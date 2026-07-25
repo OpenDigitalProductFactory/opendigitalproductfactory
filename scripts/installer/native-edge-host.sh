@@ -73,11 +73,17 @@ dpf_native_edge_install() {
   local authority_url="${DPF_LAN_AUTHORITY_URL:-}"
   local platform_env="$repo_root/.env"
   local edge_action_url edge_action_ca edge_action_cert edge_action_key edge_action_public
+  local organization_role organization_ca_url organization_pki_dir
   edge_action_url="$(_dpf_native_edge_env_value "$platform_env" DPF_EDGE_ACTION_URL)"
   edge_action_ca="$(_dpf_native_edge_env_value "$platform_env" DPF_EDGE_ACTION_CA_FILE)"
   edge_action_cert="$(_dpf_native_edge_env_value "$platform_env" DPF_EDGE_ACTION_CERT_FILE)"
   edge_action_key="$(_dpf_native_edge_env_value "$platform_env" DPF_EDGE_ACTION_KEY_FILE)"
   edge_action_public="$(_dpf_native_edge_env_value "$platform_env" DPF_EDGE_ACTION_SIGNING_PUBLIC_KEY_FILE)"
+  organization_role="$(_dpf_native_edge_env_value "$platform_env" DPF_ORGANIZATION_TRUST_ROLE)"
+  organization_ca_url="$(_dpf_native_edge_env_value "$platform_env" DPF_ORGANIZATION_CA_URL)"
+  organization_pki_dir="$(_dpf_native_edge_env_value "$platform_env" DPF_PKI_DIR)"
+  [ -n "$organization_role" ] || organization_role="member"
+  [ -n "$organization_pki_dir" ] || organization_pki_dir="${DPF_PKI_DIR:-$HOME/.dpf/pki}"
 
   if [ -z "$authority_url" ]; then
     local lan_ip
@@ -110,6 +116,10 @@ dpf_native_edge_install() {
     printf 'DPF_EDGE_NODE_NAME=%s\n' "$node_name"
     printf 'DPF_INSTALL_MODE=native\n'
     printf 'DPF_EDGE_STATE_DIR=%s\n' "$edge_state_dir"
+    printf 'DPF_INSTALL_ROOT=%s\n' "$repo_root"
+    printf 'DPF_ORGANIZATION_TRUST_ROLE=%s\n' "$organization_role"
+    printf 'DPF_PKI_DIR=%s\n' "$organization_pki_dir"
+    if [ -n "$organization_ca_url" ]; then printf 'DPF_ORGANIZATION_CA_URL=%s\n' "$organization_ca_url"; fi
     if [ -n "$edge_action_url" ] && [ -f "$edge_action_ca" ] && [ -f "$edge_action_cert" ] && [ -f "$edge_action_key" ] && [ -f "$edge_action_public" ]; then
       printf 'DPF_EDGE_ACTION_URL=%s\n' "$edge_action_url"
       printf 'DPF_EDGE_ACTION_CA_FILE=%s\n' "$edge_action_ca"

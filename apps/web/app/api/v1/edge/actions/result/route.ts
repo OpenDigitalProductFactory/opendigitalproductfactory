@@ -3,8 +3,8 @@
 // A node reports the outcome of a RemoteAction it CLAIMED: a `running` heartbeat
 // or a terminal `succeeded`/`failed` with evidence. recordActionResult verifies
 // the action is bound to THIS node (claim ownership) and the transition is legal.
-// Flag-gated OFF (DPF_REMOTE_ACTION_DISPATCH_ENABLED). This only records what the
-// node did — no host mutation happens here.
+// Flag-gated OFF (DPF_REMOTE_ACTION_DISPATCH_ENABLED). This route only records
+// what the node did; the native Edge handler owns any host mutation.
 //
 // Spec: docs/superpowers/specs/2026-06-25-convergent-remote-action-execution-design.md.
 
@@ -18,7 +18,7 @@ import { resolveEdgeNodeAuth } from "@/lib/auth/edge-node-token";
 import { recordActionResult, type DispatchOrchestratorDb } from "@/lib/remote-action/dispatch-orchestrator";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
-const BODY_SIZE_CAP_BYTES = 64 * 1024; // diagnostics evidence can be chunky
+const BODY_SIZE_CAP_BYTES = 96 * 1024; // accommodates the bounded 64 KiB join package plus JSON framing
 const OUTCOMES = ["running", "succeeded", "failed"] as const;
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -55,9 +55,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: "machine_authentication_failed" }, { status: 401 });
   }
 
-  let body: { actionKey?: unknown; outcome?: unknown; evidence?: unknown };
+  let rawBody: string;
   try {
-    body = (await request.json()) as typeof body;
+    rawBody = await request.text();
+  } catch {
+    return NextResponse.json({ ok: false, error: "invalid_json" }, { status: 400 });
+  }
+  if (Buffer.byteLength(rawBody, "utf8") > BODY_SIZE_CAP_BYTES) {
+    return NextResponse.json({ ok: false, error: "payload_too_large", maxBytes: BODY_SIZE_CAP_BYTES }, { status: 413 });
+  }
+  let body: { actionKey?: unknown; outcome?: unknown; evidence?: unknown; result?: unknown };
+  try {
+    body = JSON.parse(rawBody) as typeof body;
   } catch {
     return NextResponse.json({ ok: false, error: "invalid_json" }, { status: 400 });
   }
@@ -75,11 +84,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const evidence =
     body?.evidence && typeof body.evidence === "object" ? (body.evidence as Record<string, unknown>) : undefined;
 
+  const result =
+    body?.result && typeof body.result === "object" && !Array.isArray(body.result)
+      ? (body.result as Record<string, unknown>)
+      : undefined;
+
   const res = await recordActionResult(prisma as unknown as DispatchOrchestratorDb, {
     actionKey,
     edgeNodeRowId: authz.edgeNodeRowId,
     outcome,
     ...(evidence ? { evidence } : {}),
+    ...(result ? { result } : {}),
   });
   if (!res.ok) {
     const status =

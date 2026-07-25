@@ -2,26 +2,36 @@
 // EP-REMOTE-ACTION · P2 — claim-timeout sweep (the timeout's operational trigger).
 //
 // Times out RemoteActions a node CLAIMED but never reported a terminal result for
-// (claim-then-die: crash, network partition), so the read-only pull queue cannot
-// wedge an action in `claimed` forever. Pure logic lives in
+// (claim-then-die: crash, network partition), so the pull queue cannot wedge an
+// action in `claimed` forever. Sensitive join imports are terminally timed out
+// with encrypted parameters cleared; expired issued packages are cleared too.
+// Pure logic lives in
 // lib/remote-action/dispatch-orchestrator (timeoutStaleClaims, unit-tested); this
 // is the thin Inngest wrapper + quiescence gate, mirroring edge-incident-correlation.
 //
 // Dark-launched behind DPF_REMOTE_ACTION_DISPATCH_ENABLED — the SAME flag that
 // gates the claim/result routes — so it deploys inert and activates exactly when
-// the operator turns the dispatch channel on for verification. Read-only by
-// construction: a timed-out collect is lost telemetry, never a half-applied mutation.
+// the operator turns the dispatch channel on for verification.
 
 import { cron } from "inngest";
 
 import { inngest } from "../inngest-client";
 import { gateAtEntry } from "../quiescence-gates";
-import { timeoutStaleClaims, type DispatchOrchestratorDb } from "@/lib/remote-action/dispatch-orchestrator";
+import {
+  clearExpiredJoinPackageMaterial,
+  timeoutStaleClaims,
+  type DispatchOrchestratorDb,
+} from "@/lib/remote-action/dispatch-orchestrator";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
-export async function runRemoteActionClaimTimeout(): Promise<{ timedOut: number }> {
+export async function runRemoteActionClaimTimeout(): Promise<{ timedOut: number; joinPackagesCleared: number }> {
   const { prisma } = await import("@dpf/db");
-  return timeoutStaleClaims(prisma as unknown as DispatchOrchestratorDb);
+  const db = prisma as unknown as DispatchOrchestratorDb;
+  const [timeouts, packages] = await Promise.all([
+    timeoutStaleClaims(db),
+    clearExpiredJoinPackageMaterial(db),
+  ]);
+  return { timedOut: timeouts.timedOut, joinPackagesCleared: packages.cleared };
 }
 
 export const remoteActionClaimTimeout = inngest.createFunction(

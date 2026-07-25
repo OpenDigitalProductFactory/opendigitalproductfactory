@@ -15,6 +15,7 @@ TOKEN_FILE=""
 EDGE_TOKEN_FILE=""
 JOIN_PACKAGE=""
 PACKAGE_OUTPUT=""
+PACKAGE_TTL_SECONDS=900
 ORG_NAME="${DPF_PKI_NAME:-DPF Organization CA}"
 START_TLS=1
 SANS=""
@@ -33,6 +34,7 @@ Issue a 15-minute package for one intended installation:
   bash scripts/bootstrap-organization-pki.sh --mode issue-join \
     --hostname <joining-private-name-or-IP> [--san <name-or-IP>] \
     --ca-url <https://private-ca:9000> --package-output <file.dpfjoin>
+    [--package-ttl-seconds <300..900>]
 
 Join (another installation; one private package file only):
   bash scripts/bootstrap-organization-pki.sh --mode join \
@@ -162,6 +164,7 @@ while [ "$#" -gt 0 ]; do
     --token-file) shift; TOKEN_FILE="${1:?--token-file requires a value}" ;;
     --join-package) shift; JOIN_PACKAGE="${1:?--join-package requires a value}" ;;
     --package-output) shift; PACKAGE_OUTPUT="${1:?--package-output requires a value}" ;;
+    --package-ttl-seconds) shift; PACKAGE_TTL_SECONDS="${1:?--package-ttl-seconds requires a value}" ;;
     --org-name) shift; ORG_NAME="${1:?--org-name requires a value}" ;;
     --no-start-tls) START_TLS=0 ;;
     -h|--help) usage; exit 0 ;;
@@ -184,6 +187,8 @@ if [ "$MODE" = "issue-join" ]; then
   valid_private_ca_url "$CA_URL" || { echo "issue-join mode requires a private or local origin-only HTTPS --ca-url" >&2; exit 64; }
   [ -n "$PACKAGE_OUTPUT" ] || { echo "issue-join mode requires --package-output" >&2; exit 64; }
   [ ! -e "$PACKAGE_OUTPUT" ] || { echo "Refusing to overwrite an existing join package" >&2; exit 73; }
+  printf '%s' "$PACKAGE_TTL_SECONDS" | grep -Eq '^[0-9]{3}$' || { echo "package TTL must be 300 through 900 seconds" >&2; exit 64; }
+  [ "$PACKAGE_TTL_SECONDS" -ge 300 ] && [ "$PACKAGE_TTL_SECONDS" -le 900 ] || { echo "package TTL must be 300 through 900 seconds" >&2; exit 64; }
 fi
 command -v docker >/dev/null 2>&1 || { echo "Docker is required" >&2; exit 69; }
 docker compose version >/dev/null 2>&1 || { echo "Docker Compose v2 is required" >&2; exit 69; }
@@ -240,11 +245,19 @@ persist_organization_trust() {
   [ -f "$env_file" ] || return 0
   case "$OUT_DIR$ROOT_CERT" in *$'\n'*|*$'\r'*) echo "PKI paths must not contain newlines" >&2; exit 64 ;; esac
   env_tmp="$(mktemp "$env_file.organization-trust.XXXXXX")"
-  awk -F= '$1 != "DPF_ORGANIZATION_TRUST_ENABLED" && $1 != "DPF_PKI_TRUST_BUNDLE" && $1 != "DPF_TLS_DIR" && $1 != "DPF_EDGE_ACTION_DISPATCH_CONFIGURED" && $1 != "DPF_EDGE_ACTION_URL" && $1 != "DPF_EDGE_ACTION_CA_FILE" && $1 != "DPF_EDGE_ACTION_CERT_FILE" && $1 != "DPF_EDGE_ACTION_KEY_FILE" && $1 != "DPF_EDGE_ACTION_SIGNING_PUBLIC_KEY_FILE" && $1 != "DPF_EDGE_ACTION_SIGNING_PRIVATE_KEY_FILE" && $1 != "DPF_EDGE_ACTION_SIGNING_PASSWORD_FILE" && $1 != "DPF_EDGE_ACTION_SIGNING_KEY_ID" && $1 != "DPF_EDGE_MTLS_PROXY_SECRET_FILE" { print }' "$env_file" > "$env_tmp"
+  awk -F= '$1 != "DPF_ORGANIZATION_TRUST_ENABLED" && $1 != "DPF_PKI_TRUST_BUNDLE" && $1 != "DPF_TLS_DIR" && $1 != "DPF_INSTALL_ROOT" && $1 != "DPF_ORGANIZATION_TRUST_ROLE" && $1 != "DPF_PKI_DIR" && $1 != "DPF_ORGANIZATION_CA_URL" && $1 != "DPF_EDGE_ACTION_DISPATCH_CONFIGURED" && $1 != "DPF_EDGE_ACTION_URL" && $1 != "DPF_EDGE_ACTION_CA_FILE" && $1 != "DPF_EDGE_ACTION_CERT_FILE" && $1 != "DPF_EDGE_ACTION_KEY_FILE" && $1 != "DPF_EDGE_ACTION_SIGNING_PUBLIC_KEY_FILE" && $1 != "DPF_EDGE_ACTION_SIGNING_PRIVATE_KEY_FILE" && $1 != "DPF_EDGE_ACTION_SIGNING_PASSWORD_FILE" && $1 != "DPF_EDGE_ACTION_SIGNING_KEY_ID" && $1 != "DPF_EDGE_MTLS_PROXY_SECRET_FILE" { print }' "$env_file" > "$env_tmp"
   {
     printf 'DPF_ORGANIZATION_TRUST_ENABLED=1\n'
     printf 'DPF_PKI_TRUST_BUNDLE=%s\n' "$ROOT_CERT"
     printf 'DPF_TLS_DIR=%s\n' "$OUT_DIR"
+    printf 'DPF_INSTALL_ROOT=%s\n' "$REPO_ROOT"
+    if [ "$MODE" = "authority" ] || [ "$MODE" = "issue-join" ]; then
+      printf 'DPF_ORGANIZATION_TRUST_ROLE=authority\n'
+    else
+      printf 'DPF_ORGANIZATION_TRUST_ROLE=member\n'
+    fi
+    printf 'DPF_PKI_DIR=%s\n' "$OUT_DIR"
+    printf 'DPF_ORGANIZATION_CA_URL=%s\n' "${CA_URL:-https://$HOSTNAME_VALUE:9000}"
     if [ "$EDGE_ACTION_CONFIGURED" = "1" ]; then
       printf 'DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\n'
       printf 'DPF_EDGE_ACTION_URL=https://%s:8443\n' "$HOSTNAME_VALUE"
@@ -384,13 +397,13 @@ elif [ "$MODE" = "issue-join" ]; then
   IFS="$old_ifs"
   # shellcheck disable=SC2086 # Values passed by word splitting were validated above.
   token="$(compose exec -T step-ca step ca token "$HOSTNAME_VALUE" $san_args \
-    --not-after 15m --provisioner dpf-installer --password-file /run/secrets/step-ca-password)"
+    --not-after "${PACKAGE_TTL_SECONDS}s" --provisioner dpf-installer --password-file /run/secrets/step-ca-password)"
   edge_subject="dpf-edge-$(printf '%s' "$HOSTNAME_VALUE" | tr ':' '-')"
   edge_token="$(compose exec -T step-ca step ca token "$edge_subject" \
-    --not-after 15m --cert-not-after 720h --provisioner dpf-edge-client \
+    --not-after "${PACKAGE_TTL_SECONDS}s" --cert-not-after 720h --provisioner dpf-edge-client \
     --password-file /run/secrets/step-ca-password)"
   package_id="$(openssl rand -hex 16)"
-  expires_at="$(( $(date +%s) + 900 ))"
+  expires_at="$(( $(date +%s) + PACKAGE_TTL_SECONDS ))"
   umask 077
   {
     printf '%s\n' "DPF_ORGANIZATION_JOIN_V2"
@@ -406,7 +419,7 @@ elif [ "$MODE" = "issue-join" ]; then
   chmod 0600 "$PACKAGE_OUTPUT"
   unset token edge_token
   echo "Organization join package created at $PACKAGE_OUTPUT."
-  echo "It expires in 15 minutes and is intended only for $HOSTNAME_VALUE."
+  echo "It expires in $PACKAGE_TTL_SECONDS seconds and is intended only for $HOSTNAME_VALUE."
   exit 0
 else
   [ -n "$CA_URL" ] || { echo "join mode requires --ca-url" >&2; exit 64; }

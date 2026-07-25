@@ -17,6 +17,7 @@ type ActionResultRequest struct {
 	ActionKey string         `json:"actionKey"`
 	Outcome   string         `json:"outcome"`
 	Evidence  map[string]any `json:"evidence,omitempty"`
+	Result    map[string]any `json:"result,omitempty"`
 }
 
 // ClaimActions polls the machine-authenticated action endpoint. The HTTP

@@ -40,6 +40,11 @@ The binary is configured entirely via environment variables — the same set the
 | `DPF_INSTALL_MODE` | no | `native` | Classifies how this binary was deployed. Default for the Go runtime is `native` (the TS container defaults to `container-host`). |
 | `DPF_EDGE_NODE_VERSION` | no | `-ldflags` value | Agent version reported on enroll. Burned in at build time; env override for dev. |
 | `DPF_PLATFORM_OVERRIDE` | no | — | Test-only override of the platform string. Production never sets this. |
+| `DPF_EDGE_ACTION_URL` + trust-file variables | no | — | Complete machine-bound mTLS action channel. A partial bundle is rejected. |
+| `DPF_INSTALL_ROOT` | for organization join | — | Installer-pinned root containing the fixed PKI bootstrap scripts; never supplied by an action. |
+| `DPF_ORGANIZATION_TRUST_ROLE` | for organization join | — | Closed host posture: `authority` may issue; `member` may import. |
+| `DPF_PKI_DIR` | for organization join | — | Protected host PKI/rollback owner. |
+| `DPF_ORGANIZATION_CA_URL` | authority issue only | — | Private/local HTTPS Step CA origin used by the fixed issue handler. |
 
 State persistence rules (mirrors `services/edge-node/src/state.ts`):
 
@@ -58,8 +63,9 @@ The loops run concurrently. If heartbeat returns `node_revoked`, the process cle
 
 ## Slice status
 
-The native runtime includes enrollment/heartbeat, host and ARP collection, and
-the federated-demand Slice 1 DNS-SD adapter. The adapter is pure Go and CGO-free;
+The native runtime includes enrollment/heartbeat, host and ARP collection,
+federated-demand DNS-SD, and the closed organization join issue/import
+handlers. The adapters are pure Go and CGO-free;
 the build gate cross-compiles it for Windows amd64, macOS arm64, and Linux amd64.
 Signed one-click installation/service registration remains owned by the Edge
 deployment roadmap rather than this runtime source directory.

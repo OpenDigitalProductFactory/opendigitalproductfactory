@@ -11,6 +11,7 @@ param(
     [string]$TokenFile,
     [string]$JoinPackage,
     [string]$PackageOutput,
+    [ValidateRange(300, 900)][int]$PackageTtlSeconds = 900,
     [string]$OrganizationName = "DPF Organization CA",
     [switch]$NoStartTls
 )
@@ -164,6 +165,10 @@ function Set-DpfOrganizationTrustEnvironment {
         $_ -notmatch '^DPF_ORGANIZATION_TRUST_ENABLED=' -and
         $_ -notmatch '^DPF_PKI_TRUST_BUNDLE=' -and
         $_ -notmatch '^DPF_TLS_DIR=' -and
+        $_ -notmatch '^DPF_INSTALL_ROOT=' -and
+        $_ -notmatch '^DPF_ORGANIZATION_TRUST_ROLE=' -and
+        $_ -notmatch '^DPF_PKI_DIR=' -and
+        $_ -notmatch '^DPF_ORGANIZATION_CA_URL=' -and
         $_ -notmatch '^DPF_EDGE_ACTION_DISPATCH_CONFIGURED=' -and
         $_ -notmatch '^DPF_EDGE_ACTION_URL=' -and
         $_ -notmatch '^DPF_EDGE_ACTION_CA_FILE=' -and
@@ -175,10 +180,16 @@ function Set-DpfOrganizationTrustEnvironment {
         $_ -notmatch '^DPF_EDGE_ACTION_SIGNING_KEY_ID=' -and
         $_ -notmatch '^DPF_EDGE_MTLS_PROXY_SECRET_FILE='
     }
+    $organizationTrustRole = if ($Mode -in @("authority", "issue-join")) { "authority" } else { "member" }
+    $organizationCaUrl = if ($CaUrl) { $CaUrl } else { "https://$Hostname`:9000" }
     $content += @(
         "DPF_ORGANIZATION_TRUST_ENABLED=1",
         "DPF_PKI_TRUST_BUNDLE=$RootCert",
-        "DPF_TLS_DIR=$OutDir"
+        "DPF_TLS_DIR=$OutDir",
+        "DPF_INSTALL_ROOT=$RepoRoot",
+        "DPF_ORGANIZATION_TRUST_ROLE=$organizationTrustRole",
+        "DPF_PKI_DIR=$OutDir",
+        "DPF_ORGANIZATION_CA_URL=$organizationCaUrl"
     )
     if ($EdgeActionConfigured) {
         $content += @(
@@ -334,14 +345,14 @@ if ($Mode -eq "authority") {
     $Fingerprint = (Invoke-DpfPkiCompose -Arguments @("exec", "-T", "step-ca", "step", "certificate", "fingerprint", "/home/step/certs/root_ca.crt")).Trim()
     $sanArguments = @("--san", $Hostname)
     foreach ($name in $San) { $sanArguments += @("--san", $name) }
-    $tokenArguments = @("exec", "-T", "step-ca", "step", "ca", "token", $Hostname) + $sanArguments + @("--not-after", "15m", "--provisioner", "dpf-installer", "--password-file", "/run/secrets/step-ca-password")
+    $tokenArguments = @("exec", "-T", "step-ca", "step", "ca", "token", $Hostname) + $sanArguments + @("--not-after", "$($PackageTtlSeconds)s", "--provisioner", "dpf-installer", "--password-file", "/run/secrets/step-ca-password")
     $enrollmentToken = (Invoke-DpfPkiCompose -Arguments $tokenArguments).Trim()
     $edgeSubject = "dpf-edge-" + $Hostname.Replace(':', '-')
-    $edgeEnrollmentToken = (Invoke-DpfPkiCompose -Arguments @("exec", "-T", "step-ca", "step", "ca", "token", $edgeSubject, "--not-after", "15m", "--cert-not-after", "720h", "--provisioner", "dpf-edge-client", "--password-file", "/run/secrets/step-ca-password")).Trim()
+    $edgeEnrollmentToken = (Invoke-DpfPkiCompose -Arguments @("exec", "-T", "step-ca", "step", "ca", "token", $edgeSubject, "--not-after", "$($PackageTtlSeconds)s", "--cert-not-after", "720h", "--provisioner", "dpf-edge-client", "--password-file", "/run/secrets/step-ca-password")).Trim()
     $bytes = New-Object byte[] 16
     [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
     $package_id = -join ($bytes | ForEach-Object { $_.ToString("x2") })
-    $expires_at = [int64]([DateTime]::UtcNow - [DateTime]'1970-01-01').TotalSeconds + 900
+    $expires_at = [int64]([DateTime]::UtcNow - [DateTime]'1970-01-01').TotalSeconds + $PackageTtlSeconds
     $intendedSans = $San -join ','
     $package = @(
         "DPF_ORGANIZATION_JOIN_V2",
@@ -359,7 +370,7 @@ if ($Mode -eq "authority") {
     $enrollmentToken = $null
     $edgeEnrollmentToken = $null
     Write-Host "Organization join package created at $PackageOutput."
-    Write-Host "It expires in 15 minutes and is intended only for $Hostname."
+    Write-Host "It expires in $PackageTtlSeconds seconds and is intended only for $Hostname."
     exit 0
 } else {
     if (-not $CaUrl -or -not $Fingerprint) { throw "join mode requires CaUrl and Fingerprint" }

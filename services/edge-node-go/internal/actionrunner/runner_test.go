@@ -32,9 +32,9 @@ type fakeExecutor struct {
 	err   error
 }
 
-func (f *fakeExecutor) Execute(context.Context, action.SignedEnvelope) (map[string]any, error) {
+func (f *fakeExecutor) Execute(context.Context, action.SignedEnvelope) (action.ExecutionOutput, error) {
 	f.calls++
-	return map[string]any{"items": 2}, f.err
+	return action.ExecutionOutput{Evidence: map[string]any{"items": 2}}, f.err
 }
 
 func TestRunOnceReportsRunningThenTerminalEvidence(t *testing.T) {

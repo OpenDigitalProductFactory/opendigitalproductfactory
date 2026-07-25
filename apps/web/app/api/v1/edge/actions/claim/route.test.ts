@@ -48,7 +48,7 @@ beforeEach(() => {
   process.env.DPF_REMOTE_ACTION_DISPATCH_ENABLED = "true";
   mockResolveToken.mockResolvedValue(AUTHED);
   mockResolveMtls.mockResolvedValue({ ok: true, certificateId: "cert-1", fingerprintSha256: "a".repeat(64) });
-  mockFindCapability.mockResolvedValue({ id: "cap-1" });
+  mockFindCapability.mockResolvedValue({ id: "cap-1", evidence: { organizationTrustRole: "member" } });
   mockLoadSigner.mockReturnValue({ signingKeyId: "key-1", sign: vi.fn() });
   mockClaim.mockResolvedValue({ claimed: [], skipped: 0 });
 });
@@ -76,9 +76,22 @@ describe("POST /api/v1/edge/actions/claim", () => {
         edgeNodeId: "edge-row-1",
         nodeId: "edge-external-1",
         allowedActionTypes: ["inventory.collect"],
+        organizationTrustRole: "member",
       }),
       expect.objectContaining({ signer: expect.objectContaining({ signingKeyId: "key-1" }) }),
     );
+  });
+
+  it("passes only closed privileged action types and the host role from capability evidence", async () => {
+    mockResolveToken.mockResolvedValue({
+      ...AUTHED,
+      scopePolicy: { actionTypes: ["organization.join.import", "script.run"] },
+    });
+    await POST(request());
+    expect(mockClaim.mock.calls[0]![1]).toEqual(expect.objectContaining({
+      allowedActionTypes: ["organization.join.import"],
+      organizationTrustRole: "member",
+    }));
   });
 
   it("defaults to an empty allowlist when scope policy is absent", async () => {

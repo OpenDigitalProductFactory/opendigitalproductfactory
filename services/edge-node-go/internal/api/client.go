@@ -158,3 +158,25 @@ func (c *Client) post(ctx context.Context, path, token string, body, out any) er
 	}
 	return nil
 }
+
+// Health verifies the portal independently of an organization bootstrap
+// script's exit status. It intentionally accepts only a successful HTTP status;
+// response content is not persisted as action evidence.
+func (c *Client) Health(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, c.timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/api/health", nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.hc.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64*1024))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("portal health returned HTTP %d", resp.StatusCode)
+	}
+	return nil
+}
