@@ -55,7 +55,7 @@ jobs:
           # Full history + tags so git describe / tag verification work.
           fetch-depth: 0
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: services/edge-node-go/go.mod
           cache-dependency-path: services/edge-node-go/go.sum
