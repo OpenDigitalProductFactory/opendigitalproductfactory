@@ -7,7 +7,10 @@
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@dpf/db";
-import type { OrganizationJoinActionType } from "@dpf/db/organization-join-action";
+import {
+  isOrganizationJoinActionType,
+  type OrganizationJoinActionType,
+} from "@dpf/db/organization-join-action";
 
 import { auth } from "@/lib/auth";
 import { makeRfcId } from "@/lib/change-management/lifecycle";
@@ -69,8 +72,18 @@ export interface OrganizationJoinNodeSummary {
   trustState: string;
   role: "authority" | "member" | null;
   actionType: OrganizationJoinActionType | null;
+  hostIdentity: string | null;
   ready: boolean;
   readinessMessage: string;
+  latestAction: {
+    actionKey: string;
+    actionType: OrganizationJoinActionType;
+    status: string;
+    approvalState: string;
+    packageReady: boolean;
+    evidence: Record<string, unknown>;
+    createdAt: string;
+  } | null;
 }
 
 export async function getOrganizationJoinNodeSummariesAction(): Promise<
@@ -82,7 +95,7 @@ export async function getOrganizationJoinNodeSummariesAction(): Promise<
     orderBy: { updatedAt: "desc" },
     select: {
       id: true, nodeId: true, platform: true, status: true, trustState: true,
-      scopePolicy: true,
+      metadata: true, scopePolicy: true,
       principal: { select: { displayName: true } },
       capabilityRows: {
         where: { capability: "action.execute" },
@@ -90,6 +103,29 @@ export async function getOrganizationJoinNodeSummariesAction(): Promise<
       },
     },
   });
+  const actions = rows.length === 0
+    ? []
+    : await prisma.remoteAction.findMany({
+        where: {
+          edgeNodeId: { in: rows.map((row) => row.id) },
+          actionType: { in: ["organization.join.issue", "organization.join.import"] },
+        },
+        orderBy: { createdAt: "desc" },
+        select: {
+          actionKey: true,
+          actionType: true,
+          edgeNodeId: true,
+          status: true,
+          approvalState: true,
+          result: true,
+          evidence: true,
+          createdAt: true,
+        },
+      });
+  const latestByNode = new Map<string, (typeof actions)[number]>();
+  for (const action of actions) {
+    if (action.edgeNodeId && !latestByNode.has(action.edgeNodeId)) latestByNode.set(action.edgeNodeId, action);
+  }
   return {
     ok: true,
     nodes: rows.map((row) => {
@@ -105,6 +141,7 @@ export async function getOrganizationJoinNodeSummariesAction(): Promise<
         ? row.scopePolicy.actionTypes.includes(actionType)
         : false;
       const ready = row.trustState === "trusted" && capability?.mode === "enabled" && actionType !== null && configured;
+      const latest = latestByNode.get(row.id);
       return {
         edgeNodeId: row.id,
         nodeId: row.nodeId,
@@ -114,6 +151,7 @@ export async function getOrganizationJoinNodeSummariesAction(): Promise<
         trustState: row.trustState,
         role,
         actionType,
+        hostIdentity: edgeHostIdentity(row.metadata),
         ready,
         readinessMessage: ready
           ? "Secure host action channel ready"
@@ -124,9 +162,83 @@ export async function getOrganizationJoinNodeSummariesAction(): Promise<
               : !role
                 ? "The installation has not reported its organization role"
                 : "Allow the organization setup action for this installation",
+        latestAction: latest && isOrganizationJoinActionType(latest.actionType)
+          ? {
+              actionKey: latest.actionKey,
+              actionType: latest.actionType,
+              status: latest.status,
+              approvalState: latest.approvalState,
+              packageReady: isRecord(latest.result) && typeof latest.result.joinPackageEnc === "string",
+              evidence: sanitizeActionEvidence(isRecord(latest.evidence) ? latest.evidence : undefined),
+              createdAt: latest.createdAt.toISOString(),
+            }
+          : null,
       };
     }),
   };
+}
+
+export async function authorizeOrganizationJoinNodeAction(input: {
+  edgeNodeId: string;
+  actionType: OrganizationJoinActionType;
+  operatorConfirmed: boolean;
+}): Promise<{ ok: true } | OrganizationJoinActionFailure> {
+  const gate = await assertManagePlatform();
+  if (!gate.ok) return gate;
+  if (!input.operatorConfirmed) {
+    return {
+      ok: false,
+      error: "invalid_input",
+      message: "Confirm this installation before enabling secure organization setup",
+    };
+  }
+  const node = await prisma.edgeNode.findUnique({
+    where: { id: input.edgeNodeId },
+    select: {
+      id: true,
+      trustState: true,
+      scopePolicy: true,
+      capabilityRows: {
+        where: { capability: "action.execute" },
+        select: { id: true, mode: true, evidence: true },
+      },
+    },
+  });
+  if (!node || node.trustState !== "trusted") {
+    return { ok: false, error: "not_ready", message: "Trust this installation before enabling organization setup" };
+  }
+  const capability = node.capabilityRows[0];
+  const evidence = isRecord(capability?.evidence) ? capability.evidence : {};
+  const role = evidence.organizationTrustRole === "authority" || evidence.organizationTrustRole === "member"
+    ? evidence.organizationTrustRole
+    : null;
+  const expectedAction = role === "authority"
+    ? "organization.join.issue"
+    : role === "member" ? "organization.join.import" : null;
+  if (!capability || expectedAction !== input.actionType) {
+    return {
+      ok: false,
+      error: "not_ready",
+      message: "This installation has not reported the required secure organization role",
+    };
+  }
+  const scopePolicy = isRecord(node.scopePolicy) ? node.scopePolicy : {};
+  const existing = Array.isArray(scopePolicy.actionTypes)
+    ? scopePolicy.actionTypes.filter((value): value is string => typeof value === "string")
+    : [];
+  const actionTypes = [...new Set([...existing, input.actionType])];
+  await prisma.$transaction([
+    prisma.edgeNode.update({
+      where: { id: node.id },
+      data: { scopePolicy: { ...scopePolicy, actionTypes } },
+    }),
+    prisma.edgeNodeCapability.update({
+      where: { id: capability.id },
+      data: { mode: "enabled" },
+    }),
+  ]);
+  revalidatePath(CONNECTIONS_PATH);
+  return { ok: true };
 }
 
 export async function queueOrganizationJoinActionAction(input: {
@@ -285,4 +397,9 @@ function actionFailure(reason: string): OrganizationJoinActionFailure {
     default:
       return { ok: false, error: "invalid_input", message: "The organization setup request is not valid" };
   }
+}
+function edgeHostIdentity(value: unknown): string | null {
+  if (!isRecord(value)) return null;
+  if (typeof value.hostname === "string") return value.hostname;
+  return isRecord(value.host) && typeof value.host.hostname === "string" ? value.host.hostname : null;
 }
