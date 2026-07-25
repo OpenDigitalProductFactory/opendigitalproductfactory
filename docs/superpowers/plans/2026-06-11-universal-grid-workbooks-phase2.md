@@ -285,10 +285,17 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   dropdown `GridSelect` (floating-ui listbox — hover/active states, selected check, keyboard nav) that
   replaces the Group panel's native `<select>`s; (2) an **icon toolbar** (lucide) with active-state
   colour on the toggles; (3) **single-cell copy/paste** (`onCellCopy`/`onCellPaste`) routed through the
-  existing `onRowsChange`→`persistCell` validation. **Follow-ups after calibration:** roll `GridSelect`
-  + icons across the remaining panels/toolbar; field-type icons in headers/pickers; and the big one —
-  **rectangular range select + block copy/paste + fill-handle** (react-data-grid v7 has no built-in
-  range selection, so it needs custom work atop `onSelectedCellChange`/`FillEvent`).
+  existing `onRowsChange`→`persistCell` validation. Operator approved the direction ("yes, it needs
+  more conventional polish") → formalized in a spec:
+  [2026-07-24-grid-visual-refinement-and-cell-interactions.md](../specs/2026-07-24-grid-visual-refinement-and-cell-interactions.md).
+- **Slice 28b — visual rollout (S2 of the refinement spec) — SHIPPED.** Every remaining native
+  `<select>` in the Filter / Summary / Format / Columns panels (11 in all) now uses `GridSelect`;
+  column pickers carry **field-type icons** (`grid-field-icons.tsx` — # number, calendar date, list
+  select, …) and the colour picker shows swatches; the view-mode toggle (grid/gallery/calendar) and the
+  Views menu gain icons. `GridSelect` is more compact than a native `<select>` + `<option>` map, so
+  `GridPanels.tsx` actually *shrank* (761 → 738). **Next (spec S3/S4):** rectangular range select +
+  block copy/paste + fill-handle (react-data-grid v7 has no built-in range selection — custom work atop
+  `onSelectedCellChange`/`FillEvent`).
 - **Remaining (not built):** manual row reordering for *platform* grids (would need a per-user client
   order; low value on 1000s of rows); platform-grid *shareable* views (needs a `WorkbookView.tableId`
   schema change — platform tables have no `WorkbookTable` row); richer charts (grouped/stacked/line);
