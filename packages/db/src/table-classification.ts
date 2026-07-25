@@ -225,6 +225,9 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   TaskEvaluation: "restricted",
   EndpointTestRun: "restricted",
   AuthorizationDecisionLog: "restricted",
+  // Machine certificate binding and lifecycle metadata is authorization
+  // material. The private key remains on the Edge Node and is never stored.
+  EdgeNodeCertificate: "restricted",
   PatientProfile: "restricted",
   PatientAuthority: "restricted",
   PatientConsentDirective: "restricted",

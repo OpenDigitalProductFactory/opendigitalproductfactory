@@ -59,3 +59,4 @@ WeightAdjustmentProposal  domain-lifecycle-managed  # BI-D88DFEEA. status transi
   # evidence a real regulated-retention floor doesn't apply to but the
   # decision ledger it's attached to (DecisionInteraction) does need intact.
 AbsorptionPosture  reference-data  # Authored absorption classification (BI-ECO-001); superseded by replacement, never aged out. Reseeded idempotently from the vertical-incumbents manifest.
+EdgeNodeCertificate  domain-lifecycle-managed  # Certificate records follow the Edge Node enrollment, rotation, revocation, and cascade-delete lifecycle; an age-based purge could remove an active authorization binding.
