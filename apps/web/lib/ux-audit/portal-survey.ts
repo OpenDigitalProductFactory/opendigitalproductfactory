@@ -17,6 +17,11 @@
 // axes, rolled up here.
 
 import type { UxFinding } from "@/lib/tak/page-evaluator";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
+
+// Re-exported so consumers (and tests) can take the finding shape from the
+// survey module without reaching into page-evaluator directly.
+export type { UxFinding };
 
 /** One entry from apps/web/lib/ea/route-manifest.json. */
 export type RouteManifestEntry = {
@@ -288,7 +293,7 @@ export async function runSurvey(
         evaluated.behavioral = true;
       }
     } catch (e) {
-      error = e instanceof Error ? e.message : String(e);
+      error = getErrorMessage(e);
     }
 
     const deduped = dedupeFindings(findings);
