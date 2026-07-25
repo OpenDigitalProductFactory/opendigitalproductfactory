@@ -10,7 +10,7 @@
     "contributor:preview": "docker compose --profile dev up -d dev-portal",
     "dev:prod-runtime": "docker compose up -d portal",
     "dev:sandbox": "docker compose up -d sandbox",
-    "pregate": "sh scripts/gate-worktree.sh",
+    "pregate": "node scripts/pregate.mjs",
     "build": "pnpm --filter web build",
     "test": "pnpm -r --if-present --workspace-concurrency=1 --no-bail test",
     "test:e2e": "playwright test",

@@ -131,17 +131,41 @@ host ports `5433`, `6334`, and `7475`/`7688`.
 From a worktree, the gate is:
 
 ```bash
-pnpm run pregate            # → sh scripts/gate-worktree.sh
+pnpm run pregate            # → node scripts/pregate.mjs
 ```
 
-The script claims a `local-integration-ci` lease (waiting if the sandbox is
+**Host-native/Node-first entry point (BI-2272D840).** `pregate.mjs` detects
+whether native `sh` actually works against *this* worktree — not just "sh is
+on PATH", but that it can resolve the worktree's own git state
+(`sh -c 'git rev-parse --show-toplevel'`) — and routes accordingly:
+
+- Working native `sh` (Git-for-Windows shell, Linux/macOS): delegates straight
+  to `sh scripts/gate-worktree.sh`, unchanged.
+- No working native `sh` (e.g. a Windows worktree with no Git Bash and a WSL
+  install that cannot cleanly read the worktree's `.git` indirection — the
+  exact failure BI-C22152E7 hit): routes to `scripts/gate-worktree.mjs`, a
+  Node-native port of the same lease-claim / run / evidence-record /
+  lease-release flow (`scripts/local-ci-runner.mjs` ports the checked-in
+  runner's scratch-workspace + DB-resolution steps; both call the same
+  `scripts/local-integration-ci.mjs` plan). Missing native `sh` is therefore
+  classified as **sandbox-routable, never a build blocker** — the agent no
+  longer needs to recognize that doctrine and hand-drive the lease steps.
+
+Either path produces the same evidence shape (branch/SHA, lease id, freshness
+verdict, toolchain fingerprint, expiry) and writes the same
+`.git/dpf-local-ci-gate.json` state file, so the pre-push gate below accepts
+either without caring which one ran. Force a specific path for
+testing/debugging with `DPF_PREGATE_FORCE_SH=1` or `DPF_PREGATE_FORCE_NODE=1`.
+
+The gate claims a `local-integration-ci` lease (waiting if the sandbox is
 already leased), runs the gate command, records a local-integration evidence
 record with the lease id and `gatePassed`, releases the lease, and writes the
 latest gate result to Git-local state (`.git/dpf-local-ci-gate.json`). It does
 **not** publish the branch by default (BI-76551B2D); push/publication is a
 separate step after local evidence exists. The legacy push-before-lease behavior
-is available only as an explicit `scripts/gate-worktree.sh --push` operation for
-recovery/transition cases that intentionally need it.
+is available only as an explicit `scripts/gate-worktree.sh --push` (or
+`scripts/gate-worktree.mjs --push`) operation for recovery/transition cases
+that intentionally need it.
 
 **The gate command has a checked-in default (BI-157DC9B2):**
 [`scripts/local-ci-runner.sh`](../../scripts/local-ci-runner.sh) runs the
