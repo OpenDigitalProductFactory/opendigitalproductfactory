@@ -293,9 +293,16 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   column pickers carry **field-type icons** (`grid-field-icons.tsx` — # number, calendar date, list
   select, …) and the colour picker shows swatches; the view-mode toggle (grid/gallery/calendar) and the
   Views menu gain icons. `GridSelect` is more compact than a native `<select>` + `<option>` map, so
-  `GridPanels.tsx` actually *shrank* (761 → 738). **Next (spec S3/S4):** rectangular range select +
-  block copy/paste + fill-handle (react-data-grid v7 has no built-in range selection — custom work atop
-  `onSelectedCellChange`/`FillEvent`).
+  `GridPanels.tsx` actually *shrank* (761 → 738).
+- **Slice 28c — cell range selection + block copy/paste (S3 of the refinement spec) — SHIPPED.**
+  Excel-grade cell interaction on the flat grid: click / Shift+click / Shift+Arrow select a rectangle
+  (highlighted via `cellClass`); `Ctrl+C` copies an Excel-compatible TSV block; `Ctrl+V` fills a 1×1
+  clipboard across the selection or lays a TSV block out from the selected cell (each cell through the
+  validated `persistCell`); `Delete` clears a multi-cell selection. Pure, unit-tested range math in
+  `grid-range.ts` (`rangeRect`/`extendFocus`/`rangeToTsv`/`parseTsv`/`pasteWrites`); react-data-grid v7
+  has no native range, so it's a custom layer over its `onCellClick`/`onSelectedCellChange`/
+  `onCellKeyDown`/`onCellCopy`/`onCellPaste`. **Next (spec S4):** fill-handle + Ctrl+D/R; extract the
+  range logic into a `useCellRange` hook (Grid.tsx is 1585 LOC).
 - **Remaining (not built):** manual row reordering for *platform* grids (would need a per-user client
   order; low value on 1000s of rows); platform-grid *shareable* views (needs a `WorkbookView.tableId`
   schema change — platform tables have no `WorkbookTable` row); richer charts (grouped/stacked/line);

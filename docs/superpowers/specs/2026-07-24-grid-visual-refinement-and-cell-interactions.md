@@ -76,9 +76,17 @@ react-data-grid. Range-select is scoped to a rectangle (not multi-range).
   `<select>` in the Filter / Summary / Format / Columns panels to `GridSelect`;
   add `fieldTypeIcon` to column pickers + headers; icons on the Views menu and the
   grid/gallery/calendar view toggle; consistent control sizing/focus.
-- **S3 — Range selection + block copy/paste.** Anchor+focus range model, overlay,
-  TSV block copy/paste through `persistCell`.
-- **S4 — Fill-handle.** Drag-fill down/right over the range.
+- **S3 — Range selection + block copy/paste — SHIPPED.** Anchor+focus range model
+  (`grid-range.ts`, unit-tested); click / Shift+click / Shift+Arrow select a
+  rectangle, highlighted via `cellClass`. `Ctrl+C` writes an Excel-compatible TSV
+  block to the clipboard (a single cell writes its text); `Ctrl+V` fills a 1×1
+  clipboard across the selection or lays a TSV block out from the selected cell —
+  every written cell through the same validated `persistCell` as a manual edit;
+  `Delete` clears a multi-cell selection. Native `onCellCopy`/`onCellPaste` events
+  (synchronous, so it round-trips with Excel). Flat grid only.
+- **S4 — Fill-handle + fill down/right.** Drag the selection corner to fill; `Ctrl+D`
+  / `Ctrl+R`. (Next.) Also: extract the range logic from `Grid.tsx` into a
+  `useCellRange` hook (Grid.tsx grew to 1585 LOC — decomposition follow-up).
 
 ## Accessibility & testing
 
