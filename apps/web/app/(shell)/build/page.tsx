@@ -7,7 +7,7 @@ import { businessBuildBriefFromRecord } from "@/lib/build/business-build-brief";
 import { BuildStudio } from "@/components/build/BuildStudio";
 import { BuildStudioV2 } from "@/components/build-studio/BuildStudioV2";
 import { loadBuildStudioCapability } from "@/lib/build/build-studio-capability";
-import { loadBuildStudioCustomerStatuses } from "@/lib/build/customer-status-loader";
+import { loadBuildStudioCustomerStatuses, type CapsuleFindManyDelegate } from "@/lib/build/customer-status-loader";
 import { resolvePortalContextEnvelope } from "@/lib/portal-context";
 import { can } from "@/lib/govern/permissions";
 import { EnableRunnerButton } from "@/components/build/EnableRunnerButton";
@@ -235,11 +235,17 @@ export default async function BuildPage({ searchParams }: PageProps) {
   // first-viewport "wife-test" status band without pulling the projection into
   // the client bundle.
   const customerStatuses = await loadBuildStudioCustomerStatuses(
-    prisma,
+    // Prisma's real `groupBy` typing is a conditional generic that doesn't
+    // structurally satisfy the narrow, test-mockable delegate interface;
+    // this cast is the documented escape hatch (see CapsuleFindManyDelegate's
+    // doc comment) rather than widening the interface and breaking test mocks.
+    prisma as unknown as CapsuleFindManyDelegate,
     [...builds, ...(initialActiveBuild ? [initialActiveBuild] : [])].map((build) => ({
       id: build.id,
+      buildId: build.buildId,
       title: build.title,
       phase: build.phase,
+      updatedAt: build.updatedAt,
     })),
   );
   const portalContext = await resolvePortalContextEnvelope(
