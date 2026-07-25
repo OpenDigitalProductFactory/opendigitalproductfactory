@@ -12,6 +12,7 @@ vi.mock("next/link", () => ({
     <a href={href} style={style}>{children}</a>
   ),
 }));
+vi.mock("next/navigation", () => ({ usePathname: () => "/s/bistro" }));
 
 import { StorefrontNav } from "./StorefrontNav";
 import { CtaButton } from "./CtaButton";

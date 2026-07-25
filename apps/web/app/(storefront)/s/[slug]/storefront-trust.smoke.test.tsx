@@ -61,8 +61,16 @@ vi.mock("@dpf/db", () => ({ prisma: prismaMock }));
 
 // Stub the child forms/flows — owned by sibling PRs, not under test here.
 vi.mock("@/components/storefront/SlotBookingFlow", () => ({ SlotBookingFlow: () => <div data-test="slot-flow" /> }));
-vi.mock("@/components/storefront/SignInForm", () => ({ SignInForm: () => <form data-test="signin" /> }));
-vi.mock("@/components/storefront/SignUpForm", () => ({ SignUpForm: () => <form data-test="signup" /> }));
+vi.mock("@/components/storefront/SignInForm", () => ({
+  SignInForm: ({ returnTo }: { returnTo?: string }) => (
+    <form data-test="signin" data-return-to={returnTo ?? ""} />
+  ),
+}));
+vi.mock("@/components/storefront/SignUpForm", () => ({
+  SignUpForm: ({ returnTo }: { returnTo?: string }) => (
+    <form data-test="signup" data-return-to={returnTo ?? ""} />
+  ),
+}));
 vi.mock("@/components/storefront/InquiryForm", () => ({ InquiryForm: () => <form data-test="inquiry" /> }));
 vi.mock("@/components/storefront/OrderForm", () => ({ OrderForm: () => <form data-test="order" /> }));
 vi.mock("@/components/storefront/DonationForm", () => ({ DonationForm: () => <form data-test="donation" /> }));
@@ -216,7 +224,9 @@ describe("customer auth pages", () => {
   it("sign-in inherits brand + reservation vocabulary and links terms/privacy", async () => {
     getPublicStorefront.mockResolvedValue(RESTAURANT);
     const Page = (await import("./sign-in/page")).default;
-    const html = await renderPage(Page({ params: params({ slug: "copper-kettle" }) }));
+    const html = await renderPage(
+      Page({ params: params({ slug: "copper-kettle" }), searchParams: params({}) }),
+    );
     expect(html).toContain("The Copper Kettle");
     expect(html).toMatch(/reservation/i);
     expect(html).toContain("/s/copper-kettle/policies#terms");
@@ -231,6 +241,27 @@ describe("customer auth pages", () => {
     expect(html).toContain("Create your The Copper Kettle account");
     expect(html).toMatch(/reservation/i);
     expect(html).toContain('data-test="signup"');
+  });
+
+  it("threads returnTo from the URL through to sign-in and sign-up (BI-CC4BEB5F)", async () => {
+    getPublicStorefront.mockResolvedValue(RESTAURANT);
+    const SignInPage = (await import("./sign-in/page")).default;
+    const signInHtml = await renderPage(
+      SignInPage({
+        params: params({ slug: "copper-kettle" }),
+        searchParams: params({ returnTo: "/s/copper-kettle/book/itm-1" }),
+      }),
+    );
+    expect(signInHtml).toContain('data-return-to="/s/copper-kettle/book/itm-1"');
+
+    const SignUpPage = (await import("./sign-up/page")).default;
+    const signUpHtml = await renderPage(
+      SignUpPage({
+        params: params({ slug: "copper-kettle" }),
+        searchParams: params({ returnTo: "/s/copper-kettle/book/itm-1" }),
+      }),
+    );
+    expect(signUpHtml).toContain('data-return-to="/s/copper-kettle/book/itm-1"');
   });
 });
 

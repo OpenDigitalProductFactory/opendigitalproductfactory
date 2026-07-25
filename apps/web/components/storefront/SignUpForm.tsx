@@ -8,15 +8,27 @@ import {
   SubmitButton,
   FormStatus,
 } from "@/components/ui/form";
+import { sanitizeStorefrontReturnTo } from "@/lib/storefront/return-to";
 
 export function SignUpForm({
   orgSlug,
   prefillEmail,
+  returnTo,
 }: {
   orgSlug: string;
   prefillEmail?: string;
+  /**
+   * Where to send the customer after account creation — captured from the
+   * booking/inquiry/order route they were on (BI-CC4BEB5F). Validated against
+   * open-redirect before use; an absent or unsafe value falls back to the
+   * storefront home.
+   */
+  returnTo?: string;
 }) {
   const router = useRouter();
+  const safeReturnTo = sanitizeStorefrontReturnTo(returnTo, orgSlug);
+  const successDestination = safeReturnTo ?? `/s/${orgSlug}`;
+  const signInHref = `/s/${orgSlug}/sign-in${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ""}`;
   const [name, setName] = useState("");
   const [email, setEmail] = useState(prefillEmail ?? "");
   const [password, setPassword] = useState("");
@@ -63,7 +75,7 @@ export function SignUpForm({
       return;
     }
 
-    router.push("/portal");
+    router.push(successDestination);
   }
 
   return (
@@ -111,7 +123,7 @@ export function SignUpForm({
       </SubmitButton>
       <p className="text-center text-sm text-[var(--dpf-muted)]">
         Already have an account?{" "}
-        <a href={`/s/${orgSlug}/sign-in`} className="font-medium text-[var(--dpf-accent)]">
+        <a href={signInHref} className="font-medium text-[var(--dpf-accent)]">
           Sign in
         </a>
       </p>

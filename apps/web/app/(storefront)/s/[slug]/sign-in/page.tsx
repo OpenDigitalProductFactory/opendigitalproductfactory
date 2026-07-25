@@ -5,10 +5,13 @@ import { SignInForm } from "@/components/storefront/SignInForm";
 
 export default async function StorefrontSignInPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ returnTo?: string }>;
 }) {
   const { slug } = await params;
+  const { returnTo } = await searchParams;
   // getPublicStorefront is React-cached, so this reuses the layout's fetch.
   const storefront = await getPublicStorefront(slug, { includeUnpublished: true });
   const orgName = storefront?.orgName;
@@ -24,7 +27,7 @@ export default async function StorefrontSignInPage({
           Access your account to {trust.accountPurpose}.
         </p>
       )}
-      <SignInForm orgSlug={slug} />
+      <SignInForm orgSlug={slug} {...(returnTo ? { returnTo } : {})} />
       <p style={{ marginTop: 20, fontSize: 12, color: "var(--dpf-muted)" }}>
         By signing in you agree to our{" "}
         <Link href={`/s/${slug}/policies#terms`} style={{ color: "var(--dpf-accent)" }}>terms</Link>

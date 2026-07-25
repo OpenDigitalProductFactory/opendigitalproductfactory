@@ -1959,6 +1959,11 @@
     "spacing": 0,
     "motion": 0
   },
+  "apps/web/components/storefront/SignInForm.tsx": {
+    "type": 1,
+    "spacing": 0,
+    "motion": 0
+  },
   "apps/web/components/twin/ActorMark.tsx": {
     "type": 1,
     "spacing": 0,
