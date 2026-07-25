@@ -11,4 +11,7 @@ export type DecisionGateCaptureDraft = {
   objectionsResolvedText?: string;
   suggestedSourceTypesText?: string;
   candidateMaterial?: boolean;
+  // BI-6DCF772F: which of the gate's scored options the human chose. Validated
+  // server-side against the row's scoredOptions ids; populates chosenOptionId.
+  chosenOptionId?: string;
 };

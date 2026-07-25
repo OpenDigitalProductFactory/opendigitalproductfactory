@@ -207,6 +207,12 @@ export type DecisionInteractionGateView = {
   rationale: string | null;
   createdAt: Date;
   sources: DecisionPerspectiveEvaluationResult["sources"];
+  // BI-6DCF772F: the scored option menu (when the gate scored one), the kernel's
+  // recommendation, and any already-captured human pick — so the capture form
+  // can offer a structured choice that populates chosenOptionId.
+  scoredOptions: DecisionScoredOption[] | null;
+  recommendedOptionId: string | null;
+  chosenOptionId: string | null;
   escalationCaptured: boolean;
   deferralCaptured: boolean;
 };

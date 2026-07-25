@@ -88,6 +88,24 @@ export async function captureDecisionInteraction(input: DecisionGateCaptureDraft
     };
   }
 
+  // BI-6DCF772F: if the human picked a structured option, it must be one of the
+  // options the gate actually scored — otherwise chosenOptionId would never
+  // resolve against scoredOptions and the weight-inference adapter would drop
+  // the row. A malformed pick is rejected before any write.
+  // scoredOptions is a Json column (DecisionOption[]); read it as unknown and
+  // narrow, mirroring weight-inference-adapter.ts, so this does not depend on
+  // the generated row shape.
+  const rawScoredOptions = (row as { scoredOptions?: unknown }).scoredOptions;
+  const scoredIds = Array.isArray(rawScoredOptions)
+    ? (rawScoredOptions as Array<{ id?: unknown }>)
+      .map((option) => option?.id)
+      .filter((id): id is string => typeof id === "string")
+    : [];
+  const chosenOptionId = (input.chosenOptionId ?? "").trim() || null;
+  if (chosenOptionId && !scoredIds.includes(chosenOptionId)) {
+    throw new Error("Chosen option is not one of the scored options for this decision");
+  }
+
   const capturedAt = new Date().toISOString();
   const result = await prisma.$transaction(async (tx) => {
     if (row.outcomeType === "escalate") {
@@ -113,6 +131,7 @@ export async function captureDecisionInteraction(input: DecisionGateCaptureDraft
       await tx.decisionInteraction.update({
         where: { id: row.id },
         data: {
+          chosenOptionId,
           humanOutcome: {
             type: "escalation",
             answer,
@@ -123,6 +142,7 @@ export async function captureDecisionInteraction(input: DecisionGateCaptureDraft
             resolverUserId: userId,
             capturedAt,
             clearsGate: true,
+            chosenOptionId,
           },
         },
       });
@@ -156,6 +176,7 @@ export async function captureDecisionInteraction(input: DecisionGateCaptureDraft
     await tx.decisionInteraction.update({
       where: { id: row.id },
       data: {
+        chosenOptionId,
         humanOutcome: {
           type: "deferral",
           gapReason: answer,
@@ -164,6 +185,7 @@ export async function captureDecisionInteraction(input: DecisionGateCaptureDraft
           resolverUserId: userId,
           capturedAt,
           clearsGate: false,
+          chosenOptionId,
         },
       },
     });

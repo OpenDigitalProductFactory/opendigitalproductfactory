@@ -30,6 +30,7 @@ describe("validateOrgDecisionCapture", () => {
       rationale: null,
       makeStanding: true,
       standingTitle: null,
+      chosenOptionId: null,
     });
   });
 });

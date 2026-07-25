@@ -21,11 +21,16 @@ export type OpenOrgDecision = {
   outcomeType: string;
   /** ISO timestamp; rendered in the viewer's timezone via LocalTime. */
   createdAt: string;
+  // BI-6DCF772F: the scored option menu (when the gate scored one) and the
+  // kernel's recommendation, so the owner picks a structured option.
+  scoredOptions?: { id: string; description: string }[] | null;
+  recommendedOptionId?: string | null;
 };
 
 function CaptureCard({ decision }: { decision: OpenOrgDecision }) {
   const router = useRouter();
   const [answer, setAnswer] = useState("");
+  const [chosenOptionId, setChosenOptionId] = useState<string>(decision.recommendedOptionId ?? "");
   const [makeStanding, setMakeStanding] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<null | { standing: boolean }>(null);
@@ -39,6 +44,7 @@ function CaptureCard({ decision }: { decision: OpenOrgDecision }) {
         interactionId: decision.interactionId,
         answer,
         makeStanding,
+        chosenOptionId: chosenOptionId || undefined,
       });
       if (!result.ok) {
         setError(result.error);
@@ -71,6 +77,27 @@ function CaptureCard({ decision }: { decision: OpenOrgDecision }) {
         <LocalTime value={decision.createdAt} mode="date" className="text-xs text-[var(--dpf-muted)] shrink-0" />
       </div>
       <form onSubmit={onSubmit}>
+        {decision.scoredOptions && decision.scoredOptions.length > 0 && (
+          <fieldset className="grid gap-1.5 text-xs text-[var(--dpf-text)] mb-2">
+            <legend className="font-medium mb-1">Which option did you choose?</legend>
+            {decision.scoredOptions.map((option) => (
+              <label key={option.id} className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name={`chosen-${decision.interactionId}`}
+                  value={option.id}
+                  checked={chosenOptionId === option.id}
+                  onChange={() => setChosenOptionId(option.id)}
+                  className="accent-[var(--dpf-accent)]"
+                />
+                <span>{option.description}</span>
+                {decision.recommendedOptionId === option.id && (
+                  <span className="text-[var(--dpf-muted)]">(recommended)</span>
+                )}
+              </label>
+            ))}
+          </fieldset>
+        )}
         <label className="sr-only" htmlFor={`answer-${decision.interactionId}`}>
           What should the business do?
         </label>

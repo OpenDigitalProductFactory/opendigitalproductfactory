@@ -57,7 +57,15 @@ The two open-ended gates deferred above are now instrumented. Because their opti
 - The guarded argmax (`recommend`/`arbitrate` verdict + scored options only) was extracted from `evaluatePerspectiveGate` into a shared `resolveRecommendedOptionId` (`option-recommendation.ts`), so `org-business-gate` (via the wrapper) and `profession-gate` (which writes its own row) share ONE implementation instead of hand-rolling the guard twice. `profession-gate` now applies it after its synchronous evaluator call; `org-business-gate` forwards `scoredOptions` and inherits it.
 - No migration: the `scoredOptions`/`recommendedOptionId` columns already exist (Phase 1.5). `chosenOptionId` for these gates still awaits **part 2** (below), so `weight-inference-adapter.ts` — which requires all three columns non-null — will begin extracting observations from org-business/profession rows only once part 2 lands.
 
-**Still deferred to BI-6DCF772F part 2** (live UX, routed through `dpf-ux-fit-review`): the escalation-capture form redesign (`decision-perspective.ts` / `org-decision-capture.ts`) so a human resolving an escalate/defer picks a structured option (populating `chosenOptionId`) alongside the existing free-text rationale.
+### Phase 1.5 (follow-up) — escalation-capture structured option pick (SHIPPED as BI-6DCF772F part 2)
+
+The last column, `chosenOptionId`, is now captured for the escalation/defer paths. UX-fit-reviewed `fits-with-guardrails` (recorded on BI-6DCF772F): a structured option control added in-place to the existing capture forms, rendered ONLY when the gate scored options (free-text-only fallback otherwise), no new route/dashboard.
+
+- Read side: `DecisionInteractionGateView` + its mapper (`view-model.ts`, incl. the `DECISION_INTERACTION_GATE_SELECT`) now carry `scoredOptions`/`recommendedOptionId`/`chosenOptionId`; the org review-page query selects them too.
+- Write side: `captureDecisionInteraction` (build, `decision-perspective.ts`) and `captureOrgDecisionOutcome` (org, `org-decision-capture.ts`) accept an optional `chosenOptionId`, **validate server-side that it is one of the row's `scoredOptions` ids** (reject otherwise — a bad pick would never resolve against `scoredOptions` and the adapter would silently drop the row), and persist it on the column and inside `humanOutcome`.
+- Forms: `DecisionPerspectiveGatePanel` (build) and `OrgDecisionCaptureList` (org) render a radio group over the scored options, defaulting to the kernel's recommendation.
+
+With both parts landed, `weight-inference-adapter.ts` (unchanged) now extracts complete observations from org-business/profession gate rows once a human picks an option — the medium-timescale loop is closed for all four instrumented gates.
 
 ## Acceptance
 

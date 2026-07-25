@@ -90,6 +90,9 @@ export function DecisionPerspectiveGatePanel({ interaction, onCapture, voiceOutp
   const [objectionsResolvedText, setObjectionsResolvedText] = useState("");
   const [suggestedSourceTypesText, setSuggestedSourceTypesText] = useState("");
   const [candidateMaterial, setCandidateMaterial] = useState(false);
+  // BI-6DCF772F: which scored option the human is picking. Defaults to the
+  // kernel's recommendation when the gate scored options; "" when it did not.
+  const [chosenOptionId, setChosenOptionId] = useState<string>(interaction?.recommendedOptionId ?? "");
   const [pendingCapture, setPendingCapture] = useState(false);
   const [captureError, setCaptureError] = useState<string | null>(null);
   const [captureSaved, setCaptureSaved] = useState(false);
@@ -147,6 +150,7 @@ export function DecisionPerspectiveGatePanel({ interaction, onCapture, voiceOutp
         objectionsResolvedText,
         suggestedSourceTypesText,
         candidateMaterial,
+        chosenOptionId: chosenOptionId || undefined,
       });
       setCaptureSaved(true);
       setCaptureOpen(false);
@@ -258,6 +262,30 @@ export function DecisionPerspectiveGatePanel({ interaction, onCapture, voiceOutp
             data-testid="wwmd-gate-capture-form"
           >
             <div className="grid gap-3">
+              {activeInteraction.scoredOptions && activeInteraction.scoredOptions.length > 0 && (
+                <fieldset
+                  className="grid gap-1.5 text-xs font-semibold text-[var(--dpf-text)]"
+                  data-testid="wwmd-gate-option-pick"
+                >
+                  <legend className="mb-1">Which option did you choose?</legend>
+                  {activeInteraction.scoredOptions.map((option) => (
+                    <label key={option.id} className="flex items-center gap-2 font-normal text-[var(--dpf-text)]">
+                      <input
+                        type="radio"
+                        name="wwmd-chosen-option"
+                        value={option.id}
+                        checked={chosenOptionId === option.id}
+                        onChange={() => setChosenOptionId(option.id)}
+                        className="accent-[var(--dpf-accent)]"
+                      />
+                      <span>{option.description}</span>
+                      {activeInteraction.recommendedOptionId === option.id && (
+                        <span className="text-[var(--dpf-muted)]">(recommended)</span>
+                      )}
+                    </label>
+                  ))}
+                </fieldset>
+              )}
               <label className="grid gap-1 text-xs font-semibold text-[var(--dpf-text)]">
                 {captureOutcomeType === "escalate" ? "Human direction" : "Missing evidence"}
                 <textarea
