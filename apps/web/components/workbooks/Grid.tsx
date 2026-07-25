@@ -29,9 +29,9 @@ import {
   type CellPasteArgs,
   type CellMouseArgs,
   type CellMouseEvent,
-  type CellSelectArgs,
   type CellKeyDownArgs,
   type CellKeyboardEvent,
+  type PositionChangeArgs,
 } from "react-data-grid";
 import "react-data-grid/lib/styles.css";
 import "./dpf-grid.css";
@@ -1121,8 +1121,9 @@ export function WorkbookGrid({
   );
 
   // Arrow-key / click navigation collapses the range to the newly-active cell.
-  const onSelectedCellChange = useCallback(
-    (args: CellSelectArgs<GridRowData, SummaryRow>) => {
+  const onActivePositionChange = useCallback(
+    (args: PositionChangeArgs<GridRowData, SummaryRow>) => {
+      if (!args.column) return;
       const col = dataColIndex(args.column.key);
       if (col >= 0) setRange(singleCell(args.rowIdx, col));
     },
@@ -1133,7 +1134,7 @@ export function WorkbookGrid({
   // paste ride the native onCellCopy/onCellPaste above.)
   const onCellKeyDown = useCallback(
     (args: CellKeyDownArgs<GridRowData, SummaryRow>, event: CellKeyboardEvent) => {
-      if (args.mode === "EDIT") return;
+      if (args.mode === "EDIT" || !args.column) return;
       const col = dataColIndex(args.column.key);
       if (col < 0) return;
       const cur = range ?? singleCell(args.rowIdx, col);
@@ -1546,7 +1547,7 @@ export function WorkbookGrid({
               onCellCopy={onCellCopy}
               onCellPaste={onCellPaste}
               onCellClick={onCellClick}
-              onSelectedCellChange={onSelectedCellChange}
+              onActivePositionChange={onActivePositionChange}
               onCellKeyDown={onCellKeyDown}
               sortColumns={sortColumns}
               onSortColumnsChange={setSortColumns}
