@@ -71,6 +71,27 @@ export function assertRepoNotShallow(git, opts = {}) {
   }
 }
 
+/**
+ * Deepen a shallow repo in place (BI-AA2201B0). A `git merge` against a
+ * candidate ref that landed via a disjoint shallow graft (e.g. a separate
+ * depth-limited fetch of just that ref) fails with "refusing to merge
+ * unrelated histories" even when the two refs share real ancestry on the
+ * remote — the local object store just can't see it. `--unshallow` is the
+ * same repair `assertRepoNotShallow` already documents; this wraps it so
+ * mutating callers (a merge that MUST succeed, not just a read-only diff)
+ * can self-repair instead of failing loud. No-op when already full, so it is
+ * safe to call unconditionally before every merge — only fetches once, the
+ * first time the shallow boundary is still present.
+ *
+ * @param {(args: string[]) => string} git
+ * @param {{ remote?: string }} [opts]
+ */
+export function unshallowRootSharedSafe(git, opts = {}) {
+  if (!isShallowRepository(git)) return { mode: "already-full" };
+  git(["fetch", "--unshallow", opts.remote ?? "origin"]);
+  return { mode: "unshallowed" };
+}
+
 /** Default git runner for CLI use. */
 export function defaultGit(args) {
   return execFileSync("git", args, {

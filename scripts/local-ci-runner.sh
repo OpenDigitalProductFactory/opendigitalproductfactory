@@ -79,6 +79,20 @@ if [ -z "$WORKSPACE" ]; then
   WORKSPACE="$(dirname "$root")/$(basename "$root")-worktrees/.local-ci-runner"
 fi
 
+# Shared-object-store self-repair (BI-AA2201B0): the scratch workspace below
+# is a linked worktree of $root, so it shares $root's .git/shallow. If that
+# shallow boundary is a disjoint graft for the candidate branch or base ref
+# (e.g. a prior per-ref depth-limited fetch), the merge step a few lines down
+# fails hard with "fatal: refusing to merge unrelated histories" even though
+# the branches share real ancestry on the remote — the local object store
+# just can't see it (verified mechanism, BI-AA2201B0). Deepen $root once
+# up front so the merge can find the true common ancestor; a no-op on every
+# call after the first, since the check gates on still-being-shallow.
+if [ "$DRY_RUN" != "1" ] && [ "$(git -C "$root" rev-parse --is-shallow-repository 2>/dev/null || printf 'false')" = "true" ]; then
+  printf 'local-ci-runner: root clone is shallow — fetching full history so the scratch merge has a common ancestor (BI-AA2201B0)\n'
+  git -C "$root" fetch --unshallow origin || die "failed to unshallow root clone at $root"
+fi
+
 candidate_sha="$(git -C "$repo_top" rev-parse --verify "$CANDIDATE" 2>/dev/null || true)"
 base_sha="$(git -C "$repo_top" rev-parse --verify "$BASE_REF" 2>/dev/null || true)"
 base_commit_date=""
