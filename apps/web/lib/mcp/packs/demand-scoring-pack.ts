@@ -84,6 +84,27 @@ const definitions: ToolDefinition[] = [
     sideEffect: true,
   },
   {
+    name: "set_backlog_delivery_budget",
+    description:
+      "View or set the operator-owned backlog delivery budget: how many backlog items the governed daily tee-up (and on-demand process_backlog_for_build_studio) is funded to promote into Build Studio per day, plus whether governed promotion is enabled at all. Called with no fields, it's a read: returns the current budget alongside live parallelism context. A bigger budget only affects INTAKE — it does not raise how many builds can execute at once (Build Studio's shared sandbox is hard-capped, separately, at BUILD_WIP_CAP=3; see buildWipCap/activeBuilds in the response). Every change is audited.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        dailyBudget: {
+          type: "integer",
+          description: "Items/day funded for governed backlog→build promotion (0-50). Omit to leave unchanged (or, with enabled also omitted, to just read current state).",
+        },
+        enabled: {
+          type: "boolean",
+          description: "Turn governed backlog promotion on/off entirely (governedBacklogEnabled). Omit to leave unchanged.",
+        },
+      },
+      required: [],
+    },
+    requiredCapability: "manage_backlog",
+    sideEffect: true,
+  },
+  {
     name: "find_duplicate_candidates",
     description:
       "Find open backlog items that look like near-duplicates of a given item (by title/body similarity), so demand can be merged instead of fragmenting reach across duplicates. Read-only — returns ranked candidates; use merge_backlog_items to actually merge.",
@@ -477,6 +498,75 @@ async function setDemandPolicyHandler(params: Record<string, unknown>): Promise<
   };
 }
 
+const MAX_BACKLOG_DELIVERY_BUDGET = 50;
+
+/**
+ * View or set the backlog delivery budget (BI-5556CC2D): items/day funded for
+ * governed backlog->build promotion, framed as an operator-owned allocation
+ * (mirrors setDemandPolicyHandler's PlatformDevConfig upsert shape) rather than
+ * a bare rate-limit constant. Always returns live parallelism context alongside
+ * the budget — BUILD_WIP_CAP (apps/web/lib/build/wip-cap.ts) is a SEPARATE,
+ * hard, correctness-driven ceiling on concurrent Build Studio sandbox execution
+ * (one shared sandbox; concurrent BUILD-phase work corrupts it) that this budget
+ * does not and must not change. A bigger budget only funds more intake into
+ * ideate/plan/review; it does not raise execution parallelism.
+ */
+async function setBacklogDeliveryBudgetHandler(params: Record<string, unknown>): Promise<ToolResult> {
+  const data: { backlogTeeUpDailyCap?: number; governedBacklogEnabled?: boolean } = {};
+
+  const rawBudget = params["dailyBudget"];
+  if (typeof rawBudget === "number" && Number.isFinite(rawBudget)) {
+    if (rawBudget < 0 || rawBudget > MAX_BACKLOG_DELIVERY_BUDGET) {
+      return {
+        success: false,
+        error: "invalid_input",
+        message: `dailyBudget must be between 0 and ${MAX_BACKLOG_DELIVERY_BUDGET}.`,
+      };
+    }
+    data.backlogTeeUpDailyCap = Math.floor(rawBudget);
+  }
+
+  const rawEnabled = params["enabled"];
+  if (typeof rawEnabled === "boolean") {
+    data.governedBacklogEnabled = rawEnabled;
+  }
+
+  if (Object.keys(data).length > 0) {
+    await prisma.platformDevConfig.upsert({
+      where: { id: "singleton" },
+      update: data,
+      create: { id: "singleton", ...data },
+    });
+  }
+
+  const fresh = await prisma.platformDevConfig.findUnique({
+    where: { id: "singleton" },
+    select: { backlogTeeUpDailyCap: true, governedBacklogEnabled: true },
+  });
+
+  const { BUILD_WIP_CAP, TERMINAL_BUILD_PHASES } = await import("@/lib/build/wip-cap");
+  const activeBuilds = await prisma.featureBuild.count({
+    where: { phase: { notIn: [...TERMINAL_BUILD_PHASES] }, abandonedAt: null, parentEpicId: null },
+  });
+
+  const dailyBudget = fresh?.backlogTeeUpDailyCap ?? 3;
+  const enabled = fresh?.governedBacklogEnabled === true;
+  const parallelismNote =
+    activeBuilds >= BUILD_WIP_CAP
+      ? ` Build Studio's shared sandbox is already at its ${BUILD_WIP_CAP}-build execution limit (${activeBuilds} active) — new intake will queue behind it, not run in parallel. For more parallel throughput, use external worktree builds (unbounded — AGENTS.md §17), not a bigger budget.`
+      : ` ${activeBuilds}/${BUILD_WIP_CAP} of Build Studio's shared-sandbox execution slots are in use.`;
+
+  return {
+    success: true,
+    entityId: "singleton",
+    message:
+      Object.keys(data).length > 0
+        ? `Backlog delivery budget set to ${dailyBudget}/day (governed promotion ${enabled ? "enabled" : "disabled"}).${parallelismNote}`
+        : `Backlog delivery budget is ${dailyBudget}/day (governed promotion ${enabled ? "enabled" : "disabled"}).${parallelismNote}`,
+    data: { dailyBudget, enabled, activeBuilds, buildWipCap: BUILD_WIP_CAP },
+  };
+}
+
 async function findDuplicateCandidatesHandler(params: Record<string, unknown>): Promise<ToolResult> {
   const itemId = String(params["itemId"] ?? "");
   const target = await prisma.backlogItem.findUnique({
@@ -671,6 +761,7 @@ export const demandScoringPack: ToolPack = {
     score_demand_item: (params) => scoreDemandItemHandler(params),
     record_effort_estimate: (params, userId) => recordEffortEstimateHandler(params, userId),
     set_demand_policy: (params) => setDemandPolicyHandler(params),
+    set_backlog_delivery_budget: (params) => setBacklogDeliveryBudgetHandler(params),
     find_duplicate_candidates: (params) => findDuplicateCandidatesHandler(params),
     merge_backlog_items: (params) => mergeBacklogItemsHandler(params),
     sweep_duplicate_demand: (params) => sweepDuplicateDemandHandler(params),
@@ -681,6 +772,7 @@ export const demandScoringPack: ToolPack = {
     score_demand_item: ["backlog_write"],
     record_effort_estimate: ["backlog_write"],
     set_demand_policy: ["backlog_write"],
+    set_backlog_delivery_budget: ["backlog_write"],
     find_duplicate_candidates: ["backlog_read"],
     merge_backlog_items: ["backlog_write"],
     sweep_duplicate_demand: ["backlog_read"],
