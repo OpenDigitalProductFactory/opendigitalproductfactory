@@ -28,7 +28,7 @@ not weaken local backlog authority or make discovery itself trusted.
 Final physical acceptance also depends on the independently governed demand
 direction in `2026-07-21-federated-demand-sharing-direction.md`: deliberately
 selected demand may move end company → distributor/reseller → the configured
-Founder Hub peer (Arcamanus in the founder installation), never the reverse.
+Founder Hub peer, never the reverse.
 
 ## Backlog coverage
 
@@ -61,6 +61,13 @@ dependency of the installed-host acceptance outcome.
 - `RemoteAction`, `ChangeRequest`, `EdgeNode`, `EdgeNodeCapability`,
   `EdgeNode.scopePolicy`, credential encryption, Step CA, and the existing
   cross-platform bootstrap scripts remain the canonical owners.
+- `EdgeNodeCertificate` is one intentional addition to the measured Prisma
+  substrate. The existing `EdgeNode` record cannot preserve overlapping
+  renewal, revocation, and audit history for multiple machine certificates
+  without lossy JSON or repeating columns. The side table remains subordinate
+  to `EdgeNode`, stores no private key, and is justified by the one-to-many
+  lifecycle invariant. The static substrate baseline is refreshed with this
+  reviewed budget increase; no parallel node or trust authority is introduced.
 
 ## Deliverable 1 — BI-F12A8D0D: machine-bound read-only dispatch
 
