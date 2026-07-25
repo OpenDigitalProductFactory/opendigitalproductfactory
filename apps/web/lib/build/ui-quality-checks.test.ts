@@ -1,13 +1,20 @@
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { describe, it, expect } from "vitest";
 import { scanUiSource, formatUiQualityReport } from "./ui-quality-checks";
 
 describe("scanUiSource — design tokens", () => {
-  it("does not expose a wildcard arbitrary-value utility to Tailwind's content scanner", () => {
-    const source = readFileSync(new URL("./ui-quality-checks.ts", import.meta.url), "utf8");
+  it("does not expose a wildcard arbitrary-value utility anywhere Tailwind can scan", () => {
+    const repoRoot = fileURLToPath(new URL("../../../../", import.meta.url));
     const wildcardUtility = ["bg-[", "var(--dpf-*", ")]"].join("");
+    const result = spawnSync("git", ["grep", "-l", "-F", wildcardUtility, "--", "."], {
+      cwd: repoRoot,
+      encoding: "utf8",
+    });
 
-    expect(source).not.toContain(wildcardUtility);
+    expect(result.error).toBeUndefined();
+    expect([0, 1]).toContain(result.status);
+    expect(result.stdout.trim()).toBe("");
   });
 
   it("flags a hardcoded hex on platform UI as critical", () => {
