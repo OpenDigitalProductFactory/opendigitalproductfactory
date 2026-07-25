@@ -12,6 +12,8 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { prisma } from "@dpf/db";
 
+import { resolveEdgeNodeMtls, type EdgeNodeMtlsDb } from "@/lib/auth/edge-node-mtls";
+import { loadEdgeMtlsProxySecret } from "@/lib/auth/edge-mtls-proxy-secret";
 import { resolveEdgeNodeAuth } from "@/lib/auth/edge-node-token";
 import { recordActionResult, type DispatchOrchestratorDb } from "@/lib/remote-action/dispatch-orchestrator";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
@@ -35,6 +37,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       { ok: false, error: authz.error, message: authz.message },
       { status: authz.error === "scope_disallowed" ? 403 : 401 },
     );
+  }
+
+  let proxySecret: string;
+  try {
+    proxySecret = loadEdgeMtlsProxySecret();
+  } catch {
+    return NextResponse.json({ ok: false, error: "machine_authentication_unavailable" }, { status: 503 });
+  }
+  const mtls = await resolveEdgeNodeMtls(
+    request.headers,
+    authz.edgeNodeRowId,
+    prisma as unknown as EdgeNodeMtlsDb,
+    { proxySecret },
+  );
+  if (!mtls.ok) {
+    return NextResponse.json({ ok: false, error: "machine_authentication_failed" }, { status: 401 });
   }
 
   let body: { actionKey?: unknown; outcome?: unknown; evidence?: unknown };

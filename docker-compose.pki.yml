@@ -26,6 +26,7 @@ services:
       - step-ca-password
     volumes:
       - step_ca_data:/home/step
+      - ./scripts/pki/edge-client.tpl:/etc/dpf/pki/edge-client.tpl:ro
     security_opt:
       - no-new-privileges:true
     mem_limit: 384m

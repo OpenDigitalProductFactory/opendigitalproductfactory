@@ -44,6 +44,15 @@ export const EDGE_NODE_TRUST_STATES = [
 ] as const;
 export type EdgeNodeTrustState = (typeof EDGE_NODE_TRUST_STATES)[number];
 
+export const EDGE_NODE_CERTIFICATE_STATUSES = [
+  "active",
+  "quarantined",
+  "superseded",
+  "revoked",
+] as const;
+export type EdgeNodeCertificateStatus =
+  (typeof EDGE_NODE_CERTIFICATE_STATUSES)[number];
+
 export const EDGE_NODE_CAPABILITY_MODES = [
   "enabled",
   "reporting-only",

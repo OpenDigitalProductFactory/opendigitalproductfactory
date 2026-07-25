@@ -77,7 +77,8 @@ RUN NODE_OPTIONS="--max-old-space-size=8192" NEXT_TELEMETRY_DISABLED=1 pnpm --fi
 # ─── Stage 4: init (build source for migrations, seed, Prisma client) ─────────
 FROM deps AS init
 COPY pnpm-workspace.yaml tsconfig.base.json .gitignore ./
-COPY docker-compose.yml docker-compose.release.yml docker-compose.pki.yml docker-compose.organization-trust.yml docker-compose.tls.yml ./
+COPY docker-compose.yml docker-compose.release.yml docker-compose.pki.yml docker-compose.organization-trust.yml docker-compose.tls.yml docker-compose.edge-actions.yml ./
+COPY scripts/pki/edge-client.tpl ./scripts/pki/
 COPY scripts/set-hooks-path.mjs ./scripts/
 COPY scripts/lib/resolve-capability-compose-profiles.mjs ./scripts/lib/
 COPY scripts/lib/govern-capability-compose-args.mjs ./scripts/lib/
@@ -137,7 +138,8 @@ RUN pnpm --filter @dpf/db exec prisma generate
 RUN node packages/db/scripts/generate-tools-snapshot.js
 RUN mkdir -p /dpf-release-assets/scripts/lib /dpf-release-assets/scripts/installer/lib \
       /dpf-release-assets/monitoring && \
-    cp docker-compose.yml docker-compose.release.yml docker-compose.pki.yml docker-compose.organization-trust.yml docker-compose.tls.yml /dpf-release-assets/ && \
+    cp docker-compose.yml docker-compose.release.yml docker-compose.pki.yml docker-compose.organization-trust.yml docker-compose.tls.yml docker-compose.edge-actions.yml /dpf-release-assets/ && \
+    mkdir -p /dpf-release-assets/scripts/pki && cp scripts/pki/edge-client.tpl /dpf-release-assets/scripts/pki/ && \
     cp scripts/bootstrap-organization-pki.ps1 /dpf-release-assets/scripts/ && \
     cp scripts/lib/resolve-capability-compose-profiles.mjs scripts/lib/govern-capability-compose-args.mjs scripts/lib/capability-state-hash.mjs /dpf-release-assets/scripts/lib/ && \
     cp scripts/capability-service-catalog.generated.json /dpf-release-assets/scripts/ && \

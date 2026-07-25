@@ -13,6 +13,8 @@
 // Nothing here runs until the route layer's DPF_REMOTE_ACTION_DISPATCH_ENABLED flag
 // AND the node's action.execute capability are both on. No mutation: P2 is read-only.
 
+import { randomBytes } from "node:crypto";
+
 import {
   canTransitionDispatch,
   claimableActionsForNode,
@@ -21,6 +23,11 @@ import {
   type DispatchableActionView,
   type RemoteActionDispatchState,
 } from "@dpf/db/remote-action-dispatch";
+import {
+  EDGE_ACTION_ENVELOPE_VERSION,
+  type EdgeActionEnvelope,
+  type SignedEdgeActionEnvelope,
+} from "@dpf/db/edge-action-envelope";
 
 const MAX_CLAIM_BATCH = 25;
 
@@ -45,11 +52,12 @@ export interface DispatchOrchestratorDb {
   };
 }
 
-export interface ClaimedAction {
-  actionKey: string;
-  actionType: string;
-  parameters: unknown;
+export interface EdgeActionEnvelopeSigner {
+  signingKeyId: string;
+  sign(envelope: EdgeActionEnvelope): SignedEdgeActionEnvelope;
 }
+
+export type ClaimedAction = SignedEdgeActionEnvelope;
 
 export interface ClaimResult {
   claimed: ClaimedAction[];
@@ -67,7 +75,13 @@ export interface ClaimResult {
 export async function claimActionsForNode(
   db: DispatchOrchestratorDb,
   node: ClaimingNodeView,
-  opts: { limit?: number; now?: Date } = {},
+  opts: {
+    signer: EdgeActionEnvelopeSigner;
+    limit?: number;
+    now?: Date;
+    nonceFactory?: () => string;
+    envelopeLifetimeMs?: number;
+  },
 ): Promise<ClaimResult> {
   // Belt-and-suspenders: the route already auth-gates trust + capability, but a
   // disabled/untrusted node claims nothing here either.
@@ -98,17 +112,40 @@ export async function claimActionsForNode(
   const eligible = claimableActionsForNode(node, views);
 
   const now = opts.now ?? new Date();
+  const expiresAt = new Date(now.getTime() + Math.min(opts.envelopeLifetimeMs ?? 2 * 60 * 1000, 5 * 60 * 1000));
+  const nonceFactory = opts.nonceFactory ?? (() => randomBytes(24).toString("base64url"));
   const claimed: ClaimedAction[] = [];
   for (const e of eligible) {
+    const row = candidates.find((c) => c.actionKey === e.actionKey);
+    const envelope: EdgeActionEnvelope = {
+      version: EDGE_ACTION_ENVELOPE_VERSION,
+      signingKeyId: opts.signer.signingKeyId,
+      actionKey: e.actionKey,
+      nodeId: node.nodeId,
+      actionType: e.actionType,
+      parameters: row?.parameters ?? {},
+      nonce: nonceFactory(),
+      issuedAt: now.toISOString(),
+      expiresAt: expiresAt.toISOString(),
+    };
+    const signed = opts.signer.sign(envelope);
     // Single-claim guard: only an action still `queued` is claimable; the first
     // updater wins (count 1), a racing poller sees count 0.
     const res = await db.remoteAction.updateMany({
       where: { actionKey: e.actionKey, status: "queued" },
-      data: { status: "claimed", edgeNodeId: node.edgeNodeId, startedAt: now },
+      data: {
+        status: "claimed",
+        edgeNodeId: node.edgeNodeId,
+        startedAt: now,
+        dispatchNonce: signed.nonce,
+        dispatchIssuedAt: now,
+        dispatchExpiresAt: expiresAt,
+        dispatchSigningKeyId: signed.signingKeyId,
+        dispatchSignature: signed.signature,
+      },
     });
     if (res.count === 1) {
-      const row = candidates.find((c) => c.actionKey === e.actionKey);
-      claimed.push({ actionKey: e.actionKey, actionType: e.actionType, parameters: row?.parameters ?? {} });
+      claimed.push(signed);
     }
   }
   return { claimed, skipped: eligible.length - claimed.length };

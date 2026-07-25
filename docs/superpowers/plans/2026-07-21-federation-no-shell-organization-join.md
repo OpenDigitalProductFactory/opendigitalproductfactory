@@ -25,6 +25,11 @@ This closes the trust prerequisite for certificate-valid nearby pairing and
 automatic reconciliation of policy-eligible same-organization demand. It does
 not weaken local backlog authority or make discovery itself trusted.
 
+Final physical acceptance also depends on the independently governed demand
+direction in `2026-07-21-federated-demand-sharing-direction.md`: deliberately
+selected demand may move end company → distributor/reseller → the configured
+Founder Hub peer, never the reverse.
+
 ## Backlog coverage
 
 - Decision: decomposed
@@ -39,6 +44,8 @@ The four deliverables are independently shippable: the read-only channel is a
 general security foundation; the two host actions are independently testable
 without UI; the Connections workflow is a user capability; installed-host
 acceptance is governed release evidence rather than source implementation.
+Directional sharing is independently mapped to `BI-485F88E9`, but is a
+dependency of the installed-host acceptance outcome.
 
 ## Architecture decisions
 
@@ -54,6 +61,13 @@ acceptance is governed release evidence rather than source implementation.
 - `RemoteAction`, `ChangeRequest`, `EdgeNode`, `EdgeNodeCapability`,
   `EdgeNode.scopePolicy`, credential encryption, Step CA, and the existing
   cross-platform bootstrap scripts remain the canonical owners.
+- `EdgeNodeCertificate` is one intentional addition to the measured Prisma
+  substrate. The existing `EdgeNode` record cannot preserve overlapping
+  renewal, revocation, and audit history for multiple machine certificates
+  without lossy JSON or repeating columns. The side table remains subordinate
+  to `EdgeNode`, stores no private key, and is justified by the one-to-many
+  lifecycle invariant. The static substrate baseline is refreshed with this
+  reviewed budget increase; no parallel node or trust authority is introduced.
 
 ## Deliverable 1 — BI-F12A8D0D: machine-bound read-only dispatch
 
@@ -188,11 +202,16 @@ deployed through the governed install/update path.
 3. Verify certificate-valid HTTPS from Mac to Windows and Windows to Mac.
 4. Verify discovery add/expiry, automatic invitation exchange, matching code,
    dual approval, and service restart persistence.
-5. Approve one minimized same-organization projection. Verify selected demand
-   reconciles automatically, unselected/excluded fields do not egress, local
-   authority is preserved, offline reconnect deduplicates, and revocation stops
-   exchange.
-6. Capture V-01/V-03 evidence without secrets and attach it to `BI-52D34506`.
+5. On each installation, create or select one eligible platform-demand item.
+   Verify Mac-originated work becomes visible on Windows and Windows-originated
+   work becomes visible on Mac without another sharing click. Update and
+   withdraw each source item, then verify versioned reconciliation, excluded
+   fields never egress, neither peer overwrites source-owned status/priority/
+   estimate/build state, offline reconnect deduplicates, and revocation stops
+   exchange in both directions.
+6. Exercise the role-correct end company → distributor/reseller → Founder Hub
+   route and prove reverse-facing link roles are rejected by both UI and server.
+7. Capture V-01/V-03 evidence without secrets and attach it to `BI-52D34506`.
 
 ## Completion gate
 
@@ -207,4 +226,8 @@ V-03, and a final parent audit proves:
 - only the two founder-approved organization-join mutation types are enabled;
 - certificate-valid pairing and approved automatic demand reconciliation work
   across the actual Founder Hub Mac/Windows topology;
+- same-company demand visibility is bidirectional while every source backlog
+  remains single-writer authoritative;
+- only deliberately selected demand follows end company → distributor/reseller
+  → configured Founder Hub direction;
 - local backlog state remains sovereign and unselected data never egresses.

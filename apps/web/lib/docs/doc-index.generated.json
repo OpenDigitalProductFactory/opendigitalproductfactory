@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 549,
+  "pageCount": 550,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -3964,6 +3964,20 @@
         "review-and-remediation",
         "receipt-privacy-check",
         "existing-installs"
+      ]
+    },
+    "docs/operations/remote-action-edge-dispatch.md": {
+      "publicHref": "/operations/remote-action-edge-dispatch/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "machine-bound-edge-action-dispatch",
+        "what-the-organization-pki-bootstrap-configures",
+        "enabling-the-pilot",
+        "request-and-evidence-flow",
+        "renewal-quarantine-and-revocation",
+        "operational-checks"
       ]
     },
     "docs/operations/runtime-glossary.md": {

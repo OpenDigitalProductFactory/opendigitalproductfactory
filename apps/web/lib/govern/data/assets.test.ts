@@ -143,4 +143,29 @@ describe("seeded registry", () => {
       projectionOverride: "structure",
     });
   });
+
+  it("governs Edge Node certificate identity and lifecycle as restricted security evidence", () => {
+    const certificate = lookupAsset(DATA_ASSET_REGISTRY, "data:edge-node-certificate");
+    expect(certificate).toMatchObject({
+      physical: { prismaModel: "EdgeNodeCertificate" },
+      sensitivity: "restricted",
+      criticality: "high",
+      lifecycleClass: "security-audit",
+      residencyClass: "local-only",
+      projectionClass: "metadata",
+    });
+    expect(
+      resolveField(DATA_ASSET_REGISTRY, "data:edge-node-certificate#fingerprintSha256"),
+    ).toMatchObject({
+      collectionRule: "minimize",
+      protection: "mask-on-read",
+      projectionOverride: "structure",
+    });
+    expect(
+      resolveField(DATA_ASSET_REGISTRY, "data:edge-node-certificate#revokedAt"),
+    ).toMatchObject({
+      resolution: "governed",
+      projectionOverride: "metadata",
+    });
+  });
 });

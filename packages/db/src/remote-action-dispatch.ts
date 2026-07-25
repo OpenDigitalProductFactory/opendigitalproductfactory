@@ -92,6 +92,8 @@ export interface DispatchableActionView {
 
 export interface ClaimingNodeView {
   edgeNodeId: string;
+  /** Stable external node id embedded in the signed machine-bound envelope. */
+  nodeId: string;
   /** Must be "trusted" to claim. */
   trustState: string;
   /** The node's estate scope. null = the org's own (internal) estate. */
@@ -99,6 +101,8 @@ export interface ClaimingNodeView {
   customerSiteId: string | null;
   /** Whether the action.execute capability is enabled for this node (default off). */
   actionExecuteEnabled: boolean;
+  /** Explicit per-node action allowlist from the approved scope policy. */
+  allowedActionTypes: readonly string[];
 }
 
 export interface ClaimDecision {
@@ -134,6 +138,9 @@ export function isClaimableByNode(action: DispatchableActionView, node: Claiming
   if (action.riskClass !== "read-only") return { claimable: false, reason: "mutating-action-gated-to-P3" };
   if (!isReadonlyDispatchActionType(action.actionType)) {
     return { claimable: false, reason: `actionType-not-in-readonly-allowlist (${action.actionType})` };
+  }
+  if (!node.allowedActionTypes.includes(action.actionType)) {
+    return { claimable: false, reason: `actionType-not-allowed-for-node (${action.actionType})` };
   }
   if (!nodeScopeMatchesAction(node, action)) return { claimable: false, reason: "out-of-estate-scope" };
   return { claimable: true };

@@ -12,11 +12,13 @@ BIND_ADDRESS="${DPF_PKI_BIND_ADDRESS:-127.0.0.1}"
 CA_URL=""
 FINGERPRINT=""
 TOKEN_FILE=""
+EDGE_TOKEN_FILE=""
 JOIN_PACKAGE=""
 PACKAGE_OUTPUT=""
 ORG_NAME="${DPF_PKI_NAME:-DPF Organization CA}"
 START_TLS=1
 SANS=""
+EDGE_ACTION_CONFIGURED=0
 
 usage() {
   cat <<'EOF'
@@ -40,7 +42,7 @@ The root private key never leaves the Authority installation. Join mode accepts
 only a fingerprint-pinned public root and a short-lived enrollment token. Both
 modes write root_ca.crt, authority.crt, authority.key, and Caddyfile. Existing
 CA state is reused; the script refuses silent CA replacement. A join package
-uses the DPF_ORGANIZATION_JOIN_V1 contract and carries no CA private key.
+uses the DPF_ORGANIZATION_JOIN_V2 contract and carries no CA private key.
 EOF
 }
 
@@ -80,6 +82,7 @@ read_join_package() {
   package_sans=""
   package_expires_at=""
   package_token=""
+  package_edge_token=""
   seen_package_id=0
   seen_ca_url=0
   seen_fingerprint=0
@@ -87,6 +90,7 @@ read_join_package() {
   seen_sans=0
   seen_expiry=0
   seen_token=0
+  seen_edge_token=0
   line_number=0
   while IFS= read -r line || [ -n "$line" ]; do
     line="${line%$'\r'}"
@@ -104,17 +108,21 @@ read_join_package() {
       intended_sans) [ "$seen_sans" = 0 ] || { echo "Join package contains duplicate fields" >&2; exit 77; }; seen_sans=1; package_sans="$value" ;;
       expires_at) [ "$seen_expiry" = 0 ] || { echo "Join package contains duplicate fields" >&2; exit 77; }; seen_expiry=1; package_expires_at="$value" ;;
       enrollment_token) [ "$seen_token" = 0 ] || { echo "Join package contains duplicate fields" >&2; exit 77; }; seen_token=1; package_token="$value" ;;
+      edge_client_enrollment_token) [ "$seen_edge_token" = 0 ] || { echo "Join package contains duplicate fields" >&2; exit 77; }; seen_edge_token=1; package_edge_token="$value" ;;
       *) echo "Join package contains an unknown field" >&2; exit 77 ;;
     esac
   done < "$package_path"
 
-  [ "$package_header" = "DPF_ORGANIZATION_JOIN_V1" ] || { echo "Join package version is not supported" >&2; exit 77; }
+  case "$package_header" in DPF_ORGANIZATION_JOIN_V1|DPF_ORGANIZATION_JOIN_V2) ;; *) echo "Join package version is not supported" >&2; exit 77 ;; esac
   printf '%s' "$package_id" | grep -Eq '^[a-f0-9]{32}$' || { echo "Join package id is invalid" >&2; exit 77; }
   valid_private_ca_url "$package_ca_url" || { echo "Join package CA URL must be private or local HTTPS" >&2; exit 77; }
   printf '%s' "$package_fingerprint" | grep -Eq '^[A-Fa-f0-9]{64}$' || { echo "Join package root fingerprint is invalid" >&2; exit 77; }
   valid_name_or_ip "$package_hostname" || { echo "Join package intended peer is invalid" >&2; exit 77; }
   printf '%s' "$package_expires_at" | grep -Eq '^[0-9]{1,12}$' || { echo "Join package expiry is invalid" >&2; exit 77; }
   printf '%s' "$package_token" | grep -Eq '^[A-Za-z0-9._-]+$' || { echo "Join package enrollment authority is invalid" >&2; exit 77; }
+  if [ "$package_header" = "DPF_ORGANIZATION_JOIN_V2" ]; then
+    printf '%s' "$package_edge_token" | grep -Eq '^[A-Za-z0-9._-]+$' || { echo "Join package Edge client enrollment authority is invalid" >&2; exit 77; }
+  fi
   now_epoch="$(date +%s)"
   [ "$package_expires_at" -gt "$now_epoch" ] || { echo "Join package has expired" >&2; exit 77; }
   if [ -n "$HOSTNAME_VALUE" ] && [ "$HOSTNAME_VALUE" != "$package_hostname" ]; then
@@ -127,6 +135,7 @@ read_join_package() {
   FINGERPRINT="$package_fingerprint"
   PACKAGE_ID="$package_id"
   PACKAGE_TOKEN="$package_token"
+  PACKAGE_EDGE_TOKEN="$package_edge_token"
 }
 
 private_ipv4_or_loopback() {
@@ -191,14 +200,24 @@ PASSWORD_FILE_EFFECTIVE="$PASSWORD_FILE"
 AUTHORITY_CERT="$OUT_DIR/authority.crt"
 AUTHORITY_KEY="$OUT_DIR/authority.key"
 CADDYFILE="$OUT_DIR/Caddyfile"
+EDGE_CLIENT_CERT="$OUT_DIR/edge-client.crt"
+EDGE_CLIENT_KEY="$OUT_DIR/edge-client.key"
+ACTION_SIGNING_PUBLIC="$OUT_DIR/edge-action-signing-public.pem"
+ACTION_SIGNING_PRIVATE="$OUT_DIR/secrets/edge-action-signing-private.pem"
+ACTION_SIGNING_PASSWORD="$OUT_DIR/secrets/edge-action-signing-password"
+MTLS_PROXY_SECRET="$OUT_DIR/secrets/edge-mtls-proxy-secret"
 
 if [ "$MODE" = "join" ] && [ -n "$JOIN_PACKAGE" ]; then
   TOKEN_FILE="$OUT_DIR/secrets/.join-token-$PACKAGE_ID"
+  EDGE_TOKEN_FILE="$OUT_DIR/secrets/.join-edge-token-$PACKAGE_ID"
   umask 077
   printf '%s\n' "$PACKAGE_TOKEN" > "$TOKEN_FILE"
+  if [ -n "${PACKAGE_EDGE_TOKEN:-}" ]; then printf '%s\n' "$PACKAGE_EDGE_TOKEN" > "$EDGE_TOKEN_FILE"; fi
   chmod 0600 "$TOKEN_FILE"
+  [ ! -f "$EDGE_TOKEN_FILE" ] || chmod 0600 "$EDGE_TOKEN_FILE"
   unset PACKAGE_TOKEN
-  trap 'rm -f "$TOKEN_FILE"' EXIT HUP INT TERM
+  unset PACKAGE_EDGE_TOKEN
+  trap 'rm -f "$TOKEN_FILE" "$EDGE_TOKEN_FILE"' EXIT HUP INT TERM
 fi
 
 compose() {
@@ -221,14 +240,80 @@ persist_organization_trust() {
   [ -f "$env_file" ] || return 0
   case "$OUT_DIR$ROOT_CERT" in *$'\n'*|*$'\r'*) echo "PKI paths must not contain newlines" >&2; exit 64 ;; esac
   env_tmp="$(mktemp "$env_file.organization-trust.XXXXXX")"
-  awk -F= '$1 != "DPF_ORGANIZATION_TRUST_ENABLED" && $1 != "DPF_PKI_TRUST_BUNDLE" && $1 != "DPF_TLS_DIR" { print }' "$env_file" > "$env_tmp"
+  awk -F= '$1 != "DPF_ORGANIZATION_TRUST_ENABLED" && $1 != "DPF_PKI_TRUST_BUNDLE" && $1 != "DPF_TLS_DIR" && $1 != "DPF_EDGE_ACTION_DISPATCH_CONFIGURED" && $1 != "DPF_EDGE_ACTION_URL" && $1 != "DPF_EDGE_ACTION_CA_FILE" && $1 != "DPF_EDGE_ACTION_CERT_FILE" && $1 != "DPF_EDGE_ACTION_KEY_FILE" && $1 != "DPF_EDGE_ACTION_SIGNING_PUBLIC_KEY_FILE" && $1 != "DPF_EDGE_ACTION_SIGNING_PRIVATE_KEY_FILE" && $1 != "DPF_EDGE_ACTION_SIGNING_PASSWORD_FILE" && $1 != "DPF_EDGE_ACTION_SIGNING_KEY_ID" && $1 != "DPF_EDGE_MTLS_PROXY_SECRET_FILE" { print }' "$env_file" > "$env_tmp"
   {
     printf 'DPF_ORGANIZATION_TRUST_ENABLED=1\n'
     printf 'DPF_PKI_TRUST_BUNDLE=%s\n' "$ROOT_CERT"
     printf 'DPF_TLS_DIR=%s\n' "$OUT_DIR"
+    if [ "$EDGE_ACTION_CONFIGURED" = "1" ]; then
+      printf 'DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1\n'
+      printf 'DPF_EDGE_ACTION_URL=https://%s:8443\n' "$HOSTNAME_VALUE"
+      printf 'DPF_EDGE_ACTION_CA_FILE=%s\n' "$ROOT_CERT"
+      printf 'DPF_EDGE_ACTION_CERT_FILE=%s\n' "$EDGE_CLIENT_CERT"
+      printf 'DPF_EDGE_ACTION_KEY_FILE=%s\n' "$EDGE_CLIENT_KEY"
+      printf 'DPF_EDGE_ACTION_SIGNING_PUBLIC_KEY_FILE=%s\n' "$ACTION_SIGNING_PUBLIC"
+      printf 'DPF_EDGE_ACTION_SIGNING_PRIVATE_KEY_FILE=%s\n' "$ACTION_SIGNING_PRIVATE"
+      printf 'DPF_EDGE_ACTION_SIGNING_PASSWORD_FILE=%s\n' "$ACTION_SIGNING_PASSWORD"
+      printf 'DPF_EDGE_ACTION_SIGNING_KEY_ID=edge-action-signing-v1\n'
+      printf 'DPF_EDGE_MTLS_PROXY_SECRET_FILE=%s\n' "$MTLS_PROXY_SECRET"
+    fi
   } >> "$env_tmp"
   chmod 0600 "$env_tmp"
   mv "$env_tmp" "$env_file"
+}
+
+wait_for_step_ca() {
+  ready=0
+  attempts=0
+  while [ "$attempts" -lt 60 ]; do
+    if compose exec -T step-ca step ca health --ca-url https://127.0.0.1:9000 \
+      --root /home/step/certs/root_ca.crt >/dev/null 2>&1; then ready=1; break; fi
+    attempts=$((attempts + 1))
+    sleep 1
+  done
+  [ "$ready" = "1" ] || { echo "Organization CA did not become healthy" >&2; exit 70; }
+}
+
+run_local_step_client() {
+  ca_container_id="$(compose ps -q step-ca | tr -d '\r\n')"
+  [ -n "$ca_container_id" ] || { echo "Organization CA container is unavailable" >&2; exit 70; }
+  docker run --rm --network "container:$ca_container_id" \
+    --mount "type=bind,src=$OUT_DIR,dst=/work" "$STEP_IMAGE" step "$@"
+}
+
+ensure_edge_client_provisioner() {
+  if compose exec -T step-ca step ca provisioner list --ca-url https://127.0.0.1:9000 \
+    --root /home/step/certs/root_ca.crt 2>/dev/null | grep -Eq '"name"[[:space:]]*:[[:space:]]*"dpf-edge-client"'; then
+    return 0
+  fi
+  compose exec -T step-ca step ca provisioner add dpf-edge-client \
+    --type JWK --create --ssh=false \
+    --password-file /run/secrets/step-ca-password \
+    --x509-template /etc/dpf/pki/edge-client.tpl \
+    --x509-min-dur 5m --x509-default-dur 720h --x509-max-dur 720h \
+    --ca-config /home/step/config/ca.json >/dev/null
+  compose restart step-ca >/dev/null
+  wait_for_step_ca
+}
+
+generate_local_action_material() {
+  if [ ! -f "$ACTION_SIGNING_PASSWORD" ]; then
+    umask 077
+    docker run --rm "$STEP_IMAGE" step crypto rand --format hex 64 > "$ACTION_SIGNING_PASSWORD"
+  fi
+  if [ ! -f "$ACTION_SIGNING_PUBLIC" ] || [ ! -f "$ACTION_SIGNING_PRIVATE" ]; then
+    rm -f "$ACTION_SIGNING_PUBLIC" "$ACTION_SIGNING_PRIVATE"
+    docker run --rm --mount "type=bind,src=$OUT_DIR,dst=/work" "$STEP_IMAGE" \
+      step crypto keypair /work/edge-action-signing-public.pem \
+      /work/secrets/edge-action-signing-private.pem --kty OKP --curve Ed25519 \
+      --password-file /work/secrets/edge-action-signing-password >/dev/null
+  fi
+  if [ ! -f "$MTLS_PROXY_SECRET" ]; then
+    umask 077
+    docker run --rm "$STEP_IMAGE" step crypto rand --format hex 64 > "$MTLS_PROXY_SECRET"
+  fi
+  chmod 0644 "$ACTION_SIGNING_PUBLIC"
+  chmod 0600 "$ACTION_SIGNING_PRIVATE" "$ACTION_SIGNING_PASSWORD" "$MTLS_PROXY_SECRET"
 }
 
 if [ "$MODE" = "authority" ]; then
@@ -242,15 +327,8 @@ if [ "$MODE" = "authority" ]; then
   # invalidate every enrolled installation, so there is deliberately no force
   # or reinitialize option in this installer-facing command.
   compose up -d step-ca
-  ready=0
-  attempts=0
-  while [ "$attempts" -lt 60 ]; do
-    if compose exec -T step-ca step ca health --ca-url https://127.0.0.1:9000 \
-      --root /home/step/certs/root_ca.crt >/dev/null 2>&1; then ready=1; break; fi
-    attempts=$((attempts + 1))
-    sleep 1
-  done
-  [ "$ready" = "1" ] || { echo "Organization CA did not become healthy" >&2; exit 70; }
+  wait_for_step_ca
+  ensure_edge_client_provisioner
   compose cp step-ca:/home/step/certs/root_ca.crt "$ROOT_CERT" >/dev/null
   FINGERPRINT="$(compose exec -T step-ca step certificate fingerprint /home/step/certs/root_ca.crt | tr -d '\r\n')"
 
@@ -277,11 +355,27 @@ if [ "$MODE" = "authority" ]; then
   fi
   compose cp step-ca:/home/step/certs/dpf-portal.crt "$AUTHORITY_CERT" >/dev/null
   compose cp step-ca:/home/step/secrets/dpf-portal.key "$AUTHORITY_KEY" >/dev/null
+  edge_subject="dpf-edge-$(printf '%s' "$HOSTNAME_VALUE" | tr ':' '-')"
+  if [ -f "$EDGE_CLIENT_CERT" ] && [ -f "$EDGE_CLIENT_KEY" ]; then
+    run_local_step_client ca renew /work/edge-client.crt /work/edge-client.key \
+      --ca-url https://127.0.0.1:9000 \
+      --root /work/root_ca.crt --force >/dev/null
+  else
+    edge_token="$(compose exec -T step-ca step ca token "$edge_subject" \
+      --not-after 15m --cert-not-after 720h --provisioner dpf-edge-client \
+      --password-file /run/secrets/step-ca-password)"
+    run_local_step_client \
+      ca certificate "$edge_subject" /work/edge-client.crt /work/edge-client.key \
+      --token "$edge_token" --ca-url https://127.0.0.1:9000 \
+      --root /work/root_ca.crt --force >/dev/null
+    unset edge_token
+  fi
+  EDGE_ACTION_CONFIGURED=1
 elif [ "$MODE" = "issue-join" ]; then
   [ -f "$PASSWORD_FILE" ] || { echo "Organization CA is not initialized on this installation" >&2; exit 69; }
   compose up -d step-ca
-  compose exec -T step-ca step ca health --ca-url https://127.0.0.1:9000 \
-    --root /home/step/certs/root_ca.crt >/dev/null
+  wait_for_step_ca
+  ensure_edge_client_provisioner
   FINGERPRINT="$(compose exec -T step-ca step certificate fingerprint /home/step/certs/root_ca.crt | tr -d '\r\n')"
   san_args="--san $HOSTNAME_VALUE"
   old_ifs="$IFS"
@@ -291,11 +385,15 @@ elif [ "$MODE" = "issue-join" ]; then
   # shellcheck disable=SC2086 # Values passed by word splitting were validated above.
   token="$(compose exec -T step-ca step ca token "$HOSTNAME_VALUE" $san_args \
     --not-after 15m --provisioner dpf-installer --password-file /run/secrets/step-ca-password)"
+  edge_subject="dpf-edge-$(printf '%s' "$HOSTNAME_VALUE" | tr ':' '-')"
+  edge_token="$(compose exec -T step-ca step ca token "$edge_subject" \
+    --not-after 15m --cert-not-after 720h --provisioner dpf-edge-client \
+    --password-file /run/secrets/step-ca-password)"
   package_id="$(openssl rand -hex 16)"
   expires_at="$(( $(date +%s) + 900 ))"
   umask 077
   {
-    printf '%s\n' "DPF_ORGANIZATION_JOIN_V1"
+    printf '%s\n' "DPF_ORGANIZATION_JOIN_V2"
     printf 'package_id=%s\n' "$package_id"
     printf 'ca_url=%s\n' "$CA_URL"
     printf 'root_fingerprint=%s\n' "$FINGERPRINT"
@@ -303,9 +401,10 @@ elif [ "$MODE" = "issue-join" ]; then
     printf 'intended_sans=%s\n' "$SANS"
     printf 'expires_at=%s\n' "$expires_at"
     printf 'enrollment_token=%s\n' "$token"
+    printf 'edge_client_enrollment_token=%s\n' "$edge_token"
   } > "$PACKAGE_OUTPUT"
   chmod 0600 "$PACKAGE_OUTPUT"
-  unset token
+  unset token edge_token
   echo "Organization join package created at $PACKAGE_OUTPUT."
   echo "It expires in 15 minutes and is intended only for $HOSTNAME_VALUE."
   exit 0
@@ -313,7 +412,7 @@ else
   [ -n "$CA_URL" ] || { echo "join mode requires --ca-url" >&2; exit 64; }
   [ -n "$FINGERPRINT" ] || { echo "join mode requires --fingerprint" >&2; exit 64; }
   case "$CA_URL" in https://*) ;; *) echo "join mode requires an HTTPS --ca-url" >&2; exit 64 ;; esac
-  if [ -f "$AUTHORITY_CERT" ] && [ -f "$AUTHORITY_KEY" ]; then
+    if [ -f "$AUTHORITY_CERT" ] && [ -f "$AUTHORITY_KEY" ]; then
     PASSWORD_FILE_EFFECTIVE="$AUTHORITY_KEY"
   else
     [ -f "$TOKEN_FILE" ] || { echo "first join requires an existing --token-file" >&2; exit 64; }
@@ -334,11 +433,33 @@ else
       "$STEP_IMAGE" sh -c 'step ca certificate "$1" /work/authority.crt /work/authority.key --token "$(cat /run/secrets/enrollment-token)" --ca-url "$2" --root /work/root_ca.crt --force' \
       sh "$HOSTNAME_VALUE" "$CA_URL" >/dev/null
   fi
+  if [ -f "$EDGE_TOKEN_FILE" ]; then
+    edge_subject="dpf-edge-$(printf '%s' "$HOSTNAME_VALUE" | tr ':' '-')"
+    if [ -f "$EDGE_CLIENT_CERT" ] && [ -f "$EDGE_CLIENT_KEY" ]; then
+      docker run --rm --mount "type=bind,src=$OUT_DIR,dst=/work" "$STEP_IMAGE" \
+        step ca renew /work/edge-client.crt /work/edge-client.key --ca-url "$CA_URL" \
+        --root /work/root_ca.crt --force >/dev/null
+    else
+      docker run --rm --mount "type=bind,src=$OUT_DIR,dst=/work" \
+        --mount "type=bind,src=$EDGE_TOKEN_FILE,dst=/run/secrets/edge-enrollment-token,readonly" \
+        "$STEP_IMAGE" sh -c 'step ca certificate "$1" /work/edge-client.crt /work/edge-client.key --token "$(cat /run/secrets/edge-enrollment-token)" --ca-url "$2" --root /work/root_ca.crt --force' \
+        sh "$edge_subject" "$CA_URL" >/dev/null
+    fi
+    EDGE_ACTION_CONFIGURED=1
+  fi
+fi
+
+if [ "$EDGE_ACTION_CONFIGURED" = "1" ]; then
+  generate_local_action_material
 fi
 
 printf '%s\n' "$FINGERPRINT" > "$FINGERPRINT_FILE"
 chmod 0644 "$ROOT_CERT" "$FINGERPRINT_FILE" "$AUTHORITY_CERT"
 chmod 0600 "$AUTHORITY_KEY" "$PASSWORD_FILE" 2>/dev/null || true
+if [ "$EDGE_ACTION_CONFIGURED" = "1" ]; then
+  chmod 0644 "$EDGE_CLIENT_CERT" "$ACTION_SIGNING_PUBLIC"
+  chmod 0600 "$EDGE_CLIENT_KEY" "$ACTION_SIGNING_PRIVATE" "$ACTION_SIGNING_PASSWORD" "$MTLS_PROXY_SECRET"
+fi
 
 HOSTS="$HOSTNAME_VALUE:443"
 old_ifs="$IFS"
@@ -355,13 +476,47 @@ $HOSTS {
     reverse_proxy portal:3000
 }
 EOF
-chmod 0644 "$CADDYFILE"
+if [ "$EDGE_ACTION_CONFIGURED" = "1" ]; then
+  proxy_secret_value="$(tr -d '\r\n' < "$MTLS_PROXY_SECRET")"
+  cat >> "$CADDYFILE" <<EOF
+
+:8443 {
+    tls /etc/caddy/tls/authority.crt /etc/caddy/tls/authority.key {
+        client_auth {
+            mode require_and_verify
+            trust_pool file /etc/caddy/tls/root_ca.crt
+        }
+    }
+    @edge_actions path /api/v1/edge/actions/*
+    handle @edge_actions {
+        reverse_proxy portal:3000 {
+            header_up -X-DPF-Edge-Cert-*
+            header_up -X-DPF-MTLS-Proxy-Secret
+            header_up X-DPF-MTLS-Proxy-Secret "$proxy_secret_value"
+            header_up X-DPF-Edge-Cert-Fingerprint {tls_client_fingerprint}
+            header_up X-DPF-Edge-Cert-Serial {tls_client_serial}
+            header_up X-DPF-Edge-Cert-Subject {tls_client_subject}
+            header_up X-DPF-Edge-Cert-Issuer {tls_client_issuer}
+            header_up X-DPF-Edge-Cert-DER {tls_client_certificate_der_base64}
+        }
+    }
+    respond 404
+}
+EOF
+  unset proxy_secret_value
+fi
+chmod 0600 "$CADDYFILE"
 
 persist_organization_trust
 
 if [ "$START_TLS" = "1" ]; then
-  compose -f "$REPO_ROOT/docker-compose.tls.yml" up -d portal portal-tls
-  compose -f "$REPO_ROOT/docker-compose.tls.yml" restart portal-tls >/dev/null
+  if [ "$EDGE_ACTION_CONFIGURED" = "1" ]; then
+    compose -f "$REPO_ROOT/docker-compose.tls.yml" -f "$REPO_ROOT/docker-compose.edge-actions.yml" up -d portal portal-tls
+    compose -f "$REPO_ROOT/docker-compose.tls.yml" -f "$REPO_ROOT/docker-compose.edge-actions.yml" restart portal portal-tls >/dev/null
+  else
+    compose -f "$REPO_ROOT/docker-compose.tls.yml" up -d portal portal-tls
+    compose -f "$REPO_ROOT/docker-compose.tls.yml" restart portal-tls >/dev/null
+  fi
 fi
 
 if [ "$MODE" = "join" ] && [ -n "$JOIN_PACKAGE" ]; then

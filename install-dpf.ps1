@@ -348,6 +348,14 @@ function Get-DPFComposeArgs {
         $composeArgs += @("-f", "docker-compose.organization-trust.yml", "-f", "docker-compose.tls.yml")
     }
 
+    $edgeActions = $env:DPF_EDGE_ACTION_DISPATCH_CONFIGURED -eq "1"
+    if (-not $edgeActions -and (Test-Path -LiteralPath $envPath)) {
+        $edgeActions = [bool](Select-String -LiteralPath $envPath -Pattern '^DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1$' -Quiet)
+    }
+    if ($edgeActions -and (Test-Path (Join-Path $InstallDir "docker-compose.edge-actions.yml"))) {
+        $composeArgs += @("-f", "docker-compose.edge-actions.yml")
+    }
+
     return $composeArgs
 }
 
@@ -556,6 +564,9 @@ if (Test-Path (Join-Path $DPF_DIR "docker-compose.override.yml")) {
 $envPath = Join-Path $DPF_DIR ".env"
 if ((Test-Path -LiteralPath $envPath) -and (Select-String -LiteralPath $envPath -Pattern '^DPF_ORGANIZATION_TRUST_ENABLED=1$' -Quiet)) {
     $composeArgs += @("-f", "docker-compose.organization-trust.yml", "-f", "docker-compose.tls.yml")
+}
+if (($env:DPF_EDGE_ACTION_DISPATCH_CONFIGURED -eq '1') -or ((Test-Path -LiteralPath $envPath) -and (Select-String -LiteralPath $envPath -Pattern '^DPF_EDGE_ACTION_DISPATCH_CONFIGURED=1$' -Quiet))) {
+    $composeArgs += @("-f", "docker-compose.edge-actions.yml")
 }
 docker compose @composeArgs up -d
 

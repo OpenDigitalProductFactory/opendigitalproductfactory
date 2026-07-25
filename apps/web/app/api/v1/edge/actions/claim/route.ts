@@ -13,10 +13,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { prisma } from "@dpf/db";
-import { type ClaimingNodeView } from "@dpf/db/remote-action-dispatch";
+import { isReadonlyDispatchActionType, type ClaimingNodeView } from "@dpf/db/remote-action-dispatch";
 
+import { resolveEdgeNodeMtls, type EdgeNodeMtlsDb } from "@/lib/auth/edge-node-mtls";
+import { loadEdgeMtlsProxySecret } from "@/lib/auth/edge-mtls-proxy-secret";
 import { resolveEdgeNodeAuth } from "@/lib/auth/edge-node-token";
 import { claimActionsForNode, type DispatchOrchestratorDb } from "@/lib/remote-action/dispatch-orchestrator";
+import { loadEdgeActionSigner } from "@/lib/remote-action/action-signing-key";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 
 const BODY_SIZE_CAP_BYTES = 4 * 1024;
@@ -32,6 +35,22 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       { ok: false, error: authz.error, message: authz.message },
       { status: authz.error === "scope_disallowed" ? 403 : 401 },
     );
+  }
+
+  let proxySecret: string;
+  try {
+    proxySecret = loadEdgeMtlsProxySecret();
+  } catch {
+    return NextResponse.json({ ok: false, error: "machine_authentication_unavailable" }, { status: 503 });
+  }
+  const mtls = await resolveEdgeNodeMtls(
+    request.headers,
+    authz.edgeNodeRowId,
+    prisma as unknown as EdgeNodeMtlsDb,
+    { proxySecret },
+  );
+  if (!mtls.ok) {
+    return NextResponse.json({ ok: false, error: "machine_authentication_failed" }, { status: 401 });
   }
 
   // Optional { limit } body; absent/invalid/oversized → default batch.
@@ -53,18 +72,33 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     select: { id: true },
   });
 
+  const configuredActionTypes = Array.isArray(authz.scopePolicy?.actionTypes)
+    ? authz.scopePolicy.actionTypes.filter(
+        (value): value is string => typeof value === "string" && isReadonlyDispatchActionType(value),
+      )
+    : [];
+
   const node: ClaimingNodeView = {
     edgeNodeId: authz.edgeNodeRowId,
+    nodeId: authz.nodeId,
     trustState: authz.trustState,
     customerAccountId: authz.customerAccountId,
     customerSiteId: authz.customerSiteId,
     actionExecuteEnabled: cap !== null,
+    allowedActionTypes: configuredActionTypes,
   };
+
+  let signer;
+  try {
+    signer = loadEdgeActionSigner();
+  } catch {
+    return NextResponse.json({ ok: false, error: "action_signing_unavailable" }, { status: 503 });
+  }
 
   const result = await claimActionsForNode(
     prisma as unknown as DispatchOrchestratorDb,
     node,
-    limit !== undefined ? { limit } : {},
+    limit !== undefined ? { limit, signer } : { signer },
   );
 
   return NextResponse.json(

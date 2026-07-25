@@ -115,6 +115,14 @@ dpf_compose_files() {
     DPF_COMPOSE_FILES+=(-f docker-compose.organization-trust.yml -f docker-compose.tls.yml)
   fi
 
+  edge_actions="${DPF_EDGE_ACTION_DISPATCH_CONFIGURED:-}"
+  if [ -z "$edge_actions" ] && [ -f .env ]; then
+    edge_actions="$(sed -n 's/^DPF_EDGE_ACTION_DISPATCH_CONFIGURED=//p' .env | tail -1)"
+  fi
+  if [ "$edge_actions" = "1" ]; then
+    DPF_COMPOSE_FILES+=(-f docker-compose.edge-actions.yml)
+  fi
+
   # Append any caller-provided extras (e.g. docker-compose.dev.yml for
   # the developer port-exposing overlay).
   while [ "$#" -gt 0 ]; do
