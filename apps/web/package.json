@@ -33,7 +33,7 @@
     "@fullcalendar/core": "^6.1.21",
     "@fullcalendar/daygrid": "^6.1.21",
     "@fullcalendar/interaction": "^6.1.21",
-    "@fullcalendar/react": "^6.1.21",
+    "@fullcalendar/react": "^7.0.0",
     "@fullcalendar/timegrid": "^6.1.21",
     "@opentelemetry/api": "1.9.1",
     "@react-pdf/renderer": "^4.5.1",
