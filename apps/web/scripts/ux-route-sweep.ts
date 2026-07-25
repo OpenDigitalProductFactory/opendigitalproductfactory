@@ -198,6 +198,18 @@ async function main(): Promise<void> {
         // One unreachable route must not abort the sweep; it is reported as skipped.
         const first = (err as Error).message.split(/\r?\n/)[0];
         skipped.push({ routePath: row.routePath, reason: `error: ${first}` });
+      } finally {
+        // Isolate routes so the measured route cannot flake the NEXT one (BI-EA221325):
+        // a route can trigger a client-side navigation after domcontentloaded, and if it
+        // is still in flight when the next page.goto fires, Playwright throws
+        // "Navigation to X is interrupted by another navigation to Y" — a route that is
+        // then measured on one run and skipped on another, which reads as a false
+        // regression. Resetting to about:blank between routes cancels any pending
+        // navigation and gives every route the same clean starting state. It is
+        // side-effect-free: each real route re-navigates with its own page.goto.
+        await page
+          .goto("about:blank", { waitUntil: "commit", timeout: 10_000 })
+          .catch(() => {});
       }
     }
   } finally {
