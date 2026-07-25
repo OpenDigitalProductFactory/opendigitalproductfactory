@@ -1134,8 +1134,7 @@ export function WorkbookGrid({
   // paste ride the native onCellCopy/onCellPaste above.)
   const onCellKeyDown = useCallback(
     (args: CellKeyDownArgs<GridRowData, SummaryRow>, event: CellKeyboardEvent) => {
-      if (args.mode === "EDIT") return;
-      if (!args.column) return;
+      if (args.mode === "EDIT" || !args.column) return;
       const col = dataColIndex(args.column.key);
       if (col < 0) return;
       const cur = range ?? singleCell(args.rowIdx, col);
