@@ -1,0 +1,70 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "Prisma-to-EA current-state data-model mirror",
+    "Edge fleet authorization registry",
+    "Sanitized contributor-preview clone policy"
+  ],
+  "migration": {
+    "name": "20260722023000_edge_node_certificates",
+    "backfill": "none — existing Edge Nodes remain unbound until a machine certificate is explicitly registered"
+  },
+  "tests": [
+    "apps/web/lib/auth/edge-node-mtls.test.ts",
+    "apps/web/lib/auth/register-edge-certificate.test.ts",
+    "apps/web/lib/govern/data/assets.test.ts",
+    "packages/db/src/edge-node-types.test.ts",
+    "scripts/installer/pki-contract.test.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:edge-node-certificate",
+      "prismaModel": "EdgeNodeCertificate",
+      "lifecycleDisposition": "domain-managed through Edge Node enrollment, certificate rotation and revocation, and cascade deletion with the owning Edge Node",
+      "fields": [
+        {
+          "fieldId": "data:edge-node-certificate#certificateId",
+          "resolution": "governed",
+          "reason": "provides the stable public certificate identity used for request authorization and lifecycle updates",
+          "provenance": "organization-rooted Edge Node certificate registration",
+          "flags": ["sensitive"],
+          "fieldPolicy": "authorization metadata only; no private key or bearer credential is stored"
+        },
+        {
+          "fieldId": "data:edge-node-certificate#fingerprintSha256",
+          "resolution": "governed",
+          "reason": "binds the certificate verified at the mTLS proxy to the registered Edge Node",
+          "provenance": "SHA-256 fingerprint of the presented X.509 certificate",
+          "flags": ["sensitive"],
+          "fieldPolicy": "restricted local authorization metadata; exact-match lookup only"
+        },
+        {
+          "fieldId": "data:edge-node-certificate#subject",
+          "resolution": "governed",
+          "reason": "records the machine identity asserted by the organization certificate authority",
+          "provenance": "verified X.509 certificate subject",
+          "flags": ["sensitive"],
+          "fieldPolicy": "restricted to platform and security operators"
+        },
+        {
+          "fieldId": "data:edge-node-certificate#issuer",
+          "resolution": "governed",
+          "reason": "records which organization-rooted authority issued the accepted machine identity",
+          "provenance": "verified X.509 certificate issuer",
+          "flags": ["sensitive"],
+          "fieldPolicy": "restricted to platform and security operators"
+        },
+        {
+          "fieldId": "data:edge-node-certificate#status",
+          "resolution": "governed",
+          "reason": "makes active and revoked authorization state explicit for every request",
+          "provenance": "Edge Node certificate lifecycle service",
+          "flags": ["sensitive"],
+          "fieldPolicy": "fail closed unless the registered certificate is active and within its validity window"
+        }
+      ]
+    }
+  ]
+}
