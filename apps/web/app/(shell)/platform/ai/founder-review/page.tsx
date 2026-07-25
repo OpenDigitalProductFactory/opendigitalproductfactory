@@ -3,7 +3,7 @@ import Link from "next/link";
 import {
   dedupeFounderReviewCandidates,
   groupFounderReviewCandidates,
-  isAgentInternalFounderReviewNoise,
+  isFounderActionable,
   isBlankFounderReviewQuestion,
   projectFounderReviewCandidate,
   type DecisionInteractionQueueRow,
@@ -74,6 +74,7 @@ export default async function FounderReviewPage({ searchParams }: PageProps) {
       taskRunId: true,
       routeContext: true,
       domainClass: true,
+      gateKey: true,
       createdAt: true,
       profile: {
         select: {
@@ -87,7 +88,7 @@ export default async function FounderReviewPage({ searchParams }: PageProps) {
 
   const candidates = rows
     .filter((row) => !isBlankFounderReviewQuestion(row))
-    .filter((row) => !isAgentInternalFounderReviewNoise(row))
+    .filter((row) => isFounderActionable(row))
     .map((row) => projectFounderReviewCandidate(row as DecisionInteractionQueueRow))
     .filter((candidate) => !mode || candidate.perspective === mode);
   const visibleCandidates = dedupeFounderReviewCandidates(candidates);

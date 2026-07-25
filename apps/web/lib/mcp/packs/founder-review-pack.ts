@@ -63,7 +63,7 @@ async function listOpenDecisionReviews(
   const { Prisma, prisma } = await import("@dpf/db");
   const {
     dedupeFounderReviewCandidates,
-    isAgentInternalFounderReviewNoise,
+    isFounderActionable,
     isBlankFounderReviewQuestion,
     projectFounderReviewCandidate,
   } = await import("@/lib/founder-review/queue");
@@ -102,7 +102,14 @@ async function listOpenDecisionReviews(
       outcomeType: { in: UNRESOLVED_OUTCOMES },
       humanOutcome: { equals: Prisma.DbNull },
       question: { not: "" },
+      // Mirror of isFounderActionable at the DB, so `take: limit` counts only
+      // rows a human should decide, not advisory/agent-internal noise the JS
+      // filter would drop afterward (BI-6EC1EE25). The JS filter below stays the
+      // authoritative predicate; this keeps the limit meaningful.
       NOT: [
+        // Advisory by contract — the profession/WSID gate blocks nothing.
+        { gateKey: "profession" },
+        // Already-executed agent-internal kernel consults (BI-9026B96C).
         {
           buildId: null,
           taskRunId: null,
@@ -126,6 +133,7 @@ async function listOpenDecisionReviews(
       taskRunId: true,
       routeContext: true,
       domainClass: true,
+      gateKey: true,
       createdAt: true,
       profile: { select: { profileId: true, name: true, kind: true } },
       deferralCapture: { select: { gapReason: true, domain: true, suggestedSourceTypes: true } },
@@ -135,7 +143,7 @@ async function listOpenDecisionReviews(
 
   const candidates = rows
     .filter((row) => !isBlankFounderReviewQuestion(row))
-    .filter((row) => !isAgentInternalFounderReviewNoise(row))
+    .filter((row) => isFounderActionable(row))
     .map((row) => ({ row, candidate: projectFounderReviewCandidate(row) }));
   const uniqueIds = new Set(
     dedupeFounderReviewCandidates(candidates.map((item) => item.candidate)).map((candidate) => candidate.id),
