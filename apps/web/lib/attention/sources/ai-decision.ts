@@ -6,6 +6,7 @@
 
 import { Prisma } from "@dpf/db";
 import type { prisma } from "@dpf/db";
+import { isFounderActionable } from "@/lib/founder-review/queue";
 import type { AttentionItem, AttentionRiskClass, ResidueReason } from "../types";
 
 type Db = typeof prisma;
@@ -23,26 +24,22 @@ export type DecisionInteractionRow = {
   routeContext: string | null;
   /** Domain facet — kernel-consult rows are agent-internal WWMD consults. */
   domainClass: string | null;
+  /** Governance gate that produced the row — 'profession' rows are advisory. */
+  gateKey: string | null;
   createdAt: Date;
 };
 
 /**
- * Agent-internal kernel consults (mcp:principle_decide during dev work, or
- * domainClass=kernel-consult with no linked build/task) are already-executed
- * development decisions — audit-visible, not founder "needs-you" residue
- * (BI-9026B96C).
+ * @deprecated Use `!isFounderActionable(row)` (lib/founder-review/queue). The
+ * two copies of this deny-list drifted (BI-6EC1EE25); founder-actionability now
+ * has a single derived source of truth. Kept as its exact inverse so this
+ * source's behaviour for the agent-internal case is preserved.
  */
 export function isAgentInternalKernelConsult(row: Pick<
   DecisionInteractionRow,
-  "buildId" | "taskRunId" | "routeContext" | "domainClass"
+  "buildId" | "taskRunId" | "routeContext" | "domainClass" | "gateKey"
 >): boolean {
-  const linked = Boolean(row.buildId || row.taskRunId);
-  if (linked) return false;
-  const route = (row.routeContext ?? "").trim().toLowerCase();
-  if (route === "mcp:principle_decide" || route.startsWith("mcp:principle_decide")) return true;
-  const domain = (row.domainClass ?? "").trim().toLowerCase();
-  if (domain === "kernel-consult") return true;
-  return false;
+  return !isFounderActionable(row);
 }
 
 function clip(s: string, max = 120): string {
@@ -113,9 +110,11 @@ export async function loadAiDecisionItems(db: Db): Promise<AttentionItem[]> {
       taskRunId: true,
       routeContext: true,
       domainClass: true,
+      gateKey: true,
       createdAt: true,
     },
   });
-  // Drop agent-internal kernel-consult noise; genuine founder residue stays.
-  return rows.filter((row) => !isAgentInternalKernelConsult(row)).map(aiDecisionToAttentionItem);
+  // Keep only rows a human should actually decide; drop agent-internal consults
+  // and fail-open advisories (BI-6EC1EE25).
+  return rows.filter((row) => isFounderActionable(row)).map(aiDecisionToAttentionItem);
 }

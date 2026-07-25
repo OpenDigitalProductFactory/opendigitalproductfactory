@@ -101,7 +101,10 @@ describe("founder-review pack — list_open_decision_reviews", () => {
     expect(args.where.outcomeType).toEqual({ in: ["defer", "escalate"] });
     expect(args.where.humanOutcome).toEqual({ equals: "DbNull" });
     expect(args.where.question).toEqual({ not: "" });
+    // Advisory profession/WSID rows and agent-internal consults are excluded at
+    // the DB so `take` counts only founder-actionable rows (BI-6EC1EE25).
     expect(args.where.NOT).toEqual([
+      { gateKey: "profession" },
       {
         buildId: null,
         taskRunId: null,

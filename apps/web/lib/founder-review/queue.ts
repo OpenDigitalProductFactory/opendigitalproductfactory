@@ -25,6 +25,9 @@ export type DecisionInteractionQueueRow = {
   taskRunId: string | null;
   routeContext: string | null;
   domainClass?: string | null;
+  /** Which governance gate produced the row (BI-1BE30A9A). Advisory gates never
+   *  produce founder-actionable residue — see isFounderActionable. */
+  gateKey?: string | null;
   createdAt: Date;
   profile?: {
     profileId: string;
@@ -63,16 +66,58 @@ export function isBlankFounderReviewQuestion(row: Pick<DecisionInteractionQueueR
   return row.question.trim().length === 0;
 }
 
+/**
+ * Does this decision belong in front of the founder? (BI-6EC1EE25)
+ *
+ * The founder-review and attention queues were inclusion-by-default: every
+ * escalate/defer row was residue unless it matched a hardcoded deny-list of
+ * "agent-internal noise", duplicated verbatim across three files. That list was
+ * built for principle_decide consults (BI-9026B96C) and silently failed to
+ * exclude the next class that fit the same description — the fail-open
+ * profession/WSID advisory reviews (BI-D6CFE63A) — which then flooded the queue.
+ *
+ * This derives founder-actionability from what produced the row, so a new
+ * advisory or agent-internal writer cannot re-pollute by default. A decision is
+ * NOT founder-actionable when:
+ *
+ *  - it is a profession/WSID gate row. That gate is advisory by contract — it
+ *    returns a recommendation and blocks nothing. A craft "defer" means the
+ *    craft corpus is empty, which is a ProfessionCorpusGap signal, not a
+ *    question the founder answers. True regardless of build/task linkage:
+ *    advisory is advisory.
+ *  - it is an already-executed agent-internal kernel consult: an unlinked
+ *    principle_decide / kernel-consult row (BI-9026B96C). Audit-visible, not
+ *    residue. A build/task link means it gated real work, so it stays.
+ *
+ * Everything else — build-studio plan gates, WWWD org-business stance gaps,
+ * anything genuinely awaiting a human — is founder-actionable.
+ */
+export function isFounderActionable(row: Pick<
+  DecisionInteractionQueueRow,
+  "buildId" | "taskRunId" | "routeContext" | "domainClass" | "gateKey"
+>): boolean {
+  if ((row.gateKey ?? "").trim().toLowerCase() === "profession") return false;
+
+  const linked = Boolean(row.buildId || row.taskRunId);
+  if (!linked) {
+    const route = (row.routeContext ?? "").trim().toLowerCase();
+    if (route === "mcp:principle_decide" || route.startsWith("mcp:principle_decide")) return false;
+    const domain = (row.domainClass ?? "").trim().toLowerCase();
+    if (domain === "kernel-consult") return false;
+  }
+  return true;
+}
+
+/**
+ * @deprecated Use `!isFounderActionable(row)`. Retained as the exact inverse so
+ * the migration is behaviour-preserving for the agent-internal case; new
+ * callers must not add to a deny-list. BI-6EC1EE25.
+ */
 export function isAgentInternalFounderReviewNoise(row: Pick<
   DecisionInteractionQueueRow,
-  "buildId" | "taskRunId" | "routeContext" | "domainClass"
+  "buildId" | "taskRunId" | "routeContext" | "domainClass" | "gateKey"
 >): boolean {
-  const linked = Boolean(row.buildId || row.taskRunId);
-  if (linked) return false;
-  const route = (row.routeContext ?? "").trim().toLowerCase();
-  if (route === "mcp:principle_decide" || route.startsWith("mcp:principle_decide")) return true;
-  const domain = (row.domainClass ?? "").trim().toLowerCase();
-  return domain === "kernel-consult";
+  return !isFounderActionable(row);
 }
 
 function normalizeFounderReviewQuestion(question: string): string {

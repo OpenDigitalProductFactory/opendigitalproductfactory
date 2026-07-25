@@ -20,7 +20,7 @@ import { resolveOrgProfileId } from "@/lib/decision-perspective/material";
 import { PROFESSION_REGISTRY } from "@/lib/decision-perspective/resolve-profession-profile";
 import {
   dedupeFounderReviewCandidates,
-  isAgentInternalFounderReviewNoise,
+  isFounderActionable,
   isBlankFounderReviewQuestion,
   projectFounderReviewCandidate,
   type DecisionInteractionQueueRow,
@@ -70,6 +70,7 @@ const openDecisionReviewSelect = {
   taskRunId: true,
   routeContext: true,
   domainClass: true,
+  gateKey: true,
   createdAt: true,
   profile: { select: { profileId: true, name: true, kind: true } },
 } satisfies Prisma.DecisionInteractionSelect;
@@ -77,7 +78,7 @@ const openDecisionReviewSelect = {
 function countUniqueOpenReviews(rows: DecisionInteractionQueueRow[]): number {
   const candidates = rows
     .filter((row) => !isBlankFounderReviewQuestion(row))
-    .filter((row) => !isAgentInternalFounderReviewNoise(row))
+    .filter((row) => isFounderActionable(row))
     .map((row) => projectFounderReviewCandidate(row));
   return dedupeFounderReviewCandidates(candidates).length;
 }

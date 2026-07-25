@@ -6,7 +6,7 @@ import {
 import { resolveOrgProfileId } from "@/lib/decision-perspective/material";
 import {
   dedupeFounderReviewCandidates,
-  isAgentInternalFounderReviewNoise,
+  isFounderActionable,
   isBlankFounderReviewQuestion,
   projectFounderReviewCandidate,
   type DecisionInteractionQueueRow,
@@ -23,7 +23,12 @@ function openDecisionReviewWhere(
     outcomeType: { in: WIKI_UNRESOLVED_OUTCOMES },
     humanOutcome: { equals: Prisma.DbNull },
     question: { not: "" },
+    // Mirror of isFounderActionable at the DB (BI-6EC1EE25): advisory
+    // profession/WSID rows and already-executed agent-internal consults are not
+    // reviews awaiting a human. A craft "defer" is a corpus-growth signal
+    // (ProfessionCorpusGap), not a founder decision.
     NOT: [
+      { gateKey: "profession" },
       {
         buildId: null,
         taskRunId: null,
@@ -47,6 +52,7 @@ const openDecisionReviewSelect = {
   taskRunId: true,
   routeContext: true,
   domainClass: true,
+  gateKey: true,
   createdAt: true,
   profile: { select: { profileId: true, name: true, kind: true } },
 } satisfies Prisma.DecisionInteractionSelect;
@@ -54,7 +60,7 @@ const openDecisionReviewSelect = {
 function countUniqueOpenReviews(rows: DecisionInteractionQueueRow[]): number {
   const candidates = rows
     .filter((row) => !isBlankFounderReviewQuestion(row))
-    .filter((row) => !isAgentInternalFounderReviewNoise(row))
+    .filter((row) => isFounderActionable(row))
     .map((row) => projectFounderReviewCandidate(row));
   return dedupeFounderReviewCandidates(candidates).length;
 }
@@ -128,7 +134,7 @@ export async function getWikiGovernanceContext(): Promise<string> {
 
   const reviewCandidates = (topOpenReviews as DecisionInteractionQueueRow[])
     .filter((row) => !isBlankFounderReviewQuestion(row))
-    .filter((row) => !isAgentInternalFounderReviewNoise(row))
+    .filter((row) => isFounderActionable(row))
     .map((row) => projectFounderReviewCandidate(row));
   const reviewLines = dedupeFounderReviewCandidates(reviewCandidates)
     .map((c) => `- [${c.profileLabel}] "${c.question}" — ${c.unresolvedReasonLabel}; suggested action: ${c.primaryActionLabel}; open evidence at ${c.links.decisionCanvasHref}`);

@@ -54,6 +54,7 @@ describe("aiDecisionToAttentionItem", () => {
     taskRunId: null,
     routeContext: "/build",
     domainClass: "plan-readiness",
+    gateKey: "build-studio",
     createdAt: new Date("2026-06-23T08:00:00.000Z"),
   };
 
@@ -64,6 +65,7 @@ describe("aiDecisionToAttentionItem", () => {
         taskRunId: null,
         routeContext: "mcp:principle_decide",
         domainClass: "kernel-consult",
+        gateKey: null,
       }),
     ).toBe(true);
     expect(
@@ -72,6 +74,7 @@ describe("aiDecisionToAttentionItem", () => {
         taskRunId: null,
         routeContext: "mcp:principle_decide",
         domainClass: "kernel-consult",
+        gateKey: null,
       }),
     ).toBe(false);
     expect(
@@ -80,6 +83,7 @@ describe("aiDecisionToAttentionItem", () => {
         taskRunId: null,
         routeContext: "/coworker-decisions/decisions",
         domainClass: "plan-readiness",
+        gateKey: null,
       }),
     ).toBe(false);
   });
