@@ -1,7 +1,15 @@
+import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
 import { scanUiSource, formatUiQualityReport } from "./ui-quality-checks";
 
 describe("scanUiSource — design tokens", () => {
+  it("does not expose a wildcard arbitrary-value utility to Tailwind's content scanner", () => {
+    const source = readFileSync(new URL("./ui-quality-checks.ts", import.meta.url), "utf8");
+    const wildcardUtility = ["bg-[", "var(--dpf-*", ")]"].join("");
+
+    expect(source).not.toContain(wildcardUtility);
+  });
+
   it("flags a hardcoded hex on platform UI as critical", () => {
     const r = scanUiSource(`<div style={{ color: "#4ade80" }}>hi</div>`);
     expect(r.findings.some((f) => f.rule === "hardcoded-hex" && f.severity === "critical")).toBe(true);
