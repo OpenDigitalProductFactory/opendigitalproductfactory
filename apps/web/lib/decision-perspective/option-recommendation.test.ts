@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { recommendOptionAgainstCommandments } from "./option-recommendation";
+import { recommendOptionAgainstCommandments, resolveRecommendedOptionId } from "./option-recommendation";
 
 // BI-D88DFEEA Phase 1. This module is deliberately commandments-only (see its
 // header) — these tests pin that it reuses listPrinciplesByTier + decide()
@@ -88,5 +88,35 @@ describe("recommendOptionAgainstCommandments", () => {
       ],
     });
     expect(result).toBe("a");
+  });
+});
+
+describe("resolveRecommendedOptionId (BI-6DCF772F guard)", () => {
+  const scoredOptions = [
+    { id: "revise", description: "Revise the plan", features: { long_term_maintainability: 0.9, speed_to_value: 0.2 } },
+    { id: "proceed", description: "Proceed now", features: { long_term_maintainability: 0.2, speed_to_value: 0.9 } },
+  ];
+  const commandmentDb = () => ({ wikiPage: { findMany: vi.fn().mockResolvedValue([fakeCommandment()]) } });
+
+  it("returns null for an escalate/defer verdict even when scored options are present — never invents a recommendation the kernel declined", async () => {
+    const db = commandmentDb();
+    for (const outcomeType of ["escalate", "defer"]) {
+      expect(await resolveRecommendedOptionId({ db, scoredOptions, outcomeType })).toBeNull();
+    }
+    expect(db.wikiPage.findMany).not.toHaveBeenCalled();
+  });
+
+  it("returns null when no scored options are supplied, regardless of verdict", async () => {
+    const db = commandmentDb();
+    expect(await resolveRecommendedOptionId({ db, scoredOptions: undefined, outcomeType: "recommend" })).toBeNull();
+    expect(await resolveRecommendedOptionId({ db, scoredOptions: [], outcomeType: "recommend" })).toBeNull();
+    expect(db.wikiPage.findMany).not.toHaveBeenCalled();
+  });
+
+  it("delegates to the commandment argmax for recommend/arbitrate verdicts", async () => {
+    for (const outcomeType of ["recommend", "arbitrate"]) {
+      const result = await resolveRecommendedOptionId({ db: commandmentDb(), scoredOptions, outcomeType });
+      expect(result).toBe("revise");
+    }
   });
 });

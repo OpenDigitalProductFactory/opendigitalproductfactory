@@ -49,6 +49,12 @@ const definitions: ToolDefinition[] = [
       properties: {
         question: { type: "string", description: "The business decision to weigh, e.g. 'Should we send this customer a free replacement?'" },
         options: { type: "array", items: { type: "string" }, description: "The distinct options under consideration (at least one)." },
+        optionFeatures: {
+          type: "array",
+          items: { type: "object", additionalProperties: { type: "number" } },
+          description:
+            "Optional. Per-option feature vectors, index-aligned to `options` (optionFeatures[i] scores options[i]). Each is an axis→score map in [0,1] over the platform decision axes (e.g. speed_to_value, reversibility, blast_radius, human_cognitive_load, governance_compliance, long_term_maintainability). Provide one map per option to receive a real recommendedOptionId scored against kernel commandments; omit entirely for a coverage-based verdict only.",
+        },
         domainClass: {
           type: "string",
           enum: ["plan-readiness", "architecture-tradeoff", "risk-assessment", "professional-practice"],
@@ -95,6 +101,7 @@ async function evaluateOrgBusinessDecision(
 ): Promise<ToolResult> {
   const { evaluateOrgBusinessDecisionGate } = await import("@/lib/decision-perspective/org-business-gate");
   const { DECISION_DOMAIN_CLASSES, DECISION_RISK_TIERS } = await import("@/lib/decision-perspective/types");
+  const { parseOptionFeatures } = await import("@/lib/decision-perspective/scored-option-input");
   const { prisma } = await import("@dpf/db");
 
   const org = await prisma.organization.findFirst({ select: { id: true } });
@@ -117,11 +124,17 @@ async function evaluateOrgBusinessDecision(
     };
   }
 
+  const parsedFeatures = parseOptionFeatures(options, params["optionFeatures"]);
+  if (!parsedFeatures.ok) {
+    return { success: false, error: "invalid_params", message: parsedFeatures.message };
+  }
+
   const decision = await evaluateOrgBusinessDecisionGate({
     db: prisma,
     organizationId: org.id,
     question,
     options,
+    scoredOptions: parsedFeatures.scoredOptions,
     domainClass: domainClass as Parameters<typeof evaluateOrgBusinessDecisionGate>[0]["domainClass"],
     riskTier: riskTier as Parameters<typeof evaluateOrgBusinessDecisionGate>[0]["riskTier"],
     routeContext: context?.routeContext ?? "/coworker-business",
@@ -140,6 +153,7 @@ async function evaluateOrgBusinessDecision(
       outcomeType: decision.evaluation.outcomeType,
       confidenceScore: decision.evaluation.confidenceScore,
       orgProfileSelected: decision.orgProfileSelected,
+      recommendedOptionId: decision.evaluation.recommendedOptionId ?? null,
       rationale: rationale.length > 500 ? `${rationale.slice(0, 500)}...` : rationale,
     },
   };

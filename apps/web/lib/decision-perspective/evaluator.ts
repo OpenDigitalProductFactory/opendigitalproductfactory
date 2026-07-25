@@ -11,7 +11,7 @@ import {
 } from "./persistence";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { MARK_DPF_PLATFORM_PROFILE } from "./default-profile";
-import { recommendOptionAgainstCommandments } from "./option-recommendation";
+import { resolveRecommendedOptionId } from "./option-recommendation";
 import type {
   DecisionPerspectiveEvaluationInput,
   DecisionPerspectiveEvaluationResult,
@@ -676,21 +676,16 @@ export async function evaluatePerspectiveGate(input: {
     evaluation.resolvedProfileChain = resolved.resolvedProfileChain;
   }
 
-  // BI-D88DFEEA Phase 1. Only when the gate supplied scored options AND the
-  // verdict is a path forward (recommend/arbitrate) — an escalate/defer
-  // verdict means the kernel explicitly declined to pick among the options,
-  // so recording a recommendation there would misrepresent what happened.
-  if (
-    input.scoredOptions
-    && input.scoredOptions.length > 0
-    && (evaluation.outcomeType === "recommend" || evaluation.outcomeType === "arbitrate")
-  ) {
-    evaluation.recommendedOptionId = await recommendOptionAgainstCommandments({
-      db: input.db,
-      scoredOptions: input.scoredOptions,
-      organizationId: input.organizationId ?? null,
-    });
-  }
+  // BI-D88DFEEA Phase 1 / BI-6DCF772F. Recommend only when the gate supplied
+  // scored options AND the verdict is a path forward — the guard now lives in
+  // the shared resolveRecommendedOptionId helper so profession-gate applies it
+  // identically.
+  evaluation.recommendedOptionId = await resolveRecommendedOptionId({
+    db: input.db,
+    scoredOptions: input.scoredOptions,
+    organizationId: input.organizationId ?? null,
+    outcomeType: evaluation.outcomeType,
+  });
 
   console.info(
     `[tool-trace] ${prefix}.evaluator.complete ${JSON.stringify({

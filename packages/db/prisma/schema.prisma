@@ -12430,15 +12430,19 @@ model DecisionInteraction {
   principleConflict Boolean                           @default(false)
   outcomePayload    Json                              @default("{}")
   humanOutcome      Json?
-  // BI-D88DFEEA Phase 1 (gate instrumentation). When the gate scored real
-  // per-option feature vectors (build-studio, work-pattern-review; NOT the
-  // open-ended org-business/profession gates yet), `scoredOptions` carries the
-  // DecisionOption[] (id/description/features) actually scored,
+  // BI-D88DFEEA Phase 1 (gate instrumentation) / BI-6DCF772F (open-ended gates).
+  // When the gate scored real per-option feature vectors, `scoredOptions`
+  // carries the DecisionOption[] (id/description/features) actually scored,
   // `recommendedOptionId` is the kernel's argmax pick via decide(), and
   // `chosenOptionId` is populated once the human's response resolves to one of
-  // `scoredOptions`. All three are null for every other DecisionInteraction —
-  // the weight-inference adapter (weight-inference-adapter.ts) treats null as
-  // "cannot extract an observation from this row", never as zero-signal.
+  // `scoredOptions`. Populated by: build-studio-gate and work-pattern-review
+  // (fixed hand-authored menus), and the org-business/profession gates when the
+  // MCP caller supplies per-option `optionFeatures` (BI-6DCF772F). All three are
+  // null for every other DecisionInteraction — the weight-inference adapter
+  // (weight-inference-adapter.ts) treats null as "cannot extract an observation
+  // from this row", never as zero-signal. (`chosenOptionId` for the escalation-
+  // capture paths still awaits the structured-option form redesign, BI-6DCF772F
+  // part 2.)
   scoredOptions     Json?
   recommendedOptionId String?
   chosenOptionId    String?

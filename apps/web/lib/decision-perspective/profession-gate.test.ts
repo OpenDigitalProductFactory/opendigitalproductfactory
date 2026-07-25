@@ -101,6 +101,56 @@ describe("evaluateProfessionDecisionGate", () => {
     expect(data.gateFallbackUsed).toBe(false);
   });
 
+  const commandmentRow = {
+    id: "c1",
+    title: "Architecture Over Shortcuts",
+    principleTier: "commandment",
+    principleWeight: null,
+    principleDimensionVector: { long_term_maintainability: 0.8, speed_to_value: -0.3 },
+  };
+
+  it("records a real recommendedOptionId + scoredOptions when the caller supplies option features and the verdict is a path forward (BI-6DCF772F)", async () => {
+    const db = {
+      ...makeDb(),
+      wikiPage: { findMany: vi.fn().mockResolvedValue([commandmentRow]) },
+    };
+    const scoredOptions = [
+      { id: "Compatibility view", description: "Compatibility view", features: { long_term_maintainability: 0.9, speed_to_value: 0.2 } },
+      { id: "Hard cutover", description: "Hard cutover", features: { long_term_maintainability: 0.2, speed_to_value: 0.9 } },
+    ];
+    await evaluateProfessionDecisionGate({
+      ...base,
+      db: db as never,
+      scoredOptions,
+      resolver: fakeResolver() as never,
+      evaluator: (input) => makeEval({ outcomeType: "recommend", scoredOptions: input.scoredOptions }),
+    });
+
+    const data = db.decisionInteraction.create.mock.calls[0]![0].data as Record<string, unknown>;
+    // Compatibility view wins: high long_term_maintainability (weighted +), low speed_to_value (weighted -).
+    expect(data.recommendedOptionId).toBe("Compatibility view");
+    expect(data.scoredOptions).toEqual(scoredOptions);
+  });
+
+  it("records NO recommendedOptionId for an escalate verdict even when option features are supplied", async () => {
+    const db = {
+      ...makeDb(),
+      wikiPage: { findMany: vi.fn() },
+    };
+    await evaluateProfessionDecisionGate({
+      ...base,
+      db: db as never,
+      scoredOptions: [{ id: "a", description: "a", features: { long_term_maintainability: 1 } }],
+      resolver: fakeResolver() as never,
+      evaluator: (input) => makeEval({ outcomeType: "escalate", scoredOptions: input.scoredOptions }),
+    });
+
+    const data = db.decisionInteraction.create.mock.calls[0]![0].data as Record<string, unknown>;
+    expect(data.recommendedOptionId ?? null).toBeNull();
+    // The commandment lookup is never even attempted when the verdict isn't a path forward.
+    expect(db.wikiPage.findMany).not.toHaveBeenCalled();
+  });
+
   it("falls back to platform as ADVISORY when the craft corpus is silent", async () => {
     const db = makeDb();
     const result = await evaluateProfessionDecisionGate({
