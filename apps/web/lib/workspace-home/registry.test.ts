@@ -268,3 +268,91 @@ describe("workspace home contribution registry", () => {
     );
   });
 });
+
+// EP-EMPLOYEE-OCCUPATION P2 (BI-C135D07B): the occupation axis in the resolver.
+// Five-tier, most-specific-wins (spec §5.3), with the archetype tiers guarded so an
+// occupation-scoped home never leaks to every worker of the archetype.
+describe("workspace home occupation axis", () => {
+  const hygienistHome = makeContribution({
+    id: "clinic-hygienist-home",
+    label: "Dental hygienist home",
+    semanticArchetypeIds: ["dental-practice"],
+    archetypeCategories: ["healthcare-wellness"],
+    occupationKeys: ["dental-hygienist"],
+  });
+  const clinicHome = makeContribution({
+    id: "clinic-archetype-home",
+    label: "Dental practice home",
+    semanticArchetypeIds: ["dental-practice"],
+    archetypeCategories: ["healthcare-wellness"],
+    // no occupationKeys → archetype-level
+  });
+  const categoryOccupationHome = makeContribution({
+    id: "healthcare-frontdesk-home",
+    label: "Front desk (any healthcare)",
+    semanticArchetypeIds: [],
+    archetypeCategories: ["healthcare-wellness"],
+    occupationKeys: ["front-desk-coordinator"],
+  });
+
+  const clinicConfig = {
+    archetype: { archetypeId: "dental-practice", category: "healthcare-wellness", name: "Dental Practice" },
+  };
+
+  it("tier 1: matches archetypeId × occupation first", () => {
+    const registry = createWorkspaceHomeRegistry([clinicHome, hygienistHome]);
+    const res = resolveWorkspaceHomeContribution({
+      storefrontConfig: clinicConfig,
+      occupationKey: "dental-hygienist",
+      registry,
+    });
+    expect(res.match).toBe("archetype-occupation");
+    expect(res.contribution?.id).toBe("clinic-hygienist-home");
+  });
+
+  it("tier 2: falls to category × occupation when no archetype×occupation home exists", () => {
+    const registry = createWorkspaceHomeRegistry([clinicHome, categoryOccupationHome]);
+    const res = resolveWorkspaceHomeContribution({
+      storefrontConfig: clinicConfig,
+      occupationKey: "front-desk-coordinator",
+      registry,
+    });
+    expect(res.match).toBe("category-occupation");
+    expect(res.contribution?.id).toBe("healthcare-frontdesk-home");
+  });
+
+  it("tier 3: falls to the archetype-level home when the occupation has no tailored home", () => {
+    const registry = createWorkspaceHomeRegistry([clinicHome, hygienistHome]);
+    const res = resolveWorkspaceHomeContribution({
+      storefrontConfig: clinicConfig,
+      occupationKey: "office-manager", // no occupation-scoped home for this key
+      registry,
+    });
+    expect(res.match).toBe("exact");
+    expect(res.contribution?.id).toBe("clinic-archetype-home");
+  });
+
+  it("an occupation-scoped home NEVER leaks to the generic archetype tier", () => {
+    // Only the hygienist (occupation-scoped) home is registered — a worker with a
+    // different/absent occupation must NOT receive it; they fall through to unconfigured.
+    const registry = createWorkspaceHomeRegistry([hygienistHome]);
+    const res = resolveWorkspaceHomeContribution({
+      storefrontConfig: clinicConfig,
+      occupationKey: "field-service-technician",
+      registry,
+    });
+    expect(res.mode).toBe("unconfigured");
+    expect(res.contribution).toBeNull();
+  });
+
+  it("behaves exactly as before when no occupationKey is supplied (backward compatible)", () => {
+    const registry = createWorkspaceHomeRegistry([hygienistHome, clinicHome]);
+    const res = resolveWorkspaceHomeContribution({
+      storefrontConfig: clinicConfig,
+      registry,
+    });
+    // No occupation → tiers 1-2 skipped; archetype-level clinicHome wins, hygienistHome ignored.
+    expect(res.match).toBe("exact");
+    expect(res.contribution?.id).toBe("clinic-archetype-home");
+  });
+});

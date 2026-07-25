@@ -170,6 +170,16 @@ export type WorkspaceHomeContribution = {
   topConcerns: string[];
   semanticArchetypeIds: string[];
   archetypeCategories: string[];
+  /**
+   * Occupation keys this home is scoped to (EP-EMPLOYEE-OCCUPATION P2, the
+   * occupation dimension). When present and non-empty, this contribution is an
+   * OCCUPATION-level home — it only matches when the signed-in employee resolves to
+   * one of these occupations (spec §5.3, tiers 1-2). When absent or empty, the
+   * contribution is an ARCHETYPE-level home (the existing behavior, tiers 3-4) and
+   * must NOT leak to a single occupation. Additive and backward-compatible: every
+   * existing contribution omits this and stays archetype-level.
+   */
+  occupationKeys?: string[];
   setupActivation: WorkspaceHomeSetupActivation;
   slots: WorkspaceHomeSlot[];
   components: WorkspaceHomeComponentDescriptor[];
@@ -191,7 +201,15 @@ export type WorkspaceHomeStorefrontConfigRef = {
   archetype?: WorkspaceHomeArchetypeRef | null;
 } | null;
 
-export type WorkspaceHomeMatchKind = "exact" | "category" | "none";
+// "archetype-occupation" / "category-occupation" are the occupation-scoped tiers
+// (EP-EMPLOYEE-OCCUPATION P2, spec §5.3, most-specific-wins): archetypeId×occupation,
+// then category×occupation, then the existing archetype-level "exact"/"category".
+export type WorkspaceHomeMatchKind =
+  | "archetype-occupation"
+  | "category-occupation"
+  | "exact"
+  | "category"
+  | "none";
 
 export type WorkspaceHomeResolution =
   | {
