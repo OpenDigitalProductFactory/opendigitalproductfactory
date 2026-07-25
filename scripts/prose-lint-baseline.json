@@ -1488,14 +1488,14 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 1,
-    "textMass": 156
+    "textMass": 157
   },
   "apps/web/app/(shell)/platform/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 84
+    "textMass": 86
   },
   "apps/web/app/(shell)/platform/schedule/page.tsx": {
     "vocabulary": 0,
@@ -3294,7 +3294,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 4,
-    "textMass": 369
+    "textMass": 384
   },
   "apps/web/components/agent/AgentCoworkerShell.tsx": {
     "vocabulary": 0,
@@ -6465,7 +6465,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 1,
-    "textMass": 50
+    "textMass": 60
   },
   "apps/web/components/platform/identity/ApplicationAssignmentsPanel.tsx": {
     "vocabulary": 0,
@@ -6521,7 +6521,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 11
+    "textMass": 13
   },
   "apps/web/components/platform/identity/PrincipalDirectoryPanel.tsx": {
     "vocabulary": 0,
@@ -6549,7 +6549,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 97
+    "textMass": 99
   },
   "apps/web/components/platform/service-desk/ServiceTicketsTable.tsx": {
     "vocabulary": 0,
