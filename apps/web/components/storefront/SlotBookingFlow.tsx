@@ -205,7 +205,12 @@ export function SlotBookingFlow({
   const [viewYear, setViewYear] = useState(today.getFullYear());
   const [viewMonth, setViewMonth] = useState(today.getMonth() + 1); // 1-based
   const [availableDates, setAvailableDates] = useState<Set<string>>(new Set());
-  const [datesLoading, setDatesLoading] = useState(false);
+  // Starts true (not false): the initial fetch for the displayed month hasn't
+  // resolved yet, so the server-rendered/pre-hydration markup must show the
+  // neutral "Checking availability…" state (copy.loadingDates) rather than
+  // falsely claiming no availability while `availableDates` is still empty
+  // (BI-52648DB3). fetchDates flips this back to false in its finally block.
+  const [datesLoading, setDatesLoading] = useState(true);
   const [datesError, setDatesError] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
