@@ -63,6 +63,14 @@ updates:
       # mode code. Upgrade deliberately, not through Dependabot.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
+      # FullCalendar packages are version-coupled. Core/react published 7.0.0
+      # before daygrid/timegrid/interaction had final 7.0.0 releases (those
+      # plugins still stop at 7.0.0-rc.0 / beta), so separate major PRs create
+      # an impossible install: peer/type mismatches and missing runtime exports.
+      # Keep 6.x flowing; move to 7.x only when the whole family has final
+      # releases and can be bumped in one branch.
+      - dependency-name: "@fullcalendar/*"
+        update-types: ["version-update:semver-major"]
       # react-data-grid has no stable release yet; every version is a
       # 7.0.0-* prerelease. The maintainer ships the recommended build on
       # the `beta` channel, while `canary` is the nightly/dev channel and
