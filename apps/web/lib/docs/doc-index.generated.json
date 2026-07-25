@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 550,
+  "pageCount": 551,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1100,6 +1100,28 @@
         "what-you-see",
         "why-this-works",
         "where-to-look-learn-more"
+      ]
+    },
+    "docs/architecture/vector-decisioning-and-jsi.md": {
+      "publicHref": "/architecture/vector-decisioning-and-jsi/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "vector-decisioning-and-job-specific-intelligence-jsi-mathematical-foundations",
+        "abstract",
+        "0-relationship-to-tak-jsi-and-the-golden-triangle",
+        "1-authority-scopes-wwmd-wwwd-wsid-per-decision-override",
+        "2-the-structured-alignment-engine",
+        "21-the-dimension-registry",
+        "22-the-scoring-formula",
+        "23-evidence-discounting",
+        "3-weight-fluidity-the-jsi-three-timescale-model",
+        "31-medium-timescale-weight-inference-as-preference-learning",
+        "32-fast-timescale-situational-signal-validation",
+        "4-where-ahp-style-pairwise-elicitation-would-actually-fit",
+        "5-summary-table",
+        "references"
       ]
     },
     "docs/business-types/_readability-report.md": {
