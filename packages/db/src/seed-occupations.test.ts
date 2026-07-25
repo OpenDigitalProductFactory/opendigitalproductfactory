@@ -8,6 +8,7 @@ import {
   knownCoworkerSlugs,
   type OccupationSeed,
 } from "./seed-occupations";
+import { isKnownBaseAccessProfile, resolveBaseAccessRole } from "./occupation-access";
 
 const refs = {
   categories: knownArchetypeCategories(),
@@ -94,5 +95,26 @@ describe("validateOccupationRegistry (fails closed)", () => {
     const bad = clone(base);
     bad.occupationKey = "Not_Valid Key";
     expect(() => validateOccupationRegistry([bad], refs)).toThrow(/kebab-case/);
+  });
+
+  it("rejects an unknown baseAccessProfile (P0.1 RBAC floor must resolve)", () => {
+    const bad = clone(base);
+    bad.baseAccessProfile = "root-admin";
+    expect(() => validateOccupationRegistry([bad], refs)).toThrow(/unknown baseAccessProfile/);
+  });
+});
+
+// EP-EMPLOYEE-OCCUPATION P0.1: the base-access-profile -> platform-role binding is
+// the single source of truth (occupation-access.ts). Pin the workforce-member floor.
+describe("base access profile binding", () => {
+  it("maps every shipped occupation's baseAccessProfile to a known RBAC role", () => {
+    for (const occ of OCCUPATION_SEED_DATA) {
+      expect(isKnownBaseAccessProfile(occ.baseAccessProfile)).toBe(true);
+    }
+  });
+
+  it("binds workforce-member to HR-600 (kernel-ratified DI-4F72F64B6C5B)", () => {
+    expect(resolveBaseAccessRole("workforce-member")).toBe("HR-600");
+    expect(resolveBaseAccessRole("unknown-profile")).toBeNull();
   });
 });

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { Prisma, PrismaClient } from "../generated/client/client";
 import { ARCHETYPE_SEED_DATA } from "@dpf/storefront-templates/seed";
 import { COWORKER_AGENT_SEEDS } from "./workforce-seed.js";
+import { isKnownBaseAccessProfile, KNOWN_BASE_ACCESS_PROFILES } from "./occupation-access.js";
 
 // EP-EMPLOYEE-OCCUPATION Phase 1 (BI-442E2B42). Seeds the OccupationProfile
 // registry from packages/db/data/occupation_registry.json — the "occupation"
@@ -101,6 +102,15 @@ export function validateOccupationRegistry(
       if (typeof occ[field] !== "string" || occ[field].trim().length === 0) {
         throw new Error(`${where}: ${field} must be a non-empty string.`);
       }
+    }
+
+    // baseAccessProfile must resolve to a known RBAC floor (P0.1, occupation-access.ts).
+    // Fail closed so an occupation can never seed with a dangling security floor the
+    // narrowing gate (spec §5.4) would have nothing to narrow within.
+    if (!isKnownBaseAccessProfile(occ.baseAccessProfile)) {
+      throw new Error(
+        `${where}: unknown baseAccessProfile "${occ.baseAccessProfile}" (known: ${KNOWN_BASE_ACCESS_PROFILES.join(", ")}).`,
+      );
     }
 
     if (!Array.isArray(occ.archetypeCategories) || occ.archetypeCategories.length === 0) {

@@ -13,7 +13,12 @@ export type { PortalAudienceMode } from "../navigation/portal-navigation-model";
 
 export type PlatformRoleId =
   | "HR-000" | "HR-100" | "HR-200"
-  | "HR-300" | "HR-400" | "HR-500";
+  | "HR-300" | "HR-400" | "HR-500"
+  // HR-600 "Workforce Member": the base access floor for a customer's in-trench
+  // employees (occupation dimension, EP-EMPLOYEE-OCCUPATION P0.1). Kernel-ratified
+  // (DI-4F72F64B6C5B) as a dedicated role decoupled from the HR-000..HR-500
+  // platform-management ladder. Deliberately minimal — see PERMISSIONS below.
+  | "HR-600";
 
 export type CapabilityKey =
   | "view_ea_modeler"
@@ -88,11 +93,23 @@ export const PERMISSIONS: Record<CapabilityKey, Permission> = {
   manage_business_models:      { roles: ["HR-000", "HR-200", "HR-300"] },
   // Workbooks are a cross-domain knowledge-worker tool; the coarse role gate is
   // "can you use the feature", while fine-grained access is enforced per-workbook
-  // by WorkbookShare (owner/editor/viewer). Both granted to all roles.
-  view_workbooks:              { roles: ["HR-000", "HR-100", "HR-200", "HR-300", "HR-400", "HR-500"] },
-  manage_workbooks:            { roles: ["HR-000", "HR-100", "HR-200", "HR-300", "HR-400", "HR-500"] },
+  // by WorkbookShare (owner/editor/viewer). Granted to all roles including HR-600 —
+  // this pair is the in-trench worker's own work surface, safe because access to any
+  // individual workbook is still ACL-gated.
+  view_workbooks:              { roles: ["HR-000", "HR-100", "HR-200", "HR-300", "HR-400", "HR-500", "HR-600"] },
+  manage_workbooks:            { roles: ["HR-000", "HR-100", "HR-200", "HR-300", "HR-400", "HR-500", "HR-600"] },
   manage_platform:             { roles: ["HR-000"] },
 };
+
+// HR-600 "Workforce Member" floor (EP-EMPLOYEE-OCCUPATION P0.1, least-privilege /
+// deny-by-default). HR-600 is intentionally ABSENT from every capability above
+// except view_workbooks + manage_workbooks. It carries none of the platform-management
+// capabilities (admin, finance, customer, employee registry, manage_user_lifecycle,
+// backlog, operations, platform) that the HR-000..HR-500 ladder confers. An in-trench
+// employee reaches their home because /workspace is capabilityKey:null; the occupation
+// dimension then FOCUSES that surface and adds a governed coworker roster on top. The
+// non-widening invariant (spec §5.4) depends on this floor: occupation may narrow what
+// HR-600 already has, never grant a capability this table withholds.
 
 export type UserContext = {
   userId?: string;
@@ -100,7 +117,7 @@ export type UserContext = {
   isSuperuser: boolean;
 };
 
-const VALID_ROLE_IDS = new Set<string>(["HR-000", "HR-100", "HR-200", "HR-300", "HR-400", "HR-500"]);
+const VALID_ROLE_IDS = new Set<string>(["HR-000", "HR-100", "HR-200", "HR-300", "HR-400", "HR-500", "HR-600"]);
 
 function isPlatformRoleId(role: string): role is PlatformRoleId {
   return VALID_ROLE_IDS.has(role);

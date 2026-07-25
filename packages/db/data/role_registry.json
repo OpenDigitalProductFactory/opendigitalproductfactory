@@ -61,6 +61,16 @@
       "supervises_agents": ["AGT-ORCH-400", "AGT-ORCH-700"],
       "owns_portfolios": [],
       "status": "active"
+    },
+    {
+      "role_id": "HR-600",
+      "role_name": "Workforce Member",
+      "authority_domain": "In-trench business employee (e.g. dental hygienist, field service technician). Base access floor for the occupation dimension — their own tailored workspace and assigned work only; no platform-management authority. Kernel-ratified DI-4F72F64B6C5B (EP-EMPLOYEE-OCCUPATION P0.1).",
+      "hitl_tier_min": 1,
+      "escalation_sla_hours": 24,
+      "supervises_agents": [],
+      "owns_portfolios": [],
+      "status": "active"
     }
   ]
 }
