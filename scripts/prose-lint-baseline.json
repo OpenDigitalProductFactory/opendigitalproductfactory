@@ -3721,7 +3721,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 27
+    "textMass": 45
   },
   "apps/web/components/build/DecompositionAssistantPanel.tsx": {
     "vocabulary": 0,
@@ -7319,7 +7319,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 53
+    "textMass": 71
   },
   "apps/web/components/wiki/VoiceProfileSetup.tsx": {
     "vocabulary": 0,
