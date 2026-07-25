@@ -31,7 +31,9 @@ import type {
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 type ProfessionGateClient = Parameters<typeof resolveProfileMaterialForProfession>[0]["db"] &
-  Parameters<typeof persistDecisionInteraction>[0]["db"];
+  Parameters<typeof persistDecisionInteraction>[0]["db"] &
+  // BI-6DCF772F: the shared argmax reads kernel commandments via wikiPage.
+  Parameters<typeof resolveRecommendedOptionId>[0]["db"];
 
 type GateEvaluator = (input: DecisionPerspectiveEvaluationInput) => DecisionPerspectiveEvaluationResult;
 
