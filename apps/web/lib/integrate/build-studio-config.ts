@@ -220,6 +220,27 @@ export async function isQualityFirstRightsizingEnabled(): Promise<boolean> {
   );
 }
 
+export const BUILD_EVIDENCE_AUTO_ACCEPT_KEY = "BUILD_EVIDENCE_AUTO_ACCEPT";
+
+/**
+ * Kernel decision DI-53037C92BC0A (evidence-auto-accept): the governed autopilot may
+ * record build acceptance to clear the review→ship `acceptance-evaluated` gate, but
+ * ONLY on fully-green evidence (typecheck clean, zero failing tests — stricter than
+ * the human Record-Acceptance action, which ignores tests — and UX verification
+ * complete/skipped). DEFAULT OFF: enabling autonomous acceptance is an operator
+ * ratification, so this merges inert. Enable live (no restart) via the
+ * `BUILD_EVIDENCE_AUTO_ACCEPT` PlatformConfig row, or `DPF_BUILD_EVIDENCE_AUTO_ACCEPT=1`
+ * (env override / kill-switch). Note the inverted default vs the routing flags above:
+ * fail-closed to OFF so a config-read blip never silently starts auto-accepting.
+ */
+export async function isEvidenceAutoAcceptEnabled(): Promise<boolean> {
+  return resolveActivationFlag(
+    process.env.DPF_BUILD_EVIDENCE_AUTO_ACCEPT,
+    await readPlatformFlag(BUILD_EVIDENCE_AUTO_ACCEPT_KEY),
+    false,
+  );
+}
+
 /**
  * BI-269922A4 (EP-27FD96BC): verified-finding review — a reviewer's *critical*
  * finding may only BLOCK a gate (fail / trigger a rework round) after an

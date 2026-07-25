@@ -159,6 +159,24 @@ export async function advanceReviewedBuildToShip(
   log: (summary: string) => Promise<void>,
   t0: number,
 ): Promise<ShipDispatchOutcome> {
+  // Evidence-gated autonomous acceptance (kernel DI-53037C92BC0A, default-OFF flag).
+  // Runs BEFORE the review→ship gate read below so a governed-autopilot build with
+  // fully-green evidence records acceptance and clears the `acceptance-evaluated`
+  // requirement. This is the single autonomous choke point every advance route
+  // funnels through (fresh UX pass, UX-skipped, diff-re-entry, reconciler re-drive).
+  // Fail-closed + never throws: if it declines, the gate blocks exactly as before.
+  try {
+    const { autoAcceptBuildOnEvidence } = await import("@/lib/build/auto-accept");
+    const auto = await autoAcceptBuildOnEvidence(buildId);
+    if (auto.accepted) {
+      await log(
+        `Auto-recorded acceptance on green evidence (${auto.acceptanceMet?.length ?? 0} criteria) — evidence-gated autopilot.`,
+      );
+    }
+  } catch {
+    /* never blocks the ship path */
+  }
+
   const build = await prisma.featureBuild.findUnique({
     where: { buildId },
     select: {

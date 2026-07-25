@@ -21,6 +21,7 @@ import {
 import { buildDesignReviewPrompt, buildPlanReviewPrompt, parseReviewResponse } from "@/lib/build-reviewers";
 import { queueBuildReviewVerification } from "@/lib/build-review-verification-trigger";
 import { saveBuildArtifactRevision, type BuildArtifactField } from "@/lib/build/build-artifact-provenance";
+import { buildAcceptanceEvidenceRecord, writeAcceptanceMet } from "@/lib/build/auto-accept";
 import { evaluateBuildStudioDecision } from "@/lib/build/decision-service";
 import {
   assertFeatureBuildDependencyGate,
@@ -1015,26 +1016,18 @@ export async function recordBuildAcceptance(
   const evidenceSuffix = note?.trim()
     ? ` ${note.trim()}`
     : "";
-  const acceptanceMet = acceptanceCriteria.map((criterion) => ({
-    criterion,
-    met: true,
-    evidence: `Reviewed in Build Studio after clean typecheck and completed UX verification.${evidenceSuffix}`,
-  }));
+  const acceptanceMet = buildAcceptanceEvidenceRecord(
+    acceptanceCriteria,
+    `Reviewed in Build Studio after clean typecheck and completed UX verification.${evidenceSuffix}`,
+  );
 
-  await saveBuildArtifactRevision({
+  await writeAcceptanceMet({
     buildId,
-    field: "acceptanceMet",
     savedByUserId: userId,
-    value: acceptanceMet,
+    acceptanceMet,
+    activityTool: "record_acceptance",
+    activitySummary: `Acceptance recorded for ${acceptanceCriteria.length} criteria after review evidence completed.`,
   });
-
-  prisma.buildActivity.create({
-    data: {
-      buildId,
-      tool: "record_acceptance",
-      summary: `Acceptance recorded for ${acceptanceCriteria.length} criteria after review evidence completed.`,
-    },
-  }).catch(() => {});
 }
 
 export async function resumeBuildImplementation(buildId: string): Promise<ResumeBuildImplementationOutcome> {
