@@ -2,6 +2,7 @@ import {
   BASELINE_WORKSPACE_HOME_SLOT_IDS,
   type WorkspaceHomeComponentDescriptor,
   type WorkspaceHomeContribution,
+  type WorkspaceHomeMatchKind,
   type WorkspaceHomeRegistry,
   type WorkspaceHomeResolution,
   type WorkspaceHomeStorefrontConfigRef,
@@ -147,11 +148,39 @@ export function validateWorkspaceHomeComponent(
   };
 }
 
+/** An occupation-scoped contribution declares one or more occupationKeys. */
+function isOccupationScoped(contribution: WorkspaceHomeContribution): boolean {
+  return Array.isArray(contribution.occupationKeys) && contribution.occupationKeys.length > 0;
+}
+
+function verticalResolution(
+  match: Exclude<WorkspaceHomeMatchKind, "none">,
+  contribution: WorkspaceHomeContribution,
+): WorkspaceHomeResolution {
+  return { mode: "vertical", match, contribution, fallback: null, setupAction: null };
+}
+
+/**
+ * Resolve the workspace-home contribution for a signed-in employee (EP-EMPLOYEE-OCCUPATION
+ * P2, spec §5.3). Most-specific-wins over five tiers, every step falling through honestly:
+ *   1. archetypeId × occupation  — occupation home for this exact business type
+ *   2. category × occupation      — occupation home generic across the industry
+ *   3. archetypeId                — existing archetype-level home (unchanged)
+ *   4. category                   — existing category-level home (unchanged)
+ *   5. platform fallback          — unconfigured → PlatformWorkspaceHome
+ *
+ * `occupationKey` is the signed-in employee's resolved occupation (from the P1 resolver,
+ * apps/web/lib/workforce/occupation.ts). Absent/empty → tiers 1-2 are skipped and behaviour
+ * is exactly as before this change. Occupation-scoped contributions are excluded from the
+ * archetype/category tiers so one occupation's home never leaks to every worker of the archetype.
+ */
 export function resolveWorkspaceHomeContribution({
   storefrontConfig,
+  occupationKey = null,
   registry = defaultWorkspaceHomeRegistry,
 }: {
   storefrontConfig: WorkspaceHomeStorefrontConfigRef;
+  occupationKey?: string | null;
   registry?: WorkspaceHomeRegistry;
 }): WorkspaceHomeResolution {
   const archetype = storefrontConfig?.archetype;
@@ -159,38 +188,44 @@ export function resolveWorkspaceHomeContribution({
     return unconfiguredWorkspaceHomeResolution();
   }
 
-  const exact = archetype.archetypeId
-    ? registry.contributions.find((contribution) =>
-        contribution.semanticArchetypeIds.includes(archetype.archetypeId ?? ""),
-      )
-    : null;
+  const archetypeId = archetype.archetypeId ?? "";
+  const category = archetype.category ?? "";
+  const occ =
+    typeof occupationKey === "string" && occupationKey.length > 0 ? occupationKey : null;
 
-  if (exact) {
-    return {
-      mode: "vertical",
-      match: "exact",
-      contribution: exact,
-      fallback: null,
-      setupAction: null,
-    };
+  // Tier 1 — archetypeId × occupation.
+  if (occ && archetypeId) {
+    const match = registry.contributions.find(
+      (c) => c.semanticArchetypeIds.includes(archetypeId) && (c.occupationKeys ?? []).includes(occ),
+    );
+    if (match) return verticalResolution("archetype-occupation", match);
   }
 
-  const category = archetype.category
-    ? registry.contributions.find((contribution) =>
-        contribution.archetypeCategories.includes(archetype.category ?? ""),
-      )
-    : null;
+  // Tier 2 — category × occupation.
+  if (occ && category) {
+    const match = registry.contributions.find(
+      (c) => c.archetypeCategories.includes(category) && (c.occupationKeys ?? []).includes(occ),
+    );
+    if (match) return verticalResolution("category-occupation", match);
+  }
 
+  // Tier 3 — archetypeId (archetype-level home only; occupation-scoped excluded).
+  if (archetypeId) {
+    const match = registry.contributions.find(
+      (c) => !isOccupationScoped(c) && c.semanticArchetypeIds.includes(archetypeId),
+    );
+    if (match) return verticalResolution("exact", match);
+  }
+
+  // Tier 4 — category (archetype-level home only).
   if (category) {
-    return {
-      mode: "vertical",
-      match: "category",
-      contribution: category,
-      fallback: null,
-      setupAction: null,
-    };
+    const match = registry.contributions.find(
+      (c) => !isOccupationScoped(c) && c.archetypeCategories.includes(category),
+    );
+    if (match) return verticalResolution("category", match);
   }
 
+  // Tier 5 — platform fallback.
   return unconfiguredWorkspaceHomeResolution();
 }
 
