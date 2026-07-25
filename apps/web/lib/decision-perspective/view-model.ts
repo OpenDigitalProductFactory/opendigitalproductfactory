@@ -20,6 +20,11 @@ export const DECISION_INTERACTION_GATE_SELECT = {
   outcomePayload: true,
   evidenceBundle: true,
   createdAt: true,
+  // BI-6DCF772F: this is a `select`, so the scoring columns must be named
+  // explicitly to reach the gate view / capture form.
+  scoredOptions: true,
+  recommendedOptionId: true,
+  chosenOptionId: true,
   escalationCapture: { select: { id: true } },
   deferralCapture: { select: { id: true } },
 } as const;
@@ -38,6 +43,9 @@ export type DecisionInteractionGateRow = {
   outcomePayload?: unknown;
   evidenceBundle?: unknown;
   createdAt: Date;
+  scoredOptions?: unknown;
+  recommendedOptionId?: string | null;
+  chosenOptionId?: string | null;
   escalationCapture?: unknown;
   deferralCapture?: unknown;
 };
@@ -81,6 +89,26 @@ function normalizeNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+// BI-6DCF772F. A persisted DecisionScoredOption[] is {id,description,features};
+// validate each entry so a malformed blob degrades to null (no picker) rather
+// than rendering a broken control.
+function normalizeScoredOptions(value: unknown): DecisionInteractionGateView["scoredOptions"] {
+  if (!Array.isArray(value)) return null;
+  const options = value
+    .map((entry) => {
+      const option = asRecord(entry);
+      return typeof option.id === "string" && typeof option.description === "string"
+        ? {
+          id: option.id,
+          description: option.description,
+          features: asRecord(option.features) as Record<string, number>,
+        }
+        : null;
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+  return options.length > 0 ? options : null;
+}
+
 export function decisionInteractionRowToGateView(row: null | undefined): null;
 export function decisionInteractionRowToGateView(row: DecisionInteractionGateRow): DecisionInteractionGateView;
 export function decisionInteractionRowToGateView(
@@ -117,6 +145,9 @@ export function decisionInteractionRowToGateView(
     rationale: row.rationale ?? null,
     createdAt: row.createdAt,
     sources,
+    scoredOptions: normalizeScoredOptions(row.scoredOptions),
+    recommendedOptionId: typeof row.recommendedOptionId === "string" ? row.recommendedOptionId : null,
+    chosenOptionId: typeof row.chosenOptionId === "string" ? row.chosenOptionId : null,
     escalationCaptured: Boolean(row.escalationCapture),
     deferralCaptured: Boolean(row.deferralCapture),
   };

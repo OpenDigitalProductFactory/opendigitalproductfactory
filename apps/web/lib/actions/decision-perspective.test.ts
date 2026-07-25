@@ -106,6 +106,7 @@ describe("captureDecisionInteraction", () => {
     expect(mockPrisma.decisionInteraction.update).toHaveBeenCalledWith({
       where: { id: "decision-row-1" },
       data: {
+        chosenOptionId: null,
         humanOutcome: expect.objectContaining({
           type: "escalation",
           clearsGate: true,
@@ -115,6 +116,54 @@ describe("captureDecisionInteraction", () => {
       },
     });
     expect(revalidatePath).toHaveBeenCalledWith("/build");
+  });
+
+  it("persists a valid structured option pick on the column and in humanOutcome (BI-6DCF772F)", async () => {
+    mockPrisma.decisionInteraction.findUnique.mockResolvedValue(
+      interactionRow({
+        scoredOptions: [
+          { id: "proceed", description: "Proceed now", features: {} },
+          { id: "revise", description: "Revise the plan", features: {} },
+        ],
+      }),
+    );
+
+    await captureDecisionInteraction({
+      buildId: "FB-123",
+      interactionId: "DI-ABC123",
+      outcomeType: "escalate",
+      answer: "Revise the plan before proceeding.",
+      chosenOptionId: "revise",
+    });
+
+    expect(mockPrisma.decisionInteraction.update).toHaveBeenCalledWith({
+      where: { id: "decision-row-1" },
+      data: {
+        chosenOptionId: "revise",
+        humanOutcome: expect.objectContaining({ chosenOptionId: "revise", type: "escalation" }),
+      },
+    });
+  });
+
+  it("rejects a chosen option that is not one of the row's scored options, writing nothing", async () => {
+    mockPrisma.decisionInteraction.findUnique.mockResolvedValue(
+      interactionRow({
+        scoredOptions: [{ id: "proceed", description: "Proceed now", features: {} }],
+      }),
+    );
+
+    await expect(
+      captureDecisionInteraction({
+        buildId: "FB-123",
+        interactionId: "DI-ABC123",
+        outcomeType: "escalate",
+        answer: "Do something else entirely.",
+        chosenOptionId: "not-an-option",
+      }),
+    ).rejects.toThrow(/not one of the scored options/);
+
+    expect(mockPrisma.escalationCapture.create).not.toHaveBeenCalled();
+    expect(mockPrisma.decisionInteraction.update).not.toHaveBeenCalled();
   });
 
   it("persists deferral gap details without clearing the gate", async () => {
@@ -152,6 +201,7 @@ describe("captureDecisionInteraction", () => {
     expect(mockPrisma.decisionInteraction.update).toHaveBeenCalledWith({
       where: { id: "decision-row-1" },
       data: {
+        chosenOptionId: null,
         humanOutcome: expect.objectContaining({
           type: "deferral",
           clearsGate: false,

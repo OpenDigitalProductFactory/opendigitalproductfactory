@@ -22,10 +22,16 @@ export type OrgDecisionCaptureInput = {
   makeStanding: boolean;
   /** Optional plain title for the standing stance; derived when omitted. */
   standingTitle?: string | null;
+  /**
+   * BI-6DCF772F: which of the gate's scored options the owner chose. Membership
+   * against the row's scoredOptions is validated in the action (this pure helper
+   * cannot see the row); here it is only trimmed and passed through.
+   */
+  chosenOptionId?: string | null;
 };
 
 export type OrgDecisionCaptureValidation =
-  | { ok: true; interactionId: string; answer: string; rationale: string | null; makeStanding: boolean; standingTitle: string | null }
+  | { ok: true; interactionId: string; answer: string; rationale: string | null; makeStanding: boolean; standingTitle: string | null; chosenOptionId: string | null }
   | { ok: false; error: string };
 
 export function validateOrgDecisionCapture(
@@ -46,6 +52,7 @@ export function validateOrgDecisionCapture(
     rationale: (input.rationale ?? "").trim() || null,
     makeStanding: input.makeStanding === true,
     standingTitle: (input.standingTitle ?? "").trim() || null,
+    chosenOptionId: (input.chosenOptionId ?? "").trim() || null,
   };
 }
 

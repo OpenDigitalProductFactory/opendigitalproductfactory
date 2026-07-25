@@ -138,6 +138,8 @@ export default async function DecisionReviewPage() {
           riskTier: true,
           outcomeType: true,
           createdAt: true,
+          scoredOptions: true,
+          recommendedOptionId: true,
         },
       }),
       // Live kernel commandment corpus — the input the golden-decision drift
@@ -188,6 +190,12 @@ export default async function DecisionReviewPage() {
     riskTier: row.riskTier,
     outcomeType: row.outcomeType,
     createdAt: row.createdAt.toISOString(),
+    scoredOptions: Array.isArray(row.scoredOptions)
+      ? (row.scoredOptions as Array<{ id?: unknown; description?: unknown }>)
+        .filter((option) => typeof option?.id === "string" && typeof option?.description === "string")
+        .map((option) => ({ id: option.id as string, description: option.description as string }))
+      : null,
+    recommendedOptionId: row.recommendedOptionId ?? null,
   }));
 
   const findings = buildReviewFindings({

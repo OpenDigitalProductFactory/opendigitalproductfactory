@@ -54,9 +54,66 @@ describe("decisionInteractionRowToGateView", () => {
           effectiveWeight: 0.9,
         },
       ],
+      scoredOptions: null,
+      recommendedOptionId: null,
+      chosenOptionId: null,
       escalationCaptured: false,
       deferralCaptured: false,
     });
+  });
+
+  it("round-trips scored options / recommendedOptionId / chosenOptionId, dropping malformed entries (BI-6DCF772F)", () => {
+    const view = decisionInteractionRowToGateView({
+      interactionId: "DI-SCORED",
+      profileId: "p",
+      profileVersionId: "v",
+      domainClass: "risk-assessment",
+      outcomeType: "escalate",
+      confidenceBefore: null,
+      confidenceAfter: null,
+      principleConflict: false,
+      rationale: null,
+      sources: [],
+      outcomePayload: {},
+      evidenceBundle: {},
+      createdAt: new Date("2026-07-24T00:00:00.000Z"),
+      scoredOptions: [
+        { id: "a", description: "Option A", features: { speed_to_value: 0.8 } },
+        { description: "no id — dropped" },
+      ],
+      recommendedOptionId: "a",
+      chosenOptionId: "a",
+      escalationCapture: null,
+      deferralCapture: null,
+    });
+
+    expect(view.scoredOptions).toEqual([
+      { id: "a", description: "Option A", features: { speed_to_value: 0.8 } },
+    ]);
+    expect(view.recommendedOptionId).toBe("a");
+    expect(view.chosenOptionId).toBe("a");
+  });
+
+  it("normalizes absent/empty scored options to null (no picker)", () => {
+    const base = {
+      interactionId: "DI-X",
+      profileId: "p",
+      profileVersionId: "v",
+      domainClass: "plan-readiness",
+      outcomeType: "escalate",
+      confidenceBefore: null,
+      confidenceAfter: null,
+      principleConflict: false,
+      rationale: null,
+      sources: [],
+      outcomePayload: {},
+      evidenceBundle: {},
+      createdAt: new Date("2026-07-24T00:00:00.000Z"),
+      escalationCapture: null,
+      deferralCapture: null,
+    };
+    expect(decisionInteractionRowToGateView(base).scoredOptions).toBeNull();
+    expect(decisionInteractionRowToGateView({ ...base, scoredOptions: [] }).scoredOptions).toBeNull();
   });
 
   it("falls back to safe display defaults for sparse rows", () => {

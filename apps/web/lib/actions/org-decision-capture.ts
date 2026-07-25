@@ -82,6 +82,18 @@ export async function captureOrgDecisionOutcome(
     return { ok: true, status: "already-captured" };
   }
 
+  // BI-6DCF772F: a structured option pick must be one of the options this gate
+  // scored — otherwise chosenOptionId would never resolve against scoredOptions.
+  const rawScoredOptions = (row as { scoredOptions?: unknown }).scoredOptions;
+  const scoredIds = Array.isArray(rawScoredOptions)
+    ? (rawScoredOptions as Array<{ id?: unknown }>)
+      .map((option) => option?.id)
+      .filter((id): id is string => typeof id === "string")
+    : [];
+  if (v.chosenOptionId && !scoredIds.includes(v.chosenOptionId)) {
+    return { ok: false, error: "The chosen option is not one of this decision's options." };
+  }
+
   const org = await prisma.organization.findFirst({ select: { id: true } });
   if (!org) {
     return { ok: false, error: "No organization is configured for this install." };
@@ -122,6 +134,7 @@ export async function captureOrgDecisionOutcome(
       await tx.decisionInteraction.update({
         where: { id: row.id },
         data: {
+          chosenOptionId: v.chosenOptionId,
           humanOutcome: {
             type: row.outcomeType === "escalate" ? "escalation" : "deferral",
             answer: v.answer,
@@ -130,6 +143,7 @@ export async function captureOrgDecisionOutcome(
             resolverUserId: userId,
             capturedAt,
             clearsGate: row.outcomeType === "escalate",
+            chosenOptionId: v.chosenOptionId,
           },
         },
       });

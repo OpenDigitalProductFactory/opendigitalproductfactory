@@ -30,6 +30,9 @@ function interaction(overrides: Partial<DecisionInteractionGateView> = {}): Deci
         effectiveWeight: 0.9,
       },
     ],
+    scoredOptions: null,
+    recommendedOptionId: null,
+    chosenOptionId: null,
     escalationCaptured: false,
     deferralCaptured: false,
     ...overrides,
@@ -179,5 +182,51 @@ describe("DecisionPerspectiveGatePanel", () => {
         candidateMaterial: true,
       });
     });
+  });
+
+  it("captures a structured option pick when the gate scored options (BI-6DCF772F)", async () => {
+    const onCapture = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <DecisionPerspectiveGatePanel
+        interaction={interaction({
+          outcomeType: "escalate",
+          confidenceScore: 0.6,
+          scoredOptions: [
+            { id: "proceed", description: "Proceed now", features: {} },
+            { id: "revise", description: "Revise the plan", features: {} },
+          ],
+          recommendedOptionId: "proceed",
+        })}
+        onCapture={onCapture}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Capture human direction" }));
+    // the picker renders (defaulting to the recommendation); pick the other one
+    fireEvent.click(screen.getByRole("radio", { name: /Revise the plan/ }));
+    fireEvent.change(screen.getByLabelText("Human direction"), {
+      target: { value: "Revise the plan before proceeding." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save WWMD capture" }));
+
+    await waitFor(() => {
+      expect(onCapture).toHaveBeenCalledWith(
+        expect.objectContaining({ interactionId: "DI-ABC123", chosenOptionId: "revise" }),
+      );
+    });
+  });
+
+  it("shows no option picker when the gate scored no options — free-text fallback preserved", () => {
+    render(
+      <DecisionPerspectiveGatePanel
+        interaction={interaction({ outcomeType: "escalate", confidenceScore: 0.6 })}
+        onCapture={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Capture human direction" }));
+    expect(screen.queryByTestId("wwmd-gate-option-pick")).toBeNull();
+    expect(screen.queryByRole("radio")).toBeNull();
   });
 });
