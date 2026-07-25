@@ -146,7 +146,7 @@ jobs:
 
       - name: Upload the fresh baseline
         if: ${{ github.event.inputs.update_baseline == 'true' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ux-route-budget-baseline
           path: apps/web/lib/ux-budget/route-budget-baseline.json
@@ -154,7 +154,7 @@ jobs:
 
       - name: Upload the budget report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ux-route-budget-report
           path: apps/web/lib/ux-budget/route-budget-report.json
