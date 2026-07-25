@@ -27,6 +27,11 @@ import {
   type RenderGroupCellProps,
   type CellCopyArgs,
   type CellPasteArgs,
+  type CellMouseArgs,
+  type CellMouseEvent,
+  type CellSelectArgs,
+  type CellKeyDownArgs,
+  type CellKeyboardEvent,
 } from "react-data-grid";
 import "react-data-grid/lib/styles.css";
 import "./dpf-grid.css";
@@ -125,6 +130,16 @@ import {
 } from "./grid-named-views";
 import { GridViewsMenu } from "./GridViewsMenu";
 import { type PivotAgg, type SummaryMode } from "./grid-pivot";
+import {
+  type CellRange,
+  singleCell,
+  rangeRect,
+  isMultiCell,
+  extendFocus,
+  rangeToTsv,
+  parseTsv,
+  pasteWrites,
+} from "./grid-range";
 import { GridCalendar } from "./GridCalendar";
 import { dateColumns } from "./grid-calendar";
 import {
@@ -185,6 +200,14 @@ function toRowData(rows: GridRow[]): GridRowData[] {
 // The footer summary row is a plain columnId -> display-string map (see
 // grid-footer-summary.ts); react-data-grid renders it as a pinned bottom row.
 type SummaryRow = Record<string, string>;
+
+// Arrow-key → [dRow, dCol] for Shift+Arrow range extension (module-stable).
+const ARROW: Record<string, [number, number]> = {
+  ArrowUp: [-1, 0],
+  ArrowDown: [1, 0],
+  ArrowLeft: [0, -1],
+  ArrowRight: [0, 1],
+};
 
 function buildColumn(
   col: ColumnDefinition,
@@ -685,6 +708,43 @@ export function WorkbookGrid({
     [rowData, source, tableId],
   );
 
+  const sortedRows = useMemo<GridRowData[]>(() => {
+    const filtered = applyFilterGroup(
+      quickFilterRows(rowData, columns, filterQuery),
+      filterGroup,
+    );
+    if (sortColumns.length === 0) return filtered;
+    const sorted = [...filtered];
+    sorted.sort((ra, rb) => {
+      for (const sc of sortColumns) {
+        const cmp = compareValues(ra[sc.columnKey], rb[sc.columnKey]);
+        if (cmp !== 0) return sc.direction === "DESC" ? -cmp : cmp;
+      }
+      return 0;
+    });
+    return sorted;
+  }, [rowData, columns, filterQuery, filterGroup, sortColumns]);
+
+  // --- Cell range selection (Excel-grade: select a rectangle, then block
+  // copy/paste or clear). react-data-grid v7 has no native range, so we track an
+  // anchor+focus cell (indices into the displayed rows/cols) and highlight the
+  // rectangle via `cellClass`. Flat grid only. Pure range math in grid-range.ts.
+  const [range, setRange] = useState<CellRange | null>(null);
+  const rangeCellSet = useMemo(() => {
+    if (!range || !isMultiCell(range)) return null;
+    const rect = rangeRect(range);
+    const set = new Set<string>();
+    for (let r = rect.top; r <= Math.min(rect.bottom, sortedRows.length - 1); r++) {
+      const rowId = sortedRows[r]?.rowId;
+      if (!rowId) continue;
+      for (let c = rect.left; c <= Math.min(rect.right, visibleCols.length - 1); c++) {
+        const colId = visibleCols[c]?.columnId;
+        if (colId) set.add(`${rowId}:${colId}`);
+      }
+    }
+    return set;
+  }, [range, sortedRows, visibleCols]);
+
   const gridColumns = useMemo<Column<GridRowData, SummaryRow>[]>(() => {
     const cols = visibleCols.map((c, i) => {
       const built = buildColumn(
@@ -693,6 +753,14 @@ export function WorkbookGrid({
         showProvenance,
         i < effectiveFrozen,
       ) as Column<GridRowData, SummaryRow>;
+      // Highlight cells inside the selected range (Excel-style rectangle).
+      const base: Column<GridRowData, SummaryRow> = rangeCellSet
+        ? {
+            ...built,
+            cellClass: (row: GridRowData) =>
+              rangeCellSet.has(`${row.rowId}:${c.columnId}`) ? "dpf-cell-range" : undefined,
+          }
+        : built;
       // Inline per-group subtotal: when grouping is active, a non-group-by column
       // with a chosen aggregate shows that aggregate over the group's rows on the
       // group header row — the same `footerAgg` selection that drives the footer
@@ -704,7 +772,7 @@ export function WorkbookGrid({
         grouping && agg !== "none" && !effectiveGroupBy.includes(c.columnId);
       const withGroupCell: Column<GridRowData, SummaryRow> = showsGroupSubtotal
         ? {
-            ...built,
+            ...base,
             renderGroupCell: ({ childRows }: RenderGroupCellProps<GridRowData, SummaryRow>) => {
               const value = computeFooter(childRows, c.columnId, agg);
               return value ? (
@@ -715,7 +783,7 @@ export function WorkbookGrid({
               ) : null;
             },
           }
-        : built;
+        : base;
       if (!showFooter) return withGroupCell;
       // Footer cell: an aggregate picker + the computed value (Airtable-style).
       return {
@@ -816,6 +884,7 @@ export function WorkbookGrid({
     source,
     sortColumns.length,
     onReorderRow,
+    rangeCellSet,
   ]);
 
   const onColumnsReorder = useCallback(
@@ -826,24 +895,6 @@ export function WorkbookGrid({
     },
     [columns],
   );
-
-  const sortedRows = useMemo<GridRowData[]>(() => {
-    const filtered = applyFilterGroup(
-      quickFilterRows(rowData, columns, filterQuery),
-      filterGroup,
-    );
-    if (sortColumns.length === 0) return filtered;
-    const sorted = [...filtered];
-    sorted.sort((ra, rb) => {
-      for (const sc of sortColumns) {
-        const cmp = compareValues(ra[sc.columnKey], rb[sc.columnKey]);
-        if (cmp !== 0) return sc.direction === "DESC" ? -cmp : cmp;
-      }
-      return 0;
-    });
-    return sorted;
-  }, [rowData, columns, filterQuery, filterGroup, sortColumns]);
-
 
   // Footer summary bar: one pinned bottom row of per-column aggregates over the
   // filtered rows. Empty object when off; react-data-grid still needs a row so
@@ -962,22 +1013,142 @@ export function WorkbookGrid({
   // the cell's display text to the clipboard; paste routes the new value back
   // through onRowsChange → persistCell, so it hits the same validation + optimistic
   // revert as a normal edit. Only editable cells accept a paste.
+  // Map a react-data-grid column key to its index in the visible data columns
+  // (-1 for leading select/drag/expand columns, which never anchor a range).
+  const dataColIndex = useCallback(
+    (key: string) => visibleCols.findIndex((c) => c.columnId === key),
+    [visibleCols],
+  );
+
+  // Copy: a multi-cell range writes an Excel-compatible TSV block; a single cell
+  // writes its text. Native clipboard event, so Ctrl+C round-trips with Excel.
   const onCellCopy = useCallback(
     ({ row, column }: CellCopyArgs<GridRowData, SummaryRow>, event: ReactClipboardEvent<HTMLDivElement>) => {
-      event.clipboardData.setData("text/plain", cellSearchText(row[column.key] ?? null));
+      if (range && isMultiCell(range)) {
+        const rect = rangeRect(range);
+        event.clipboardData.setData(
+          "text/plain",
+          rangeToTsv(rect, (r, c) =>
+            cellSearchText(sortedRows[r]?.[visibleCols[c]?.columnId ?? ""] ?? null),
+          ),
+        );
+      } else {
+        event.clipboardData.setData("text/plain", cellSearchText(row[column.key] ?? null));
+      }
     },
-    [],
+    [range, sortedRows, visibleCols],
   );
+
+  // Paste: a 1×1 clipboard fills the selection; a TSV block lays out from the
+  // selected cell (Excel behavior). Every written cell goes through the same
+  // validated persistCell as a manual edit; the origin row is returned unchanged
+  // because we persist it ourselves along with the rest of the block.
   const onCellPaste = useCallback(
     (
       { row, column }: CellPasteArgs<GridRowData, SummaryRow>,
       event: ReactClipboardEvent<HTMLDivElement>,
     ): GridRowData => {
-      const col = columns.find((c) => c.columnId === column.key);
-      if (!capabilities.canEditCell || !col?.editable) return row;
-      return { ...row, [column.key]: event.clipboardData.getData("text/plain") };
+      const originCol = dataColIndex(column.key);
+      if (originCol < 0 || !capabilities.canEditCell) return row;
+      const originRow = sortedRows.findIndex((r) => r.rowId === row.rowId);
+      if (originRow < 0) return row;
+      const block = parseTsv(event.clipboardData.getData("text/plain"));
+      const targetRect = rangeRect(range ?? singleCell(originRow, originCol));
+      const writes = pasteWrites(
+        block,
+        originRow,
+        originCol,
+        targetRect,
+        sortedRows.length - 1,
+        visibleCols.length - 1,
+      );
+      // Persist every written cell EXCEPT the origin ourselves; return the origin
+      // updated so react-data-grid's own onRowsChange persists it (avoids the
+      // origin being double-written / reverted to its old value).
+      const originColId = visibleCols[originCol]?.columnId;
+      let originValue: string | undefined;
+      for (const w of writes) {
+        if (w.row === originRow && w.col === originCol) {
+          originValue = w.value;
+          continue;
+        }
+        const gr = sortedRows[w.row];
+        const cd = visibleCols[w.col];
+        if (!gr || !cd?.editable) continue;
+        void persistCell(gr.rowId, cd.columnId, w.value, gr[cd.columnId] ?? null);
+      }
+      return originValue !== undefined && originColId
+        ? { ...row, [originColId]: originValue }
+        : row;
     },
-    [columns, capabilities.canEditCell],
+    [range, sortedRows, visibleCols, dataColIndex, capabilities.canEditCell, persistCell],
+  );
+
+  // Clear every editable cell in the range (Delete over a multi-cell selection).
+  const clearRange = useCallback(
+    (r: CellRange) => {
+      const rect = rangeRect(r);
+      for (let row = rect.top; row <= Math.min(rect.bottom, sortedRows.length - 1); row++) {
+        const gr = sortedRows[row];
+        if (!gr) continue;
+        for (let col = rect.left; col <= Math.min(rect.right, visibleCols.length - 1); col++) {
+          const cd = visibleCols[col];
+          if (!cd?.editable) continue;
+          const prev = gr[cd.columnId] ?? null;
+          if (prev === null || prev === "") continue;
+          void persistCell(gr.rowId, cd.columnId, null, prev);
+        }
+      }
+    },
+    [sortedRows, visibleCols, persistCell],
+  );
+
+  // Click a cell → start a range there; Shift+click → extend to it.
+  const onCellClick = useCallback(
+    (args: CellMouseArgs<GridRowData, SummaryRow>, event: CellMouseEvent) => {
+      const col = dataColIndex(args.column.key);
+      if (col < 0) return;
+      if (event.shiftKey) {
+        event.preventGridDefault();
+        setRange((prev) =>
+          prev ? { ...prev, focusRow: args.rowIdx, focusCol: col } : singleCell(args.rowIdx, col),
+        );
+      } else {
+        setRange(singleCell(args.rowIdx, col));
+      }
+    },
+    [dataColIndex],
+  );
+
+  // Arrow-key / click navigation collapses the range to the newly-active cell.
+  const onSelectedCellChange = useCallback(
+    (args: CellSelectArgs<GridRowData, SummaryRow>) => {
+      const col = dataColIndex(args.column.key);
+      if (col >= 0) setRange(singleCell(args.rowIdx, col));
+    },
+    [dataColIndex],
+  );
+
+  // Shift+Arrow extends the range; Delete clears a multi-cell selection. (Copy /
+  // paste ride the native onCellCopy/onCellPaste above.)
+  const onCellKeyDown = useCallback(
+    (args: CellKeyDownArgs<GridRowData, SummaryRow>, event: CellKeyboardEvent) => {
+      if (args.mode === "EDIT") return;
+      const col = dataColIndex(args.column.key);
+      if (col < 0) return;
+      const cur = range ?? singleCell(args.rowIdx, col);
+      const maxRow = sortedRows.length - 1;
+      const maxCol = visibleCols.length - 1;
+      const delta = event.shiftKey ? ARROW[event.key] : undefined;
+      if (delta) {
+        event.preventGridDefault();
+        setRange(extendFocus(cur, delta[0], delta[1], maxRow, maxCol));
+      } else if ((event.key === "Delete" || event.key === "Backspace") && isMultiCell(cur)) {
+        event.preventGridDefault();
+        clearRange(cur);
+      }
+    },
+    [range, sortedRows, visibleCols, dataColIndex, clearRange],
   );
 
   // Replay a cell to a target value through the validated dispatch; on success
@@ -1374,6 +1545,9 @@ export function WorkbookGrid({
               onRowsChange={onRowsChange}
               onCellCopy={onCellCopy}
               onCellPaste={onCellPaste}
+              onCellClick={onCellClick}
+              onSelectedCellChange={onSelectedCellChange}
+              onCellKeyDown={onCellKeyDown}
               sortColumns={sortColumns}
               onSortColumnsChange={setSortColumns}
               selectedRows={selectedRows}

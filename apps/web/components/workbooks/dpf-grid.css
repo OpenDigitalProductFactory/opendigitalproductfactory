@@ -559,3 +559,9 @@
   color: var(--dpf-accent, #6366f1);
   font-weight: 600;
 }
+
+/* Cell range selection (Excel-style rectangle highlight). */
+.dpf-workbook-grid .rdg-cell.dpf-cell-range {
+  background-color: color-mix(in srgb, var(--dpf-accent, #6366f1) 16%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dpf-accent, #6366f1) 40%, transparent);
+}
