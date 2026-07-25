@@ -14,6 +14,7 @@
 
 import type { PrismaClient } from "@dpf/db";
 import type { CellValue } from "@/lib/workbooks/types";
+import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { createIncumbentApplication, type IncumbentIntakeInput } from "./intake";
 
 // Header heuristics — first matching column wins. The P3 UI will let an operator
@@ -106,7 +107,7 @@ export async function importIncumbentRows(
       if (r.matched) result.matched += 1;
       else result.created += 1;
     } catch (e) {
-      result.errors.push({ row: i + 1, message: e instanceof Error ? e.message : String(e) });
+      result.errors.push({ row: i + 1, message: getErrorMessage(e) });
     }
   }
 

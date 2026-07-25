@@ -66,5 +66,10 @@ The manual-entry form + spreadsheet-drop, and the 12th `SETUP_STEPS` entry (`app
 - Decision: decomposed
 - Parent: BI-BF12C25C
 - Receipt: cmrzm7e8q0btj01o3zb3jpoq6
-- Phases (all deliver BI-BF12C25C; not xlarge, so no child-BI split required): P1 intake core, P2 spreadsheet import, P3 UI + onboarding step
 - Dependencies: P2 depends on P1; P3 depends on P1 (and consumes BI-ECO-001 P2's postureForArchetype)
+
+Deliverable -> BacklogItem (all deliver the one umbrella BI-BF12C25C; it is not xlarge, so no child-BI split is required):
+
+- P1 intake core -> BI-BF12C25C
+- P2 spreadsheet import -> BI-BF12C25C
+- P3 UI + onboarding step 12 -> BI-BF12C25C
