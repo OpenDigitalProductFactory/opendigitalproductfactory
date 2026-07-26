@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   FEATURE_BUILD_KIND_VALUES,
   isFixContextComplete,
@@ -7,6 +7,16 @@ import {
   type FixContext,
 } from "./feature-build-types";
 import { getBuildPhasePrompt } from "@/lib/integrate/build-agent-prompts";
+
+vi.mock("@/lib/tak/prompt-loader", () => ({
+  loadPrompt: vi.fn(
+    async (
+      _category: string,
+      _slug: string,
+      fallback?: string,
+    ): Promise<string> => fallback ?? "",
+  ),
+}));
 
 // The fix flow is the kind="fix" branch of the Build Studio pipeline. These
 // tests pin the behavior the spec requires: a complete diagnosis substitutes
