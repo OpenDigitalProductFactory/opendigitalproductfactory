@@ -115,6 +115,8 @@ Five BIs (not one xlarge) — each shippable alone; Wave 1 Grok BS seed unblocks
 ## Done when
 
 1. Host Grok and BS Grok both expose dpf-platform skills and plane-1 denies.
-2. Competitive superpowers-family disabled on Codex + Grok (Claude when adapter lands).
+2. Competitive superpowers-family disabled on Codex + Grok + Claude (`claude plugin disable` adapter, BI-A4BEFE99).
 3. Tier-A janitor can run scheduled dry-run (auto-reap optional flag).
 4. Capability parity doc lists G1–G9 for all SURFACE_CLIENT_KINDS + suggested clients.
+5. Antigravity competitive cleanup is honest **unsupported-until-proven** (no disable CLI).
+6. OpenCode / Gemini / Cursor have a documented adapter checklist (not fake parity).

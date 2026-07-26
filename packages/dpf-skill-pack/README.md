@@ -44,12 +44,14 @@ The same JSON file also owns the cleanup/update lifecycle policy. The policy is
 `disable-not-delete`: rerunning bootstrap or the updater after a skill-pack
 change replaces the managed DPF copy and lets tested client adapters disable
 known competitive plugins. It does not remove user-owned skill files or plugin
-caches. Today Codex and Grok have safe disable adapters (`enabled = false` / `grok
-plugin disable`); Claude and Antigravity report warn-only until their
-active-state cleanup adapters are verified. Grok also materializes a global
+caches. Codex, Grok, and Claude have safe disable adapters (`enabled = false` /
+`grok plugin disable` / `claude plugin disable`); Antigravity remains
+**unsupported-until-proven** (no non-interactive plugin disable CLI — skills are
+file-synced only). Grok also materializes a global
 `~/.grok/hooks/dpf-guards.json` (PreToolUse + SessionStart + SessionEnd/Stop)
 because its hook plane ignores plugin-bundled hooks; Build Studio Grok seeds
-the same pack at dispatch time (BI-BCA23DBB / BI-C5F9A232).
+the same pack at dispatch time (BI-BCA23DBB / BI-C5F9A232). Wave 3 client
+equalize: BI-A4BEFE99.
 
 ## Skills shipped in v0.1.0
 
@@ -208,8 +210,29 @@ full Node planner is unavailable in a source-only checkout.
 The update run also prints process-spine cleanup/update readiness. For Codex it
 converges `~/.codex/config.toml` by keeping `dpf-platform` enabled and disabling
 contract-listed competitive process plugins such as `superpowers@openai-curated`.
-For clients without a tested disable adapter, the readiness output stays
-warn-only and names the missing adapter honestly.
+For Grok and Claude it runs the matching `plugin list` / `plugin disable`
+adapters (never uninstall). Antigravity and any client without a disable CLI
+stay warn / unsupported-until-proven and name the gap honestly.
+
+### Adapter checklist — suggested clients (OpenCode / Gemini / Cursor)
+
+These surfaces are **not** first-class bootstrap targets until product demand
+pulls them. Before promoting any to `reconciles-safe-config`, complete:
+
+| Gate | What to prove |
+|------|----------------|
+| **G1 Skills** | Install path for `dpf-platform` skills (plugin, skills dir, or seed copy) |
+| **G2 Competitive** | Non-destructive disable of contract-listed competitive process plugins |
+| **G3 Plane-1 hooks** | At least lease / root-clone / compose deny path, or explicit “comply by construction” |
+| **G4 Session** | SessionStart/End (or documented absence) |
+| **G5 MCP** | `DPF_MCP_BEARER_TOKEN` + snippet format |
+| **G6 Capsule** | External evidence attribution kind (or BS-only if in-sandbox) |
+| **G7 Worktree** | Canonical sibling base + session hygiene hooks where events exist |
+| **G8 Headless** | Always-approve / non-interactive still honors deny |
+| **G9 Readiness** | Bootstrap or dispatch readiness observable |
+
+Until then, rows stay checklist-only in
+[`docs/architecture/agent-client-capability-parity.md`](../../docs/architecture/agent-client-capability-parity.md).
 
 ### Version bumps propagate automatically
 

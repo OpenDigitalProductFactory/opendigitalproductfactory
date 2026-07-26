@@ -251,5 +251,5 @@ Adopt only when product value exists; still **document** the adapter checklist s
 ## Open questions (resolve in plan execution, not blocking Wave 1)
 
 1. Should BS engine preflight **hard-fail** or **warn + continue** when dpf-platform missing? (Recommend hard-fail after seed lands.)
-2. Claude competitive disable: which CLI/API is safe without deleting user packs?
+2. Claude competitive disable: which CLI/API is safe without deleting user packs? **Resolved (BI-A4BEFE99):** `claude plugin list --json` + `claude plugin disable <id> [--scope …]` — disable-not-delete; never uninstall.
 3. Worktree Tier A default-on timeline after soak (1 week? 1 release?).

@@ -51,12 +51,19 @@ test("cleanup policy is contract-backed and never destructive", () => {
   const summary = renderCleanupPolicySummary(policy).join("\n");
   assert.match(summary, /disable-not-delete/);
   assert.match(summary, /Codex/);
-  // Grok (and Codex) reconcile via disable-plugin; Claude/Antigravity remain warn-only.
+  // Codex, Grok, and Claude reconcile via disable-plugin; Antigravity is honest unsupported.
   assert.match(summary, /Grok/);
-  assert.match(summary, /warn-only|disables known competitive/);
+  assert.match(summary, /Claude/);
+  assert.match(summary, /disables known competitive/);
+  assert.match(summary, /unsupported-until-proven/);
   const grok = policy.clients.find((c) => c.client === "grok");
   assert.equal(grok?.status, "reconciles-safe-config");
   assert.equal(grok?.action, "disable-plugin");
+  const claude = policy.clients.find((c) => c.client === "claude");
+  assert.equal(claude?.status, "reconciles-safe-config");
+  assert.equal(claude?.action, "disable-plugin");
+  const antigravity = policy.clients.find((c) => c.client === "antigravity");
+  assert.equal(antigravity?.status, "unsupported-until-proven");
 });
 
 test("distinguishes installed-on-disk from exposed-in-session evidence", () => {
