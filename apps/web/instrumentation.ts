@@ -975,11 +975,10 @@ export async function register() {
     // kernel (principle_decide) is gated. Registration is in-memory + idempotent
     // (deduped by hook id); mode is DPF_DECISION_GATE_MODE (enforce default).
     {
-      const { registerToolLifecycleHook } = await import("@/lib/mcp-governed-execute");
-      const { createDecisionRoutingGovernanceHook } = await import(
-        "@/lib/tak/decision-routing-governance-hook"
+      const { registerServerToolGovernanceHooks } = await import(
+        "@/lib/governance/register-tool-governance-hooks"
       );
-      registerToolLifecycleHook(createDecisionRoutingGovernanceHook());
+      registerServerToolGovernanceHooks();
     }
 
     // Mirror version.json into PlatformConfig["platform.version"] so the

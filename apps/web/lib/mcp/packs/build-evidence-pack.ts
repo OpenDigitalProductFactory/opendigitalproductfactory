@@ -16,6 +16,11 @@ import * as crypto from "crypto";
 import { prisma } from "@dpf/db";
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import {
+  EXECUTION_EVIDENCE_KINDS,
+  isExecutionEvidenceKind,
+  validateExecutionEvidenceStructure,
+} from "@/lib/backlog/execution-evidence";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 /** Strip bearer tokens / MCP tokens / Anthropic keys out of operator-supplied failure text. */
@@ -35,23 +40,14 @@ function redactFunctionalFailureText(text: string): string {
 const definitions: ToolDefinition[] = [
   {
     name: "record_execution_evidence",
-    description: "Attach an evidence record to a backlog item (test pass/fail, build pass/fail, ux verification, spec review, manual check, external link). Writes an evidence activity row; the cross-cutting audit lives in ToolExecution. Side-effecting.",
+    description: "Attach typed evidence to a backlog item (tests, production build, UX, migration, source provenance, spec review, manual check, or supporting link). Positive completion evidence is later resolved server-side; a supplied ToolExecution reference must identify a successful execution owned by the same user.",
     inputSchema: {
       type: "object",
       properties: {
         itemId: { type: "string", description: "Semantic backlog item id" },
         kind: {
           type: "string",
-          enum: [
-            "test_pass",
-            "test_fail",
-            "build_pass",
-            "build_fail",
-            "ux_verified",
-            "spec_review",
-            "manual_check",
-            "external_link",
-          ],
+          enum: [...EXECUTION_EVIDENCE_KINDS],
           description: "Evidence kind",
         },
         summary: { type: "string", description: "Headline for the timeline (<= 240 chars)" },
@@ -140,30 +136,37 @@ async function recordExecutionEvidenceHandler(
   const body = typeof params["body"] === "string" ? params["body"].slice(0, 8000) : null;
   const toolExecutionId =
     typeof params["toolExecutionId"] === "string" ? params["toolExecutionId"] : null;
-  const ALLOWED_KINDS = new Set([
-    "test_pass",
-    "test_fail",
-    "build_pass",
-    "build_fail",
-    "ux_verified",
-    "spec_review",
-    "manual_check",
-    "external_link",
-  ]);
   if (!itemIdRaw || !kindRaw || !summaryRaw)
     return {
       success: false,
       error: "missing_required",
       message: "itemId, kind, summary are all required",
     };
-  if (!ALLOWED_KINDS.has(kindRaw))
+  if (!isExecutionEvidenceKind(kindRaw))
     return { success: false, error: "invalid_kind", message: `kind=${kindRaw} not allowed` };
+  const structuralError = validateExecutionEvidenceStructure(kindRaw, url);
+  if (structuralError) {
+    return { success: false, error: "invalid_evidence", message: structuralError };
+  }
   const item = await prisma.backlogItem.findUnique({
     where: { itemId: itemIdRaw },
     select: { id: true },
   });
   if (!item)
     return { success: false, error: "not_found", message: `Item ${itemIdRaw} not found` };
+  if (toolExecutionId) {
+    const toolExecution = await prisma.toolExecution.findUnique({
+      where: { id: toolExecutionId },
+      select: { id: true, success: true, userId: true },
+    });
+    if (!toolExecution?.success || toolExecution.userId !== userId) {
+      return {
+        success: false,
+        error: "invalid_tool_execution",
+        message: `ToolExecution ${toolExecutionId} does not resolve to a successful execution owned by this user`,
+      };
+    }
+  }
   const activity = await prisma.backlogItemActivity.create({
     data: {
       backlogItemId: item.id,

@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 552,
+  "pageCount": 553,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -397,6 +397,21 @@
         "what-this-currently-tells-us-the-open-adoption-gaps",
         "refresh-ritual-monthly-how-this-stays-fresh",
         "related"
+      ]
+    },
+    "docs/architecture/agent-client-governance.md": {
+      "publicHref": "/architecture/agent-client-governance/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "agent-client-governance",
+        "the-four-governance-altitudes",
+        "which-plane-owns-what",
+        "evidence-earned-completion",
+        "client-identity-and-trust",
+        "operator-attention",
+        "adding-another-consequential-gate"
       ]
     },
     "docs/architecture/agent-skill-index.md": {
