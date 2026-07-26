@@ -240,6 +240,52 @@ export function periodKeyOf(date: Date): string {
   return `${y}-${m}`;
 }
 
+/**
+ * Build reversing lines for a journal entry (storno / reversal posting):
+ * Swaps debits and credits for each line so the reversing entry exactly cancels out the original.
+ * Guarantees that if the original entry passed validateJournalEntry, the reversal entry balances identically.
+ */
+export function buildReversalPostingLines(lines: JournalLineInput[]): JournalLineInput[] {
+  if (!Array.isArray(lines)) return [];
+  return lines.map((l) => ({
+    accountId: l.accountId,
+    debit: l.credit ? Math.max(l.credit, 0) : undefined,
+    credit: l.debit ? Math.max(l.debit, 0) : undefined,
+    description: l.description ? `Reversal: ${l.description}` : "Reversal",
+    customerAccountId: l.customerAccountId ?? null,
+    contactId: l.contactId ?? null,
+  }));
+}
+
+/**
+ * Check if a fiscal period key ("YYYY-MM") is locked against new postings.
+ */
+export function isPeriodLocked(
+  periodKey: string,
+  lockedPeriodKeys: Iterable<string>,
+): boolean {
+  const set = lockedPeriodKeys instanceof Set ? lockedPeriodKeys : new Set(lockedPeriodKeys);
+  return set.has(periodKey);
+}
+
+/**
+ * Validate period lock invariant before posting to the ledger.
+ */
+export function validatePostingPeriod(
+  entryDate: Date,
+  lockedPeriodKeys: Iterable<string>,
+): { ok: boolean; periodKey: string; error?: string } {
+  const periodKey = periodKeyOf(entryDate);
+  if (isPeriodLocked(periodKey, lockedPeriodKeys)) {
+    return {
+      ok: false,
+      periodKey,
+      error: `Fiscal period ${periodKey} is locked for financial close; new postings are rejected.`,
+    };
+  }
+  return { ok: true, periodKey };
+}
+
 // ─── Sub-ledger → GL posting builders ────────────────────────────────────────
 //
 // These translate a sub-ledger document into the balanced set of journal lines
