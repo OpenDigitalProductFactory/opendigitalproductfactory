@@ -9,6 +9,21 @@
 - **Coordinates with:** `BI-71310615`, `BI-88681BE0`, `BI-DE4BF92F`,
   `BI-0A636528`, `BI-522E754E`, and `BI-356E69B1`
 
+## Design grounding
+
+- **Existing specs/plans reviewed:** the per-client configuration conformance
+  design, governed playbook experimentation design, and the parallel autonomous
+  Build Studio experimentation plan.
+- **Current code substrate reviewed:** `mcp-governed-execute.ts`, the backlog
+  and build-evidence tool packs, `ToolExecution`, `BacklogItemActivity`, active
+  Build Studio verification, attention delivery, and startup hook registration.
+- **Source of truth:** server-resolved evidence evaluated by the shared governed
+  lifecycle hook; client instructions and caller-supplied verdicts are not
+  authority.
+- **Decision:** enforce risk-tiered evidence profiles at the common server
+  execution seam. Build Studio and governed playbook experiments may produce
+  qualifying evidence, but cannot bypass the completion gate.
+
 ## 1. Executive decision
 
 DPF will enforce a risk-tiered evidence contract at the server seam where an AI

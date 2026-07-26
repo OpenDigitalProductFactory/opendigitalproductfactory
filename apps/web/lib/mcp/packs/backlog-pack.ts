@@ -39,7 +39,7 @@ import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { tryAcquireBacklogClaimAtomic } from "@/lib/backlog/claim-on-start";
 import { normalizeCompletionEvidenceManifest } from "@/lib/backlog/completion-evidence-policy";
-
+import { backlogStatusToolDefinition } from "./backlog-status-tool-definition";
 const definitions: ToolDefinition[] = [
   {
     name: "create_backlog_item",
@@ -267,56 +267,7 @@ const definitions: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: false,
   },
-  {
-    name: "update_backlog_item_status",
-    description: "Move a backlog item between lifecycle statuses. Enforces the legal-transition table; same-status calls are no-op successes. Agent callers setting status='done' must supply completionEvidence that cites fresh, server-resolved evidence proportional to documentation, verified-existing, implementation, or operational work. Setting status='triaging' on an already-triaged item is the retriage path. Moving an item to in-progress acquires its work claim; it does not start Build Studio.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        itemId: { type: "string", description: "Semantic backlog item id" },
-        status: { type: "string", enum: ["triaging", "open", "in-progress", "done", "deferred"], description: "Target status. 'triaging' from a triaged status is allowed and clears the prior triage decision." },
-        reason: { type: "string", description: "Free-text rationale captured in the activity row. Required when status=triaging from a triaged status." },
-        resolution: { type: "string", description: "Outcome summary, required when status=done" },
-        force: { type: "boolean", description: "When moving to in-progress, take over a claim already held by another active session (default false). The takeover is recorded on the status_change activity row." },
-        completionEvidence: {
-          type: "object",
-          description: "Required for agent callers when status=done. Cite evidence activity IDs; implementation work must explicitly classify UX and migration as verified or not-applicable with a concrete reason.",
-          properties: {
-            workClass: {
-              type: "string",
-              enum: ["documentation", "verified-existing", "implementation", "operational"],
-            },
-            evidenceActivityIds: {
-              type: "array",
-              items: { type: "string" },
-              maxItems: 50,
-            },
-            useActiveBuildEvidence: { type: "boolean" },
-            ux: {
-              type: "object",
-              properties: {
-                disposition: { type: "string", enum: ["verified", "not-applicable"] },
-                reason: { type: "string" },
-              },
-              required: ["disposition"],
-            },
-            migration: {
-              type: "object",
-              properties: {
-                disposition: { type: "string", enum: ["verified", "not-applicable"] },
-                reason: { type: "string" },
-              },
-              required: ["disposition"],
-            },
-          },
-          required: ["workClass", "evidenceActivityIds"],
-        },
-      },
-      required: ["itemId", "status"],
-    },
-    requiredCapability: "manage_backlog",
-    sideEffect: true,
-  },
+  backlogStatusToolDefinition,
   {
     name: "link_backlog_item_to_epic",
     description: "Link a backlog item to an epic (or unlink with epicId=null). Recomputes target epic status — if a done epic gains a new open item, it flips back to open. Writes an epic_link activity row. NOTE: linking is organizational only — it does NOT triage the item (use triage_backlog_item) and does NOT promote it or create a build (use promote_to_build_studio). Linking an untriaged/unpromoted item returns an advisory; never report an epic link as 'triaged' or 'promoted'.",
