@@ -717,8 +717,10 @@ def _claude_plugin_matches(installed_id: str, competitive_id: str) -> bool:
         return False
     inst_bare = installed_id.split("@", 1)[0]
     if "@" not in competitive_id:
+        # Contract bare name matches any marketplace-qualified install of that name.
         return inst_bare == competitive_id
-    return installed_id == competitive_id
+    # Competitive id is fully qualified; equality was already checked above.
+    return False
 
 
 def disable_competitive_claude_plugins(
