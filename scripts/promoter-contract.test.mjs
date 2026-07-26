@@ -41,6 +41,34 @@ test("promoter image embeds and labels the exact contract", async () => {
   assert.match(digest, /^sha256:[a-f0-9]{64}$/);
 });
 
+test("portal-owned candidate builds have Buildx and cannot fall back to the legacy builder", async () => {
+  const [portalDockerfile, artifactSource, promoterSource] = await Promise.all([
+    readFile(resolve(root, "Dockerfile"), "utf8"),
+    readFile(resolve(root, "apps/web/lib/self-upgrade/promoter-artifact.ts"), "utf8"),
+    readFile(resolve(root, "apps/web/lib/self-upgrade/promoter.ts"), "utf8"),
+  ]);
+  assert.match(
+    portalDockerfile,
+    /apk add --no-cache .*docker-cli.*docker-cli-buildx.*docker-cli-compose/,
+    "the portal invokes candidate builds and must carry the Buildx CLI component",
+  );
+  assert.match(
+    artifactSource,
+    /"buildx",\s*"build",\s*"--load"/,
+    "candidate artifacts must explicitly use Buildx and load the image for digest inspection",
+  );
+  assert.match(
+    promoterSource,
+    /docker buildx build --load -t dpf-promoter/,
+    "the portal-baked JIT recovery path must use the same explicit Buildx contract",
+  );
+  assert.doesNotMatch(
+    promoterSource,
+    /timeoutMs:\s*5\s*\*\s*60_000/,
+    "candidate Docker operations must not use a separate five-minute wall clock",
+  );
+});
+
 test("every promoter Docker COPY input is mechanically closed by portal baking and JIT staging", async () => {
   const [promoterDockerfile, portalDockerfile, promoterSource] = await Promise.all([
     readFile(resolve(root, "Dockerfile.promoter"), "utf8"), readFile(resolve(root, "Dockerfile"), "utf8"),

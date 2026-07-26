@@ -155,6 +155,7 @@ describe("buildCandidatePromoterImage", () => {
       );
       expect(image).toBe("dpf-promoter:abc1234");
       expect(calls).toHaveLength(1);
+      expect(calls[0]?.slice(0, 4)).toEqual(["buildx", "build", "--load", "-f"]);
       expect(calls[0]).toContain("DPF_PROMOTER_SOURCE_SHA=abc1234");
       expect(calls[0]?.at(-1)).toBe(sourcePath);
     } finally {
@@ -423,7 +424,7 @@ describe("PROMOTER_JIT_BUILD_SCRIPT", () => {
     expect(PROMOTER_JIT_BUILD_SCRIPT).toContain("/promoter/Dockerfile");
     expect(PROMOTER_JIT_BUILD_SCRIPT).toContain("/promoter/Dockerfile.promoter");
     expect(PROMOTER_JIT_BUILD_SCRIPT).toContain("/promoter/scripts/promote.sh");
-    expect(PROMOTER_JIT_BUILD_SCRIPT).toContain("docker build -t dpf-promoter -f Dockerfile.promoter");
+    expect(PROMOTER_JIT_BUILD_SCRIPT).toContain("docker buildx build --load -t dpf-promoter -f Dockerfile.promoter");
   });
 
   it("is a fixed constant with no interpolation (safe under sh -c)", () => {
@@ -451,6 +452,14 @@ describe("resolvePromoterTimeoutMs", () => {
   it("ignores a non-positive or non-numeric budget and falls through", () => {
     expect(resolvePromoterTimeoutMs({ ...CLEAN, timeoutMs: 0 })).toBe(25 * 60 * 1000);
     expect(resolvePromoterTimeoutMs({ ...CLEAN, timeoutMs: -5 })).toBe(25 * 60 * 1000);
+  });
+});
+
+describe("candidate promoter Docker operation budget", () => {
+  it("uses the governed promoter timeout instead of a separate five-minute ceiling", () => {
+    const source = readFileSync(resolve(__dirname, "promoter.ts"), "utf8");
+    expect(source).not.toContain("timeoutMs: 5 * 60_000");
+    expect(source).toContain("resolvePromoterTimeoutMs(params)");
   });
 });
 

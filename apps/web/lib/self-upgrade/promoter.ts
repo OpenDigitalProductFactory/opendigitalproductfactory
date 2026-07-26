@@ -49,25 +49,34 @@ export type ReadinessOwner = "bridge" | "portal" | "unavailable";
 export type UpgradeReadinessMode = "enforced" | "legacy-bootstrap";
 
 export type PromoterDockerRunner = (args: string[]) => Promise<PromoterResult>;
+type PromoterTimeoutParams = { timeoutMs?: number } | PromoterParams;
 
-async function defaultPromoterDockerRunner(args: string[]): Promise<PromoterResult> {
-  return runProcessWithBudget("docker", args, { timeoutMs: 5 * 60_000 });
+function createPromoterDockerRunner(params: PromoterTimeoutParams): PromoterDockerRunner {
+  return (args) => runProcessWithBudget("docker", args, {
+    timeoutMs: resolvePromoterTimeoutMs(params),
+  });
 }
 
 /** Build the candidate-owned local promoter from the prepared source tree. */
 export async function buildCandidatePromoterImage(
-  params: { sourcePath: string; targetSha: string; promoterImage?: string },
-  runDocker: PromoterDockerRunner = defaultPromoterDockerRunner,
+  params: { sourcePath: string; targetSha: string; promoterImage?: string; timeoutMs?: number },
+  runDocker?: PromoterDockerRunner,
 ): Promise<string> {
-  return buildCandidatePromoterArtifactImage(params, runDocker);
+  return buildCandidatePromoterArtifactImage(
+    params,
+    runDocker ?? createPromoterDockerRunner(params),
+  );
 }
 
 /** Pulls/inspects a target reference once and verifies its embedded contract. */
 export async function resolvePromoterArtifact(
-  params: { promoterImage?: string; targetSha: string; callerProtocol?: number },
-  runDocker: PromoterDockerRunner = defaultPromoterDockerRunner,
+  params: { promoterImage?: string; targetSha: string; callerProtocol?: number; timeoutMs?: number },
+  runDocker?: PromoterDockerRunner,
 ): Promise<ResolvedPromoterArtifact> {
-  return resolveCandidatePromoterArtifact(params, runDocker);
+  return resolveCandidatePromoterArtifact(
+    params,
+    runDocker ?? createPromoterDockerRunner(params),
+  );
 }
 
 export async function runPromoterReadiness(
@@ -408,7 +417,7 @@ export const PROMOTER_JIT_BUILD_SCRIPT =
   "cp /promoter/scripts/lib/govern-capability-compose-args.mjs \"$BDIR/scripts/lib/govern-capability-compose-args.mjs\" && " +
   "cp /promoter/scripts/lib/capability-state-hash.mjs \"$BDIR/scripts/lib/capability-state-hash.mjs\" && " +
   "cp /promoter/scripts/capability-service-catalog.generated.json \"$BDIR/scripts/capability-service-catalog.generated.json\" && " +
-  "tar -C \"$BDIR\" -c . | docker build -t dpf-promoter -f Dockerfile.promoter -";
+  "tar -C \"$BDIR\" -c . | docker buildx build --load -t dpf-promoter -f Dockerfile.promoter -";
 
 /**
  * Whether the configured promoter image can be built here from the portal's
@@ -619,7 +628,7 @@ export async function inspectPromoterContainerState(
 }
 
 /** Default hard budget for the promoter subprocess: 25 min (env-overridable). */
-export function resolvePromoterTimeoutMs(params: PromoterParams): number {
+export function resolvePromoterTimeoutMs(params: PromoterTimeoutParams): number {
   if (typeof params.timeoutMs === "number" && params.timeoutMs > 0) return params.timeoutMs;
   const env = Number(process.env.DPF_PROMOTER_TIMEOUT_MS);
   if (Number.isFinite(env) && env > 0) return env;
