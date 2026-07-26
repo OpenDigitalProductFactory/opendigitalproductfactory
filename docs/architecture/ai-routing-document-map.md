@@ -12,6 +12,7 @@ records.
 | What code chooses and dispatches a route? | `apps/web/lib/inference/routed-inference.ts`, `apps/web/lib/routing/request-contract.ts`, and `apps/web/lib/routing/pipeline-v2.ts` |
 | What policy decides whether governed data may leave the install? | `apps/web/lib/govern/data/policy-decision.ts` and `apps/web/lib/govern/data/policy-enforcement.ts` |
 | How is provider/account suitability compiled into route constraints? | [AI provider suitability routing design](../superpowers/specs/2026-07-19-ai-provider-suitability-routing-design.md) and its implemented contracts |
+| How is the designed route projected into EA? | `apps/web/lib/ea/ai-routing-architecture-registry.ts`, `apps/web/lib/ea/ai-routing-architecture-extract.ts`, and `apps/web/lib/ea/reconcile-ai-routing-architecture.ts`; one versioned registry projects synchronized BPMN, SysML, and ArchiMate model kinds |
 | What happened operationally? | Route decisions, inference outcomes, token usage, capacity state, and safe suitability receipts in the live install |
 
 Current implementation truth comes from code plus live evidence. A diagram, design
@@ -31,7 +32,7 @@ every planned behavior is already live.
 
 | Artifact | Status and purpose |
 | --- | --- |
-| [AI Routing Architecture & Explainability](../superpowers/specs/2026-07-26-ai-routing-architecture-explainability-design.md) | Proposed architecture authority for the owner-readable routing subway map, Designed/Observed/Compare viewpoints, safe conformance evidence, and technical drill-through |
+| [AI Routing Architecture & Explainability](../superpowers/specs/2026-07-26-ai-routing-architecture-explainability-design.md) | Architecture authority. The deterministic Designed projection is implemented; Observed/Compare evidence, technical drill-through, and the completed owner-facing Operations Map remain later child BIs. |
 | [Routing Control Plane / Data Plane](../superpowers/specs/2026-04-27-routing-control-data-plane-design.md) | Proposed and deferred RIB/FIB target state; not the current per-request routing runtime |
 
 ## Historical records

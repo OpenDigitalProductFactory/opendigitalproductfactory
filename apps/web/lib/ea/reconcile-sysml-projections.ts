@@ -28,6 +28,10 @@ import { reconcileIt4itCoverage } from "./reconcile-it4it-coverage";
 import { reconcileSecurityPosture } from "./reconcile-security-posture";
 import { reconcileWorkPatternArchitecture } from "./reconcile-work-pattern-architecture";
 import { reconcileFederatedDemandArchitecture } from "./reconcile-federated-demand-architecture";
+import {
+  reconcileAiRoutingArchitecture,
+  type AiRoutingArchitectureReconcileResult,
+} from "./reconcile-ai-routing-architecture";
 import type { SysmlSeedResult } from "./sysml-model-seed";
 
 export interface SysmlProjectionsResult {
@@ -57,6 +61,8 @@ export interface SysmlProjectionsResult {
   // promotion ladder, and no-self-activation verification cases.
   workPatternArchitecture: SysmlSeedResult;
   federatedDemandArchitecture: SysmlSeedResult;
+  // Governed AI-routing behavior + requirements + realizing structure.
+  aiRoutingArchitecture: AiRoutingArchitectureReconcileResult;
 }
 
 const SKIPPED: SysmlSeedResult = { status: "skipped", created: 0, updated: 0, removed: 0 };
@@ -108,9 +114,19 @@ export async function reconcileSysmlProjections(
     () => reconcileFederatedDemandArchitecture({ db: opts.db }),
     SKIPPED,
   );
+  const aiRoutingArchitecture = await runDomain(
+    "aiRoutingArchitecture",
+    () => reconcileAiRoutingArchitecture({ db: opts.db }),
+    {
+      ...SKIPPED,
+      bpmn: SKIPPED,
+      archimate: SKIPPED,
+      sysml: SKIPPED,
+    },
+  );
   return {
     mcpAuthority, coworkerAuthority, valueStreams, routes, navigation, codeStructure, processModels, skillToolchain,
     operationalGraph, networkTopology, integrations, scheduledJobs, it4itCoverage, securityPosture, workPatternArchitecture,
-    federatedDemandArchitecture,
+    federatedDemandArchitecture, aiRoutingArchitecture,
   };
 }
