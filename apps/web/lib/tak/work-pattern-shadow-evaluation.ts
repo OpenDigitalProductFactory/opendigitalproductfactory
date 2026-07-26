@@ -124,6 +124,22 @@ export function parseWorkPatternShadowTrials(value: unknown): WorkPatternShadowT
   return trials;
 }
 
+export function parseLegacyWorkPatternShadowTrials(
+  ...sources: unknown[]
+): WorkPatternShadowTrial[] {
+  const trials: WorkPatternShadowTrial[] = [];
+  const seen = new Set<string>();
+  for (const source of sources) {
+    if (!isRecord(source)) continue;
+    for (const trial of parseWorkPatternShadowTrials(source.shadowTrials)) {
+      if (seen.has(trial.trialId)) continue;
+      seen.add(trial.trialId);
+      trials.push(trial);
+    }
+  }
+  return trials;
+}
+
 function emptyDeltas(): Record<DeltaField, number> {
   return {
     toolCallDelta: 0,

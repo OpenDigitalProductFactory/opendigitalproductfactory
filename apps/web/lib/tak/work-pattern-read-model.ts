@@ -21,8 +21,8 @@ import {
 import {
   evaluateWorkPatternShadowEvidence,
   parseAutonomyLevel,
+  parseLegacyWorkPatternShadowTrials,
   parseRiskClass,
-  parseWorkPatternShadowTrials,
   type WorkPatternShadowEvaluation,
   type WorkPatternShadowTrial,
 } from "./work-pattern-shadow-evaluation";
@@ -32,6 +32,11 @@ import {
   type WorkPatternReviewState,
 } from "./work-pattern-review";
 import type { WorkPatternCaseStagingState } from "./work-pattern-case-staging";
+import {
+  hasWorkPatternExperimentCellMetadata,
+  parseWorkPatternExperimentProjection,
+  type WorkPatternExperimentProjection,
+} from "./work-pattern-experiment-projection";
 
 const DEFAULT_WINDOW_DAYS = 30;
 const DEFAULT_TAKE = 200;
@@ -123,6 +128,7 @@ export type WorkPatternSummary = {
   activationCandidate: WorkPatternActivationCandidate | null;
   caseStaging: WorkPatternCaseStagingState | null;
   shadowEvaluation: WorkPatternShadowEvaluation | null;
+  experiment: WorkPatternExperimentProjection | null;
 };
 
 export type WorkPatternReadModel = {
@@ -148,10 +154,11 @@ type SummaryAccumulator = Omit<
   candidateNeedKinds: Set<CoworkerCapabilityNeedKind>;
   linkedNeedIds: Set<string>;
   evidenceRefs: Map<string, WorkPatternEvidenceRef>;
-  shadowTrials: WorkPatternShadowTrial[];
+    shadowTrials: WorkPatternShadowTrial[];
   shadowCurrentLevel: AutonomyLevel | null;
   shadowRegulatoryCeiling: AutonomyLevel | null;
   shadowRiskClass: RiskClass | null;
+  experiment: WorkPatternExperimentProjection | null;
 };
 
 type PatternSeed = {
@@ -253,10 +260,6 @@ function booleanField(source: unknown, field: string): boolean | null {
   return typeof value === "boolean" ? value : null;
 }
 
-function unknownField(source: unknown, field: string): unknown {
-  return isRecord(source) ? source[field] : undefined;
-}
-
 function dateFrom(value: unknown): Date | null {
   if (value instanceof Date && Number.isFinite(value.getTime())) return value;
   if (typeof value !== "string") return null;
@@ -323,6 +326,7 @@ function fallbackSeed(input: {
 
 function seedFromTaskRun(row: WorkPatternReadModelTaskRunRow, agentId: string): PatternSeed | null {
   const metadata = workPatternFromMetadata(row.a2aMetadata);
+  const experiment = parseWorkPatternExperimentProjection(row.a2aMetadata);
   const effectiveAgentId = row.currentAgentId ?? row.initiatingAgentId ?? agentId;
   const routeContext = row.routeContext ?? null;
   const riskClass = riskClassFromMetadata(row.a2aMetadata);
@@ -341,6 +345,31 @@ function seedFromTaskRun(row: WorkPatternReadModelTaskRunRow, agentId: string): 
       readiness: evaluatePatternReadiness(metadata),
       activationProposed: false,
     };
+  }
+
+  if (experiment) {
+    return {
+      patternKey: experiment.patternKey,
+      agentId: effectiveAgentId,
+      routeContext,
+      riskClass: experiment.riskClass,
+      status: "candidate",
+      scope: routeContext ? "route" : "agent",
+      version: experiment.maxPatternVersion,
+      source: "observer",
+      decisionScope: routeContext ? patternDecisionScope("route") : patternDecisionScope("agent"),
+      candidate: null,
+      readiness: {
+        readyForReview: false,
+        readyForCaseActivation: false,
+        blockers: ["governed-experiment-incomplete"],
+      },
+      activationProposed: false,
+    };
+  }
+
+  if (hasWorkPatternExperimentCellMetadata(row.a2aMetadata)) {
+    return null;
   }
 
   if (!row.repeatedPatternKey) return null;
@@ -395,10 +424,7 @@ function shadowRiskClassFromNeed(row: WorkPatternReadModelNeedRow): RiskClass | 
 }
 
 function shadowTrialsFromNeed(row: WorkPatternReadModelNeedRow): WorkPatternShadowTrial[] {
-  return [
-    ...parseWorkPatternShadowTrials(unknownField(row.evidenceJson, "shadowTrials")),
-    ...parseWorkPatternShadowTrials(unknownField(row.readinessJson, "shadowTrials")),
-  ];
+  return parseLegacyWorkPatternShadowTrials(row.evidenceJson, row.readinessJson);
 }
 
 function seedFromNeed(row: WorkPatternReadModelNeedRow): PatternSeed | null {
@@ -471,6 +497,7 @@ function createAccumulator(seed: PatternSeed): SummaryAccumulator {
     shadowCurrentLevel: null,
     shadowRegulatoryCeiling: null,
     shadowRiskClass: null,
+    experiment: null,
   };
 }
 
@@ -606,6 +633,20 @@ function observeRun(summary: SummaryAccumulator, row: WorkPatternReadModelTaskRu
     summary.latestTaskRunId = row.taskRunId;
   }
   addEvidence(summary, metadataEvidence(row));
+  const experiment = parseWorkPatternExperimentProjection(row.a2aMetadata);
+  if (experiment) {
+    summary.experiment = experiment;
+    if (experiment.lifecycle === "completed" && experiment.invalidPairReasons.length === 0) {
+      summary.readiness = {
+        readyForReview: summary.experiment.validPairCount > 0,
+        readyForCaseActivation: false,
+        blockers:
+          summary.experiment.validPairCount > 0
+            ? ["experiment-evidence-awaits-governed-review"]
+            : ["insufficient-valid-experiment-pairs"],
+      };
+    }
+  }
 }
 
 function attachNeed(summary: SummaryAccumulator, row: WorkPatternReadModelNeedRow): void {
