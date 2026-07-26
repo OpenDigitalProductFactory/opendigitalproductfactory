@@ -402,6 +402,58 @@ describe("routeAndCall activity harness overrides", () => {
     );
   });
 
+  it("explains a screen-blocked route without exposing raw payload values", async () => {
+    mocks.routeEndpointV2.mockResolvedValueOnce({
+      selectedEndpoint: null,
+      selectedModelId: null,
+      reason: "Residency policy 'local_only' requires a local provider",
+      fitnessScore: 0,
+      fallbackChain: [],
+      candidates: [{
+        endpointId: "openai:gpt-4o-mini",
+        providerId: "openai",
+        modelId: "gpt-4o-mini",
+        fitnessScore: 0,
+        estimatedCostUSD: null,
+        estimatedLatencyMs: 100,
+        policyRulesApplied: ["inference-dispatch"],
+        excluded: true,
+        excludedReason: "Residency policy 'local_only' requires a local provider",
+      }],
+      excludedCount: 1,
+      excludedReasons: ["Residency policy 'local_only' requires a local provider"],
+      policyRulesApplied: ["inference-dispatch"],
+      taskType: "summarization",
+      sensitivity: "confidential",
+      timestamp: new Date("2026-06-28T21:00:00.000Z"),
+    });
+
+    let thrown: unknown;
+    try {
+      await routeAndCall(
+        [{ role: "user", content: "Customer email is alex@example.com; summarize next action." }],
+        "You summarize customer records.",
+        "internal",
+        {
+          taskType: "summarization",
+          persistDecision: false,
+        },
+      );
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    const message = (thrown as Error).message;
+    expect(message).toContain(
+      "Sensitive-data routing blocked cloud dispatch for task 'summarization' because the payload includes customer records.",
+    );
+    expect(message).toContain("Use an eligible local/private model or an approved provider account");
+    expect(message).toContain("Masking/tokenization is not available for this route yet");
+    expect(message).not.toContain("alex@example.com");
+    expect(mocks.callWithFallbackChain).not.toHaveBeenCalled();
+  });
+
   it("applies the same pre-dispatch data screen to preview routing", async () => {
     const preview = await previewRoute(
       [{ role: "user", content: "Customer email is alex@example.com; summarize next action." }],
