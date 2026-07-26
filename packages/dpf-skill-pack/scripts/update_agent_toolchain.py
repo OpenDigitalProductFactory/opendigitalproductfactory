@@ -1058,6 +1058,7 @@ def install_grok_plugin(managed: Path, dry_run: bool) -> str:
 
 # PreToolUse guards to wire into Grok's hook plane. Blocking safety/decision
 # guards only; the Write/Edit advisory prechecks are Claude-shaped and non-blocking.
+# Flat list kept for drift tests vs hooks.json emitDeny set.
 GROK_HOOK_GUARDS = (
     "lease-punt-guard.mjs",
     "decision-routing-guard.mjs",
@@ -1065,6 +1066,29 @@ GROK_HOOK_GUARDS = (
     "root-clone-guard.mjs",
     "compose-guard.mjs",
     "plan-backlog-coverage-guard.mjs",
+)
+# Matcher-scoped groups (BI-pretooluse): without matchers Grok runs EVERY PreToolUse
+# command on EVERY tool (6 serial node spawns per call), which looks like
+# "PreToolUse is broken/slow" and races the 15s per-hook timeout under load.
+# Tool names are the Grok+Claude union (Shell/Bash/run_terminal_command).
+GROK_PRETOOLUSE_GROUPS = (
+    (
+        "Shell|Bash|run_terminal_command|run_terminal_cmd",
+        (
+            "lease-punt-guard.mjs",
+            "lease-guard.mjs",
+            "root-clone-guard.mjs",
+            "compose-guard.mjs",
+        ),
+    ),
+    (
+        "AskQuestion|AskUserQuestion",
+        ("decision-routing-guard.mjs",),
+    ),
+    (
+        "Write|Edit|MultiEdit",
+        ("plan-backlog-coverage-guard.mjs",),
+    ),
 )
 
 # Session/Stop plane for Grok (BI-BCA23DBB + session worktree hygiene).
@@ -1089,26 +1113,45 @@ def grok_hooks_file(home: Path) -> Path:
     return home / ".grok" / "hooks" / "dpf-guards.json"
 
 
-def _grok_command_entry(hooks_dir: Path, script: str, timeout: int = 15) -> dict[str, Any]:
+def _grok_hook_command(hooks_dir: Path, script: str, timeout: int = 15) -> dict[str, Any]:
     return {
-        "hooks": [
-            {
-                "type": "command",
-                "command": f'node "{hooks_dir / script}"',
-                "timeout": timeout,
-            }
-        ]
+        "type": "command",
+        "command": f'node "{hooks_dir / script}"',
+        "timeout": timeout,
     }
+
+
+def _grok_command_entry(hooks_dir: Path, script: str, timeout: int = 15) -> dict[str, Any]:
+    """Single-script PreToolUse group (legacy shape used by session events)."""
+    return {"hooks": [_grok_hook_command(hooks_dir, script, timeout=timeout)]}
+
+
+def _grok_matched_group(
+    hooks_dir: Path,
+    matcher: str,
+    scripts: tuple[str, ...],
+    *,
+    dry_run: bool,
+    timeout: int = 15,
+) -> dict[str, Any] | None:
+    hooks = [
+        _grok_hook_command(hooks_dir, script, timeout=timeout)
+        for script in scripts
+        if dry_run or (hooks_dir / script).exists()
+    ]
+    if not hooks:
+        return None
+    return {"matcher": matcher, "hooks": hooks}
 
 
 def build_grok_hooks_payload(managed: Path, dry_run: bool = False) -> dict[str, Any]:
     """Build the global Grok hooks payload (PreToolUse + SessionStart + SessionEnd/Stop)."""
     hooks_dir = managed / "hooks"
-    pre_entries = [
-        _grok_command_entry(hooks_dir, guard, timeout=15)
-        for guard in GROK_HOOK_GUARDS
-        if dry_run or (hooks_dir / guard).exists()
-    ]
+    pre_entries: list[dict[str, Any]] = []
+    for matcher, scripts in GROK_PRETOOLUSE_GROUPS:
+        group = _grok_matched_group(hooks_dir, matcher, scripts, dry_run=dry_run, timeout=15)
+        if group:
+            pre_entries.append(group)
     payload: dict[str, Any] = {"hooks": {}}
     if pre_entries:
         payload["hooks"]["PreToolUse"] = pre_entries
@@ -1143,20 +1186,23 @@ def install_grok_hooks(managed: Path, home: Path, dry_run: bool) -> str:
     Session worktree hygiene: Tier-A reap of THIS worktree on SessionEnd (primary path).
     """
     payload = build_grok_hooks_payload(managed, dry_run=dry_run)
-    pre_count = len(payload.get("hooks", {}).get("PreToolUse", []))
+    pre_groups = payload.get("hooks", {}).get("PreToolUse", [])
+    pre_count = sum(len(g.get("hooks", [])) for g in pre_groups if isinstance(g, dict))
+    pre_matchers = sum(1 for g in pre_groups if isinstance(g, dict) and g.get("matcher"))
     if pre_count == 0 and "SessionStart" not in payload.get("hooks", {}):
         return "skipped: no guard scripts found in managed copy"
     path = grok_hooks_file(home)
     if dry_run:
         return (
             f"dry-run: would write {pre_count} PreToolUse guard(s) "
-            f"+ SessionStart/Stop plane to {path}"
+            f"in {pre_matchers} matcher group(s) + SessionStart/Stop plane to {path}"
         )
     path.parent.mkdir(parents=True, exist_ok=True)
     changed = write_json(path, payload)
     session = "SessionStart+Stop" if "SessionStart" in payload.get("hooks", {}) else "no-session"
     return (
-        f"wired {pre_count} PreToolUse guard(s) + {session} -> {path}"
+        f"wired {pre_count} PreToolUse guard(s) in {pre_matchers} matcher group(s) "
+        f"+ {session} -> {path}"
         + ("" if changed else " (unchanged)")
     )
 

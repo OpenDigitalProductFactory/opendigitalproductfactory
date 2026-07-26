@@ -19,7 +19,13 @@
 // stdout and exit 0; to ALLOW, exit 0 with no output. The hook fails OPEN — any
 // parse/IO error allows the command (a guard must never wedge the session).
 
-import { readHookPayload, isShellTool, emitDeny, inDpfWorkspace } from "./lib/hook-io.mjs";
+import {
+  readHookPayload,
+  isShellTool,
+  emitDeny,
+  inDpfWorkspace,
+  shellCommandFromInput,
+} from "./lib/hook-io.mjs";
 
 import { executableCommandText } from "./command-text.mjs";
 
@@ -77,7 +83,7 @@ function main() {
 
   // Only a shell tool launches a server; ignore every other tool (Bash / Shell / run_terminal_command).
   if (!isShellTool(payload.toolName)) process.exit(0);
-  const command = payload.toolInput?.command ?? "";
+  const command = shellCommandFromInput(payload.toolInput);
   const verdict = decide(command, process.env);
   if (!verdict.block) process.exit(0);
 

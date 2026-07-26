@@ -68,14 +68,21 @@ class InstallGrokHooksTest(unittest.TestCase):
             updater.copy_skill_pack(skill_pack, managed, dry_run=False)
             status = updater.install_grok_hooks(managed, home, dry_run=False)
             self.assertIn("wired 6 PreToolUse guard", status)
+            self.assertIn("matcher group", status)
             self.assertIn("SessionStart+Stop", status)
             hook_file = updater.grok_hooks_file(home)
             self.assertTrue(hook_file.exists())
             data = json.loads(hook_file.read_text())
             entries = data["hooks"]["PreToolUse"]
-            self.assertEqual(len(entries), 6)
+            # Matcher-scoped groups (not one group per script) so Grok does not
+            # run every guard on every tool call.
+            self.assertEqual(len(entries), 3)
+            self.assertTrue(all(e.get("matcher") for e in entries))
             cmds = [h["command"] for e in entries for h in e["hooks"]]
+            self.assertEqual(len(cmds), 6)
             self.assertTrue(any("lease-punt-guard.mjs" in c for c in cmds))
+            shell_group = next(e for e in entries if "Shell" in str(e.get("matcher")))
+            self.assertTrue(any("lease-guard.mjs" in h["command"] for h in shell_group["hooks"]))
             for guard in updater.GROK_HOOK_GUARDS:
                 self.assertTrue((managed / "hooks" / guard).exists(), guard)
             session_cmds = [
