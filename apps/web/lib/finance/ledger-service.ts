@@ -21,6 +21,7 @@ import {
   buildPaymentPostingLines,
   buildBillPostingLines,
   buildDepreciationPostingLines,
+  buildReversalPostingLines,
   validateJournalEntry,
   computeTrialBalance,
   deriveFinancialStatements,
@@ -567,4 +568,102 @@ export async function postDepreciationJournal(
     select: { id: true },
   });
   return { posted: true, periodKey, totalCharge: charge, journalEntryId: entry.id };
+}
+
+// ─── Journal Entry Reversal / Correction ──────────────────────────────────────
+
+export type ReverseJournalEntryResult =
+  | { success: true; reversingEntryId: string; entryRef: string }
+  | { success: false; reason: "not-found" | "not-posted" | "period-locked" | "unbalanced"; detail?: string };
+
+/**
+ * Reverse a posted journal entry (storno / accounting correction):
+ *  1. Ensures the target entry is currently `posted`.
+ *  2. Generates an exact reversing journal entry with swapped debits/credits.
+ *  3. Marks the original entry status as `reversed`.
+ *  4. Enforces period-lock rules to prevent posting reversals into closed periods.
+ */
+export async function reverseJournalEntry(
+  journalEntryId: string,
+  reason?: string,
+): Promise<ReverseJournalEntryResult> {
+  const original = await prisma.journalEntry.findUnique({
+    where: { id: journalEntryId },
+    include: { lines: true },
+  });
+
+  if (!original) {
+    return { success: false, reason: "not-found" };
+  }
+  if (original.status !== "posted") {
+    return { success: false, reason: "not-posted", detail: `Entry is in status '${original.status}'` };
+  }
+
+  // Check period lock
+  const closedSummary = await prisma.periodSummary.findFirst({
+    where: { organizationId: original.organizationId, periodKey: original.periodKey, isClosed: true },
+  });
+  if (closedSummary) {
+    return {
+      success: false,
+      reason: "period-locked",
+      detail: `Period ${original.periodKey} is closed and locked against modifications.`,
+    };
+  }
+
+  const reversingLines = buildReversalPostingLines(
+    original.lines.map((l) => ({
+      accountId: l.accountId,
+      debit: Number(l.debit),
+      credit: Number(l.credit),
+      description: l.description ?? undefined,
+      customerAccountId: l.customerAccountId,
+      contactId: l.contactId,
+    })),
+  );
+
+  const check = validateJournalEntry(reversingLines);
+  if (!check.ok) {
+    return { success: false, reason: "unbalanced", detail: check.errors.join("; ") };
+  }
+
+  const reversalRef = `REV-${original.entryRef}`;
+  const now = new Date();
+
+  const [reversalEntry] = await prisma.$transaction([
+    prisma.journalEntry.create({
+      data: {
+        organizationId: original.organizationId,
+        entryRef: reversalRef,
+        entryDate: now,
+        periodKey: periodKeyOf(now),
+        status: "posted",
+        source: "manual",
+        sourceType: "JournalEntry",
+        sourceId: original.id,
+        currency: original.currency,
+        postedAt: now,
+        memo: reason ? `Reversal of ${original.entryRef}: ${reason}` : `Reversal of ${original.entryRef}`,
+        lines: {
+          create: reversingLines.map((l, i) => ({
+            accountId: l.accountId,
+            debit: l.debit ?? 0,
+            credit: l.credit ?? 0,
+            currency: original.currency,
+            description: l.description,
+            customerAccountId: l.customerAccountId ?? null,
+            contactId: l.contactId ?? null,
+            sortOrder: i,
+          })),
+        },
+      },
+      select: { id: true, entryRef: true },
+    }),
+    prisma.journalEntry.update({
+      where: { id: original.id },
+      data: { status: "reversed" },
+    }),
+  ]);
+
+  return { success: true, reversingEntryId: reversalEntry.id, entryRef: reversalEntry.entryRef };
 }
