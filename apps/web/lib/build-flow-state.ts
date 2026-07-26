@@ -459,6 +459,13 @@ export async function reconcileBuildCompletion(buildId: string): Promise<boolean
     console.error("[reconcileBuildCompletion] dependency readiness check failed:", err);
   });
 
+  // BI-8BD61C30: release sandbox isolation worktree on complete (promote may
+  // already have done this; teardown is idempotent).
+  const { releaseSandboxForTerminalBuild } = await import(
+    "@/lib/integrate/sandbox/sandbox-build-gc"
+  );
+  await releaseSandboxForTerminalBuild(buildId, { deleteBranch: false }).catch(() => {});
+
   // Emit phase:change so the UI updates without a full refresh. Dynamic
   // import keeps the event bus out of the cold-path module graph.
   try {

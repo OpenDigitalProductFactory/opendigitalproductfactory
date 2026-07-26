@@ -698,11 +698,13 @@ async function provisionBuildWorktree(args: {
 }
 
 /**
- * Tear down a build's worktree (isolation-ON cleanup on promote/abandon).
+ * Tear down a build's worktree (isolation-ON cleanup on promote/abandon/terminal).
  * Best-effort — the symlinked node_modules are not real files so removal never
  * touches the shared install, and a missing worktree is not an error.
+ * Exported for BI-8BD61C30 (releaseSandboxForTerminalBuild in sandbox-build-gc.ts).
  */
-async function teardownBuildWorktree(buildId: string): Promise<void> {
+export async function teardownBuildWorktree(buildId: string): Promise<void> {
+  if (!isBuildWorktreeIsolationEnabled()) return;
   await execSandboxGit(buildSandboxWorktreeRemoveCommand(buildId)).catch((err) => {
     console.warn(
       `[build-branch] worktree teardown skipped (non-fatal): ${(err as Error).message?.slice(0, 200)}`,
@@ -917,13 +919,14 @@ export async function promoteBuildBranch(buildId: string): Promise<void> {
     ].join(" && "),
   );
 
-  // Isolation ON: the merge reads build/<id> from git regardless of which tree
-  // holds it, so the now-merged worktree can be torn down.
-  if (isBuildWorktreeIsolationEnabled()) {
-    await teardownBuildWorktree(buildId);
-  }
+  // Tear down isolation worktree; branch already merged into client/* so drop it
+  // (BI-8BD61C30). releaseSandboxForTerminalBuild lives in sandbox-build-gc to
+  // keep this module under the size ratchet.
+  const { releaseSandboxForTerminalBuild } = await import("./sandbox-build-gc");
+  await releaseSandboxForTerminalBuild(buildId, { deleteBranch: true });
 
-  console.log(`[build-branch] Promoted ${branchName} → ${identity.clientBranch}`);
+  // Avoid logging request-scoped ids (CodeQL js/log-injection).
+  console.log("[build-branch] Promoted build branch into client branch");
 }
 
 /**
@@ -933,16 +936,12 @@ export async function promoteBuildBranch(buildId: string): Promise<void> {
 export async function abandonBuildBranch(buildId: string): Promise<void> {
   const identity = await getClientIdentity();
   try {
-    // Isolation ON: the build lived in its own worktree, so /workspace is
-    // already on the client branch (checkout is a harmless no-op) — just drop
-    // the worktree. The branch itself is preserved in git for audit/recovery.
-    if (isBuildWorktreeIsolationEnabled()) {
-      await teardownBuildWorktree(buildId);
-    }
+    // Drop isolation worktree; keep build/<id> branch for audit/recovery.
+    await teardownBuildWorktree(buildId);
     await execSandboxGit(
       `cd ${WORKSPACE} && git checkout "${identity.clientBranch}"`,
     );
-    console.log(`[build-branch] Abandoned build/${buildId} — back on ${identity.clientBranch}`);
+    console.log("[build-branch] Abandoned build — sandbox worktree released");
   } catch (err) {
     console.warn(`[build-branch] abandon failed (non-fatal): ${(err as Error).message?.slice(0, 100)}`);
   }
