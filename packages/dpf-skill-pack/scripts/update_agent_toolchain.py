@@ -946,40 +946,86 @@ GROK_HOOK_GUARDS = (
     "plan-backlog-coverage-guard.mjs",
 )
 
+# Session plane: process-spine + worktree transactional hygiene (primary reaper).
+# Fleet schedule (ops/worktree-janitor) is backstop only — not the primary path.
+GROK_SESSION_START_SCRIPTS = (
+    "process-spine-health-check.mjs",
+    "governance-freshness-check.mjs",
+    "worktree-session-hygiene.mjs",
+)
+GROK_SESSION_END_SCRIPTS = (
+    "uncommitted-work-guard.mjs",
+    "worktree-session-hygiene.mjs",
+)
+
 
 def grok_hooks_file(home: Path) -> Path:
     return home / ".grok" / "hooks" / "dpf-guards.json"
 
 
-def install_grok_hooks(managed: Path, home: Path, dry_run: bool) -> str:
-    """Wire the plane-1 guards into a hook plane Grok actually executes.
+def _grok_command_entry(hooks_dir: Path, script: str, timeout: int = 15) -> dict[str, Any]:
+    # process-spine SessionStart needs --hook flag
+    extra = " --hook" if script == "process-spine-health-check.mjs" else ""
+    return {
+        "hooks": [
+            {
+                "type": "command",
+                "command": f'node "{hooks_dir / script}"{extra}',
+                "timeout": timeout,
+            }
+        ]
+    }
 
-    Live probe (BI-883FC2FC, Grok 0.2.87) proved Grok runs PreToolUse blocking
-    command-hooks and honors deny, but its hook-execution plane loads ONLY from
-    ~/.grok/hooks, ~/.claude/settings.json, and ~/.cursor/hooks — NOT from a
-    plugin's bundled hooks.json (a plugin shows has_hooks=true in inventory yet
-    contributes total_hooks=0 to the plane). So `grok plugin install` surfaces the
-    SKILLS but never the guards. This writes a global ~/.grok/hooks/dpf-guards.json
-    pointing at the managed guard copies. Global hooks are always-trusted (no
-    folder-trust prompt); the guards self-scope to DPF checkouts (inDpfWorkspace)
-    so they never fire DPF-branded denials in unrelated repos. Kernel ledger
-    DI-C17A5861CE0E (opt_global_context_gated).
-    """
+
+def build_grok_hooks_payload(managed: Path, dry_run: bool = False) -> dict[str, Any]:
     hooks_dir = managed / "hooks"
-    entries = [
-        {"hooks": [{"type": "command", "command": f'node "{hooks_dir / guard}"', "timeout": 15}]}
-        for guard in GROK_HOOK_GUARDS
-        if (dry_run or (hooks_dir / guard).exists())
+    payload: dict[str, Any] = {"hooks": {}}
+    pre = [
+        _grok_command_entry(hooks_dir, g, 15)
+        for g in GROK_HOOK_GUARDS
+        if dry_run or (hooks_dir / g).exists()
     ]
-    if not entries:
+    if pre:
+        payload["hooks"]["PreToolUse"] = pre
+    start = [
+        _grok_command_entry(hooks_dir, s, 30)
+        for s in GROK_SESSION_START_SCRIPTS
+        if dry_run or (hooks_dir / s).exists()
+    ]
+    if start:
+        payload["hooks"]["SessionStart"] = start
+    end = [
+        _grok_command_entry(hooks_dir, s, 60)
+        for s in GROK_SESSION_END_SCRIPTS
+        if dry_run or (hooks_dir / s).exists()
+    ]
+    if end:
+        payload["hooks"]["SessionEnd"] = end
+        payload["hooks"]["Stop"] = end
+    return payload
+
+
+def install_grok_hooks(managed: Path, home: Path, dry_run: bool) -> str:
+    """Wire plane-1 + session plane into Grok's executable hook plane.
+
+    Grok ignores plugin-bundled hooks (BI-883FC2FC). Global ~/.grok/hooks is the
+    only plane that runs. Includes SessionStart/End worktree-session-hygiene so
+    reaping is transactional per session (primary), not cron-dependent.
+    """
+    payload = build_grok_hooks_payload(managed, dry_run=dry_run)
+    pre_count = len(payload.get("hooks", {}).get("PreToolUse", []))
+    if pre_count == 0:
         return "skipped: no guard scripts found in managed copy"
-    payload = {"hooks": {"PreToolUse": entries}}
     path = grok_hooks_file(home)
     if dry_run:
-        return f"dry-run: would write {len(entries)} guard(s) to {path}"
+        return f"dry-run: would write {pre_count} PreToolUse + session plane to {path}"
     path.parent.mkdir(parents=True, exist_ok=True)
     changed = write_json(path, payload)
-    return f"wired {len(entries)} guard(s) -> {path}" + ("" if changed else " (unchanged)")
+    session = "SessionStart+Stop" if "SessionStart" in payload.get("hooks", {}) else "no-session"
+    return (
+        f"wired {pre_count} PreToolUse guard(s) + {session} -> {path}"
+        + ("" if changed else " (unchanged)")
+    )
 
 
 # Bash-scoped blocking guards for Codex's user hook plane (~/.codex/hooks.json).
@@ -1168,6 +1214,7 @@ HOOK_PURPOSES = {
     "worktree-create.mjs": "seeds a new worktree with MCP config on WorktreeCreate",
     "process-spine-health-check.mjs": "SessionStart: warns when DPF-native replacement skills are missing or hidden by retired generic skills",
     "governance-freshness-check.mjs": "SessionStart: warns if governance guard wiring is stale",
+    "worktree-session-hygiene.mjs": "SessionStart observe worktree sprawl; SessionEnd reaps THIS worktree when Tier-A (merged+clean) — primary reaper, not cron",
     "uncommitted-work-guard.mjs": "SessionEnd/Stop/post-checkout: warns before uncommitted spec/plan loss",
 }
 

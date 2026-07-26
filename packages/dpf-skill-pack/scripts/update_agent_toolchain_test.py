@@ -67,19 +67,25 @@ class InstallGrokHooksTest(unittest.TestCase):
             managed = home / ".agents" / "plugins" / "plugins" / "dpf-platform"
             updater.copy_skill_pack(skill_pack, managed, dry_run=False)
             status = updater.install_grok_hooks(managed, home, dry_run=False)
-            self.assertIn("wired 6 guard", status)
+            self.assertIn("wired 6 PreToolUse", status)
+            self.assertIn("SessionStart+Stop", status)
             hook_file = updater.grok_hooks_file(home)
             self.assertTrue(hook_file.exists())
             data = json.loads(hook_file.read_text())
             entries = data["hooks"]["PreToolUse"]
             self.assertEqual(len(entries), 6)
             cmds = [h["command"] for e in entries for h in e["hooks"]]
-            # Every command points at an existing managed guard script.
             self.assertTrue(any("lease-punt-guard.mjs" in c for c in cmds))
-            self.assertTrue(any("decision-routing-guard.mjs" in c for c in cmds))
-            self.assertTrue(any("plan-backlog-coverage-guard.mjs" in c for c in cmds))
             for guard in updater.GROK_HOOK_GUARDS:
                 self.assertTrue((managed / "hooks" / guard).exists(), guard)
+            session_cmds = [
+                h["command"]
+                for e in data["hooks"]["SessionStart"]
+                for h in e["hooks"]
+            ]
+            self.assertTrue(any("worktree-session-hygiene.mjs" in c for c in session_cmds))
+            stop_cmds = [h["command"] for e in data["hooks"]["Stop"] for h in e["hooks"]]
+            self.assertTrue(any("worktree-session-hygiene.mjs" in c for c in stop_cmds))
 
     def test_dry_run_writes_nothing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
