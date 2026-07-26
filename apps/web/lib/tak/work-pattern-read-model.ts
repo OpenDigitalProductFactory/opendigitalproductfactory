@@ -21,8 +21,8 @@ import {
 import {
   evaluateWorkPatternShadowEvidence,
   parseAutonomyLevel,
+  parseLegacyWorkPatternShadowTrials,
   parseRiskClass,
-  parseWorkPatternShadowTrials,
   type WorkPatternShadowEvaluation,
   type WorkPatternShadowTrial,
 } from "./work-pattern-shadow-evaluation";
@@ -253,10 +253,6 @@ function booleanField(source: unknown, field: string): boolean | null {
   return typeof value === "boolean" ? value : null;
 }
 
-function unknownField(source: unknown, field: string): unknown {
-  return isRecord(source) ? source[field] : undefined;
-}
-
 function dateFrom(value: unknown): Date | null {
   if (value instanceof Date && Number.isFinite(value.getTime())) return value;
   if (typeof value !== "string") return null;
@@ -395,10 +391,7 @@ function shadowRiskClassFromNeed(row: WorkPatternReadModelNeedRow): RiskClass | 
 }
 
 function shadowTrialsFromNeed(row: WorkPatternReadModelNeedRow): WorkPatternShadowTrial[] {
-  return [
-    ...parseWorkPatternShadowTrials(unknownField(row.evidenceJson, "shadowTrials")),
-    ...parseWorkPatternShadowTrials(unknownField(row.readinessJson, "shadowTrials")),
-  ];
+  return parseLegacyWorkPatternShadowTrials(row.evidenceJson, row.readinessJson);
 }
 
 function seedFromNeed(row: WorkPatternReadModelNeedRow): PatternSeed | null {

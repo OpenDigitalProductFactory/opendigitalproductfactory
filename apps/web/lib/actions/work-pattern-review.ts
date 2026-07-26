@@ -24,8 +24,8 @@ import {
 import {
   evaluateWorkPatternShadowEvidence,
   parseAutonomyLevel,
+  parseLegacyWorkPatternShadowTrials,
   parseRiskClass,
-  parseWorkPatternShadowTrials,
 } from "@/lib/tak/work-pattern-shadow-evaluation";
 import {
   buildWorkPatternReview,
@@ -360,10 +360,7 @@ export async function recordWorkPatternReview(formData: FormData): Promise<Revie
     stringField(evidenceJson, "patternKey") ?? stringField(readinessJson, "patternKey");
   if (!patternKey) throw new Error("work_pattern_missing_pattern_key");
 
-  const shadowTrials = [
-    ...parseWorkPatternShadowTrials(evidenceJson.shadowTrials),
-    ...parseWorkPatternShadowTrials(readinessJson.shadowTrials),
-  ];
+  const shadowTrials = parseLegacyWorkPatternShadowTrials(evidenceJson, readinessJson);
   const currentLevel =
     parseAutonomyLevel(stringField(evidenceJson, "currentAutonomyLevel")) ??
     parseAutonomyLevel(stringField(readinessJson, "currentAutonomyLevel"));
