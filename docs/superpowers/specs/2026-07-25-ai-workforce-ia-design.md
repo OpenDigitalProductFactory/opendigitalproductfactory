@@ -531,6 +531,11 @@ Phase 4: Retire redirect-only and low-value peer destinations.
 - The coworker record is the durable management home.
 - Fleet modes are for cross-coworker comparison, exception handling, and setup workflows.
 - Technical raw detail must use progressive disclosure.
+- On phone-width viewports, global and Platform navigation collapse to compact,
+  route-aware controls. Their full option sets remain one deliberate action
+  away; they must not consume the roster's first viewport.
+- The shared AI coworker launcher remains available on mobile and opens as a
+  viewport modal rather than a docked or floating desktop panel.
 
 ## Acceptance Criteria
 
@@ -543,6 +548,12 @@ Phase 4: Retire redirect-only and low-value peer destinations.
 - Given a redirect-only or compatibility route, it does not appear as a visible primary nav destination.
 - Given a selected coworker record, the first viewport shows identity, work offered, current-business availability, attention state, and approval/autonomy posture without requiring the operator to inspect prompts, models, or provider routes.
 - Given a Build Studio operator, Build Studio remains the place to start product-building work; AI Workforce provides coworker records and runtime/governance context for the coworkers doing that work.
+- Given a `390x844` viewport, the AI Workforce title and coworker search are
+  visible in the first viewport, the document has no horizontal overflow, and
+  optional global/Platform navigation is collapsed.
+- Given the same mobile viewport, the shared AI coworker launcher is reachable;
+  opening it creates a full-viewport modal with background isolation, scroll
+  lock, keyboard dismissal, and restored page state after close.
 
 ## Review Synthesis
 

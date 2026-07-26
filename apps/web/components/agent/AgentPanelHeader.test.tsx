@@ -37,6 +37,7 @@ describe("AgentPanelHeader", () => {
     // The duplicate sensitivity badge is gone: exactly one "Internal" indicator.
     expect(screen.getAllByText("Internal")).toHaveLength(1);
     expect(screen.getByRole("button", { name: "More options" })).toBeTruthy();
+    expect(screen.getByText("Helps with operations").className).toContain("hidden sm:inline");
     // Posture now lives in the composer lip, not the header.
     expect(screen.queryByText("Controls")).toBeNull();
     expect(screen.queryByText("Edit fields on this page")).toBeNull();

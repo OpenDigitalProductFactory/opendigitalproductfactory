@@ -92,7 +92,7 @@ export function AgentFAB({ onClick }: Props) {
     <button
       type="button"
       data-agent-fab="true"
-      className="fixed right-3 z-50 hidden h-10 w-10 select-none items-center justify-center gap-1.5 rounded-full p-0 text-xs font-medium text-[var(--dpf-text)] transition-opacity sm:right-4 sm:flex sm:h-auto sm:w-auto sm:rounded-[20px] sm:px-4 sm:py-2"
+      className="fixed right-3 z-50 flex h-11 w-11 select-none items-center justify-center gap-1.5 rounded-full p-0 text-xs font-medium text-[var(--dpf-text)] transition-opacity sm:right-4 sm:h-auto sm:w-auto sm:rounded-[20px] sm:px-4 sm:py-2"
       onMouseDown={handleMouseDown}
       onClick={handleClick}
       aria-label="Open AI Coworker"

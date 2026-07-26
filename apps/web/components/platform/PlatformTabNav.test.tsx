@@ -5,6 +5,7 @@ let pathname = "/platform";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => pathname,
+  useRouter: () => ({ push: () => {} }),
 }));
 
 vi.mock("next/link", () => ({
@@ -91,6 +92,18 @@ describe("PlatformTabNav", () => {
     expect(aiFamily.subItems.some((item) => item.label === "Overview")).toBe(false);
     expect(html).toContain(">Readiness<");
     expect(html).toContain(">Workforce<");
+  });
+
+  it("uses compact route selectors on mobile while preserving the desktop navigation", () => {
+    pathname = "/platform/ai/overview";
+    const html = renderToStaticMarkup(<PlatformTabNav />);
+
+    expect(html).toContain('aria-label="Platform area"');
+    expect(html).toContain('aria-label="AI Operations view"');
+    expect(html).toContain('class="grid gap-2 md:hidden"');
+    expect(html).toContain('class="hidden md:block"');
+    expect(html).toContain('<option value="/platform/ai" selected="">AI Operations</option>');
+    expect(html).toContain('<option value="/platform/ai/overview" selected="">Workforce</option>');
   });
 
   it("uses compact chrome on the operations map so the visual route map starts sooner", () => {
