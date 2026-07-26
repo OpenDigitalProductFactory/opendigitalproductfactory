@@ -273,13 +273,15 @@ git diff --check
 - Modify: `apps/web/lib/routing/pipeline-v2.provider-policy.test.ts`
 
 - [x] Run the screen before `inferContract()` so sensitivity, allowed/denied providers, and residency are compiled into the route preview and live route.
-- [ ] Re-run or validate the screen immediately before provider dispatch so direct fallback execution cannot bypass the PEP.
+- [x] Re-run or validate the screen immediately before provider dispatch so direct fallback execution cannot bypass the PEP.
 - [ ] Intersect allowed providers and union denied providers with any provider suitability policy already compiled from the activity contract.
 - [x] Prove `routeEndpointV2` excludes public/non-enterprise providers when the transformed payload still carries restricted data.
-- [ ] Prove fallback never sends a transformed payload to a provider that was not eligible for the original decision.
+- [x] Prove fallback never sends a transformed payload to a provider that was not eligible for the original decision.
 - [ ] Surface blocked routing as a short, actionable explanation: what class of data blocked the route, what safer route is needed, and whether masking is possible.
 
 **Slice 3 progress:** `screenInferencePayload` now builds a privacy-safe `inference-data-screen/v1` receipt from the classifier/PDP result and narrows preview/live `RequestContract` inputs before `inferContract()`. When external dispatch is denied or needs review and masking/tokenization is not yet available, the screen escalates sensitivity and applies `residencyPolicy="local_only"` so `routeEndpointV2` owns provider exclusion and fallback inherits the eligible candidate set. The receipt is attached to the in-memory `RouteDecision` and contains only hashes, classes, decision IDs, effect codes, obligation kinds, destination class, and transformation status. Remaining work: durable receipt persistence, final pre-dispatch TOCTOU validation, mask/token transform, direct fallback/legacy dispatcher receipt enforcement, and blocked-route UX copy.
+
+**Slice 4 progress:** `fallback.ts` and the legacy `task-dispatcher.ts` now require an `inference-data-screen/v1` receipt for governed/sensitive dispatch and refuse to walk excluded fallback candidates when the screen applies. The route reroute path that strips unsupported tools preserves the original screen receipt before dispatch. This closes the direct fallback bypass while keeping raw prompts, tool payloads, and detected values out of receipts. Remaining work: durable receipt persistence, full hash/freshness TOCTOU validation, mask/token transform, provider-policy merge semantics, and blocked-route UX copy.
 
 **Verification:**
 
