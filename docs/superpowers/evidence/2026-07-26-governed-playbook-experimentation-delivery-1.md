@@ -1,8 +1,10 @@
 # Governed playbook experimentation — Delivery 1 evidence
 
-Date: 2026-07-26  
-Branch: `feat/work-pattern-experiment-ledger`  
-Backlog item: `BI-0A636528`  
+Date: 2026-07-26
+
+Branch: `feat/work-pattern-experiment-ledger`
+
+Backlog item: `BI-0A636528`
 Work Capsule: `WC-3301191A`
 
 ## Delivered
