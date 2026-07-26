@@ -530,6 +530,16 @@ export async function recordWorkPatternReview(formData: FormData): Promise<Revie
     });
   });
 
+  const { scheduleReviewedWorkPatternExperiment } = await import(
+    "@/lib/tak/work-pattern-experiment-scheduler"
+  );
+  await scheduleReviewedWorkPatternExperiment({
+    action,
+    candidate: evidenceJson.workPatternExperimentCandidate,
+    reviewerUserId: userId,
+    orchestratingAgentId: need.agentId,
+  });
+
   revalidatePath(routeContext);
   return {
     status: "recorded",

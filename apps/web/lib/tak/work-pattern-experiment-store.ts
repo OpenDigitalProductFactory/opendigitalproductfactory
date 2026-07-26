@@ -27,6 +27,7 @@ export type WorkPatternCellMetadata = {
   methodVariantKey: string;
   modelVariantKey: string;
   attempt: number;
+  executionRequest?: unknown;
 };
 
 export type WorkPatternStoredTaskRun = {
@@ -84,7 +85,11 @@ export type WorkPatternExperimentInput = {
   activityKey: string;
   riskClass: WorkPatternExperimentMetadataV1["riskClass"];
   pairKey: string;
-  cells: Array<{ methodVariantKey: string; modelVariantKey: string }>;
+  cells: Array<{
+    methodVariantKey: string;
+    modelVariantKey: string;
+    executionRequest?: unknown;
+  }>;
   orchestratingAgentId: string;
   buildId?: string;
   replicate?: number;
@@ -251,6 +256,9 @@ export async function createOrResumeWorkPatternExperiment(
           methodVariantKey: cell.methodVariantKey,
           modelVariantKey: cell.modelVariantKey,
           attempt: 1,
+          ...(cell.executionRequest !== undefined
+            ? { executionRequest: cell.executionRequest }
+            : {}),
         };
         child = await session.createTaskRun({
           taskRunId,

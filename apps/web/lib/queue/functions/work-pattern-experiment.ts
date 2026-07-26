@@ -75,9 +75,13 @@ export const workPatternExperimentRun = inngest.createFunction(
               select: { a2aMetadata: true },
             });
             const metadata = row?.a2aMetadata as {
-              workPatternExperimentExecution?: unknown;
+              workPatternExperimentCell?: {
+                executionRequest?: unknown;
+              };
             } | null;
-            if (!metadata?.workPatternExperimentExecution) {
+            const executionRequest =
+              metadata?.workPatternExperimentCell?.executionRequest;
+            if (!executionRequest) {
               throw new Error(
                 `missing_work_pattern_experiment_execution_request:${cell.taskRunId}`,
               );
@@ -87,7 +91,7 @@ export const workPatternExperimentRun = inngest.createFunction(
             );
             return executePersistedWorkPatternExperimentCell(
               cell.taskRunId,
-              metadata.workPatternExperimentExecution,
+              executionRequest,
             );
           },
           transition: (taskRunId, lifecycle) =>
