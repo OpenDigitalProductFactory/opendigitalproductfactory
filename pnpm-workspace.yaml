@@ -59,6 +59,10 @@ overrides:
   # body-parser < 2.3.0: GHSA-v422-hmwv-36x6 DoS when an invalid `limit` value silently
   # disables body size enforcement (Dependabot #104, low). Transitive; floor to 2.3.0.
   body-parser: '^2.3.0'
+  # valibot <= 1.4.1: GHSA-5qjj-4xww-7phc / CVE-2026-59952 request-path
+  # DoS when flatten() receives record issue paths matching inherited Object keys
+  # (Dependabot #132, medium). Transitive through @prisma/dev; floor to 1.4.2.
+  'valibot@<=1.4.1': '1.4.2'
   # --- jest 30 unification (apps/mobile) ---
   # Force the ENTIRE jest family to a single major (30) so apps/mobile runs a
   # unified jest 30 install. jest-expo@~56 (Expo SDK 55/56) still *declares* jest
