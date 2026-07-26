@@ -5,7 +5,7 @@ import { isRecord } from "@/lib/shared/coerce";
 import {
   parsePersistedWorkPatternExperimentExecution,
 } from "@/lib/integrate/work-pattern-experiment-runtime";
-import { inngest } from "@/lib/queue/inngest-client";
+import { enqueueWorkPatternExperiment } from "@/lib/queue/functions/work-pattern-experiment";
 
 import {
   createOrResumeWorkPatternExperiment,
@@ -137,10 +137,9 @@ export async function scheduleReviewedWorkPatternExperiment(input: {
     },
   );
 
-  await inngest.send({
-    id: `work-pattern-experiment:${run.manifest.experimentRunId}`,
-    name: "build/work-pattern-experiment.run",
-    data: { parentTaskRunId: run.parent.taskRunId },
-  });
+  await enqueueWorkPatternExperiment(
+    run.manifest.experimentRunId,
+    run.parent.taskRunId,
+  );
   return { scheduled: true, parentTaskRunId: run.parent.taskRunId };
 }

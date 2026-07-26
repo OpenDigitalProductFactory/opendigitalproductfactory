@@ -55,9 +55,13 @@ export type PersistedWorkPatternRuntimeDeps = {
     inputTokens: number;
     outputTokens: number;
   }>;
+  markWorking: (input: {
+    taskRunId: string;
+    a2aMetadata: Record<string, unknown>;
+  }) => Promise<void>;
   updateTaskRun: (input: {
     taskRunId: string;
-    status: "working" | "completed" | "failed";
+    status: "completed" | "failed";
     a2aMetadata: Record<string, unknown>;
   }) => Promise<void>;
   recordEvidence: (input: {
@@ -226,16 +230,22 @@ async function defaultDeps(): Promise<PersistedWorkPatternRuntimeDeps> {
         outputTokens: result.outputTokens,
       };
     },
+    markWorking: async ({ taskRunId, a2aMetadata }) => {
+      const { markTaskRunWorking } = await import("@/lib/observability/heartbeat");
+      await markTaskRunWorking(taskRunId);
+      await prisma.taskRun.update({
+        where: { taskRunId },
+        data: { a2aMetadata: a2aMetadata as never },
+      });
+    },
     updateTaskRun: async ({ taskRunId, status, a2aMetadata }) => {
       await prisma.taskRun.update({
         where: { taskRunId },
         data: {
           status,
           a2aMetadata: a2aMetadata as never,
-          lastHeartbeatAt: status === "working" ? new Date() : null,
-          ...(status === "completed" || status === "failed"
-            ? { completedAt: new Date() }
-            : {}),
+          lastHeartbeatAt: null,
+          completedAt: new Date(),
         },
       });
     },
@@ -281,9 +291,8 @@ export async function executePersistedWorkPatternExperimentCell(
   const existingMetadata = isRecord(context.taskRun.a2aMetadata)
     ? context.taskRun.a2aMetadata
     : {};
-  await deps.updateTaskRun({
+  await deps.markWorking({
     taskRunId,
-    status: "working",
     a2aMetadata: existingMetadata,
   });
   await deps.recordEvidence({

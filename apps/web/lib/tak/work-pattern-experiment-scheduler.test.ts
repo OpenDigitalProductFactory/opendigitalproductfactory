@@ -6,7 +6,9 @@ const { createRun, send } = vi.hoisted(() => ({
 }));
 
 vi.mock("@dpf/db", () => ({ prisma: {} }));
-vi.mock("@/lib/queue/inngest-client", () => ({ inngest: { send } }));
+vi.mock("@/lib/queue/functions/work-pattern-experiment", () => ({
+  enqueueWorkPatternExperiment: send,
+}));
 vi.mock("./work-pattern-experiment-store", () => ({
   createPrismaWorkPatternExperimentPersistence: vi.fn().mockReturnValue({}),
   createOrResumeWorkPatternExperiment: createRun,
@@ -102,11 +104,7 @@ describe("scheduleReviewedWorkPatternExperiment", () => {
       }),
       expect.objectContaining({ resolveOwnerUserId: expect.any(Function) }),
     );
-    expect(send).toHaveBeenCalledWith({
-      id: "work-pattern-experiment:WPR-1",
-      name: "build/work-pattern-experiment.run",
-      data: { parentTaskRunId: "TR-PARENT" },
-    });
+    expect(send).toHaveBeenCalledWith("WPR-1", "TR-PARENT");
   });
 
   it("does not schedule deferred or non-shadow candidates", async () => {

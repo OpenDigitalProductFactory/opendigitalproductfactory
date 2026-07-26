@@ -39,6 +39,17 @@ export async function runWorkPatternExperiment(
   return { executed };
 }
 
+export async function enqueueWorkPatternExperiment(
+  experimentRunId: string,
+  parentTaskRunId: string,
+) {
+  return inngest.send({
+    id: `work-pattern-experiment:${experimentRunId}`,
+    name: "build/work-pattern-experiment.run",
+    data: { parentTaskRunId },
+  });
+}
+
 export const workPatternExperimentRun = inngest.createFunction(
   {
     id: "build/work-pattern-experiment",

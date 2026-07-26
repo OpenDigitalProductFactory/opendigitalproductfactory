@@ -66,6 +66,7 @@ function deps(): PersistedWorkPatternRuntimeDeps {
       inputTokens: 12,
       outputTokens: 1,
     }),
+    markWorking: vi.fn().mockResolvedValue(undefined),
     updateTaskRun: vi.fn().mockResolvedValue(undefined),
     recordEvidence: vi.fn().mockImplementation(async (input) => input),
   };
@@ -98,6 +99,10 @@ describe("executePersistedWorkPatternExperimentCell", () => {
       }),
     );
     expect(runtime.recordEvidence).toHaveBeenCalledTimes(2);
+    expect(runtime.markWorking).toHaveBeenCalledWith({
+      taskRunId: "TR-CELL-1",
+      a2aMetadata: { workPatternExperimentCell: { attempt: 1 } },
+    });
     expect(runtime.recordEvidence).toHaveBeenLastCalledWith(
       expect.objectContaining({
         observationKind: "outcome",
