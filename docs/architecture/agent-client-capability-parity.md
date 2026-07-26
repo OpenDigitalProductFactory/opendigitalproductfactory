@@ -56,8 +56,41 @@ Reconciles the "Functional proof on Codex/Grok still pending" line above (2026-0
 
 **Refresh ritual — operationalization (BI-4B8EABF8 follow-up).** The monthly ritual below is documented; wiring it as an actual `scheduledAgentTask` on the existing `agent-task-scheduler.ts` / `agent-task-dispatch.ts` substrate (read official docs → diff this tracker → file a BI per material drift → record sources + verification age) is the remaining code slice. No new cron — reuse the cognitive-load-migration scan substrate.
 
+## Governance outcomes (G1–G9) — multi-client parity
+
+**Spec:** [`docs/superpowers/specs/2026-07-26-multi-client-governance-parity-design.md`](../superpowers/specs/2026-07-26-multi-client-governance-parity-design.md)  
+**Plan:** [`docs/superpowers/plans/2026-07-26-multi-client-governance-parity.md`](../superpowers/plans/2026-07-26-multi-client-governance-parity.md)  
+**Last verified (live install sample):** 2026-07-26. Outcomes are **required**; mechanisms may differ per client (thin adapters).
+
+| Outcome | Meaning |
+|---------|---------|
+| **G1 Skills** | `dpf-platform` skills installed and loadable |
+| **G2 Competitive** | Known competitive process plugins **disabled** (disable-not-delete), not merely warned |
+| **G3 Plane-1 hooks** | lease / lease-punt / root-clone / compose / decision-routing / plan-backlog fire and can deny |
+| **G4 Session plane** | SessionStart process-spine + competitive; SessionEnd/Stop uncommitted + lease/capsule release where events exist |
+| **G5 MCP** | `DPF_MCP_BEARER_TOKEN` wired; tools reachable when portal not quiescing |
+| **G6 Capsule** | Work claims a capsule / FeatureBuild; orphans detectable |
+| **G7 Worktree lifecycle** | Canonical sibling base; Tier-A reaping; no nested-root sprawl as steady state |
+| **G8 Headless-safe** | Always-approve / non-interactive still honors deny; no operator TUI required |
+| **G9 Readiness** | `record_surface_readiness` / bootstrap readiness observable |
+
+| Client | G1 | G2 | G3 | G4 | G5 | G6 | G7 | G8 | G9 | Notes (2026-07-26) |
+|--------|----|----|----|----|----|----|----|----|----|---------------------|
+| **Claude Code** (host) | ✅ | ⚠️ warn | ✅ dual plane | ✅ plugin | ✅ | ◐ | ◐ create hook; reap manual | ✅ | ◐ | Competitive still warn-only |
+| **Codex CLI** (host) | ✅ | ✅ disable | ✅ if hook-trust | ✅ | ✅ | ◐ | ◐ | ✅ | ◐ | Hook-trust fail-open until trusted |
+| **Grok Build** (host) | ✅ | ⚠️ warn | ✅ global only | ⬜ | ✅ | ◐ | ⬜ | ✅ | ◐ | Plugin hooks ignored; Session plane missing |
+| **Grok** (Build Studio sandbox) | ⬜ | ⬜ | ⬜ | ⬜ | ◐ | ✅ BS | ➖ | ⚠️ no guards | ⬜ | **P0:** `grok plugin list` empty in sandbox |
+| **Antigravity (agy)** | ◐ pack | ⚠️ warn | ⬜ unproven | ⬜ | ◐ MCP wire | ◐ | ⬜ | ❓ | ⬜ | Hooks pending functional proof |
+| **Build Studio** (agentic in-portal) | ✅ seed skills | ➖ | runtime gates | ➖ | ✅ | ✅ | ➖ | ✅ phase HITL | ◐ | Not CLI-hook based |
+| **OpenCode** (suggested / BS dispatch) | ⬜ | ⬜ | ⬜ | ⬜ | ◐ | ✅ BS | ➖ | ❓ | ⬜ | Complete adapter after Grok BS seed |
+| **Gemini CLI** (suggested) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ❓ | ⬜ | Document checklist; bootstrap when product pulls |
+| **Cursor** (compat / optional) | ⬜ | ⬜ | ◐ via Grok compat paths | ⬜ | ⬜ | ⬜ | ⬜ | ❓ | ⬜ | Hook event aliases; not first-class bootstrap |
+
+**Backlog (filed 2026-07-26):** BI-F4A1A0DC (docs/matrix), BI-BCA23DBB (Grok host plane + competitive), BI-C5F9A232 (BS Grok seed), BI-42FA7DD8 (worktree Tier-A reap), BI-A4BEFE99 (remaining clients equalize).
+
 ## What this currently tells us (the open adoption gaps)
 
+- **Governance parity (2026-07-26):** Grok BS seed + competitive disable + worktree Tier-A reap are the highest-leverage closes (see G1–G9 table). Token economy rows below remain separate.
 - **R3 — deferred tools on `/api/mcp/v1`** (⬜): external CLIs pull the full JWT-scoped surface; adopt the Tool Search pattern.
 - **R4 — code execution in the native loop** (⬜): the single biggest local-window token lever; sandbox already exists.
 - **R6 — local prefix-KV cache** (◐): confirm DMR/llama.cpp reuses the static prefix.

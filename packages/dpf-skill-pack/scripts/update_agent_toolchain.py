@@ -946,17 +946,22 @@ GROK_HOOK_GUARDS = (
     "plan-backlog-coverage-guard.mjs",
 )
 
-# Session plane: process-spine + worktree transactional hygiene (primary reaper).
-# Fleet schedule (ops/worktree-janitor) is backstop only — not the primary path.
+# Session/Stop plane for Grok (BI-BCA23DBB + session worktree hygiene).
+# Plugin hooks.json names these for Claude; Grok only executes ~/.grok/hooks.
+# - grok-session-start: process-spine exposure + governance-freshness
+# - worktree-session-hygiene: transactional Tier-A reap of THIS worktree (primary;
+#   fleet schedule ops/worktree-janitor is backstop only)
 GROK_SESSION_START_SCRIPTS = (
-    "process-spine-health-check.mjs",
-    "governance-freshness-check.mjs",
+    "grok-session-start.mjs",
     "worktree-session-hygiene.mjs",
 )
 GROK_SESSION_END_SCRIPTS = (
     "uncommitted-work-guard.mjs",
     "worktree-session-hygiene.mjs",
 )
+# Back-compat single names (older docs / tests may reference these).
+GROK_SESSION_START_SCRIPT = GROK_SESSION_START_SCRIPTS[0]
+GROK_SESSION_END_SCRIPT = GROK_SESSION_END_SCRIPTS[0]
 
 
 def grok_hooks_file(home: Path) -> Path:
@@ -964,13 +969,11 @@ def grok_hooks_file(home: Path) -> Path:
 
 
 def _grok_command_entry(hooks_dir: Path, script: str, timeout: int = 15) -> dict[str, Any]:
-    # process-spine SessionStart needs --hook flag
-    extra = " --hook" if script == "process-spine-health-check.mjs" else ""
     return {
         "hooks": [
             {
                 "type": "command",
-                "command": f'node "{hooks_dir / script}"{extra}',
+                "command": f'node "{hooks_dir / script}"',
                 "timeout": timeout,
             }
         ]
@@ -978,26 +981,27 @@ def _grok_command_entry(hooks_dir: Path, script: str, timeout: int = 15) -> dict
 
 
 def build_grok_hooks_payload(managed: Path, dry_run: bool = False) -> dict[str, Any]:
+    """Build the global Grok hooks payload (PreToolUse + SessionStart + SessionEnd/Stop)."""
     hooks_dir = managed / "hooks"
-    payload: dict[str, Any] = {"hooks": {}}
-    pre = [
-        _grok_command_entry(hooks_dir, g, 15)
-        for g in GROK_HOOK_GUARDS
-        if dry_run or (hooks_dir / g).exists()
+    pre_entries = [
+        _grok_command_entry(hooks_dir, guard, timeout=15)
+        for guard in GROK_HOOK_GUARDS
+        if dry_run or (hooks_dir / guard).exists()
     ]
-    if pre:
-        payload["hooks"]["PreToolUse"] = pre
+    payload: dict[str, Any] = {"hooks": {}}
+    if pre_entries:
+        payload["hooks"]["PreToolUse"] = pre_entries
     start = [
-        _grok_command_entry(hooks_dir, s, 30)
-        for s in GROK_SESSION_START_SCRIPTS
-        if dry_run or (hooks_dir / s).exists()
+        _grok_command_entry(hooks_dir, script, timeout=30)
+        for script in GROK_SESSION_START_SCRIPTS
+        if dry_run or (hooks_dir / script).exists()
     ]
     if start:
         payload["hooks"]["SessionStart"] = start
     end = [
-        _grok_command_entry(hooks_dir, s, 60)
-        for s in GROK_SESSION_END_SCRIPTS
-        if dry_run or (hooks_dir / s).exists()
+        _grok_command_entry(hooks_dir, script, timeout=60)
+        for script in GROK_SESSION_END_SCRIPTS
+        if dry_run or (hooks_dir / script).exists()
     ]
     if end:
         payload["hooks"]["SessionEnd"] = end
@@ -1006,19 +1010,27 @@ def build_grok_hooks_payload(managed: Path, dry_run: bool = False) -> dict[str, 
 
 
 def install_grok_hooks(managed: Path, home: Path, dry_run: bool) -> str:
-    """Wire plane-1 + session plane into Grok's executable hook plane.
+    """Wire plane-1 + session plane into a hook plane Grok actually executes.
 
-    Grok ignores plugin-bundled hooks (BI-883FC2FC). Global ~/.grok/hooks is the
-    only plane that runs. Includes SessionStart/End worktree-session-hygiene so
-    reaping is transactional per session (primary), not cron-dependent.
+    Live probe (BI-883FC2FC, Grok 0.2.87) proved Grok runs PreToolUse blocking
+    command-hooks and honors deny, but its hook-execution plane loads ONLY from
+    ~/.grok/hooks, ~/.claude/settings.json, and ~/.cursor/hooks — NOT from a
+    plugin's bundled hooks.json. This writes a global ~/.grok/hooks/dpf-guards.json
+    pointing at the managed guard copies.
+
+    BI-BCA23DBB: SessionStart via grok-session-start.mjs + SessionEnd uncommitted warn.
+    Session worktree hygiene: Tier-A reap of THIS worktree on SessionEnd (primary path).
     """
     payload = build_grok_hooks_payload(managed, dry_run=dry_run)
     pre_count = len(payload.get("hooks", {}).get("PreToolUse", []))
-    if pre_count == 0:
+    if pre_count == 0 and "SessionStart" not in payload.get("hooks", {}):
         return "skipped: no guard scripts found in managed copy"
     path = grok_hooks_file(home)
     if dry_run:
-        return f"dry-run: would write {pre_count} PreToolUse + session plane to {path}"
+        return (
+            f"dry-run: would write {pre_count} PreToolUse guard(s) "
+            f"+ SessionStart/Stop plane to {path}"
+        )
     path.parent.mkdir(parents=True, exist_ok=True)
     changed = write_json(path, payload)
     session = "SessionStart+Stop" if "SessionStart" in payload.get("hooks", {}) else "no-session"
@@ -1026,6 +1038,77 @@ def install_grok_hooks(managed: Path, home: Path, dry_run: bool) -> str:
         f"wired {pre_count} PreToolUse guard(s) + {session} -> {path}"
         + ("" if changed else " (unchanged)")
     )
+
+
+def disable_competitive_grok_plugins(skill_pack: Optional[Path] = None, dry_run: bool = False) -> str:
+    """Disable known competitive process plugins on Grok (disable-not-delete).
+
+    Codex already writes enabled=false into config.toml. Grok uses
+    `grok plugin disable <name>` against plugins reported by
+    `grok plugin list --json`. Only acts when a competitive plugin is installed
+    and not already disabled. Never uninstalls or deletes caches.
+    """
+    grok = resolve_grok_binary()
+    if not grok:
+        return "skipped: Grok CLI not found"
+    plugin_ids = grok_competitive_plugin_ids(skill_pack)
+    if not plugin_ids:
+        return "skipped: no competitive plugin ids in cleanup policy"
+    if dry_run:
+        return f"dry-run: would disable competitive plugins {plugin_ids}"
+
+    list_result = subprocess.run(
+        [grok, "plugin", "list", "--json"],
+        capture_output=True,
+        text=True,
+    )
+    if list_result.returncode != 0:
+        return f"failed: grok plugin list exited {list_result.returncode}"
+    try:
+        installed = json.loads(list_result.stdout or "[]")
+    except json.JSONDecodeError:
+        return "failed: grok plugin list returned invalid JSON"
+    if not isinstance(installed, list):
+        return "failed: grok plugin list shape unexpected"
+
+    by_name = {
+        str(p.get("name")): p
+        for p in installed
+        if isinstance(p, dict) and p.get("name")
+    }
+    disabled: list[str] = []
+    already: list[str] = []
+    missing: list[str] = []
+    failed: list[str] = []
+    for plugin_id in dict.fromkeys(plugin_ids):
+        if plugin_id == PLUGIN_NAME:
+            continue
+        entry = by_name.get(plugin_id)
+        if entry is None:
+            missing.append(plugin_id)
+            continue
+        if entry.get("enabled") is False or entry.get("status") == "disabled":
+            already.append(plugin_id)
+            continue
+        result = subprocess.run(
+            [grok, "plugin", "disable", plugin_id],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            disabled.append(plugin_id)
+        else:
+            failed.append(plugin_id)
+    parts = []
+    if disabled:
+        parts.append(f"disabled {disabled}")
+    if already:
+        parts.append(f"already-disabled {already}")
+    if missing:
+        parts.append(f"not-installed {missing}")
+    if failed:
+        parts.append(f"failed {failed}")
+    return "; ".join(parts) if parts else "no competitive plugins present"
 
 
 # Bash-scoped blocking guards for Codex's user hook plane (~/.codex/hooks.json).
@@ -1214,6 +1297,7 @@ HOOK_PURPOSES = {
     "worktree-create.mjs": "seeds a new worktree with MCP config on WorktreeCreate",
     "process-spine-health-check.mjs": "SessionStart: warns when DPF-native replacement skills are missing or hidden by retired generic skills",
     "governance-freshness-check.mjs": "SessionStart: warns if governance guard wiring is stale",
+    "grok-session-start.mjs": "Grok SessionStart: process-spine exposure probe + governance-freshness (global hook plane)",
     "worktree-session-hygiene.mjs": "SessionStart observe worktree sprawl; SessionEnd reaps THIS worktree when Tier-A (merged+clean) — primary reaper, not cron",
     "uncommitted-work-guard.mjs": "SessionEnd/Stop/post-checkout: warns before uncommitted spec/plan loss",
 }
@@ -1365,9 +1449,16 @@ def main(argv: list[str]) -> int:
             grok_status = install_grok_plugin(shared_managed, args.dry_run)
         print(f"  Grok       : plugin install {grok_status}")
         # Grok's hook plane ignores plugin-bundled hooks (BI-883FC2FC), so the
-        # blocking guards are delivered via the always-trusted global hook plane.
+        # blocking guards + session plane are delivered via the always-trusted
+        # global hook plane (BI-BCA23DBB).
         grok_hooks_status = install_grok_hooks(shared_managed, home, args.dry_run)
         print(f"  Grok hooks : {grok_hooks_status}")
+        grok_competitive_status = "skipped by flag"
+        if not args.skip_grok_cli_install:
+            grok_competitive_status = disable_competitive_grok_plugins(
+                process_spine_root, dry_run=args.dry_run
+            )
+        print(f"  Grok competitive: {grok_competitive_status}")
         # Antigravity (agy): MCP-config wiring + skill-pack sync.
         antigravity_status = "skipped by flag"
         if not args.skip_antigravity_cli_install:

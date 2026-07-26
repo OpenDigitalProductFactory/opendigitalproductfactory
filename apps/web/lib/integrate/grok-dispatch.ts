@@ -23,6 +23,7 @@ import {
   sandboxExec,
   writeSandboxFile,
 } from "./sandbox/agent-cli-runtime";
+import { ensureSandboxGrokGovernance } from "./sandbox/grok-governance-seed";
 import { getDecryptedCredential } from "@/lib/inference/ai-provider-internals";
 import { resolveBuildWorkdir } from "./sandbox/build-branch";
 import { recordBuildDispatchAttempt } from "@/lib/build/dispatch-attempts";
@@ -196,6 +197,23 @@ export async function dispatchGrokTask(params: {
     await ensureSandboxNodeUser(containerId);
   } catch {
     // Non-fatal; proceed (some sandboxes may already be correct)
+  }
+
+  // BI-C5F9A232: seed dpf-platform skills + global hooks for headless Grok.
+  // Best-effort — missing workspace skill pack must not wedge an unrelated auth path.
+  try {
+    const gov = await ensureSandboxGrokGovernance({ containerId });
+    if (!gov.ok) {
+      console.warn(
+        `[grok-dispatch] governance seed incomplete: plugin=${gov.plugin} hooks=${gov.hooks} detail=${gov.detail ?? ""}`,
+      );
+    } else {
+      console.log(
+        `[grok-dispatch] governance seed ok: plugin=${gov.plugin}; ${gov.hooks}`,
+      );
+    }
+  } catch (e) {
+    console.warn(`[grok-dispatch] governance seed error: ${(e as Error).message}`);
   }
 
   let grokAuth: GrokAuthInjection;

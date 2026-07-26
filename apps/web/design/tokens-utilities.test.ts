@@ -51,7 +51,13 @@ async function compile(utilities: string[]): Promise<string> {
     `@source inline("${utilities.join(" ")}");`,
     "",
   ].join("\n");
-  const result = await postcss([tailwind()]).process(css, {
+  // pnpm's hoisted layout can expose the same locked PostCSS release through
+  // both the workspace root and apps/web. TypeScript treats those physical
+  // declaration paths as distinct even though the runtime plugin contract is
+  // identical, so normalize the third-party boundary once instead of leaking
+  // the duplicate-package identity through this test.
+  const tailwindPlugin = tailwind() as unknown as postcss.AcceptedPlugin;
+  const result = await postcss([tailwindPlugin]).process(css, {
     // The dirname must stay apps/web/app so `./tokens.generated.css` resolves. The
     // FILENAME is unique per call on purpose: @tailwindcss/postcss keys its compiler
     // cache on `from`, so reusing one path lets an earlier compile's candidate set
