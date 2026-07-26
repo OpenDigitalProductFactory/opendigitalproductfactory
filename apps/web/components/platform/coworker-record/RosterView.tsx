@@ -45,7 +45,7 @@ function formatRelative(iso: string): string {
 
 export function RosterView({ rows, facets }: { rows: RosterRow[]; facets: RosterFacets }) {
   const [filters, setFilters] = useState<Filters>(EMPTY);
-  const [groupBy, setGroupBy] = useState<"tier" | "family">("tier");
+  const [groupBy, setGroupBy] = useState<"tier" | "family" | "domain">("domain");
 
   // Kind facet option set is derived from the rows present (design item 1) so a
   // fresh install never shows a role-type it has no coworker for.
@@ -59,7 +59,14 @@ export function RosterView({ rows, facets }: { rows: RosterRow[]; facets: Roster
   const groups = useMemo(() => {
     const map = new Map<string, RosterRow[]>();
     for (const r of filtered) {
-      const key = groupBy === "tier" ? TIER_LABELS[r.tier] ?? `Tier ${r.tier}` : r.familyLabel ?? "Unmapped";
+      const key =
+        groupBy === "tier"
+          ? TIER_LABELS[r.tier] ?? `Tier ${r.tier}`
+          : groupBy === "domain"
+            ? r.valueStream
+              ? r.valueStream.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+              : "Core Platform / Universal"
+            : r.familyLabel ?? "Unmapped";
       const list = map.get(key) ?? [];
       list.push(r);
       map.set(key, list);
@@ -122,6 +129,7 @@ export function RosterView({ rows, facets }: { rows: RosterRow[]; facets: Roster
         <button type="button" onClick={() => setFilters(EMPTY)} style={linkBtn}>reset</button>
         <div style={{ marginLeft: "auto", display: "inline-flex", gap: 6, alignItems: "center" }}>
           <span style={{ fontSize: 11, color: "var(--dpf-muted)" }}>group by</span>
+          <button type="button" onClick={() => setGroupBy("domain")} style={toggleBtn(groupBy === "domain")}>domain</button>
           <button type="button" onClick={() => setGroupBy("tier")} style={toggleBtn(groupBy === "tier")}>tier</button>
           <button type="button" onClick={() => setGroupBy("family")} style={toggleBtn(groupBy === "family")}>family</button>
         </div>
