@@ -6,6 +6,7 @@ import type {
   CoworkerCatalogRiskTier,
   CoworkerServiceStatus,
 } from "./types";
+import { hasExactCoworkerArchetypeDeclaration } from "./archetype-declarations";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -311,7 +312,12 @@ export function filterCoworkerOffers(
     if (filters.persona && !offer.eligibleConsumers.includes(filters.persona)) return false;
     if (filters.portfolioRole && !offer.service.portfolioRoles.includes(filters.portfolioRole)) return false;
     if (filters.valueStream && !offer.service.valueStreams.includes(filters.valueStream)) return false;
-    if (filters.archetype && !offer.service.archetypes.includes(filters.archetype)) return false;
+    if (
+      filters.archetype &&
+      !hasExactCoworkerArchetypeDeclaration(offer.service.archetypes, filters.archetype)
+    ) {
+      return false;
+    }
     if (filters.jurisdiction && !matchesStringOrArray(offer.filters.jurisdiction, filters.jurisdiction) && !offer.service.jurisdictions.includes(filters.jurisdiction)) return false;
     if (filters.riskTier && offer.riskTier !== filters.riskTier) return false;
     if (filters.availabilityScope && offer.availabilityScope !== filters.availabilityScope) return false;
@@ -386,4 +392,3 @@ function unique(values: string[]): string[] {
 function matchesStringOrArray(value: unknown, expected: string): boolean {
   return value === expected || (Array.isArray(value) && value.includes(expected));
 }
-

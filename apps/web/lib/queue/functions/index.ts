@@ -51,6 +51,7 @@ import {
 } from "./postgres-daily-backup";
 import { runtimeTargetJanitor } from "./runtime-target-janitor";
 import { runtimeArtifactJanitor } from "./runtime-artifact-janitor";
+import { worktreeJanitor } from "./worktree-janitor";
 import { sandboxBuildGc } from "./sandbox-build-gc";
 import {
   dataRetentionSweepScheduled,
@@ -93,6 +94,7 @@ import {
 } from "./semantic-memory-reconcile";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 import { demandReconciliationScheduled } from "./demand-reconciliation";
+import { workPatternExperimentRun } from "./work-pattern-experiment";
 
 export const scheduledFunctions = [
   prometheusPoll,
@@ -123,8 +125,10 @@ export const scheduledFunctions = [
   selfUpgradeScheduled,
   runtimeTargetJanitor,  // BI-AD949172: RT heartbeat sweep + lease expiry, hourly
   runtimeArtifactJanitor, // BI-DBF3F426: OBSERVE-ONLY dry-run scan of orphaned CI images + stray compose projects (logs would-reap, never deletes; --apply is founder-gated), daily 05:20, flag-gated DPF_RUNTIME_ARTIFACT_JANITOR_ENABLED
+  worktreeJanitor, // BI-42FA7DD8: host worktree Tier-A fleet backstop; daily 05:40
   sandboxBuildGc, // BI-8BD61C30: BS sandbox .builds worktree + aged build/* branch GC (flag DPF_SANDBOX_BUILD_GC_ENABLED), daily 05:50
   dataRetentionSweepScheduled, // EP-DATA-RETENTION: daily DB purge of aged logs/telemetry/chat, 04:00
+
   qualityIssueDriftSweepScheduled, // BI-0B420A1D: runtime governance — self-heal recovery/orphan backstop + detect per-type open-count drift vs registry budgets, daily 05:00
 
   inngestRetentionSweepScheduled, // BI-0AB96FE7: bound db=inngest history + reap Redis-TTL orphans that wedge the executor, every 6h
@@ -181,6 +185,7 @@ export const eventFunctions = [
   coworkerCertificationRunNow, // EP-COWORKER-LIFECYCLE P2 (BI-DE9CC88B): operator "run now" certification sweep
   semanticMemoryReconcileRequested, // BI-DG-001: operator "run now" semantic-memory orphan reconciliation
   postmarkCallbackDispatchRequested,
+  workPatternExperimentRun,
 ];
 
 export const allFunctions = [...scheduledFunctions, ...eventFunctions];

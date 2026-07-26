@@ -322,4 +322,160 @@ describe("getWorkPatternReadModel", () => {
       shadowEvaluation: null,
     });
   });
+
+  it("projects a running governed experiment onto its existing Living Playbook", async () => {
+    const manifest = {
+      schemaVersion: 1 as const,
+      experimentDefinitionKey: "WPD-1",
+      experimentRunId: "WPR-1",
+      replicate: 1,
+      patternKey: "review-loop",
+      activityKey: "build.review",
+      riskClass: "internal-reversible" as const,
+      methodVariants: [
+        { methodVariantKey: "baseline", patternVersion: 1 },
+        { methodVariantKey: "candidate", patternVersion: 2 },
+      ],
+      modelVariants: [
+        { modelVariantKey: "model-a", modelProfileId: "profile-a" },
+        { modelVariantKey: "model-b", modelProfileId: "profile-b" },
+      ],
+      requiredCellKeys: [
+        "baseline:model-a",
+        "baseline:model-b",
+        "candidate:model-a",
+        "candidate:model-b",
+      ],
+      taskCorpusKey: "review-fixtures",
+      taskCorpusVersion: "1",
+      oracleKey: "review-oracle",
+      oracleVersion: "1",
+      promotionPolicyKey: "bounded-promotion",
+      promotionPolicyVersion: 1,
+      installScope: "canonical" as const,
+      lifecycle: "running" as const,
+    };
+    const db = {
+      listTaskRuns: vi.fn().mockResolvedValue([
+        {
+          taskRunId: "TR-WPX-1",
+          currentAgentId: "build-specialist",
+          initiatingAgentId: "build-specialist",
+          routeContext: "/build",
+          status: "working",
+          repeatedPatternKey: "work-pattern-experiment:WPD-1",
+          a2aMetadata: {
+            workPatternExperiment: manifest,
+            workPatternExperimentProjection: {
+              evidenceOrigin: "hermetic-replay",
+              validPairCount: 0,
+              resultSummary: "Candidate and baseline are still running.",
+              moreEvidenceNeeded: true,
+              invalidPairReasons: [],
+              freshnessAt: "2026-06-28T11:30:00.000Z",
+            },
+          },
+          createdAt: new Date("2026-06-28T11:00:00.000Z"),
+          completedAt: null,
+        },
+        {
+          taskRunId: "TR-WPC-1",
+          currentAgentId: "build-specialist",
+          initiatingAgentId: "build-specialist",
+          routeContext: "/build",
+          status: "submitted",
+          repeatedPatternKey: "work-pattern-experiment:WPD-1",
+          a2aMetadata: {
+            workPatternExperimentCell: {
+              schemaVersion: 1,
+              experimentRunId: "WPR-1",
+              experimentDefinitionKey: "WPD-1",
+              cellKey: "baseline:model-a",
+              pairKey: "pair",
+              methodVariantKey: "baseline",
+              modelVariantKey: "model-a",
+              attempt: 1,
+            },
+          },
+          createdAt: new Date("2026-06-28T11:01:00.000Z"),
+          completedAt: null,
+        },
+      ]),
+      listCapabilityNeeds: vi.fn().mockResolvedValue([]),
+    };
+
+    const model = await getWorkPatternReadModel({ agentId: "build-specialist", now }, { db });
+
+    expect(model.patterns).toHaveLength(1);
+    expect(model.patterns[0]).toMatchObject({
+      patternKey: "review-loop",
+      experiment: {
+        label: "Testing a better method",
+        lifecycle: "running",
+        validPairCount: 0,
+        evidenceOrigin: "hermetic-replay",
+        moreEvidenceNeeded: true,
+        methodVariants: ["baseline", "candidate"],
+        modelVariants: ["model-a", "model-b"],
+      },
+    });
+  });
+
+  it("keeps invalid completed evidence visible without styling it as active", async () => {
+    const db = {
+      listTaskRuns: vi.fn().mockResolvedValue([
+        {
+          taskRunId: "TR-WPX-2",
+          currentAgentId: "build-specialist",
+          initiatingAgentId: "build-specialist",
+          routeContext: "/build",
+          status: "completed",
+          repeatedPatternKey: "work-pattern-experiment:WPD-2",
+          a2aMetadata: {
+            workPatternExperiment: {
+              schemaVersion: 1,
+              experimentDefinitionKey: "WPD-2",
+              experimentRunId: "WPR-2",
+              replicate: 1,
+              patternKey: "review-loop",
+              activityKey: "build.review",
+              riskClass: "internal-reversible",
+              methodVariants: [{ methodVariantKey: "candidate", patternVersion: 2 }],
+              modelVariants: [{ modelVariantKey: "model-a", modelProfileId: "profile-a" }],
+              requiredCellKeys: ["candidate:model-a"],
+              taskCorpusKey: "review-fixtures",
+              taskCorpusVersion: "1",
+              oracleKey: "review-oracle",
+              oracleVersion: "1",
+              promotionPolicyKey: "bounded-promotion",
+              promotionPolicyVersion: 1,
+              installScope: "canonical",
+              lifecycle: "completed",
+            },
+            workPatternExperimentProjection: {
+              evidenceOrigin: "matched-cohort",
+              validPairCount: 0,
+              resultSummary: "The evidence could not be compared safely.",
+              moreEvidenceNeeded: true,
+              invalidPairReasons: ["source_commit_mismatch"],
+              freshnessAt: "2026-06-28T11:30:00.000Z",
+            },
+          },
+          createdAt: new Date("2026-06-28T11:00:00.000Z"),
+          completedAt: new Date("2026-06-28T11:30:00.000Z"),
+        },
+      ]),
+      listCapabilityNeeds: vi.fn().mockResolvedValue([]),
+    };
+
+    const model = await getWorkPatternReadModel({ agentId: "build-specialist", now }, { db });
+
+    expect(model.patterns[0]?.experiment).toMatchObject({
+      lifecycle: "completed",
+      validPairCount: 0,
+      invalidPairReasons: ["source_commit_mismatch"],
+      resultSummary: "The evidence could not be compared safely.",
+    });
+    expect(model.patterns[0]?.status).not.toBe("active");
+  });
 });

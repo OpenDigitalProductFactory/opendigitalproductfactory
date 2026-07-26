@@ -18,6 +18,12 @@ Build Studio is real, but it is still being hardened. It should be described as 
 
 Recent hardening work includes plan-review trajectory, design-time decomposition for oversized builds, activity quiescence for safer portal upgrades, and voice/follow-up guards in coworker chat. Complex source changes may still need VS Code in customizable installs while Build Studio keeps the design, review, test, and promotion record.
 
+Build Studio also has a governed experimentation substrate for reviewed Living Playbook candidates.
+Eligible immutable replay lanes can run autonomously in shadow, compare method and model factors,
+and record reproducible evidence without advancing a feature phase, creating a pull request,
+joining the merge queue, releasing software, or changing live customer state. Unsupported or
+higher-authority cases remain escalations.
+
 ## Key Concepts
 
 - **Phases** — The five stages every feature moves through: Ideate (define the problem), Plan (design the solution), Build (generate and test code), Review (quality gates), Ship (deploy to production).

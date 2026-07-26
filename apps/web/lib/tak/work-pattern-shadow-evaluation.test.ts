@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   evaluateWorkPatternShadowEvidence,
+  parseLegacyWorkPatternShadowTrials,
   parseWorkPatternShadowTrials,
 } from "./work-pattern-shadow-evaluation";
 
@@ -40,6 +41,28 @@ describe("parseWorkPatternShadowTrials", () => {
       toolCallDelta: -2,
     });
     expect(parsed[0].observedAt?.toISOString()).toBe("2026-06-28T10:00:00.000Z");
+  });
+});
+
+describe("parseLegacyWorkPatternShadowTrials", () => {
+  it("normalizes and deduplicates trials repeated across legacy JSON sources", () => {
+    const first = trial();
+    const second = trial({ trialId: "S-2" });
+
+    expect(parseLegacyWorkPatternShadowTrials(
+      { shadowTrials: [first, second] },
+      { shadowTrials: [first] },
+    )).toEqual(parseWorkPatternShadowTrials([first, second]));
+  });
+
+  it("preserves first-source order for compatibility", () => {
+    const first = trial({ trialId: "S-2" });
+    const second = trial({ trialId: "S-1" });
+
+    expect(parseLegacyWorkPatternShadowTrials(
+      { shadowTrials: [first] },
+      { shadowTrials: [second] },
+    ).map((row) => row.trialId)).toEqual(["S-2", "S-1"]);
   });
 });
 

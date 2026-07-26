@@ -217,6 +217,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "worktree-janitor",
+    inngestId: "ops/worktree-janitor",
+    name: "Worktree janitor fleet backstop (Tier-A)",
+    purpose:
+      "OPTIONAL fleet sweeper for leftover worktrees. Primary reaping is session-lifecycle (worktree-session-hygiene on SessionEnd). This portal Inngest job dry-runs when DPF_WORKTREE_JANITOR_ENABLED=1; live Tier-A only with DPF_WORKTREE_JANITOR_AUTO_REAP=1. Not a per-client CLI cron.",
+    cron: "40 5 * * *",
+    cadence: "Daily at 05:40",
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "sandbox-build-gc",
     inngestId: "ops/sandbox-build-gc",
     name: "Build Studio sandbox build GC",
