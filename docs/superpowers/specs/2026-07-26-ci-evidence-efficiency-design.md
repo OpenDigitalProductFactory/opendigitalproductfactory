@@ -4,8 +4,14 @@ status: draft-for-implementation
 date: 2026-07-26
 owner: platform
 related:
+  - docs/superpowers/specs/2026-03-17-build-disciplines-design.md
+  - docs/superpowers/specs/2026-04-27-artifact-provenance-receipts-design.md
+  - docs/superpowers/specs/2026-05-11-ai-routing-ux-verification-test-architecture-design.md
   - docs/superpowers/specs/2026-05-13-code-intelligence-graph-adoption-design.md
+  - docs/superpowers/specs/2026-05-31-tiered-dev-loop-isolation-design.md
   - docs/superpowers/plans/2026-05-13-code-intelligence-graph-adoption.md
+  - docs/superpowers/plans/2026-07-06-local-ci-gate-mechanical-enforcement.md
+  - docs/superpowers/plans/2026-07-26-merge-readiness-integrity.md
   - docs/testing/pr-health.md
   - scripts/ci-change-scope.mjs
   - scripts/lib/local-integration-ci.mjs
@@ -142,6 +148,26 @@ This is an architecture umbrella, not a competing implementation:
 
 The code graph is currently low-trust for CI selection: its live index is stale/dirty and exposes no trustworthy structural relationships. It may recommend tests after it meets freshness and recall requirements, but it must not yet be a sole blocking selector.
 
+## Prior-design reconciliation
+
+This design changes execution scheduling, not DPF's existing quality or merge-authority contracts.
+
+| Prior design | Reconciliation and retained owner |
+|---|---|
+| Build Disciplines (`2026-03-17`) | Test-first task execution and Build Studio's full verification gate remain unchanged. Affected PR selection is remote feedback optimization; it never authorizes production code without a test or replaces Build Studio phase evidence. |
+| Artifact Provenance Receipts (`2026-04-27`) | `ToolExecution` / `ToolExecutionReceipt` remain the canonical internal execution-provenance substrate. GitHub-hosted CI does not fabricate those rows or reuse a Build Studio receipt across builds. GitHub evidence uses the transport contract in “Exact-tree evidence” below. |
+| AI Routing and UX Verification (`2026-05-11`) | Route-budget measurement is not functional UX coverage. Changed-route PR evidence and the full route sweep complement—not replace—route-family Playwright journeys, static route/coworker contracts, `tests/e2e/platform-qa-plan.md`, model probes, or normalized failure evidence. |
+| Code Intelligence Graph Adoption (`2026-05-13`) | The evidence planner consumes `findRelatedTests` / `TESTED_BY` facts only when graph snapshot, confidence, and freshness contracts pass. Graph advice is one input; Vitest static relationships and fail-safe expansion remain independent. |
+| Tiered Dev-Loop Isolation (`2026-05-31`) and Local-CI Mechanical Enforcement (`2026-07-06`) | `pnpm pregate`, exact branch/SHA gate records, docs-only exemptions, `pr:health`, the `local-integration-ci` lease, and the shared convergence sandbox remain authoritative. The planner is shared logic inside that lifecycle, not a replacement pre-push path or a per-worktree runtime. |
+| Merge Readiness Integrity (`2026-07-26`) | The versioned merge-policy manifest, `Merge Readiness` aggregate, separate `UX Route Budget Sweep` context, DCO, `merge_group` triggers, legitimate skip semantics, and branch-protection drift audit remain the merge-authority source of truth. Lifecycle optimization occurs behind those stable contexts. |
+
+Normative consequences:
+
+- Pull-request selection does not weaken TDD, Build Studio phase gates, or the exhaustive merge-group proof.
+- The evidence planner must emit results through the existing `Merge Readiness` aggregate; it does not create a competing required-check list.
+- Functional UX journeys continue to be selected from the canonical QA inventory by route family and risk. A successful route-budget crawl alone is never functional acceptance evidence.
+- Local and GitHub planners must agree on impact classification, while each surface retains its existing evidence and authority mechanism.
+
 ## Standards and market benchmark
 
 ### Open-source / primary guidance
@@ -230,6 +256,8 @@ Run the exhaustive tier when any of these holds:
 
 “Unknown” means “full,” never “skip.”
 
+These rules also preserve the existing local-CI contract: a runtime-code push still requires a passing `pnpm pregate` record for the exact branch and SHA (or an explicit governed override), while the checked-in docs-only exemption remains intact. Planner output is additional structured evidence consumed by that gate.
+
 ### 3. Lifecycle matrix
 
 | Evidence | Pull request | Merge group | Push to `main` | Scheduled |
@@ -245,9 +273,16 @@ Run the exhaustive tier when any of these holds:
 
 The merge queue is deliberately exhaustive because it tests the integration result against the current target branch. Recent merge-group-only prose failures demonstrate that integration-sensitive ratchets catch real issues.
 
-### 4. Exact-tree evidence receipts
+The stable required contexts remain those owned by the merge-readiness design: `Merge Readiness`, `UX Route Budget Sweep`, and DCO. Internal jobs may be selected, combined, or reused only if the aggregate still evaluates every planned dependency and fails on failed or cancelled work; legitimate scope-driven skips remain allowed.
 
-Extend the existing `ToolExecutionReceipt` owner and link its use through `RuntimeVerification` / Work Capsule evidence rather than introducing a second evidence database. `ToolExecutionReceipt` already owns an input fingerprint, output digest, execution status, expiry, and receipt usages; the CI receipt is a typed receipt kind over that substrate. A receipt must include:
+### 4. Exact-tree evidence
+
+There are two provenance domains and they must not be conflated:
+
+1. **DPF-governed internal execution** continues to use canonical `ToolExecution` → `ToolExecutionReceipt` → immutable artifact revision / receipt usage contracts. Existing cross-build consumption restrictions remain unchanged.
+2. **GitHub-hosted CI execution** produces a checksummed, versioned `ci-evidence.json` workflow artifact plus GitHub CheckRun/CheckSuite identity. A workflow cannot mint a DPF `ToolExecutionReceipt` unless it actually executes through the governed DPF tool path.
+
+The GitHub evidence artifact must include:
 
 - repository and immutable Git tree SHA;
 - event and merge-group identity;
@@ -258,7 +293,9 @@ Extend the existing `ToolExecutionReceipt` owner and link its use through `Runti
 - artifact checksums;
 - creation and expiry times.
 
-Post-merge reuse is allowed only when the resulting `main` **tree** equals the tested merge-group tree and the receipt includes every required gate. A commit SHA comparison alone is insufficient because GitHub may materialize different commits for queue and merge events. Missing or mismatched receipts trigger a full run.
+Post-merge reuse is allowed only when the resulting `main` **tree** equals the tested merge-group tree, the workflow artifact checksum is valid, and the artifact includes every gate required by the versioned merge-policy manifest. A commit SHA comparison alone is insufficient because GitHub may materialize different commits for queue and merge events. Missing or mismatched evidence triggers a full run.
+
+The successful result may later be linked into `ExternalEvidenceRecord`, `RuntimeVerification`, or Work Capsule evidence for operator visibility. That import is a projection of GitHub's evidence, not a fabricated `ToolExecution` audit root and not a prerequisite for GitHub's merge authority.
 
 ### 5. Route sweep
 
@@ -271,6 +308,8 @@ Post-merge reuse is allowed only when the resulting `main` **tree** equals the t
 5. Keep the same route inventory; optimize execution, not coverage.
 
 The initial target is to reduce the 271–295 second crawl materially without increasing skipped routes, navigation races, or budget variance. The worker count is selected by evidence, not assumed to be four.
+
+The sweep remains a structural/budget measurement. Functional UX evidence continues to use route-family Playwright projects and journeys from `tests/e2e/platform-qa-plan.md`, with login/redirect assertions, persisted workflow outcomes, and failure-only traces/screenshots. Changed-route selection may choose which journeys run early on a PR; the exhaustive/risk-mandated functional set remains governed separately.
 
 ### 6. Build and setup reuse
 
@@ -365,6 +404,9 @@ Each step is independently reversible and must show its own before/after wall ti
 - UX sweep determinism and completion satisfy `BI-EA221325` before parallelism or ratchet enforcement is credited.
 - Exactly one authoritative CodeQL configuration remains, with language and required-check parity proved.
 - Post-merge reuse rejects a different tree, incomplete receipt, stale planner, expired evidence, or mismatched toolchain.
+- GitHub evidence reuse does not create or consume a cross-build `ToolExecutionReceipt`; internal receipt policy remains owned by the artifact-provenance design.
+- The versioned merge-policy manifest and stable `Merge Readiness` / UX / DCO contexts remain authoritative.
+- Affected PR selection leaves Build Studio TDD/full-verification and route-family functional UX contracts intact.
 - Flaky tests remain visible and forced into selected sets; retries never convert a red result into silent green evidence.
 - The implementation reports documentation impact and updates operator/contributor guidance with each lifecycle change.
 
