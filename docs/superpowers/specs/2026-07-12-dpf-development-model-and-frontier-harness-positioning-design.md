@@ -1,5 +1,9 @@
 # DPF Development Model & Frontier-Harness Positioning — Consolidated Strategy
 
+> **2026-07-25 implementation companion:** Governed model x method experimentation and the
+> evidence-bounded autonomous Build Studio consumer are specified in
+> [`2026-07-25-governed-playbook-experimentation-autonomous-build-studio-design.md`](2026-07-25-governed-playbook-experimentation-autonomous-build-studio-design.md).
+
 - **Status:** approved-direction (kernel-consulted; see §10)
 - **Authored:** 2026-07-12
 - **Epic anchors:** EP-1155CEF3 (doc consolidation), EP-27FD96BC (reasoning economy), EP-0AF96937 (decision governance), EP-F7E35344 (capability inputs)
