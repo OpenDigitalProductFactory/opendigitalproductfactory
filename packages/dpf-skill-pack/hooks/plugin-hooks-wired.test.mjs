@@ -215,8 +215,8 @@ test("plugin hook commands reference the script via ${CLAUDE_PLUGIN_ROOT}, not a
 });
 
 test("surface manifests wire the hooks file so guards ship on every surface", () => {
-  // Codex and Grok resolve the hooks manifest from an explicit plugin.json key.
-  // Both resolve component paths from the PLUGIN ROOT (the dir CONTAINING the
+  // Grok resolves the hooks manifest from an explicit plugin.json key.
+  // It resolves component paths from the PLUGIN ROOT (the dir CONTAINING the
   // .<surface>-plugin/ folder), so the key must be "./hooks/hooks.json". The
   // .grok-plugin manifest previously used "../hooks/hooks.json" on the wrong
   // assumption that it resolves from the .grok-plugin dir; live probing (BI-883FC2FC)
@@ -227,7 +227,6 @@ test("surface manifests wire the hooks file so guards ship on every surface", ()
   // guards still ship on Claude via the auto-loaded file, asserted present below.
   // BI-CA0ED781 / BI-883FC2FC. See also surface-manifest-paths.test.mjs.
   const declaring = [
-    [".codex-plugin", "./hooks/hooks.json"],
     [".grok-plugin", "./hooks/hooks.json"],
     [".antigravity-plugin", "./hooks/hooks.json"],
   ];
@@ -253,6 +252,18 @@ test("surface manifests wire the hooks file so guards ship on every surface", ()
   assert.ok(
     existsSync(join(here, "hooks.json")),
     "hooks/hooks.json must exist so Claude auto-loads the guards",
+  );
+
+  // Codex's current plugin manifest schema rejects an explicit hooks field.
+  // The dependency-free updater installs the same guards through
+  // ~/.codex/hooks.json, which is covered by update_agent_toolchain_test.py.
+  const codexManifest = JSON.parse(
+    readFileSync(join(here, "..", ".codex-plugin", "plugin.json"), "utf8"),
+  );
+  assert.equal(
+    codexManifest.hooks,
+    undefined,
+    '.codex-plugin/plugin.json must not declare unsupported "hooks"; the updater owns Codex hook wiring',
   );
 });
 

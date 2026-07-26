@@ -1,6 +1,6 @@
 {
   "name": "dpf-platform",
-  "version": "0.2.4",
+  "version": "0.2.5+codex.20260726032301",
   "description": "DPF-native agent skills for contributor sessions and in-portal coworkers.",
   "author": {
     "name": "Digital Product Factory",
@@ -21,8 +21,6 @@
     "wwmd"
   ],
   "skills": "./skills/",
-  "mcpServers": "./codex.mcp.json",
-  "hooks": "./hooks/hooks.json",
   "interface": {
     "displayName": "DPF Platform",
     "shortDescription": "DPF-native development and coworker skills",
@@ -33,6 +31,11 @@
       "Read",
       "Write"
     ],
-    "websiteURL": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory"
+    "websiteURL": "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory",
+    "defaultPrompt": [
+      "Ground this DPF decision in the founder kernel.",
+      "Plan this DPF change against the live backlog.",
+      "Review this work using DPF architecture doctrine."
+    ]
   }
 }

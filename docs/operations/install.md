@@ -202,7 +202,7 @@ Bearer tokens never appear in this file. The `transcript` field is routed throug
 
 For the avoidance of doubt, the installer:
 
-- Does **not** edit your `~/.codex/config.toml` outside the `[plugins."dpf-platform"]` block. Other blocks (user MCP servers, marketplaces, feature flags, project trust levels) are preserved byte-for-byte. User intent (`enabled = false` set manually) is preserved on re-runs.
+- Does **not** edit your `~/.codex/config.toml` outside the `[plugins."dpf-platform@personal"]` block. The updater migrates the retired bare `[plugins."dpf-platform"]` key because current Codex requires `<plugin>@<marketplace>`. Other blocks (user MCP servers, marketplaces, feature flags, project trust levels) are preserved byte-for-byte. User intent (`enabled = false` set manually) is preserved on re-runs.
 - Does **not** write your DPF MCP bearer token into any tracked file. The token is read from `DPF_MCP_BEARER_TOKEN` and never persisted to the agent toolchain state.
 - Does **not** auto-upgrade upstream-owned plugins (`superpowers@openai-curated`). If your installed version differs from the DPF pin, the banner shows an advisory line — no action is taken.
 - Does **not** prompt the contributor to run scripts or copy commands. Missing CLIs / tokens / drifted state become explicit readiness states with one primary action; never a command-copy.

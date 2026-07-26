@@ -99,7 +99,7 @@ When adding a skill to this pack:
 
 ## Plugin manifests
 
-The `.claude-plugin/plugin.json` manifest turns this directory into an installable Claude Code plugin. The `.codex-plugin/plugin.json` manifest exposes the same package to Codex. All three manifests (`.claude-plugin`, `.codex-plugin`, `.grok-plugin`) point to the same `skills/` directory and the same `hooks/hooks.json` — the governance guards (lease-guard + the UX-fit / spec-plan-doc prechecks) that ship to every surface per BI-CA0ED781, since Codex and Grok adopted the Claude `PreToolUse` hook protocol — plus client-specific DPF MCP descriptors:
+The `.claude-plugin/plugin.json` manifest turns this directory into an installable Claude Code plugin. The `.codex-plugin/plugin.json` manifest exposes the same skills package to Codex. Claude auto-loads `hooks/hooks.json`; Grok and Antigravity declare it in their manifests. Codex's current plugin manifest schema does not accept a `hooks` field, so the dependency-free updater installs the same governance guards through `~/.codex/hooks.json`. MCP wiring is likewise converged by the updater per client rather than declared in the Codex manifest:
 
 - `claude.mcp.json` — Claude Code MCP descriptor using `${DPF_MCP_URL:-http://127.0.0.1:3000/api/mcp/v1}` and `${DPF_MCP_BEARER_TOKEN:-}`.
 - `codex.mcp.json` — Codex MCP descriptor using local `http://127.0.0.1:3000/api/mcp/v1` plus `bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"`.
@@ -130,13 +130,17 @@ The dependency-free updater lives in this package:
 What the updater does:
 
 1. Validates the skill-pack manifests and `skills/` directory.
-2. Copies the current skill pack to the managed personal plugin location:
-   `~/.agents/plugins/plugins/dpf-platform`.
+2. Copies the current skill pack to the client-resolved managed plugin
+   locations:
+   - Codex personal marketplace source: `~/plugins/dpf-platform`
+   - shared Claude/Grok source: `~/.agents/plugins/plugins/dpf-platform`
 3. Writes or updates Codex's personal marketplace at
    `~/.agents/plugins/marketplace.json` with `dpf-platform` marked
    `INSTALLED_BY_DEFAULT`.
-4. Writes or updates `~/.codex/config.toml` with:
-   - `[plugins."dpf-platform"] enabled = true`
+4. Installs `dpf-platform@personal` through the Codex plugin registry, verifies
+   that Codex reports it installed and enabled, and writes or updates
+   `~/.codex/config.toml` with:
+   - `[plugins."dpf-platform@personal"] enabled = true`
    - `[mcp_servers.dpf]` pointing to the DPF MCP URL and
      `bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"`
 5. Writes a Claude local marketplace at

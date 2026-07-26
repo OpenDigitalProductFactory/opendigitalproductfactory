@@ -8,7 +8,7 @@
  *
  * Convergence scope (per docs/superpowers/specs/2026-06-05-unified-delivery-
  * surfaces-execution-alignment-design.md S4.5):
- *   - ensure `[plugins."dpf-platform"]` + `[mcp_servers.dpf]` (the DPF baseline);
+ *   - ensure `[plugins."dpf-platform@personal"]` + `[mcp_servers.dpf]` (the DPF baseline);
  *   - DISABLE generic, non-DPF clients that auto-spawn orphaned npx/node
  *     sidecars (`superpowers@openai-curated`, `build-ios-apps@openai-curated`
  *     plugins; `nanobanana-mcp`, `youtube_transcript` MCP servers). The decision
@@ -52,7 +52,8 @@ export type CodexConfigPlan = {
   convergence: CodexConfigConvergenceChange[];
 };
 
-const DPF_PLUGIN_KEY = "dpf-platform";
+const DPF_PLUGIN_KEY = "dpf-platform@personal";
+const LEGACY_DPF_PLUGIN_KEY = "dpf-platform";
 // Mirrors MCP_BEARER_TOKEN_ENV_VAR in apps/web/lib/auth/mcp-setup-snippets.ts.
 // Duplicated as a stable literal because this installer-side package must not
 // depend on the web bundle. Keep the two in lockstep.
@@ -199,7 +200,7 @@ function isGenericPlugin(pluginId: string): boolean {
  * Plan the Codex `config.toml` upsert for this contributor and repo.
  *
  * Converges the DPF working profile:
- *   - `[plugins."dpf-platform"]` enabled = true (the DPF skill pack)
+ *   - `[plugins."dpf-platform@personal"]` enabled = true (the DPF skill pack)
  *   - `[mcp_servers.dpf]` url + bearer_token_env_var (the governed MCP transport),
  *     written only when `mcpEndpoint` is supplied.
  *   - generic, non-DPF plugins (`superpowers`, `build-ios-apps`) disabled.
@@ -245,9 +246,13 @@ export function planCodexConfig(
   }
 
   const plugins = (parsed["plugins"] as Record<string, unknown> | undefined) ?? {};
-  const existingBlock = plugins[DPF_PLUGIN_KEY] as { enabled?: boolean } | undefined;
+  const currentBlock = plugins[DPF_PLUGIN_KEY] as { enabled?: boolean } | undefined;
+  const legacyBlock = plugins[LEGACY_DPF_PLUGIN_KEY] as { enabled?: boolean } | undefined;
+  const existingBlock = currentBlock ?? legacyBlock;
+  const legacyPluginPresent = Object.prototype.hasOwnProperty.call(plugins, LEGACY_DPF_PLUGIN_KEY);
   const userDisabledPlugin = existingBlock?.enabled === false;
-  const pluginConverged = existingBlock?.enabled === true || userDisabledPlugin;
+  const pluginConverged =
+    !legacyPluginPresent && (currentBlock?.enabled === true || currentBlock?.enabled === false);
 
   const mcpServers = (parsed["mcp_servers"] as Record<string, unknown> | undefined) ?? {};
   const existingMcp = mcpServers["dpf"] as
@@ -286,6 +291,7 @@ export function planCodexConfig(
   });
 
   const needsConvergence =
+    legacyPluginPresent ||
     genericPluginsToDisable.length > 0 ||
     genericMcpToDisable.length > 0 ||
     trustToAdd.length > 0;
@@ -308,11 +314,20 @@ export function planCodexConfig(
 
   // Plugin block: add/enable DPF unless the user explicitly disabled it.
   // We also disable the generic plugins in the same plugins map.
-  if (!pluginConverged || genericPluginsToDisable.length > 0) {
+  if (!pluginConverged || legacyPluginPresent || genericPluginsToDisable.length > 0) {
     const nextPlugins: Record<string, unknown> = { ...plugins };
-    if (!pluginConverged) {
-      nextPlugins[DPF_PLUGIN_KEY] = { ...(existingBlock ?? {}), enabled: true };
-      rationaleParts.push(`enable [plugins."${DPF_PLUGIN_KEY}"]`);
+    if (legacyPluginPresent) {
+      delete nextPlugins[LEGACY_DPF_PLUGIN_KEY];
+      rationaleParts.push(`migrate legacy [plugins."${LEGACY_DPF_PLUGIN_KEY}"]`);
+    }
+    if (!pluginConverged || legacyPluginPresent) {
+      nextPlugins[DPF_PLUGIN_KEY] = {
+        ...(existingBlock ?? {}),
+        enabled: userDisabledPlugin ? false : true,
+      };
+      rationaleParts.push(
+        `${userDisabledPlugin ? "preserve disabled" : "enable"} [plugins."${DPF_PLUGIN_KEY}"]`,
+      );
     }
     for (const id of genericPluginsToDisable) {
       const blk = (plugins[id] as Record<string, unknown> | undefined) ?? {};
