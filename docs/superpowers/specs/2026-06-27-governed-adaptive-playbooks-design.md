@@ -1,5 +1,10 @@
 # Governed Adaptive Playbooks - Translating Ornith-Style Self-Improving Work into DPF
 
+> **2026-07-25 continuation:** The proposal, review, Work Case staging, receipt, and resolution
+> foundation described here has shipped. Executable method variants, controlled baseline/candidate
+> trials, evidence-scope promotion, and the fully autonomous Build Studio consumer are specified in
+> [`2026-07-25-governed-playbook-experimentation-autonomous-build-studio-design.md`](2026-07-25-governed-playbook-experimentation-autonomous-build-studio-design.md).
+
 - **Status:** Design analysis
 - **Date:** 2026-06-27
 - **Author:** Codex, operator-directed
