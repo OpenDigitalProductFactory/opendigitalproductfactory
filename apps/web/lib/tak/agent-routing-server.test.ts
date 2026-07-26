@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 vi.mock("./agent-routing", () => ({
+  coworkerIdFromRecordRoute: vi.fn(),
   resolveAgentForRoute: vi.fn(),
 }));
 
@@ -22,7 +23,10 @@ vi.mock("@/lib/coworker-identity", () => ({
   resolveCoworkerIdentity: vi.fn(),
 }));
 
-import { resolveAgentForRoute } from "./agent-routing";
+import {
+  coworkerIdFromRecordRoute,
+  resolveAgentForRoute,
+} from "./agent-routing";
 import { loadPrompt } from "./prompt-loader";
 import { getSkillsForAgentLegacy } from "@/lib/actions/agent-skills";
 import { ensureAgentPrincipalIdentity } from "@/lib/identity/principal-linking";
@@ -35,6 +39,7 @@ import {
 describe("resolveAgentForRouteWithPrompts", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(coworkerIdFromRecordRoute).mockReturnValue(null);
     vi.mocked(resolveAgentForRoute).mockReturnValue({
       agentId: "hr-specialist",
       agentName: "HR Specialist",
@@ -101,5 +106,26 @@ describe("resolveAgentForRouteWithPrompts", () => {
         prompt: "Run the scout.",
       },
     ]);
+  });
+
+  it("loads the selected coworker for a coworker record route", async () => {
+    vi.mocked(coworkerIdFromRecordRoute).mockReturnValue(
+      "external-catalog-scout",
+    );
+
+    const result = await resolveAgentForRouteWithPrompts(
+      "/platform/ai/agent/external-catalog-scout",
+      {
+        platformRole: "HR-000",
+        isSuperuser: true,
+      },
+    );
+
+    expect(resolveAgentForRoute).not.toHaveBeenCalled();
+    expect(ensureAgentPrincipalIdentity).toHaveBeenCalledWith(
+      "external-catalog-scout",
+    );
+    expect(result.agentId).toBe("external-catalog-scout");
+    expect(result.agentName).toBe("External Catalog Scout");
   });
 });

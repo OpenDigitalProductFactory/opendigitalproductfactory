@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { resolveAgentForRoute, generateCannedResponse } from "./agent-routing";
+import {
+  coworkerIdFromRecordRoute,
+  generateCannedResponse,
+  resolveAgentForRoute,
+} from "./agent-routing";
 
 // High-risk route/agent/tool/QA-ID summary coverage lives in
 // apps/web/lib/testing/route-contracts.test.ts. Keep the role-conditional
@@ -36,6 +40,27 @@ describe("resolveAgentForRoute", () => {
     const result = resolveAgentForRoute("/unknown/path", superuser);
     expect(result.agentId).toBe("coo");
     expect(result.canAssist).toBe(true);
+  });
+
+  it("uses the selected coworker on a coworker record route", () => {
+    const result = resolveAgentForRoute(
+      "/platform/ai/agent/customer-advisor",
+      superuser,
+    );
+
+    expect(result.agentId).toBe("customer-advisor");
+    expect(result.agentName).toBe("Customer Advisor");
+    expect(result.canAssist).toBe(true);
+  });
+
+  it("does not bypass platform access for a selected coworker", () => {
+    const result = resolveAgentForRoute(
+      "/platform/ai/agent/customer-advisor",
+      noRole,
+    );
+
+    expect(result.agentId).toBe("customer-advisor");
+    expect(result.canAssist).toBe(false);
   });
 
   it("returns canAssist=false when user lacks capability", () => {
@@ -195,6 +220,20 @@ describe("resolveAgentForRoute", () => {
     // Verify the raw skills include both view and manage capabilities
     const viewSkills = eaAgent.skills.filter((s) => s.capability === "view_ea_modeler");
     expect(viewSkills.length).toBeGreaterThan(0);
+  });
+});
+
+describe("coworkerIdFromRecordRoute", () => {
+  it("decodes one safe coworker identifier", () => {
+    expect(
+      coworkerIdFromRecordRoute("/platform/ai/agent/AGT-WS-CUSTOMER?tab=overview"),
+    ).toBe("AGT-WS-CUSTOMER");
+  });
+
+  it("rejects nested, malformed, or non-record routes", () => {
+    expect(coworkerIdFromRecordRoute("/platform/ai/agent/one/more")).toBeNull();
+    expect(coworkerIdFromRecordRoute("/platform/ai/agent/%2F")).toBeNull();
+    expect(coworkerIdFromRecordRoute("/platform/ai/overview")).toBeNull();
   });
 });
 

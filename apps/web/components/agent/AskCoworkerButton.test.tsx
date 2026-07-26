@@ -43,6 +43,28 @@ describe("AskCoworkerButton", () => {
     expect(events[0].detail).toEqual({ autoMessage: "p" });
   });
 
+  it("can open a selected coworker without sending a message for the user", () => {
+    const events: CustomEvent[] = [];
+    const handler = (e: Event) => events.push(e as CustomEvent);
+    document.addEventListener("open-agent-panel", handler);
+
+    render(
+      <AskCoworkerButton
+        label="Ask this coworker"
+        routeContext="/platform/ai/agent/customer-advisor"
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Ask this coworker" }),
+    );
+
+    document.removeEventListener("open-agent-panel", handler);
+    expect(events).toHaveLength(1);
+    expect(events[0].detail).toEqual({
+      routeContext: "/platform/ai/agent/customer-advisor",
+    });
+  });
+
   it("carries an optional validated provider-review packet for deterministic dispatch", () => {
     const events: CustomEvent[] = [];
     const handler = (e: Event) => events.push(e as CustomEvent);

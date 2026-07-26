@@ -9,6 +9,10 @@
 
 import { resolveProactivityPlan, resolveProactivityPlanForLevel } from "./proactivity-resolver";
 import type { ProactivityLevel } from "./proactivity-types";
+import {
+  ownerFacingAreaForPortfolio,
+  type OwnerFacingArea,
+} from "@/lib/coworker-record/owner-areas";
 
 export type ProactivityRosterAgent = {
   agentId: string;
@@ -21,24 +25,10 @@ export type ProactivityRosterAgent = {
 /** An owner-friendly business area, ordered from the customer inward (the same
  *  outside-in axis the attention inbox uses), so the 100+ coworker roster reads
  *  as a few navigable sections rather than a flat dump. */
-export type ProactivityArea = {
-  key: string;
-  label: string;
-  order: number;
-};
-
-// The four canonical portfolios → plain owner-facing area labels, customer-inward.
-const AREA_BY_PORTFOLIO: Record<string, { label: string; order: number }> = {
-  products_and_services_sold: { label: "Customers and sales", order: 1 },
-  for_employees: { label: "Your team", order: 2 },
-  manufacturing_and_delivery: { label: "Operations and delivery", order: 3 },
-  foundational: { label: "Platform and back office", order: 4 },
-};
-const OTHER_AREA: ProactivityArea = { key: "other", label: "Other", order: 5 };
+export type ProactivityArea = OwnerFacingArea;
 
 export function areaForPortfolio(slug: string | null | undefined): ProactivityArea {
-  const match = slug ? AREA_BY_PORTFOLIO[slug] : undefined;
-  return match ? { key: slug as string, label: match.label, order: match.order } : OTHER_AREA;
+  return ownerFacingAreaForPortfolio(slug);
 }
 
 export type ProactivityRosterRow = ProactivityRosterAgent & {

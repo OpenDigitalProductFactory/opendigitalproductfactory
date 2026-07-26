@@ -4,7 +4,10 @@
 // Import this in server components / server actions — NOT in "use client" components.
 
 import "server-only";
-import { resolveAgentForRoute } from "./agent-routing";
+import {
+  coworkerIdFromRecordRoute,
+  resolveAgentForRoute,
+} from "./agent-routing";
 import { loadPrompt } from "./prompt-loader";
 import { getSkillsForAgentLegacy } from "@/lib/actions/agent-skills";
 import type { AgentInfo, AgentSkill } from "@/lib/agent-coworker-types";
@@ -32,6 +35,11 @@ export async function resolveAgentForRouteWithPrompts(
   userContext: UserContext,
   useUnified?: boolean,
 ): Promise<AgentInfo> {
+  const selectedCoworkerId = coworkerIdFromRecordRoute(pathname);
+  if (selectedCoworkerId) {
+    return resolveAgentByIdWithPrompts(selectedCoworkerId, userContext);
+  }
+
   // Get the base agent info with hardcoded prompts and inline skills
   const agent = resolveAgentForRoute(pathname, userContext, useUnified);
 

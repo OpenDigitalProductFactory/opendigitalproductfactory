@@ -3,6 +3,7 @@ import type { UserContext } from "@/lib/permissions";
 import type { AgentInfo, RouteAgentEntry, AgentSkill } from "@/lib/agent-coworker-types";
 import { getRouteSensitivity } from "@/lib/agent-sensitivity";
 import { resolveRouteContext, UNIVERSAL_SKILLS } from "@/lib/route-context-map";
+import { resolveAgentRoleLabel } from "@dpf/db/agent-identity";
 // prompt-loader is imported server-side only via agent-routing-server.ts.
 // This file stays free of @dpf/db for client component compatibility.
 
@@ -686,6 +687,43 @@ WHAT YOU DO NOT DO:
 
 const FALLBACK_ENTRY = ROUTE_AGENT_MAP["/workspace"]!;
 
+const COWORKER_RECORD_ROUTE_PREFIX = "/platform/ai/agent/";
+
+export function coworkerIdFromRecordRoute(pathname: string): string | null {
+  const path = pathname.split(/[?#]/, 1)[0] ?? "";
+  if (!path.startsWith(COWORKER_RECORD_ROUTE_PREFIX)) return null;
+
+  const encodedId = path.slice(COWORKER_RECORD_ROUTE_PREFIX.length);
+  if (!encodedId || encodedId.includes("/")) return null;
+
+  try {
+    const agentId = decodeURIComponent(encodedId).trim();
+    return /^[A-Za-z0-9_-]+$/.test(agentId) ? agentId : null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveSelectedCoworkerForRoute(
+  pathname: string,
+  userContext: UserContext,
+): AgentInfo | null {
+  const agentId = coworkerIdFromRecordRoute(pathname);
+  if (!agentId) return null;
+
+  const agentName = resolveAgentRoleLabel(agentId);
+  return {
+    agentId,
+    agentName,
+    agentDescription: `Work with ${agentName}`,
+    canAssist: can(userContext, "view_platform"),
+    sensitivity: "internal",
+    systemPrompt: "",
+    skills: [],
+    modelRequirements: {},
+  };
+}
+
 /** Exported for client-safe resolver in agent-routing-client.ts */
 export { PLATFORM_PREAMBLE, FALLBACK_ENTRY };
 export const ROUTE_AGENT_MAP_ENTRIES = Object.entries(ROUTE_AGENT_MAP);
@@ -718,6 +756,9 @@ export function resolveAgentForRoute(
   userContext: UserContext,
   useUnified?: boolean,
 ): AgentInfo {
+  const selectedCoworker = resolveSelectedCoworkerForRoute(pathname, userContext);
+  if (selectedCoworker) return selectedCoworker;
+
   if (useUnified) {
     const routeCtx = resolveRouteContext(pathname);
     return {
@@ -787,6 +828,9 @@ export function resolveAgentForRouteSync(
   pathname: string,
   userContext: UserContext,
 ): AgentInfo {
+  const selectedCoworker = resolveSelectedCoworkerForRoute(pathname, userContext);
+  if (selectedCoworker) return selectedCoworker;
+
   let bestMatch: RouteAgentEntry = FALLBACK_ENTRY;
   let bestLen = 0;
 
