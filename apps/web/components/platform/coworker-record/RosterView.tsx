@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  ChevronDown,
+  ChevronUp,
   ChevronRight,
   MessageSquare,
   RotateCcw,
@@ -84,6 +86,7 @@ export function RosterView({
       filterValueSets,
     ),
   );
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   useEffect(() => {
     const restoreFilters = () =>
       setFilters(
@@ -126,6 +129,10 @@ export function RosterView({
     filters.lifecycle,
     filters.coverageGap ? "coverage" : "",
   ].filter(Boolean).length;
+  const secondaryFilterCount =
+    advancedFilterCount +
+    [filters.interaction, filters.availability, filters.attentionOnly]
+      .filter(Boolean).length;
 
   function replaceFilters(next: RosterFilters) {
     setFilters(next);
@@ -181,121 +188,151 @@ export function RosterView({
               label: area.label,
             }))}
           />
-          <Select
-            label="Interaction"
-            value={filters.interaction}
-            onChange={(value) => set({ interaction: value })}
-            options={INTERACTION_OPTIONS}
-          />
-          <Select
-            label="Availability"
-            value={filters.availability}
-            onChange={(value) => set({ availability: value })}
-            options={AVAILABILITY_OPTIONS}
-          />
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-3">
-          <label className="inline-flex min-h-11 items-center gap-2 text-sm text-[var(--dpf-text-secondary)]">
-            <input
-              type="checkbox"
-              checked={filters.attentionOnly}
-              onChange={(event) =>
-                set({ attentionOnly: event.target.checked })
-              }
-              className="h-4 w-4"
-            />
-            Needs attention
-          </label>
           <button
             type="button"
-            onClick={() => replaceFilters(EMPTY_FILTERS)}
-            className="inline-flex min-h-11 items-center gap-2 rounded-md px-2 text-sm text-[var(--dpf-muted)] hover:bg-[var(--dpf-surface-2)] hover:text-[var(--dpf-text)]"
-            title="Reset filters"
+            aria-controls="coworker-secondary-filters"
+            aria-expanded={mobileFiltersOpen}
+            onClick={() => setMobileFiltersOpen((open) => !open)}
+            className="inline-flex min-h-11 items-center justify-between gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 text-sm font-medium text-[var(--dpf-text)] lg:hidden"
           >
-            <RotateCcw aria-hidden className="h-4 w-4" />
-            Reset
+            <span>
+              Filters
+              {secondaryFilterCount > 0 ? ` (${secondaryFilterCount})` : ""}
+            </span>
+            {mobileFiltersOpen ? (
+              <ChevronUp aria-hidden className="h-4 w-4" />
+            ) : (
+              <ChevronDown aria-hidden className="h-4 w-4" />
+            )}
           </button>
+          <div
+            className={
+              mobileFiltersOpen
+                ? "grid gap-3 sm:grid-cols-2 lg:contents"
+                : "hidden lg:contents"
+            }
+          >
+            <Select
+              label="Interaction"
+              value={filters.interaction}
+              onChange={(value) => set({ interaction: value })}
+              options={INTERACTION_OPTIONS}
+            />
+            <Select
+              label="Availability"
+              value={filters.availability}
+              onChange={(value) => set({ availability: value })}
+              options={AVAILABILITY_OPTIONS}
+            />
+          </div>
         </div>
 
-        <OwnerFirstDisclosure
-          summary={`More filters${advancedFilterCount > 0 ? ` (${advancedFilterCount})` : ""}`}
-          hint="Profession, role, lifecycle, and knowledge"
+        <div
+          id="coworker-secondary-filters"
+          className={mobileFiltersOpen ? "mt-3" : "hidden lg:block"}
         >
-          <div className="grid gap-3 pb-2 sm:grid-cols-2 xl:grid-cols-4">
-            <Select
-              label="Approval and autonomy"
-              value={filters.authority}
-              onChange={(value) => set({ authority: value })}
-              options={AUTHORITY_OPTIONS}
-            />
-            <Select
-              label="Profession"
-              value={filters.family}
-              onChange={(value) => set({ family: value })}
-              options={facets.families.map((family) => ({
-                value: family.key,
-                label: family.label,
-              }))}
-            />
-            <Select
-              label="Role type"
-              value={filters.kind}
-              onChange={(value) => set({ kind: value })}
-              options={kindOpts.map((kind) => ({
-                value: kind,
-                label: titleCase(kind),
-              }))}
-            />
-            <Select
-              label="Lifecycle"
-              value={filters.lifecycle}
-              onChange={(value) => set({ lifecycle: value })}
-              options={facets.lifecycleStages.map((value) => ({
-                value,
-                label: titleCase(value),
-              }))}
-            />
-            <Select
-              label="Value stream"
-              value={filters.valueStream}
-              onChange={(value) => set({ valueStream: value })}
-              options={facets.valueStreams.map((value) => ({
-                value,
-                label: titleCase(value),
-              }))}
-            />
-            <Select
-              label="Competency"
-              value={filters.competency}
-              onChange={(value) => set({ competency: value })}
-              options={facets.competencies.map((value) => ({
-                value,
-                label: titleCase(value),
-              }))}
-            />
-            <Select
-              label="Jurisdiction"
-              value={filters.jurisdiction}
-              onChange={(value) => set({ jurisdiction: value })}
-              options={facets.jurisdictions.map((value) => ({
-                value,
-                label: value,
-              }))}
-            />
-            <label className="inline-flex min-h-11 items-end gap-2 pb-2 text-sm text-[var(--dpf-text-secondary)]">
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="inline-flex min-h-11 items-center gap-2 text-sm text-[var(--dpf-text-secondary)]">
               <input
                 type="checkbox"
-                checked={filters.coverageGap}
+                checked={filters.attentionOnly}
                 onChange={(event) =>
-                  set({ coverageGap: event.target.checked })
+                  set({ attentionOnly: event.target.checked })
                 }
-                className="mb-0.5 h-4 w-4"
+                className="h-4 w-4"
               />
-              Knowledge coverage gaps
+              Needs attention
             </label>
+            <button
+              type="button"
+              onClick={() => replaceFilters(EMPTY_FILTERS)}
+              className="inline-flex min-h-11 items-center gap-2 rounded-md px-2 text-sm text-[var(--dpf-muted)] hover:bg-[var(--dpf-surface-2)] hover:text-[var(--dpf-text)]"
+              title="Reset filters"
+            >
+              <RotateCcw aria-hidden className="h-4 w-4" />
+              Reset
+            </button>
           </div>
-        </OwnerFirstDisclosure>
+
+          <OwnerFirstDisclosure
+            summary={`More filters${advancedFilterCount > 0 ? ` (${advancedFilterCount})` : ""}`}
+            hint="Profession, role, lifecycle, and knowledge"
+          >
+            <div className="grid gap-3 pb-2 sm:grid-cols-2 xl:grid-cols-4">
+              <Select
+                label="Approval and autonomy"
+                value={filters.authority}
+                onChange={(value) => set({ authority: value })}
+                options={AUTHORITY_OPTIONS}
+              />
+              <Select
+                label="Profession"
+                value={filters.family}
+                onChange={(value) => set({ family: value })}
+                options={facets.families.map((family) => ({
+                  value: family.key,
+                  label: family.label,
+                }))}
+              />
+              <Select
+                label="Role type"
+                value={filters.kind}
+                onChange={(value) => set({ kind: value })}
+                options={kindOpts.map((kind) => ({
+                  value: kind,
+                  label: titleCase(kind),
+                }))}
+              />
+              <Select
+                label="Lifecycle"
+                value={filters.lifecycle}
+                onChange={(value) => set({ lifecycle: value })}
+                options={facets.lifecycleStages.map((value) => ({
+                  value,
+                  label: titleCase(value),
+                }))}
+              />
+              <Select
+                label="Value stream"
+                value={filters.valueStream}
+                onChange={(value) => set({ valueStream: value })}
+                options={facets.valueStreams.map((value) => ({
+                  value,
+                  label: titleCase(value),
+                }))}
+              />
+              <Select
+                label="Competency"
+                value={filters.competency}
+                onChange={(value) => set({ competency: value })}
+                options={facets.competencies.map((value) => ({
+                  value,
+                  label: titleCase(value),
+                }))}
+              />
+              <Select
+                label="Jurisdiction"
+                value={filters.jurisdiction}
+                onChange={(value) => set({ jurisdiction: value })}
+                options={facets.jurisdictions.map((value) => ({
+                  value,
+                  label: value,
+                }))}
+              />
+              <label className="inline-flex min-h-11 items-end gap-2 pb-2 text-sm text-[var(--dpf-text-secondary)]">
+                <input
+                  type="checkbox"
+                  checked={filters.coverageGap}
+                  onChange={(event) =>
+                    set({ coverageGap: event.target.checked })
+                  }
+                  className="mb-0.5 h-4 w-4"
+                />
+                Knowledge coverage gaps
+              </label>
+            </div>
+          </OwnerFirstDisclosure>
+        </div>
       </div>
 
       <p
@@ -364,6 +401,16 @@ function RosterRowCard({
   const canStartConversation = row.canStartConversation;
   const setupNeeded = row.availability.state === "setup-needed";
   const attention = needsAttention(row);
+  const availabilityOwnsAttention =
+    row.availability.state === "setup-needed" ||
+    row.availability.state === "needs-attention";
+  const coverageNeedsReview =
+    row.availability.state === "coverage-not-defined";
+  const coverageSetupHref = row.availability.reason
+    .toLowerCase()
+    .includes("business type")
+    ? "/storefront/settings/business"
+    : "/platform/ai/readiness";
 
   return (
     <article
@@ -375,7 +422,7 @@ function RosterRowCard({
           <h3 className="text-sm font-semibold text-[var(--dpf-text)]">
             {row.displayName}
           </h3>
-          {attention && (
+          {attention && !availabilityOwnsAttention && (
             <StatusBadge
               intent="warning"
               label="Needs attention"
@@ -387,6 +434,9 @@ function RosterRowCard({
           {row.plainJob}
         </p>
         <div className="mt-3 flex min-w-0 flex-wrap gap-2">
+          <span className="self-center text-xs font-medium text-[var(--dpf-muted)]">
+            Work includes
+          </span>
           {row.interaction.scopes.map((scope, index) => (
             <StatusBadge
               key={scope}
@@ -426,6 +476,15 @@ function RosterRowCard({
           >
             <Settings2 aria-hidden className="h-4 w-4" />
             Finish setup
+          </Link>
+        )}
+        {coverageNeedsReview && (
+          <Link
+            href={coverageSetupHref}
+            className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--dpf-border)] px-3 text-sm font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
+          >
+            <Settings2 aria-hidden className="h-4 w-4" />
+            Review availability
           </Link>
         )}
         <Link

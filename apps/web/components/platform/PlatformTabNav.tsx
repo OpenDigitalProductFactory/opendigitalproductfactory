@@ -29,7 +29,7 @@ export function PlatformTabNav() {
 
   return (
     <>
-      <div className="grid gap-2 md:hidden" data-component="platform-mobile-nav">
+      <div className="grid gap-2 lg:hidden" data-component="platform-mobile-nav">
         <select
           aria-label="Platform area"
           value={activeFamily.href}
@@ -65,7 +65,7 @@ export function PlatformTabNav() {
         )}
       </div>
 
-      <div className="hidden md:block">
+      <div className="hidden lg:block">
         <SectionNav
           config={{
             variant: "families",

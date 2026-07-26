@@ -219,7 +219,19 @@ describe("matchesFilters", () => {
 
 describe("attention and URL state", () => {
   it("keeps owner attention separate from technical knowledge coverage", () => {
+    const base = row();
     expect(needsAttention(row())).toBe(false);
+    expect(
+      needsAttention(
+        row({
+          availability: {
+            ...base.availability,
+            state: "setup-needed",
+            label: "Setup needed",
+          },
+        }),
+      ),
+    ).toBe(true);
     expect(needsAttention(row({ providerHealthy: false }))).toBe(true);
     expect(needsAttention(row({ openBlockers: 1 }))).toBe(true);
     expect(needsAttention(row({ coveragePct: 40 }))).toBe(false);

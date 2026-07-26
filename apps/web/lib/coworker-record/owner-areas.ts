@@ -49,4 +49,3 @@ export function ownerFacingAreaForPortfolio(
     OTHER_OWNER_FACING_AREA
   );
 }
-

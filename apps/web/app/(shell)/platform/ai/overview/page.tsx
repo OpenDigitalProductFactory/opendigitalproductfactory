@@ -3,6 +3,7 @@
 // directory of every coworker (profession family / value stream / competency /
 // jurisdiction / lifecycle / coverage-gap) with fitness-for-duty signals,
 // each row linking to that coworker's record.
+import Link from "next/link";
 import { loadRoster } from "@/lib/coworker-record/roster";
 import { loadProfessionCorpusSignals } from "@/lib/coworker-record/corpus-signals";
 import { RosterView } from "@/components/platform/coworker-record/RosterView";
@@ -45,9 +46,21 @@ export default async function PlatformAiOverviewPage({
           initialQuery={initialQuery}
         />
       ) : (
-        <p className="text-sm text-[var(--dpf-muted)]">
-          No coworkers registered yet.
-        </p>
+        <div className="border-l-2 border-[var(--dpf-accent)] py-1 pl-4">
+          <h2 className="text-sm font-semibold text-[var(--dpf-text)]">
+            No selectable coworkers
+          </h2>
+          <p className="mt-1 max-w-2xl text-sm text-[var(--dpf-muted)]">
+            Coworkers may be inactive, not in production, or missing matching
+            identity records.
+          </p>
+          <Link
+            href="/platform/ai/readiness"
+            className="mt-3 inline-flex min-h-11 items-center text-sm font-medium text-[var(--dpf-accent)] hover:underline"
+          >
+            Review workforce readiness
+          </Link>
+        </div>
       )}
 
       <div className="mt-8">

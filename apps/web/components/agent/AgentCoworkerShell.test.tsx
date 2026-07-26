@@ -452,6 +452,26 @@ describe("AgentCoworkerShell support entry", () => {
     expect(startFeedbackSupportMock).not.toHaveBeenCalled();
   });
 
+  it("lets named coworker actions own roster and record entry", async () => {
+    pathname = "/platform/ai/overview";
+    renderShell();
+    await settleShellThread();
+
+    expect(screen.queryByTestId("agent-fab")).not.toBeInTheDocument();
+
+    act(() => {
+      document.dispatchEvent(
+        new CustomEvent("open-agent-panel", {
+          detail: {
+            routeContext: "/platform/ai/agent/customer-advisor",
+          },
+        }),
+      );
+    });
+
+    expect(await screen.findByTestId("coworker-panel")).toBeInTheDocument();
+  });
+
   it("starts a provider consultation once the routed COO thread is ready without auto-sending a duplicate model turn", async () => {
     pathname = "/workspace";
     renderShell();

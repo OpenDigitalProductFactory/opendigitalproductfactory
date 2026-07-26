@@ -681,6 +681,9 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
 
   const isDocked = dockedFrame !== null;
   const usesFixedFrame = isDocked || isMobile;
+  const namedCoworkerEntryOwnsRoute =
+    pathname === "/platform/ai/overview" ||
+    pathname.startsWith("/platform/ai/agent/");
   const panelStyle = isMobile
     ? {
         position: "fixed" as const,
@@ -738,7 +741,9 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
 
   return (
     <>
-      {!isOpen && <AgentFAB onClick={handleOpen} />}
+      {!isOpen && !namedCoworkerEntryOwnsRoute && (
+        <AgentFAB onClick={handleOpen} />
+      )}
 
       {isOpen && (
         <div

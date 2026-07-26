@@ -5,7 +5,7 @@
 // the same order as `tabs`, so all data fetching/rendering stays server-side
 // (no prop serialization). This component owns only the active-tab state.
 
-import { useState, Children } from "react";
+import { Children, useEffect, useState } from "react";
 
 export type CoworkerTab = { id: string; label: string; badge?: string | null };
 
@@ -19,9 +19,31 @@ export function CoworkerRecordTabs({
   const [active, setActive] = useState(0);
   const panels = Children.toArray(children);
 
-  function focusTab(index: number) {
+  useEffect(() => {
+    function restoreSection() {
+      const requested = window.location.hash.slice(1);
+      const index = tabs.findIndex((tab) => tab.id === requested);
+      setActive(index >= 0 ? index : 0);
+    }
+
+    restoreSection();
+    window.addEventListener("hashchange", restoreSection);
+    return () => window.removeEventListener("hashchange", restoreSection);
+  }, [tabs]);
+
+  function activateTab(index: number) {
     const next = Math.max(0, Math.min(tabs.length - 1, index));
     setActive(next);
+    const tab = tabs[next];
+    if (!tab) return;
+    const url = new URL(window.location.href);
+    url.hash = next === 0 ? "" : tab.id;
+    window.history.replaceState(window.history.state, "", url);
+  }
+
+  function focusTab(index: number) {
+    const next = Math.max(0, Math.min(tabs.length - 1, index));
+    activateTab(next);
     window.requestAnimationFrame(() => {
       document.getElementById(`tab-${tabs[next]?.id}`)?.focus();
     });
@@ -35,7 +57,7 @@ export function CoworkerRecordTabs({
         </span>
         <select
           value={active}
-          onChange={(event) => setActive(Number(event.target.value))}
+          onChange={(event) => activateTab(Number(event.target.value))}
           className="h-11 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 text-sm text-[var(--dpf-text)]"
         >
           {tabs.map((tab, index) => (
@@ -59,7 +81,7 @@ export function CoworkerRecordTabs({
             aria-selected={active === i}
             aria-controls={`panel-${tab.id}`}
             type="button"
-            onClick={() => setActive(i)}
+            onClick={() => activateTab(i)}
             onKeyDown={(event) => {
               if (event.key === "ArrowRight") {
                 event.preventDefault();

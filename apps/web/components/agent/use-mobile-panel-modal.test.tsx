@@ -35,6 +35,7 @@ function Harness({
       >
         <button type="button">First action</button>
         <button type="button">Last action</button>
+        <input type="file" aria-label="Hidden upload" style={{ display: "none" }} />
       </div>
     </>
   );
@@ -65,6 +66,18 @@ describe("useMobilePanelModal", () => {
     fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
     expect(document.activeElement).toBe(
       screen.getByRole("button", { name: "Last action" }),
+    );
+  });
+
+  it("ignores visually hidden controls when wrapping focus forward", () => {
+    render(<Harness />);
+    const lastAction = screen.getByRole("button", { name: "Last action" });
+    lastAction.focus();
+
+    fireEvent.keyDown(lastAction, { key: "Tab" });
+
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "First action" }),
     );
   });
 

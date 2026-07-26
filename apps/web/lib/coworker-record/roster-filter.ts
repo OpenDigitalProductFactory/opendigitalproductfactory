@@ -124,6 +124,7 @@ export function matchesFilters(row: RosterRow, f: RosterFilters): boolean {
 
 export function needsAttention(row: RosterRow): boolean {
   return (
+    row.availability.state === "setup-needed" ||
     row.availability.state === "needs-attention" ||
     row.authority.state === "review-needed" ||
     !row.providerHealthy ||

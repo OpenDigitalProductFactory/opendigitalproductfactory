@@ -244,6 +244,11 @@ export default async function AgentDetailPage({
     plainJob,
   } = discovery;
   const interactionLabel = interaction.labels.join(", ");
+  const coverageSetupHref = availability.reason
+    .toLowerCase()
+    .includes("business type")
+    ? "/storefront/settings/business"
+    : "/platform/ai/readiness";
   const authority = projectCoworkerServiceAuthority({
     agent: {
       agentId: agent.agentId,
@@ -387,6 +392,15 @@ export default async function AgentDetailPage({
                 Finish setup
               </Link>
             )}
+            {availability.state === "coverage-not-defined" && (
+              <Link
+                href={coverageSetupHref}
+                className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--dpf-border)] px-3 text-sm font-semibold text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
+              >
+                <Settings2 aria-hidden className="h-4 w-4" />
+                Review availability
+              </Link>
+            )}
             <RecordActionsMenu
               actions={[
                 { label: "Edit persona prompt", href: "/platform/ai/prompts" },
@@ -406,9 +420,9 @@ export default async function AgentDetailPage({
 
         <dl className="mt-5 grid border-y border-[var(--dpf-border)] sm:grid-cols-3 sm:divide-x sm:divide-[var(--dpf-border)]">
           <OwnerStatus
-            label="Interaction"
+            label="Work includes"
             value={interactionLabel}
-            detail="Who this coworker's declared work can interact with."
+            detail="Interaction across this coworker's declared services."
           />
           <OwnerStatus
             label="Availability"

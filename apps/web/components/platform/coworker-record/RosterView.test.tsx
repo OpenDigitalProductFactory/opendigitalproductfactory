@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RosterView } from "./RosterView";
@@ -181,5 +187,51 @@ describe("RosterView", () => {
     expect(
       screen.getByRole("link", { name: /View coworker/ }).getAttribute("href"),
     ).toContain("returnTo=");
+  });
+
+  it("progressively discloses secondary filters without duplicating controls", () => {
+    render(<RosterView rows={[row()]} facets={facets} />);
+
+    const filtersButton = screen.getByRole("button", { name: "Filters" });
+    const filterRegion = document.getElementById("coworker-secondary-filters");
+    expect(filtersButton.getAttribute("aria-expanded")).toBe("false");
+    expect(filterRegion?.classList.contains("hidden")).toBe(true);
+    expect(screen.getAllByLabelText("Interaction")).toHaveLength(1);
+
+    fireEvent.click(filtersButton);
+
+    expect(filtersButton.getAttribute("aria-expanded")).toBe("true");
+    expect(filterRegion?.classList.contains("hidden")).toBe(false);
+  });
+
+  it("shows one availability warning and an honest recovery path", () => {
+    render(
+      <RosterView
+        rows={[
+          row({
+            availability: {
+              state: "coverage-not-defined",
+              label: "Coverage not defined",
+              reason: "No storefront business type is configured.",
+              matchLevel: null,
+              evidence: [],
+            },
+            canStartConversation: false,
+          }),
+        ]}
+        facets={facets}
+      />,
+    );
+
+    const card = document.querySelector("[data-coworker-card]");
+    expect(card).not.toBeNull();
+    const cardView = within(card as HTMLElement);
+    expect(cardView.getAllByText("Coverage not defined")).toHaveLength(1);
+    expect(cardView.queryByText("Needs attention")).toBeNull();
+    expect(
+      cardView
+        .getByRole("link", { name: "Review availability" })
+        .getAttribute("href"),
+    ).toBe("/storefront/settings/business");
   });
 });

@@ -97,4 +97,16 @@ describe("PlatformAiOverviewPage", () => {
     expect(html).toContain("Acts with review");
     expect(html).toContain("/platform/ai/agent/hr-specialist");
   });
+
+  it("describes an empty selectable roster honestly and offers a recovery path", async () => {
+    vi.mocked(loadRoster).mockResolvedValue({ rows: [], facets });
+
+    const { default: PlatformAiOverviewPage } = await import("./page");
+    const html = renderToStaticMarkup(await PlatformAiOverviewPage());
+
+    expect(html).toContain("No selectable coworkers");
+    expect(html).toContain("inactive, not in production, or missing matching identity records");
+    expect(html).toContain('href="/platform/ai/readiness"');
+    expect(html).not.toContain("No coworkers registered yet");
+  });
 });
