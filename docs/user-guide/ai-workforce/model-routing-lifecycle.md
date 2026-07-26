@@ -100,7 +100,9 @@ When an agent needs to call an LLM, the routing pipeline runs in this order:
 1. **Load AgentModelConfig** for the agent. If a DB row exists, use its tier and budget. Otherwise, fall back to code defaults.
 2. **Convert tier to minimum dimensions.** For example, `frontier` becomes `{ codegen: 85, toolFidelity: 85, reasoning: 85 }`.
 3. **Load all endpoint manifests.** Query `ModelProfile` where `modelStatus` is `active` or `degraded`, joined with `ModelProvider` where `status` is `active` or `degraded`.
-4. **Hard filter (V2 pipeline).** Exclude models that fail any of:
+4. **Screen the task payload before dispatch.** The provider setup facts are not a one-time approval for every future request. Before an LLM call leaves the install, DPF screens the actual system prompt, messages, tool schemas, tool arguments, and tool results for sensitive data classes such as customer records, employee records, financial data, credentials, source code, regulated records, and unknown governed data. The screen records only hashes, data classes, policy versions, and transformation status; it does not store raw prompt content or detected secret values.
+5. **Compile data-policy constraints into the request.** If the payload is public or ordinary internal work, the low-cost eligible providers can remain available. If the payload contains confidential, restricted, or unknown governed data, the data-governance decision can narrow allowed providers, deny external services, require local/private routing, require masking or tokenization, or stop for human review. Provider cost, model quality, capacity, and pins cannot loosen that result.
+6. **Hard filter (V2 pipeline).** Exclude models that fail any of:
    - Provider is outside `RequestContract.allowedProviders`
    - Provider is present in `RequestContract.deniedProviders` (deny wins if both lists contain it)
    - Status not active/degraded
@@ -108,14 +110,14 @@ When an agent needs to call an LLM, the routing pipeline runs in this order:
    - Sensitivity clearance doesn't cover the request
    - Missing required capability (e.g., tool use)
    - Any dimension score below the minimum threshold
-5. **Rank by cost-per-success.** Estimate success probability for each remaining model. With `quality_first` budget, rank by success probability alone. With `minimize_cost`, rank by cost efficiency.
-6. **Apply an exceptional provider/model preference override.** If configured, the
+7. **Rank by cost-per-success.** Estimate success probability for each remaining model. With `quality_first` budget, rank by success probability alone. With `minimize_cost`, rank by cost efficiency.
+8. **Apply an exceptional provider/model preference override.** If configured, the
    preferred endpoint replaces the cost/quality winner only when it remains in the
    eligible candidate set. A pin cannot override provider allow/deny, sensitivity,
    residency, capability, model-class, status, or other hard exclusions. If its
    target is unavailable or excluded, routing records a warning and keeps the
    V2-selected route.
-7. **Dispatch with the eligible fallback chain.** Try the selected model, then the next eligible model after an inference error. A provider excluded by the request policy never reappears in fallback.
+9. **Dispatch with the eligible fallback chain.** Try the selected model, then the next eligible model after an inference error. A provider excluded by the request policy never reappears in fallback, and fallback receives only the same screened or transformed payload.
 
 Provider allow/deny constraints are request-level hard policy, distinct from the provider registry's `modelRestrictions` discovery allowlist. An explicitly empty `allowedProviders` list means no provider is eligible; routing returns no endpoint rather than treating the empty list as “allow any.” Cost, quality, provider health, capacity, and pin preferences only rank the providers that remain after the hard filter.
 
@@ -126,6 +128,8 @@ DPF evaluates the work being done, not only the company and provider name. The a
 That means one connected provider can be available for public marketing copy and unavailable for patient, student, financial-customer, public-sector, source-code, or credential work in the same company. Governed data classification always wins over an archetype or activity default. Missing or conflicting classification on high-risk work requires review and cannot be relaxed by cost, model quality, occupation, or a provider pin.
 
 An employee's occupation focuses the explanations and recommendations they see. It does not grant data access, expand coworker or tool authority, or make a blocked provider eligible.
+
+When masking is safe, DPF can replace sensitive details with labels or stable tokens before a public or lower-cost model sees the request, then rehydrate only for the same authorized actor and surface. When the exact value is necessary for correctness, masking is not used as a workaround. The route must use an eligible internal, local, or enterprise provider, or the platform blocks the request with a short explanation and next action.
 
 ### Evidence belongs to the connected account
 

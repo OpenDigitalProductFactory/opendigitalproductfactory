@@ -28,6 +28,12 @@ export const DATA_PEP_CAPABILITY_MATRIX: Readonly<
     "disposition-evidence",
   ]),
   "coworker-context": new Set<DataObligationKind>(["mask", "log-use"]),
+  "inference-dispatch": new Set<DataObligationKind>([
+    "mask",
+    "destination",
+    "log-use",
+    "human-approval",
+  ]),
   projection: new Set<DataObligationKind>([
     "mask",
     "encrypt",
