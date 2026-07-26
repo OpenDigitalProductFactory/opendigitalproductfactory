@@ -19,6 +19,8 @@ export interface RouteAndCallOptions {
   deniedProviders?: string[];
   /** Hard residency boundary. Never widened by fallback. */
   residencyPolicy?: RequestContract["residencyPolicy"];
+  /** Optional system prompt text for side-effect-free route previews that need data screening parity. */
+  screeningSystemPrompt?: string;
   modelTier?: "local" | "robust";
   minimumDimensions?: Record<string, number>;
   requiredModelClass?: ModelClass;

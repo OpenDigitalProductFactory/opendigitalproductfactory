@@ -1,4 +1,6 @@
 import type { ChatMessage } from "@/lib/inference/ai-inference";
+import type { DataEffect, DestinationClass } from "@/lib/govern/data/taxonomy";
+import type { RequestContract } from "@/lib/routing/request-contract";
 
 export type InferenceDataClass =
   | "customer-records"
@@ -34,6 +36,31 @@ export type InferencePayloadReceipt = {
   matchCount: number;
   transformation: "none" | "masked" | "tokenized" | "blocked";
   rawPayloadStored: false;
+};
+
+export type InferenceDataScreenRouteContext = Pick<
+  RequestContract,
+  "sensitivity" | "allowedProviders" | "deniedProviders" | "residencyPolicy"
+>;
+
+export type InferenceDataScreenReceipt = {
+  schemaVersion: "inference-data-screen/v1";
+  screenId: string;
+  decisionIds: string[];
+  inputHash: string;
+  classifiedDataClasses: InferenceDataClass[];
+  policyEffect: DataEffect;
+  routeEffect: "allow" | "local-only" | "block";
+  destinationClass: DestinationClass;
+  transformation: InferencePayloadReceipt["transformation"];
+  explanationCodes: string[];
+  obligationKinds: string[];
+  rawPayloadStored: false;
+};
+
+export type InferenceDataScreenResult = {
+  routeContext: InferenceDataScreenRouteContext;
+  receipt: InferenceDataScreenReceipt;
 };
 
 export type GovernedPayloadHint = {
