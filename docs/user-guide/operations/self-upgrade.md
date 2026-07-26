@@ -36,9 +36,11 @@ waiting, but the platform does not move forward on its own.
 - A failed upgrade is **automatically rolled back** and its promoter container is
   force-removed, so a broken build cannot leave the install in a half-swapped
   state.
-- The build is bounded by a hard wall-clock budget (default **25 minutes**). If a
-  build step stalls, the promoter is killed and the deployment is marked failed
-  with a retryable `promoter-timeout` diagnosis instead of hanging.
+- Candidate promoter preparation and the application build use Docker BuildKit
+  and the same bounded wall-clock budget (default **25 minutes**). If either
+  build stalls, it is killed and the deployment is marked failed with a
+  retryable `promoter-timeout` diagnosis instead of hanging. Candidate
+  preparation finishes before the platform begins quiescing.
 - A periodic watchdog force-removes any promoter container orphaned by a
   mid-deployment restart, so a stalled build can never linger and cause an
   unexpected later swap.
@@ -47,7 +49,7 @@ waiting, but the platform does not move forward on its own.
 
 - If an upgrade fails, open the deployment log for the retryable diagnosis, then
   re-run the upgrade.
-- Operators on unusually slow hosts can raise the build budget by setting
+- Operators on unusually slow hosts can raise the shared build budget by setting
   `DPF_PROMOTER_TIMEOUT_MS` (milliseconds) in the environment.
 - Deployment windows and change-request lifecycle are managed from the wider
   Operations area.

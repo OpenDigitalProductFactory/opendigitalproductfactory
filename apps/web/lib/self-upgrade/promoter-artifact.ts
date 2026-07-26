@@ -49,7 +49,8 @@ export async function buildCandidatePromoterArtifactImage(
   const contractDigest = `sha256:${createHash("sha256").update(manifest).digest("hex")}`;
   const targetImage = `${DEFAULT_PROMOTER_IMAGE}:${params.targetSha}`;
   requireDockerSuccess(await runDocker([
-    "build", "-f", join(params.sourcePath, "Dockerfile.promoter"), "-t", targetImage,
+    "buildx", "build", "--load",
+    "-f", join(params.sourcePath, "Dockerfile.promoter"), "-t", targetImage,
     "--build-arg", `DPF_PROMOTER_SOURCE_SHA=${params.targetSha}`,
     "--build-arg", `DPF_PROMOTER_CONTRACT_DIGEST=${contractDigest}`,
     params.sourcePath,
