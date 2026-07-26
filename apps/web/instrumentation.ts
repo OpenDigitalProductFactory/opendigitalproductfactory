@@ -91,6 +91,7 @@ export function scheduleInitialCodeGraphBootstrap(input: {
 export async function syncPlatformVersionOnBoot(
   logger: Pick<Console, "log" | "error"> = console,
 ): Promise<boolean> {
+  if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return false;
   try {
     const { syncPlatformVersionConfig } = await import("@/lib/platform/version-config");
     await syncPlatformVersionConfig();
@@ -122,6 +123,7 @@ export async function reconcileSelfUpgradeRunsOnBoot(
   logger: Pick<Console, "log" | "error"> = console,
   opts: { staleAfterMs?: number; now?: () => Date } = {},
 ): Promise<{ succeeded: number; failed: number } | null> {
+  if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return null;
   try {
     const { prisma } = await import("@dpf/db");
     const { getDeployedSha } = await import("@/lib/self-upgrade/completion");
@@ -235,6 +237,7 @@ export async function reconcileQuiescenceRunsOnBoot(
   logger: Pick<Console, "log" | "warn" | "error"> = console,
   opts: { staleAfterMs?: number; now?: () => Date } = {},
 ): Promise<{ reconciled: number; failed: number } | null> {
+  if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return null;
   try {
     const { getDeployedSha } = await import("@/lib/self-upgrade/completion");
     const { reconcileQuiescenceOnBoot } = await import("@/lib/self-upgrade/quiescence");
@@ -266,6 +269,7 @@ export async function reconcileQuiescenceRunsOnBoot(
 export async function resetStuckQuiescenceLevelOnBoot(
   logger: Pick<Console, "log" | "error"> = console,
 ): Promise<boolean> {
+  if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return false;
   try {
     const { prisma } = await import("@dpf/db");
     const { QUIESCENCE_CONFIG_KEY, setQuiescenceLevel } = await import(
@@ -313,6 +317,7 @@ export async function resetStuckQuiescenceLevelOnBoot(
 export async function recoverContradictoryBuildExecStatesOnBoot(
   logger: Pick<Console, "log" | "error"> = console,
 ): Promise<{ recovered: number; cleared: number; failedCoerced: number } | null> {
+  if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return null;
   try {
     const { prisma, Prisma } = await import("@dpf/db");
     const { planExecStateRecovery } = await import("@/lib/integrate/build-exec-types");
@@ -396,6 +401,7 @@ export async function recoverContradictoryBuildExecStatesOnBoot(
  * raw verificationOut, exactly like the orchestrator). Exported for tests.
  */
 export async function advanceStrandedBuildToReview(buildId: string): Promise<boolean> {
+  if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return false;
   const { prisma } = await import("@dpf/db");
   const { checkPhaseGate, canTransitionPhase } = await import("@/lib/feature-build-types");
 
@@ -461,6 +467,7 @@ export async function advanceStrandedBuildToReview(buildId: string): Promise<boo
 export async function reconcileDeployedShipBuilds(
   logger: Pick<Console, "log" | "error"> = console,
 ): Promise<{ completed: number } | null> {
+  if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return null;
   const { isAutoCompleteEnabled } = await import("@/lib/integrate/ship-on-review-approval");
   if (!isAutoCompleteEnabled()) return null;
   try {
@@ -596,6 +603,7 @@ export async function resumeStrandedBuildsOnBoot(
   } = {},
   logger: Pick<Console, "log" | "error"> = console,
 ): Promise<{ resumed: number; flagged: number; advanced: number; abandoned: number } | null> {
+  if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return null;
   const staleAfterMs = opts.staleAfterMs ?? 5 * 60 * 1000;
   try {
     const { prisma } = await import("@dpf/db");
@@ -907,6 +915,7 @@ export async function enqueueFirstBootEvals(providerId: string): Promise<{
   enqueued: number;
   error: string | null;
 }> {
+  if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return { enqueued: 0, error: null };
   try {
     const { prisma } = await import("@dpf/db");
     const profiles = await prisma.modelProfile.findMany({
@@ -953,6 +962,7 @@ export async function onRequestError(
   request: { path?: string; method?: string },
   context: { routePath?: string },
 ): Promise<void> {
+  if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return;
   try {
     const { httpUnhandledErrors } = await import("@/lib/metrics");
     const route = context?.routePath || request?.path || "unknown";
@@ -964,6 +974,7 @@ export async function onRequestError(
 }
 
 export async function register() {
+  if (process.env.NEXT_RUNTIME && process.env.NEXT_RUNTIME !== "nodejs") return;
   if (process.env.NEXT_RUNTIME === "nodejs" && process.env.NEXT_PHASE !== "phase-production-build") {
     // Fire the deprecation warning up front so operators see it on first
     // boot rather than waiting for a contribution to trip it.
