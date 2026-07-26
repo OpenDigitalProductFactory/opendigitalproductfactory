@@ -217,6 +217,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "worktree-janitor",
+    inngestId: "ops/worktree-janitor",
+    name: "Worktree janitor (Tier-A)",
+    purpose:
+      "Classifies git worktrees: Tier A (merged+clean) and Tier B (stale unmerged). Dry-run observe when DPF_WORKTREE_JANITOR_ENABLED=1; live Tier-A reaping only when DPF_WORKTREE_JANITOR_AUTO_REAP=1 as well. Tier B is never auto-deleted.",
+    cron: "40 5 * * *",
+    cadence: "Daily at 05:40",
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "infra-prune",
     inngestId: "ops/infra-prune",
     name: "Infrastructure prune",
