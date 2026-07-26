@@ -9,7 +9,7 @@ import type { ProviderOnboardingRecommendation } from "@/lib/routing/provider-su
 afterEach(cleanup);
 
 describe("ProviderSuitabilityGuide", () => {
-  it("hands the explanation to the canonical COO route", () => {
+  it("hands a short next-step explanation request to the canonical COO route", () => {
     const events: CustomEvent[] = [];
     const handler = (event: Event) => events.push(event as CustomEvent);
     document.addEventListener("open-agent-panel", handler);
@@ -47,12 +47,15 @@ describe("ProviderSuitabilityGuide", () => {
         },
       }),
     }} />);
-    fireEvent.click(screen.getByRole("button", { name: "Ask my COO to explain" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ask my COO for the next step" }));
 
     document.removeEventListener("open-agent-panel", handler);
     expect(events).toHaveLength(1);
     expect(events[0]?.detail.routeContext).toBe("/workspace");
     expect(events[0]?.detail.autoMessage).toContain("Consult AGT-902");
+    expect(events[0]?.detail.autoMessage).toContain("Return a short owner-facing answer");
+    expect(events[0]?.detail.autoMessage).toContain("three bullets");
+    expect(events[0]?.detail.autoMessage).toContain("Do not broaden provider activation");
     expect(events[0]?.detail.autoMessage).toContain("provider-compliance-review.v1");
     expect(events[0]?.detail.autoMessage).not.toContain(recommendation.headline);
     expect(events[0]?.detail.providerReviewPacket).toEqual(expect.objectContaining({
@@ -61,7 +64,7 @@ describe("ProviderSuitabilityGuide", () => {
     }));
   });
 
-  it("exposes the recommendation, safeguards, next action, and COO coordination in plain language", () => {
+  it("keeps the first viewport to a recommendation, safeguard, next action, and COO coordination", () => {
     const recommendation: Omit<ProviderOnboardingRecommendation, "reviewPacket"> = {
       status: "not-ready",
       headline: "Choose a connection before using AI with company data",
@@ -94,11 +97,12 @@ describe("ProviderSuitabilityGuide", () => {
     }} />);
 
     expect(screen.getByRole("status").textContent).toContain("Setup needed");
-    expect(screen.getByRole("region", { name: "Use now" }).textContent).toContain("No connection is approved to use now");
-    expect(screen.getByRole("region", { name: "Use after review" }).textContent).toContain("No connection is waiting for review");
-    expect(screen.getByRole("region", { name: "Not for this work" }).textContent).toContain("No connection is blocked for this work");
-    expect(screen.getByRole("region", { name: "Work DPF is protecting" }).textContent).toContain("Customer records");
-    expect(screen.getByText(/Your COO coordinates the Data Governance specialist/)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: recommendation.headline })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "Recommendation summary" }).textContent).toContain(recommendation.caveat);
+    expect(screen.getByRole("region", { name: "What DPF will do" }).textContent).toContain("No company data may leave yet.");
+    expect(screen.getByRole("button", { name: "Review provider choices" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Review protected work and evidence" })).toBeTruthy();
+    expect(screen.getByText(/Your COO will give one short next step/)).toBeTruthy();
     expect(screen.getByText(/Next action:/).textContent).toContain(recommendation.nextAction);
   });
 

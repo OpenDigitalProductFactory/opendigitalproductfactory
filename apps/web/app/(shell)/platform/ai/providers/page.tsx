@@ -156,18 +156,6 @@ export default async function ProvidersPage() {
 
       <ProviderSuitabilityGuide recommendation={onboardingRecommendation} telemetry={suitabilityTelemetry} />
 
-      {/* CLI pool rate-limit detail (reset times, error snippets). The live gate
-          itself now also shows inline on each CLI-backed provider's row as the
-          "rate_limited" eligibility state (BI-1C4AAE1E); this panel is the
-          drill-down. Only renders when a pool has a recorded 429. */}
-      <CliPoolStatusPanel statuses={cliPoolStatuses} />
-
-      {/* EP-COST Phase 2: Agent Budget Events — surface warning_95 and rejected threshold crossings */}
-      <AgentBudgetEventsPanel events={budgetEvents} recentRejections={recentRejections} />
-
-      {/* Local-only inference (cloud-disabled) guarantee — BI-594E8782 */}
-      <LocalOnlyInferenceToggle initialEnabled={localOnlyInference} canWrite={canWrite} />
-
       <div
         style={{
           marginBottom: 24,
@@ -223,18 +211,71 @@ export default async function ProvidersPage() {
         )}
       </div>
 
-      {/* Section 2: Token Spend */}
-      <div style={{ marginBottom: 32 }}>
-        <TokenSpendPanel initialMonth={currentMonth} byProvider={byProvider} byAgent={byAgent} />
-      </div>
+      <details
+        style={{
+          marginBottom: 24,
+          border: "1px solid var(--dpf-border)",
+          borderRadius: 8,
+          padding: "12px 14px",
+          background: "var(--dpf-surface-1)",
+        }}
+      >
+        <summary
+          style={{
+            cursor: "pointer",
+            color: "var(--dpf-text)",
+            fontSize: 12,
+            fontWeight: 700,
+          }}
+        >
+          Advanced routing operations
+        </summary>
+        <div style={{ marginTop: 14 }}>
+          {/* CLI pool rate-limit detail (reset times, error snippets). The live gate
+              itself now also shows inline on each CLI-backed provider's row as the
+              "rate_limited" eligibility state (BI-1C4AAE1E); this panel is the
+              drill-down. Only renders when a pool has a recorded 429. */}
+          <CliPoolStatusPanel statuses={cliPoolStatuses} />
 
-      {/* Section 3: Scheduled Jobs */}
-      <div>
-        <div style={{ color: "var(--dpf-accent)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
-          Scheduled Jobs
+          {/* EP-COST Phase 2: Agent Budget Events — surface warning_95 and rejected threshold crossings */}
+          <AgentBudgetEventsPanel events={budgetEvents} recentRejections={recentRejections} />
+
+          {/* Local-only inference (cloud-disabled) guarantee — BI-594E8782 */}
+          <LocalOnlyInferenceToggle initialEnabled={localOnlyInference} canWrite={canWrite} />
         </div>
-        <ScheduledJobsTable jobs={freshJobs} canWrite={canWrite} />
-      </div>
+      </details>
+
+      <details
+        style={{
+          border: "1px solid var(--dpf-border)",
+          borderRadius: 8,
+          padding: "12px 14px",
+          background: "var(--dpf-surface-1)",
+        }}
+      >
+        <summary
+          style={{
+            cursor: "pointer",
+            color: "var(--dpf-text)",
+            fontSize: 12,
+            fontWeight: 700,
+          }}
+        >
+          Spend and scheduled maintenance
+        </summary>
+        <div style={{ marginTop: 14 }}>
+          <div style={{ marginBottom: 32 }}>
+            <TokenSpendPanel initialMonth={currentMonth} byProvider={byProvider} byAgent={byAgent} />
+          </div>
+
+          <div>
+            <div style={{ color: "var(--dpf-accent)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
+              Scheduled Jobs
+            </div>
+            <ScheduledJobsTable jobs={freshJobs} canWrite={canWrite} />
+          </div>
+        </div>
+      </details>
     </div>
   );
 }

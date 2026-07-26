@@ -1,5 +1,7 @@
+// @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { ProviderRow, ProviderWithCredential, ProviderModelSummary } from "@/lib/ai-provider-types";
 import type { RoutingEligibility } from "@/lib/routing/provider-routing-eligibility";
 
@@ -125,7 +127,7 @@ describe("ServiceRow eligibility surface (BI-1C4AAE1E)", () => {
 });
 
 describe("ServiceRow weekly allocation hint (BI-779FA953)", () => {
-  it("renders the real remaining weekly allocation when a hint is provided", () => {
+  it("keeps weekly allocation out of the collapsed setup row", () => {
     const html = renderToStaticMarkup(
       <ServiceRow
         pw={pw(provider({ providerId: "anthropic", name: "Anthropic", authMethod: "oauth" }))}
@@ -133,27 +135,29 @@ describe("ServiceRow weekly allocation hint (BI-779FA953)", () => {
         weeklyAllocationHint="63% weekly left · resets ~2d 4h"
       />,
     );
-    expect(html).toContain("63% weekly left · resets ~2d 4h");
+    expect(html).not.toContain("63% weekly left · resets ~2d 4h");
     // Informational only — it never replaces the routing answer.
     expect(html).toContain("Routable");
   });
 
-  it("shows the weekly hint even when the pool is rate-limited (independent of the 429 gate)", () => {
+  it("shows weekly allocation in expanded diagnostics even when the pool is rate-limited", () => {
     const rateLimited: RoutingEligibility = {
       state: "rate_limited",
       eligible: false,
       label: "Rate-limited",
       reason: "Temporarily rate-limited at the provider. Recovers in ~5min.",
     };
-    const html = renderToStaticMarkup(
+    render(
       <ServiceRow
         pw={pw(provider({ providerId: "anthropic", name: "Anthropic", authMethod: "oauth" }))}
         eligibility={rateLimited}
         weeklyAllocationHint="12% weekly left · resets ~18h"
       />,
     );
-    expect(html).toContain("12% weekly left · resets ~18h");
-    expect(html).toContain("Rate-limited");
+    expect(screen.queryByText("12% weekly left · resets ~18h")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Anthropic/ }));
+    expect(screen.getByText("12% weekly left · resets ~18h")).toBeTruthy();
+    expect(screen.getByText("Rate-limited")).toBeTruthy();
   });
 
   it("renders nothing extra when no hint is provided", () => {
@@ -165,21 +169,27 @@ describe("ServiceRow weekly allocation hint (BI-779FA953)", () => {
 });
 
 describe("ServiceRow calibrated routing scores (BI-1B46967D)", () => {
-  it("renders the calibrated ModelProfile rollup scores, not a placeholder 50", () => {
+  it("keeps calibrated ModelProfile rollup scores out of the collapsed setup row", () => {
     const html = renderToStaticMarkup(
       <ServiceRow pw={pw(provider())} eligibility={routable} modelSummary={summary()} />,
     );
-    // Scores come from the rolled-up representative model (via title attrs).
-    expect(html).toContain("Reasoning: 90/100");
-    expect(html).toContain("Codegen: 100/100");
-    expect(html).toContain("Tools: 100/100");
-    // measured-but-not-DPF-evaluated (lastEvalAt null) reads "baseline".
-    expect(html).toContain("baseline");
+    expect(html).not.toContain("Reasoning: 90/100");
+    expect(html).not.toContain("Codegen: 100/100");
+    expect(html).not.toContain("Tools: 100/100");
+    expect(html).not.toContain("baseline");
     // The whole point: a measured provider never shows the dead seed 50.
     expect(html).not.toContain("Reasoning: 50/100");
   });
 
-  it("reads 'not measured' (not a fake 50) when the provider has no measured model", () => {
+  it("shows routing scores in expanded diagnostics", () => {
+    render(<ServiceRow pw={pw(provider())} eligibility={routable} modelSummary={summary()} />);
+    expect(screen.queryByText("baseline")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Docker Model Runner/ }));
+    expect(screen.getByText("baseline")).toBeTruthy();
+    expect(screen.getByTitle("Reasoning: 90/100 (docker.io/ai/qwen3-coder:latest)")).toBeTruthy();
+  });
+
+  it("reads 'not measured' in expanded diagnostics, not in the collapsed setup row", () => {
     const html = renderToStaticMarkup(
       <ServiceRow
         pw={pw(provider())}
@@ -187,7 +197,17 @@ describe("ServiceRow calibrated routing scores (BI-1B46967D)", () => {
         modelSummary={summary({ routingScores: null, representativeModelId: null, measuredModels: 0 })}
       />,
     );
-    expect(html).toContain("not measured");
+    expect(html).not.toContain("not measured");
     expect(html).not.toContain("Reasoning: 50/100");
+
+    render(
+      <ServiceRow
+        pw={pw(provider())}
+        eligibility={routable}
+        modelSummary={summary({ routingScores: null, representativeModelId: null, measuredModels: 0 })}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Docker Model Runner/ }));
+    expect(screen.getByText("not measured")).toBeTruthy();
   });
 });

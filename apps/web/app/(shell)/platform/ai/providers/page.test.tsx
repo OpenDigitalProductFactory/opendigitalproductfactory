@@ -145,14 +145,15 @@ describe("ProvidersPage", () => {
     const html = renderToStaticMarkup(await ProvidersPage());
 
     expect(html).toContain("Providers &amp; Routing");
-    expect(html).toContain("Business-safe provider guidance");
+    expect(html).toContain("AI provider setup");
     expect(html).toContain("Keep company data out until account terms are confirmed");
     expect(html).toContain('role="status"');
-    expect(html).toContain('aria-label="Use now"');
-    expect(html).toContain("No connection is approved to use now.");
-    expect(html).toContain("Your COO coordinates the Data Governance specialist");
+    expect(html).toContain('aria-label="Recommendation summary"');
+    expect(html).toContain("Review provider choices");
+    expect(html).toContain("Your COO will give one short next step");
     expect(html).toContain("Next action: Choose a business account.");
     expect(html).toContain("detected-services-banner");
+    expect(html).toContain("Advanced routing operations");
     expect(html).toContain("token-spend-panel");
     expect(html).toContain("scheduled-jobs-table");
     expect(html).not.toContain("Activated MCP Services");
