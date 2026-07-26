@@ -320,30 +320,6 @@ describe("agent coworker external access", () => {
     mockIsUnifiedCoworkerEnabled.mockResolvedValue(false);
   });
 
-  it("does not send when the selected coworker cannot assist", async () => {
-    mockResolveAgentForRoute.mockResolvedValueOnce({
-      agentId: "missing-coworker",
-      agentName: "Coworker unavailable",
-      agentDescription: "Unavailable",
-      canAssist: false,
-      sensitivity: "internal",
-      systemPrompt: "",
-      skills: [],
-    });
-
-    const result = await sendMessage({
-      threadId: "thread-1",
-      content: "Start this work",
-      routeContext: "/platform/ai/agent/missing-coworker",
-    });
-
-    expect(result).toEqual({
-      error:
-        "This coworker is unavailable or you do not have permission to use it.",
-    });
-    expect(mockRouteAndCall).not.toHaveBeenCalled();
-  });
-
   it("passes external access state into available tool filtering", async () => {
     mockGetAvailableTools.mockReturnValue([]);
     mockRouteAndCall.mockResolvedValue({

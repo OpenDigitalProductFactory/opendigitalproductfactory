@@ -5,10 +5,8 @@
 
 import "server-only";
 import { prisma } from "@dpf/db";
-import {
-  coworkerIdFromRecordRoute,
-  resolveAgentForRoute,
-} from "./agent-routing";
+import { resolveAgentForRoute } from "./agent-routing";
+import { coworkerIdFromRecordRoute } from "./selected-coworker-route";
 import { loadPrompt } from "./prompt-loader";
 import { getSkillsForAgentLegacy } from "@/lib/actions/agent-skills";
 import type { AgentInfo, AgentSkill } from "@/lib/agent-coworker-types";

@@ -1,9 +1,8 @@
-import { can } from "@/lib/permissions";
-import type { UserContext } from "@/lib/permissions";
+import { can, type UserContext } from "@/lib/permissions";
 import type { AgentInfo, RouteAgentEntry, AgentSkill } from "@/lib/agent-coworker-types";
 import { getRouteSensitivity } from "@/lib/agent-sensitivity";
 import { resolveRouteContext, UNIVERSAL_SKILLS } from "@/lib/route-context-map";
-import { resolveAgentRoleLabel } from "@dpf/db/agent-identity";
+import { resolveSelectedCoworkerForRoute } from "./selected-coworker-route";
 // prompt-loader is imported server-side only via agent-routing-server.ts.
 // This file stays free of @dpf/db for client component compatibility.
 
@@ -687,53 +686,11 @@ WHAT YOU DO NOT DO:
 
 const FALLBACK_ENTRY = ROUTE_AGENT_MAP["/workspace"]!;
 
-const COWORKER_RECORD_ROUTE_PREFIX = "/platform/ai/agent/";
-
-export function coworkerIdFromRecordRoute(pathname: string): string | null {
-  const path = pathname.split(/[?#]/, 1)[0] ?? "";
-  if (!path.startsWith(COWORKER_RECORD_ROUTE_PREFIX)) return null;
-
-  const encodedId = path.slice(COWORKER_RECORD_ROUTE_PREFIX.length);
-  if (!encodedId || encodedId.includes("/")) return null;
-
-  try {
-    const agentId = decodeURIComponent(encodedId).trim();
-    return /^[A-Za-z0-9_-]+$/.test(agentId) ? agentId : null;
-  } catch {
-    return null;
-  }
-}
-
-function resolveSelectedCoworkerForRoute(
-  pathname: string,
-  userContext: UserContext,
-): AgentInfo | null {
-  const agentId = coworkerIdFromRecordRoute(pathname);
-  if (!agentId) return null;
-
-  const agentName = resolveAgentRoleLabel(agentId);
-  return {
-    agentId,
-    agentName,
-    agentDescription: `Work with ${agentName}`,
-    canAssist: can(userContext, "view_platform"),
-    sensitivity: "internal",
-    systemPrompt: "",
-    skills: [],
-    modelRequirements: {},
-  };
-}
-
 /** Exported for client-safe resolver in agent-routing-client.ts */
 export { PLATFORM_PREAMBLE, FALLBACK_ENTRY };
 export const ROUTE_AGENT_MAP_ENTRIES = Object.entries(ROUTE_AGENT_MAP);
 
-/**
- * Lookup agentId → agentName for rendering historical messages.
- * EP-AI-WORKFORCE-001: This remains synchronous for client component compatibility.
- * The canonical source is the Agent DB table; this map mirrors it for client-side rendering.
- * TODO: Replace with server component data passing when UI architecture supports it.
- */
+/** Client-side mirror for rendering historical agent names synchronously. */
 export const AGENT_NAME_MAP: Record<string, string> = {
   ...Object.fromEntries(Object.values(ROUTE_AGENT_MAP).map((e) => [e.agentId, e.agentName])),
   coworker: "Coworker",
@@ -820,10 +777,7 @@ export function resolveAgentForRoute(
   };
 }
 
-/**
- * Synchronous client-side agent resolver. No DB dependency.
- * Use in "use client" components where async is not possible.
- */
+/** Synchronous resolver for client components. */
 export function resolveAgentForRouteSync(
   pathname: string,
   userContext: UserContext,

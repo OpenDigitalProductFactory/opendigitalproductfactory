@@ -2,8 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { prisma } from "@dpf/db";
-import { validateMessageInput } from "@/lib/agent-coworker-types";
-import type { AgentMessageRow } from "@/lib/agent-coworker-types";
+import { validateMessageInput, type AgentMessageRow } from "@/lib/agent-coworker-types";
 import { generateCannedResponse } from "@/lib/agent-routing";
 import { loadOpeningBriefingPayload } from "@/lib/agent/opening-briefing-loader";
 import type { OpeningBriefingPayload } from "@/lib/agent/opening-briefing";
@@ -14,8 +13,7 @@ import {
   NoProvidersAvailableError,
 } from "@/lib/ai-provider-priority";
 import { NoEligibleEndpointsError } from "@/lib/routed-inference";
-import { logTokenUsage } from "@/lib/ai-inference";
-import type { ChatMessage } from "@/lib/ai-inference";
+import { logTokenUsage, type ChatMessage } from "@/lib/ai-inference";
 import { buildCoworkerContextKey } from "@/lib/agent-coworker-context";
 import {
   buildFormAssistInstruction,
@@ -80,6 +78,7 @@ import {
 } from "@/lib/tak/autonomous-work-run";
 import { deriveEffortWarrant } from "@/lib/tak/effort-warrant";
 import { applyLocalDegradationCaveat } from "@/lib/tak/local-degradation-caveat";
+import { coworkerUnavailableResult } from "./coworker-send-eligibility";
 import {
   isConversationalExpansionRequest,
   isPageExplanationOnlyRequest,
@@ -523,12 +522,7 @@ export async function sendMessage(input: {
     platformRole: user.platformRole,
     isSuperuser: user.isSuperuser,
   }, useUnified);
-  if (!agent.canAssist) {
-    return {
-      error:
-        "This coworker is unavailable or you do not have permission to use it.",
-    };
-  }
+  if (!agent.canAssist) return coworkerUnavailableResult();
 
   // Lifecycle gate (EP-COWORKER-LIFECYCLE Phase 3, BI-2C4056BF): a draft or
   // retired coworker — and, under COWORKER_LIFECYCLE_STRICT, one that failed

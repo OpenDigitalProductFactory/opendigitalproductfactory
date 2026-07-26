@@ -1,9 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  coworkerIdFromRecordRoute,
-  generateCannedResponse,
-  resolveAgentForRoute,
-} from "./agent-routing";
+import { generateCannedResponse, resolveAgentForRoute } from "./agent-routing";
 
 // High-risk route/agent/tool/QA-ID summary coverage lives in
 // apps/web/lib/testing/route-contracts.test.ts. Keep the role-conditional
@@ -220,20 +216,6 @@ describe("resolveAgentForRoute", () => {
     // Verify the raw skills include both view and manage capabilities
     const viewSkills = eaAgent.skills.filter((s) => s.capability === "view_ea_modeler");
     expect(viewSkills.length).toBeGreaterThan(0);
-  });
-});
-
-describe("coworkerIdFromRecordRoute", () => {
-  it("decodes one safe coworker identifier", () => {
-    expect(
-      coworkerIdFromRecordRoute("/platform/ai/agent/AGT-WS-CUSTOMER?tab=overview"),
-    ).toBe("AGT-WS-CUSTOMER");
-  });
-
-  it("rejects nested, malformed, or non-record routes", () => {
-    expect(coworkerIdFromRecordRoute("/platform/ai/agent/one/more")).toBeNull();
-    expect(coworkerIdFromRecordRoute("/platform/ai/agent/%2F")).toBeNull();
-    expect(coworkerIdFromRecordRoute("/platform/ai/overview")).toBeNull();
   });
 });
 

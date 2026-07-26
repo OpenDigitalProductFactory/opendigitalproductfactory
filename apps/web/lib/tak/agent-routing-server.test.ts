@@ -11,8 +11,11 @@ vi.mock("@dpf/db", () => ({
 }));
 
 vi.mock("./agent-routing", () => ({
-  coworkerIdFromRecordRoute: vi.fn(),
   resolveAgentForRoute: vi.fn(),
+}));
+
+vi.mock("./selected-coworker-route", () => ({
+  coworkerIdFromRecordRoute: vi.fn(),
 }));
 
 vi.mock("./prompt-loader", () => ({
@@ -36,10 +39,8 @@ vi.mock("@/lib/coworker-lifecycle/lifecycle-gate", () => ({
 }));
 
 import { prisma } from "@dpf/db";
-import {
-  coworkerIdFromRecordRoute,
-  resolveAgentForRoute,
-} from "./agent-routing";
+import { resolveAgentForRoute } from "./agent-routing";
+import { coworkerIdFromRecordRoute } from "./selected-coworker-route";
 import { loadPrompt } from "./prompt-loader";
 import { getSkillsForAgentLegacy } from "@/lib/actions/agent-skills";
 import { ensureAgentPrincipalIdentity } from "@/lib/identity/principal-linking";
