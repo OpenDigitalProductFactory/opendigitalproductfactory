@@ -67,7 +67,8 @@ class InstallGrokHooksTest(unittest.TestCase):
             managed = home / ".agents" / "plugins" / "plugins" / "dpf-platform"
             updater.copy_skill_pack(skill_pack, managed, dry_run=False)
             status = updater.install_grok_hooks(managed, home, dry_run=False)
-            self.assertIn("wired 6 guard", status)
+            self.assertIn("wired 6 PreToolUse guard", status)
+            self.assertIn("SessionStart+Stop", status)
             hook_file = updater.grok_hooks_file(home)
             self.assertTrue(hook_file.exists())
             data = json.loads(hook_file.read_text())
@@ -80,6 +81,15 @@ class InstallGrokHooksTest(unittest.TestCase):
             self.assertTrue(any("plan-backlog-coverage-guard.mjs" in c for c in cmds))
             for guard in updater.GROK_HOOK_GUARDS:
                 self.assertTrue((managed / "hooks" / guard).exists(), guard)
+            session_cmds = [
+                h["command"]
+                for e in data["hooks"]["SessionStart"]
+                for h in e["hooks"]
+            ]
+            self.assertTrue(any("grok-session-start.mjs" in c for c in session_cmds))
+            stop_cmds = [h["command"] for e in data["hooks"]["Stop"] for h in e["hooks"]]
+            self.assertTrue(any("uncommitted-work-guard.mjs" in c for c in stop_cmds))
+            self.assertIn("SessionEnd", data["hooks"])
 
     def test_dry_run_writes_nothing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -87,6 +97,39 @@ class InstallGrokHooksTest(unittest.TestCase):
             status = updater.install_grok_hooks(home / "managed", home, dry_run=True)
             self.assertIn("dry-run", status)
             self.assertFalse(updater.grok_hooks_file(home).exists())
+
+    def test_disable_competitive_grok_plugins_skips_when_no_cli(self) -> None:
+        with patch.object(updater, "resolve_grok_binary", return_value=None):
+            status = updater.disable_competitive_grok_plugins(dry_run=False)
+            self.assertIn("skipped: Grok CLI not found", status)
+
+    def test_disable_competitive_grok_plugins_dry_run(self) -> None:
+        with patch.object(updater, "resolve_grok_binary", return_value="grok"):
+            status = updater.disable_competitive_grok_plugins(dry_run=True)
+            self.assertIn("dry-run", status)
+
+    def test_disable_competitive_grok_plugins_disables_active(self) -> None:
+        from unittest.mock import Mock
+
+        list_payload = json.dumps(
+            [
+                {"name": "superpowers", "enabled": True, "status": "installed"},
+                {"name": "dpf-platform", "enabled": True, "status": "installed"},
+            ]
+        )
+
+        def fake_run(cmd, capture_output=True, text=True):  # type: ignore[no-untyped-def]
+            if cmd[1:3] == ["plugin", "list"]:
+                return Mock(returncode=0, stdout=list_payload, stderr="")
+            if cmd[1:3] == ["plugin", "disable"]:
+                return Mock(returncode=0, stdout="", stderr="")
+            return Mock(returncode=1, stdout="", stderr="unexpected")
+
+        with patch.object(updater, "resolve_grok_binary", return_value="grok"):
+            with patch.object(updater.subprocess, "run", side_effect=fake_run):
+                status = updater.disable_competitive_grok_plugins(dry_run=False)
+        self.assertIn("disabled", status)
+        self.assertIn("superpowers", status)
 
 
 class HookRosterTest(unittest.TestCase):
