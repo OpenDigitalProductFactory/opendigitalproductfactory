@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DPF documentation content and visual quality plan</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f5f7fb;
+      --surface: #ffffff;
+      --surface-2: #eef3fb;
+      --text: #172033;
+      --muted: #5f6b7d;
+      --border: #d7dfeb;
+      --accent: #2f6feb;
+      --accent-soft: #e8f0ff;
+      --good: #16794b;
+      --warn: #986500;
+      --shadow: 0 16px 42px rgb(23 32 51 / 0.09);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1118;
+        --surface: #151b25;
+        --surface-2: #1b2432;
+        --text: #edf2fa;
+        --muted: #a8b3c4;
+        --border: #303b4c;
+        --accent: #79a8ff;
+        --accent-soft: #1b3157;
+        --good: #57c792;
+        --warn: #e5b64c;
+        --shadow: 0 18px 44px rgb(0 0 0 / 0.28);
+      }
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 16px/1.62 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    a { color: var(--accent); }
+    .shell {
+      display: grid;
+      grid-template-columns: minmax(220px, 280px) minmax(0, 1040px);
+      gap: 32px;
+      width: min(1380px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 34px 0 80px;
+    }
+    nav {
+      position: sticky;
+      top: 24px;
+      align-self: start;
+      padding: 20px;
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    nav strong { display: block; margin-bottom: 10px; }
+    nav a {
+      display: block;
+      padding: 7px 0;
+      color: var(--muted);
+      text-decoration: none;
+    }
+    nav a:hover { color: var(--accent); }
+    main { min-width: 0; }
+    header, section {
+      margin-bottom: 24px;
+      padding: clamp(22px, 4vw, 42px);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .eyebrow {
+      margin: 0 0 8px;
+      color: var(--accent);
+      font-size: .78rem;
+      font-weight: 800;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    h1 { margin: 0; font-size: clamp(2rem, 5vw, 4rem); line-height: 1.04; }
+    h2 { margin: 0 0 14px; font-size: clamp(1.45rem, 3vw, 2.25rem); }
+    h3 { margin: 0 0 6px; font-size: 1.05rem; }
+    p { max-width: 76ch; }
+    .lede { color: var(--muted); font-size: 1.15rem; }
+    .meta, .metrics, .cards, .phases {
+      display: grid;
+      gap: 14px;
+    }
+    .meta { grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 26px; }
+    .metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .cards { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .phases { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .datum, .card, .phase {
+      padding: 18px;
+      border: 1px solid var(--border);
+      border-radius: 15px;
+      background: var(--surface-2);
+    }
+    .datum strong {
+      display: block;
+      font-size: 1.55rem;
+      line-height: 1.2;
+    }
+    .datum span, .card p, .phase p { color: var(--muted); font-size: .93rem; }
+    .badge {
+      display: inline-flex;
+      padding: 4px 9px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: .78rem;
+      font-weight: 750;
+    }
+    .diagram {
+      overflow-x: auto;
+      margin-top: 22px;
+      padding: 16px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: var(--surface-2);
+    }
+    svg { display: block; min-width: 760px; width: 100%; height: auto; }
+    .node { fill: var(--surface); stroke: var(--border); stroke-width: 2; }
+    .node-accent { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; }
+    .line { stroke: var(--muted); stroke-width: 2; fill: none; marker-end: url(#arrow); }
+    .svg-title { fill: var(--text); font: 700 17px system-ui, sans-serif; }
+    .svg-copy { fill: var(--muted); font: 14px system-ui, sans-serif; }
+    table { width: 100%; border-collapse: collapse; margin-top: 18px; }
+    th, td { padding: 12px 14px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+    th { background: var(--surface-2); font-size: .82rem; letter-spacing: .04em; text-transform: uppercase; }
+    .callout {
+      padding: 18px 20px;
+      border-left: 4px solid var(--accent);
+      border-radius: 8px;
+      background: var(--accent-soft);
+    }
+    .good { color: var(--good); font-weight: 700; }
+    .warn { color: var(--warn); font-weight: 700; }
+    code { padding: 2px 6px; border-radius: 5px; background: var(--surface-2); }
+    @media (max-width: 900px) {
+      .shell { display: block; width: min(100% - 24px, 760px); }
+      nav { position: static; margin-bottom: 20px; columns: 2; }
+      nav strong { column-span: all; }
+      .meta, .metrics, .cards, .phases { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 560px) {
+      .meta, .metrics, .cards, .phases { grid-template-columns: 1fr; }
+      nav { columns: 1; }
+      header, section { padding: 22px; border-radius: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <nav aria-label="Plan sections">
+      <strong>Documentation quality plan</strong>
+      <a href="#outcome">Outcome</a>
+      <a href="#evidence">Evidence</a>
+      <a href="#format">Format architecture</a>
+      <a href="#fit">UX-fit guardrails</a>
+      <a href="#delivery">Delivery slices</a>
+      <a href="#verification">Verification</a>
+      <a href="#risks">Risks and rollback</a>
+      <a href="#coverage">Backlog coverage</a>
+    </nav>
+
+    <main>
+      <header>
+        <p class="eyebrow">Active plan · 26 July 2026</p>
+        <h1>Make DPF documentation useful before making it bigger.</h1>
+        <p class="lede">
+          Improve completeness, accuracy, and visual explanation across the
+          public site, GitHub README, and shared user guide—without creating
+          parallel sources of truth or decorating an overloaded information
+          architecture.
+        </p>
+        <div class="meta">
+          <div class="datum"><strong>BI-A51A8786</strong><span>Umbrella backlog item</span></div>
+          <div class="datum"><strong>WC-8ABC1810</strong><span>Work Capsule</span></div>
+          <div class="datum"><strong>3 slices</strong><span>Independent PR boundaries</span></div>
+          <div class="datum"><strong>20%</strong><span>Reserved for refactoring and de-duplication</span></div>
+        </div>
+      </header>
+
+      <section id="outcome">
+        <p class="eyebrow">Outcome</p>
+        <h2>Three audiences, three entry points, one coherent story</h2>
+        <div class="cards">
+          <article class="card">
+            <span class="badge">Public evaluator</span>
+            <h3>Understand fit and proof quickly</h3>
+            <p>A concise HTML entry point answers who DPF serves, what changes, what is shipped, and where to go next.</p>
+          </article>
+          <article class="card">
+            <span class="badge">Installer & contributor</span>
+            <h3>Choose a path without archaeology</h3>
+            <p>The README prioritizes product value, install maturity, architecture at a glance, and contribution handoff.</p>
+          </article>
+          <article class="card">
+            <span class="badge">Operator</span>
+            <h3>Complete a task and recover</h3>
+            <p>The shared user guide leads with purpose, next action, consequence, reversibility, and recovery; builder detail stays disclosed.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="evidence">
+        <p class="eyebrow">Current-state evidence</p>
+        <h2>The substrate is strong; the content layer is uneven</h2>
+        <div class="metrics">
+          <div class="datum"><strong>36,629 px</strong><span>Public overview desktop height</span></div>
+          <div class="datum"><strong>74,386 px</strong><span>Public overview mobile height</span></div>
+          <div class="datum"><strong>63 cards</strong><span>On one public overview page</span></div>
+          <div class="datum"><strong>1 image</strong><span>Across that 34-section page</span></div>
+          <div class="datum"><strong>2,037</strong><span>Source lines in <code>docs/index.html</code></span></div>
+          <div class="datum"><strong>287</strong><span>README lines</span></div>
+          <div class="datum"><strong>0 visuals</strong><span>README and docs index Markdown</span></div>
+          <div class="datum"><strong>3 tables</strong><span>Wider than a 390px mobile viewport</span></div>
+        </div>
+        <p class="callout">
+          The live page has no horizontal document overflow, but its mobile
+          journey doubles in height and the first viewport is dominated by six
+          stacked calls to action. The problem is hierarchy and disclosure, not
+          a missing coat of paint.
+        </p>
+      </section>
+
+      <section id="format">
+        <p class="eyebrow">Format architecture</p>
+        <h2>Hybrid by surface</h2>
+        <p>
+          WWMD interaction <code>DI-6D6BB6BFC1ED</code> recommended this model
+          with high confidence. It retains the existing link resolver, generated
+          document index, diagram pipeline, impact graph, and Docs Impact Gate.
+        </p>
+        <div class="diagram" role="img" aria-label="Documentation source and publication flow">
+          <svg viewBox="0 0 960 330" aria-hidden="true">
+            <defs>
+              <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--muted)"></path>
+              </marker>
+            </defs>
+            <rect class="node-accent" x="350" y="30" width="260" height="82" rx="16"></rect>
+            <text class="svg-title" x="480" y="64" text-anchor="middle">Canonical source by audience</text>
+            <text class="svg-copy" x="480" y="88" text-anchor="middle">Facts verified; duplication minimized</text>
+
+            <rect class="node" x="30" y="210" width="260" height="88" rx="16"></rect>
+            <text class="svg-title" x="160" y="243" text-anchor="middle">Public overview</text>
+            <text class="svg-copy" x="160" y="267" text-anchor="middle">Semantic HTML + focused visuals</text>
+
+            <rect class="node" x="350" y="210" width="260" height="88" rx="16"></rect>
+            <text class="svg-title" x="480" y="243" text-anchor="middle">Repository README</text>
+            <text class="svg-copy" x="480" y="267" text-anchor="middle">Markdown + GitHub-safe HTML + image</text>
+
+            <rect class="node" x="670" y="210" width="260" height="88" rx="16"></rect>
+            <text class="svg-title" x="800" y="243" text-anchor="middle">Shared user guide</text>
+            <text class="svg-copy" x="800" y="267" text-anchor="middle">Enriched Markdown + generated SVG</text>
+
+            <path class="line" d="M430 112 C390 150 250 150 180 210"></path>
+            <path class="line" d="M480 112 L480 210"></path>
+            <path class="line" d="M530 112 C570 150 710 150 780 210"></path>
+          </svg>
+        </div>
+      </section>
+
+      <section id="fit">
+        <p class="eyebrow">UX-fit review</p>
+        <h2>Fits with guardrails</h2>
+        <table>
+          <thead><tr><th>Decision field</th><th>Guardrail</th></tr></thead>
+          <tbody>
+            <tr><td>Owning area</td><td>Knowledge for the user-guide corpus; public evaluator experience for <code>docs/index.html</code>; contributor entry for README.</td></tr>
+            <tr><td>Primary personas</td><td>Prospective evaluator, installing operator, day-to-day operator, and contributor—never one undifferentiated audience.</td></tr>
+            <tr><td>Navigation</td><td>Public global navigation becomes a short journey; deep technical detail moves behind linked section pages or explicit advanced disclosure.</td></tr>
+            <tr><td>Reuse</td><td>Reuse the generated docs index, diagram assets, link resolver, route impact manifest, Jekyll layout, and in-platform Markdown renderer.</td></tr>
+            <tr><td>Source truth</td><td>Quantitative and maturity claims must cite repository/runtime evidence; no hand-maintained copy of volatile counts without a verification owner.</td></tr>
+            <tr><td>Failure behavior</td><td>Every task page explains recovery, reversibility, and what happens if the operator does nothing.</td></tr>
+            <tr><td>AI boundary</td><td>Documentation links navigate only. No visual card or topic choice may silently start a coworker action.</td></tr>
+            <tr><td>Visuals</td><td>Every visual explains a relationship or workflow, carries text alternatives, works in light/dark contexts, and remains useful on mobile.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="delivery">
+        <p class="eyebrow">Delivery</p>
+        <h2>One independently reviewable concern per PR</h2>
+        <div class="phases">
+          <article class="phase">
+            <span class="badge">BI-5CC999F1</span>
+            <h3>1 · Public overview</h3>
+            <p>Refactor the giant landing page into a guided entry point. Move deep detail rather than deleting it, and add a small visual system.</p>
+            <p><strong>Verify:</strong> HTML semantics, links, desktop/mobile first viewport, scroll reduction, table behavior, accessibility.</p>
+          </article>
+          <article class="phase">
+            <span class="badge">BI-EB04747F</span>
+            <h3>2 · Repository README</h3>
+            <p>Lead with product fit, maturity, install path, and architecture at a glance. Use selective HTML, not an HTML rewrite.</p>
+            <p><strong>Verify:</strong> GitHub rendering, link checks, install claims, accessible architecture visual.</p>
+          </article>
+          <article class="phase">
+            <span class="badge">BI-519DC022</span>
+            <h3>3 · Shared user guide</h3>
+            <p>Establish coverage and visual-quality baselines, then enrich highest-value workflows. Coordinate with <code>BI-1D718FCA</code>.</p>
+            <p><strong>Verify:</strong> index/link/diagram/impact checks plus rendered portal and public pages at desktop/mobile.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="verification">
+        <p class="eyebrow">Evidence before merge</p>
+        <h2>Structural checks plus rendered use</h2>
+        <table>
+          <thead><tr><th>Gate</th><th>Evidence</th><th>Substrate</th></tr></thead>
+          <tbody>
+            <tr><td>Document identity</td><td><code>pnpm docs:index:check</code></td><td>Source-local or shared CI sandbox</td></tr>
+            <tr><td>Links and anchors</td><td><code>pnpm docs:links</code> and link tests</td><td>Source-local or shared CI sandbox</td></tr>
+            <tr><td>Diagram freshness</td><td><code>pnpm docs:diagrams:check</code></td><td>Compile-ready shared CI sandbox</td></tr>
+            <tr><td>Impact coverage</td><td><code>pnpm docs:impact:graph:check</code></td><td>Source-local or shared CI sandbox</td></tr>
+            <tr><td>Public presentation</td><td>Desktop and 390px visual exercise; keyboard landmarks; no unintended overflow</td><td>Rendered preview or governed shared nonprod</td></tr>
+            <tr><td>In-platform presentation</td><td>Context help, guide home, operator/advanced disclosure, desktop/mobile</td><td>Governed shared nonprod</td></tr>
+            <tr><td>Claims</td><td>Each count, GA/early-access status, and capability statement tied to current code or governed live evidence</td><td>Repository plus DPF MCP/live state</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="risks">
+        <p class="eyebrow">Risks and rollback</p>
+        <h2>Refactor the hierarchy without losing the record</h2>
+        <ul>
+          <li><span class="warn">Risk:</span> splitting the public overview creates dead links. <strong>Control:</strong> move by stable section anchors, keep redirects where necessary, and run the link checker.</li>
+          <li><span class="warn">Risk:</span> visual polish hides stale claims. <strong>Control:</strong> verify claims before layout work and make maturity states explicit.</li>
+          <li><span class="warn">Risk:</span> screenshots become stale or expose private data. <strong>Control:</strong> prefer diagrams; use curated fixtures and sanitized captures when screenshots are uniquely useful.</li>
+          <li><span class="warn">Risk:</span> parallel guide work conflicts. <strong>Control:</strong> respect capsule scope; the active <code>docs/user-guide/ai-workforce/*</code> claim is excluded from this branch.</li>
+          <li><span class="good">Rollback:</span> each surface ships in its own PR. Reverting one slice restores the prior source without affecting the other two or the docs-system substrate.</li>
+        </ul>
+      </section>
+
+      <section id="coverage">
+        <p class="eyebrow">Backlog coverage</p>
+        <h2>Governed decomposition</h2>
+        <p>
+          Umbrella <code>BI-A51A8786</code> is decomposed under receipt
+          <code>cms2c4bms002i01qod4bv1lt2</code>.
+        </p>
+        <table>
+          <thead><tr><th>Deliverable</th><th>Backlog item</th><th>Status at plan time</th></tr></thead>
+          <tbody>
+            <tr><td>Public overview</td><td><code>BI-5CC999F1</code></td><td>Open · independently shippable</td></tr>
+            <tr><td>Repository README</td><td><code>BI-EB04747F</code></td><td>Open · independently shippable</td></tr>
+            <tr><td>Shared user guide</td><td><code>BI-519DC022</code></td><td>Open · independently shippable; coordinates with <code>BI-1D718FCA</code></td></tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
