@@ -78,8 +78,8 @@ export const createPaymentRunSchema = z.object({
   consolidatePerSupplier: z.boolean().default(true),
 });
 
-export type CreateSupplierInput = z.infer<typeof createSupplierSchema>;
-export type CreateBillInput = z.infer<typeof createBillSchema>;
+export type CreateSupplierInput = z.input<typeof createSupplierSchema>;
+export type CreateBillInput = z.input<typeof createBillSchema>;
 export type UpdateBillInput = z.infer<typeof updateBillSchema>;
-export type CreatePOInput = z.infer<typeof createPOSchema>;
-export type CreatePaymentRunInput = z.infer<typeof createPaymentRunSchema>;
+export type CreatePOInput = z.input<typeof createPOSchema>;
+export type CreatePaymentRunInput = z.input<typeof createPaymentRunSchema>;
