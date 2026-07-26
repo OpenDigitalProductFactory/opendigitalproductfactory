@@ -26,6 +26,24 @@ Reporting a PR "green / mergeable / queued" while a real blocker was still in pl
 
 `mergeStateStatus=BLOCKED` with no concrete blocker is reported as a *note*, not a blocker — that is normally a clean PR waiting its turn in the merge queue / behind main, which the queue rebases itself. Don't rebase-spin a clean PR; re-check after the queue runs. Note that `gh pr merge --admin` does **not** bypass required checks or conversation-resolution — only the branch-up-to-date rule.
 
+## Observation versus merge authority
+
+`pr:health` observes the broad, dynamic set of checks attached to a PR and remains intentionally
+stricter than branch protection: every reported check must be terminal and non-failing.
+
+Branch protection uses the smaller, versioned contract in
+[`config/merge-readiness-policy.json`](../../config/merge-readiness-policy.json):
+
+- **Merge Readiness** aggregates every job in `.github/workflows/ci.yml`;
+- **UX Route Budget Sweep** owns the separate browser/Postgres runtime; and
+- **DCO** proves commit sign-off.
+
+Both repository workflows run for `pull_request` and `merge_group`. The repo guard fails if a CI job
+is not included in the aggregate or either workflow loses merge-group coverage. Use
+`pnpm merge-policy:check` for local conformance and `pnpm merge-policy:audit` to compare the
+manifest with live `main` protection. `pnpm merge-policy:apply` changes only required status
+checks; use it after new contexts have proven green on `main`, never before.
+
 ## Tests & CI
 
 The pure verdict (`evaluatePrHealth()`) is unit-tested in [`scripts/pr-health.test.mjs`](../../scripts/pr-health.test.mjs) and runs in CI as the **PR Health Logic** job (`node --test`). The script's GitHub I/O is exercised by running it against live PRs; it is not run in CI (it would be circular).
