@@ -1,9 +1,16 @@
-# Routing Architecture: Control Plane / Data Plane — Design Spec
+# Routing Architecture: Control Plane / Data Plane — Proposed Target-State Design
+
+> **Status: PROPOSED / DEFERRED TARGET STATE.** The RIB/FIB compilation model in
+> this document is not the current runtime architecture. DPF still computes the
+> route inline through `prepareRoute()` / `routeEndpointV2()` for each request.
+> Use the [AI routing document map](../../architecture/ai-routing-document-map.md)
+> to distinguish current implementation, approved adjacent contracts, target
+> designs, and historical records.
 
 | Field | Value |
 |-------|-------|
 | **Epic** | Platform Infrastructure / Routing Substrate |
-| **Status** | Draft |
+| **Status** | Proposed target state; primary implementation deferred |
 | **Created** | 2026-04-27 |
 | **Author** | Claude Opus 4.7 for Mark Bodman |
 | **Scope** | `apps/web/lib/routing/`, `apps/web/lib/inference/routed-inference.ts`, `apps/web/lib/tak/agent-router*.ts`, `packages/db/prisma/schema.prisma` (additive), `apps/web/lib/govern/activate-provider.ts` |

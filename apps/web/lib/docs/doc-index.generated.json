@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 553,
+  "pageCount": 554,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -550,6 +550,21 @@
         "implementation-7",
         "rationale-7",
         "application"
+      ]
+    },
+    "docs/architecture/ai-routing-document-map.md": {
+      "publicHref": "/architecture/ai-routing-document-map/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "ai-routing-document-map",
+        "current-authority",
+        "approved-adjacent-delivery-contract",
+        "proposed-architecture",
+        "historical-records",
+        "provider-and-model-pin-semantics",
+        "planned-one-picture-experience"
       ]
     },
     "docs/architecture/archetype-business-value-streams.md": {
@@ -9180,6 +9195,7 @@
       "anchors": [
         "use-this-doc-for",
         "workflow",
+        "architecture-and-evidence",
         "what-to-watch"
       ]
     },

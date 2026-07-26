@@ -1,12 +1,19 @@
-# Routing architecture (current state as of 2026-04-20)
+# Routing architecture (dated snapshot: 2026-04-20)
 
-**Status: CURRENT.** This document describes how DPF chooses which LLM handles a given call. It supersedes the earlier design docs listed at the bottom — those remain for historical context but should not be consulted for current behaviour.
+> **Status: HISTORICAL SNAPSHOT.** This document records the routing architecture as
+> understood on 2026-04-20. It is no longer the current documentation authority.
+> Start with the [AI routing document map](../../architecture/ai-routing-document-map.md)
+> for current implementation, operator guidance, proposed target state, and
+> explainability ownership.
 
 ## Principle
 
-> The routing layer picks the right LLM dynamically for each call based on the task's requirements and the candidate pool's capability tier. There are no hard pins from agents to specific providers/models. The system adapts as models are added or retired.
+> The default routing posture is dynamic: each call is matched to eligible models
+> using task requirements, policy constraints, capability, cost, health, and
+> availability. Seeded agent configurations do not pin a provider or model.
 
-Captured in memory: `feedback_no_provider_pinning`.
+That default remains current. The runtime now also supports an exceptional
+provider/model preference override; see **Agent-level overrides** below.
 
 ## The pipeline
 
@@ -108,7 +115,17 @@ Profiles are populated by:
 - `budgetClass` — `quality_first` | `balanced` | `minimize_cost`.
 - `minimumCapabilities` — hard floor (e.g. `{ toolUse: true }` for any agent that uses MCP tools).
 - `minimumContextTokens` — context window requirement.
-- **`pinnedProviderId`, `pinnedModelId` — deliberately unused.** Seed leaves these null. Admin UI still supports setting them but `[pin-audit]` in `instrumentation.ts` logs a warn on every boot if any row has a non-null pin, so regressions are visible.
+- `pinnedProviderId`, `pinnedModelId` — optional exceptional overrides. Seed and
+  first-run bootstrap leave them null. When set, `agentic-loop.ts` passes them to
+  `routeAndCall()` as preferred provider/model values. `routed-inference.ts`
+  applies the preference only to a candidate that already survived hard routing
+  exclusions; an excluded or unavailable target falls back to the V2-selected
+  route. `[pin-audit]` in `instrumentation.ts` warns on startup whenever a
+  persisted pin exists so the exception remains visible.
+
+Live-install evidence queried on 2026-07-26 showed 24 `AgentModelConfig` rows,
+with 0 provider pins and 0 model pins. That count is operational evidence for that
+install and time, not a fleet-wide invariant.
 
 The agent's floor **ANDs** with the task's floor — whichever is stricter wins.
 
@@ -149,7 +166,8 @@ The following earlier design documents each tackled some slice of this problem a
 
 ## Related memory
 
-- `feedback_no_provider_pinning` — routing is dynamic, no pins.
+- `feedback_no_provider_pinning` — dynamic, unpinned routing is the seeded default;
+  any persisted pin is an explicit, audited exception.
 - `feedback_evidence_before_diagnosis` — when routing misbehaves, query state before speculating.
 - `feedback_fix_seed_not_runtime` — a routing misbehaviour caused by stale seed data is fixed in the seed, not the runtime path.
 

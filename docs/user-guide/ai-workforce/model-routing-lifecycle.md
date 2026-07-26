@@ -25,7 +25,7 @@ During container startup, `docker-entrypoint.sh` runs the following sequence:
 **Step 3** seeds model profiles from `packages/db/data/model-profiles.json`. These are pre-evaluated profiles with hand-tuned dimension scores (codegen, reasoning, toolFidelity, etc.) and `profileSource: "evaluated"`. Only models known to work with the default credential tier are included. The seed also:
 - Ensures Haiku 4.5 is set to `active` (Haiku 3.0 to `degraded`)
 - Creates `AgentModelConfig` rows with default tier and budget settings for each agent
-- Pins the `build-specialist` agent to `anthropic-sub/claude-haiku-4-5-20251001`
+- Leaves provider and model pins empty so routing can adapt to the eligible pool
 
 Pre-evaluated profiles are protected from being overwritten by dynamic discovery.
 
@@ -71,16 +71,22 @@ Each agent has an `AgentModelConfig` row that controls which models it can use:
 |-------|---------|
 | `minimumTier` | The lowest quality tier the agent will accept (e.g., "frontier" for build-specialist) |
 | `budgetClass` | Cost strategy: `minimize_cost`, `balanced`, or `quality_first` |
-| `pinnedProviderId` | Force routing to a specific provider (optional) |
-| `pinnedModelId` | Force routing to a specific model within that provider (optional) |
+| `pinnedProviderId` | Exceptional preference override for a specific eligible provider (optional) |
+| `pinnedModelId` | Exceptional preference override for a specific eligible model (optional) |
 
-Default configurations are seeded during installation. Admins can override them via the platform UI or direct database updates. The seed respects existing rows -- if an admin has already configured an agent, the seed will not overwrite it.
+Default configurations are seeded during installation. Admins can override them via
+the platform UI. The normal posture is unpinned: seed and first-run bootstrap leave
+pins empty, and startup emits a `[pin-audit]` warning when a persisted pin exists.
+Use a pin only when a provider/model dependency is intentional and documented; use
+tier, capability, sensitivity, residency, and budget controls for normal routing.
+The seed respects existing rows -- if an admin has already configured an agent, the
+seed will not overwrite it.
 
 ### Default Agent Tiers
 
 | Agent | Minimum Tier | Budget | Pinned To |
 |-------|-------------|--------|-----------|
-| build-specialist | frontier | quality_first | anthropic-sub / claude-haiku-4-5-20251001 |
+| build-specialist | strong | quality_first | (auto) |
 | coo | strong | balanced | (auto) |
 | platform-engineer | strong | balanced | (auto) |
 | admin-assistant | strong | balanced | (auto) |
@@ -103,7 +109,12 @@ When an agent needs to call an LLM, the routing pipeline runs in this order:
    - Missing required capability (e.g., tool use)
    - Any dimension score below the minimum threshold
 5. **Rank by cost-per-success.** Estimate success probability for each remaining model. With `quality_first` budget, rank by success probability alone. With `minimize_cost`, rank by cost efficiency.
-6. **Apply provider pin preference.** A pin may select its configured provider only when that provider remains inside the request's hard allow/deny policy. A pin cannot override a provider fence.
+6. **Apply an exceptional provider/model preference override.** If configured, the
+   preferred endpoint replaces the cost/quality winner only when it remains in the
+   eligible candidate set. A pin cannot override provider allow/deny, sensitivity,
+   residency, capability, model-class, status, or other hard exclusions. If its
+   target is unavailable or excluded, routing records a warning and keeps the
+   V2-selected route.
 7. **Dispatch with the eligible fallback chain.** Try the selected model, then the next eligible model after an inference error. A provider excluded by the request policy never reappears in fallback.
 
 Provider allow/deny constraints are request-level hard policy, distinct from the provider registry's `modelRestrictions` discovery allowlist. An explicitly empty `allowedProviders` list means no provider is eligible; routing returns no endpoint rather than treating the empty list as “allow any.” Cost, quality, provider health, capacity, and pin preferences only rank the providers that remain after the hard filter.
@@ -184,7 +195,9 @@ Local models are automatically discovered and profiled. They are assigned the `b
 
 **Agent uses wrong model:**
 - Check `AgentModelConfig` in the database
-- `pinnedProviderId` / `pinnedModelId` are preferences within the request's hard provider, residency, sensitivity, and capability constraints
+- `pinnedProviderId` / `pinnedModelId` are exceptional preferences within the
+  request's hard provider, residency, sensitivity, status, model-class, and
+  capability constraints; they are empty by default
 - If no pin is set, routing selects based on dimension scores and budget class
 
 **Models missing after connecting a provider:**
