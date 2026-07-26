@@ -420,6 +420,10 @@ export async function routeAndCall(
       console.log(`[routing] Retrying without tools requirement for '${taskType}'`);
       const relaxedContract = { ...contract, requiresTools: false };
       decision = await routeEndpointV2(manifests, relaxedContract, policies, overrides);
+      decision.inferenceDataScreenReceipt = prepared.decision.inferenceDataScreenReceipt;
+      if (!decision.policyRulesApplied.includes("inference-dispatch")) {
+        decision.policyRulesApplied = [...decision.policyRulesApplied, "inference-dispatch"];
+      }
       if (decision.selectedEndpoint) {
         toolsStripped = true;
       }

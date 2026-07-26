@@ -80,6 +80,21 @@ const mockContext: DispatchContext = {
   agentMessageId: "msg-1",
 };
 
+const safeScreenReceipt: NonNullable<TaskRouteDecision["inferenceDataScreenReceipt"]> = {
+  schemaVersion: "inference-data-screen/v1",
+  screenId: "screen_safe",
+  decisionIds: ["decision-safe"],
+  inputHash: "hash-safe",
+  classifiedDataClasses: ["employee-records"],
+  policyEffect: "deny",
+  routeEffect: "local-only",
+  destinationClass: "external-service",
+  transformation: "blocked",
+  explanationCodes: ["restricted-external-denied"],
+  obligationKinds: [],
+  rawPayloadStored: false,
+};
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("callWithFallbackChain", () => {
@@ -114,6 +129,55 @@ describe("callWithFallbackChain", () => {
       agentId: "test-agent",
     }));
     expect(mockObserve).not.toHaveBeenCalled();
+  });
+
+  it("requires a data-screen receipt before governed legacy dispatch", async () => {
+    await expect(
+      callWithFallbackChain(
+        { ...mockDecision, policyRulesApplied: ["inference-dispatch"] },
+        mockPayload,
+        mockContext,
+      ),
+    ).rejects.toThrow("missing inference data screen receipt");
+
+    expect(mockCallProvider).not.toHaveBeenCalled();
+    expect(mockPrisma.routeDecisionLog.create).not.toHaveBeenCalled();
+  });
+
+  it("does not dispatch an excluded governed fallback candidate", async () => {
+    mockCallProvider.mockRejectedValueOnce(new Error("primary unavailable"));
+
+    await expect(
+      callWithFallbackChain(
+        {
+          ...mockDecision,
+          policyRulesApplied: ["inference-dispatch"],
+          inferenceDataScreenReceipt: safeScreenReceipt,
+          fallbackChain: ["ep-2"],
+          candidates: [
+            makeCandidate({ endpointId: "ep-1", providerId: "provider-1", modelId: "model-a" }),
+            makeCandidate({
+              endpointId: "ep-2",
+              providerId: "provider-2",
+              modelId: "model-b",
+              excluded: true,
+              excludedReason: "sensitivityClearance excludes restricted data",
+            }),
+          ],
+        },
+        mockPayload,
+        mockContext,
+      ),
+    ).rejects.toThrow(NoEndpointAvailableError);
+
+    expect(mockCallProvider).toHaveBeenCalledTimes(1);
+    expect(mockCallProvider).toHaveBeenCalledWith(
+      "provider-1",
+      "model-a",
+      mockPayload.messages,
+      mockPayload.systemPrompt,
+      undefined,
+    );
   });
 
   it("persists a supplied provider suitability receipt without request content", async () => {

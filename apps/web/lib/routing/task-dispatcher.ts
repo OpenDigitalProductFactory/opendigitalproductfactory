@@ -14,6 +14,11 @@ import {
   type ChatMessage,
 } from "@/lib/ai-inference";
 import { normalizeRouteDecisionActor } from "./route-decision-attribution";
+import {
+  assertInferenceDispatchScreen,
+  isEligibleForScreenedDispatch,
+  requiresInferenceDispatchScreen,
+} from "./inference-dispatch-guard";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 /** The payload passed to callProvider for each attempt. */
@@ -59,6 +64,8 @@ export async function callWithFallbackChain(
   payload: ProviderCallPayload,
   context: DispatchContext,
 ) {
+  assertInferenceDispatchScreen(decision);
+  const requireScreenedCandidates = requiresInferenceDispatchScreen(decision);
   const endpointIds = [decision.selectedEndpointId, ...decision.fallbackChain].filter(
     (id): id is string => id !== null,
   );
@@ -68,6 +75,16 @@ export async function callWithFallbackChain(
   for (const endpointId of endpointIds) {
     const candidate = decision.candidates.find((c) => c.endpointId === endpointId);
     if (!candidate) continue; // should never happen — defensive
+    if (requireScreenedCandidates && !isEligibleForScreenedDispatch(decision, candidate)) {
+      fallbacksUsed.push({
+        endpointId,
+        error: candidate.excludedReason
+          ? `skipped ineligible screened endpoint: ${candidate.excludedReason}`
+          : "skipped ineligible screened endpoint",
+        timestamp: new Date().toISOString(),
+      });
+      continue;
+    }
 
     try {
       const result = await callProvider(
