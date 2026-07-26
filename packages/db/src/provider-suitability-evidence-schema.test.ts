@@ -8,6 +8,10 @@ const migration = readFileSync(resolve(
   import.meta.dirname,
   "../prisma/migrations/20260720100000_provider_suitability_evidence/migration.sql",
 ), "utf8");
+const inferenceDataScreenMigration = readFileSync(resolve(
+  import.meta.dirname,
+  "../prisma/migrations/20260726173000_add_inference_data_screen_receipt/migration.sql",
+), "utf8");
 
 describe("provider suitability evidence schema", () => {
   it("binds claim evidence to one provider connection through the existing ComplianceEvidence owner", () => {
@@ -32,5 +36,12 @@ describe("provider suitability evidence schema", () => {
     expect(schema).toMatch(/model RouteDecisionLog \{[\s\S]*suitabilityReceipt\s+Json\?/);
     expect(migration).toContain('ALTER TABLE "RouteDecisionLog"');
     expect(migration).toContain('ADD COLUMN "suitabilityReceipt" JSONB');
+  });
+
+  it("adds a nullable inference data-screen receipt to the existing route audit log", () => {
+    expect(schema).toMatch(/model RouteDecisionLog \{[\s\S]*inferenceDataScreenReceipt\s+Json\?/);
+    expect(inferenceDataScreenMigration).toContain('ALTER TABLE "RouteDecisionLog"');
+    expect(inferenceDataScreenMigration).toContain('ADD COLUMN "inferenceDataScreenReceipt" JSONB');
+    expect(inferenceDataScreenMigration).not.toMatch(/NOT NULL|DEFAULT/i);
   });
 });

@@ -433,6 +433,7 @@ export async function persistRouteDecision(
       fallbackChain: decision.fallbackChain,
       shadowMode,
       suitabilityReceipt: decision.providerSuitabilityReceipt ?? undefined,
+      inferenceDataScreenReceipt: decision.inferenceDataScreenReceipt ?? undefined,
     },
   });
   return record.id;

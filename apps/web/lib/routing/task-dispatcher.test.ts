@@ -212,6 +212,21 @@ describe("callWithFallbackChain", () => {
     expect(JSON.stringify(persisted.suitabilityReceipt)).not.toContain("Hello");
   });
 
+  it("persists a supplied inference data screen receipt without request content", async () => {
+    mockCallProvider.mockResolvedValueOnce({
+      content: "success",
+      inputTokens: 10,
+      outputTokens: 20,
+      inferenceMs: 500,
+    });
+
+    await callWithFallbackChain({ ...mockDecision, inferenceDataScreenReceipt: safeScreenReceipt }, mockPayload, mockContext);
+
+    const persisted = mockPrisma.routeDecisionLog.create.mock.calls[0][0].data;
+    expect(persisted.inferenceDataScreenReceipt).toEqual(safeScreenReceipt);
+    expect(JSON.stringify(persisted.inferenceDataScreenReceipt)).not.toContain("Hello");
+  });
+
   it("logs token usage with correct shape after success", async () => {
     mockCallProvider.mockResolvedValueOnce({
       content: "ok",
