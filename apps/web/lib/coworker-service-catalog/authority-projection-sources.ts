@@ -66,7 +66,7 @@ export function collectProjectionEvidence(
 ): ProjectionScopeEvidence {
   const scope = validateScope(input.scope, work);
   if (input.offer) {
-    collectOffer(input.offer, "selected-base", work, true);
+    collectOffer(input.offer, "selected-base", work);
     if (input.service) {
       collectService(input.service, "overridden-default", work, false);
     }
@@ -133,10 +133,9 @@ function collectOffer(
   offer: NonNullable<CoworkerAuthorityProjectionInput["offer"]>,
   role: CoworkerAuthorityEvidenceRole,
   work: ProjectionWork,
-  selected: boolean,
 ) {
   const ref = cleanRef(offer.offerId);
-  if (selected && !ref) work.errors.push("Offer is missing a source reference");
+  if (!ref) work.errors.push("Offer is missing a source reference");
 
   const boundary = normalizeCatalogBoundary(offer.authorityBoundary);
   addCandidate(
@@ -152,7 +151,7 @@ function collectOffer(
         ? `Offer ${ref || "<missing>"} has catalog boundary ${String(offer.authorityBoundary)}`
         : `Offer ${ref || "<missing>"} authority boundary is unresolved`,
     },
-    selected && boundary
+    boundary
       ? {
           level: boundary,
           ownerReason: ownerReasonForSource("offer", boundary),
@@ -161,19 +160,18 @@ function collectOffer(
         }
       : null,
   );
-  if (selected && !boundary) {
+  if (!boundary) {
     work.errors.push(
       `Offer ${ref || "<missing>"} has an unsupported authorityBoundary value`,
     );
   }
-  collectRequiredApprovals(offer, role, work, selected);
+  collectRequiredApprovals(offer, role, work);
 }
 
 function collectRequiredApprovals(
   offer: NonNullable<CoworkerAuthorityProjectionInput["offer"]>,
   role: CoworkerAuthorityEvidenceRole,
   work: ProjectionWork,
-  selected: boolean,
 ) {
   const ref = cleanRef(offer.offerId);
   if (!Array.isArray(offer.requiredApprovals)) {
@@ -186,38 +184,30 @@ function collectRequiredApprovals(
       normalizedLevel: null,
       detail: "Offer approval declarations could not be read",
     });
-    if (selected) {
-      work.errors.push(
-        `Offer ${ref || "<missing>"} requiredApprovals must be an array`,
-      );
-    }
+    work.errors.push(
+      `Offer ${ref || "<missing>"} requiredApprovals must be an array`,
+    );
     return;
   }
 
   const requiredNames: string[] = [];
   offer.requiredApprovals.forEach((entry, index) => {
     if (!isRecord(entry)) {
-      if (selected) {
-        work.errors.push(
-          `Offer ${ref || "<missing>"} requiredApprovals[${index}] must be an object`,
-        );
-      }
+      work.errors.push(
+        `Offer ${ref || "<missing>"} requiredApprovals[${index}] must be an object`,
+      );
       return;
     }
     if (typeof entry.required !== "boolean") {
-      if (selected) {
-        work.errors.push(
-          `Offer ${ref || "<missing>"} requiredApprovals[${index}].required must be true or false`,
-        );
-      }
+      work.errors.push(
+        `Offer ${ref || "<missing>"} requiredApprovals[${index}].required must be true or false`,
+      );
       return;
     }
     if (typeof entry.type !== "string" || !entry.type.trim()) {
-      if (selected) {
-        work.errors.push(
-          `Offer ${ref || "<missing>"} requiredApprovals[${index}].type must include a nonblank type`,
-        );
-      }
+      work.errors.push(
+        `Offer ${ref || "<missing>"} requiredApprovals[${index}].type must include a nonblank type`,
+      );
       return;
     }
     if (entry.required) requiredNames.push(humanizeKey(entry.type));
@@ -240,7 +230,7 @@ function collectRequiredApprovals(
           ? `Offer ${ref || "<missing>"} requires ${ownerList}`
           : `Offer ${ref || "<missing>"} declares no additional approvals`,
     },
-    selected && normalizedLevel
+    normalizedLevel
       ? {
           level: normalizedLevel,
           ownerReason: `${capitalize(ownerList)} are required.`,
