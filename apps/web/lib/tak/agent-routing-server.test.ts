@@ -2,6 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
+vi.mock("@dpf/db", () => ({
+  prisma: {
+    agent: {
+      findFirst: vi.fn(),
+    },
+  },
+}));
+
 vi.mock("./agent-routing", () => ({
   coworkerIdFromRecordRoute: vi.fn(),
   resolveAgentForRoute: vi.fn(),
@@ -19,10 +27,15 @@ vi.mock("@/lib/identity/principal-linking", () => ({
   ensureAgentPrincipalIdentity: vi.fn(),
 }));
 
-vi.mock("@/lib/coworker-identity", () => ({
-  resolveCoworkerIdentity: vi.fn(),
+vi.mock("@/lib/permissions", () => ({
+  can: vi.fn(),
 }));
 
+vi.mock("@/lib/coworker-lifecycle/lifecycle-gate", () => ({
+  evaluateLifecycleGate: vi.fn(),
+}));
+
+import { prisma } from "@dpf/db";
 import {
   coworkerIdFromRecordRoute,
   resolveAgentForRoute,
@@ -30,7 +43,8 @@ import {
 import { loadPrompt } from "./prompt-loader";
 import { getSkillsForAgentLegacy } from "@/lib/actions/agent-skills";
 import { ensureAgentPrincipalIdentity } from "@/lib/identity/principal-linking";
-import { resolveCoworkerIdentity } from "@/lib/coworker-identity";
+import { can } from "@/lib/permissions";
+import { evaluateLifecycleGate } from "@/lib/coworker-lifecycle/lifecycle-gate";
 import {
   resolveAgentByIdWithPrompts,
   resolveAgentForRouteWithPrompts,
@@ -56,12 +70,16 @@ describe("resolveAgentForRouteWithPrompts", () => {
       if (key === "company-mission") return "Company mission";
       return fallback ?? "";
     });
-    vi.mocked(resolveCoworkerIdentity).mockReturnValue({
-      agentId: "external-catalog-scout",
-      agentName: "external-catalog-scout",
+    vi.mocked(can).mockReturnValue(true);
+    vi.mocked(prisma.agent.findFirst).mockResolvedValue({
+      agentId: "AGT-WS-SCOUT",
+      slugId: "external-catalog-scout",
       displayName: "External Catalog Scout",
-      aliases: ["hive-scout"],
+      name: "External Catalog Scout",
+      description: "Researches external providers.",
+      sensitivity: "internal",
     });
+    vi.mocked(evaluateLifecycleGate).mockResolvedValue({ allowed: true });
     vi.mocked(ensureAgentPrincipalIdentity).mockResolvedValue(null);
   });
 
@@ -127,5 +145,55 @@ describe("resolveAgentForRouteWithPrompts", () => {
     );
     expect(result.agentId).toBe("external-catalog-scout");
     expect(result.agentName).toBe("External Catalog Scout");
+  });
+
+  it("does not create a principal for an unknown or archived coworker", async () => {
+    vi.mocked(prisma.agent.findFirst).mockResolvedValue(null);
+
+    const result = await resolveAgentByIdWithPrompts("missing-coworker", {
+      platformRole: "HR-000",
+      isSuperuser: true,
+    });
+
+    expect(result.canAssist).toBe(false);
+    expect(ensureAgentPrincipalIdentity).not.toHaveBeenCalled();
+    expect(getSkillsForAgentLegacy).not.toHaveBeenCalled();
+  });
+
+  it("does not load or provision a coworker blocked by lifecycle", async () => {
+    vi.mocked(evaluateLifecycleGate).mockResolvedValue({
+      allowed: false,
+      agentId: "AGT-WS-SCOUT",
+      stage: "draft",
+      certification: null,
+      reason: "Draft coworkers cannot be summoned.",
+    });
+
+    const result = await resolveAgentByIdWithPrompts(
+      "external-catalog-scout",
+      {
+        platformRole: "HR-000",
+        isSuperuser: true,
+      },
+    );
+
+    expect(result.canAssist).toBe(false);
+    expect(ensureAgentPrincipalIdentity).not.toHaveBeenCalled();
+  });
+
+  it("does not disclose or provision a selected coworker without platform access", async () => {
+    vi.mocked(can).mockReturnValue(false);
+
+    const result = await resolveAgentByIdWithPrompts(
+      "external-catalog-scout",
+      {
+        platformRole: null,
+        isSuperuser: false,
+      },
+    );
+
+    expect(result.canAssist).toBe(false);
+    expect(prisma.agent.findFirst).not.toHaveBeenCalled();
+    expect(ensureAgentPrincipalIdentity).not.toHaveBeenCalled();
   });
 });

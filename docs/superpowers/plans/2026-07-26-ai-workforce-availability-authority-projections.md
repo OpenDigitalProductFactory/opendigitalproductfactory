@@ -12,7 +12,8 @@ The implementation sequence follows WWMD decision `DI-4A73DBCEC0E3`:
 2. Authority projection.
 3. Four-area roster and coworker-record consumption.
 
-This branch implements only deliverable 2 under `BI-F39A1A82`.
+Availability and authority are merged. This branch implements deliverable 3
+under `BI-C810CC5A` and Work Capsule `WC-D6E5F3F4`.
 
 ## Backlog Coverage
 
@@ -249,11 +250,107 @@ verbatim.
 Implement in a separate branch for `BI-C810CC5A` after both projections land.
 
 - Load the install archetype once.
-- Project roster and coworker-record labels from the shared read models.
+- Project roster and coworker-record labels from one shared coworker-discovery
+  read model.
 - Group coworkers under the four owner-facing areas defined by the live audit:
   `Customers and sales`, `Your team`, `Operations and delivery`, and `Platform and back office`.
 - Keep technical evidence under progressive disclosure.
 - Do not duplicate applicability or authority logic in React components.
+
+WWMD decision `DI-36FF28260D08` selected the existing dynamic coworker-record
+route as the selected coworker context. `/platform/ai/agent/[agentId]` therefore
+resolves that coworker in both the client panel header and server prompt path.
+The shared `AgentCoworkerPanel` remains the one conversation surface; the
+roster and record do not create a parallel workspace or pass a broad agent
+override through the event pipeline.
+
+Implementation contract:
+
+- Extract the four portfolio-to-area labels from proactivity into one shared
+  owner-facing area map. `CoworkerService.portfolioId` is the classification
+  source. `Agent.portfolioId` remains workforce identity placement and must
+  never be used as a fallback for the work-area projection.
+- Extend the normalized service catalog with the service portfolio slug and
+  name. Select the first customer-inward area among a coworker's active,
+  explicitly classified services; retain every classified area in Work
+  Offered. Coworkers without an explicitly classified service remain in
+  `Other`.
+- Add `ownerAreaSlug` to the service seed definition as seed-only metadata.
+  Resolve the four existing Portfolio rows once at seed time and persist their
+  IDs on the service create/update payload. Do not add a schema model, enum, or
+  parallel classification store. Seeded assignments are global service
+  semantics, not install-specific content:
+  - customer/sales and marketing services ->
+    `products_and_services_sold`;
+  - build, compliance, legal, finance, and provider-scout services ->
+    `foundational`.
+  Ordinary reseeds must converge these seeded services to their declared area;
+  non-seeded services are untouched. A seed invariant fails if a declared
+  portfolio slug does not resolve.
+- Normalize service and health evidence across slug and canonical agent IDs.
+- Derive a plain job deterministically from an active aggregate service, then
+  the authored agent description, then an honest undefined label.
+- Preserve customer, partner, internal, and not-defined interaction as a set
+  derived only from active service declarations; cards and filters may show or
+  match more than one scope.
+- Aggregate availability conservatively:
+  `needs-attention`, `setup-needed`, `available`,
+  `coverage-not-defined`, then `not-available`.
+- Until a typed setup evaluator supplies evidence, pass `not-evaluated`.
+  Capability needs in `submitted` state are advanced improvement information,
+  not runtime blockers. Only `blocked` rows may enter readiness evidence.
+- Allow `Ask this coworker` only for `available`; route `setup-needed` to Setup.
+- Keep owner filters in the URL and include the roster return URL in coworker
+  record links.
+- Reduce the coworker record to six sections and render a mobile section
+  selector instead of wrapping a long technical tab row.
+- Keep workforce health, profession coverage, raw identity, and projection
+  evidence behind disclosure.
+- Validate dynamic record IDs against an active, permitted Agent before
+  creating a principal or loading prompts and skills. Unknown, archived,
+  non-production, and unauthorized records cannot send work.
+- Clamp the existing shared coworker panel to the mobile viewport; the roster
+  and record continue to use that one panel rather than creating another AI
+  surface.
+
+Live evidence gathered before implementation:
+
+- 77 visible coworkers after dual-seed alias collapse.
+- Agent workforce placements populate all four canonical portfolios, but those
+  placements are not valid work-area evidence.
+- 10 active coworker services: 2 external and 8 internal.
+- 0 active coworker services currently have an explicit portfolio assignment;
+  seeded service classifications are therefore a launch dependency.
+- The live install is `restaurant` / `food-hospitality`.
+- The current live service declarations still name
+  `software-and-platforms`; the roster must therefore show the mismatch rather
+  than imply restaurant availability.
+- 0 agent governance profiles currently exist; default authority therefore
+  projects from `Agent.hitlTierDefault` until stricter evidence is configured.
+
+### UX Fit Review
+
+- Decision: `fits-with-guardrails`
+- Owning area: Platform
+- Route family: `/platform/ai/overview` and
+  `/platform/ai/agent/[agentId]`
+- Primary persona: business owner or platform operator finding the right
+  coworker and starting work without understanding agent topology
+- Navigation layer touched: local filters, record tabs, and contextual actions
+- Reuse/convergence: existing AI Workforce route family, report-kit status and
+  filter primitives, `OwnerFirstDisclosure`, and the shared
+  `AgentCoworkerPanel`
+- Source truth: normalized `CoworkerService` catalog plus availability and
+  authority projections; service portfolio owns work-area classification
+- Empty/failure behavior: unclassified coworkers remain in `Other`;
+  unevaluated readiness remains `Coverage not defined`; unavailable coworkers
+  cannot start work
+- AI boundary: roster cards and record sections do not send prompts;
+  `Ask this coworker` opens the selected shared panel without auto-sending
+- Evidence before merge: focused read-model/routing tests, invalid URL filter
+  tests, 1440x900 and 390x844 browser passes, keyboard tab pass, 44px action
+  targets, selected-coworker panel identity, and
+  `scrollWidth <= clientWidth` before and after opening the panel
 
 ## Refactoring Allowance
 

@@ -4,6 +4,7 @@
 // Import this in server components / server actions — NOT in "use client" components.
 
 import "server-only";
+import { prisma } from "@dpf/db";
 import {
   coworkerIdFromRecordRoute,
   resolveAgentForRoute,
@@ -12,8 +13,8 @@ import { loadPrompt } from "./prompt-loader";
 import { getSkillsForAgentLegacy } from "@/lib/actions/agent-skills";
 import type { AgentInfo, AgentSkill } from "@/lib/agent-coworker-types";
 import { ensureAgentPrincipalIdentity } from "@/lib/identity/principal-linking";
-import { resolveCoworkerIdentity } from "@/lib/coworker-identity";
-import type { UserContext } from "@/lib/permissions";
+import { can, type UserContext } from "@/lib/permissions";
+import { evaluateLifecycleGate } from "@/lib/coworker-lifecycle/lifecycle-gate";
 import { withCoworkerInteractionContract } from "./coworker-interaction-contract";
 
 async function loadPromptBackplane(agentId: string, fallbackPrompt: string): Promise<string> {
@@ -65,24 +66,80 @@ export async function resolveAgentForRouteWithPrompts(
 
 export async function resolveAgentByIdWithPrompts(
   agentId: string,
-  _userContext: UserContext,
+  userContext: UserContext,
 ): Promise<AgentInfo> {
-  const identity = resolveCoworkerIdentity(agentId);
-  const agentName = identity?.displayName ?? identity?.agentName ?? agentId;
+  if (!can(userContext, "view_platform")) {
+    return unavailableAgent(agentId);
+  }
+
+  const selected = await prisma.agent.findFirst({
+    where: {
+      OR: [{ agentId }, { slugId: agentId }],
+      archived: false,
+    },
+    select: {
+      agentId: true,
+      slugId: true,
+      displayName: true,
+      name: true,
+      description: true,
+      sensitivity: true,
+    },
+  });
+  if (!selected) {
+    return unavailableAgent(agentId);
+  }
+
+  const gate = await evaluateLifecycleGate(selected.agentId, {
+    purpose: "chat",
+  });
+  if (!gate.allowed) {
+    return unavailableAgent(agentId);
+  }
+
+  const runtimeAgentId = selected.slugId ?? selected.agentId;
+  const agentName = selected.displayName || selected.name || runtimeAgentId;
   const fallbackPrompt = `You are ${agentName}. Complete the assigned scheduled work with your granted tools, prefer concrete action over narration, and finish with a concise operational summary.`;
 
-  await ensureAgentPrincipalIdentity(agentId);
+  await ensureAgentPrincipalIdentity(runtimeAgentId);
 
-  const dbSkills = await getSkillsForAgentLegacy(agentId);
+  const dbSkills = await getSkillsForAgentLegacy(runtimeAgentId);
   const skills: AgentSkill[] = dbSkills as AgentSkill[];
 
   return {
-    agentId,
+    agentId: runtimeAgentId,
     agentName,
-    agentDescription: `${agentName} scheduled specialist`,
+    agentDescription:
+      selected.description?.trim() || `${agentName} scheduled specialist`,
     canAssist: true,
-    sensitivity: "internal",
+    sensitivity: normalizeSensitivity(selected.sensitivity),
     skills,
-    systemPrompt: await loadPromptBackplane(agentId, fallbackPrompt),
+    systemPrompt: await loadPromptBackplane(runtimeAgentId, fallbackPrompt),
   };
+}
+
+function unavailableAgent(agentId: string): AgentInfo {
+  return {
+    agentId,
+    agentName: "Coworker unavailable",
+    agentDescription:
+      "This coworker is unavailable or you do not have permission to use it.",
+    canAssist: false,
+    sensitivity: "internal",
+    skills: [],
+    systemPrompt: "",
+  };
+}
+
+function normalizeSensitivity(
+  value: string | null | undefined,
+): AgentInfo["sensitivity"] {
+  if (
+    value === "public" ||
+    value === "confidential" ||
+    value === "restricted"
+  ) {
+    return value;
+  }
+  return "internal";
 }

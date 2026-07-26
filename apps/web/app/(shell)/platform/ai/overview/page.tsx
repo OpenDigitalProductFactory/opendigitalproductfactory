@@ -7,66 +7,72 @@ import { loadRoster } from "@/lib/coworker-record/roster";
 import { loadProfessionCorpusSignals } from "@/lib/coworker-record/corpus-signals";
 import { RosterView } from "@/components/platform/coworker-record/RosterView";
 import { ProfessionCorpusPanel } from "@/components/platform/coworker-record/ProfessionCorpusPanel";
+import { WorkforceSummaryPanel } from "@/components/platform/coworker-record/WorkforceSummaryPanel";
+import { computeWorkforceSummary } from "@/lib/coworker-record/workforce-summary";
+import { OwnerFirstDisclosure } from "@/components/owner-first/OwnerFirstDisclosure";
 
-export default async function PlatformAiOverviewPage() {
+type PageSearchParams = Record<string, string | string[] | undefined>;
+
+export default async function PlatformAiOverviewPage({
+  searchParams,
+}: {
+  searchParams?: Promise<PageSearchParams>;
+} = {}) {
   const [{ rows, facets }, corpusSignals] = await Promise.all([
     loadRoster(),
     loadProfessionCorpusSignals(),
   ]);
-
-  const brokenProviders = rows.filter((r) => !r.providerHealthy);
-  const coverageGaps = rows.filter((r) => r.unmapped || r.emptyCorpus);
+  const initialQuery = toQueryString(
+    searchParams ? await searchParams : {},
+  );
+  const summary = computeWorkforceSummary(rows);
 
   return (
     <div>
-      <div style={{ marginBottom: 16 }}>
-        <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>AI Workforce</h1>
-        <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginTop: 2 }}>
-          The AI workforce directory - filter by profession, competency, jurisdiction, lifecycle, and
-          coverage gaps. Select a coworker to open its record.
+      <header className="mb-5">
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">
+          AI Workforce
+        </h1>
+        <p className="mt-1 text-sm text-[var(--dpf-muted)]">
+          Find the right coworker for the work you need done.
         </p>
-      </div>
-
-      {brokenProviders.length > 0 && (
-        <Banner tone="warning">
-          {brokenProviders.length} coworker{brokenProviders.length !== 1 ? "s have" : " has"} an inactive
-          pinned provider - they fall back to auto-routing ({brokenProviders.map((a) => a.name).join(", ")}).
-        </Banner>
-      )}
-      {coverageGaps.length > 0 && (
-        <Banner tone="warning">
-          {coverageGaps.length} coworker{coverageGaps.length !== 1 ? "s" : ""} have a profession-coverage gap
-          (unmapped role or empty corpus) - the demand queue for the next corpus to build.
-        </Banner>
-      )}
+      </header>
 
       {rows.length > 0 ? (
-        <RosterView rows={rows} facets={facets} />
+        <RosterView
+          rows={rows}
+          facets={facets}
+          initialQuery={initialQuery}
+        />
       ) : (
-        <p style={{ fontSize: 12, color: "var(--dpf-muted)" }}>No coworkers registered yet.</p>
+        <p className="text-sm text-[var(--dpf-muted)]">
+          No coworkers registered yet.
+        </p>
       )}
 
-      <ProfessionCorpusPanel signals={corpusSignals} />
+      <div className="mt-8">
+        <OwnerFirstDisclosure
+          summary="Workforce administration"
+          hint="Health, profession coverage, and technical management"
+        >
+        <div className="space-y-6 pb-4 pt-2">
+          <WorkforceSummaryPanel summary={summary} />
+          <ProfessionCorpusPanel signals={corpusSignals} />
+        </div>
+        </OwnerFirstDisclosure>
+      </div>
     </div>
   );
 }
 
-function Banner({ tone, children }: { tone: "warning"; children: React.ReactNode }) {
-  const toneVar = "var(--dpf-warning)";
-  return (
-    <div
-      style={{
-        border: `1px solid ${toneVar}`,
-        borderRadius: 8,
-        padding: "9px 13px",
-        marginBottom: 12,
-        fontSize: 11,
-        color: "var(--dpf-text-secondary)",
-        background: "var(--dpf-surface)",
-      }}
-    >
-      <span style={{ color: toneVar, fontWeight: 600, marginRight: 6 }}>!</span>
-      {children}
-    </div>
-  );
+function toQueryString(searchParams: PageSearchParams): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(searchParams)) {
+    if (Array.isArray(value)) {
+      for (const entry of value) query.append(key, entry);
+    } else if (value !== undefined) {
+      query.set(key, value);
+    }
+  }
+  return query.toString();
 }

@@ -2,6 +2,11 @@ import type { Prisma, PrismaClient } from "../generated/client/client";
 import { AI_WORKFORCE_PRODUCT_ID } from "./workforce-portfolio";
 
 type CoworkerServiceSeed = {
+  ownerAreaSlug:
+    | "products_and_services_sold"
+    | "for_employees"
+    | "manufacturing_and_delivery"
+    | "foundational";
   serviceId: string;
   providerAgentId: string;
   name: string;
@@ -55,6 +60,7 @@ const LEGACY_COWORKER_CATALOG_PRODUCT_ID = "dpf-portal";
 
 export const COWORKER_SERVICE_CATALOG_SERVICE_SEEDS: readonly CoworkerServiceSeed[] = [
   serviceSeed("svc-build-sensitive-requirements", "build-specialist", {
+    ownerAreaSlug: "foundational",
     name: "Build Studio sensitive-domain requirements broker",
     summary: "Routes regulated, paid-provider, and sensitive feature builds to the right specialist packet.",
     description:
@@ -74,6 +80,7 @@ export const COWORKER_SERVICE_CATALOG_SERVICE_SEEDS: readonly CoworkerServiceSee
     metadata: { aggregate: true, processMaturity: "codified" },
   }),
   serviceSeed("svc-compliance-pci-requirements", "compliance-officer", {
+    ownerAreaSlug: "foundational",
     name: "PCI and regulated-control requirements",
     summary: "Translates compliance obligations into build acceptance criteria and evidence.",
     description:
@@ -93,6 +100,7 @@ export const COWORKER_SERVICE_CATALOG_SERVICE_SEEDS: readonly CoworkerServiceSee
     metadata: { triggerFamilies: ["pci-cardholder-data", "regulated-sensitive-domain"] },
   }),
   serviceSeed("svc-legal-counsel-packet", "legal-operations-counsel", {
+    ownerAreaSlug: "foundational",
     name: "Legal and contract review packet",
     summary: "Prepares counsel-ready facts, questions, clauses, and risk notes.",
     description:
@@ -112,6 +120,7 @@ export const COWORKER_SERVICE_CATALOG_SERVICE_SEEDS: readonly CoworkerServiceSee
     metadata: { legalRisk: "attorney-review-required" },
   }),
   serviceSeed("svc-finance-provider-cost-intake", "finance-controller", {
+    ownerAreaSlug: "foundational",
     name: "Provider cost and purchasing intake",
     summary: "Captures paid provider, token, renewal, D&B, ADP, and subscription cost impacts.",
     description:
@@ -131,6 +140,7 @@ export const COWORKER_SERVICE_CATALOG_SERVICE_SEEDS: readonly CoworkerServiceSee
     metadata: { triggerFamilies: ["paid-provider-or-token", "contract-renewal-obligation"] },
   }),
   serviceSeed("svc-customer-sales-intake", "customer-advisor", {
+    ownerAreaSlug: "products_and_services_sold",
     name: "Customer sales and service intake",
     summary: "External-facing customer inquiry, quote, support, and service-request triage.",
     description:
@@ -151,6 +161,7 @@ export const COWORKER_SERVICE_CATALOG_SERVICE_SEEDS: readonly CoworkerServiceSee
     metadata: { externalInterface: true },
   }),
   serviceSeed("svc-marketing-partner-intake", "marketing-specialist", {
+    ownerAreaSlug: "products_and_services_sold",
     name: "Marketing and campaign collaboration intake",
     summary: "External/partner-facing campaign, lead-source, and channel collaboration intake.",
     description:
@@ -171,6 +182,7 @@ export const COWORKER_SERVICE_CATALOG_SERVICE_SEEDS: readonly CoworkerServiceSee
     metadata: { externalInterface: true },
   }),
   serviceSeed("svc-external-provider-scout", "external-catalog-scout", {
+    ownerAreaSlug: "foundational",
     name: "External provider and MCP catalog scout",
     summary: "Researches external AI coworkers, MCP servers, providers, and authority data sources for governed adoption.",
     description:
@@ -196,6 +208,7 @@ export const COWORKER_SERVICE_CATALOG_SERVICE_SEEDS: readonly CoworkerServiceSee
   // GAID/AIDoc required. backingToolNames cover every marketing-pack tool (a
   // drift-guard test asserts the union stays complete).
   serviceSeed("svc-marketing-campaign-execution", "marketing-specialist", {
+    ownerAreaSlug: "products_and_services_sold",
     name: "Marketing campaign execution",
     summary: "Establishes and runs a campaign end to end: plan, brief, tracked links, content calendar, and cross-channel performance.",
     description:
@@ -222,6 +235,7 @@ export const COWORKER_SERVICE_CATALOG_SERVICE_SEEDS: readonly CoworkerServiceSee
     metadata: { aggregate: true, family: "marketing-execution" },
   }),
   serviceSeed("svc-marketing-ab-testing", "marketing-specialist", {
+    ownerAreaSlug: "products_and_services_sold",
     name: "Marketing A/B variant testing",
     summary: "Creates competing copy variants for an asset, records measured results, and recommends a statistically-guarded winner.",
     description:
@@ -240,6 +254,7 @@ export const COWORKER_SERVICE_CATALOG_SERVICE_SEEDS: readonly CoworkerServiceSee
     metadata: { family: "marketing-execution" },
   }),
   serviceSeed("svc-marketing-competitive-intelligence", "marketing-specialist", {
+    ownerAreaSlug: "products_and_services_sold",
     name: "Marketing competitive battlecards",
     summary: "Maintains durable per-competitor battlecards and projects a competitive matrix across them.",
     description:
@@ -344,11 +359,36 @@ export const COWORKER_SERVICE_CATALOG_OFFER_SEEDS: readonly CoworkerOfferSeed[] 
 ];
 
 export async function seedCoworkerServiceCatalog(prisma: PrismaClient): Promise<void> {
+  const ownerAreaSlugs = [
+    ...new Set(
+      COWORKER_SERVICE_CATALOG_SERVICE_SEEDS.map(
+        (service) => service.ownerAreaSlug,
+      ),
+    ),
+  ];
+  const ownerAreas = await prisma.portfolio.findMany({
+    where: { slug: { in: ownerAreaSlugs } },
+    select: { id: true, slug: true },
+  });
+  const ownerAreaIdBySlug = new Map(
+    ownerAreas.map((portfolio) => [portfolio.slug, portfolio.id]),
+  );
+  const missingOwnerAreas = ownerAreaSlugs.filter(
+    (slug) => !ownerAreaIdBySlug.has(slug),
+  );
+  if (missingOwnerAreas.length > 0) {
+    throw new Error(
+      `Coworker service owner areas are missing: ${missingOwnerAreas.join(", ")}`,
+    );
+  }
+
   for (const service of COWORKER_SERVICE_CATALOG_SERVICE_SEEDS) {
+    const portfolioId = ownerAreaIdBySlug.get(service.ownerAreaSlug)!;
+    const { ownerAreaSlug: _ownerAreaSlug, ...serviceData } = service;
     await prisma.coworkerService.upsert({
       where: { serviceId: service.serviceId },
-      create: service,
-      update: serviceUpdate(service),
+      create: { ...serviceData, portfolioId },
+      update: serviceUpdate(service, portfolioId),
     });
   }
 
@@ -387,17 +427,20 @@ export async function seedCoworkerServiceCatalog(prisma: PrismaClient): Promise<
 
 function serviceUpdate({
   archetypes: _archetypes,
+  ownerAreaSlug: _ownerAreaSlug,
   ...update
-}: CoworkerServiceSeed): Omit<CoworkerServiceSeed, "archetypes"> {
-  return update;
+}: CoworkerServiceSeed, portfolioId: string) {
+  return { ...update, portfolioId };
 }
 
 function serviceSeed(
   serviceId: string,
   providerAgentId: string,
-  overrides: Partial<CoworkerServiceSeed>,
+  overrides: Partial<Omit<CoworkerServiceSeed, "ownerAreaSlug">> &
+    Pick<CoworkerServiceSeed, "ownerAreaSlug">,
 ): CoworkerServiceSeed {
   return {
+    ownerAreaSlug: overrides.ownerAreaSlug,
     serviceId,
     providerAgentId,
     name: overrides.name ?? serviceId,

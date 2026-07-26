@@ -523,6 +523,12 @@ export async function sendMessage(input: {
     platformRole: user.platformRole,
     isSuperuser: user.isSuperuser,
   }, useUnified);
+  if (!agent.canAssist) {
+    return {
+      error:
+        "This coworker is unavailable or you do not have permission to use it.",
+    };
+  }
 
   // Lifecycle gate (EP-COWORKER-LIFECYCLE Phase 3, BI-2C4056BF): a draft or
   // retired coworker — and, under COWORKER_LIFECYCLE_STRICT, one that failed

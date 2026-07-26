@@ -25,6 +25,7 @@ import {
   getDockedPanelFrame,
   getReservedPanelWidth,
   isDockedPanelViewport,
+  isMobilePanelViewport,
   type DockedPanelFrame,
   type PanelPosition,
   type PanelSize,
@@ -667,8 +668,29 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
 
   if (!hydrated) return null;
 
+  const isMobile = isMobilePanelViewport(getViewport());
   const isDocked = dockedFrame !== null;
-  const panelStyle = isDocked && dockedFrame
+  const usesFixedFrame = isDocked || isMobile;
+  const panelStyle = isMobile
+    ? {
+        position: "fixed" as const,
+        zIndex: 50,
+        inset: 0,
+        width: "100vw",
+        maxWidth: "100vw",
+        minWidth: 0,
+        height: "100dvh",
+        maxHeight: "100dvh",
+        borderRadius: 0,
+        background: "var(--dpf-surface-1)",
+        border: 0,
+        boxShadow: "none",
+        boxSizing: "border-box" as const,
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column" as const,
+      }
+    : isDocked && dockedFrame
     ? {
         position: "fixed" as const,
         zIndex: 50,
@@ -716,6 +738,7 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
           aria-label="AI coworker panel"
           tabIndex={-1}
           style={panelStyle}
+          data-panel-layout={isMobile ? "mobile-viewport" : isDocked ? "desktop-docked" : "floating"}
         >
           <AgentCoworkerPanel
             threadId={threadId}
@@ -729,11 +752,11 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
             onAutoMessageConsumed={() => setPendingAutoMessage(null)}
             onConversationCleared={() => setInitialMessages([])}
             routeContextOverride={guidedRouteContext ?? undefined}
-            isDocked={isDocked}
+            isDocked={usesFixedFrame}
             threadLoadState={threadLoadState}
             onReloadToReconnect={handleReloadToReconnect}
           />
-          {!isDocked && (
+          {!usesFixedFrame && (
             <div
               onMouseDown={handleResizeStart}
               title="Resize coworker panel"

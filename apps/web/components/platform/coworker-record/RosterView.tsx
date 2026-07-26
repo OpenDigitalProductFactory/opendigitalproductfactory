@@ -1,236 +1,442 @@
 "use client";
 
-// EP-AI-WORKFORCE-001 (HRIS surface) — the AI-workforce directory view.
-// Filter rail (profession family / value stream / competency / jurisdiction /
-// lifecycle / coverage-gap) + tier|family grouping over the annotated roster
-// rows, with fitness-for-duty signals per coworker. Spec §7. Theme tokens only.
-
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import {
+  ChevronRight,
+  MessageSquare,
+  RotateCcw,
+  Search,
+  Settings2,
+} from "lucide-react";
+
 import { AskCoworkerButton } from "@/components/agent/AskCoworkerButton";
-import type { RosterRow, RosterFacets } from "@/lib/coworker-record/roster";
-import { matchesFilters, kindOptions, EMPTY_FILTERS, type RosterFilters } from "@/lib/coworker-record/roster-filter";
-import { computeWorkforceSummary } from "@/lib/coworker-record/workforce-summary";
-import { WorkforceSummaryPanel } from "./WorkforceSummaryPanel";
+import { OwnerFirstDisclosure } from "@/components/owner-first/OwnerFirstDisclosure";
+import { StatusBadge } from "@/components/ui/report-kit";
+import {
+  filtersFromSearchParams,
+  filtersToSearchParams,
+  kindOptions,
+  matchesFilters,
+  needsAttention,
+  EMPTY_FILTERS,
+  type RosterFilters,
+} from "@/lib/coworker-record/roster-filter";
+import type {
+  RosterFacets,
+  RosterRow,
+} from "@/lib/coworker-record/roster";
+import {
+  OTHER_OWNER_FACING_AREA,
+  OWNER_FACING_AREAS,
+} from "@/lib/coworker-record/owner-areas";
 
-// Tier is a span-of-control level, not a role — the role-type lives in each
-// coworker's `kind` chip (a tier-1 group can hold a specialist, e.g. an analyst
-// reporting at orchestration tier). Labels stay neutral so they never contradict
-// the kind chip (EP-COWORKER-RT follow-up: tier said "Orchestrators" over a COO
-// whose kind chip read "Specialist").
-const TIER_LABELS: Record<number, string> = {
-  1: "Tier 1",
-  2: "Tier 2",
-  3: "Tier 3",
-};
+const INTERACTION_OPTIONS = [
+  { value: "talks-to-customers", label: "Talks to customers" },
+  { value: "works-with-partners", label: "Works with partners" },
+  { value: "internal-only", label: "Internal only" },
+  { value: "not-defined", label: "Not defined" },
+];
 
-type Filters = RosterFilters;
+const AVAILABILITY_OPTIONS = [
+  { value: "available", label: "Available" },
+  { value: "setup-needed", label: "Setup needed" },
+  { value: "needs-attention", label: "Needs attention" },
+  { value: "not-available", label: "Not available" },
+  { value: "coverage-not-defined", label: "Coverage not defined" },
+];
 
-const EMPTY = EMPTY_FILTERS;
+const AUTHORITY_OPTIONS = [
+  { value: "cannot-act", label: "Cannot act" },
+  { value: "advice-only", label: "Advises only" },
+  { value: "proposal-only", label: "Prepares work for approval" },
+  { value: "approval-required", label: "Acts with approval" },
+  { value: "review-required", label: "Acts with review" },
+  { value: "autonomous", label: "Can act within limits" },
+  { value: "review-needed", label: "Approval rules need review" },
+];
 
-// Coarse relative label for the last-activity chip (EP-26E528F5 P2) — same
-// idiom as AsyncOperationsTable. Coarse units keep SSR/client hydration stable.
-function formatRelative(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime();
-  if (ms < 60_000) return "just now";
-  const minutes = Math.floor(ms / 60_000);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  return `${months}mo ago`;
-}
-
-export function RosterView({ rows, facets }: { rows: RosterRow[]; facets: RosterFacets }) {
-  const [filters, setFilters] = useState<Filters>(EMPTY);
-  const [groupBy, setGroupBy] = useState<"tier" | "family" | "domain">("domain");
-
-  // Kind facet option set is derived from the rows present (design item 1) so a
-  // fresh install never shows a role-type it has no coworker for.
+export function RosterView({
+  rows,
+  facets,
+  initialQuery = "",
+}: {
+  rows: RosterRow[];
+  facets: RosterFacets;
+  initialQuery?: string;
+}) {
+  const [filters, setFilters] = useState<RosterFilters>(() =>
+    filtersFromSearchParams(new URLSearchParams(initialQuery)),
+  );
+  useEffect(() => {
+    const restoreFilters = () =>
+      setFilters(filtersFromSearchParams(new URLSearchParams(window.location.search)));
+    window.addEventListener("popstate", restoreFilters);
+    return () => window.removeEventListener("popstate", restoreFilters);
+  }, []);
   const kindOpts = useMemo(() => kindOptions(rows), [rows]);
-  // WS5 workforce summary — computed once from the full roster (not the filtered
-  // view): the at-a-glance "whole workforce" panel is a fixed denominator.
-  const summary = useMemo(() => computeWorkforceSummary(rows), [rows]);
-
-  const filtered = useMemo(() => rows.filter((r) => matchesFilters(r, filters)), [rows, filters]);
-
+  const filtered = useMemo(
+    () => rows.filter((row) => matchesFilters(row, filters)),
+    [rows, filters],
+  );
   const groups = useMemo(() => {
-    const map = new Map<string, RosterRow[]>();
-    for (const r of filtered) {
-      const key =
-        groupBy === "tier"
-          ? TIER_LABELS[r.tier] ?? `Tier ${r.tier}`
-          : groupBy === "domain"
-            ? r.valueStream
-              ? r.valueStream.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
-              : "Core Platform / Universal"
-            : r.familyLabel ?? "Unmapped";
-      const list = map.get(key) ?? [];
-      list.push(r);
-      map.set(key, list);
+    const byArea = new Map<string, { row: RosterRow; rows: RosterRow[] }>();
+    for (const row of filtered) {
+      const existing = byArea.get(row.area.key);
+      if (existing) existing.rows.push(row);
+      else byArea.set(row.area.key, { row, rows: [row] });
     }
-    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [filtered, groupBy]);
+    return [...byArea.values()]
+      .sort((left, right) => left.row.area.order - right.row.area.order)
+      .map((group) => ({
+        area: group.row.area,
+        rows: group.rows.sort((left, right) =>
+          left.displayName.localeCompare(right.displayName),
+        ),
+      }));
+  }, [filtered]);
 
-  const gaps = filtered.filter((r) => r.unmapped || r.emptyCorpus).length;
-  const set = (patch: Partial<Filters>) => setFilters((f) => ({ ...f, ...patch }));
+  const advancedFilterCount = [
+    filters.authority,
+    filters.family,
+    filters.kind,
+    filters.valueStream,
+    filters.competency,
+    filters.jurisdiction,
+    filters.lifecycle,
+    filters.coverageGap ? "coverage" : "",
+  ].filter(Boolean).length;
+
+  function replaceFilters(next: RosterFilters) {
+    setFilters(next);
+    if (typeof window === "undefined") return;
+    const params = filtersToSearchParams(
+      next,
+      new URLSearchParams(window.location.search),
+    );
+    const query = params.toString();
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
+    );
+  }
+
+  function set(patch: Partial<RosterFilters>) {
+    replaceFilters({ ...filters, ...patch });
+  }
+
+  const currentQuery = filtersToSearchParams(
+    filters,
+    new URLSearchParams(initialQuery),
+  ).toString();
+  const returnHref = `/platform/ai/overview${currentQuery ? `?${currentQuery}` : ""}`;
 
   return (
     <div>
-      {/* WS5 — workforce summary (at-a-glance, computed from the full roster). */}
-      <WorkforceSummaryPanel summary={summary} />
-
-      {/* Filter rail */}
-      <div
-        style={{
-          display: "flex",
-          gap: 10,
-          flexWrap: "wrap",
-          alignItems: "center",
-          padding: "10px 12px",
-          border: "1px solid var(--dpf-border)",
-          borderRadius: 8,
-          background: "var(--dpf-surface)",
-          marginBottom: 14,
-        }}
-      >
-        {/* Directory search (design §5) — name / slug / family substring. */}
-        <label style={{ display: "inline-flex", flexDirection: "column", gap: 2, flex: "1 1 220px", minWidth: 200 }}>
-          <span style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--dpf-muted)" }}>Search</span>
-          <input
-            type="search"
-            value={filters.query}
-            onChange={(e) => set({ query: e.target.value })}
-            placeholder="name, slug, or family…"
-            aria-label="Search coworkers by name, slug, or family"
-            style={{
-              fontSize: 11,
-              padding: "5px 8px",
-              borderRadius: 5,
-              border: "1px solid var(--dpf-border)",
-              background: "var(--dpf-bg)",
-              color: "var(--dpf-text)",
-              width: "100%",
-            }}
+      <div className="mb-5 border-y border-[var(--dpf-border)] py-4">
+        <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_repeat(3,minmax(150px,0.45fr))]">
+          <label className="relative block">
+            <span className="mb-1 block text-xs font-medium text-[var(--dpf-text-secondary)]">
+              Find a coworker
+            </span>
+            <Search
+              aria-hidden
+              className="absolute bottom-2.5 left-3 h-4 w-4 text-[var(--dpf-muted)]"
+            />
+            <input
+              type="search"
+              value={filters.query}
+              onChange={(event) => set({ query: event.target.value })}
+              placeholder="Name or work"
+            className="h-11 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] pl-9 pr-3 text-sm text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
+            />
+          </label>
+          <Select
+            label="Business area"
+            value={filters.area}
+            onChange={(value) => set({ area: value })}
+            options={[...OWNER_FACING_AREAS, OTHER_OWNER_FACING_AREA].map((area) => ({
+              value: area.key,
+              label: area.label,
+            }))}
           />
-        </label>
-        <Select label="Family" value={filters.family} onChange={(v) => set({ family: v })} options={facets.families.map((f) => ({ value: f.key, label: f.label }))} />
-        <Select label="Kind" value={filters.kind} onChange={(v) => set({ kind: v })} options={kindOpts.map((k) => ({ value: k, label: k.charAt(0).toUpperCase() + k.slice(1) }))} />
-        <Select label="Value stream" value={filters.valueStream} onChange={(v) => set({ valueStream: v })} options={facets.valueStreams.map((v) => ({ value: v, label: v }))} />
-        <Select label="Competency" value={filters.competency} onChange={(v) => set({ competency: v })} options={facets.competencies.map((v) => ({ value: v, label: v }))} />
-        <Select label="Jurisdiction" value={filters.jurisdiction} onChange={(v) => set({ jurisdiction: v })} options={facets.jurisdictions.map((v) => ({ value: v, label: v }))} />
-        <Select label="Lifecycle" value={filters.lifecycle} onChange={(v) => set({ lifecycle: v })} options={facets.lifecycleStages.map((v) => ({ value: v, label: v }))} />
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--dpf-text-secondary)" }}>
-          <input type="checkbox" checked={filters.coverageGap} onChange={(e) => set({ coverageGap: e.target.checked })} />
-          coverage gaps only
-        </label>
-        <button type="button" onClick={() => setFilters(EMPTY)} style={linkBtn}>reset</button>
-        <div style={{ marginLeft: "auto", display: "inline-flex", gap: 6, alignItems: "center" }}>
-          <span style={{ fontSize: 11, color: "var(--dpf-muted)" }}>group by</span>
-          <button type="button" onClick={() => setGroupBy("domain")} style={toggleBtn(groupBy === "domain")}>domain</button>
-          <button type="button" onClick={() => setGroupBy("tier")} style={toggleBtn(groupBy === "tier")}>tier</button>
-          <button type="button" onClick={() => setGroupBy("family")} style={toggleBtn(groupBy === "family")}>family</button>
+          <Select
+            label="Interaction"
+            value={filters.interaction}
+            onChange={(value) => set({ interaction: value })}
+            options={INTERACTION_OPTIONS}
+          />
+          <Select
+            label="Availability"
+            value={filters.availability}
+            onChange={(value) => set({ availability: value })}
+            options={AVAILABILITY_OPTIONS}
+          />
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <label className="inline-flex min-h-11 items-center gap-2 text-sm text-[var(--dpf-text-secondary)]">
+            <input
+              type="checkbox"
+              checked={filters.attentionOnly}
+              onChange={(event) =>
+                set({ attentionOnly: event.target.checked })
+              }
+              className="h-4 w-4"
+            />
+            Needs attention
+          </label>
+          <button
+            type="button"
+            onClick={() => replaceFilters(EMPTY_FILTERS)}
+            className="inline-flex min-h-11 items-center gap-2 rounded-md px-2 text-sm text-[var(--dpf-muted)] hover:bg-[var(--dpf-surface-2)] hover:text-[var(--dpf-text)]"
+            title="Reset filters"
+          >
+            <RotateCcw aria-hidden className="h-4 w-4" />
+            Reset
+          </button>
+        </div>
+
+        <OwnerFirstDisclosure
+          summary={`More filters${advancedFilterCount > 0 ? ` (${advancedFilterCount})` : ""}`}
+          hint="Profession, role, lifecycle, and knowledge"
+        >
+          <div className="grid gap-3 pb-2 sm:grid-cols-2 xl:grid-cols-4">
+            <Select
+              label="Approval and autonomy"
+              value={filters.authority}
+              onChange={(value) => set({ authority: value })}
+              options={AUTHORITY_OPTIONS}
+            />
+            <Select
+              label="Profession"
+              value={filters.family}
+              onChange={(value) => set({ family: value })}
+              options={facets.families.map((family) => ({
+                value: family.key,
+                label: family.label,
+              }))}
+            />
+            <Select
+              label="Role type"
+              value={filters.kind}
+              onChange={(value) => set({ kind: value })}
+              options={kindOpts.map((kind) => ({
+                value: kind,
+                label: titleCase(kind),
+              }))}
+            />
+            <Select
+              label="Lifecycle"
+              value={filters.lifecycle}
+              onChange={(value) => set({ lifecycle: value })}
+              options={facets.lifecycleStages.map((value) => ({
+                value,
+                label: titleCase(value),
+              }))}
+            />
+            <Select
+              label="Value stream"
+              value={filters.valueStream}
+              onChange={(value) => set({ valueStream: value })}
+              options={facets.valueStreams.map((value) => ({
+                value,
+                label: titleCase(value),
+              }))}
+            />
+            <Select
+              label="Competency"
+              value={filters.competency}
+              onChange={(value) => set({ competency: value })}
+              options={facets.competencies.map((value) => ({
+                value,
+                label: titleCase(value),
+              }))}
+            />
+            <Select
+              label="Jurisdiction"
+              value={filters.jurisdiction}
+              onChange={(value) => set({ jurisdiction: value })}
+              options={facets.jurisdictions.map((value) => ({
+                value,
+                label: value,
+              }))}
+            />
+            <label className="inline-flex min-h-11 items-end gap-2 pb-2 text-sm text-[var(--dpf-text-secondary)]">
+              <input
+                type="checkbox"
+                checked={filters.coverageGap}
+                onChange={(event) =>
+                  set({ coverageGap: event.target.checked })
+                }
+                className="mb-0.5 h-4 w-4"
+              />
+              Knowledge coverage gaps
+            </label>
+          </div>
+        </OwnerFirstDisclosure>
+      </div>
+
+      <p
+        className="mb-5 text-sm text-[var(--dpf-muted)]"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {filtered.length} coworker{filtered.length === 1 ? "" : "s"}
+      </p>
+
+      <div className="space-y-8">
+        {groups.map(({ area, rows: areaRows }) => (
+          <section key={area.key} aria-labelledby={`area-${area.key}`}>
+            <div className="mb-3 flex items-baseline justify-between gap-3 border-b border-[var(--dpf-border)] pb-2">
+              <h2
+                id={`area-${area.key}`}
+                className="text-base font-semibold text-[var(--dpf-text)]"
+              >
+                {area.label}
+              </h2>
+              <span className="text-xs text-[var(--dpf-muted)]">
+                {areaRows.length}
+              </span>
+            </div>
+            <div className="grid gap-3">
+              {areaRows.map((row) => (
+                <RosterRowCard
+                  key={row.agentId}
+                  row={row}
+                  returnHref={returnHref}
+                />
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+
+      {filtered.length === 0 && (
+        <div className="border-y border-[var(--dpf-border)] py-8 text-center">
+          <p className="text-sm font-medium text-[var(--dpf-text)]">
+            No coworkers match these filters.
+          </p>
+          <button
+            type="button"
+            onClick={() => replaceFilters(EMPTY_FILTERS)}
+            className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--dpf-border)] px-3 text-sm text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
+          >
+            <RotateCcw aria-hidden className="h-4 w-4" />
+            Reset filters
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RosterRowCard({
+  row,
+  returnHref,
+}: {
+  row: RosterRow;
+  returnHref: string;
+}) {
+  const detailRoute = `/platform/ai/agent/${encodeURIComponent(row.agentId)}`;
+  const detailHref = `${detailRoute}?returnTo=${encodeURIComponent(returnHref)}`;
+  const available = row.availability.state === "available";
+  const setupNeeded = row.availability.state === "setup-needed";
+  const attention = needsAttention(row);
+
+  return (
+    <article
+      className="grid min-w-0 gap-4 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+      data-coworker-card={row.agentId}
+    >
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-sm font-semibold text-[var(--dpf-text)]">
+            {row.displayName}
+          </h3>
+          {attention && (
+            <StatusBadge
+              intent="warning"
+              label="Needs attention"
+              uppercase={false}
+            />
+          )}
+        </div>
+        <p className="mt-1 max-w-3xl text-sm leading-5 text-[var(--dpf-text-secondary)]">
+          {row.plainJob}
+        </p>
+        <div className="mt-3 flex min-w-0 flex-wrap gap-2">
+          {row.interaction.scopes.map((scope, index) => (
+            <StatusBadge
+              key={scope}
+              intent={interactionIntent(scope)}
+              label={row.interaction.labels[index]}
+              uppercase={false}
+            />
+          ))}
+          <StatusBadge
+            intent={availabilityIntent(row.availability.state)}
+            label={row.availability.label}
+            uppercase={false}
+          />
+          <StatusBadge
+            intent={row.authority.state === "resolved" ? "neutral" : "warning"}
+            label={row.authority.label}
+            uppercase={false}
+          />
         </div>
       </div>
 
-      <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 14 }}>
-        {filtered.length} coworker{filtered.length !== 1 ? "s" : ""}
-        {gaps > 0 ? ` · ${gaps} with coverage gap` : ""}
-      </div>
-
-      {groups.map(([groupName, groupRows]) => (
-        <section key={groupName} style={{ marginBottom: 22 }}>
-          <h2 style={{ fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--dpf-muted)", marginBottom: 8 }}>
-            {groupName} <span style={{ fontWeight: 400 }}>({groupRows.length})</span>
-          </h2>
-          <div style={{ display: "grid", gap: 6 }}>
-            {groupRows.map((r) => (
-              <Link
-                key={r.agentId}
-                href={`/platform/ai/agent/${encodeURIComponent(r.agentId)}`}
-                style={{ textDecoration: "none", color: "inherit" }}
-              >
-                <RosterRowCard row={r} />
-              </Link>
-            ))}
-          </div>
-        </section>
-      ))}
-
-      {filtered.length === 0 && (
-        <p style={{ fontSize: 12, color: "var(--dpf-muted)" }}>No coworkers match the current filters.</p>
-      )}
-    </div>
-  );
-}
-
-function RosterRowCard({ row }: { row: RosterRow }) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 10,
-        padding: "9px 12px",
-        border: "1px solid var(--dpf-border)",
-        borderRadius: 8,
-        background: "var(--dpf-surface)",
-        flexWrap: "wrap",
-      }}
-    >
-      <span style={{ fontSize: 13, fontWeight: 600, color: "var(--dpf-text)", minWidth: 180 }}>{row.displayName}</span>
-      <Badge tone="muted">{row.kind.charAt(0).toUpperCase() + row.kind.slice(1)}</Badge>
-      {row.familyLabel ? (
-        <Badge tone="accent">{row.familyLabel}</Badge>
-      ) : (
-        <Badge tone="error">unmapped role</Badge>
-      )}
-      {row.valueStream && <Badge tone="muted">{row.valueStream}</Badge>}
-      <Badge tone="muted">{row.lifecycleStage}</Badge>
-      <span style={{ marginLeft: "auto", display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-        {row.coveragePct !== null && (
-          <Badge tone={row.coveragePct >= 80 ? "success" : row.coveragePct >= 40 ? "warning" : "error"}>
-            corpus {row.coveragePct}%
-          </Badge>
-        )}
-        {row.emptyCorpus && row.familyKey && <Badge tone="warning">empty corpus</Badge>}
-        {!row.providerHealthy && (
+      <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
+        {available && (
           <AskCoworkerButton
-            prompt={`The AI workforce roster shows "${row.displayName}" with a "provider down" warning — its AI provider isn't healthy, so this coworker may not respond. Please check the provider status, explain what's wrong in plain language, and give me the exact next step (or fix it if you have a safe way to do so).`}
-            routeContext="/platform"
-            title="This coworker's AI provider isn't healthy — click to ask what's wrong and how to fix it"
-            className=""
+            routeContext={detailRoute}
+            label="Ask this coworker"
+            className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--dpf-accent)] px-3 text-sm font-medium text-[var(--dpf-accent)] hover:bg-[var(--dpf-surface-2)]"
           >
-            <Badge tone="warning">provider down — ask</Badge>
+            <MessageSquare aria-hidden className="h-4 w-4" />
+            <span>Ask this coworker</span>
           </AskCoworkerButton>
         )}
-        {row.openBlockers > 0 && <Badge tone="error">{row.openBlockers} blocker{row.openBlockers !== 1 ? "s" : ""}</Badge>}
-        {row.deferRate > 0.25 && <Badge tone="warning">defer {Math.round(row.deferRate * 100)}%</Badge>}
-        {/* Live "what are they doing" signal (BI-CF6D8C12): most recent visible
-            work, so the fleet home reads as activity, not a static HR roster. */}
-        <Badge tone={row.lastActiveAt ? "muted" : "warning"}>
-          {row.lastActiveAt ? `active ${formatRelative(row.lastActiveAt)}` : "never active"}
-        </Badge>
-      </span>
-    </div>
+        {setupNeeded && (
+          <Link
+            href="/setup"
+            className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--dpf-border)] px-3 text-sm font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
+          >
+            <Settings2 aria-hidden className="h-4 w-4" />
+            Finish setup
+          </Link>
+        )}
+        <Link
+          href={detailHref}
+          className="inline-flex min-h-11 items-center gap-1 rounded-md bg-[var(--dpf-accent)] px-3 text-sm font-semibold text-white hover:opacity-90"
+        >
+          View coworker
+          <ChevronRight aria-hidden className="h-4 w-4" />
+        </Link>
+      </div>
+    </article>
   );
 }
 
-function Badge({ children, tone }: { children: React.ReactNode; tone: "muted" | "accent" | "success" | "warning" | "error" }) {
-  const toneVar = {
-    muted: "var(--dpf-muted)",
-    accent: "var(--dpf-accent)",
-    success: "var(--dpf-success)",
-    warning: "var(--dpf-warning)",
-    error: "var(--dpf-error)",
-  }[tone];
-  return (
-    <span style={{ fontSize: 10, padding: "1px 7px", borderRadius: 4, border: `1px solid ${toneVar}`, color: toneVar, whiteSpace: "nowrap" }}>
-      {children}
-    </span>
-  );
+function interactionIntent(
+  scope: RosterRow["interaction"]["scopes"][number],
+): "neutral" | "success" {
+  if (scope === "talks-to-customers" || scope === "works-with-partners") {
+    return "success";
+  }
+  return "neutral";
+}
+
+function availabilityIntent(
+  state: RosterRow["availability"]["state"],
+): "success" | "warning" | "neutral" {
+  if (state === "available") return "success";
+  if (state === "setup-needed" || state === "needs-attention") {
+    return "warning";
+  }
+  return "neutral";
 }
 
 function Select({
@@ -241,52 +447,32 @@ function Select({
 }: {
   label: string;
   value: string;
-  onChange: (v: string) => void;
+  onChange: (value: string) => void;
   options: { value: string; label: string }[];
 }) {
   return (
-    <label style={{ display: "inline-flex", flexDirection: "column", gap: 2 }}>
-      <span style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--dpf-muted)" }}>{label}</span>
+    <label className="block min-w-0">
+      <span className="mb-1 block text-xs font-medium text-[var(--dpf-text-secondary)]">
+        {label}
+      </span>
       <select
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{
-          fontSize: 11,
-          padding: "4px 6px",
-          borderRadius: 5,
-          border: "1px solid var(--dpf-border)",
-          background: "var(--dpf-bg)",
-          color: "var(--dpf-text)",
-          minWidth: 110,
-        }}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-11 w-full min-w-0 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 text-sm text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
       >
-        <option value="">all</option>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
+        <option value="">All</option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
         ))}
       </select>
     </label>
   );
 }
 
-const linkBtn: React.CSSProperties = {
-  appearance: "none",
-  background: "transparent",
-  border: "none",
-  color: "var(--dpf-accent)",
-  fontSize: 11,
-  cursor: "pointer",
-  padding: 0,
-};
-
-const toggleBtn = (active: boolean): React.CSSProperties => ({
-  appearance: "none",
-  background: active ? "var(--dpf-surface-2)" : "transparent",
-  border: "1px solid var(--dpf-border)",
-  borderColor: active ? "var(--dpf-accent)" : "var(--dpf-border)",
-  color: active ? "var(--dpf-text)" : "var(--dpf-text-secondary)",
-  fontSize: 11,
-  padding: "3px 9px",
-  borderRadius: 5,
-  cursor: "pointer",
-});
+function titleCase(value: string): string {
+  return value
+    .replace(/[-_]/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}

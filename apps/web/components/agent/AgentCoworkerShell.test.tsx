@@ -94,6 +94,7 @@ vi.mock("./agent-panel-layout", () => ({
   getDockedPanelFrame: () => null,
   getReservedPanelWidth: () => 0,
   isDockedPanelViewport: () => false,
+  isMobilePanelViewport: () => window.innerWidth < 640,
 }));
 
 vi.mock("./agent-panel-prefs", () => ({
@@ -149,6 +150,10 @@ async function settleShellThread() {
 
 describe("AgentCoworkerShell support entry", () => {
   beforeEach(() => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1024,
+    });
     pathname = "/build";
     getOrCreateThreadSnapshotMock.mockResolvedValue({
       threadId: "thread-1",
@@ -175,6 +180,31 @@ describe("AgentCoworkerShell support entry", () => {
         ok: true,
         json: async () => ({ ok: true }),
       }),
+    );
+  });
+
+  it("uses a viewport-bound frame on mobile", async () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 390,
+    });
+    renderShell();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Open coworker" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "AI coworker panel",
+    });
+    expect(dialog).toHaveAttribute("data-panel-layout", "mobile-viewport");
+    expect(dialog).toHaveStyle({
+      width: "100vw",
+      maxWidth: "100vw",
+      minWidth: "0",
+      height: "100dvh",
+      overflow: "hidden",
+    });
+    expect(agentCoworkerPanelMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ isDocked: true }),
     );
   });
 

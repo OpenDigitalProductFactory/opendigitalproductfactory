@@ -6,7 +6,35 @@ order: 1
 
 ## Overview
 
-The AI Workforce area is where platform administrators configure the AI infrastructure that powers the platform's agents, coworkers, and automated capabilities. It manages which AI providers are active, how models are selected for different tasks, how the platform behaves when a provider is unavailable, and how agent authority and governance are enforced.
+AI Workforce is the directory and management home for the people-like AI roles that work in DPF. Start here to find who can help, what work they offer, whether that work is available for the current business type, and how much approval or review it requires.
+
+Coworkers are grouped from customer-facing work inward:
+
+1. **Customers and sales**
+2. **Your team**
+3. **Operations and delivery**
+4. **Platform and back office**
+5. **Other** — work that has not yet been explicitly classified
+
+Provider, model, prompt, skill, runtime, and decision evidence remains available, but it is supporting detail rather than the directory's starting point.
+
+The grouping describes the work a coworker offers, not where the coworker's
+identity sits in the workforce hierarchy. A coworker appears in one of the four
+areas only when an active service is assigned there. Unassigned work remains in
+**Other** instead of being guessed from a title or team.
+
+## Find and Work With a Coworker
+
+1. Open `/platform/ai/overview`.
+2. Search by coworker name or the work you need done.
+3. Filter by business area, interaction, availability, or attention state. Additional profession and lifecycle filters are under **More filters**.
+4. Read the three compact signals on each coworker: who they interact with, whether their declared work supports this business type, and their approval/autonomy posture.
+5. Choose **View coworker** for the full record.
+6. Choose **Ask this coworker** only when the roster shows the coworker as available. This opens the existing coworker panel without sending a message for you.
+
+The roster keeps filter state in the URL. Returning from a coworker record restores the same directory view.
+
+An unavailable label is not a runtime guess. It is projected from the current storefront business type, explicit coworker service declarations, and an explicit readiness evaluation. Missing declarations or unevaluated readiness appear as **Coverage not defined** rather than being treated as universal support or enabling work prematurely.
 
 ## Key Concepts
 
@@ -17,12 +45,15 @@ The AI Workforce area is where platform administrators configure the AI infrastr
 - **Token Spend** — Usage tracking per provider and model. Visible to admins to monitor cost and identify unexpected consumption patterns.
 - **Finance Bridge** — When a provider is configured, the platform can seed finance ownership by linking the provider to a supplier, draft contract, and finance work items.
 - **Tool Grants** — Each agent has a declared set of tool grants in `agent_registry.json` that control which platform tools it can invoke. Tool grants are enforced at runtime — an agent can only use tools that match its grants AND the user's role capabilities (effective permissions = user role intersection with agent grants).
-- **HITL Tiers** — Human-In-The-Loop tiers define how much autonomy an agent has. Tier 0 = executive oversight required, Tier 1 = manager approval, Tier 2 = auto-approved with audit, Tier 3 = informational only.
+- **Approval and autonomy** — The owner-facing record projects existing HITL and governance evidence into plain labels: **Cannot act**, **Advises only**, **Prepares work for approval**, **Acts with approval**, **Acts with review**, or **Can act within limits**. Incomplete or contradictory evidence appears as **Approval rules need review**.
 - **Tool Evaluation Pipeline** — External tools (MCP servers, npm packages, APIs) must pass a multi-agent evaluation pipeline (security, architecture, compliance, integration) before adoption. See EP-GOVERN-002.
 
 ## What You Can Do
 
 - Register new AI providers and configure their API keys and connection settings
+- Find coworkers by business area, customer/partner interaction, business-type availability, approval posture, and attention state
+- Open one coworker record with six sections: **Overview**, **Work Offered**, **Availability**, **Capabilities**, **Autonomy & Governance**, and **Activity**
+- Open the selected coworker in the shared panel without creating a second conversation surface
 - Review available models per provider and configure their routing profiles
 - Set up failover chains to ensure continuity when a provider is degraded
 - Monitor token spend and usage patterns across all active providers
@@ -39,6 +70,8 @@ The AI Workforce area is where platform administrators configure the AI infrastr
 
 ## Related Routes
 
+- `/platform/ai/overview` — customer-first coworker directory
+- `/platform/ai/agent/[agentId]` — selected coworker record and work entry
 - `/platform/ai/providers/[providerId]` — provider setup and the Finance Bridge panel
 - `/platform/ai/agent/AGT-ORCH-000` — standing COO record, including its optional organization-visible conversational name
 - `/platform/ai/runtime-health` — capability-aware local service and external-provider health

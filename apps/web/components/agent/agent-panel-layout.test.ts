@@ -6,11 +6,13 @@ import {
   EDGE_GAP,
   MIN_PANEL_HEIGHT,
   MIN_PANEL_WIDTH,
+  MOBILE_PANEL_BREAKPOINT,
   clampPanelPosition,
   clampPanelSize,
   getDockedPanelFrame,
   getDefaultPanelPosition,
   isDockedPanelViewport,
+  isMobilePanelViewport,
   getReservedPanelWidth,
 } from "./agent-panel-layout";
 
@@ -85,6 +87,21 @@ describe("agent panel layout helpers", () => {
   it("detects desktop viewports for docked panel mode", () => {
     expect(isDockedPanelViewport({ width: DESKTOP_PANEL_RESERVE_BREAKPOINT, height: 900 })).toBe(true);
     expect(isDockedPanelViewport({ width: DESKTOP_PANEL_RESERVE_BREAKPOINT - 1, height: 900 })).toBe(false);
+  });
+
+  it("uses a viewport-filling panel mode below the mobile breakpoint", () => {
+    expect(
+      isMobilePanelViewport({
+        width: MOBILE_PANEL_BREAKPOINT - 1,
+        height: 844,
+      }),
+    ).toBe(true);
+    expect(
+      isMobilePanelViewport({
+        width: MOBILE_PANEL_BREAKPOINT,
+        height: 844,
+      }),
+    ).toBe(false);
   });
 
   it("returns a right-aligned docked frame that fills the remaining viewport height", () => {

@@ -14,6 +14,10 @@
 // consumers; they are not duplicated query *shapes* that can silently diverge.
 
 import { prisma } from "@dpf/db";
+import {
+  CANONICAL_AGENT_ID_TO_COWORKER_SLUG,
+  resolveCanonicalAgentId,
+} from "@dpf/db/agent-identity";
 import { getAgentGaidMap } from "@/lib/identity/principal-linking";
 import {
   findProfessionFamilyForAgentIdentity,
@@ -24,6 +28,10 @@ import {
 } from "@/lib/decision-perspective/resolve-profession-profile";
 import type { DecisionPerspectiveProfile } from "@/lib/decision-perspective/types";
 import { loadProfessionCoverage, type ProfessionCoverage } from "./coverage";
+import { loadInstallAvailabilityContext } from "./availability-context";
+import type { CoworkerInstallArchetypeResolution } from "@/lib/coworker-service-catalog/availability-projection";
+import { loadCoworkerDiscoveryServices } from "@/lib/coworker-service-catalog/catalog";
+import type { RosterServiceEvidence } from "./roster-presentation";
 
 /** Recommend / arbitrate / escalate / defer tally for a coworker's profile. */
 export type DecisionSignal = {
@@ -54,6 +62,8 @@ export type CoworkerRecord = {
   profession: CoworkerProfessionFacet;
   voice: CoworkerVoice;
   decisions: DecisionSignal;
+  services: RosterServiceEvidence[];
+  installAvailability: CoworkerInstallArchetypeResolution;
 };
 
 const DECISION_WINDOW_DAYS = 30;
@@ -117,8 +127,23 @@ export async function loadCoworkerRecord(
   const family = findProfessionFamilyForAgentIdentity(agent);
 
   const profileId = family ? professionProfileId(family.professionKey) : null;
+  const canonicalAgentId = resolveCanonicalAgentId(agent.agentId);
+  const serviceProviderIds = [
+    agent.agentId,
+    canonicalAgentId,
+    agent.slugId,
+    CANONICAL_AGENT_ID_TO_COWORKER_SLUG[canonicalAgentId],
+  ].filter((value): value is string => Boolean(value));
 
-  const [gaid, profile, coverage, voiceRow, decisions] = await Promise.all([
+  const [
+    gaid,
+    profile,
+    coverage,
+    voiceRow,
+    decisions,
+    services,
+    installAvailability,
+  ] = await Promise.all([
     getAgentGaidMap([agent.agentId]).then((m) => m.get(agent.agentId) ?? null),
     family
       ? resolveProfessionProfile({
@@ -141,6 +166,8 @@ export async function loadCoworkerRecord(
           .catch(() => null)
       : Promise.resolve(null),
     profileId ? loadDecisionSignal(profileId) : Promise.resolve({ total: 0, byOutcome: {}, deferRate: 0 }),
+    loadCoworkerDiscoveryServices(serviceProviderIds).catch(() => []),
+    loadInstallAvailabilityContext(),
   ]);
 
   return {
@@ -156,5 +183,7 @@ export async function loadCoworkerRecord(
         }
       : null,
     decisions,
+    services,
+    installAvailability,
   };
 }

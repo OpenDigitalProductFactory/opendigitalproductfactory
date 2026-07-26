@@ -10,6 +10,18 @@ vi.mock("@dpf/db", () => ({
     // WS2 Capabilities-editor data (catalog skills assigned + full catalog):
     skillAssignment: { findMany: vi.fn().mockResolvedValue([]) },
     skillDefinition: { findMany: vi.fn().mockResolvedValue([]) },
+    coworkerService: { findMany: vi.fn().mockResolvedValue([]) },
+    organization: {
+      findFirst: vi.fn().mockResolvedValue({ id: "org-1" }),
+    },
+    storefrontConfig: {
+      findUnique: vi.fn().mockResolvedValue({
+        archetype: {
+          archetypeId: "restaurant",
+          category: "food-hospitality",
+        },
+      }),
+    },
     // loadCoworkerRecord facet queries (HRIS surface):
     // findFirst also backs the WS4 posture-inheritance read (golden-triangle persistence).
     decisionPerspectiveProfile: {

@@ -2,7 +2,9 @@
 
 ## Status
 
-Draft reviewed design for `BI-ADFDC62F` under `EP-UX-SYSTEM`.
+Accepted design under `EP-UX-SYSTEM`. Availability and authority projections
+are merged; the four-area roster and coworker-record consumption are in
+delivery under `BI-C810CC5A` and Work Capsule `WC-D6E5F3F4`.
 
 ## Problem
 
@@ -183,6 +185,13 @@ Recommended first-screen order:
 4. **Platform and back office**
    - Finance, compliance, admin, Build Lead, Platform Engineer, Enterprise Architect, UX Design Critic, Data Architect, External Catalog Scout, and internal improvement coworkers.
 
+The examples above are a target classification, not permission to infer areas
+from names, role types, or `Agent.portfolioId`. The source of truth is the
+portfolio assigned to each active `CoworkerService`. A coworker with services
+in several areas is grouped by the most customer-inward assigned area and keeps
+all assigned areas in Work Offered. A coworker with no classified active
+service appears under **Other**.
+
 Each coworker card should show:
 
 - Coworker name.
@@ -194,8 +203,9 @@ Each coworker card should show:
 - Availability badge:
   - `Available for your business type`
   - `Setup needed`
-  - `Not available`
-  - `Coming later`
+  - `Needs attention`
+  - `Not available for your business type`
+  - `Coverage not defined`
 - Approval/autonomy badge:
   - Use the canonical owner labels from Deliverable 2 of
     `docs/superpowers/plans/2026-07-26-ai-workforce-availability-authority-projections.md`.
@@ -557,7 +567,13 @@ Accepted critique:
 These are non-blocking defaults for implementation planning:
 
 - Use the four owner-facing roster areas confirmed by the live audit: `Customers and sales`, `Your team`, `Operations and delivery`, and `Platform and back office`.
-- Seeded offer applicability determines whether a coworker can ever support an archetype/category. Install setup state determines whether the currently selected install is available now or setup-needed.
+- Active service portfolio assignments determine the owner-facing area;
+  unassigned work remains in `Other`. Agent workforce placement is not a
+  substitute.
+- Seeded service applicability determines whether a coworker can support an
+  archetype/category. Explicit readiness evidence determines whether matching
+  work is available now, setup-needed, or blocked. Unevaluated readiness stays
+  `Coverage not defined`.
 - If telemetry is unavailable, no route is retired. Routes may be hidden from visible nav only when the new AI Workforce destination exists and compatibility links remain readable.
 
 ## Telemetry for Route Retirement

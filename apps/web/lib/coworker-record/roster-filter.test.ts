@@ -8,6 +8,9 @@ import {
   isCoverageGap,
   kindOptions,
   EMPTY_FILTERS,
+  filtersFromSearchParams,
+  filtersToSearchParams,
+  needsAttention,
 } from "./roster-filter";
 import type { RosterRow } from "./roster";
 
@@ -21,6 +24,49 @@ function row(over: Partial<RosterRow> = {}): RosterRow {
     tier: 2,
     valueStream: "operate",
     lifecycleStage: "production",
+    plainJob: "Keeps the books current and prepares finance work.",
+    area: {
+      key: "foundational",
+      label: "Platform and back office",
+      order: 4,
+    },
+    areas: [
+      {
+        key: "foundational",
+        label: "Platform and back office",
+        order: 4,
+      },
+    ],
+    interaction: {
+      scopes: ["internal-only"],
+      labels: ["Internal only"],
+    },
+    availability: {
+      state: "available",
+      label: "Available for your business type",
+      reason: "This coworker explicitly supports the restaurant business type.",
+      matchLevel: "leaf",
+      evidence: [],
+    },
+    authority: {
+      state: "resolved",
+      scope: { kind: "default-posture" },
+      level: "approval-required",
+      label: "Acts with approval",
+      summary: "This coworker acts after a person approves.",
+      ownerReason: "The default human-in-the-loop tier requires approval.",
+      ownerAction: "Approve the action before it runs.",
+      winner: {
+        source: "agent",
+        ref: "AGT-1",
+        field: "hitlTierDefault",
+        role: "selected-base",
+        observedValue: "1",
+        normalizedLevel: "approval-required",
+        detail: "Agent AGT-1 has HITL tier 1",
+      },
+      evidence: [],
+    },
     familyKey: "finance",
     familyLabel: "Finance & Accounting",
     coveragePct: 90,
@@ -63,6 +109,11 @@ describe("matchesQuery", () => {
     expect(matchesQuery(row({ familyLabel: "Finance & Accounting" }), "accounting")).toBe(true);
   });
 
+  it("matches owner-facing job and area copy", () => {
+    expect(matchesQuery(row(), "keeps the books")).toBe(true);
+    expect(matchesQuery(row(), "back office")).toBe(true);
+  });
+
   it("does not crash on null slug / family", () => {
     expect(matchesQuery(row({ slugId: null, familyLabel: null }), "finance")).toBe(true); // matches name/displayName
     expect(matchesQuery(row({ slugId: null, familyLabel: null }), "zzz")).toBe(false);
@@ -81,6 +132,24 @@ describe("matchesFilters", () => {
     expect(matchesFilters(row(), { ...EMPTY_FILTERS, jurisdiction: "eu" })).toBe(false);
     expect(matchesFilters(row(), { ...EMPTY_FILTERS, competency: "expert" })).toBe(false);
     expect(matchesFilters(row(), { ...EMPTY_FILTERS, lifecycle: "retirement" })).toBe(false);
+  });
+
+  it("filters by owner area, interaction, availability, and authority", () => {
+    expect(
+      matchesFilters(row(), {
+        ...EMPTY_FILTERS,
+        area: "foundational",
+        interaction: "internal-only",
+        availability: "available",
+        authority: "approval-required",
+      }),
+    ).toBe(true);
+    expect(
+      matchesFilters(row(), {
+        ...EMPTY_FILTERS,
+        interaction: "talks-to-customers",
+      }),
+    ).toBe(false);
   });
 
   it("filters by kind", () => {
@@ -110,6 +179,51 @@ describe("matchesFilters", () => {
   it("coverageGap filter excludes healthy rows and keeps gaps", () => {
     expect(matchesFilters(row({ coveragePct: 95 }), { ...EMPTY_FILTERS, coverageGap: true })).toBe(false);
     expect(matchesFilters(row({ unmapped: true }), { ...EMPTY_FILTERS, coverageGap: true })).toBe(true);
+  });
+});
+
+describe("attention and URL state", () => {
+  it("keeps owner attention separate from technical knowledge coverage", () => {
+    expect(needsAttention(row())).toBe(false);
+    expect(needsAttention(row({ providerHealthy: false }))).toBe(true);
+    expect(needsAttention(row({ openBlockers: 1 }))).toBe(true);
+    expect(needsAttention(row({ coveragePct: 40 }))).toBe(false);
+  });
+
+  it("round-trips filters while preserving unrelated query parameters", () => {
+    const filters = {
+      ...EMPTY_FILTERS,
+      query: "customer",
+      area: "products_and_services_sold",
+      interaction: "talks-to-customers",
+      attentionOnly: true,
+    };
+    const params = filtersToSearchParams(
+      filters,
+      new URLSearchParams("tab=coworkers"),
+    );
+
+    expect(params.get("tab")).toBe("coworkers");
+    expect(filtersFromSearchParams(params)).toEqual(filters);
+  });
+
+  it("normalizes invalid closed-set URL filters and accepts Other", () => {
+    const invalid = filtersFromSearchParams(
+      new URLSearchParams(
+        "area=imaginary&interaction=unknown&availability=ready&authority=owner&kind=wizard",
+      ),
+    );
+    expect(invalid).toMatchObject({
+      area: "",
+      interaction: "",
+      availability: "",
+      authority: "",
+      kind: "",
+    });
+
+    expect(
+      filtersFromSearchParams(new URLSearchParams("area=other")).area,
+    ).toBe("other");
   });
 });
 
