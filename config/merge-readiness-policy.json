@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "branch": "main",
+  "strict": false,
+  "requiredContexts": [
+    "Merge Readiness",
+    "UX Route Budget Sweep",
+    "DCO"
+  ],
+  "workflows": {
+    "ci": ".github/workflows/ci.yml",
+    "ux": ".github/workflows/ux-route-sweep.yml"
+  },
+  "aggregateJobId": "merge-readiness",
+  "aggregateJobName": "Merge Readiness",
+  "uxJobId": "sweep",
+  "uxJobName": "UX Route Budget Sweep"
+}

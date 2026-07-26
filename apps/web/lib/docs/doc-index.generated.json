@@ -8211,6 +8211,7 @@
         "pr-health-merge-readiness-checker",
         "why-it-exists",
         "what-it-asserts-ready-iff-all-hold",
+        "observation-versus-merge-authority",
         "tests-ci"
       ]
     },
