@@ -4,16 +4,19 @@
 // docs renderer. The /docs route only renders markdown, and Next serves /public —
 // so build-time-rendered Mermaid SVGs and screenshots (committed under the docs
 // tree, EP-DOCS-SYSTEM Phase 2) need this route to reach the portal. Read-only,
-// path-traversal-guarded, long-cache (assets are content-addressed by ordinal +
-// change with the source markdown).
+// path-traversal-guarded, long-cache (rendered diagram URLs include their
+// source-fence hash as a version query).
 
 import fs from "node:fs";
 import path from "node:path";
 import { NextResponse } from "next/server";
 
 // Mirror of the user-guide dir resolution in apps/web/lib/shared/docs.ts.
-const prodDir = path.join(process.cwd(), "docs", "user-guide", "assets");
-const devDir = path.resolve(process.cwd(), "..", "..", "docs", "user-guide", "assets");
+// Resolved asset URLs already include their `assets/` segment, so the guarded
+// root is the user-guide directory—not user-guide/assets (which would resolve
+// an authored `assets/foo.svg` as `assets/assets/foo.svg`).
+const prodDir = path.join(process.cwd(), "docs", "user-guide");
+const devDir = path.resolve(process.cwd(), "..", "..", "docs", "user-guide");
 const ASSETS_ROOT = fs.existsSync(prodDir) ? prodDir : devDir;
 
 const CONTENT_TYPES: Record<string, string> = {

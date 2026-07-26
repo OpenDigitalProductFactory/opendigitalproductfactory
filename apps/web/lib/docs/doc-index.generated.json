@@ -9293,8 +9293,13 @@
       "publishedPublic": true,
       "publishedPortal": true,
       "anchors": [
+        "choose-your-path",
+        "quick-paths-by-responsibility",
         "start-here",
-        "domain-guides",
+        "serve-customers-and-deliver-work",
+        "run-the-company",
+        "supervise-the-platform",
+        "change-the-platform",
         "architecture-and-standards",
         "specifications-and-plans",
         "documentation-freshness"

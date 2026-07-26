@@ -30,6 +30,7 @@ export function diagramPublicHref(slug, index) {
  * API route (the /docs route only renders markdown), so diagrams resolve through
  * /api/docs-asset/<repo-relative-path-under-user-guide>.
  */
-export function diagramPortalHref(slug, index) {
-  return `/api/docs-asset/assets/diagrams/${slug}/${index}.svg`;
+export function diagramPortalHref(slug, index, version) {
+  const base = `/api/docs-asset/assets/diagrams/${slug}/${index}.svg`;
+  return version ? `${base}?v=${encodeURIComponent(version)}` : base;
 }

@@ -6,6 +6,7 @@ import remarkGfm from "remark-gfm";
 import type { ReactNode } from "react";
 import { resolveDocLink, slugifyHeading } from "@/lib/docs/doc-link-resolver.mjs";
 import { diagramSlug, diagramPortalHref } from "@/lib/docs/diagram-assets.mjs";
+import { DIAGRAM_VERSIONS } from "@/lib/docs/diagram-versions.generated.mjs";
 
 type C = { children?: ReactNode };
 
@@ -108,7 +109,9 @@ function buildComponents(sourcePath: string) {
     code: ({ children, className }: C & { className?: string }) => {
       const isBlock = className?.startsWith("language-");
       if (className === "language-mermaid") {
-        const src = diagramPortalHref(slug, mermaidIndex++);
+        const diagramKey = `${slug}/${mermaidIndex++}`;
+        const version = DIAGRAM_VERSIONS[diagramKey];
+        const src = diagramPortalHref(slug, mermaidIndex - 1, version);
         // eslint-disable-next-line @next/next/no-img-element
         return (
           <img
