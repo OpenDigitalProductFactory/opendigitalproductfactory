@@ -33,9 +33,10 @@ import {
 } from "./work-pattern-review";
 import type { WorkPatternCaseStagingState } from "./work-pattern-case-staging";
 import {
-  parseWorkPatternExperimentMetadata,
-  type WorkPatternExperimentLifecycle,
-} from "./work-pattern-experiment-types";
+  hasWorkPatternExperimentCellMetadata,
+  parseWorkPatternExperimentProjection,
+  type WorkPatternExperimentProjection,
+} from "./work-pattern-experiment-projection";
 
 const DEFAULT_WINDOW_DAYS = 30;
 const DEFAULT_TAKE = 200;
@@ -128,25 +129,6 @@ export type WorkPatternSummary = {
   caseStaging: WorkPatternCaseStagingState | null;
   shadowEvaluation: WorkPatternShadowEvaluation | null;
   experiment: WorkPatternExperimentProjection | null;
-};
-
-export type WorkPatternExperimentProjection = {
-  label: "Testing a better method";
-  lifecycle: WorkPatternExperimentLifecycle;
-  validPairCount: number;
-  resultSummary: string;
-  evidenceOrigin: "hermetic-replay" | "matched-cohort" | "unknown";
-  moreEvidenceNeeded: boolean;
-  invalidPairReasons: string[];
-  methodVariants: string[];
-  modelVariants: string[];
-  installScope: string;
-  taskCorpusVersion: string;
-  oracleVersion: string;
-  promotionPolicyVersion: number;
-  freshnessAt: string | null;
-  experimentRunId: string;
-  experimentDefinitionKey: string;
 };
 
 export type WorkPatternReadModel = {
@@ -308,57 +290,6 @@ function workPatternFromMetadata(value: unknown) {
   return parseWorkPatternMetadata(value.workPattern);
 }
 
-function experimentManifestFromMetadata(value: unknown) {
-  if (!isRecord(value)) return null;
-  return parseWorkPatternExperimentMetadata(value.workPatternExperiment);
-}
-
-function experimentProjectionFromMetadata(
-  value: unknown,
-): Omit<
-  WorkPatternExperimentProjection,
-  | "label"
-  | "lifecycle"
-  | "methodVariants"
-  | "modelVariants"
-  | "installScope"
-  | "taskCorpusVersion"
-  | "oracleVersion"
-  | "promotionPolicyVersion"
-  | "experimentRunId"
-  | "experimentDefinitionKey"
-> {
-  const projection =
-    isRecord(value) && isRecord(value.workPatternExperimentProjection)
-      ? value.workPatternExperimentProjection
-      : {};
-  const origin = projection.evidenceOrigin;
-  const evidenceOrigin =
-    origin === "hermetic-replay" || origin === "matched-cohort" ? origin : "unknown";
-  return {
-    validPairCount:
-      typeof projection.validPairCount === "number"
-      && Number.isInteger(projection.validPairCount)
-      && projection.validPairCount >= 0
-        ? projection.validPairCount
-        : 0,
-    resultSummary:
-      typeof projection.resultSummary === "string" && projection.resultSummary.trim().length > 0
-        ? projection.resultSummary.trim()
-        : "Experiment evidence is still being collected.",
-    evidenceOrigin,
-    moreEvidenceNeeded:
-      typeof projection.moreEvidenceNeeded === "boolean"
-        ? projection.moreEvidenceNeeded
-        : true,
-    invalidPairReasons: stringArrayField(projection, "invalidPairReasons"),
-    freshnessAt:
-      typeof projection.freshnessAt === "string" && dateFrom(projection.freshnessAt)
-        ? projection.freshnessAt
-        : null,
-  };
-}
-
 function riskClassFromMetadata(value: unknown): string | null {
   return stringField(value, "riskClass");
 }
@@ -395,7 +326,7 @@ function fallbackSeed(input: {
 
 function seedFromTaskRun(row: WorkPatternReadModelTaskRunRow, agentId: string): PatternSeed | null {
   const metadata = workPatternFromMetadata(row.a2aMetadata);
-  const experimentManifest = experimentManifestFromMetadata(row.a2aMetadata);
+  const experiment = parseWorkPatternExperimentProjection(row.a2aMetadata);
   const effectiveAgentId = row.currentAgentId ?? row.initiatingAgentId ?? agentId;
   const routeContext = row.routeContext ?? null;
   const riskClass = riskClassFromMetadata(row.a2aMetadata);
@@ -416,17 +347,15 @@ function seedFromTaskRun(row: WorkPatternReadModelTaskRunRow, agentId: string): 
     };
   }
 
-  if (experimentManifest) {
+  if (experiment) {
     return {
-      patternKey: experimentManifest.patternKey,
+      patternKey: experiment.patternKey,
       agentId: effectiveAgentId,
       routeContext,
-      riskClass: experimentManifest.riskClass,
+      riskClass: experiment.riskClass,
       status: "candidate",
       scope: routeContext ? "route" : "agent",
-      version: Math.max(
-        ...experimentManifest.methodVariants.map((variant) => variant.patternVersion),
-      ),
+      version: experiment.maxPatternVersion,
       source: "observer",
       decisionScope: routeContext ? patternDecisionScope("route") : patternDecisionScope("agent"),
       candidate: null,
@@ -439,10 +368,7 @@ function seedFromTaskRun(row: WorkPatternReadModelTaskRunRow, agentId: string): 
     };
   }
 
-  if (
-    isRecord(row.a2aMetadata)
-    && isRecord(row.a2aMetadata.workPatternExperimentCell)
-  ) {
+  if (hasWorkPatternExperimentCellMetadata(row.a2aMetadata)) {
     return null;
   }
 
@@ -707,22 +633,10 @@ function observeRun(summary: SummaryAccumulator, row: WorkPatternReadModelTaskRu
     summary.latestTaskRunId = row.taskRunId;
   }
   addEvidence(summary, metadataEvidence(row));
-  const manifest = experimentManifestFromMetadata(row.a2aMetadata);
-  if (manifest) {
-    summary.experiment = {
-      label: "Testing a better method",
-      lifecycle: manifest.lifecycle,
-      ...experimentProjectionFromMetadata(row.a2aMetadata),
-      methodVariants: manifest.methodVariants.map((variant) => variant.methodVariantKey),
-      modelVariants: manifest.modelVariants.map((variant) => variant.modelVariantKey),
-      installScope: manifest.installScope,
-      taskCorpusVersion: manifest.taskCorpusVersion,
-      oracleVersion: manifest.oracleVersion,
-      promotionPolicyVersion: manifest.promotionPolicyVersion,
-      experimentRunId: manifest.experimentRunId,
-      experimentDefinitionKey: manifest.experimentDefinitionKey,
-    };
-    if (manifest.lifecycle === "completed" && summary.experiment.invalidPairReasons.length === 0) {
+  const experiment = parseWorkPatternExperimentProjection(row.a2aMetadata);
+  if (experiment) {
+    summary.experiment = experiment;
+    if (experiment.lifecycle === "completed" && experiment.invalidPairReasons.length === 0) {
       summary.readiness = {
         readyForReview: summary.experiment.validPairCount > 0,
         readyForCaseActivation: false,
