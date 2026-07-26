@@ -32,6 +32,10 @@ import {
   type WorkPatternReviewState,
 } from "./work-pattern-review";
 import type { WorkPatternCaseStagingState } from "./work-pattern-case-staging";
+import {
+  parseWorkPatternExperimentMetadata,
+  type WorkPatternExperimentLifecycle,
+} from "./work-pattern-experiment-types";
 
 const DEFAULT_WINDOW_DAYS = 30;
 const DEFAULT_TAKE = 200;
@@ -123,6 +127,26 @@ export type WorkPatternSummary = {
   activationCandidate: WorkPatternActivationCandidate | null;
   caseStaging: WorkPatternCaseStagingState | null;
   shadowEvaluation: WorkPatternShadowEvaluation | null;
+  experiment: WorkPatternExperimentProjection | null;
+};
+
+export type WorkPatternExperimentProjection = {
+  label: "Testing a better method";
+  lifecycle: WorkPatternExperimentLifecycle;
+  validPairCount: number;
+  resultSummary: string;
+  evidenceOrigin: "hermetic-replay" | "matched-cohort" | "unknown";
+  moreEvidenceNeeded: boolean;
+  invalidPairReasons: string[];
+  methodVariants: string[];
+  modelVariants: string[];
+  installScope: string;
+  taskCorpusVersion: string;
+  oracleVersion: string;
+  promotionPolicyVersion: number;
+  freshnessAt: string | null;
+  experimentRunId: string;
+  experimentDefinitionKey: string;
 };
 
 export type WorkPatternReadModel = {
@@ -148,10 +172,11 @@ type SummaryAccumulator = Omit<
   candidateNeedKinds: Set<CoworkerCapabilityNeedKind>;
   linkedNeedIds: Set<string>;
   evidenceRefs: Map<string, WorkPatternEvidenceRef>;
-  shadowTrials: WorkPatternShadowTrial[];
+    shadowTrials: WorkPatternShadowTrial[];
   shadowCurrentLevel: AutonomyLevel | null;
   shadowRegulatoryCeiling: AutonomyLevel | null;
   shadowRiskClass: RiskClass | null;
+  experiment: WorkPatternExperimentProjection | null;
 };
 
 type PatternSeed = {
@@ -283,6 +308,57 @@ function workPatternFromMetadata(value: unknown) {
   return parseWorkPatternMetadata(value.workPattern);
 }
 
+function experimentManifestFromMetadata(value: unknown) {
+  if (!isRecord(value)) return null;
+  return parseWorkPatternExperimentMetadata(value.workPatternExperiment);
+}
+
+function experimentProjectionFromMetadata(
+  value: unknown,
+): Omit<
+  WorkPatternExperimentProjection,
+  | "label"
+  | "lifecycle"
+  | "methodVariants"
+  | "modelVariants"
+  | "installScope"
+  | "taskCorpusVersion"
+  | "oracleVersion"
+  | "promotionPolicyVersion"
+  | "experimentRunId"
+  | "experimentDefinitionKey"
+> {
+  const projection =
+    isRecord(value) && isRecord(value.workPatternExperimentProjection)
+      ? value.workPatternExperimentProjection
+      : {};
+  const origin = projection.evidenceOrigin;
+  const evidenceOrigin =
+    origin === "hermetic-replay" || origin === "matched-cohort" ? origin : "unknown";
+  return {
+    validPairCount:
+      typeof projection.validPairCount === "number"
+      && Number.isInteger(projection.validPairCount)
+      && projection.validPairCount >= 0
+        ? projection.validPairCount
+        : 0,
+    resultSummary:
+      typeof projection.resultSummary === "string" && projection.resultSummary.trim().length > 0
+        ? projection.resultSummary.trim()
+        : "Experiment evidence is still being collected.",
+    evidenceOrigin,
+    moreEvidenceNeeded:
+      typeof projection.moreEvidenceNeeded === "boolean"
+        ? projection.moreEvidenceNeeded
+        : true,
+    invalidPairReasons: stringArrayField(projection, "invalidPairReasons"),
+    freshnessAt:
+      typeof projection.freshnessAt === "string" && dateFrom(projection.freshnessAt)
+        ? projection.freshnessAt
+        : null,
+  };
+}
+
 function riskClassFromMetadata(value: unknown): string | null {
   return stringField(value, "riskClass");
 }
@@ -319,6 +395,7 @@ function fallbackSeed(input: {
 
 function seedFromTaskRun(row: WorkPatternReadModelTaskRunRow, agentId: string): PatternSeed | null {
   const metadata = workPatternFromMetadata(row.a2aMetadata);
+  const experimentManifest = experimentManifestFromMetadata(row.a2aMetadata);
   const effectiveAgentId = row.currentAgentId ?? row.initiatingAgentId ?? agentId;
   const routeContext = row.routeContext ?? null;
   const riskClass = riskClassFromMetadata(row.a2aMetadata);
@@ -337,6 +414,36 @@ function seedFromTaskRun(row: WorkPatternReadModelTaskRunRow, agentId: string): 
       readiness: evaluatePatternReadiness(metadata),
       activationProposed: false,
     };
+  }
+
+  if (experimentManifest) {
+    return {
+      patternKey: experimentManifest.patternKey,
+      agentId: effectiveAgentId,
+      routeContext,
+      riskClass: experimentManifest.riskClass,
+      status: "candidate",
+      scope: routeContext ? "route" : "agent",
+      version: Math.max(
+        ...experimentManifest.methodVariants.map((variant) => variant.patternVersion),
+      ),
+      source: "observer",
+      decisionScope: routeContext ? patternDecisionScope("route") : patternDecisionScope("agent"),
+      candidate: null,
+      readiness: {
+        readyForReview: false,
+        readyForCaseActivation: false,
+        blockers: ["governed-experiment-incomplete"],
+      },
+      activationProposed: false,
+    };
+  }
+
+  if (
+    isRecord(row.a2aMetadata)
+    && isRecord(row.a2aMetadata.workPatternExperimentCell)
+  ) {
+    return null;
   }
 
   if (!row.repeatedPatternKey) return null;
@@ -464,6 +571,7 @@ function createAccumulator(seed: PatternSeed): SummaryAccumulator {
     shadowCurrentLevel: null,
     shadowRegulatoryCeiling: null,
     shadowRiskClass: null,
+    experiment: null,
   };
 }
 
@@ -599,6 +707,32 @@ function observeRun(summary: SummaryAccumulator, row: WorkPatternReadModelTaskRu
     summary.latestTaskRunId = row.taskRunId;
   }
   addEvidence(summary, metadataEvidence(row));
+  const manifest = experimentManifestFromMetadata(row.a2aMetadata);
+  if (manifest) {
+    summary.experiment = {
+      label: "Testing a better method",
+      lifecycle: manifest.lifecycle,
+      ...experimentProjectionFromMetadata(row.a2aMetadata),
+      methodVariants: manifest.methodVariants.map((variant) => variant.methodVariantKey),
+      modelVariants: manifest.modelVariants.map((variant) => variant.modelVariantKey),
+      installScope: manifest.installScope,
+      taskCorpusVersion: manifest.taskCorpusVersion,
+      oracleVersion: manifest.oracleVersion,
+      promotionPolicyVersion: manifest.promotionPolicyVersion,
+      experimentRunId: manifest.experimentRunId,
+      experimentDefinitionKey: manifest.experimentDefinitionKey,
+    };
+    if (manifest.lifecycle === "completed" && summary.experiment.invalidPairReasons.length === 0) {
+      summary.readiness = {
+        readyForReview: summary.experiment.validPairCount > 0,
+        readyForCaseActivation: false,
+        blockers:
+          summary.experiment.validPairCount > 0
+            ? ["experiment-evidence-awaits-governed-review"]
+            : ["insufficient-valid-experiment-pairs"],
+      };
+    }
+  }
 }
 
 function attachNeed(summary: SummaryAccumulator, row: WorkPatternReadModelNeedRow): void {
