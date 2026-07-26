@@ -32,6 +32,7 @@ The AI Workforce area is where platform administrators configure the AI infrastr
 - View the **Authority** tab to understand agent tool grants, HITL tiers, and escalation paths
 - Review the **Action History** to see all agent proposals and their approval status
 - Inspect the **Tool Execution Log** to audit every tool call made by any agent (who, what, when, result)
+- Open a coworker record to review **Living Playbooks** and see when the platform is testing a better method
 - Evaluate external tools via the **Tool Evaluation Pipeline** before adding them to the platform
 - Connect external coding surfaces such as Claude, Codex, and Grok while keeping the same MCP, evidence, documentation, and PR gates as Build Studio
 - Open **Runtime Health** to see which local services are required by enabled capabilities and which AI runtimes are managed by configured providers
@@ -76,6 +77,22 @@ Agent tool availability is the **intersection** of two authority systems:
 2. **Agent tool grants** — what the agent's declared grants in `agent_registry.json` permit
 
 An action is only possible if BOTH allow it. This prevents agents from exceeding their design scope, even when triggered by a user with broad permissions.
+
+## Living Playbook experiments
+
+An approved Living Playbook candidate can carry an evidence-cleared replay definition. For those
+candidates, DPF schedules a bounded shadow experiment automatically; approval still does not make
+the candidate active.
+
+The coworker record shows **Testing a better method**, the number of valid comparison pairs, the
+evidence origin, the current result, and whether more evidence is needed. Expand **Experiment
+evidence details** for method/model factors, corpus and oracle versions, invalid-pair reasons,
+freshness, and engineer IDs.
+
+Only immutable, versioned replay fixtures execute autonomously in this first lane. The compared
+provider or model is evidence, while the orchestrating coworker remains the accountable agent in
+the audit ledger. Missing fixtures, live-environment requests, mutable code-workspace work, and
+authority-ceiling cases stop without activation or customer-state mutation.
 
 ## Tool Evaluation Pipeline
 

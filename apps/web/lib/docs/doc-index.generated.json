@@ -8480,6 +8480,7 @@
         "agent-authority-overview",
         "tool-execution-log",
         "effective-permissions",
+        "living-playbook-experiments",
         "tool-evaluation-pipeline",
         "development-surfaces"
       ]
