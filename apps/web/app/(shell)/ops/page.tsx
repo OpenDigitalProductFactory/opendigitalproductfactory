@@ -36,12 +36,12 @@ export default async function OpsPage({ searchParams }: Props) {
   ]);
 
   const [items, digitalProducts, taxonomyNodes, epics, portfolios, session] = await Promise.all([
-    getBacklogItems(),
-    getDigitalProductsForSelect(),
-    getTaxonomyNodesFlat(),
-    getEpics(),
-    getPortfoliosForSelect(),
-    auth(),
+    getBacklogItems().catch(() => []),
+    getDigitalProductsForSelect().catch(() => []),
+    getTaxonomyNodesFlat().catch(() => []),
+    getEpics().catch(() => []),
+    getPortfoliosForSelect().catch(() => []),
+    auth().catch(() => null),
   ]);
   // Current operator — resolves the "mine" scope in the Needs-you-next band
   // (BI-01CC2356). Optional: the band degrades to an urgency-only split when absent.
