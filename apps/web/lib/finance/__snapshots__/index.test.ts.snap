@@ -43,6 +43,7 @@ exports[`finance barrel export > exports all public symbols 1`] = `
   "buildInvoicePostingLines",
   "buildOrgChartOfAccounts",
   "buildPaymentPostingLines",
+  "buildReversalPostingLines",
   "computeMonthlyDepreciation",
   "computeTrialBalance",
   "createAssetSchema",
@@ -71,6 +72,7 @@ exports[`finance barrel export > exports all public symbols 1`] = `
   "getCurrencySymbol",
   "getFinancePeriodSummary",
   "isLedgerAccountType",
+  "isPeriodLocked",
   "listAiProviderFinanceProfiles",
   "matchTransactionSchema",
   "maybeRunAiProviderFinanceDailyEvaluation",
@@ -91,5 +93,6 @@ exports[`finance barrel export > exports all public symbols 1`] = `
   "updateInvoiceSchema",
   "updateScheduleStatusSchema",
   "validateJournalEntry",
+  "validatePostingPeriod",
 ]
 `;

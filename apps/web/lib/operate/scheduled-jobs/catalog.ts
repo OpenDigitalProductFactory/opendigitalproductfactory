@@ -229,6 +229,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "sandbox-build-gc",
+    inngestId: "ops/sandbox-build-gc",
+    name: "Build Studio sandbox build GC",
+    purpose:
+      "Backstop: removes leftover /workspace/.builds/<FB-*> for terminal or missing FeatureBuilds; optional aged build/* branch delete when DPF_SANDBOX_BUILD_GC_DELETE_BRANCHES=1. Primary cleanup is transactional on promote/abandon/complete. Enable with DPF_SANDBOX_BUILD_GC_ENABLED=1.",
+    cron: "50 5 * * *",
+    cadence: "Daily at 05:50",
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "infra-prune",
     inngestId: "ops/infra-prune",
     name: "Infrastructure prune",

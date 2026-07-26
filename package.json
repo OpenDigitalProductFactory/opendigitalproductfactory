@@ -71,6 +71,9 @@
     "security:secrets:staged": "node scripts/security/run-gitleaks-local.mjs --staged",
     "docs:tak": "node docs/architecture/generate-tak-docx.mjs",
     "pr:health": "node scripts/pr-health.mjs",
+    "merge-policy:check": "node scripts/merge-readiness-policy.mjs check",
+    "merge-policy:audit": "node scripts/merge-readiness-policy.mjs audit",
+    "merge-policy:apply": "node scripts/merge-readiness-policy.mjs apply",
     "postinstall": "node scripts/set-hooks-path.mjs"
   },
   "engines": {

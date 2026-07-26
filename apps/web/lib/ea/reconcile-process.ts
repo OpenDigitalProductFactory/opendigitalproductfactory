@@ -10,13 +10,14 @@
 
 import { prisma } from "@dpf/db";
 import { ENVELOPE_STATUSES, TERMINAL_STATUSES, canTransition as envelopeCanTransition } from "@/lib/coworker/envelope-state-machine";
-import { BACKLOG_STATUSES, isLegalTransition } from "@/lib/backlog/transitions";
+import { BACKLOG_STATUSES, isLegalTransition, requiresAdminGrant } from "@/lib/backlog/transitions";
 import { buildProcessModel, type ProcessStateMachine } from "./process-extract";
 import { applySysmlModel, type SysmlSeedResult } from "./sysml-model-seed";
 
 const envelopeTerminals = new Set<string>(TERMINAL_STATUSES);
 const envelopeCan = envelopeCanTransition as (from: string, to: string) => boolean;
 const backlogCan = isLegalTransition as (from: string, to: string) => boolean;
+const backlogRequiresAdmin = requiresAdminGrant as (from: string, to: string) => boolean;
 
 export const PLATFORM_PROCESS_MACHINES: ProcessStateMachine[] = [
   {
@@ -32,8 +33,8 @@ export const PLATFORM_PROCESS_MACHINES: ProcessStateMachine[] = [
     key: "backlog-item",
     name: "Backlog Item Lifecycle",
     statuses: BACKLOG_STATUSES,
-    // A status is terminal iff it has no legal transition to a *different* status.
-    isTerminal: (s) => !BACKLOG_STATUSES.some((t) => t !== s && backlogCan(s, t)),
+    // A status is operationally terminal iff it has no standard (non-admin-grant) transition to a different status.
+    isTerminal: (s) => !BACKLOG_STATUSES.some((t) => t !== s && backlogCan(s, t) && !backlogRequiresAdmin(s, t)),
     canTransition: (from, to) => from !== to && backlogCan(from, to),
     description:
       "Triage → build → done lifecycle governing every backlog item (apps/web/lib/backlog/transitions.ts).",

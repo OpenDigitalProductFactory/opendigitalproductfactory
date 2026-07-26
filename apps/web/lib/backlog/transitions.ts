@@ -19,7 +19,7 @@ const LEGAL: Record<BacklogStatus, ReadonlySet<BacklogStatus>> = {
   // Closes BI-7D4AF644.
   open: new Set<BacklogStatus>(["triaging", "in-progress", "done", "deferred"]),
   "in-progress": new Set<BacklogStatus>(["triaging", "open", "done", "deferred"]),
-  done: new Set<BacklogStatus>(["done"]),
+  done: new Set<BacklogStatus>(["done", "open", "triaging"]),
   deferred: new Set<BacklogStatus>(["triaging", "open", "in-progress"]),
 };
 

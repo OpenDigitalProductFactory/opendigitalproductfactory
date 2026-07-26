@@ -197,9 +197,10 @@ Each coworker card should show:
   - `Not available`
   - `Coming later`
 - Approval/autonomy badge:
-  - `Needs approval before sending`
-  - `Can respond automatically`
-  - `Internal proposal only`
+  - Use the canonical owner labels from Deliverable 2 of
+    `docs/superpowers/plans/2026-07-26-ai-workforce-availability-authority-projections.md`.
+  - The roster uses the `default-posture` projection. Action-specific grant or
+    proposal decisions appear only in scoped offer/work detail.
 - Health/attention badge when relevant:
   - `Needs setup`
   - `Blocked`

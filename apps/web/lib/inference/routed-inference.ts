@@ -41,6 +41,10 @@ import {
   prepareProviderSuitabilityRuntime,
   type ProviderSuitabilityRuntime,
 } from "@/lib/routing/provider-suitability/runtime";
+import {
+  screenInferencePayload,
+  type ScreenInferencePayloadInput,
+} from "@/lib/inference/data-screening/screen-inference-payload";
 export type { RouteAndCallOptions } from "./routed-inference-options";
 
 // ─── Result type ────────────────────────────────────────────────────────────
@@ -117,6 +121,7 @@ interface PreparedRoute {
  */
 async function prepareRoute(
   messages: ChatMessage[],
+  systemPrompt: string,
   sensitivity: RouteSensitivity,
   options: RouteAndCallOptions | undefined,
   prep?: { skipRecipe?: boolean },
@@ -139,6 +144,32 @@ async function prepareRoute(
   // per-coworker priority actually tunes that coworker's runs. Single-org install
   // → null org id; non-coworker runs pass null agentId (platform default).
   const posture = await resolveDispatchPosture(options?.agentId ?? null, taskType);
+  const initialRouteContext = {
+    // Posture defaults first — every explicit caller field and the local-only
+    // switch below override them (spread/assignment order = precedence).
+    ...(posture?.routeContext ?? {}),
+    sensitivity,
+    interactionMode: options?.interactionMode,
+    requiresCodeExecution: options?.requiresCodeExecution,
+    requiresWebSearch: options?.requiresWebSearch,
+    requiresComputerUse: options?.requiresComputerUse,
+    budgetClass: posture?.routeContext.budgetClass ?? options?.budgetClass,
+    allowedProviders: options?.allowedProviders,
+    deniedProviders: options?.deniedProviders,
+    residencyPolicy:
+      options?.modelTier === "local" || localOnlyInference
+        ? "local_only"
+        : options?.residencyPolicy,
+    requiredModelClass: options?.requiredModelClass,
+  };
+  const screen = screenInferencePayload({
+    messages,
+    systemPrompt,
+    tools: options?.tools,
+    taskType,
+    routeContext: initialRouteContext,
+    activityContract: options?.activityContract,
+  } satisfies ScreenInferencePayloadInput);
 
   // 1. Infer contract
   let contract = await inferContract(
@@ -147,14 +178,8 @@ async function prepareRoute(
     options?.tools,
     undefined, // outputSchema
     {
-      // Posture defaults first — every explicit caller field and the local-only
-      // switch below override them (spread/assignment order = precedence).
-      ...(posture?.routeContext ?? {}),
-      sensitivity,
-      interactionMode: options?.interactionMode,
-      requiresCodeExecution: options?.requiresCodeExecution,
-      requiresWebSearch: options?.requiresWebSearch,
-      requiresComputerUse: options?.requiresComputerUse,
+      ...initialRouteContext,
+      sensitivity: screen.routeContext.sensitivity,
       // EP-GOLDEN-TRIANGLE reconciliation: the posture (the everyday Cost/Quality
       // lever) OWNS budgetClass. AgentModelConfig.budgetClass (which defaults to
       // "balanced" and is always sent) applies only as the fallback when no
@@ -163,14 +188,9 @@ async function prepareRoute(
       // already reconciled: AgentModelConfig.minimumTier acts as a floor via the
       // per-dimension max-merge in inferContract, which the posture can raise but
       // not drop below. See docs/design/2026-06-25-coworker-work-orchestration.md.)
-      budgetClass: posture?.routeContext.budgetClass ?? options?.budgetClass,
-      allowedProviders: options?.allowedProviders,
-      deniedProviders: options?.deniedProviders,
-      residencyPolicy:
-        options?.modelTier === "local" || localOnlyInference
-          ? "local_only"
-          : options?.residencyPolicy,
-      requiredModelClass: options?.requiredModelClass,
+      allowedProviders: screen.routeContext.allowedProviders,
+      deniedProviders: screen.routeContext.deniedProviders,
+      residencyPolicy: screen.routeContext.residencyPolicy,
       // EP-MODEL-TIER-ROUTING: a "local"-tier call forces local_only (keep
       // small/simple work on-box) even when the global switch is off; "robust"
       // leaves routing free to prefer a frontier endpoint. The global local-only
@@ -247,6 +267,10 @@ async function prepareRoute(
     activityContract: options?.activityContract,
     activityHarnessConfidenceOverrides,
   });
+  decision.inferenceDataScreenReceipt = screen.receipt;
+  if (!decision.policyRulesApplied.includes("inference-dispatch")) {
+    decision.policyRulesApplied = [...decision.policyRulesApplied, "inference-dispatch"];
+  }
 
   return { contract, decision, manifests, policies, overrides, taskType, posture, suitability };
 }
@@ -283,6 +307,7 @@ export async function previewRoute(
 ): Promise<RoutePreview> {
   const { contract, decision, manifests } = await prepareRoute(
     messages,
+    options?.screeningSystemPrompt ?? "",
     sensitivity,
     options,
     { skipRecipe: true },
@@ -319,7 +344,7 @@ export async function routeAndCall(
   // prediction can never drift from what this live path actually picks. The
   // live path keeps recipe selection (skipRecipe defaults false) so the
   // executionPlan is built for dispatch below.
-  const prepared = await prepareRoute(messages, sensitivity, options);
+  const prepared = await prepareRoute(messages, systemPrompt, sensitivity, options);
   const { contract, manifests, policies, overrides, taskType } = prepared;
   let decision = prepared.decision;
   let toolsStripped = false;

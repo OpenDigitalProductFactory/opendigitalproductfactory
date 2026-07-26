@@ -288,6 +288,7 @@ export type DataPepKind =
   | "high-risk-read"
   | "mdm-action"
   | "coworker-context"
+  | "inference-dispatch"
   | "projection"
   | "lifecycle";
 export const ALL_DATA_PEP_KINDS = [
@@ -295,6 +296,7 @@ export const ALL_DATA_PEP_KINDS = [
   "high-risk-read",
   "mdm-action",
   "coworker-context",
+  "inference-dispatch",
   "projection",
   "lifecycle",
 ] as const satisfies readonly DataPepKind[];

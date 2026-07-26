@@ -91,7 +91,10 @@ function runScript(env: Record<string, string | undefined>, extraArgs: string[] 
     const envSource: Record<string, string | undefined> = { NODE_ENV: process.env.NODE_ENV ?? "test", DPF_PROMOTER_STATE_DIR: resolveBashPath(stateDir), ...mapped };
     const envAssignments = Object.entries(envSource).flatMap(([key, value]) => value === undefined ? [] : [`${key}=${quoteForBash(value)}`]);
     const command = ["env", "-i", 'PATH="$PATH"', ...envAssignments, "bash", quoteForBash(SCRIPT), "--self-upgrade", ...extraArgs.map(quoteForBash)].join(" ");
-    return spawnSync(BASH_COMMAND, ["-lc", command], { encoding: "utf8" });
+    return spawnSync(BASH_COMMAND, ["-lc", command], {
+      encoding: "utf8",
+      timeout: READINESS_SCRIPT_TIMEOUT_MS,
+    });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -122,35 +125,35 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
       const result = runScript(env);
       expect(result.status).not.toBe(0);
       expect(result.stderr).toContain("PROMOTE_SOURCE");
-    });
+    }, READINESS_SCRIPT_TIMEOUT_MS);
 
     it("exits non-zero and names PROMOTE_TARGET_SHA when missing", () => {
       const { PROMOTE_TARGET_SHA: _omit, ...env } = BASE_ENV;
       const result = runScript(env);
       expect(result.status).not.toBe(0);
       expect(result.stderr).toContain("PROMOTE_TARGET_SHA");
-    });
+    }, READINESS_SCRIPT_TIMEOUT_MS);
 
     it("exits non-zero and names PROMOTE_BACKUP_PATH when missing", () => {
       const { PROMOTE_BACKUP_PATH: _omit, ...env } = BASE_ENV;
       const result = runScript(env);
       expect(result.status).not.toBe(0);
       expect(result.stderr).toContain("PROMOTE_BACKUP_PATH");
-    });
+    }, READINESS_SCRIPT_TIMEOUT_MS);
 
     it("exits non-zero and names PROMOTE_HEALTH_URL when missing", () => {
       const { PROMOTE_HEALTH_URL: _omit, ...env } = BASE_ENV;
       const result = runScript(env);
       expect(result.status).not.toBe(0);
       expect(result.stderr).toContain("PROMOTE_HEALTH_URL");
-    });
+    }, READINESS_SCRIPT_TIMEOUT_MS);
   });
 
   describe("dry-run output", () => {
     it("exits zero when all required vars are present", () => {
       const result = runScript(BASE_ENV, ["--dry-run"]);
       expect(result.status).toBe(0);
-    });
+    }, READINESS_SCRIPT_TIMEOUT_MS);
 
     it("redacts source path", () => {
       const result = runScript(
@@ -159,7 +162,7 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
       );
       expect(result.status).toBe(0);
       expect(result.stdout).not.toContain("source-sentinel-xyz");
-    });
+    }, READINESS_SCRIPT_TIMEOUT_MS);
 
     it("redacts backup path", () => {
       const result = runScript(
@@ -168,7 +171,7 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
       );
       expect(result.status).toBe(0);
       expect(result.stdout).not.toContain("backup-sentinel-xyz");
-    });
+    }, READINESS_SCRIPT_TIMEOUT_MS);
 
     it("redacts health URL", () => {
       const result = runScript(
@@ -177,7 +180,7 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
       );
       expect(result.status).toBe(0);
       expect(result.stdout).not.toContain("sentinel-token-xyz");
-    });
+    }, READINESS_SCRIPT_TIMEOUT_MS);
 
     it("includes target SHA unredacted", () => {
       const result = runScript(
@@ -186,7 +189,7 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
       );
       expect(result.status).toBe(0);
       expect(result.stdout).toContain("deadbeef12345678");
-    });
+    }, READINESS_SCRIPT_TIMEOUT_MS);
   });
 
   describe("step order in dry-run", () => {
@@ -208,7 +211,7 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
 
     beforeAll(() => {
       dryRunResult = runScript(BASE_ENV, ["--dry-run"]);
-    });
+    }, READINESS_SCRIPT_TIMEOUT_MS);
 
     it("exits zero", () => {
       expect(dryRunResult.status).toBe(0);

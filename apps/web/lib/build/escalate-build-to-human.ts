@@ -217,6 +217,11 @@ export async function escalateBuildToHuman(args: EscalateBuildArgs): Promise<Esc
       },
     });
     wipFreed = true;
+    // BI-8BD61C30: tear down isolation worktree when escalating (same as self-abandon).
+    const { releaseSandboxForTerminalBuild } = await import(
+      "@/lib/integrate/sandbox/sandbox-build-gc"
+    );
+    await releaseSandboxForTerminalBuild(buildId, { deleteBranch: false }).catch(() => {});
   } catch (err) {
     await safeLog(`Failed to abandon build to free WIP: ${String(err)}`.slice(0, 300));
   }

@@ -75,21 +75,36 @@ describe("routeAndCall activity harness overrides", () => {
     mocks.persistRouteDecision.mockResolvedValue("route-log-1");
     mocks.updateProviderSuitabilityReceipt.mockResolvedValue(undefined);
     mocks.resolveDispatchPosture.mockResolvedValue(null);
-    mocks.inferContract.mockResolvedValue({
+    mocks.inferContract.mockImplementation(async (
+      taskType: string,
+      messages: Array<{ role: string; content: unknown }>,
+      tools?: Array<Record<string, unknown>>,
+      _outputSchema?: Record<string, unknown>,
+      routeContext?: Record<string, unknown>,
+    ) => ({
       contractId: "contract-1",
       contractFamily: "sync.test",
-      taskType: "summarization",
+      taskType,
       modality: { input: ["text"], output: ["text"] },
-      interactionMode: "sync",
-      sensitivity: "internal",
-      requiresTools: false,
+      interactionMode: routeContext?.interactionMode ?? "sync",
+      sensitivity: routeContext?.sensitivity ?? "internal",
+      requiresTools: (tools?.length ?? 0) > 0,
       requiresStrictSchema: false,
       requiresStreaming: false,
-      estimatedInputTokens: 1000,
+      estimatedInputTokens: messages.length * 1000,
       estimatedOutputTokens: 400,
       reasoningDepth: "low",
-      budgetClass: "minimize_cost",
-    });
+      budgetClass: routeContext?.budgetClass ?? "minimize_cost",
+      ...(routeContext?.allowedProviders !== undefined
+        ? { allowedProviders: routeContext.allowedProviders }
+        : {}),
+      ...(routeContext?.deniedProviders !== undefined
+        ? { deniedProviders: routeContext.deniedProviders }
+        : {}),
+      ...(routeContext?.residencyPolicy !== undefined
+        ? { residencyPolicy: routeContext.residencyPolicy }
+        : {}),
+    }));
     mocks.loadEndpointManifests.mockResolvedValue([
       {
         id: "openai:gpt-4o-mini",
@@ -297,6 +312,89 @@ describe("routeAndCall activity harness overrides", () => {
       selectedProviderId: "openai",
     });
     expect(JSON.stringify(result.routeDecision.providerSuitabilityReceipt)).not.toContain("customer update");
+  });
+
+  it("screens restricted prompt content before route selection and narrows external dispatch to local-only", async () => {
+    const result = await routeAndCall(
+      [{ role: "user", content: "Summarize employee salary and disciplinary notes for Jane." }],
+      "You summarize employee records.",
+      "internal",
+      {
+        taskType: "summarization",
+        persistDecision: false,
+      },
+    );
+
+    expect(mocks.inferContract).toHaveBeenCalledWith(
+      "summarization",
+      expect.any(Array),
+      undefined,
+      undefined,
+      expect.objectContaining({
+        sensitivity: "restricted",
+        residencyPolicy: "local_only",
+      }),
+    );
+    expect(mocks.routeEndpointV2).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({
+        sensitivity: "restricted",
+        residencyPolicy: "local_only",
+      }),
+      [],
+      [],
+      expect.any(Object),
+    );
+    expect(result.routeDecision.inferenceDataScreenReceipt).toMatchObject({
+      schemaVersion: "inference-data-screen/v1",
+      policyEffect: "deny",
+      routeEffect: "local-only",
+      classifiedDataClasses: expect.arrayContaining(["employee-records"]),
+      rawPayloadStored: false,
+    });
+    expect(JSON.stringify(result.routeDecision.inferenceDataScreenReceipt)).not.toContain("Jane");
+    expect(mocks.callWithFallbackChain).toHaveBeenCalledWith(
+      expect.objectContaining({
+        inferenceDataScreenReceipt: expect.objectContaining({
+          routeEffect: "local-only",
+        }),
+      }),
+      expect.any(Array),
+      expect.any(String),
+      undefined,
+      expect.any(Object),
+      undefined,
+      undefined,
+      expect.any(Object),
+    );
+  });
+
+  it("applies the same pre-dispatch data screen to preview routing", async () => {
+    const preview = await previewRoute(
+      [{ role: "user", content: "Customer email is alex@example.com; summarize next action." }],
+      "internal",
+      {
+        taskType: "summarization",
+        screeningSystemPrompt: "You summarize customer records.",
+      },
+    );
+
+    expect(mocks.routeEndpointV2).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({
+        sensitivity: "confidential",
+        residencyPolicy: "local_only",
+      }),
+      [],
+      [],
+      expect.objectContaining({ skipRecipe: true }),
+    );
+    expect(preview.decision.inferenceDataScreenReceipt).toMatchObject({
+      routeEffect: "local-only",
+      classifiedDataClasses: expect.arrayContaining(["customer-records"]),
+      rawPayloadStored: false,
+    });
+    expect(JSON.stringify(preview.decision.inferenceDataScreenReceipt)).not.toContain("alex@example.com");
   });
 });
 

@@ -10,6 +10,9 @@ import {
   buildBillPostingLines,
   computeMonthlyDepreciation,
   buildDepreciationPostingLines,
+  buildReversalPostingLines,
+  isPeriodLocked,
+  validatePostingPeriod,
   periodKeyOf,
   toMinorUnits,
   LEDGER_ACCOUNT_TYPES,
@@ -381,5 +384,52 @@ describe("buildDepreciationPostingLines", () => {
     expect(validateJournalEntry(lines).ok).toBe(true);
     expect(lines.find((l) => l.accountId === "acc-dep-exp")!.debit).toBe(1000);
     expect(lines.find((l) => l.accountId === "acc-accum-dep")!.credit).toBe(1000);
+  });
+});
+
+describe("buildReversalPostingLines", () => {
+  it("swaps debit and credit for each line and balances", () => {
+    const original = [
+      { accountId: "1100", debit: 1200, description: "Accounts receivable" },
+      { accountId: "4000", credit: 1000, description: "Revenue" },
+      { accountId: "2200", credit: 200, description: "Tax payable" },
+    ];
+    const reversed = buildReversalPostingLines(original);
+    expect(reversed).toHaveLength(3);
+    expect(reversed[0]).toEqual({
+      accountId: "1100",
+      credit: 1200,
+      debit: undefined,
+      description: "Reversal: Accounts receivable",
+      customerAccountId: null,
+      contactId: null,
+    });
+    expect(reversed[1]).toEqual({
+      accountId: "4000",
+      debit: 1000,
+      credit: undefined,
+      description: "Reversal: Revenue",
+      customerAccountId: null,
+      contactId: null,
+    });
+    expect(validateJournalEntry(reversed).ok).toBe(true);
+  });
+});
+
+describe("isPeriodLocked and validatePostingPeriod", () => {
+  it("detects locked periods accurately", () => {
+    const locked = new Set(["2026-05", "2026-06"]);
+    expect(isPeriodLocked("2026-05", locked)).toBe(true);
+    expect(isPeriodLocked("2026-07", locked)).toBe(false);
+  });
+
+  it("validates posting dates against locked periods", () => {
+    const locked = ["2026-05"];
+    const v1 = validatePostingPeriod(new Date("2026-05-15T12:00:00Z"), locked);
+    expect(v1.ok).toBe(false);
+    expect(v1.error).toMatch(/locked/i);
+
+    const v2 = validatePostingPeriod(new Date("2026-07-01T12:00:00Z"), locked);
+    expect(v2.ok).toBe(true);
   });
 });

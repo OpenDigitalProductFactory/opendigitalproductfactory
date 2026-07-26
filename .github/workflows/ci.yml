@@ -1196,3 +1196,64 @@ jobs:
       - name: Tear down
         if: always()
         run: node scripts/dpf-compose.mjs --profile integration-test down --volumes
+
+  # Stable repository-wide merge authority. Branch protection requires this
+  # aggregate instead of coupling itself to dozens of implementation-level
+  # jobs whose names and sharding may evolve. Every CI job must appear here;
+  # scripts/check-no-merge-readiness-policy-drift.mjs enforces that invariant.
+  merge-readiness:
+    name: Merge Readiness
+    runs-on: ubuntu-latest
+    if: always()
+    needs:
+      - changes
+      - typecheck
+      - repo-guard-loop
+      - docs-link-integrity
+      - derived-artifact-registry
+      - pr-health-test
+      - mobile-jest-pin-guard
+      - diagram-dependency-pin-guard
+      - override-provenance-guard
+      - bundle-boundary-guard
+      - prose-lint-guard
+      - style-drift-guard
+      - reporting-composition-guard
+      - compose-env-contract-guard
+      - n-minus-one-caller-honesty
+      - module-size-guard
+      - instruction-plane-guard
+      - archetype-completeness-guard
+      - stewardship-scope-guard
+      - capability-consumer-guard
+      - finding-substrate-guard
+      - docs-staleness-detector
+      - mcp-tool-pack-guard
+      - package-boundary-guard
+      - build-studio-namespace-guard
+      - sbom-divergence-guard
+      - new-dependency-gate
+      - singleton-safety-guard
+      - decision-baseline
+      - ux-fit-gate
+      - docs-impact-gate
+      - seed-fit-gate
+      - spec-plan-doc-gate
+      - data-impact-gate
+      - design-grounding-gate
+      - doc-reference-integrity
+      - janitor-tests
+      - routing-contract
+      - test-web
+      - test-packages
+      - unit-tests
+      - build
+      - dockerfile-node-version
+      - compose-image-pins
+      - adp-integration-tests
+    steps:
+      - uses: actions/checkout@v7
+      - name: Assert every CI dependency is merge-safe
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: node scripts/merge-readiness-policy.mjs evaluate-needs

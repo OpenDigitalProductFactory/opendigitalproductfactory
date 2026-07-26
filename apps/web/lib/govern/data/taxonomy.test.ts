@@ -77,6 +77,10 @@ describe("closed vocabularies", () => {
       "content",
     ]);
   });
+
+  it("keeps inference dispatch as its own PEP kind", () => {
+    expect([...ALL_DATA_PEP_KINDS]).toContain("inference-dispatch");
+  });
 });
 
 describe("precedence lattice", () => {
