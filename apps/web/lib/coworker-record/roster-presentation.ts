@@ -212,8 +212,7 @@ export function canStartCoworkerConversation(
 ): boolean {
   return (
     availability.matchLevel !== null &&
-    availability.state !== "needs-attention" &&
-    availability.state !== "not-available"
+    availability.state !== "needs-attention"
   );
 }
 
