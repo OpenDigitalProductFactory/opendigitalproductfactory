@@ -701,7 +701,7 @@ async function provisionBuildWorktree(args: {
  * Tear down a build's worktree (isolation-ON cleanup on promote/abandon/terminal).
  * Best-effort — the symlinked node_modules are not real files so removal never
  * touches the shared install, and a missing worktree is not an error.
- * Exported for BI-8BD61C30 so every terminal path can share one cleanup door.
+ * Exported for BI-8BD61C30 (releaseSandboxForTerminalBuild in sandbox-build-gc.ts).
  */
 export async function teardownBuildWorktree(buildId: string): Promise<void> {
   if (!isBuildWorktreeIsolationEnabled()) return;
@@ -710,28 +710,6 @@ export async function teardownBuildWorktree(buildId: string): Promise<void> {
       `[build-branch] worktree teardown skipped (non-fatal): ${(err as Error).message?.slice(0, 200)}`,
     );
   });
-}
-
-/**
- * Release sandbox disk for a terminal FeatureBuild (BI-8BD61C30).
- * Always tears down `.builds/<buildId>` when isolation is on.
- * Optionally deletes `build/<buildId>` (use after promote; abandon keeps branch for audit).
- */
-export async function releaseSandboxForTerminalBuild(
-  buildId: string,
-  options?: { deleteBranch?: boolean },
-): Promise<void> {
-  await teardownBuildWorktree(buildId);
-  if (options?.deleteBranch) {
-    const branch = `build/${buildId}`;
-    await execSandboxGit(
-      `cd ${WORKSPACE} && git branch -D "${branch}" 2>/dev/null || true`,
-    ).catch((err) => {
-      console.warn(
-        `[build-branch] branch delete skipped for ${branch}: ${(err as Error).message?.slice(0, 160)}`,
-      );
-    });
-  }
 }
 
 /**
@@ -941,8 +919,10 @@ export async function promoteBuildBranch(buildId: string): Promise<void> {
     ].join(" && "),
   );
 
-  // Isolation ON: tear down worktree; branch is already merged into client/* so
-  // delete build/<id> to stop branch-list growth (BI-8BD61C30).
+  // Tear down isolation worktree; branch already merged into client/* so drop it
+  // (BI-8BD61C30). releaseSandboxForTerminalBuild lives in sandbox-build-gc to
+  // keep this module under the size ratchet.
+  const { releaseSandboxForTerminalBuild } = await import("./sandbox-build-gc");
   await releaseSandboxForTerminalBuild(buildId, { deleteBranch: true });
 
   console.log(`[build-branch] Promoted ${branchName} → ${identity.clientBranch}`);
@@ -956,7 +936,7 @@ export async function abandonBuildBranch(buildId: string): Promise<void> {
   const identity = await getClientIdentity();
   try {
     // Drop isolation worktree; keep build/<id> branch for audit/recovery.
-    await releaseSandboxForTerminalBuild(buildId, { deleteBranch: false });
+    await teardownBuildWorktree(buildId);
     await execSandboxGit(
       `cd ${WORKSPACE} && git checkout "${identity.clientBranch}"`,
     );

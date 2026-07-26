@@ -106,7 +106,7 @@ vi.mock("@/lib/integrate/sandbox/build-branch", () => ({
   startBuildBranch: mockStartBuildBranch,
   getClientIdentity: mockGetClientIdentity,
 }));
-
+vi.mock("@/lib/integrate/sandbox/sandbox-build-gc", () => ({ releaseSandboxForTerminalBuild: vi.fn() }));
 vi.mock("@/lib/build-review-verification-trigger", () => ({
   queueBuildReviewVerification: mockQueueBuildReviewVerification,
 }));

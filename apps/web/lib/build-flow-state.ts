@@ -462,7 +462,7 @@ export async function reconcileBuildCompletion(buildId: string): Promise<boolean
   // BI-8BD61C30: release sandbox isolation worktree on complete (promote may
   // already have done this; teardown is idempotent).
   const { releaseSandboxForTerminalBuild } = await import(
-    "@/lib/integrate/sandbox/build-branch"
+    "@/lib/integrate/sandbox/sandbox-build-gc"
   );
   await releaseSandboxForTerminalBuild(buildId, { deleteBranch: false }).catch(() => {});
 

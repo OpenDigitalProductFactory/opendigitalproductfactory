@@ -14,14 +14,37 @@ import { prisma } from "@dpf/db";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 import {
   BUILD_WORKTREE_ROOT_SEGMENT,
-  buildSandboxWorktreeRemoveCommand,
   isBuildWorktreeIsolationEnabled,
-  releaseSandboxForTerminalBuild,
+  teardownBuildWorktree,
 } from "./build-branch";
 import { execInSandbox, isSandboxRunning } from "./sandbox";
 
 const SANDBOX_CONTAINER = process.env.SANDBOX_CONTAINER_ID ?? "dpf-sandbox-1";
 const WORKSPACE = "/workspace";
+
+/**
+ * Release sandbox disk for a terminal FeatureBuild (BI-8BD61C30).
+ * Always tears down `.builds/<buildId>` when isolation is on.
+ * Optionally deletes `build/<buildId>` (use after promote; abandon keeps branch for audit).
+ * Lives here (not build-branch.ts) so the module-size ratchet on build-branch stays green.
+ */
+export async function releaseSandboxForTerminalBuild(
+  buildId: string,
+  options?: { deleteBranch?: boolean },
+): Promise<void> {
+  await teardownBuildWorktree(buildId);
+  if (options?.deleteBranch) {
+    const branch = `build/${buildId}`;
+    await execInSandbox(
+      SANDBOX_CONTAINER,
+      `git -C ${WORKSPACE} branch -D "${branch}" 2>/dev/null || true`,
+    ).catch((err) => {
+      console.warn(
+        `[sandbox-build-gc] branch delete skipped for ${branch}: ${(err as Error).message?.slice(0, 160)}`,
+      );
+    });
+  }
+}
 
 /** Master switch for the scheduled GC (default OFF). */
 export const SANDBOX_BUILD_GC_ENABLED_FLAG = "DPF_SANDBOX_BUILD_GC_ENABLED";
@@ -179,7 +202,7 @@ export async function runSandboxBuildGc(
   const removeWorktree =
     options.removeWorktree ??
     (async (buildId: string) => {
-      await releaseSandboxForTerminalBuild(buildId, { deleteBranch: false });
+      await teardownBuildWorktree(buildId);
     });
   const deleteBranch =
     options.deleteBranch ??
@@ -254,5 +277,3 @@ export async function runSandboxBuildGc(
   return result;
 }
 
-// Re-export for callers that only need the command builder path.
-export { buildSandboxWorktreeRemoveCommand };

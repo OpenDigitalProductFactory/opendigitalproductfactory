@@ -1529,7 +1529,7 @@ export async function completeBuild(buildId: string): Promise<void> {
   });
   // BI-8BD61C30: drop sandbox .builds/<id> when the build completes.
   const { releaseSandboxForTerminalBuild } = await import(
-    "@/lib/integrate/sandbox/build-branch"
+    "@/lib/integrate/sandbox/sandbox-build-gc"
   );
   await releaseSandboxForTerminalBuild(buildId, { deleteBranch: false }).catch(() => {});
   revalidatePath("/build");
