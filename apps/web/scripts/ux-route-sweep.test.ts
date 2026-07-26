@@ -1,41 +1,62 @@
 import { describe, expect, it } from "vitest";
 
-import { resetSweepPage } from "./ux-route-sweep";
+import { withIsolatedSweepPage } from "./ux-route-sweep";
 
-describe("resetSweepPage", () => {
-  it("waits for the blank isolation navigation to finish before the next route starts", async () => {
-    let navigationFinished = false;
-    let releaseNavigation!: () => void;
-    const navigationFinishedPromise = new Promise<void>((resolve) => {
-      releaseNavigation = () => {
-        navigationFinished = true;
-        resolve();
-      };
-    });
-    const page = {
-      goto: async (
-        url: string,
-        options: { waitUntil: "commit" | "load"; timeout: number },
-      ) => {
-        expect(url).toBe("about:blank");
-        expect(options.timeout).toBe(10_000);
-        if (options.waitUntil === "commit") return null;
-        await navigationFinishedPromise;
-        return null;
+describe("withIsolatedSweepPage", () => {
+  it("gives each route a fresh page and closes it after measurement", async () => {
+    const events: string[] = [];
+    let nextId = 0;
+    const context = {
+      newPage: async () => {
+        const id = ++nextId;
+        events.push(`open:${id}`);
+        return {
+          id,
+          close: async () => {
+            events.push(`close:${id}`);
+          },
+        };
       },
     };
 
-    let resetFinished = false;
-    const reset = resetSweepPage(page).then(() => {
-      resetFinished = true;
+    const first = await withIsolatedSweepPage(context, async (page) => {
+      events.push(`measure:${page.id}`);
+      return page.id;
     });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    const second = await withIsolatedSweepPage(context, async (page) => {
+      events.push(`measure:${page.id}`);
+      return page.id;
+    });
 
-    expect(navigationFinished).toBe(false);
-    expect(resetFinished).toBe(false);
-    releaseNavigation();
-    await reset;
-    expect(navigationFinished).toBe(true);
-    expect(resetFinished).toBe(true);
+    expect(first).toBe(1);
+    expect(second).toBe(2);
+    expect(events).toEqual([
+      "open:1",
+      "measure:1",
+      "close:1",
+      "open:2",
+      "measure:2",
+      "close:2",
+    ]);
+  });
+
+  it("closes the route page when measurement fails", async () => {
+    let closed = false;
+    const page = {
+      close: async () => {
+        closed = true;
+      },
+    };
+
+    await expect(
+      withIsolatedSweepPage(
+        { newPage: async () => page },
+        async () => {
+          throw new Error("measurement failed");
+        },
+      ),
+    ).rejects.toThrow("measurement failed");
+
+    expect(closed).toBe(true);
   });
 });
