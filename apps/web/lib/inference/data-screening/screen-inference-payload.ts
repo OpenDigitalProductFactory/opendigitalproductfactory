@@ -14,6 +14,7 @@ import type {
 } from "./types";
 
 const DEFAULT_ORGANIZATION_ID = "org:local-install";
+const LOCAL_PROVIDER_IDS = new Set(["local", "ollama"]);
 
 const SENSITIVITY_RANK: Readonly<Record<RequestContract["sensitivity"], number>> = {
   public: 0,
@@ -70,13 +71,17 @@ export function screenInferencePayload(
   const residencyPolicy = routeEffect === "local-only"
     ? stricterResidency(input.routeContext?.residencyPolicy, "local_only")
     : input.routeContext?.residencyPolicy;
+  const allowedProviders = input.routeContext?.allowedProviders === undefined
+    ? undefined
+    : localOnlyAllowedProviders(
+        normalizeProviderIds(input.routeContext.allowedProviders),
+        routeEffect,
+      );
 
   return {
     routeContext: {
       sensitivity,
-      ...(input.routeContext?.allowedProviders !== undefined
-        ? { allowedProviders: normalizeProviderIds(input.routeContext.allowedProviders) }
-        : {}),
+      ...(allowedProviders !== undefined ? { allowedProviders } : {}),
       ...(input.routeContext?.deniedProviders !== undefined
         ? { deniedProviders: normalizeProviderIds(input.routeContext.deniedProviders) }
         : {}),
@@ -126,6 +131,15 @@ function stricterResidency(
 
 function normalizeProviderIds(providerIds: readonly string[]): string[] {
   return [...new Set(providerIds.map((providerId) => providerId.trim()).filter(Boolean))].sort();
+}
+
+function localOnlyAllowedProviders(
+  providerIds: string[],
+  routeEffect: InferenceDataScreenResult["receipt"]["routeEffect"],
+): string[] {
+  return routeEffect === "local-only"
+    ? providerIds.filter((providerId) => LOCAL_PROVIDER_IDS.has(providerId))
+    : providerIds;
 }
 
 function hintsFromActivity(activity: ActivityContract | undefined): GovernedPayloadHint[] {

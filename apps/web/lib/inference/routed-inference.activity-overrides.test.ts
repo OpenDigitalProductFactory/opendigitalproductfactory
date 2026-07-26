@@ -369,6 +369,39 @@ describe("routeAndCall activity harness overrides", () => {
     );
   });
 
+  it("intersects screen allowlists with provider suitability and unions denials before routing", async () => {
+    mocks.loadProviderSuitabilitySourceContext.mockResolvedValueOnce(localAndCloudSuitabilitySource());
+
+    await routeAndCall(
+      [{ role: "user", content: "Customer email is alex@example.com; summarize the selected records." }],
+      "You summarize governed customer records.",
+      "internal",
+      {
+        taskType: "summarization",
+        activityContract: makeActivity({
+          activityClass: "code-edit",
+          workloadClassHints: ["source-code"],
+        }),
+        allowedProviders: ["openai", "local"],
+        deniedProviders: ["operator-denied"],
+        persistDecision: false,
+      },
+    );
+
+    expect(mocks.routeEndpointV2).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({
+        sensitivity: "confidential",
+        allowedProviders: ["local"],
+        deniedProviders: ["openai", "operator-denied"],
+        residencyPolicy: "local_only",
+      }),
+      [],
+      [],
+      expect.any(Object),
+    );
+  });
+
   it("applies the same pre-dispatch data screen to preview routing", async () => {
     const preview = await previewRoute(
       [{ role: "user", content: "Customer email is alex@example.com; summarize next action." }],
@@ -398,7 +431,7 @@ describe("routeAndCall activity harness overrides", () => {
   });
 });
 
-function makeActivity(): ActivityContract {
+function makeActivity(overrides: Partial<ActivityContract> = {}): ActivityContract {
   return {
     activityId: "request:REQ-1:01:summarize",
     parentRef: { taskRunId: "TASK-1" },
@@ -418,5 +451,75 @@ function makeActivity(): ActivityContract {
       minimumSignal: "accepted",
     },
     requestContractHints: {},
+    ...overrides,
+  };
+}
+
+function localAndCloudSuitabilitySource() {
+  return {
+    businessProfile: {
+      organizationId: "org-1",
+      archetypeId: "software-platform",
+      archetypeCategory: "software-platform",
+      operatesIn: ["us"],
+      sellsTo: [],
+      employsIn: [],
+      dataResidency: [],
+      riskPosture: "balanced",
+    },
+    handlesCardPayments: false,
+    regulationResults: [],
+    connections: [
+      {
+        label: "Local model",
+        status: "active",
+        facts: {
+          providerId: "local",
+          catalogProviderId: "local",
+          category: "local",
+          jurisdictions: ["us"],
+          externalEgress: "none",
+          supportsZdr: true,
+          supportsNoTraining: true,
+          supportsRegionalRouting: false,
+          supportedRegions: [],
+          regionalEndpoints: [],
+          providerConnectionId: "connection-local",
+          executionChannel: "local-runtime",
+          accountClass: "unknown",
+          commercialBasis: "local-compute",
+          authMethod: "local",
+          contractEvidence: {},
+          entitlements: { noTraining: true },
+          evidenceStatus: "operator-attested",
+          lastReviewedAt: "2026-07-01T00:00:00.000Z",
+        },
+      },
+      {
+        label: "OpenAI regular",
+        status: "active",
+        facts: {
+          providerId: "openai",
+          catalogProviderId: "openai",
+          category: "direct",
+          jurisdictions: ["us"],
+          externalEgress: "provider-cloud",
+          supportsZdr: false,
+          supportsNoTraining: false,
+          supportsRegionalRouting: false,
+          supportedRegions: [],
+          regionalEndpoints: [],
+          providerConnectionId: "connection-openai-regular",
+          executionChannel: "direct-api",
+          accountClass: "regular",
+          commercialBasis: "usage-metered",
+          authMethod: "api-key",
+          contractEvidence: {},
+          entitlements: {},
+          evidenceStatus: "operator-attested",
+          lastReviewedAt: "2026-07-01T00:00:00.000Z",
+        },
+      },
+    ],
   };
 }
