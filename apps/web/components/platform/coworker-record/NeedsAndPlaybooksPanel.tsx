@@ -233,10 +233,10 @@ function ExperimentEvidenceRow({
               : "evidence origin pending"}
         </Chip>
       </div>
-      <div style={{ fontSize: 11, color: "var(--dpf-text)", overflowWrap: "anywhere" }}>
+      <div style={{ fontSize: 12, color: "var(--dpf-text)", overflowWrap: "anywhere" }}>
         {experiment.resultSummary}
       </div>
-      <div style={{ fontSize: 10, color: "var(--dpf-muted)" }}>
+      <div style={{ fontSize: 12, color: "var(--dpf-muted)" }}>
         {experiment.moreEvidenceNeeded
           ? "More comparable evidence is needed before this method can be promoted."
           : "The evidence set is ready for governed review."}
@@ -245,7 +245,7 @@ function ExperimentEvidenceRow({
         <summary
           style={{
             cursor: "pointer",
-            fontSize: 10,
+            fontSize: 12,
             fontWeight: 600,
             color: "var(--dpf-accent)",
           }}
@@ -257,7 +257,7 @@ function ExperimentEvidenceRow({
             display: "grid",
             gap: 4,
             marginTop: 6,
-            fontSize: 10,
+            fontSize: 12,
             color: "var(--dpf-muted)",
             overflowWrap: "anywhere",
           }}

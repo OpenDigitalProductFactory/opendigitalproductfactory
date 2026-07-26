@@ -14,6 +14,7 @@ describe("runWorkPatternExperiment", () => {
       .mockResolvedValueOnce({ taskRunId: "TR-2", completed: true })
       .mockRejectedValueOnce(new Error("interrupted"));
     const transition = vi.fn();
+    const analyze = vi.fn();
 
     await expect(
       runWorkPatternExperiment(
@@ -21,6 +22,7 @@ describe("runWorkPatternExperiment", () => {
         {
           loadCells: vi.fn().mockResolvedValue(cells),
           executeCell,
+          analyze,
           transition,
         },
       ),
@@ -34,12 +36,15 @@ describe("runWorkPatternExperiment", () => {
       {
         loadCells: vi.fn().mockResolvedValue(cells),
         executeCell,
+        analyze,
         transition,
       },
     );
 
     expect(executeCell).toHaveBeenCalledTimes(1);
     expect(executeCell).toHaveBeenCalledWith(cells[2]);
+    expect(analyze).toHaveBeenCalledTimes(1);
+    expect(analyze).toHaveBeenCalledWith("TR-PARENT", cells);
     expect(transition.mock.calls.map((call) => call[1])).toEqual([
       "running",
       "running",
