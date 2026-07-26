@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { isRecord } from "@/lib/shared/coerce";
 
 export type WorkPatternLedgerRow = {
@@ -23,6 +25,105 @@ export type WorkPatternPromotionPairVerdict = {
   valid: boolean;
   reasons: string[];
 };
+
+export type WorkPatternCandidateEvidence = {
+  patternKey: string;
+  patternVersion: number;
+  methodVariantKey: string;
+  modelProfileId: string;
+  taskCorpusKey: string;
+  taskCorpusVersion: string;
+  oracleKey: string;
+  oracleVersion: string;
+  promotionPolicyKey: string;
+  promotionPolicyVersion: number;
+};
+
+export function workPatternCandidateEvidenceIdentity(
+  candidate: WorkPatternCandidateEvidence,
+): string {
+  const canonical = [
+    candidate.patternKey,
+    candidate.patternVersion,
+    candidate.methodVariantKey,
+    candidate.modelProfileId,
+    candidate.taskCorpusKey,
+    candidate.taskCorpusVersion,
+    candidate.oracleKey,
+    candidate.oracleVersion,
+    candidate.promotionPolicyKey,
+    candidate.promotionPolicyVersion,
+  ];
+  return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
+}
+
+export function canReopenRejectedWorkPatternCandidate(input: {
+  candidate: WorkPatternCandidateEvidence;
+  effectiveRejections: readonly {
+    candidateIdentity: string;
+    failureClass: string;
+  }[];
+}) {
+  const candidateIdentity = workPatternCandidateEvidenceIdentity(input.candidate);
+  return input.effectiveRejections.some(
+    (rejection) => rejection.candidateIdentity === candidateIdentity,
+  )
+    ? { allowed: false as const, reason: "materially_identical_rejection_retained" as const }
+    : { allowed: true as const, reason: "materially_new_evidence" as const };
+}
+
+const RETAINED_FAILURE_CLASSES = new Set([
+  "commandment_gate_regression",
+  "critical_finding_reproduced",
+  "correctness_regression",
+  "security_regression",
+  "migrationSafety_regression",
+  "customerImpact_regression",
+]);
+
+export function isRetainedWorkPatternFailureClass(value: string): boolean {
+  return RETAINED_FAILURE_CLASSES.has(value);
+}
+
+export function validateWorkPatternSafeBindingChain(
+  bindings: readonly {
+    bindingId: string;
+    priorSafeBindingId: string | null;
+  }[],
+): WorkPatternPromotionPairVerdict {
+  const reasons: string[] = [];
+  const ids = new Set(bindings.map((binding) => binding.bindingId));
+  const byId = new Map(bindings.map((binding) => [binding.bindingId, binding]));
+
+  for (const binding of bindings) {
+    if (
+      binding.priorSafeBindingId
+      && !ids.has(binding.priorSafeBindingId)
+    ) {
+      reasons.push(
+        `prior_safe_binding_dangling:${binding.bindingId}:${binding.priorSafeBindingId}`,
+      );
+    }
+  }
+
+  let cycleFound = false;
+  for (const binding of bindings) {
+    const visited = new Set<string>();
+    let cursor: string | null = binding.bindingId;
+    while (cursor && byId.has(cursor)) {
+      if (visited.has(cursor)) {
+        cycleFound = true;
+        break;
+      }
+      visited.add(cursor);
+      cursor = byId.get(cursor)?.priorSafeBindingId ?? null;
+    }
+    if (cycleFound) break;
+  }
+  if (cycleFound) reasons.push("prior_safe_binding_cycle");
+
+  return { valid: reasons.length === 0, reasons };
+}
 
 function supersededLedgerId(row: WorkPatternLedgerRow): string | null {
   if (!isRecord(row.metadata)) return null;

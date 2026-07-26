@@ -111,6 +111,22 @@ The maturity spec also names this exact risk and its mitigation
 
 That is customer zero's boundary, already made mechanical, for *capability scores*.
 
+## Living Playbooks carry the same boundary
+
+Governed work-pattern promotion applies the same rule to learned methods. Every active
+`work-pattern` authority binding records its evidence scope: installation, organization, task
+corpus, model profile, activity, and risk class. Customer-zero evidence can therefore activate a
+method autonomously for DPF's own installation while remaining explicitly blocked from broader
+use. A verified portable corpus or materially different, egress-approved customer corroboration
+can raise that ceiling; provenance alone cannot.
+
+Activation re-reads the evidence inside a serializable, advisory-locked transaction, retains one
+active binding per lane, and records supersession or rollback in the existing
+`DecisionShadowLedger`. The generic authority editor excludes these bindings so it cannot widen
+their scope or mutate their lifecycle outside that governed transaction. Rejected candidate
+identities also remain effective negative knowledge until the corpus, model, oracle, or promotion
+policy materially changes.
+
 ## The gap: no equivalent separation for learned decision weights
 
 The same discipline does **not** exist on the JSI weight-inference path.

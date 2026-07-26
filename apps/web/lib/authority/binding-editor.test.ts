@@ -10,6 +10,7 @@ vi.mock("@dpf/db", () => ({
     },
     authorityBinding: {
       create: vi.fn(),
+      findUnique: vi.fn(),
       update: vi.fn(),
     },
   },
@@ -45,7 +46,43 @@ describe("validateBindingGrant", () => {
 describe("binding editor", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(prisma.authorityBinding.findUnique).mockResolvedValue({
+      resourceType: "route",
+    } as never);
   });
+
+  it("rejects work-pattern creation outside the specialized activation transaction", async () => {
+    await expect(
+      createAuthorityBinding({
+        bindingId: "AB-WORK-PATTERN",
+        name: "Build review method",
+        scopeType: "work-pattern",
+        resourceType: "work-pattern",
+        resourceRef: "build-review@2",
+      }),
+    ).rejects.toThrow("work_pattern_binding_requires_specialized_transaction");
+
+    expect(prisma.authorityBinding.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["status", { status: "superseded" }],
+    ["authority scope", { authorityScope: { scopeKey: "widened" } }],
+    ["resource identity", { resourceRef: "build-review@3" }],
+  ])(
+    "rejects generic %s mutation for an existing work-pattern binding",
+    async (_label, update) => {
+      vi.mocked(prisma.authorityBinding.findUnique).mockResolvedValue({
+        resourceType: "work-pattern",
+      } as never);
+
+      await expect(
+        updateAuthorityBinding("AB-WORK-PATTERN", update),
+      ).rejects.toThrow("work_pattern_binding_requires_specialized_transaction");
+
+      expect(prisma.authorityBinding.update).not.toHaveBeenCalled();
+    },
+  );
 
   it("creates a binding with a resolved coworker and normalized rows", async () => {
     vi.mocked(prisma.agent.findUnique).mockResolvedValue({

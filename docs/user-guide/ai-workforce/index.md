@@ -94,6 +94,19 @@ provider or model is evidence, while the orchestrating coworker remains the acco
 the audit ledger. Missing fixtures, live-environment requests, mutable code-workspace work, and
 authority-ceiling cases stop without activation or customer-state mutation.
 
+When the required comparison cells are complete, fresh, non-regressing, and within the promotion
+policy's activity and risk ceiling, DPF can activate the winning method without another approval.
+Activation is limited to the installations, organizations, task corpora, and model profile proven
+by that evidence. It never adds tool authority. The coworker's **Living Playbooks** panel shows the
+active method, where it may run, when its evidence was last checked, and what evidence is still
+needed before broader use.
+
+A rejected candidate remains useful negative knowledge: DPF will not repeat the materially same
+experiment unless the corpus, model, oracle, or promotion policy changes. If an active method later
+regresses, DPF rolls back to the recorded prior-safe method and retains both versions in the audit
+history. Unsupported risks, regulatory human-control requirements, and missing rollback targets
+still escalate.
+
 ## Tool Evaluation Pipeline
 
 External tools must be evaluated before adoption (EP-GOVERN-002). The pipeline runs 6 agents with different perspectives:

@@ -37,6 +37,14 @@ type CreateAuthorityBindingInput = BindingBaseInput & {
 
 type UpdateAuthorityBindingInput = BindingBaseInput;
 
+const SPECIALIZED_BINDING_RESOURCE_TYPES = new Set(["work-pattern"]);
+
+function assertGenericEditorOwnsResourceType(resourceType: string | undefined) {
+  if (resourceType && SPECIALIZED_BINDING_RESOURCE_TYPES.has(resourceType)) {
+    throw new Error("work_pattern_binding_requires_specialized_transaction");
+  }
+}
+
 export async function validateBindingGrant(options: {
   intrinsic: string[];
   requested: BindingGrantInput[];
@@ -145,6 +153,7 @@ async function buildNestedData(input: BindingBaseInput) {
 }
 
 export async function createAuthorityBinding(input: CreateAuthorityBindingInput) {
+  assertGenericEditorOwnsResourceType(input.resourceType);
   const nested = await buildNestedData(input);
 
   return prisma.authorityBinding.create({
@@ -171,6 +180,12 @@ export async function createAuthorityBinding(input: CreateAuthorityBindingInput)
 }
 
 export async function updateAuthorityBinding(bindingId: string, input: UpdateAuthorityBindingInput) {
+  const existing = await prisma.authorityBinding.findUnique({
+    where: { bindingId },
+    select: { resourceType: true },
+  });
+  assertGenericEditorOwnsResourceType(existing?.resourceType);
+  assertGenericEditorOwnsResourceType(input.resourceType);
   const nested = await buildNestedData(input);
 
   return prisma.authorityBinding.update({

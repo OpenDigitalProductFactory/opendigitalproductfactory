@@ -37,6 +37,10 @@ import {
   parseWorkPatternExperimentProjection,
   type WorkPatternExperimentProjection,
 } from "./work-pattern-experiment-projection";
+import {
+  listWorkPatternBindingsForAgent,
+  type WorkPatternBindingRecord,
+} from "./work-pattern-binding-reader";
 
 const DEFAULT_WINDOW_DAYS = 30;
 const DEFAULT_TAKE = 200;
@@ -89,6 +93,7 @@ export type WorkPatternReadModelQuery = {
 export type WorkPatternReadModelDb = {
   listTaskRuns(query: WorkPatternReadModelQuery): Promise<WorkPatternReadModelTaskRunRow[]>;
   listCapabilityNeeds(query: WorkPatternReadModelQuery): Promise<WorkPatternReadModelNeedRow[]>;
+  listWorkPatternBindings?(agentId: string): Promise<WorkPatternBindingRecord[]>;
 };
 
 export type GetWorkPatternReadModelInput = {
@@ -144,6 +149,7 @@ export type WorkPatternReadModel = {
     readyForReviewCount: number;
     candidateOnlyCount: number;
   };
+  bindings?: WorkPatternBindingRecord[];
   patterns: WorkPatternSummary[];
 };
 
@@ -178,6 +184,7 @@ type PatternSeed = {
 
 function defaultDb(): WorkPatternReadModelDb {
   return {
+    listWorkPatternBindings: listWorkPatternBindingsForAgent,
     listTaskRuns: (query) =>
       prisma.taskRun.findMany({
         where: {
@@ -730,9 +737,10 @@ export async function getWorkPatternReadModel(
 ): Promise<WorkPatternReadModel> {
   const query = resolveQuery(input);
   const db = deps?.db ?? defaultDb();
-  const [taskRuns, needs] = await Promise.all([
+  const [taskRuns, needs, bindings] = await Promise.all([
     db.listTaskRuns(query),
     db.listCapabilityNeeds(query),
+    db.listWorkPatternBindings?.(query.agentId) ?? Promise.resolve([]),
   ]);
 
   const summaries = new Map<string, SummaryAccumulator>();
@@ -761,6 +769,7 @@ export async function getWorkPatternReadModel(
       readyForReviewCount: patterns.filter((item) => item.readiness.readyForReview).length,
       candidateOnlyCount: patterns.filter((item) => item.observedRuns === 0).length,
     },
+    bindings,
     patterns,
   };
 }

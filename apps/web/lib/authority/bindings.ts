@@ -171,6 +171,7 @@ export function shapeAuthorityBindingRows(
 export async function listAuthorityBindingRecords(filters?: AuthorityBindingListFilters) {
   const bindings = await prisma.authorityBinding.findMany({
     where: {
+      resourceType: { not: "work-pattern" },
       status: filters?.statuses ? { in: filters.statuses } : undefined,
       resourceRef: filters?.resourceRefs ? { in: filters.resourceRefs } : undefined,
       appliedAgent: filters?.appliedAgentIds
