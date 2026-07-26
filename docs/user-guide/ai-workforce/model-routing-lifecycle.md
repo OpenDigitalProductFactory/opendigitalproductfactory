@@ -110,14 +110,13 @@ When an agent needs to call an LLM, the routing pipeline runs in this order:
    - Sensitivity clearance doesn't cover the request
    - Missing required capability (e.g., tool use)
    - Any dimension score below the minimum threshold
-7. **Rank by cost-per-success.** Estimate success probability for each remaining model. With `quality_first` budget, rank by success probability alone. With `minimize_cost`, rank by cost efficiency.
-8. **Apply an exceptional provider/model preference override.** If configured, the
+
    preferred endpoint replaces the cost/quality winner only when it remains in the
    eligible candidate set. A pin cannot override provider allow/deny, sensitivity,
    residency, capability, model-class, status, or other hard exclusions. If its
    target is unavailable or excluded, routing records a warning and keeps the
    V2-selected route.
-9. **Dispatch with the eligible fallback chain.** Try the selected model, then the next eligible model after an inference error. A provider excluded by the request policy never reappears in fallback, and fallback receives only the same screened or transformed payload.
+
 
 Provider allow/deny constraints are request-level hard policy, distinct from the provider registry's `modelRestrictions` discovery allowlist. An explicitly empty `allowedProviders` list means no provider is eligible; routing returns no endpoint rather than treating the empty list as “allow any.” Cost, quality, provider health, capacity, and pin preferences only rank the providers that remain after the hard filter.
 

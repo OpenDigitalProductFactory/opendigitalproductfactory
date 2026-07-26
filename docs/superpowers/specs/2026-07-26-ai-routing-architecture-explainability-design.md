@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Proposed — architecture audit and backlog decomposition complete; implementation not started |
+| Status | Approved — documentation authority and deterministic Designed EA projection implemented; Observed/Compare delivery remains |
 | Date | 2026-07-26 |
 | Epic | `EP-CFACFA9F` — AI Routing Architecture & Explainability |
 | Umbrella BI | `BI-3FA17F95` |
@@ -144,17 +144,20 @@ flowchart LR
 | --- | --- | --- |
 | Work asks for AI help | Inference/coworker entry point | Governed routed-inference entry points |
 | What work and data are involved? | Activity context, purpose, actor, governed data classification | Data-governance registry plus activity contract |
-| May this data cross the boundary? | Data PDP decision and destination class | `policy-decision.ts` and sensitive-routing plan |
-| Protect it | Mask-before-context/tokenization obligations | `mask-for-context` contract from `BI-DG-009` |
+| May this data cross the chosen boundary? | Data PDP decision and destination class | `policy-decision.ts` and sensitive-routing plan (`BI-3D210AF8`) |
+| Keep it local, request approval, or stop | PDP deny/review outcome or local endpoint restriction | Policy decision PEP and safe fallback controller |
+| Omit, mask, tokenize, or aggregate | Mask-before-context/tokenization obligations | `mask-for-context` contract from `BI-DG-009` |
 | Build the allowed route set | `RequestContract` provider/residency/sensitivity constraints | Request-contract compiler and provider-suitability policy |
-| Can do the work | Capabilities, context, modality, tool and contract-family floors | Routing loader and `routeEndpointV2` hard filters |
-| Available within limits | Lifecycle state, runtime capacity, cooldown, short/long quota windows | Provider capacity/circuit-breaker sources |
+| Which routes can actually do the work? | Capabilities, context, modality, tool and contract-family floors | Routing loader and `routeEndpointV2` hard filters |
+| Which routes are available within current limits? | Lifecycle state, runtime capacity, cooldown, short/long quota windows | Provider capacity/circuit-breaker sources |
+| Use an eligible fallback, defer, or stop | Fallback chain execution preserving original constraints | Governed fallback contract (`fallback.ts`) |
 | Balance quality, time, and cost | Ranking inside the eligible set | Routing scorer and Golden Triangle posture |
-| Eligible fallback | Same transformed payload and hard constraints | Governed fallback contract |
-| Dispatch | Adapter/transport invocation | Inference adapter registry |
-| Safe decision and outcome | Screen, route, adapter, outcome and token evidence | Existing ledgers plus sensitive-screen receipt |
-| Restore protected values | Fresh PDP decision plus actor/surface/action authorization | Rehydration authorization contract |
-| Learn and detect drift | Evaluation, telemetry aggregation and parity | Parity Engine and conformance steward |
+| Dispatch through the selected adapter | Adapter/transport invocation | Inference adapter registry (`ai-inference.ts`) |
+| Record a privacy-safe decision and outcome | Screen, route, adapter, outcome and token evidence | `RouteDecisionLog`, `RouteOutcome`, `AdapterRunTelemetry` ledgers |
+| May protected values be restored here? | Rehydration PDP check plus actor/surface/action authorization | `BI-749EB750` / `BI-62BFAA95` authorization contract |
+| Return a masked answer and explanation | Unhydrated or token-preserved response with plain-language explanation | Response formatter with safe explanation codes |
+| Return the authorized answer | Rehydrated response for authorized recipient/surface | Rehydration transformer (`rehydrationHandle`) |
+| Learn from outcomes and detect drift | Evaluation, telemetry aggregation and parity | Parity Engine and conformance steward |
 
 ## 6. Primary picture 2 — design and evidence projection architecture
 
@@ -314,25 +317,27 @@ parallel diagram store.
 
 The evidence projection should reuse:
 
-- sensitive-screen receipt from `BI-3D210AF8`;
-- `RouteDecisionLog`;
-- `RouteOutcome`;
-- `AdapterRunTelemetry`;
+- sensitive-screen receipt from `BI-3D210AF8` (`InferenceDataScreenResult`: `screenId`, `decisionId`, `inputHash`, `classifiedDataClasses`, `obligations`, `transformation`);
+- `RouteDecisionLog` (Prisma model: `id`, `agentMessageId`, `actorKind`, `actorId`, `agentId`, `selectedEndpointId`, `taskType`, `sensitivity`, `reason`, `candidateTrace`, `excludedTrace`, `policyRulesApplied`, `fallbackChain`, `suitabilityReceipt`);
+- `RouteOutcome` (Prisma model: `id`, `requestId`, `providerId`, `modelId`, `taskType`, `agentId`, `latencyMs`, `inputTokens`, `outputTokens`, `costUsd`, `fallbackOccurred`);
+- `AdapterRunTelemetry` (Prisma model: `id`, `threadId`, `agentMessageId`, `buildId`, `agentId`, `skillId`, `adapterKind`, `executionMode`, `status`, `inputTokens`, `outputTokens`, `estimatedCostUsd`);
 - `TokenUsage`;
 - `ProviderCapacityStatus`;
 - provider suitability receipts/evidence;
-- authorized rehydration result.
+- authorized rehydration result (`rehydrationHandle`).
 
-The correlation envelope must support:
+The correlation envelope joins across existing indexed schema keys without creating a parallel trace ledger:
 
 ```text
-design revision + screen decision
-  -> route decision
-  -> route/fallback attempt(s)
-  -> adapter outcome
-  -> token/cost/capacity evidence
-  -> authorized rehydration outcome
+design revision + screen decision (screenId / decisionId)
+  -> route decision (RouteDecisionLog indexed by agentMessageId / id)
+  -> route/fallback attempt(s) (RouteDecisionLog.fallbackChain / fallbacksUsed)
+  -> adapter outcome (AdapterRunTelemetry indexed by agentMessageId / threadId)
+  -> token/cost/capacity evidence (RouteOutcome indexed by requestId / agentId, TokenUsage)
+  -> authorized rehydration outcome (rehydrationHandle)
 ```
+
+Because `agentMessageId` is an indexed field present on both `RouteDecisionLog` and `AdapterRunTelemetry`, and `requestId` correlates `RouteOutcome`, cross-ledger correlation operates directly over existing database indexes. No new telemetry table or trace model is approved.
 
 Safe evidence may contain identifiers, hashes, versions, enumerated classes,
 obligations, transformation type, explanation codes, provider/model identity,
@@ -340,7 +345,7 @@ timing, token/cost counts and outcome status.
 
 Every Compare result must name the **design revision it compared against**—for
 example the applicable EA snapshot/projection revision plus implementation source
-revision. A current design silently overlaid on older traffic is not valid
+revision hash (git commit SHA + EA snapshot ID). A current design silently overlaid on older traffic is not valid
 conformance evidence. This revision should reuse existing snapshot/source identity
 before any new persistence is considered.
 
@@ -372,9 +377,15 @@ query and label the current time window, sample size, coverage and freshness.
 
 ### 11.1 Projection gaps
 
-- No routing-process BPMN extractor exists.
-- Sensitive-routing stages are not represented in the EA graph.
-- Cross-notation relationships are defined but not materialized.
+- The deterministic routing-process projection is implemented; live-install
+  reconcile evidence remains part of the Phase 2 completion gate.
+- The classifier and pure inference-policy evaluator from PR #3609 are represented
+  as `partial` because they are implemented but not yet bound into dispatch.
+  Transformation, fail-closed dispatch enforcement, and rehydration remain
+  explicitly `proposed`.
+- Nine BPMN/SysML/ArchiMate cross-notation relationships are defined by the routing
+  projection and materialized through the shared applier; live graph counts must
+  still be captured during governed nonprod verification.
 - No design/runtime conformance projection exists for routing.
 
 ### 11.2 Evidence gaps
@@ -430,12 +441,13 @@ The map itself does not become an ungoverned policy editor.
 
 ### 12.3 Accessibility and responsive behavior
 
-- Every station and edge is keyboard reachable.
-- Color is never the only status signal.
-- A list/table representation provides equivalent content.
-- Dense technical labels collapse behind the inspector.
-- Mobile uses a vertical station sequence with the same stable identities.
-- Exported views include mode, time window, freshness and evidence coverage.
+- Every station and edge is keyboard reachable (tabbable nodes, `Enter`/`Space` expands station details, `Escape` closes the technical inspector).
+- Station node focus states use explicit high-contrast outlines compliant with WCAG 2.1 AA.
+- Color is never the only status signal; icons, text labels, and patterns accompany all status indicators (`aria-label` / `aria-describedby` for visual status).
+- A complete, screen-reader-accessible list/table representation (`<table summary="...">` or structured list with identical Designed/Observed/Compare data) provides full feature parity for non-visual operators.
+- Dense technical labels collapse behind the inspector with progressive disclosure.
+- Mobile view uses a vertical station sequence with identical stable node identities and responsive touch targets (minimum 44x44px touch boundary).
+- Exported views include mode, time window, freshness, evidence coverage, and accessibility alt text metadata.
 
 ## 13. Documentation authority
 
@@ -541,8 +553,9 @@ Reserve approximately 20 percent of implementation capacity:
 - **Data model:** no new Prisma model is approved. Each implementing BI must prove
   existing snapshot, evidence and relationship substrate insufficient before a
   schema proposal.
-- **Parallel-work boundary:** PR #3602 owns sensitive-routing enforcement; this epic
-  consumes its merged contracts and must re-sweep them before implementation.
+- **Parallel-work boundary:** PR #3609 landed the classifier and pure inference-policy
+  evaluator. The remaining data-governance BIs own dispatch enforcement, masking,
+  and rehydration; this epic consumes those contracts without duplicating them.
 - **Current/target separation:** RIB/FIB and other target-state concepts require a
   Proposed badge until implementation evidence exists.
 - **Evidence integrity:** Compare must bind observed traffic to the applicable design
@@ -552,6 +565,26 @@ Reserve approximately 20 percent of implementation capacity:
   prompt archives.
 - **Recommended next step:** land the canonical design/document-authority BI first,
   then allow the projection, evidence and drill-through BIs to proceed independently.
+
+### Phase 2 implementation advisory
+
+- **Decision:** aligned with the existing EA and Parity Engine substrate.
+- **Schema/data authority:** no schema or diagram store was added. The implementation
+  reuses `EaElement`, `EaRelationship`, `EaView`, `EaConformanceIssue`, notation
+  seeds, and the shared projection orchestrator.
+- **Single source of truth:** one versioned routing-stage registry projects BPMN,
+  SysML, and ArchiMate. The superseded seed-time AI-cockpit writer was removed while
+  preserving its `sysml:aic:` stable identities for in-place reconciliation.
+- **Cross-notation integrity:** the shared applier now resolves explicitly named
+  relationship notations, preserves bounded explanation metadata, and validates
+  explicit cross-notation edges against seeded `EaRelationshipRule` rows.
+- **Current/target honesty:** the sensitive screen and policy gateway are `partial`
+  with direct PR #3609 source anchors because their pure logic exists but dispatch
+  binding does not. Transformation and rehydration remain `proposed`; implemented
+  routing stages retain direct source anchors.
+- **Standards:** the implementation remains within the ISO/IEC/IEEE 42010 viewpoint
+  separation and existing OMG BPMN 2.0.2, SysML 2.0, and ArchiMate model-kind
+  decisions in this design; no new external standard or tool was introduced.
 
 ## 19. Standards
 
@@ -600,8 +633,7 @@ Reserve approximately 20 percent of implementation capacity:
 
 ## 21. Open implementation decisions
 
-1. Which stable correlation identifier is canonical across screen, route, fallback,
-   outcome and rehydration without creating a parallel trace ledger?
+1. **Resolved 2026-07-26:** `agentMessageId` (for coworker/thread flows) and `screenId` / `requestId` (for direct API/routed inference flows) serve as the canonical correlation key linking `InferenceDataScreenResult` receipt -> `RouteDecisionLog` -> `AdapterRunTelemetry` -> `RouteOutcome`. `agentMessageId` is already an indexed field on `RouteDecisionLog` and `AdapterRunTelemetry`, so no parallel trace ledger model is required.
 2. Can the current EA relationship/viewpoint validators render mixed-notation
    related-view navigation entirely through shared element identity, or is a narrow
    renderer change required?
@@ -610,8 +642,7 @@ Reserve approximately 20 percent of implementation capacity:
    targets fall back to the V2 winner, and the current install has no persisted
    pins.
 4. Which existing encrypted runtime artifact can hold short-lived token maps?
-5. Should the first Compare conformance cadence be request-time aggregation,
-   scheduled reconciliation, or both through one pure projector?
+5. **Resolved 2026-07-26:** The first Compare conformance projector uses request-time pure aggregation over time-window indexed queries (`RouteDecisionLog.createdAt`, `AdapterRunTelemetry.startedAt`), with in-memory caching for wider windows (30d/90d). No background cron job or new persistence table is required for initial rollout.
 
 These decisions must be resolved against implementation and live evidence during
 their owning BI. They do not justify parallel substrate in advance.
