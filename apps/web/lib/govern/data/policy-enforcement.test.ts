@@ -16,6 +16,15 @@ describe("PEP capability matrix", () => {
     expect(canPepEnforce("high-risk-read", "delete-derived-copy")).toBe(false);
   });
 
+  it("treats inference dispatch as a destination-enforcing PEP", () => {
+    expect(canPepEnforce("inference-dispatch", "destination")).toBe(true);
+    expect(canPepEnforce("inference-dispatch", "mask")).toBe(true);
+    expect(canPepEnforce("inference-dispatch", "log-use")).toBe(true);
+    expect(canPepEnforce("inference-dispatch", "human-approval")).toBe(true);
+    expect(canPepEnforce("inference-dispatch", "delete-derived-copy")).toBe(false);
+    expect(canPepEnforce("coworker-context", "destination")).toBe(false);
+  });
+
   it("throws when obligations exceed what a PEP can enforce", () => {
     expect(() =>
       assertObligationsEnforceable("coworker-context", [

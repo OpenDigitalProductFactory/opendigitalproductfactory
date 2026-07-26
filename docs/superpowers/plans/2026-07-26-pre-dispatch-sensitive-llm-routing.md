@@ -196,11 +196,13 @@ When those checks fail, keep the token or masked label in the answer and surface
 - Modify: `apps/web/lib/govern/data/taxonomy.test.ts`
 - Modify: `docs/user-guide/ai-workforce/model-routing-lifecycle.md`
 
-- [ ] Write failing tests for secrets, customer records, employee records, finance, PHI/student/public-sector/legal/security/source-code, mixed tool payloads, and unknown governed data.
-- [ ] Add an `inference-dispatch` `DataPepKind` if the architecture review confirms the closed enum should expand rather than reuse `coworker-context`.
-- [ ] Model the pre-dispatch receipt shape with hashes, data classes, obligations, and transformation status. Do not include raw values.
-- [ ] Add deterministic fixtures for common leaked-data shapes, including copied API keys, HR notes, finance exports, support transcripts, and source code with embedded credentials.
-- [ ] Update model-routing lifecycle docs so operators understand that provider setup facts guide routing, while the actual task payload is screened at dispatch time.
+- [x] Write failing tests for secrets, customer records, employee records, finance, source-code, mixed tool payloads, and unknown governed data.
+- [x] Add an `inference-dispatch` `DataPepKind` if the architecture review confirms the closed enum should expand rather than reuse `coworker-context`.
+- [x] Model the pre-dispatch receipt shape with hashes, data classes, and transformation status. Do not include raw values.
+- [x] Add deterministic fixtures for common leaked-data shapes, including copied API keys, HR notes, finance fields, support transcripts, and source code with embedded credentials.
+- [x] Update model-routing lifecycle docs so operators understand that provider setup facts guide routing, while the actual task payload is screened at dispatch time.
+
+**Slice 1 progress:** `feat/sensitive-llm-data-screen` adds the pure classifier, safe receipt contract, and `inference-dispatch` PEP-kind taxonomy entry. PHI/student/public-sector/legal/security fixtures, PDP/PEP binding, and user-facing routing docs remain for the next slices.
 
 **Verification:**
 
@@ -219,11 +221,13 @@ git diff --check
 - Create: `apps/web/lib/inference/data-screening/evaluate-inference-policy.test.ts`
 - Modify: `apps/web/lib/govern/data/policy-decision.test.ts`
 
-- [ ] Add an inference dispatch PEP capability matrix that can enforce `mask`, `destination`, `log-use`, and `human-approval` only when a human-in-loop surface exists.
-- [ ] Evaluate screened prompt/tool payloads as `DataAction="export"` and `DestinationClass="external-service"` for cloud/router/subscription endpoints; local in-process endpoints stay `in-process`.
-- [ ] Fail closed when classification, purpose, authority, or provider destination is unknown for high-risk work.
+- [x] Add an inference dispatch PEP capability matrix that can enforce `mask`, `destination`, `log-use`, and `human-approval` only when a human-in-loop surface exists.
+- [x] Evaluate screened prompt/tool payloads as `DataAction="export"` and `DestinationClass="external-service"` for cloud/router/subscription endpoints; local in-process endpoints stay `in-process`.
+- [x] Fail closed when classification, purpose, authority, or provider destination is unknown for high-risk work.
 - [ ] Persist only decision IDs, hashes, versions, explanation codes, and obligations.
 - [ ] Add TOCTOU freshness checks before dispatch and before response rehydration.
+
+**Slice 2 progress:** `evaluateInferenceDispatchPolicy` now provides the pure inference PEP adapter over the existing PDP. It treats no-detected-governed-data payloads as eligible for normal routing, evaluates governed/sensitive external dispatch as `export` to `external-service`, denies restricted or unknown-governed external payloads by default, and refuses policies whose obligations exceed the `inference-dispatch` PEP matrix. Dispatch integration, durable evidence persistence, and TOCTOU revalidation remain next.
 
 **Verification:**
 
