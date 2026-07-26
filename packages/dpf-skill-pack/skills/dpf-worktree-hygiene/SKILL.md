@@ -1,0 +1,145 @@
+---
+name: dpf-worktree-hygiene
+description: "Use when worktree or Build Studio sandbox disk is sprawling, when deciding whether to enable fleet janitor/GC flags, when running a dry-run or live Tier-A reap, or when leftovers remain after merges. Encodes primary session reaping vs flag-gated portal soak, dry-run default, explicit-go for live deletes, and junction-safe removal. Complements dpf-worktree-per-session (create) with the reaping/hygiene half."
+
+# Agent Skills standard fields (Surface A — Claude Code)
+disable-model-invocation: false
+user-invocable: true
+allowed-tools: Bash(git worktree *) Bash(git branch *) Bash(git status *) Bash(node scripts/worktree-janitor*) Bash(node scripts/lib/junction-safe*) Bash(docker exec *) Bash(docker ps *)
+
+# DPF coworker fields (Surface B — in-portal seed loader)
+category: ops
+assignTo: ["build-specialist", "platform-engineer", "ops-coordinator"]
+capability: null
+taskType: workflow
+triggerPattern: "worktree (hygiene|sprawl|janitor|reap|prune|cleanup)|Tier-?A (reap|janitor)|sandbox (GC|leftover|\\.builds)|DPF_WORKTREE_JANITOR|DPF_SANDBOX_BUILD_GC|orphan worktree|disk reclaim.*worktree"
+userInvocable: true
+agentInvocable: true
+allowedTools: ["Bash"]
+composesFrom: ["dpf-worktree-per-session"]
+contextRequirements: ["git root clone available; scripts/worktree-janitor.mjs present; operator go required for live --live reap"]
+riskBand: high
+
+# Kernel principle enforcement
+enforces:
+  - kernel/principles/worktree-selection-and-reaping
+  - kernel/principles/destructive-actions-require-explicit-go
+  - kernel/principles/worktree-per-session
+  - kernel/principles/keep-root-clone-as-merge-worktree
+---
+
+# DPF Worktree & Sandbox Hygiene
+
+Creates are covered by [`dpf-worktree-per-session`](../dpf-worktree-per-session/SKILL.md). This skill is the **reaping / disk-hygiene** half: what runs automatically, what the portal schedule does when flags are on, and what an agent may run **only with clear operator go**.
+
+## Ownership model (do not invert)
+
+| Path | Owner | Agent freestyle? |
+|------|--------|------------------|
+| **Primary reaper** — this session's worktree on SessionEnd/Stop when Tier-A (merged + clean) | Client hooks (`worktree-session-hygiene.mjs`) | No — automatic when dpf-platform / global hooks are installed |
+| **Fleet soak** — scheduled observe / optional Tier-A, sandbox leftover GC | Portal Inngest (`ops/worktree-janitor`, `ops/sandbox-build-gc`) + env flags | No — enable flags; do not hand-cron |
+| **Exceptional reclaim** — live Tier-A bulk prune, force-delete locked dirs, kill locking shells | Operator + explicit "go" | Only after dry-run report + operator approval |
+
+Primary design: multi-client governance parity (BI-42FA7DD8, BI-8BD61C30, BI-A4BEFE99). Spec/plan under `docs/superpowers/*2026-07-26-multi-client-governance-parity*`.
+
+## Flags (install-local; not a PR)
+
+| Flag | Default | Meaning |
+|------|---------|---------|
+| `DPF_WORKTREE_JANITOR_ENABLED` | off | When `1`, schedule **scans** (dry-run unless AUTO_REAP) |
+| `DPF_WORKTREE_JANITOR_AUTO_REAP` | off | When `1` **and** ENABLED, live **Tier A only** |
+| `DPF_SANDBOX_BUILD_GC_ENABLED` | off | When `1`, daily GC for terminal/orphan `.builds/*` |
+| `DPF_SANDBOX_BUILD_GC_DELETE_BRANCHES` | off | When `1` **and** ENABLED, also age-delete `build/*` past grace |
+
+Wire via host `.env` and/or gitignored `docker-compose.override.yml` on the **portal** service, then recreate portal so `printenv` shows the flags. Do not set AUTO_REAP or BRANCH delete until observe-only soak looks clean.
+
+## When to use
+
+- Operator reports disk full, hundreds of worktrees, or leftover sandbox `build/*` branches.
+- After a merge wave when many topic worktrees are still registered.
+- Deciding whether to enable soak flags on a live install.
+- Agent is tempted to `rm -rf` a worktree or `git worktree remove --force` by hand.
+
+## When NOT to use
+
+- Creating a new session worktree → `dpf-worktree-per-session`.
+- Normal PR finish of **this** branch's worktree → session SessionEnd reaper or `dpf-finishing-a-development-branch`.
+- Portal self-upgrade / version skew → self-upgrade path, not janitor.
+
+## Steps
+
+### A. Observe (always safe)
+
+From the **root clone** (merge worktree):
+
+```bash
+# Host worktree classification (default dry-run)
+node scripts/worktree-janitor.mjs --dry-run --json
+
+# Sandbox leftovers
+docker exec dpf-sandbox-1 sh -c 'ls /workspace/.builds 2>/dev/null; git -C /workspace branch --list "build/*"'
+```
+
+Report: counts of `PRUNE_TIER_A` / `KEEP` / `SKIP`, and whether sandbox has orphan dirs vs an **active** `build/FB-*` (do not delete review/in-progress builds).
+
+### B. Fleet soak (prefer over agent loops)
+
+1. Confirm flags on portal: `docker exec dpf-portal-1 printenv | grep -E 'WORKTREE_JANITOR|SANDBOX_BUILD_GC'`.
+2. If soak is desired: set ENABLED flags only (no AUTO_REAP) via install config; recreate portal.
+3. Periodic work is then **Inngest**, not the agent rereading this skill every hour.
+
+### C. Live Tier-A host prune (destructive — needs explicit go)
+
+Only after operator says **go** (or equivalent) on a dry-run report:
+
+```bash
+node scripts/worktree-janitor.mjs --live --tier-a-only --json
+```
+
+- Uses junction-safe remove under the hood.
+- Never use bare `git worktree remove --force` on Windows (BI-F6AC1A56).
+- Never target the root clone path.
+
+### D. Locked leftovers (exceptional)
+
+If dry-run/live leaves dirs that are **not** registered worktrees but still on disk:
+
+1. Identify lockers by **process cwd** (e.g. orphaned bash/powershell with cwd in the path) — do **not** kill unrelated Claude Desktop / codex host processes.
+2. Stop only those PIDs; then remove via junction-safe helper or long-path purge.
+3. Require operator go if the agent cannot prove the process is abandoned session debris.
+
+### E. Sandbox GC one-shot (destructive — needs go)
+
+Prefer flag-enabled scheduled GC. Manual one-shot only with go:
+
+- Remove **orphan** `.builds/FB-*` (no FeatureBuild row) or **terminal** phases.
+- Keep currently checked-out / non-terminal (`review`, `building`, …) branches.
+- `git worktree prune` inside sandbox if a dir was deleted out from under git.
+
+## Guardrails
+
+- **Dry-run default.** Live reap is never the default agent action.
+- **No freestyle `rm -rf` / mass process kill** as hygiene.
+- **Junction-safe only** for worktree directory removal on Windows.
+- **Hide complexity from lay users** — report outcomes (how many reaped, flags on/off), not raw flag names unless the operator is in ops mode.
+- **Primary reaper remains session hooks** — this skill does not replace SessionEnd hygiene.
+
+## Output template
+
+```
+**Worktree/sandbox hygiene**
+
+- Dry-run: Tier-A=N, keep=N, skip=N
+- Sandbox: .builds=N, build/*=N (active kept: …)
+- Flags: JANITOR_ENABLED=… AUTO_REAP=… SANDBOX_GC=… BRANCH_DELETE=…
+- Live actions taken: none | Tier-A live prune | sandbox one-shot (operator go: yes)
+- Next: enable observe-only soak | wait soak | stop
+```
+
+## See also
+
+- [`dpf-worktree-per-session`](../dpf-worktree-per-session/SKILL.md) — create path
+- [`scripts/worktree-janitor.mjs`](../../../../scripts/worktree-janitor.mjs)
+- [`scripts/lib/junction-safe-worktree-remove.mjs`](../../../../scripts/lib/junction-safe-worktree-remove.mjs)
+- AGENTS.md §4 / §17 worktree bullets — doctrine pointers
+- Catalog: `apps/web/lib/operate/scheduled-jobs/catalog.ts` (`worktree-janitor`, `sandbox-build-gc`)
