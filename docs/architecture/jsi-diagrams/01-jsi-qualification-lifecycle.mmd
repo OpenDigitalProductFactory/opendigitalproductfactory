@@ -1,0 +1,31 @@
+flowchart TB
+    subgraph establish["Establish qualification"]
+        direction LR
+        A["Define job + scheme"] --> B["Bind GAID + profile"]
+        B --> C["Assess representative work"]
+        C --> D{"Pass?"}
+    end
+
+    D -- "No" --> E["Restrict + remediate"]
+    D -- "Yes" --> F["Shadow + gather outcomes"]
+    F --> H["Issue scoped qualification"]
+
+    subgraph sustain["Sustain qualification"]
+        direction LR
+        H --> I["Operate + monitor"]
+        I --> J{"Change or expiry?"}
+        J -- "No" --> I
+    end
+
+    J -- "Yes" --> K["Revalidate + regress autonomy"]
+    K --> C
+
+    classDef define fill:#e8f0fe,stroke:#1e3a5f,color:#1e3a5f
+    classDef assess fill:#fff4cc,stroke:#8a6500,color:#4b3a00
+    classDef qualify fill:#e6f4ea,stroke:#236b3d,color:#173d26
+    classDef restrict fill:#fde8e8,stroke:#9b2c2c,color:#5c1b1b
+
+    class A,B define
+    class C,D,F assess
+    class H,I,J qualify
+    class E,K restrict

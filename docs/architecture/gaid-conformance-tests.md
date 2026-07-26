@@ -35,6 +35,10 @@ Each assertion should identify:
 | `GAID-013` | `Public` | Public identity binding | Public certificate, domain-control proof, or approved decentralized binding | Publicly exposed identity is bound to an accountable organization or issuer-controlled trust anchor |
 | `GAID-014` | `Public` | Privacy minimization | Public `AIDoc` and receipt samples | Public disclosures minimize unnecessary personal data and avoid leaking sensitive internal-only context |
 | `GAID-015` | `All` | Conformance statement publication | Public or internal implementation statement naming profile and version | The implementation states what `GAID` profile and version it actually claims, plus known limitations or extensions |
+| `GAID-016` | `All` | Qualification claim binding | `AIDoc` and badge samples naming the `GAID`, operating-profile fingerprint, `TAK-JSI` scheme, and job-profile version | A qualification can be resolved to exactly one assessed operational subject and scope |
+| `GAID-017` | `Federated` | Qualification scope disclosure | Qualification badge with activities, exclusions, data/risk constraints, autonomy ceiling, evidence, and evaluator | A relying party can distinguish the qualified scope from declared capability and prohibited use |
+| `GAID-018` | `Federated` | Qualification lifecycle status | Status and history tests covering pending revalidation, restriction, suspension, expiry, and revocation | Stale or invalid qualifications are not advertised as current and historical evidence is preserved |
+| `GAID-019` | `All` | Qualification is not authorization | Verifier and runtime-integration tests | Resolving an active qualification never independently grants a token, entitlement, tool, or live action permission |
 
 ## Evidence Publication Guidance
 

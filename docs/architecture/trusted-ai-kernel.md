@@ -6,7 +6,7 @@ The Trusted AI Kernel (`TAK`) is a normative agent-harness and runtime-governanc
 
 The problem `TAK` addresses is broader than runtime mediation alone: model capability does not create trustworthy agency, and ad hoc agent wrappers do not create a consistent basis for governed deployment. Trustworthy agency requires a standard harness that defines how authority, instructions, tool invocation, provider use, data sensitivity, memory, oversight, and evidence are assembled and enforced at runtime. `TAK` defines that harness contract.
 
-`TAK` is intentionally concerned with runtime governance and harness consistency. It does not attempt to solve global agent naming or public badging. Those concerns belong to the companion `GAID` standard. `TAK` instead defines what a trustworthy agent harness and runtime `MUST`, `SHOULD`, and `MAY` do once an identified agent is allowed to operate.
+`TAK` is intentionally concerned with runtime governance and harness consistency. It does not attempt to solve global agent naming or public badging; those concerns belong to the companion `GAID` standard. It does not define whether an operating profile is qualified for a particular job; that concern belongs to the `TAK-JSI` qualification profile. `TAK` defines what a trustworthy agent harness and runtime `MUST`, `SHOULD`, and `MAY` do once an identified, appropriately qualified agent is allowed to operate.
 
 ## 1. Scope
 
@@ -19,6 +19,8 @@ This standard specifies requirements for:
 - tool execution gating
 - provider rate budgeting, backpressure, queueing, and failover handling
 - human-in-the-loop (`HITL`) controls
+- qualification-aware autonomy ceilings and regression
+- proactivity controls that cannot widen authority or qualification
 - delegation and escalation
 - memory and context-window governance
 - audit, evidence, and non-repudiation records
@@ -39,8 +41,9 @@ This standard does not define:
 - global namespace governance for public agent identifiers
 - public issuer accreditation models
 - external identity and badging formats
+- job definitions, qualification schemes, and job-specific competence assertions
 
-Those concerns are addressed by `GAID`.
+Those concerns are addressed by `GAID` and the companion [Job-Specific Intelligence (`TAK-JSI`) profile](job-specific-intelligence.md).
 
 ## 2. Conformance
 
@@ -87,9 +90,12 @@ The following references are relevant to this standard and informed its design:
 
 | Reference | Relevance |
 |-----------|-----------|
-| [ISO/IEC 42001:2023](https://www.iso.org/standard/81230.html) | Organization-level AI management systems |
+| [ISO/IEC 42001:2023](https://www.iso.org/standard/42001) | Organization-level AI management systems |
+| [ISO/IEC 17024:2026](https://www.iso.org/standard/17024) | Competence-scheme, assessment, surveillance, and reassessment prior art profiled by `TAK-JSI` |
+| [ISO/IEC 25059:2023](https://www.iso.org/standard/80655.html) | AI-system quality characteristics for specification and evaluation |
+| [ISO/IEC 5259-5:2025](https://www.iso.org/standard/84150.html) | Data-quality governance and stewardship relevant to qualified agent work |
 | [NIST AI RMF 1.0](https://doi.org/10.6028/NIST.AI.100-1) | Risk management framing for AI systems |
-| [NIST AI Agent Standards Initiative](https://www.nist.gov/caisi/ai-agent-standards-initiative) | Current U.S. public-sector standards activity for agents |
+| [NIST AI Agent Standards Initiative](https://www.nist.gov/artificial-intelligence/ai-agent-standards-initiative) | Current U.S. public-sector standards activity for agent security, identity, interoperability, and evaluation |
 | [NCCoE concept paper: software and AI agent identity and authorization](https://csrc.nist.gov/pubs/other/2026/02/05/accelerating-the-adoption-of-software-and-ai-agent/ipd) | Identity, authorization, auditing, and non-repudiation concerns for agents |
 | [NIST AI 800-2 benchmark evaluation draft](https://www.nist.gov/news-events/news/2026/01/towards-best-practices-automated-benchmark-evaluations) | Evaluation transparency and benchmark discipline |
 | [Model Context Protocol specification](https://modelcontextprotocol.io/specification/2025-11-25/basic) | Tool and context interoperability |
@@ -115,6 +121,7 @@ The following references are relevant to this standard and informed its design:
 | [IMDA Model AI Governance Framework for Agentic AI](https://www.imda.gov.sg/resources/press-releases-factsheets-and-speeches/press-releases/2026/new-model-ai-governance-framework-for-agentic-ai) | National governance framework for agentic AI deployment |
 | [ISO/IEC 12792:2025](https://www.iso.org/standard/84111.html) | Transparency taxonomy for AI systems |
 | [ISO/IEC DIS 42102](https://www.iso.org/standard/86898.html) | Framework for characterizing AI system methods and capabilities |
+| [Job-Specific Intelligence (`TAK-JSI`)](job-specific-intelligence.md) | Qualification profile for job, activity, data, risk, and operating-profile fitness |
 
 ### 3.1 Reuse and Profiling Rule
 
@@ -164,6 +171,10 @@ For the purposes of this standard:
 | `operating profile` | The governed bundle of materially relevant runtime state for an identified agent, including model binding, instructions, tools, autonomy posture, and verification references |
 | `profile fingerprint` | A digest or equivalent marker derived from the materially relevant operating profile state |
 | `validation continuity` | Whether the currently running operating profile remains the same validated operational subject previously assessed or approved |
+| `job qualification` | A versioned assertion that an identified operating profile satisfies a declared job/activity qualification scheme within stated data, risk, tool, and deployment constraints |
+| `proactivity` | The requested degree of initiative an agent may take before involving a human; it does not create authority or competence |
+| `earned autonomy` | Runtime action latitude justified by evidence and policy for a specific `(agent × activity × risk)` scope |
+| `autonomy ceiling` | The highest oversight tier allowed after authority, qualification, data, regulatory, and risk constraints are intersected |
 
 ## 5. Core Principle
 
@@ -185,6 +196,8 @@ An implementation of `TAK`:
 - `MUST` treat tool invocation as governed execution, not model free-form behavior
 - `MUST` treat provider rate, quota, budget, and availability constraints as kernel-governed runtime concerns rather than application-local exception handling
 - `MUST` preserve an auditable chain from human authority to agent action
+- `MUST` treat qualification as a ceiling on autonomy rather than as authorization
+- `MUST` prevent proactivity preferences from widening authority, qualification, data eligibility, or mandatory oversight
 - `MUST` make material runtime-state changes visible to policy and audit layers
 - `SHOULD` minimize the tools and context exposed to an agent at any point in time
 - `SHOULD` favor bounded specialists over unconstrained generalists for operational tasks
@@ -281,6 +294,9 @@ Material change includes:
 - changes to immutable or governed instruction bundles
 - changes to tool surface
 - changes to autonomy or approval posture
+- changes to the applicable job profile, qualification scheme, profession corpus, decision axes, or qualification evidence
+- changes to data classification, permitted use, residency, or stewarded quality requirements
+- changes to an approved routed-model substitution set or routing policy
 - changes in runtime dependencies that materially alter practical capability or risk
 
 The same enduring subject identity `MAY` remain valid while validation continuity is broken.
@@ -339,6 +355,71 @@ It shows the stable `TAK` control relationship between:
 ![TAK reference model](tak-diagrams/png/11-neutral-trust-model.png)
 
 _Figure 2. `TAK` defines a vendor-neutral harness control plane that sits between authority, agents, tools, and evidence._
+
+### 7.11 Qualification-Aware Runtime Enforcement
+
+For job-scoped autonomous work, a conforming runtime `MUST` distinguish:
+
+- declared capability
+- tested capability
+- job qualification
+- present authorization
+- evidence-earned autonomy
+
+None is interchangeable with another.
+
+A `GAID` capability or qualification badge `MUST NOT` be treated as live authorization. A
+`TAK-JSI` qualification `MUST NOT` be treated as permission to perform every qualified action. At
+execution time, the runtime `MUST` compute the effective action posture from the intersection of:
+
+```text
+principal authority
+∩ agent grants
+∩ route or workflow policy
+∩ active job-qualification scope
+∩ data, residency, and permitted-use constraints
+∩ regulatory and contractual ceilings
+∩ evidence-earned autonomy for (agent × activity × risk)
+```
+
+If the applicable qualification is absent, expired, suspended, revoked, outside scope, or pending
+revalidation, the runtime `MUST` fail closed, narrow the action, reduce the oversight tier, or
+escalate according to policy.
+
+The runtime `MUST NOT` infer job qualification solely from:
+
+- a model or provider name
+- a model card or system card
+- a generic benchmark
+- a successful demonstration in another job
+- a high proactivity setting
+- a high-cost or high-quality execution posture
+
+### 7.12 Proactivity, Earned Autonomy, and Assurance Posture
+
+Proactivity, autonomy, and execution assurance are separate control axes:
+
+- **proactivity** states how readily the agent should initiate, suggest, or continue work
+- **earned autonomy** states how much of a scoped activity the runtime may permit without a
+  pre-action human decision
+- **assurance posture** states how much model, reasoning, review, verification, and retry resource
+  the runtime should allocate
+
+A conforming implementation:
+
+- `MUST` enforce hard authority, qualification, data, and regulatory ceilings before applying any
+  proactivity preference
+- `MUST` scope autonomy evidence to an agent, activity, and risk class
+- `MUST` support autonomy regression when evidence, qualification status, or operating conditions
+  deteriorate
+- `MUST NOT` allow a resourcing control such as the Golden Triangle to reduce a mandatory safety,
+  data, qualification, or human-oversight floor
+- `SHOULD` expose the reason when requested proactivity or autonomy is clamped
+- `SHOULD` preserve evidence showing why an autonomy increase or regression occurred
+
+An implementation `MAY` use progressive stages such as shadow, propose, bounded execution with
+review, and bounded autonomous execution. The exact labels are implementation-specific; reversible,
+evidence-based progression and enforcement are normative.
 
 ## 8. Tool Execution and Action Gating
 
@@ -638,6 +719,11 @@ The runtime `MUST` enforce the effective oversight tier at execution time. It is
 
 The runtime `MUST NOT` allow the model to self-upgrade its oversight tier.
 
+The effective tier `MUST` not exceed the lowest applicable ceiling established by authority,
+qualification status, data policy, regulation, contract, and evidence-earned autonomy.
+
+Increasing proactivity or execution effort `MUST NOT` increase that ceiling.
+
 ### 9.3 Supervisor Visibility
 
 For `TAK-Managed` and above, the runtime `MUST` provide a human-supervisor-visible view of:
@@ -916,8 +1002,16 @@ A conforming implementation `MUST` test the runtime, not only the model. At mini
 - provider backpressure and rate-budget handling
 - queueing, resumption, and duplicate-prevention behavior
 - approval-gate compliance
+- qualification-scope enforcement
+- autonomy progression and regression behavior
+- proactivity clamping against authority, data, and qualification ceilings
+- model-routing eligibility under sensitivity, residency, and job-fit constraints
 
 Fabrication resistance and related trust claims `MUST` be backed by a published evaluation methodology and baseline rates, either by profiling a recognized benchmark suite or by documenting an organization-specific evaluation pack with reproducible pass criteria.
+
+For job-specific claims, generic benchmark evidence is insufficient by itself. The applicable
+`TAK-JSI` scheme `MUST` evaluate the identified operating profile under representative job, tool,
+data, workflow, and consequence conditions.
 
 ### 16.2 Advanced Evaluation
 
@@ -945,6 +1039,8 @@ At minimum, a conforming implementation `MUST` re-run the applicable evaluation 
 - on model or provider substitution
 - on major instruction-bundle or tool-surface change
 - on release into a new trust boundary or exposure state
+- on a material job-profile, profession-corpus, decision-axis, routing-policy, or data-policy change
+- when the applicable qualification expires, becomes restricted, or enters pending revalidation
 
 `TAK-Assured` implementations `SHOULD` additionally map at least the most relevant scenarios to external threat catalogs such as `OWASP` Top 10 for Agentic Applications, `CSA MAESTRO`, and `MITRE ATLAS`, so evaluation coverage is legible outside one vendor stack.
 
@@ -975,6 +1071,8 @@ At minimum, a conforming implementation `MUST` re-run the applicable evaluation 
 - delegation narrowing
 - human-visible provider and governance incident escalation
 - sensitivity-class-aware handling
+- qualification-aware action ceilings
+- explicit proactivity clamping and autonomy regression
 
 ### 17.3 TAK-Assured
 
@@ -986,6 +1084,7 @@ At minimum, a conforming implementation `MUST` re-run the applicable evaluation 
 - governed failover and substitution traceability across approved provider sets
 - stronger traceability across delegation and cross-system flows
 - documented control ownership and change management
+- evidence-backed, scoped autonomy progression with qualification and operational-surveillance links
 
 Implementations claiming any `TAK` profile `SHOULD` publish an assertion mapping, evidence pack, or equivalent rubric such as the companion `tak-conformance-tests.md` document.
 
@@ -1001,17 +1100,23 @@ This standard assumes:
 
 The consequence is that a trustworthy agent runtime cannot be reduced to prompt design alone.
 
-## 19. Informative Annex A: Relationship to GAID
+## 19. Informative Annex A: Relationship to GAID and TAK-JSI
 
-`TAK` and `GAID` are designed to work together.
+`TAK`, `GAID`, and `TAK-JSI` are designed to work together.
 
 - `GAID` identifies and attests the agent, its claims, and its public or cross-boundary posture.
+- `TAK-JSI` defines whether a versioned operating profile is qualified for a declared job,
+  activity, data, and risk scope.
 - `TAK` governs the runtime in which that agent actually operates.
 
 In practical terms:
 
 - `GAID` answers "who is this agent and what claims does it carry?"
+- `TAK-JSI` answers "what job is this operating profile qualified to perform, under which
+  constraints, and what evidence keeps that claim current?"
 - `TAK` answers "how is this agent actually constrained, supervised, and evidenced at runtime?"
+
+The canonical family map is [agent-standards-family.md](agent-standards-family.md).
 
 ## 20. Informative Annex B: Relationship to DPF
 
@@ -1024,6 +1129,9 @@ In practical terms:
 - anti-fabrication controls
 - audit logging
 - orchestrator and specialist patterns
+- proactivity controls separated from hard approval ceilings
+- sensitivity-aware model/provider routing
+- shadow-ledger and progressive-autonomy mechanisms
 
 That makes `DPF` a useful proving ground for the first conformance assessment of this standard.
 
@@ -1041,6 +1149,7 @@ The most useful near-term `DPF` outcomes under this standard include:
 - stronger runtime event typing for backpressure, failover, and escalation
 - tighter linkage between runtime evidence and companion `GAID` receipts
 - clearer supervisor-facing transparency for active runtime posture
+- qualification-aware runtime enforcement and revalidation through the companion `TAK-JSI` profile
 
 ## 21. Summary
 

@@ -1,8 +1,10 @@
-# DPF Conformance Assessment for TAK and GAID
+# DPF Conformance Assessment for TAK, GAID, and TAK-JSI
 
 ## Purpose
 
-This document assesses the current `DPF` implementation against the proposed `TAK` and `GAID` standards.
+This document assesses the current `DPF` implementation against the `TAK`, `GAID`, and `TAK-JSI`
+standards family. The canonical ownership map is
+[agent-standards-family.md](agent-standards-family.md).
 
 Status values:
 
@@ -19,6 +21,7 @@ The companion verification rubrics intended to make future conformance claims re
 
 - `docs/architecture/tak-conformance-tests.md`
 - `docs/architecture/gaid-conformance-tests.md`
+- `docs/architecture/jsi-conformance-tests.md`
 
 ## TAK Conformance
 
@@ -34,6 +37,9 @@ The companion verification rubrics intended to make future conformance claims re
 | Runtime transparency | Partially Implemented | `apps/web/lib/tak/agent-routing.ts`, `apps/web/lib/tak/prompt-assembler.ts`, `apps/web/lib/tak/agentic-loop.ts`, `apps/web/lib/tak/agent-card-service.ts`, `apps/web/components/platform/AgentCardSupervisorPanel.tsx`, `apps/web/app/(shell)/platform/audit/authority/page.tsx` | The platform exposes route-specific agents, skills, sensitivity context, tool execution records, and an internal Agent Card projection with a supervisor-ready authority snapshot in the Authority & Audit workspace. The supervisor card now includes active grant and oversight metadata, pending proposal counts, latest pending proposal state, approval workflow references, recent receipt counts, receipt status, and journal links. That is a meaningful transparency posture, but not yet a complete supervisor-facing control plane for all runtime states. | Add directive versions, normalize the card state into one runtime policy object, and expose parent-child delegation and receipt chains. |
 | Injection defenses | Partially Implemented | `apps/web/lib/tak/prompt-assembler.ts`, `apps/web/lib/tak/agentic-loop.ts`, `apps/web/lib/mcp-tools.ts` | The runtime includes fabrication detection, tool-use nudging, parameter sanitization, and sensitivity-aware prompting. These are real controls, but not yet a complete injection-defense architecture across prompts, tools, skills, and connectors. | Add explicit prompt-injection and connector-compromise handling with policy outcomes and test coverage. |
 | Evaluation and red teaming | Partially Implemented | `docs/superpowers/specs/2026-03-25-tool-evaluation-pipeline-design.md`, runtime heuristics in `apps/web/lib/tak/agentic-loop.ts` | `DPF` has strong design intent and governance work, but the runtime evidence reviewed here does not yet show a fully integrated `TAK` conformance evaluation suite. | Define a repeatable `TAK` verification harness and red-team pack, then store the resulting evidence as part of conformance claims. |
+| Proactivity boundary enforcement | Partially Implemented | `apps/web/lib/proactivity/`, `apps/web/lib/actions/agent-task-scheduler.ts` | DPF resolves scoped proactivity plans and enforces scheduled-task action boundaries, including proposal paths. The control is not yet uniformly intersected with a `TAK-JSI` qualification status across every runtime surface. | Add qualification status to the canonical runtime boundary calculation and test that higher proactivity never widens it. |
+| Evidence-earned autonomy | Implemented (substrate) | `apps/web/lib/autonomy/trust-graduation.ts`, `apps/web/lib/autonomy/regulatory-ceiling.ts`, `packages/db/prisma/schema.prisma` | DPF has activity/risk-scoped trust graduation, regulatory ceilings, and regression-oriented policy substrate. This is relevant `TAK` machinery, but it is not yet fed by a formal job qualification. | Intersect the existing trust ceiling with an active `TAK-JSI` qualification ceiling. |
+| Golden Triangle separation | Partially Implemented | `apps/web/lib/golden-triangle.ts`, `apps/web/lib/actions/golden-triangle.ts` | DPF models cost/quality/time posture independently from agent identity and local autonomy. Formal qualification-aware route eligibility is not yet integrated. | Compile Golden Triangle posture only after hard job, data, provider, and oversight eligibility. |
 
 ## GAID Conformance
 
@@ -49,6 +55,22 @@ The companion verification rubrics intended to make future conformance claims re
 | External validation and certificates | Not Implemented | Current implementation review | The reviewed implementation does not yet bind agent identity to public certificates, external issuer validation, or public status endpoints. | Add certificate-backed external validation for publicly exposed agents and issuer-operated status services. |
 | Transparency logging | Partially Implemented | Internal execution logging in `apps/web/lib/tak/agentic-loop.ts` | Internal audit logging exists, but there is no public or federated transparency log for issuance, revocation, or public identity state changes. | Add a transparency log for agent issuance, status, and revocation events. |
 | Protocol interoperability profile | Partially Implemented | `apps/web/lib/mcp-tools.ts`, `apps/web/lib/identity/aidoc-resolver.ts`, `apps/web/lib/tak/agent-card-service.ts` | `DPF` models tool metadata and open-world access in a way that can align with `MCP`-style interoperability, and it now has an internal Agent Card projection that carries `TAK` and `GAID` metadata for future A2A/MCP publication. It does not yet publish public A2A Agent Cards, public verifier metadata, or external receipt status endpoints. | Publish identity and receipt metadata through protocol profiles, starting with private A2A-compatible cards and MCP server metadata before public endpoints. |
+
+## TAK-JSI Conformance
+
+This section assesses existing substrate only. It does not claim that DPF currently issues a
+`TAK-JSI-Qualified` credential.
+
+| Control Area | Status | Evidence Path | Notes | Recommended Next Step |
+|---|---|---|---|---|
+| Versioned job profiles | Partially Implemented | `docs/professions/`, `skills/`, `docs/superpowers/specs/2026-07-24-job-specific-intelligence-fluid-weight-layer-design.md` | DPF has profession corpora, skills, and a JSI substrate design, but no single qualification-ready job-profile schema currently composes activities, data, tools, evidence, exclusions, and validity. | Define the first bounded job profile and validate the schema against `JSI-001`. |
+| Profession and decision doctrine | Partially Implemented | `docs/professions/`, `apps/web/lib/decision-perspective/`, `packages/db/src/seed-decision-perspective.ts` | WSID-style doctrine and decision-perspective substrate exist. Versioned job-qualification binding and rank/completeness checks are not yet conformance evidence. | Bind stable corpus and decision-axis versions into the first qualification scheme. |
+| Operating-profile identity binding | Partially Implemented | `apps/web/lib/identity/aidoc-resolver.ts`, `apps/web/lib/tak/agent-card-service.ts` | DPF projects agent identity and operating metadata but does not yet issue a qualification record bound to a canonical `GAID` and fingerprint. | Add qualification references to the internal `AIDoc` projection before any qualification is advertised. |
+| Job-specific evaluation | Not Implemented | `docs/superpowers/specs/2026-03-25-tool-evaluation-pipeline-design.md` | Generic evaluation design exists, but no completed job-profile assessment pack and qualification decision were found. | Implement a representative scenario pack with critical failures and declared thresholds. |
+| Model/provider eligibility | Partially Implemented | `apps/web/lib/model-routing/`, `apps/web/lib/golden-triangle.ts` | DPF has routing and resource-posture concepts, but no formal job-profile eligibility contract was found. | Apply hard data, residency, provider, modality, tool, context, and job-fit filters before ranking. |
+| Data stewardship | Partially Implemented | `packages/db/prisma/schema.prisma`, platform data-governance surfaces | DPF has sensitivity and governance substrate, but qualification-specific data ownership, quality, purpose, and evidence-minimization fields are not yet composed. | Make a named steward and data-quality contract mandatory in each data-bearing job profile. |
+| Qualification lifecycle | Not Implemented | Current implementation review | No qualification-specific issue, expiry, surveillance, revalidation, restriction, suspension, or revocation record was found. | Implement the `TAK-JSI` status model and material-change triggers without duplicating the existing autonomy ledger. |
+| Qualification-aware runtime ceiling | Not Implemented | `apps/web/lib/autonomy/`, `apps/web/lib/proactivity/` | DPF can enforce proactivity and regulatory/trust ceilings, but there is no active job-qualification ceiling in the intersection. | Add qualification status and scope as a fail-closed input to runtime action posture. |
 
 ## Context Economy Conformance
 
@@ -100,5 +122,5 @@ The most important prototype outcomes implied by the current standards refresh a
 
 - Stand up an accredited-issuer-ready public identity model with revocation and transparency logging.
 - Expose `GAID` claims through `MCP`, `A2A`, and HTTP transport profiles.
-- Build a repeatable `TAK` and `GAID` conformance test suite and preserve the resulting evidence.
+- Build repeatable `TAK`, `GAID`, and `TAK-JSI` conformance suites and preserve the resulting evidence.
 - Extend `DPF` from platform-local identity into a demonstrable cross-boundary trust implementation suitable for standards-body review.

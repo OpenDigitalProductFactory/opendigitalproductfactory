@@ -2,7 +2,8 @@
 
 ## Executive Summary
 
-This document is a position paper describing why the market now needs two complementary standards for AI agents: a runtime governance standard and an identity and assurance standard.
+This document is a position paper describing why the market needs a complementary standards family
+for AI agents: runtime governance, identity and assurance, and job-specific qualification.
 
 The key message of this document is simple. The market does not lack agent innovation. It lacks a cohesive trust architecture for that innovation.
 
@@ -14,6 +15,7 @@ Enterprises are already deploying AI agents to search code, read documents, invo
 - What human oversight applies?
 - What evidence exists for what they actually did?
 - What claims about fit-for-purpose, safety, bias, or tool use have been independently assessed?
+- For which job, activity, data, and risk scope is this exact operating profile qualified?
 
 Current standards and products address parts of this problem, but not the whole of it. `ISO/IEC 42001:2023` remains current, but it operates at the organization management-system level, not at the runtime identity and control-plane level required for agent operations. `MCP` and `A2A` are important and timely, but they address interoperability between agents, tools, and systems rather than trusted identity, assurance, and end-to-end runtime governance. Vendor frameworks from `OpenAI`, `Anthropic`, `Google`, and `Microsoft` make agent development more practical, but they do not establish a shared, globally usable trust model across platforms.
 
@@ -21,6 +23,8 @@ We therefore propose a standards family composed of:
 
 - `TAK`, the `Trusted AI Kernel`, which defines the runtime control model for trustworthy agent operation
 - `GAID`, the `Global AI Agent Identification and Governance Framework`, which defines stable identity, badging, assurance, issuer governance, and chain-of-custody for AI agents
+- `TAK-JSI`, the `Job-Specific Intelligence` profile, which defines how a versioned operating
+  profile is assessed, qualified, monitored, and revalidated for a particular job and context
 
 The point is not to duplicate existing standards. The point is to connect the layers that are currently fragmented.
 
@@ -43,6 +47,11 @@ This is where current operating pain is most visible. Many organizations can des
 This problem becomes more acute when agents are offered beyond a single team. The moment an agent is consumed across a large enterprise, across partners, or in public business-to-business or business-to-consumer channels, trust can no longer depend on undocumented local knowledge. Identity, capability claims, and chain-of-custody need to be structured, portable, and verifiable.
 
 The problem is not merely technical. It is managerial. Without stronger standards, organizations cannot govern AI agents with the same discipline expected for software components, identities, certificates, regulated workflows, or high-consequence operational changes.
+
+Generic model selection does not close this gap. A model card, hallucination benchmark, or
+one-shot application test can be useful evidence, but it does not establish competence for every
+job that may route to that model. Job fitness depends on the whole operating profile: knowledge,
+decision doctrine, tools, data, routing, instructions, oversight, and representative outcomes.
 
 ## 2. Why Current Standards and Protocols Fall Short
 
@@ -87,7 +96,7 @@ The White House has also already established AI policy as a live federal agenda.
 
 Industry behavior reinforces this. `OpenAI` published its proposals for the U.S. AI Action Plan on March 13, 2025. `Anthropic` submitted its own March 2025 `OSTP` response and has continued to argue for stronger testing and evaluation approaches, including in its earlier essay on third-party testing and its later work with `CAISI` and the `UK AISI`. This is not evidence that the market has solved the problem. It is evidence that leading vendors understand the policy and assurance questions are becoming unavoidable.
 
-International and regional governance work reinforces the same conclusion. The `EU` published the `General-Purpose AI Code of Practice` on July 10, 2025 as a voluntary but practically significant route to meeting `AI Act` obligations around transparency, safety, security, and copyright. `Singapore IMDA` launched its `Model AI Governance Framework for Agentic AI` on January 22, 2026, positioning it as a first national framework focused specifically on reliable and safe deployment of agentic AI. These are not direct substitutes for `TAK` or `GAID`, but they show that the market is moving from general AI governance into concrete operational expectations for agents.
+International and regional governance work reinforces the same conclusion. The `EU` published the `General-Purpose AI Code of Practice` on July 10, 2025 as a voluntary but practically significant route to meeting `AI Act` obligations around transparency, safety, security, and copyright. `Singapore IMDA` launched its `Model AI Governance Framework for Agentic AI` on January 22, 2026, positioning it as a first national framework focused specifically on reliable and safe deployment of agentic AI. These are not direct substitutes for `TAK`, `GAID`, or `TAK-JSI`, but they show that the market is moving from general AI governance into concrete operational expectations for agents.
 
 The point is not that governments or frontier labs are waiting for one final regulatory answer before acting. The point is that both are operating in a fragmented environment and are now seeking more coherent structures for identity, assurance, interoperability, and runtime trust.
 
@@ -129,23 +138,46 @@ The need for a stronger badging model is especially acute. In practice, organiza
 
 This is also where public trust enters the picture. Internal identifiers are useful, but public agents need stronger validation. The closest analogies are not only application user accounts. They are also `DNS`, `ISBN`, `PKI`, and supply-chain provenance systems. Public trust works when syntax, governance, accreditation, status, and verification all exist together. That is the role `GAID` is intended to play.
 
-## 6. Why These Standards Belong Together
+## 6. The Case for Job-Specific Intelligence (TAK-JSI)
 
-The two proposed standards are deliberately separate, but they are not independent in the practical sense.
+`TAK-JSI` addresses the qualification gap between identity claims and runtime permission.
 
-`TAK` without `GAID` gives an organization a runtime governance model, but not a portable answer to identity, public validation, or assurance disclosure.
+AI Coworkers resemble enduring operational subjects: they have a `GAID`, an owner, an operating
+profile, and advertised capabilities. But a capability label such as "research", "coding", or
+"customer support" is too broad to serve as a job qualification. A qualification must bind a
+versioned operating profile to a versioned job profile, assessment scheme, activity scope, data and
+risk boundary, evidence, expiry, and revalidation policy.
 
-`GAID` without `TAK` gives an organization a way to name and describe agents, but not a reliable answer to how those agents are controlled in operation.
+This structure follows established competence-assessment ideas without claiming that an AI agent is
+a person. It also aligns with the `NIST AI RMF` emphasis on fit-for-purpose measurement under
+representative deployment conditions. Qualification is evidence for a ceiling on autonomy; it is
+not authorization and does not eliminate runtime controls.
 
-The two together create a more complete trust architecture:
+`TAK-JSI` also clarifies three controls that are often conflated:
 
-- `TAK` governs action
-- `GAID` governs identity and claims
-- receipts join the two through evidence
+- **proactivity** controls initiative, not permission
+- **earned autonomy** controls evidence-backed latitude for a specific activity and risk
+- the **Golden Triangle** controls cost, quality, time, reasoning, and verification resources, not
+  competence or data eligibility
 
-This is important for both internal and external use. Internally, organizations need inventory, role and tool governance, and reliable audit. Externally, they need verifiable identity, clear public claims, and accountable cross-boundary interaction. A cohesive answer requires both layers.
+Model and provider routing must therefore filter first for job, data, residency, modality,
+contractual, and evidence eligibility before ranking remaining candidates by quality, cost, or
+latency.
 
-## 7. DPF as a Proving Ground
+## 7. Why the Standards Belong Together
+
+The standards are deliberately separate because each has one canonical owner:
+
+- `GAID` answers who the agent is and what current claims it carries
+- `TAK-JSI` answers which job and context the identified operating profile is qualified for
+- `TAK` answers what the runtime permits now
+- receipts join identity, qualification, authority, action, and evidence
+
+Identity without qualification can overstate fitness. Qualification without runtime enforcement
+can become a decorative certificate. Runtime governance without portable identity and claims can
+remain locally controlled but externally opaque.
+
+## 8. DPF as a Proving Ground
 
 The value of a standard increases materially when it can be exercised in a real platform rather than described only in the abstract.
 
@@ -160,11 +192,16 @@ The value of a standard increases materially when it can be exercised in a real 
 
 It also contains early identity-related structures that are relevant to `GAID`, including a registry of agent identities, model bindings, tool grants, supervisor assignments, default `HITL` tiers, delegation relationships, and memory declarations.
 
+DPF also contains substrate relevant to `TAK-JSI`: AI Coworker identities, profession doctrine,
+decision perspectives, scoped proactivity, cost/quality/time posture, sensitivity-aware routing,
+and evidence-earned autonomy. The missing step is to compose these into a versioned job profile,
+assessment scheme, qualification record, and runtime qualification ceiling.
+
 This makes `DPF` especially valuable for conformance work. It is not a blank sheet. It already demonstrates that many `TAK` controls are implementable in a practical system. At the same time, it exposes what is still missing for a fuller `GAID` posture: federated issuance, public verification, standardized badges, external certificates, public status and revocation, and portable action receipts.
 
 In other words, `DPF` is credible as a first implementation case because it shows both existing strengths and remaining work.
 
-## 8. A Neutral Reference Model
+## 9. A Neutral Reference Model
 
 The standards family proposed here is intentionally vendor-neutral.
 
@@ -172,6 +209,7 @@ The reference model is not meant to mirror one product suite. It is meant to ide
 
 - an identity plane
 - an assurance plane
+- a job-qualification plane
 - a runtime control plane
 - an evidence plane
 - an interoperability plane
@@ -181,7 +219,7 @@ The reference model is not meant to mirror one product suite. It is meant to ide
 
 This matters because the current market often presents partial control planes as if they were complete trust architectures. In practice, the runtime, identity, evidence, and validation concerns remain distinct even when a single vendor offers them in one product family.
 
-## 9. Why a Staged Adoption Model Is the Most Credible Path
+## 10. Why a Staged Adoption Model Is the Most Credible Path
 
 The phased adoption model proposed for `GAID` follows the historical pattern by which durable public identifier systems have become trusted in practice.
 
@@ -196,7 +234,7 @@ That precedent supports a staged `GAID` path:
 
 This is not a compromise. It is the most historically grounded route to adoption at scale.
 
-## 10. Public Verification Architecture Options for GAID
+## 11. Public Verification Architecture Options for GAID
 
 There are several viable public-verification architectures for `GAID`.
 
@@ -220,7 +258,7 @@ Adjacent work in payments and commerce also supports this direction. `AP2`, the 
 
 This hybrid model offers the best balance of adoption, accountability, and future portability.
 
-## 11. DPF as an Initial Prototype and Outcome Framework
+## 12. DPF as an Initial Prototype and Outcome Framework
 
 `DPF` is not being offered as proof that the standards are already fully solved. It is being offered as the initial implementation prototype and proving ground.
 
@@ -252,13 +290,13 @@ The standards therefore produce implementation outcomes for the prototype. Near-
 
 This is a crucial part of the proposal. The standards are not only theoretical artifacts. They define what a real platform should build next.
 
-## 12. Recommendations for Governments, Standards Bodies, and Enterprises
+## 13. Recommendations for Governments, Standards Bodies, and Enterprises
 
 The recommendations are straightforward.
 
 Governments and standards bodies should:
 
-- treat runtime governance and agent identity as separate but complementary standards layers
+- treat runtime governance, agent identity, and job qualification as separate but complementary standards layers
 - build on existing work such as `MCP`, `A2A`, `VC`, `SLSA`, `Trace Context`, and `HTTP Message Signatures` rather than starting from zero
 - establish explicit liaison positions with `OpenID AIIM`, the `W3C` Agent Identity Registry Protocol Community Group, `CoSAI`, the `Agentic AI Foundation`, and the relevant `IETF` OAuth and GNAP work
 - recognize accredited issuer governance as a critical dependency for public agent identity
@@ -269,46 +307,65 @@ Enterprises should:
 - stop treating agent inventory as a prompt catalog problem
 - adopt structured identity, tool-surface, and oversight metadata now, even before public standards fully mature
 - distinguish self-asserted claims from independently evidenced claims
+- distinguish generic capability evidence from job-specific qualification
+- require qualification revalidation when the operating profile, job doctrine, routing set, or data
+  policy materially changes
 - require runtime evidence for consequential actions
 
 Platform vendors should:
 
 - expose stronger structured metadata for tools, skills, prompts, memory, and approval posture
 - make badging and assurance claims machine-readable
+- bind qualification badges to versioned job and operating profiles with current status and expiry
 - support portable identity and receipt semantics across frameworks
 
 The standards themselves should also ship with companion implementation artifacts, not only prose. At minimum that means:
 
 - a `TAK` conformance assertion rubric
 - a `GAID` conformance assertion rubric
+- a `TAK-JSI` conformance assertion rubric
 - a reference implementation statement from the `DPF` prototype
 - a clear standards-lifecycle and liaison posture
 
-The most credible near-term disposition is liaison-first. `TAK` should align outward to `AAIF`, `NIST`, `CoSAI`, and relevant `IETF` work on authorization and proof-of-possession. `GAID` should align outward to `OpenID AIIM`, the `W3C` Agent Identity Registry Protocol Community Group, `CoSAI`, and the same `IETF` authorization and trust infrastructure work. That approach is more realistic than pretending one venue already owns the whole problem.
+The most credible near-term disposition is liaison-first. `TAK` should align outward to `AAIF`,
+`NIST`, `CoSAI`, and relevant `IETF` work on authorization and proof-of-possession. `GAID` should
+align outward to `OpenID AIIM`, the `W3C` Agent Identity Registry Protocol Community Group,
+`CoSAI`, and the same `IETF` authorization and trust infrastructure work. `TAK-JSI` should align to
+`NIST` evaluation work, AI quality and risk standards, data-quality governance, competence-scheme
+prior art, and versioned occupation/skill taxonomies. No single venue currently owns the full
+problem.
 
 The point is not to wait for a perfect end-state. The point is to move from ad hoc local conventions toward interoperable trust infrastructure.
 
-## 13. Conclusion
+## 14. Conclusion
 
 AI agents are now mature enough to create a standards problem and immature enough that the standards answer is still forming.
 
 That combination is exactly why action is needed now.
 
-The market already has meaningful building blocks. It has organization-level governance frameworks. It has interoperability protocols. It has vendor frameworks. It has credential, signature, provenance, and traceability standards. What it does not yet have is a cohesive answer to the combined problem of trusted runtime control and trusted agent identity.
+The market already has meaningful building blocks. It has organization-level governance
+frameworks. It has interoperability protocols. It has vendor frameworks. It has credential,
+signature, provenance, and traceability standards. What it does not yet have is a cohesive answer
+to trusted runtime control, trusted agent identity, and job-specific qualification.
 
 This paper therefore proposes a practical direction:
 
 - `TAK` for runtime governance
 - `GAID` for identity, assurance, and traceability
+- `TAK-JSI` for versioned job qualification, surveillance, and revalidation
 - `DPF` as an early proving ground for conformance and refinement
 
 We propose these not as final answers to every policy or platform question, but as a concrete starting point for the standards work that now needs to happen.
 
 ## References
 
-- [ISO/IEC 42001:2023 Artificial intelligence management system](https://www.iso.org/standard/81230.html)
+- [ISO/IEC 42001:2023 Artificial intelligence management system](https://www.iso.org/standard/42001)
+- [ISO/IEC 17024:2026 Conformity assessment - General requirements for bodies operating certification of persons](https://www.iso.org/standard/17024)
+- [ISO/IEC 25059:2023 Quality model for AI systems](https://www.iso.org/standard/80655.html)
+- [ISO/IEC 5259-5:2025 Data quality governance](https://www.iso.org/standard/84150.html)
 - [NIST AI RMF 1.0](https://doi.org/10.6028/NIST.AI.100-1)
-- [NIST AI Agent Standards Initiative, February 17, 2026](https://www.nist.gov/caisi/ai-agent-standards-initiative)
+- [NIST AI Agent Standards Initiative, February 17, 2026](https://www.nist.gov/artificial-intelligence/ai-agent-standards-initiative)
+- [NIST AI RMF Playbook - Measure](https://airc.nist.gov/airmf-resources/playbook/measure/)
 - [NIST press release: Announcing the AI Agent Standards Initiative, February 17, 2026](https://www.nist.gov/node/1906621)
 - [NCCoE concept paper: Accelerating the Adoption of Software and AI Agent Identity and Authorization, February 5, 2026](https://csrc.nist.gov/pubs/other/2026/02/05/accelerating-the-adoption-of-software-and-ai-agent/ipd)
 - [CAISI RFI on Securing AI Agent Systems, January 12, 2026](https://www.nist.gov/news-events/news/2026/01/caisi-issues-request-information-about-securing-ai-agent-systems)
@@ -350,6 +407,9 @@ We propose these not as final answers to every policy or platform question, but 
 - [Veza introduces AI Agent Security, December 8, 2025](https://veza.com/company/press-room/veza-introduces-ai-agent-security-to-protect-and-govern-ai-agents-at-enterprise-scale/)
 - [Veza introduces Native Access Agents and Enterprise Agent Identity Control Plane, February 25, 2026](https://veza.com/company/press-room/veza-introduces-native-access-agents-to-secure-the-modern-ai-driven-enterprise-with-enterprise-agent-identity-control-plane/)
 - [W3C Verifiable Credentials Data Model v2.0](https://www.w3.org/TR/vc-data-model/)
+- [1EdTech Open Badges 3.0](https://standards.1edtech.org/open-badges/specifications/standards/v3p0/cert)
+- [O*NET Content Model](https://www.onetcenter.org/content.html)
+- [ESCO](https://esco.ec.europa.eu/en/about-esco)
 - [Decentralized Identifiers (DIDs) v1.0](https://www.w3.org/TR/did-core/)
 - [W3C Trace Context](https://www.w3.org/TR/trace-context/)
 - [RFC 9421 HTTP Message Signatures](https://www.rfc-editor.org/info/rfc9421)

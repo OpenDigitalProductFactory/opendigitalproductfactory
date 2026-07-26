@@ -11,7 +11,8 @@
  * source of truth; generated DOCX files are publication artifacts.
  */
 
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
 import {
   existsSync,
   mkdirSync,
@@ -23,8 +24,11 @@ import {
 import { homedir } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 
-import { marked } from "marked";
-import {
+const ROOT = resolve(import.meta.dirname, "..", "..");
+const DEPENDENCY_ROOT = resolve(process.env.DPF_DOC_DEPENDENCY_ROOT || ROOT);
+const dependencyRequire = createRequire(join(DEPENDENCY_ROOT, "package.json"));
+const { marked } = dependencyRequire("marked");
+const {
   AlignmentType,
   BorderStyle,
   Document,
@@ -47,9 +51,8 @@ import {
   TextRun,
   WidthType,
   convertInchesToTwip,
-} from "docx";
+} = dependencyRequire("docx");
 
-const ROOT = resolve(import.meta.dirname, "..", "..");
 const NAVY = "1e3a5f";
 const MID_BLUE = "1565c0";
 const LIGHT_BLUE = "e8f0fe";
@@ -75,6 +78,35 @@ function findChrome() {
   return existsSync(exe) ? exe : null;
 }
 
+function findMermaidCliEntry() {
+  const directEntry = join(
+    DEPENDENCY_ROOT,
+    "node_modules",
+    "@mermaid-js",
+    "mermaid-cli",
+    "src",
+    "cli.js",
+  );
+  const pnpmStore = join(DEPENDENCY_ROOT, "node_modules", ".pnpm");
+  if (existsSync(pnpmStore)) {
+    const packageDir = readdirSync(pnpmStore)
+      .find((entry) => entry.startsWith("@mermaid-js+mermaid-cli@"));
+    if (packageDir) {
+      const storeEntry = join(
+        pnpmStore,
+        packageDir,
+        "node_modules",
+        "@mermaid-js",
+        "mermaid-cli",
+        "src",
+        "cli.js",
+      );
+      if (existsSync(storeEntry)) return storeEntry;
+    }
+  }
+  return existsSync(directEntry) ? directEntry : null;
+}
+
 function renderMermaidDiagrams(diagramsDir) {
   if (!diagramsDir || !existsSync(diagramsDir)) return;
 
@@ -87,9 +119,14 @@ function renderMermaidDiagrams(diagramsDir) {
   const chromePath = findChrome();
   const env = { ...process.env };
   if (chromePath) env.PUPPETEER_EXECUTABLE_PATH = chromePath;
+  const mmdcEntry = findMermaidCliEntry();
 
   const mmdFiles = readdirSync(diagramsDir).filter((file) => file.endsWith(".mmd"));
   console.log(`Rendering ${mmdFiles.length} Mermaid diagrams from ${diagramsDir}...`);
+  if (mmdFiles.length > 0 && !mmdcEntry) {
+    console.warn(`  WARN: Mermaid CLI was not found under ${DEPENDENCY_ROOT}; diagrams were not rendered.`);
+    return;
+  }
 
   for (const file of mmdFiles) {
     const input = join(diagramsDir, file);
@@ -110,13 +147,15 @@ function renderMermaidDiagrams(diagramsDir) {
 
     console.log(`  ${file} -> svg, png`);
     try {
-      execSync(
-        `pnpm exec mmdc -i "${input}" -o "${svgOutput}" -c "${mmdConfig}" -b white`,
-        { cwd: ROOT, stdio: "pipe", timeout: 180_000, env },
+      execFileSync(
+        process.execPath,
+        [mmdcEntry, "-i", input, "-o", svgOutput, "-c", mmdConfig, "-b", "white"],
+        { cwd: DEPENDENCY_ROOT, stdio: "pipe", timeout: 180_000, env },
       );
-      execSync(
-        `pnpm exec mmdc -i "${input}" -o "${pngOutput}" -c "${mmdConfig}" -b white -s 4`,
-        { cwd: ROOT, stdio: "pipe", timeout: 180_000, env },
+      execFileSync(
+        process.execPath,
+        [mmdcEntry, "-i", input, "-o", pngOutput, "-c", mmdConfig, "-b", "white", "-s", "4"],
+        { cwd: DEPENDENCY_ROOT, stdio: "pipe", timeout: 180_000, env },
       );
     } catch (err) {
       const message = err?.stderr?.toString?.().split("\n")[0] || err?.message || "Unknown render error";
@@ -273,9 +312,11 @@ function resolveDiagramCompanions(localPath) {
 
   if (extension === ".png" && existsSync(svgPath)) {
     return {
-      primaryPath: svgPath,
-      primaryType: "svg",
-      fallbackPath: localPath,
+      // Word preserves Mermaid node text more reliably when PNG is primary.
+      // Keep SVGs as separate publication assets instead of relying on Office's
+      // incomplete SVG text/fallback handling inside DOCX.
+      primaryPath: localPath,
+      primaryType: "png",
       dimensionsPath: localPath,
     };
   }
