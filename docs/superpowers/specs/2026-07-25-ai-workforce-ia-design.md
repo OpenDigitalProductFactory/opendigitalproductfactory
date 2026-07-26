@@ -573,6 +573,43 @@ Telemetry source rule:
 - If route/page instrumentation is not present, add a small route-visit event for legacy AI/coworker routes before any route retirement decision.
 - Until that instrumentation exists, the only allowed migration action is visible-nav removal plus compatibility links/redirects. Physical route removal is blocked.
 
+## DPF Vision & Best Practices Alignment
+
+To align the Information Architecture with foundational DPF governance, coworker development principles, and the navigation audit checklist, the following refinements are integrated into the design.
+
+### 1. Archetype Availability Resolution
+* **Single Source of Truth**: Availability calculations MUST resolve dynamically against `StorefrontConfig.archetypeId` (as defined in `AGENTS.md` §2). 
+* **Resolution Logic**:
+  - **Universal**: Applicable if `CoworkerService.archetypes` is empty or contains `*`.
+  - **Category/Leaf Match**: Match current `StorefrontConfig.archetypeId` against the service's `archetypes` JSON list.
+  - **Prerequisites check**: Query the storefront database state for the current install (e.g. presence of operating hours, service catalog, or channel configuration) to toggle between `Available` and `Setup needed`.
+
+### 2. Specialization & Tool Bloat Guardrails
+* **Principle 1 Alignment (Specialization Over Generalization)**: Coworkers are most effective when limited to `< 10` tools (see `docs/architecture/ai-coworker-development-principles.md`).
+* **UI Refinement**: Under the **Capabilities** lens and the coworker's **Capabilities** detail tab:
+  - Display a count of assigned tools (`backingToolNames`) and skills (`backingSkillIds`).
+  - Flag an operational warning/technical-debt indicator if the assigned tool count exceeds **10** (amber warning) or **15** (red alert), suggesting that the coworker should be refactored or decomposed.
+
+### 3. Structured Handoff & Contract Visualizer
+* **Principle 3 Alignment (Structured Handoffs)**: Coworkers pass decisions and context schemas via structured handoff documents rather than verbose chat history.
+* **UI Refinement**: In the **Work Offered** and **Activity** detail views, render the structured schemas for `requiredInputs` and `producedOutputs` as a readable "Job API Contract". This helps the operator visualize exactly how coworkers interlock inside the orchestrator-worker pipeline.
+
+### 4. Autonomy, Governance, and HITL Boundaries
+* **Principle 7 Alignment (Human-in-the-Loop at Phase Boundaries)**: Distinguish between broad workflow gates and tactical execution blockages.
+* **UI Refinement**: Under the **Decision Governance** lens and the coworker's **Autonomy & Governance** tab, split controls and lists into:
+  - **Phase-Boundary Approvals**: For workflow transitions (e.g., approving a plan to proceed to build).
+  - **Consequential Side-Effect Approvals**: For proposal tools (e.g., executing schema migrations, deploying to staging).
+  - Provide direct link navigation from decision rows to the global **Paused-Work surface** or cross-process inbox.
+
+### 5. Memory Compaction & Looping Diagnostics
+* **Principle 5 Alignment (Selective Memory)**: Surface the efficiency of the vector storage (Qdrant) by showing a breakdown of "Salient Context" (durable decisions, user choices, constraints) vs. transient notes. Provide a compaction/pruning trigger.
+* **Principle 8 Alignment (Fail Fast, Explain Clearly)**: In both the **Work Monitor** and **Systems Health** lenses, bubble up active tool repetition looping alerts (e.g. when a coworker hits the 3–5 repetition limit) as high-priority operational exceptions rather than burying them in logs.
+
+### 6. Workspace vs. Configuration Separation
+* **Navigation Audit Alignment**: Keep "where to go" controls separated from "what to do" controls.
+  - The page route `/platform/ai/agent/[agentId]` is strictly a management, status, and metadata detail view.
+  - Active conversation panels, prompt testing, and execution tasks are handled by the sliding **AgentCoworkerPanel** sidebar or the inbox, ensuring the workspace chrome does not compete with the main IA.
+
 ## Implementation Notes
 
 This design should be implemented as a sequence of small slices:
