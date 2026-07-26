@@ -92,6 +92,10 @@ Every result carries:
 - Extend `packages/db/src/coworker-service-catalog-seed.test.ts` with a registry-validity invariant.
 - Correct stale universal and roster-group language in `docs/superpowers/specs/2026-07-25-ai-workforce-ia-design.md`.
 
+### Seed-Fit Decision
+
+`global-default`. Every install should preserve valid service declarations and stop assigning unresolved services to the software archetype. The narrow legacy backfill removes a false fleet default; it does not introduce install-specific or vertical-specific content.
+
 ### TDD Cases
 
 - Valid leaf match.
