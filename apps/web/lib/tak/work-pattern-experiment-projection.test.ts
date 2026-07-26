@@ -23,7 +23,7 @@ describe("analyzeWorkPatternExperimentCells", () => {
     oracleVersion: "1",
     promotionPolicyKey: "policy",
     promotionPolicyVersion: 1,
-    installScope: "global" as const,
+    installScope: "canonical" as const,
     lifecycle: "analyzing" as const,
   };
   const cell = (methodVariantKey: string) => ({
