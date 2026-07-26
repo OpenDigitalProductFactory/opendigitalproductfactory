@@ -11,6 +11,10 @@ const db = vi.hoisted(() => ({
   epicCount: vi.fn(),
   platformDevConfigFindUnique: vi.fn(),
   transaction: vi.fn(),
+  txBacklogItemUpdate: vi.fn(),
+  txActivityCreate: vi.fn(),
+  txBacklogItemCount: vi.fn(),
+  txEpicUpdate: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -47,6 +51,9 @@ vi.mock("@/lib/mcp-handlers/update-backlog-item", () => ({
   handleUpdateBacklogItem: (...a: unknown[]) => updateHandler.handleUpdateBacklogItem(...a),
 }));
 
+const backlogBridge = vi.hoisted(() => ({ bridgeBacklogItemToWorkItem: vi.fn() }));
+vi.mock("@/lib/queue/bridges/backlog-bridge", () => backlogBridge);
+
 import { backlogPack } from "./backlog-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 
@@ -70,6 +77,20 @@ const EXPECTED_TOOLS = [
 
 beforeEach(() => {
   vi.clearAllMocks();
+  db.transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) =>
+    callback({
+      backlogItem: {
+        update: (...a: unknown[]) => db.txBacklogItemUpdate(...a),
+        count: (...a: unknown[]) => db.txBacklogItemCount(...a),
+      },
+      backlogItemActivity: {
+        create: (...a: unknown[]) => db.txActivityCreate(...a),
+      },
+      epic: {
+        update: (...a: unknown[]) => db.txEpicUpdate(...a),
+      },
+    }),
+  );
 });
 
 describe("backlog pack — registration", () => {
@@ -155,6 +176,94 @@ describe("backlog pack — handler behavior (delegation preserved)", () => {
     );
     expect(res.success).toBe(false);
     expect(res.error).toBe("invalid_status");
+  });
+
+  it("update_backlog_item_status exposes the typed completion evidence schema", () => {
+    const definition = backlogPack.definitions.find((entry) => entry.name === "update_backlog_item_status");
+    const rootProperties = definition?.inputSchema.properties as
+      | Record<string, unknown>
+      | undefined;
+    const completionEvidence = rootProperties?.completionEvidence as
+      | { properties?: Record<string, { enum?: unknown[]; maxItems?: number }> }
+      | undefined;
+    expect(completionEvidence?.properties?.workClass.enum).toEqual([
+      "documentation",
+      "verified-existing",
+      "implementation",
+      "operational",
+    ]);
+    expect(completionEvidence?.properties?.evidenceActivityIds.maxItems).toBe(50);
+  });
+
+  it("update_backlog_item_status records the normalized completion evidence receipt", async () => {
+    db.backlogItemFindUnique.mockResolvedValue({
+      id: "row-1",
+      status: "in-progress",
+      epicId: null,
+      triageOutcome: "build",
+      effortSize: "medium",
+      activeBuildId: null,
+      claimStatus: "active",
+      claimedById: "u1",
+      claimedByAgentId: "agent-1",
+      claimedAt: new Date("2026-07-26T09:00:00Z"),
+    });
+    db.txBacklogItemUpdate.mockResolvedValue({
+      itemId: "BI-1",
+      status: "done",
+      epicId: null,
+      completedAt: new Date("2026-07-26T12:00:00Z"),
+    });
+    db.txActivityCreate.mockResolvedValue({ id: "activity-1" });
+    const res = await backlogPack.handlers.update_backlog_item_status(
+      {
+        itemId: "BI-1",
+        status: "done",
+        resolution: "Delivered through PR #1.",
+        completionEvidence: {
+          workClass: "implementation",
+          evidenceActivityIds: ["source", "tests", "tests"],
+          useActiveBuildEvidence: false,
+          ux: { disposition: "not-applicable", reason: "No user interface files or routes changed." },
+          migration: { disposition: "not-applicable", reason: "No database schema or persisted data changed." },
+          callerVerdict: "allow",
+        },
+      },
+      "u1",
+      { agentId: "agent-1" },
+    );
+    expect(res.success).toBe(true);
+    const payload = db.txActivityCreate.mock.calls[0][0].data.payload;
+    expect(payload.completionEvidence).toEqual({
+      workClass: "implementation",
+      evidenceActivityIds: ["source", "tests"],
+      useActiveBuildEvidence: false,
+      ux: { disposition: "not-applicable", reason: "No user interface files or routes changed." },
+      migration: { disposition: "not-applicable", reason: "No database schema or persisted data changed." },
+    });
+    expect(payload.completionEvidence.callerVerdict).toBeUndefined();
+  });
+
+  it("update_backlog_item_status keeps an already-done retry a no-op without a new receipt", async () => {
+    db.backlogItemFindUnique.mockResolvedValue({
+      id: "row-1",
+      status: "done",
+      epicId: null,
+      triageOutcome: "build",
+      effortSize: "medium",
+      activeBuildId: null,
+      claimStatus: "released",
+      claimedById: "u1",
+      claimedByAgentId: "agent-1",
+      claimedAt: new Date("2026-07-26T09:00:00Z"),
+    });
+    const res = await backlogPack.handlers.update_backlog_item_status(
+      { itemId: "BI-1", status: "done", resolution: "already done" },
+      "u1",
+    );
+    expect(res.success).toBe(true);
+    expect(res.message).toContain("no-op");
+    expect(db.transaction).not.toHaveBeenCalled();
   });
 
   it("link_backlog_item_to_epic requires an itemId", async () => {

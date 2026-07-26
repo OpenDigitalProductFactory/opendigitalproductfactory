@@ -979,7 +979,11 @@ export async function register() {
       const { createDecisionRoutingGovernanceHook } = await import(
         "@/lib/tak/decision-routing-governance-hook"
       );
+      const { createCompletionEvidenceGovernanceHook } = await import(
+        "@/lib/backlog/completion-evidence-governance-hook"
+      );
       registerToolLifecycleHook(createDecisionRoutingGovernanceHook());
+      registerToolLifecycleHook(createCompletionEvidenceGovernanceHook());
     }
 
     // Mirror version.json into PlatformConfig["platform.version"] so the

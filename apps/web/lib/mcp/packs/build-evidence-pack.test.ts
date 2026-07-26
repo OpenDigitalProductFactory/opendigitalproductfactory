@@ -6,6 +6,7 @@ const db = vi.hoisted(() => ({
   backlogItemCreate: vi.fn(),
   backlogItemUpdate: vi.fn(),
   activityCreate: vi.fn(),
+  toolExecutionFindUnique: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -17,6 +18,9 @@ vi.mock("@dpf/db", () => ({
     },
     backlogItemActivity: {
       create: (...a: unknown[]) => db.activityCreate(...a),
+    },
+    toolExecution: {
+      findUnique: (...a: unknown[]) => db.toolExecutionFindUnique(...a),
     },
   },
 }));
@@ -81,6 +85,33 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
     expect(res.error).toBe("invalid_kind");
   });
 
+  it("record_execution_evidence rejects source evidence without HTTP(S) provenance", async () => {
+    const res = await buildEvidencePack.handlers.record_execution_evidence(
+      { itemId: "BI-1", kind: "source_verified", summary: "source", url: "file:///tmp/repo" },
+      "u1",
+    );
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("invalid_evidence");
+    expect(db.backlogItemFindUnique).not.toHaveBeenCalled();
+  });
+
+  it("record_execution_evidence validates a supplied ToolExecution reference", async () => {
+    db.backlogItemFindUnique.mockResolvedValue({ id: "row-1" });
+    db.toolExecutionFindUnique.mockResolvedValue({ id: "te-1", success: false });
+    const res = await buildEvidencePack.handlers.record_execution_evidence(
+      {
+        itemId: "BI-1",
+        kind: "test_pass",
+        summary: "green",
+        toolExecutionId: "te-1",
+      },
+      "u1",
+    );
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("invalid_tool_execution");
+    expect(db.activityCreate).not.toHaveBeenCalled();
+  });
+
   it("record_execution_evidence writes an evidence activity for a known item", async () => {
     db.backlogItemFindUnique.mockResolvedValue({ id: "row-1" });
     db.activityCreate.mockResolvedValue({ id: "act-1", recordedAt: new Date("2026-01-01T00:00:00Z") });
@@ -95,6 +126,16 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
     const arg = db.activityCreate.mock.calls[0][0];
     expect(arg.data.recordedById).toBe("u1");
     expect(arg.data.recordedByAgentId).toBe("agent-x");
+  });
+
+  it("uses the canonical registry in the MCP enum", () => {
+    const definition = buildEvidencePack.definitions.find((entry) => entry.name === "record_execution_evidence");
+    const properties = definition?.inputSchema.properties as
+      | Record<string, { enum?: unknown[] }>
+      | undefined;
+    expect(properties?.kind.enum).toContain("migration_pass");
+    expect(properties?.kind.enum).toContain("ux_fail");
+    expect(properties?.kind.enum).toContain("source_verified");
   });
 
   it("record_execution_evidence surfaces not_found for an unknown item", async () => {

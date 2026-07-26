@@ -1,5 +1,14 @@
 # Per-client configuration conformance — server-authoritative minimal substrate + client-advisory optimization
 
+> **Related authority boundary (2026-07-26):** this design governs client
+> identity, conformance, and the tool surface available below the grant ceiling.
+> It does not treat a conforming client as trusted to make every mutation.
+> Consequential mutation acceptance is owned by
+> [`docs/architecture/agent-client-governance.md`](../../architecture/agent-client-governance.md)
+> and the evidence-earned completion design. Tool access means a caller may
+> attempt an action; server-resolved evidence determines whether an
+> organizational-truth transition is accepted.
+
 - **Backlog item:** BI-71310615 — "Per-client configuration conformance across heterogeneous agent clients"
 - **Status:** Design (decision-bearing). No code in this document.
 - **Author:** Claude (external_coding_agent), 2026-07-24

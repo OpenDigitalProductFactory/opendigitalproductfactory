@@ -318,6 +318,13 @@ until fleet convergence permits a later contract phase.
 
 ## 8. Outcome evidence and decision rule
 
+Build Studio is also an evidence producer for the cross-surface
+[agent-client governance contract](../../architecture/agent-client-governance.md).
+Its canonical `FeatureBuild` verification may satisfy a consequential backlog
+completion policy through a read adapter; the completion gate must not copy
+Build Studio results into a parallel evidence ledger or grant Build Studio a
+privileged bypass.
+
 Do not collapse quality into a single reward number. Store the dimensions, then apply a versioned
 decision rule appropriate to the activity and risk.
 

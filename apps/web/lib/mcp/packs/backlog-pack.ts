@@ -38,6 +38,7 @@ import type { BacklogIngestInput } from "@/lib/operate/backlog-ingest";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { tryAcquireBacklogClaimAtomic } from "@/lib/backlog/claim-on-start";
+import { normalizeCompletionEvidenceManifest } from "@/lib/backlog/completion-evidence-policy";
 
 const definitions: ToolDefinition[] = [
   {
@@ -268,7 +269,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "update_backlog_item_status",
-    description: "Move a backlog item between lifecycle statuses. Enforces the legal-transition table; same-status calls are no-op successes. Setting status='triaging' on an already-triaged item is the *retriage* path — clears triageOutcome and effortSize so triage_backlog_item can re-decide. Setting status='done' requires a resolution. Writes a status_change activity row and may auto-close the parent epic. Moving an item to in-progress ACQUIRES its work claim and is rejected with error=claim_conflict if another session already holds a fresh active claim (pass force=true to take it over); the claim is released when the item leaves in-progress. NOTE: this only changes the status field — it does NOT start work. For a triageOutcome=build item, starting the work means promote_to_build_studio (creates the FeatureBuild + Build Studio Ideate); flipping such an item to in-progress returns an advisory and does not build anything.",
+    description: "Move a backlog item between lifecycle statuses. Enforces the legal-transition table; same-status calls are no-op successes. Agent callers setting status='done' must supply completionEvidence that cites fresh, server-resolved evidence proportional to documentation, verified-existing, implementation, or operational work. Setting status='triaging' on an already-triaged item is the retriage path. Moving an item to in-progress acquires its work claim; it does not start Build Studio.",
     inputSchema: {
       type: "object",
       properties: {
@@ -277,6 +278,39 @@ const definitions: ToolDefinition[] = [
         reason: { type: "string", description: "Free-text rationale captured in the activity row. Required when status=triaging from a triaged status." },
         resolution: { type: "string", description: "Outcome summary, required when status=done" },
         force: { type: "boolean", description: "When moving to in-progress, take over a claim already held by another active session (default false). The takeover is recorded on the status_change activity row." },
+        completionEvidence: {
+          type: "object",
+          description: "Required for agent callers when status=done. Cite evidence activity IDs; implementation work must explicitly classify UX and migration as verified or not-applicable with a concrete reason.",
+          properties: {
+            workClass: {
+              type: "string",
+              enum: ["documentation", "verified-existing", "implementation", "operational"],
+            },
+            evidenceActivityIds: {
+              type: "array",
+              items: { type: "string" },
+              maxItems: 50,
+            },
+            useActiveBuildEvidence: { type: "boolean" },
+            ux: {
+              type: "object",
+              properties: {
+                disposition: { type: "string", enum: ["verified", "not-applicable"] },
+                reason: { type: "string" },
+              },
+              required: ["disposition"],
+            },
+            migration: {
+              type: "object",
+              properties: {
+                disposition: { type: "string", enum: ["verified", "not-applicable"] },
+                reason: { type: "string" },
+              },
+              required: ["disposition"],
+            },
+          },
+          required: ["workClass", "evidenceActivityIds"],
+        },
       },
       required: ["itemId", "status"],
     },
@@ -643,6 +677,10 @@ async function updateBacklogItemStatus(
     };
   const reason = typeof params["reason"] === "string" ? params["reason"] : null;
   const resolution = typeof params["resolution"] === "string" ? params["resolution"] : null;
+  const completionEvidence =
+    target === "done"
+      ? normalizeCompletionEvidenceManifest(params["completionEvidence"])
+      : null;
   if (target === "done" && !resolution)
     return {
       success: false,
@@ -755,6 +793,17 @@ async function updateBacklogItemStatus(
           to: target,
           reason: reason ?? null,
           resolution: resolution ?? null,
+          ...(completionEvidence
+            ? {
+                completionEvidence: {
+                  workClass: completionEvidence.workClass,
+                  evidenceActivityIds: completionEvidence.evidenceActivityIds,
+                  useActiveBuildEvidence: completionEvidence.useActiveBuildEvidence,
+                  ux: completionEvidence.ux ?? null,
+                  migration: completionEvidence.migration ?? null,
+                },
+              }
+            : {}),
           ...(isRetriage
             ? {
                 retriage: true,
