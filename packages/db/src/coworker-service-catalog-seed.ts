@@ -348,9 +348,17 @@ export async function seedCoworkerServiceCatalog(prisma: PrismaClient): Promise<
     await prisma.coworkerService.upsert({
       where: { serviceId: service.serviceId },
       create: service,
-      update: service,
+      update: serviceUpdate(service),
     });
   }
+
+  await prisma.coworkerService.updateMany({
+    where: {
+      serviceId: { in: COWORKER_SERVICE_CATALOG_SERVICE_SEEDS.map((service) => service.serviceId) },
+      archetypes: { equals: ["software-and-platforms"] },
+    },
+    data: { archetypes: [] },
+  });
 
   await prisma.coworkerService.updateMany({
     where: {
@@ -377,6 +385,13 @@ export async function seedCoworkerServiceCatalog(prisma: PrismaClient): Promise<
   });
 }
 
+function serviceUpdate({
+  archetypes: _archetypes,
+  ...update
+}: CoworkerServiceSeed): Omit<CoworkerServiceSeed, "archetypes"> {
+  return update;
+}
+
 function serviceSeed(
   serviceId: string,
   providerAgentId: string,
@@ -396,7 +411,7 @@ function serviceSeed(
     personas: overrides.personas ?? [],
     portfolioRoles: overrides.portfolioRoles ?? ["workforce"],
     valueStreams: overrides.valueStreams ?? ["cross-cutting"],
-    archetypes: overrides.archetypes ?? ["software-and-platforms"],
+    archetypes: overrides.archetypes ?? [],
     jurisdictions: overrides.jurisdictions ?? ["us", "global"],
     requiredInputs: overrides.requiredInputs ?? [],
     producedOutputs: overrides.producedOutputs ?? [],

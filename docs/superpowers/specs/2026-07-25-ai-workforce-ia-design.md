@@ -170,15 +170,18 @@ The roster must lead with customer value and practical availability.
 
 Recommended first-screen order:
 
-1. **Works with customers**
-   - Customer Success Manager, Marketing Strategist, partner/customer-facing coworkers.
+1. **Customers and sales**
+   - Customer Success Manager, Marketing Strategist, sales, partner, and customer-facing coworkers.
    - Highest trust and value-discovery priority.
 
-2. **Runs business operations**
-   - Finance, compliance, HR, storefront, scheduling, fulfillment, admin, support operations.
+2. **Your team**
+   - Hiring, onboarding, scheduling, learning, employee support, and workforce-planning coworkers.
 
-3. **Builds and improves DPF**
-   - Build Lead, Platform Engineer, Enterprise Architect, UX Design Critic, Data Architect, External Catalog Scout, internal improvement coworkers.
+3. **Operations and delivery**
+   - Storefront, service delivery, fulfillment, customer support operations, and day-to-day coordination.
+
+4. **Platform and back office**
+   - Finance, compliance, admin, Build Lead, Platform Engineer, Enterprise Architect, UX Design Critic, Data Architect, External Catalog Scout, and internal improvement coworkers.
 
 Each coworker card should show:
 
@@ -204,7 +207,7 @@ Each coworker card should show:
   - `Review needed`
 - Primary action: `View coworker`.
 
-The roster should support filters for business area, customer interaction, availability, setup state, approval level, and health. These filters should not replace the three visible groupings above.
+The roster should support filters for business area, customer interaction, availability, setup state, approval level, and health. These filters should not replace the four visible groupings above.
 
 ## Coworker Record Design
 
@@ -276,9 +279,9 @@ Coworker detail examples:
 - `Other supported business types: Salon, clinic, retail`
 - `Not supported yet: Manufacturing, field services`
 
-The data model should distinguish:
+The availability read model should distinguish:
 
-- universal availability
+- explicitly governed universal availability, once that encoding exists
 - archetype-category availability
 - leaf-archetype availability
 - install-specific setup-needed state
@@ -305,8 +308,8 @@ Precedence:
    - Example: category supports retail, but a regulated pharmacy leaf requires later support.
    - Show the leaf result.
 
-4. **Category / universal available**
-   - The current category is supported, or the offer is universal, and setup prerequisites are satisfied.
+4. **Category available**
+   - The current category is explicitly supported and setup prerequisites are satisfied.
    - Show `Available for your business type`.
 
 5. **Coming later**
@@ -317,7 +320,7 @@ Precedence:
    - The work is not applicable to the current business type.
    - Show `Not available for your business type`.
 
-Universal availability applies only if no stricter category, leaf, setup, or safety signal overrides it.
+Universal availability must not be inferred from an empty list or `*`. When a governed universal encoding is introduced, it applies only if no stricter category, leaf, setup, or safety signal overrides it.
 
 ## Offer as the Core Discovery Object
 
@@ -506,7 +509,7 @@ Phase 4: Retire redirect-only and low-value peer destinations.
 | `/coworker-decisions/decisions/*` | AI Workforce > Decision Governance decision detail | Migrate then redirect |
 | `/admin/agents`, `/ea/agents` | AI Workforce > Coworkers or Platform Identity > Agents, depending user intent | Remove as ordinary coworker entry; keep admin/identity deep link |
 | Domain AI pages such as `/finance/spend/ai` | Domain workflow with contextual coworker link | Keep domain workflow; link to coworker record |
-| Customer/marketing AI pages | Domain/customer workflows plus `Works with customers` roster group | Keep workflow; cross-link |
+| Customer/marketing AI pages | Domain/customer workflows plus `Customers and sales` roster area | Keep workflow; cross-link |
 
 ## Guardrails
 
@@ -541,7 +544,7 @@ Three critique lenses were applied:
 Accepted critique:
 
 - The roster must not become a new overloaded dashboard.
-- Customer-facing coworkers need a first-class `Works with customers` grouping.
+- Customer-facing coworkers need a first-class `Customers and sales` area.
 - Decision governance needs a stable fleet-level review queue.
 - The old Coworker Decision Engine should migrate under AI Workforce.
 - Five modes should be shallow lenses, not another route tree.
@@ -552,7 +555,7 @@ Accepted critique:
 
 These are non-blocking defaults for implementation planning:
 
-- Use the three owner-facing roster groups in this spec until a broader four-portfolio naming decision replaces them: `Works with customers`, `Runs business operations`, `Builds and improves DPF`.
+- Use the four owner-facing roster areas confirmed by the live audit: `Customers and sales`, `Your team`, `Operations and delivery`, and `Platform and back office`.
 - Seeded offer applicability determines whether a coworker can ever support an archetype/category. Install setup state determines whether the currently selected install is available now or setup-needed.
 - If telemetry is unavailable, no route is retired. Routes may be hidden from visible nav only when the new AI Workforce destination exists and compatibility links remain readable.
 
@@ -580,9 +583,10 @@ To align the Information Architecture with foundational DPF governance, coworker
 ### 1. Archetype Availability Resolution
 * **Single Source of Truth**: Availability calculations MUST resolve dynamically against `StorefrontConfig.archetypeId` (as defined in `AGENTS.md` §2). 
 * **Resolution Logic**:
-  - **Universal**: Applicable if `CoworkerService.archetypes` is empty or contains `*`.
-  - **Category/Leaf Match**: Match current `StorefrontConfig.archetypeId` against the service's `archetypes` JSON list.
-  - **Prerequisites check**: Query the storefront database state for the current install (e.g. presence of operating hours, service catalog, or channel configuration) to toggle between `Available` and `Setup needed`.
+  - **Validated evidence only**: Resolve the selected storefront's governed leaf slug and category slug, then validate every `CoworkerService.archetypes` declaration against the storefront-template registry.
+  - **Category/Leaf Match**: A validated leaf declaration takes precedence over a validated category declaration. Until a governed universal/category encoding is introduced, catalog filtering keeps exact matching.
+  - **Conservative unknown**: Empty declarations, `*`, unknown identifiers, contradictory evidence, or unresolved install context produce `Coverage not defined`; none may imply universal availability.
+  - **Prerequisites check**: Evaluate install setup state (for example operating hours, service catalog, or channel configuration) only after positive applicability, to toggle between `Available` and `Setup needed`.
 
 ### 2. Specialization & Tool Bloat Guardrails
 * **Principle 1 Alignment (Specialization Over Generalization)**: Coworkers are most effective when limited to `< 10` tools (see `docs/architecture/ai-coworker-development-principles.md`).

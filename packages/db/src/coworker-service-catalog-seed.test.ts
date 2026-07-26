@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ALL_ARCHETYPES } from "@dpf/storefront-templates";
 
 import {
   COWORKER_SERVICE_CATALOG_OFFER_SEEDS,
@@ -45,6 +46,21 @@ describe("coworker service catalog seed data", () => {
     }
     for (const offer of COWORKER_SERVICE_CATALOG_OFFER_SEEDS) {
       expect(serviceIds.includes(offer.serviceId), offer.offerId).toBe(true);
+    }
+  });
+
+  it("uses only governed archetype category or leaf identifiers", () => {
+    const governedIdentifiers = new Set(
+      ALL_ARCHETYPES.flatMap((archetype) => [archetype.archetypeId, archetype.category]),
+    );
+
+    for (const service of COWORKER_SERVICE_CATALOG_SERVICE_SEEDS) {
+      const declarations = service.archetypes as unknown;
+      expect(Array.isArray(declarations), service.serviceId).toBe(true);
+      for (const declaration of declarations as unknown[]) {
+        expect(typeof declaration, service.serviceId).toBe("string");
+        expect(governedIdentifiers.has(String(declaration)), `${service.serviceId}: ${String(declaration)}`).toBe(true);
+      }
     }
   });
 
@@ -106,6 +122,8 @@ describe("coworker service catalog seed data", () => {
     for (const args of serviceUpserts) {
       expect(args["create"]).not.toHaveProperty("digitalProductId");
       expect(args["update"]).not.toHaveProperty("digitalProductId");
+      expect(args["create"]).toHaveProperty("archetypes", []);
+      expect(args["update"]).not.toHaveProperty("archetypes");
     }
     // BI-74FD6420 seed-FK contract: providerAgentId stays the slug agentId
     // (build-specialist), NOT the dual-seed AGT-* twin. Collapsing to AGT-*
@@ -120,6 +138,12 @@ describe("coworker service catalog seed data", () => {
     expect(providerIds).not.toContain("AGT-WS-BUILD");
     expect(providerIds).not.toContain("AGT-WS-SCOUT");
     expect(serviceUpdates).toEqual([
+      expect.objectContaining({
+        where: expect.objectContaining({
+          archetypes: { equals: ["software-and-platforms"] },
+        }),
+        data: { archetypes: [] },
+      }),
       expect.objectContaining({
         where: expect.objectContaining({ digitalProductId: "dpf-portal" }),
         data: { digitalProductId: null },
