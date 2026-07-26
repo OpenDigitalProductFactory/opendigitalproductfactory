@@ -1,0 +1,72 @@
+# AI routing document map
+
+This page is the entry point for understanding DPF's LLM and AI coworker routing.
+It separates what the platform does now from proposed architecture and historical
+records.
+
+## Current authority
+
+| Question | Authority |
+| --- | --- |
+| How does an operator configure and understand routing today? | [Model Routing & Lifecycle](../user-guide/ai-workforce/model-routing-lifecycle.md) |
+| What code chooses and dispatches a route? | `apps/web/lib/inference/routed-inference.ts`, `apps/web/lib/routing/request-contract.ts`, and `apps/web/lib/routing/pipeline-v2.ts` |
+| What policy decides whether governed data may leave the install? | `apps/web/lib/govern/data/policy-decision.ts` and `apps/web/lib/govern/data/policy-enforcement.ts` |
+| How is provider/account suitability compiled into route constraints? | [AI provider suitability routing design](../superpowers/specs/2026-07-19-ai-provider-suitability-routing-design.md) and its implemented contracts |
+| What happened operationally? | Route decisions, inference outcomes, token usage, capacity state, and safe suitability receipts in the live install |
+
+Current implementation truth comes from code plus live evidence. A diagram, design
+document, or seeded row does not override those sources.
+
+## Approved adjacent delivery contract
+
+[Pre-dispatch sensitive LLM routing](../superpowers/plans/2026-07-26-pre-dispatch-sensitive-llm-routing.md)
+defines the implementation sequence for classifying governed payloads, evaluating
+the data PDP/PEP, enforcing masking/tokenization obligations, constraining provider
+eligibility, preserving constraints through fallback, and authorizing response
+rehydration. It landed through PR #3602. Delivery progress must still be read from
+its backlog items and implementation evidence; a merged plan is not evidence that
+every planned behavior is already live.
+
+## Proposed architecture
+
+| Artifact | Status and purpose |
+| --- | --- |
+| [AI Routing Architecture & Explainability](../superpowers/specs/2026-07-26-ai-routing-architecture-explainability-design.md) | Proposed architecture authority for the owner-readable routing subway map, Designed/Observed/Compare viewpoints, safe conformance evidence, and technical drill-through |
+| [Routing Control Plane / Data Plane](../superpowers/specs/2026-04-27-routing-control-data-plane-design.md) | Proposed and deferred RIB/FIB target state; not the current per-request routing runtime |
+
+## Historical records
+
+[Routing architecture dated snapshot](../superpowers/specs/2026-04-20-routing-architecture-current.md)
+records the platform's 2026-04-20 understanding. Earlier routing designs that point
+to that file remain historical context as well.
+
+## Provider and model pin semantics
+
+The verified current behavior is:
+
+1. Seed and first-run bootstrap leave agent provider/model pins empty.
+2. A persisted pin is mapped to a preferred provider/model for routed inference.
+3. Routing first constructs the candidate set and applies hard exclusions.
+4. The preference may replace the cost/quality winner only with a non-excluded
+   candidate.
+5. An excluded or unavailable preference target produces a warning and falls back
+   to the normal V2 winner.
+6. Startup audits non-null pins because they are intentional exceptions to dynamic
+   routing.
+
+A live query on 2026-07-26 found 24 `AgentModelConfig` rows, 0 provider pins, and
+0 model pins in the current install. This is time-bounded operational evidence, not
+a fleet invariant.
+
+## Planned one-picture experience
+
+The target experience uses one stable route geometry:
+
+- **Designed** shows the governed route that should be available.
+- **Observed** overlays privacy-safe evidence for a selected time window.
+- **Compare** exposes missing evidence, unexpected paths, stale design, and
+  attribution gaps.
+
+The owner view uses plain-language subway stations. BPMN, SysML, ArchiMate/C4,
+source versions, rule detail, and remediation appear through progressive
+drill-through rather than competing diagrams.

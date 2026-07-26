@@ -1,4 +1,4 @@
-> **⚠️ SUPERSEDED** — this design doc captures an earlier iteration of routing. See [2026-04-20-routing-architecture-current.md](./2026-04-20-routing-architecture-current.md) for the current authoritative architecture.
+> **⚠️ SUPERSEDED** — this design doc captures an earlier iteration of routing. See the [AI routing document map](../../architecture/ai-routing-document-map.md) for current authority.
 
 # Provider Activation Routing Reconciliation Design
 

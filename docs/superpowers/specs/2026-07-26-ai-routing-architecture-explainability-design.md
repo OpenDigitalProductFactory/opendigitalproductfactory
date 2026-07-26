@@ -9,7 +9,7 @@
 | Plan | `docs/superpowers/plans/2026-07-26-ai-routing-architecture-explainability.md` |
 | Primary surface | Existing `/platform/ai/operations-map` |
 | Architecture surface | Existing `/ea` |
-| Upstream security contract | `BI-3D210AF8`; PR #3602; `docs/superpowers/plans/2026-07-26-pre-dispatch-sensitive-llm-routing.md` |
+| Upstream security contract | `BI-3D210AF8`; merged PR #3602; `docs/superpowers/plans/2026-07-26-pre-dispatch-sensitive-llm-routing.md` |
 | Composes with | `EP-AI-OPSMAP`, `EP-PARITY-ENGINE`, `EP-ROUTING-11`, `EP-DATA-GOVERNANCE` |
 
 ## 1. Executive decision
@@ -54,7 +54,7 @@ provider suitability, provider/model configuration, EA views, several design
 documents, route receipts, outcomes, token usage, capacity state, and the AI
 Operations Map.
 
-The fragmentation has produced concrete ambiguity:
+The initial audit found concrete ambiguity:
 
 - `docs/superpowers/specs/2026-04-20-routing-architecture-current.md` says provider
   and model pins are deliberately unused.
@@ -69,6 +69,14 @@ The fragmentation has produced concrete ambiguity:
 
 This makes it possible for individual documents to be locally correct while the
 whole system remains difficult to explain or verify.
+
+The documentation-authority slice resolves the pinning ambiguity: seed and
+first-run bootstrap leave pins null; a persisted pin is an exceptional preference
+override applied only to a non-excluded candidate; startup audits every persisted
+pin. Live evidence on 2026-07-26 found 24 agent configurations and zero provider or
+model pins. The [AI routing document map](../../architecture/ai-routing-document-map.md)
+now distinguishes current implementation, adjacent delivery contracts, proposed
+architecture, and historical records.
 
 ## 3. Goals
 
@@ -446,8 +454,18 @@ The completed design BI must establish the following hierarchy:
 6. The user guide must describe verified current behavior and link to the
    owner-readable map.
 
-The pinning contradiction must be resolved from implementation and live configuration
-evidence before either document is edited to claim one behavior.
+The pinning contradiction was resolved from implementation and live configuration
+evidence on 2026-07-26:
+
+- `agentic-loop.ts` maps a persisted pin to the routed-inference preferred fields;
+- `routed-inference.ts` can replace the V2 winner only with a candidate for which
+  `excluded === false`;
+- unavailable or excluded preference targets keep the V2 winner and add a warning;
+- seed/bootstrap keep pins null and startup audits any non-null exception; and
+- the live install contained 24 configurations, 0 provider pins, and 0 model pins.
+
+Therefore documentation uses **exceptional eligible-candidate preference override**,
+not “unused” and not an unconstrained “force.”
 
 ## 14. SysML architecture note
 
@@ -587,8 +605,10 @@ Reserve approximately 20 percent of implementation capacity:
 2. Can the current EA relationship/viewpoint validators render mixed-notation
    related-view navigation entirely through shared element identity, or is a narrow
    renderer change required?
-3. Does the implemented routing pipeline use any provider/model pin preference
-   today, and under what constraints?
+3. **Resolved 2026-07-26:** provider/model pins are exceptional overrides among
+   candidates that have already survived hard exclusions; unavailable or excluded
+   targets fall back to the V2 winner, and the current install has no persisted
+   pins.
 4. Which existing encrypted runtime artifact can hold short-lived token maps?
 5. Should the first Compare conformance cadence be request-time aggregation,
    scheduled reconciliation, or both through one pure projector?

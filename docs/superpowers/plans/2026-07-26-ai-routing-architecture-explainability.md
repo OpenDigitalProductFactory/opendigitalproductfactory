@@ -15,7 +15,7 @@ while giving technical users safe evidence, source links and conformance detail.
 
 **Design:** `docs/superpowers/specs/2026-07-26-ai-routing-architecture-explainability-design.md`
 
-**Upstream contract:** `BI-3D210AF8` / PR #3602 /
+**Upstream contract:** `BI-3D210AF8` / merged PR #3602 /
 `docs/superpowers/plans/2026-07-26-pre-dispatch-sensitive-llm-routing.md`
 
 ## Backlog coverage
@@ -55,19 +55,19 @@ current behavior.
 
 ### Work
 
-- [ ] Review the design with Enterprise Architect, Data Architect, AI Operations and
+- [x] Review the design with Enterprise Architect, Data Architect, AI Operations and
       provider-suitability ownership.
-- [ ] Merge or coordinate PR #3602 so the sensitive-routing contract has a stable
+- [x] Merge or coordinate PR #3602 so the sensitive-routing contract has a stable
       repository path.
-- [ ] Verify the implemented pin behavior and live `AgentModelConfig` state; resolve
+- [x] Verify the implemented pin behavior and live `AgentModelConfig` state; resolve
       the contradiction between the current-state architecture and user guide.
-- [ ] Classify the RIB/FIB control/data-plane document as proposed target-state until
+- [x] Classify the RIB/FIB control/data-plane document as proposed target-state until
       its implementation is resumed.
-- [ ] Add an architecture-document index that names current, target and historical
+- [x] Add an architecture-document index that names current, target and historical
       routing sources.
-- [ ] Update the owner-facing routing lifecycle guide to point at one current
+- [x] Update the owner-facing routing lifecycle guide to point at one current
       authority and the eventual Operations Map view.
-- [ ] Record concrete documentation impact for operator, contributor and AI coworker
+- [x] Record concrete documentation impact for operator, contributor and AI coworker
       surfaces.
 
 ### Likely files
@@ -313,8 +313,9 @@ Reserve approximately 20 percent across the child BIs:
 
 ## Risks
 
-- **Parallel-contract drift:** PR #3602 may change while this work proceeds. Each
-  implementing BI must re-read the merged sensitive-routing contract before edits.
+- **Upstream-contract drift:** PR #3602 is merged, but later sensitive-routing
+  implementation may refine its contracts. Each implementing BI must re-read the
+  current merged contract before edits.
 - **Historic evidence gaps:** do not backfill fabricated links; show coverage.
 - **Sensitive observability:** allowlist safe fields and run persistence canaries.
 - **Over-modeling:** extract only construction, verification, authority and
