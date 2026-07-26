@@ -54,6 +54,14 @@ vi.mock("@/lib/mcp-handlers/update-backlog-item", () => ({
 const backlogBridge = vi.hoisted(() => ({ bridgeBacklogItemToWorkItem: vi.fn() }));
 vi.mock("@/lib/queue/bridges/backlog-bridge", () => backlogBridge);
 
+const specPlanSearch = vi.hoisted(() => ({
+  buildSpecPlanReferenceIndex: vi.fn(async () => ({
+    specs: new Map<string, string>(),
+    plans: new Map<string, string>(),
+  })),
+}));
+vi.mock("@/lib/backlog/spec-plan-search", () => specPlanSearch);
+
 import { backlogPack } from "./backlog-pack";
 import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 
