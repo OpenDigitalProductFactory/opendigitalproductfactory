@@ -600,10 +600,11 @@ export async function reverseJournalEntry(
   }
 
   // Check period lock
-  const closedSummary = await prisma.periodSummary.findFirst({
-    where: { organizationId: original.organizationId, periodKey: original.periodKey, isClosed: true },
+  const configRow = await prisma.platformConfig.findUnique({
+    where: { key: "finance.locked_periods" },
   });
-  if (closedSummary) {
+  const lockedPeriods = (configRow?.value as string[] | null) ?? [];
+  if (isPeriodLocked(original.periodKey, lockedPeriods)) {
     return {
       success: false,
       reason: "period-locked",
