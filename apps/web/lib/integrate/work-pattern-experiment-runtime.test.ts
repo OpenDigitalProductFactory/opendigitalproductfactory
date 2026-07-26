@@ -1,0 +1,148 @@
+import { describe, expect, it, vi } from "vitest";
+
+import {
+  executePersistedWorkPatternExperimentCell,
+  type PersistedWorkPatternRuntimeDeps,
+} from "./work-pattern-experiment-runtime";
+
+function request(environmentKey = "shadow") {
+  return {
+    experimentRunId: "WPR-1",
+    childTaskRunId: "TR-CELL-1",
+    cellKey: "baseline:model-a",
+    pairKey: "pair",
+    methodVariantKey: "baseline",
+    modelVariantKey: "model-a",
+    executionProfile: {
+      patternKey: "review-loop",
+      patternVersion: 1,
+      variantKey: "baseline",
+      activityKey: "build.review",
+      riskClass: "internal-reversible",
+      providerId: "preferred-provider",
+      modelId: "preferred-model",
+      modelProfileId: "profile",
+      toolPackDigest: "tools",
+      promptOrSkillDigest: "method-digest",
+      contextPolicyKey: "hermetic",
+      recoveryPolicyKey: "bounded",
+      installScope: "canonical",
+      taskCorpusKey: "corpus",
+      taskCorpusVersion: "1",
+      environmentKey,
+      sourceCommitSha: "abc123",
+    },
+    fixtureKey: "fixture-1",
+    oracleKey: "oracle",
+    oracleVersion: "1",
+    resourcePolicyKey: "bounded",
+  };
+}
+
+function deps(): PersistedWorkPatternRuntimeDeps {
+  return {
+    loadContext: vi.fn().mockResolvedValue({
+      taskRun: {
+        taskRunId: "TR-CELL-1",
+        currentAgentId: "agent-orchestrator",
+        initiatingAgentId: "agent-orchestrator",
+        a2aMetadata: { workPatternExperimentCell: { attempt: 1 } },
+      },
+      fixtureParts: {
+        schemaVersion: 1,
+        kind: "inference-replay-v1",
+        messages: [{ role: "user", content: "Return READY." }],
+        systemPrompt: "Follow the replay fixture exactly.",
+        methodInstructions: {
+          "method-digest": "Use the baseline method.",
+        },
+        oracle: { kind: "exact", expected: "READY" },
+      },
+    }),
+    infer: vi.fn().mockResolvedValue({
+      content: "READY",
+      providerId: "fallback-provider",
+      modelId: "fallback-model",
+      inputTokens: 12,
+      outputTokens: 1,
+    }),
+    updateTaskRun: vi.fn().mockResolvedValue(undefined),
+    recordEvidence: vi.fn().mockImplementation(async (input) => input),
+  };
+}
+
+describe("executePersistedWorkPatternExperimentCell", () => {
+  it("runs an immutable replay autonomously and records compact assignment/outcome evidence", async () => {
+    const runtime = deps();
+
+    const result = await executePersistedWorkPatternExperimentCell(
+      "TR-CELL-1",
+      request(),
+      runtime,
+    );
+
+    expect(result).toMatchObject({
+      success: true,
+      actualProviderId: "fallback-provider",
+      actualModelId: "fallback-model",
+      workspaceId: "TR-CELL-1:abc123",
+    });
+    expect(runtime.infer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        systemPrompt: expect.stringContaining("Use the baseline method."),
+        profile: expect.objectContaining({
+          providerId: "preferred-provider",
+          modelId: "preferred-model",
+        }),
+        agentId: "agent-orchestrator",
+      }),
+    );
+    expect(runtime.recordEvidence).toHaveBeenCalledTimes(2);
+    expect(runtime.recordEvidence).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        observationKind: "outcome",
+        orchestratingAgentId: "agent-orchestrator",
+        actualDecision: {
+          actualProviderId: "fallback-provider",
+          actualModelId: "fallback-model",
+        },
+        outcome: expect.objectContaining({
+          outputDigest: expect.stringMatching(/^[a-f0-9]{64}$/),
+          inputTokens: 12,
+          outputTokens: 1,
+        }),
+      }),
+    );
+    expect(runtime.updateTaskRun).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        taskRunId: "TR-CELL-1",
+        status: "completed",
+        a2aMetadata: expect.objectContaining({
+          workPatternExperimentResult: expect.objectContaining({ success: true }),
+        }),
+      }),
+    );
+  });
+
+  it("fails closed before inference for authority-ceiling and unsupported fixture cases", async () => {
+    const runtime = deps();
+    await expect(
+      executePersistedWorkPatternExperimentCell("TR-CELL-1", request("live"), runtime),
+    ).rejects.toThrow("work_pattern_experiment_authority_ceiling");
+    expect(runtime.infer).not.toHaveBeenCalled();
+
+    vi.mocked(runtime.loadContext).mockResolvedValueOnce({
+      taskRun: {
+        taskRunId: "TR-CELL-1",
+        currentAgentId: "agent-orchestrator",
+        initiatingAgentId: null,
+        a2aMetadata: {},
+      },
+      fixtureParts: { kind: "mutable-code-workspace" },
+    });
+    await expect(
+      executePersistedWorkPatternExperimentCell("TR-CELL-1", request(), runtime),
+    ).rejects.toThrow("work_pattern_experiment_fixture_unavailable");
+    expect(runtime.infer).not.toHaveBeenCalled();
+  });
+});

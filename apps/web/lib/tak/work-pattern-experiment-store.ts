@@ -247,6 +247,18 @@ export async function createOrResumeWorkPatternExperiment(
       });
       let child = await session.findTaskRun(taskRunId);
       if (!child) {
+        const normalizedExecutionRequest =
+          cell.executionRequest !== undefined && isRecord(cell.executionRequest)
+            ? {
+                ...cell.executionRequest,
+                experimentRunId,
+                childTaskRunId: taskRunId,
+                cellKey: cell.cellKey,
+                pairKey: input.pairKey,
+                methodVariantKey: cell.methodVariantKey,
+                modelVariantKey: cell.modelVariantKey,
+              }
+            : cell.executionRequest;
         const cellMetadata: WorkPatternCellMetadata = {
           schemaVersion: 1,
           experimentRunId,
@@ -256,8 +268,8 @@ export async function createOrResumeWorkPatternExperiment(
           methodVariantKey: cell.methodVariantKey,
           modelVariantKey: cell.modelVariantKey,
           attempt: 1,
-          ...(cell.executionRequest !== undefined
-            ? { executionRequest: cell.executionRequest }
+          ...(normalizedExecutionRequest !== undefined
+            ? { executionRequest: normalizedExecutionRequest }
             : {}),
         };
         child = await session.createTaskRun({
