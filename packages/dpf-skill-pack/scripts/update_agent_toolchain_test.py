@@ -337,6 +337,41 @@ class UpdateAgentToolchainTest(unittest.TestCase):
                 self.assertNotIn("dpf-platform", data["plugins"])
             self.assertEqual(raw.count("dpf-platform"), 1)
 
+    def test_reconverges_config_after_codex_plugin_install_recreates_legacy_alias(self) -> None:
+        skill_pack = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            config = home / ".codex" / "config.toml"
+
+            def install_with_legacy_alias(_home: Path, _dry_run: bool) -> str:
+                with config.open("a", encoding="utf-8") as handle:
+                    handle.write('[plugins."dpf-platform"]\nenabled = true\n')
+                return "installed, enabled, and verified"
+
+            with patch.dict(
+                os.environ,
+                {"DPF_AGENT_TOOLCHAIN_HOME": tmp},
+                clear=False,
+            ), patch.object(
+                updater,
+                "install_codex_plugin",
+                side_effect=install_with_legacy_alias,
+            ):
+                updater.main([
+                    "--skill-pack-path",
+                    str(skill_pack),
+                    "--skip-claude-cli-install",
+                    "--skip-grok-cli-install",
+                    "--skip-antigravity-cli-install",
+                ])
+
+            raw = config.read_text(encoding="utf-8")
+            if tomllib is not None:
+                data = tomllib.loads(raw)
+                self.assertTrue(data["plugins"]["dpf-platform@personal"]["enabled"])
+                self.assertNotIn("dpf-platform", data["plugins"])
+            self.assertEqual(raw.count("dpf-platform"), 1)
+
     def test_heals_config_already_corrupted_with_duplicate_table(self) -> None:
         """A config a pre-#2657 updater left with a stray appended
         `[mcp_servers.dpf]` (a TOML redefinition error) is healed back to a single
