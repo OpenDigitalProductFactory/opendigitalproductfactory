@@ -19,26 +19,68 @@ export default async function SelfUpgradePage() {
   // primary path; the source-merge sub-step (PlatformUpdateApplyPanel) is
   // folded in below and surfaces only when the install customises source
   // (updatePending). getPlatformDevConfig can be null on a fresh install.
-  const [status, { runs, nextCursor }, devConfig, localChanges] = await Promise.all([
-    getSelfUpgradeStatus(),
-    listSelfUpgradeRuns(),
-    getPlatformDevConfig(),
-    getLocalChangesLedger(),
+  const [status, runsResult, devConfig, localChanges] = await Promise.all([
+    getSelfUpgradeStatus().catch(() => null),
+    listSelfUpgradeRuns().catch(() => ({ runs: [], nextCursor: null })),
+    getPlatformDevConfig().catch(() => null),
+    getLocalChangesLedger().catch(() => ({ available: false, note: "Local changes ledger temporarily unavailable.", changes: [] })),
   ]);
 
-  // Read the DURABLE CACHE only — never generate synchronously in the render.
-  // Generating (summarizeUpgradeImpact = git-walk merge + LLM) here blocked the
-  // whole page for 30-60s on the first view after each upgrade: the target SHA
-  // changes on every upgrade, so the per-(lineage,target) cache misses every
-  // time and each first click paid the full cost before a byte was returned
-  // ("eventually comes up"). The glance summary is now auto-generated CLIENT-side
-  // after paint (UpgradeImpactPanel), so the page renders promptly and the
-  // summary fills in with a loading affordance. BI-4A400DE4.
-  const initialImpactSummary = await loadPersistedImpactSummary(status.targetSha);
+  const runs = runsResult?.runs ?? [];
+  const nextCursor = runsResult?.nextCursor ?? null;
+
+  const initialImpactSummary = status?.targetSha
+    ? await loadPersistedImpactSummary(status.targetSha).catch(() => null)
+    : null;
+
+  const fallbackStatus = {
+    enabled: false,
+    channel: "stable",
+    inMaintenanceWindow: false,
+    windowConfigured: false,
+    windowSource: "operating-hours" as const,
+    autoWindowSummary: null,
+    blackoutUntil: null,
+    blackoutName: null,
+    storeOpen: true,
+    windowTimezone: "UTC",
+    nextWindowStart: null,
+    nextScheduledCheckAt: null,
+    deployedSha: null,
+    deployedShaSource: "unknown",
+    targetSha: null,
+    isFresh: true,
+    releaseBatch: {
+      applicable: false,
+      eligible: false,
+      reason: "Status unavailable",
+      pendingCount: 0,
+      minPendingPrs: 1,
+      maxWaitHours: 24,
+      oldestPendingAt: null,
+      summary: "Status unavailable",
+    },
+    latestRun: null,
+    latestRunImpact: null,
+    quiescence: { blockers: [] },
+    admission: { mode: "uncapped" as const, limit: null, blockedBy: [] },
+    cooldownUntil: null,
+    jobEngine: { healthy: false },
+    platformVersion: {
+      version: "unknown",
+      publishedAt: new Date().toISOString(),
+      gitSha: "unknown",
+      imageVersion: undefined,
+      buildDate: undefined,
+      note: undefined,
+    },
+  };
+
+  const effectiveStatus = status ?? fallbackStatus;
 
   const clientProps = JSON.parse(
     JSON.stringify({
-      ...status,
+      ...effectiveStatus,
       history: runs,
       historyNextCursor: nextCursor,
       initialImpactSummary,
@@ -52,26 +94,26 @@ export default async function SelfUpgradePage() {
   // Simple (worker) nav-mode keeps collapsed by default.
   const ownerSummary = buildOwnerReleaseSummary(
     {
-      enabled: status.enabled,
-      isFresh: status.isFresh,
-      targetSha: status.targetSha,
-      deployedSha: status.deployedSha,
-      nextWindowStart: status.nextWindowStart,
-      blackoutUntil: status.blackoutUntil,
-      blackoutName: status.blackoutName,
+      enabled: effectiveStatus.enabled,
+      isFresh: effectiveStatus.isFresh,
+      targetSha: effectiveStatus.targetSha,
+      deployedSha: effectiveStatus.deployedSha,
+      nextWindowStart: effectiveStatus.nextWindowStart,
+      blackoutUntil: effectiveStatus.blackoutUntil,
+      blackoutName: effectiveStatus.blackoutName,
       platformVersion: {
-        version: status.platformVersion.version,
-        gitSha: status.platformVersion.gitSha,
+        version: effectiveStatus.platformVersion.version,
+        gitSha: effectiveStatus.platformVersion.gitSha,
       },
-      rollbackAvailable: hasGovernedRecoveryPoint(status.latestRun?.completionEvidence ?? null),
-      latestRun: status.latestRun
+      rollbackAvailable: hasGovernedRecoveryPoint(effectiveStatus.latestRun?.completionEvidence ?? null),
+      latestRun: effectiveStatus.latestRun
         ? {
-            status: status.latestRun.status,
-            reason: status.latestRun.reason,
-            targetSha: status.latestRun.targetSha,
+            status: effectiveStatus.latestRun.status,
+            reason: effectiveStatus.latestRun.reason,
+            targetSha: effectiveStatus.latestRun.targetSha,
           }
         : null,
-      latestRunImpact: status.latestRunImpact,
+      latestRunImpact: effectiveStatus.latestRunImpact,
     },
     localChanges,
   );
