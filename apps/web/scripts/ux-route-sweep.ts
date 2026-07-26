@@ -91,17 +91,27 @@ function pruneInvisible(): string {
 /** Why a route produced no measurement — reported, never silently dropped. */
 export type SkipReason = { routePath: string; reason: string };
 
-export async function resetSweepPage(
-  page: {
-    goto(
-      url: string,
-      options: { waitUntil: "load"; timeout: number },
-    ): Promise<unknown>;
-  },
-): Promise<void> {
-  await page
-    .goto("about:blank", { waitUntil: "load", timeout: 10_000 })
-    .catch(() => {});
+/**
+ * Give one route exclusive ownership of one page.
+ *
+ * Authentication lives on the shared BrowserContext, so a fresh page is cheap but
+ * cross-route client navigations cannot interrupt the next route's page.goto.
+ */
+export async function withIsolatedSweepPage<
+  TPage extends { close(): Promise<void> },
+  TResult,
+>(
+  context: { newPage(): Promise<TPage> },
+  operation: (page: TPage) => Promise<TResult>,
+): Promise<TResult> {
+  const page = await context.newPage();
+  try {
+    return await operation(page);
+  } finally {
+    // Browser shutdown remains the final cleanup backstop. A close failure should
+    // not replace the route's more useful measurement error.
+    await page.close().catch(() => {});
+  }
 }
 
 async function measureRoute(
@@ -201,28 +211,17 @@ async function main(): Promise<void> {
       viewport: { width: 1280, height: 900 },
       ...(existsSync(statePath) ? { storageState: statePath } : {}),
     });
-    const page = await context.newPage();
 
     for (const row of rows) {
       try {
-        const m = await measureRoute(page, row, baseUrl, skipped);
+        const m = await withIsolatedSweepPage(context, (page) =>
+          measureRoute(page, row, baseUrl, skipped),
+        );
         if (m) measurements.push(m);
       } catch (err) {
         // One unreachable route must not abort the sweep; it is reported as skipped.
         const first = (err as Error).message.split(/\r?\n/)[0];
         skipped.push({ routePath: row.routePath, reason: `error: ${first}` });
-      } finally {
-        // Isolate routes so the measured route cannot flake the NEXT one (BI-EA221325):
-        // a route can trigger a client-side navigation after domcontentloaded, and if it
-        // is still in flight when the next page.goto fires, Playwright throws
-        // "Navigation to X is interrupted by another navigation to Y" — a route that is
-        // then measured on one run and skipped on another, which reads as a false
-        // regression. Resetting to about:blank between routes cancels any pending
-        // navigation and gives every route the same clean starting state. Wait for
-        // the full blank-page load: waiting only for "commit" lets that isolation
-        // navigation race and interrupt the next real route. It is side-effect-free:
-        // each real route re-navigates with its own page.goto.
-        await resetSweepPage(page);
       }
     }
   } finally {
