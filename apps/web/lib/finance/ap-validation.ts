@@ -16,7 +16,7 @@ export const createSupplierSchema = z.object({
   defaultCurrency: z.string().length(3).default("USD"),
   notes: z.string().optional(),
   category: z.string().optional(),
-  preferredStatus: z.boolean().default(false),
+  preferredStatus: z.boolean().optional().default(false),
 });
 
 export const updateSupplierSchema = createSupplierSchema.partial().extend({
@@ -30,7 +30,6 @@ export const supplierOnboardingChecklistSchema = z.object({
   hasInsuranceCertificate: z.boolean(),
 });
 
-export type CreateSupplierInput = z.infer<typeof createSupplierSchema>;
 export type UpdateSupplierInput = z.infer<typeof updateSupplierSchema>;
 export type SupplierOnboardingChecklist = z.infer<typeof supplierOnboardingChecklistSchema>;
 
