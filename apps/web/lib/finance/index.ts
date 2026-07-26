@@ -12,3 +12,4 @@ export * from "./currency-symbol";
 export * from "./period-summary";
 export * from "./ledger";
 export * from "./chart-of-accounts";
+export * from "./supplier-service";

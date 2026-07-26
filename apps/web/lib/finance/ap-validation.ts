@@ -2,7 +2,9 @@ import { z } from "zod";
 
 export const BILL_STATUSES = ["draft", "awaiting_approval", "approved", "partially_paid", "paid", "void"] as const;
 export const PO_STATUSES = ["draft", "sent", "acknowledged", "received", "cancelled"] as const;
-export const SUPPLIER_STATUSES = ["active", "inactive", "blocked"] as const;
+export const SUPPLIER_STATUSES = ["active", "inactive", "blocked", "onboarding"] as const;
+
+export type SupplierStatus = (typeof SUPPLIER_STATUSES)[number];
 
 export const createSupplierSchema = z.object({
   name: z.string().min(1),
@@ -13,7 +15,24 @@ export const createSupplierSchema = z.object({
   paymentTerms: z.string().default("Net 30"),
   defaultCurrency: z.string().length(3).default("USD"),
   notes: z.string().optional(),
+  category: z.string().optional(),
+  preferredStatus: z.boolean().default(false),
 });
+
+export const updateSupplierSchema = createSupplierSchema.partial().extend({
+  status: z.enum(SUPPLIER_STATUSES).optional(),
+});
+
+export const supplierOnboardingChecklistSchema = z.object({
+  hasTaxId: z.boolean(),
+  hasBankDetails: z.boolean(),
+  hasSignedContract: z.boolean(),
+  hasInsuranceCertificate: z.boolean(),
+});
+
+export type CreateSupplierInput = z.infer<typeof createSupplierSchema>;
+export type UpdateSupplierInput = z.infer<typeof updateSupplierSchema>;
+export type SupplierOnboardingChecklist = z.infer<typeof supplierOnboardingChecklistSchema>;
 
 const billLineItemSchema = z.object({
   description: z.string().min(1),
