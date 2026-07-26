@@ -6672,6 +6672,8 @@ model BuildPhaseRun {
   costUsd        Decimal?     @db.Decimal(10, 6)
   /// Primary provider used in this phase (populated on write; may be "mixed" for multi-provider phases)
   providerId     String?
+  /// Compact immutable reference to the resolved work-pattern execution profile used by this actual phase.
+  executionProfileRef Json?
   /// Number of AI inference calls made during this phase
   inferenceCount Int          @default(0)
   build          FeatureBuild @relation(fields: [buildId], references: [buildId], onDelete: Cascade)
