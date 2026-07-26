@@ -17,13 +17,13 @@
       },
       {
         "client": "claude",
-        "status": "warn-only",
+        "status": "reconciles-safe-config",
         "competitivePluginIds": [
           "superpowers",
           "superpowers@openai-curated",
           "superpowers@openai-bundled"
         ],
-        "action": "warn-until-adapter-verified"
+        "action": "disable-plugin"
       },
       {
         "client": "grok",
@@ -37,13 +37,14 @@
       },
       {
         "client": "antigravity",
-        "status": "warn-only",
+        "status": "unsupported-until-proven",
         "competitivePluginIds": [
           "superpowers",
           "superpowers@openai-curated",
           "superpowers@openai-bundled"
         ],
-        "action": "warn-until-adapter-verified"
+        "action": "warn-no-disable-cli",
+        "notes": "agy has no non-interactive plugin disable; skills are file-synced only. Hook plane still unproven (BI-47A81FEB)."
       }
     ]
   },

@@ -135,24 +135,27 @@ def load_process_spine_cleanup_policy(skill_pack: Optional[Path] = None) -> dict
     return policy
 
 
-def codex_competitive_plugin_ids(skill_pack: Optional[Path] = None) -> list[str]:
+def competitive_plugin_ids_for(client_name: str, skill_pack: Optional[Path] = None) -> list[str]:
+    """Contract-backed competitive plugin ids for one client (disable-not-delete)."""
     policy = load_process_spine_cleanup_policy(skill_pack)
     for client in policy.get("clients", []):
-        if client.get("client") == "codex":
+        if client.get("client") == client_name:
             ids = client.get("competitivePluginIds")
             if isinstance(ids, list):
                 return [str(item) for item in ids if str(item)]
     return []
+
+
+def codex_competitive_plugin_ids(skill_pack: Optional[Path] = None) -> list[str]:
+    return competitive_plugin_ids_for("codex", skill_pack)
 
 
 def grok_competitive_plugin_ids(skill_pack: Optional[Path] = None) -> list[str]:
-    policy = load_process_spine_cleanup_policy(skill_pack)
-    for client in policy.get("clients", []):
-        if client.get("client") == "grok":
-            ids = client.get("competitivePluginIds")
-            if isinstance(ids, list):
-                return [str(item) for item in ids if str(item)]
-    return []
+    return competitive_plugin_ids_for("grok", skill_pack)
+
+
+def claude_competitive_plugin_ids(skill_pack: Optional[Path] = None) -> list[str]:
+    return competitive_plugin_ids_for("claude", skill_pack)
 
 
 def _grok_plugin_active(plugins: list[Any], plugin_id: str) -> bool:
@@ -697,6 +700,122 @@ def install_claude_plugin(home: Path, dry_run: bool) -> str:
         if result.returncode != 0:
             return f"failed: {' '.join(command[:3])} exited {result.returncode}"
     return "installed and refreshed"
+
+
+def _claude_plugin_matches(installed_id: str, competitive_id: str) -> bool:
+    """Match contract ids against Claude's plugin@marketplace ids.
+
+    Claude `plugin list --json` reports `id` as `name@marketplace`. The cleanup
+    contract may list bare names (`superpowers`) or fully-qualified ids.
+    """
+    if not installed_id or not competitive_id:
+        return False
+    if installed_id == competitive_id:
+        return True
+    # Never treat dpf-platform as competitive even if bare-name logic runs.
+    if installed_id == PLUGIN_NAME or installed_id.startswith(f"{PLUGIN_NAME}@"):
+        return False
+    inst_bare = installed_id.split("@", 1)[0]
+    if "@" not in competitive_id:
+        return inst_bare == competitive_id
+    return installed_id == competitive_id
+
+
+def disable_competitive_claude_plugins(
+    skill_pack: Optional[Path] = None, dry_run: bool = False
+) -> str:
+    """Disable known competitive process plugins on Claude Code (disable-not-delete).
+
+    Codex writes enabled=false into config.toml; Grok uses `grok plugin disable`.
+    Claude uses `claude plugin list --json` + `claude plugin disable <id>`
+    (optionally `--scope`). Only acts when a competitive plugin is installed and
+    still enabled. Never uninstalls or deletes caches (BI-A4BEFE99).
+    """
+    claude = resolve_claude_binary()
+    if not claude:
+        return "skipped: Claude CLI not found"
+    plugin_ids = claude_competitive_plugin_ids(skill_pack)
+    if not plugin_ids:
+        return "skipped: no competitive plugin ids in cleanup policy"
+    if dry_run:
+        return f"dry-run: would disable competitive plugins {plugin_ids}"
+
+    list_result = subprocess.run(
+        [claude, "plugin", "list", "--json"],
+        capture_output=True,
+        text=True,
+    )
+    if list_result.returncode != 0:
+        return f"failed: claude plugin list exited {list_result.returncode}"
+    try:
+        installed = json.loads(list_result.stdout or "[]")
+    except json.JSONDecodeError:
+        return "failed: claude plugin list returned invalid JSON"
+    if not isinstance(installed, list):
+        return "failed: claude plugin list shape unexpected"
+
+    contract_ids = [
+        plugin_id
+        for plugin_id in dict.fromkeys(plugin_ids)
+        if plugin_id
+        and plugin_id != PLUGIN_NAME
+        and not plugin_id.startswith(f"{PLUGIN_NAME}@")
+    ]
+
+    # Deduplicate installed entries (same id may appear under multiple scopes).
+    # A single installed plugin can match several contract ids (bare + qualified);
+    # act once per (id, scope), not once per contract id.
+    matched_contract: set[str] = set()
+    targets: list[dict[str, Any]] = []
+    seen_labels: set[str] = set()
+    for entry in installed:
+        if not isinstance(entry, dict):
+            continue
+        full_id = str(entry.get("id") or entry.get("name") or "")
+        if not full_id:
+            continue
+        hits = [cid for cid in contract_ids if _claude_plugin_matches(full_id, cid)]
+        if not hits:
+            continue
+        matched_contract.update(hits)
+        scope = entry.get("scope")
+        label = f"{full_id}#{scope}" if scope else full_id
+        if label in seen_labels:
+            continue
+        seen_labels.add(label)
+        targets.append(entry)
+
+    disabled: list[str] = []
+    already: list[str] = []
+    failed: list[str] = []
+    missing = [cid for cid in contract_ids if cid not in matched_contract]
+
+    for entry in targets:
+        full_id = str(entry.get("id") or entry.get("name") or "")
+        scope = entry.get("scope")
+        label = f"{full_id}#{scope}" if scope else full_id
+        if entry.get("enabled") is False:
+            already.append(label)
+            continue
+        command = [claude, "plugin", "disable", full_id]
+        if scope in ("user", "project", "local"):
+            command.extend(["--scope", str(scope)])
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode == 0:
+            disabled.append(label)
+        else:
+            failed.append(label)
+
+    parts: list[str] = []
+    if disabled:
+        parts.append(f"disabled {disabled}")
+    if already:
+        parts.append(f"already-disabled {already}")
+    if missing:
+        parts.append(f"not-installed {missing}")
+    if failed:
+        parts.append(f"failed {failed}")
+    return "; ".join(parts) if parts else "no competitive plugins present"
 
 
 def resolve_codex_binary() -> str | None:
@@ -1478,6 +1597,12 @@ def main(argv: list[str]) -> int:
         if not args.skip_claude_cli_install:
             status = install_claude_plugin(home, args.dry_run)
         print(f"  Claude     : marketplace converged; plugin install {status}")
+        claude_competitive_status = "skipped by flag"
+        if not args.skip_claude_cli_install:
+            claude_competitive_status = disable_competitive_claude_plugins(
+                process_spine_root, dry_run=args.dry_run
+            )
+        print(f"  Claude competitive: {claude_competitive_status}")
 
     token_present = bool(os.environ.get(TOKEN_ENV_VAR))
     print(f"  MCP token  : {'present' if token_present else 'missing'} ({TOKEN_ENV_VAR})")

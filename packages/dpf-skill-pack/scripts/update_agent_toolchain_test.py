@@ -131,6 +131,94 @@ class InstallGrokHooksTest(unittest.TestCase):
         self.assertIn("superpowers", status)
 
 
+class ClaudeCompetitiveDisableTest(unittest.TestCase):
+    """Claude competitive cleanup (BI-A4BEFE99) — disable-not-delete via CLI."""
+
+    def test_disable_competitive_claude_plugins_skips_when_no_cli(self) -> None:
+        with patch.object(updater, "resolve_claude_binary", return_value=None):
+            status = updater.disable_competitive_claude_plugins(dry_run=False)
+            self.assertIn("skipped: Claude CLI not found", status)
+
+    def test_disable_competitive_claude_plugins_dry_run(self) -> None:
+        with patch.object(updater, "resolve_claude_binary", return_value="claude"):
+            status = updater.disable_competitive_claude_plugins(dry_run=True)
+            self.assertIn("dry-run", status)
+
+    def test_claude_plugin_matches_bare_and_qualified(self) -> None:
+        self.assertTrue(
+            updater._claude_plugin_matches("superpowers@openai-curated", "superpowers")
+        )
+        self.assertTrue(
+            updater._claude_plugin_matches(
+                "superpowers@openai-curated", "superpowers@openai-curated"
+            )
+        )
+        self.assertFalse(
+            updater._claude_plugin_matches(
+                "superpowers@other-market", "superpowers@openai-curated"
+            )
+        )
+        self.assertFalse(
+            updater._claude_plugin_matches("dpf-platform@dpf-platform-local", "superpowers")
+        )
+
+    def test_disable_competitive_claude_plugins_disables_active_with_scope(self) -> None:
+        from unittest.mock import Mock
+
+        list_payload = json.dumps(
+            [
+                {
+                    "id": "superpowers@openai-curated",
+                    "enabled": True,
+                    "scope": "user",
+                },
+                {
+                    "id": "dpf-platform@dpf-platform-local",
+                    "enabled": True,
+                    "scope": "local",
+                },
+                {
+                    "id": "code-review@claude-code-plugins",
+                    "enabled": True,
+                    "scope": "project",
+                },
+            ]
+        )
+        disable_cmds: list[list[str]] = []
+
+        def fake_run(cmd, capture_output=True, text=True):  # type: ignore[no-untyped-def]
+            if cmd[1:3] == ["plugin", "list"]:
+                return Mock(returncode=0, stdout=list_payload, stderr="")
+            if cmd[1:3] == ["plugin", "disable"]:
+                disable_cmds.append(list(cmd))
+                return Mock(returncode=0, stdout="", stderr="")
+            return Mock(returncode=1, stdout="", stderr="unexpected")
+
+        with patch.object(updater, "resolve_claude_binary", return_value="claude"):
+            with patch.object(updater.subprocess, "run", side_effect=fake_run):
+                status = updater.disable_competitive_claude_plugins(dry_run=False)
+
+        self.assertIn("disabled", status)
+        self.assertIn("superpowers@openai-curated", status)
+        self.assertEqual(len(disable_cmds), 1)
+        self.assertEqual(
+            disable_cmds[0],
+            ["claude", "plugin", "disable", "superpowers@openai-curated", "--scope", "user"],
+        )
+        # Must never disable dpf-platform or unrelated plugins
+        self.assertNotIn("dpf-platform", status.split("disabled")[-1] if "disabled" in status else "")
+        self.assertTrue(all("code-review" not in " ".join(c) for c in disable_cmds))
+
+    def test_cleanup_policy_claude_reconciles(self) -> None:
+        policy = updater.load_process_spine_cleanup_policy()
+        claude = next(c for c in policy["clients"] if c["client"] == "claude")
+        self.assertEqual(claude["status"], "reconciles-safe-config")
+        self.assertEqual(claude["action"], "disable-plugin")
+        antigravity = next(c for c in policy["clients"] if c["client"] == "antigravity")
+        self.assertEqual(antigravity["status"], "unsupported-until-proven")
+        self.assertIn("warn", antigravity["action"])
+
+
 class HookRosterTest(unittest.TestCase):
     """The trust-UI roster must name+describe every hook (BI-276EC984)."""
 

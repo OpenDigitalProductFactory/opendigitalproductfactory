@@ -74,23 +74,39 @@ Reconciles the "Functional proof on Codex/Grok still pending" line above (2026-0
 | **G8 Headless-safe** | Always-approve / non-interactive still honors deny; no operator TUI required |
 | **G9 Readiness** | `record_surface_readiness` / bootstrap readiness observable |
 
-| Client | G1 | G2 | G3 | G4 | G5 | G6 | G7 | G8 | G9 | Notes (2026-07-26) |
-|--------|----|----|----|----|----|----|----|----|----|---------------------|
-| **Claude Code** (host) | ✅ | ⚠️ warn | ✅ dual plane | ✅ plugin | ✅ | ◐ | ◐ create hook; reap manual | ✅ | ◐ | Competitive still warn-only |
+| Client | G1 | G2 | G3 | G4 | G5 | G6 | G7 | G8 | G9 | Notes (2026-07-26, Wave 3 update) |
+|--------|----|----|----|----|----|----|----|----|----|-----------------------------------|
+| **Claude Code** (host) | ✅ | ✅ disable | ✅ dual plane | ✅ plugin | ✅ | ◐ | ◐ create + session hygiene | ✅ | ◐ | BI-A4BEFE99: `claude plugin disable` adapter |
 | **Codex CLI** (host) | ✅ | ✅ disable | ✅ if hook-trust | ✅ | ✅ | ◐ | ◐ | ✅ | ◐ | Hook-trust fail-open until trusted |
-| **Grok Build** (host) | ✅ | ⚠️ warn | ✅ global only | ⬜ | ✅ | ◐ | ⬜ | ✅ | ◐ | Plugin hooks ignored; Session plane missing |
-| **Grok** (Build Studio sandbox) | ⬜ | ⬜ | ⬜ | ⬜ | ◐ | ✅ BS | ➖ | ⚠️ no guards | ⬜ | **P0:** `grok plugin list` empty in sandbox |
-| **Antigravity (agy)** | ◐ pack | ⚠️ warn | ⬜ unproven | ⬜ | ◐ MCP wire | ◐ | ⬜ | ❓ | ⬜ | Hooks pending functional proof |
-| **Build Studio** (agentic in-portal) | ✅ seed skills | ➖ | runtime gates | ➖ | ✅ | ✅ | ➖ | ✅ phase HITL | ◐ | Not CLI-hook based |
-| **OpenCode** (suggested / BS dispatch) | ⬜ | ⬜ | ⬜ | ⬜ | ◐ | ✅ BS | ➖ | ❓ | ⬜ | Complete adapter after Grok BS seed |
-| **Gemini CLI** (suggested) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ❓ | ⬜ | Document checklist; bootstrap when product pulls |
+| **Grok Build** (host) | ✅ | ✅ disable | ✅ global only | ✅ SessionStart/Stop | ✅ | ◐ | ◐ session hygiene + janitor | ✅ | ◐ | BI-BCA23DBB: global hooks + competitive |
+| **Grok** (Build Studio sandbox) | ✅ seed | ◐ | ◐ seeded guards | ➖ | ◐ | ✅ BS | ➖ | ◐ always-approve + guards | ◐ | BI-C5F9A232: pack seeded at dispatch |
+| **Antigravity (agy)** | ◐ pack | ⬜ unsupported | ⬜ unproven | ⬜ | ◐ MCP wire | ◐ | ⬜ | ❓ | ⬜ | No plugin-disable CLI; hooks unproven — honest gap |
+| **Build Studio** (agentic in-portal) | ✅ seed skills | ➖ | runtime gates | ➖ | ✅ | ✅ | sandbox GC | ✅ phase HITL | ◐ | Not CLI-hook based; BS worktree GC landed |
+| **OpenCode** (suggested / BS dispatch) | ⬜ | ⬜ | ⬜ | ⬜ | ◐ | ✅ BS | ➖ | ❓ | ⬜ | Checklist only until product pull — see skill-pack README |
+| **Gemini CLI** (suggested) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ❓ | ⬜ | Checklist only until product pull |
 | **Cursor** (compat / optional) | ⬜ | ⬜ | ◐ via Grok compat paths | ⬜ | ⬜ | ⬜ | ⬜ | ❓ | ⬜ | Hook event aliases; not first-class bootstrap |
 
-**Backlog (filed 2026-07-26):** BI-F4A1A0DC (docs/matrix), BI-BCA23DBB (Grok host plane + competitive), BI-C5F9A232 (BS Grok seed), BI-42FA7DD8 (worktree Tier-A reap), BI-A4BEFE99 (remaining clients equalize).
+**Backlog (filed 2026-07-26):** BI-F4A1A0DC (docs/matrix), BI-BCA23DBB (Grok host plane + competitive), BI-C5F9A232 (BS Grok seed), BI-42FA7DD8 (worktree Tier-A reap), BI-A4BEFE99 (remaining clients equalize), BI-8BD61C30 (BS sandbox GC). Waves 0–3 implementation shipped via PRs #3594–#3601 + this branch.
+
+### Suggested-client adapter checklist (OpenCode / Gemini / Cursor)
+
+Promote a suggested client only after each gate has evidence (or an explicit “comply by construction” note):
+
+1. **G1 Skills** — install path for `dpf-platform` skills (plugin / skills dir / seed).
+2. **G2 Competitive** — non-destructive disable of `process-spine-replacements.json` competitive ids.
+3. **G3 Plane-1 hooks** — lease / root-clone / compose deny, or documented substitute.
+4. **G4 Session** — SessionStart/End plane where the client exposes events.
+5. **G5 MCP** — token env + snippet format.
+6. **G6 Capsule** — external executor kind + evidence attribution.
+7. **G7 Worktree** — canonical sibling base + hygiene hooks when events exist.
+8. **G8 Headless** — non-interactive still honors deny.
+9. **G9 Readiness** — bootstrap or dispatch readiness observable.
+
+Source checklist also lives in `packages/dpf-skill-pack/README.md` (adapter checklist section).
 
 ## What this currently tells us (the open adoption gaps)
 
-- **Governance parity (2026-07-26):** Grok BS seed + competitive disable + worktree Tier-A reap are the highest-leverage closes (see G1–G9 table). Token economy rows below remain separate.
+- **Governance parity (2026-07-26):** Waves 1–3 closed Grok host/BS seed, competitive disable on Codex/Grok/Claude, worktree Tier-A, and BS sandbox GC. Remaining: Antigravity disable+hooks proof, OpenCode/Gemini/Cursor product pull, Docker image reap (separate). Token economy rows below remain separate.
 - **R3 — deferred tools on `/api/mcp/v1`** (⬜): external CLIs pull the full JWT-scoped surface; adopt the Tool Search pattern.
 - **R4 — code execution in the native loop** (⬜): the single biggest local-window token lever; sandbox already exists.
 - **R6 — local prefix-KV cache** (◐): confirm DMR/llama.cpp reuses the static prefix.
