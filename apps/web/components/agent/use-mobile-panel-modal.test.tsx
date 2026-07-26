@@ -46,14 +46,14 @@ describe("useMobilePanelModal", () => {
     const { unmount } = render(<Harness onClose={onClose} />);
     const background = screen.getByTestId("background");
 
-    expect(background).toHaveAttribute("inert");
-    expect(background).toHaveAttribute("aria-hidden", "true");
+    expect(background.hasAttribute("inert")).toBe(true);
+    expect(background.getAttribute("aria-hidden")).toBe("true");
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
 
     unmount();
-    expect(background).not.toHaveAttribute("inert");
-    expect(background).not.toHaveAttribute("aria-hidden");
+    expect(background.hasAttribute("inert")).toBe(false);
+    expect(background.hasAttribute("aria-hidden")).toBe(false);
   });
 
   it("wraps backward focus from the dialog container", () => {
@@ -63,12 +63,14 @@ describe("useMobilePanelModal", () => {
     });
     dialog.focus();
     fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
-    expect(screen.getByRole("button", { name: "Last action" })).toHaveFocus();
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Last action" }),
+    );
   });
 
   it("does not make the desktop panel modal", () => {
     render(<Harness isMobile={false} />);
-    expect(screen.getByTestId("background")).not.toHaveAttribute("inert");
+    expect(screen.getByTestId("background").hasAttribute("inert")).toBe(false);
     expect(document.body.style.overflow).toBe("");
   });
 });

@@ -600,7 +600,7 @@ describe("AgentDetailPage", () => {
       await AgentDetailPage({ params: Promise.resolve({ agentId: "hr-specialist" }) }),
     );
 
-    expect(html).toContain("Needs &amp; Playbooks");
+    expect(html).toContain("Capabilities");
     expect(html).toContain("Living Playbooks");
     expect(html).toContain("Missing sandbox lease grant");
     expect(html).toContain("Shadow evidence");

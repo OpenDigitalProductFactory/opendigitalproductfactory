@@ -25,8 +25,10 @@ describe("CoworkerRecordTabs", () => {
     });
 
     expect(
-      screen.getByRole("tabpanel", { name: "Availability" }),
-    ).not.toHaveAttribute("hidden");
+      screen
+        .getByRole("tabpanel", { name: "Availability" })
+        .hasAttribute("hidden"),
+    ).toBe(false);
   });
 
   it("supports arrow-key navigation between desktop tabs", () => {
@@ -47,7 +49,9 @@ describe("CoworkerRecordTabs", () => {
     fireEvent.keyDown(overview, { key: "ArrowRight" });
 
     expect(
-      screen.getByRole("tab", { name: "Availability" }),
-    ).toHaveAttribute("aria-selected", "true");
+      screen
+        .getByRole("tab", { name: "Availability" })
+        .getAttribute("aria-selected"),
+    ).toBe("true");
   });
 });

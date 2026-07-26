@@ -157,6 +157,11 @@ describe("RosterView", () => {
   });
 
   it("preserves owner filter state in the URL and coworker return link", () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/platform/ai/overview?tab=coworkers",
+    );
     render(
       <RosterView
         rows={[row()]}

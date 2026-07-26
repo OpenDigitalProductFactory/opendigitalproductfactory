@@ -157,7 +157,7 @@ describe("projectRosterAvailability", () => {
     ).toBe("coverage-not-defined");
     expect(
       projectRosterAvailability({
-        services: [service({ archetypes: ["software-and-platforms"] })],
+        services: [service({ archetypes: ["software-platform"] })],
         install: restaurantInstall,
       }).state,
     ).toBe("not-available");
@@ -184,7 +184,7 @@ describe("projectCoworkerDiscovery", () => {
   it("does not offer conversation when applicability does not match", () => {
     const projection = projectCoworkerDiscovery({
       agentDescription: "Authored work description.",
-      services: [service({ archetypes: ["software-and-platforms"] })],
+      services: [service({ archetypes: ["software-platform"] })],
       install: restaurantInstall,
     });
 
