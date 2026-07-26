@@ -46,6 +46,7 @@ class WriteTextIfChangedTest(unittest.TestCase):
                 code = updater.main([
                     "--skill-pack-path",
                     str(skill_pack),
+                    "--skip-codex-cli-install",
                     "--skip-claude-cli-install",
                     "--skip-grok-cli-install",
                 ])
@@ -122,6 +123,17 @@ class HookRosterTest(unittest.TestCase):
 
 
 class UpdateAgentToolchainTest(unittest.TestCase):
+    def test_client_managed_paths_match_marketplace_resolution(self) -> None:
+        home = Path("/operator-home")
+        self.assertEqual(
+            updater.codex_managed_plugin_path(home),
+            home / "plugins" / "dpf-platform",
+        )
+        self.assertEqual(
+            updater.shared_managed_plugin_path(home),
+            home / ".agents" / "plugins" / "plugins" / "dpf-platform",
+        )
+
     @unittest.skipIf(tomllib is None, "tomllib requires Python 3.11+")
     def test_converges_codex_and_claude_marketplaces_in_temp_home(self) -> None:
         skill_pack = Path(__file__).resolve().parents[1]
@@ -130,6 +142,7 @@ class UpdateAgentToolchainTest(unittest.TestCase):
                 code = updater.main([
                     "--skill-pack-path",
                     str(skill_pack),
+                    "--skip-codex-cli-install",
                     "--skip-claude-cli-install",
                     "--skip-grok-cli-install",
                 ])
@@ -137,14 +150,16 @@ class UpdateAgentToolchainTest(unittest.TestCase):
             self.assertEqual(code, 0)
             home = Path(tmp)
 
-            managed = home / ".agents" / "plugins" / "plugins" / "dpf-platform"
-            self.assertTrue((managed / ".codex-plugin" / "plugin.json").exists())
-            self.assertTrue((managed / ".claude-plugin" / "plugin.json").exists())
-            self.assertTrue((managed / "skills").exists())
-            self.assertTrue((managed / "hooks" / "plan-backlog-coverage-guard.mjs").exists())
+            codex_managed = home / "plugins" / "dpf-platform"
+            shared_managed = home / ".agents" / "plugins" / "plugins" / "dpf-platform"
+            for managed in (codex_managed, shared_managed):
+                self.assertTrue((managed / ".codex-plugin" / "plugin.json").exists())
+                self.assertTrue((managed / ".claude-plugin" / "plugin.json").exists())
+                self.assertTrue((managed / "skills").exists())
+                self.assertTrue((managed / "hooks" / "plan-backlog-coverage-guard.mjs").exists())
 
             codex_config = tomllib.loads((home / ".codex" / "config.toml").read_text())
-            self.assertTrue(codex_config["plugins"]["dpf-platform"]["enabled"])
+            self.assertTrue(codex_config["plugins"]["dpf-platform@personal"]["enabled"])
             self.assertEqual(
                 codex_config["mcp_servers"]["dpf"]["bearer_token_env_var"],
                 "DPF_MCP_BEARER_TOKEN",
@@ -195,6 +210,7 @@ class UpdateAgentToolchainTest(unittest.TestCase):
                 updater.main([
                     "--skill-pack-path",
                     str(skill_pack),
+                    "--skip-codex-cli-install",
                     "--skip-claude-cli-install",
                     "--skip-grok-cli-install",
                     "--mcp-url",
@@ -203,7 +219,8 @@ class UpdateAgentToolchainTest(unittest.TestCase):
 
             data = tomllib.loads(config.read_text())
             self.assertEqual(data["model"], "gpt-5.5")
-            self.assertTrue(data["plugins"]["dpf-platform"]["enabled"])
+            self.assertFalse(data["plugins"]["dpf-platform@personal"]["enabled"])
+            self.assertNotIn("dpf-platform", data["plugins"])
             self.assertEqual(data["mcp_servers"]["dpf"]["url"], "https://mcp.example.test/api/mcp/v1")
 
     @unittest.skipIf(tomllib is None, "tomllib requires Python 3.11+")
@@ -226,12 +243,13 @@ class UpdateAgentToolchainTest(unittest.TestCase):
                 updater.main([
                     "--skill-pack-path",
                     str(skill_pack),
+                    "--skip-codex-cli-install",
                     "--skip-claude-cli-install",
                     "--skip-grok-cli-install",
                 ])
 
             data = tomllib.loads(config.read_text())
-            self.assertTrue(data["plugins"]["dpf-platform"]["enabled"])
+            self.assertTrue(data["plugins"]["dpf-platform@personal"]["enabled"])
             self.assertFalse(data["plugins"]["superpowers@openai-curated"]["enabled"])
             self.assertTrue(data["plugins"]["custom-helper"]["enabled"])
 
@@ -242,7 +260,55 @@ class UpdateAgentToolchainTest(unittest.TestCase):
         self.assertIn("superpowers@openai-curated", codex["competitivePluginIds"])
         self.assertEqual(codex["action"], "disable-plugin")
 
-    def test_reuses_bare_codex_plugin_table_instead_of_appending_duplicate(self) -> None:
+    def test_installs_and_verifies_through_codex_registry(self) -> None:
+        add_result = unittest.mock.Mock(returncode=0, stdout='{"installed":true}', stderr="")
+        list_result = unittest.mock.Mock(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "installed": [
+                        {
+                            "pluginId": "dpf-platform@personal",
+                            "installed": True,
+                            "enabled": True,
+                        }
+                    ]
+                }
+            ),
+            stderr="",
+        )
+        with patch.object(
+            updater, "resolve_codex_binary", return_value="/fake/codex"
+        ), patch("subprocess.run", side_effect=[add_result, list_result]) as run:
+            status = updater.install_codex_plugin(Path("/operator-home"), dry_run=False)
+
+        self.assertEqual(status, "installed, enabled, and verified")
+        self.assertEqual(
+            run.call_args_list[0].args[0],
+            ["/fake/codex", "plugin", "add", "dpf-platform@personal", "--json"],
+        )
+        self.assertEqual(
+            run.call_args_list[1].args[0],
+            [
+                "/fake/codex",
+                "plugin",
+                "list",
+                "--marketplace",
+                "personal",
+                "--json",
+            ],
+        )
+
+    def test_refuses_to_claim_success_when_registry_does_not_install_plugin(self) -> None:
+        add_result = unittest.mock.Mock(returncode=0, stdout="{}", stderr="")
+        list_result = unittest.mock.Mock(returncode=0, stdout='{"installed":[]}', stderr="")
+        with patch.object(
+            updater, "resolve_codex_binary", return_value="/fake/codex"
+        ), patch("subprocess.run", side_effect=[add_result, list_result]):
+            status = updater.install_codex_plugin(Path("/operator-home"), dry_run=False)
+        self.assertIn("failed", status)
+
+    def test_migrates_bare_codex_plugin_table_to_registry_qualified_key(self) -> None:
         skill_pack = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
@@ -259,6 +325,7 @@ class UpdateAgentToolchainTest(unittest.TestCase):
                 updater.main([
                     "--skill-pack-path",
                     str(skill_pack),
+                    "--skip-codex-cli-install",
                     "--skip-claude-cli-install",
                     "--skip-grok-cli-install",
                 ])
@@ -266,7 +333,8 @@ class UpdateAgentToolchainTest(unittest.TestCase):
             raw = config.read_text()
             if tomllib is not None:
                 data = tomllib.loads(raw)
-                self.assertTrue(data["plugins"]["dpf-platform"]["enabled"])
+                self.assertTrue(data["plugins"]["dpf-platform@personal"]["enabled"])
+                self.assertNotIn("dpf-platform", data["plugins"])
             self.assertEqual(raw.count("dpf-platform"), 1)
 
     def test_heals_config_already_corrupted_with_duplicate_table(self) -> None:
@@ -299,6 +367,7 @@ class UpdateAgentToolchainTest(unittest.TestCase):
                 updater.main([
                     "--skill-pack-path",
                     str(skill_pack),
+                    "--skip-codex-cli-install",
                     "--skip-claude-cli-install",
                     "--skip-grok-cli-install",
                 ])
@@ -322,6 +391,7 @@ class UpdateAgentToolchainTest(unittest.TestCase):
                 code = updater.main([
                     "--skill-pack-path",
                     str(skill_pack),
+                    "--skip-codex-cli-install",
                     "--skip-claude-cli-install",
                     "--skip-grok-cli-install",
                 ])
@@ -333,7 +403,7 @@ class UpdateAgentToolchainTest(unittest.TestCase):
             self.assertTrue((managed / "skills" / "dpf-worktree-per-session" / "SKILL.md").exists())
 
             codex_config = tomllib.loads((home / ".codex" / "config.toml").read_text())
-            self.assertTrue(codex_config["plugins"]["dpf-platform"]["enabled"])
+            self.assertTrue(codex_config["plugins"]["dpf-platform@personal"]["enabled"])
             self.assertEqual(
                 codex_config["mcp_servers"]["dpf"]["bearer_token_env_var"],
                 "DPF_MCP_BEARER_TOKEN",
@@ -421,10 +491,11 @@ class ClaudeInstallTest(unittest.TestCase):
         ) as run:
             status = updater.install_claude_plugin(Path("/tmp/home"), dry_run=False)
         self.assertEqual(status, "installed and refreshed")
+        marketplace_root = str(Path("/tmp/home") / ".agents" / "plugins")
         self.assertEqual(
             [call[0][0] for call in run.call_args_list],
             [
-                ["/fake/claude", "plugin", "marketplace", "add", "/tmp/home/.agents/plugins", "--scope", "local"],
+                ["/fake/claude", "plugin", "marketplace", "add", marketplace_root, "--scope", "local"],
                 ["/fake/claude", "plugin", "install", "dpf-platform@dpf-platform-local", "--scope", "local"],
                 ["/fake/claude", "plugin", "update", "dpf-platform@dpf-platform-local", "--scope", "local"],
             ],
@@ -714,6 +785,7 @@ class CodexHookTrustTest(unittest.TestCase):
                     [
                         "--skill-pack-path",
                         str(skill_pack),
+                        "--skip-codex-cli-install",
                         "--skip-claude-cli-install",
                         "--skip-grok-cli-install",
                         "--require-codex-hook-trust",
@@ -796,6 +868,30 @@ class ProbeGrokExposedSkillsTest(unittest.TestCase):
                     [
                         "--skill-pack-path",
                         str(self.skill_pack),
+                        "--skip-codex-cli-install",
+                        "--skip-claude-cli-install",
+                        "--skip-grok-cli-install",
+                    ]
+                )
+            self.assertEqual(code, 0)
+            mock_probe.assert_not_called()
+
+    def test_main_never_uses_grok_evidence_for_multi_client_session_health(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            clean_env = {
+                key: value
+                for key, value in os.environ.items()
+                if not key.startswith("DPF_PROCESS_SPINE_EXPOSED_SKILLS")
+            }
+            clean_env["DPF_AGENT_TOOLCHAIN_HOME"] = tmp
+            with patch.dict(os.environ, clean_env, clear=True), patch.object(
+                updater, "probe_grok_exposed_skills"
+            ) as mock_probe:
+                code = updater.main(
+                    [
+                        "--skill-pack-path",
+                        str(self.skill_pack),
+                        "--skip-codex-cli-install",
                         "--skip-claude-cli-install",
                         "--skip-grok-cli-install",
                     ]

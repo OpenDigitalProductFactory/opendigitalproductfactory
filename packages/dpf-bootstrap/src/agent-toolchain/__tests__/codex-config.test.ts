@@ -20,7 +20,7 @@ const CONFIG_PATH = "C:\\Users\\Test\\.codex\\config.toml";
 const LOCAL_ENDPOINT = "http://127.0.0.1:3000/api/mcp/v1";
 
 describe("planCodexConfig", () => {
-  it("upserts [plugins.\"dpf-platform\"] enabled=true on the operator-current fixture", () => {
+  it("upserts [plugins.\"dpf-platform@personal\"] enabled=true on the operator-current fixture", () => {
     const plan = planCodexConfig(operatorRedacted, REPO, CONFIG_PATH);
 
     expect(plan.writes).toHaveLength(1);
@@ -32,7 +32,7 @@ describe("planCodexConfig", () => {
     const parsed = parse(plan.writes[0].content) as {
       plugins: Record<string, { enabled: boolean }>;
     };
-    expect(parsed.plugins["dpf-platform"]).toEqual({ enabled: true });
+    expect(parsed.plugins["dpf-platform@personal"]).toEqual({ enabled: true });
   });
 
   it("preserves byte-equivalence of all blocks OUTSIDE the convergence scope", () => {
@@ -55,7 +55,7 @@ describe("planCodexConfig", () => {
     // Non-DPF, non-generic plugins are preserved byte-for-byte.
     const beforePlugins = beforeParsed.plugins as Record<string, { enabled?: boolean }>;
     const afterPlugins = afterParsed.plugins as Record<string, { enabled?: boolean }>;
-    const generic = ["superpowers@openai-curated", "build-ios-apps@openai-curated"];
+    const generic = ["dpf-platform", "superpowers@openai-curated", "build-ios-apps@openai-curated"];
     for (const otherPlugin of Object.keys(beforePlugins)) {
       if (generic.includes(otherPlugin)) continue;
       expect(afterPlugins[otherPlugin]).toEqual(beforePlugins[otherPlugin]);
@@ -163,7 +163,8 @@ describe("planCodexConfig", () => {
     const parsed = parse(plan.writes[0].content) as {
       plugins: Record<string, { enabled?: boolean }>;
     };
-    expect(parsed.plugins["dpf-platform"].enabled).toBe(false); // intent preserved
+    expect(parsed.plugins["dpf-platform@personal"].enabled).toBe(false); // intent preserved
+    expect(parsed.plugins["dpf-platform"]).toBeUndefined(); // legacy key migrated
     expect(parsed.plugins["superpowers@openai-curated"].enabled).toBe(false); // generic disabled
     expect(plan.convergence.some((c) => c.kind === "plugin-disabled")).toBe(true);
   });
@@ -231,7 +232,7 @@ describe("planCodexConfig", () => {
     const parsed = parse(plan.writes[0].content) as {
       plugins: Record<string, { enabled?: boolean }>;
     };
-    expect(parsed.plugins["dpf-platform"].enabled).toBe(true);
+    expect(parsed.plugins["dpf-platform@personal"].enabled).toBe(true);
   });
 
   it("handles empty existing config (fresh contributor)", () => {
@@ -239,7 +240,7 @@ describe("planCodexConfig", () => {
 
     expect(plan.writes).toHaveLength(1);
     const parsed = parse(plan.writes[0].content) as { plugins: Record<string, { enabled: boolean }> };
-    expect(parsed.plugins["dpf-platform"]).toEqual({ enabled: true });
+    expect(parsed.plugins["dpf-platform@personal"]).toEqual({ enabled: true });
   });
 
   it("upserts [mcp_servers.dpf] alongside the plugin when an endpoint is supplied", () => {
@@ -251,7 +252,7 @@ describe("planCodexConfig", () => {
       plugins: Record<string, { enabled: boolean }>;
       mcp_servers: Record<string, { url: string; bearer_token_env_var: string }>;
     };
-    expect(parsed.plugins["dpf-platform"]).toEqual({ enabled: true });
+    expect(parsed.plugins["dpf-platform@personal"]).toEqual({ enabled: true });
     expect(parsed.mcp_servers["dpf"]).toEqual({
       url: LOCAL_ENDPOINT,
       bearer_token_env_var: "DPF_MCP_BEARER_TOKEN",
@@ -287,7 +288,7 @@ describe("planCodexConfig", () => {
       mcp_servers: Record<string, { url: string; bearer_token_env_var: string }>;
     };
     // Plugin intent preserved (still disabled), MCP block written.
-    expect(parsed.plugins["dpf-platform"].enabled).toBe(false);
+    expect(parsed.plugins["dpf-platform@personal"].enabled).toBe(false);
     expect(parsed.mcp_servers["dpf"]).toEqual({
       url: novelEndpoint,
       bearer_token_env_var: "DPF_MCP_BEARER_TOKEN",

@@ -102,20 +102,9 @@ Write-Info "DPF MCP token    : $(if ($HasToken)      { 'present' } else { 'missi
 Write-Info "Skill pack ver.  : $expectedVersion"
 
 $ProcessSpineCheck = Join-Path $RepoRoot "packages\dpf-skill-pack\hooks\process-spine-health-check.mjs"
-$GrokSkillExposureAdapter = Join-Path $RepoRoot "packages\dpf-skill-pack\hooks\grok-skill-exposure-adapter.mjs"
 if ((Test-Path -LiteralPath $ProcessSpineCheck) -and ($null -ne (Get-Command node -ErrorAction SilentlyContinue))) {
-    # Grok active-skill exposure adapter (BI-BCA162CF): `grok plugin list --json`
-    # is a genuine non-interactive evidence source, so populate the shared env
-    # channel from it when nothing has already supplied evidence. Never
-    # overwrite evidence the operator/CI already set explicitly.
-    $hasExplicitExposureEvidence = $env:DPF_PROCESS_SPINE_EXPOSED_SKILLS_JSON -or `
-        $env:DPF_PROCESS_SPINE_EXPOSED_SKILLS_FILE -or $env:DPF_PROCESS_SPINE_EXPOSED_SKILLS
-    if ($GrokPresent -and -not $hasExplicitExposureEvidence -and (Test-Path -LiteralPath $GrokSkillExposureAdapter)) {
-        $grokExposedSkills = & node $GrokSkillExposureAdapter --skill-pack-root (Join-Path $RepoRoot "packages\dpf-skill-pack") 2>$null
-        if ($LASTEXITCODE -eq 0 -and $grokExposedSkills) {
-            $env:DPF_PROCESS_SPINE_EXPOSED_SKILLS_JSON = $grokExposedSkills
-        }
-    }
+    # Exposure evidence is session/client scoped. Never use Grok's plugin
+    # inventory to certify a Codex or Claude session (BI-BCA162CF).
     & node $ProcessSpineCheck --skill-pack-root (Join-Path $RepoRoot "packages\dpf-skill-pack")
     if ($LASTEXITCODE -eq 2) {
         Write-Warn2 "Process spine replacement skills are missing from the DPF skill pack."

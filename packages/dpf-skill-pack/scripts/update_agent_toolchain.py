@@ -21,6 +21,7 @@ from typing import Any, Optional
 
 
 PLUGIN_NAME = "dpf-platform"
+CODEX_PLUGIN_ID = f"{PLUGIN_NAME}@personal"
 MARKETPLACE_NAME = "dpf-platform-local"
 TOKEN_ENV_VAR = "DPF_MCP_BEARER_TOKEN"
 DEFAULT_MCP_URL = "http://127.0.0.1:3000/api/mcp/v1"
@@ -92,8 +93,24 @@ def codex_marketplace_path(home: Path) -> Path:
     return home / ".agents" / "plugins" / "marketplace.json"
 
 
-def managed_plugin_path(home: Path) -> Path:
+def codex_managed_plugin_path(home: Path) -> Path:
+    """Return the source path Codex resolves for the personal marketplace.
+
+    Codex resolves `./plugins/<name>` in ~/.agents/plugins/marketplace.json
+    against the user home, not against the marketplace file's directory.
+    `codex plugin list --available --json` reports this exact absolute path.
+    """
+    return home / "plugins" / PLUGIN_NAME
+
+
+def shared_managed_plugin_path(home: Path) -> Path:
+    """Return the managed copy consumed by Claude, Grok, and global hooks."""
     return home / ".agents" / "plugins" / "plugins" / PLUGIN_NAME
+
+
+# Backward-compatible name for existing hook/install helpers and callers.
+def managed_plugin_path(home: Path) -> Path:
+    return shared_managed_plugin_path(home)
 
 
 def process_spine_contract_path(skill_pack: Path) -> Path:
@@ -523,6 +540,39 @@ def upsert_toml_table(text: str, header: str, body_lines: list[str]) -> str:
     return "\n".join(rebuilt).rstrip() + "\n"
 
 
+def remove_toml_table(text: str, canonical_key: str) -> str:
+    """Remove every exact table match while preserving all other text."""
+    lines = text.splitlines()
+    ranges: list[tuple[int, int]] = []
+    index = 0
+    while index < len(lines):
+        if canonical_toml_table_header(lines[index]) == canonical_key:
+            end = index + 1
+            while end < len(lines) and not _is_table_boundary(lines[end]):
+                end += 1
+            ranges.append((index, end))
+            index = end
+        else:
+            index += 1
+    removal = {line_no for start, end in ranges for line_no in range(start, end)}
+    return "\n".join(line for index, line in enumerate(lines) if index not in removal).rstrip() + "\n"
+
+
+def toml_table_enabled(text: str, canonical_key: str) -> Optional[bool]:
+    """Read an explicit enabled boolean from one table without a TOML dependency."""
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if canonical_toml_table_header(line) != canonical_key:
+            continue
+        end = index + 1
+        while end < len(lines) and not _is_table_boundary(lines[end]):
+            match = re.match(r"^\s*enabled\s*=\s*(true|false)\s*(?:#.*)?$", lines[end], re.IGNORECASE)
+            if match:
+                return match.group(1).lower() == "true"
+            end += 1
+    return None
+
+
 def disable_competitive_codex_plugins(text: str, plugin_ids: list[str]) -> str:
     for plugin_id in dict.fromkeys(plugin_ids):
         if not plugin_id or plugin_id == PLUGIN_NAME:
@@ -558,10 +608,16 @@ def ensure_codex_config(
     # ships an equivalent command.
     path = codex_config_path(home)
     text = path.read_text(encoding="utf-8-sig") if path.exists() else ""
+    current_enabled = toml_table_enabled(text, f"plugins.{CODEX_PLUGIN_ID}")
+    legacy_enabled = toml_table_enabled(text, f"plugins.{PLUGIN_NAME}")
+    desired_enabled = current_enabled if current_enabled is not None else legacy_enabled
+    # Pre-plugin-registry DPF installers wrote the bare key. Current Codex
+    # requires <plugin>@<marketplace> and logs the bare key as invalid.
+    text = remove_toml_table(text, f"plugins.{PLUGIN_NAME}")
     text = upsert_toml_table(
         text,
-        f'[plugins."{PLUGIN_NAME}"]',
-        ["enabled = true"],
+        f'[plugins."{CODEX_PLUGIN_ID}"]',
+        [f"enabled = {'false' if desired_enabled is False else 'true'}"],
     )
     text = disable_competitive_codex_plugins(text, codex_competitive_plugin_ids(skill_pack))
     text = upsert_toml_table(
@@ -644,15 +700,26 @@ def install_claude_plugin(home: Path, dry_run: bool) -> str:
 
 
 def resolve_codex_binary() -> str | None:
-    found = shutil.which("codex")
-    if found:
-        return found
     home = home_dir()
     candidates: list[str] = []
+    configured = os.environ.get("CODEX_CLI_PATH")
+    if configured:
+        candidates.append(configured)
     if platform.system() == "Windows":
         local = os.environ.get("LOCALAPPDATA")
         if local:
             candidates.append(str(Path(local) / "Programs" / "Codex" / "codex.exe"))
+            app_bin = Path(local) / "OpenAI" / "Codex" / "bin"
+            if app_bin.exists():
+                candidates.extend(
+                    str(path)
+                    for path in sorted(
+                        app_bin.glob("*/codex.exe"),
+                        key=lambda path: path.stat().st_mtime,
+                        reverse=True,
+                    )
+                )
+                candidates.append(str(app_bin / "codex.exe"))
         candidates.append(str(home / "AppData" / "Roaming" / "npm" / "codex.cmd"))
     else:
         candidates.extend([
@@ -660,10 +727,54 @@ def resolve_codex_binary() -> str | None:
             "/usr/local/bin/codex",
             str(home / ".local" / "bin" / "codex"),
         ])
+    found = shutil.which("codex")
+    if found:
+        candidates.append(found)
     for candidate in candidates:
         if Path(candidate).exists():
             return candidate
     return None
+
+
+def install_codex_plugin(home: Path, dry_run: bool) -> str:
+    """Install and verify the DPF plugin through Codex's own registry."""
+    codex = resolve_codex_binary()
+    if not codex:
+        return "skipped: Codex CLI not found"
+    selector = f"{PLUGIN_NAME}@personal"
+    if dry_run:
+        return f"dry-run: would install and verify {selector}"
+    try:
+        installed = subprocess.run(
+            [codex, "plugin", "add", selector, "--json"],
+            cwd=str(home),
+            capture_output=True,
+            text=True,
+        )
+    except OSError as exc:
+        return f"failed: Codex CLI could not start ({exc.__class__.__name__})"
+    if installed.returncode != 0:
+        return f"failed: codex plugin add exited {installed.returncode}"
+    listed = subprocess.run(
+        [codex, "plugin", "list", "--marketplace", "personal", "--json"],
+        cwd=str(home),
+        capture_output=True,
+        text=True,
+    )
+    if listed.returncode != 0:
+        return f"failed: codex plugin list exited {listed.returncode}"
+    try:
+        inventory = json.loads(listed.stdout or "{}")
+    except json.JSONDecodeError:
+        return "failed: codex plugin list returned invalid JSON"
+    matches = [
+        plugin
+        for plugin in inventory.get("installed", [])
+        if isinstance(plugin, dict) and plugin.get("pluginId") == selector
+    ]
+    if not matches or not matches[0].get("installed") or not matches[0].get("enabled"):
+        return "failed: Codex did not report dpf-platform installed and enabled"
+    return "installed, enabled, and verified"
 
 
 def resolve_grok_binary() -> str | None:
@@ -1135,6 +1246,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--mcp-url", default=os.environ.get("DPF_MCP_URL", DEFAULT_MCP_URL))
     parser.add_argument("--codex-only", action="store_true")
     parser.add_argument("--claude-only", action="store_true")
+    parser.add_argument("--skip-codex-cli-install", action="store_true")
     parser.add_argument("--skip-claude-cli-install", action="store_true")
     parser.add_argument("--skip-grok-cli-install", action="store_true")
     parser.add_argument(
@@ -1157,7 +1269,8 @@ def main(argv: list[str]) -> int:
     manifest = validate_skill_pack(skill_pack)
     version = str(manifest.get("version", "0.0.0"))
     home = home_dir()
-    managed = managed_plugin_path(home)
+    codex_managed = codex_managed_plugin_path(home)
+    shared_managed = shared_managed_plugin_path(home)
 
     print(f"DPF agent toolchain updater")
     print(f"  skill pack : {skill_pack}")
@@ -1165,16 +1278,14 @@ def main(argv: list[str]) -> int:
     print(f"  home       : {home}")
     print(f"  MCP URL    : {args.mcp_url}")
 
-    copy_skill_pack(skill_pack, managed, args.dry_run)
-    print(f"  managed copy: {managed}")
-    process_spine_root = skill_pack if args.dry_run else managed
+    copy_skill_pack(skill_pack, codex_managed, args.dry_run)
+    copy_skill_pack(skill_pack, shared_managed, args.dry_run)
+    print(f"  Codex source : {codex_managed}")
+    print(f"  shared source: {shared_managed}")
+    process_spine_root = skill_pack if args.dry_run else codex_managed
     if not process_spine_contract_path(process_spine_root).exists():
         process_spine_root = skill_pack
     exposed_skills = exposed_process_spine_skills_from_env()
-    if exposed_skills is None:
-        # No explicit evidence channel set; try the Grok live-probe adapter
-        # before falling back to "unknown" (BI-BCA162CF).
-        exposed_skills = probe_grok_exposed_skills(process_spine_root)
     process_spine_verdict = assess_process_spine_health(
         process_spine_root,
         exposed_skills=exposed_skills,
@@ -1189,15 +1300,21 @@ def main(argv: list[str]) -> int:
     if not args.claude_only:
         ensure_codex_marketplace(home, version, args.dry_run)
         ensure_codex_config(home, args.mcp_url, args.dry_run, process_spine_root)
-        codex_hooks_status = install_codex_hooks(managed, home, args.dry_run)
-        print(f"  Codex      : marketplace + config converged; hooks {codex_hooks_status}")
+        codex_status = "skipped by flag"
+        if not args.skip_codex_cli_install:
+            codex_status = install_codex_plugin(home, args.dry_run)
+        codex_hooks_status = install_codex_hooks(codex_managed, home, args.dry_run)
+        print(
+            f"  Codex      : marketplace + config converged; plugin {codex_status}; "
+            f"hooks {codex_hooks_status}"
+        )
         grok_status = "skipped by flag"
         if not args.skip_grok_cli_install:
-            grok_status = install_grok_plugin(managed, args.dry_run)
+            grok_status = install_grok_plugin(shared_managed, args.dry_run)
         print(f"  Grok       : plugin install {grok_status}")
         # Grok's hook plane ignores plugin-bundled hooks (BI-883FC2FC), so the
         # blocking guards are delivered via the always-trusted global hook plane.
-        grok_hooks_status = install_grok_hooks(managed, home, args.dry_run)
+        grok_hooks_status = install_grok_hooks(shared_managed, home, args.dry_run)
         print(f"  Grok hooks : {grok_hooks_status}")
         # Antigravity (agy): MCP-config wiring + skill-pack sync.
         antigravity_status = "skipped by flag"
@@ -1209,7 +1326,11 @@ def main(argv: list[str]) -> int:
 
     if not args.codex_only:
         ensure_claude_marketplace(home, version, args.dry_run)
-        ensure_claude_repo_mcp_config(managed if not args.dry_run else skill_pack, args.mcp_url, args.dry_run)
+        ensure_claude_repo_mcp_config(
+            shared_managed if not args.dry_run else skill_pack,
+            args.mcp_url,
+            args.dry_run,
+        )
         status = "skipped by flag"
         if not args.skip_claude_cli_install:
             status = install_claude_plugin(home, args.dry_run)
