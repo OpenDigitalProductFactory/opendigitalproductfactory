@@ -6869,6 +6869,7 @@ model TaskRun {
   @@index([threadId])
   @@index([contextId])
   @@index([parentTaskRunId])
+  @@index([buildId, status])
   @@index([routeContext, status])
   @@index([repeatedPatternKey])
   // Watchdog query: WHERE status = 'working' AND lastHeartbeatAt < ...
