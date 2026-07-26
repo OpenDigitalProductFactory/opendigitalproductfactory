@@ -51,6 +51,7 @@ import {
 } from "./postgres-daily-backup";
 import { runtimeTargetJanitor } from "./runtime-target-janitor";
 import { runtimeArtifactJanitor } from "./runtime-artifact-janitor";
+import { sandboxBuildGc } from "./sandbox-build-gc";
 import {
   dataRetentionSweepScheduled,
   dataRetentionSweepRequested,
@@ -122,6 +123,7 @@ export const scheduledFunctions = [
   selfUpgradeScheduled,
   runtimeTargetJanitor,  // BI-AD949172: RT heartbeat sweep + lease expiry, hourly
   runtimeArtifactJanitor, // BI-DBF3F426: OBSERVE-ONLY dry-run scan of orphaned CI images + stray compose projects (logs would-reap, never deletes; --apply is founder-gated), daily 05:20, flag-gated DPF_RUNTIME_ARTIFACT_JANITOR_ENABLED
+  sandboxBuildGc, // BI-8BD61C30: BS sandbox .builds worktree + aged build/* branch GC (flag DPF_SANDBOX_BUILD_GC_ENABLED), daily 05:50
   dataRetentionSweepScheduled, // EP-DATA-RETENTION: daily DB purge of aged logs/telemetry/chat, 04:00
   qualityIssueDriftSweepScheduled, // BI-0B420A1D: runtime governance — self-heal recovery/orphan backstop + detect per-type open-count drift vs registry budgets, daily 05:00
 

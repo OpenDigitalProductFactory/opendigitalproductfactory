@@ -226,6 +226,11 @@ export async function reapInertStuckBuilds(
       console.warn(
         `[inert-build-reaper] reaped ${inert ? "inert" : "stalled"} build ${c.buildId} (${hoursOld}h old, phase=${c.phase}, last activity ${staleHours}h ago)`,
       );
+      // BI-8BD61C30: free sandbox .builds/<id> — inert reaper previously left worktrees behind.
+      const { releaseSandboxForTerminalBuild } = await import(
+        "@/lib/integrate/sandbox/build-branch"
+      );
+      await releaseSandboxForTerminalBuild(c.buildId, { deleteBranch: false }).catch(() => {});
     } catch (err) {
       console.warn(`[inert-build-reaper] failed to reap build ${c.buildId}:`, err);
     }
