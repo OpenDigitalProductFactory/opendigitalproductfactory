@@ -1,23 +1,70 @@
-# Open Digital Product Factory
+<p align="center">
+  <img src="docs/assets/logos/OpenDigitalProductFactory.png" width="150" alt="Open Digital Product Factory logo" />
+</p>
 
-**The platform that builds itself.** An open-source, AI-native operating platform for small businesses and product teams under human governance. A DPF install starts from a market archetype, gives the business a customer portal and internal workspace in its own vocabulary, and puts purposed AI coworkers at the center of daily work. Single-org install on your hardware; opt-in cross-install contribution through the Hive Mind.
+<h1 align="center">Open Digital Product Factory</h1>
 
-> **For potential users and customers, start at [opendigitalproductfactory.com](https://opendigitalproductfactory.com)** — the canonical product tour with capability inventory, archetypes, coworker workforce, maturity surface, and standards conformance.
->
-> **This README is for people working with the project source** — contributors, integrators, and anyone running the install scripts or modifying the codebase.
+<p align="center">
+  <strong>A local-first operating platform where purposed AI coworkers help one organization run and improve its business under human authority.</strong>
+</p>
 
----
+<p align="center">
+  <a href="https://opendigitalproductfactory.com/"><strong>Product tour</strong></a>
+  &nbsp;&middot;&nbsp;
+  <a href="https://opendigitalproductfactory.com/business-types/">Business catalogue</a>
+  &nbsp;&middot;&nbsp;
+  <a href="docs/user-guide/">User guide</a>
+  &nbsp;&middot;&nbsp;
+  <a href="#quick-install">Install</a>
+  &nbsp;&middot;&nbsp;
+  <a href="CONTRIBUTING.md">Contribute</a>
+</p>
 
-## Product posture
+<p align="center">
+  <a href="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/actions/workflows/ci.yml">
+    <img src="https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/actions/workflows/ci.yml/badge.svg?branch=main" alt="Continuous integration status" />
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/license-Apache--2.0-5b8def.svg" alt="Apache 2.0 license" />
+  </a>
+</p>
 
-DPF's user story is now archetype-led rather than module-led:
+DPF starts from the business you run rather than an empty software canvas. A packaged business type shapes the customer experience, internal vocabulary, operating defaults, and coworker context. The install is dedicated to one organization, runs on infrastructure that organization controls, and only connects to external providers, integrations, or contribution paths when they are deliberately configured.
 
-- Pick the business type first: HVAC, clinic, retail, nonprofit, HOA, professional services, software platform, and other small-business categories.
-- The selected archetype shapes the customer portal, internal workspace vocabulary, worker home, marketing posture, and feature-contribution applicability.
-- AI coworkers are the primary interaction surface. They are purposed by role and route, but every side effect still goes through role checks, agent grants, approval gates, and audit logs.
-- WWMD is the trust-building autonomy path: coworkers can consult the founder-kernel wiki and principle vectors for ambiguous decisions, then return a confidence-scored recommendation, arbitration, escalation, or deferral with sources and an audit ledger.
-- Voice is an optional coworker modality: speech-to-text for input, text-to-speech for narrated decision/profile output where consent and provider setup allow it.
-- Build Studio is the governed self-development surface, but it is still being hardened. Use it honestly: ready for guided platform work and evidence capture, not a claim that every complex source change is fully autonomous today.
+This README is the source-facing entry point. The [public tour](https://opendigitalproductfactory.com/) is the clearer introduction for potential users and customers.
+
+## Choose your path
+
+| If you want to... | Start here | What you will find |
+|---|---|---|
+| Evaluate DPF for a business | [Product tour](https://opendigitalproductfactory.com/) and [business catalogue](https://opendigitalproductfactory.com/business-types/) | Fit, operating model, trust posture, current maturity, and business-shaped examples |
+| Install or pilot it | [Quick install](#quick-install) | Supported hosts, early-access paths, installer commands, and verification reporting |
+| Run the platform | [User guide](docs/user-guide/) | Setup, everyday work, coworkers, compliance, administration, and in-product help |
+| Extend or contribute | [Developer setup](docs/user-guide/contributing/developer-setup.md) and [AGENTS.md](AGENTS.md) | Worktrees, architecture rules, verification, DCO, CI, and pull-request delivery |
+| Review the trust model | [TAK](docs/architecture/trusted-ai-kernel.md), [GAID](docs/architecture/GAID.md), and [conformance](docs/architecture/agent-standards-dpf-conformance.md) | Runtime authority, agent identity, delegation, evidence, assurance, and current gaps |
+
+## The platform in one view
+
+```mermaid
+flowchart LR
+  A["Business type"] --> B["Customer experience"]
+  A --> C["Operating workspace"]
+  A --> D["Coworker context"]
+  B --> E["Shared company primitives"]
+  C --> E
+  D --> F["Authority + risk gate"]
+  F --> E
+  E --> G["Audited outcomes"]
+```
+
+Text alternative: the selected business type shapes the customer experience, operating workspace, and coworker context. Customer and workspace activity meet shared company primitives. Coworker actions first pass through authority and risk policy. Outcomes retain an evidence trail.
+
+Four boundaries keep that story honest:
+
+- **Business first.** More than 100 packaged business types shape vocabulary and defaults; the internal archetype remains the single source of truth.
+- **One organization per install.** DPF is not a shared multi-tenant database. Cross-install learning uses governed, opt-in contribution.
+- **AI does not create authority.** A tool call requires both user capability and coworker grant, plus approval or escalation when risk policy requires it.
+- **Self-development is governed work.** Build Studio can guide and evidence platform changes, while customizable installs also support editors and external agent clients. Complex source work is not represented as hands-off autonomy.
 
 User-facing narrative lives in [Market Archetypes And Coworkers](docs/user-guide/market-archetypes.md), with proof personas under [docs/personas/](docs/personas/).
 
@@ -93,7 +140,7 @@ bash install-dpf.sh --headless --release
 
 Terraform modules for the cloud-VM path live under [`infra/terraform/single-vm/{aws,gcp,azure}/`](infra/terraform/single-vm/).
 
-The installer asks one question — **Ready to go** (pre-built images; Build Studio is the governed development surface) or **Customizable** (full source clone; Build Studio and a local IDE share the same workspace). Both modes include the full platform; the difference is whether direct IDE access is part of the supported workflow. For serious source changes while Build Studio continues hardening, use Customizable mode. Login credentials are saved to `.env` / `.admin-credentials` at the end of installation.
+The installer asks one question — **Ready to go** (pre-built images; source changes normally flow through Build Studio) or **Customizable** (full source clone; Build Studio, editors, and external agent clients can share the workspace). Both modes include the full platform. Build Studio is available in both, but it is not the only supported development path for a customizable install. For serious source changes while Build Studio continues hardening, use Customizable mode. Login credentials are saved to `.env` / `.admin-credentials` at the end of installation.
 
 **AI toolchain readiness.** If you have Claude Code or Codex CLI installed on the host, the installer wires them automatically — DPF skills, MCP tools, and kernel-tier memory all available on the first turn of every new contributor session. Re-running the installer is a no-op when nothing has drifted. See [Install operations](docs/operations/install.md) for the readiness states and what each one means.
 
