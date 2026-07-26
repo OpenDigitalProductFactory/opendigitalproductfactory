@@ -15,27 +15,68 @@ function quoteForBash(value: string) {
   return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
+// BI-72AEDE8B: under full Windows local-CI load, every resolveBashPath used to
+// spawn up to three `bash -lc test -f` probes — and used -f even for temp
+// *directories*, so all probes failed and still cost ~0.5–2s each. Cache the
+// first successful Git-Bash path style per drive, prefer `test -e`, and skip
+// probing for paths that do not exist on the Windows side yet.
+const bashPathCache = new Map<string, string>();
+/** Once known: which candidate prefix works for drive-letter paths on this host. */
+let preferredWinBashDriveForm: "mnt" | "root" | "normalized" | null = null;
+
 function resolveBashPath(path: string) {
   if (process.platform !== "win32") {
     return path;
   }
 
+  const cached = bashPathCache.get(path);
+  if (cached) return cached;
+
   const normalized = path.replace(/\\/g, "/");
   const driveMatch = /^([A-Za-z]):\/(.*)$/.exec(normalized);
   if (!driveMatch) {
+    bashPathCache.set(path, normalized);
     return normalized;
   }
 
   const [, drive, rest] = driveMatch;
-  const candidates = [`/mnt/${drive.toLowerCase()}/${rest}`, `/${drive.toLowerCase()}/${rest}`, normalized];
-  return (
-    candidates.find((candidate) => {
-      const probe = _probe(BASH_COMMAND, ["-lc", `test -f ${quoteForBash(candidate)}`], {
-        encoding: "utf8",
-      });
-      return probe.status === 0;
-    }) ?? normalized
-  );
+  const byForm = {
+    mnt: `/mnt/${drive.toLowerCase()}/${rest}`,
+    root: `/${drive.toLowerCase()}/${rest}`,
+    normalized,
+  } as const;
+
+  // Nothing on disk yet (e.g. backup dir before promote creates it) — do not pay
+  // for three failing bash probes; Git Bash accepts /d/... style for new paths.
+  if (!existsSync(path)) {
+    const guess = preferredWinBashDriveForm
+      ? byForm[preferredWinBashDriveForm]
+      : byForm.root;
+    bashPathCache.set(path, guess);
+    return guess;
+  }
+
+  const order: Array<keyof typeof byForm> = preferredWinBashDriveForm
+    ? [preferredWinBashDriveForm, "mnt", "root", "normalized"]
+    : ["mnt", "root", "normalized"];
+  const seen = new Set<string>();
+  for (const form of order) {
+    const candidate = byForm[form];
+    if (seen.has(candidate)) continue;
+    seen.add(candidate);
+    const probe = _probe(BASH_COMMAND, ["-lc", `test -e ${quoteForBash(candidate)}`], {
+      encoding: "utf8",
+      timeout: 5_000,
+    });
+    if (probe.status === 0) {
+      preferredWinBashDriveForm = form;
+      bashPathCache.set(path, candidate);
+      return candidate;
+    }
+  }
+
+  bashPathCache.set(path, normalized);
+  return normalized;
 }
 
 const SCRIPT = resolveBashPath(resolve(__dirname, "../../../../scripts/promote.sh"));
@@ -65,7 +106,17 @@ const BASE_ENV: Record<string, string> = {
   PROMOTE_BACKUP_PATH: "/opt/app/backup",
   PROMOTE_HEALTH_URL: "http://localhost:3000/api/health",
 };
-const READINESS_SCRIPT_TIMEOUT_MS = 30_000;
+/**
+ * Child wall-clock for a single promote.sh invocation under contract tests.
+ * BI-72AEDE8B: must stay below the Vitest per-test timeout so a hung bash is
+ * reported as a timed-out child (signal/error), not a silent suite stall.
+ * Not a global vitest.config timeout change.
+ */
+const CONTRACT_CHILD_TIMEOUT_MS = 25_000;
+/** Vitest per-test budget: child bound + fixture overhead on loaded Windows hosts. */
+const CONTRACT_TEST_TIMEOUT_MS = 40_000;
+/** @deprecated alias kept for readiness describe block readability */
+const READINESS_SCRIPT_TIMEOUT_MS = CONTRACT_TEST_TIMEOUT_MS;
 
 function runScript(env: Record<string, string | undefined>, extraArgs: string[] = [], stateOverrides: Record<string, unknown> = {}) {
   const marker = basename(env.PROMOTE_SOURCE ?? "source").replace(/[^A-Za-z0-9-]/g, "-");
@@ -93,11 +144,20 @@ function runScript(env: Record<string, string | undefined>, extraArgs: string[] 
     const command = ["env", "-i", 'PATH="$PATH"', ...envAssignments, "bash", quoteForBash(SCRIPT), "--self-upgrade", ...extraArgs.map(quoteForBash)].join(" ");
     return spawnSync(BASH_COMMAND, ["-lc", command], {
       encoding: "utf8",
-      timeout: READINESS_SCRIPT_TIMEOUT_MS,
+      // Kill hung promote.sh; vitest timeout is higher so we can assert on signal.
+      timeout: CONTRACT_CHILD_TIMEOUT_MS,
     });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+}
+
+function assertChildDidNotTimeOut(result: ReturnType<typeof spawnSync>, label: string) {
+  const timedOut =
+    result.signal === "SIGTERM"
+    || result.error?.message?.includes("ETIMEDOUT")
+    || (result.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT";
+  expect(timedOut, `${label}: promote child hit CONTRACT_CHILD_TIMEOUT_MS (${CONTRACT_CHILD_TIMEOUT_MS}ms) — hung promoter, not slow host budget`).toBe(false);
 }
 
 // BI-D47955AF. The promoter is candidate-owned but launched by the DEPLOYED portal, so an
@@ -118,78 +178,104 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --readiness host identity", () => {
   }, READINESS_SCRIPT_TIMEOUT_MS);
 });
 
+describe.skipIf(!BASH_AVAILABLE)("promote contract child timeout boundary (BI-72AEDE8B)", () => {
+  it("kills a hung bash child well under the vitest wall clock", () => {
+    const started = Date.now();
+    const result = spawnSync(BASH_COMMAND, ["-lc", "sleep 120"], {
+      encoding: "utf8",
+      timeout: 1_500,
+    });
+    const elapsed = Date.now() - started;
+    expect(elapsed).toBeLessThan(10_000);
+    const timedOut =
+      result.signal === "SIGTERM"
+      || result.error?.message?.includes("ETIMEDOUT")
+      || (result.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT";
+    expect(timedOut).toBe(true);
+  }, 15_000);
+});
+
 describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
   describe("required variables", () => {
     it("exits non-zero and names PROMOTE_SOURCE when missing", () => {
       const { PROMOTE_SOURCE: _omit, ...env } = BASE_ENV;
       const result = runScript(env);
+      assertChildDidNotTimeOut(result, "missing PROMOTE_SOURCE");
       expect(result.status).not.toBe(0);
       expect(result.stderr).toContain("PROMOTE_SOURCE");
-    }, READINESS_SCRIPT_TIMEOUT_MS);
+    }, CONTRACT_TEST_TIMEOUT_MS);
 
     it("exits non-zero and names PROMOTE_TARGET_SHA when missing", () => {
       const { PROMOTE_TARGET_SHA: _omit, ...env } = BASE_ENV;
       const result = runScript(env);
+      assertChildDidNotTimeOut(result, "missing PROMOTE_TARGET_SHA");
       expect(result.status).not.toBe(0);
       expect(result.stderr).toContain("PROMOTE_TARGET_SHA");
-    }, READINESS_SCRIPT_TIMEOUT_MS);
+    }, CONTRACT_TEST_TIMEOUT_MS);
 
     it("exits non-zero and names PROMOTE_BACKUP_PATH when missing", () => {
       const { PROMOTE_BACKUP_PATH: _omit, ...env } = BASE_ENV;
       const result = runScript(env);
+      assertChildDidNotTimeOut(result, "missing PROMOTE_BACKUP_PATH");
       expect(result.status).not.toBe(0);
       expect(result.stderr).toContain("PROMOTE_BACKUP_PATH");
-    }, READINESS_SCRIPT_TIMEOUT_MS);
+    }, CONTRACT_TEST_TIMEOUT_MS);
 
     it("exits non-zero and names PROMOTE_HEALTH_URL when missing", () => {
       const { PROMOTE_HEALTH_URL: _omit, ...env } = BASE_ENV;
       const result = runScript(env);
+      assertChildDidNotTimeOut(result, "missing PROMOTE_HEALTH_URL");
       expect(result.status).not.toBe(0);
       expect(result.stderr).toContain("PROMOTE_HEALTH_URL");
-    }, READINESS_SCRIPT_TIMEOUT_MS);
+    }, CONTRACT_TEST_TIMEOUT_MS);
   });
 
   describe("dry-run output", () => {
     it("exits zero when all required vars are present", () => {
       const result = runScript(BASE_ENV, ["--dry-run"]);
+      assertChildDidNotTimeOut(result, "dry-run success");
       expect(result.status).toBe(0);
-    }, READINESS_SCRIPT_TIMEOUT_MS);
+    }, CONTRACT_TEST_TIMEOUT_MS);
 
     it("redacts source path", () => {
       const result = runScript(
         { ...BASE_ENV, PROMOTE_SOURCE: "/internal/source-sentinel-xyz" },
         ["--dry-run"],
       );
+      assertChildDidNotTimeOut(result, "redact source");
       expect(result.status).toBe(0);
       expect(result.stdout).not.toContain("source-sentinel-xyz");
-    }, READINESS_SCRIPT_TIMEOUT_MS);
+    }, CONTRACT_TEST_TIMEOUT_MS);
 
     it("redacts backup path", () => {
       const result = runScript(
         { ...BASE_ENV, PROMOTE_BACKUP_PATH: "/internal/backup-sentinel-xyz" },
         ["--dry-run"],
       );
+      assertChildDidNotTimeOut(result, "redact backup");
       expect(result.status).toBe(0);
       expect(result.stdout).not.toContain("backup-sentinel-xyz");
-    }, READINESS_SCRIPT_TIMEOUT_MS);
+    }, CONTRACT_TEST_TIMEOUT_MS);
 
     it("redacts health URL", () => {
       const result = runScript(
         { ...BASE_ENV, PROMOTE_HEALTH_URL: "http://internal/health?token=sentinel-token-xyz" },
         ["--dry-run"],
       );
+      assertChildDidNotTimeOut(result, "redact health");
       expect(result.status).toBe(0);
       expect(result.stdout).not.toContain("sentinel-token-xyz");
-    }, READINESS_SCRIPT_TIMEOUT_MS);
+    }, CONTRACT_TEST_TIMEOUT_MS);
 
     it("includes target SHA unredacted", () => {
       const result = runScript(
         { ...BASE_ENV, PROMOTE_TARGET_SHA: "deadbeef12345678" },
         ["--dry-run"],
       );
+      assertChildDidNotTimeOut(result, "sha unredacted");
       expect(result.status).toBe(0);
       expect(result.stdout).toContain("deadbeef12345678");
-    }, READINESS_SCRIPT_TIMEOUT_MS);
+    }, CONTRACT_TEST_TIMEOUT_MS);
   });
 
   describe("step order in dry-run", () => {
@@ -211,7 +297,8 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
 
     beforeAll(() => {
       dryRunResult = runScript(BASE_ENV, ["--dry-run"]);
-    }, READINESS_SCRIPT_TIMEOUT_MS);
+      assertChildDidNotTimeOut(dryRunResult, "beforeAll dry-run");
+    }, CONTRACT_TEST_TIMEOUT_MS);
 
     it("exits zero", () => {
       expect(dryRunResult.status).toBe(0);
