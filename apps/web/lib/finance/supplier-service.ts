@@ -2,7 +2,6 @@
 
 import { prisma } from "@dpf/db";
 import {
-  SUPPLIER_STATUSES,
   type SupplierStatus,
   type SupplierOnboardingChecklist,
   type UpdateSupplierInput,
