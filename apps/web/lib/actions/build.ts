@@ -1527,11 +1527,10 @@ export async function completeBuild(buildId: string): Promise<void> {
   await recordReadyDependentsAfterCompletion({ db: prisma, buildId }).catch((err) => {
     console.error("[completeBuild] dependency readiness check failed:", err);
   });
-  // BI-8BD61C30: drop sandbox .builds/<id> when the build completes.
-  const { releaseSandboxForTerminalBuild } = await import(
-    "@/lib/integrate/sandbox/sandbox-build-gc"
-  );
-  await releaseSandboxForTerminalBuild(buildId, { deleteBranch: false }).catch(() => {});
+  // BI-8BD61C30: drop sandbox .builds/<id> when the build completes (best-effort).
+  void import("@/lib/integrate/sandbox/sandbox-build-gc")
+    .then((m) => m.releaseSandboxForTerminalBuild(buildId, { deleteBranch: false }))
+    .catch(() => {});
   revalidatePath("/build");
 }
 

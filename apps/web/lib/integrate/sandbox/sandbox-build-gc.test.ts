@@ -10,6 +10,12 @@ import {
 } from "./sandbox-build-gc";
 
 describe("sandbox-build-gc pure rules (BI-8BD61C30)", () => {
+  it("assertSafeBuildId accepts FB- ids and rejects shell metacharacters", async () => {
+    const { assertSafeBuildId } = await import("./sandbox-build-gc");
+    expect(assertSafeBuildId("FB-ADA4BA8F")).toBe("FB-ADA4BA8F");
+    expect(() => assertSafeBuildId("evil;rm -rf /")).toThrow(/invalid buildId/);
+  });
+
   it("gc worktree dir for missing and terminal phases only", () => {
     expect(shouldGcSandboxWorktreeDir(null)).toBe(true);
     expect(shouldGcSandboxWorktreeDir("complete")).toBe(true);

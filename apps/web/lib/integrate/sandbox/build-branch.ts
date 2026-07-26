@@ -925,7 +925,8 @@ export async function promoteBuildBranch(buildId: string): Promise<void> {
   const { releaseSandboxForTerminalBuild } = await import("./sandbox-build-gc");
   await releaseSandboxForTerminalBuild(buildId, { deleteBranch: true });
 
-  console.log(`[build-branch] Promoted ${branchName} → ${identity.clientBranch}`);
+  // Avoid logging request-scoped ids (CodeQL js/log-injection).
+  console.log("[build-branch] Promoted build branch into client branch");
 }
 
 /**
@@ -940,7 +941,7 @@ export async function abandonBuildBranch(buildId: string): Promise<void> {
     await execSandboxGit(
       `cd ${WORKSPACE} && git checkout "${identity.clientBranch}"`,
     );
-    console.log(`[build-branch] Abandoned build/${buildId} — back on ${identity.clientBranch}`);
+    console.log("[build-branch] Abandoned build — sandbox worktree released");
   } catch (err) {
     console.warn(`[build-branch] abandon failed (non-fatal): ${(err as Error).message?.slice(0, 100)}`);
   }

@@ -12,6 +12,7 @@
 
 import { prisma } from "@dpf/db";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
+import { sanitizeForLog } from "@/lib/security/safe-log";
 import {
   BUILD_WORKTREE_ROOT_SEGMENT,
   isBuildWorktreeIsolationEnabled,
@@ -28,19 +29,30 @@ const WORKSPACE = "/workspace";
  * Optionally deletes `build/<buildId>` (use after promote; abandon keeps branch for audit).
  * Lives here (not build-branch.ts) so the module-size ratchet on build-branch stays green.
  */
+/** Reject shell-metacharacters so buildId is safe in git/docker argv fragments. */
+export function assertSafeBuildId(buildId: string): string {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{2,64}$/.test(buildId)) {
+    throw new Error("invalid buildId for sandbox cleanup");
+  }
+  return buildId;
+}
+
 export async function releaseSandboxForTerminalBuild(
   buildId: string,
   options?: { deleteBranch?: boolean },
 ): Promise<void> {
-  await teardownBuildWorktree(buildId);
+  const safeId = assertSafeBuildId(buildId);
+  await teardownBuildWorktree(safeId);
   if (options?.deleteBranch) {
-    const branch = `build/${buildId}`;
+    const branch = `build/${safeId}`;
     await execInSandbox(
       SANDBOX_CONTAINER,
       `git -C ${WORKSPACE} branch -D "${branch}" 2>/dev/null || true`,
     ).catch((err) => {
       console.warn(
-        `[sandbox-build-gc] branch delete skipped for ${branch}: ${(err as Error).message?.slice(0, 160)}`,
+        "[sandbox-build-gc] branch delete skipped for %s: %s",
+        sanitizeForLog(branch),
+        sanitizeForLog((err as Error).message?.slice(0, 160) ?? ""),
       );
     });
   }
@@ -234,10 +246,16 @@ export async function runSandboxBuildGc(
     try {
       await removeWorktree(buildId);
       worktreesRemoved.push(buildId);
-      console.warn(`[sandbox-build-gc] removed worktree .builds/${buildId} (phase=${phase ?? "missing"})`);
+      console.warn(
+        "[sandbox-build-gc] removed worktree .builds/%s (phase=%s)",
+        sanitizeForLog(buildId),
+        sanitizeForLog(phase ?? "missing"),
+      );
     } catch (err) {
       console.warn(
-        `[sandbox-build-gc] worktree remove failed for ${buildId}: ${(err as Error).message?.slice(0, 160)}`,
+        "[sandbox-build-gc] worktree remove failed for %s: %s",
+        sanitizeForLog(buildId),
+        sanitizeForLog((err as Error).message?.slice(0, 160) ?? ""),
       );
     }
   }
@@ -258,10 +276,12 @@ export async function runSandboxBuildGc(
       try {
         await deleteBranch(buildId);
         branchesDeleted.push(buildId);
-        console.warn(`[sandbox-build-gc] deleted branch build/${buildId}`);
+        console.warn("[sandbox-build-gc] deleted branch build/%s", sanitizeForLog(buildId));
       } catch (err) {
         console.warn(
-          `[sandbox-build-gc] branch delete failed for ${buildId}: ${(err as Error).message?.slice(0, 160)}`,
+          "[sandbox-build-gc] branch delete failed for %s: %s",
+          sanitizeForLog(buildId),
+          sanitizeForLog((err as Error).message?.slice(0, 160) ?? ""),
         );
       }
     }
