@@ -8834,6 +8834,7 @@ model RouteDecisionLog {
   createdAt          DateTime @default(now())
   selectedModelId    String?
   suitabilityReceipt Json?
+  inferenceDataScreenReceipt Json?
 
   @@index([taskType])
   @@index([actorKind, actorId, createdAt])

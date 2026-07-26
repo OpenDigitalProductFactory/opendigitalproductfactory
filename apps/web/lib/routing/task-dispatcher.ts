@@ -191,6 +191,7 @@ async function persistDecision(
       shadowMode: context.shadowMode ?? false,
       selectedModelId: selectedCandidate?.modelId ?? null,
       suitabilityReceipt: decision.providerSuitabilityReceipt ?? undefined,
+      inferenceDataScreenReceipt: decision.inferenceDataScreenReceipt ?? undefined,
     },
   });
 }

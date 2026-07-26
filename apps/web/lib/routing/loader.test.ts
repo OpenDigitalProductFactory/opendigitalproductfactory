@@ -6,6 +6,7 @@ import {
   invalidateRoutingLoaderCache,
   persistRouteDecision,
 } from "./loader";
+import type { InferenceDataScreenReceipt } from "@/lib/inference/data-screening/types";
 import type { RouteDecision } from "./types";
 import { MODEL_ROUTING_ENDPOINT_TYPES } from "./provider-eligibility";
 
@@ -97,6 +98,17 @@ describe("persistRouteDecision", () => {
     expect(mockPrisma.routeDecisionLog.create.mock.calls[0]?.[0].data.suitabilityReceipt).toEqual(
       makeSuitabilityReceipt(),
     );
+  });
+
+  it("persists the privacy-safe inference data screen receipt when supplied", async () => {
+    const decision = makeDecision();
+    decision.inferenceDataScreenReceipt = makeInferenceDataScreenReceipt();
+
+    await persistRouteDecision(decision, { actor: { kind: "agent", id: "build-specialist" } });
+
+    const persisted = mockPrisma.routeDecisionLog.create.mock.calls[0]?.[0].data.inferenceDataScreenReceipt;
+    expect(persisted).toEqual(makeInferenceDataScreenReceipt());
+    expect(JSON.stringify(persisted)).not.toContain("Summarize Jane's payroll.");
   });
 });
 
@@ -377,5 +389,22 @@ function makeSuitabilityReceipt() {
     obligations: null,
     explanationCodes: ["provider-evidence-required"],
     createdAt: "2026-07-20T09:00:00.000Z",
+  };
+}
+
+function makeInferenceDataScreenReceipt(): InferenceDataScreenReceipt {
+  return {
+    schemaVersion: "inference-data-screen/v1" as const,
+    screenId: "screen_safe",
+    decisionIds: ["decision-safe"],
+    inputHash: "hash-safe",
+    classifiedDataClasses: ["employee-records"],
+    policyEffect: "deny" as const,
+    routeEffect: "local-only" as const,
+    destinationClass: "external-service" as const,
+    transformation: "blocked" as const,
+    explanationCodes: ["restricted-external-denied"],
+    obligationKinds: [],
+    rawPayloadStored: false,
   };
 }

@@ -4,6 +4,7 @@
  */
 import { prisma } from "@dpf/db";
 import type { CandidateTrace } from "@/lib/routing/types";
+import type { InferenceDataScreenReceipt } from "@/lib/inference/data-screening/types";
 import type { ProviderSuitabilityRouteReceipt } from "@/lib/routing/provider-suitability/evidence";
 import {
   rollUpProviderRoutingTelemetry,
@@ -25,6 +26,7 @@ export interface RouteDecisionLogRow {
   fallbackChain: string[];
   shadowMode: boolean;
   suitabilityReceipt: ProviderSuitabilityRouteReceipt | null;
+  inferenceDataScreenReceipt: InferenceDataScreenReceipt | null;
   createdAt: Date;
 }
 
@@ -56,6 +58,7 @@ export async function getRouteDecisionLogs(limit = 100): Promise<RouteDecisionLo
     fallbackChain: r.fallbackChain,
     shadowMode: r.shadowMode,
     suitabilityReceipt: r.suitabilityReceipt as ProviderSuitabilityRouteReceipt | null,
+    inferenceDataScreenReceipt: r.inferenceDataScreenReceipt as InferenceDataScreenReceipt | null,
     createdAt: r.createdAt,
   }));
 }
