@@ -115,7 +115,7 @@ The bootstrap is **idempotent** (re-running on a converged install is a no-op) a
 1. **Detects** which of Claude / Codex / Grok / Antigravity are installed — resolving GUI-app and non-PATH install locations, not just `which`.
 2. **Mints and persists a DPF MCP token** if one isn't present (issued inside the portal container, persisted to `~/.dpf/agent-toolchain.env` and your shell profile, never logged). Default scope is `write` so the agent can use side-effecting MCP tools (backlog, evidence, Build Studio handoff). On macOS it also injects the token via `launchctl` so GUI-launched apps — which don't read your shell profile — still pick it up.
 3. **Connects the DPF MCP server** in each client (`.mcp.json` / `.vscode/mcp.json` for Claude, `[mcp_servers.dpf]` in Codex/Grok config, and Antigravity's `mcpServers.dpf` config when available), all referencing `${DPF_MCP_BEARER_TOKEN}`.
-4. **Installs the `dpf-platform` plugin** for each client from the repo-local marketplace — this is the single package that carries the **skill pack**, the **MCP connector contract**, and the **governance hooks** (see [The plugin](#the-plugin-skills-hooks-and-mcp-in-one-package) below).
+4. **Installs the `dpf-platform` plugin** for each client from its local marketplace/registry — this is the single package that carries the shared **skill pack** and the cross-client hook/MCP contracts (see [The plugin](#the-plugin-skills-hooks-and-mcp-in-one-package) below). For Codex, the bootstrap registers and verifies the qualified plugin key `dpf-platform@personal`; copying plugin files alone is not considered installed.
 5. **Seeds kernel-tier memory** so the agent is kernel-aware from the first turn, before any MCP retrieval round-trip.
 6. **Runs read-only MCP + kernel smoke probes**, checks whether the DPF-native process-spine replacement skills are installed and visible to the current session, and prints a single **readiness banner**. On Grok, this check is **verified** (`grok plugin list --json`, run automatically by the bootstrap before the health check) rather than merely inferred from install state; Codex and Antigravity have no non-interactive way to list actively loaded skills yet, so their exposure stays `unknown` until their CLIs expose one — see the [process-spine skill exposure health design](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-07-19-process-spine-skill-exposure-health-design.md).
 
@@ -144,7 +144,7 @@ The banner reports **DPF-native replacement skills installed** separately from *
 
 ### The plugin: skills, hooks, and MCP in one package
 
-The bootstrap doesn't copy loose files around — it installs one **plugin**, `dpf-platform`, into each client. A plugin is the Claude Code (and Codex / Grok / Antigravity) packaging format that lets a single artifact declare **skills**, **hooks**, and **MCP servers** together. DPF ships all three from `packages/dpf-skill-pack` so one install makes any client fully DPF-native.
+The bootstrap doesn't rely on loose skill files — it installs one **plugin**, `dpf-platform`, into each client. The shared package owns the skills plus the cross-client hook and MCP contracts. Each client adapter then uses the host's supported registration surfaces. Claude can consume those declarations from its plugin manifest; Codex receives skills through the qualified `dpf-platform@personal` registry entry while the bootstrap wires Codex hooks and MCP in its global config.
 
 ```mermaid
 flowchart LR
@@ -165,7 +165,7 @@ flowchart LR
     mc --> client
 ```
 
-The manifest (`plugin.json`) is what ties it together — its `skills`, `hooks`, and `mcpServers` keys point at the three folders above. Codex, Grok, and Antigravity get parallel manifests (`.codex-plugin/plugin.json`, `.grok-plugin/plugin.json`, `.antigravity-plugin/plugin.json`) so the **same source of truth** installs on every surface.
+The surface manifest (`plugin.json`) ties the package to each host. Manifests declare only capabilities that host supports; the bootstrap adapter owns any remaining global wiring. Codex, Grok, and Antigravity get parallel manifests (`.codex-plugin/plugin.json`, `.grok-plugin/plugin.json`, `.antigravity-plugin/plugin.json`) so the **same source of truth** installs on every surface without pretending their plugin schemas are identical.
 
 > **One file per skill, two surfaces.** Each skill's `SKILL.md` is a superset that feeds **both** the external agent client (as the `dpf-platform:*` plugin namespace) **and** the in-portal coworker (seeded as a `SkillDefinition` row). You never maintain two copies.
 
@@ -248,7 +248,9 @@ DPF relies on local guardrails — the pre-commit secret scan + typecheck hook (
 
 #### Codex
 
-- Desktop/IDE app and CLI both read `~/.codex/config.toml`. The bearer token is referenced via `bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"`, never stored in the file. The plugin installs from `.codex-plugin/plugin.json`. **Check the draft-PR default** (above).
+- Desktop/IDE app and CLI both read `~/.codex/config.toml`. The bearer token is referenced via `bearer_token_env_var = "DPF_MCP_BEARER_TOKEN"`, never stored in the file.
+- The bootstrap publishes the repo-local package to Codex's personal marketplace, runs the equivalent of `codex plugin add dpf-platform@personal`, and verifies that the registry reports it installed and enabled. The canonical config key is `[plugins."dpf-platform@personal"]`; the bootstrap migrates the older invalid bare key without overriding an explicit user disable.
+- Codex's current plugin manifest exposes the skills and default prompts. The bootstrap separately wires the shared governance hooks and DPF MCP server in Codex's global configuration because those fields are not accepted in the Codex plugin manifest schema. **Check the draft-PR default** (above).
 
 #### Grok
 
@@ -414,7 +416,7 @@ The full operating contract is [AGENTS.md](https://github.com/OpenDigitalProduct
 | `/mcp` (or the client's MCP panel) doesn't list `dpf` | Restart the client in the repo root; GUI apps need a full restart to pick up a new token; re-run the bootstrap if still missing |
 | Banner shows `missing_token` | Issue a write token in Admin → Platform Development → MCP, then re-run the bootstrap |
 | Banner shows `needs_refresh` | Restart the client; if rotated, `POST /api/mcp/token/refresh` with the new token |
-| Skills / plugin not showing up | Confirm the `dpf-platform` plugin installed (re-run the bootstrap, `--show-substrate` for detail); restart the client |
+| Skills / plugin not showing up | Re-run the bootstrap and inspect `--show-substrate`; on Codex, confirm the qualified `dpf-platform@personal` registry entry is installed and enabled, then restart the client |
 | Retired generic process skills are visible but DPF replacements are missing | Stop before project work, restart the client, and re-run the bootstrap; the readiness banner distinguishes plugin files installed from replacement skills loaded in the active session |
 | PRs keep opening as drafts | Disable the "create PRs as draft" default in your client's GitHub settings (DPF uses ready-for-review PRs only) |
 | Tool returns `insufficient_token_scope` | Issue a scoped token, refresh, retry — do **not** bypass with direct DB edits |
