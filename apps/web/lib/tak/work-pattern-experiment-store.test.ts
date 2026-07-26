@@ -29,7 +29,7 @@ function makePersistence(): WorkPatternExperimentPersistence & {
       });
       await prior;
       try {
-        return await work();
+        return await work(this);
       } finally {
         release();
       }
@@ -72,7 +72,7 @@ const input = {
       { methodVariantKey: "candidate", patternVersion: 2 },
     ],
     modelVariants: [{ modelVariantKey: "model-a", modelProfileId: "profile-a" }],
-    installScope: "platform" as const,
+    installScope: "canonical" as const,
     promotionPolicyKey: "bounded-promotion",
     promotionPolicyVersion: 1,
   },
@@ -173,7 +173,7 @@ describe("work-pattern experiment store", () => {
 
     expect(retry.taskRunId).not.toBe(run.children[0]!.taskRunId);
     expect(retry.parentTaskRunId).toBe(run.parent.id);
-    expect(retry.a2aMetadata.workPatternExperimentCell.attempt).toBe(2);
+    expect(retry.a2aMetadata.workPatternExperimentCell!.attempt).toBe(2);
     expect(persistence.rows).toHaveLength(4);
   });
 
@@ -196,11 +196,25 @@ describe("work-pattern experiment store", () => {
         { persistence },
       );
       expect(parent.status).toBe(status);
-      expect(parent.a2aMetadata.workPatternExperiment.lifecycle).toBe(lifecycle);
+      expect(parent.a2aMetadata.workPatternExperiment!.lifecycle).toBe(lifecycle);
     }
     await expect(
       transitionWorkPatternExperiment(run.parent.taskRunId, "running", { persistence }),
     ).rejects.toThrow("illegal_work_pattern_experiment_transition");
+  });
+
+  it("fails closed when stored lifecycle metadata and A2A status have diverged", async () => {
+    const persistence = makePersistence();
+    const deps = {
+      persistence,
+      resolveOwnerUserId: vi.fn().mockResolvedValue("user-owner"),
+    };
+    const run = await createOrResumeWorkPatternExperiment(input, deps);
+    await persistence.updateTaskRun(run.parent.taskRunId, { status: "working" });
+
+    await expect(createOrResumeWorkPatternExperiment(input, deps)).rejects.toThrow(
+      "work_pattern_experiment_status_divergence",
+    );
   });
 
   it("converges duplicate ledger writes and attributes them to the orchestrating coworker", async () => {
@@ -223,7 +237,7 @@ describe("work-pattern experiment store", () => {
     ]);
 
     expect(first).toEqual(second);
-    expect(persistence.ledgers).toHaveLength(1);
+    expect(persistence.ledgers.size).toBe(1);
     expect(first.agentId).toBe("agent-orchestrator");
     expect(first.metadata).toMatchObject({ modelProfileId: "candidate-model" });
   });

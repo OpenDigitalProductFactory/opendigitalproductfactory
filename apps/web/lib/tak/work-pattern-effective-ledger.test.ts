@@ -52,6 +52,22 @@ describe("resolveEffectiveWorkPatternLedger", () => {
       ]),
     ).toThrow("work_pattern_ledger_supersession_cycle");
   });
+
+  it("fails closed when two corrections fork from the same evidence row", () => {
+    expect(() =>
+      resolveEffectiveWorkPatternLedger([
+        { ledgerId: "L1", metadata: {} },
+        {
+          ledgerId: "L2",
+          metadata: { supersedesLedgerId: "L1", invalidationReason: "first correction" },
+        },
+        {
+          ledgerId: "L3",
+          metadata: { supersedesLedgerId: "L1", invalidationReason: "second correction" },
+        },
+      ]),
+    ).toThrow("work_pattern_ledger_ambiguous_supersession");
+  });
 });
 
 describe("validateWorkPatternPromotionPair", () => {
