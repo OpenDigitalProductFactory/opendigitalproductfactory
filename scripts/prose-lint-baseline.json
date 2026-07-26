@@ -1196,6 +1196,20 @@
     "longSentences": 0,
     "textMass": 82
   },
+  "apps/web/app/(shell)/ops/error.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 25
+  },
+  "apps/web/app/(shell)/ops/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
+  },
   "apps/web/app/(shell)/ops/patches/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -1222,7 +1236,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 27
+    "textMass": 29
   },
   "apps/web/app/(shell)/platform/ai/agent/[agentId]/page.tsx": {
     "vocabulary": 0,
