@@ -131,11 +131,23 @@ export async function loadCoworkerRecord(
   const agent = await loadAgentWithRelations(decoded);
   if (!agent) return null;
 
+  const identityRefs = selectableCoworkerIdentityRefs(agent.agentId);
+  if (identityRefs.runtimeAgentId !== agent.agentId) {
+    const runtime = await prisma.agent.findFirst({
+      where: {
+        agentId: identityRefs.runtimeAgentId,
+        ...SELECTABLE_COWORKER_STATE,
+      },
+      select: { agentId: true },
+    });
+    if (!runtime) return null;
+  }
+
   const family = findProfessionFamilyForAgentIdentity(agent);
 
   const profileId = family ? professionProfileId(family.professionKey) : null;
   const canonicalAgentId = resolveCanonicalAgentId(agent.agentId);
-  const { runtimeAgentId } = selectableCoworkerIdentityRefs(canonicalAgentId);
+  const { runtimeAgentId } = identityRefs;
   const serviceProviderIds = [
     agent.agentId,
     canonicalAgentId,

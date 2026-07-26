@@ -263,6 +263,24 @@ describe("AgentCoworkerShell support entry", () => {
     expect(background).not.toHaveAttribute("aria-hidden");
   });
 
+  it("wraps backward focus from the mobile dialog container", async () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 390,
+    });
+    renderShell();
+    fireEvent.click(await screen.findByRole("button", { name: "Open coworker" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "AI coworker panel",
+    });
+    const close = screen.getByRole("button", { name: "Close" });
+    dialog.focus();
+    fireEvent.keyDown(dialog, { key: "Tab", shiftKey: true });
+
+    expect(close).toHaveFocus();
+  });
+
   it("recomputes mobile mode when the viewport crosses the breakpoint", async () => {
     Object.defineProperty(window, "innerWidth", {
       configurable: true,

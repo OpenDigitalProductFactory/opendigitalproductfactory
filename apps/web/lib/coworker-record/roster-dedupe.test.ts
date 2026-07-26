@@ -39,19 +39,26 @@ describe("dropDualSeedAliasAgents (BI-74FD6420)", () => {
     }
   });
 
-  it("keeps the slug row when its canonical twin is absent (orphan alias still usable)", () => {
+  it("hides a known slug row when its canonical detail record is absent", () => {
     const agents = [
       { agentId: "coo", displayName: "COO" },
       { agentId: "build-specialist", displayName: "Build Lead" },
     ];
     const kept = dropDualSeedAliasAgents(agents);
-    expect(kept.map((a) => a.agentId).sort()).toEqual(["build-specialist", "coo"]);
+    expect(kept).toEqual([]);
   });
 
-  it("is a no-op when the roster already has only canonical rows", () => {
+  it("hides mapped canonical rows when their executable slug is absent", () => {
     const agents = [
       { agentId: "AGT-ORCH-000", displayName: "COO" },
       { agentId: "AGT-WS-BUILD", displayName: "Build Lead" },
+    ];
+    expect(dropDualSeedAliasAgents(agents)).toEqual([]);
+  });
+
+  it("keeps an unmapped coworker whose canonical and runtime identity are the same", () => {
+    const agents = [
+      { agentId: "storefront-advisor", displayName: "Storefront Advisor" },
     ];
     expect(dropDualSeedAliasAgents(agents)).toEqual(agents);
   });

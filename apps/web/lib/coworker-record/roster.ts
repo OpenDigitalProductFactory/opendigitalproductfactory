@@ -94,19 +94,27 @@ type FamilyCoverage = {
 const DECISION_WINDOW_DAYS = 30;
 
 /**
- * Drop legacy dual-seed alias rows when their canonical AGT-* twin is present
- * (BI-74FD6420). Pure + exported for unit tests — seed retires the alias rows
- * long-term; this is the belt-and-suspenders roster filter for installs that
- * have not re-seeded yet.
+ * Keep one display row only when the full canonical + executable identity pair
+ * is selectable (BI-74FD6420). Known slug rows never render independently:
+ * their detail route canonicalizes to AGT-* and execution still uses the slug,
+ * so an orphan on either side cannot complete the roster's primary job.
  */
 export function dropDualSeedAliasAgents<T extends { agentId: string }>(
   agents: T[],
   slugToCanonical: Readonly<Record<string, string>> = COWORKER_SLUG_TO_CANONICAL_AGENT_ID,
 ): T[] {
   const present = new Set(agents.map((a) => a.agentId));
+  const canonicalToSlug = new Map(
+    Object.entries(slugToCanonical).map(([slug, canonical]) => [
+      canonical,
+      slug,
+    ]),
+  );
   return agents.filter((a) => {
     const canonical = slugToCanonical[a.agentId];
-    if (canonical && canonical !== a.agentId && present.has(canonical)) return false;
+    if (canonical && canonical !== a.agentId) return false;
+    const runtimeSlug = canonicalToSlug.get(a.agentId);
+    if (runtimeSlug && !present.has(runtimeSlug)) return false;
     return true;
   });
 }

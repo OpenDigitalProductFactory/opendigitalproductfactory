@@ -93,7 +93,7 @@ export function matchesQuery(row: RosterRow, query: string): boolean {
 
 export function matchesFilters(row: RosterRow, f: RosterFilters): boolean {
   if (!matchesQuery(row, f.query)) return false;
-  if (f.area && row.area.key !== f.area) return false;
+  if (f.area && !row.areas.some((area) => area.key === f.area)) return false;
   if (
     f.interaction &&
     !row.interaction.scopes.includes(

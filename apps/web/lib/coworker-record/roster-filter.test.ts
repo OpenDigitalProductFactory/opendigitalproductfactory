@@ -165,6 +165,28 @@ describe("matchesFilters", () => {
     ).toBe(false);
   });
 
+  it("matches a secondary service-defined owner area without duplicating the card", () => {
+    expect(
+      matchesFilters(
+        row({
+          areas: [
+            {
+              key: "products_and_services_sold",
+              label: "Customers and sales",
+              order: 1,
+            },
+            {
+              key: "foundational",
+              label: "Platform and back office",
+              order: 4,
+            },
+          ],
+        }),
+        { ...EMPTY_FILTERS, area: "products_and_services_sold" },
+      ),
+    ).toBe(true);
+  });
+
   it("filters by kind", () => {
     expect(matchesFilters(row({ kind: "orchestrator" }), { ...EMPTY_FILTERS, kind: "orchestrator" })).toBe(true);
     expect(matchesFilters(row({ kind: "specialist" }), { ...EMPTY_FILTERS, kind: "orchestrator" })).toBe(false);
