@@ -1303,6 +1303,11 @@ def main(argv: list[str]) -> int:
         codex_status = "skipped by flag"
         if not args.skip_codex_cli_install:
             codex_status = install_codex_plugin(home, args.dry_run)
+            # Codex currently writes a legacy `[plugins."<name>"]` alias while
+            # installing a qualified registry id. Converge again after the CLI
+            # mutation so the next process does not warn that `dpf-platform`
+            # lacks its `@marketplace` qualifier.
+            ensure_codex_config(home, args.mcp_url, args.dry_run, process_spine_root)
         codex_hooks_status = install_codex_hooks(codex_managed, home, args.dry_run)
         print(
             f"  Codex      : marketplace + config converged; plugin {codex_status}; "
