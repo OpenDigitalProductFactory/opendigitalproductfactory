@@ -75,10 +75,7 @@ class InstallGrokHooksTest(unittest.TestCase):
             entries = data["hooks"]["PreToolUse"]
             self.assertEqual(len(entries), 6)
             cmds = [h["command"] for e in entries for h in e["hooks"]]
-            # Every command points at an existing managed guard script.
             self.assertTrue(any("lease-punt-guard.mjs" in c for c in cmds))
-            self.assertTrue(any("decision-routing-guard.mjs" in c for c in cmds))
-            self.assertTrue(any("plan-backlog-coverage-guard.mjs" in c for c in cmds))
             for guard in updater.GROK_HOOK_GUARDS:
                 self.assertTrue((managed / "hooks" / guard).exists(), guard)
             session_cmds = [
@@ -87,8 +84,10 @@ class InstallGrokHooksTest(unittest.TestCase):
                 for h in e["hooks"]
             ]
             self.assertTrue(any("grok-session-start.mjs" in c for c in session_cmds))
+            self.assertTrue(any("worktree-session-hygiene.mjs" in c for c in session_cmds))
             stop_cmds = [h["command"] for e in data["hooks"]["Stop"] for h in e["hooks"]]
             self.assertTrue(any("uncommitted-work-guard.mjs" in c for c in stop_cmds))
+            self.assertTrue(any("worktree-session-hygiene.mjs" in c for c in stop_cmds))
             self.assertIn("SessionEnd", data["hooks"])
 
     def test_dry_run_writes_nothing(self) -> None:

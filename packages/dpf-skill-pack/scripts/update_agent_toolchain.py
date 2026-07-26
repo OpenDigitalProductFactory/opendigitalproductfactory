@@ -946,10 +946,22 @@ GROK_HOOK_GUARDS = (
     "plan-backlog-coverage-guard.mjs",
 )
 
-# Session/Stop plane for Grok (BI-BCA23DBB). Plugin hooks.json already names
-# these for Claude; Grok only executes the global ~/.grok/hooks plane.
-GROK_SESSION_START_SCRIPT = "grok-session-start.mjs"
-GROK_SESSION_END_SCRIPT = "uncommitted-work-guard.mjs"
+# Session/Stop plane for Grok (BI-BCA23DBB + session worktree hygiene).
+# Plugin hooks.json names these for Claude; Grok only executes ~/.grok/hooks.
+# - grok-session-start: process-spine exposure + governance-freshness
+# - worktree-session-hygiene: transactional Tier-A reap of THIS worktree (primary;
+#   fleet schedule ops/worktree-janitor is backstop only)
+GROK_SESSION_START_SCRIPTS = (
+    "grok-session-start.mjs",
+    "worktree-session-hygiene.mjs",
+)
+GROK_SESSION_END_SCRIPTS = (
+    "uncommitted-work-guard.mjs",
+    "worktree-session-hygiene.mjs",
+)
+# Back-compat single names (older docs / tests may reference these).
+GROK_SESSION_START_SCRIPT = GROK_SESSION_START_SCRIPTS[0]
+GROK_SESSION_END_SCRIPT = GROK_SESSION_END_SCRIPTS[0]
 
 
 def grok_hooks_file(home: Path) -> Path:
@@ -979,14 +991,21 @@ def build_grok_hooks_payload(managed: Path, dry_run: bool = False) -> dict[str, 
     payload: dict[str, Any] = {"hooks": {}}
     if pre_entries:
         payload["hooks"]["PreToolUse"] = pre_entries
-    if dry_run or (hooks_dir / GROK_SESSION_START_SCRIPT).exists():
-        payload["hooks"]["SessionStart"] = [
-            _grok_command_entry(hooks_dir, GROK_SESSION_START_SCRIPT, timeout=30)
-        ]
-    if dry_run or (hooks_dir / GROK_SESSION_END_SCRIPT).exists():
-        end_entry = _grok_command_entry(hooks_dir, GROK_SESSION_END_SCRIPT, timeout=15)
-        payload["hooks"]["SessionEnd"] = [end_entry]
-        payload["hooks"]["Stop"] = [end_entry]
+    start = [
+        _grok_command_entry(hooks_dir, script, timeout=30)
+        for script in GROK_SESSION_START_SCRIPTS
+        if dry_run or (hooks_dir / script).exists()
+    ]
+    if start:
+        payload["hooks"]["SessionStart"] = start
+    end = [
+        _grok_command_entry(hooks_dir, script, timeout=60)
+        for script in GROK_SESSION_END_SCRIPTS
+        if dry_run or (hooks_dir / script).exists()
+    ]
+    if end:
+        payload["hooks"]["SessionEnd"] = end
+        payload["hooks"]["Stop"] = end
     return payload
 
 
@@ -996,17 +1015,11 @@ def install_grok_hooks(managed: Path, home: Path, dry_run: bool) -> str:
     Live probe (BI-883FC2FC, Grok 0.2.87) proved Grok runs PreToolUse blocking
     command-hooks and honors deny, but its hook-execution plane loads ONLY from
     ~/.grok/hooks, ~/.claude/settings.json, and ~/.cursor/hooks — NOT from a
-    plugin's bundled hooks.json (a plugin shows has_hooks=true in inventory yet
-    contributes total_hooks=0 to the plane). So `grok plugin install` surfaces the
-    SKILLS but never the guards. This writes a global ~/.grok/hooks/dpf-guards.json
-    pointing at the managed guard copies. Global hooks are always-trusted (no
-    folder-trust prompt); the guards self-scope to DPF checkouts (inDpfWorkspace)
-    so they never fire DPF-branded denials in unrelated repos. Kernel ledger
-    DI-C17A5861CE0E (opt_global_context_gated).
+    plugin's bundled hooks.json. This writes a global ~/.grok/hooks/dpf-guards.json
+    pointing at the managed guard copies.
 
-    BI-BCA23DBB extends the same file with SessionStart (process-spine + competitive
-    exposure via grok-session-start.mjs) and SessionEnd/Stop (uncommitted durable
-    artifact warn) so headless and interactive Grok share one session plane.
+    BI-BCA23DBB: SessionStart via grok-session-start.mjs + SessionEnd uncommitted warn.
+    Session worktree hygiene: Tier-A reap of THIS worktree on SessionEnd (primary path).
     """
     payload = build_grok_hooks_payload(managed, dry_run=dry_run)
     pre_count = len(payload.get("hooks", {}).get("PreToolUse", []))
@@ -1285,6 +1298,7 @@ HOOK_PURPOSES = {
     "process-spine-health-check.mjs": "SessionStart: warns when DPF-native replacement skills are missing or hidden by retired generic skills",
     "governance-freshness-check.mjs": "SessionStart: warns if governance guard wiring is stale",
     "grok-session-start.mjs": "Grok SessionStart: process-spine exposure probe + governance-freshness (global hook plane)",
+    "worktree-session-hygiene.mjs": "SessionStart observe worktree sprawl; SessionEnd reaps THIS worktree when Tier-A (merged+clean) — primary reaper, not cron",
     "uncommitted-work-guard.mjs": "SessionEnd/Stop/post-checkout: warns before uncommitted spec/plan loss",
 }
 
