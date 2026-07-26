@@ -754,6 +754,27 @@ def ensure_antigravity_mcp_config(home: Path, mcp_url: str, dry_run: bool) -> st
     return "converged" if changed else "already current"
 
 
+def ensure_antigravity_skills(skill_pack: Path, home: Path, dry_run: bool) -> str:
+    """Sync skills from packages/dpf-skill-pack/skills to ~/.gemini/antigravity/skills."""
+    source = skill_pack / "skills"
+    dest = home / ".gemini" / "antigravity" / "skills"
+    if not source.exists():
+        return "skipped: source skills directory missing"
+    if dry_run:
+        return f"dry-run: would copy skills from {source} to {dest}"
+    dest.mkdir(parents=True, exist_ok=True)
+    count = 0
+    for skill_dir in source.iterdir():
+        if skill_dir.is_dir() and (skill_dir / "SKILL.md").exists():
+            target = dest / skill_dir.name
+            if target.exists():
+                shutil.rmtree(target)
+            ignore = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
+            shutil.copytree(skill_dir, target, ignore=ignore)
+            count += 1
+    return f"synced {count} skill(s) -> {dest}"
+
+
 def install_grok_plugin(managed: Path, dry_run: bool) -> str:
     """Install the plugin into Grok's OWN plugin store.
 
@@ -1178,13 +1199,13 @@ def main(argv: list[str]) -> int:
         # blocking guards are delivered via the always-trusted global hook plane.
         grok_hooks_status = install_grok_hooks(managed, home, args.dry_run)
         print(f"  Grok hooks : {grok_hooks_status}")
-        # Antigravity (agy): MCP-config wiring only. Its plugin-install verb and
-        # hook plane are unconfirmed (EP-ANTIGRAVITY-001 evidence gate), so we do
-        # not install a plugin or hooks here — just wire the governed MCP server.
+        # Antigravity (agy): MCP-config wiring + skill-pack sync.
         antigravity_status = "skipped by flag"
         if not args.skip_antigravity_cli_install:
-            antigravity_status = ensure_antigravity_mcp_config(home, args.mcp_url, args.dry_run)
-        print(f"  Antigravity: MCP config {antigravity_status}")
+            mcp_st = ensure_antigravity_mcp_config(home, args.mcp_url, args.dry_run)
+            skills_st = ensure_antigravity_skills(skill_pack, home, args.dry_run)
+            antigravity_status = f"MCP config {mcp_st}; skills {skills_st}"
+        print(f"  Antigravity: {antigravity_status}")
 
     if not args.codex_only:
         ensure_claude_marketplace(home, version, args.dry_run)
