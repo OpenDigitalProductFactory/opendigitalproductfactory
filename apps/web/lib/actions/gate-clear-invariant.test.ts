@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
@@ -39,6 +39,10 @@ function tsFiles(dir: string): string[] {
 
 const WRITES_A_CAPTURE = /(escalationCapture|deferralCapture)\.create\b/;
 
+function relativeSourcePath(file: string): string {
+  return relative(LIB_ROOT, file).replaceAll("\\", "/");
+}
+
 /**
  * True when a source file contains a `clearsGate:` write whose value is not the
  * literal `false` — i.e. `clearsGate: true` or a dynamic expression that can
@@ -60,7 +64,7 @@ describe("gate-clear write invariant (BI-6EC1EE25)", () => {
       const src = readFileSync(file, "utf8");
       if (!setsClearsGateTruthy(src)) continue;
       if (!WRITES_A_CAPTURE.test(src)) {
-        offenders.push(file.slice(LIB_ROOT.length + 1));
+        offenders.push(relativeSourcePath(file));
       }
     }
     expect(
@@ -75,7 +79,7 @@ describe("gate-clear write invariant (BI-6EC1EE25)", () => {
     // Guards against the regex silently matching nothing (e.g. a rename) and the
     // invariant passing vacuously.
     const writers = tsFiles(LIB_ROOT).filter((f) => setsClearsGateTruthy(readFileSync(f, "utf8")));
-    const rel = writers.map((f) => f.slice(LIB_ROOT.length + 1)).sort();
+    const rel = writers.map(relativeSourcePath).sort();
     expect(rel).toEqual([
       "actions/decision-perspective.ts",
       "actions/org-decision-capture.ts",

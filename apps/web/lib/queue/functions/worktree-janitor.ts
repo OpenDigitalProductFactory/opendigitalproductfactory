@@ -1,24 +1,25 @@
-// BI-42FA7DD8 — Worktree Tier-A scheduled janitor.
+// BI-42FA7DD8 — Worktree Tier-A FLEET BACKSTOP (optional schedule).
+//
+// PRIMARY path is transactional, not this cron:
+//   packages/dpf-skill-pack/hooks/worktree-session-hygiene.mjs on SessionStart
+//   (observe) + SessionEnd/Stop (reap THIS session's worktree when Tier-A).
+// That fires on every client that loaded dpf-platform (Claude plugin / Grok
+// global hooks / Codex hooks) — no per-client cron to configure, no "schedule
+// went dark" failure mode for the common case.
+//
+// THIS module is an optional fleet sweeper for leftovers (abandoned worktrees
+// after crashes, clients without hooks). It is server-side Inngest (portal),
+// NOT a CLI client cron. It still may not see host worktrees when the portal
+// container lacks a host git view — then it no-ops.
 //
 // Spec: docs/superpowers/specs/2026-07-26-multi-client-governance-parity-design.md § D4
-// Kernel: worktree-selection-and-reaping, destructive-actions-require-explicit-go,
-//         remove-avoidable-failure-opportunities
+// Kernel: worktree-selection-and-reaping, destructive-actions-require-explicit-go
 //
-// Complements:
-//   - scripts/worktree-janitor.sh / scripts/worktree-janitor.mjs (host CLI)
-//   - runtime-target-janitor (DB lease/RT records)
-//   - runtime-artifact-janitor (Docker observe-only)
-//
-// SAFETY DOCTRINE
+// SAFETY DOCTRINE (backstop)
 //   * Default OFF (DPF_WORKTREE_JANITOR_ENABLED not set) — no scan.
-//   * When ENABLED without AUTO_REAP: dry-run observe only (logs would-reap Tier A/B).
-//   * When AUTO_REAP=1: live removal of **Tier A only** (merged+clean+no open PR/lease).
-//     Tier B (stale unmerged) is NEVER live-reaped by the schedule — observe only.
+//   * When ENABLED without AUTO_REAP: dry-run observe only.
+//   * When AUTO_REAP=1: live **Tier A only**. Tier B never auto-deleted here.
 //   * Removals use junction-safe-worktree-remove.mjs via the CLI.
-//
-// The schedule may run inside the portal container. When git worktrees are not
-// visible (no /host-dpf, no worktree list), the CLI returns available:false and
-// the schedule degrades to a skip — never throws.
 
 import { cron } from "inngest";
 import { inngest } from "../inngest-client";

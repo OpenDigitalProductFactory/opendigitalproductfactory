@@ -131,6 +131,24 @@ vi.mock("@/lib/tak/work-pattern-read-model", () => ({
           },
           blockers: [],
         },
+        experiment: {
+          label: "Testing a better method",
+          lifecycle: "running",
+          validPairCount: 0,
+          resultSummary: "Candidate and baseline are still running.",
+          evidenceOrigin: "hermetic-replay",
+          moreEvidenceNeeded: true,
+          invalidPairReasons: [],
+          methodVariants: ["baseline", "candidate"],
+          modelVariants: ["model-a", "model-b"],
+          installScope: "canonical",
+          taskCorpusVersion: "1",
+          oracleVersion: "1",
+          promotionPolicyVersion: 1,
+          freshnessAt: "2026-06-28T11:30:00.000Z",
+          experimentRunId: "WPR-1",
+          experimentDefinitionKey: "WPD-1",
+        },
       },
       {
         patternKey: "prompt-refinement|hr-specialist|/build",
@@ -574,6 +592,10 @@ describe("AgentDetailPage", () => {
     expect(html).toContain("Living Playbooks");
     expect(html).toContain("Missing sandbox lease grant");
     expect(html).toContain("Shadow evidence");
+    expect(html).toContain("Testing a better method");
+    expect(html).toContain("0 valid pairs");
+    expect(html).toContain("More comparable evidence is needed");
+    expect(html).toContain("Experiment evidence details");
     expect(html).toContain("95% agreement");
     expect(html).toContain("approve narrower scope");
     expect(html).toContain("Approve candidate");

@@ -93,6 +93,7 @@ import {
 } from "./semantic-memory-reconcile";
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 import { demandReconciliationScheduled } from "./demand-reconciliation";
+import { workPatternExperimentRun } from "./work-pattern-experiment";
 
 export const scheduledFunctions = [
   prometheusPoll,
@@ -181,6 +182,7 @@ export const eventFunctions = [
   coworkerCertificationRunNow, // EP-COWORKER-LIFECYCLE P2 (BI-DE9CC88B): operator "run now" certification sweep
   semanticMemoryReconcileRequested, // BI-DG-001: operator "run now" semantic-memory orphan reconciliation
   postmarkCallbackDispatchRequested,
+  workPatternExperimentRun,
 ];
 
 export const allFunctions = [...scheduledFunctions, ...eventFunctions];

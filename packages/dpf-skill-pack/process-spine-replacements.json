@@ -27,13 +27,13 @@
       },
       {
         "client": "grok",
-        "status": "warn-only",
+        "status": "reconciles-safe-config",
         "competitivePluginIds": [
           "superpowers",
           "superpowers@openai-curated",
           "superpowers@openai-bundled"
         ],
-        "action": "warn-until-adapter-verified"
+        "action": "disable-plugin"
       },
       {
         "client": "antigravity",

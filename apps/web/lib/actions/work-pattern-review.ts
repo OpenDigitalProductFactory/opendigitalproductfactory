@@ -24,8 +24,8 @@ import {
 import {
   evaluateWorkPatternShadowEvidence,
   parseAutonomyLevel,
+  parseLegacyWorkPatternShadowTrials,
   parseRiskClass,
-  parseWorkPatternShadowTrials,
 } from "@/lib/tak/work-pattern-shadow-evaluation";
 import {
   buildWorkPatternReview,
@@ -360,10 +360,7 @@ export async function recordWorkPatternReview(formData: FormData): Promise<Revie
     stringField(evidenceJson, "patternKey") ?? stringField(readinessJson, "patternKey");
   if (!patternKey) throw new Error("work_pattern_missing_pattern_key");
 
-  const shadowTrials = [
-    ...parseWorkPatternShadowTrials(evidenceJson.shadowTrials),
-    ...parseWorkPatternShadowTrials(readinessJson.shadowTrials),
-  ];
+  const shadowTrials = parseLegacyWorkPatternShadowTrials(evidenceJson, readinessJson);
   const currentLevel =
     parseAutonomyLevel(stringField(evidenceJson, "currentAutonomyLevel")) ??
     parseAutonomyLevel(stringField(readinessJson, "currentAutonomyLevel"));
@@ -531,6 +528,16 @@ export async function recordWorkPatternReview(formData: FormData): Promise<Revie
         readinessJson: mergeWorkPatternReviewState(readinessJson, reviewWithStaging) as Prisma.InputJsonValue,
       },
     });
+  });
+
+  const { scheduleReviewedWorkPatternExperiment } = await import(
+    "@/lib/tak/work-pattern-experiment-scheduler"
+  );
+  await scheduleReviewedWorkPatternExperiment({
+    action,
+    candidate: evidenceJson.workPatternExperimentCandidate,
+    reviewerUserId: userId,
+    orchestratingAgentId: need.agentId,
   });
 
   revalidatePath(routeContext);

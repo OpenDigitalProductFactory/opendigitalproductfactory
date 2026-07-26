@@ -38,7 +38,8 @@ import type { BacklogIngestInput } from "@/lib/operate/backlog-ingest";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 import { tryAcquireBacklogClaimAtomic } from "@/lib/backlog/claim-on-start";
-
+import { normalizeCompletionEvidenceManifest } from "@/lib/backlog/completion-evidence-policy";
+import { backlogStatusToolDefinition } from "./backlog-status-tool-definition";
 const definitions: ToolDefinition[] = [
   {
     name: "create_backlog_item",
@@ -266,23 +267,7 @@ const definitions: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: false,
   },
-  {
-    name: "update_backlog_item_status",
-    description: "Move a backlog item between lifecycle statuses. Enforces the legal-transition table; same-status calls are no-op successes. Setting status='triaging' on an already-triaged item is the *retriage* path — clears triageOutcome and effortSize so triage_backlog_item can re-decide. Setting status='done' requires a resolution. Writes a status_change activity row and may auto-close the parent epic. Moving an item to in-progress ACQUIRES its work claim and is rejected with error=claim_conflict if another session already holds a fresh active claim (pass force=true to take it over); the claim is released when the item leaves in-progress. NOTE: this only changes the status field — it does NOT start work. For a triageOutcome=build item, starting the work means promote_to_build_studio (creates the FeatureBuild + Build Studio Ideate); flipping such an item to in-progress returns an advisory and does not build anything.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        itemId: { type: "string", description: "Semantic backlog item id" },
-        status: { type: "string", enum: ["triaging", "open", "in-progress", "done", "deferred"], description: "Target status. 'triaging' from a triaged status is allowed and clears the prior triage decision." },
-        reason: { type: "string", description: "Free-text rationale captured in the activity row. Required when status=triaging from a triaged status." },
-        resolution: { type: "string", description: "Outcome summary, required when status=done" },
-        force: { type: "boolean", description: "When moving to in-progress, take over a claim already held by another active session (default false). The takeover is recorded on the status_change activity row." },
-      },
-      required: ["itemId", "status"],
-    },
-    requiredCapability: "manage_backlog",
-    sideEffect: true,
-  },
+  backlogStatusToolDefinition,
   {
     name: "link_backlog_item_to_epic",
     description: "Link a backlog item to an epic (or unlink with epicId=null). Recomputes target epic status — if a done epic gains a new open item, it flips back to open. Writes an epic_link activity row. NOTE: linking is organizational only — it does NOT triage the item (use triage_backlog_item) and does NOT promote it or create a build (use promote_to_build_studio). Linking an untriaged/unpromoted item returns an advisory; never report an epic link as 'triaged' or 'promoted'.",
@@ -643,6 +628,10 @@ async function updateBacklogItemStatus(
     };
   const reason = typeof params["reason"] === "string" ? params["reason"] : null;
   const resolution = typeof params["resolution"] === "string" ? params["resolution"] : null;
+  const completionEvidence =
+    target === "done"
+      ? normalizeCompletionEvidenceManifest(params["completionEvidence"])
+      : null;
   if (target === "done" && !resolution)
     return {
       success: false,
@@ -755,6 +744,17 @@ async function updateBacklogItemStatus(
           to: target,
           reason: reason ?? null,
           resolution: resolution ?? null,
+          ...(completionEvidence
+            ? {
+                completionEvidence: {
+                  workClass: completionEvidence.workClass,
+                  evidenceActivityIds: completionEvidence.evidenceActivityIds,
+                  useActiveBuildEvidence: completionEvidence.useActiveBuildEvidence,
+                  ux: completionEvidence.ux ?? null,
+                  migration: completionEvidence.migration ?? null,
+                },
+              }
+            : {}),
           ...(isRetriage
             ? {
                 retriage: true,

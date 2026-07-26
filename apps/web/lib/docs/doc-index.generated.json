@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 552,
+  "pageCount": 553,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -393,9 +393,25 @@
         "capability-matrix-verified-2026-06-20",
         "2026-06-26-refresh-delivery-surface-sweep",
         "2026-07-24-refresh-bi-14e9f7ce-closeout-grok-hook-portability",
+        "governance-outcomes-g1g9-multi-client-parity",
         "what-this-currently-tells-us-the-open-adoption-gaps",
         "refresh-ritual-monthly-how-this-stays-fresh",
         "related"
+      ]
+    },
+    "docs/architecture/agent-client-governance.md": {
+      "publicHref": "/architecture/agent-client-governance/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "agent-client-governance",
+        "the-four-governance-altitudes",
+        "which-plane-owns-what",
+        "evidence-earned-completion",
+        "client-identity-and-trust",
+        "operator-attention",
+        "adding-another-consequential-gate"
       ]
     },
     "docs/architecture/agent-skill-index.md": {
@@ -8480,6 +8496,7 @@
         "agent-authority-overview",
         "tool-execution-log",
         "effective-permissions",
+        "living-playbook-experiments",
         "tool-evaluation-pipeline",
         "development-surfaces"
       ]

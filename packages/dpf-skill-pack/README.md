@@ -44,8 +44,12 @@ The same JSON file also owns the cleanup/update lifecycle policy. The policy is
 `disable-not-delete`: rerunning bootstrap or the updater after a skill-pack
 change replaces the managed DPF copy and lets tested client adapters disable
 known competitive plugins. It does not remove user-owned skill files or plugin
-caches. Today Codex has a safe config adapter; Claude, Grok, and Antigravity
-report warn-only until their active-state cleanup adapters are verified.
+caches. Today Codex and Grok have safe disable adapters (`enabled = false` / `grok
+plugin disable`); Claude and Antigravity report warn-only until their
+active-state cleanup adapters are verified. Grok also materializes a global
+`~/.grok/hooks/dpf-guards.json` (PreToolUse + SessionStart + SessionEnd/Stop)
+because its hook plane ignores plugin-bundled hooks; Build Studio Grok seeds
+the same pack at dispatch time (BI-BCA23DBB / BI-C5F9A232).
 
 ## Skills shipped in v0.1.0
 

@@ -149,5 +149,23 @@ describe("filterCoworkerOffers", () => {
 
     expect(filterCoworkerOffers(catalog.offers, { jurisdiction: "eu" })).toEqual([]);
   });
-});
 
+  it("keeps archetype filtering exact without wildcard, empty-list, or category expansion", () => {
+    const catalog = buildCoworkerCatalog(baseRows);
+
+    expect(filterCoworkerOffers(catalog.offers, { archetype: "professional-services" })).toHaveLength(1);
+    expect(filterCoworkerOffers(catalog.offers, { archetype: "legal-services" })).toEqual([]);
+
+    const wildcardCatalog = buildCoworkerCatalog({
+      ...baseRows,
+      services: [{ ...baseRows.services[0], archetypes: ["*"] }],
+    });
+    expect(filterCoworkerOffers(wildcardCatalog.offers, { archetype: "professional-services" })).toEqual([]);
+
+    const emptyCatalog = buildCoworkerCatalog({
+      ...baseRows,
+      services: [{ ...baseRows.services[0], archetypes: [] }],
+    });
+    expect(filterCoworkerOffers(emptyCatalog.offers, { archetype: "professional-services" })).toEqual([]);
+  });
+});

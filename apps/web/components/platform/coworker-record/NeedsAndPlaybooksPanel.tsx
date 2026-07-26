@@ -184,7 +184,103 @@ function PlaybookRow({ pattern, canWrite }: { pattern: WorkPatternSummary; canWr
       {pattern.shadowEvaluation ? (
         <ShadowEvidenceRow evaluation={pattern.shadowEvaluation} />
       ) : null}
+      {pattern.experiment ? <ExperimentEvidenceRow experiment={pattern.experiment} /> : null}
       <PlaybookReviewRow pattern={pattern} canWrite={canWrite} />
+    </div>
+  );
+}
+
+function ExperimentEvidenceRow({
+  experiment,
+}: {
+  experiment: NonNullable<WorkPatternSummary["experiment"]>;
+}) {
+  const hasValidEvidence = experiment.validPairCount > 0;
+  const tone =
+    experiment.lifecycle === "cancelled"
+      ? "error"
+      : hasValidEvidence && !experiment.moreEvidenceNeeded
+        ? "success"
+        : "warning";
+  const stateLabel =
+    experiment.lifecycle === "running" || experiment.lifecycle === "analyzing"
+      ? "in progress"
+      : experiment.lifecycle;
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: 6,
+        marginTop: 8,
+        padding: "8px 9px",
+        borderRadius: 5,
+        border: "1px solid var(--dpf-border)",
+        background: "var(--dpf-surface-1)",
+      }}
+      aria-label="Work-pattern experiment evidence"
+    >
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
+        <Chip tone="accent">{experiment.label}</Chip>
+        <Chip tone={tone}>{stateLabel}</Chip>
+        <Chip tone={hasValidEvidence ? "success" : "warning"}>
+          {experiment.validPairCount} valid {experiment.validPairCount === 1 ? "pair" : "pairs"}
+        </Chip>
+        <Chip tone="muted">
+          {experiment.evidenceOrigin === "hermetic-replay"
+            ? "replay evidence"
+            : experiment.evidenceOrigin === "matched-cohort"
+              ? "matched evidence"
+              : "evidence origin pending"}
+        </Chip>
+      </div>
+      <div style={{ fontSize: 12, color: "var(--dpf-text)", overflowWrap: "anywhere" }}>
+        {experiment.resultSummary}
+      </div>
+      <div style={{ fontSize: 12, color: "var(--dpf-muted)" }}>
+        {experiment.moreEvidenceNeeded
+          ? "More comparable evidence is needed before this method can be promoted."
+          : "The evidence set is ready for governed review."}
+      </div>
+      <details>
+        <summary
+          style={{
+            cursor: "pointer",
+            fontSize: 12,
+            fontWeight: 600,
+            color: "var(--dpf-accent)",
+          }}
+        >
+          Experiment evidence details
+        </summary>
+        <div
+          style={{
+            display: "grid",
+            gap: 4,
+            marginTop: 6,
+            fontSize: 12,
+            color: "var(--dpf-muted)",
+            overflowWrap: "anywhere",
+          }}
+        >
+          <span>Methods: {experiment.methodVariants.join(", ")}</span>
+          <span>Models: {experiment.modelVariants.join(", ")}</span>
+          <span>
+            Scope: {experiment.installScope}; corpus v{experiment.taskCorpusVersion}; oracle v
+            {experiment.oracleVersion}; promotion policy v{experiment.promotionPolicyVersion}
+          </span>
+          {experiment.invalidPairReasons.length > 0 ? (
+            <span>Pairs not used: {experiment.invalidPairReasons.join(", ")}</span>
+          ) : null}
+          {experiment.freshnessAt ? (
+            <span>
+              Evidence refreshed <LocalTime value={experiment.freshnessAt} mode="date" />
+            </span>
+          ) : null}
+          <span>
+            Engineer IDs: {experiment.experimentRunId}; {experiment.experimentDefinitionKey}
+          </span>
+        </div>
+      </details>
     </div>
   );
 }

@@ -83,6 +83,14 @@
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/governance-freshness-check.mjs\""
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-session-hygiene.mjs\""
+          }
+        ]
       }
     ],
     "SessionEnd": [
@@ -93,6 +101,14 @@
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/uncommitted-work-guard.mjs\""
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-session-hygiene.mjs\""
+          }
+        ]
       }
     ],
     "Stop": [
@@ -101,6 +117,14 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/uncommitted-work-guard.mjs\""
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/worktree-session-hygiene.mjs\""
           }
         ]
       }
