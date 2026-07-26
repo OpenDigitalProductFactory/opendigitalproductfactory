@@ -111,16 +111,50 @@ export function WorkOfferedPanel({
   );
 }
 
+export function WorkHighlights({
+  services,
+}: {
+  services: CoworkerRecord["services"];
+}) {
+  const highlighted = activeRosterServices(services).slice(0, 3);
+  if (highlighted.length === 0) {
+    return (
+      <p className="text-sm text-[var(--dpf-muted)]">
+        No active work has been declared for this coworker yet.
+      </p>
+    );
+  }
+
+  return (
+    <ul className="divide-y divide-[var(--dpf-border)] border-y border-[var(--dpf-border)]">
+      {highlighted.map((service) => (
+        <li key={service.serviceId} className="py-3">
+          <h3 className="text-sm font-semibold text-[var(--dpf-text)]">
+            {service.name}
+          </h3>
+          {service.summary && (
+            <p className="mt-1 text-sm leading-5 text-[var(--dpf-text-secondary)]">
+              {service.summary}
+            </p>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function AvailabilityPanel({
   availability,
   authority,
   interactionLabel,
   installArchetypeId,
+  canStartConversation,
 }: {
   availability: CoworkerAvailabilityProjection;
   authority: CoworkerAuthorityProjection;
   interactionLabel: string;
   installArchetypeId: string | null;
+  canStartConversation: boolean;
 }) {
   return (
     <div className="space-y-5">
@@ -138,7 +172,9 @@ export function AvailabilityPanel({
           detail={
             availability.state === "available"
               ? "This coworker's declared work can be used for this business type."
-              : "Work entry stays unavailable until this status changes."
+              : canStartConversation
+                ? "You can ask this coworker questions; service readiness remains separate."
+                : "Conversation and service entry remain unavailable until this status changes."
           }
         />
         <OwnerStatus

@@ -30,11 +30,11 @@ areas only when an active service is assigned there. Unassigned work remains in
 3. Filter by business area, interaction, availability, or attention state. Additional profession and lifecycle filters are under **More filters**.
 4. Read the three compact signals on each coworker: who they interact with, whether their declared work supports this business type, and their approval/autonomy posture.
 5. Choose **View coworker** for the full record.
-6. Choose **Ask this coworker** only when the roster shows the coworker as available. This opens the existing coworker panel without sending a message for you.
+6. Choose **Ask this coworker** when the coworker's declared work explicitly applies to your business type and no safety blocker applies. This opens the existing coworker panel without sending a message for you. Asking a question does not claim that every service prerequisite is ready.
 
 The roster keeps filter state in the URL. Returning from a coworker record restores the same directory view.
 
-An unavailable label is not a runtime guess. It is projected from the current storefront business type, explicit coworker service declarations, and an explicit readiness evaluation. Missing declarations or unevaluated readiness appear as **Coverage not defined** rather than being treated as universal support or enabling work prematurely.
+An availability label is not a runtime guess. It is projected from the current storefront business type, explicit coworker service declarations, and an explicit readiness evaluation. Missing declarations or unevaluated service readiness appear as **Coverage not defined** rather than being treated as universal support. When business-type applicability is explicit, you may still ask the coworker a question while service readiness remains unevaluated.
 
 ## Key Concepts
 

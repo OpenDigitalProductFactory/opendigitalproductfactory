@@ -15,7 +15,6 @@
 
 import { prisma } from "@dpf/db";
 import {
-  CANONICAL_AGENT_ID_TO_COWORKER_SLUG,
   resolveCanonicalAgentId,
 } from "@dpf/db/agent-identity";
 import { getAgentGaidMap } from "@/lib/identity/principal-linking";
@@ -32,6 +31,10 @@ import { loadInstallAvailabilityContext } from "./availability-context";
 import type { CoworkerInstallArchetypeResolution } from "@/lib/coworker-service-catalog/availability-projection";
 import { loadCoworkerDiscoveryServices } from "@/lib/coworker-service-catalog/catalog";
 import type { RosterServiceEvidence } from "./roster-presentation";
+import {
+  SELECTABLE_COWORKER_STATE,
+  selectableCoworkerIdentityRefs,
+} from "./selectable-coworker";
 
 /** Recommend / arbitrate / escalate / defer tally for a coworker's profile. */
 export type DecisionSignal = {
@@ -69,8 +72,12 @@ export type CoworkerRecord = {
 const DECISION_WINDOW_DAYS = 30;
 
 async function loadAgentWithRelations(idOrSlug: string) {
+  const { canonicalAgentId } = selectableCoworkerIdentityRefs(idOrSlug);
   return prisma.agent.findFirst({
-    where: { OR: [{ agentId: idOrSlug }, { slugId: idOrSlug }] },
+    where: {
+      agentId: canonicalAgentId,
+      ...SELECTABLE_COWORKER_STATE,
+    },
     include: {
       executionConfig: true,
       skills: { orderBy: { sortOrder: "asc" } },
@@ -128,11 +135,12 @@ export async function loadCoworkerRecord(
 
   const profileId = family ? professionProfileId(family.professionKey) : null;
   const canonicalAgentId = resolveCanonicalAgentId(agent.agentId);
+  const { runtimeAgentId } = selectableCoworkerIdentityRefs(canonicalAgentId);
   const serviceProviderIds = [
     agent.agentId,
     canonicalAgentId,
     agent.slugId,
-    CANONICAL_AGENT_ID_TO_COWORKER_SLUG[canonicalAgentId],
+    runtimeAgentId,
   ].filter((value): value is string => Boolean(value));
 
   const [
@@ -166,7 +174,7 @@ export async function loadCoworkerRecord(
           .catch(() => null)
       : Promise.resolve(null),
     profileId ? loadDecisionSignal(profileId) : Promise.resolve({ total: 0, byOutcome: {}, deferRate: 0 }),
-    loadCoworkerDiscoveryServices(serviceProviderIds).catch(() => []),
+    loadCoworkerDiscoveryServices(serviceProviderIds),
     loadInstallAvailabilityContext(),
   ]);
 

@@ -20,6 +20,7 @@ import {
   matchesFilters,
   needsAttention,
   EMPTY_FILTERS,
+  type RosterFilterValueSets,
   type RosterFilters,
 } from "@/lib/coworker-record/roster-filter";
 import type {
@@ -65,16 +66,35 @@ export function RosterView({
   facets: RosterFacets;
   initialQuery?: string;
 }) {
+  const kindOpts = useMemo(() => kindOptions(rows), [rows]);
+  const filterValueSets = useMemo<RosterFilterValueSets>(
+    () => ({
+      families: facets.families.map((family) => family.key),
+      kinds: kindOpts,
+      valueStreams: facets.valueStreams,
+      competencies: facets.competencies,
+      jurisdictions: facets.jurisdictions,
+      lifecycleStages: facets.lifecycleStages,
+    }),
+    [facets, kindOpts],
+  );
   const [filters, setFilters] = useState<RosterFilters>(() =>
-    filtersFromSearchParams(new URLSearchParams(initialQuery)),
+    filtersFromSearchParams(
+      new URLSearchParams(initialQuery),
+      filterValueSets,
+    ),
   );
   useEffect(() => {
     const restoreFilters = () =>
-      setFilters(filtersFromSearchParams(new URLSearchParams(window.location.search)));
+      setFilters(
+        filtersFromSearchParams(
+          new URLSearchParams(window.location.search),
+          filterValueSets,
+        ),
+      );
     window.addEventListener("popstate", restoreFilters);
     return () => window.removeEventListener("popstate", restoreFilters);
-  }, []);
-  const kindOpts = useMemo(() => kindOptions(rows), [rows]);
+  }, [filterValueSets]);
   const filtered = useMemo(
     () => rows.filter((row) => matchesFilters(row, filters)),
     [rows, filters],
@@ -149,7 +169,7 @@ export function RosterView({
               value={filters.query}
               onChange={(event) => set({ query: event.target.value })}
               placeholder="Name or work"
-            className="h-11 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] pl-9 pr-3 text-sm text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
+              className="h-11 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] pl-9 pr-3 text-sm text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
             />
           </label>
           <Select
@@ -341,7 +361,7 @@ function RosterRowCard({
 }) {
   const detailRoute = `/platform/ai/agent/${encodeURIComponent(row.agentId)}`;
   const detailHref = `${detailRoute}?returnTo=${encodeURIComponent(returnHref)}`;
-  const available = row.availability.state === "available";
+  const canStartConversation = row.canStartConversation;
   const setupNeeded = row.availability.state === "setup-needed";
   const attention = needsAttention(row);
 
@@ -389,7 +409,7 @@ function RosterRowCard({
       </div>
 
       <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
-        {available && (
+        {canStartConversation && (
           <AskCoworkerButton
             routeContext={detailRoute}
             label="Ask this coworker"
@@ -410,7 +430,7 @@ function RosterRowCard({
         )}
         <Link
           href={detailHref}
-          className="inline-flex min-h-11 items-center gap-1 rounded-md bg-[var(--dpf-accent)] px-3 text-sm font-semibold text-white hover:opacity-90"
+          className="inline-flex min-h-11 items-center gap-1 rounded-md bg-[var(--dpf-accent)] px-3 text-sm font-semibold text-[var(--dpf-on-accent,var(--dpf-surface-1))] hover:opacity-90"
         >
           View coworker
           <ChevronRight aria-hidden className="h-4 w-4" />

@@ -73,7 +73,7 @@ describe("resolveAgentForRouteWithPrompts", () => {
     vi.mocked(can).mockReturnValue(true);
     vi.mocked(prisma.agent.findFirst).mockResolvedValue({
       agentId: "AGT-WS-SCOUT",
-      slugId: "external-catalog-scout",
+      slugId: null,
       displayName: "External Catalog Scout",
       name: "External Catalog Scout",
       description: "Researches external providers.",
@@ -158,6 +158,64 @@ describe("resolveAgentForRouteWithPrompts", () => {
     expect(result.canAssist).toBe(false);
     expect(ensureAgentPrincipalIdentity).not.toHaveBeenCalled();
     expect(getSkillsForAgentLegacy).not.toHaveBeenCalled();
+  });
+
+  it("validates the executable slug row after the canonical record", async () => {
+    vi.mocked(prisma.agent.findFirst)
+      .mockResolvedValueOnce({
+        agentId: "AGT-WS-SCOUT",
+        slugId: null,
+        displayName: "External Catalog Scout",
+        name: "External Catalog Scout",
+        description: "Researches external providers.",
+        sensitivity: "internal",
+      })
+      .mockResolvedValueOnce(null);
+
+    const result = await resolveAgentByIdWithPrompts("AGT-WS-SCOUT", {
+      platformRole: "HR-000",
+      isSuperuser: true,
+    });
+
+    expect(result.canAssist).toBe(false);
+    expect(prisma.agent.findFirst).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: {
+          agentId: "external-catalog-scout",
+          status: "active",
+          archived: false,
+          lifecycleStage: "production",
+        },
+      }),
+    );
+    expect(ensureAgentPrincipalIdentity).not.toHaveBeenCalled();
+    expect(evaluateLifecycleGate).not.toHaveBeenCalled();
+  });
+
+  it("requires the canonical record to be selectable before resolving its runtime twin", async () => {
+    vi.mocked(prisma.agent.findFirst).mockResolvedValueOnce(null);
+
+    const result = await resolveAgentByIdWithPrompts(
+      "external-catalog-scout",
+      {
+        platformRole: "HR-000",
+        isSuperuser: true,
+      },
+    );
+
+    expect(result.canAssist).toBe(false);
+    expect(prisma.agent.findFirst).toHaveBeenCalledTimes(1);
+    expect(prisma.agent.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          agentId: "AGT-WS-SCOUT",
+          status: "active",
+          archived: false,
+          lifecycleStage: "production",
+        },
+      }),
+    );
   });
 
   it("does not load or provision a coworker blocked by lifecycle", async () => {

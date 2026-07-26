@@ -54,6 +54,15 @@ export const EMPTY_FILTERS: RosterFilters = {
   coverageGap: false,
 };
 
+export type RosterFilterValueSets = {
+  families: readonly string[];
+  kinds: readonly string[];
+  valueStreams: readonly string[];
+  competencies: readonly string[];
+  jurisdictions: readonly string[];
+  lifecycleStages: readonly string[];
+};
+
 /** Coverage gap = unmapped role, empty corpus, or below 80% checklist coverage. */
 export function isCoverageGap(row: RosterRow): boolean {
   return row.unmapped || row.emptyCorpus || (row.coveragePct ?? 100) < 80;
@@ -71,6 +80,7 @@ export function matchesQuery(row: RosterRow, query: string): boolean {
   const haystack = [
     row.displayName,
     row.plainJob,
+    row.workSearchText,
     row.area.label,
     row.slugId ?? "",
     row.name,
@@ -141,6 +151,7 @@ const FILTER_PARAM_KEYS = {
 
 export function filtersFromSearchParams(
   searchParams: SearchParamsReader,
+  valueSets: RosterFilterValueSets,
 ): RosterFilters {
   return {
     query: searchParams.get(FILTER_PARAM_KEYS.query) ?? "",
@@ -161,12 +172,29 @@ export function filtersFromSearchParams(
       "review-needed",
     ]),
     attentionOnly: searchParams.get(FILTER_PARAM_KEYS.attentionOnly) === "1",
-    family: searchParams.get(FILTER_PARAM_KEYS.family) ?? "",
-    kind: closedValue(searchParams.get(FILTER_PARAM_KEYS.kind), AGENT_KINDS),
-    valueStream: searchParams.get(FILTER_PARAM_KEYS.valueStream) ?? "",
-    competency: searchParams.get(FILTER_PARAM_KEYS.competency) ?? "",
-    jurisdiction: searchParams.get(FILTER_PARAM_KEYS.jurisdiction) ?? "",
-    lifecycle: searchParams.get(FILTER_PARAM_KEYS.lifecycle) ?? "",
+    family: closedValue(
+      searchParams.get(FILTER_PARAM_KEYS.family),
+      valueSets.families,
+    ),
+    kind: closedValue(searchParams.get(FILTER_PARAM_KEYS.kind), [
+      ...AGENT_KINDS.filter((kind) => valueSets.kinds.includes(kind)),
+    ]),
+    valueStream: closedValue(
+      searchParams.get(FILTER_PARAM_KEYS.valueStream),
+      valueSets.valueStreams,
+    ),
+    competency: closedValue(
+      searchParams.get(FILTER_PARAM_KEYS.competency),
+      valueSets.competencies,
+    ),
+    jurisdiction: closedValue(
+      searchParams.get(FILTER_PARAM_KEYS.jurisdiction),
+      valueSets.jurisdictions,
+    ),
+    lifecycle: closedValue(
+      searchParams.get(FILTER_PARAM_KEYS.lifecycle),
+      valueSets.lifecycleStages,
+    ),
     coverageGap: searchParams.get(FILTER_PARAM_KEYS.coverageGap) === "1",
   };
 }
@@ -204,4 +232,14 @@ export function filtersToSearchParams(
  */
 export function kindOptions(rows: RosterRow[]): string[] {
   return [...new Set(rows.map((r) => r.kind).filter((k): k is string => !!k))].sort();
+}
+
+export function safeRosterReturnTo(
+  value: string | string[] | undefined,
+): string {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  return candidate &&
+    /^\/platform\/ai\/overview(?:[?#][^\r\n\\]*)?$/.test(candidate)
+    ? candidate
+    : "/platform/ai/overview";
 }

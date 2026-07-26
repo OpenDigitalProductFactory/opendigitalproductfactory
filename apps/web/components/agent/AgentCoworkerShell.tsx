@@ -170,6 +170,7 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
   const providerConsultationInFlightRef = useRef<string | null>(null);
   const [guidedRouteContext, setGuidedRouteContext] = useState<string | null>(null);
   const [dockedFrame, setDockedFrame] = useState<DockedPanelFrame | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
   const lastAutoMessageRef = useRef<{ signature: string; at: number } | null>(null);
   // Queue auto-messages whose target thread hasn't loaded yet. The panel
   // can't submit to a thread until threadId is set; if the open-agent-panel
@@ -219,6 +220,7 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
     positionRef.current = initialPosition;
     setSize(initialSize);
     setPosition(initialPosition);
+    setIsMobile(isMobilePanelViewport(viewport));
 
     if (loadPanelOpen(userKey)) {
       setIsOpen(true);
@@ -227,6 +229,7 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
 
     function handleResize() {
       const viewport = getViewport();
+      setIsMobile(isMobilePanelViewport(viewport));
       const clampedSize = clampPanelSize(sizeRef.current, viewport);
       const clampedPosition = clampPanelPosition(positionRef.current, clampedSize, viewport);
 
@@ -426,7 +429,7 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
     savePanelOpen(userKey, true);
   }
 
-  function handleClose() {
+  const handleClose = useCallback(() => {
     setIsOpen(false);
     savePanelOpen(userKey, false);
     window.setTimeout(() => {
@@ -438,12 +441,91 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
 
       document.querySelector<HTMLElement>("[data-agent-fab='true']")?.focus();
     }, 0);
-  }
+  }, [userKey]);
 
   useEffect(() => {
     if (!isOpen) return;
     panelRef.current?.focus();
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !isMobile) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+
+    const background = [...(panel.parentElement?.children ?? [])].filter(
+      (element): element is HTMLElement =>
+        element instanceof HTMLElement && element !== panel,
+    );
+    const previousBackgroundState = background.map((element) => ({
+      element,
+      inert: element.inert,
+      inertAttribute: element.hasAttribute("inert"),
+      ariaHidden: element.getAttribute("aria-hidden"),
+    }));
+    for (const element of background) {
+      element.inert = true;
+      element.setAttribute("inert", "");
+      element.setAttribute("aria-hidden", "true");
+    }
+
+    const previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    function handleModalKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        handleClose();
+        return;
+      }
+      if (event.key !== "Tab" || !panel) return;
+
+      const focusable = [
+        ...panel.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ].filter((element) => !element.hidden);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        panel.focus();
+        return;
+      }
+
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (
+        !event.shiftKey &&
+        (document.activeElement === last ||
+          !panel.contains(document.activeElement))
+      ) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleModalKeyDown);
+    panel.focus();
+    return () => {
+      document.removeEventListener("keydown", handleModalKeyDown);
+      document.body.style.overflow = previousBodyOverflow;
+      for (const state of previousBackgroundState) {
+        state.element.inert = state.inert;
+        if (state.inertAttribute) {
+          state.element.setAttribute("inert", "");
+        } else {
+          state.element.removeAttribute("inert");
+        }
+        if (state.ariaHidden === null) {
+          state.element.removeAttribute("aria-hidden");
+        } else {
+          state.element.setAttribute("aria-hidden", state.ariaHidden);
+        }
+      }
+    };
+  }, [handleClose, isMobile, isOpen]);
 
   // Listen for panel open requests (feedback button, build creation, etc.)
   useEffect(() => {
@@ -668,7 +750,6 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
 
   if (!hydrated) return null;
 
-  const isMobile = isMobilePanelViewport(getViewport());
   const isDocked = dockedFrame !== null;
   const usesFixedFrame = isDocked || isMobile;
   const panelStyle = isMobile
@@ -735,6 +816,7 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
           ref={panelRef}
           data-agent-panel="true"
           role="dialog"
+          aria-modal={isMobile ? true : undefined}
           aria-label="AI coworker panel"
           tabIndex={-1}
           style={panelStyle}

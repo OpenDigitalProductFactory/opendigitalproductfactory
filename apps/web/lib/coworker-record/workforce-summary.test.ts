@@ -16,6 +16,8 @@ function row(over: Partial<RosterRow> = {}): RosterRow {
     valueStream: "operate",
     lifecycleStage: "production",
     plainJob: "Keeps finance work moving.",
+    workSearchText: "Monthly close",
+    canStartConversation: true,
     area: {
       key: "foundational",
       label: "Platform and back office",

@@ -196,6 +196,7 @@ describe("AgentCoworkerShell support entry", () => {
       name: "AI coworker panel",
     });
     expect(dialog).toHaveAttribute("data-panel-layout", "mobile-viewport");
+    expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(dialog).toHaveStyle({
       width: "100vw",
       maxWidth: "100vw",
@@ -206,6 +207,87 @@ describe("AgentCoworkerShell support entry", () => {
     expect(agentCoworkerPanelMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ isDocked: true }),
     );
+  });
+
+  it("closes the mobile modal with Escape", async () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 390,
+    });
+    renderShell();
+    fireEvent.click(await screen.findByRole("button", { name: "Open coworker" }));
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "AI coworker panel",
+    });
+    fireEvent.keyDown(dialog, { key: "Escape" });
+
+    expect(
+      await screen.findByRole("button", { name: "Open coworker" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", { name: "AI coworker panel" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("makes background content inert only while the mobile modal is open", async () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 390,
+    });
+    render(
+      <>
+        <main data-testid="background">
+          <button type="button">Background action</button>
+        </main>
+        <AgentCoworkerShell
+          userContext={{
+            userId: "user-1",
+            platformRole: "OPS-100",
+            isSuperuser: false,
+          }}
+          useUnifiedCoworker={true}
+        />
+      </>,
+    );
+    const background = screen.getByTestId("background");
+    fireEvent.click(await screen.findByRole("button", { name: "Open coworker" }));
+
+    await screen.findByRole("dialog", { name: "AI coworker panel" });
+    expect(background).toHaveAttribute("inert");
+    expect(background).toHaveAttribute("aria-hidden", "true");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    await screen.findByRole("button", { name: "Open coworker" });
+    expect(background).not.toHaveAttribute("inert");
+    expect(background).not.toHaveAttribute("aria-hidden");
+  });
+
+  it("recomputes mobile mode when the viewport crosses the breakpoint", async () => {
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 390,
+    });
+    renderShell();
+    fireEvent.click(await screen.findByRole("button", { name: "Open coworker" }));
+    expect(
+      await screen.findByRole("dialog", { name: "AI coworker panel" }),
+    ).toHaveAttribute("data-panel-layout", "mobile-viewport");
+
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      value: 1024,
+    });
+    fireEvent(window, new Event("resize"));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("dialog", { name: "AI coworker panel" }),
+      ).not.toHaveAttribute("data-panel-layout", "mobile-viewport");
+    });
+    expect(
+      screen.getByRole("dialog", { name: "AI coworker panel" }),
+    ).not.toHaveAttribute("aria-modal");
   });
 
   afterEach(() => {

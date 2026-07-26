@@ -185,6 +185,7 @@ describe("projectCoworkerAvailability", () => {
     ).toMatchObject({
       state: "coverage-not-defined",
       label: "Coverage not defined",
+      matchLevel: "leaf",
       evidence: expect.arrayContaining([
         {
           source: "readiness-evaluation",

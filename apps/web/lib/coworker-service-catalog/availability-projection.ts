@@ -56,7 +56,7 @@ export type CoworkerAvailabilityProjection =
       state: "coverage-not-defined";
       label: "Coverage not defined";
       reason: string;
-      matchLevel: null;
+      matchLevel: CoworkerAvailabilityMatchLevel;
       evidence: CoworkerAvailabilityEvidence[];
     };
 
@@ -190,13 +190,17 @@ export function projectCoworkerAvailability(
     const reason =
       input.readiness?.reason ??
       "Setup and blocker readiness has not been evaluated for this coworker.";
-    return coverageNotDefined(reason, [
-      ...baseEvidence,
-      {
-        source: "readiness-evaluation",
-        values: ["not-evaluated", reason],
-      },
-    ]);
+    return coverageNotDefined(
+      reason,
+      [
+        ...baseEvidence,
+        {
+          source: "readiness-evaluation",
+          values: ["not-evaluated", reason],
+        },
+      ],
+      matchLevel,
+    );
   }
 
   const readinessEvidence: CoworkerAvailabilityEvidence = {
@@ -324,12 +328,13 @@ function validateDeclarations(declarations: unknown):
 function coverageNotDefined(
   reason: string,
   evidence: CoworkerAvailabilityEvidence[],
+  matchLevel: CoworkerAvailabilityMatchLevel = null,
 ): CoworkerAvailabilityProjection {
   return {
     state: "coverage-not-defined",
     label: "Coverage not defined",
     reason,
-    matchLevel: null,
+    matchLevel,
     evidence,
   };
 }

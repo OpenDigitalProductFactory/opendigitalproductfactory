@@ -280,7 +280,7 @@ Roster-card examples:
 - `Available for restaurants`
 - `Available after setup`
 - `Not available for your business type`
-- `Coming later for your business type`
+- `Coverage not defined for your business type`
 
 Coworker detail examples:
 
@@ -323,15 +323,15 @@ Precedence:
    - The current category is explicitly supported and setup prerequisites are satisfied.
    - Show `Available for your business type`.
 
-5. **Coming later**
-   - The offer is intended for this category or similar businesses, but capability coverage is not ready.
-   - Show `Coming later`.
-
-6. **Not available**
+5. **Not available**
    - The work is not applicable to the current business type.
    - Show `Not available for your business type`.
 
-Universal availability must not be inferred from an empty list or `*`. When a governed universal encoding is introduced, it applies only if no stricter category, leaf, setup, or safety signal overrides it.
+6. **Coverage not defined**
+   - No explicit leaf, category, or governed universal declaration establishes support.
+   - Show `Coverage not defined for your business type`; do not infer future intent.
+
+Universal availability must not be inferred from an empty list or `*`. Future intent such as `Coming later` also requires its own governed encoding and must not be inferred from missing coverage. When a governed universal encoding is introduced, it applies only if no stricter category, leaf, setup, or safety signal overrides it.
 
 ## Offer as the Core Discovery Object
 
@@ -535,7 +535,7 @@ Phase 4: Retire redirect-only and low-value peer destinations.
 ## Acceptance Criteria
 
 - Given a restaurant-like current archetype, an owner can identify coworkers that `Talk to customers`, `Work with partners`, and are `Internal only` from the AI Workforce first viewport without opening provider/admin pages.
-- Given coworkers in available, setup-needed, not-available, and coming-later states, the roster shows one owner-readable availability badge per coworker or offer.
+- Given coworkers in available, setup-needed, not-available, and coverage-not-defined states, the roster shows one owner-readable availability badge per coworker or offer.
 - Given a customer-facing coworker with missing setup dependencies, the roster shows `Setup needed` and the coworker detail explains the missing prerequisite before technical capability data.
 - Given a governance user looking for unresolved AI decisions, they can reach the cross-coworker review queue from AI Workforce > Decision Governance without using `/coworker-decisions`.
 - Given an operator troubleshooting degraded AI work, Systems Health gives a symptom-oriented entry before raw provider/model/routing tables.

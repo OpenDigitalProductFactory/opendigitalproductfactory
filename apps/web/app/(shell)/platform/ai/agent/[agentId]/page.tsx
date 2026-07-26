@@ -20,6 +20,7 @@ import { getCoworkerPostureInheritance } from "@/lib/actions/golden-triangle";
 import {
   loadCoworkerRecord,
 } from "@/lib/coworker-record/load-record";
+import { safeRosterReturnTo } from "@/lib/coworker-record/roster-filter";
 import { loadFamilyCorpusSignals } from "@/lib/coworker-record/corpus-signals";
 import {
   getCoworkerCapabilityNeedReview,
@@ -47,17 +48,16 @@ import { CooConversationalNameCard } from "@/components/platform/coworker-record
 import { isStandingCooAgentId } from "@/lib/coworker-presentation/coo-name";
 import { AskCoworkerButton } from "@/components/agent/AskCoworkerButton";
 import {
-  projectCoworkerAuthority,
-} from "@/lib/coworker-service-catalog/authority-projection";
-import {
   activeRosterServices,
   projectCoworkerDiscovery,
+  projectCoworkerServiceAuthority,
 } from "@/lib/coworker-record/roster-presentation";
 import {
   AdvancedDetail,
   AvailabilityPanel,
   HeaderChip,
   OwnerStatus,
+  WorkHighlights,
   WorkOfferedPanel,
 } from "@/components/platform/coworker-record/OwnerCoworkerPanels";
 
@@ -236,10 +236,15 @@ export default async function AgentDetailPage({
     services: record.services,
     install: record.installAvailability,
   });
-  const { area, interaction, availability, plainJob } = discovery;
+  const {
+    area,
+    interaction,
+    availability,
+    canStartConversation,
+    plainJob,
+  } = discovery;
   const interactionLabel = interaction.labels.join(", ");
-  const authority = projectCoworkerAuthority({
-    scope: { kind: "default-posture" },
+  const authority = projectCoworkerServiceAuthority({
     agent: {
       agentId: agent.agentId,
       hitlTierDefault: agent.hitlTierDefault,
@@ -251,6 +256,7 @@ export default async function AgentDetailPage({
           hitlPolicy: agent.governanceProfile.hitlPolicy,
         }
       : { state: "not-configured" },
+    services: record.services,
   });
   const detailRoute = `/platform/ai/agent/${encodeURIComponent(agent.agentId)}`;
 
@@ -362,7 +368,7 @@ export default async function AgentDetailPage({
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {availability.state === "available" && (
+            {canStartConversation && (
               <AskCoworkerButton
                 routeContext={detailRoute}
                 label="Ask this coworker"
@@ -451,11 +457,11 @@ export default async function AgentDetailPage({
         <div className="space-y-5">
           <section>
             <h2 className="text-base font-semibold text-[var(--dpf-text)]">
-              What this coworker does
+              Work offered now
             </h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--dpf-text-secondary)]">
-              {plainJob}
-            </p>
+            <div className="mt-2">
+              <WorkHighlights services={record.services} />
+            </div>
           </section>
           <AdvancedDetail summary="Operational profile">
             <OverviewPanel record={record} summary={summary} />
@@ -466,6 +472,7 @@ export default async function AgentDetailPage({
           availability={availability}
           authority={authority}
           interactionLabel={interactionLabel}
+          canStartConversation={canStartConversation}
           installArchetypeId={
             record.installAvailability.install?.archetypeId ?? null
           }
@@ -503,17 +510,4 @@ export default async function AgentDetailPage({
       </CoworkerRecordTabs>
     </div>
   );
-}
-
-function safeRosterReturnTo(value: string | string[] | undefined): string {
-  const candidate = Array.isArray(value) ? value[0] : value;
-  if (
-    candidate &&
-    candidate.startsWith("/platform/ai/overview") &&
-    !candidate.includes("\n") &&
-    !candidate.includes("\r")
-  ) {
-    return candidate;
-  }
-  return "/platform/ai/overview";
 }

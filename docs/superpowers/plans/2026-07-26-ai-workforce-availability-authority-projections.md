@@ -299,19 +299,33 @@ Implementation contract:
 - Until a typed setup evaluator supplies evidence, pass `not-evaluated`.
   Capability needs in `submitted` state are advanced improvement information,
   not runtime blockers. Only `blocked` rows may enter readiness evidence.
-- Allow `Ask this coworker` only for `available`; route `setup-needed` to Setup.
+- Keep conversational entry distinct from service-readiness claims. Allow
+  `Ask this coworker` when explicit leaf/category applicability matches and no
+  safety blocker applies, including when setup readiness is not yet evaluated.
+  Continue to label service readiness truthfully and route `setup-needed` to
+  Setup.
 - Keep owner filters in the URL and include the roster return URL in coworker
   record links.
 - Reduce the coworker record to six sections and render a mobile section
   selector instead of wrapping a long technical tab row.
 - Keep workforce health, profession coverage, raw identity, and projection
   evidence behind disclosure.
-- Validate dynamic record IDs against an active, permitted Agent before
-  creating a principal or loading prompts and skills. Unknown, archived,
-  non-production, and unauthorized records cannot send work.
+- Resolve every requested identity to one canonical record and one executable
+  slug record. Apply the same `active`, non-archived, `production` predicate to
+  both before creating a principal or loading prompts and skills. Unknown,
+  archived, non-production, and unauthorized records cannot send work.
+- Project the owner authority headline from the strictest active service
+  boundary/HITL evidence plus agent governance. Agent defaults cannot widen a
+  proposal-only or approval-required service.
+- Index every active service name and summary in roster search.
+- Do not convert service-catalog read failures into an empty catalog. Let the
+  route fail into its retryable error boundary rather than presenting `Other`
+  or `No active work` as if that were business truth.
 - Clamp the existing shared coworker panel to the mobile viewport; the roster
   and record continue to use that one panel rather than creating another AI
-  surface.
+  surface. Mobile mode is modal: it traps focus, marks background content
+  inert, closes on Escape, and recomputes when the viewport crosses the mobile
+  breakpoint.
 
 Live evidence gathered before implementation:
 
@@ -351,6 +365,14 @@ Live evidence gathered before implementation:
   tests, 1440x900 and 390x844 browser passes, keyboard tab pass, 44px action
   targets, selected-coworker panel identity, and
   `scrollWidth <= clientWidth` before and after opening the panel
+
+An independent post-implementation critique initially returned `defer` with
+P1 findings in conversational entry, service-level authority, executable
+identity validation, catalog-error truthfulness, service search, and mobile
+modal behavior. Those findings are merge blockers. The implementation folds
+their controls into the contract above; the fit decision returns to
+`fits-with-guardrails` only after targeted tests, build, and browser evidence
+prove them.
 
 ## Refactoring Allowance
 

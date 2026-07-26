@@ -11,6 +11,7 @@ import {
   filtersFromSearchParams,
   filtersToSearchParams,
   needsAttention,
+  safeRosterReturnTo,
 } from "./roster-filter";
 import type { RosterRow } from "./roster";
 
@@ -25,6 +26,8 @@ function row(over: Partial<RosterRow> = {}): RosterRow {
     valueStream: "operate",
     lifecycleStage: "production",
     plainJob: "Keeps the books current and prepares finance work.",
+    workSearchText: "Monthly close Vendor reconciliation",
+    canStartConversation: true,
     area: {
       key: "foundational",
       label: "Platform and back office",
@@ -83,6 +86,15 @@ function row(over: Partial<RosterRow> = {}): RosterRow {
   };
 }
 
+const valueSets = {
+  families: ["finance"],
+  kinds: ["specialist"],
+  valueStreams: ["operate"],
+  competencies: ["practitioner"],
+  jurisdictions: ["us", "global"],
+  lifecycleStages: ["production"],
+};
+
 describe("isCoverageGap", () => {
   it("flags unmapped, empty corpus, and sub-80% coverage", () => {
     expect(isCoverageGap(row({ unmapped: true, familyKey: null, coveragePct: null }))).toBe(true);
@@ -112,6 +124,7 @@ describe("matchesQuery", () => {
   it("matches owner-facing job and area copy", () => {
     expect(matchesQuery(row(), "keeps the books")).toBe(true);
     expect(matchesQuery(row(), "back office")).toBe(true);
+    expect(matchesQuery(row(), "vendor reconciliation")).toBe(true);
   });
 
   it("does not crash on null slug / family", () => {
@@ -204,14 +217,15 @@ describe("attention and URL state", () => {
     );
 
     expect(params.get("tab")).toBe("coworkers");
-    expect(filtersFromSearchParams(params)).toEqual(filters);
+    expect(filtersFromSearchParams(params, valueSets)).toEqual(filters);
   });
 
   it("normalizes invalid closed-set URL filters and accepts Other", () => {
     const invalid = filtersFromSearchParams(
       new URLSearchParams(
-        "area=imaginary&interaction=unknown&availability=ready&authority=owner&kind=wizard",
+        "area=imaginary&interaction=unknown&availability=ready&authority=owner&kind=wizard&family=legal&valueStream=build&competency=expert&jurisdiction=eu&lifecycle=draft",
       ),
+      valueSets,
     );
     expect(invalid).toMatchObject({
       area: "",
@@ -219,11 +233,61 @@ describe("attention and URL state", () => {
       availability: "",
       authority: "",
       kind: "",
+      family: "",
+      valueStream: "",
+      competency: "",
+      jurisdiction: "",
+      lifecycle: "",
     });
 
     expect(
-      filtersFromSearchParams(new URLSearchParams("area=other")).area,
+      filtersFromSearchParams(
+        new URLSearchParams("area=other"),
+        valueSets,
+      ).area,
     ).toBe("other");
+  });
+
+  it("accepts advanced URL filters only when the loaded roster exposes them", () => {
+    const parsed = filtersFromSearchParams(
+      new URLSearchParams(
+        "family=finance&kind=specialist&valueStream=operate&competency=practitioner&jurisdiction=us&lifecycle=production",
+      ),
+      valueSets,
+    );
+
+    expect(parsed).toMatchObject({
+      family: "finance",
+      kind: "specialist",
+      valueStream: "operate",
+      competency: "practitioner",
+      jurisdiction: "us",
+      lifecycle: "production",
+    });
+  });
+});
+
+describe("safeRosterReturnTo", () => {
+  it("accepts the exact roster route with query or fragment state", () => {
+    expect(
+      safeRosterReturnTo(
+        "/platform/ai/overview?interaction=talks-to-customers#coworkers",
+      ),
+    ).toBe(
+      "/platform/ai/overview?interaction=talks-to-customers#coworkers",
+    );
+  });
+
+  it("rejects prefix lookalikes, external paths, and control characters", () => {
+    for (const candidate of [
+      "/platform/ai/overview-evil",
+      "/platform/ai/overview/other",
+      "//evil.example/platform/ai/overview",
+      "/platform/ai/overview\\evil",
+      "/platform/ai/overview\nother",
+    ]) {
+      expect(safeRosterReturnTo(candidate)).toBe("/platform/ai/overview");
+    }
   });
 });
 

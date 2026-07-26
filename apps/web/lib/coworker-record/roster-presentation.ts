@@ -5,6 +5,12 @@ import {
   type CoworkerInstallArchetypeResolution,
 } from "@/lib/coworker-service-catalog/availability-projection";
 import {
+  LEVEL_RANK,
+  projectCoworkerAuthority,
+  type CoworkerAuthorityProjection,
+  type CoworkerGovernanceEvaluation,
+} from "@/lib/coworker-service-catalog/authority-projection";
+import {
   OTHER_OWNER_FACING_AREA,
   ownerFacingAreaForPortfolio,
   type OwnerFacingArea,
@@ -45,6 +51,8 @@ export type RosterServiceEvidence = {
   name: string;
   summary: string | null;
   status: string;
+  hitlTier?: unknown;
+  authorityBoundary?: unknown;
   availabilityScope: unknown;
   personas: unknown;
   archetypes: unknown;
@@ -64,6 +72,8 @@ export type CoworkerDiscoveryProjection = {
   plainJob: string;
   interaction: CoworkerInteractionProjection;
   availability: CoworkerAvailabilityProjection;
+  canStartConversation: boolean;
+  workSearchText: string;
 };
 
 const AVAILABILITY_PRIORITY: Record<
@@ -187,6 +197,81 @@ export function rosterPlainJob(
   return description || "Work description not defined.";
 }
 
+export function rosterWorkSearchText(
+  services: readonly RosterServiceEvidence[],
+): string {
+  return activeRosterServices(services)
+    .flatMap((service) => [service.name, service.summary ?? ""])
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
+export function canStartCoworkerConversation(
+  availability: CoworkerAvailabilityProjection,
+): boolean {
+  return (
+    availability.matchLevel !== null &&
+    availability.state !== "needs-attention" &&
+    availability.state !== "not-available"
+  );
+}
+
+export function projectCoworkerServiceAuthority(input: {
+  agent: {
+    agentId: string;
+    hitlTierDefault: unknown;
+  };
+  governance: CoworkerGovernanceEvaluation;
+  services: readonly RosterServiceEvidence[];
+}): CoworkerAuthorityProjection {
+  const active = activeRosterServices(input.services);
+  const projections =
+    active.length > 0
+      ? active.map((service) =>
+          projectCoworkerAuthority({
+            scope: { kind: "default-posture" },
+            agent: input.agent,
+            governance: input.governance,
+            service: {
+              serviceId: service.serviceId,
+              authorityBoundary: service.authorityBoundary,
+              hitlTier: service.hitlTier,
+            },
+          }),
+        )
+      : [
+          projectCoworkerAuthority({
+            scope: { kind: "default-posture" },
+            agent: input.agent,
+            governance: input.governance,
+          }),
+        ];
+
+  const evidence = projections.flatMap((projection) => projection.evidence);
+  const reviewNeeded = projections.filter(
+    (projection) => projection.state === "review-needed",
+  );
+  if (reviewNeeded.length > 0) {
+    const first = reviewNeeded[0]!;
+    return {
+      ...first,
+      reasons: [
+        ...new Set(reviewNeeded.flatMap((projection) => projection.reasons)),
+      ],
+      evidence,
+    };
+  }
+
+  const winner = projections
+    .filter((projection) => projection.state === "resolved")
+    .sort(
+      (left, right) =>
+        LEVEL_RANK[left.level] - LEVEL_RANK[right.level],
+    )[0]!;
+  return { ...winner, evidence };
+}
+
 export function projectCoworkerDiscovery(input: {
   agentDescription: string | null;
   services: readonly RosterServiceEvidence[];
@@ -194,16 +279,19 @@ export function projectCoworkerDiscovery(input: {
   readiness?: CoworkerAvailabilityReadiness;
 }): CoworkerDiscoveryProjection {
   const ownerAreas = projectCoworkerOwnerAreas(input.services);
+  const availability = projectRosterAvailability({
+    services: input.services,
+    install: input.install,
+    readiness: input.readiness,
+  });
   return {
     area: ownerAreas.primary,
     areas: ownerAreas.all,
     plainJob: rosterPlainJob(input.agentDescription, input.services),
+    workSearchText: rosterWorkSearchText(input.services),
     interaction: projectCoworkerInteraction(input.services),
-    availability: projectRosterAvailability({
-      services: input.services,
-      install: input.install,
-      readiness: input.readiness,
-    }),
+    availability,
+    canStartConversation: canStartCoworkerConversation(availability),
   };
 }
 

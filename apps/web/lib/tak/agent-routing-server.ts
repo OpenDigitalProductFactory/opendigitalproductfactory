@@ -16,6 +16,10 @@ import { ensureAgentPrincipalIdentity } from "@/lib/identity/principal-linking";
 import { can, type UserContext } from "@/lib/permissions";
 import { evaluateLifecycleGate } from "@/lib/coworker-lifecycle/lifecycle-gate";
 import { withCoworkerInteractionContract } from "./coworker-interaction-contract";
+import {
+  SELECTABLE_COWORKER_STATE,
+  selectableCoworkerIdentityRefs,
+} from "@/lib/coworker-record/selectable-coworker";
 
 async function loadPromptBackplane(agentId: string, fallbackPrompt: string): Promise<string> {
   const dbPrompt = await loadPrompt("route-persona", agentId, fallbackPrompt);
@@ -72,10 +76,12 @@ export async function resolveAgentByIdWithPrompts(
     return unavailableAgent(agentId);
   }
 
+  const { canonicalAgentId, runtimeAgentId } =
+    selectableCoworkerIdentityRefs(agentId);
   const selected = await prisma.agent.findFirst({
     where: {
-      OR: [{ agentId }, { slugId: agentId }],
-      archived: false,
+      agentId: canonicalAgentId,
+      ...SELECTABLE_COWORKER_STATE,
     },
     select: {
       agentId: true,
@@ -90,15 +96,36 @@ export async function resolveAgentByIdWithPrompts(
     return unavailableAgent(agentId);
   }
 
-  const gate = await evaluateLifecycleGate(selected.agentId, {
+  const runtime = await prisma.agent.findFirst({
+    where: {
+      agentId: runtimeAgentId,
+      ...SELECTABLE_COWORKER_STATE,
+    },
+    select: {
+      agentId: true,
+      displayName: true,
+      name: true,
+      description: true,
+      sensitivity: true,
+    },
+  });
+  if (!runtime) {
+    return unavailableAgent(agentId);
+  }
+
+  const gate = await evaluateLifecycleGate(runtime.agentId, {
     purpose: "chat",
   });
   if (!gate.allowed) {
     return unavailableAgent(agentId);
   }
 
-  const runtimeAgentId = selected.slugId ?? selected.agentId;
-  const agentName = selected.displayName || selected.name || runtimeAgentId;
+  const agentName =
+    selected.displayName ||
+    selected.name ||
+    runtime.displayName ||
+    runtime.name ||
+    runtimeAgentId;
   const fallbackPrompt = `You are ${agentName}. Complete the assigned scheduled work with your granted tools, prefer concrete action over narration, and finish with a concise operational summary.`;
 
   await ensureAgentPrincipalIdentity(runtimeAgentId);
@@ -110,9 +137,13 @@ export async function resolveAgentByIdWithPrompts(
     agentId: runtimeAgentId,
     agentName,
     agentDescription:
-      selected.description?.trim() || `${agentName} scheduled specialist`,
+      selected.description?.trim() ||
+      runtime.description?.trim() ||
+      `${agentName} scheduled specialist`,
     canAssist: true,
-    sensitivity: normalizeSensitivity(selected.sensitivity),
+    sensitivity: normalizeSensitivity(
+      selected.sensitivity ?? runtime.sensitivity,
+    ),
     skills,
     systemPrompt: await loadPromptBackplane(runtimeAgentId, fallbackPrompt),
   };

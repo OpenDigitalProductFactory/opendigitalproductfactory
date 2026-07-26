@@ -85,7 +85,7 @@ export function CoworkerRecordTabs({
           >
             {tab.label}
             {tab.badge ? (
-              <span className="rounded bg-[var(--dpf-accent-soft)] px-1.5 text-[10px] font-semibold text-[var(--dpf-accent)]">
+              <span className="rounded bg-[var(--dpf-accent-soft)] px-1.5 text-xs font-semibold text-[var(--dpf-accent)]">
                 {tab.badge}
               </span>
             ) : null}

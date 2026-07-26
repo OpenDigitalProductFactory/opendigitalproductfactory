@@ -5,8 +5,10 @@ import {
   projectCoworkerDiscovery,
   projectCoworkerInteraction,
   projectCoworkerOwnerAreas,
+  projectCoworkerServiceAuthority,
   projectRosterAvailability,
   rosterPlainJob,
+  rosterWorkSearchText,
   type RosterServiceEvidence,
 } from "./roster-presentation";
 
@@ -26,6 +28,8 @@ function service(
     name: "Customer intake",
     summary: "Handles customer intake and follow-up.",
     status: "active",
+    hitlTier: 1,
+    authorityBoundary: "proposal-only",
     availabilityScope: "external",
     personas: ["customer"],
     archetypes: ["restaurant"],
@@ -172,6 +176,20 @@ describe("projectCoworkerDiscovery", () => {
     expect(projection.plainJob).toBe("Authored work description.");
     expect(projection.interaction.scopes).toContain("talks-to-customers");
     expect(projection.availability.state).toBe("coverage-not-defined");
+    expect(projection.availability.matchLevel).toBe("leaf");
+    expect(projection.canStartConversation).toBe(true);
+    expect(projection.workSearchText).toContain("Customer intake");
+  });
+
+  it("does not offer conversation when applicability does not match", () => {
+    const projection = projectCoworkerDiscovery({
+      agentDescription: "Authored work description.",
+      services: [service({ archetypes: ["software-and-platforms"] })],
+      install: restaurantInstall,
+    });
+
+    expect(projection.availability.state).toBe("not-available");
+    expect(projection.canStartConversation).toBe(false);
   });
 });
 
@@ -199,5 +217,48 @@ describe("rosterPlainJob", () => {
 
   it("keeps an explicit unknown when neither source defines the job", () => {
     expect(rosterPlainJob(null, [])).toBe("Work description not defined.");
+  });
+});
+
+describe("service discovery evidence", () => {
+  it("indexes the names and summaries of every active service", () => {
+    expect(
+      rosterWorkSearchText([
+        service(),
+        service({
+          serviceId: "svc-battlecards",
+          name: "Competitive battlecards",
+          summary: "Prepares competitor positioning.",
+        }),
+      ]),
+    ).toContain("Competitive battlecards Prepares competitor positioning.");
+  });
+
+  it("uses the strictest active service authority for the owner headline", () => {
+    const projection = projectCoworkerServiceAuthority({
+      agent: {
+        agentId: "marketing-specialist",
+        hitlTierDefault: 3,
+      },
+      governance: { state: "not-configured" },
+      services: [
+        service({
+          serviceId: "svc-autonomous",
+          authorityBoundary: "autonomous-allowed",
+          hitlTier: 3,
+        }),
+        service({
+          serviceId: "svc-proposal",
+          authorityBoundary: "proposal-only",
+          hitlTier: 2,
+        }),
+      ],
+    });
+
+    expect(projection.state).toBe("resolved");
+    if (projection.state === "resolved") {
+      expect(projection.level).toBe("proposal-only");
+      expect(projection.winner.ref).toBe("svc-proposal");
+    }
   });
 });

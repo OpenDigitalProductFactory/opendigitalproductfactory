@@ -118,6 +118,8 @@ export type CoworkerDiscoveryService = {
   name: string;
   summary: string | null;
   status: string;
+  hitlTier: number | null;
+  authorityBoundary: string;
   availabilityScope: string;
   personas: unknown;
   archetypes: unknown;
@@ -245,6 +247,8 @@ export async function loadCoworkerDiscoveryServices(
       name: true,
       summary: true,
       status: true,
+      hitlTier: true,
+      authorityBoundary: true,
       availabilityScope: true,
       personas: true,
       archetypes: true,

@@ -20,7 +20,6 @@ import {
   professionProfileId,
 } from "@/lib/decision-perspective/resolve-profession-profile";
 import {
-  projectCoworkerAuthority,
   type CoworkerAuthorityProjection,
 } from "@/lib/coworker-service-catalog/authority-projection";
 import {
@@ -33,9 +32,11 @@ import type { OwnerFacingArea } from "./owner-areas";
 import {
   COWORKER_BLOCKING_CAPABILITY_NEED_STATUSES,
   projectCoworkerDiscovery,
+  projectCoworkerServiceAuthority,
   type CoworkerInteractionProjection,
   type RosterServiceEvidence,
 } from "./roster-presentation";
+import { SELECTABLE_COWORKER_STATE } from "./selectable-coworker";
 
 // BI-74FD6420: roster collapses dual-seed slug + AGT-* pairs for display only.
 // Seed still creates slug agentId rows for FK consumers (service catalog, etc.).
@@ -50,6 +51,8 @@ export type RosterRow = {
   valueStream: string | null;
   lifecycleStage: string;
   plainJob: string;
+  workSearchText: string;
+  canStartConversation: boolean;
   area: OwnerFacingArea;
   areas: OwnerFacingArea[];
   interaction: CoworkerInteractionProjection;
@@ -215,8 +218,7 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
     installAvailability,
   ] = await Promise.all([
     prisma.agent.findMany({
-      // Exclude archived / retired dual-seed alias rows (BI-74FD6420).
-      where: { archived: false, lifecycleStage: { not: "retirement" } },
+      where: SELECTABLE_COWORKER_STATE,
       orderBy: [{ tier: "asc" }, { displayName: "asc" }],
       select: {
         agentId: true,
@@ -245,7 +247,7 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
       })
       .catch(() => [] as Array<{ agentId: string; _count: { _all: number } }>),
     loadLastActivity(),
-    loadCoworkerDiscoveryServices().catch(() => []),
+    loadCoworkerDiscoveryServices(),
     loadInstallAvailabilityContext(),
   ]);
 
@@ -340,12 +342,13 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
       valueStream: agent.valueStream,
       lifecycleStage: agent.lifecycleStage,
       plainJob: discovery.plainJob,
+      workSearchText: discovery.workSearchText,
+      canStartConversation: discovery.canStartConversation,
       area: discovery.area,
       areas: discovery.areas,
       interaction: discovery.interaction,
       availability: discovery.availability,
-      authority: projectCoworkerAuthority({
-        scope: { kind: "default-posture" },
+      authority: projectCoworkerServiceAuthority({
         agent: {
           agentId: agent.agentId,
           hitlTierDefault: agent.hitlTierDefault,
@@ -357,6 +360,7 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
               hitlPolicy: agent.governanceProfile.hitlPolicy,
             }
           : { state: "not-configured" },
+        services: agentServices,
       }),
       familyKey: fam?.professionKey ?? null,
       familyLabel: fam?.label ?? null,

@@ -48,6 +48,8 @@ function row(over: Partial<RosterRow> = {}): RosterRow {
     valueStream: "consume",
     lifecycleStage: "production",
     plainJob: "Handles customer intake and follow-up.",
+    workSearchText: "Customer intake Customer follow-up",
+    canStartConversation: true,
     area: {
       key: "products_and_services_sold",
       label: "Customers and sales",
@@ -130,6 +132,7 @@ describe("RosterView", () => {
               matchLevel: null,
               evidence: [],
             },
+            canStartConversation: false,
           }),
           row(),
         ]}
