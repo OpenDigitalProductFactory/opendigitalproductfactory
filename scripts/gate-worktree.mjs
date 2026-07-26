@@ -5,17 +5,22 @@
 // fetch (scripts/lib/mcp-client.mjs), freshness classification via the shared
 // scripts/lib/sandbox-freshness.mjs decision core.
 //
-// This is the fallback gate scripts/pregate.mjs routes to when it cannot
-// confirm a working native sh (source-only / no-native-sh worktrees). Hosts
-// where `sh scripts/gate-worktree.sh` works keep using that path unchanged —
-// this file does not replace it, it covers the hosts it cannot reach.
+// This is the canonical implementation on every host. gate-worktree.sh is a
+// compatibility entry point that execs this file so lease safety cannot drift
+// between POSIX and Windows contributor surfaces.
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, resolve as resolvePath } from "node:path";
+import { dirname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
 import { classifyGateOutcome } from "./lib/sandbox-freshness.mjs";
+import { superviseLeaseRun } from "./lib/lease-supervisor.mjs";
+import {
+  acquireLocalSandboxFence,
+  heartbeatLocalSandboxFence,
+  releaseLocalSandboxFence,
+} from "./lib/local-sandbox-fence.mjs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
@@ -134,30 +139,60 @@ function resolveGateCommand({ branch, allowStub, gitBin }) {
   return null;
 }
 
-function runGateCommand(commandSpec, { cwd, env, allowStub }) {
+function createGateCommand(commandSpec, { cwd, env, allowStub }) {
   if (!commandSpec) {
     if (!allowStub) throw new Error("runGateCommand called with no command and no stub allowed");
     return {
-      label: "sandbox checkout/build stub",
-      status: 0,
-      output: "sandbox checkout/build stub: gate passed (DPF_ALLOW_LOCAL_CI_STUB=1)\n",
-      announce: "sandbox checkout/build stub: gate passed (explicit test-only mode)",
+      run: async () => ({
+        label: "sandbox checkout/build stub",
+        status: 0,
+        output: "sandbox checkout/build stub: gate passed (DPF_ALLOW_LOCAL_CI_STUB=1)\n",
+      }),
+      terminate: async () => {},
     };
   }
-  if (commandSpec.kind === "argv") {
-    const [command, ...rest] = commandSpec.value;
-    const result = spawnSync(command, rest, { cwd, env, encoding: "utf8" });
-    return {
-      label: commandSpec.label,
-      status: result.status ?? 1,
-      output: `${result.stdout ?? ""}${result.stderr ?? ""}`,
-    };
-  }
-  const result = spawnSync(commandSpec.value, { cwd, env, encoding: "utf8", shell: true });
+  let child = null;
+  let output = "";
+  const append = (chunk, stream) => {
+    const text = String(chunk);
+    output = `${output}${text}`.slice(-12000);
+    stream.write(text);
+  };
   return {
-    label: commandSpec.label,
-    status: result.status ?? 1,
-    output: `${result.stdout ?? ""}${result.stderr ?? ""}`,
+    run: () => new Promise((resolve, reject) => {
+      const common = {
+        cwd,
+        env,
+        detached: process.platform !== "win32",
+        stdio: ["ignore", "pipe", "pipe"],
+      };
+      if (commandSpec.kind === "argv") {
+        const [command, ...rest] = commandSpec.value;
+        child = spawn(command, rest, common);
+      } else {
+        child = spawn(commandSpec.value, { ...common, shell: true });
+      }
+      child.stdout.on("data", (chunk) => append(chunk, process.stdout));
+      child.stderr.on("data", (chunk) => append(chunk, process.stderr));
+      child.once("error", reject);
+      child.once("close", (code, signal) => resolve({
+        label: commandSpec.label,
+        status: code ?? (signal ? 143 : 1),
+        output,
+      }));
+    }),
+    terminate: async () => {
+      if (!child || child.exitCode !== null) return;
+      if (process.platform === "win32") {
+        spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+      } else {
+        try {
+          process.kill(-child.pid, "SIGTERM");
+        } catch {
+          child.kill("SIGTERM");
+        }
+      }
+    },
   };
 }
 
@@ -174,6 +209,12 @@ async function main() {
 
   const stateFile = gitPath(gitBin, worktreePath, "dpf-local-ci-gate.json");
   const metadataFile = gitPath(gitBin, worktreePath, "dpf-local-ci-metadata.json");
+  const gitCommonDir = resolvePath(
+    worktreePath,
+    gitOrEmpty(gitBin, ["rev-parse", "--git-common-dir"], worktreePath),
+  );
+  const localFencePath = process.env.DPF_LOCAL_SANDBOX_FENCE_PATH
+    || join(gitCommonDir, "dpf-local-ci-owner.json");
 
   const commandSpec = resolveGateCommand({ branch, allowStub, gitBin });
 
@@ -205,12 +246,27 @@ async function main() {
     if (push.status !== 0) die(`push failed: ${push.stderr || push.stdout}`);
   }
 
-  const expiresAt = new Date(Date.now() + options.expiresMinutes * 60000).toISOString();
+  const leaseTtlMs = Math.min(options.expiresMinutes * 60000, 20 * 60_000);
+  let expiresAt = "";
   const deadline = Date.now() + options.leaseWaitSeconds * 1000;
   const url = process.env.DPF_LOCAL_CI_URL || "http://localhost:3010";
 
   let leaseId = "";
+  let localFenceToken = "";
   for (;;) {
+    const localFence = acquireLocalSandboxFence({
+      path: localFencePath,
+      ownerSessionId,
+      branch,
+    });
+    if (localFence.status === "conflict") {
+      if (Date.now() >= deadline) die("local-CI sandbox owner process is still live; timed out waiting");
+      process.stdout.write(`local-CI sandbox process fence held by ${localFence.active?.ownerSessionId || "unknown"}; retrying in ${options.pollSeconds}s...\n`);
+      await sleep(options.pollSeconds * 1000);
+      continue;
+    }
+    localFenceToken = localFence.record.token;
+    expiresAt = new Date(Date.now() + leaseTtlMs).toISOString();
     const claimResponse = await mcpCall("claim_nonprod_environment_lease", {
       environmentKey: "local-integration-ci",
       ownerProvider: options.ownerProvider,
@@ -228,6 +284,8 @@ async function main() {
       leaseId = claimResponse.entityId || claimResponse?.data?.lease?.leaseId || "";
       break;
     }
+    releaseLocalSandboxFence({ path: localFencePath, token: localFenceToken });
+    localFenceToken = "";
     if (claimResponse?.error === "lease_conflict") {
       if (Date.now() >= deadline) die("local-CI sandbox lease is busy; timed out waiting");
       process.stdout.write(`local-CI sandbox busy; queued behind active lease. Retrying in ${options.pollSeconds}s...\n`);
@@ -241,12 +299,75 @@ async function main() {
   if (commandSpec) process.stdout.write(`running local-CI command: ${commandSpec.label}\n`);
   else process.stdout.write("sandbox checkout/build stub: gate passed (explicit test-only mode)\n");
 
-  const runResult = runGateCommand(commandSpec, {
+  const gateCommand = createGateCommand(commandSpec, {
     cwd: worktreePath,
-    env: { ...process.env, DPF_LOCAL_CI_METADATA_FILE: metadataFile },
+    env: {
+      ...process.env,
+      DPF_LOCAL_CI_METADATA_FILE: metadataFile,
+      DPF_NONPROD_LEASE_ID: leaseId,
+      DPF_NONPROD_OWNER_SESSION_ID: ownerSessionId,
+    },
     allowStub,
   });
-  process.stdout.write(runResult.output);
+  const leaseEvents = [{ type: "claimed", at: new Date().toISOString(), expiresAt }];
+  let receivedSignal = "";
+  const signalHandlers = Object.fromEntries(["SIGINT", "SIGTERM"].map((signal) => [
+    signal,
+    () => {
+      receivedSignal = signal;
+      leaseEvents.push({ type: "signal", signal, at: new Date().toISOString() });
+      void gateCommand.terminate();
+    },
+  ]));
+  for (const [signal, handler] of Object.entries(signalHandlers)) process.once(signal, handler);
+  let supervised;
+  try {
+    supervised = await superviseLeaseRun({
+      ttlMs: leaseTtlMs,
+      run: gateCommand.run,
+      terminate: gateCommand.terminate,
+      renew: async () => {
+        const localHeartbeat = heartbeatLocalSandboxFence({
+          path: localFencePath,
+          token: localFenceToken,
+        });
+        if (localHeartbeat.status !== "renewed") {
+          return { success: false, error: "local-process-fence-lost" };
+        }
+        return mcpCall("renew_nonprod_environment_lease", {
+          leaseId,
+          ownerSessionId,
+        }, { mcpUrl: options.mcpUrl, bearerToken });
+      },
+      release: async () => {
+        try {
+          const response = await mcpCall("release_nonprod_environment_lease", {
+            leaseId,
+          }, { mcpUrl: options.mcpUrl, bearerToken });
+          if (response?.success !== true) {
+            throw new Error(`failed to release local-CI lease: ${JSON.stringify(response)}`);
+          }
+        } finally {
+          releaseLocalSandboxFence({ path: localFencePath, token: localFenceToken });
+        }
+      },
+      onEvent: (event) => leaseEvents.push(event),
+    });
+  } finally {
+    for (const [signal, handler] of Object.entries(signalHandlers)) process.removeListener(signal, handler);
+  }
+  const runResult = supervised.result;
+  if (supervised.status === "fenced") {
+    runResult.status = 75;
+    runResult.output = `${runResult.output}\ngate-worktree: lease fenced (${supervised.reason}); child process tree terminated\n`;
+    process.stderr.write(`gate-worktree: lease fenced (${supervised.reason}); child process tree terminated\n`);
+  }
+  if (receivedSignal) {
+    runResult.status = 130;
+    runResult.output = `${runResult.output}\ngate-worktree: received ${receivedSignal}; child process tree terminated\n`;
+    process.stderr.write(`gate-worktree: received ${receivedSignal}; child process tree terminated\n`);
+  }
+  if (!commandSpec) process.stdout.write(runResult.output);
   const gateOutput = runResult.output.slice(-12000);
 
   let freshnessReport = null;
@@ -296,6 +417,8 @@ async function main() {
       freshnessBi: "BI-ECDF9520",
       phase: 1,
       leaseId,
+      leaseEvents,
+      leaseSupervisionStatus: supervised.status,
       branch,
       sha,
       expiresAt,
@@ -323,15 +446,11 @@ async function main() {
   if (evidenceResponse?.success === true) {
     evidenceId = evidenceResponse.entityId || "";
   } else {
-    writeState(stateFile, { branch, sha, gatePassed: false, leaseId, evidenceId: "", status: "failed", expiresAt, resilience });
-    await mcpCall("release_nonprod_environment_lease", { leaseId }, { mcpUrl: options.mcpUrl, bearerToken }).catch(() => {});
+    writeState(stateFile, { branch, sha, gatePassed: false, leaseId, evidenceId: "", status: "failed", expiresAt, resilience, leaseEvents });
     die(`failed to record local integration evidence: ${JSON.stringify(evidenceResponse)}`);
   }
 
-  const releaseResponse = await mcpCall("release_nonprod_environment_lease", { leaseId }, { mcpUrl: options.mcpUrl, bearerToken });
-  if (releaseResponse?.success !== true) die(`failed to release local-CI lease: ${JSON.stringify(releaseResponse)}`);
-
-  writeState(stateFile, { branch, sha, gatePassed: outcome.gatePassed, leaseId, evidenceId, status: outcome.status, expiresAt, resilience });
+  writeState(stateFile, { branch, sha, gatePassed: outcome.gatePassed, leaseId, evidenceId, status: outcome.status, expiresAt, resilience, leaseEvents });
 
   if (outcome.gatePassed) {
     process.stdout.write("gate passed\n");
@@ -345,7 +464,7 @@ async function main() {
   die("gate failed");
 }
 
-function writeState(stateFile, { branch, sha, gatePassed, leaseId, evidenceId, status, expiresAt, resilience }) {
+function writeState(stateFile, { branch, sha, gatePassed, leaseId, evidenceId, status, expiresAt, resilience, leaseEvents }) {
   mkdirSync(dirname(stateFile), { recursive: true });
   const payload = {
     branch,
@@ -355,6 +474,7 @@ function writeState(stateFile, { branch, sha, gatePassed, leaseId, evidenceId, s
     evidenceRecordId: evidenceId,
     status,
     expiresAt,
+    leaseEvents,
     recordedAt: new Date().toISOString(),
   };
   if (resilience) payload.resilience = resilience;

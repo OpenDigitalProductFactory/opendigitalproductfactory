@@ -134,18 +134,18 @@ From a worktree, the gate is:
 pnpm run pregate            # → node scripts/pregate.mjs
 ```
 
-**Host-native/Node-first entry point (BI-2272D840).** `pregate.mjs` detects
-whether native `sh` actually works against *this* worktree — not just "sh is
-on PATH", but that it can resolve the worktree's own git state
+**Host-native/Node-first entry point (BI-2272D840, BI-52500C0D).** `pregate.mjs`
+detects whether native `sh` actually works against *this* worktree — not just
+"sh is on PATH", but that it can resolve the worktree's own git state
 (`sh -c 'git rev-parse --show-toplevel'`) — and routes accordingly:
 
-- Working native `sh` (Git-for-Windows shell, Linux/macOS): delegates straight
-  to `sh scripts/gate-worktree.sh`, unchanged.
+- Working native `sh` (Git-for-Windows shell, Linux/macOS): delegates to
+  `scripts/gate-worktree.sh`.
 - No working native `sh` (e.g. a Windows worktree with no Git Bash and a WSL
   install that cannot cleanly read the worktree's `.git` indirection — the
   exact failure BI-C22152E7 hit): routes to `scripts/gate-worktree.mjs`, a
-  Node-native port of the same lease-claim / run / evidence-record /
-  lease-release flow (`scripts/local-ci-runner.mjs` ports the checked-in
+  Node-native port of the same lease-claim / heartbeat / fenced-run /
+  evidence-record / lease-release flow (`scripts/local-ci-runner.mjs` ports the checked-in
   runner's scratch-workspace + DB-resolution steps; both call the same
   `scripts/local-integration-ci.mjs` plan). Missing native `sh` is therefore
   classified as **sandbox-routable, never a build blocker** — the agent no
@@ -158,9 +158,23 @@ either without caring which one ran. Force a specific path for
 testing/debugging with `DPF_PREGATE_FORCE_SH=1` or `DPF_PREGATE_FORCE_NODE=1`.
 
 The gate claims a `local-integration-ci` lease (waiting if the sandbox is
-already leased), runs the gate command, records a local-integration evidence
-record with the lease id and `gatePassed`, releases the lease, and writes the
-latest gate result to Git-local state (`.git/dpf-local-ci-gate.json`). It does
+already leased), heartbeats at no more than one third of the effective lease
+TTL, runs the gate command, releases the runtime slot, records a
+local-integration evidence record with the lease id and `gatePassed`, and
+writes the latest gate result to Git-local state
+(`.git/dpf-local-ci-gate.json`). Renewal loss is
+fail-closed: before further sandbox mutation the gate terminates its complete
+child process tree, records a fenced outcome, and releases idempotently.
+Admission also takes an atomic host-local owner fence in the shared Git
+directory. A competing claimant waits while that fence's PID is alive even if
+an older database TTL has elapsed; a dead PID is reaped as an orphan. The
+database lease remains the governed cross-process record, while this local
+fence closes the host process-liveness gap the database cannot observe.
+The requested expiry is calculated for each claim attempt, after queue
+admission, so time spent waiting never consumes the acquired owner's TTL.
+Claim, heartbeat, signal/fence, and release timestamps are included in the
+evidence and Git-local state. An expired TTL is never permission for the old
+owner to continue working. The gate does
 **not** publish the branch by default (BI-76551B2D); push/publication is a
 separate step after local evidence exists. The legacy push-before-lease behavior
 is available only as an explicit `scripts/gate-worktree.sh --push` (or
