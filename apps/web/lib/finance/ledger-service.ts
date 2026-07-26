@@ -22,6 +22,8 @@ import {
   buildBillPostingLines,
   buildDepreciationPostingLines,
   buildReversalPostingLines,
+  isPeriodLocked,
+  validatePostingPeriod,
   validateJournalEntry,
   computeTrialBalance,
   deriveFinancialStatements,
