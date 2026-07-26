@@ -4617,7 +4617,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 64
+    "textMass": 106
   },
   "apps/web/components/ea/ReferenceModelPortfolioTable.tsx": {
     "vocabulary": 0,

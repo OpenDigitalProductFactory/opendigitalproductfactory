@@ -1,0 +1,51 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "PostgreSQL BuildPhaseRun execution evidence ledger",
+    "PostgreSQL TaskRun scheduler access path",
+    "Prisma-to-EA current-state data-model mirror"
+  ],
+  "migration": {
+    "name": "20260726010000_add_build_phase_execution_profile_ref + 20260726020000_index_task_run_build_status",
+    "backfill": "none — executionProfileRef is additive and nullable, so existing BuildPhaseRun rows remain null and retain their prior meaning; the TaskRun composite index is a non-destructive physical access path over existing buildId/status values and does not rewrite logical records"
+  },
+  "tests": [
+    "apps/web/lib/integrate/work-pattern-experiment-runtime.test.ts",
+    "apps/web/lib/queue/functions/work-pattern-experiment.test.ts",
+    "apps/web/lib/tak/work-pattern-experiment-scheduler.test.ts",
+    "apps/web/lib/tak/work-pattern-experiment-store.test.ts",
+    "apps/web/lib/tak/work-pattern-effective-ledger.test.ts",
+    "packages/db/scripts/migration-safety-guard.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:build-phase-run#execution-profile-ref",
+      "prismaModel": "BuildPhaseRun",
+      "lifecycleDisposition": "existing BuildPhaseRun rows are retained unchanged with executionProfileRef=null; new experiment phase rows may carry an immutable compact reference to the resolved execution profile, and the reference follows the existing BuildPhaseRun lifecycle and build cascade policy",
+      "fields": [
+        {
+          "fieldId": "data:build-phase-run#executionProfileRef",
+          "resolution": "governed",
+          "reason": "records the immutable execution-profile identity actually resolved for a Build Studio phase so experiment evidence can reject requested-versus-actual provider, model, method, or policy mismatches instead of inferring identity after execution",
+          "provenance": "BI-0A636528 delivery 1; approved governed playbook experimentation design; written only from the resolved work-pattern execution profile at phase execution time"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:task-run#build-status-index",
+      "prismaModel": "TaskRun",
+      "lifecycleDisposition": "no TaskRun lifecycle or retention semantics change; the composite index is retained as a physical scheduler access path and can be removed in a later forward migration without changing logical records",
+      "fields": [
+        {
+          "fieldId": "data:task-run#index-buildId-status",
+          "resolution": "not-applicable",
+          "reason": "the index duplicates no logical field and introduces no new captured value; it accelerates the existing scheduler lookup for active experiment work by canonical buildId and status",
+          "provenance": "BI-0A636528 delivery 1 scheduler query plan; migration 20260726020000_index_task_run_build_status"
+        }
+      ]
+    }
+  ]
+}
