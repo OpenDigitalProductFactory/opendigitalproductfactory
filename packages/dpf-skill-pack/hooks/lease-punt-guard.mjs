@@ -24,7 +24,14 @@
 // must never wedge the session. Shipped INSIDE the dpf-platform plugin so it
 // travels to every surface.
 
-import { readHookPayload, isShellTool, emitDeny, emitContext, inDpfWorkspace } from "./lib/hook-io.mjs";
+import {
+  readHookPayload,
+  isShellTool,
+  emitDeny,
+  emitContext,
+  inDpfWorkspace,
+  shellCommandFromInput,
+} from "./lib/hook-io.mjs";
 
 import { executableCommandText } from "./command-text.mjs";
 
@@ -91,7 +98,7 @@ function main() {
 
   // Shell tool across surfaces (Bash / Shell / run_terminal_command).
   if (!isShellTool(payload.toolName)) process.exit(0);
-  const command = payload.toolInput?.command ?? "";
+  const command = shellCommandFromInput(payload.toolInput);
   const verdict = decide(command, process.env);
   if (verdict.action === "allow") process.exit(0);
 

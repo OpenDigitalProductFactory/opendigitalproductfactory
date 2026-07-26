@@ -29,7 +29,13 @@
 // Emergency bypass: prefix the command with DPF_ALLOW_ROOT_COMPOSE_UP=1 (an
 // intentional install/recovery `up`) or DPF_ALLOW_DESTRUCTIVE_COMPOSE=1 (either).
 
-import { readHookPayload, isShellTool, emitDeny, inDpfWorkspace } from "./lib/hook-io.mjs";
+import {
+  readHookPayload,
+  isShellTool,
+  emitDeny,
+  inDpfWorkspace,
+  shellCommandFromInput,
+} from "./lib/hook-io.mjs";
 
 const DEFAULT_PROJECT = "dpf";
 const CONTAINER_CREATING = new Set(["up", "create", "start", "restart", "run"]);
@@ -188,7 +194,7 @@ function main() {
   if (!inDpfWorkspace(payload.cwd)) process.exit(0); // DPF-scoped global hook: enforce only inside a DPF checkout
 
   if (!isShellTool(payload.toolName)) process.exit(0);
-  const command = payload.toolInput?.command ?? "";
+  const command = shellCommandFromInput(payload.toolInput);
   const verdict = decide({ command, env: process.env });
   if (!verdict.block) process.exit(0);
 

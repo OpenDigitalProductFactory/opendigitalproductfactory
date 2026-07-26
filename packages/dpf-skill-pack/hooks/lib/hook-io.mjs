@@ -82,6 +82,19 @@ export function normalizePayload(raw) {
 }
 
 /**
+ * Shell command text from a normalized or raw toolInput.
+ * Surfaces use `command` (Claude/Grok); some agents also send `cmd`/`script`.
+ * Without this union, lease/root-clone guards fail open on non-`command` fields.
+ * @param {Record<string, any>|undefined|null} toolInput
+ * @returns {string}
+ */
+export function shellCommandFromInput(toolInput) {
+  if (!toolInput || typeof toolInput !== "object") return "";
+  const raw = toolInput.command ?? toolInput.cmd ?? toolInput.script ?? "";
+  return typeof raw === "string" ? raw : "";
+}
+
+/**
  * Read + parse the PreToolUse payload from stdin (fd 0), normalized. Returns null
  * on any read/parse error so callers can fail open.
  * @returns {{ toolName: string|undefined, toolInput: Record<string, any> }|null}

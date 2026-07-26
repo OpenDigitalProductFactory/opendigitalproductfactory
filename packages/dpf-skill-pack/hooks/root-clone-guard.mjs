@@ -32,7 +32,13 @@
 // Emergency bypass: prefix the command with DPF_ALLOW_ROOT_CLONE_MUTATION=1.
 
 import { lstatSync, statSync } from "node:fs";
-import { readHookPayload, isShellTool, emitDeny, inDpfWorkspace } from "./lib/hook-io.mjs";
+import {
+  readHookPayload,
+  isShellTool,
+  emitDeny,
+  inDpfWorkspace,
+  shellCommandFromInput,
+} from "./lib/hook-io.mjs";
 
 const WORKTREE_MARKER = "/.claude/worktrees/";
 
@@ -287,7 +293,7 @@ function main() {
   if (!inDpfWorkspace(payload.cwd)) process.exit(0); // DPF-scoped global hook: enforce only inside a DPF checkout
 
   if (!isShellTool(payload.toolName)) process.exit(0);
-  const command = payload.toolInput?.command ?? "";
+  const command = shellCommandFromInput(payload.toolInput);
   const cwd = payload.cwd ?? process.cwd();
   const verdict = decide({ command, cwd, env: process.env, isSymlink: realIsSymlink, isDir: realIsDir });
   if (!verdict.block) process.exit(0);

@@ -51,6 +51,15 @@ test("isShellTool spans every surface's shell tool name", () => {
   assert.ok(!isShellTool(undefined));
 });
 
+test("shellCommandFromInput accepts command/cmd/script aliases", async () => {
+  const { shellCommandFromInput } = await import("./lib/hook-io.mjs");
+  assert.equal(shellCommandFromInput({ command: "a" }), "a");
+  assert.equal(shellCommandFromInput({ cmd: "b" }), "b");
+  assert.equal(shellCommandFromInput({ script: "c" }), "c");
+  assert.equal(shellCommandFromInput({}), "");
+  assert.equal(shellCommandFromInput(null), "");
+});
+
 test("isDecisionTool spans Claude and Grok decision tools", () => {
   assert.ok(isDecisionTool("AskUserQuestion"));
   assert.ok(isDecisionTool("AskQuestion"));

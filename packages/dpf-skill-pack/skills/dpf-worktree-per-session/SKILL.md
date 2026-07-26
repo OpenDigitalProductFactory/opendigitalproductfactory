@@ -158,6 +158,7 @@ A sibling session running concurrently (the BS test thread the operator mentione
 
 ## See also
 
+- Successor hygiene skill: [`dpf-worktree-hygiene`](../dpf-worktree-hygiene/SKILL.md) — reaping, janitor flags, sandbox GC (not create)
 - AGENTS.md §4 (Branching, Commits & PRs) — full canonical doctrine
 - Kernel principle: [`worktree-per-session`](../../../../docs/founder-kernel/wiki/principles/worktree-per-session.md)
 - Concurrency principle: [`propose-acknowledge-reassign`](../../../../docs/founder-kernel/wiki/principles/propose-acknowledge-reassign.md)
