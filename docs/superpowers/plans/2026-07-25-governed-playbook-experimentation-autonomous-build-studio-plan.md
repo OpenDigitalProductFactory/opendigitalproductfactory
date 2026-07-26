@@ -1,6 +1,7 @@
 # Governed Playbook Experimentation and Autonomous Build Studio Implementation Plan
 
-- **Status:** awaiting operator review and approval
+- **Status:** operator-reviewed and approved for implementation
+- **Approved:** 2026-07-25
 - **Date:** 2026-07-25
 - **Approved design:** [`../specs/2026-07-25-governed-playbook-experimentation-autonomous-build-studio-design.md`](../specs/2026-07-25-governed-playbook-experimentation-autonomous-build-studio-design.md)
 - **Backlog item:** `BI-0A636528`
@@ -14,11 +15,12 @@
 
 > **For agentic workers:** execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff.
 
-## Approval stop
+## Approval record
 
-This document is a plan only. Do not edit production source, create migrations, promote any of the
-three BIs, open implementation PRs, enable autonomous flags, or change live `AuthorityBinding`
-records until the operator has reviewed and explicitly approved this plan.
+The operator explicitly approved this plan on 2026-07-25 after the architecture-review additions
+and TaskRun lifecycle correction were incorporated. Implementation may now proceed one delivery BI,
+branch, and PR at a time. Autonomous flags and live `AuthorityBinding` records remain rollout
+actions governed by the slice gates below, not implementation shortcuts.
 
 After approval, revalidate the backlog coverage receipt and re-sweep `origin/main`, open PRs, and
 the live backlog before each delivery branch starts. If the approved design, an owning BI, or a
@@ -166,6 +168,23 @@ risks found during review are resolved in the tasks below:
    scope-key lock. Work-pattern activation, supersession, rollback, and authority-scope changes
    go only through the specialized activation transaction; the generic editor rejects those
    mutations for `resourceType="work-pattern"`.
+4. `apps/web/lib/authority/bindings.ts` (`listAuthorityBindingRecords`) and every consumer of it
+   (`/platform/identity/authorization`, `BindingList`, `BindingDetailPanel`,
+   `BindingDetailDrawer`) query and render every `AuthorityBinding` row with no `resourceType`
+   filter. Every row in the codebase today is `resourceType="route"`, and the rendering assumes
+   route-shaped `subjects`/`grants`. Left unfiltered, the first work-pattern binding will surface
+   raw binding IDs and scope JSON in that unrelated admin screen the same day Delivery 2 ships,
+   contradicting this plan's own "no raw IDs at default altitude" UX guardrail. The read path
+   filters `resourceType="work-pattern"` bindings out of the route-authorization surface; it does
+   not just guard the write path.
+5. `TaskRun.status` already carries a documented, watchdog-consumed A2A lifecycle
+   (`submitted | working | input-required | auth-required | completed | failed | canceled |
+   rejected | archived`, indexed by `@@index([status, lastHeartbeatAt])`). The experiment manifest
+   adds a second lifecycle (`planned -> running -> analyzing -> completed`, `cancelled`) in
+   `a2aMetadata.workPatternExperiment.lifecycle` on the same parent row. The two are never allowed
+   to diverge silently: each experiment lifecycle value maps to one explicit `TaskRun.status`, and
+   the mapping is tested, not left to whichever value the implementer picks when the code is
+   written. `planned` remains `submitted` so queued work is not treated as stale in-flight work.
 
 No additional external architecture standard is required for this plan. The approved design has
 already grounded the experimental method, while DPF's own operational doctrine is authoritative
@@ -427,6 +446,14 @@ branch.
    terminal required cells. Invalid pairs remain operational evidence but cannot promote.
 9. Store compact profiles/digests only. Bulky artifacts remain in existing task/build artifact
    stores.
+10. Attribute every `DecisionShadowLedger.agentId` write to the orchestrating coworker (the
+    build's assigned `Agent.id`), never to a candidate model/provider under test. `agentId` is a
+    required, non-nullable column; a model being compared is evidence, not the attributing agent.
+11. Map every experiment lifecycle value to one explicit parent `TaskRun.status`
+    (`planned -> status="submitted"`, `running`/`analyzing -> status="working"`,
+    `completed -> status="completed"`, `cancelled -> status="canceled"`) so the row's A2A status and its
+    `a2aMetadata.workPatternExperiment.lifecycle` never diverge, and the watchdog's
+    `status='working' AND lastHeartbeatAt` staleness check stays meaningful through `analyzing`.
 
 **Tests first:**
 
@@ -439,7 +466,9 @@ branch.
 - retry increments attempt;
 - duplicate ledger writes converge;
 - supersession resolution, dangling references, and cycles;
-- missing/blocked/cancelled/budget-skewed cells invalidate promotion pairs.
+- missing/blocked/cancelled/budget-skewed cells invalidate promotion pairs;
+- parent `TaskRun.status` and `a2aMetadata.workPatternExperiment.lifecycle` never diverge across
+  every legal lifecycle transition.
 
 **Refactor allocation — 1 unit:**
 
@@ -656,7 +685,12 @@ evidence is accepted.
 
 - `apps/web/lib/authority/binding-editor.ts` to reject work-pattern activation, supersession,
   rollback, or authority-scope mutation outside the specialized transaction;
-- the binding-editor tests covering that guard.
+- the binding-editor tests covering that guard;
+- `apps/web/lib/authority/bindings.ts` (`listAuthorityBindingRecords`) so `resourceType="work-pattern"`
+  rows never reach the `/platform/identity/authorization` admin list or the `BindingList` /
+  `BindingDetailPanel` / `BindingDetailDrawer` components, all of which today assume every row is
+  `resourceType="route"` and render it unfiltered;
+- the bindings-reader tests covering that filter.
 
 **Reuse:**
 
@@ -688,7 +722,9 @@ evidence is accepted.
 - retry is idempotent;
 - generic binding-editor calls cannot activate, supersede, roll back, or change the authority
   scope of a work-pattern binding;
-- no capability-need JSON is treated as authority.
+- no capability-need JSON is treated as authority;
+- a work-pattern binding never appears in `listAuthorityBindingRecords()` output or the
+  route-authorization admin list.
 
 **Refactor allocation — 1 unit:**
 
@@ -768,6 +804,7 @@ node scripts/check-style-drift.mjs
 - add valid portable/corroborating evidence and confirm only the proved dimension widens;
 - run two concurrent activation attempts and observe one active binding;
 - trigger rollback and confirm previous safe binding plus retained failed evidence;
+- confirm `/platform/identity/authorization` shows no work-pattern binding row after activation;
 - verify UI at mobile/desktop, light/dark, keyboard-only, and screen-reader label level.
 
 **Delivery 2 exit:**
