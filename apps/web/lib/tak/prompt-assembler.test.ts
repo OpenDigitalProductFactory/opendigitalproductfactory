@@ -1,9 +1,15 @@
 // apps/web/lib/prompt-assembler.test.ts
 // TDD RED → GREEN tests for the composable system prompt assembler.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { assembleSystemPrompt } from "./prompt-assembler";
 import type { PromptInput } from "./prompt-assembler";
+
+vi.mock("./prompt-loader", () => ({
+  loadPrompts: vi.fn(async (refs: Array<{ category: string; slug: string; fallback?: string }>) => {
+    return new Map(refs.map((ref) => [`${ref.category}/${ref.slug}`, ref.fallback ?? ""]));
+  }),
+}));
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
