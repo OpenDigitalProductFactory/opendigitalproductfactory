@@ -12,7 +12,7 @@ The implementation sequence follows WWMD decision `DI-4A73DBCEC0E3`:
 2. Authority projection.
 3. Four-area roster and coworker-record consumption.
 
-This branch implements only deliverable 1 under `BI-4503457C`.
+This branch implements only deliverable 2 under `BI-F39A1A82`.
 
 ## Backlog Coverage
 
@@ -117,12 +117,132 @@ Every result carries:
 
 Implement in a separate branch for `BI-F39A1A82`.
 
-- Normalize existing authority sources into comparable restriction levels.
-- Apply explicit offer restrictions before service defaults, then agent defaults.
-- Let stricter downstream governance, grant, or action-proposal restrictions win.
-- Return `Approval rules need review` for malformed, contradictory, or unresolved inputs.
-- Carry the winning reason and source references.
-- Do not change enforcement or persisted authority.
+WWMD interaction `DI-072C2AC24FB8` selected the `restriction-lattice`
+approach with high confidence. The projection is a pure, evidence-bearing,
+discriminated read model over existing authority sources. It does not add a
+database model, authority store, or enforcement path.
+
+Decision ledger:
+
+| Option | Result | Rationale |
+| --- | --- | --- |
+| `restriction-lattice` | Selected, score `9.4964` | Preserves source evidence, fails closed, and reuses governed data without creating a second authority store |
+| `hitl-only` | Rejected | Too coarse; it would ignore explicit offer and service rules |
+| `live-action-probe` | Rejected | Conflates a contextual authorization check with a stable roster posture and adds runtime coupling |
+
+The recommendation margin was `1.8566`; the kernel returned high confidence
+with a usable decision signal. The lattice preserves action and resource scope
+rather than turning one denied action into a global coworker restriction.
+
+### Authority lattice
+
+Normalize authority into these levels, ordered from strictest to loosest:
+
+1. `cannot-act`
+2. `advice-only`
+3. `proposal-only`
+4. `approval-required`
+5. `review-required`
+6. `autonomous`
+
+The owner labels are:
+
+- `Cannot act`
+- `Advises only`
+- `Prepares work for approval`
+- `Acts with approval`
+- `Acts with review`
+- `Can act within limits`
+
+Catalog boundaries map as follows:
+
+| Existing value | Projection level |
+| --- | --- |
+| `never-allowed` | `cannot-act` |
+| `advice-only` | `advice-only` |
+| `proposal-only` | `proposal-only` |
+| `approval-required` | `approval-required` |
+| `autonomous-allowed` | `autonomous` |
+
+Agent and service HITL tiers map as follows:
+
+| Existing tier | Meaning | Projection level |
+| --- | --- | --- |
+| `0` | Human-only | `cannot-act` |
+| `1` | Approve | `approval-required` |
+| `2` | Review | `review-required` |
+| `3` | Autonomous | `autonomous` |
+
+### Authority precedence
+
+1. Select the most specific base: explicit offer, else service, else agent.
+2. Within that selected base, let a required offer approval or stricter
+   service HITL tier narrow the declared boundary.
+3. Preserve service and agent defaults as overridden evidence when a more
+   specific source is selected; they do not narrow an explicit offer.
+4. Apply agent-governance evidence as a general restriction.
+5. For a specific action, consume the existing
+   `EffectiveAuthorityExplanation` rather than recomputing grants or bindings.
+   This preserves user capability, agent grants, binding subjects, binding
+   grants, and binding approval modes in one canonical decision.
+6. Apply native action-proposal evidence only when the projection carries an
+   explicit action key and resource reference. These contextual restrictions
+   may only narrow, never widen, the selected base.
+7. Require explicit evaluation states. `evaluated` with no matching rows is
+   distinct from `unavailable` or an omitted evaluation.
+8. Require each contextual evaluation to attest the same action key and
+   resource reference as the projection scope.
+9. Prefer the more specific owner explanation when two candidates have equal
+   restriction strength.
+10. Return `Approval rules need review` when selected or downstream evidence is
+   malformed, unsupported, contradictory, or missing a source reference.
+
+### Authority scopes
+
+- `default-posture` is the roster and coworker-record summary. It combines the
+  selected catalog/agent base with agent-governance policy. It does not apply
+  action-specific grants or proposals globally.
+- `effective-action` adds an action key, resource reference, the canonical
+  effective-authority evaluation, and native
+  action-proposal evaluation. Each evaluation attests the same action/resource
+  pair. This scope is suitable for a specific offer or work item, not the
+  roster headline.
+
+Catalog values are validated with the existing
+`COWORKER_AUTHORITY_BOUNDARIES` registry. Projection-only levels are never
+accepted as stored offer or service boundaries. Effective action decisions use
+the existing `allow`, `deny`, and `require-approval` output. Proposal evidence
+uses the statuses written by the current proposal surfaces: `proposed`,
+`approve`, `approved`, `reject`, `rejected`, `executed`, and `failed`.
+`BI-17C845C9` owns normalizing the governance API so future rows use the
+canonical past-tense decision states; the read model remains tolerant of current
+legacy rows until that bug lands.
+
+Every resolved result carries:
+
+- `label` and `summary` for the compact badge;
+- `ownerReason` and `ownerAction` for the visible explanation;
+- the projection scope;
+- the winning source reference;
+- advanced evidence with source, field, normalized level, and technical detail.
+
+Every review-needed result carries owner guidance plus validation reasons.
+Unknown arrays and objects are represented by type markers, and unrecognized
+primitive strings are represented by type and length rather than returned
+verbatim.
+
+### Authority files and tests
+
+- Add `apps/web/lib/coworker-service-catalog/authority-projection-contract.ts`.
+- Add `apps/web/lib/coworker-service-catalog/authority-projection-sources.ts`.
+- Add `apps/web/lib/coworker-service-catalog/authority-projection.ts`.
+- Add `apps/web/lib/coworker-service-catalog/authority-projection.test.ts`.
+- Cover every HITL and catalog mapping, source precedence, within-source
+  tightening, general versus action scope, native governance/grant/proposal
+  values, explicit evaluation states, owner-copy tie behavior, malformed and
+  contradictory evidence, and the live unsupported `requirements-gate` value.
+- Do not change persisted authority, delegated-action enforcement, grants, or
+  action-proposal behavior. Those remain owned by `BI-62BFAA95`.
 
 ## Deliverable 3: Roster Consumers
 
