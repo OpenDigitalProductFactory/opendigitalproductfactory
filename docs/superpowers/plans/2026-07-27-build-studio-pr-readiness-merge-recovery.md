@@ -61,9 +61,13 @@ References:
 - Governed self-upgrade owns deployment, recovery points, health evidence, and rollback.
 - Existing `escalateBuildToHuman` owns bounded, deduplicated human escalation.
 
-## Atomic coverage decision
+## Backlog coverage
 
-This plan is deliberately atomic under receipt `cms2q28mg0dqe01qqyggqaaem`.
+- Decision: atomic
+- Parent: `BI-7C4FDBF5`
+- Receipt: `cms2xz0h4014g01l7lumlp0ge`
+- Dependencies: Shared readiness → durable reconciler → customer projection → controlled rollout and verification.
+- Rationale: Every slice is non-independently shippable. Queue actuation without durable reconciliation can strand or duplicate delivery; reconciliation without exact-SHA readiness can accept stale evidence; customer projection without authoritative state can mislead; and enforcement without controlled rollout and verification is unsafe.
 
 | Deliverable | Dependency | Independently shippable |
 |---|---|---:|
