@@ -74,6 +74,7 @@ export const AGENT_IDENTITY_OVERRIDES: Record<string, { displayName?: string; ki
 export const COWORKER_SLUG_TO_CANONICAL_AGENT_ID: Readonly<Record<string, string>> = {
   coo: "AGT-ORCH-000",
   "build-specialist": "AGT-WS-BUILD",
+  "change-reviewer": "AGT-WS-REVIEW",
   "admin-assistant": "AGT-WS-ADMIN",
   "portfolio-advisor": "AGT-WS-PORTFOLIO",
   "external-catalog-scout": "AGT-WS-SCOUT",

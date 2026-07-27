@@ -3,7 +3,7 @@
 
 import type { SensitivityLevel } from "./agent-router-types";
 import { resolveDocsPath } from "@/lib/docs-route-map";
-
+import { CHANGE_REVIEWER_ROUTE_CONTEXT } from "./change-reviewer-route";
 export type RouteContextDef = {
   routePrefix: string;
   domain: string;
@@ -20,9 +20,7 @@ export type RouteContextDef = {
   }>;
 };
 
-// ─── Universal Skills (added to every route) ────────────────────────────────
-// These appear on every page, giving the agent baseline page-interaction ability.
-
+// Universal baseline page-interaction skills added to every route.
 export const UNIVERSAL_SKILLS: RouteContextDef["skills"] = [
   {
     label: "Analyze this page",
@@ -613,6 +611,8 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       },
     ],
   },
+
+  "/build/work": CHANGE_REVIEWER_ROUTE_CONTEXT,
 
   "/build": {
     routePrefix: "/build",

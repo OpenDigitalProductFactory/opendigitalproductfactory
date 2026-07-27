@@ -144,6 +144,34 @@ describe("coworker definition conformance gate (EP-COWORKER-LIFECYCLE)", () => {
     expect(marketing?.hasSelfTask).toBe(true);
   });
 
+  it("defines the Change Reviewer as an independent read-only coworker", () => {
+    const defs = assembleCoworkerDefinitions(realSources());
+    const reviewer = defs.find((d) => d.agentId === "change-reviewer");
+
+    expect(reviewer).toBeDefined();
+    expect(reviewer?.sensitivity).toBe("confidential");
+    expect(reviewer?.boundRoutes.length).toBeGreaterThan(0);
+    expect(reviewer?.modelFloor?.minimumTier).toBe("strong");
+    expect(reviewer?.grants).toEqual(
+      expect.arrayContaining([
+        "file_read",
+        "code_graph_read",
+        "architecture_read",
+        "spec_plan_read",
+        "backlog_read",
+        "registry_read",
+      ]),
+    );
+    expect(reviewer?.grants).not.toEqual(
+      expect.arrayContaining([
+        "backlog_write",
+        "build_plan_write",
+        "sandbox_execute",
+        "release_gate_create",
+      ]),
+    );
+  });
+
   it("flags an incomplete new coworker on every missing axis", () => {
     const sources = realSources();
     const incomplete: CoworkerDefinitionSources = {

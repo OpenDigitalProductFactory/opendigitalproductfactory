@@ -18,6 +18,17 @@ describe("resolveRouteContext", () => {
     expect(ctx.routePrefix).toBe("/build");
   });
 
+  it("uses the confidential Change Review context for governed work capsules", () => {
+    const ctx = resolveRouteContext("/build/work/WC-123");
+
+    expect(ctx.domain).toBe("Change Review");
+    expect(ctx.routePrefix).toBe("/build/work");
+    expect(ctx.sensitivity).toBe("confidential");
+    expect(ctx.domainTools).toEqual(
+      expect.arrayContaining(["read_project_file", "search_code_graph", "find_related_tests"]),
+    );
+  });
+
   it("matches nested EA routes", () => {
     const ctx = resolveRouteContext("/ea/views/123");
     expect(ctx.domain).toBe("Enterprise Architecture");

@@ -3,13 +3,11 @@ import type { AgentInfo, RouteAgentEntry, AgentSkill } from "@/lib/agent-coworke
 import { getRouteSensitivity } from "@/lib/agent-sensitivity";
 import { resolveRouteContext, UNIVERSAL_SKILLS } from "@/lib/route-context-map";
 import { resolveSelectedCoworkerForRoute } from "./selected-coworker-route";
+import { CHANGE_REVIEWER_ROUTE_AGENT } from "./change-reviewer-route";
 // prompt-loader is imported server-side only via agent-routing-server.ts.
 // This file stays free of @dpf/db for client component compatibility.
 
-/**
- * Shared platform identity preamble — injected into every agent's system prompt.
- * Tells the agent what this platform is, so it doesn't hallucinate or ask obvious questions.
- */
+/** Shared identity preamble; prevents page-context hallucination and redundant questions. */
 const PLATFORM_PREAMBLE = `You are an AI co-worker. The user is on a specific page in the platform. You know which page from the route context below.
 
 LANGUAGE: Always respond in English, regardless of the language of any previous messages or system context.
@@ -460,6 +458,7 @@ ON THIS PAGE: The user sees the AI Workforce (agent cards with provider dropdown
       defaultBudgetClass: "balanced",
     },
   },
+  "/build/work": CHANGE_REVIEWER_ROUTE_AGENT,
   "/build": {
     agentId: "build-specialist",
     agentName: "Software Engineer",

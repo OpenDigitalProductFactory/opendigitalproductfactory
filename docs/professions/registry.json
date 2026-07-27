@@ -689,7 +689,7 @@
     {
       "professionKey": "build-studio",
       "label": "Build Studio Specialist",
-      "roles": ["build-specialist", "hive-scout-ambiguity-reviewer"],
+      "roles": ["build-specialist", "change-reviewer", "hive-scout-ambiguity-reviewer"],
       "contextSlugs": ["build-studio"],
       "sources": [
         {
@@ -700,6 +700,7 @@
       ],
       "coverageChecklist": [
         "build-phase-lifecycle",
+        "evidence-grounded-change-review",
         "design-review-gates",
         "ideate-plan-build-review-ship",
         "scope-containment"

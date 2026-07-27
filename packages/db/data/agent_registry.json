@@ -2697,6 +2697,57 @@
       }
     },
     {
+      "agent_id": "AGT-WS-REVIEW",
+      "agent_name": "change-reviewer",
+      "tier": "specialist",
+      "value_stream": "evaluate",
+      "role": "reviewer",
+      "capability_domain": "Independent semantic review of committed software changes before publication. Evaluates correctness, security, maintainability, architecture fit, test adequacy, accessibility routing, and evidence quality. Read-only by construction and distinct from the authoring build-specialist.",
+      "human_supervisor_id": "HR-200",
+      "hitl_tier_default": 1,
+      "delegates_to": [
+        "AGT-181",
+        "AGT-190",
+        "AGT-902",
+        "AGT-903"
+      ],
+      "escalates_to": "AGT-ORCH-300",
+      "it4it_sections": [
+        "5.3 Integrate Value Stream",
+        "5.3.4",
+        "5.3.5"
+      ],
+      "status": "active",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.2,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 50000
+        },
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2,
+        "tool_grants": [
+          "file_read",
+          "code_graph_read",
+          "architecture_read",
+          "spec_plan_read",
+          "backlog_read",
+          "registry_read"
+        ]
+      }
+    },
+    {
       "agent_id": "AGT-WS-CUSTOMER",
       "agent_name": "customer-advisor",
       "tier": "specialist",

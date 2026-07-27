@@ -50,6 +50,14 @@ export function derivedReadProbe(agentId: string): GoldenJourney {
  * Keyed by agentId; each entry must remain read-only.
  */
 export const CURATED_JOURNEYS: Readonly<Record<string, readonly Omit<GoldenJourney, "agentId" | "kind">[]>> = {
+  "change-reviewer": [
+    {
+      journeyId: "change-reviewer/evidence-grounded-change-review",
+      mode: "act",
+      prompt:
+        "Certification probe (read-only). Use your source or code-graph tools to inspect one current committed source file and one related test. Report the file, the test, one evidence-grounded review observation, and what evidence would be needed before calling it a defect. Do not create, modify, or delete anything. If tools fail, reply TOOL-FAILURE and name the tool.",
+    },
+  ],
   "marketing-specialist": [
     {
       journeyId: "marketing-specialist/campaign-readiness-review",
