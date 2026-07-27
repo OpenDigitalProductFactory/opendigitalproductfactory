@@ -436,6 +436,17 @@
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
+    "@vitest/coverage-v8": {
+      "added": "2026-07-27",
+      "workspaces": [
+        "apps/web",
+        "packages/db"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "Official Vitest V8 coverage provider, peer-aligned at 4.1.10 with the pinned Vitest runtime. Required because Vitest 4 loads coverage providers as separate packages; no existing dependency supplies exhaustive V8 coverage. Vetted: MIT, npm SLSA provenance attestation, published since 2023, 5 maintainers, 31.7M weekly downloads, and pnpm scan:deps reported 0 advisories across the workspace."
+    },
     "@xyflow/react": {
       "added": "2026-06-21",
       "workspaces": [
