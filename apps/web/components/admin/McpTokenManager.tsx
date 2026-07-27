@@ -18,7 +18,7 @@ import { confirmDialog } from "@/components/ui/Dialog";
 import {
   type McpTokenRow as TokenRow,
   useMcpTokenManagerInitialState,
-} from "@/components/admin/useMcpTokenManagerInitialState";
+} from "@/lib/mcp/use-token-manager-initial-state";
 
 import {
   bulkRevokeMyMcpTokens,
