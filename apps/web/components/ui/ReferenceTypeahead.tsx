@@ -3,6 +3,7 @@
 import {
   useState,
   useEffect,
+  useId,
   useRef,
   useCallback,
   type KeyboardEvent,
@@ -42,6 +43,10 @@ export function ReferenceTypeahead({
   disabled = false,
   autoFocus = false,
 }: ReferenceTypeaheadProps) {
+  const instanceId = useId().replace(/:/g, "");
+  const listboxId = `ref-typeahead-listbox-${instanceId}`;
+  const optionId = (index: number) =>
+    `ref-typeahead-option-${instanceId}-${index}`;
   const [query, setQuery] = useState(value?.label ?? "");
   const [results, setResults] = useState<RefItem[]>([]);
   const [open, setOpen] = useState(false);
@@ -187,8 +192,9 @@ export function ReferenceTypeahead({
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-autocomplete="list"
+        aria-controls={listboxId}
         aria-activedescendant={
-          activeIndex >= 0 ? `ref-typeahead-option-${activeIndex}` : undefined
+          activeIndex >= 0 ? optionId(activeIndex) : undefined
         }
         disabled={disabled}
         value={query}
@@ -209,6 +215,7 @@ export function ReferenceTypeahead({
             (listRef as React.MutableRefObject<HTMLUListElement | null>).current =
               el;
           }}
+          id={listboxId}
           role="listbox"
           style={floatingStyles}
           className="z-50 max-h-60 overflow-auto rounded border bg-[var(--dpf-surface-1)] border-[var(--dpf-border)] py-1 shadow-lg"
@@ -217,7 +224,7 @@ export function ReferenceTypeahead({
           {results.map((item, idx) => (
             <li
               key={item.id}
-              id={`ref-typeahead-option-${idx}`}
+              id={optionId(idx)}
               role="option"
               aria-selected={idx === activeIndex}
               onMouseDown={(e) => e.preventDefault()}
@@ -234,7 +241,7 @@ export function ReferenceTypeahead({
           ))}
           {showAddNew && (
             <li
-              id={`ref-typeahead-option-${results.length}`}
+              id={optionId(results.length)}
               role="option"
               aria-selected={activeIndex === results.length}
               onMouseDown={(e) => e.preventDefault()}

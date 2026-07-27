@@ -43,6 +43,90 @@ function revalidateAdminPaths(): void {
   revalidatePath("/employee");
 }
 
+// ─── Bounded reference search ────────────────────────────────────────────────
+
+const ADMIN_REFERENCE_SEARCH_LIMIT = 20;
+
+function boundedSearchQuery(query: string): string {
+  return query.trim().slice(0, 100);
+}
+
+export async function searchAdminRegions(query: string) {
+  const denied = await requireAdminCapability();
+  const normalized = boundedSearchQuery(query);
+  if (denied || !normalized) return [];
+
+  return prisma.region.findMany({
+    where: {
+      status: "active",
+      OR: [
+        { name: { contains: normalized, mode: "insensitive" } },
+        { code: { contains: normalized, mode: "insensitive" } },
+        {
+          country: {
+            name: { contains: normalized, mode: "insensitive" },
+          },
+        },
+      ],
+    },
+    select: {
+      id: true,
+      name: true,
+      code: true,
+      country: { select: { id: true, name: true, iso2: true } },
+    },
+    orderBy: [{ name: "asc" }, { country: { name: "asc" } }],
+    take: ADMIN_REFERENCE_SEARCH_LIMIT,
+  });
+}
+
+export async function searchRegionMergeCandidates(
+  countryId: string,
+  loserId: string,
+  query: string,
+) {
+  const denied = await requireAdminCapability();
+  const normalized = boundedSearchQuery(query);
+  if (denied || !countryId || !loserId || !normalized) return [];
+
+  return prisma.region.findMany({
+    where: {
+      countryId,
+      id: { not: loserId },
+      status: "active",
+      OR: [
+        { name: { contains: normalized, mode: "insensitive" } },
+        { code: { contains: normalized, mode: "insensitive" } },
+      ],
+    },
+    select: { id: true, name: true, code: true },
+    orderBy: { name: "asc" },
+    take: ADMIN_REFERENCE_SEARCH_LIMIT,
+  });
+}
+
+export async function searchCityMergeCandidates(
+  regionId: string,
+  loserId: string,
+  query: string,
+) {
+  const denied = await requireAdminCapability();
+  const normalized = boundedSearchQuery(query);
+  if (denied || !regionId || !loserId || !normalized) return [];
+
+  return prisma.city.findMany({
+    where: {
+      regionId,
+      id: { not: loserId },
+      status: "active",
+      name: { contains: normalized, mode: "insensitive" },
+    },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+    take: ADMIN_REFERENCE_SEARCH_LIMIT,
+  });
+}
+
 // ─── Toggle Country Status ───────────────────────────────────────────────────
 
 export async function toggleCountryStatus(id: string): Promise<WorkforceActionResult> {

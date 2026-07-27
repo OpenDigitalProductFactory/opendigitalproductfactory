@@ -7,9 +7,20 @@ import {
   toggleRegionStatus,
   previewRegionMerge,
   mergeRegion,
+  searchRegionMergeCandidates,
   type MergePreview,
 } from "@/lib/actions/reference-data-admin";
-import { forceCreateRegion } from "@/lib/actions/reference-data";
+import {
+  forceCreateRegion,
+  searchCountries,
+} from "@/lib/actions/reference-data";
+import { ReferenceTypeahead } from "@/components/ui/ReferenceTypeahead";
+import {
+  ReferenceDataPagination,
+  ReferenceDataParentPicker,
+  ReferenceDataSearch,
+} from "@/components/admin/ReferenceDataControls";
+import type { PageWindow } from "@/lib/admin/reference-data-read-model";
 
 type Region = {
   id: string;
@@ -25,17 +36,20 @@ type CountryOption = { id: string; name: string; iso2: string };
 
 type Props = {
   regions: Region[];
-  countries: CountryOption[];
+  selectedCountry: CountryOption | null;
+  query: string;
+  window: PageWindow;
 };
 
-const inputCls =
-  "w-full rounded border px-3 py-2 text-sm bg-[var(--dpf-surface-2)] border-[var(--dpf-border)] text-[var(--dpf-foreground)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--dpf-accent)]";
-
-export function RegionPanel({ regions, countries }: Props) {
+export function RegionPanel({
+  regions,
+  selectedCountry,
+  query,
+  window,
+}: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(true);
-  const [countryFilter, setCountryFilter] = useState<string>("");
 
   // Inline edit state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -46,18 +60,25 @@ export function RegionPanel({ regions, countries }: Props) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [addName, setAddName] = useState("");
   const [addCode, setAddCode] = useState("");
-  const [addCountryId, setAddCountryId] = useState(countries[0]?.id ?? "");
+  const [addCountry, setAddCountry] = useState<{
+    id: string;
+    label: string;
+  } | null>(
+    selectedCountry
+      ? {
+          id: selectedCountry.id,
+          label: `${selectedCountry.name} (${selectedCountry.iso2})`,
+        }
+      : null,
+  );
 
   // Merge state
   const [mergingId, setMergingId] = useState<string | null>(null);
-  const [survivorId, setSurvivorId] = useState("");
+  const [survivor, setSurvivor] = useState<{
+    id: string;
+    label: string;
+  } | null>(null);
   const [preview, setPreview] = useState<MergePreview | null>(null);
-
-  const activeCount = regions.filter((r) => r.status === "active").length;
-
-  const filtered = countryFilter
-    ? regions.filter((r) => r.countryId === countryFilter)
-    : regions;
 
   function startEdit(r: Region) {
     setEditingId(r.id);
@@ -87,10 +108,10 @@ export function RegionPanel({ regions, countries }: Props) {
   }
 
   function handleAdd() {
-    if (!addName.trim() || !addCountryId) return;
+    if (!addName.trim() || !addCountry) return;
     startTransition(async () => {
       await forceCreateRegion(
-        addCountryId,
+        addCountry.id,
         addName.trim(),
         addCode.trim() || undefined,
       );
@@ -103,27 +124,27 @@ export function RegionPanel({ regions, countries }: Props) {
 
   function startMerge(r: Region) {
     setMergingId(r.id);
-    setSurvivorId("");
+    setSurvivor(null);
     setPreview(null);
   }
 
   function cancelMerge() {
     setMergingId(null);
-    setSurvivorId("");
+    setSurvivor(null);
     setPreview(null);
   }
 
   function runPreview(loserId: string) {
-    if (!survivorId) return;
+    if (!survivor) return;
     startTransition(async () => {
-      setPreview(await previewRegionMerge(loserId, survivorId));
+      setPreview(await previewRegionMerge(loserId, survivor.id));
     });
   }
 
   function confirmMerge(loserId: string) {
-    if (!survivorId) return;
+    if (!survivor) return;
     startTransition(async () => {
-      await mergeRegion(loserId, survivorId);
+      await mergeRegion(loserId, survivor.id);
       cancelMerge();
       router.refresh();
     });
@@ -142,35 +163,56 @@ export function RegionPanel({ regions, countries }: Props) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls="region-panel-content"
         className="flex w-full items-center justify-between text-left"
       >
         <h3 className="text-sm font-semibold text-[var(--dpf-text)]">
-          Regions ({activeCount} active)
+          Regions ({window.total.toLocaleString()} matching)
         </h3>
-        <span className="text-[var(--dpf-muted)] text-sm">
+        <span aria-hidden="true" className="text-sm text-[var(--dpf-muted)]">
           {open ? "\u25BE" : "\u25B8"}
         </span>
       </button>
 
       {open && (
-        <div className="mt-3 space-y-3">
-          <select
-            value={countryFilter}
-            onChange={(e) => setCountryFilter(e.target.value)}
-            className={inputCls}
-          >
-            <option value="">All countries</option>
-            {countries.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name} ({c.iso2})
-              </option>
-            ))}
-          </select>
+        <div id="region-panel-content" className="mt-3 space-y-3">
+          <ReferenceDataParentPicker
+            inputId="region-country-filter"
+            label="Country"
+            value={
+              selectedCountry
+                ? {
+                    id: selectedCountry.id,
+                    label: `${selectedCountry.name} (${selectedCountry.iso2})`,
+                  }
+                : null
+            }
+            placeholder="Search for a country..."
+            paramName="regionCountry"
+            resetParams={["regionQ", "regionPage"]}
+            onSearch={async (searchQuery) =>
+              (await searchCountries(searchQuery)).map((country) => ({
+                id: country.id,
+                label: `${country.name} (${country.iso2})`,
+              }))
+            }
+          />
+          {selectedCountry && (
+            <ReferenceDataSearch
+              inputId="region-search"
+              label={`Find regions in ${selectedCountry.name}`}
+              query={query}
+              queryParam="regionQ"
+              pageParam="regionPage"
+              placeholder="Filter by name or code..."
+            />
+          )}
 
           <div className="space-y-1">
-            {filtered.map((r) => (
+            {regions.map((r) => (
               <div key={r.id}>
-                <div className="flex items-center justify-between rounded px-3 py-2 text-sm hover:bg-[var(--dpf-surface-2)]">
+                <div className="flex flex-col gap-2 rounded px-3 py-2 text-sm hover:bg-[var(--dpf-surface-2)] sm:flex-row sm:items-center sm:justify-between">
                 {editingId === r.id ? (
                   <div className="flex flex-1 items-center gap-2">
                     <input
@@ -272,33 +314,35 @@ export function RegionPanel({ regions, countries }: Props) {
                     <span className="text-[var(--dpf-muted)]">
                       Merge &ldquo;{r.name}&rdquo; into:
                     </span>
-                    <select
-                      value={survivorId}
-                      onChange={(e) => {
-                        setSurvivorId(e.target.value);
-                        setPreview(null);
-                      }}
-                      className="rounded border px-2 py-1 text-sm bg-[var(--dpf-surface-2)] border-[var(--dpf-border)] text-[var(--dpf-foreground)] focus:outline-none focus:ring-1 focus:ring-[var(--dpf-accent)]"
-                    >
-                      <option value="">Select survivor region&hellip;</option>
-                      {regions
-                        .filter(
-                          (o) =>
-                            o.id !== r.id &&
-                            o.countryId === r.countryId &&
-                            o.status === "active",
-                        )
-                        .map((o) => (
-                          <option key={o.id} value={o.id}>
-                            {o.name}
-                            {o.code ? ` (${o.code})` : ""}
-                          </option>
-                        ))}
-                    </select>
+                    <div className="min-w-64 flex-1">
+                      <ReferenceTypeahead
+                        inputId={`region-survivor-${r.id}`}
+                        value={survivor}
+                        placeholder="Search survivor region..."
+                        onSearch={async (searchQuery) =>
+                          (
+                            await searchRegionMergeCandidates(
+                              r.countryId,
+                              r.id,
+                              searchQuery,
+                            )
+                          ).map((candidate) => ({
+                            id: candidate.id,
+                            label: candidate.code
+                              ? `${candidate.name} (${candidate.code})`
+                              : candidate.name,
+                          }))
+                        }
+                        onSelect={(candidate) => {
+                          setSurvivor(candidate);
+                          setPreview(null);
+                        }}
+                      />
+                    </div>
                     <button
                       type="button"
                       onClick={() => runPreview(r.id)}
-                      disabled={isPending || !survivorId}
+                      disabled={isPending || !survivor}
                       className="rounded border border-[var(--dpf-border)] px-2 py-1 text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-foreground)] disabled:opacity-50"
                     >
                       Preview impact
@@ -333,12 +377,24 @@ export function RegionPanel({ regions, countries }: Props) {
                 )}
               </div>
             ))}
-            {filtered.length === 0 && (
+            {!selectedCountry && (
               <p className="px-3 py-2 text-xs text-[var(--dpf-muted)]">
-                No regions to display.
+                Choose a country to list its regions.
+              </p>
+            )}
+            {selectedCountry && regions.length === 0 && (
+              <p className="px-3 py-2 text-xs text-[var(--dpf-muted)]">
+                No regions match this country and filter.
               </p>
             )}
           </div>
+          {selectedCountry && (
+            <ReferenceDataPagination
+              label="Region results"
+              window={window}
+              pageParam="regionPage"
+            />
+          )}
 
           {/* Add region form */}
           {!showAddForm ? (
@@ -350,7 +406,7 @@ export function RegionPanel({ regions, countries }: Props) {
               + Add region
             </button>
           ) : (
-            <div className="flex items-center gap-2 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
+            <div className="flex flex-col gap-2 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 sm:flex-row sm:items-center">
               <input
                 type="text"
                 value={addName}
@@ -366,21 +422,24 @@ export function RegionPanel({ regions, countries }: Props) {
                 placeholder="Code"
                 className="w-20 rounded border px-2 py-1 text-sm bg-[var(--dpf-surface-2)] border-[var(--dpf-border)] text-[var(--dpf-foreground)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--dpf-accent)]"
               />
-              <select
-                value={addCountryId}
-                onChange={(e) => setAddCountryId(e.target.value)}
-                className="rounded border px-2 py-1 text-sm bg-[var(--dpf-surface-2)] border-[var(--dpf-border)] text-[var(--dpf-foreground)] focus:outline-none focus:ring-1 focus:ring-[var(--dpf-accent)]"
-              >
-                {countries.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.iso2})
-                  </option>
-                ))}
-              </select>
+              <div className="min-w-64 flex-1">
+                <ReferenceTypeahead
+                  inputId="add-region-country"
+                  value={addCountry}
+                  placeholder="Search for the region’s country..."
+                  onSearch={async (searchQuery) =>
+                    (await searchCountries(searchQuery)).map((country) => ({
+                      id: country.id,
+                      label: `${country.name} (${country.iso2})`,
+                    }))
+                  }
+                  onSelect={setAddCountry}
+                />
+              </div>
               <button
                 type="button"
                 onClick={handleAdd}
-                disabled={isPending || !addName.trim()}
+                disabled={isPending || !addName.trim() || !addCountry}
                 className="rounded bg-[var(--dpf-accent)] px-3 py-1 text-xs font-medium text-white disabled:opacity-50"
               >
                 {isPending ? "..." : "Add"}
@@ -391,6 +450,7 @@ export function RegionPanel({ regions, countries }: Props) {
                   setShowAddForm(false);
                   setAddName("");
                   setAddCode("");
+                  setAddCountry(null);
                 }}
                 className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-foreground)]"
               >
