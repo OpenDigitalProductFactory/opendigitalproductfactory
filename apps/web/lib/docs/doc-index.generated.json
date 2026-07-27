@@ -9753,8 +9753,13 @@
       "publishedPortal": true,
       "anchors": [
         "use-this-doc-for",
-        "workflow",
-        "what-to-watch"
+        "choose-the-right-settings-area",
+        "update-portal-presentation",
+        "keep-business-context-current",
+        "set-hours-and-timezone-safely",
+        "verification-and-recovery",
+        "what-to-watch",
+        "related"
       ]
     },
     "docs/user-guide/storefront/setup-and-launch.md": {
@@ -9764,8 +9769,13 @@
       "publishedPortal": true,
       "anchors": [
         "use-this-doc-for",
-        "workflow",
-        "what-to-watch"
+        "before-you-start",
+        "from-setup-to-a-live-portal",
+        "complete-the-guided-setup",
+        "launch-readiness-check",
+        "verify-the-customer-experience",
+        "what-to-watch",
+        "related"
       ]
     },
     "docs/user-guide/storefront/team-and-fulfilment.md": {
