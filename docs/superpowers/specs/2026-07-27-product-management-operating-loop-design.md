@@ -338,6 +338,16 @@ The Products home at `/portfolio` remains the canonical place to browse Goods an
 - Roadmap (`/direction/roadmap`);
 - Outcomes (`/direction/outcomes`).
 
+`ProductTabNav` already has a **Commercial** family whose **Offerings** subroute
+(`/portfolio/product/[id]/offerings`) renders `ServiceOffering` rows directly today
+(`apps/web/app/(shell)/portfolio/product/[id]/offerings/page.tsx`). This is the existing
+front-end home for exactly the record §7 already flags for reconciliation. The canonical
+commercial Offering/CatalogItem contract extends this existing Commercial > Offerings tab; it does
+not stand up Catalog Builder, or any other surface, as a second product-level commercial home.
+Reconciling `ServiceOffering` without naming this route risks the operational-commitment view and
+the new commercial-Offering view drifting into two competing "what does this product sell"
+surfaces — the exact failure mode the design's other guardrails prevent everywhere else.
+
 The product Overview remains a concise identity/posture page and may show a single “Direction needs attention” handoff. Demand stays structurally backed by the existing backlog; the Direction brief projects the relevant demand state rather than moving or duplicating it. Catalog Builder remains an internal Storefront capability reached contextually from the product or the Storefront; it does not become a competing product-management home. Any new subroute is subject to the navigation audit in its child item.
 
 ### 9.2 First viewport
@@ -419,6 +429,11 @@ The rollout is product-selective before becoming an organization default. Existi
 - **Data model:** The design extends `DigitalProduct`, storefront, quote/order, research, battlecard, knowledge, and backlog substrate. New ProductLine, commercial Offering/CatalogItem, optional reusable configuration, Product Sold traceability, and objective/outcome contracts are justified gaps, but their final shapes require child-level schema/code-graph verification. Objective ownership resolves through `Principal`; it does not introduce another identity string.
 - **Single source of truth:** Product/ProductLine owns what the organization manages; CatalogItem owns the canonical purchase option; StorefrontItem is a channel projection; quote/order owns sale-specific configuration snapshots; Product Sold owns fulfilled-customer traceability; demand remains the idea/investment authority; knowledge remains the reviewed narrative authority; roadmap and brief content remain projections.
 - **Substrate fit:** The management experience stays in Products, Catalog Builder stays in internal Storefront management, the scheduler and research executor are reused, reporting UI composes report-kit, and organization/product-line/product query logic converges behind one read model.
+- **Important (added on re-review):** the existing `ProductTabNav` "Commercial" family already has an
+  "Offerings" tab (`/portfolio/product/[id]/offerings`) that renders `ServiceOffering` rows today —
+  the exact record §7 flags for reconciliation. §9.1 named this route and its resolution (the
+  canonical Offering/CatalogItem contract extends this tab; it is not a second commercial-product
+  surface) so Delivery does not have to discover the collision mid-implementation.
 - **Enums and contracts:** New fixed strings must have one canonical TypeScript registry and exact MCP mirrors. Hyphens are required. No new value may be used in data before both contracts land.
 - **Blast radius:** Prisma schema/migrations, setup/archetype composition, product/storefront/quote/order relations, research execution, battlecard services and MCP pack, backlog demand rules, product navigation/routes, Catalog Builder, report components, skills/prompts, scheduled tasks, exports, telemetry, user guide, and tests.
 - **Standards researched:** Product Talk, Productboard, Jira Product Discovery, Plane, OpenProject, Leantime, IT4IT, and official ServiceNow CSDM/catalog/product-offering guidance informed traceability, producer/consumer separation, derived audience views, recurring rhythms, progressive disclosure, and outcome roll-up. Current CSDM does not yet supply the proposed Product Sold contract.

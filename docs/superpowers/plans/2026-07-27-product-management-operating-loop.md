@@ -64,7 +64,7 @@ Across the delivery graph, reserve approximately 20% of total implementation cap
 ### Task 2.1: Lock the producer/consumer boundaries
 
 1. Define tested contracts for Product, commercial Offering, canonical CatalogItem, and channel projection.
-2. Audit `ServiceOffering`, `StorefrontItem`, `QuoteLineItem`, actions, and integrations before selecting names or relations.
+2. Audit `ServiceOffering`, the existing Commercial → Offerings route at `/portfolio/product/[id]/offerings`, `StorefrontItem`, `QuoteLineItem`, actions, and integrations before selecting names or relations.
 3. Prove why every new distinction has a separate lifecycle, ownership, traceability, reuse, or control need.
 4. Record the compatibility and deprecation sequence; do not one-step rename or repurpose live models.
 
@@ -80,9 +80,10 @@ Across the delivery graph, reserve approximately 20% of total implementation cap
 1. Present the common case as one “what you sell” workflow.
 2. Reveal offerings/catalog items only when channels, terms, prices, or availability diverge.
 3. Add guided creation, sensible defaults, breadcrumbs, related-record navigation, and advanced audit drill-down.
-4. Run a portal-navigation audit before adding any route or navigation layer.
+4. Extend Commercial → Offerings as the product-level commercial home; keep Catalog Builder contextual and prevent it from becoming a competing product-management surface.
+5. Run a portal-navigation audit before adding any route or navigation layer.
 
-**Phase gate:** compatibility/invariant tests, build, representative-data migration, and simple/divergent case UX verification.
+**Phase gate:** compatibility/invariant tests, build, representative-data migration, and simple/divergent case UX verification proving the existing Offerings route reconciles `ServiceOffering` without a second product-level commercial home.
 
 ## Phase 3 — Catalog Builder and configuration (`BI-83C7D9EE`)
 
