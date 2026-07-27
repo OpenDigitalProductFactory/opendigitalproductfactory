@@ -3,7 +3,7 @@
 | Field | Value |
 | --- | --- |
 | Date | 2026-07-26 |
-| Status | Proposed design; operator direction accepted; review-hardened 2026-07-27; implementation pending |
+| Status | Accepted; review-hardened 2026-07-27; projection contract implemented in PR #3659 |
 | Epic | EP-2984B02B |
 | Umbrella backlog item | BI-29BF297B |
 | Work Capsule | WC-7FA22391 |

@@ -135,6 +135,23 @@ Target 25-30 percent:
 
 Revert the room projection exports and keep the characterized Work Case loader. No data rollback is required.
 
+### Implementation record (2026-07-27)
+
+PR #3659 implements this slice through the existing `apps/web/lib/work-management/` substrate:
+
+- `WorkRoomView` remains a typed projection over the canonical Work Case; its `roomKey` is the existing encoded `caseKey`;
+- the existing source registry owns finite/standing mode and required Outcome Packet categories;
+- boundary gaps, participant role/work/presence axes, explicit outcome facts, stable activity ids, source attribution, and terminal state are projected without new persistence or routes;
+- the Workspace loader exposes the room projection while retaining its transitional Work Case detail adapter for the following UX slice;
+- raw messages remain quiet activity and cannot become decisions, evidence, artifacts, or outcome facts by inference.
+
+Evidence:
+
+- TDD red: `cms3aw28j00mb01p5y0wnvfex`;
+- canonical local-CI: `cms3blqtv01m901p58ul9cnbi` at `1691447c764bad7c28d8f4af572810e4be4f1a9e`;
+- 2,266 test files and 19,653 tests passed, followed by web typecheck and the production Docker build;
+- no schema, migration, route, provider, or dependency change was required.
+
 ## 6. BI-32E26F62 — Outcome-first Workspace Work Room UX
 
 ### Deliverable
