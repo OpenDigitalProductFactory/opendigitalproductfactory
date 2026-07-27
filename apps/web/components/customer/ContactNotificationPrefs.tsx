@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { updateCustomerContact } from "@/lib/actions/customer-contacts";
 
 const selectClasses =
-  "bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[var(--dpf-text)] rounded px-2 py-1 text-[10px] focus:border-[var(--dpf-accent)] focus:outline-none w-full";
-const labelClasses = "block text-[9px] text-[var(--dpf-muted)] mb-0.5";
+  "w-full rounded-dpf-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-dpf-caption text-[var(--dpf-text)] focus:border-[var(--dpf-accent)] focus:outline-none";
+const labelClasses = "mb-1 block text-dpf-caption text-[var(--dpf-muted)]";
 
 const CHANNEL_OPTIONS = [
   { value: "", label: "Not set" },
@@ -77,8 +77,10 @@ export function ContactNotificationPrefs({
   }
 
   return (
-    <div className="mt-2 space-y-1.5 border-t border-[var(--dpf-border)] pt-2">
-      <p className="text-[9px] font-medium text-[var(--dpf-muted)]">Notification preferences</p>
+    <div className="mt-2 space-y-2 border-t border-[var(--dpf-border)] pt-2">
+      <p className="text-dpf-caption font-dpf-medium text-[var(--dpf-muted)]">
+        Notification preferences
+      </p>
       <div className="grid grid-cols-2 gap-2">
         <div>
           <label className={labelClasses} htmlFor={`channel-${contactId}`}>
@@ -131,23 +133,27 @@ export function ContactNotificationPrefs({
           </select>
         </div>
       </div>
-      <p className="text-[8px] text-[var(--dpf-muted)]">
+      <p className="text-dpf-caption text-[var(--dpf-muted)]">
         Dispatch uses these before SMS or voice. Landline phones cannot receive texts.
       </p>
-      {error && <p className="text-[9px] text-[var(--dpf-accent)]" role="alert">{error}</p>}
-      {saved && !dirty && (
-        <p className="text-[9px] text-[var(--dpf-muted)]">Saved</p>
-      )}
-      {dirty && (
+      {error ? (
+        <p className="text-dpf-caption text-[var(--dpf-accent)]" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {saved && !dirty ? (
+        <p className="text-dpf-caption text-[var(--dpf-muted)]">Saved</p>
+      ) : null}
+      {dirty ? (
         <button
           type="button"
-          className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-[10px] font-medium text-[var(--dpf-text)] hover:border-[var(--dpf-accent)] disabled:opacity-50"
+          className="rounded-dpf-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-dpf-caption font-dpf-medium text-[var(--dpf-text)] hover:border-[var(--dpf-accent)] disabled:opacity-50"
           disabled={isPending}
           onClick={save}
         >
           {isPending ? "Saving…" : "Save preferences"}
         </button>
-      )}
+      ) : null}
     </div>
   );
 }
