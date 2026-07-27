@@ -6,32 +6,81 @@ order: 3
 
 ## Use This Doc For
 
-- `/finance/invoices`
-- `/finance/invoices/new`
-- `/finance/invoices/[id]`
+- `/finance/invoices`, `/finance/invoices/new`, and `/finance/invoices/[id]`
 - `/finance/payments`
 - `/finance/revenue`
+- the customer payment page reached from an invoice's secure pay link
 
-## Workflow
+## Purpose
 
-1. Confirm the customer-facing charge or invoice is correct.
-2. Send or record the receivable event.
-3. Apply payments and review what remains outstanding.
+Accounts receivable turns delivered work or a valid customer charge into an
+invoice, records what the customer has paid, and keeps the remaining balance
+visible. An invoice status is an operational claim, so move it only when the
+underlying customer communication or payment evidence supports the change.
 
-## Starting an invoice from context (food & hospitality)
+## Before You Start
 
-For the **food-hospitality** archetype, `/finance/invoices/new` can start from a specific billing context instead of only a generic customer dropdown. Opening the page with a `from` parameter sets a contextual heading, an entry-point chooser, a context badge, and helper copy matched to your business. The same entry points appear as cards on the owner-first `/finance` overview.
+- Confirm the customer account, contact, due date, currency, payment terms, tax,
+  discount, and source order or service.
+- Use at least one line item with a clear description, quantity, and unit price.
+- Decide whether the customer must sign before payment. The signature setting
+  controls the public payment page; it is not an internal approval.
+- Keep internal notes separate from customer-facing notes.
 
-The available contexts depend on the business:
+## Invoice And Collection Workflow
 
-- **Restaurant** — `?from=booking`, `?from=order`, `?from=catering`, `?from=private-event`, and `?from=no-show`. Copy uses guest and booking language.
-- **Catering** — `?from=quote` (price a job before it is confirmed; nothing is owed until the client accepts), `?from=event-deposit` (the deposit that secures the date), `?from=event-balance` (the remainder once the event is delivered), and `?from=private-event`. The account picker is labelled **Client**.
-- **Bakery** — `?from=custom-order` (celebration or wedding cake, deposit up front and balance on collection), `?from=counter-sale` (a standard over-the-counter sale), and `?from=delivery` (a pickup or delivery fee).
+1. Create the invoice. New invoices start in **draft**.
+2. Review the totals and source context before sending.
+3. Send the invoice. DPF creates or reuses a secure pay token, records
+   **sent**, and timestamps the event.
+4. When the customer opens the payment link, the invoice is marked **viewed**.
+   If a signature is required, the public page records signer name, email,
+   signature image, and timestamp.
+5. After money is actually received, record an inbound payment against the
+   invoice. DPF creates a completed payment and allocation, increases the
+   amount paid, decreases the amount due, and sets **partially paid** or
+   **paid**.
+6. Match that recorded payment to the imported bank transaction during
+   reconciliation.
 
-A blank invoice is always available. Other business types keep the standard customer-first invoice form and professional-services copy.
+Sending and recording payments make best-effort ledger postings. The customer
+workflow is not failed merely because the ledger post has a transient problem,
+so use the underlying invoice, payment, and ledger evidence together during
+review.
 
-## What To Watch
+## Starting An Invoice From Context
 
-- invoices sent before the underlying customer or service data is ready
-- payments recorded without clearing the expected receivable
-- revenue views being used as an operational queue instead of a summary surface
+Food-and-hospitality organizations can open `/finance/invoices/new` with a
+`from` parameter so the page uses the right business language:
+
+- Restaurant: `booking`, `order`, `catering`, `private-event`, or `no-show`.
+- Catering: `quote`, `event-deposit`, `event-balance`, or `private-event`.
+- Bakery: `custom-order`, `counter-sale`, or `delivery`.
+
+A contextual entry point changes the heading, helper copy, and starting
+context. It does not prove that a charge is owed. In particular, a catering
+quote remains a price proposal until the client accepts it. A blank invoice is
+always available, and other archetypes retain the customer-first form.
+
+## Decisions, Recovery, And Evidence
+
+Recording a payment does not charge a card, initiate a transfer, or verify bank
+settlement. Confirm the external receipt first. Payment allocation updates the
+invoice immediately, and the current workflow does not provide a general
+payment undo, so check amount, direction, currency, reference, and invoice
+before saving.
+
+Use **void** only when the invoice should no longer be collectible and preserve
+the business reason in supporting records. Do not mark an invoice paid to
+remove it from an overdue queue. For a partial receipt, record the actual
+amount; the remaining balance stays visible.
+
+Keep the source order or service, sent invoice, delivery evidence, signature
+when required, processor or bank receipt, payment reference, and reconciled
+bank transaction as the evidence chain.
+
+## Related Help
+
+- [Banking and reconciliation](banking-and-reconciliation.md)
+- [Reporting and close](reporting-and-close.md)
+- [Controls and automation](controls-and-automation.md)

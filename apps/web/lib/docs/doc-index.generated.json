@@ -9222,8 +9222,12 @@
       "publishedPortal": true,
       "anchors": [
         "use-this-doc-for",
-        "workflow",
-        "what-to-watch"
+        "purpose",
+        "before-you-start",
+        "from-commitment-to-payment",
+        "approval-and-payment-consequences",
+        "recovery-and-evidence",
+        "related-help"
       ]
     },
     "docs/user-guide/finance/accounts-receivable.md": {
@@ -9233,9 +9237,12 @@
       "publishedPortal": true,
       "anchors": [
         "use-this-doc-for",
-        "workflow",
-        "starting-an-invoice-from-context-food-hospitality",
-        "what-to-watch"
+        "purpose",
+        "before-you-start",
+        "invoice-and-collection-workflow",
+        "starting-an-invoice-from-context",
+        "decisions-recovery-and-evidence",
+        "related-help"
       ]
     },
     "docs/user-guide/finance/ai-spend.md": {
@@ -9244,11 +9251,14 @@
       "publishedPublic": true,
       "publishedPortal": true,
       "anchors": [
-        "overview",
-        "what-you-can-see",
-        "how-it-gets-populated",
+        "purpose",
+        "how-the-finance-bridge-starts",
+        "activate-a-contract",
+        "record-a-subscription-payment",
+        "allowance-evaluation",
+        "recovery-and-evidence",
         "related-routes",
-        "daily-evaluation"
+        "related-help"
       ]
     },
     "docs/user-guide/finance/banking-and-reconciliation.md": {
@@ -9258,8 +9268,12 @@
       "publishedPortal": true,
       "anchors": [
         "use-this-doc-for",
-        "workflow",
-        "what-to-watch"
+        "purpose",
+        "before-you-import",
+        "import-and-reconcile",
+        "consequences-and-recovery",
+        "reconciliation-evidence",
+        "related-help"
       ]
     },
     "docs/user-guide/finance/controls-and-automation.md": {
@@ -9269,8 +9283,13 @@
       "publishedPortal": true,
       "anchors": [
         "use-this-doc-for",
-        "workflow",
-        "what-to-watch"
+        "purpose",
+        "before-you-change-a-control",
+        "recurring-invoices",
+        "dunning-currency-tax-and-approvals",
+        "payment-runs-are-records-not-transfers",
+        "recovery-and-evidence",
+        "related-help"
       ]
     },
     "docs/user-guide/finance/expense-workflows.md": {
@@ -9280,8 +9299,12 @@
       "publishedPortal": true,
       "anchors": [
         "use-this-doc-for",
-        "workflow",
-        "what-to-watch"
+        "purpose",
+        "before-you-start",
+        "submit-review-and-reimburse",
+        "authority-and-consequences",
+        "recovery-and-evidence",
+        "related-help"
       ]
     },
     "docs/user-guide/finance/index.md": {
@@ -9293,9 +9316,12 @@
         "overview",
         "key-concepts",
         "what-you-can-do",
+        "before-you-record-money-movement",
+        "choose-the-workflow",
         "owner-first-overview-food-hospitality",
         "readiness-notes",
         "recording-a-payment-run",
+        "reporting-and-close-boundaries",
         "route-guide"
       ]
     },
@@ -9306,8 +9332,12 @@
       "publishedPortal": true,
       "anchors": [
         "use-this-doc-for",
-        "workflow",
-        "what-to-watch"
+        "purpose",
+        "understand-the-current-basis",
+        "close-readiness-workflow",
+        "what-to-watch",
+        "recovery-and-evidence",
+        "related-help"
       ]
     },
     "docs/user-guide/getting-started/ai-coworker.md": {

@@ -1,57 +1,92 @@
 ---
 title: "AI Spend"
 area: finance
-order: 2
+order: 8
 ---
 
-## Overview
+## Purpose
 
-The AI Spend workspace brings AI providers into Finance as real supplier commitments.
+The AI Spend workspace brings AI providers into Finance as supplier
+commitments. Use `/finance/spend/ai` to see which active providers are linked
+to suppliers, which commercial details are still drafts, what monthly
+commitment is recorded, how included allowances are being used, and which
+finance work items remain open.
 
-Use `/finance/spend/ai` to review:
+Provider authentication and technical health still belong in the AI Workforce
+provider pages. A healthy provider connection does not prove that its contract,
+allowance, invoice, or payment record is complete.
 
-- which AI providers are linked to finance suppliers
-- which contracts are fully configured versus still missing plan details
-- committed monthly spend
-- open work items raised by setup gaps or daily usage evaluation
+## How The Finance Bridge Starts
 
-This page is designed for Finance operations, not provider authentication. Provider credentials and technical setup still live in the AI Workforce provider detail pages.
+After a provider is configured, the platform can seed a finance bridge:
 
-## What You Can See
+1. find or create an active supplier for the provider
+2. create or update the provider's finance profile as **seeded**
+3. reuse a compatible draft or active supplier contract when possible, or
+   create a monthly **draft** contract
+4. open a finance work item for missing plan, commitment, allowance, or billing
+   details
 
-- **AI Suppliers** — count of finance-linked AI providers
-- **Committed Spend** — current monthly commitment across linked provider contracts
-- **Needs Setup** — finance profiles still missing commercial details
-- **Open Work Items** — follow-up items raised for missing data or allowance thresholds
+This makes the commercial gap explicit without inventing values. Draft
+contracts are counted as needing setup; active contracts contribute to the
+managed commitment view.
 
-The workspace table shows supplier, provider, latest contract posture, utilization snapshot, and open item count.
+## Activate A Contract
 
-## How It Gets Populated
+Before activation, confirm the plan name, committed amount, currency, billing
+cadence, contract dates, renewal date, billing source, and at least one
+allowance. Activation changes the contract to **active**, replaces its
+allowance rows with the reviewed values, and resolves matching setup work
+items. It does not purchase a plan, change provider credentials, or verify an
+external invoice.
 
-When someone configures an AI provider successfully in the platform AI workspace:
+Use the supplier detail and provider Finance Bridge together when several
+providers share a commercial contract. The overview merges provider-specific
+and shared supplier contracts so finance ownership is visible without
+duplicating the commitment.
 
-1. the technical provider setup completes
-2. the platform seeds a Finance bridge
-3. the provider is linked to a finance supplier
-4. a draft contract is created
-5. missing plan details become explicit finance work items
+## Record A Subscription Payment
 
-This means Finance can take ownership even when the setup user does not know every commercial detail yet.
+The subscription-payment action records a commercial event that has already
+occurred. It finds or creates the supplier and active finance profile, creates
+or updates an active contract, records a paid bill for that billing cycle,
+creates a completed outbound payment and allocation when one does not already
+exist, advances the next billing date, and closes related setup work items.
+
+The operation is designed to reuse an existing bill/payment for the same
+supplier, contract, and billing period. Even so, confirm the external charge,
+amount, date, payment method, and reference first. Recording it in DPF does not
+charge the card or initiate a bank transfer.
+
+## Allowance Evaluation
+
+Daily evaluation reviews active contracts and their included allowance. It can
+open work items when allowance details are missing, when use is low for a
+time-limited commitment, or when remaining allowance is critically low. These
+are decision signals, not commands to increase usage or spend. Review provider
+telemetry, business need, and contract terms before acting.
+
+## Recovery And Evidence
+
+Do not activate a contract with placeholder commercial values merely to remove
+a setup warning. Correct the contract record with the source agreement and
+preserve why it changed. A recorded paid bill and payment have reporting
+consequences and no general undo, so investigate duplicates before creating
+another cycle record.
+
+Keep the provider invoice or receipt, contract and allowance terms, billing
+portal link, payment reference, usage snapshot source, evaluator flags, and the
+decision taken on each finance work item.
 
 ## Related Routes
 
-- `/platform/ai/providers/[providerId]` — technical provider setup plus Finance Bridge panel
-- `/finance/spend` — spend hub with the AI Spend summary card
-- `/finance/suppliers/[id]` — supplier detail with AI provider finance context when linked
+- `/platform/ai/providers/[providerId]` — provider setup and Finance Bridge
+- `/finance/spend` — supplier, bill, expense, and AI-spend hub
+- `/finance/suppliers/[id]` — supplier detail and linked AI contracts
+- `/finance/bills` and `/finance/payments` — recorded subscription settlement
 
-## Daily Evaluation
+## Related Help
 
-The platform can evaluate active AI contracts daily against their included allowances.
-
-This supports:
-
-- underuse follow-up for “use it or lose it” plans
-- critical-low warnings for remaining included allowance
-- future messaging and alerting integrations
-
-In the current slice, these outcomes are surfaced as finance work items.
+- [Accounts payable](accounts-payable.md)
+- [Banking and reconciliation](banking-and-reconciliation.md)
+- [Reporting and close](reporting-and-close.md)

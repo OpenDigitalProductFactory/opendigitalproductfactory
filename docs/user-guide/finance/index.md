@@ -8,12 +8,43 @@ order: 1
 
 The Finance area handles your organization's core financial operations: billing customers, managing supplier relationships, and processing purchases. It is not a full accounting system, but covers the transactional layer that connects to your products and services.
 
+```mermaid
+flowchart TB
+    event["Confirm the external business event"] --> source["Create the right source record<br/>Invoice, purchase order and bill, or expense claim"]
+    source --> approval["Complete validation and approval<br/>where the workflow requires it"]
+    approval --> movement["Receive or pay money<br/>through the external financial channel"]
+    movement --> payment["Record the payment or reimbursement in DPF"]
+    payment --> import["Import bank statement"]
+    import --> reconcile["Match and reconcile"]
+    reconcile --> reports["Review reports and open items"]
+    reports --> close["Close-readiness review"]
+
+    classDef source fill:#dbeafe,stroke:#2563eb,color:#172554
+    classDef governed fill:#fff7ed,stroke:#ea580c,color:#431407
+    classDef evidence fill:#ecfdf5,stroke:#059669,color:#052e16
+    class event,source source
+    class approval governed
+    class movement,payment,import,reconcile,reports,close evidence
+```
+
+Text alternative: confirm the external event, create the right source record,
+complete any required validation or approval, move money through the external
+financial channel, and record the payment or reimbursement in DPF. Then import
+bank activity, reconcile it, review reports and open items, and complete a
+close-readiness review. The source record is an invoice for a receivable, a
+purchase order and bill for a payable, or a claim for an employee expense.
+
 ## Key Concepts
 
 - **Invoice** — A billable document sent to a customer for products or services delivered. Invoices track their own status through draft, sent, and paid states.
 - **Supplier** — An external party your organization purchases goods or services from. Supplier records hold contact details, payment terms, and transaction history.
 - **Bill** — An incoming payable from a supplier. Bills are matched against purchase orders where applicable.
 - **Purchase Order (PO)** — A formal request to a supplier to deliver goods or services at an agreed price. POs can be raised before the work starts and matched to the resulting bill.
+- **Payment** — DPF's record that money was received or paid. Creating this
+  record does not initiate a transfer, charge a card, or confirm bank
+  settlement.
+- **Reconciliation** — The explicit match between an imported bank transaction
+  and a recorded payment.
 
 ## What You Can Do
 
@@ -24,6 +55,35 @@ The Finance area handles your organization's core financial operations: billing 
 - Review outstanding payables and receivables at a glance
 - Monitor AI providers as finance-owned suppliers, including draft contracts, open setup work items, and linked billing/usage pages
 - Review committed AI spend and setup gaps from the dedicated `/finance/spend/ai` workspace
+
+## Before You Record Money Movement
+
+- Confirm the real event in the bank, processor, payroll, or supplier/customer
+  evidence.
+- Check direction, amount, currency, date, counterparty, reference, and the
+  invoice, bill, claim, or contract being settled.
+- Resolve required approvals first. A status change affects queues and reports
+  even when no external money moved.
+- Preserve source documents and approval evidence. DPF is an operational
+  finance layer, not the only evidence source or a replacement for qualified
+  accounting judgment.
+
+## Choose The Workflow
+
+- [Accounts receivable](accounts-receivable.md) — invoice customers, record
+  receipts, and preserve the collection evidence chain.
+- [Accounts payable](accounts-payable.md) — manage suppliers, purchase orders,
+  bill approvals, and recorded payments.
+- [Expense workflows](expense-workflows.md) — submit, review, and record
+  employee reimbursement.
+- [Banking and reconciliation](banking-and-reconciliation.md) — import statement
+  activity and match it to recorded payments.
+- [Reporting and close](reporting-and-close.md) — understand report basis,
+  caveats, and close-readiness without implying a period lock.
+- [Controls and automation](controls-and-automation.md) — govern recurring
+  invoices, dunning, tax, currency, approvals, and payment runs.
+- [AI spend](ai-spend.md) — manage provider supplier bridges, contracts,
+  allowances, and subscription-payment records.
 
 ## Owner-first overview (food & hospitality)
 
@@ -70,9 +130,26 @@ It is a **draft for you to review**. Nothing is sent to anyone, no action is tak
 
 A payment run (`/finance/payment-runs`) **records the selected approved bills as paid in DPF** and writes a matching outbound payment. It is **not a draft** and does **not** initiate a real bank transfer — pay your suppliers through your bank as usual, then use a payment run to keep your books settled. The action is labelled **"Record as Paid"** to make this explicit.
 
+## Reporting And Close Boundaries
+
+Current profit-and-loss and finance-period summaries are cash-basis: paid
+invoices count as income, while paid bills and paid expense claims count as
+expense. Open receivables, payables, and claims are shown as gaps or pending
+work rather than paid totals. Multi-currency summaries can contain raw,
+unconverted sums and explicitly flag that limitation.
+
+`/finance/close` is a readiness hub. It does not lock a period, prevent later
+edits, post a close journal, or certify results. Complete the organization's
+authoritative accounting close and retain its reviewer evidence separately.
+
 ## Route Guide
 
 - `/finance` — Finance overview workspace
+- `/finance/invoices` and `/finance/payments` — customer billing and recorded receipts
+- `/finance/suppliers`, `/finance/purchase-orders`, and `/finance/bills` — supplier commitments and payables
+- `/finance/expense-claims` and `/finance/my-expenses` — reviewer and employee expense workflows
+- `/finance/banking` — statement import, rules, and reconciliation
+- `/finance/reports` and `/finance/close` — reporting and close-readiness
 - `/finance/spend` — spend hub for suppliers, bills, expenses, and AI spend summary
 - `/finance/spend/ai` — dedicated AI supplier spend and utilization workspace
 - `/finance/suppliers/[id]` — supplier detail, including AI finance context when the supplier is linked to a provider
