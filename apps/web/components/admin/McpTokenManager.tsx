@@ -40,6 +40,7 @@ import {
   type McpTokenScopeTier,
   type McpTokenTemplateId,
 } from "@/lib/mcp-token-scopes";
+import type { ContributorMcpReadiness } from "@/lib/mcp/contributor-readiness";
 
 export interface McpTokenManagerProps {
   baseUrl: string;
