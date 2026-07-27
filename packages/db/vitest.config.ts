@@ -23,6 +23,7 @@ export default defineConfig({
     ],
     // BI-2F60FDCE — observation-mode V8 coverage; all owned src included even
     // when no test imports the file yet.
+    // Cast: V8-only fields need @vitest/coverage-v8 types (not lockfile-pinned yet).
     coverage: {
       provider: "v8",
       all: true,
@@ -37,7 +38,6 @@ export default defineConfig({
       reporter: ["text-summary", "json-summary", "json"],
       reportsDirectory: "./coverage",
       reportOnFailure: true,
-      thresholds: undefined,
-    },
+    } as import("vitest/node").CoverageOptions,
   },
 });

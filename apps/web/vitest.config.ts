@@ -76,6 +76,9 @@ export default defineConfig({
     // BI-2F60FDCE — observation-mode V8 coverage (non-blocking thresholds).
     // `all: true` keeps owned production files that no test imports in the
     // report so unloaded inventory is measurable (selection later depends on it).
+    // Cast: V8-only fields (`all`, `reportOnFailure`) are valid at runtime for
+    // provider "v8", but workspace TS types only expose base CoverageOptions
+    // until @vitest/coverage-v8 is lockfile-pinned.
     coverage: {
       provider: "v8",
       all: true,
@@ -100,9 +103,7 @@ export default defineConfig({
       // Keep coverage output even when the suite fails so calibration can
       // still measure incomplete runs.
       reportOnFailure: true,
-      // Observation phase: no hard fail thresholds (publish baseline first).
-      thresholds: undefined,
-    },
+    } as import("vitest/node").CoverageOptions,
   },
   resolve: {
     dedupe: ["react", "react-dom"],
