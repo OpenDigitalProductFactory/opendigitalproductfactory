@@ -92,13 +92,12 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=8192
         run: pnpm typecheck
 
-  # BI-0580AFD3 parity phase. These two profiles replay the startup-heavy
-  # policy jobs through one checkout/runtime each while the legacy jobs remain
-  # authoritative. Named results and durations are published as an artifact
-  # and job summary. After parity is observed, the legacy jobs are removed and
-  # these profiles become blocking.
-  policy-guards-source-shadow:
-    name: Policy Guards (source shadow)
+  # BI-0580AFD3. These profiles replace 34 startup-heavy policy jobs with one
+  # checkout/runtime per profile. The registry preserves each former job's
+  # name, commands, result, and duration in the job summary and JSON artifact.
+  # Exact-tree parity was 34/34 on PR #3675 run 30309641352.
+  policy-guards-source:
+    name: Policy Guards (source)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -114,7 +113,6 @@ jobs:
           corepack enable && corepack prepare pnpm@10.33.2 --activate
           pnpm install --frozen-lockfile --ignore-scripts --filter @dpf/repo-guard-runtime
       - name: Run named source policy guards
-        continue-on-error: true
         run: node scripts/ci-policy-guards.mjs --profile source --results "$RUNNER_TEMP/policy-guards-source.json"
       - name: Upload source policy results
         if: always()
@@ -122,11 +120,11 @@ jobs:
         with:
           name: policy-guards-source-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/policy-guards-source.json
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 30
 
-  policy-guards-pr-shadow:
-    name: Policy Guards (PR shadow)
+  policy-guards-pr:
+    name: Policy Guards (PR)
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
@@ -138,7 +136,6 @@ jobs:
         with:
           node-version: 24
       - name: Run named pull-request policy guards
-        continue-on-error: true
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_BODY: ${{ github.event.pull_request.body }}
@@ -151,12 +148,13 @@ jobs:
         with:
           name: policy-guards-pr-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/policy-guards-pr.json
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 30
 
   repo-guard-loop:
     name: Repo Guard Loop
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # BI-3B0AD9CF (EP-8DC217EB). ONE job discovers and runs every
     # scripts/check-no-*.mjs ratchet guard (each sibling *.test.mjs self-test
     # runs first). Adding a new ratchet = adding one script file — no ci.yml or
@@ -187,6 +185,7 @@ jobs:
   docs-link-integrity:
     name: Docs Link Integrity
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # EP-DOCS-SYSTEM Phase 1. The user guide is rendered by two engines (the
     # public Jekyll site and the in-portal Next.js renderer) with historically
     # opposite link conventions and no validation — so dead links accumulated
@@ -218,6 +217,7 @@ jobs:
   derived-artifact-registry:
     name: Derived Artifact Registry
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # BI-48768E05. scripts/lib/derived-artifacts-registry.mjs is the single
     # source of truth for every generated-from-source, committed-to-git
     # artifact (doc index, doc-impact manifest, doc diagrams, capability
@@ -245,6 +245,7 @@ jobs:
   pr-health-test:
     name: PR Health Logic
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # Unit-tests the pure evaluatePrHealth() verdict used by `pnpm pr:health`
     # (scripts/pr-health.mjs) — the comprehensive PR merge-readiness checker.
     # The script itself queries a live PR's GitHub state, so only its logic is
@@ -274,6 +275,7 @@ jobs:
   mobile-jest-pin-guard:
     name: Mobile Jest Pin Guard
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # Asserts apps/mobile stays on jest ^29.x. PR #1053 walked back a
     # Dependabot bump to jest 30 that broke every mobile test and blocked
     # every open PR for hours. Without this guard a future bump silently
@@ -290,6 +292,7 @@ jobs:
   diagram-dependency-pin-guard:
     name: Diagram Dependency Pin Guard
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # BI-72E0A27B. Prevent a lock refresh from advancing Mermaid/ZenUML's
     # transitive Floating UI graph inside the release-age quarantine window.
     steps:
@@ -304,6 +307,7 @@ jobs:
   override-provenance-guard:
     name: Override Provenance Guard
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # Every security-floor entry in pnpm-workspace.yaml overrides must carry a
     # machine-readable advisory tag (Dependabot #NN / GHSA / CVE) so the stale-
     # override audit (BI-CDB2E8AB) can check whether the alert is still open.
@@ -321,6 +325,7 @@ jobs:
   bundle-boundary-guard:
     name: Bundle Boundary Guard
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # BI-98AF1066 (EP-VERIFY-PROC). Catches bundle-boundary failures statically
     # in seconds — a bundle-hostile `new Function(...require...)` shim (the
     # lazy-node "d is not a function" crash that crash-looped /build) or a Node
@@ -366,6 +371,7 @@ jobs:
   style-drift-guard:
     name: Style Drift Guard
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # BI-ARCH-UI-PRIMS. DPF surfaces are themed with --dpf-* tokens + the
     # report-kit status palette so light/dark/branding work (AGENTS.md §12).
     # This ratchet fails a PR that adds a NEW hardcoded hex color (or grows an
@@ -384,6 +390,7 @@ jobs:
   reporting-composition-guard:
     name: Reporting Composition Guard
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # EP-829D997C / BI-801758D1. The kernel principle compose-report-kit-for-
     # reporting-ux (AGENTS.md §12) says tabular data-display composes the shared
     # report-kit DataTable, not hand-rolled raw <table> markup (~87 legacy files
@@ -403,6 +410,7 @@ jobs:
   compose-env-contract-guard:
     name: Compose Env Contract Guard
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # #3262 fleet incident. A portal volume `${DPF_STATE_DIR:-${HOME}/.dpf}:/dpf-state`
     # shipped with DPF_STATE_DIR undocumented + unprovisioned, so every install fell
     # back to ${HOME}/.dpf — fine for `docker compose up`, but the self-upgrade
@@ -424,6 +432,7 @@ jobs:
   n-minus-one-caller-honesty:
     name: N-1 Caller Honesty
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # BI-D47955AF. The promoter is CANDIDATE-owned but CALLER-launched, so a PR can
     # add a requirement to the candidate AND the caller-side plumbing that satisfies
     # it, and ship green — because the N-1 harness supplies the new environment by
@@ -450,6 +459,7 @@ jobs:
   module-size-guard:
     name: Module Size Guard
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # BI-OPT-RATCHETS. No size guard existed, which is how mcp-tools.ts grew past
     # 15k LOC unnoticed. This ratchet holds NEW files to an 800-LOC ceiling (1000
     # hard cap) and lets the already-large files (frozen in
@@ -467,6 +477,7 @@ jobs:
   instruction-plane-guard:
     name: Instruction Plane Guard
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # BI-0020D511, Phase 0. The always-on agent instruction plane (AGENTS.md,
     # forced by the CLAUDE.md pointer) grew ~4k chars in a day while the audit
     # that measured it was open — proof it re-accretes without a ratchet. This
@@ -488,6 +499,7 @@ jobs:
   archetype-completeness-guard:
     name: Archetype Completeness Guard
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # The archetype-side equivalent of the coworker conformance gate. A new
     # business archetype must not ship the template substrate alone and forget
     # its WSID corpus + coworker decision (as warehousing-fulfilment did before
@@ -510,6 +522,7 @@ jobs:
   stewardship-scope-guard:
     name: Stewardship Scope Guard
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # BI-C34E09B0 — architecture grows, stewardship scope does not, and nothing
     # notices. A new Prisma model absent from TABLE_CLASSIFICATION falls through
     # to DEFAULT_SENSITIVITY="confidential" (a guess presented as a decision),
@@ -535,6 +548,7 @@ jobs:
   capability-consumer-guard:
     name: Capability Consumer Guard
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # BI-5CD43089 — the declared-but-inert capability guard. Every key in the
     # archetype capability registry must have >=1 recognised gate consumer (nav
     # orgCapabilityKey, hasActiveOrgCapability guard, customer-estate activation
@@ -557,6 +571,7 @@ jobs:
   finding-substrate-guard:
     name: Finding Substrate Guard
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # BI-REFACTOR-CC46703A — the "no-seventh-finding-table guard". The Assurance
     # Ledger spec (§3.3) froze the finding substrate after AssuranceFinding became
     # the seventh finding-shaped model. Until the founder Phase-2 unify decision
@@ -577,6 +592,7 @@ jobs:
   docs-staleness-detector:
     name: Docs Staleness Detector
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # Unit-tests the doc-staleness detector (BI-AA5DFEA2). The detector itself runs
     # weekly (refresh-docs-staleness.yml), not on every PR — but its logic is tested
     # here so a change to it is caught at PR time.
@@ -592,6 +608,7 @@ jobs:
   mcp-tool-pack-guard:
     name: MCP Tool Pack Guard
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # BI-OPT-RATCHETS (enforcement teeth for BI-ARCH-TOOLPACKS). executeTool's
     # `switch (toolName)` in apps/web/lib/mcp-tools.ts is migrating to scoped
     # packs. This ratchet freezes the inline `case` set in
@@ -609,6 +626,7 @@ jobs:
   package-boundary-guard:
     name: Package Boundary Guard
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # BI-ARCH-PACKAGES. The portable contract/client packages (@dpf/types,
     # @dpf/validators, @dpf/api-client) are shared with the mobile app and must
     # never depend on server persistence. This guard fails any PR that makes a
@@ -627,6 +645,7 @@ jobs:
   build-studio-namespace-guard:
     name: Build Studio Namespace Guard
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # BI-ARCH-BUILDSTUDIO-NS. components/build is the single production Build
     # Studio namespace. components/build-studio is a quarantined, stale V2
     # prototype (reachable only via /build?v=2). This guard fails any PR that
@@ -645,6 +664,7 @@ jobs:
   sbom-divergence-guard:
     name: SBOM Divergence Guard
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # The proactive dependency-REDUCTION gate — counterpart to Dependabot, which
     # owns vulnerabilities + lifecycle. Fails a PR that introduces a NEW
     # first-party version split: the same package declared at incompatible
@@ -667,6 +687,7 @@ jobs:
   new-dependency-gate:
     name: New Dependency Gate
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # Kernel-selected #1 of the package-acquisition hardening program
     # (principle_decide 2026-06-20: composite 9.39, high confidence — "Least
     # privilege / deny by default", "Build Gate Mandatory", "Never adopt an
@@ -690,6 +711,7 @@ jobs:
   singleton-safety-guard:
     name: Singleton Safety Guard
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # Dual-package-hazard gate. Most duplicate packages are harmless utilities,
     # but a singleton / instanceof / global-state library (react, react-dom, zod,
     # redux, immer, graphql, emotion, @tanstack/react-query, ...) breaks when two
@@ -720,7 +742,7 @@ jobs:
     # corpus (merge latest main first), so a baseline regression shows as a named
     # red check on the PR, not three queue cycles later. Mirrors the pre-commit
     # decision-baseline guard; merge_group stays covered by the canonical test.
-    if: github.event_name == 'pull_request'
+    if: ${{ false }} # Migrated to policy-guards-pr.
     steps:
       - uses: actions/checkout@v7
         with:
@@ -744,7 +766,7 @@ jobs:
     name: UX-Fit Gate
     runs-on: ubuntu-latest
     # Only meaningful on PRs — it diffs against the PR base and reads the PR body.
-    if: github.event_name == 'pull_request'
+    if: ${{ false }} # Migrated to policy-guards-pr.
     # BI-65DEE968. The un-skippable UX-fit / cognitive-load gate. A UI-impacting
     # diff (new user-facing form controls, numeric inputs, or routes under
     # apps/web) must carry a recorded UX-fit decision — a `UX-Fit-Decision:`
@@ -773,7 +795,7 @@ jobs:
     name: Docs Impact Gate
     runs-on: ubuntu-latest
     # Only meaningful on PRs — it diffs against the PR base and reads the PR body.
-    if: github.event_name == 'pull_request'
+    if: ${{ false }} # Migrated to policy-guards-pr.
     # EP-DOCS-SYSTEM Phase 3. When a PR changes a user-facing route whose page IS
     # documented (via DOCS_ROUTE_MAP, the route->doc map that powers contextual
     # help), it must EITHER update the linked user-guide page(s) OR carry a
@@ -807,7 +829,7 @@ jobs:
   seed-fit-gate:
     name: Seed Contribution Fit Gate
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: ${{ false }} # Migrated to policy-guards-pr.
     # Canonical seed sources are fleet defaults, so a PR that changes them must
     # carry one reviewed applicability decision. The gate reads evidence from
     # the PR body/labels and the changed paths; it does not trust contributor
@@ -834,7 +856,7 @@ jobs:
     name: Spec/Plan/Doc Gate
     runs-on: ubuntu-latest
     # Only meaningful on PRs — it diffs against the PR base and reads the PR body.
-    if: github.event_name == 'pull_request'
+    if: ${{ false }} # Migrated to policy-guards-pr.
     # The process-spine enforcement edge. A PR that adds a substantial
     # implementation surface (a new source module/route/migration, or a large
     # in-place rewrite) must ALSO touch a durable-knowledge artifact (a spec,
@@ -890,7 +912,7 @@ jobs:
     name: Data-Impact Gate
     runs-on: ubuntu-latest
     # Only meaningful on PRs — it diffs against the PR base for changed persistent surfaces.
-    if: github.event_name == 'pull_request'
+    if: ${{ false }} # Migrated to policy-guards-pr.
     # BI-DG-003 (spec §6.9). Content-based data-governance conformance gate: a PR that
     # changes a persistent surface (schema, migration, projection producer, AI-context
     # source, MDM domain, or lifecycle executor) must carry a generated DataImpactManifest
@@ -915,7 +937,7 @@ jobs:
     name: Design Grounding Gate
     runs-on: ubuntu-latest
     # Only meaningful on PRs — it diffs against the PR base and reads the PR body.
-    if: github.event_name == 'pull_request'
+    if: ${{ false }} # Migrated to policy-guards-pr.
     # BI-11900EE7. A UX/workflow/queue/navigation/process-spine change must name
     # the existing specs/plans and code substrate reviewed before implementation.
     # This complements Spec/Plan/Doc (durable artifact) and UX-Fit (cognitive
@@ -941,6 +963,7 @@ jobs:
   doc-reference-integrity:
     name: Doc Reference Integrity
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # Referential integrity for docs. The Spec/Plan/Doc Gate proves a doc was
     # TOUCHED; this proves docs are not BROKEN. Doc breakage is non-local — a route
     # or file renamed on one side leaves a dead reference in a doc elsewhere the PR
@@ -961,6 +984,7 @@ jobs:
   janitor-tests:
     name: Janitor Tests
     runs-on: ubuntu-latest
+    if: ${{ false }} # Migrated to policy-guards-source.
     # BI-DBF3F426. Gates the runtime-artifact janitor's pure decision library +
     # CLI flag contract: the staleness threshold, the never-touch-root /
     # never-touch-live-worktree safety guards, and dry-run-vs-apply. Also gates
@@ -1286,8 +1310,8 @@ jobs:
     needs:
       - changes
       - typecheck
-      - policy-guards-source-shadow
-      - policy-guards-pr-shadow
+      - policy-guards-source
+      - policy-guards-pr
       - repo-guard-loop
       - docs-link-integrity
       - derived-artifact-registry

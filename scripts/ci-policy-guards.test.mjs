@@ -99,15 +99,31 @@ describe("CI policy guard registry", () => {
     );
   });
 
-  it("wires source and pull-request shadow profiles in CI", () => {
+  it("wires blocking source and pull-request profiles in CI", () => {
     const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
-    assert.match(workflow, /^  policy-guards-source-shadow:$/m);
+    assert.match(workflow, /^  policy-guards-source:$/m);
     assert.match(workflow, /node scripts\/ci-policy-guards\.mjs --profile source/);
-    assert.match(workflow, /^  policy-guards-pr-shadow:$/m);
+    assert.match(workflow, /^  policy-guards-pr:$/m);
     assert.match(workflow, /node scripts\/ci-policy-guards\.mjs --profile pull-request/);
     assert.equal(
       (workflow.match(/continue-on-error:\s*true/g) ?? []).length,
-      2,
+      0,
     );
+  });
+
+  it("keeps every migrated legacy job disabled while its definition remains", () => {
+    const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
+
+    for (const legacyJobId of EXPECTED_LEGACY_JOBS) {
+      const escapedJobId = legacyJobId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      assert.match(
+        workflow,
+        new RegExp(
+          `^  ${escapedJobId}:\\r?\\n(?:^[ \\t].*\\r?\\n)*?^    if: \\$\\{\\{ false \\}\\} # Migrated to policy-guards-(?:source|pr)\\.$`,
+          "m",
+        ),
+        `${legacyJobId} must remain disabled until its definition is removed`,
+      );
+    }
   });
 });
