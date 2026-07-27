@@ -2,14 +2,13 @@
 //
 // Covers the fallback path scripts/pregate.mjs routes to when a worktree has
 // no working native `sh` — scripts/gate-worktree.mjs and
-// scripts/local-ci-runner.mjs. These tests deliberately never spawn `sh`:
-// that is the point (proving the Node path is self-sufficient), and it makes
-// this file itself a no-native-sh regression check, not just documentation
-// of intent. The sh-path contract stays covered by
-// tests/release/local-ci-gate-contract.test.mjs, unchanged.
+// scripts/local-ci-runner.mjs. Node-path tests deliberately never require
+// `sh`; the one routing parity check is explicitly skipped when a native
+// POSIX shell is unavailable. The full sh-path contract stays covered by
+// tests/release/local-ci-gate-contract.test.mjs.
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, cpSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, cpSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:http";
@@ -21,6 +20,11 @@ const repoRoot = new URL("../..", import.meta.url).pathname.replace(/^\/([A-Za-z
 const pregateScript = join(repoRoot, "scripts", "pregate.mjs");
 const gateScript = join(repoRoot, "scripts", "gate-worktree.mjs");
 const runnerScript = join(repoRoot, "scripts", "local-ci-runner.mjs");
+const nativeShellProbe = spawnSync("sh", ["-c", "printf ok"], { encoding: "utf8" });
+const shellContractSkipReason = nativeShellProbe.error
+  ? "native POSIX shell 'sh' is unavailable on this host; shell routing parity runs in CI/Linux or Git Bash-equipped worktrees"
+  : false;
+const shellContractTest = (name, fn) => test(name, { skip: shellContractSkipReason }, fn);
 
 function makeTempRepo() {
   const dir = mkdtempSync(join(tmpdir(), "dpf-node-gate-"));
@@ -43,11 +47,17 @@ function makeTempRepo() {
 // handler by a tool name read off the request body, so it must not dispatch
 // through a request-controlled key (`handlers[toolName]` / `map.get(toolName)`
 // both count as "user-controlled" dispatch to CodeQL's taint tracking). This
-// resolver instead switches on literal tool-name cases — the only three MCP
-// tools any test here ever mocks — so every property access is a fixed
+// resolver instead switches on literal tool-name cases — the bounded MCP
+// tools this gate uses — so every property access is a fixed
 // literal, never the tainted variable itself.
 function resolveMockHandler(handlers, toolName) {
   switch (toolName) {
+    case "get_quiescence_status":
+      return handlers.get_quiescence_status
+        ?? (() => ({ success: true, data: { level: "normal", writesRefused: false, retryAfterSeconds: 0 } }));
+    case "list_nonprod_environment_leases":
+      return handlers.list_nonprod_environment_leases
+        ?? (() => ({ success: true, data: { leases: [] } }));
     case "claim_nonprod_environment_lease": return handlers.claim_nonprod_environment_lease;
     case "record_local_integration_result": return handlers.record_local_integration_result;
     case "release_nonprod_environment_lease": return handlers.release_nonprod_environment_lease;
@@ -142,7 +152,7 @@ test("pregate.mjs routes to gate-worktree.mjs (Node path) when forced, and reach
   assert.match(result.stdout, /branch=feat\/x/);
 });
 
-test("pregate.mjs routes to sh scripts/gate-worktree.sh when a working native shell is confirmed", () => {
+shellContractTest("pregate.mjs routes to sh scripts/gate-worktree.sh when a working native shell is confirmed", () => {
   const result = spawnSync(process.execPath, [pregateScript, "--dry-run", "--branch", "feat/x", "--worktree", repoRoot], {
     encoding: "utf8",
     env: { ...process.env, DPF_PREGATE_FORCE_SH: "1" },
@@ -180,6 +190,7 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   mkdirSync(join(temp, "scripts", "lib"), { recursive: true });
   cpSync(gateScript, join(temp, "scripts", "gate-worktree.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "mcp-client.mjs"), join(temp, "scripts", "lib", "mcp-client.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "local-ci-failure-summary.mjs"), join(temp, "scripts", "lib", "local-ci-failure-summary.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "sandbox-freshness.mjs"), join(temp, "scripts", "lib", "sandbox-freshness.mjs"));
   // gate-worktree.mjs static-imports these lease-safety modules at load time
   // (BI-52500C0D). Copy them into the temp tree so the refusal path can run
@@ -218,6 +229,8 @@ test("gate-worktree.mjs claims, records, and releases in order, and carries evid
     // the gate records evidence (claim → release → record). Holding the lease
     // only for the mutation window is intentional (BI-52500C0D).
     assert.deepEqual(toolSequence, [
+      "get_quiescence_status",
+      "list_nonprod_environment_leases",
       "claim_nonprod_environment_lease",
       "release_nonprod_environment_lease",
       "record_local_integration_result",
@@ -228,6 +241,22 @@ test("gate-worktree.mjs claims, records, and releases in order, and carries evid
     assert.equal(evidenceCall.params.arguments.evidence.branch, "feat/local-ci-sandbox");
     assert.equal(evidenceCall.params.arguments.evidence.sha, "candidate-sha");
     assert.equal(evidenceCall.params.arguments.evidence.gatePassed, true);
+    assert.equal(evidenceCall.params.arguments.evidence.impactedTestRecommendationBi, "BI-A4EC0EA6");
+    assert.deepEqual(evidenceCall.params.arguments.evidence.failureSummary, {
+      schema: "dpf-local-ci-failure-summary/v1",
+      failedTests: [],
+      failedChecks: [],
+      omittedFailureLineCount: 0,
+      truncated: false,
+    });
+    assert.equal(
+      evidenceCall.params.arguments.evidence.fullLogFile,
+      join(dir, ".git", "dpf-local-ci-output.log"),
+    );
+    assert.match(
+      readFileSync(evidenceCall.params.arguments.evidence.fullLogFile, "utf8"),
+      /sandbox checkout\/build stub: gate passed/,
+    );
     assert.deepEqual(evidenceCall.params.arguments.evidence.resilience, {
       publicationMode: "deferred",
       acceptedBaseMode: "local-ref",
@@ -238,6 +267,137 @@ test("gate-worktree.mjs claims, records, and releases in order, and carries evid
     assert.equal(state.gatePassed, true);
     assert.equal(state.branch, "feat/local-ci-sandbox");
     assert.equal(state.sha, "candidate-sha");
+  } finally {
+    await mcp.close();
+  }
+});
+
+test("gate-worktree.mjs blocks active quiescence before claiming a lease or running expensive work", async () => {
+  const { dir } = makeTempRepo();
+  const mcp = await startMockMcp({
+    get_quiescence_status: () => ({
+      success: true,
+      data: {
+        level: "draining",
+        runId: "QR-TEST",
+        writesRefused: true,
+        retryAfterSeconds: 45,
+        drainBlockers: [{ surface: "build-phase", count: 1 }],
+      },
+    }),
+  });
+  try {
+    const result = await runGateAsync(
+      ["--branch", "feat/quiescence-block", "--sha", "candidate-sha", "--worktree", dir, "--no-push", "--mcp-url", mcp.url],
+      { ...process.env, DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_ALLOW_LOCAL_CI_STUB: "1" },
+    );
+    assert.equal(result.status, 4, `${result.stdout}\n${result.stderr}`);
+    assert.match(result.stderr, /portal is draining/i);
+    assert.match(result.stderr, /no expensive local-CI command was run/i);
+    assert.deepEqual(mcp.calls.map((call) => call.params.name), ["get_quiescence_status"]);
+
+    const state = JSON.parse(readFileSync(join(dir, ".git", "dpf-local-ci-gate.json"), "utf8"));
+    assert.equal(state.gatePassed, false);
+    assert.equal(state.status, "blocked_quiescence");
+    assert.equal(state.quiescence.runId, "QR-TEST");
+    assert.equal(state.quiescence.retryAfterSeconds, 45);
+  } finally {
+    await mcp.close();
+  }
+});
+
+test("gate-worktree.mjs reports active lease contention and stale main before expensive work", async () => {
+  const { dir, g } = makeTempRepo();
+  g(["branch", "feat/topic"]);
+  writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
+  g(["commit", "-qam", "advance main"]);
+  const advancedMain = g(["rev-parse", "HEAD"]);
+  g(["update-ref", "refs/remotes/origin/main", advancedMain]);
+  g(["checkout", "-q", "feat/topic"]);
+  const candidateSha = g(["rev-parse", "HEAD"]);
+
+  const mcp = await startMockMcp({
+    list_nonprod_environment_leases: () => ({
+      success: true,
+      data: {
+        leases: [{
+          environmentKey: "local-integration-ci",
+          leaseId: "NPEL-BUSY",
+          status: "active",
+        }],
+      },
+    }),
+    claim_nonprod_environment_lease: () => ({ success: true, entityId: "NPEL-TEST" }),
+    release_nonprod_environment_lease: () => ({ success: true }),
+    record_local_integration_result: () => ({ success: true, entityId: "EXT-TEST" }),
+  });
+  try {
+    const result = await runGateAsync(
+      ["--branch", "feat/topic", "--sha", candidateSha, "--worktree", dir, "--no-push", "--mcp-url", mcp.url],
+      { ...process.env, DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_ALLOW_LOCAL_CI_STUB: "1" },
+    );
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    assert.match(result.stderr, /preflight sees 1 active local-integration-ci lease/);
+    assert.match(result.stderr, /HEAD is 1 commit\(s\) behind origin\/main/);
+  } finally {
+    await mcp.close();
+  }
+});
+
+test("gate-worktree.mjs preserves a green gate for finalize-only evidence replay after quiescence", async () => {
+  const { dir } = makeTempRepo();
+  let recordAttempts = 0;
+  const mcp = await startMockMcp({
+    claim_nonprod_environment_lease: () => ({ success: true, entityId: "NPEL-PENDING" }),
+    release_nonprod_environment_lease: () => ({ success: true }),
+    record_local_integration_result: () => {
+      recordAttempts += 1;
+      return recordAttempts === 1
+        ? { success: false, error: "portal_quiescing", data: { retryAfterSeconds: 30 } }
+        : { success: true, entityId: "EXT-FINALIZED" };
+    },
+  });
+  try {
+    const commonArgs = [
+      "--branch", "feat/pending-evidence",
+      "--sha", "candidate-sha",
+      "--worktree", dir,
+      "--no-push",
+      "--mcp-url", mcp.url,
+    ];
+    const env = {
+      ...process.env,
+      DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+      DPF_ALLOW_LOCAL_CI_STUB: "1",
+    };
+
+    const first = await runGateAsync(commonArgs, env);
+    assert.equal(first.status, 4, `${first.stdout}\n${first.stderr}`);
+    assert.match(first.stderr, /gate passed but evidence recording is pending/i);
+
+    const pendingPath = join(dir, ".git", "dpf-local-ci-pending-evidence.json");
+    assert.equal(existsSync(pendingPath), true);
+    const pending = JSON.parse(readFileSync(pendingPath, "utf8"));
+    assert.equal(pending.branch, "feat/pending-evidence");
+    assert.equal(pending.sha, "candidate-sha");
+    assert.equal(pending.recordArgs.evidence.gatePassed, true);
+
+    const pendingState = JSON.parse(readFileSync(join(dir, ".git", "dpf-local-ci-gate.json"), "utf8"));
+    assert.equal(pendingState.gatePassed, true);
+    assert.equal(pendingState.evidencePending, true);
+
+    const callCountBeforeFinalize = mcp.calls.length;
+    const finalized = await runGateAsync(["--finalize-evidence", ...commonArgs], env);
+    assert.equal(finalized.status, 0, `${finalized.stdout}\n${finalized.stderr}`);
+    assert.match(finalized.stdout, /recorded pending local-CI evidence: EXT-FINALIZED/);
+    assert.equal(existsSync(pendingPath), false);
+
+    const finalizeCalls = mcp.calls.slice(callCountBeforeFinalize).map((call) => call.params.name);
+    assert.deepEqual(finalizeCalls, ["get_quiescence_status", "record_local_integration_result"]);
+    const finalState = JSON.parse(readFileSync(join(dir, ".git", "dpf-local-ci-gate.json"), "utf8"));
+    assert.equal(finalState.gatePassed, true);
+    assert.equal(finalState.evidencePending, false);
+    assert.equal(finalState.evidenceRecordId, "EXT-FINALIZED");
   } finally {
     await mcp.close();
   }

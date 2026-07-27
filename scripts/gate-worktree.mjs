@@ -10,10 +10,11 @@
 // between POSIX and Windows contributor surfaces.
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
+import { summarizeLocalCiOutput } from "./lib/local-ci-failure-summary.mjs";
 import { classifyGateOutcome } from "./lib/sandbox-freshness.mjs";
 import { superviseLeaseRun } from "./lib/lease-supervisor.mjs";
 import {
@@ -71,6 +72,7 @@ Options:
   --push                       Push before claiming the lease (legacy/explicit publication mode)
   --no-push                    Do not push before claiming the lease (default)
   --dry-run                    Print planned actions; skip git push and MCP calls
+  --finalize-evidence          Publish pending local-CI evidence without rerunning the gate
   --help                       Show this help
 
 Environment:
@@ -94,6 +96,7 @@ function parseArgs(argv) {
     expiresMinutes: Number(process.env.DPF_GATE_EXPIRES_MINUTES || 60),
     pushBranch: false,
     dryRun: false,
+    finalizeEvidence: false,
   };
   const args = [...argv];
   while (args.length > 0) {
@@ -112,6 +115,7 @@ function parseArgs(argv) {
       case "--push": options.pushBranch = true; break;
       case "--no-push": options.pushBranch = false; break;
       case "--dry-run": options.dryRun = true; break;
+      case "--finalize-evidence": options.finalizeEvidence = true; break;
       case "--help":
       case "-h":
         process.stdout.write(usage());
@@ -139,23 +143,27 @@ function resolveGateCommand({ branch, allowStub, gitBin }) {
   return null;
 }
 
-function createGateCommand(commandSpec, { cwd, env, allowStub }) {
+function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFile }) {
   if (!commandSpec) {
     if (!allowStub) throw new Error("runGateCommand called with no command and no stub allowed");
+    const stubOutput = "sandbox checkout/build stub: gate passed (DPF_ALLOW_LOCAL_CI_STUB=1)\n";
+    writeFileSync(fullLogFile, stubOutput);
     return {
       run: async () => ({
         label: "sandbox checkout/build stub",
         status: 0,
-        output: "sandbox checkout/build stub: gate passed (DPF_ALLOW_LOCAL_CI_STUB=1)\n",
+        output: stubOutput,
       }),
       terminate: async () => {},
     };
   }
   let child = null;
   let output = "";
+  writeFileSync(fullLogFile, "");
   const append = (chunk, stream) => {
     const text = String(chunk);
     output = `${output}${text}`.slice(-12000);
+    appendFileSync(fullLogFile, text);
     stream.write(text);
   };
   return {
@@ -196,6 +204,65 @@ function createGateCommand(commandSpec, { cwd, env, allowStub }) {
   };
 }
 
+function responseData(response) {
+  return response?.data ?? response ?? {};
+}
+
+async function readQuiescenceStatus({ mcpUrl, bearerToken }) {
+  try {
+    const response = await mcpCall("get_quiescence_status", {}, { mcpUrl, bearerToken });
+    if (response?.success !== true) return null;
+    return responseData(response);
+  } catch (error) {
+    process.stderr.write(`gate-worktree: quiescence preflight unavailable (${error.message}); continuing to governed lease claim\n`);
+    return null;
+  }
+}
+
+function quiescenceBlocksWrites(status) {
+  return Boolean(status)
+    && ((status.level && status.level !== "normal") || status.writesRefused === true);
+}
+
+async function warnAboutActiveLease({ mcpUrl, bearerToken }) {
+  try {
+    const response = await mcpCall("list_nonprod_environment_leases", {}, { mcpUrl, bearerToken });
+    if (response?.success !== true) return;
+    const data = responseData(response);
+    const leases = Array.isArray(data.leases) ? data.leases : [];
+    const active = leases.filter((lease) =>
+      (lease.environmentKey || lease.environment || lease.key) === "local-integration-ci");
+    if (active.length > 0) {
+      process.stderr.write(`gate-worktree: preflight sees ${active.length} active local-integration-ci lease(s); claim will queue if busy.\n`);
+    }
+  } catch (error) {
+    process.stderr.write(`gate-worktree: lease-list preflight unavailable (${error.message}); claim remains authoritative\n`);
+  }
+}
+
+function warnAboutMainFreshness({ gitBin, worktreePath }) {
+  if (!gitOrEmpty(gitBin, ["rev-parse", "--verify", "origin/main"], worktreePath)) return;
+  const behind = gitOrEmpty(gitBin, ["rev-list", "--count", "HEAD..origin/main"], worktreePath);
+  if (behind && behind !== "0") {
+    process.stderr.write(`gate-worktree: preflight warning: HEAD is ${behind} commit(s) behind origin/main; local-ci-runner will merge the current base before expensive gates.\n`);
+  }
+}
+
+function writePendingEvidence(path, { branch, sha, expiresAt, reason, retryAfterSeconds, recordArgs }) {
+  mkdirSync(dirname(path), { recursive: true });
+  const payload = {
+    schema: "dpf-local-ci-pending-evidence/v1",
+    branch,
+    sha,
+    expiresAt,
+    reason,
+    retryAfterSeconds,
+    recordedAt: new Date().toISOString(),
+    recordArgs,
+  };
+  writeFileSync(path, `${JSON.stringify(payload, null, 2)}\n`);
+}
+
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const gitBin = process.env.DPF_GATE_GIT_BIN || "git";
@@ -209,6 +276,8 @@ async function main() {
 
   const stateFile = gitPath(gitBin, worktreePath, "dpf-local-ci-gate.json");
   const metadataFile = gitPath(gitBin, worktreePath, "dpf-local-ci-metadata.json");
+  const pendingEvidenceFile = gitPath(gitBin, worktreePath, "dpf-local-ci-pending-evidence.json");
+  const fullLogFile = gitPath(gitBin, worktreePath, "dpf-local-ci-output.log");
   const freshnessReportFile = gitPath(
     gitBin,
     worktreePath,
@@ -228,6 +297,8 @@ async function main() {
     process.stdout.write(`branch=${branch}\nsha=${sha}\nworktree=${worktreePath}\nremote=${options.remote}\nmcpUrl=${options.mcpUrl}\n`);
     process.stdout.write(`metadataFile=${metadataFile}\n`);
     process.stdout.write(`freshnessReportFile=${freshnessReportFile}\n`);
+    process.stdout.write(`pendingEvidenceFile=${pendingEvidenceFile}\n`);
+    process.stdout.write(`fullLogFile=${fullLogFile}\n`);
     process.stdout.write(`pushBeforeLease=${options.pushBranch}\n`);
     if (commandSpec) {
       process.stdout.write(`localCiCommand=${commandSpec.label}\n`);
@@ -240,12 +311,71 @@ async function main() {
     process.exit(0);
   }
 
-  if (!commandSpec && !allowStub) {
+  if (!options.finalizeEvidence && !commandSpec && !allowStub) {
     die("local-CI gate runner is not wired (scripts/local-ci-runner.mjs is missing); refusing to record passing stub evidence. Set DPF_LOCAL_CI_COMMAND to the canonical sandbox command, or use DPF_ALLOW_LOCAL_CI_STUB=1 only in contract tests.");
   }
 
   const bearerToken = process.env.DPF_MCP_BEARER_TOKEN;
   if (!bearerToken) die("DPF_MCP_BEARER_TOKEN is required to claim the local-CI lease");
+
+  const quiescence = await readQuiescenceStatus({
+    mcpUrl: options.mcpUrl,
+    bearerToken,
+  });
+  if (quiescenceBlocksWrites(quiescence)) {
+    writeState(stateFile, {
+      branch,
+      sha,
+      gatePassed: false,
+      leaseId: "",
+      evidenceId: "",
+      status: "blocked_quiescence",
+      expiresAt: new Date(Date.now() + Number(quiescence.retryAfterSeconds || 30) * 1000).toISOString(),
+      resilience: null,
+      leaseEvents: [],
+      quiescence,
+    });
+    process.stderr.write(`gate-worktree: portal is ${quiescence.level || "quiescing"}; local-CI evidence writes are refused. Retry after ${quiescence.retryAfterSeconds || 30}s.\n`);
+    process.stderr.write("gate-worktree: no expensive local-CI command was run; use get_quiescence_status for drain blockers.\n");
+    process.exit(4);
+  }
+
+  if (options.finalizeEvidence) {
+    if (!existsSync(pendingEvidenceFile)) {
+      die(`no pending local-CI evidence file found at ${pendingEvidenceFile}`);
+    }
+    const pending = JSON.parse(readFileSync(pendingEvidenceFile, "utf8"));
+    if (pending.branch !== branch) die(`pending evidence branch mismatch: ${pending.branch} != ${branch}`);
+    if (pending.sha !== sha) die(`pending evidence sha mismatch: ${pending.sha} != ${sha}`);
+    const response = await mcpCall(
+      "record_local_integration_result",
+      pending.recordArgs,
+      { mcpUrl: options.mcpUrl, bearerToken },
+    );
+    if (response?.success !== true) {
+      die(`failed to record pending local-CI evidence: ${JSON.stringify(response)}`);
+    }
+    const evidenceId = response.entityId || "";
+    const evidence = pending.recordArgs?.evidence ?? {};
+    writeState(stateFile, {
+      branch,
+      sha,
+      gatePassed: true,
+      leaseId: evidence.leaseId || "",
+      evidenceId,
+      status: "passed",
+      expiresAt: pending.expiresAt || evidence.expiresAt || "",
+      resilience: evidence.resilience ?? null,
+      leaseEvents: evidence.leaseEvents ?? [],
+      evidencePending: false,
+    });
+    rmSync(pendingEvidenceFile, { force: true });
+    process.stdout.write(`recorded pending local-CI evidence: ${evidenceId}\n`);
+    process.exit(0);
+  }
+
+  await warnAboutActiveLease({ mcpUrl: options.mcpUrl, bearerToken });
+  warnAboutMainFreshness({ gitBin, worktreePath });
 
   if (options.pushBranch) {
     const push = git(gitBin, ["push", options.remote, branch], worktreePath);
@@ -330,6 +460,7 @@ async function main() {
       DPF_NONPROD_OWNER_SESSION_ID: ownerSessionId,
     },
     allowStub,
+    fullLogFile,
   });
   const leaseEvents = [{ type: "claimed", at: new Date().toISOString(), expiresAt }];
   let receivedSignal = "";
@@ -391,6 +522,7 @@ async function main() {
   }
   if (!commandSpec) process.stdout.write(runResult.output);
   const gateOutput = runResult.output.slice(-12000);
+  const failureSummary = summarizeLocalCiOutput(readFileSync(fullLogFile, "utf8"));
 
   let freshnessReport = null;
   try {
@@ -438,6 +570,7 @@ async function main() {
       bi: "BI-166C59F3",
       resilienceBi: "BI-76551B2D",
       freshnessBi: "BI-ECDF9520",
+      impactedTestRecommendationBi: "BI-A4EC0EA6",
       phase: 1,
       leaseId,
       leaseEvents,
@@ -454,8 +587,16 @@ async function main() {
       buildCommand: commandLabel,
       buildExitCode: runResult.status,
       output: gateOutput,
+      fullLogFile,
+      failureSummary,
+      impactedTests: {
+        recommendationBacklogItem: "BI-A4EC0EA6",
+        status: "deferred_to_code_graph_recommender",
+        note: "Local-CI records the handoff; graph-backed impacted-test selection remains owned by BI-A4EC0EA6.",
+      },
       url,
     },
+    failureSummary,
   };
 
   let evidenceResponse = await mcpCall("record_local_integration_result", evidenceArgs, { mcpUrl: options.mcpUrl, bearerToken });
@@ -469,11 +610,65 @@ async function main() {
   if (evidenceResponse?.success === true) {
     evidenceId = evidenceResponse.entityId || "";
   } else {
-    writeState(stateFile, { branch, sha, gatePassed: false, leaseId, evidenceId: "", status: "failed", expiresAt, resilience, leaseEvents });
+    const evidenceError = evidenceResponse?.error ?? evidenceResponse?.data?.error ?? "";
+    if (outcome.gatePassed && evidenceError === "portal_quiescing") {
+      const retryAfterSeconds = Number(
+        evidenceResponse?.data?.retryAfterSeconds
+          ?? evidenceResponse?.retryAfterSeconds
+          ?? 30,
+      );
+      writePendingEvidence(pendingEvidenceFile, {
+        branch,
+        sha,
+        expiresAt,
+        reason: evidenceError,
+        retryAfterSeconds,
+        recordArgs: evidenceArgs,
+      });
+      writeState(stateFile, {
+        branch,
+        sha,
+        gatePassed: true,
+        leaseId,
+        evidenceId: "",
+        status: outcome.status,
+        expiresAt,
+        resilience,
+        leaseEvents,
+        evidencePending: true,
+        evidencePendingReason: evidenceError,
+      });
+      process.stderr.write("gate-worktree: local-CI gate passed but evidence recording is pending because the portal is quiescing.\n");
+      process.stderr.write(`gate-worktree: the lease is released; rerun pnpm run pregate -- --finalize-evidence --branch "${branch}" --sha "${sha}" --worktree "${worktreePath}" after quiescence clears.\n`);
+      process.exit(4);
+    }
+    writeState(stateFile, {
+      branch,
+      sha,
+      gatePassed: false,
+      leaseId,
+      evidenceId: "",
+      status: "failed",
+      expiresAt,
+      resilience,
+      leaseEvents,
+      evidencePending: false,
+    });
     die(`failed to record local integration evidence: ${JSON.stringify(evidenceResponse)}`);
   }
 
-  writeState(stateFile, { branch, sha, gatePassed: outcome.gatePassed, leaseId, evidenceId, status: outcome.status, expiresAt, resilience, leaseEvents });
+  writeState(stateFile, {
+    branch,
+    sha,
+    gatePassed: outcome.gatePassed,
+    leaseId,
+    evidenceId,
+    status: outcome.status,
+    expiresAt,
+    resilience,
+    leaseEvents,
+    evidencePending: false,
+  });
 
   if (outcome.gatePassed) {
     process.stdout.write("gate passed\n");
@@ -487,7 +682,20 @@ async function main() {
   die("gate failed");
 }
 
-function writeState(stateFile, { branch, sha, gatePassed, leaseId, evidenceId, status, expiresAt, resilience, leaseEvents }) {
+function writeState(stateFile, {
+  branch,
+  sha,
+  gatePassed,
+  leaseId,
+  evidenceId,
+  status,
+  expiresAt,
+  resilience,
+  leaseEvents,
+  evidencePending = false,
+  evidencePendingReason = "",
+  quiescence = null,
+}) {
   mkdirSync(dirname(stateFile), { recursive: true });
   const payload = {
     branch,
@@ -498,9 +706,12 @@ function writeState(stateFile, { branch, sha, gatePassed, leaseId, evidenceId, s
     status,
     expiresAt,
     leaseEvents,
+    evidencePending,
     recordedAt: new Date().toISOString(),
   };
   if (resilience) payload.resilience = resilience;
+  if (evidencePending) payload.evidencePendingReason = evidencePendingReason || "unknown";
+  if (quiescence) payload.quiescence = quiescence;
   writeFileSync(stateFile, `${JSON.stringify(payload, null, 2)}\n`);
 }
 

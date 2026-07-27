@@ -241,7 +241,7 @@ Git verbs during `gate-worktree.sh`, records local-only evidence with
 the same no-network Git wrapper and proves the same unexpired SHA-bound record
 is sufficient for later publication.
 
-**Quiescence-aware evidence recovery.** `gate-worktree.sh` now preflights
+**Quiescence-aware evidence recovery.** `pnpm run pregate` now preflights
 `get_quiescence_status` before the expensive gate. If the portal is actively
 draining or swapping, the gate exits before claiming the lease or running the
 full local-CI command. If the expensive gate already passed but
@@ -252,13 +252,16 @@ writes `.git/dpf-local-ci-pending-evidence.json`, attempts
 publish that saved evidence without rerunning local-CI:
 
 ```bash
-scripts/gate-worktree.sh --finalize-evidence --branch <branch> --sha <sha>
+pnpm run pregate -- --finalize-evidence --branch <branch> --sha <sha>
 ```
 
 The pre-push gate blocks `evidencePending=true` records until finalization
 succeeds. Failure evidence also carries `failureSummary`, a bounded list of
 failed tests/checks and omitted counts, plus an explicit pointer to
-BI-A4EC0EA6 for code-graph impacted-test recommendations.
+BI-A4EC0EA6 for code-graph impacted-test recommendations. The complete output
+from the most recent run is retained outside the working tree at the git-private
+path reported as `fullLogFile` in dry-run and evidence output; the bounded tail
+and summary remain the default diagnostic surface.
 
 **The pre-push hook chain is active by default.** The local `pre-push` file is
 gitignored (git-lfs generates it), so the enforced logic ships as the tracked

@@ -32,6 +32,7 @@ local_fence_file=""
 local_fence_token=""
 METADATA_FILE=""
 PENDING_EVIDENCE_FILE=""
+FULL_LOG_FILE=""
 
 usage() {
   cat <<'EOF'
@@ -312,6 +313,7 @@ METADATA_FILE="$("$GIT_BIN" rev-parse --git-path dpf-local-ci-metadata.json)"
 git_common_dir="$("$GIT_BIN" rev-parse --git-common-dir)"
 local_fence_file="${DPF_LOCAL_SANDBOX_FENCE_PATH:-$(node -e 'const p=require("node:path"); process.stdout.write(p.resolve(process.argv[1], process.argv[2], "dpf-local-ci-owner.json"))' "$WORKTREE_PATH" "$git_common_dir")}"
 PENDING_EVIDENCE_FILE="$("$GIT_BIN" rev-parse --git-path dpf-local-ci-pending-evidence.json)"
+FULL_LOG_FILE="$("$GIT_BIN" rev-parse --git-path dpf-local-ci-output.log)"
 
 # Checked-in default (BI-157DC9B2): when no DPF_LOCAL_CI_COMMAND is supplied and
 # the stub is not explicitly allowed, run the non-mutating merge-workspace
@@ -325,6 +327,7 @@ if [ "$DRY_RUN" = "1" ]; then
   printf 'branch=%s\nsha=%s\nworktree=%s\nremote=%s\nmcpUrl=%s\n' "$BRANCH" "$SHA" "$WORKTREE_PATH" "$REMOTE" "$MCP_URL"
   printf 'metadataFile=%s\n' "$METADATA_FILE"
   printf 'pendingEvidenceFile=%s\n' "$PENDING_EVIDENCE_FILE"
+  printf 'fullLogFile=%s\n' "$FULL_LOG_FILE"
   if [ "$PUSH_BRANCH" = "1" ]; then
     printf 'pushBeforeLease=true\n'
   else
@@ -420,7 +423,9 @@ gate_passed=false
 evidence_id=""
 status="failed"
 gate_command_label=""
-gate_output_file="$(mktemp)"
+gate_output_file="$FULL_LOG_FILE"
+mkdir -p "$(dirname "$gate_output_file")"
+: >"$gate_output_file"
 lease_events_file="$(mktemp)"
 lease_fence_file="$(mktemp)"
 gate_output=""
@@ -498,7 +503,6 @@ process.stdout.write(JSON.stringify(rows));
 cat "$gate_output_file"
 gate_output="$(tail -c 12000 "$gate_output_file" 2>/dev/null || cat "$gate_output_file")"
 failure_summary_json="$(node "$SCRIPT_DIR/lib/local-ci-failure-summary.mjs" "$gate_output_file" 2>/dev/null || printf '%s' '{"schema":"dpf-local-ci-failure-summary/v1","failedTests":[],"failedChecks":[],"omittedFailureLineCount":0,"truncated":false}')"
-rm -f "$gate_output_file"
 
 # Sandbox freshness classification (BI-ECDF9520): the preflight (run inside the
 # gate command) writes a report next to the git dir. A red/missing-freshness
@@ -581,6 +585,7 @@ const evidence = {
   buildCommand: process.argv[7],
   buildExitCode: Number(process.argv[12]),
   output: process.argv[8],
+  fullLogFile: process.argv[19],
   failureSummary,
   url: process.argv[6]
 };
@@ -595,7 +600,7 @@ process.stdout.write(JSON.stringify({
   evidence,
   failureSummary
 }));
-' "$status" "$gate_passed" "$lease_id" "$BRANCH" "$SHA" "$URL" "$gate_command_label" "$gate_output" "$OWNER_PROVIDER" "$OWNER_SESSION_ID" "$outcome_json" "$gate_status" "$PUSH_BRANCH" "$METADATA_FILE" "$expires_at" "$resilience_json" "$lease_events_json" "$failure_summary_json")"
+' "$status" "$gate_passed" "$lease_id" "$BRANCH" "$SHA" "$URL" "$gate_command_label" "$gate_output" "$OWNER_PROVIDER" "$OWNER_SESSION_ID" "$outcome_json" "$gate_status" "$PUSH_BRANCH" "$METADATA_FILE" "$expires_at" "$resilience_json" "$lease_events_json" "$failure_summary_json" "$FULL_LOG_FILE")"
 evidence_response="$(mcp_call record_local_integration_result "$evidence_args" | extract_tool_result)"
 evidence_success="$(printf '%s' "$evidence_response" | field success)"
 if [ "$evidence_success" != "true" ] && [ "$status" = "blocked_sandbox_drift" ]; then
@@ -628,7 +633,7 @@ else
     write_pending_evidence "$evidence_error" "$retry_after"
     write_state true "$lease_id" "" "$status" "$expires_at" "$resilience_json" "$lease_events_json" true "$evidence_error"
     printf '%s\n' "gate-worktree: local-CI gate passed but evidence recording is pending because the portal is quiescing." >&2
-    printf '%s\n' "gate-worktree: the lease is released; rerun scripts/gate-worktree.sh --finalize-evidence --branch '$BRANCH' --sha '$SHA' --worktree '$WORKTREE_PATH' after quiescence clears." >&2
+    printf '%s\n' "gate-worktree: the lease is released; rerun pnpm run pregate -- --finalize-evidence --branch '$BRANCH' --sha '$SHA' --worktree '$WORKTREE_PATH' after quiescence clears." >&2
     exit 4
   fi
   write_state false "$lease_id" "" "failed" "$expires_at" "$resilience_json" "$lease_events_json" false ""

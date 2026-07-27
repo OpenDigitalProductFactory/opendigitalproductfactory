@@ -68,10 +68,54 @@ Result: pass, with 3 pure JS tests run and 28 native-shell contract tests skippe
 - Modify if needed: `docs/runbooks/pr-delivery-postmortem.md`
 - Modify if needed: `docs/testing/pre-pr-gate.md`
 
-- [ ] **Step 1: Confirm the post-mortem runbook routes durable learnings to commons/backlog/docs**
+- [x] **Step 1: Confirm the post-mortem runbook routes durable learnings to commons/backlog/docs**
 
 Read the runbook for concrete action language, not vague reflection.
+Result: confirmed. The routine orders backlog, docs/runbooks, commons, then
+regression tests and explicitly points impacted-test selection to BI-A4EC0EA6.
 
-- [ ] **Step 2: Run source-local verification**
+- [x] **Step 2: Run source-local verification**
 
 Run targeted Vitest and Node tests. Treat full production build and runtime UX as unrun unless a governed local-CI lease is available.
+Result: 58 delivery contracts passed (26 executed, 32 POSIX-only contracts
+explicitly skipped because this host has no native `sh`). Targeted Vitest
+remained a source-only harness limitation because the inherited worktree
+Vitest package was incomplete; no dependency install was attempted. The
+governed exact-SHA gate remains the authoritative Vitest/typecheck/build proof.
+
+### Task 4: Reconcile The Current Cross-Platform Gate
+
+Current main added the Node-native Windows gate, lease heartbeat fencing, early
+lease release, and candidate-gitdir freshness handoff after the original
+BI-C22152E7 implementation. The closeout therefore preserves those newer
+contracts and extends both host paths rather than replaying the old shell-only
+behavior.
+
+- [x] **Step 1: Preserve current lease supervision**
+
+Keep claim → supervised command → release → evidence ordering, local process
+fencing, heartbeat renewal, and candidate-gitdir freshness ownership.
+
+- [x] **Step 2: Add Node-native parity**
+
+Add quiescence/main/lease preflight, bounded failure summaries, BI-A4EC0EA6
+handoff metadata, pending evidence persistence, and finalize-only replay to
+`gate-worktree.mjs`.
+
+- [x] **Step 3: Retain complete output without polluting the worktree**
+
+Both host paths retain the latest full gate output at the git-private
+`dpf-local-ci-output.log` path while evidence uses the bounded tail and
+machine-readable failure summary by default.
+
+- [x] **Step 4: Make recovery invocation host-neutral**
+
+The pre-push guard and docs now route evidence replay through
+`pnpm run pregate -- --finalize-evidence ...`, letting `pregate.mjs` select the
+working Node or POSIX implementation.
+
+- [ ] **Step 5: Run the governed exact-SHA gate and publish**
+
+Run `pnpm run pregate`, record the evidence id, push the exact gated SHA, open
+a ready non-draft PR, verify with `pnpm pr:health`, and enroll through the merge
+queue.

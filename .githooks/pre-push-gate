@@ -160,7 +160,7 @@ if (state.branch !== branch || state.sha !== sha || state.gatePassed !== true) {
 if (state.evidencePending === true) {
   console.error("[pre-push-gate] local-CI gate passed but evidence publication is still pending.");
   console.error(`[pre-push-gate] reason=${state.evidencePendingReason || "unknown"}`);
-  console.error(`[pre-push-gate] Run: scripts/gate-worktree.sh --finalize-evidence --branch "${branch}" --sha "${sha}"`);
+  console.error(`[pre-push-gate] Run: pnpm run pregate -- --finalize-evidence --branch "${branch}" --sha "${sha}"`);
   process.exit(1);
 }
 if (!state.expiresAt) {

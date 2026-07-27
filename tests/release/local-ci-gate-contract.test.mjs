@@ -461,8 +461,8 @@ esac
     "get_quiescence_status",
     "list_nonprod_environment_leases",
     "claim_nonprod_environment_lease",
-    "record_local_integration_result",
     "release_nonprod_environment_lease",
+    "record_local_integration_result",
   ]);
 
   const state = JSON.parse(readFileSync(join(temp, "dpf-local-ci-gate.json"), "utf8"));
@@ -906,7 +906,7 @@ shellContractTest("pre-push-gate blocks a matching gate record while evidence pu
   const result = runGateHook(dir, { input: refsLine(g) });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /local-CI gate passed but evidence publication is still pending/i);
-  assert.match(result.stderr, /scripts\/gate-worktree\.sh --finalize-evidence/);
+  assert.match(result.stderr, /pnpm run pregate -- --finalize-evidence/);
 });
 
 shellContractTest("pre-push-gate blocks an expired matching gate record", () => {
@@ -1156,7 +1156,7 @@ esac
   return { stubDir, callsFile };
 }
 
-test("local-ci-runner.sh unshallows the root clone before merging when the root is shallow", () => {
+shellContractTest("local-ci-runner.sh unshallows the root clone before merging when the root is shallow", () => {
   const { stubDir, callsFile } = stubGitFor(true);
   const metadataFile = join(stubDir, "metadata.json");
 
@@ -1181,7 +1181,7 @@ test("local-ci-runner.sh unshallows the root clone before merging when the root 
   assert.match(result.stderr, /candidate ref not found locally/);
 });
 
-test("local-ci-runner.sh skips the unshallow fetch when the root clone is already full", () => {
+shellContractTest("local-ci-runner.sh skips the unshallow fetch when the root clone is already full", () => {
   const { stubDir, callsFile } = stubGitFor(false);
   const metadataFile = join(stubDir, "metadata.json");
 
@@ -1200,7 +1200,7 @@ test("local-ci-runner.sh skips the unshallow fetch when the root clone is alread
   assert.doesNotMatch(calls, /fetch --unshallow/);
 });
 
-test("local-ci-runner.sh --dry-run never fetches --unshallow even on a shallow root", () => {
+shellContractTest("local-ci-runner.sh --dry-run never fetches --unshallow even on a shallow root", () => {
   const { stubDir, callsFile } = stubGitFor(true);
   const metadataFile = join(stubDir, "metadata.json");
 
