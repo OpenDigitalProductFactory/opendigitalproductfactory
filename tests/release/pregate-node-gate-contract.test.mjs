@@ -9,7 +9,7 @@
 // tests/release/local-ci-gate-contract.test.mjs, unchanged.
 
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, cpSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, cpSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:http";
@@ -243,15 +243,142 @@ test("gate-worktree.mjs claims, records, and releases in order, and carries evid
   }
 });
 
+test("gate-worktree.mjs hands the scratch command a clean candidate-gitdir freshness path (BI-5E4EFA22)", async () => {
+  const { dir } = makeTempRepo();
+  const reportPath = join(dir, ".git", "dpf-sandbox-freshness.json");
+  writeFileSync(
+    reportPath,
+    JSON.stringify({
+      schema: "dpf-sandbox-freshness/v1",
+      verdict: "sandbox_drift",
+      generatedAt: "stale-from-a-prior-run",
+      failures: [{ kind: "stale_fixture", message: "must be removed before the gate" }],
+      packages: [],
+    }),
+  );
+
+  const temp = mkdtempSync(join(tmpdir(), "dpf-node-gate-freshness-handoff-"));
+  const writerScript = join(temp, "write-freshness.mjs");
+  writeFileSync(writerScript, `
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
+
+const out = process.env.DPF_LOCAL_CI_FRESHNESS_REPORT_FILE;
+if (!out) process.exit(40);
+if (existsSync(out)) process.exit(41);
+mkdirSync(dirname(out), { recursive: true });
+writeFileSync(out, JSON.stringify({
+  schema: "dpf-sandbox-freshness/v1",
+  generatedAt: "fresh-from-this-run",
+  verdict: "green",
+  failures: [],
+  packages: [{
+    name: "next",
+    lockedVersion: "16.2.11",
+    resolvedVersion: "16.2.11"
+  }],
+  convergence: null,
+  handoffPath: out
+}) + "\\n");
+`);
+
+  const mcp = await startMockMcp({
+    claim_nonprod_environment_lease: () => ({ success: true, entityId: "NPEL-HANDOFF" }),
+    record_local_integration_result: () => ({ success: true, entityId: "EXT-HANDOFF" }),
+    release_nonprod_environment_lease: () => ({ success: true }),
+  });
+  try {
+    const result = await runGateAsync(
+      ["--branch", "feat/freshness-handoff", "--sha", "candidate-sha", "--worktree", dir, "--no-push", "--mcp-url", mcp.url],
+      {
+        ...process.env,
+        DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+        DPF_LOCAL_CI_COMMAND: `"${process.execPath}" "${writerScript}"`,
+      },
+    );
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+
+    const report = JSON.parse(readFileSync(reportPath, "utf8"));
+    assert.equal(report.generatedAt, "fresh-from-this-run");
+    assert.equal(report.handoffPath, reportPath);
+
+    const evidenceCall = mcp.calls.find((c) => c.params.name === "record_local_integration_result");
+    assert.equal(evidenceCall.params.arguments.evidence.freshness.verdict, "green");
+    assert.deepEqual(evidenceCall.params.arguments.evidence.freshness.packages, [{
+      name: "next",
+      locked: "16.2.11",
+      resolved: "16.2.11",
+    }]);
+  } finally {
+    await mcp.close();
+    rmSync(temp, { recursive: true, force: true });
+  }
+});
+
+test("gate-worktree.mjs does not clear freshness evidence until it owns the local sandbox fence (BI-5E4EFA22)", async () => {
+  const { dir } = makeTempRepo();
+  const reportPath = join(dir, ".git", "dpf-sandbox-freshness.json");
+  const activeReport = {
+    schema: "dpf-sandbox-freshness/v1",
+    verdict: "green",
+    generatedAt: "active-owner-run",
+    failures: [],
+    packages: [],
+  };
+  writeFileSync(reportPath, `${JSON.stringify(activeReport)}\n`);
+  writeFileSync(
+    join(dir, ".git", "dpf-local-ci-owner.json"),
+    `${JSON.stringify({
+      schema: "dpf-local-sandbox-fence/v1",
+      token: "active-owner-token",
+      pid: process.pid,
+      ownerSessionId: "active-owner",
+      branch: "feat/active-owner",
+      acquiredAt: new Date().toISOString(),
+      heartbeatAt: new Date().toISOString(),
+    })}\n`,
+  );
+
+  const result = await runGateAsync(
+    [
+      "--branch", "feat/queued-waiter",
+      "--sha", "candidate-sha",
+      "--worktree", dir,
+      "--no-push",
+      "--lease-wait-seconds", "0",
+    ],
+    {
+      ...process.env,
+      DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+      DPF_ALLOW_LOCAL_CI_STUB: "1",
+    },
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /sandbox owner process is still live/);
+  assert.deepEqual(JSON.parse(readFileSync(reportPath, "utf8")), activeReport);
+});
+
 test("gate-worktree.mjs records blocked_sandbox_drift (exit 3), not a product failure, when the freshness report is red", async () => {
   const { dir } = makeTempRepo();
-  writeFileSync(join(dir, ".git", "dpf-sandbox-freshness.json"), JSON.stringify({
+  const temp = mkdtempSync(join(tmpdir(), "dpf-node-gate-freshness-drift-"));
+  const writerScript = join(temp, "write-freshness-drift.mjs");
+  writeFileSync(writerScript, `
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
+
+const out = process.env.DPF_LOCAL_CI_FRESHNESS_REPORT_FILE;
+if (!out) process.exit(40);
+mkdirSync(dirname(out), { recursive: true });
+writeFileSync(out, JSON.stringify({
     schema: "dpf-sandbox-freshness/v1",
     verdict: "sandbox_drift",
     failures: [{ kind: "version_drift", message: "next resolves to 16.2.7 but pnpm-lock.yaml requires 16.2.9" }],
     packages: [{ name: "next", lockedVersion: "16.2.9", resolvedVersion: "16.2.7" }],
     convergence: { attempted: true, command: "pnpm install --frozen-lockfile", exitCode: 1 },
-  }));
+}) + "\\n");
+process.exit(3);
+`);
 
   const mcp = await startMockMcp({
     claim_nonprod_environment_lease: () => ({ success: true, entityId: "NPEL-DRIFT" }),
@@ -261,7 +388,7 @@ test("gate-worktree.mjs records blocked_sandbox_drift (exit 3), not a product fa
   try {
     const result = await runGateAsync(
       ["--branch", "feat/x", "--sha", "abc123", "--worktree", dir, "--no-push", "--mcp-url", mcp.url],
-      { ...process.env, DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_LOCAL_CI_COMMAND: `"${process.execPath}" -e "process.exit(3)"` },
+      { ...process.env, DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_LOCAL_CI_COMMAND: `"${process.execPath}" "${writerScript}"` },
     );
     assert.equal(result.status, 3, `${result.stdout}\n${result.stderr}`);
     assert.match(result.stderr, /BLOCKED \(sandbox drift\)/);
@@ -277,6 +404,7 @@ test("gate-worktree.mjs records blocked_sandbox_drift (exit 3), not a product fa
     assert.equal(state.status, "blocked_sandbox_drift");
   } finally {
     await mcp.close();
+    rmSync(temp, { recursive: true, force: true });
   }
 });
 
