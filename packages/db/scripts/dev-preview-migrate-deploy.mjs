@@ -5,9 +5,9 @@
 // Used by docker-compose dev-init instead of bare `prisma migrate deploy`.
 //
 // Safety:
-// - Only runs when DPF_ENVIRONMENT=dev (or --allow-dev-preview).
-// - Never targets the live portal; DATABASE_URL must point at dev-postgres.
-// - Marks a failed migration applied only when every structural effect is present.
+// - Only runs when DPF_ENVIRONMENT=dev.
+// - DATABASE_URL must match an explicit disposable-preview endpoint.
+// - Automatic repair is allowlisted to one migration with an exact schema contract.
 // - Unrecoverable drift → exit 3 (blocked_sandbox_drift) with one next action.
 
 import { execFileSync } from "node:child_process";
@@ -21,9 +21,10 @@ import {
   MAX_REPAIR_ROUNDS,
   decideMigrationRepair,
   formatBlockedMessage,
+  isDisposablePreviewDatabaseUrl,
   parseFailedMigrationFromStatus,
   parseMigrationEffects,
-  probeEffectsPresent,
+  probeHiveContributionsSchema,
   readMigrationSql,
 } from "../../../scripts/lib/dev-preview-migrate-converge.mjs";
 
@@ -53,7 +54,7 @@ function prismaInvocation() {
   };
 }
 
-function runPrisma(args, { env = process.env, allowFail = false } = {}) {
+function runPrisma(args, { env = process.env } = {}) {
   const inv = prismaInvocation();
   try {
     const out = execFileSync(inv.command, [...inv.argsPrefix, ...args], {
@@ -80,9 +81,8 @@ function runPrisma(args, { env = process.env, allowFail = false } = {}) {
 
 function assertDevPreviewContext() {
   const envName = String(process.env.DPF_ENVIRONMENT ?? "").toLowerCase();
-  const allow = process.argv.includes("--allow-dev-preview");
-  if (envName !== "dev" && !allow) {
-    log("refusing to run: DPF_ENVIRONMENT must be 'dev' (or pass --allow-dev-preview for tests)");
+  if (envName !== "dev") {
+    log("refusing to run: DPF_ENVIRONMENT must be 'dev'");
     process.exit(2);
   }
   const url = String(process.env.DATABASE_URL ?? "");
@@ -90,12 +90,10 @@ function assertDevPreviewContext() {
     log("DATABASE_URL is required");
     process.exit(2);
   }
-  // Soft guard: prefer hostnames that look like the contributor preview DB.
-  const looksLive =
-    /@postgres:|@dpf-postgres|PRODUCTION_DATABASE_URL/i.test(url)
-    && !/dev-postgres|localhost:5433|127\.0\.0\.1:5433/i.test(url);
-  if (looksLive && !allow) {
-    log("refusing DATABASE_URL that looks like the live portal database");
+  if (!isDisposablePreviewDatabaseUrl(url)) {
+    log(
+      "refusing DATABASE_URL: expected disposable preview at dev-postgres:5432 or localhost:5433",
+    );
     process.exit(2);
   }
 }
@@ -116,7 +114,7 @@ async function main() {
   const databaseUrl = process.env.DATABASE_URL;
 
   log("running prisma migrate deploy (contributor-preview)");
-  let deploy = runPrisma(["migrate", "deploy"], { allowFail: true });
+  let deploy = runPrisma(["migrate", "deploy"]);
   if (deploy.ok) {
     log("migrate deploy succeeded with no repair");
     process.stdout.write(deploy.stdout);
@@ -136,7 +134,7 @@ async function main() {
         ?? parseFailedMigrationFromStatus(deploy.combined);
 
       if (!migrationName) {
-        const status = runPrisma(["migrate", "status"], { allowFail: true });
+        const status = runPrisma(["migrate", "status"]);
         migrationName = parseFailedMigrationFromStatus(
           `${status.combined ?? ""}\n${deploy.combined}`,
         );
@@ -170,9 +168,8 @@ async function main() {
         process.exit(BLOCKED_SANDBOX_DRIFT_EXIT);
       }
 
-      const present = await probeEffectsPresent(
+      const present = await probeHiveContributionsSchema(
         async (sql) => (await client.query(sql)).rows,
-        effects,
       );
 
       const decision = decideMigrationRepair({
@@ -186,10 +183,12 @@ async function main() {
 
       if (decision.action === "mark-applied") {
         log(`marking ${migrationName} applied (schema effects already present)`);
-        const resolved = runPrisma(
-          ["migrate", "resolve", "--applied", migrationName],
-          { allowFail: true },
-        );
+        const resolved = runPrisma([
+          "migrate",
+          "resolve",
+          "--applied",
+          migrationName,
+        ]);
         if (!resolved.ok) {
           process.stderr.write(resolved.combined);
           process.stderr.write(
@@ -203,7 +202,7 @@ async function main() {
           );
           process.exit(BLOCKED_SANDBOX_DRIFT_EXIT);
         }
-        deploy = runPrisma(["migrate", "deploy"], { allowFail: true });
+        deploy = runPrisma(["migrate", "deploy"]);
         if (deploy.ok) {
           log("migrate deploy succeeded after repair");
           process.stdout.write(deploy.stdout);
