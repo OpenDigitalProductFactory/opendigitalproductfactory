@@ -162,6 +162,7 @@ export function ServiceRow({ pw, modelSummary, eligibility, resolvesPhases, week
     : eligibility.reason;
   const typeLabel   = provider.endpointType === "service" ? "MCP" : "LLM";
   const costView = buildProviderCostView({ provider, financeProfile: null, internalUsage: null });
+  const detailId = `provider-${provider.providerId.replaceAll(/[^a-zA-Z0-9_-]/g, "-")}-details`;
 
   return (
     <div
@@ -173,8 +174,16 @@ export function ServiceRow({ pw, modelSummary, eligibility, resolvesPhases, week
       <div
         role="button"
         tabIndex={0}
+        aria-expanded={expanded}
+        aria-controls={detailId}
+        aria-label={`${provider.name}: ${eligibility.label}`}
         onClick={() => setExpanded((v) => !v)}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setExpanded((v) => !v); }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setExpanded((v) => !v);
+          }
+        }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{
@@ -215,23 +224,6 @@ export function ServiceRow({ pw, modelSummary, eligibility, resolvesPhases, week
           {provider.name}
         </span>
 
-        {/* BI-779FA953: real remaining weekly subscription allocation, when a
-            fresh quota snapshot is available. Informational — never gates routing. */}
-        {weeklyAllocationHint && (
-          <span
-            title={`Remaining pre-paid weekly LLM allocation for this subscription pool: ${weeklyAllocationHint}.`}
-            style={{
-              flexShrink: 0,
-              fontSize: 9,
-              fontVariantNumeric: "tabular-nums",
-              color: "var(--dpf-text-muted)",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {weeklyAllocationHint}
-          </span>
-        )}
-
         {/* Routing eligibility — the single "can routing use this now?" answer */}
         <span title={eligibilityTitle} style={{ flexShrink: 0, display: "inline-flex" }}>
           <StatusBadge
@@ -265,6 +257,24 @@ export function ServiceRow({ pw, modelSummary, eligibility, resolvesPhases, week
           </span>
         )}
 
+        {recommendedAction && (
+          <span
+            title={recommendedAction}
+            style={{
+              color: "var(--dpf-muted)",
+              fontSize: 10,
+              flexShrink: 1,
+              minWidth: 0,
+              maxWidth: 220,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {recommendedAction}
+          </span>
+        )}
+
         {/* Type badge */}
         <span
           style={{
@@ -281,68 +291,6 @@ export function ServiceRow({ pw, modelSummary, eligibility, resolvesPhases, week
         >
           {typeLabel}
         </span>
-
-        {/* Model count — LLM only */}
-        {provider.endpointType === "llm" && modelSummary && (
-          <span
-            style={{
-              fontSize: 10,
-              color: "var(--dpf-muted)",
-              flexShrink: 0,
-              fontFamily: "monospace",
-            }}
-          >
-            {modelSummary.activeModels}/{modelSummary.totalModels} models
-          </span>
-        )}
-
-        {/* Non-chat capability badges — LLM only */}
-        {provider.endpointType === "llm" && modelSummary && modelSummary.nonChatClasses.length > 0 && (
-          <span className="hidden sm:inline" style={{ flexShrink: 0 }}>
-            <ModelClassBadges classes={modelSummary.nonChatClasses} />
-          </span>
-        )}
-
-        {/* Sensitivity clearance badges — hidden on small screens */}
-        {provider.sensitivityClearance.length > 0 && (
-          <span
-            className="hidden sm:flex"
-            style={{ display: "flex", gap: 3, flexShrink: 0 }}
-          >
-            {provider.sensitivityClearance.map((s) => (
-              <span
-                key={s}
-                style={{
-                  fontSize: 9,
-                  color: "var(--dpf-muted)",
-                  background: "color-mix(in srgb, var(--dpf-text) 6%, transparent)",
-                  padding: "1px 4px",
-                  borderRadius: 2,
-                }}
-              >
-                {SENSITIVITY_ABBR[s] ?? s}
-              </span>
-            ))}
-          </span>
-        )}
-
-        {/* Calibrated routing scores + eval freshness (BI-1B46967D) — LLM only, hidden on small screens */}
-        {provider.endpointType === "llm" && (
-          <RoutingScorePills summary={modelSummary} />
-        )}
-
-        {/* Capability tier — hidden on small screens. Prefers derived tier (D25). */}
-        {displayedTier && (
-          <span
-            className="hidden sm:inline"
-            style={{ color: "var(--dpf-muted)", fontSize: 10, flexShrink: 0 }}
-            title={modelSummary?.derivedTier
-              ? "Derived from discovered models"
-              : "From provider seed (no models discovered yet)"}
-          >
-            {displayedTier}
-          </span>
-        )}
 
         {/* External-billing reconciliation status lives in the expanded detail
             below (clearly labeled), NOT here — it is a finance signal, not a
@@ -364,6 +312,7 @@ export function ServiceRow({ pw, modelSummary, eligibility, resolvesPhases, week
       {/* Expanded detail */}
       {expanded && (
         <div
+          id={detailId}
           style={{
             padding: "10px 14px 12px 26px",
             background: "var(--dpf-surface-1)",
@@ -389,7 +338,53 @@ export function ServiceRow({ pw, modelSummary, eligibility, resolvesPhases, week
             <DetailItem label={costView.routingCostBand.label} value={costView.routingCostBand.value} />
             <DetailItem label={costView.catalogPricing.label} value={costView.catalogPricing.value} />
             <DetailItem label={costView.externalProviderBilling.label} value={costView.externalProviderBilling.value} />
+            {weeklyAllocationHint && (
+              <DetailItem label="Weekly allocation" value={weeklyAllocationHint} />
+            )}
+            {provider.endpointType === "llm" && modelSummary && (
+              <DetailItem label="Active models" value={`${modelSummary.activeModels}/${modelSummary.totalModels}`} />
+            )}
           </div>
+
+          {provider.endpointType === "llm" && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", marginBottom: 8 }}>
+              <span style={{ color: "var(--dpf-muted)", fontSize: 10 }}>Routing diagnostics:</span>
+              <RoutingScorePills summary={modelSummary} />
+              {modelSummary && modelSummary.nonChatClasses.length > 0 && (
+                <ModelClassBadges classes={modelSummary.nonChatClasses} />
+              )}
+              {displayedTier && (
+                <span
+                  style={{ color: "var(--dpf-muted)", fontSize: 10, flexShrink: 0 }}
+                  title={modelSummary?.derivedTier
+                    ? "Derived from discovered models"
+                    : "From provider seed (no models discovered yet)"}
+                >
+                  {displayedTier}
+                </span>
+              )}
+            </div>
+          )}
+
+          {provider.sensitivityClearance.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
+              <span style={{ color: "var(--dpf-muted)", fontSize: 10, marginRight: 4, alignSelf: "center" }}>Sensitivity:</span>
+              {provider.sensitivityClearance.map((s) => (
+                <span
+                  key={s}
+                  style={{
+                    fontSize: 9,
+                    color: "var(--dpf-muted)",
+                    background: "color-mix(in srgb, var(--dpf-text) 6%, transparent)",
+                    padding: "1px 4px",
+                    borderRadius: 2,
+                  }}
+                >
+                  {SENSITIVITY_ABBR[s] ?? s}
+                </span>
+              ))}
+            </div>
+          )}
 
           {/* Task tags */}
           {provider.taskTags.length > 0 && (

@@ -1369,7 +1369,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 100
+    "textMass": 107
   },
   "apps/web/app/(shell)/platform/ai/readiness/page.tsx": {
     "vocabulary": 0,
@@ -3378,7 +3378,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 2
+    "textMass": 14
   },
   "apps/web/components/agent/CollaborationActivityPanel.tsx": {
     "vocabulary": 0,
@@ -6129,7 +6129,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 109
+    "textMass": 132
   },
   "apps/web/components/platform/ProviderTrustEvidencePanel.tsx": {
     "vocabulary": 0,
@@ -6206,7 +6206,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 29
+    "textMass": 35
   },
   "apps/web/components/platform/ServiceSection.tsx": {
     "vocabulary": 0,
