@@ -119,4 +119,61 @@ describe("classifyInferencePayload", () => {
     );
     expect(result.receipt.inputHash).toMatch(/^[a-f0-9]{64}$/);
   });
+
+  it("hashes tool declarations without treating their schema vocabulary as live data", () => {
+    const withSensitiveSchemaNames = classifyInferencePayload({
+      messages: [{ role: "user", content: "Check whether the workspace is ready." }],
+      systemPrompt: "Use an appropriate read-only tool.",
+      tools: [{
+        type: "function",
+        function: {
+          name: "inspect_employee_record",
+          description: "Inspect payment, credential, and customer record metadata.",
+          parameters: {
+            type: "object",
+            properties: {
+              password: { type: "string" },
+              employeeEmail: { type: "string" },
+            },
+          },
+        },
+      }],
+      taskType: "conversation",
+    });
+    const withoutTools = classifyInferencePayload({
+      messages: [{ role: "user", content: "Check whether the workspace is ready." }],
+      systemPrompt: "Use an appropriate read-only tool.",
+      taskType: "conversation",
+    });
+
+    expect(withSensitiveSchemaNames.overallSensitivity).toBe("internal");
+    expect(withSensitiveSchemaNames.dataClasses).toEqual([]);
+    expect(withSensitiveSchemaNames.matches).toEqual([]);
+    expect(withSensitiveSchemaNames.receipt.inputHash).not.toBe(
+      withoutTools.receipt.inputHash,
+    );
+  });
+
+  it("continues to classify sensitive values in executed tool-call arguments", () => {
+    const result = classifyInferencePayload({
+      messages: [{
+        role: "assistant",
+        content: "",
+        toolCalls: [{
+          id: "call-1",
+          name: "lookup",
+          arguments: { password: "not-a-real-value" },
+        }],
+      }],
+      systemPrompt: "",
+      taskType: "conversation",
+    });
+
+    expect(result.overallSensitivity).toBe("restricted");
+    expect(result.dataClasses).toContain("secrets-credentials");
+    expect(result.matches).toContainEqual(expect.objectContaining({
+      path: "messages[0].toolCalls[0].arguments.password",
+      reason: "secret-field-name",
+    }));
+  });
 });
