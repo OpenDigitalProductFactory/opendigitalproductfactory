@@ -53,7 +53,6 @@ import { createRoutingTraceId } from "@/lib/routing/routing-trace";
 import { AI_ROUTING_ARCHITECTURE_VERSION } from "@/lib/routing/routing-architecture-version";
 export type { RouteAndCallOptions } from "./routed-inference-options";
 // ─── Result type ────────────────────────────────────────────────────────────
-
 /** Unified inference result — flat token fields, V2 metadata included. */
 export interface RoutedInferenceResult {
   providerId: string;
