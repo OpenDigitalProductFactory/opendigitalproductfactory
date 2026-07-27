@@ -10,6 +10,7 @@ import { CustomerSiteTree } from "@/components/customer/CustomerSiteTree";
 import { NewCustomerSiteButton } from "@/components/customer/NewCustomerSiteButton";
 import { AccountLifecycleActions } from "@/components/customer/AccountLifecycleActions";
 import { AddContactButton } from "@/components/customer/AddContactButton";
+import { ContactNotificationPrefs } from "@/components/customer/ContactNotificationPrefs";
 import { MergeCustomerAccountButton } from "@/components/customer/MergeCustomerAccountButton";
 import { UnmergeCustomerAccountButton } from "@/components/customer/UnmergeCustomerAccountButton";
 import { loadCustomerEstateSummary } from "@/lib/customer-estate/account-estate-summary";
@@ -71,6 +72,8 @@ export default async function AccountDetailPage({
             jobTitle: true,
             isActive: true,
             doNotContact: true,
+            preferredNotificationChannel: true,
+            phoneType: true,
           },
           orderBy: { createdAt: "asc" },
         },
@@ -420,6 +423,11 @@ export default async function AccountDetailPage({
                       />
                     )}
                   </div>
+                  <ContactNotificationPrefs
+                    contactId={c.id}
+                    preferredNotificationChannel={c.preferredNotificationChannel}
+                    phoneType={c.phoneType}
+                  />
                 </div>
               ))}
             </div>

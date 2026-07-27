@@ -1,5 +1,26 @@
 import { z } from "zod";
 
+// BI-FS-003 — closed preference enums for field-service dispatch routing.
+// Source of truth for allowed values (DB stores free strings; validators gate writes).
+export const PREFERRED_NOTIFICATION_CHANNELS = ["sms", "voice", "email", "none"] as const;
+export type PreferredNotificationChannel = (typeof PREFERRED_NOTIFICATION_CHANNELS)[number];
+
+export const CONTACT_PHONE_TYPES = ["mobile", "landline", "unknown"] as const;
+export type ContactPhoneType = (typeof CONTACT_PHONE_TYPES)[number];
+
+export const preferredNotificationChannelSchema = z.enum(PREFERRED_NOTIFICATION_CHANNELS);
+export const contactPhoneTypeSchema = z.enum(CONTACT_PHONE_TYPES);
+
+/**
+ * CustomerNotificationPreference — used by the dispatcher (BI-FS-005/006) and
+ * CRM contact create/update paths. Null/undefined means "not set yet".
+ */
+export const CustomerNotificationPreference = z.object({
+  preferredNotificationChannel: preferredNotificationChannelSchema.nullable().optional(),
+  phoneType: contactPhoneTypeSchema.nullable().optional(),
+});
+export type CustomerNotificationPreference = z.infer<typeof CustomerNotificationPreference>;
+
 export const updateCustomerSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   industry: z.string().max(100).optional(),
@@ -35,6 +56,8 @@ export const createContactSchema = z.object({
   linkedinUrl: z.string().url().max(500).optional().or(z.literal("")),
   source: z.enum(["web", "referral", "import", "manual"]).optional(),
   accountId: z.string(),
+  preferredNotificationChannel: preferredNotificationChannelSchema.optional().nullable(),
+  phoneType: contactPhoneTypeSchema.optional().nullable(),
 });
 
 export type CreateContactInput = z.infer<typeof createContactSchema>;
@@ -48,6 +71,8 @@ export const updateContactSchema = z.object({
   doNotContact: z.boolean().optional(),
   avatarUrl: z.string().url().max(500).optional().or(z.literal("")),
   isActive: z.boolean().optional(),
+  preferredNotificationChannel: preferredNotificationChannelSchema.optional().nullable(),
+  phoneType: contactPhoneTypeSchema.optional().nullable(),
 });
 
 export type UpdateContactInput = z.infer<typeof updateContactSchema>;

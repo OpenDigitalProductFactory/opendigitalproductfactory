@@ -126,7 +126,14 @@ export async function PATCH(
 
     const prior = await prisma.customerContact.findUnique({
       where: { id },
-      select: { firstName: true, lastName: true, jobTitle: true, phone: true },
+      select: {
+        firstName: true,
+        lastName: true,
+        jobTitle: true,
+        phone: true,
+        preferredNotificationChannel: true,
+        phoneType: true,
+      },
     });
 
     const updated = await prisma.customerContact.update({
@@ -150,8 +157,17 @@ export async function PATCH(
         lastName: updated.lastName,
         jobTitle: updated.jobTitle,
         phone: updated.phone,
+        preferredNotificationChannel: updated.preferredNotificationChannel,
+        phoneType: updated.phoneType,
       },
-      attributes: ["firstName", "lastName", "jobTitle", "phone"],
+      attributes: [
+        "firstName",
+        "lastName",
+        "jobTitle",
+        "phone",
+        "preferredNotificationChannel",
+        "phoneType",
+      ],
       source: "api-patch",
     });
 
