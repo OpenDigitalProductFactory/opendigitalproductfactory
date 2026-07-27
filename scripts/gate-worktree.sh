@@ -355,6 +355,22 @@ else
 fi
 set -e
 
+# Release as soon as the mutation window ends — parity with gate-worktree.mjs
+# superviseLeaseRun finally (claim -> release -> record). Holding the lease only
+# for the sandbox command is intentional (BI-52500C0D); evidence recording does
+# not need the shared lease.
+if [ -n "$lease_id" ] && [ "$lease_released" != "1" ]; then
+  release_response="$(mcp_call release_nonprod_environment_lease "{\"leaseId\":$(json_escape "$lease_id")}" | extract_tool_result)"
+  release_success="$(printf '%s' "$release_response" | field success)"
+  [ "$release_success" = "true" ] || die "failed to release local-CI lease: $release_response"
+  lease_released=1
+  printf '{"type":"released","at":%s}\n' "$(json_escape "$(node -e 'process.stdout.write(new Date().toISOString())')")" >>"$lease_events_file"
+fi
+if [ -n "$local_fence_token" ]; then
+  node "$SCRIPT_DIR/lib/local-sandbox-fence.mjs" release "$local_fence_file" "$local_fence_token" >/dev/null
+  local_fence_token=""
+fi
+
 lease_events_json="$(node -e '
 const fs = require("node:fs");
 const rows = fs.readFileSync(process.argv[1], "utf8").split(/\r?\n/).filter(Boolean).map(JSON.parse);
@@ -478,13 +494,6 @@ else
   write_state false "$lease_id" "" "failed" "$expires_at" "$resilience_json" "$lease_events_json"
   die "failed to record local integration evidence: $evidence_response"
 fi
-
-release_response="$(mcp_call release_nonprod_environment_lease "{\"leaseId\":$(json_escape "$lease_id")}" | extract_tool_result)"
-release_success="$(printf '%s' "$release_response" | field success)"
-[ "$release_success" = "true" ] || die "failed to release local-CI lease: $release_response"
-lease_released=1
-node "$SCRIPT_DIR/lib/local-sandbox-fence.mjs" release "$local_fence_file" "$local_fence_token" >/dev/null
-local_fence_token=""
 
 write_state "$gate_passed" "$lease_id" "$evidence_id" "$status" "$expires_at" "$resilience_json" "$lease_events_json"
 
