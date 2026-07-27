@@ -61,7 +61,7 @@ DPF's canonical portfolio roots (`packages/db/data/portfolio_registry.json`, anc
 
 | Portfolio | Role | Side of the line |
 |---|---|---|
-| **Products & Services Sold** | The market offer — what the company sells to external consumers (DPPM "Provided Externally") | **Dividing line.** Radically different per company. Customer 0 sells the platform itself; a clinic sells appointments. n=1 proves nothing here. |
+| **Goods and Services for Sale** | The market offer — what the company makes available to external consumers (DPPM "Provided Externally"; stable slug `products_and_services_sold`) | **Dividing line.** Radically different per company. Customer 0 sells the platform itself; a clinic sells appointments. n=1 proves nothing here. |
 | **Workforce** (`for_employees`) | The workforce and the internal products it consumes — employees, contractors, AI coworkers, robots, any accountable actor (DPPM "Provided Internally") | **Dividing line.** Who does the work, and how, is company-specific. |
 | **Foundational** | Infrastructure, platform services, architectural building blocks | **Embedded.** Identical substrate on every install. Validating it at customer zero validates it fleet-wide. |
 | **Manufacturing & Delivery** | The internal manufacture and delivery pipeline — CI/CD, build tooling, release orchestration, deployment automation | **Embedded.** This *is* use case zero. Build Studio lives here. |
@@ -72,7 +72,7 @@ direction (G252 §4, restated in
 [`2026-06-07-business-operating-model-portfolio-wiring-design.md`](../superpowers/specs/2026-06-07-business-operating-model-portfolio-wiring-design.md) §2):
 
 ```text
-Products & Services Sold  ─┐
+Goods and Services for Sale ─┐
                            ├── both depend on ──▶  Foundational
 Workforce                 ─┘                             ▲
                                                           │ deployed and supported by
@@ -84,7 +84,7 @@ So the mapping is exact:
 - **Mechanism** (what customer zero validates) = Foundational + Manufacturing & Delivery. Shared
   substrate and shared factory. Exercising them hard at customer zero is genuine fleet-wide
   evidence, because there is only one of each.
-- **Content** (what customer zero cannot validate) = Products & Services Sold + Workforce. These
+- **Content** (what customer zero cannot validate) = Goods and Services for Sale + Workforce. These
   are populated *per company* from archetype and operator direction. One company's populated
   portfolios are a sample of one.
 

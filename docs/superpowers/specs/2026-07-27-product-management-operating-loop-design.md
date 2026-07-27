@@ -16,7 +16,7 @@
 
 DPF already contains much of the substrate a product manager needs: four portfolios, digital products, archetype-derived market offers, product-linked backlog, market research, competitive battlecards, knowledge with revisions and staleness, demand scoring, funding decisions, architecture, releases, storefronts, sales/quotes, scheduling, and AI coworkers. The original design treated `DigitalProduct` as the universal product-management anchor. That is correct for EEMD and DPF's platform-scoped digital-product decisioning, but it is too narrow for the organization-specific goods, services, experiences, access products, and mixed product lines that WWWD must understand.
 
-This amended design keeps EEMD digital-product focused and introduces a connected business-product perspective in the organization's **Products & Services Sold** portfolio. A top-down product-line hierarchy describes what the organization creates and manages over time. A separate consumption chain describes how those products are packaged and purchased:
+This amended design keeps EEMD digital-product focused and introduces a connected business-product perspective in the organization's **Goods and Services for Sale** portfolio (stable internal slug: `products_and_services_sold`). A top-down product-line hierarchy describes what the organization creates and manages over time. A separate consumption chain describes how those products are packaged and purchased:
 
 `Product Line → Product → Offering → Catalog Item → optional reusable SKU or order-specific configuration → channel presentation → purchase/consumption`
 
@@ -47,7 +47,7 @@ The current platform has capable but fragmented product-management ingredients:
 - roadmap assembly is described in prompts, but a durable roadmap workflow is not honored by the current substrate;
 - there is no canonical product objective/outcome model connecting a bet, its measure, delivered work, and observed learning;
 - reusable scheduling exists, but the core PM cadences are not packaged as discoverable product-scoped playbooks.
-- the Products & Services Sold portfolio does not yet provide a canonical product-line → product hierarchy for non-digital goods and services;
+- the Goods and Services for Sale portfolio does not yet provide a canonical product-line → product hierarchy for non-digital goods and services;
 - setup establishes one primary archetype and a seeded market offer but does not confirm common adjacent lines such as salon retail goods, hotel conferences, or restaurant events;
 - `StorefrontItem` combines channel presentation and price but has no structural trace to a managed business Product, Offering, or canonical CatalogItem;
 - `QuoteLineItem` points directly to `DigitalProduct`, conflating the managed product with the exact sellable configuration;
@@ -113,7 +113,7 @@ The resulting tradeoff rule is:
 
 ## 6. Design principles
 
-1. **Two connected product perspectives.** EEMD `DigitalProduct` remains the digital-product architecture. The organization's Products & Services Sold owns its business Product Lines and Products. Explicit links show when a business Product is constituted or augmented by one or more DigitalProducts.
+1. **Two connected product perspectives.** EEMD `DigitalProduct` remains the digital-product architecture. The organization's Goods and Services for Sale portfolio owns its business Product Lines and Products. Explicit links show when a business Product is constituted or augmented by one or more DigitalProducts.
 2. **Separate producer and consumer lifecycles.** Product lines/products describe what is created and managed. Offerings, CatalogItems, SKUs/configurations, channels, quotes, and purchases describe how it is packaged and consumed.
 3. **Necessary complexity carries a UX obligation.** Do not flatten justified architectural boundaries, but do count their operator and cognitive cost. Offset that cost with derived defaults, guided creation, contextual navigation, and progressive disclosure.
 4. **CatalogItem is canonical.** Storefront, mobile, sales-desk, partner, and quote surfaces project the same catalog definition instead of copying it.
@@ -139,7 +139,7 @@ The resulting tradeoff rule is:
 | Persistent artifact | `KnowledgeArticle`, product links, revisions, review and staleness | Reuse for reviewed narrative briefs and exported snapshots when durable storage is required. |
 | Recurring workflow | `ScheduledAgentTask`, research schedule, skills/prompts | Reuse and package product-scoped PM playbooks. |
 | Audit/signoff | decision interactions, backlog activities, tool execution | Reuse for funding and stakeholder review; do not add a roadmap-approval ledger. |
-| Product-line hierarchy | Four-portfolio registry, `DigitalProduct.portfolioId`, taxonomy, archetype market-offer seeding | Existing substrate is insufficient: add a general business ProductLine/Product contract in Products & Services Sold; do not broaden EEMD semantics or use taxonomy as mutable organization data. |
+| Product-line hierarchy | Four-portfolio registry, `DigitalProduct.portfolioId`, taxonomy, archetype market-offer seeding | Existing substrate is insufficient: add a general business ProductLine/Product contract in Goods and Services for Sale; do not broaden EEMD semantics or use taxonomy as mutable organization data. |
 | Mixed business lines at setup | `StorefrontArchetypeComposition`, composition views/actions, archetype activation profiles | Extend. Capture business-language product lines during initial setup and derive primary/secondary archetype composition internally. |
 | Offering | `ServiceOffering` with availability/MTTR/RTO/support commitments | Reconcile rather than silently repurpose. Define the commercial Offering contract and its relationship to operational service commitments. |
 | Canonical catalog item | `StorefrontItem`, archetype item templates, storefront sections | Existing channel-specific substrate is insufficient. Establish CatalogItem as canonical and make StorefrontItem a compatibility projection. |
@@ -172,7 +172,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    PF["Products & Services Sold"] --> PL["Product line"]
+    PF["Goods and Services for Sale"] --> PL["Product line"]
     PL --> P["Managed product<br/>good or service"]
     DP["Digital product<br/>EEMD scope"] -. "constitutes or augments" .-> P
     P --> OF["Offering<br/>commercial promise"]
@@ -331,7 +331,7 @@ Each recipe declares inputs, read tools, proposed writes, approval requirements,
 
 ### 9.1 Owning area
 
-The Products home at `/portfolio` remains the canonical place to browse Products & Services Sold. It gains a top-down product-line hierarchy and rollups without adding a new global destination. The existing product route remains `/portfolio/product/[id]`. Add a **Direction** family to `ProductTabNav`, with:
+The Products home at `/portfolio` remains the canonical place to browse Goods and Services for Sale. It gains a top-down product-line hierarchy and rollups without adding a new global destination. The existing product route remains `/portfolio/product/[id]`. Add a **Direction** family to `ProductTabNav`, with:
 
 - Brief (`/direction`);
 - Intelligence (`/direction/intelligence`);

@@ -21,7 +21,7 @@ const PORTFOLIO_PERSONAS: Record<string, { label: string; description: string }>
     description: "Knowledge for employees, contractors, AI coworkers, robots, non-human identities, HR, managers, and policy",
   },
   products_and_services_sold: {
-    label: "Products & Services Sold",
+    label: "Goods and Services for Sale",
     description: "Business knowledge for product and sales teams",
   },
 };

@@ -45,9 +45,10 @@ Across the delivery graph, reserve approximately 20% of total implementation cap
 ### Task 1.2: Add fleet-safe product-line substrate
 
 1. Add ProductLine/Product relations expand-first; preserve current portfolio and storefront behavior.
-2. Backfill only deterministic existing product relationships. Leave ambiguous records explicitly unclassified.
-3. Add cycle prevention, organization isolation, stable ordering, and rollup tests.
-4. Add compatibility adapters so current digital products can participate without changing EEMD semantics.
+2. Rename the canonical user-facing portfolio label to **Goods and Services for Sale** while preserving the stable `products_and_services_sold` slug and imported source terminology.
+3. Backfill only deterministic existing product relationships. Leave ambiguous records explicitly unclassified.
+4. Add cycle prevention, organization isolation, stable ordering, and rollup tests.
+5. Add compatibility adapters so current digital products can participate without changing EEMD semantics.
 
 ### Task 1.3: Capture “what the business sells” during setup
 

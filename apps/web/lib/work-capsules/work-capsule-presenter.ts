@@ -39,7 +39,7 @@ const PORTFOLIO_ROLE_LABELS: Record<string, string> = {
   foundational: "Foundational",
   manufactureAndDeliver: "Manufacture & Deliver",
   forEmployees: "Workforce",
-  productsAndServicesSold: "Products & Services Sold",
+  productsAndServicesSold: "Goods and Services for Sale",
 };
 
 const ACTIVITY_KIND_LABELS: Record<string, string> = {

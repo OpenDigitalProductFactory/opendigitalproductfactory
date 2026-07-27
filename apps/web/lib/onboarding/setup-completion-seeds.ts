@@ -21,7 +21,7 @@ import { applyMissionPrompt } from "./apply-mission-prompt";
  * Persist the captured mission into the company-mission prompt (visible to
  * every coworker), seed the per-org WWWD corpus, persist the per-org portfolio
  * decomposition (BI-2D452667), seed the archetype-derived market offer into
- * the Products & Services Sold portfolio (BI-4503E6B9), project archetype
+ * the Goods and Services for Sale portfolio (BI-4503E6B9), project archetype
  * supply, and apply the seeded risk posture to the org WWWD profile.
  *
  * Idempotent — safe to re-run on setup re-completion, replay, or boot backfill.

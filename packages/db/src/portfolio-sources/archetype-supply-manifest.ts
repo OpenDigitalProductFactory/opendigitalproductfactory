@@ -1,7 +1,7 @@
 // Per-archetype-category starter suppliers + goods (BI-PORTCOV-P5; spec §4.4.5).
 //
 // seed-market-offer.ts already seeds the SERVICES an archetype sells into
-// Products & Services Sold. This manifest adds the buy-side and the goods-side
+// Goods and Services for Sale. This manifest adds the buy-side and the goods-side
 // the archetype implies but never seeds: the SUPPLIERS a business manages to
 // deliver (a plumber's trade merchants — "a missing part means a second trip")
 // and the GOODS it sells distinct from its services. These are broad, true,
@@ -21,7 +21,7 @@ export interface ArchetypeSupplyItem {
 export interface ArchetypeSupplyStarter {
   /** Vendors the business manages to deliver — projected into Manufacturing & Delivery (coverage=used). */
   suppliers: ArchetypeSupplyItem[];
-  /** Physical goods sold, distinct from services — projected into Products & Services Sold (coverage=sold). */
+  /** Physical goods sold, distinct from services — projected into Goods and Services for Sale (coverage=sold). */
   goods: ArchetypeSupplyItem[];
 }
 

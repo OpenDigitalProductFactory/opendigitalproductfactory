@@ -46,7 +46,7 @@ The proposal keeps the DPPM four-portfolio model intact.
 
 | Current DPPM portfolio role | Proposed standards-facing label | Purpose |
 | --- | --- | --- |
-| Provided Externally | Products and Services Sold | Digital products and services provided to customers, citizens, partners, or other external consumers. |
+| Provided Externally | Goods and Services for Sale | Goods and services provided to customers, citizens, partners, or other external consumers. This is DPF's user-facing label for the source model's “Products and Services Sold” portfolio. |
 | Provided Internally / For Employees | Workforce | Internal digital products and workforce actor support capabilities used by employees, contractors, AI coworkers, robots, non-human identities, and other accountable work actors. |
 | Foundational | Foundational | Reusable technology building blocks, platforms, data, infrastructure, security, and shared services that enable the other portfolios. |
 | Manufacture and Delivery | Manufacture and Delivery | The digital factory products and capabilities used to build, deploy, release, operate, and support digital products. |

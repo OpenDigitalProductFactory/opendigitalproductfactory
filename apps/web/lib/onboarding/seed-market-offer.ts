@@ -1,6 +1,6 @@
 // Onboarding market-offer seeding (BI-4503E6B9, EP-BOM-WIRING Phase 1).
 //
-// Populates the "Products & Services Sold" portfolio (DPPM "Provided
+// Populates the "Goods and Services for Sale" portfolio (DPPM "Provided
 // Externally") with the company's actual market offer, derived from the chosen
 // archetype. Each archetype already carries its offer as `itemTemplates`
 // (e.g. a dental practice's "New Patient Examination", "Check-up & Clean") — so
@@ -18,7 +18,7 @@ import { prisma } from "@dpf/db";
 import { slugify } from "@/lib/shared/slugify";
 import { ALL_ARCHETYPES } from "@dpf/storefront-templates";
 
-/** Stable slug of the Products & Services Sold portfolio root (Portfolio.id is a cuid). */
+/** Stable slug of the Goods and Services for Sale portfolio root (Portfolio.id is a cuid). */
 const PRODUCTS_AND_SERVICES_SOLD_SLUG = "products_and_services_sold";
 
 /** Structural client — satisfied by the real PrismaClient and by test fakes. */
@@ -51,7 +51,7 @@ export type SeedMarketOfferResult = {
 
 
 /**
- * Seed the org's market offer into the Products & Services Sold portfolio from
+ * Seed the org's market offer into the Goods and Services for Sale portfolio from
  * its archetype. Non-destructive: never overwrites an existing offer product.
  */
 export async function seedMarketOffer(

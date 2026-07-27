@@ -17,6 +17,9 @@ describe("taxonomy seed entries", () => {
 
     expect(entries.find((entry) => entry.nodeId === "for_employees")?.name).toBe("Workforce");
     expect(
+      entries.find((entry) => entry.nodeId === "products_and_services_sold")?.name,
+    ).toBe("Goods and Services for Sale");
+    expect(
       new Set(
         taxonomyRows
           .filter((row) => row.portfolio_id === "for_employees")

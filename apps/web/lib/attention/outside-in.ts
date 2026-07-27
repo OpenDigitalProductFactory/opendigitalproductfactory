@@ -3,7 +3,7 @@
 //
 // The governing principle (BI-8C3EB52C): the cockpit organizes the four canonical
 // Portfolios FROM THE CUSTOMER INWARD. The primary organizing perspective, in order:
-//   1. Products and Services Sold   (customer-facing, PRIMARY, outermost)
+//   1. Goods and Services for Sale  (customer-facing, PRIMARY, outermost)
 //   2. For Employees / Workforce     (PRIMARY)
 //   3. Manufacturing and Delivery    (secondary)
 //   4. Foundational                  (deepest inside, secondary)
@@ -43,7 +43,7 @@ export function isPrimaryPortfolio(portfolio: AttentionPortfolio): boolean {
 }
 
 const PORTFOLIO_LABEL: Record<AttentionPortfolio, string> = {
-  "products-and-services-sold": "Products & services sold",
+  "products-and-services-sold": "Goods and services for sale",
   "for-employees": "Workforce",
   "manufacturing-and-delivery": "Manufacturing & delivery",
   foundational: "Foundational",
