@@ -6,7 +6,7 @@ The Global AI Agent Identification and Governance Framework (`GAID`) is a normat
 
 The problem `GAID` addresses is not naming alone. The problem is that AI agents are increasingly expected to act with durable identity, delegated authority, tool access, and external impact, while the market still relies on ad hoc metadata, undocumented prompts, trial-and-error capability discovery, and weak audit trails. In practice, organizations cannot reliably inventory, compare, govern, or trust agents at scale without a stronger identity and assurance model.
 
-`GAID` is intentionally complementary to `TAK`. `GAID` defines who an agent is, what claims can be made about it, and how those claims are verified and traced. `TAK` defines how a trustworthy runtime `MUST` govern the agent in operation.
+`GAID` is intentionally complementary to `TAK` and its `TAK-JSI` qualification profile. `GAID` defines who an agent is, what claims it carries, and how those claims are verified and traced. `TAK-JSI` defines whether a versioned operating profile is qualified for a particular job and context. `TAK` defines how a trustworthy runtime `MUST` govern the identified and qualified agent in operation.
 
 ## 1. Scope
 
@@ -17,6 +17,7 @@ This standard specifies requirements for:
 - agent identity resolution
 - the `Agent Identity Document` (`AIDoc`)
 - badging and assurance claims
+- versioned job-qualification claims and their status
 - portable authorization classes
 - chain-of-custody and action receipt records
 - public validation, revocation, and reassignment controls
@@ -33,10 +34,11 @@ This standard applies to:
 This standard does not define:
 
 - runtime execution controls, memory governance, or human-in-the-loop enforcement
+- job definitions, qualification schemes, or qualification assessment procedures
 - internal model architecture
 - organization-wide AI management systems
 
-Those concerns are addressed respectively by `TAK` and broader governance frameworks such as `ISO/IEC 42001`.
+Those concerns are addressed respectively by `TAK`, the [Job-Specific Intelligence (`TAK-JSI`) profile](job-specific-intelligence.md), and broader governance frameworks such as `ISO/IEC 42001`.
 
 ## 2. Conformance
 
@@ -84,11 +86,16 @@ The following references are relevant to this standard and informed its design:
 
 | Reference | Relevance |
 |-----------|-----------|
-| [ISO/IEC 42001:2023](https://www.iso.org/standard/81230.html) | Organization-level AI management systems |
+| [ISO/IEC 42001:2023](https://www.iso.org/standard/42001) | Organization-level AI management systems |
+| [ISO/IEC 17024:2026](https://www.iso.org/standard/17024) | Competence-scheme, assessment, surveillance, and reassessment prior art profiled by `TAK-JSI` |
+| [ISO/IEC 25059:2023](https://www.iso.org/standard/80655.html) | AI-system quality characteristics for structured capability and qualification evidence |
+| [ISO/IEC 5259-1:2024](https://www.iso.org/standard/81088.html) | AI data-quality concepts and terminology |
+| [ISO/IEC 5259-2:2024](https://www.iso.org/standard/81860.html) | AI data-quality measures relevant to evidence and qualification scope |
+| [ISO/IEC 5259-5:2025](https://www.iso.org/standard/84150.html) | Data-quality governance and stewardship relevant to qualification claims |
 | [ISO/IEC 12792:2025](https://www.iso.org/standard/84111.html) | Transparency taxonomy for AI systems relevant to `AIDoc` and badge disclosure posture |
 | [ISO/IEC DIS 42102](https://www.iso.org/standard/86898.html) | Framework for characterizing AI system methods and capabilities |
 | [NIST AI RMF 1.0](https://doi.org/10.6028/NIST.AI.100-1) | Risk management framing for AI systems |
-| [NIST AI Agent Standards Initiative](https://www.nist.gov/caisi/ai-agent-standards-initiative) | Current U.S. public-sector standards activity for agent interoperability, identity, and security |
+| [NIST AI Agent Standards Initiative](https://www.nist.gov/artificial-intelligence/ai-agent-standards-initiative) | Current U.S. public-sector standards activity for agent interoperability, identity, security, and evaluation |
 | [NCCoE concept paper: Accelerating the Adoption of Software and AI Agent Identity and Authorization](https://csrc.nist.gov/pubs/other/2026/02/05/accelerating-the-adoption-of-software-and-ai-agent/ipd) | Identity, authorization, auditing, and non-repudiation concerns for agents |
 | [OpenID Foundation AIIM Community Group](https://openid.net/cg/artificial-intelligence-identity-management-community-group/) | Open identity-community venue focused on AI agent identity, modularization, and liaison work |
 | [OpenID Foundation: Identity Management for Agentic AI](https://openid.net/wp-content/uploads/2025/10/Identity-Management-for-Agentic-AI.pdf) | Agent identity, authorization, and interoperability white paper from the AIIM community |
@@ -109,6 +116,7 @@ The following references are relevant to this standard and informed its design:
 | [RFC 9767 GNAP Resource Server Connections](https://www.rfc-editor.org/rfc/rfc9767) | Resource-server-facing GNAP model for binding access rights to protected resources |
 | [RFC 9449 OAuth 2.0 Demonstrating Proof of Possession (DPoP)](https://www.rfc-editor.org/rfc/rfc9449) | Sender-constrained token and proof binding for high-assurance agent requests |
 | [W3C Verifiable Credentials Data Model v2.0](https://www.w3.org/TR/vc-data-model/) | Credential format and issuer-verifier trust patterns |
+| [1EdTech Open Badges 3.0](https://standards.1edtech.org/open-badges/specifications/standards/v3p0/cert) | Claim, evidence, result, issuer, status, and expiry patterns for portable qualification records |
 | [Decentralized Identifiers (DIDs) v1.0](https://www.w3.org/TR/did-core/) | Optional decentralized public identity profile for portable verification |
 | [W3C Trace Context](https://www.w3.org/TR/trace-context/) | Cross-system trace propagation |
 | [RFC 9421 HTTP Message Signatures](https://www.rfc-editor.org/info/rfc9421) | Message-level integrity and signing |
@@ -128,6 +136,7 @@ The following references are relevant to this standard and informed its design:
 | [Regulation (EU) 2016/679 (GDPR)](https://eur-lex.europa.eu/legal-content/EN/ALL/?uri=celex%3A32016R0679) | Privacy-law baseline for personal data minimization, accountability, and records implications of receipts and identity documents |
 | [IMDA Model AI Governance Framework for Agentic AI](https://www.imda.gov.sg/resources/press-releases-factsheets-and-speeches/press-releases/2026/new-model-ai-governance-framework-for-agentic-ai) | National governance framework for agentic AI deployment |
 | [ISO/IEC 27701:2025](https://www.iso.org/standard/85819.html) | Privacy information management system reference for `AIDoc` and receipt minimization obligations |
+| [Job-Specific Intelligence (`TAK-JSI`)](job-specific-intelligence.md) | Job-qualification profile whose portable claims are carried by `GAID` |
 
 ## 4. Terms and Definitions
 
@@ -141,6 +150,7 @@ For the purposes of this standard:
 | `registry` | The namespace management layer that delegates or recognizes issuer prefixes |
 | `AIDoc` | The signed `Agent Identity Document` describing an agent's identity, operating surface, governance claims, and status |
 | `badge` | A structured claim about an agent's capability, governance posture, assurance status, or operating constraint |
+| `job-qualification claim` | A versioned claim that a specific operating profile meets a declared `TAK-JSI` scheme within stated activity, data, risk, and deployment constraints |
 | `assurance level` | The strength of evidence behind a claim, such as self-asserted, organization-attested, independently-assessed, or accredited-certified |
 | `authorization class` | A portable declaration of the kinds of actions or data access an agent is designed to request or perform |
 | `public namespace` | The globally resolvable identifier space intended for cross-organizational or public consumption |
@@ -159,6 +169,8 @@ An implementation of `GAID`:
 - `MUST` distinguish enduring subject identity from versioned operating state
 - `MUST` preserve a durable mapping from agent identity to issuing authority
 - `MUST` distinguish declared capability from verified capability
+- `MUST` distinguish capability, job qualification, authorization, and runtime autonomy
+- `MUST NOT` treat a qualification badge as live authorization
 - `MUST` distinguish local authorization from portable authorization class
 - `MUST` preserve chain-of-custody for consequential actions
 - `SHOULD` support both private and public operation without forcing them to share a single namespace
@@ -494,6 +506,7 @@ At minimum, an `AIDoc` `MUST` contain the following fields:
 | `operating_profile_ref` | `SHOULD` | Current governed operating profile identifier |
 | `operating_profile_fingerprint` | `SHOULD` | Digest or equivalent marker of the materially relevant operating state |
 | `validation_state` | `SHOULD` | Whether the current operating state is validated, stale, pending review, restricted, or revoked |
+| `qualification_refs` | `SHOULD` | Current `TAK-JSI` qualification claims, schemes, status, and verifier references |
 | `tool_surface` | `MUST` | Declared tools, connectors, or protocol surfaces |
 | `skill_surface` | `SHOULD` | Declared skills, capabilities, or specialized repertoires |
 | `prompt_surface` | `SHOULD` | Prompt or instruction classes, including immutable or hidden instruction disclosures by class or hash |
@@ -632,6 +645,7 @@ A conforming implementation `SHOULD` support badge categories at least sufficien
 |----------------|----------|
 | `identity-and-accountability` | sponsor assigned, accountable team declared, directory binding validated |
 | `capability` | code generation, research, CRM update, scheduling, deployment coordination |
+| `job-qualification` | qualified for claims intake, architecture review, deployment coordination, or another versioned job profile |
 | `governance` | human approval required, audit logging enabled, immutable instructions controlled |
 | `data-sensitivity` | public, internal, confidential, regulated, export-controlled |
 | `access-and-blast-radius` | least-privilege attested, broad entitlement scope, production write capable, public-facing |
@@ -669,6 +683,16 @@ At minimum, scoped fit-for-purpose or governance badges `SHOULD` make it possibl
 - excluded uses or prohibited contexts
 - jurisdictional or regulatory overlays where relevant
 
+A `job-qualification` badge `MUST` additionally identify:
+
+- the qualification scheme and job-profile version
+- the assessed operating-profile fingerprint
+- qualified activities and explicit exclusions
+- applicable tools, data classes, risk classes, jurisdictions, and deployment constraints
+- the maximum autonomy tier supported by the qualification evidence
+- issue, expiry or review, surveillance, and status references
+- evidence and evaluator identity appropriate to the claimed assurance level
+
 ### 8.4 Assurance Levels
 
 At minimum, the following assurance levels `MUST` be supported:
@@ -700,6 +724,11 @@ Examples include:
 - effective context-window utilization under declared conditions
 - hallucination or fabrication rate under defined tests
 - known limits or exclusions
+
+A generic model benchmark, model card, system card, or successful demonstration in another job
+`MUST NOT` by itself be represented as job qualification. A job-qualification claim `MUST` be
+supported by evidence for the identified operating profile under representative job, tool, data,
+workflow, and consequence conditions.
 
 Where possible, the evidence model `SHOULD` reuse adjacent standards and recognized evidence artifacts such as:
 
@@ -752,6 +781,9 @@ Material changes include, at minimum:
 - prompt or instruction bundle changes
 - tool-surface changes
 - autonomy or governance changes
+- job-profile, qualification-scheme, profession-corpus, decision-axis, or assessment changes
+- routed-model eligibility, substitution-set, or routing-policy changes
+- data classification, permitted-use, residency, or stewarded quality changes
 - verification key, certificate, or credential-binding changes that affect identity, signing, or delegated authority
 - runtime dependency drift that alters practical capability or risk
 
@@ -784,6 +816,28 @@ For materially consequential badges, a conforming implementation `SHOULD` scruti
 - explicitly excluded or higher-risk scenarios where the claim does not apply
 
 This is especially important where organizations are trying to govern broad families of internal and public AI agents. A badge that is useful for a low-risk intake workflow in one archetype `MUST NOT` be implied to cover high-risk approval or regulated decision support in another.
+
+### 8.11 Job Qualification Claims
+
+`GAID` carries job-qualification claims; it does not define the qualification scheme. The normative
+scheme belongs to `TAK-JSI`.
+
+A conforming implementation:
+
+- `MUST` bind each qualification claim to a `GAID` and operating-profile fingerprint
+- `MUST` expose the current qualification status without erasing historical status
+- `MUST` distinguish `defined`, `assessed`, and `qualified` profiles
+- `MUST` support at least `active`, `pending-revalidation`, `restricted`, `suspended`, `expired`,
+  and `revoked` qualification states
+- `MUST NOT` advertise a stale or out-of-scope qualification as current
+- `MUST` cause material change to enter revalidation unless the scheme explicitly establishes
+  evidence-backed continuity
+- `SHOULD` publish qualified activities, exclusions, evidence strength, surveillance cadence, and
+  next review date in a verifier-readable form
+
+The identity subject may remain the same while its operating profile changes and one or more
+qualification claims become stale. Revalidation normally updates the qualification record rather
+than minting a new `GAID`.
 
 ## 9. Authorization Classes
 
@@ -1078,18 +1132,23 @@ Implementations claiming any `GAID` profile `SHOULD` publish an assertion mappin
 
 ## 14. Informative Annexes
 
-### Annex A: Relationship to TAK
+### Annex A: Relationship to TAK and TAK-JSI
 
-`GAID` and `TAK` solve different but related problems:
+`GAID`, `TAK-JSI`, and `TAK` solve different but related problems:
 
 - `GAID` identifies the agent, its claims, and its evidence
+- `TAK-JSI` qualifies a versioned operating profile for a declared job and context
 - `TAK` governs the runtime in which that agent acts
 
 An implementation with `TAK` but no `GAID` may be locally well governed but externally opaque.
 
 An implementation with `GAID` but no `TAK` may be well labeled but behaviorally under-governed.
 
-The standards are therefore complementary.
+An implementation with identity and runtime governance but no `TAK-JSI` may be capable yet unable
+to substantiate that its operating profile is fit for a particular job.
+
+The standards are therefore complementary. The canonical ownership map is
+[agent-standards-family.md](agent-standards-family.md).
 
 ### Annex B: Suggested AIDoc Skeleton
 

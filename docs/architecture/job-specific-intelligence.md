@@ -1,0 +1,755 @@
+# Job-Specific Intelligence (TAK-JSI)
+
+## Abstract
+
+Job-Specific Intelligence (`JSI`) is a normative qualification profile for autonomous and
+semi-autonomous AI agents. It defines how an identified agent operating profile is shown to be fit
+for a specific job, activity, data scope, and risk context; how that qualification is versioned and
+advertised; and when it must be restricted, suspended, or revalidated.
+
+The problem is not that AI systems have no benchmarks. The problem is that generic model
+benchmarks, model cards, system cards, and one-shot demonstrations do not establish whether an AI
+Coworker can perform a particular job in a particular organization under its actual tool, data,
+authority, and oversight constraints. A coding benchmark may support a software-development
+qualification. It does not qualify the same operating profile for legal intake, health operations,
+finance approval, or any other job with different knowledge, evidence, data, and harm boundaries.
+
+`TAK-JSI` treats qualification as a property of a versioned operational subject in context, not as
+a permanent property of a model name. It is a profile of the Trusted AI Kernel (`TAK`) because
+qualification constrains runtime autonomy. It binds claims through `GAID` because relying parties
+need to know which AI Coworker and operating profile earned the qualification.
+
+## 1. Scope
+
+This profile specifies requirements for:
+
+- job and activity definitions for AI agents
+- job-specific knowledge, skill, decision, tool, data, and evidence requirements
+- qualification schemes and assessment plans
+- qualification records bound to versioned agent operating profiles
+- model and provider eligibility for a job and data scope
+- data stewardship within qualification and evaluation
+- evidence-based autonomy and proactivity boundaries
+- material-change detection, surveillance, expiry, revalidation, suspension, and revocation
+- portable advertisement of qualification through `GAID`
+- conformance evidence for qualification issuers, operators, and verifiers
+
+This profile applies to:
+
+- AI Coworkers performing bounded enterprise or public-sector jobs
+- orchestrators and specialists whose job scopes differ
+- agents that route among multiple models or providers
+- agents that act with tools, memory, retrieval, or delegated authority
+- internal, federated, and public-facing agent operating profiles
+
+This profile does not:
+
+- define a universal ontology of every occupation
+- define global agent identity; `GAID` owns that concern
+- define live authorization or tool enforcement; `TAK` owns that concern
+- replace profession doctrine such as DPF's `WSID`
+- prescribe one model vendor, benchmark, prompt format, or harness implementation
+- claim that passing an evaluation makes unrestricted autonomy safe
+
+## 2. Conformance
+
+An implementation conforms only if it satisfies every `MUST` for its claimed profile.
+
+This standard defines three conformance profiles:
+
+| Profile | Meaning |
+|---|---|
+| `TAK-JSI-Defined` | A versioned job profile, qualification scheme, constraints, and evidence requirements exist. No claim of demonstrated job performance is implied. |
+| `TAK-JSI-Assessed` | A specific versioned agent operating profile has passed the declared assessment plan under representative conditions. |
+| `TAK-JSI-Qualified` | The assessed profile also has governed operational evidence, surveillance/revalidation rules, GAID-bound status, and an enforceable TAK autonomy ceiling. |
+
+An implementation:
+
+- `MUST` declare the supported `TAK-JSI` version
+- `MUST` declare the highest conformance profile claimed
+- `MUST NOT` use `qualified` for a merely defined or self-described job profile
+- `MUST` identify whether an assertion is self-asserted, organization-attested,
+  independently-assessed, or accredited-certified
+- `MUST` publish or retain an assertion-to-evidence mapping
+- `SHOULD` publish a machine-readable implementation statement
+
+### 2.1 Versioning
+
+`TAK-JSI` `SHOULD` use semantic-style versioning:
+
+- major versions for incompatible normative changes
+- minor versions for additive requirements or profiles
+- patch versions for clarifications and errata
+
+Job profiles, qualification schemes, and qualification records `MUST` each have their own version
+or immutable identifier. Updating this standard does not silently update a job qualification, and
+updating a job profile does not silently preserve an earlier qualification.
+
+## 3. Normative References
+
+| Reference | Relevance |
+|---|---|
+| [Trusted AI Kernel](trusted-ai-kernel.md) | Runtime authority, oversight, tool/data enforcement, material-change handling, evidence, and autonomy ceilings |
+| [GAID](GAID.md) | Agent identity, operating-profile binding, badges, status, receipts, and verification |
+| [NIST AI RMF 1.0](https://doi.org/10.6028/NIST.AI.100-1) | Context-of-use risk mapping, measurement, monitoring, and management |
+| [NIST AI RMF Playbook - Measure](https://airc.nist.gov/airmf-resources/playbook/measure/) | Fit-for-purpose evaluation, representative conditions, uncertainty, limits, and ongoing monitoring |
+| [NIST AI Agent Standards Initiative](https://www.nist.gov/artificial-intelligence/ai-agent-standards-initiative) | Agent security, identity, interoperability, and consumer-comparable evaluation activity |
+| [ISO/IEC 17024:2026](https://www.iso.org/standard/17024) | Certification-scheme scope, competence requirements, assessment, surveillance, and periodic reassessment |
+| [ISO/IEC 25059:2023](https://www.iso.org/standard/80655.html) | Quality model and common terminology for specifying and evaluating AI-system quality |
+| [ISO/IEC 23894:2023](https://www.iso.org/standard/77304.html) | AI risk-management integration |
+| [ISO/IEC 5259-1:2024](https://www.iso.org/standard/81088.html) | Data quality concepts and fit-for-purpose framing for analytics and ML |
+| [ISO/IEC 5259-2:2024](https://www.iso.org/standard/81860.html) | Measurable data-quality characteristics |
+| [ISO/IEC 5259-3:2024](https://www.iso.org/standard/81092.html) | Data-quality lifecycle management requirements and guidance |
+| [ISO/IEC 5259-5:2025](https://www.iso.org/standard/84150.html) | Data-quality governance and accountable stewardship |
+| [W3C Verifiable Credentials Data Model 2.0](https://www.w3.org/TR/vc-data-model/) | Issuer-holder-verifier claim model, schemas, evidence, validity, and status |
+| [1EdTech Open Badges 3.0](https://standards.1edtech.org/open-badges/specifications/standards/v3p0/cert) | Achievement claims with issuer, evidence, results, issue date, expiry, and portable verification |
+| [O*NET Content Model](https://www.onetcenter.org/content.html) | Tasks, knowledge, skills, abilities, work activities, and work context as job descriptors |
+| [ESCO](https://esco.ec.europa.eu/en/about-esco) | Versioned relationships among occupations, skills, competences, and qualifications |
+
+### 3.1 Reuse rule
+
+`TAK-JSI` profiles adjacent standards instead of replacing them:
+
+- occupation taxonomies `MAY` identify jobs and skill concepts
+- `WSID` or an equivalent profession corpus `MAY` own job craft and decision doctrine
+- verifiable credentials or open badges `MAY` carry qualification assertions
+- `GAID` `MUST` bind the assertion to the agent subject and operating profile
+- `TAK` `MUST` enforce the resulting operational ceiling
+
+## 4. Terms and Definitions
+
+| Term | Definition |
+|---|---|
+| `job` | A bounded set of responsibilities, activities, outcomes, and constraints performed for an organization or relying party |
+| `activity` | A coherent unit of work within a job that may have its own qualification and autonomy boundary |
+| `job profile` | A versioned description of a job's purpose, activities, knowledge, skills, decision axes, tools, data, evidence, and prohibited uses |
+| `operating profile` | The materially relevant runtime state of an identified agent, as defined by `TAK` and bound through `GAID` |
+| `qualification scheme` | The rules, assessment methods, evidence requirements, decision process, validity, and revalidation policy used to determine job fitness |
+| `qualification record` | A versioned assertion that a specific operating profile met a qualification scheme for a declared scope |
+| `qualification subject` | The tuple of agent identity, operating-profile fingerprint, job-profile version, activity scope, deployment context, and applicable data/risk classes |
+| `job-specific intelligence` | The demonstrated ability of a qualification subject to perform a declared job/activity within its constraints and evidence requirements |
+| `declared capability` | A capability stated by an operator, vendor, model card, tool description, or agent metadata without job-specific proof |
+| `tested capability` | A capability observed under a declared evaluation, without necessarily satisfying a complete job qualification scheme |
+| `qualified capability` | A capability that satisfies the applicable qualification scheme for its declared scope |
+| `surveillance` | Ongoing monitoring used to determine whether a qualification remains valid between formal reassessments |
+| `material change` | A change capable of altering job performance, risk, data handling, authority, or the validity of prior evidence |
+| `proactivity` | The requested degree of initiative an agent may take before involving a human |
+| `earned autonomy` | The runtime action latitude justified by evidence and policy for a specific agent, activity, and risk scope |
+| `autonomy ceiling` | The highest runtime oversight tier allowed after intersecting authority, qualification, data, regulatory, and risk constraints |
+| `data steward` | The accountable role responsible for a data domain's meaning, quality, classification, permitted use, and lifecycle expectations |
+
+## 5. Core Principle
+
+The core principle of `TAK-JSI` is:
+
+> Intelligence for autonomous work is qualified against the job, operating profile, data, tools,
+> and consequences that exist in practice. It is not inferred from a model label or a generic
+> benchmark.
+
+The qualification subject is therefore:
+
+```text
+(GAID subject
+ × operating-profile fingerprint
+ × job-profile version
+ × activity
+ × deployment context
+ × data/risk scope)
+```
+
+A qualification `MUST NOT` be generalized beyond that tuple without additional evidence.
+
+## 6. Relationship to TAK, GAID, WSID, Proactivity, and the Golden Triangle
+
+| Concern | Canonical owner | `TAK-JSI` relationship |
+|---|---|---|
+| Identity and advertised claim | `GAID` | Provides a qualification claim that GAID binds to a subject, profile, status, and evidence |
+| Runtime permission and oversight | `TAK` | Provides an autonomy ceiling and qualification status that TAK enforces at action time |
+| Profession and craft doctrine | `WSID` or equivalent | Consumes versioned knowledge, techniques, decision axes, and evidence practices; does not redefine them |
+| Human initiative preference | Proactivity policy | Treats proactivity as a request that remains bounded by qualification and TAK constraints |
+| Cost/quality/time posture | Golden Triangle or equivalent | Uses the compiled effort and assurance envelope during evaluation or execution; does not treat resource spend as proof of competence |
+| Model/provider selection | Runtime router | Defines job-fit and data eligibility requirements; does not hard-code vendor flags |
+| Data quality and handling | Data governance | Requires stewarded data constraints and evidence within the qualification scheme |
+
+### 6.1 Proactivity is not autonomy
+
+A proactivity setting `MAY` request that an agent:
+
+- wait for a prompt
+- suggest work
+- prepare a proposal
+- continue routine work within a boundary
+- initiate bounded work when a trigger occurs
+
+The setting `MUST NOT`:
+
+- widen the principal's authority
+- create a capability or qualification
+- bypass a `TAK` approval requirement
+- exceed a regulatory, contractual, jurisdictional, or data-handling ceiling
+- exceed the qualification's activity or risk scope
+
+### 6.2 The Golden Triangle is not a qualification score
+
+A cost/quality/time posture `MAY` change:
+
+- eligible model tier
+- reasoning or inference effort
+- context and loop budget
+- review and verification depth
+- retry and fallback posture
+
+It `MUST NOT`:
+
+- make an ineligible model eligible for restricted data
+- convert an unqualified operating profile into a qualified one
+- substitute more tokens or retries for missing job knowledge
+- reduce a mandatory oversight or verification floor
+
+## 7. Job Profile Requirements
+
+Every `TAK-JSI-Defined` job profile `MUST` identify:
+
+1. stable job-profile identifier and version
+2. purpose and accountable owner
+3. activities and expected outcomes
+4. knowledge and skill/competence requirements
+5. applicable profession corpus and decision-axis versions
+6. tool and connector requirements
+7. local authorization classes and prohibited actions
+8. data domains, classifications, residency, retention, and permitted-use constraints
+9. workflow, archetype, jurisdiction, and regulatory context
+10. required human roles and oversight boundaries
+11. expected evidence and acceptance criteria
+12. known exclusions and unsupported use
+13. material-change triggers
+14. surveillance, expiry, and revalidation policy
+
+### 7.1 Activity decomposition
+
+A job profile `SHOULD` separate activities when they differ materially in:
+
+- authority
+- tools
+- data sensitivity
+- consequence or reversibility
+- required knowledge
+- evaluation method
+- autonomy ceiling
+
+An agent qualified to summarize a legal document, for example, `MUST NOT` be implied to be
+qualified to provide legal advice, approve a filing, or make a jurisdictional determination.
+
+### 7.2 Job-taxonomy alignment
+
+Where an authoritative job or skill taxonomy exists, a job profile `SHOULD` reference stable
+occupation and skill identifiers rather than inventing ambiguous local labels. Local extensions
+`MAY` add organization-specific activities and constraints, but `MUST` preserve the referenced
+version and semantic boundary.
+
+## 8. Intelligence Profile Composition
+
+A qualification scheme `MUST` assess the operational composition that performs the job, including:
+
+| Dimension | Minimum question |
+|---|---|
+| Knowledge | Does the subject retrieve and apply the required, current, authoritative corpus? |
+| Judgment | Does it apply the job's decision axes, policies, and escalation rules consistently? |
+| Tools | Can it select and use the required tools correctly and stay inside the declared surface? |
+| Data | Can it handle the permitted data classes with required quality, minimization, residency, and retention controls? |
+| Model/provider | Is the routed model eligible and adequate for the activity, modality, context, and risk? |
+| Harness | Do instructions, memory, grants, action gates, and receipts preserve the qualified behavior? |
+| Human configuration | Are required reviewers, supervisors, and escalation receivers present and effective? |
+| Outcomes | Do results satisfy job-specific acceptance criteria under representative conditions? |
+
+The qualification `MUST` assess the system composition, not the base model in isolation.
+
+### 8.1 WSID and vector decisioning
+
+When a platform uses profession-local doctrine or decision vectors:
+
+- the qualification scheme `MUST` identify the applicable profession and axis versions
+- shared platform doctrine and profession-local doctrine `MUST` remain distinguishable
+- organization-specific weights `MUST` identify their authority and evidence basis
+- inferred or situational weights `MUST` disclose their confidence, freshness, and validation scope
+- a rank-deficient or materially incomplete decision space `MUST NOT` be represented as a complete
+  job-intelligence qualification
+
+### 8.2 Learning and adaptation
+
+`TAK-JSI` does not require model training or fine-tuning.
+
+An implementation `MAY` adapt:
+
+- retrieval and corpus selection
+- organization-specific decision weights
+- task routing
+- tool selection policies
+- prompts or skills
+- workflow sequencing
+
+Adaptive changes `MUST` remain observable, attributable, bounded, and subject to the material-change
+rules in Section 13.
+
+## 9. Model and Provider Suitability
+
+### 9.1 Eligibility before ranking
+
+Model routing for qualified work `MUST` apply hard eligibility constraints before quality, cost, or
+latency ranking.
+
+Hard constraints `SHOULD` include, where applicable:
+
+- data sensitivity clearance
+- residency and egress restrictions
+- modality and tool/function support
+- minimum context capacity under the actual prompt/tool budget
+- approved provider and model status
+- required security, privacy, and contractual posture
+- task-specific capability floor
+- availability of required logging and evidence
+
+If no candidate satisfies every hard constraint, the runtime `MUST` fail closed, narrow the task, or
+escalate. It `MUST NOT` route sensitive or high-consequence work to an ineligible provider because
+that provider has a higher generic benchmark score.
+
+### 9.2 Evidence-based adequacy
+
+After eligibility filtering, a qualification scheme `SHOULD` evaluate candidates using:
+
+- job/activity scenario results
+- observed tool-use reliability
+- outcome correctness and completeness
+- failure detection and escalation behavior
+- uncertainty or calibration evidence
+- cost and latency within the declared service envelope
+- robustness across representative data and edge cases
+
+Model cards and system cards `MAY` inform candidate selection. They `MUST NOT` be treated as a
+substitute for qualification under the actual job profile.
+
+### 9.3 Routed and multi-model profiles
+
+If an operating profile can route among multiple models:
+
+- the qualification record `MUST` identify the approved substitution set or routing policy version
+- every candidate `MUST` satisfy the hard job and data constraints
+- evaluation `MUST` cover the routing behavior, not only the best candidate
+- fallback behavior `MUST` preserve the qualification's minimum floor
+- adding or changing a candidate `MUST` trigger impact analysis and any required revalidation
+
+## 10. Data Stewardship Requirements
+
+Every qualification scheme involving organizational or external data `MUST` identify:
+
+- accountable data owner or steward
+- data domain and classification
+- provenance and authoritative source
+- permitted purpose and prohibited reuse
+- minimum quality and completeness requirements
+- freshness or verification requirements
+- representativeness and known coverage gaps
+- residency and cross-boundary constraints
+- minimization, retention, deletion, and evidence-preservation rules
+- incident and correction path
+
+### 10.1 Data quality is part of job fitness
+
+An evaluation `MUST NOT` claim job fitness when its test data is materially unlike the intended
+operational data without declaring that limitation.
+
+Where job performance depends on current facts, stale-but-plausible data `MUST` be treated as a
+distinct risk. The qualification scheme `SHOULD` test freshness detection, source verification,
+supersession, and abstention or escalation behavior.
+
+### 10.2 Sensitive evaluation evidence
+
+Qualification evidence `MUST` be minimized. Public badges or verifier responses `MUST NOT` disclose
+personal, confidential, restricted, or regulated evaluation data merely to prove that an assessment
+occurred.
+
+A public assertion `SHOULD` expose:
+
+- the evidence type
+- assessor or issuer
+- methodology identifier
+- date and validity
+- result and limitations
+- protected evidence reference
+
+It `SHOULD NOT` expose the underlying sensitive records.
+
+## 11. Qualification Scheme and Evaluation
+
+A qualification scheme `MUST` define:
+
+1. scheme owner and decision authority
+2. qualification subject and requested scope
+3. prerequisites
+4. assessment plan and scenario set
+5. data and environment requirements
+6. scoring, uncertainty, and acceptance rules
+7. critical failures that override aggregate scores
+8. human review and appeal path
+9. evidence and reproducibility requirements
+10. validity period, surveillance, and revalidation triggers
+11. suspension and revocation rules
+
+### 11.1 Representative evaluation
+
+The assessment plan `MUST` include conditions similar to the intended deployment context.
+
+It `SHOULD` cover:
+
+- ordinary job tasks
+- boundary and refusal cases
+- incomplete, ambiguous, and conflicting information
+- tool failure and partial completion
+- unsafe or unauthorized requests
+- relevant data classifications
+- escalation and handoff
+- repeated or long-horizon work where the job requires it
+- adversarial or manipulated inputs appropriate to the risk
+
+### 11.2 Job-specific measures
+
+Measures `MUST` derive from the job's outcomes and risks.
+
+They `MAY` include:
+
+- correctness
+- completeness
+- timeliness
+- evidence quality
+- policy compliance
+- tool-use success
+- escalation precision and recall
+- fabrication or unsupported-claim rate
+- harmful-error severity
+- recovery and correction behavior
+- human-review burden
+- cost and latency within a declared envelope
+
+A generic benchmark `MAY` be supporting evidence. It `MUST NOT` be the sole basis for a
+`TAK-JSI-Qualified` claim unless the scheme demonstrates that the benchmark is representative of
+the declared job, tools, data, and consequences.
+
+### 11.3 Critical failures
+
+A scheme `MUST` identify critical failures that cannot be averaged away, such as:
+
+- unauthorized or prohibited action
+- sensitive-data disclosure or ineligible provider routing
+- fabricated completion of consequential work
+- failure to escalate a mandatory human decision
+- action outside the qualified job/activity scope
+- loss of chain-of-custody evidence
+
+## 12. Qualification Decision and Record
+
+A qualification decision `MUST` be made by the declared scheme authority, not by the subject agent.
+
+The resulting qualification record `MUST` contain:
+
+- qualification record identifier
+- `TAK-JSI` version
+- qualification scheme identifier and version
+- job profile identifier and version
+- subject `GAID`
+- operating-profile fingerprint
+- qualified activities and excluded uses
+- applicable workflow, archetype, jurisdiction, and data/risk scopes
+- approved model/provider set or routing-policy version
+- tool and authority envelope
+- maximum autonomy/oversight posture
+- assessment result and evidence references
+- issuer, assessor, and assurance level
+- issued-at, valid-from, expiry/review date, and status
+- material-change and surveillance policy reference
+
+### 12.1 Status
+
+A qualification record `MUST` support at least:
+
+- `active`
+- `pending-revalidation`
+- `restricted`
+- `suspended`
+- `expired`
+- `revoked`
+
+An implementation `MUST NOT` advertise a non-active record as a current qualification.
+
+## 13. Material Change and Revalidation
+
+Qualification continuity is distinct from identity continuity.
+
+The same `GAID` `MAY` remain valid while its qualification becomes pending, restricted, suspended,
+expired, or revoked.
+
+### 13.1 Minimum material-change triggers
+
+The scheme `MUST` evaluate at least:
+
+| Change | Required response |
+|---|---|
+| Model or provider substitution | Impact analysis; re-run affected capability, safety, data, and routing tests |
+| Prompt, immutable directive, skill, or profession-corpus change | Re-run affected job scenarios and governance tests |
+| Tool, connector, entitlement, or authority change | Re-run tool-boundary, critical-failure, and receipt tests |
+| Memory or retrieval-policy change | Re-run provenance, freshness, contamination, and retention tests |
+| Decision-axis or weight-policy change | Re-run judgment, calibration, and scope tests |
+| Data classification, residency, or permitted-use change | Re-evaluate eligibility and data-handling controls before use |
+| Job profile, regulation, workflow, or risk change | Issue a new scope/version and reassess affected activities |
+| Harness/runtime dependency change | Assess whether enforcement or practical capability changed |
+| Significant incident or performance drift | Restrict or suspend the affected scope pending review |
+
+### 13.2 Fail-safe continuity
+
+When the impact of a material change is unresolved:
+
+- the record `MUST` move to `pending-revalidation`, `restricted`, or `suspended`
+- the runtime `MUST NOT` increase autonomy
+- the runtime `MAY` continue only at a lower, explicitly permitted oversight tier
+- relying parties `MUST` be able to observe the changed status
+
+### 13.3 Surveillance and renewal
+
+`TAK-JSI-Qualified` implementations `MUST` define surveillance between formal assessments.
+
+Surveillance `SHOULD` use:
+
+- outcome quality
+- exception and escalation patterns
+- critical-failure events
+- route/model substitutions
+- data-quality or freshness incidents
+- human corrections and overrides
+- drift against qualification thresholds
+
+Qualification renewal `MUST` consider operational evidence, not merely rerun a static benchmark.
+
+## 14. Qualification and Earned Autonomy
+
+Qualification sets a ceiling; it does not grant authority.
+
+At execution time, `TAK` `MUST` compute the effective action posture from the intersection of:
+
+```text
+principal authority
+∩ agent grants
+∩ route/workflow policy
+∩ qualification scope and status
+∩ data/residency constraints
+∩ regulatory and contractual ceilings
+∩ evidence-earned autonomy for (agent × activity × risk)
+```
+
+### 14.1 Progressive autonomy
+
+An implementation `MAY` use a progression such as:
+
+1. shadow or observe only
+2. recommend or propose
+3. bounded execution with post-action review
+4. bounded autonomous execution with mandatory evidence
+
+Progression `MUST` be:
+
+- scoped to a specific agent, activity, and risk class
+- based on verified outcomes and critical-failure history
+- reversible
+- capped by the job qualification and external policy
+- visible to a supervisor or relying party
+
+Agreement with a human alone `MUST NOT` be treated as sufficient proof of competence when both may
+share the same error or incomplete evidence.
+
+### 14.2 Regression
+
+The runtime `MUST` support reducing autonomy when:
+
+- qualification status changes
+- evidence freshness expires
+- performance drifts
+- a critical failure occurs
+- the job, data, tools, or regulation changes
+- required human oversight is unavailable
+
+## 15. GAID Binding and Advertisement
+
+Every advertised `TAK-JSI-Assessed` or `TAK-JSI-Qualified` claim `MUST` bind to:
+
+- a resolvable `GAID`
+- an operating-profile fingerprint
+- a job-profile and qualification-scheme version
+- a declared scope
+- evidence and issuer references
+- a current status
+- a validity or review date
+
+### 15.1 Qualification badge
+
+`GAID` implementations `SHOULD` represent a JSI qualification as a structured
+`job-qualification` badge or verifiable credential.
+
+The badge `MUST` distinguish:
+
+- the job/activity the subject is qualified for
+- the actions and data classes it is not qualified for
+- the strength of assurance
+- the maximum autonomy posture
+- current status and expiry
+- the profile version actually assessed
+
+The visual badge alone is never the claim. The structured, verifiable payload is the claim.
+
+### 15.2 Minimum verifier response
+
+A verifier `SHOULD` be able to answer:
+
+- Is the agent identity valid?
+- Is this the assessed operating profile?
+- Is the qualification active?
+- Does it cover this job/activity, data class, jurisdiction, and risk?
+- What autonomy ceiling applies?
+- What changed since assessment?
+- Where is the supporting evidence?
+
+## 16. Security, Privacy, and Misuse Considerations
+
+Threats include:
+
+- capability inflation through vague badges
+- benchmark overfitting and evaluation leakage
+- swapping the assessed model, prompt, tools, or data after qualification
+- using a low-risk job qualification to justify high-risk work
+- routing sensitive work through an unassessed provider
+- stale profession or organizational knowledge
+- poisoned evaluation or operational evidence
+- self-issued claims presented as independent assurance
+- hiding failure data while advertising aggregate success
+- qualification lock-in to a proprietary benchmark or vendor label
+
+Mitigations `SHOULD` include:
+
+- precise scope and exclusions
+- immutable profile fingerprints
+- protected evidence and transparent methodology
+- independent assessment where risk warrants it
+- critical-failure gates
+- change-triggered revalidation
+- status and revocation checking
+- data minimization
+- separation of scheme owner, assessor, operator, and subject where practical
+
+## 17. Conformance Profiles
+
+### 17.1 TAK-JSI-Defined
+
+Requires:
+
+- versioned job profile
+- versioned qualification scheme
+- declared data, tool, model/provider, authority, and oversight constraints
+- assessment plan and acceptance criteria
+- material-change and revalidation policy
+
+It `MUST NOT` imply demonstrated performance.
+
+### 17.2 TAK-JSI-Assessed
+
+Requires everything in `TAK-JSI-Defined`, plus:
+
+- qualification subject bound to a `GAID` and operating-profile fingerprint
+- representative assessment execution
+- retained evidence and result
+- critical-failure evaluation
+- explicit qualified scope and exclusions
+- current status and validity period
+
+### 17.3 TAK-JSI-Qualified
+
+Requires everything in `TAK-JSI-Assessed`, plus:
+
+- operational outcome evidence or a governed probation/shadow period
+- active surveillance
+- material-change detection
+- enforceable TAK autonomy ceiling and regression path
+- GAID-bound qualification advertisement and verifier status
+- periodic reassessment or renewal
+
+## 18. Informative Annex A: Qualification Lifecycle
+
+![TAK-JSI qualification lifecycle](jsi-diagrams/png/01-jsi-qualification-lifecycle.png)
+
+_Figure 1. A qualification is defined, assessed, earned, monitored, and revalidated; it is never a
+permanent property of the agent name._
+
+## 19. Informative Annex B: Example Qualification Record
+
+```json
+{
+  "qualification_id": "jsiq:example.org:accounts-payable-review:2026-01",
+  "tak_jsi_version": "0.1.0",
+  "scheme": {
+    "id": "jsischeme:example.org:accounts-payable-review",
+    "version": "2.1.0"
+  },
+  "job_profile": {
+    "id": "job:example.org:accounts-payable-specialist",
+    "version": "4.0.0",
+    "activities": ["invoice-validation", "exception-routing"]
+  },
+  "subject": {
+    "gaid": "gaid:priv:example.org:ap-coworker",
+    "operating_profile_fingerprint": "sha256:example"
+  },
+  "scope": {
+    "data_classes": ["internal", "confidential-finance"],
+    "authorization_classes": ["observe", "analyze", "report"],
+    "excluded_uses": ["payment-release", "bank-account-change"],
+    "jurisdictions": ["US"],
+    "autonomy_ceiling": "review-after-execution"
+  },
+  "routing_policy": {
+    "id": "route:example.org:ap-review",
+    "version": "3.2.0"
+  },
+  "assurance_level": "org-attested",
+  "evidence": [
+    "https://assurance.example.org/evidence/ap-review-2026-01"
+  ],
+  "issued_at": "2026-07-26T00:00:00Z",
+  "review_after": "2026-10-26T00:00:00Z",
+  "status": "active",
+  "status_endpoint": "https://assurance.example.org/status/ap-coworker"
+}
+```
+
+## 20. Informative Annex C: Relationship to DPF
+
+DPF is a prototype implementation environment for `TAK-JSI`, not a present claim of complete
+conformance.
+
+Its current substrate demonstrates important parts of the profile:
+
+- AI Coworker identity and lifecycle
+- WSID profession corpora and profession-local decision axes
+- model/provider routing with capability and sensitivity filters
+- Golden Triangle effort and assurance posture
+- proactivity controls
+- shadow-ledger and progressive-autonomy concepts
+- outcome and evidence records
+- material-change and validation-continuity concepts in TAK/GAID
+
+The companion [agent-standards-dpf-conformance.md](agent-standards-dpf-conformance.md) records which
+parts are implemented, partial, or still absent.
+
+## 21. Summary
+
+The key message of this profile is:
+
+An AI Coworker is not qualified for a job because its model is impressive. It is qualified only
+when the identified operating profile demonstrates the job's knowledge, judgment, tool, data,
+oversight, and outcome requirements; advertises that scope honestly; and continues to earn the
+evidence on which its autonomy depends.

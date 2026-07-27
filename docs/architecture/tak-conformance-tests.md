@@ -35,6 +35,10 @@ Each assertion should identify:
 | `TAK-013` | `Assured` | Failover policy correctness | Multi-provider test runs and substitution traces | Failover occurs only to pre-approved providers or models and never widens capability, scope, or assurance posture |
 | `TAK-014` | `Assured` | Threat-model alignment | Threat model artifact mapped to `OWASP`, `MAESTRO`, or `ATLAS` | The implementation maintains a current threat model covering its actual trust boundaries and attack surfaces |
 | `TAK-015` | `Assured` | Evaluation cadence | Evaluation calendar or release-gate policy | The evaluation pack is re-run on material runtime change, model/provider substitution, major instruction changes, or new exposure states |
+| `TAK-016` | `Managed` | Qualification-aware action ceiling | Runtime tests covering active, absent, stale, restricted, and revoked `TAK-JSI` states | Runtime fails closed, narrows, or escalates when qualification does not support the requested activity and never treats a badge as authorization |
+| `TAK-017` | `Managed` | Proactivity clamping | Policy tests varying proactivity across fixed authority, qualification, data, and regulatory constraints | Increasing initiative never widens authority, qualification scope, data eligibility, or mandatory oversight |
+| `TAK-018` | `Assured` | Evidence-earned autonomy progression and regression | Trust-ledger evidence plus tests for promotion, suspension, and regression by `(agent × activity × risk)` | Autonomy rises only on declared evidence and reversibly falls when evidence, qualification, or operating conditions deteriorate |
+| `TAK-019` | `Assured` | Assurance-posture independence | Tests varying cost, quality, time, review, and retry posture | Resource posture cannot make an ineligible route eligible or lower a mandatory safety, data, qualification, or oversight floor |
 
 ## Evidence Publication Guidance
 

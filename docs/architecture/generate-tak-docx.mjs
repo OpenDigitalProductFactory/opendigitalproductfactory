@@ -7,16 +7,7 @@
  * Usage: node docs/architecture/generate-tak-docx.mjs
  */
 
-import { join, resolve } from "node:path";
+import { publicationConfig } from "./agent-standard-publications.mjs";
 import { generateDocxFromMarkdown } from "./generate-docx-from-markdown.mjs";
 
-const ARCH_DIR = resolve(import.meta.dirname);
-
-await generateDocxFromMarkdown({
-  markdownPath: join(ARCH_DIR, "trusted-ai-kernel.md"),
-  outputPath: join(ARCH_DIR, "Trusted-AI-Kernel-Architecture.docx"),
-  title: "Trusted AI Kernel",
-  subtitle: "Normative Runtime Governance Standard",
-  headerTitle: "Trusted AI Kernel (TAK)",
-  diagramsDir: join(ARCH_DIR, "tak-diagrams"),
-});
+await generateDocxFromMarkdown(publicationConfig("tak"));

@@ -1,8 +1,9 @@
-# TAK and GAID Shared Threat Model Companion
+# TAK, GAID, and TAK-JSI Shared Threat Model Companion
 
 ## Purpose
 
-This companion document provides a shared starter threat model for the `TAK` and `GAID` standards family.
+This companion document provides a shared starter threat model for the `TAK`, `GAID`, and
+`TAK-JSI` standards family.
 
 It is not a substitute for an implementation-specific threat model. It is a structured baseline that helps implementers identify the minimum assets, actors, trust boundaries, and abuse paths that trustworthy agent platforms must account for.
 
@@ -18,6 +19,8 @@ The standards family assumes at least the following protected assets:
 - memory stores, retrieval context, and evidence history
 - queue state, retry state, and provider budget state
 - badge evidence, evaluation reports, and conformance statements
+- job profiles, qualification schemes, operating-profile fingerprints, and qualification status
+- profession corpora, decision axes, stewarded evaluation data, and routed-model eligibility policy
 - receipts, trace context, and parent-child delegation lineage
 
 ## Threat Actors
@@ -55,6 +58,11 @@ The shared baseline should cover at least these abuse paths:
 - forged or replayed receipts
 - forged or stale `AIDoc` resolution
 - badge reuse after material runtime change
+- qualification inflation from a generic benchmark or unrelated demonstration
+- operating-profile substitution beneath a still-active qualification badge
+- stale profession doctrine, decision axes, or qualification evidence
+- data-policy or residency bypass through model routing or fallback
+- autonomy laundering through a proactivity or resource-posture setting
 - silent failover to an unapproved provider or capability tier
 - cross-principal or cross-tenant memory leakage
 - forged delegation lineage or missing parent-child traceability
@@ -77,6 +85,19 @@ The shared baseline should cover at least these abuse paths:
 - weak issuer trust and verifier confusion
 - broken chain-of-custody and receipt validation
 - weak public and private identity boundary handling
+
+`TAK-JSI` primarily mitigates:
+
+- vague or unversioned job definitions
+- capability claims presented as job qualifications
+- qualifications generalized across jobs, activities, data, or risk scopes
+- assessment evidence detached from the actual operating profile
+- stale qualifications surviving material change
+- model routing that optimizes quality, cost, or latency before data and job eligibility
+
+Cross-standard enforcement is required for threats that span ownership. For example, `TAK-JSI`
+defines the qualification ceiling, `GAID` carries its status, and `TAK` must still enforce the
+effective action boundary at runtime.
 
 ## Mapping Guidance
 

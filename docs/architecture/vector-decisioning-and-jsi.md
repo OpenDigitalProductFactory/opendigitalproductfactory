@@ -1,11 +1,17 @@
 ---
-title: Vector Decisioning and Job-Specific Intelligence (JSI) — Mathematical Foundations
+title: Vector Decisioning for Job-Specific Intelligence (JSI) — Mathematical Foundations
 description: The real formalism behind DPF's decision substrate — structured alignment scoring, spine/profession-local axis projection, evidence discounting, and the three-timescale weight-fluidity model — with external prior art, positioned against the Trusted AI Kernel (TAK) and the Golden Triangle.
 ---
 
-# Vector Decisioning and Job-Specific Intelligence (JSI): Mathematical Foundations
+# Vector Decisioning for Job-Specific Intelligence (JSI): Mathematical Foundations
 
 ## Abstract
+
+This document is the mathematical companion to the normative
+[Job-Specific Intelligence (`TAK-JSI`) profile](job-specific-intelligence.md). It explains one DPF
+mechanism for representing and evaluating profession-local judgment. It does not independently
+define job qualification, issue qualification claims, or replace the profile's broader requirements
+for job scope, tools, data, evaluation, surveillance, and runtime enforcement.
 
 DPF makes AI coworker judgment auditable by scoring every option a coworker considers against a
 fixed, named registry of decision dimensions, using signed weight vectors that are either
@@ -22,15 +28,16 @@ synthesis: pulling the mathematical core out of four scattered specs into one ac
 referenced account, and drawing the line — precisely — between what DPF has built and what a
 future design could still add.
 
-## 0. Relationship to TAK, JSI, and the Golden Triangle
+## 0. Relationship to TAK, TAK-JSI, and the Golden Triangle
 
-Three DPF standards answer three different questions about the same governed action, and are
-designed to compose, not overlap:
+The standards family and this implementation companion answer different questions about the same
+governed action:
 
 | Standard | Question it answers | Governs |
 |---|---|---|
 | **TAK** (`docs/architecture/trusted-ai-kernel.md`) | *May this agent act, under what authority, with what evidence trail?* | Runtime harness: authentication, tool-execution gating, HITL escalation, provider budgeting, audit/non-repudiation. |
-| **Vector decisioning / JSI** (this document) | *What should this decision weigh, how much, and how confidently?* | The epistemic content of a judgment: which factors matter, at what strength, under whose authority, with what evidence backing it. |
+| **TAK-JSI** (`docs/architecture/job-specific-intelligence.md`) | *Is this operating profile qualified for this job and context?* | Versioned job profiles, qualification schemes, assessment evidence, data/model eligibility, surveillance, and revalidation. |
+| **Vector decisioning for JSI** (this document) | *What should this decision weigh, how much, and how confidently?* | One mathematical component of job intelligence: which factors matter, at what strength, under whose authority, with what evidence backing it. |
 | **Golden Triangle** (`docs/design/golden-triangle-design.md`) | *How hard should the system work to get this right, and how fast/cheap?* | Preference-to-policy compilation: model tier, effort, review depth, verification depth, retry posture — the resourcing envelope around the decision, not its content. |
 
 TAK's own abstract states the boundary precisely: TAK "defines what a trustworthy agent harness
@@ -220,7 +227,7 @@ material authority (`unconfirmed` 0.6 → `confirmed` 0.9 → `ruled` 1.0), but 
 un-ruled statistical inference can never outweigh authored doctrine. It mutates nothing until a
 human rules on it.
 
-**External grounding**, per the JSI spec's own research pass (§3), independently arrived at and
+**External grounding**, per the fluid-weight design's research pass (§3), independently arrived at and
 consistent with this document's framing:
 
 - **Revealed preference theory** (Samuelson, *A Note on the Pure Theory of Consumer's Behaviour*,
@@ -250,14 +257,14 @@ consistent with this document's framing:
 
 ### 3.2 Fast timescale: situational signal validation
 
-Not yet built. The design (JSI spec §4.3) proposes exactly one pilot: a single correlate, in a
+Not yet built. The fluid-weight design (§4.3) proposes exactly one pilot: a single correlate, in a
 single archetype, that starts as unscored evidence and is promoted to a scored input only after a
 minimum-sample, minimum-correlation-with-*actual-recorded-outcome* test, ratified by a human — a
 deliberately higher bar than the medium layer, because an external signal has no author vouching
 for it. Once validated it modulates a decision at inference time only; it is never persisted as a
 stored weight (the "attention, not backprop" distinction the spec draws explicitly from how a
 transformer's attention mechanism re-weighs context at inference time over frozen training-time
-weights — the LLM-construction analogy the JSI spec opens with).
+weights — the LLM-construction analogy the fluid-weight design opens with).
 
 **External grounding**: signal half-life / confidence decay on a live risk signal, with a
 human-reviewable rule layer staying inspectable while a statistical layer adapts underneath, is
@@ -266,7 +273,7 @@ documentation of analyst-overridable, decaying risk signals) and in hybrid recom
 blend stable hand-curated features with continuously updated collaborative-filtering signal as
 distinct components combined at serving time, not merged into one representation (the
 architecture pattern documented publicly by Netflix's and Spotify's recommendation engineering
-writing). Both are cited as structural precedent in the JSI spec, not as endorsements to adopt
+writing). Both are cited as structural precedent in the fluid-weight design, not as endorsements to adopt
 either platform's underlying (opaque) model.
 
 ## 4. Where AHP-style pairwise elicitation would actually fit
@@ -294,7 +301,7 @@ genuine weight inference. It would not create a second authority model, and it w
 the spine (a per-org AHP session cannot invent new axes — §2.1's projection rule and the
 `decisions-belong-to-their-scope` non-inherit boundary both hold unchanged). This is recorded here
 as a candidate for a future, separately-scoped BI — not proposed as done, and not scheduled ahead of
-the JSI spec's own sequencing (§6 of that spec; medium-timescale wiring is the higher-leverage,
+the fluid-weight design's own sequencing (§6; medium-timescale wiring is the higher-leverage,
 already-designed gap).
 
 ## 5. Summary table
@@ -307,8 +314,8 @@ already-designed gap).
 | Semantic alignment fallback | `apps/web/lib/decision/option-scoring.ts` | Vector space model (Salton et al. 1975) | Shipped |
 | Evidence-coverage confidence discounting | `apps/web/lib/decision-perspective/material.ts` | GRADE evidence-quality discounting (Guyatt et al. 2008) | Shipped |
 | Material authority ladder | `apps/web/lib/decision-perspective/stance-promotion.ts` | Revealed preference (Samuelson 1938) | Shipped |
-| Medium-timescale weight inference | `apps/web/lib/decision-perspective/weight-inference.ts` | Bradley-Terry (1952); LinUCB/Thompson sampling; ADWIN/DDM | Engine shipped and unit-tested; **zero live callers** (JSI spec §2) |
-| Fast-timescale situational signal | Not yet built | Stripe Radar signal decay; Netflix/Spotify hybrid blend | Design only, one pilot scoped (JSI spec §4.3) |
+| Medium-timescale weight inference | `apps/web/lib/decision-perspective/weight-inference.ts` | Bradley-Terry (1952); LinUCB/Thompson sampling; ADWIN/DDM | Engine shipped and unit-tested; **zero live callers** (fluid-weight design §2) |
+| Fast-timescale situational signal | Not yet built | Stripe Radar signal decay; Netflix/Spotify hybrid blend | Design only, one pilot scoped (fluid-weight design §4.3) |
 | Cold-start pairwise elicitation | Not yet built | AHP eigenvector method + Consistency Ratio (Saaty 1980) | Candidate, not scoped as a BI (§4 above) |
 | Cost/quality/time preference compiler | `docs/design/golden-triangle-design.md` | PMI triple constraint; NIST AI RMF; RouteLLM; FrugalGPT | Slice 3 shipped (v0.3.5) |
 | Runtime authority/harness enforcement | `docs/architecture/trusted-ai-kernel.md` | ISO/IEC 42001; NIST AI RMF; MCP; OWASP Agentic Top 10 | Normative standard, implementation ongoing |
