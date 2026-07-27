@@ -326,18 +326,40 @@ The evidence projection should reuse:
 - provider suitability receipts/evidence;
 - authorized rehydration result (`rehydrationHandle`).
 
-The correlation envelope joins across existing indexed schema keys without creating a parallel trace ledger:
+The correlation envelope joins the existing ledgers through one request-scoped
+OpenTelemetry-compatible trace identifier; it does not create a parallel trace
+ledger:
 
 ```text
-design revision + screen decision (screenId / decisionId)
-  -> route decision (RouteDecisionLog indexed by agentMessageId / id)
-  -> route/fallback attempt(s) (RouteDecisionLog.fallbackChain / fallbacksUsed)
-  -> adapter outcome (AdapterRunTelemetry indexed by agentMessageId / threadId)
-  -> token/cost/capacity evidence (RouteOutcome indexed by requestId / agentId, TokenUsage)
+design revision + screen decision (traceId + screenId / decisionId)
+  -> route decision (RouteDecisionLog indexed by traceId)
+  -> route/fallback attempt(s) (RouteOutcome indexed by traceId)
+  -> adapter outcome (AdapterRunTelemetry indexed by traceId)
+  -> token/cost evidence (TokenUsage indexed by traceId)
+  -> capacity evidence (ProviderCapacityStatus by provider and observation time)
   -> authorized rehydration outcome (rehydrationHandle)
 ```
 
-Because `agentMessageId` is an indexed field present on both `RouteDecisionLog` and `AdapterRunTelemetry`, and `requestId` correlates `RouteOutcome`, cross-ledger correlation operates directly over existing database indexes. No new telemetry table or trace model is approved.
+`agentMessageId` and `gen_ai.conversation.id` remain conversation attribution, not
+request correlation. `screenId` is derived from a payload hash and therefore can
+repeat when the same safe input is screened more than once. `RouteOutcome.requestId`
+is generated inside the outcome writer and is currently unrelated to the route
+decision. Neither is a sound end-to-end execution key. The request-scoped `traceId`
+is generated once for a live dispatch and copied to nullable, indexed fields on the
+existing `RouteDecisionLog`, `AdapterRunTelemetry`, `RouteOutcome`, and `TokenUsage`
+rows. Historic rows remain null and are reported as uncorrelated rather than
+backfilled heuristically. No new telemetry table or trace model is approved.
+
+The safe projection follows the OpenTelemetry GenAI vocabulary where it fits:
+`gen_ai.provider.name`, `gen_ai.operation.name`, `gen_ai.request.model`,
+`gen_ai.response.model`, `gen_ai.usage.input_tokens`,
+`gen_ai.usage.output_tokens`, and `gen_ai.conversation.id`. Prompt, system
+instruction, tool argument/result, and message-content attributes are deliberately
+excluded because the semantic-convention registry warns that they can contain
+sensitive information. References:
+[OpenTelemetry GenAI attribute registry](https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/)
+and
+[OpenTelemetry GenAI semantic conventions](https://github.com/open-telemetry/semantic-conventions-genai).
 
 Safe evidence may contain identifiers, hashes, versions, enumerated classes,
 obligations, transformation type, explanation codes, provider/model identity,
@@ -633,7 +655,12 @@ Reserve approximately 20 percent of implementation capacity:
 
 ## 21. Open implementation decisions
 
-1. **Resolved 2026-07-26:** `agentMessageId` (for coworker/thread flows) and `screenId` / `requestId` (for direct API/routed inference flows) serve as the canonical correlation key linking `InferenceDataScreenResult` receipt -> `RouteDecisionLog` -> `AdapterRunTelemetry` -> `RouteOutcome`. `agentMessageId` is already an indexed field on `RouteDecisionLog` and `AdapterRunTelemetry`, so no parallel trace ledger model is required.
+1. **Corrected 2026-07-27 from implementation evidence:** one request-scoped
+   `traceId` links `InferenceDataScreenResult` receipt -> `RouteDecisionLog` ->
+   `AdapterRunTelemetry` -> `RouteOutcome` -> `TokenUsage`. `agentMessageId`
+   remains conversation attribution; deterministic `screenId` and independently
+   generated `RouteOutcome.requestId` are not execution correlation keys. Existing
+   ledgers gain nullable indexed fields; no parallel trace ledger is required.
 2. Can the current EA relationship/viewpoint validators render mixed-notation
    related-view navigation entirely through shared element identity, or is a narrow
    renderer change required?

@@ -55,11 +55,15 @@ describe("recordRouteOutcome", () => {
   });
 
   it("records outcome with all fields", async () => {
-    await recordRouteOutcome(BASE_OUTCOME);
+    await recordRouteOutcome({
+      ...BASE_OUTCOME,
+      traceId: "0123456789abcdef0123456789abcdef",
+    });
 
     expect(prisma.routeOutcome.create).toHaveBeenCalledOnce();
     const call = vi.mocked(prisma.routeOutcome.create).mock.calls[0][0];
     expect(call.data).toMatchObject({
+      traceId: "0123456789abcdef0123456789abcdef",
       providerId: "openai",
       modelId: "gpt-4o",
       recipeId: null,

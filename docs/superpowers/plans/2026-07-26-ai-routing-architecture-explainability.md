@@ -164,6 +164,30 @@ metrics and design/runtime conformance.
 - [ ] Use OpenTelemetry-compatible GenAI names when they match existing DPF contracts.
 - [ ] Document retention and historical-coverage limitations.
 
+### Execution decision — 2026-07-27
+
+- Phase coverage receipt: `cms2l9eer09sp01qqoiiwie8g`
+- Phase coverage decision: `atomic` under `BI-758722A7`
+- Reuse `RouteDecisionLog`, `AdapterRunTelemetry`, `RouteOutcome`, `TokenUsage`,
+  `ProviderCapacityStatus`, `EaElement`, and `EaConformanceIssue`; do not add a
+  transaction or trace-ledger model.
+- Generate one request-scoped `traceId` for each live routed dispatch and copy it
+  into nullable indexed fields on the existing evidence ledgers. Do not reuse
+  deterministic `screenId` for execution identity and do not infer historic joins.
+- Record `AI_ROUTING_ARCHITECTURE_VERSION` on the route decision. Historic rows
+  without a design revision are `unproven`, not compared silently with the latest
+  design.
+- Build the initial conformance view as a pure, request-time time-window
+  aggregation. Reconcile only bounded aggregate issue families, never one issue
+  per transaction.
+- Use OpenTelemetry GenAI attribute names for the safe output vocabulary where
+  they fit. Content-bearing prompt/message/tool attributes stay forbidden.
+
+These are internal phases of one atomic vertical slice: correlation writes without
+the coverage/conformance reader would create unused schema, while the reader
+without correlated writes would institutionalize heuristic joins. The slice ships
+only when both are present and tested.
+
 ### Likely files
 
 - AI Operations Map projection/loaders

@@ -414,6 +414,8 @@ export async function persistRouteDecision(
   );
   const record = await prisma.routeDecisionLog.create({
     data: {
+      traceId: decision.traceId ?? null,
+      designRevision: decision.designRevision ?? null,
       agentMessageId: agentMessageId ?? null,
       actorKind: actor.actorKind,
       actorId: actor.actorId,

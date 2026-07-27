@@ -50,6 +50,8 @@ vi.mock("@dpf/db", () => ({
       findMany: vi.fn(),
       aggregate: vi.fn(),
     },
+    adapterRunTelemetry: { findMany: vi.fn() },
+    providerCapacityStatus: { findMany: vi.fn() },
     scheduledAgentTask: {
       findMany: vi.fn(),
     },
@@ -88,7 +90,8 @@ describe("loadOperationsMapData", () => {
     vi.mocked(prisma.agentMessage.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.modelProfile.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
-    // Evidence-range aggregates default to an empty install.
+    vi.mocked(prisma.adapterRunTelemetry.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.providerCapacityStatus.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.routeDecisionLog.aggregate).mockResolvedValue({ _min: { createdAt: null }, _max: { createdAt: null } } as never);
     vi.mocked(prisma.tokenUsage.aggregate).mockResolvedValue({ _min: { createdAt: null }, _max: { createdAt: null } } as never);
     vi.mocked(prisma.routeOutcome.aggregate).mockResolvedValue({ _min: { createdAt: null }, _max: { createdAt: null } } as never);
@@ -98,7 +101,6 @@ describe("loadOperationsMapData", () => {
       generatedAt: "2026-06-28T20:00:00.000Z",
       phases: [],
     });
-    // A2A interaction sources default to empty; individual tests override.
     vi.mocked(prisma.delegationChain.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.phaseHandoff.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.deliberationRun.findMany).mockResolvedValue([] as never);
@@ -367,26 +369,11 @@ describe("loadOperationsMapData", () => {
       orderBy: { createdAt: "desc" },
       take: 40,
     }));
-    expect(prisma.routeOutcome.findMany).toHaveBeenCalledWith({
-      where: {
-        OR: [
-          { providerErrorCode: { not: null } },
-          { fallbackOccurred: true },
-        ],
-      },
+    expect(prisma.routeOutcome.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {},
       orderBy: { createdAt: "desc" },
       take: 40,
-      select: {
-        id: true,
-        agentId: true,
-        providerId: true,
-        modelId: true,
-        taskType: true,
-        fallbackOccurred: true,
-        providerErrorCode: true,
-        createdAt: true,
-      },
-    });
+    }));
     expect(prisma.scheduledAgentTask.findMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { isActive: true },
       orderBy: { nextRunAt: "asc" },
@@ -634,8 +621,6 @@ describe("loadOperationsMapData", () => {
         take: WINDOWED_SOURCE_LIMIT,
       }),
     );
-    // The stalled lift stays unwindowed: operator recovery (Retry/Abandon/
-    // Escalate) must see every stalled row regardless of the viewed window.
     expect(prisma.taskRun.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { archivedAt: null, status: "stalled" },

@@ -11,6 +11,8 @@ vi.mock("@dpf/db", () => ({
     externalEvidenceRecord: { findMany: vi.fn() },
     routeDecisionLog: { findMany: vi.fn(), aggregate: vi.fn() },
     routeOutcome: { findMany: vi.fn(), aggregate: vi.fn() },
+    adapterRunTelemetry: { findMany: vi.fn() },
+    providerCapacityStatus: { findMany: vi.fn() },
     agentMessage: { findMany: vi.fn() },
     modelProvider: { findMany: vi.fn() },
     modelProfile: { findMany: vi.fn() },
@@ -128,6 +130,8 @@ describe("AI operations map page", () => {
     vi.mocked(prisma.modelProfile.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.tokenUsage.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.routeOutcome.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.adapterRunTelemetry.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.providerCapacityStatus.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledAgentTask.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.scheduledJob.findMany).mockResolvedValue([] as never);
     vi.mocked(prisma.delegationChain.findMany).mockResolvedValue([] as never);

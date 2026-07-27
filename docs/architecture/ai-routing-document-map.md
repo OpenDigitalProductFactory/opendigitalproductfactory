@@ -13,7 +13,7 @@ records.
 | What policy decides whether governed data may leave the install? | `apps/web/lib/govern/data/policy-decision.ts` and `apps/web/lib/govern/data/policy-enforcement.ts` |
 | How is provider/account suitability compiled into route constraints? | [AI provider suitability routing design](../superpowers/specs/2026-07-19-ai-provider-suitability-routing-design.md) and its implemented contracts |
 | How is the designed route projected into EA? | `apps/web/lib/ea/ai-routing-architecture-registry.ts`, `apps/web/lib/ea/ai-routing-architecture-extract.ts`, and `apps/web/lib/ea/reconcile-ai-routing-architecture.ts`; one versioned registry projects synchronized BPMN, SysML, and ArchiMate model kinds |
-| What happened operationally? | Route decisions, inference outcomes, token usage, capacity state, and safe suitability receipts in the live install |
+| What happened operationally? | Route decisions, adapter attempts, inference outcomes, token usage, capacity state, and safe screen/suitability receipts in the live install, correlated by request-scoped `traceId` for new traffic |
 
 Current implementation truth comes from code plus live evidence. A diagram, design
 document, or seeded row does not override those sources.
@@ -67,6 +67,11 @@ The target experience uses one stable route geometry:
 - **Observed** overlays privacy-safe evidence for a selected time window.
 - **Compare** exposes missing evidence, unexpected paths, stale design, and
   attribution gaps.
+
+New routed traffic carries one privacy-safe `traceId` across the existing decision,
+adapter, outcome, and usage ledgers. Conversation IDs remain attribution; historic
+rows without a trace or design revision remain visible as coverage gaps and are not
+joined heuristically.
 
 The owner view uses plain-language subway stations. BPMN, SysML, ArchiMate/C4,
 source versions, rule detail, and remediation appear through progressive
