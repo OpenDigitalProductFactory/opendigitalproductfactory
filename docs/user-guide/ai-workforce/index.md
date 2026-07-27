@@ -30,11 +30,13 @@ areas only when an active service is assigned there. Unassigned work remains in
 3. Filter by business area, interaction, availability, or attention state. Additional profession and lifecycle filters are under **More filters**.
 4. Read the three compact signals on each coworker: who they interact with, whether their declared work supports this business type, and their approval/autonomy posture.
 5. Choose **View coworker** for the full record.
-6. Choose **Ask this coworker** when the coworker's declared work explicitly applies to your business type and no safety blocker applies. This opens the existing coworker panel without sending a message for you. Asking a question does not claim that every service prerequisite is ready.
+6. Choose the named action, such as **Ask Marketing**, when the coworker is **Available for your business type**. This opens the selected coworker in the existing panel without sending a message for you.
 
 The roster keeps filter state in the URL. Returning from a coworker record restores the same directory view.
 
-An availability label is not a runtime guess. It is projected from the current storefront business type, explicit coworker service declarations, and an explicit readiness evaluation. Missing declarations or unevaluated service readiness appear as **Coverage not defined** rather than being treated as universal support. When business-type applicability is explicit, you may still ask the coworker a question while service readiness remains unevaluated.
+An availability label is not a runtime guess. It is projected from the current storefront business type, explicit coworker service declarations, enabled skill assignments, registered tools, effective grants, provider health, and governed blockers. **Available** means at least one applicable advertised service has verified backing. A ready service does not make unresolved sibling work ready; the selected service and its evidence remain visible under **Availability evidence**.
+
+Missing declarations or unevaluated readiness appear as **Coverage not defined**. Missing backing appears as **Setup needed**, and safety or provider blockers appear as **Needs attention**. These states fail closed and do not show the Ask action. Opening a named Ask action never sends work automatically; the operator must submit a message explicitly.
 
 ## Key Concepts
 

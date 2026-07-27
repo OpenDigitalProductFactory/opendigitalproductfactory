@@ -56,6 +56,9 @@ export type RosterServiceEvidence = {
   availabilityScope: unknown;
   personas: unknown;
   archetypes: unknown;
+  backingSkillIds: unknown;
+  backingToolNames: unknown;
+  backingGrantKeys: unknown;
   metadata?: unknown;
   portfolio?: { slug: string; name: string } | null;
 };
@@ -64,6 +67,10 @@ export type RosterAvailabilityInput = {
   services: readonly RosterServiceEvidence[];
   install: CoworkerInstallArchetypeResolution;
   readiness?: CoworkerAvailabilityReadiness;
+  readinessByServiceId?: ReadonlyMap<
+    string,
+    CoworkerAvailabilityReadiness
+  >;
 };
 
 export type CoworkerDiscoveryProjection = {
@@ -72,17 +79,24 @@ export type CoworkerDiscoveryProjection = {
   plainJob: string;
   interaction: CoworkerInteractionProjection;
   availability: CoworkerAvailabilityProjection;
+  serviceAvailability: CoworkerServiceAvailability[];
   canStartConversation: boolean;
   workSearchText: string;
+};
+
+export type CoworkerServiceAvailability = {
+  serviceId: string;
+  serviceName: string;
+  availability: CoworkerAvailabilityProjection;
 };
 
 const AVAILABILITY_PRIORITY: Record<
   CoworkerAvailabilityProjection["state"],
   number
 > = {
-  "needs-attention": 0,
-  "setup-needed": 1,
-  available: 2,
+  available: 0,
+  "needs-attention": 1,
+  "setup-needed": 2,
   "coverage-not-defined": 3,
   "not-available": 4,
 };
@@ -149,8 +163,8 @@ export function projectCoworkerInteraction(
 export function projectRosterAvailability(
   input: RosterAvailabilityInput,
 ): CoworkerAvailabilityProjection {
-  const active = activeRosterServices(input.services);
-  if (active.length === 0) {
+  const serviceAvailability = projectRosterServiceAvailability(input);
+  if (serviceAvailability.length === 0) {
     return projectCoworkerAvailability({
       install: input.install.install,
       installResolutionReason: input.install.installResolutionReason,
@@ -162,25 +176,46 @@ export function projectRosterAvailability(
     });
   }
 
-  const readiness = input.readiness ?? {
-    status: "not-evaluated" as const,
-    reason: "Setup readiness has not been evaluated for this coworker.",
-  };
-
-  return active
-    .map((service) =>
-      projectCoworkerAvailability({
-        install: input.install.install,
-        installResolutionReason: input.install.installResolutionReason,
-        declarations: service.archetypes,
-        readiness,
-      }),
-    )
+  return serviceAvailability
+    .map((service) => service.availability)
     .sort(
       (left, right) =>
         AVAILABILITY_PRIORITY[left.state] -
         AVAILABILITY_PRIORITY[right.state],
     )[0]!;
+}
+
+export function projectRosterServiceAvailability(
+  input: RosterAvailabilityInput,
+): CoworkerServiceAvailability[] {
+  return activeRosterServices(input.services).map((service) => {
+    const readiness =
+      input.readinessByServiceId?.get(service.serviceId) ??
+      input.readiness ?? {
+        status: "not-evaluated" as const,
+        reason: `Setup readiness has not been evaluated for ${service.name}.`,
+      };
+    const projection = projectCoworkerAvailability({
+      install: input.install.install,
+      installResolutionReason: input.install.installResolutionReason,
+      declarations: service.archetypes,
+      readiness,
+    });
+    return {
+      serviceId: service.serviceId,
+      serviceName: service.name,
+      availability: {
+        ...projection,
+        evidence: [
+          {
+            source: "coworker-service" as const,
+            values: [service.serviceId, service.name],
+          },
+          ...projection.evidence,
+        ],
+      },
+    };
+  });
 }
 
 export function rosterPlainJob(
@@ -210,10 +245,7 @@ export function rosterWorkSearchText(
 export function canStartCoworkerConversation(
   availability: CoworkerAvailabilityProjection,
 ): boolean {
-  return (
-    availability.matchLevel !== null &&
-    availability.state !== "needs-attention"
-  );
+  return availability.state === "available";
 }
 
 export function projectCoworkerServiceAuthority(input: {
@@ -276,13 +308,19 @@ export function projectCoworkerDiscovery(input: {
   services: readonly RosterServiceEvidence[];
   install: CoworkerInstallArchetypeResolution;
   readiness?: CoworkerAvailabilityReadiness;
+  readinessByServiceId?: ReadonlyMap<
+    string,
+    CoworkerAvailabilityReadiness
+  >;
 }): CoworkerDiscoveryProjection {
   const ownerAreas = projectCoworkerOwnerAreas(input.services);
-  const availability = projectRosterAvailability({
+  const availabilityInput = {
     services: input.services,
     install: input.install,
     readiness: input.readiness,
-  });
+    readinessByServiceId: input.readinessByServiceId,
+  };
+  const availability = projectRosterAvailability(availabilityInput);
   return {
     area: ownerAreas.primary,
     areas: ownerAreas.all,
@@ -290,6 +328,8 @@ export function projectCoworkerDiscovery(input: {
     workSearchText: rosterWorkSearchText(input.services),
     interaction: projectCoworkerInteraction(input.services),
     availability,
+    serviceAvailability:
+      projectRosterServiceAvailability(availabilityInput),
     canStartConversation: canStartCoworkerConversation(availability),
   };
 }

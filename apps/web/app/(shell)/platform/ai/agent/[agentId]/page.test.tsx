@@ -627,4 +627,97 @@ describe("AgentDetailPage", () => {
     expect(html).not.toContain("DecisionInteraction");
     expect(html).not.toContain("CoworkerActionEnvelope");
   });
+
+  it("shows a named Ask Marketing action when a campaign service is ready", async () => {
+    vi.mocked(prisma.agent.findFirst).mockReset();
+    vi.mocked(prisma.agent.findFirst).mockResolvedValueOnce({
+      id: "agent-db-marketing-canonical",
+      agentId: "AGT-WS-MARKETING",
+      slugId: "marketing-specialist",
+      name: "Marketing",
+      displayName: "Marketing",
+      kind: "specialist",
+      tier: 2,
+      type: "specialist",
+      description: "Plans and runs customer-facing campaigns.",
+      status: "active",
+      valueStream: "consume",
+      sensitivity: "internal",
+      humanSupervisorId: null,
+      escalatesTo: null,
+      delegatesTo: [],
+      lifecycleStage: "production",
+      hitlTierDefault: 2,
+      portfolio: null,
+      executionConfig: null,
+      skills: [],
+      toolGrants: [],
+      performanceProfiles: [],
+      degradationMappings: [],
+      promptContext: null,
+      governanceProfile: null,
+      coworkerAssessments: [],
+      ownerships: [],
+    } as never).mockResolvedValueOnce({
+      id: "agent-db-marketing-runtime",
+      agentId: "marketing-specialist",
+      slugId: "marketing-specialist",
+      skills: [],
+      toolGrants: [
+        { grantKey: "marketing_read" },
+        { grantKey: "marketing_write" },
+      ],
+    } as never);
+    vi.mocked(prisma.coworkerService.findMany).mockResolvedValue([
+      {
+        serviceId: "svc-marketing-campaign-execution",
+        providerAgentId: "marketing-specialist",
+        name: "Marketing campaign execution",
+        summary: "Plans and runs campaigns.",
+        status: "active",
+        hitlTier: 2,
+        authorityBoundary: "proposal-only",
+        availabilityScope: "external",
+        personas: ["customer"],
+        archetypes: ["food-hospitality"],
+        backingSkillIds: [],
+        backingToolNames: [
+          "create_marketing_campaign",
+          "get_campaign_plan",
+        ],
+        backingGrantKeys: ["marketing_read", "marketing_write"],
+        metadata: { aggregate: true },
+        portfolio: {
+          slug: "products_and_services_sold",
+          name: "Products and services sold",
+        },
+      },
+    ] as never);
+    vi.mocked(getAgentGaidMap).mockResolvedValue(new Map());
+    vi.mocked(prisma.modelProvider.findMany).mockResolvedValue([
+      {
+        providerId: "openai",
+        name: "OpenAI",
+        status: "active",
+        modelProfiles: [
+          {
+            modelId: "gpt-tool",
+            friendlyName: "Tool model",
+            supportsToolUse: true,
+          },
+        ],
+      },
+    ] as never);
+
+    const { default: AgentDetailPage } = await import("./page");
+    const html = renderToStaticMarkup(
+      await AgentDetailPage({
+        params: Promise.resolve({ agentId: "AGT-WS-MARKETING" }),
+      }),
+    );
+
+    expect(html).toContain("Available for your business type");
+    expect(html).toContain("Ask Marketing");
+    expect(html).not.toContain("Ask this coworker");
+  });
 });

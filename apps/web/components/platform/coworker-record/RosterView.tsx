@@ -462,11 +462,11 @@ function RosterRowCard({
         {canStartConversation && (
           <AskCoworkerButton
             routeContext={detailRoute}
-            label="Ask this coworker"
+            label={`Ask ${row.displayName}`}
             className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--dpf-accent)] px-3 text-sm font-medium text-[var(--dpf-accent)] hover:bg-[var(--dpf-surface-2)]"
           >
             <MessageSquare aria-hidden className="h-4 w-4" />
-            <span>Ask this coworker</span>
+            <span>{`Ask ${row.displayName}`}</span>
           </AskCoworkerButton>
         )}
         {setupNeeded && (

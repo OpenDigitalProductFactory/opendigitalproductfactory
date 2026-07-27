@@ -149,12 +149,10 @@ describe("RosterView", () => {
     const headings = screen.getAllByRole("heading", { level: 2 });
     expect(headings[0]?.textContent).toBe("Customers and sales");
     expect(headings[1]?.textContent).toBe("Platform and back office");
-    expect(
-      screen.getAllByRole("button", { name: "Ask this coworker" }),
-    ).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Ask Customer Advisor" })).toHaveLength(1);
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Ask this coworker" }),
+      screen.getByRole("button", { name: "Ask Customer Advisor" }),
     );
     document.removeEventListener("open-agent-panel", handler);
     expect(events[0]?.detail).toEqual({
