@@ -186,7 +186,7 @@ export default async function AuditAuthorityPage() {
           Effective Permissions Inspector
         </h2>
         <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 12 }}>
-          Select a user role and agent to see what tools the combination can actually use.
+          Inspect.
         </p>
         <EffectivePermissionsPanel
           agents={agentSummaries.map((a) => ({ agentId: a.agentId, agentName: a.agentName, grants: a.grants }))}

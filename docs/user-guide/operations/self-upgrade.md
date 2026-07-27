@@ -25,6 +25,15 @@ and governed by deployment windows.
 4. Confirm the health check passed after the swap, and read the deployment log if
    it did not.
 
+The owner status card and upgrade action stay visible on arrival. Open
+**Deploy controls & history** only when you need technical controls, run
+history, logs, or the local-changes ledger.
+
+During an active upgrade, the portal enters quiescence and refuses new mutating
+MCP writes. Delivery agents can still read quiescence status and release an
+owned nonproduction lease, then retry evidence publication after the portal
+returns to normal.
+
 ## What Happens If You Do Nothing
 
 The install stays on its current version. Queued fixes and improvements are not
@@ -59,3 +68,4 @@ waiting, but the platform does not move forward on its own.
 - triggering an upgrade outside an approved deployment window
 - treating a failed, rolled-back deployment as if the swap had succeeded
 - re-running an upgrade without first reading the failure diagnosis in the log
+- starting expensive local-CI work while the portal reports active quiescence

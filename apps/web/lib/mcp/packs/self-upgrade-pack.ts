@@ -46,6 +46,18 @@ const definitions: ToolDefinition[] = [
     executionMode: "immediate",
     sideEffect: false,
   },
+  {
+    name: "get_quiescence_status",
+    description: "Read quiescence, blockers, write availability, coordinator state, and retry guidance before CI.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+    requiredCapability: "view_operations",
+    executionMode: "immediate",
+    sideEffect: false,
+  },
 ];
 
 function auditTag(params: Record<string, unknown>, context?: { agentId?: string }): string {
@@ -177,6 +189,55 @@ async function getSelfUpgradeQueueStatusTool(): Promise<ToolResult> {
   };
 }
 
+async function getQuiescenceStatusTool(): Promise<ToolResult> {
+  const { getQuiescenceActivity } = await import("@/lib/self-upgrade/quiescence");
+  const activity = await getQuiescenceActivity();
+  const activeTaskCount = activity.blockers.reduce((sum, blocker) => sum + blocker.count, 0);
+  const writesRefused = activity.level !== "normal";
+  const trigger = activity.run?.trigger ?? null;
+  const retryAfterSeconds = writesRefused ? 30 : 0;
+
+  return {
+    success: true,
+    message: writesRefused
+      ? `Portal is ${activity.level}; mutating MCP writes are refused until quiescence clears.`
+      : "Portal quiescence is normal; MCP writes are accepted.",
+    data: {
+      level: activity.level,
+      runId: activity.runId,
+      enteredAt: activity.enteredAt,
+      trigger,
+      activeCoordinator: activity.run
+        ? {
+            kind: trigger,
+            runId: activity.run.runId,
+            status: activity.run.status,
+            targetVersion: activity.run.targetVersion,
+            targetBundleHash: activity.run.targetBundleHash,
+            drainStartedAt: activity.run.drainStartedAt,
+            lastHeartbeatAt: activity.run.lastHeartbeatAt,
+            budgetMs: activity.run.budgetMs,
+            deferSurface: activity.run.deferSurface,
+            deferReason: activity.run.deferReason,
+          }
+        : null,
+      blockersCapturedAt: activity.blockersCapturedAt,
+      drainBlockers: activity.blockers,
+      activeTaskCount,
+      retryAfterSeconds,
+      writesRefused,
+      readOperationsAllowed: true,
+      cleanupOperationsAllowed: ["release_nonprod_environment_lease"],
+      refusedOperations: writesRefused
+        ? ["mutating MCP writes", "new lease claims", "local-CI evidence writes"]
+        : [],
+      writeImplications: writesRefused
+        ? "Mutating MCP writes are refused during active quiescence; retry after the level returns to normal. Lease release remains cleanup-safe so local-CI can finalize without leaking a lease."
+        : "Mutating MCP writes are accepted. Continue normal local-CI evidence recording and lease operations.",
+    },
+  };
+}
+
 export const selfUpgradePack: ToolPack = {
   packId: "self-upgrade",
   definitions,
@@ -184,6 +245,7 @@ export const selfUpgradePack: ToolPack = {
     request_self_upgrade: requestSelfUpgradeTool,
     repair_promoter_image: repairPromoterImageTool,
     get_self_upgrade_queue_status: getSelfUpgradeQueueStatusTool,
+    get_quiescence_status: getQuiescenceStatusTool,
   },
   grants: {
     request_self_upgrade: ["admin_write"],
@@ -192,5 +254,6 @@ export const selfUpgradePack: ToolPack = {
     // by the ops coworker with no new grant.
     repair_promoter_image: ["admin_write"],
     get_self_upgrade_queue_status: ["release_plan_read"],
+    get_quiescence_status: ["release_plan_read"],
   },
 };

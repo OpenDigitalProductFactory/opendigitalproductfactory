@@ -200,4 +200,20 @@ cd "$WORKSPACE"
 FETCH_FLAG=""
 [ "$FETCH_BASE" = "1" ] && FETCH_FLAG="--fetch-base"
 # shellcheck disable=SC2086 — MIGRATE_FLAG and FETCH_FLAG are single optional tokens
-exec node "$repo_top/scripts/local-integration-ci.mjs" --candidate "$CANDIDATE" --base-ref "$BASE_REF" --candidate-sha "$candidate_sha" --base-sha "$base_sha" --metadata-out "$metadata_file" $FETCH_FLAG $MIGRATE_FLAG
+set +e
+node "$repo_top/scripts/local-integration-ci.mjs" --candidate "$CANDIDATE" --base-ref "$BASE_REF" --candidate-sha "$candidate_sha" --base-sha "$base_sha" --metadata-out "$metadata_file" $FETCH_FLAG $MIGRATE_FLAG
+status=$?
+set -e
+
+# The freshness preflight runs inside the scratch integration worktree, while
+# gate-worktree.sh reads git-private evidence from the caller worktree. Copy the
+# scratch report back even when the expensive command fails so classification
+# uses the report that applied to this run rather than stale caller state.
+scratch_freshness_file="$(git -C "$WORKSPACE" rev-parse --git-path dpf-sandbox-freshness.json 2>/dev/null || true)"
+caller_freshness_file="$(dirname "$metadata_file")/dpf-sandbox-freshness.json"
+if [ -n "$scratch_freshness_file" ] && [ -f "$scratch_freshness_file" ]; then
+  mkdir -p "$(dirname "$caller_freshness_file")"
+  cp "$scratch_freshness_file" "$caller_freshness_file"
+fi
+
+exit "$status"

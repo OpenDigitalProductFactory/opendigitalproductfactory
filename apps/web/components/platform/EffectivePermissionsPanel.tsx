@@ -117,6 +117,7 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   run_release_gate: ["release_gate_create"],
   schedule_release_bundle: ["release_plan_create"],
   get_release_status: ["release_plan_read"],
+  get_quiescence_status: ["release_plan_read"],
   evaluate_page: ["file_read"],
   generate_ux_test: ["file_read"],
   run_ux_test: ["file_read"],
@@ -143,7 +144,6 @@ const TOOL_TO_GRANTS: Record<string, string[]> = {
   prefill_onboarding_wizard: ["data_governance_validate"],
   evaluate_tool: ["tool_evaluation_create"],
 };
-
 function Dot({ color }: { color: string }) {
   return (
     <span

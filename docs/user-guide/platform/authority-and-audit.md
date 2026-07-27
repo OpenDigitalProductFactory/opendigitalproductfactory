@@ -19,7 +19,11 @@ order: 3
 
 1. Confirm what authority or action path you are reviewing.
 2. Inspect the recorded execution or decision trail.
-3. Separate user permission issues from agent-grant issues before changing configuration.
+3. In the Effective Permissions inspector, select the user role and AI coworker
+   whose combined access you need to understand.
+4. Separate user permission issues from agent-grant issues before changing
+   configuration. Quiescence status requires the existing
+   `release_plan_read` grant and does not mutate the platform.
 
 ## What To Watch
 

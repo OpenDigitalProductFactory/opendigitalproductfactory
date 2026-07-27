@@ -157,6 +157,12 @@ if (state.branch !== branch || state.sha !== sha || state.gatePassed !== true) {
   console.error("[pre-push-gate] Run: pnpm run pregate   (or a recorded override — see above)");
   process.exit(1);
 }
+if (state.evidencePending === true) {
+  console.error("[pre-push-gate] local-CI gate passed but evidence publication is still pending.");
+  console.error(`[pre-push-gate] reason=${state.evidencePendingReason || "unknown"}`);
+  console.error(`[pre-push-gate] Run: pnpm run pregate -- --finalize-evidence --branch "${branch}" --sha "${sha}"`);
+  process.exit(1);
+}
 if (!state.expiresAt) {
   console.error("[pre-push-gate] Latest local-CI gate record is missing expiresAt.");
   console.error("[pre-push-gate] Run: pnpm run pregate   (records fresh, expiry-bound local-CI evidence)");

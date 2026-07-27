@@ -32,6 +32,7 @@ export const HOST_BUILD_NODE_OPTIONS = "NODE_OPTIONS=--max-old-space-size=8192";
 // web storage that jsdom installs in Vitest fork workers. Disable only Node's
 // host implementation at process start so jsdom remains the environment owner.
 export const HOST_TEST_NODE_OPTIONS = "NODE_OPTIONS=--no-experimental-webstorage";
+export const HOST_TEST_MAX_WORKERS = "--maxWorkers=4";
 
 export function resolveCommandInvocation(command, baseEnv = process.env) {
   if (command[0] !== "env") {
@@ -167,7 +168,7 @@ export function createLocalIntegrationPlan(input) {
     ["node", "scripts/gen-doc-index.mjs", "--check"],
     ["node", "scripts/check-doc-links.mjs"],
     ["node", "scripts/check-guards.mjs"],
-    ["env", HOST_TEST_NODE_OPTIONS, "pnpm", "--filter", "web", "exec", "vitest", "run"],
+    ["env", HOST_TEST_NODE_OPTIONS, "pnpm", "--filter", "web", "exec", "vitest", "run", HOST_TEST_MAX_WORKERS],
     // typecheck needs the same heap headroom as the host-next build: with the
     // node 24 default heap, `tsc --noEmit` over apps/web SIGABRTs (exit 134)
     // exactly like the build worker did (BI-B5011ACE) — observed live on the

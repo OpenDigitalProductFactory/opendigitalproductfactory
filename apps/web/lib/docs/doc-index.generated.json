@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 561,
+  "pageCount": 562,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -6831,6 +6831,19 @@
         "4-rebuild-redeploy",
         "5-verify-record",
         "escalation"
+      ]
+    },
+    "docs/runbooks/pr-delivery-postmortem.md": {
+      "publicHref": "/runbooks/pr-delivery-postmortem/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "pr-delivery-post-mortem-routine",
+        "trigger",
+        "capture",
+        "route-learnings",
+        "pr-3480-reference-pattern"
       ]
     },
     "docs/security/2026-05-24-shift-left-rollout.md": {

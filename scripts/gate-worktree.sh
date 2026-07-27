@@ -14,6 +14,7 @@ POLL_SECONDS="${DPF_GATE_POLL_SECONDS:-10}"
 EXPIRES_MINUTES="${DPF_GATE_EXPIRES_MINUTES:-60}"
 PUSH_BRANCH=0
 DRY_RUN=0
+FINALIZE_EVIDENCE=0
 LOCAL_CI_COMMAND="${DPF_LOCAL_CI_COMMAND:-}"
 ALLOW_STUB="${DPF_ALLOW_LOCAL_CI_STUB:-0}"
 URL="${DPF_LOCAL_CI_URL:-http://localhost:3010}"
@@ -29,6 +30,9 @@ lease_events_file=""
 lease_fence_file=""
 local_fence_file=""
 local_fence_token=""
+METADATA_FILE=""
+PENDING_EVIDENCE_FILE=""
+FULL_LOG_FILE=""
 
 usage() {
   cat <<'EOF'
@@ -48,6 +52,7 @@ Options:
   --push                     Push before claiming the lease (legacy/explicit publication mode)
   --no-push                  Do not push before claiming the lease (default)
   --dry-run                  Print planned actions; skip git push and MCP calls
+  --finalize-evidence        Publish a pending local-CI evidence record without rerunning the gate
   --help                     Show this help
 
 Environment:
@@ -122,7 +127,10 @@ terminate_process_tree() {
 
 stop_heartbeat() {
   if [ -n "$heartbeat_pid" ]; then
-    kill "$heartbeat_pid" 2>/dev/null || true
+    # The monitor normally sleeps for hundreds of seconds between renewals.
+    # Kill its child sleep first so a completed gate never waits for the next
+    # heartbeat tick (which previously inflated Linux contract tests by 20m).
+    terminate_process_tree "$heartbeat_pid"
     wait "$heartbeat_pid" 2>/dev/null || true
     heartbeat_pid=""
   fi
@@ -154,6 +162,8 @@ write_state() {
   expires_at_value="$5"
   resilience_json="${6:-null}"
   lease_events_json="${7:-[]}"
+  evidence_pending="${8:-false}"
+  pending_reason="${9:-}"
   mkdir -p "$(dirname "$STATE_FILE")"
   node -e '
 const fs = require("node:fs");
@@ -172,8 +182,106 @@ const payload = {
   recordedAt: new Date().toISOString()
 };
 if (resilience) payload.resilience = resilience;
+payload.evidencePending = process.argv[11] === "true";
+if (payload.evidencePending) payload.evidencePendingReason = process.argv[12] || "unknown";
 fs.writeFileSync(out, JSON.stringify(payload, null, 2) + "\n");
-' "$STATE_FILE" "$BRANCH" "$SHA" "$gate_passed" "$lease_id" "$evidence_id" "$status" "$expires_at_value" "$resilience_json" "$lease_events_json"
+' "$STATE_FILE" "$BRANCH" "$SHA" "$gate_passed" "$lease_id" "$evidence_id" "$status" "$expires_at_value" "$resilience_json" "$lease_events_json" "$evidence_pending" "$pending_reason"
+}
+
+preflight_quiescence() {
+  response="$(mcp_call get_quiescence_status "{}" 2>/dev/null | extract_tool_result 2>/dev/null || true)"
+  [ -n "$response" ] || return 0
+  success="$(printf '%s' "$response" | field success)"
+  [ "$success" = "true" ] || return 0
+  level="$(printf '%s' "$response" | field data.level)"
+  writes_refused="$(printf '%s' "$response" | field data.writesRefused)"
+  retry_after="$(printf '%s' "$response" | field data.retryAfterSeconds)"
+  [ -n "$retry_after" ] || retry_after=30
+  if [ "$level" != "" ] && [ "$level" != "normal" ]; then
+    write_state false "" "" "blocked_quiescence" "$expires_at" "null" "[]" false ""
+    printf '%s\n' "gate-worktree: portal is ${level}; local-CI evidence writes are currently refused. Retry after ${retry_after}s." >&2
+    printf '%s\n' "gate-worktree: no expensive local-CI command was run; call get_quiescence_status for drain blockers." >&2
+    exit 4
+  fi
+  if [ "$writes_refused" = "true" ]; then
+    write_state false "" "" "blocked_quiescence" "$expires_at" "null" "[]" false ""
+    printf '%s\n' "gate-worktree: portal quiescence status reports writesRefused=true. Retry after ${retry_after}s." >&2
+    exit 4
+  fi
+}
+
+preflight_leases() {
+  response="$(mcp_call list_nonprod_environment_leases "{}" 2>/dev/null | extract_tool_result 2>/dev/null || true)"
+  [ -n "$response" ] || return 0
+  printf '%s' "$response" | node -e '
+const fs = require("node:fs");
+let payload;
+try { payload = JSON.parse(fs.readFileSync(0, "utf8")); } catch { process.exit(0); }
+const leases = payload?.data?.leases || payload?.leases || [];
+const active = Array.isArray(leases)
+  ? leases.filter((l) => (l.environmentKey || l.environment || l.key) === "local-integration-ci")
+  : [];
+if (active.length > 0) {
+  console.error(`gate-worktree: preflight sees ${active.length} active local-integration-ci lease(s); claim will queue if busy.`);
+}
+' || true
+}
+
+preflight_main_freshness() {
+  if "$GIT_BIN" rev-parse --verify origin/main >/dev/null 2>&1; then
+    behind="$("$GIT_BIN" rev-list --count HEAD..origin/main 2>/dev/null || printf '0')"
+    if [ "$behind" != "0" ]; then
+      printf '%s\n' "gate-worktree: preflight warning: HEAD is ${behind} commit(s) behind origin/main; local-ci-runner will merge the current base before expensive gates." >&2
+    fi
+  fi
+}
+
+write_pending_evidence() {
+  reason="$1"
+  retry_after="$2"
+  mkdir -p "$(dirname "$PENDING_EVIDENCE_FILE")"
+  node -e '
+const fs = require("node:fs");
+const out = process.argv[1];
+const recordArgs = JSON.parse(process.argv[2]);
+const payload = {
+  schema: "dpf-local-ci-pending-evidence/v1",
+  branch: process.argv[3],
+  sha: process.argv[4],
+  expiresAt: process.argv[5],
+  reason: process.argv[6],
+  retryAfterSeconds: Number(process.argv[7] || 30),
+  recordedAt: new Date().toISOString(),
+  recordArgs
+};
+fs.writeFileSync(out, JSON.stringify(payload, null, 2) + "\n");
+' "$PENDING_EVIDENCE_FILE" "$evidence_args" "$BRANCH" "$SHA" "$expires_at" "$reason" "$retry_after"
+}
+
+finalize_pending_evidence() {
+  [ -f "$PENDING_EVIDENCE_FILE" ] || die "no pending local-CI evidence file found at $PENDING_EVIDENCE_FILE"
+  preflight_quiescence
+  pending_json="$(cat "$PENDING_EVIDENCE_FILE")"
+  pending_branch="$(printf '%s' "$pending_json" | field branch)"
+  pending_sha="$(printf '%s' "$pending_json" | field sha)"
+  [ "$pending_branch" = "$BRANCH" ] || die "pending evidence branch mismatch: $pending_branch != $BRANCH"
+  [ "$pending_sha" = "$SHA" ] || die "pending evidence sha mismatch: $pending_sha != $SHA"
+  record_args="$(printf '%s' "$pending_json" | node -e '
+const fs = require("node:fs");
+const payload = JSON.parse(fs.readFileSync(0, "utf8"));
+process.stdout.write(JSON.stringify(payload.recordArgs));
+')"
+  evidence_response="$(mcp_call record_local_integration_result "$record_args" | extract_tool_result)"
+  evidence_success="$(printf '%s' "$evidence_response" | field success)"
+  if [ "$evidence_success" != "true" ]; then
+    die "failed to record pending local-CI evidence: $evidence_response"
+  fi
+  evidence_id="$(printf '%s' "$evidence_response" | field entityId)"
+  pending_expires_at="$(printf '%s' "$pending_json" | field expiresAt)"
+  [ -n "$pending_expires_at" ] || pending_expires_at="$expires_at"
+  write_state true "" "$evidence_id" "passed" "$pending_expires_at" "null" "[]" false ""
+  rm -f "$PENDING_EVIDENCE_FILE"
+  printf '%s\n' "recorded pending local-CI evidence: $evidence_id"
 }
 
 while [ "$#" -gt 0 ]; do
@@ -191,6 +299,7 @@ while [ "$#" -gt 0 ]; do
     --push) PUSH_BRANCH=1; shift ;;
     --no-push) PUSH_BRANCH=0; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
+    --finalize-evidence) FINALIZE_EVIDENCE=1; shift ;;
     --help|-h) usage; exit 0 ;;
     --) shift ;;
     *) die "unknown option: $1" ;;
@@ -206,6 +315,8 @@ STATE_FILE="$("$GIT_BIN" rev-parse --git-path dpf-local-ci-gate.json)"
 METADATA_FILE="$("$GIT_BIN" rev-parse --git-path dpf-local-ci-metadata.json)"
 git_common_dir="$("$GIT_BIN" rev-parse --git-common-dir)"
 local_fence_file="${DPF_LOCAL_SANDBOX_FENCE_PATH:-$(node -e 'const p=require("node:path"); process.stdout.write(p.resolve(process.argv[1], process.argv[2], "dpf-local-ci-owner.json"))' "$WORKTREE_PATH" "$git_common_dir")}"
+PENDING_EVIDENCE_FILE="$("$GIT_BIN" rev-parse --git-path dpf-local-ci-pending-evidence.json)"
+FULL_LOG_FILE="$("$GIT_BIN" rev-parse --git-path dpf-local-ci-output.log)"
 
 # Checked-in default (BI-157DC9B2): when no DPF_LOCAL_CI_COMMAND is supplied and
 # the stub is not explicitly allowed, run the non-mutating merge-workspace
@@ -218,6 +329,8 @@ if [ "$DRY_RUN" = "1" ]; then
   printf 'gate-worktree dry-run\n'
   printf 'branch=%s\nsha=%s\nworktree=%s\nremote=%s\nmcpUrl=%s\n' "$BRANCH" "$SHA" "$WORKTREE_PATH" "$REMOTE" "$MCP_URL"
   printf 'metadataFile=%s\n' "$METADATA_FILE"
+  printf 'pendingEvidenceFile=%s\n' "$PENDING_EVIDENCE_FILE"
+  printf 'fullLogFile=%s\n' "$FULL_LOG_FILE"
   if [ "$PUSH_BRANCH" = "1" ]; then
     printf 'pushBeforeLease=true\n'
   else
@@ -234,9 +347,20 @@ if [ "$DRY_RUN" = "1" ]; then
   exit 0
 fi
 
+[ -n "${DPF_MCP_BEARER_TOKEN:-}" ] || die "DPF_MCP_BEARER_TOKEN is required to claim the local-CI lease"
+
+expires_at="$(node -e 'process.stdout.write(new Date(Date.now() + Number(process.argv[1]) * 60000).toISOString())' "$EXPIRES_MINUTES")"
+
+if [ "$FINALIZE_EVIDENCE" = "1" ]; then
+  finalize_pending_evidence
+  exit 0
+fi
+
 [ -n "$LOCAL_CI_COMMAND" ] || [ "$ALLOW_STUB" = "1" ] || die "local-CI gate runner is not wired (scripts/local-ci-runner.sh is missing); refusing to record passing stub evidence. Set DPF_LOCAL_CI_COMMAND to the canonical sandbox command, or use DPF_ALLOW_LOCAL_CI_STUB=1 only in contract tests."
 
-[ -n "${DPF_MCP_BEARER_TOKEN:-}" ] || die "DPF_MCP_BEARER_TOKEN is required to claim the local-CI lease"
+preflight_quiescence
+preflight_leases
+preflight_main_freshness
 
 if [ "$PUSH_BRANCH" = "1" ]; then
   # DPF_PREPUSH_GATE_INFLIGHT: this push is part of the gate run itself — the
@@ -302,7 +426,9 @@ gate_passed=false
 evidence_id=""
 status="failed"
 gate_command_label=""
-gate_output_file="$(mktemp)"
+gate_output_file="$FULL_LOG_FILE"
+mkdir -p "$(dirname "$gate_output_file")"
+: >"$gate_output_file"
 lease_events_file="$(mktemp)"
 lease_fence_file="$(mktemp)"
 gate_output=""
@@ -379,7 +505,7 @@ process.stdout.write(JSON.stringify(rows));
 
 cat "$gate_output_file"
 gate_output="$(tail -c 12000 "$gate_output_file" 2>/dev/null || cat "$gate_output_file")"
-rm -f "$gate_output_file"
+failure_summary_json="$(node "$SCRIPT_DIR/lib/local-ci-failure-summary.mjs" "$gate_output_file" 2>/dev/null || printf '%s' '{"schema":"dpf-local-ci-failure-summary/v1","failedTests":[],"failedChecks":[],"omittedFailureLineCount":0,"truncated":false}')"
 
 # Sandbox freshness classification (BI-ECDF9520): the preflight (run inside the
 # gate command) writes a report next to the git dir. A red/missing-freshness
@@ -433,12 +559,14 @@ const fs = require("node:fs");
 const outcome = JSON.parse(process.argv[11]);
 const resilience = JSON.parse(process.argv[16]);
 const leaseEvents = JSON.parse(process.argv[17]);
+const failureSummary = JSON.parse(process.argv[18]);
 let contentMetadata = null;
 try { contentMetadata = JSON.parse(fs.readFileSync(process.argv[14], "utf8")); } catch {}
 const evidence = {
   bi: "BI-166C59F3",
   resilienceBi: "BI-76551B2D",
   freshnessBi: "BI-ECDF9520",
+  impactedTestRecommendationBi: "BI-A4EC0EA6",
   phase: 1,
   leaseId: process.argv[3],
   leaseEvents,
@@ -451,10 +579,17 @@ const evidence = {
   content: contentMetadata,
   gatePassed: outcome.gatePassed,
   freshness: outcome.freshness,
+  impactedTests: {
+    recommendationBacklogItem: "BI-A4EC0EA6",
+    status: "deferred_to_code_graph_recommender",
+    note: "Local-CI records the handoff; graph-backed impacted-test selection remains owned by BI-A4EC0EA6."
+  },
   commands: [process.argv[7]],
   buildCommand: process.argv[7],
   buildExitCode: Number(process.argv[12]),
   output: process.argv[8],
+  fullLogFile: process.argv[19],
+  failureSummary,
   url: process.argv[6]
 };
 process.stdout.write(JSON.stringify({
@@ -465,9 +600,10 @@ process.stdout.write(JSON.stringify({
   mode: "single-branch",
   status: outcome.status,
   summary: outcome.summary,
-  evidence
+  evidence,
+  failureSummary
 }));
-' "$status" "$gate_passed" "$lease_id" "$BRANCH" "$SHA" "$URL" "$gate_command_label" "$gate_output" "$OWNER_PROVIDER" "$OWNER_SESSION_ID" "$outcome_json" "$gate_status" "$PUSH_BRANCH" "$METADATA_FILE" "$expires_at" "$resilience_json" "$lease_events_json")"
+' "$status" "$gate_passed" "$lease_id" "$BRANCH" "$SHA" "$URL" "$gate_command_label" "$gate_output" "$OWNER_PROVIDER" "$OWNER_SESSION_ID" "$outcome_json" "$gate_status" "$PUSH_BRANCH" "$METADATA_FILE" "$expires_at" "$resilience_json" "$lease_events_json" "$failure_summary_json" "$FULL_LOG_FILE")"
 evidence_response="$(mcp_call record_local_integration_result "$evidence_args" | extract_tool_result)"
 evidence_success="$(printf '%s' "$evidence_response" | field success)"
 if [ "$evidence_success" != "true" ] && [ "$status" = "blocked_sandbox_drift" ]; then
@@ -491,11 +627,23 @@ fi
 if [ "$evidence_success" = "true" ]; then
   evidence_id="$(printf '%s' "$evidence_response" | field entityId)"
 else
-  write_state false "$lease_id" "" "failed" "$expires_at" "$resilience_json" "$lease_events_json"
+  evidence_error="$(printf '%s' "$evidence_response" | field error)"
+  [ -n "$evidence_error" ] || evidence_error="$(printf '%s' "$evidence_response" | field data.error)"
+  if [ "$gate_passed" = "true" ] && [ "$evidence_error" = "portal_quiescing" ]; then
+    retry_after="$(printf '%s' "$evidence_response" | field data.retryAfterSeconds)"
+    [ -n "$retry_after" ] || retry_after="$(printf '%s' "$evidence_response" | field retryAfterSeconds)"
+    [ -n "$retry_after" ] || retry_after=30
+    write_pending_evidence "$evidence_error" "$retry_after"
+    write_state true "$lease_id" "" "$status" "$expires_at" "$resilience_json" "$lease_events_json" true "$evidence_error"
+    printf '%s\n' "gate-worktree: local-CI gate passed but evidence recording is pending because the portal is quiescing." >&2
+    printf '%s\n' "gate-worktree: the lease is released; rerun pnpm run pregate -- --finalize-evidence --branch '$BRANCH' --sha '$SHA' --worktree '$WORKTREE_PATH' after quiescence clears." >&2
+    exit 4
+  fi
+  write_state false "$lease_id" "" "failed" "$expires_at" "$resilience_json" "$lease_events_json" false ""
   die "failed to record local integration evidence: $evidence_response"
 fi
 
-write_state "$gate_passed" "$lease_id" "$evidence_id" "$status" "$expires_at" "$resilience_json" "$lease_events_json"
+write_state "$gate_passed" "$lease_id" "$evidence_id" "$status" "$expires_at" "$resilience_json" "$lease_events_json" false ""
 
 if [ "$gate_passed" = "true" ]; then
   printf '%s\n' "gate passed"

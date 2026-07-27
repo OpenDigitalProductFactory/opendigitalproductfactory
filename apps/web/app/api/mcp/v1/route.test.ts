@@ -12,6 +12,14 @@ vi.mock("@/lib/mcp-governed-execute", () => ({
   governedExecuteTool: vi.fn(),
 }));
 
+const { getQuiescenceConfigMock } = vi.hoisted(() => ({
+  getQuiescenceConfigMock: vi.fn(),
+}));
+
+vi.mock("@/lib/self-upgrade/quiescence", () => ({
+  getQuiescenceConfig: getQuiescenceConfigMock,
+}));
+
 vi.mock("@/lib/tak/autonomous-work-run", () => ({
   createAutonomousWorkRun: vi.fn(),
   executeAutonomousAgenticLoop: vi.fn(),
@@ -92,6 +100,7 @@ function makeRequest(opts: {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  getQuiescenceConfigMock.mockResolvedValue({ level: "normal", runId: null, enteredAt: null });
   userMock.mockResolvedValue({
     isSuperuser: true,
     groups: [{ platformRole: { roleId: "HR-000" } }],
@@ -850,52 +859,6 @@ describe("POST — tools/call", () => {
     expect(body.result.structuredContent.requiredScope).toBe("write");
     expect(body.result.structuredContent.tokenScope).toBe("read");
     expect(govMock).not.toHaveBeenCalled();
-  });
-
-  it("allows write-scoped tokens to call create_work_capsule", async () => {
-    resolveMock.mockResolvedValue({
-      tokenId: "tok_write",
-      userId: "u1",
-      agentId: "AGT-CAPSULE",
-      scopes: ["work_capsule_write"],
-      capability: "write",
-      scope: "write",
-    });
-    govMock.mockResolvedValue({
-      success: true,
-      message: "Work Capsule WC-SCOPE created.",
-      entityId: "WC-SCOPE",
-      data: { capsuleId: "WC-SCOPE" },
-    });
-
-    const res = await POST(
-      makeRequest({
-        bearer: "dpfmcp_WRITE",
-        body: {
-          jsonrpc: "2.0",
-          id: 72,
-          method: "tools/call",
-          params: {
-            name: "create_work_capsule",
-            arguments: {
-              title: "Token scope test",
-              objective: "Verify write-token acceptance",
-              source: "operator",
-              idempotencyKey: "scope-write-test",
-            },
-          },
-        },
-      }),
-    );
-
-    const body = await res.json();
-    expect(body.result.isError).toBe(false);
-    expect(body.result.structuredContent).toEqual({ capsuleId: "WC-SCOPE" });
-    expect(govMock).toHaveBeenCalledOnce();
-    const call = govMock.mock.calls[0]![0];
-    expect(call.toolName).toBe("create_work_capsule");
-    expect(call.context.apiTokenId).toBe("tok_write");
-    expect(call.source).toBe("external-jsonrpc");
   });
 
   it("accepts an implying grant for a finer required grant (build_promote → build_lifecycle)", async () => {

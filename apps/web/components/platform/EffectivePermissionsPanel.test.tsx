@@ -110,4 +110,24 @@ describe("EffectivePermissionsPanel", () => {
     expect(html).toContain("3 current");
     expect(html).toContain("1 pending");
   });
+
+  it("applies the release-plan grant contract to quiescence status", () => {
+    const html = renderToStaticMarkup(
+      <EffectivePermissionsPanel
+        agents={[{ agentId: "observer", agentName: "Observer", grants: [] }]}
+        roles={[{ roleId: "HR-000", roleName: "CDIO" }]}
+        tools={[
+          {
+            toolName: "get_quiescence_status",
+            description: "Read quiescence status",
+            requiredCapability: null,
+            sideEffect: false,
+          },
+        ]}
+        permissions={{}}
+      />,
+    );
+
+    expect(html).toContain("0 of 1 tools available");
+  });
 });

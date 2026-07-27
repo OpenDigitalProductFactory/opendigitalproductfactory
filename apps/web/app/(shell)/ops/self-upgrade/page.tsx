@@ -125,8 +125,7 @@ export default async function SelfUpgradePage() {
       <div className="mb-6">
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Self-Upgrade</h1>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
-          Keep your platform up to date. Here&apos;s the plain-language status; technical
-          controls and history are under Advanced.
+          Upgrade status.
         </p>
       </div>
 
@@ -165,7 +164,7 @@ export default async function SelfUpgradePage() {
         >
           Deploy controls &amp; history
           <span className="ml-2 text-xs font-normal text-[var(--dpf-muted)]">
-            Run logs, runtime and security checks
+            Details
           </span>
         </summary>
 

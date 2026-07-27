@@ -182,6 +182,7 @@ describe("self-upgrade tool pack", () => {
       "request_self_upgrade",
       "repair_promoter_image",
       "get_self_upgrade_queue_status",
+      "get_quiescence_status",
     ]);
     for (const def of selfUpgradePack.definitions) {
       expect(selfUpgradePack.handlers[def.name], def.name).toBeTypeOf("function");

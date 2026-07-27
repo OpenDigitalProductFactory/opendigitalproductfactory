@@ -24,6 +24,7 @@ import { verifyMcpSessionToken } from "@/lib/mcp/session-token";
 import { governedExecuteTool } from "@/lib/mcp-governed-execute";
 import { PLATFORM_TOOLS, resolveAnnotations, type ToolDefinition } from "@/lib/mcp-tools";
 import { submitRemoteCoworkerTask } from "@/lib/mcp-task-submit";
+import { getQuiescenceConfig } from "@/lib/self-upgrade/quiescence";
 import { getToolGrantMapping, expandGrants } from "@/lib/tak/agent-grants";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
 import { resolveMcpToolTier, selectToolsByTier, type McpToolTier } from "@/lib/mcp/tool-tier";
@@ -75,6 +76,12 @@ type JsonRpcResponse =
       id: JsonRpcId;
       error: { code: number; message: string; data?: unknown };
     };
+
+type McpToolsCallResult = {
+  content: { type: "text"; text: string }[];
+  structuredContent?: unknown;
+  isError: boolean;
+};
 
 function jsonResponse(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
@@ -259,12 +266,69 @@ function tokenScopeSatisfies(actual: McpTokenScope, required: McpTokenScope): bo
   return actual === "admin";
 }
 
+const QUIESCENCE_SAFE_SIDE_EFFECT_TOOLS = new Set([
+  // Releasing a lease is cleanup, and is what prevents quiescence-blocked
+  // local-CI evidence writes from leaking scarce nonprod environments.
+  "release_nonprod_environment_lease",
+]);
+
+function isToolAllowedDuringQuiescence(toolName: string, tool: ToolDefinition | undefined): boolean {
+  if (toolName === "get_quiescence_status") return true;
+  if (tool?.sideEffect === false) return true;
+  return QUIESCENCE_SAFE_SIDE_EFFECT_TOOLS.has(toolName);
+}
+
+async function quiescenceRefusalResult(
+  toolName: string,
+  tool: ToolDefinition | undefined,
+): Promise<McpToolsCallResult | null> {
+  if (isToolAllowedDuringQuiescence(toolName, tool)) return null;
+  const config = await getQuiescenceConfig();
+  if (config.level === "normal") return null;
+
+  const data = {
+    error: "portal_quiescing",
+    toolName,
+    level: config.level,
+    runId: config.runId,
+    enteredAt: config.enteredAt,
+    retryAfterSeconds: 30,
+    retryable: true,
+    writesRefused: true,
+    readOperationsAllowed: true,
+    cleanupOperationsAllowed: [...QUIESCENCE_SAFE_SIDE_EFFECT_TOOLS],
+    implications:
+      "Mutating MCP writes are refused while the portal is quiescing. Retry after quiescence clears; cleanup-safe lease release remains available.",
+  };
+  return {
+    content: [
+      {
+        type: "text",
+        text: JSON.stringify(
+          {
+            success: false,
+            error: "portal_quiescing",
+            message:
+              `Mutating MCP write refused during ${config.level}. ` +
+              `Run get_quiescence_status for blockers and retry after ${data.retryAfterSeconds}s.`,
+            data,
+          },
+          null,
+          2,
+        ),
+      },
+    ],
+    structuredContent: data,
+    isError: true,
+  };
+}
+
 function insufficientScopeResult(
   toolName: string,
   tokenScope: McpTokenScope,
   requiredScope: McpTokenScope,
   requiredGrants: readonly string[],
-) {
+): McpToolsCallResult {
   return {
     content: [
       {
@@ -410,6 +474,11 @@ async function handleToolsCall(
       ],
       isError: true,
     });
+  }
+
+  const quiescenceRefusal = await quiescenceRefusalResult(toolName, toolDef);
+  if (quiescenceRefusal) {
+    return jsonRpcOk(id, quiescenceRefusal);
   }
 
   const userContext = await loadUserContext(token.userId);
