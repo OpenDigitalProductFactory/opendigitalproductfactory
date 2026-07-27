@@ -11,6 +11,9 @@ export type InferenceDataClass =
   | "student-records"
   | "legal-privileged"
   | "security-logs"
+  | "criminal-justice"
+  | "safety-sensitive"
+  | "youth-sensitive"
   | "public-sector-records"
   | "regulated-decisioning"
   | "source-code"
@@ -72,6 +75,8 @@ export type InferenceDataScreenReceipt = {
   transformation: InferencePayloadReceipt["transformation"];
   explanationCodes: string[];
   obligationKinds: string[];
+  /** Present for policy-pack-aware screens; absent on pre-pack v1 receipts. */
+  policyPackVersions?: string[];
   rawPayloadStored: false;
 };
 

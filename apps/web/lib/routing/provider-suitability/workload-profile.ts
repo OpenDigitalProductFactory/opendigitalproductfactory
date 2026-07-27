@@ -6,14 +6,14 @@ import type {
 } from "@/lib/govern/data/taxonomy";
 import type { AiWorkloadClassKey, AiWorkloadDataProfile } from "./types";
 
-type WorkloadBinding = {
+export type AiWorkloadDataBinding = {
   assetId: DataAssetId;
   sensitivity: DataSensitivity;
   categories: DataCategory[];
   residencyClass: ResidencyClassKey;
 };
 
-const WORKLOAD_BINDINGS: Readonly<Record<AiWorkloadClassKey, WorkloadBinding>> = {
+const WORKLOAD_BINDINGS: Readonly<Record<AiWorkloadClassKey, AiWorkloadDataBinding>> = {
   "public-marketing": {
     assetId: "data:marketing-content",
     sensitivity: "public",
@@ -68,6 +68,24 @@ const WORKLOAD_BINDINGS: Readonly<Record<AiWorkloadClassKey, WorkloadBinding>> =
     categories: ["security-audit", "telemetry"],
     residencyClass: "region-bound",
   },
+  "criminal-justice": {
+    assetId: "data:criminal-justice-record",
+    sensitivity: "restricted",
+    categories: ["identity", "security-audit", "operational"],
+    residencyClass: "local-only",
+  },
+  "safety-sensitive": {
+    assetId: "data:safety-sensitive-record",
+    sensitivity: "restricted",
+    categories: ["identity", "personal-attribute", "operational"],
+    residencyClass: "local-only",
+  },
+  "youth-sensitive": {
+    assetId: "data:youth-sensitive-record",
+    sensitivity: "restricted",
+    categories: ["identity", "contact", "personal-attribute", "content"],
+    residencyClass: "region-bound",
+  },
   "public-sector-records": {
     assetId: "data:public-sector-record",
     sensitivity: "restricted",
@@ -94,13 +112,24 @@ const WORKLOAD_BINDINGS: Readonly<Record<AiWorkloadClassKey, WorkloadBinding>> =
   },
 };
 
+/** One canonical class-to-governed-profile mapping shared by routing and inference. */
+export function aiWorkloadDataBindingFor(
+  workloadClass: AiWorkloadClassKey,
+): AiWorkloadDataBinding {
+  const binding = WORKLOAD_BINDINGS[workloadClass];
+  return {
+    ...binding,
+    categories: [...binding.categories],
+  };
+}
+
 export function deriveAiWorkloadDataProfile(input: {
   workloadClass: AiWorkloadClassKey;
   classificationKnown?: boolean;
   applicableRegulationIds?: string[];
   processingActivityId?: string;
 }): AiWorkloadDataProfile {
-  const binding = WORKLOAD_BINDINGS[input.workloadClass];
+  const binding = aiWorkloadDataBindingFor(input.workloadClass);
   return {
     workloadClass: input.workloadClass,
     assetIds: [binding.assetId],
