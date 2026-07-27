@@ -1,3 +1,8 @@
+import {
+  maskForContext,
+  type ContextMaskAuthority,
+} from "@/lib/govern/data/mask-for-context";
+
 /**
  * Tool-result token-budget guard.
  *
@@ -66,6 +71,8 @@ export type ClampedToolResult = {
   truncated: boolean;
   /** Length of the untruncated serialization (for telemetry). */
   originalChars: number;
+  /** Opaque only; raw token maps never leave the controlled runtime. */
+  rehydrationHandle?: string;
 };
 
 function buildFullText(result: ModelFacingToolResult): string {
@@ -91,12 +98,19 @@ function buildFullText(result: ModelFacingToolResult): string {
  */
 export function clampToolResultForModel(
   result: ModelFacingToolResult,
-  opts?: { maxChars?: number },
+  opts?: { maxChars?: number; contextMask?: ContextMaskAuthority },
 ): ClampedToolResult {
   const maxChars = Math.max(0, opts?.maxChars ?? DEFAULT_TOOL_RESULT_CHAR_CAP);
-  const full = buildFullText(result);
+  const masked = opts?.contextMask ? maskForContext(result, opts.contextMask) : null;
+  const full = buildFullText(masked?.value ?? result);
+  const handle = masked?.rehydrationHandle;
   if (full.length <= maxChars) {
-    return { text: full, truncated: false, originalChars: full.length };
+    return {
+      text: full,
+      truncated: false,
+      originalChars: full.length,
+      ...(handle ? { rehydrationHandle: handle } : {}),
+    };
   }
   const notice =
     `\n…[truncated ${full.length - maxChars} of ${full.length} chars — result exceeds the per-call ` +
@@ -106,5 +120,6 @@ export function clampToolResultForModel(
     text: full.slice(0, keep) + notice,
     truncated: true,
     originalChars: full.length,
+    ...(handle ? { rehydrationHandle: handle } : {}),
   };
 }

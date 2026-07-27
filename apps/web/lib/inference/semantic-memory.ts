@@ -16,6 +16,12 @@ import {
   semanticMemoryLatency,
 } from "@/lib/metrics";
 import type { RouteSensitivity } from "@/lib/tak/agent-sensitivity";
+import {
+  ContextMaskAuthorizationError,
+  ContextMaskCoverageError,
+  maskForContext,
+} from "@/lib/govern/data/mask-for-context";
+import { screenInferencePayload } from "@/lib/inference/data-screening/screen-inference-payload";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -46,16 +52,12 @@ const KNOWN_SENSITIVITIES: readonly RouteSensitivity[] = [
 ];
 
 /**
- * Interim deterministic masking seam for `confidential` content. It is intentionally
- * conservative and pure (same input → same output) so recall stays stable and the
- * seam is unit-testable; field-level protection policy (later BIs) replaces the body
- * without moving the call site. It never introduces randomness or timestamps.
+ * Compatibility facade over the canonical BI-DG-009 transform. The PDP and
+ * classifier select the treatment; this call site never supplies a mask list.
  */
 export function maskConfidentialContent(content: string): string {
-  return content
-    .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, "[email]")
-    .replace(/\b[A-Za-z0-9_-]{32,}\b/g, "[token]")
-    .replace(/\d[\d\s().+-]{4,}\d/g, "[number]");
+  const disposition = resolveConfidentialMemoryMask(content);
+  return disposition.action === "store" ? disposition.storedContent : "";
 }
 
 /**
@@ -72,13 +74,61 @@ export function resolveMemoryStorageDisposition(
     return { action: "block", storedContent: "", payloadClass: "content" };
   }
   if (sensitivity === "confidential") {
-    return {
-      action: "store",
-      storedContent: maskConfidentialContent(content),
-      payloadClass: "masked-content",
-    };
+    return resolveConfidentialMemoryMask(content);
   }
   return { action: "store", storedContent: content, payloadClass: "content" };
+}
+
+function resolveConfidentialMemoryMask(
+  content: string,
+): { action: "store" | "block"; storedContent: string; payloadClass: MemoryPayloadClass } {
+  const screen = screenInferencePayload({
+    messages: [{ role: "user", content }],
+    systemPrompt: "",
+    destinationClass: "derived-index",
+    governedData: [{
+      assetId: "data:agent-conversation",
+      fieldIds: ["data:agent-conversation#content"],
+      classificationKnown: true,
+      sensitivity: "confidential",
+      purpose: SEMANTIC_MEMORY_PURPOSE,
+    }],
+  });
+  const decision = screen.decisions.find(
+    (candidate) =>
+      candidate.effect === "allow-with-obligations" &&
+      candidate.obligations.some((obligation) => obligation.kind === "mask"),
+  );
+  if (!decision) {
+    return { action: "block", storedContent: "", payloadClass: "masked-content" };
+  }
+
+  try {
+    const masked = maskForContext(
+      { messages: [{ role: "user" as const, content }], systemPrompt: "" },
+      {
+        decision,
+        matches: screen.classification.matches,
+        detailUse: "replaceable",
+      },
+    );
+    if (masked.transformation === "none") {
+      return { action: "block", storedContent: "", payloadClass: "masked-content" };
+    }
+    return {
+      action: "store",
+      storedContent: masked.value.messages[0]!.content,
+      payloadClass: "masked-content",
+    };
+  } catch (error) {
+    if (
+      error instanceof ContextMaskAuthorizationError ||
+      error instanceof ContextMaskCoverageError
+    ) {
+      return { action: "block", storedContent: "", payloadClass: "masked-content" };
+    }
+    throw error;
+  }
 }
 
 // ─── Store Conversation Memory ──────────────────────────────────────────────

@@ -373,6 +373,34 @@ describe("routeAndCall activity harness overrides", () => {
     );
   });
 
+  it("never exposes replaceable sensitive canaries to contract inference or provider dispatch", async () => {
+    const rawEmail = "ada@example.com";
+    const result = await routeAndCall(
+      [{ role: "user", content: `Draft a neutral greeting for ${rawEmail}.` }],
+      "Draft a greeting without private identifiers.",
+      "internal",
+      {
+        taskType: "draft",
+        sensitiveDetailUse: "replaceable",
+        persistDecision: false,
+      },
+    );
+
+    const inferPayload = JSON.stringify(mocks.inferContract.mock.calls.at(-1));
+    const dispatchPayload = JSON.stringify(mocks.callWithFallbackChain.mock.calls.at(-1));
+    expect(inferPayload).not.toContain(rawEmail);
+    expect(dispatchPayload).not.toContain(rawEmail);
+    expect(inferPayload).toContain("[DPF_TOKEN_");
+    expect(dispatchPayload).toContain("[DPF_TOKEN_");
+    expect(result.routeDecision.inferenceDataScreenReceipt).toMatchObject({
+      transformation: "tokenized",
+      routeEffect: "allow",
+      classifiedDataClasses: expect.arrayContaining(["customer-records"]),
+      rawPayloadStored: false,
+    });
+    expect(result.rehydrationHandle).toMatch(/^rehydration_/);
+  });
+
   it("intersects screen allowlists with provider suitability and unions denials before routing", async () => {
     mocks.loadProviderSuitabilitySourceContext.mockResolvedValueOnce(localAndCloudSuitabilitySource());
 

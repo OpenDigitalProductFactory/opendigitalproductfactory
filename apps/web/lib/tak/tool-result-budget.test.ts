@@ -5,6 +5,7 @@ import {
   DEFAULT_TOOL_RESULT_CHAR_CAP,
   MCP_ROUTE_TOOL_RESULT_CHAR_CAP,
 } from "./tool-result-budget";
+import type { DataPolicyDecision } from "@/lib/govern/data/policy-decision";
 
 describe("resolveToolResultCharCap", () => {
   it("returns the conservative default when the window is unknown", () => {
@@ -28,6 +29,41 @@ describe("resolveToolResultCharCap", () => {
 });
 
 describe("clampToolResultForModel", () => {
+  it("masks a governed tool result before model-facing serialization", () => {
+    const decision: DataPolicyDecision = {
+      decisionId: "decision-tool-mask",
+      organizationId: "org-test",
+      inputHash: "input",
+      effect: "allow-with-obligations",
+      obligations: [{ kind: "mask", profileId: "default-confidential" }],
+      matchedPolicyVersions: ["confidential-projection-mask@1"],
+      assetVersion: "a1",
+      classificationVersion: "c1",
+      authorityVersion: "auth1",
+      explanationCode: "confidential-masked-before-projection",
+      replay: "single-use",
+    };
+    const out = clampToolResultForModel(
+      { success: true, data: { customerEmail: "ada@example.com" } },
+      {
+        contextMask: {
+          decision,
+          detailUse: "replaceable",
+          matches: [{
+            dataClass: "customer-records",
+            path: "data.customerEmail",
+            reason: "contact-detail",
+            confidence: "deterministic",
+          }],
+        },
+      },
+    );
+
+    expect(out.text).not.toContain("ada@example.com");
+    expect(out.text).toContain("[DPF_TOKEN_");
+    expect(out.rehydrationHandle).toMatch(/^rehydration_/);
+  });
+
   it("passes through a small successful result untouched", () => {
     const out = clampToolResultForModel(
       { success: true, message: "ok", data: { a: 1 } },

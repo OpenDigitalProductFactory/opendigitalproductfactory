@@ -4,7 +4,8 @@
   "affectedCopies": [
     "Prisma-to-EA current-state data-model mirror",
     "RouteDecisionLog governed dispatch evidence",
-    "RouteDecisionLog operator explanation projection"
+    "RouteDecisionLog operator explanation projection",
+    "Runtime-only bounded token maps (ephemeral and never persisted)"
   ],
   "migration": {
     "name": "20260726173000_add_inference_data_screen_receipt",
@@ -14,6 +15,9 @@
     "packages/db/src/provider-suitability-evidence-schema.test.ts",
     "apps/web/lib/inference/routed-inference.activity-overrides.test.ts",
     "apps/web/lib/inference/data-screening/routed-screening.test.ts",
+    "apps/web/lib/govern/data/mask-for-context.test.ts",
+    "apps/web/lib/inference/semantic-memory.test.ts",
+    "apps/web/lib/tak/tool-result-budget.test.ts",
     "apps/web/lib/routing/loader.test.ts",
     "apps/web/lib/routing/fallback-screened-dispatch.test.ts",
     "apps/web/lib/routing/inference-dispatch-guard.test.ts",

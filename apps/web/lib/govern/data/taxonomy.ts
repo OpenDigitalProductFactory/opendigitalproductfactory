@@ -188,6 +188,14 @@ export const ALL_PROJECTION_CLASSES = [
   "content",
 ] as const satisfies readonly ProjectionClass[];
 
+/** Protection already applied before a projection reaches its destination. */
+export type DataProtectionTransformation = "none" | "masked" | "tokenized";
+export const ALL_DATA_PROTECTION_TRANSFORMATIONS = [
+  "none",
+  "masked",
+  "tokenized",
+] as const satisfies readonly DataProtectionTransformation[];
+
 /** Protection profile key — a named encryption/tokenization/masking treatment. */
 export type ProtectionProfileKey =
   | "none"

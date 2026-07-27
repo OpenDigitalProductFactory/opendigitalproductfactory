@@ -129,7 +129,9 @@ That means one connected provider can be available for public marketing copy and
 
 An employee's occupation focuses the explanations and recommendations they see. It does not grant data access, expand coworker or tool authority, or make a blocked provider eligible.
 
-When masking is safe, DPF can replace sensitive details with labels or stable tokens before a public or lower-cost model sees the request, then rehydrate only for the same authorized actor and surface. When the exact value is necessary for correctness, masking is not used as a workaround. The route must use an eligible internal, local, or enterprise provider, or the platform blocks the request with a short explanation and next action.
+When a caller declares that sensitive details are replaceable, the PDP can authorize DPF to omit, redact, partially reveal, tokenize, or aggregate matched values before contract inference, preview construction, memory projection, tool-result serialization, and provider dispatch. The transformed payload is screened again, while its receipt keeps the source data classes, protection state, and current policy versions. Stable tokens have an opaque, short-lived rehydration handle; the token map stays only inside the controlled runtime and is never written to route logs, memory, previews, vector storage, receipts, or exception text.
+
+If the exact value is material to correctness—or the classifier cannot prove a safe transform—DPF does not mask around the restriction. The task remains on an eligible internal, local, or enterprise route, or is blocked with a short explanation and next action. Response rehydration remains masked until the separate actor, role, purpose, and surface authorization gate approves it.
 
 ### Evidence belongs to the connected account
 

@@ -1,6 +1,7 @@
 import type { ChatMessage } from "@/lib/inference/ai-inference";
 import type { DataEffect, DestinationClass } from "@/lib/govern/data/taxonomy";
 import type { RequestContract } from "@/lib/routing/request-contract";
+import type { DataPolicyDecision } from "@/lib/govern/data/policy-decision";
 
 export type InferenceDataClass =
   | "customer-records"
@@ -77,6 +78,10 @@ export type InferenceDataScreenReceipt = {
 export type InferenceDataScreenResult = {
   routeContext: InferenceDataScreenRouteContext;
   receipt: InferenceDataScreenReceipt;
+  /** Ephemeral classifier evidence used only by the enforcing transform seam. */
+  classification: InferencePayloadClassification;
+  /** Ephemeral PDP decisions; persisted evidence remains the bounded receipt. */
+  decisions: DataPolicyDecision[];
 };
 
 export type GovernedPayloadHint = {
