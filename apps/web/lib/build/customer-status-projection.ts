@@ -36,6 +36,8 @@ export interface BuildStudioCustomerStatus {
   worker: string;
   /** Plain evidence behind the status, safe for customer/operator display. */
   evidence: string;
+  /** Contributor diagnostics, rendered only behind progressive disclosure. */
+  technicalEvidence?: string;
   /** One concrete next action that moves the work forward. */
   nextAction: string;
   /** The accountable owner for the next action. */
@@ -201,9 +203,16 @@ export function projectBuildStudioCustomerStatus(args: {
   if (delivery) {
     const base = {
       whatIsBeingBuilt: args.build.title,
-      evidence: delivery.lastObservedHeadSha
-        ? `Delivery evidence is current at ${delivery.lastObservedHeadSha.slice(0, 12)}.`
+      evidence: delivery.lastObservedAt
+        ? "Build Studio checked the current delivery state."
         : "Build Studio is gathering current delivery evidence.",
+      technicalEvidence: [
+        `PR #${delivery.prNumber}`,
+        delivery.lastObservedHeadSha ? `head ${delivery.lastObservedHeadSha.slice(0, 12)}` : null,
+        `observations ${delivery.reconciliationAttempts}`,
+        `stale updates ${delivery.staleUpdateAttempts}`,
+        delivery.lastError ? `last result ${delivery.lastError}` : null,
+      ].filter(Boolean).join(" · "),
     };
     switch (delivery.status) {
       case "created":

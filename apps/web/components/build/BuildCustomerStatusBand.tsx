@@ -30,6 +30,12 @@ export function BuildCustomerStatusBand({ status }: { status: BuildStudioCustome
           <p className="m-0 mt-0.5 text-[11px] leading-relaxed text-[var(--dpf-muted)]">
             Owner: {status.owner}
           </p>
+          {status.technicalEvidence && (
+            <details className="mt-1 text-[11px] text-[var(--dpf-muted)]">
+              <summary className="cursor-pointer text-[var(--dpf-accent)]">Technical delivery details</summary>
+              <p className="m-0 mt-1 font-mono leading-relaxed">{status.technicalEvidence}</p>
+            </details>
+          )}
         </div>
         {status.needsYou && (
           <span className={NEEDS_YOU_PILL} data-testid="build-customer-status-needs-you">

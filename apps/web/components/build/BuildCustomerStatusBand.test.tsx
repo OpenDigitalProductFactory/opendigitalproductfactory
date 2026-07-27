@@ -25,6 +25,27 @@ describe("BuildCustomerStatusBand", () => {
     expect(html).toContain("Work in progress");
   });
 
+  it("keeps technical PR evidence behind progressive disclosure", () => {
+    const html = renderToStaticMarkup(
+      <BuildCustomerStatusBand
+        status={{
+          whatIsBeingBuilt: "Recover delivery",
+          lifecyclePosition: "Merge queued",
+          worker: "Repository merge queue",
+          evidence: "Build Studio checked the current delivery state.",
+          technicalEvidence: "PR #42 · head abc123 · observations 2",
+          nextAction: "wait for the protected merge queue to finish.",
+          owner: "Build Studio",
+          needsYou: false,
+        }}
+      />,
+    );
+    expect(html).toContain("<details");
+    expect(html).not.toContain("<details open");
+    expect(html).toContain("Technical delivery details");
+    expect(html).toContain("PR #42");
+  });
+
   it("renders evidence, next action, and owner for operational closeout", () => {
     const html = renderToStaticMarkup(<BuildCustomerStatusBand status={status()} />);
     expect(html).toContain("Evidence:");
