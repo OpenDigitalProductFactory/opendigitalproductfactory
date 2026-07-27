@@ -233,7 +233,10 @@ export const AI_ROUTING_STAGES: readonly AiRoutingStage[] = [
     technicalName: "Fresh response-rehydration authorization",
     lane: "response-authorization",
     bpmnTypeSlug: "bpmn_exclusive_gateway",
-    source: PROPOSED_SENSITIVE_ROUTING("Masking And Rehydration"),
+    source: IMPLEMENTED(
+      "apps/web/lib/govern/data/response-rehydration.ts",
+      "rehydrateResponse",
+    ),
   },
   {
     id: "return-masked-response",
@@ -241,7 +244,10 @@ export const AI_ROUTING_STAGES: readonly AiRoutingStage[] = [
     technicalName: "Protected response",
     lane: "response-authorization",
     bpmnTypeSlug: "bpmn_end_event",
-    source: PROPOSED_SENSITIVE_ROUTING("Masking And Rehydration"),
+    source: IMPLEMENTED(
+      "apps/web/lib/govern/data/response-rehydration.ts",
+      "rehydrateResponse",
+    ),
   },
   {
     id: "return-authorized-response",
@@ -249,7 +255,10 @@ export const AI_ROUTING_STAGES: readonly AiRoutingStage[] = [
     technicalName: "Authorized response delivery",
     lane: "response-authorization",
     bpmnTypeSlug: "bpmn_end_event",
-    source: PROPOSED_SENSITIVE_ROUTING("Masking And Rehydration"),
+    source: IMPLEMENTED(
+      "apps/web/lib/govern/data/response-rehydration.ts",
+      "rehydrateResponse",
+    ),
   },
 ];
 

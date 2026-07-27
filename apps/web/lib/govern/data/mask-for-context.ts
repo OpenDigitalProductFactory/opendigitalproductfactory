@@ -1,7 +1,11 @@
-import { createHmac, randomBytes } from "node:crypto";
-
 import type { DataPolicyDecision } from "./policy-decision";
 import type { InferencePayloadMatch } from "@/lib/inference/data-screening/types";
+import {
+  createRehydrationToken,
+  storeRehydrationTokenMap,
+  type RehydrationAuthorizationBinding,
+  type StoredRehydrationToken,
+} from "./rehydration-token-vault";
 
 export type ContextTransform =
   | "omit"
@@ -17,6 +21,7 @@ export type ContextMaskAuthority = {
   decision: DataPolicyDecision;
   matches: readonly InferencePayloadMatch[];
   detailUse: SensitiveDetailUse;
+  rehydrationBindings?: readonly RehydrationAuthorizationBinding[];
 };
 
 export type MaskedContext<T> = {
@@ -49,30 +54,11 @@ export class ContextMaskCoverageError extends Error {
   }
 }
 
-const TOKEN_KEY = randomBytes(32);
-const TOKEN_TTL_MS = 5 * 60_000;
-const MAX_TOKEN_MAPS = 1_000;
 const CONTACT_PATTERN =
   /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b|\b(?:\+?1[-.\s]?)?\(?[2-9]\d{2}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/gi;
 const SECRET_PATTERN =
   /\b(?:sk-[A-Za-z0-9_-]{10,}|dpfmcp_[A-Za-z0-9_-]{8,}|Bearer\s+[A-Za-z0-9._-]{12,}|AKIA[0-9A-Z]{12,})\b|-----BEGIN\s+(?:RSA\s+)?PRIVATE KEY-----/gi;
 const FINANCE_IDENTIFIER_PATTERN = /\b\d[\d\s-]{5,}\d\b/g;
-
-type TokenVaultEntry = {
-  expiresAt: number;
-  tokens: ReadonlyMap<string, string>;
-};
-
-const tokenVault = new Map<string, TokenVaultEntry>();
-
-function stableToken(value: string): string {
-  const digest = createHmac("sha256", TOKEN_KEY)
-    .update(value)
-    .digest("hex")
-    .slice(0, 12)
-    .toUpperCase();
-  return `[DPF_TOKEN_${digest}]`;
-}
 
 /**
  * Pure transform primitive. `maskForContext` owns authorization and should be
@@ -93,7 +79,7 @@ export function applyContextTransform(
       return text.length <= 4 ? "[PARTIAL]" : `[PARTIAL:${text.slice(-4)}]`;
     }
     case "tokenize":
-      return stableToken(String(value ?? ""));
+      return createRehydrationToken(String(value ?? ""));
     case "aggregate": {
       const count = Array.isArray(value)
         ? value.length
@@ -138,7 +124,7 @@ export function maskForContext<T>(
     throw new ContextMaskCoverageError([...new Set(unsupported)].sort());
   }
 
-  const tokenMap = new Map<string, string>();
+  const tokenMap = new Map<string, StoredRehydrationToken>();
   const state = { transformedValueCount: 0 };
   const transformed = visitContext(
     value,
@@ -147,10 +133,11 @@ export function maskForContext<T>(
     tokenMap,
     state,
     forcedTransform,
+    authority.rehydrationBindings,
   ) as T;
 
   const rehydrationHandle = tokenMap.size > 0
-    ? storeTokenMap(tokenMap)
+    ? storeRehydrationTokenMap(tokenMap)
     : undefined;
   return {
     value: transformed,
@@ -225,16 +212,29 @@ function visitContext(
   value: unknown,
   path: string,
   matchesByPath: ReadonlyMap<string, readonly InferencePayloadMatch[]>,
-  tokenMap: Map<string, string>,
+  tokenMap: Map<string, StoredRehydrationToken>,
   state: { transformedValueCount: number },
   forcedTransform?: ContextTransform,
+  rehydrationBindings?: readonly RehydrationAuthorizationBinding[],
 ): unknown {
   const pathMatches = matchesByPath.get(path) ?? [];
   if (pathMatches.length > 0 && forcedTransform) {
-    return applyAuthorizedTransform(value, forcedTransform, tokenMap, state);
+    return applyAuthorizedTransform(
+      value,
+      forcedTransform,
+      tokenMap,
+      state,
+      bindingsForPath(path, rehydrationBindings),
+    );
   }
   if (typeof value === "string" && pathMatches.length > 0) {
-    return transformMatchedString(value, pathMatches, tokenMap, state);
+    return transformMatchedString(
+      value,
+      pathMatches,
+      tokenMap,
+      state,
+      bindingsForPath(path, rehydrationBindings),
+    );
   }
 
   if (Array.isArray(value)) {
@@ -246,6 +246,7 @@ function visitContext(
         tokenMap,
         state,
         forcedTransform,
+        rehydrationBindings,
       ),
     );
   }
@@ -271,6 +272,7 @@ function visitContext(
       tokenMap,
       state,
       forcedTransform,
+      rehydrationBindings,
     );
   }
   return output;
@@ -279,23 +281,25 @@ function visitContext(
 function applyAuthorizedTransform(
   value: unknown,
   transform: ContextTransform,
-  tokenMap: Map<string, string>,
+  tokenMap: Map<string, StoredRehydrationToken>,
   state: { transformedValueCount: number },
+  rehydrationBindings: readonly RehydrationAuthorizationBinding[],
 ): unknown {
   if (transform === "pass-through") return value;
   state.transformedValueCount += 1;
   if (transform !== "tokenize") return applyContextTransform(value, transform);
   const raw = typeof value === "string" ? value : JSON.stringify(value);
-  const token = stableToken(raw);
-  tokenMap.set(token, raw);
+  const token = createRehydrationToken(raw);
+  addStoredToken(tokenMap, token, raw, rehydrationBindings);
   return token;
 }
 
 function transformMatchedString(
   value: string,
   matches: readonly InferencePayloadMatch[],
-  tokenMap: Map<string, string>,
+  tokenMap: Map<string, StoredRehydrationToken>,
   state: { transformedValueCount: number },
+  rehydrationBindings: readonly RehydrationAuthorizationBinding[],
 ): string {
   let transformed = value;
   if (matches.some((match) => match.reason === "secret-shaped-token")) {
@@ -306,16 +310,16 @@ function transformMatchedString(
   }
   if (matches.some((match) => match.reason === "contact-detail")) {
     transformed = transformed.replace(CONTACT_PATTERN, (raw) => {
-      const token = stableToken(raw);
-      tokenMap.set(token, raw);
+      const token = createRehydrationToken(raw);
+      addStoredToken(tokenMap, token, raw, rehydrationBindings);
       state.transformedValueCount += 1;
       return token;
     });
   }
   if (matches.some((match) => match.reason === "payment-or-finance-text")) {
     transformed = transformed.replace(FINANCE_IDENTIFIER_PATTERN, (raw) => {
-      const token = stableToken(raw);
-      tokenMap.set(token, raw);
+      const token = createRehydrationToken(raw);
+      addStoredToken(tokenMap, token, raw, rehydrationBindings);
       state.transformedValueCount += 1;
       return token;
     });
@@ -347,20 +351,51 @@ function appendIndex(path: string, index: number): string {
   return `${path}[${index}]`;
 }
 
-function storeTokenMap(tokens: ReadonlyMap<string, string>): string {
-  const now = Date.now();
-  for (const [handle, entry] of tokenVault) {
-    if (entry.expiresAt <= now) tokenVault.delete(handle);
+function addStoredToken(
+  tokenMap: Map<string, StoredRehydrationToken>,
+  token: string,
+  value: string,
+  bindings: readonly RehydrationAuthorizationBinding[],
+): void {
+  const existing = tokenMap.get(token);
+  if (!existing) {
+    tokenMap.set(token, {
+      value,
+      bindings: [...bindings],
+      ...(bindings.length === 0 ? { hasUnboundOccurrence: true } : {}),
+    });
+    return;
   }
-  while (tokenVault.size >= MAX_TOKEN_MAPS) {
-    const oldest = tokenVault.keys().next().value as string | undefined;
-    if (!oldest) break;
-    tokenVault.delete(oldest);
+  // A repeated raw value can occur at multiple governed paths. Every binding is
+  // retained, and the response PEP requires their intersection before release.
+  if (bindings.length === 0) {
+    existing.hasUnboundOccurrence = true;
+    return;
   }
-  const handle = `rehydration_${randomBytes(12).toString("hex")}`;
-  tokenVault.set(handle, {
-    expiresAt: now + TOKEN_TTL_MS,
-    tokens: new Map(tokens),
-  });
-  return handle;
+  for (const binding of bindings) {
+    if (!existing.bindings.some((candidate) => sameBinding(candidate, binding))) {
+      existing.bindings.push(binding);
+    }
+  }
+}
+
+function bindingsForPath(
+  path: string,
+  bindings: readonly RehydrationAuthorizationBinding[] | undefined,
+): RehydrationAuthorizationBinding[] {
+  return (bindings ?? []).filter((binding) =>
+    !binding.pathPrefixes ||
+    binding.pathPrefixes.some((prefix) =>
+      path === prefix ||
+      path.startsWith(`${prefix}.`) ||
+      path.startsWith(`${prefix}[`)
+    )
+  );
+}
+
+function sameBinding(
+  left: RehydrationAuthorizationBinding,
+  right: RehydrationAuthorizationBinding,
+): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
 }

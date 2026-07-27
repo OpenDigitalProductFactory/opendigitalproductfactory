@@ -5,6 +5,7 @@ import {
   rescreenRoutedInferenceWithoutTools,
 } from "./routed-screening";
 import { screenInferencePayload } from "./screen-inference-payload";
+import { readRehydrationTokenMap } from "@/lib/govern/data/rehydration-token-vault";
 
 describe("routed inference screening", () => {
   it("tokenizes replaceable contact data before routing and preserves source classification evidence", () => {
@@ -24,6 +25,55 @@ describe("routed inference screening", () => {
     expect(routed.screen.receipt.obligationKinds).toContain("mask");
     expect(routed.screen.receipt.routeEffect).toBe("allow");
     expect(routed.rehydrationHandle).toMatch(/^rehydration_/);
+  });
+
+  it("binds tokens to caller-owned actor/subject intent and screen-owned governance evidence", () => {
+    const raw = "ada@example.com";
+    const routed = createRoutedInferenceScreen({
+      messages: [{ role: "user", content: `Draft a greeting for ${raw}.` }],
+      systemPrompt: "",
+      taskType: "draft",
+      routeContext: { sensitivity: "public" },
+      sensitiveDetailUse: "replaceable",
+      policyVersionSource: () => ({
+        assetVersion: "asset-v1",
+        classificationVersion: "classification-v1",
+        authorityVersion: "authority-v1",
+        policyBundleVersion: "bundle-v1",
+      }),
+      responseRehydration: {
+        expectedActor: {
+          principalId: "PRN-1",
+          actingHumanUserId: "user-1",
+          actingAgentId: null,
+          delegationGrantId: null,
+        },
+        purpose: "coworker-assistance",
+        surface: "private-customer",
+        subject: { kind: "account", id: "account-1" },
+        pathPrefixes: ["messages"],
+      },
+    });
+
+    const read = readRehydrationTokenMap(routed.rehydrationHandle ?? "");
+    expect(read.status).toBe("available");
+    if (read.status !== "available") return;
+    const stored = [...read.tokens.values()][0];
+    expect(stored?.bindings).toEqual([
+      expect.objectContaining({
+        purpose: "coworker-assistance",
+        surface: "private-customer",
+        subject: { kind: "account", id: "account-1" },
+        pathPrefixes: ["messages"],
+        sensitivity: "confidential",
+        dataClasses: expect.arrayContaining(["customer-records"]),
+        decisionVersions: expect.arrayContaining([
+          expect.objectContaining({
+            classificationVersion: "classification-v1",
+          }),
+        ]),
+      }),
+    ]);
   });
 
   it("keeps material contact data local instead of masking it into a misleading request", () => {
