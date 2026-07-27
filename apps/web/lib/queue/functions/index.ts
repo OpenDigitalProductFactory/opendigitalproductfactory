@@ -95,6 +95,7 @@ import {
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
 import { demandReconciliationScheduled } from "./demand-reconciliation";
 import { workPatternExperimentRun } from "./work-pattern-experiment";
+import { buildPrDeliveryReconcile } from "./build-pr-delivery-reconcile";
 
 export const scheduledFunctions = [
   prometheusPoll,
@@ -149,6 +150,7 @@ export const scheduledFunctions = [
   memoryConsolidationNightly, // BI-907C4327: EP-8C706944 P2 autoDream — nightly batch-dedupe + expire coworker notes / user facts, 04:20
   semanticMemoryReconcileScheduled, // BI-DG-001: EP-DATA-GOVERNANCE — nightly orphan reconciliation of the semantic-memory derived copy, 05:10 (after retention sweep)
   demandReconciliationScheduled, // BI-44AA45BF: trusted-link demand projection, retry, and reconciliation every five minutes
+  buildPrDeliveryReconcile, // BI-7C4FDBF5: exact-SHA Build Studio PR readiness, queue enrollment, and restart recovery
   postmarkCallbackDispatchSweep,
 ];
 

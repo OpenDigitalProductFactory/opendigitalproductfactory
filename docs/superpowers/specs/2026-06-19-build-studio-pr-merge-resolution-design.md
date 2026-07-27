@@ -1,11 +1,26 @@
 # Build Studio PR Merge Resolution — Design
 
-- **Status:** Design / recommendation (not yet ratified). BI-7C4FDBF5, EP-BUILD-STUDIO.
+- **Status:** Ratified through the approved 2026-07-27 implementation plan; implementation in progress under BI-7C4FDBF5, EP-BUILD-STUDIO.
 - **Date:** 2026-06-19
 - **Operator prompt (Mark):** "Build Studio submits PRs that may not merge correctly (e.g. #2122, stuck on conflicts). Research how to best resolve this when the user is non-technical. Is there a precedent?"
 - **Method:** read-only audit of the BS PR path + GitHub-API commit/merge code, cross-checked against the live merge-race observed all of 2026-06-19, plus external precedent research.
 
 ---
+
+## 2026-07-27 current-state correction
+
+The repository now has a protected GitHub merge queue. Build Studio therefore
+does not create a per-portal queue and does not directly merge. The ratified
+implementation uses exact-head readiness, GitHub's compare-and-swap
+`update-branch` operation for a stale head, repository auto-merge/queue
+enrollment for evidence-cleared PRs, and a restart-safe Work Capsule reconciler.
+True textual conflicts escalate with evidence; automatic AI conflict editing is
+outside this prerequisite and requires a separate governed decision.
+
+PR merge is also distinct from deployment. A merged PR waits for governed
+self-upgrade and live-version evidence before the build can become complete.
+The detailed file-level contract and 20% bounded refactoring allocation are in
+`docs/superpowers/plans/2026-07-27-build-studio-pr-readiness-merge-recovery.md`.
 
 ## 1. The failure mode (non-technical customer, dead-ended)
 

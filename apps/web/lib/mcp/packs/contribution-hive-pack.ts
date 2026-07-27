@@ -21,6 +21,10 @@ import {
   resolveActiveBuildId,
 } from "@/lib/mcp/build-tool-helpers";
 import { isLowSeverityReferenceDocProposal } from "@/lib/process-spine/reference-doc-promotion";
+import {
+  finalizeHiveContribution,
+  reconcileHiveContributionDelivery,
+} from "@/lib/mcp/contribution-hive-delivery";
 
 const definitions: ToolDefinition[] = [
   {
@@ -600,28 +604,20 @@ async function contributeToHiveHandler(
     console.warn("[contribute_to_hive] upstream PR creation failed:", err);
   }
 
-  // Update linked ImprovementProposal if exists
-  await prisma.improvementProposal.updateMany({
-    where: { buildId: build.id, contributionStatus: "local" },
-    data: { contributionStatus: "contributed" },
-  }).catch(() => {});
-
-  logBuildActivity(
+  await reconcileHiveContributionDelivery({
     buildId,
-    "contribute_to_hive",
-    prUrl
-      ? `FeaturePack ${packId} created + PR ${prUrl}. ${manifest.totalFiles} files. DCO: ${dcoAttestation}`
-      : `FeaturePack ${packId} created but upstream PR FAILED: ${prError ?? "unknown"}. ${manifest.totalFiles} files. DCO: ${dcoAttestation}`,
-  );
-
-  // Fork disposition has changed — ask the reconciler whether the build
-  // is ready to advance ship → complete. Success and failure both count
-  // as a terminal disposition for the upstream fork (errored is still
-  // terminal); the only state that blocks complete is in_progress.
-  {
-    const { reconcileBuildCompletion } = await import("@/lib/build-flow-state");
-    await reconcileBuildCompletion(buildId).catch(() => {});
-  }
+    prUrl,
+    token: hiveTokenEarly,
+    eligible: securityScan.passed && !prError,
+  });
+  await finalizeHiveContribution({
+    buildId,
+    packId,
+    prUrl,
+    prError,
+    totalFiles: manifest.totalFiles,
+    dcoAttestation,
+  });
 
   if (!prUrl) {
     return {

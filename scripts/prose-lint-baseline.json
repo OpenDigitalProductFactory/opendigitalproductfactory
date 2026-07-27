@@ -3637,7 +3637,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 2
+    "textMass": 5
   },
   "apps/web/components/build/BuildDecisionLedgerBand.tsx": {
     "vocabulary": 0,

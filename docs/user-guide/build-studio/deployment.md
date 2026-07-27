@@ -60,7 +60,7 @@ When your feature is ready to ship, the AI Coworker runs through these steps in 
 3. **Create backlog epic** — Adds the feature to the operations backlog for visibility
 4. **Contribution assessment** — If sharing is enabled, evaluates whether the feature could benefit the wider community. You choose whether to share.
 5. **Documentation evidence** — Confirms that affected user guide, public site, architecture, install/ops, prompt, or contributor docs were updated, or that the build recorded a concrete no-docs-needed reason.
-6. **Pull request and security gates** — Creates a pull request on the codebase with automated security checks: secret detection, backdoor scanning, architecture compliance, dependency audit, and destructive operation scanning. If all checks pass and the build is fully verified, the PR auto-merges. If any check fails, the PR is flagged for human review with details of what needs attention.
+6. **Pull request and security gates** — Creates a pull request on the codebase with automated security checks: secret detection, backdoor scanning, architecture compliance, dependency audit, and destructive operation scanning. Build Studio checks the current PR evidence, safely refreshes a stale branch, and asks the protected merge queue to integrate an eligible change. It never bypasses the queue.
 7. **Deploy** — Checks the deployment window and triggers the governed deployment pipeline described above where promotion is enabled
 
 ## Database Backups
@@ -83,11 +83,22 @@ Every PR goes through four automated checks:
 3. **Architecture compliance** — Verifies files are in the correct directories and imports follow platform conventions
 4. **Dependency audit** — Flags any new packages added to the project for license and security review
 
-### Auto-Merge
+### Autonomous Merge-Queue Delivery
 
-If all four gates pass AND the build has passed TypeCheck, all tests, and all acceptance criteria, the PR is automatically merged using squash merge. The build status updates to "complete."
+If all four gates pass AND the build has passed TypeCheck, all tests, and all acceptance criteria, Build Studio watches the current PR head, waits for repository checks and review threads, and enrolls it in the protected merge queue. If the platform advances while checks run, Build Studio requests a safe branch update and waits for fresh checks.
 
-If any gate finds issues, the PR is created but not merged. The findings are posted as a comment on the PR for human review.
+Build Studio reports these states in plain language:
+
+- **Checking the pull request** — current checks or review evidence are still running
+- **Finalizing against the latest platform** — the branch is being refreshed safely
+- **Merge queued** — the protected repository queue owns the next step
+- **Waiting for governed release** — the PR merged, but the live platform has not advanced yet
+- **Deployed** — governed release evidence proves the change is live
+- **Needs your decision** — a true conflict, closed PR, or bounded recovery limit requires a person
+
+A merged pull request does not make the build complete. Completion waits for the
+governed release and live-version evidence. Build Studio does not directly
+merge, force-push, or silently edit a true conflict.
 
 ### Configuration
 

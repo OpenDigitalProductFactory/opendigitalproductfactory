@@ -8,6 +8,7 @@ vi.mock("@dpf/db", () => ({
     buildActivity:     { findFirst: vi.fn() },
     productVersion:    { findMany: vi.fn() },
     changePromotion:   { updateMany: vi.fn() },
+    workCapsule:       { findFirst: vi.fn() },
   },
 }));
 
@@ -22,6 +23,7 @@ vi.mock("@/lib/self-upgrade/completion", () => ({
 import { prisma } from "@dpf/db";
 import { isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
 import { getBuildFlowState, reconcileBuildCompletion, completeLocalDeliveryBuild } from "./build-flow-state";
+import { createBuildPrDeliveryState, writeBuildPrDeliveryState } from "./build/build-pr-delivery-state";
 
 // ─── Fixture helpers ────────────────────────────────────────────────────────
 
@@ -76,6 +78,23 @@ function mockDevConfig(mode: "fork_only" | "selective" | "contribute_all" = "sel
 
 function mockPack(pack: { packId: string; prUrl: string | null; prNumber: number | null; manifest?: unknown } | null): void {
   vi.mocked(prisma.featurePack.findFirst).mockResolvedValue(pack as never);
+  const manifest = pack?.manifest as { prUrl?: string; prNumber?: number } | undefined;
+  const resolvedPrUrl = pack?.prUrl ?? manifest?.prUrl ?? null;
+  const resolvedPrNumber = pack?.prNumber ?? manifest?.prNumber ?? null;
+  vi.mocked(prisma.workCapsule.findFirst).mockResolvedValue(
+    resolvedPrUrl
+      ? ({
+          workspaceState: writeBuildPrDeliveryState({}, {
+            ...createBuildPrDeliveryState({
+              repository: "org/repo",
+              prNumber: resolvedPrNumber ?? 1,
+              prUrl: resolvedPrUrl,
+            }),
+            status: "awaiting-release",
+          }),
+        } as never)
+      : null,
+  );
 }
 
 function mockActivity(summary: string | null): void {
@@ -189,6 +208,21 @@ describe("getBuildFlowState — upstream PR fork", () => {
     expect(state!.upstream.state).toBe("shipped");
     expect(state!.upstream.prUrl).toBe("https://github.com/org/repo/pull/42");
     expect(state!.upstream.prNumber).toBe(42);
+  });
+
+  it("is still in progress when the PR exists but is only queued", async () => {
+    mockBuild({ phase: "ship" });
+    const prUrl = "https://github.com/org/repo/pull/42";
+    mockPack({ packId: "FP-1", prUrl, prNumber: 42 });
+    vi.mocked(prisma.workCapsule.findFirst).mockResolvedValue({
+      workspaceState: writeBuildPrDeliveryState({}, {
+        ...createBuildPrDeliveryState({ repository: "org/repo", prNumber: 42, prUrl }),
+        status: "queued",
+      }),
+    } as never);
+    const state = await getBuildFlowState("FB-TEST-001");
+    expect(state!.upstream.state).toBe("in_progress");
+    expect(state!.allApplicableForksTerminal).toBe(false);
   });
 
   it("reads prUrl from manifest when the top-level column is null (post-A2)", async () => {

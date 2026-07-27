@@ -16,6 +16,15 @@ When enabled, a build that passes review and reaches the `ship` phase:
    the **platform self-upgrade** (the deploy you already run) — _not_ a per-build
    `dpf-promoter` deploy.
 
+Between steps 1 and 3, Build Studio now owns PR delivery recovery:
+
+- it evaluates checks and unresolved review threads at the PR's exact head SHA;
+- it safely updates a stale branch using GitHub's expected-head comparison;
+- it enrolls an evidence-cleared PR in the repository merge queue;
+- it resumes after portal restarts through versioned Work Capsule state; and
+- it escalates true conflicts, closed PRs, ambiguous state, or exhausted retry
+  budgets without direct merge or force-push.
+
 Completion is handled by a periodic reconciler that runs on boot and every ~10
 minutes (`reconcileDeployedShipBuilds`): for each build sitting at `ship` whose
 merged commit is now in the deployed runtime (`isFeatureBuildDeployed`), it marks
@@ -32,10 +41,17 @@ ideate → plan → build → review → ship → (PR merges + next self-upgrade
 
 ```
 DPF_AUTO_COMPLETE_VERIFIED_BUILDS = "1" | "true" | "on"     # default OFF
+DPF_BUILD_PR_DELIVERY_RECONCILER_MODE = "off" | "shadow" | "enforce"
 ```
 
 Set on the `dpf-portal` container's environment. Unset / anything else = OFF —
 builds reach `ship` and wait for a manual ship, exactly as before.
+
+The delivery reconciler defaults to `shadow`: it records the action it would
+take but does not mutate GitHub. Use `enforce` only after shadow evidence is
+reviewed for the install. `off` disables both observation and actuation. The
+outer autonomous-completion switch still controls whether Build Studio creates
+and resolves the autonomous ship forks.
 
 ## How to turn it on
 
@@ -56,6 +72,12 @@ builds reach `ship` and wait for a manual ship, exactly as before.
 - **Idempotent + non-throwing** — re-runs skip already-pushed PRs and
   already-registered products; any unresolved fork simply parks the build at
   `ship` for an operator.
+- **No direct merge** — the protected repository merge queue remains the
+  integration authority.
+- **Exact-head compare-and-swap** — a concurrent branch update cancels the old
+  decision and triggers a fresh observation.
+- **Merge is not deployment** — merged work displays “Waiting for governed
+  release” until self-upgrade evidence proves it live.
 - **Real artifacts only** — a build reads `complete` only when it genuinely has a
   pushed PR, a product/promotion, and its merged code live in the runtime. It
   never writes a `complete` status without those.

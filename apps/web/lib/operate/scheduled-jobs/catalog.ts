@@ -73,6 +73,18 @@ export interface ScheduledJobCatalogEntry {
 // Ordered roughly by operational prominence. core-locked jobs first.
 export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
+    jobId: "build-pr-delivery-reconcile",
+    inngestId: "build/pr-delivery-reconcile",
+    name: "Build Studio PR delivery reconcile",
+    purpose:
+      "Recovers Build Studio pull requests through exact-head readiness, stale-branch updates, and the protected merge queue without bypassing governed release.",
+    cron: "2,7,12,17,22,27,32,37,42,47,52,57 * * * *",
+    cadence: "Every 5 minutes, offset by 2 minutes",
+    category: "core",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: CODE_GRAPH_JOB_ID, // "code-graph-reconcile"
     inngestId: "ops/code-graph-reconcile-scheduled",
     name: "Code graph reconcile",

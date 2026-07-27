@@ -2,10 +2,41 @@ import { describe, expect, it } from "vitest";
 
 import { projectBuildStudioCustomerStatus } from "./customer-status-projection";
 import { STALLED_BUILD_REAP_MS } from "./inert-build-reaper";
+import { createBuildPrDeliveryState, writeBuildPrDeliveryState } from "./build-pr-delivery-state";
 
 const build = { title: "Add a dark-mode toggle", phase: "build" as const, updatedAt: new Date("2026-07-20T00:00:00Z") };
 
 describe("projectBuildStudioCustomerStatus (BI-BB13B599)", () => {
+  it.each([
+    ["checking", "Checking the pull request", false],
+    ["updating", "Finalizing against the latest platform", false],
+    ["queued", "Merge queued", false],
+    ["awaiting-release", "Waiting for governed release", false],
+    ["deployed", "Deployed", false],
+    ["escalated", "Needs your decision", true],
+    ["closed", "Needs your decision", true],
+  ] as const)("projects delivery state %s honestly", (deliveryStatus, label, needsYou) => {
+    const delivery = {
+      ...createBuildPrDeliveryState({
+        repository: "o/r",
+        prNumber: 42,
+        prUrl: "https://github.com/o/r/pull/42",
+      }),
+      status: deliveryStatus,
+      lastError: deliveryStatus === "escalated" ? "true-merge-conflict" : null,
+    };
+    const status = projectBuildStudioCustomerStatus({
+      build: { ...build, phase: "ship" },
+      capsule: {
+        capsuleId: "WC-1",
+        status: "working",
+        workspaceState: writeBuildPrDeliveryState({}, delivery),
+      },
+    });
+    expect(status.lifecyclePosition).toBe(label);
+    expect(status.needsYou).toBe(needsYou);
+  });
+
   it("derives a plain customer status from the linked capsule (blocked → automated work, needs you)", () => {
     const status = projectBuildStudioCustomerStatus({
       build,

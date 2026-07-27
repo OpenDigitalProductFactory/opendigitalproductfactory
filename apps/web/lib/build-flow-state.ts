@@ -15,6 +15,7 @@ import type { BuildPhase } from "@/lib/feature-build-types";
 import { PHASE_LABELS } from "@/lib/feature-build-types";
 import { isFeatureBuildDeployed } from "@/lib/self-upgrade/completion";
 import { recordReadyDependentsAfterCompletion } from "@/lib/build/feature-build-dependencies";
+import { readBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -332,7 +333,28 @@ async function deriveUpstreamFork(
   }
 
   if (prUrl) {
-    return { state: "shipped", prUrl, prNumber, packId: pack.packId, errorMessage: null };
+    const capsule = await prisma.workCapsule.findFirst({
+      where: {
+        featureBuildId: buildRowId,
+        ...(prNumber ? { pullRequestNumber: prNumber } : {}),
+      },
+      orderBy: { updatedAt: "desc" },
+      select: { workspaceState: true },
+    });
+    const delivery = readBuildPrDeliveryState(capsule?.workspaceState);
+    if (delivery?.status === "awaiting-release" || delivery?.status === "deployed") {
+      return { state: "shipped", prUrl, prNumber, packId: pack.packId, errorMessage: null };
+    }
+    if (delivery?.status === "escalated" || delivery?.status === "closed") {
+      return {
+        state: "errored",
+        prUrl,
+        prNumber,
+        packId: pack.packId,
+        errorMessage: delivery.lastError ?? "Pull request delivery needs a human decision",
+      };
+    }
+    return { state: "in_progress", prUrl, prNumber, packId: pack.packId, errorMessage: null };
   }
 
   // Pack exists but no prUrl — check BuildActivity for a failure record on

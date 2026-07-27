@@ -25,6 +25,7 @@ import { projectWorkCaseState } from "@/lib/work-management/status-projection";
 import type { WorkCaseState } from "@/lib/work-management/case-types";
 import type { BuildPhase } from "@/lib/explore/feature-build-types";
 import { STALLED_BUILD_REAP_MS } from "@/lib/build/inert-build-reaper";
+import { readBuildPrDeliveryState } from "@/lib/build/build-pr-delivery-state";
 
 export interface BuildStudioCustomerStatus {
   /** Plain restatement of what is being built (the build title). */
@@ -35,6 +36,8 @@ export interface BuildStudioCustomerStatus {
   worker: string;
   /** Plain evidence behind the status, safe for customer/operator display. */
   evidence: string;
+  /** Contributor diagnostics, rendered only behind progressive disclosure. */
+  technicalEvidence?: string;
   /** One concrete next action that moves the work forward. */
   nextAction: string;
   /** The accountable owner for the next action. */
@@ -192,10 +195,88 @@ function isActivityStale(args: {
 
 export function projectBuildStudioCustomerStatus(args: {
   build: { title: string; phase: BuildPhase; updatedAt: Date };
-  capsule: { capsuleId: string; status: string } | null;
+  capsule: { capsuleId: string; status: string; workspaceState?: unknown } | null;
   /** Activity-freshness signal (BI-46204009). Omit to skip the stall check (e.g. existing callers mid-migration). */
   activity?: { lastActivityAt: Date | null; now?: Date };
 }): BuildStudioCustomerStatus {
+  const delivery = readBuildPrDeliveryState(args.capsule?.workspaceState);
+  if (delivery) {
+    const base = {
+      whatIsBeingBuilt: args.build.title,
+      evidence: delivery.lastObservedAt
+        ? "Build Studio checked the current delivery state."
+        : "Build Studio is gathering current delivery evidence.",
+      technicalEvidence: [
+        `PR #${delivery.prNumber}`,
+        delivery.lastObservedHeadSha ? `head ${delivery.lastObservedHeadSha.slice(0, 12)}` : null,
+        `observations ${delivery.reconciliationAttempts}`,
+        `stale updates ${delivery.staleUpdateAttempts}`,
+        delivery.lastError ? `last result ${delivery.lastError}` : null,
+      ].filter(Boolean).join(" · "),
+    };
+    switch (delivery.status) {
+      case "created":
+      case "checking":
+        return {
+          ...base,
+          lifecyclePosition: "Checking the pull request",
+          worker: "Checking delivery evidence",
+          nextAction: "wait while current checks and review evidence finish.",
+          owner: "Build Studio",
+          needsYou: false,
+        };
+      case "updating":
+        return {
+          ...base,
+          lifecyclePosition: "Finalizing against the latest platform",
+          worker: "Updating the proposed change",
+          nextAction: "rerun checks against the updated platform.",
+          owner: "Build Studio",
+          needsYou: false,
+        };
+      case "queued":
+        return {
+          ...base,
+          lifecyclePosition: "Merge queued",
+          worker: "Repository merge queue",
+          nextAction: "wait for the protected merge queue to finish.",
+          owner: "Build Studio",
+          needsYou: false,
+        };
+      case "awaiting-release":
+        return {
+          ...base,
+          lifecyclePosition: "Waiting for governed release",
+          worker: "Governed release process",
+          nextAction: "wait for governed self-upgrade and live-version evidence.",
+          owner: "Build Studio",
+          needsYou: false,
+        };
+      case "deployed":
+        return {
+          ...base,
+          lifecyclePosition: "Deployed",
+          worker: "Finished",
+          nextAction: "review the completed result.",
+          owner: "reviewer",
+          needsYou: false,
+        };
+      case "closed":
+      case "escalated":
+        return {
+          ...base,
+          lifecyclePosition: "Needs your decision",
+          worker: "Waiting for you",
+          evidence: delivery.lastError
+            ? `Autonomous delivery stopped: ${delivery.lastError}.`
+            : "Autonomous delivery stopped safely.",
+          nextAction: "review the delivery issue and decide how to continue.",
+          owner: "human decision-maker",
+          needsYou: true,
+        };
+    }
+  }
+
   const base: BuildStudioCustomerStatus = args.capsule
     ? (() => {
         const projection = projectWorkCaseState({ capsule: args.capsule! });
