@@ -20,6 +20,13 @@ vi.mock("@/lib/actions/built-in-tools", () => ({
         currentValue: "BSA-secret",
       },
     },
+    addressValidation: {
+      commercialProviderDetected: false,
+      siteLookupReady: false,
+      headline: "No address validation provider is configured.",
+      nextStep: "Choose Smarty (US-first) or Mapbox (global), add one key, leave the other off.",
+      primaryCountry: "US",
+    },
   }),
 }));
 
@@ -45,5 +52,8 @@ describe("BuiltInToolsPage", () => {
     expect(html).toContain("Brave Search");
     expect(html).toContain("search_public_web");
     expect(html).toContain("platform-keys-panel");
+    expect(html).toContain("Address validation providers");
+    expect(html).toContain("Smarty");
+    expect(html).toContain("Mapbox");
   });
 });

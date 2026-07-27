@@ -5,6 +5,12 @@ vi.mock("@dpf/db", () => ({
     platformConfig: {
       findMany: vi.fn(),
     },
+    modelProvider: {
+      findFirst: vi.fn(),
+    },
+    organization: {
+      findFirst: vi.fn(),
+    },
   },
 }));
 
@@ -16,6 +22,8 @@ describe("getBuiltInToolsOverview", () => {
     vi.mocked(prisma.platformConfig.findMany).mockResolvedValue([
       { key: "brave_search_api_key", value: "BSA-secret" },
     ] as never);
+    vi.mocked(prisma.modelProvider.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.organization.findFirst).mockResolvedValue({ address: null } as never);
 
     const result = await getBuiltInToolsOverview();
     const braveSearch = result.tools.find((tool) => tool.id === "brave-search");
@@ -26,6 +34,8 @@ describe("getBuiltInToolsOverview", () => {
 
   it("includes the built-in tool descriptors even when no key is configured", async () => {
     vi.mocked(prisma.platformConfig.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.modelProvider.findFirst).mockResolvedValue(null as never);
+    vi.mocked(prisma.organization.findFirst).mockResolvedValue({ address: null } as never);
 
     const result = await getBuiltInToolsOverview();
 
@@ -35,5 +45,20 @@ describe("getBuiltInToolsOverview", () => {
       "branding-analyzer",
     ]);
     expect(result.keyData.brave_search_api_key.configured).toBe(false);
+  });
+
+  it("reports address validation status and org country hint (BI-SITE-5E6A18)", async () => {
+    vi.mocked(prisma.platformConfig.findMany).mockResolvedValue([] as never);
+    vi.mocked(prisma.modelProvider.findFirst).mockResolvedValue({ id: "prov-1" } as never);
+    vi.mocked(prisma.organization.findFirst).mockResolvedValue({
+      address: { country: "US" },
+    } as never);
+
+    const result = await getBuiltInToolsOverview();
+
+    expect(result.addressValidation.commercialProviderDetected).toBe(true);
+    expect(result.addressValidation.siteLookupReady).toBe(false);
+    expect(result.addressValidation.primaryCountry).toBe("US");
+    expect(result.addressValidation.headline.toLowerCase()).toMatch(/not wired|registered/);
   });
 });

@@ -7,6 +7,7 @@ order: 5
 ## Use This Doc For
 
 - `/platform/tools`
+- `/platform/tools/built-ins`
 - `/platform/tools/catalog`
 - `/platform/tools/catalog/sync`
 - `/platform/tools/integrations`
@@ -16,6 +17,7 @@ order: 5
 - `/platform/tools/services`
 - `/platform/services`
 - `/platform/integrations`
+- Address validation provider choice (Smarty vs Mapbox) — see [Address Validation Providers](address-validation-providers.md)
 
 ## Start With The Object You Are Managing
 

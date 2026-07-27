@@ -16,6 +16,7 @@ export * from "./docs";
 export * from "./docs-types";
 export * from "./bmr-resolver";
 export * from "./address-validation";
+export * from "./address-validation-provider-guidance";
 export * from "./address-data";
 export * from "./address-types";
 export * from "./email";

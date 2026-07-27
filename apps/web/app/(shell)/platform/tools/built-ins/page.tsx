@@ -1,4 +1,5 @@
 import { PlatformKeysPanel } from "@/components/admin/PlatformKeysPanel";
+import { AddressValidationProviderGuidance } from "@/components/platform/AddressValidationProviderGuidance";
 import { getBuiltInToolsOverview } from "@/lib/actions/built-in-tools";
 
 const BRAVE_SEARCH_CONFIG = [
@@ -12,7 +13,7 @@ const BRAVE_SEARCH_CONFIG = [
 ];
 
 export default async function BuiltInToolsPage() {
-  const { tools, keyData } = await getBuiltInToolsOverview();
+  const { tools, keyData, addressValidation } = await getBuiltInToolsOverview();
 
   return (
     <div className="space-y-6">
@@ -34,12 +35,12 @@ export default async function BuiltInToolsPage() {
                 <h2 className="text-sm font-semibold text-[var(--dpf-text)]">{tool.name}</h2>
                 <p className="mt-2 text-sm text-[var(--dpf-muted)]">{tool.description}</p>
               </div>
-              <span className="rounded-full border border-[var(--dpf-border)] px-2 py-1 text-[10px] uppercase tracking-[0.12em] text-[var(--dpf-muted)]">
+              <span className="rounded-full border border-[var(--dpf-border)] px-2 py-1 text-dpf-caption uppercase tracking-[0.12em] text-[var(--dpf-muted)]">
                 {tool.model}
               </span>
             </div>
 
-            <div className="mt-4 space-y-2 text-xs text-[var(--dpf-muted)]">
+            <div className="mt-4 space-y-2 text-dpf-caption text-[var(--dpf-muted)]">
               <p>
                 Capability: <span className="font-mono text-[var(--dpf-text)]">{tool.capability}</span>
               </p>
@@ -53,6 +54,11 @@ export default async function BuiltInToolsPage() {
           </div>
         ))}
       </div>
+
+      <AddressValidationProviderGuidance
+        status={addressValidation}
+        primaryCountry={addressValidation.primaryCountry}
+      />
 
       <PlatformKeysPanel
         keyData={keyData}
