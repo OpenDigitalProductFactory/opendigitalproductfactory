@@ -1,9 +1,7 @@
 // Pure, token-backed visual grammar for the unified Operations Topology canvas.
 //
-// Mirrors the route/marker semantics already used by RoutingTopologyPanel so the
-// new canvas renders the provider topology identically. Kept React/DOM-free and
-// token-only (no raw hex). During the parity transition these intentionally
-// duplicate the panel's private helpers; they are deduped at cutover (Stage E).
+// Canonical route/marker semantics for the authoritative canvas. Kept
+// React/DOM-free and token-only (no raw hex).
 //
 // Spec: docs/superpowers/specs/2026-06-05-ai-operations-map-three-band-cohesive-layout-design.md §7 Stage B
 

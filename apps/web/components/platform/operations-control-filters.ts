@@ -1,11 +1,9 @@
 // Pure control-filter helpers for the Operations Map.
 //
 // Single source of truth for "which routes / providers / markers / A2A edges
-// survive the operator's filter selections". Shared by the legacy
-// RoutingTopologyPanel and A2aInteractionsPanel (which own the filter UI today)
-// and by the unified OperationsTopologyCanvas (Stage D), so the canvas honours
-// exactly what the operator sets. These helpers are destined to back the single
-// control rail at Stage E cutover, when the legacy panels are deleted.
+// survive the operator's filter selections". OperationsTopologyControls owns
+// the one filter rail; AiOperationsMap applies the same criteria to the
+// authoritative OperationsTopologyCanvas.
 //
 // Replay is intentionally NOT applied here. The shared replay window is layered
 // on top by the canvas (routeVisibleAtReplayTime / a2aEdgeVisibleAtReplayTime)
@@ -26,7 +24,7 @@ import { a2aEdgeIsGoverned } from "./a2a-interaction-graph";
 export type RoutingRouteFilter = "all" | OperationsMapRoutingRouteState;
 export type RoutingProviderTypeFilter = "llm" | "mcp" | "all";
 
-/** Provider-side control filters owned by RoutingTopologyPanel. */
+/** Provider-side criteria owned by the unified topology control rail. */
 export type RoutingControlCriteria = {
   routeFilter: RoutingRouteFilter;
   providerTypeFilter: RoutingProviderTypeFilter;
@@ -37,7 +35,7 @@ export type RoutingControlCriteria = {
 export type A2aActorRole = "either" | "from" | "to";
 export type A2aAuthorityFilter = "all" | "governed" | "ungoverned";
 
-/** A2A-side control filters owned by A2aInteractionsPanel. */
+/** A2A-side criteria owned by the unified topology control rail. */
 export type A2aControlCriteria = {
   types: OperationsMapA2aEdgeKind[];
   states: OperationsMapA2aInteractionState[];
@@ -68,8 +66,7 @@ export function markerMatchesRouteFilter(
 /**
  * Apply the provider-side control filters to a topology, returning the routes,
  * provider nodes, and markers that should be visible (before replay). Mirrors
- * the predicate RoutingTopologyPanel computes internally so the canvas matches
- * the panel exactly.
+ * the predicates used by the control rail's evidence table.
  */
 export function applyRoutingControlFilters(
   topology: Pick<OperationsMapRoutingTopology, "routes" | "providers" | "markers">,
@@ -112,8 +109,7 @@ export function applyRoutingControlFilters(
 }
 
 /**
- * Apply the A2A-side control filters to a set of edges (before replay). Mirrors
- * the predicate A2aInteractionsPanel computes internally.
+ * Apply the A2A-side control filters to a set of edges (before replay).
  */
 export function applyA2aControlFilters(
   edges: OperationsMapA2aEdge[],

@@ -1,11 +1,7 @@
 // Unified Operations Topology canvas — one coworker spine, provider routes on
-// the right, A2A interactions on the left. Stage B1 renders ONLY the provider
-// side (spine + provider nodes + routes + markers) so the new canvas can prove
-// provider parity against the old RoutingTopologyPanel before the A2A arc half
-// (Stage C) and the interactive replay/zoom/popover reuse (Stage B2) land.
-//
-// This component is intentionally NOT wired into the operator route yet; it is
-// exercised only by parity tests until Stage E cutover.
+// the right, and A2A interactions on the left. This is the authoritative
+// technical canvas; filters, replay, and table equivalence live in the adjacent
+// OperationsTopologyControls rather than in duplicate diagram panels.
 //
 // Spec: docs/superpowers/specs/2026-06-05-ai-operations-map-three-band-cohesive-layout-design.md §7 Stage B
 
@@ -71,6 +67,9 @@ export function OperationsTopologyCanvas({
 }: Props) {
   const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
+  const [selectedConnection, setSelectedConnection] = useState<
+    { kind: "provider-route" | "a2a"; id: string } | null
+  >(null);
   const zoomLevel = ZOOM_LEVELS[zoomIndex] ?? 1;
   const showProvider = dimension === "provider" || dimension === "both";
   const showA2a = dimension === "a2a" || dimension === "both";
@@ -107,6 +106,12 @@ export function OperationsTopologyCanvas({
   const selectedMarker = selectedMarkerId
     ? topology.markers.find((marker) => marker.id === selectedMarkerId) ?? null
     : null;
+  const selectedRoute = selectedConnection?.kind === "provider-route"
+    ? topology.routes.find((route) => route.id === selectedConnection.id) ?? null
+    : null;
+  const selectedA2a = selectedConnection?.kind === "a2a"
+    ? topology.a2aEdges.find((edge) => edge.id === selectedConnection.id) ?? null
+    : null;
 
   const isEmpty = layout.rows.length === 0 && layout.providerNodes.length === 0;
   const svgLabel = showProvider && showA2a
@@ -122,6 +127,11 @@ export function OperationsTopologyCanvas({
     <section
       aria-label="AI operations topology canvas"
       data-operations-topology-canvas
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        setSelectedMarkerId(null);
+        setSelectedConnection(null);
+      }}
       className="relative overflow-x-auto rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
     >
       {isEmpty ? (
@@ -180,6 +190,16 @@ export function OperationsTopologyCanvas({
                     role="button"
                     tabIndex={0}
                     aria-label={`${fromRow.label} → ${toRow.label}: ${EDGE_KIND_LABEL[arc.edgeKind]} (${STATE_LABEL[arc.state]})`}
+                    onClick={() => {
+                      setSelectedMarkerId(null);
+                      setSelectedConnection({ kind: "a2a", id: arc.edgeId });
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return;
+                      event.preventDefault();
+                      setSelectedMarkerId(null);
+                      setSelectedConnection({ kind: "a2a", id: arc.edgeId });
+                    }}
                     d={a2aArcPath(CANVAS.spineX, arc.fromY, arc.toY, arc.lane)}
                     fill="none"
                     stroke={stroke}
@@ -210,6 +230,16 @@ export function OperationsTopologyCanvas({
                 role="button"
                 tabIndex={0}
                 aria-label={`${row.label} → ${provider.label}: ${ROUTE_STATE_LABEL[lane.state]}`}
+                onClick={() => {
+                  setSelectedMarkerId(null);
+                  setSelectedConnection({ kind: "provider-route", id: lane.routeId });
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  setSelectedMarkerId(null);
+                  setSelectedConnection({ kind: "provider-route", id: lane.routeId });
+                }}
                 d={routePath(CANVAS.spineX, lane.fromY, CANVAS.providerX, provider.y, lane.lane)}
                 fill="none"
                 stroke={stroke}
@@ -239,10 +269,14 @@ export function OperationsTopologyCanvas({
                 tabIndex={0}
                 aria-label={`${marker.label}: ${marker.summary}`}
                 className="cursor-pointer focus:outline-none"
-                onClick={() => setSelectedMarkerId(marker.id)}
+                onClick={() => {
+                  setSelectedConnection(null);
+                  setSelectedMarkerId(marker.id);
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
+                    setSelectedConnection(null);
                     setSelectedMarkerId(marker.id);
                   }
                 }}
@@ -312,6 +346,61 @@ export function OperationsTopologyCanvas({
                   : "Not provider-specific"}
               </dd>
             </dl>
+          </aside>
+        ) : null}
+        {selectedRoute || selectedA2a ? (
+          <aside
+            data-canvas-connection-detail
+            aria-label="Connection detail"
+            className="absolute bottom-2 left-2 z-10 max-w-sm rounded-md border border-[var(--dpf-border)] bg-[color-mix(in_srgb,var(--dpf-surface-1)_94%,transparent)] p-3 text-xs shadow-lg backdrop-blur"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <p className="font-semibold text-[var(--dpf-text)]">
+                {selectedRoute ? "Provider route" : "A2A interaction"}
+              </p>
+              <button
+                type="button"
+                aria-label="Close connection detail"
+                onClick={() => setSelectedConnection(null)}
+                className="min-h-11 min-w-11 rounded text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)]"
+              >
+                Close
+              </button>
+            </div>
+            {selectedRoute ? (
+              <>
+                <p className="mt-1 leading-5 text-[var(--dpf-muted)]">{selectedRoute.summary}</p>
+                <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1">
+                  <dt className="font-semibold text-[var(--dpf-muted)]">From</dt>
+                  <dd>{coworkerLabelById.get(selectedRoute.coworkerId) ?? selectedRoute.coworkerId}</dd>
+                  <dt className="font-semibold text-[var(--dpf-muted)]">To</dt>
+                  <dd>{providerLabelById.get(selectedRoute.providerId) ?? selectedRoute.providerId}</dd>
+                  <dt className="font-semibold text-[var(--dpf-muted)]">State</dt>
+                  <dd>{ROUTE_STATE_LABEL[selectedRoute.state]}</dd>
+                  <dt className="font-semibold text-[var(--dpf-muted)]">When</dt>
+                  <dd><LocalTime value={selectedRoute.occurredAt} fallback="Current state" /></dd>
+                  <dt className="font-semibold text-[var(--dpf-muted)]">Source</dt>
+                  <dd className="break-all">{selectedRoute.decisionId ?? selectedRoute.id}</dd>
+                </dl>
+              </>
+            ) : null}
+            {selectedA2a ? (
+              <>
+                <p className="mt-1 leading-5 text-[var(--dpf-muted)]">{selectedA2a.summary}</p>
+                <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-2 gap-y-1">
+                  <dt className="font-semibold text-[var(--dpf-muted)]">From</dt>
+                  <dd>{coworkerLabelById.get(selectedA2a.fromCoworkerId) ?? selectedA2a.fromCoworkerId}</dd>
+                  <dt className="font-semibold text-[var(--dpf-muted)]">To</dt>
+                  <dd>{coworkerLabelById.get(selectedA2a.toCoworkerId) ?? selectedA2a.toCoworkerId}</dd>
+                  <dt className="font-semibold text-[var(--dpf-muted)]">State</dt>
+                  <dd>{STATE_LABEL[selectedA2a.state]}</dd>
+                  <dt className="font-semibold text-[var(--dpf-muted)]">Authority</dt>
+                  <dd>{selectedA2a.authorityScope?.join(", ") || "Not recorded"}</dd>
+                  <dt className="font-semibold text-[var(--dpf-muted)]">Source</dt>
+                  <dd className="break-all">{a2aSourceRef(selectedA2a)}</dd>
+                </dl>
+              </>
+            ) : null}
           </aside>
         ) : null}
         </>
@@ -399,4 +488,13 @@ function markerAnchor(
 function clip(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value;
   return `${value.slice(0, Math.max(0, maxLength - 1))}…`;
+}
+
+function a2aSourceRef(edge: OperationsMapRoutingTopology["a2aEdges"][number]): string {
+  return edge.refs.delegationChainId
+    ?? edge.refs.phaseHandoffId
+    ?? edge.refs.taskRunId
+    ?? edge.refs.parentTaskRunId
+    ?? edge.refs.deliberationRunId
+    ?? edge.id;
 }
