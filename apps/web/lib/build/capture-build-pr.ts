@@ -23,13 +23,23 @@
 // build with no capsule yet (or missing inputs) is a non-error that returns
 // `{ captured: 0 }` rather than throwing.
 
+import {
+  createBuildPrDeliveryState,
+  writeBuildPrDeliveryState,
+  type BuildPrDeliveryStateV1,
+} from "./build-pr-delivery-state";
+
 /** The narrow slice of the Prisma client this helper needs (injectable for tests). */
 export interface CaptureBuildPrDeps {
   workCapsule: {
-    updateMany: (args: {
+    findMany: (args: {
       where: { featureBuildId: string };
-      data: { pullRequestUrl: string; pullRequestNumber: number };
-    }) => Promise<{ count: number }>;
+      select: { id: true; workspaceState: true };
+    }) => Promise<Array<{ id: string; workspaceState: unknown }>>;
+    update: (args: {
+      where: { id: string };
+      data: { pullRequestUrl: string; pullRequestNumber: number; workspaceState: Record<string, unknown> };
+    }) => Promise<unknown>;
   };
 }
 
@@ -42,6 +52,29 @@ export interface CaptureBuildPrArgs {
   featureBuildId: string;
   prNumber: number;
   prUrl: string;
+  repository?: string;
+}
+
+export async function persistBuildPrDeliveryStateForBuild(input: {
+  db: CaptureBuildPrDeps;
+  featureBuildId: string;
+  delivery: BuildPrDeliveryStateV1;
+}): Promise<number> {
+  const capsules = await input.db.workCapsule.findMany({
+    where: { featureBuildId: input.featureBuildId },
+    select: { id: true, workspaceState: true },
+  });
+  await Promise.all(capsules.map((capsule) =>
+    input.db.workCapsule.update({
+      where: { id: capsule.id },
+      data: {
+        pullRequestUrl: input.delivery.prUrl,
+        pullRequestNumber: input.delivery.prNumber,
+        workspaceState: writeBuildPrDeliveryState(capsule.workspaceState, input.delivery),
+      },
+    }),
+  ));
+  return capsules.length;
 }
 
 /**
@@ -62,9 +95,17 @@ export async function captureBuildPrOntoCapsule(
     return { captured: 0 };
   }
 
-  const res = await db.workCapsule.updateMany({
-    where: { featureBuildId },
-    data: { pullRequestUrl: prUrl, pullRequestNumber: prNumber },
-  });
-  return { captured: res.count };
+  const repository = args.repository ?? (() => {
+    try {
+      const url = new URL(prUrl);
+      return url.pathname.split("/").filter(Boolean).slice(0, 2).join("/");
+    } catch {
+      return "";
+    }
+  })();
+  if (!repository) return { captured: 0 };
+
+  const delivery = createBuildPrDeliveryState({ repository, prNumber, prUrl });
+  const captured = await persistBuildPrDeliveryStateForBuild({ db, featureBuildId, delivery });
+  return { captured };
 }

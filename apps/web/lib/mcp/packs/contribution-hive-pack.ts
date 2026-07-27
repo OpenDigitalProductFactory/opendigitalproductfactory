@@ -502,6 +502,9 @@ async function contributeToHiveHandler(
   // Anonymous identity pushes dpf/<hash>/<slug> branch directly to the upstream repo.
   // No customer fork needed — the hive token provides write access.
   let prUrl: string | null = null;
+  let prNumber: number | null = null;
+  let prOwner: string | null = null;
+  let prRepo: string | null = null;
   let prError: string | null = null;
   try {
     const upstreamUrl = devConfig?.upstreamRemoteUrl ?? "https://github.com/OpenDigitalProductFactory/opendigitalproductfactory.git";
@@ -566,6 +569,9 @@ async function contributeToHiveHandler(
 
         if (prResult.prUrl) {
           prUrl = prResult.prUrl;
+          prNumber = prResult.prNumber;
+          prOwner = upstreamMatch[1];
+          prRepo = upstreamMatch[2];
           await prisma.featurePack.update({
             where: { packId },
             data: { manifest: { ...manifest, dcoAttestation, prUrl } as unknown as import("@dpf/db").Prisma.InputJsonValue },
@@ -598,6 +604,39 @@ async function contributeToHiveHandler(
   } catch (err) {
     prError = getErrorMessage(err);
     console.warn("[contribute_to_hive] upstream PR creation failed:", err);
+  }
+
+  // Converge the autonomous contribution path with create_portal_pr: durable
+  // Work Capsule recovery state is established before exact-head observation
+  // or merge-queue actuation. Contribution review/security findings withhold
+  // actuation and remain a human decision.
+  if (prUrl && prNumber && prOwner && prRepo) {
+    try {
+      const { initializeAndReconcileBuildPrDelivery } = await import(
+        "@/lib/build/build-pr-delivery-reconciler"
+      );
+      const outcome = await initializeAndReconcileBuildPrDelivery({
+        db: prisma,
+        featureBuildId: build.id,
+        owner: prOwner,
+        repo: prRepo,
+        prNumber,
+        prUrl,
+        token: hiveTokenEarly,
+        eligible: securityScan.passed && !prError,
+      });
+      logBuildActivity(
+        buildId,
+        "build-pr-delivery",
+        `PR #${prNumber}: ${outcome.action?.kind ?? "withheld"}; delivery state ${outcome.state.status}; actuated=${outcome.actuated}; capsules=${outcome.captured}.`,
+      );
+    } catch (error) {
+      logBuildActivity(
+        buildId,
+        "build-pr-delivery",
+        `PR #${prNumber} recovery will retry after initial observation failed: ${getErrorMessage(error).slice(0, 180)}`,
+      );
+    }
   }
 
   // Update linked ImprovementProposal if exists

@@ -26,8 +26,8 @@ export interface CapsuleFindManyDelegate {
   workCapsule: {
     findMany: (args: {
       where: { featureBuildId: { in: string[] } };
-      select: { featureBuildId: true; capsuleId: true; status: true };
-    }) => Promise<Array<{ featureBuildId: string | null; capsuleId: string; status: string }>>;
+      select: { featureBuildId: true; capsuleId: true; status: true; workspaceState: true };
+    }) => Promise<Array<{ featureBuildId: string | null; capsuleId: string; status: string; workspaceState: unknown }>>;
   };
   buildActivity: {
     groupBy: (args: {
@@ -65,16 +65,20 @@ export async function loadBuildStudioCustomerStatuses(
 ): Promise<Record<string, BuildStudioCustomerStatus>> {
   const ids = Array.from(new Set(builds.map((b) => b.id)));
   const buildIds = Array.from(new Set(builds.map((b) => b.buildId)));
-  const byBuild = new Map<string, { capsuleId: string; status: string }>();
+  const byBuild = new Map<string, { capsuleId: string; status: string; workspaceState: unknown }>();
   const lastActivityByBuildId = new Map<string, Date>();
   if (ids.length > 0) {
     const capsules = await db.workCapsule.findMany({
       where: { featureBuildId: { in: ids } },
-      select: { featureBuildId: true, capsuleId: true, status: true },
+      select: { featureBuildId: true, capsuleId: true, status: true, workspaceState: true },
     });
     for (const capsule of capsules) {
       if (capsule.featureBuildId) {
-        byBuild.set(capsule.featureBuildId, { capsuleId: capsule.capsuleId, status: capsule.status });
+        byBuild.set(capsule.featureBuildId, {
+          capsuleId: capsule.capsuleId,
+          status: capsule.status,
+          workspaceState: capsule.workspaceState,
+        });
       }
     }
   }

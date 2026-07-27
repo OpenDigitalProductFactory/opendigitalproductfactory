@@ -8,10 +8,10 @@ const RECENT = new Date(NOW.getTime() - 5 * 60 * 1000);
 const STALE = new Date(NOW.getTime() - STALLED_BUILD_REAP_MS - 60_000);
 
 function dbWith(
-  capsuleRows: Array<{ featureBuildId: string | null; capsuleId: string; status: string }>,
+  capsuleRows: Array<{ featureBuildId: string | null; capsuleId: string; status: string; workspaceState?: unknown }>,
   activityRows: Array<{ buildId: string; _max: { createdAt: Date | null } }> = [],
 ) {
-  const findMany = vi.fn().mockResolvedValue(capsuleRows);
+  const findMany = vi.fn().mockResolvedValue(capsuleRows.map((row) => ({ workspaceState: {}, ...row })));
   const groupBy = vi.fn().mockResolvedValue(activityRows);
   return { db: { workCapsule: { findMany }, buildActivity: { groupBy } }, findMany, groupBy };
 }

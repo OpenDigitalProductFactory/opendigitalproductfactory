@@ -535,7 +535,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
   if (gateResult.requiresHumanReview) labels.push("needs-review");
   if (!typecheckPassed || testsFailed > 0) labels.push("verification-issues");
 
-  const { createBranchAndPR, mergePR, commentOnPR } = await import("@/lib/integrate/github-api-commit");
+  const { createBranchAndPR, commentOnPR } = await import("@/lib/integrate/github-api-commit");
 
   const prResult = await createBranchAndPR({
     headOwner: repoOwner,
@@ -561,75 +561,41 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
     };
   }
 
-  // Capture the PR onto the build's Work Capsule so it becomes a queryable,
-  // surfaceable fact (delivery visibility). The capsule's pullRequestUrl/
-  // Number are READ by the change-lanes projection, the runtime-target
-  // rollup, and the capsule presenters, but had no writer at PR-creation
-  // time — so a build's PR stayed invisible until a delayed branch-name-
-  // matched GitHub inventory snapshot backfilled it (or never). Migration-
-  // free + best-effort: opening the PR must never hinge on this write.
+  // Integration decision: all local gates pass + build fully verified. GitHub
+  // remains authoritative for current-head checks, review threads, branch
+  // freshness, and merge-queue policy. A PR merge is NOT deployment.
+  const fullyVerified = typecheckPassed && testsFailed === 0 && acMet === acTotal && acTotal > 0;
+  let deliveryState = "awaiting-review";
   try {
-    const { captureBuildPrOntoCapsule } = await import("@/lib/build/capture-build-pr");
-    const cap = await captureBuildPrOntoCapsule({
+    const {
+      initializeAndReconcileBuildPrDelivery,
+    } = await import("@/lib/build/build-pr-delivery-reconciler");
+    const outcome = await initializeAndReconcileBuildPrDelivery({
       db: prisma,
       featureBuildId: build.id,
-      prNumber: prResult.prNumber,
-      prUrl: prResult.prUrl,
-    });
-    if (cap.captured > 0) {
-      logBuildActivity(buildId, "create_portal_pr", `Linked PR #${prResult.prNumber} to ${cap.captured} work capsule(s).`);
-    }
-  } catch (err) {
-    console.warn("[create_portal_pr] PR-capture onto capsule failed:", err);
-  }
-
-  // Auto-merge decision: all gates pass + build fully verified
-  const fullyVerified = typecheckPassed && testsFailed === 0 && acMet === acTotal && acTotal > 0;
-  let merged = false;
-
-  if (!gateResult.requiresHumanReview && fullyVerified) {
-    // Auto-merge via squash
-    const mergeResult = await mergePR({
       owner: repoOwner,
       repo: repoName,
       prNumber: prResult.prNumber,
-      commitTitle: `${prTitle} (#${prResult.prNumber})`,
-      mergeMethod: "squash",
+      prUrl: prResult.prUrl,
       token,
+      eligible: !gateResult.requiresHumanReview && fullyVerified,
     });
-    merged = mergeResult.merged;
+    deliveryState = outcome.state.status;
+    logBuildActivity(
+      buildId,
+      "build-pr-delivery",
+      `PR #${prResult.prNumber}: ${outcome.action?.kind ?? "withheld"}; delivery state ${outcome.state.status}; actuated=${outcome.actuated}; capsules=${outcome.captured}.`,
+    );
+  } catch (err) {
+    deliveryState = "checking";
+    logBuildActivity(
+      buildId,
+      "build-pr-delivery",
+      `PR #${prResult.prNumber} recovery will retry after initial observation failed: ${String(err).slice(0, 180)}`,
+    );
+  }
 
-    if (merged) {
-      // Update lifecycle: FeatureBuild → complete, ChangePromotion → deployed
-      await prisma.featureBuild.update({
-        where: { buildId },
-        data: { phase: "complete" },
-      });
-      const { recordReadyDependentsAfterCompletion } = await import("@/lib/build/feature-build-dependencies");
-      await recordReadyDependentsAfterCompletion({ db: prisma, buildId }).catch((err) => {
-        console.warn("[create_portal_pr] dependency readiness check failed:", err);
-      });
-
-      const promotion = build.productVersions[0]?.promotions[0];
-      if (promotion) {
-        await prisma.changePromotion.update({
-          where: { promotionId: promotion.promotionId },
-          data: { status: "deployed", deployedAt: new Date(), deploymentLog: `Auto-merged PR #${prResult.prNumber}` },
-        });
-      }
-
-      logBuildActivity(buildId, "create_portal_pr", `PR #${prResult.prNumber} auto-merged. Build complete.`);
-    } else {
-      // Merge failed — post comment explaining why
-      await commentOnPR({
-        owner: repoOwner, repo: repoName, prNumber: prResult.prNumber,
-        body: `Auto-merge failed. This PR requires manual review and merge.\n\n${formatGateReport(gateResult)}`,
-        token,
-      }).catch(() => {});
-
-      logBuildActivity(buildId, "create_portal_pr", `PR #${prResult.prNumber} created but auto-merge failed.`);
-    }
-  } else {
+  if (gateResult.requiresHumanReview || !fullyVerified) {
     // Needs human review — post gate report as comment
     const reasons: string[] = [];
     if (gateResult.requiresHumanReview) reasons.push("security gate warnings");
@@ -646,9 +612,10 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
     logBuildActivity(buildId, "create_portal_pr", `PR #${prResult.prNumber} created — needs review: ${reasons.join(", ")}`);
   }
 
-  const statusMsg = merged
-    ? `PR #${prResult.prNumber} created and auto-merged. Build is complete.`
-    : `PR #${prResult.prNumber} created and awaiting review. ${gateResult.summary}`;
+  const statusMsg =
+    !gateResult.requiresHumanReview && fullyVerified
+      ? `PR #${prResult.prNumber} created. Delivery state: ${deliveryState}.`
+      : `PR #${prResult.prNumber} created and awaiting review. ${gateResult.summary}`;
 
   return {
     success: true,
@@ -658,7 +625,8 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
       prNumber: prResult.prNumber,
       branchName,
       commitSha: prResult.commitSha,
-      merged,
+      merged: false,
+      deliveryState,
       gates: gateResult,
     },
   };

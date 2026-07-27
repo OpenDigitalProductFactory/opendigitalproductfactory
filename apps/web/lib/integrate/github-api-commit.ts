@@ -467,6 +467,7 @@ export interface PRStatus {
   mergeable: boolean | null;
   title: string;
   checksPass: boolean | null;
+  headSha: string;
 }
 
 /**
@@ -487,13 +488,14 @@ export async function getPRStatus(input: {
     merged: boolean;
     mergeable: boolean | null;
     title: string;
+    head: { sha: string };
   }>(`${apiBase}/pulls/${prNumber}`, token);
 
   // Check combined status for the head SHA
   let checksPass: boolean | null = null;
   try {
     const checks = await githubGet<{ state: string }>(
-      `${apiBase}/commits/${pr.number}/status`,
+      `${apiBase}/commits/${pr.head.sha}/status`,
       token,
     );
     checksPass = checks.state === "success";
@@ -508,6 +510,7 @@ export async function getPRStatus(input: {
     mergeable: pr.mergeable,
     title: pr.title,
     checksPass,
+    headSha: pr.head.sha,
   };
 }
 

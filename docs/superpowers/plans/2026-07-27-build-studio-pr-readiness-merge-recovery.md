@@ -1,6 +1,6 @@
 # Build Studio PR Readiness and Merge Recovery Implementation Plan
 
-**Status:** Draft — awaiting operator review and approval. Do not implement until approved.
+**Status:** Approved by the operator on 2026-07-27; implementation in progress.
 
 **Backlog item:** `BI-7C4FDBF5`
 
@@ -329,4 +329,18 @@ The plan was checked against the live code, the approved autonomous Build Studio
 
 ## Approval gate
 
-Implementation may begin only after the operator approves this plan. Approval authorizes the five slices above, the exact 20% bounded refactoring allocation, the no-migration decision, and the shadow-to-enforced rollout. Any later need for a schema migration, a new public lifecycle enum, automatic AI conflict editing, force-push, direct merge, or a separate deployment path requires a new design decision and renewed approval.
+The operator approved this plan on 2026-07-27. Approval authorizes the five slices above, the exact 20% bounded refactoring allocation, the no-migration decision, and the shadow-to-enforced rollout. Any later need for a schema migration, a new public lifecycle enum, automatic AI conflict editing, force-push, direct merge, or a separate deployment path requires a new design decision and renewed approval.
+
+## UX fit review — Build Studio PR delivery recovery
+
+- **Decision:** fits with guardrails, now encoded in Slice 4.
+- **Owning area:** Platform.
+- **Route family:** existing `/build` Build Studio surface.
+- **Primary persona:** founder/operator monitoring autonomous delivery; technical diagnostics remain available to the contributor/platform operator.
+- **Navigation layer touched:** none; this is an existing in-page status projection.
+- **Reuse/convergence:** reuse `BuildCustomerStatusBand` and the existing customer-status loader/projection. No new dashboard, route, tab, badge family, or report component.
+- **Source truth:** versioned `WorkCapsule.workspaceState.buildStudio.delivery`, projected under `FeatureBuild` lifecycle authority.
+- **Empty/failure behavior:** missing or malformed delivery state fails closed to existing phase/capsule status; conflicts, closure, and exhausted recovery show “Needs your decision.”
+- **AI boundary:** status rendering sends no prompt and starts no coworker action.
+- **Evidence before merge:** projection/loader tests, source-truth tests, theme/style guards, desktop/mobile light/dark browser verification, keyboard and live-region review.
+- **Captured in:** this section and Slice 4.

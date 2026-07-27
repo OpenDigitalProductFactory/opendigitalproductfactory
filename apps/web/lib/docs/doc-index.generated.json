@@ -8843,7 +8843,7 @@
         "database-backups",
         "pull-requests-and-security-gates",
         "pre-pr-security-gates",
-        "auto-merge",
+        "autonomous-merge-queue-delivery",
         "configuration",
         "safety-guarantees"
       ]

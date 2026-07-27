@@ -17,21 +17,20 @@ import {
   resolveRepoIdentity,
 } from "@/lib/contributor-change-lanes/github-rest-reader";
 import { createPlatformIssueReport } from "@/lib/quality/platform-issue-reports";
+import {
+  enablePullRequestAutoMerge,
+  resolvePullRequestNodeId,
+} from "@/lib/integrate/github-pr-readiness";
 import { ASSURANCE_ORIGIN_MARKER } from "./remediation-teeup";
 import type { MergeGateAdapters, PrReadiness, ReadyRemediationPR } from "./remediation-merge-orchestrator";
 
 const NPM_REGISTRY_BASE = process.env.NPM_REGISTRY_BASE ?? "https://registry.npmjs.org";
 const OSV_BASE = process.env.OSV_BASE_URL ?? "https://api.osv.dev";
-const GITHUB_GRAPHQL = "https://api.github.com/graphql";
 
 /** Release-age cooldown for an auto-mergeable bump (hijacked-release guard; mirrors
  *  the Dependabot patch cooldown). The bumped release must be at least this old. */
 export const ASSURANCE_REMEDIATION_COOLDOWN_DAYS = 3;
 
-const PR_ID_QUERY =
-  "query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){id}}}";
-const ENABLE_AUTOMERGE_MUTATION =
-  "mutation($id:ID!){enablePullRequestAutoMerge(input:{pullRequestId:$id}){pullRequest{number}}}";
 
 // ─── pure helpers ─────────────────────────────────────────────────────────────
 
@@ -121,29 +120,6 @@ export async function fetchOsvClean(
   } catch {
     return false;
   }
-}
-
-async function githubGraphql(
-  fetchImpl: typeof fetch,
-  token: string,
-  query: string,
-  variables: Record<string, unknown>,
-): Promise<Record<string, unknown> | null> {
-  const res = await fetchImpl(GITHUB_GRAPHQL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "content-type": "application/json",
-      "User-Agent": "dpf-assurance-merge-gate",
-    },
-    body: JSON.stringify({ query, variables }),
-  });
-  if (!res.ok) throw new Error(`GitHub GraphQL HTTP ${res.status}`);
-  const json = (await res.json()) as { data?: Record<string, unknown>; errors?: unknown[] };
-  if (Array.isArray(json.errors) && json.errors.length > 0) {
-    throw new Error(`GitHub GraphQL errors: ${JSON.stringify(json.errors).slice(0, 200)}`);
-  }
-  return json.data ?? null;
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -250,16 +226,14 @@ export async function createLiveMergeGateAdapters(deps: LiveMergeGateDeps): Prom
         throw new Error("assurance auto-merge: no GitHub token (github-pr-sync credential not active)");
       }
       const repo = await resolveRepoIdentity(tokenPrisma);
-      const idData = await githubGraphql(fetchImpl, token, PR_ID_QUERY, {
+      const nodeId = await resolvePullRequestNodeId({
+        fetchImpl,
+        token,
         owner: repo.owner,
-        name: repo.name,
-        number: pr.prNumber,
+        repo: repo.name,
+        prNumber: pr.prNumber,
       });
-      const nodeId = (idData as { repository?: { pullRequest?: { id?: unknown } } } | null)?.repository?.pullRequest?.id;
-      if (typeof nodeId !== "string" || !nodeId) {
-        throw new Error(`assurance auto-merge: could not resolve node id for PR #${pr.prNumber}`);
-      }
-      await githubGraphql(fetchImpl, token, ENABLE_AUTOMERGE_MUTATION, { id: nodeId });
+      await enablePullRequestAutoMerge({ fetchImpl, token, nodeId });
     },
 
     escalate: async (pr, reason): Promise<void> => {
