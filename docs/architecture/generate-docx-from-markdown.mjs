@@ -338,18 +338,26 @@ function resolveDiagramCompanions(localPath) {
   };
 }
 
-function createImageRunFromLocalPath(localPath, maxDimensions) {
+function createImageRunFromLocalPath(localPath, maxDimensions, altText) {
   const source = resolveDiagramCompanions(localPath);
   const dimensions =
     readPngDimensions(source.dimensionsPath)
     ?? (source.primaryType === "svg" ? readSvgDimensions(source.primaryPath) : null);
   const transformation = fitWithin(dimensions, maxDimensions);
+  const normalizedAltText = String(altText || basename(source.primaryPath, extname(source.primaryPath)))
+    .trim();
+  const imageAltText = {
+    name: basename(source.primaryPath),
+    title: normalizedAltText,
+    description: normalizedAltText,
+  };
 
   if (source.primaryType === "svg" && source.fallbackPath && existsSync(source.fallbackPath)) {
     return new ImageRun({
       type: "svg",
       data: readFileSync(source.primaryPath),
       transformation,
+      altText: imageAltText,
       fallback: {
         type: extname(source.fallbackPath).slice(1) || "png",
         data: readFileSync(source.fallbackPath),
@@ -362,6 +370,7 @@ function createImageRunFromLocalPath(localPath, maxDimensions) {
     data: readFileSync(source.primaryPath),
     transformation,
     type: source.primaryType,
+    altText: imageAltText,
   });
 }
 
@@ -409,7 +418,7 @@ function inlineRunsFromTokens(tokens = [], baseDir, style = {}) {
     if (token.type === "image") {
       const localPath = resolveLocalPath(baseDir, token.href);
       if (canRenderLocalImage(localPath)) {
-        runs.push(createImageRunFromLocalPath(localPath, INLINE_IMAGE_MAX));
+        runs.push(createImageRunFromLocalPath(localPath, INLINE_IMAGE_MAX, token.text || token.href));
       } else {
         runs.push(plainTextRun(`[Missing image: ${token.href}]`, { italics: true }));
       }
@@ -492,7 +501,7 @@ function imageParagraph(token, baseDir) {
   return new Paragraph({
     spacing: { before: 200, after: 200 },
     alignment: AlignmentType.CENTER,
-    children: [createImageRunFromLocalPath(localPath, BLOCK_IMAGE_MAX)],
+    children: [createImageRunFromLocalPath(localPath, BLOCK_IMAGE_MAX, token.text || token.href)],
   });
 }
 

@@ -14,6 +14,12 @@ subjects.
 | Global AI Agent Identification and Governance (`GAID`) | [GAID.md](GAID.md) | Who is this agent, which operating profile is active, what claims are advertised, and how can a relying party verify their status? | Identity, AIDoc, claims, badges, receipts, lifecycle, and cross-boundary verification |
 | Job-Specific Intelligence profile (`TAK-JSI`) | [job-specific-intelligence.md](job-specific-intelligence.md) | Is this identified operating profile qualified for this job, activity, data scope, and risk context, and what evidence keeps that qualification current? | Job definition, qualification scheme, evidence, surveillance, revalidation, and qualification-to-autonomy boundaries |
 
+The family's relationship to NIST, ISO/IEC, IEEE, W3C, IETF, OpenID, 1EdTech, and adjacent
+protocol work is maintained in the informative
+[External Standards Alignment](agent-standards-external-alignment.md) companion. That document is
+the single source of truth for cross-standard gap analysis, synergy, augmentation boundaries, and
+standards-body contribution routes.
+
 ## Composition rule
 
 The standards compose around one governed action:
@@ -54,3 +60,7 @@ Normative requirements belong in exactly one standard:
 
 White papers, conformance rubrics, diagrams, DPF assessments, and generated Word files are derived
 companions. They may summarize the standards but must link back to the canonical normative source.
+
+External crosswalks and submission-positioning material are also derived companions. They belong
+in [agent-standards-external-alignment.md](agent-standards-external-alignment.md), while specific
+technical requirements remain with the normative owner named above.
