@@ -184,7 +184,7 @@ export const BOM_WORKFORCE_SURFACE_MANIFEST: BomWorkforceSurface[] = [
     productId: "bom-surface-tax-remittance",
     name: "Tax Remittance / Paying Taxes",
     description:
-      "Paying taxes / tax remittance as a Workforce financial-management product (consumers: finance employee, accountant coworker, operator). Depends on Foundational accounting/banking/identity and, where tax derives from sales, Products & Services Sold revenue records.",
+      "Paying taxes / tax remittance as a Workforce financial-management product (consumers: finance employee, accountant coworker, operator). Depends on Foundational accounting/banking/identity and, where tax derives from sales, Goods and Services for Sale revenue records.",
     taxonomyNodeId: "for_employees/financial_management/manage_taxes",
   },
   {

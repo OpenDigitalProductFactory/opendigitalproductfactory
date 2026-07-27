@@ -8,24 +8,33 @@
 
 **Umbrella backlog item:** `BI-5C5FA641`
 
-**Decision ledger:** `DI-8B3E5799CA59`
+**Decision ledger:** `DI-8B3E5799CA59`, `DI-26D56D03E6BD`
 
 **Implementation plan:** `docs/superpowers/plans/2026-07-27-product-management-operating-loop.md`
 
 ## 1. Executive summary
 
-DPF already contains much of the substrate a product manager needs: digital products, product-linked backlog, market research, competitive battlecards, knowledge with revisions and staleness, demand scoring, funding decisions, architecture, releases, scheduling, and AI coworkers. The gap is not another product-management database. The gap is a coherent operating loop that keeps those capabilities product-scoped, evidence-backed, current, explainable, and easy to use.
+DPF already contains much of the substrate a product manager needs: four portfolios, digital products, archetype-derived market offers, product-linked backlog, market research, competitive battlecards, knowledge with revisions and staleness, demand scoring, funding decisions, architecture, releases, storefronts, sales/quotes, scheduling, and AI coworkers. The original design treated `DigitalProduct` as the universal product-management anchor. That is correct for EEMD and DPF's platform-scoped digital-product decisioning, but it is too narrow for the organization-specific goods, services, experiences, access products, and mixed product lines that WWWD must understand.
 
-This design converges the existing capabilities behind a typed `ProductOperatingContext` projection and adds only the missing canonical outcome-learning contract. Product managers receive an action-oriented **Direction** area inside the existing Product workspace. It connects:
+This amended design keeps EEMD digital-product focused and introduces a connected business-product perspective in the organization's **Goods and Services for Sale** portfolio (stable internal slug: `products_and_services_sold`). A top-down product-line hierarchy describes what the organization creates and manages over time. A separate consumption chain describes how those products are packaged and purchased:
+
+`Product Line → Product → Offering → Catalog Item → optional reusable SKU or order-specific configuration → channel presentation → purchase/consumption`
+
+`CatalogItem` is canonical; `StorefrontItem` becomes a storefront channel projection. The architecture preserves the complete model but automatically collapses the common 1:1 Product ↔ default Offering ↔ Catalog Item case in user experience. Configuration, SKU, bundle, pricing, quote, and Product Sold layers appear only when the business model or actual divergence requires them.
+
+The design converges the existing capabilities behind typed organization, product-line, and product operating-context projections. Product managers and owner-operators receive role-adaptive, action-oriented **Direction** experiences that connect:
 
 1. cited market and customer intelligence;
 2. evidence-linked demand and investment decisions;
 3. objectives and measurable outcomes;
 4. derived, audience-appropriate roadmaps;
 5. delivery and release state; and
-6. recurring coworker-assisted review workflows.
+6. recurring coworker-assisted review workflows;
+7. product-line comparisons and rollups;
+8. offering, catalog, bundle, configuration, and consumption evidence; and
+9. WWWD-grounded proactive business advice.
 
-Roadmaps remain projections of canonical demand, objective, architecture, and delivery state. Research remains approval-gated and reviewable. AI actions preview their inputs and proposed mutations. The product workspace remains the owner; no second global PM cockpit is introduced.
+Roadmaps remain projections of canonical demand, objective, architecture, and delivery state. Catalogs remain consumption projections over managed products, not product-definition authorities. Research remains approval-gated and reviewable. AI actions preview their inputs and proposed mutations. Products remains the canonical management area; no second global PM cockpit is introduced.
 
 ## 2. Problem
 
@@ -38,6 +47,13 @@ The current platform has capable but fragmented product-management ingredients:
 - roadmap assembly is described in prompts, but a durable roadmap workflow is not honored by the current substrate;
 - there is no canonical product objective/outcome model connecting a bet, its measure, delivered work, and observed learning;
 - reusable scheduling exists, but the core PM cadences are not packaged as discoverable product-scoped playbooks.
+- the Goods and Services for Sale portfolio does not yet provide a canonical product-line → product hierarchy for non-digital goods and services;
+- setup establishes one primary archetype and a seeded market offer but does not confirm common adjacent lines such as salon retail goods, hotel conferences, or restaurant events;
+- `StorefrontItem` combines channel presentation and price but has no structural trace to a managed business Product, Offering, or canonical CatalogItem;
+- `QuoteLineItem` points directly to `DigitalProduct`, conflating the managed product with the exact sellable configuration;
+- the existing `ServiceOffering` is operational-commitment oriented and is not a complete commercial Product Offering;
+- DPF has no general Product Sold trace from the purchased offering/catalog item/configuration to account, consumer, subscriber, or installed/provisioned instance; and
+- the platform cannot yet roll commercial and operational evidence from product → product line → organization for proactive WWWD advice.
 
 The result is a platform that can store and execute many parts of product work without yet making the product manager's loop feel continuous.
 
@@ -64,6 +80,10 @@ The Product Talk article about Claude Code highlights six durable properties: pe
 | [Plane Cycles](https://plane.so/cycles) and [Operating Manual](https://plane.so/operating-manual) | Recurring cycles and progressive disclosure help teams turn a backlog into a repeatable rhythm. | DPF uses existing schedules and product lifecycle state rather than importing sprint semantics. |
 | [OpenProject work packages](https://www.openproject.org/docs/user-guide/work-packages/) | Typed work, hierarchy, timelines, and exports are valuable when they share one work graph. | DPF retains `Epic` and `BacklogItem` as the delivery graph. |
 | [Leantime strategy management](https://support.leantime.io/en/article/how-to-use-leantimes-strategy-management-software-16wm52a/) | Strategy becomes useful when goals roll up from ongoing project work. | DPF adds a minimal outcome contract, not a general-purpose strategy-document suite. |
+| [The Open Group IT4IT](https://www.opengroup.org/it4it) | Preserve the distinction between managing digital products and offering/consuming them; retain Product, Offering, and Subscriber alignment for digital-product operations. | IT4IT remains the EEMD/digital-product architecture. It does not become the authority for every business-product or commerce concept. |
+| [ServiceNow CSDM foundation domain](https://www.servicenow.com/docs/r/servicenow-platform/common-service-data-model-csdm/foundation-domain.html) | Product models carry lifecycle/ownership context and can represent reusable configurations or bundles. | Catalog Item, SKU, configuration, and the proposed generalized Product Sold chain are not described as current CSDM entities in this design. |
+| [ServiceNow Service Catalog use case](https://www.servicenow.com/docs/r/xanadu/servicenow-platform/common-service-data-model-csdm/request-cat-use-case-example.html) | A catalog item is the selectable/requestable consumption surface and may appear through portal and other channels. | DPF generalizes CatalogItem beyond the current storefront; StorefrontItem becomes a channel projection. |
+| [ServiceNow product offerings](https://www.servicenow.com/docs/bundle/xanadu-order-management/page/product/tmt-order-mgt/task/som-create-product-offering.html) | Product offerings are orderable commercial forms, may be standalone or bundle-only, and can participate in leads, quotes, and orders. | ServiceNow Sales/Order Management and CSM adjacency is research input, not a claim that these objects are already in CSDM. |
 
 ## 5. Governing architecture decision
 
@@ -77,22 +97,40 @@ The kernel selected **projected operating loop** with high confidence, composite
 
 The surface stitch is too passive: it would make fragmentation more visible without activating the workflow. The parallel module violates single-source-of-truth and would require permanent synchronization with demand, delivery, architecture, and knowledge.
 
+### 5.1 Complete model versus user exposure
+
+The operator subsequently ratified a second architecture decision after extending the scope to business products and consumption:
+
+1. **Flat simple model** — combine product, catalog, storefront, and sale concepts.
+2. **Complete exposed model** — normalize every layer and expose every layer to every user.
+3. **Complete progressive model** — preserve the normalized model, auto-provision/collapse common 1:1 relationships, and reveal complexity only when the archetype, capability profile, or actual commercial divergence requires it.
+
+Kernel consultation `DI-26D56D03E6BD` recommended **complete progressive** with usable, strongly structured signal (`6.6121` composite), no commandment conflict, and a close `0.1684` margin over complete-exposed. Research and Use Standards, Never Assume — Verify, Ground New Work in Existing Platform, Architecture Over Shortcuts, and Single Source of Truth pulled toward the complete model. Human cognitive load pulled against exposing it universally. Because the margin was below the kernel tie threshold, the operator's explicit preference ratifies the decision.
+
+The resulting tradeoff rule is:
+
+> Require every architectural distinction to justify its complexity through lifecycle, ownership, traceability, reuse, or control. When a sound design still introduces substantial complexity, treat usability as part of that design: derive defaults, guide creation, provide contextual navigation, and progressively disclose advanced layers.
+
 ## 6. Design principles
 
-1. **One product graph.** Evidence, demand, objectives, roadmap projections, delivery, and outcomes must resolve to a `DigitalProduct`.
-2. **Evidence before prioritization.** A score is explainable through inputs, evidence, estimates, and provenance.
-3. **Derived artifacts stay derived.** Briefs and roadmaps are read models. Exported snapshots are records of communication, not new planning authorities.
-4. **AI proposes; governed workflows decide.** Research execution, demand mutation, funding, and publishing preserve preview, approval, and audit boundaries.
-5. **Freshness is visible.** Every evidence-based conclusion exposes source, observed/retrieved time, review state, and staleness.
-6. **The first viewport is for action.** It leads with changed evidence, decisions needed, current bets, risks, and outcome posture—not a wall of counts.
-7. **Common substrate, archetype vocabulary.** The loop works across products while labels, sources, and playbooks can be configured for an archetype.
-8. **Refactor before expansion.** Roughly 20% of implementation capacity is reserved for the operating-context boundary and invariant coverage.
+1. **Two connected product perspectives.** EEMD `DigitalProduct` remains the digital-product architecture. The organization's Goods and Services for Sale portfolio owns its business Product Lines and Products. Explicit links show when a business Product is constituted or augmented by one or more DigitalProducts.
+2. **Preserve the provider–consumer boundary at every scale.** Product lines/products describe what the provider creates and manages. Offerings, CatalogItems, SKUs/configurations, channels, quotes, purchases, and Product Sold describe how a consuming party obtains and uses it. A small business may default the provider to the organization and derive the consumer from ordinary customer records; a large organization may disclose business units, product teams, subscriber types, and delegated ownership. Scale changes the projection, not the boundary or its reporting trace.
+3. **Necessary complexity carries a UX obligation.** Do not flatten justified architectural boundaries, but do count their operator and cognitive cost. Offset that cost with derived defaults, guided creation, contextual navigation, and progressive disclosure.
+4. **CatalogItem is canonical.** Storefront, mobile, sales-desk, partner, and quote surfaces project the same catalog definition instead of copying it.
+5. **Configuration is not automatic catalog growth.** Reusable standard configurations may become SKUs. One-off car/home configurations remain immutable quote/order/Product Sold snapshots unless deliberately promoted.
+6. **Evidence before prioritization.** A score or recommendation is explainable through inputs, evidence, estimates, constraints, and provenance.
+7. **Derived artifacts stay derived.** Briefs, roadmaps, storefront listings, and channel views do not become duplicate authorities.
+8. **AI proposes; governed workflows decide.** Research, commercial changes, investment, and publishing preserve preview, approval, and audit boundaries.
+9. **Freshness is visible.** Every evidence-based conclusion exposes source, observed/retrieved time, review state, and staleness.
+10. **The first viewport is for action.** It leads with changed evidence, decisions needed, current bets, risks, and outcome posture—not a wall of counts.
+11. **Common substrate, archetype vocabulary.** The loop works across products while defaults, labels, sources, and playbooks are archetype-configured.
+12. **Refactor before expansion.** Roughly 20% of implementation capacity is reserved for canonical boundaries, compatibility adapters, and invariant coverage.
 
 ## 7. Substrate verification ledger
 
 | Proposed concept | Existing substrate | Verdict |
 | --- | --- | --- |
-| Product context | `DigitalProduct`, `digital-product-view-model.ts`, product relations | Extend as a typed read-only `ProductOperatingContext`; do not persist another context record. |
+| Product context | `DigitalProduct`, `digital-product-view-model.ts`, product relations | Extend into typed organization/product-line/product operating projections; do not persist another context-summary record. |
 | Product intelligence | `ResearchProposal`, cited `market-research.ts`, research schedule/execution, `KnowledgeArticle` | Reuse. Add optional product scope to a proposal and propagate it to resulting knowledge. |
 | Competitive learning | `MarketingBattlecard`, marketing MCP pack, matrix builder | Reuse. Add optional product scope because positioning differs by product. |
 | Demand and investment | `BacklogItem.demandStage`, value inputs, score, investment bucket, estimate provenance, demand UI, funding decision tool | Activate and guard. Do not create an Idea model. |
@@ -101,6 +139,14 @@ The surface stitch is too passive: it would make fragmentation more visible with
 | Persistent artifact | `KnowledgeArticle`, product links, revisions, review and staleness | Reuse for reviewed narrative briefs and exported snapshots when durable storage is required. |
 | Recurring workflow | `ScheduledAgentTask`, research schedule, skills/prompts | Reuse and package product-scoped PM playbooks. |
 | Audit/signoff | decision interactions, backlog activities, tool execution | Reuse for funding and stakeholder review; do not add a roadmap-approval ledger. |
+| Product-line hierarchy | Four-portfolio registry, `DigitalProduct.portfolioId`, taxonomy, archetype market-offer seeding | Existing substrate is insufficient: add a general business ProductLine/Product contract in Goods and Services for Sale; do not broaden EEMD semantics or use taxonomy as mutable organization data. |
+| Mixed business lines at setup | `StorefrontArchetypeComposition`, composition views/actions, archetype activation profiles | Extend. Capture business-language product lines during initial setup and derive primary/secondary archetype composition internally. |
+| Offering | `ServiceOffering` with availability/MTTR/RTO/support commitments | Reconcile rather than silently repurpose. Define the commercial Offering contract and its relationship to operational service commitments. |
+| Canonical catalog item | `StorefrontItem`, archetype item templates, storefront sections | Existing channel-specific substrate is insufficient. Establish CatalogItem as canonical and make StorefrontItem a compatibility projection. |
+| SKU and configuration | Price fields on `StorefrontItem`; archetype-specific inventory SKU strings | Add optional reusable SKU/configuration contracts. Keep one-off configurations order-scoped unless deliberately promoted. |
+| Catalog packaging | Storefront setup/editing, Quote, QuoteLineItem, SalesOrder, Subscription | Extend behind Catalog Builder. Quote is an optional route, not a requirement. |
+| Product Sold | No general purchase-to-product/offering/catalog/configuration/consumer trace exists; `Subscription` is DPF-support specific | New future DPF/CSDM-extension concept justified. Label it as proposed, not current CSDM. Preserve CSM adjacency as research only. |
+| Product-line intelligence | Finance, CRM, storefront, booking, demand, delivery/capacity, outcome records | Add a bounded rollup projection with explicit measure availability and anti-double-counting rules; do not persist a second analytics ledger. |
 
 ## 8. Target operating loop
 
@@ -122,11 +168,79 @@ flowchart LR
     C -. "prepare, explain, refresh" .-> M
 ```
 
-### 8.1 Product operating context
+### 8.1 Producer-to-consumer domain contract
+
+```mermaid
+flowchart LR
+    subgraph PROVIDER["Provider-managed domain"]
+        PF["Goods and Services for Sale"] --> PL["Product line"]
+        PL --> P["Managed product<br/>good or service"]
+        DP["Digital product<br/>EEMD scope"] -. "constitutes or augments" .-> P
+    end
+    P --> OF["Offering<br/>provider–consumer promise"]
+    subgraph CONSUMPTION["Consumption domain"]
+        OF --> CI["Catalog item<br/>canonical purchase option"]
+        CI --> CF{"Configuration"}
+        CF -->|reusable| SKU["SKU / standard configuration"]
+        CF -->|sale-specific| OS["Quote/order configuration snapshot"]
+        SKU --> CH["Channel presentation<br/>StorefrontItem or other channel"]
+        OS --> QO["Quote or order"]
+        CH --> QO
+        QO --> PS["Product Sold<br/>fulfilled customer instance"]
+        PS --> CU["Account / consumer / subscriber"]
+    end
+```
+
+The boundaries are normative:
+
+- **Provider–consumer** is a required semantic boundary, not an enterprise-only workflow. The provider is the accountable organization by default and may resolve to explicit business units, teams, or owners when that distinction exists. The consuming party is resolved from actual account, contact, order, subscription, booking, or fulfillment evidence; the platform does not fabricate a generic consumer merely to complete the model.
+- **ProductLine** organizes what the business creates and manages, supports nested rollups, and does not change when sales packaging changes.
+- **Product** is the managed good or service. A `DigitalProduct` may constitute or augment it, but EEMD remains digital-product focused.
+- **Offering** is a sellable commercial promise for a product, including the terms under which it is available.
+- **CatalogItem** is the canonical purchase option. `StorefrontItem` becomes a channel-specific projection, not a second product definition.
+- **SKU/configuration** is optional. A reusable standard configuration may have a SKU; a one-off configured sale is stored as an immutable quote/order snapshot unless someone deliberately promotes it into the reusable catalog.
+- **Quote** is an optional commercial route. A price-list item may proceed directly to order.
+- **Product Sold** is the trace from the fulfilled customer instance back to product, offering, catalog item, configuration, order, and consuming party. It is a proposed DPF/CSDM extension, not a claim about the current CSDM standard.
+
+A bundle such as car + financing + insurance, a full dinner experience, or a haircut-and-shave special is a consumption package. It may link catalog items from multiple product lines, but it does not rewrite the product hierarchy. Rollups must distinguish product performance from package sales so a bundle does not double count revenue or volume.
+
+### 8.2 Progressive exposure contract
+
+The complete model is internal. The user sees the smallest truthful projection:
+
+| Business situation | Default experience | Advanced concept disclosed |
+| --- | --- | --- |
+| Owner-operated business with no internal product organization | The business is the provider; ordinary customers, bookings, or orders establish the consuming party | No product-team, subscriber-type, or delegated-governance setup |
+| Multi-team or multi-business-unit enterprise | Provider ownership and consuming populations are explicit where they affect accountability, access, funding, or service levels | Business unit, product team, consumer type, subscription, entitlement, delegated ownership |
+| One fixed product sold one way | One “what you sell” record; default offering and catalog item are derived | None |
+| Same product with channel, price, or term variants | “Ways customers can buy it” | Offering and catalog-item variants |
+| Standard configurable product | Product plus reusable options/configurations | SKU or standard configuration |
+| One-off configured sale | Configuration captured in the quote/order | Sale-specific snapshot, not a new SKU |
+| Off-the-lot sale | Select a standard SKU and, where relevant, a physical unit | Inventory/serialized-instance details |
+| Bundle, promotion, or seasonal package | Catalog Builder composes existing catalog items | Bundle membership, price, validity, channel |
+| Negotiated sale | Quote workflow appears only when required | Quote, revision, approval, acceptance |
+
+There is no global “simple mode” and “advanced mode.” Disclosure follows the selected archetype and product lines, enabled capabilities, observed data, and the task the user is performing. Authorized users retain drill-down and audit access without being required to maintain every layer manually.
+
+### 8.3 Initial product-line setup
+
+Initial setup asks **“What does your business sell?”** in business language. The user selects a primary line and any adjacent lines common to the archetype, then adds or removes products and services. Examples include:
+
+- hotel rooms plus conferences and events;
+- restaurant dining plus catered or booked events;
+- salon services plus hair-care goods;
+- vehicle sales plus financing and insurance;
+- construction services plus standard and configured homes.
+
+The platform derives the organization’s archetype composition, product-line hierarchy, starter products, default one-to-one offerings/catalog items, provider identity, and WWWD context. For a simple business, the organization is the provider and no separate product-team or subscriber model is requested. Consumer relationships arise from real customer, booking, order, subscription, or fulfillment evidence. Technical constructs stay behind the setup projection unless the selections or observed operating model require them. Product-line changes after setup remain a future lifecycle concern, but setup records provenance and effective state so later change management can be added without redefining the model.
+
+### 8.4 Product operating context
 
 `ProductOperatingContext` is a server-side TypeScript read model, assembled through explicit query adapters:
 
-- product identity, lifecycle, ownership, and architecture constraints;
+- organization, product-line, and product identity, lifecycle, ownership, and architecture constraints;
+- constituting or augmenting digital products and manufacturing/delivery enablers where relevant;
+- offering, catalog, sales, and consumption posture without treating those records as product definitions;
 - new or changed intelligence with source and review metadata;
 - demand funnel counts plus top explainable items;
 - pending decisions and funding posture;
@@ -137,7 +251,11 @@ flowchart LR
 
 The context returns source IDs and `asOf` timestamps. It does not store generated prose. Narrative summaries are generated from this bounded context and can be promoted to a product-linked `KnowledgeArticle` revision when a manager chooses to retain one.
 
-### 8.2 Minimal data changes
+### 8.5 Data-model sequencing
+
+The child backlog items own final Prisma and API shapes after code-graph and live-schema verification. Do not rename or repurpose `StorefrontItem`, `ServiceOffering`, or `QuoteLineItem` in a one-step migration. Use expand → backfill → switch reads/writes → contract, with compatibility projections during the transition.
+
+The first implementation increments remain additive:
 
 Add nullable `digitalProductId` relations to:
 
@@ -167,9 +285,10 @@ The migration is expand-first:
 - new tables are additive;
 - product foreign keys on existing models are nullable;
 - no existing organization-wide research or battlecard is guessed into a product;
+- no existing storefront or quote line is guessed into a product, offering, catalog item, or configuration without deterministic evidence;
 - any later tightening or uniqueness rule is a separate fleet-safe contract step.
 
-### 8.3 Demand activation
+### 8.6 Demand activation
 
 The current demand fields become an explicit product workflow:
 
@@ -184,7 +303,7 @@ The current demand fields become an explicit product workflow:
 
 Legacy rows are classified, not silently invented. An idempotent migration or governed backfill may assign a neutral intake stage only when a deterministic rule exists; otherwise the UI presents an explicit “not yet classified” queue. New product demand cannot silently omit its stage after the activation release.
 
-### 8.4 Roadmap projections
+### 8.7 Roadmap projections
 
 The roadmap query takes canonical inputs and produces:
 
@@ -203,7 +322,7 @@ Every card explains:
 
 Managers may filter and save audience preferences. They cannot directly drag a funded item into a contradictory state; the interaction opens the canonical funding, dependency, or delivery control. A portable export records filters, source IDs, `asOf`, and confidence.
 
-### 8.5 Reusable playbooks
+### 8.8 Reusable playbooks
 
 Initial product-scoped recipes:
 
@@ -219,14 +338,24 @@ Each recipe declares inputs, read tools, proposed writes, approval requirements,
 
 ### 9.1 Owning area
 
-The canonical route remains `/portfolio/product/[id]`. Add a **Direction** family to `ProductTabNav`, with:
+The Products home at `/portfolio` remains the canonical place to browse Goods and Services for Sale. It gains a top-down product-line hierarchy and rollups without adding a new global destination. The existing product route remains `/portfolio/product/[id]`. Add a **Direction** family to `ProductTabNav`, with:
 
 - Brief (`/direction`);
 - Intelligence (`/direction/intelligence`);
 - Roadmap (`/direction/roadmap`);
 - Outcomes (`/direction/outcomes`).
 
-The product Overview remains a concise identity/posture page and may show a single “Direction needs attention” handoff. Demand stays structurally backed by the existing backlog; the Direction brief projects the relevant demand state rather than moving or duplicating it. No new top-level navigation item is added.
+`ProductTabNav` already has a **Commercial** family whose **Offerings** subroute
+(`/portfolio/product/[id]/offerings`) renders `ServiceOffering` rows directly today
+(`apps/web/app/(shell)/portfolio/product/[id]/offerings/page.tsx`). This is the existing
+front-end home for exactly the record §7 already flags for reconciliation. The canonical
+commercial Offering/CatalogItem contract extends this existing Commercial > Offerings tab; it does
+not stand up Catalog Builder, or any other surface, as a second product-level commercial home.
+Reconciling `ServiceOffering` without naming this route risks the operational-commitment view and
+the new commercial-Offering view drifting into two competing "what does this product sell"
+surfaces — the exact failure mode the design's other guardrails prevent everywhere else.
+
+The product Overview remains a concise identity/posture page and may show a single “Direction needs attention” handoff. Demand stays structurally backed by the existing backlog; the Direction brief projects the relevant demand state rather than moving or duplicating it. Catalog Builder remains an internal Storefront capability reached contextually from the product or the Storefront; it does not become a competing product-management home. Any new subroute is subject to the navigation audit in its child item.
 
 ### 9.2 First viewport
 
@@ -242,6 +371,10 @@ Counts and trend charts are secondary. Empty states teach the next useful action
 
 ### 9.3 Interaction and accessibility contract
 
+- Use business language first: “what you sell,” “ways customers can buy it,” “options,” and “customer purchases.” Canonical entity names remain available in help, audit, and advanced detail.
+- Collapse derived one-to-one Product → Offering → CatalogItem relationships into one workflow. Reveal the layers when prices, channels, terms, configurations, bundles, or quote requirements diverge.
+- When users must work with necessary complexity, provide a guided creation flow, sensible defaults, breadcrumbs/related-record navigation, and an explanation of why the additional layer exists.
+- Do not require a global advanced mode. Disclosure follows the current task and the record’s actual capabilities.
 - Reuse `SectionNav`, report-kit components, shared filters, knowledge cards, and staleness indicators.
 - One primary action per page; secondary actions use menus or contextual links.
 - AI write actions show the context window, proposed records, sources, and approval boundary before execution.
@@ -268,6 +401,9 @@ Measure the loop without turning activity into a vanity score:
 - percentage of funded roadmap bets linked to an active objective;
 - percentage of due objective reviews completed on time;
 - percentage of released bets with a subsequent outcome observation;
+- percentage of active business products assigned to a product line;
+- product-line contribution and trend coverage, with bundled sales reconciled against component attribution;
+- rate at which one-off configurations are deliberately promoted to reusable catalog configurations;
 - roadmap exports generated from current state rather than manually maintained artifacts;
 - manager correction/override rate for AI-prepared summaries and scores.
 
@@ -276,41 +412,52 @@ Guardrails:
 - no decrease in source/provenance completeness;
 - no automatic publishing of research;
 - no growth in duplicate roadmap or idea authorities;
+- no uncontrolled SKU/catalog growth from one-off configured sales;
+- no double counting of bundle sales in product-line rollups;
 - no AI mutation without its declared approval contract.
 
 ## 12. Rollout
 
-1. Establish the projection and associations behind feature flags.
-2. Add outcome contracts and API/MCP surfaces.
-3. Activate demand for a small set of products with an explicit unclassified queue.
-4. Introduce Direction views and roadmap projections.
-5. Add scheduled playbooks and exports.
-6. Expand defaults after adoption, correction, and outcome-review evidence is healthy.
+1. Establish product-line setup and the Product → Offering → CatalogItem compatibility contract behind feature flags.
+2. Add Catalog Builder packaging, reusable configuration, and one-off configuration snapshot behavior.
+3. Add Product Sold traceability without making it a current-CSDM claim or blocking simple price-list sales.
+4. Establish the organization/product-line/product operating projection.
+5. Add outcome contracts and API/MCP surfaces.
+6. Activate demand for a small set of products with an explicit unclassified queue.
+7. Introduce role-adaptive Direction views and roadmap projections.
+8. Add product-line advice, scheduled playbooks, and exports.
+9. Expand defaults after adoption, correction, navigation, and outcome-review evidence is healthy.
 
 The rollout is product-selective before becoming an organization default. Existing organization-wide research, battlecards, backlog, and product pages continue to function throughout.
 
 ## 13. Architecture review (advisory)
 
-- **Alignment summary:** Well aligned after folding the convergence, principal, enum, projection, and fleet-safe migration guardrails into this design.
-- **Data model:** The design extends `DigitalProduct`, `ResearchProposal`, `MarketingBattlecard`, `KnowledgeArticle`, and `BacklogItem`. The only new canonical entity is the outcome contract proven absent by schema audit. Objective ownership resolves through `Principal`; it does not introduce another identity string.
-- **Single source of truth:** Demand remains the idea/investment authority; knowledge remains the reviewed narrative authority; roadmap and brief content remain projections; decision interactions remain the approval/audit authority.
-- **Substrate fit:** The route stays in Products, the scheduler and research executor are reused, reporting UI composes report-kit, and product query logic converges behind one read model.
+- **Alignment summary:** Well aligned with guardrails after separating the business-product hierarchy from EEMD, the producer lifecycle from the consumption lifecycle, and the complete architecture from its task-specific presentation.
+- **Data model:** The design extends `DigitalProduct`, storefront, quote/order, research, battlecard, knowledge, and backlog substrate. New ProductLine, commercial Offering/CatalogItem, optional reusable configuration, Product Sold traceability, and objective/outcome contracts are justified gaps, but their final shapes require child-level schema/code-graph verification. Objective ownership resolves through `Principal`; it does not introduce another identity string.
+- **Single source of truth:** Product/ProductLine owns what the organization manages; CatalogItem owns the canonical purchase option; StorefrontItem is a channel projection; quote/order owns sale-specific configuration snapshots; Product Sold owns fulfilled-customer traceability; demand remains the idea/investment authority; knowledge remains the reviewed narrative authority; roadmap and brief content remain projections.
+- **Substrate fit:** The management experience stays in Products, Catalog Builder stays in internal Storefront management, the scheduler and research executor are reused, reporting UI composes report-kit, and organization/product-line/product query logic converges behind one read model.
+- **Provider–consumer invariant:** Organizational scale changes the projection, not the semantic boundary. `Organization` is the default provider identity; subordinate provider/team structure is disclosed only when real accountability requires it, and consuming parties resolve from canonical customer/transaction evidence rather than placeholder records.
+- **Important (added on re-review):** the existing `ProductTabNav` "Commercial" family already has an
+  "Offerings" tab (`/portfolio/product/[id]/offerings`) that renders `ServiceOffering` rows today —
+  the exact record §7 flags for reconciliation. §9.1 named this route and its resolution (the
+  canonical Offering/CatalogItem contract extends this tab; it is not a second commercial-product
+  surface) so Delivery does not have to discover the collision mid-implementation.
 - **Enums and contracts:** New fixed strings must have one canonical TypeScript registry and exact MCP mirrors. Hyphens are required. No new value may be used in data before both contracts land.
-- **Blast radius:** Prisma schema/migration, product inverse relations, research execution, battlecard services and MCP pack, backlog demand rules, product navigation/routes, report components, skills/prompts, scheduled tasks, exports, telemetry, user guide, and tests.
-- **Standards researched:** Product Talk, Productboard, Jira Product Discovery, Plane, OpenProject, and Leantime informed traceability, derived audience views, recurring rhythms, progressive disclosure, and outcome roll-up. Their separate idea/roadmap authorities were explicitly rejected because DPF already has canonical demand and delivery records.
-- **Escalated decision:** Surface stitch vs projected operating loop vs parallel PM module was governed through the kernel; `DI-8B3E5799CA59` selected the projected loop.
+- **Blast radius:** Prisma schema/migrations, setup/archetype composition, product/storefront/quote/order relations, research execution, battlecard services and MCP pack, backlog demand rules, product navigation/routes, Catalog Builder, report components, skills/prompts, scheduled tasks, exports, telemetry, user guide, and tests.
+- **Standards researched:** Product Talk, Productboard, Jira Product Discovery, Plane, OpenProject, Leantime, IT4IT, and official ServiceNow CSDM/catalog/product-offering guidance informed traceability, producer/consumer separation, derived audience views, recurring rhythms, progressive disclosure, and outcome roll-up. Current CSDM does not yet supply the proposed Product Sold contract.
+- **Escalated decisions:** `DI-8B3E5799CA59` selected the projected operating loop. `DI-26D56D03E6BD` selected a complete model with progressive exposure; the operator refined this into a tradeoff rule that requires necessary architectural complexity to carry compensating creation and navigation aids.
 - **Reference-doc feedback:** None. The current architecture, usability, schema-audit, and single-source-of-truth references cover the durable rules found in this review.
-- **Recommended next step:** Proceed through the decomposed child items, beginning with the operating-context refactor and re-running substrate verification in each implementation branch.
+- **Recommended next step:** Proceed through the decomposed child items, beginning with product-line/setup and catalog-contract foundations before the operating-context refactor, and re-run substrate and UX-fit verification in each implementation branch.
 
 ## 14. UX fit review
 
-- **Decision:** `fits-with-guardrails`; the required guardrails are already folded into Sections 8.3, 8.4, 9, and the implementation plan.
-- **Owning area:** Products.
-- **Route family:** `/portfolio/product/[id]/direction` and its Intelligence, Roadmap, and Outcomes sibling views.
-- **Primary persona:** Digital product manager deciding what to learn, fund, communicate, and review without remembering which platform subsystem owns each record.
-- **Navigation layer touched:** Product section navigation plus contextual actions; no global navigation.
-- **Reuse/convergence:** `ProductTabNav`, `SectionNav`, report-kit, knowledge cards, staleness indicators, shared filters, and scheduled-task controls. New components express product-specific composition, not a new visual dialect.
-- **Source truth:** `ProductOperatingContext` projects canonical product, research, knowledge, demand, objective, decision, architecture, release, change, and schedule sources.
+- **Decision:** `fits-with-guardrails`; the complete model is appropriate only with the progressive exposure, guided creation, and contextual navigation contract in Sections 8.2, 8.3, and 9.
+- **Owning area:** Products for creation/management; internal Storefront/Catalog Builder for packaging and consumption.
+- **Route family:** `/portfolio`, `/portfolio/product/[id]/direction` and its Intelligence, Roadmap, and Outcomes sibling views; Catalog Builder placement must reuse the verified Storefront route family.
+- **Primary personas:** A professional product manager and a small-business owner/solopreneur need the same underlying insight. Vocabulary, density, and guided defaults adapt without creating separate data models.
+- **Navigation layer touched:** Product hierarchy/section navigation plus contextual transitions into Catalog Builder and consumption traceability; no global navigation.
+- **Reuse/convergence:** Existing portfolio navigation, `ProductTabNav`, `SectionNav`, internal Storefront management, report-kit, knowledge cards, staleness indicators, shared filters, and scheduled-task controls. New components express product-specific composition, not a new visual dialect.
+- **Source truth:** `ProductOperatingContext` projects canonical organization, product-line, product, digital-product, offering/catalog, consumption, research, knowledge, demand, objective, decision, architecture, release, change, and schedule sources.
 - **Empty/failure behavior:** Every page provides an honest next action for fresh, partial, stale, unavailable-provider, failed-run, and unauthorized states. Empty pages do not render zero-filled dashboards.
 - **AI boundary:** Informational cards and navigation never send prompts. Research, scoring, scheduling, mutation, and publishing actions require a context/write preview and the existing confirmation or approval boundary.
 - **Design-intelligence checks:** Adopt helpful empty states, URL-addressable view/filter state, visible active/disabled states, clear focus, readable type, and minimal/direct composition. Reject decorative dashboard density, alert animation, and hardcoded style/color recommendations.
@@ -326,6 +473,11 @@ The rollout is product-selective before becoming an organization default. Existi
 - promising dates where delivery evidence only supports sequence or confidence;
 - building a general OKR suite unrelated to product bets and learning;
 - auto-associating legacy organization records to products using guesses.
+- broadening EEMD beyond digital products or treating a business product line as an EEMD portfolio;
+- claiming CatalogItem or Product Sold is already part of current CSDM;
+- exposing every canonical layer to every user or requiring formal quotes for price-list purchases;
+- auto-materializing a reusable SKU for every one-off configured sale;
+- changing the product hierarchy when a bundle, promotion, or sales package changes.
 
 ## 16. Open implementation questions
 
@@ -334,6 +486,9 @@ These are bounded implementation decisions, not architecture forks:
 - whether the first outcome measure supports a small typed family (`number`, `percentage`, `currency`, `duration`, `qualitative`) or uses a unit-plus-value contract;
 - whether saved roadmap audience preferences belong in the existing user preference substrate or a small product-view configuration record;
 - the deterministic eligibility rule, if any, for initially assigning legacy product-linked backlog to the intake stage;
-- which existing decision interaction type best records stakeholder roadmap review without expanding its enum.
+- which existing decision interaction type best records stakeholder roadmap review without expanding its enum;
+- the lifecycle and approval rule for promoting a successful one-off configuration into a reusable catalog configuration/SKU;
+- how mixed-line bundle revenue and volume are attributed without double counting;
+- the exact compatibility projection and migration sequence from `StorefrontItem` and operational `ServiceOffering` to the canonical commercial contract.
 
 Each question must be resolved against the verified substrate and recorded in the implementing child backlog item before migration or UI work begins.

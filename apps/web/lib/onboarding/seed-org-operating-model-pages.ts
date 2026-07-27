@@ -3,7 +3,7 @@
 // The archetype starter seed (seed-org-wwwd-corpus.ts) gives a fresh install
 // an honest but GENERIC stance corpus. Onboarding also persists the company's
 // actual operating-model map — its market offer as DigitalProducts in the
-// Products & Services Sold portfolio (seed-market-offer.ts), its portfolio
+// Goods and Services for Sale portfolio (seed-market-offer.ts), its portfolio
 // decomposition on BusinessContext (seed-portfolio-decomposition.ts), and its
 // supply/tooling as DigitalProducts in Manufacturing & Delivery / For
 // Employees (projectArchetypeSupply) — but until now none of that map was
@@ -106,7 +106,7 @@ function listNames(names: string[]): string {
 }
 
 const ROLE_LABELS: Record<string, string> = {
-  productsAndServicesSold: "Products & Services Sold — what we offer the market",
+  productsAndServicesSold: "Goods and Services for Sale — what we offer the market",
   manufactureAndDeliver: "Manufacturing & Delivery — how the work gets made and delivered",
   forEmployees: "Workforce — who and what performs work",
   foundational: "Foundational — the base the rest stands on",
@@ -133,7 +133,7 @@ function buildWhatWeSellPage(input: {
     OPERATING_MODEL_SEED_MARKER,
     "# What we sell",
     "",
-    `This is ${input.orgLabel}'s recorded market offer — each line lives as a product or service offering in the \`Products & Services Sold\` portfolio, so decisions about the catalog can point at the real thing rather than a description of it:`,
+    `This is ${input.orgLabel}'s recorded market offer — each line lives as a product or service offering in the \`Goods and Services for Sale\` portfolio, so decisions about the catalog can point at the real thing rather than a description of it:`,
     "",
     listNames(names),
     "",

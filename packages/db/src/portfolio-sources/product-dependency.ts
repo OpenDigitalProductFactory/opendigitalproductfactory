@@ -1,5 +1,5 @@
 // Product-to-product dependency graph (BI-PORTPRIO-2) — the rail for the DPPM
-// line-of-sight priority cascade (BI-PORTPRIO-4): a Products & Services Sold
+// line-of-sight priority cascade (BI-PORTPRIO-4): a Goods and Services for Sale
 // offering's priority floors the priority of the Foundational / Manufacturing &
 // Delivery products it depends on.
 //
@@ -150,7 +150,7 @@ export function platformCapabilityDependencyEdges(
 
 /**
  * Cross-portfolio DPPM line-of-sight edges (BI-PORTPRIO-5) so the cascade reaches
- * beyond Foundational. A Products & Services Sold offering is DELIVERED BY the
+ * beyond Foundational. A Goods and Services for Sale offering is DELIVERED BY the
  * Manufacturing & Delivery pipeline; integrations (For Employees + others) RUN ON
  * the foundational MCP plane. The sold→AI Workforce edge now lives in
  * digital_product_registry.json (`dpf-platform-standard` → `dpf-ai-workforce`)
@@ -159,7 +159,7 @@ export function platformCapabilityDependencyEdges(
 export function crossPortfolioDependencyEdges(): ProductDependencyEdge[] {
   const edges: ProductDependencyEdge[] = [];
 
-  // Products & Services Sold → Manufacturing & Delivery: the platform offer is
+  // Goods and Services for Sale → Manufacturing & Delivery: the platform offer is
   // delivered by the build / source-control / deploy pipeline.
   for (const to of ["cap-build-studio", "cap-github-delivery", "cap-self-upgrade"]) {
     edges.push({

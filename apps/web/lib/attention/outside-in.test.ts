@@ -267,6 +267,6 @@ describe("outsideInReason", () => {
 
   it("names just the portfolio for a calm customer-facing item", () => {
     const reason = outsideInReason(item({ source: "approval-outbound" }));
-    expect(reason).toBe("Products & services sold");
+    expect(reason).toBe("Goods and services for sale");
   });
 });

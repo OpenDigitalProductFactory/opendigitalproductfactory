@@ -79,7 +79,7 @@ test.describe(`Suite 1: ${ORG}`, () => {
     await page.screenshot({ path: "e2e-results/01-product-cyber.png" });
   });
 
-  test("1.7 Navigate to portfolio: Products & Services Sold", async ({ page }) => {
+  test("1.7 Navigate to portfolio: Goods and Services for Sale", async ({ page }) => {
     await ensureLoggedIn(page);
     await page.goto(`/portfolio/${PORTFOLIO}`);
     await page.waitForLoadState("networkidle");

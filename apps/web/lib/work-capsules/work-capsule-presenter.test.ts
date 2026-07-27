@@ -121,12 +121,12 @@ describe("presentCapsuleRow", () => {
       decisionScope: "wwwd",
       decisionScopeLabel: "WWWD",
       portfolioRole: "productsAndServicesSold",
-      portfolioRoleLabel: "Products & Services Sold",
+      portfolioRoleLabel: "Goods and Services for Sale",
       servedPersona: "customer",
       activityKind: "delivery",
       activityKindLabel: "Delivery",
       outcomeAnchorLabel: "Onboard Contoso",
-      servesPortfolioRoleLabels: ["Products & Services Sold", "Manufacture & Deliver"],
+      servesPortfolioRoleLabels: ["Goods and Services for Sale", "Manufacture & Deliver"],
       dependsOnPortfolioRoleLabels: ["Foundational"],
     });
   });

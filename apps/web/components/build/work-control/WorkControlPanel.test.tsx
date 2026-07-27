@@ -19,12 +19,12 @@ describe("WorkControlPanel", () => {
             decisionScope: "wwwd",
             decisionScopeLabel: "WWWD",
             portfolioRole: "productsAndServicesSold",
-            portfolioRoleLabel: "Products & Services Sold",
+            portfolioRoleLabel: "Goods and Services for Sale",
             servedPersona: "customer",
             activityKind: "delivery",
             activityKindLabel: "Delivery",
             outcomeAnchorLabel: "Onboard Contoso",
-            servesPortfolioRoleLabels: ["Products & Services Sold"],
+            servesPortfolioRoleLabels: ["Goods and Services for Sale"],
             dependsOnPortfolioRoleLabels: ["Foundational"],
           },
           worktreePath: "D:/DPF-adopt",
@@ -40,7 +40,7 @@ describe("WorkControlPanel", () => {
     expect(html).toContain("Work Control");
     expect(html).toContain("Adopt work");
     expect(html).toContain("WWWD");
-    expect(html).toContain("Products &amp; Services Sold");
+    expect(html).toContain("Goods and Services for Sale");
     expect(html).toContain("customer");
     expect(html).toContain("Onboard Contoso");
     expect(html).toContain("feat/adopt");

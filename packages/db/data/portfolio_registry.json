@@ -29,10 +29,10 @@
     {
       "id": "products_and_services_sold",
       "portfolio_id": "products_and_services_sold",
-      "name": "Products and Services Sold",
-      "description": "Revenue-generating digital products and service offers delivered to external consumers. Includes all commercially contracted service offers.",
+      "name": "Goods and Services for Sale",
+      "description": "Revenue-generating goods and services offered to external consumers. Includes physical goods, digital products, service offers, experiences, access products, and other commercially available market offerings.",
       "owner_role": "HR-100",
-      "it4it_reference": "IT4IT §6.4 Products and Services Sold Portfolio"
+      "it4it_reference": "IT4IT §6.4 Products and Services Sold Portfolio (source terminology)"
     }
   ]
 }

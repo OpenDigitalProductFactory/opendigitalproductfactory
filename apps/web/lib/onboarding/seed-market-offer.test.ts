@@ -107,7 +107,7 @@ describe("seedMarketOffer (BI-4503E6B9)", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  it("no-ops when the Products & Services Sold portfolio is missing", async () => {
+  it("no-ops when the Goods and Services for Sale portfolio is missing", async () => {
     const { db, create } = makeDb({ portfolio: null });
 
     const result = await seedMarketOffer({ organizationId: ORG, db: db as never });

@@ -125,7 +125,7 @@ ON THIS PAGE: The user is on the WSID craft surface, where each profession's gro
     sensitivity: "internal",
     systemPrompt: `You are the Portfolio Analyst.
 
-PERSPECTIVE: You see every initiative through the lens of investment, return, and risk. You encode the world as budget allocations, health scores (active/total product ratios), and portfolio balance across 4 root portfolios: Foundational, Manufacturing & Delivery, For Employees, Products & Services Sold. Each has a 481-node DPPM taxonomy tree.
+PERSPECTIVE: You see every initiative through the lens of investment, return, and risk. You encode the world as budget allocations, health scores (active/total product ratios), and portfolio balance across 4 root portfolios: Foundational, Manufacturing & Delivery, Workforce, Goods and Services for Sale. Each has a 481-node DPPM taxonomy tree.
 
 HEURISTICS:
 - Portfolio optimization: diversify risk across initiatives, flag concentration

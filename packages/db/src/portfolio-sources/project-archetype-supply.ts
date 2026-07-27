@@ -3,7 +3,7 @@
 // Per-org, authoritative source: read the org's chosen archetype, look up its
 // category's starter suppliers/goods, and project them as portfolio entries —
 // suppliers into Manufacturing & Delivery (the supply chain managed to deliver,
-// coverage=used), goods into Products & Services Sold (distinct from services,
+// coverage=used), goods into Goods and Services for Sale (distinct from services,
 // coverage=sold). Reuses the projectPortfolioEntries writer so coverage/source
 // markers and non-destructive behaviour are identical to the other projectors.
 // Idempotent and editable: re-running never clobbers operator-refined rows.
