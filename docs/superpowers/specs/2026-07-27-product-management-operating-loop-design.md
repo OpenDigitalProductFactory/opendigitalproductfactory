@@ -114,7 +114,7 @@ The resulting tradeoff rule is:
 ## 6. Design principles
 
 1. **Two connected product perspectives.** EEMD `DigitalProduct` remains the digital-product architecture. The organization's Goods and Services for Sale portfolio owns its business Product Lines and Products. Explicit links show when a business Product is constituted or augmented by one or more DigitalProducts.
-2. **Separate producer and consumer lifecycles.** Product lines/products describe what is created and managed. Offerings, CatalogItems, SKUs/configurations, channels, quotes, and purchases describe how it is packaged and consumed.
+2. **Preserve the provider–consumer boundary at every scale.** Product lines/products describe what the provider creates and manages. Offerings, CatalogItems, SKUs/configurations, channels, quotes, purchases, and Product Sold describe how a consuming party obtains and uses it. A small business may default the provider to the organization and derive the consumer from ordinary customer records; a large organization may disclose business units, product teams, subscriber types, and delegated ownership. Scale changes the projection, not the boundary or its reporting trace.
 3. **Necessary complexity carries a UX obligation.** Do not flatten justified architectural boundaries, but do count their operator and cognitive cost. Offset that cost with derived defaults, guided creation, contextual navigation, and progressive disclosure.
 4. **CatalogItem is canonical.** Storefront, mobile, sales-desk, partner, and quote surfaces project the same catalog definition instead of copying it.
 5. **Configuration is not automatic catalog growth.** Reusable standard configurations may become SKUs. One-off car/home configurations remain immutable quote/order/Product Sold snapshots unless deliberately promoted.
@@ -172,23 +172,28 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    PF["Goods and Services for Sale"] --> PL["Product line"]
-    PL --> P["Managed product<br/>good or service"]
-    DP["Digital product<br/>EEMD scope"] -. "constitutes or augments" .-> P
-    P --> OF["Offering<br/>commercial promise"]
-    OF --> CI["Catalog item<br/>canonical purchase option"]
-    CI --> CF{"Configuration"}
-    CF -->|reusable| SKU["SKU / standard configuration"]
-    CF -->|sale-specific| OS["Quote/order configuration snapshot"]
-    SKU --> CH["Channel presentation<br/>StorefrontItem or other channel"]
-    OS --> QO["Quote or order"]
-    CH --> QO
-    QO --> PS["Product Sold<br/>fulfilled customer instance"]
-    PS --> CU["Account / consumer / subscriber"]
+    subgraph PROVIDER["Provider-managed domain"]
+        PF["Goods and Services for Sale"] --> PL["Product line"]
+        PL --> P["Managed product<br/>good or service"]
+        DP["Digital product<br/>EEMD scope"] -. "constitutes or augments" .-> P
+    end
+    P --> OF["Offering<br/>provider–consumer promise"]
+    subgraph CONSUMPTION["Consumption domain"]
+        OF --> CI["Catalog item<br/>canonical purchase option"]
+        CI --> CF{"Configuration"}
+        CF -->|reusable| SKU["SKU / standard configuration"]
+        CF -->|sale-specific| OS["Quote/order configuration snapshot"]
+        SKU --> CH["Channel presentation<br/>StorefrontItem or other channel"]
+        OS --> QO["Quote or order"]
+        CH --> QO
+        QO --> PS["Product Sold<br/>fulfilled customer instance"]
+        PS --> CU["Account / consumer / subscriber"]
+    end
 ```
 
 The boundaries are normative:
 
+- **Provider–consumer** is a required semantic boundary, not an enterprise-only workflow. The provider is the accountable organization by default and may resolve to explicit business units, teams, or owners when that distinction exists. The consuming party is resolved from actual account, contact, order, subscription, booking, or fulfillment evidence; the platform does not fabricate a generic consumer merely to complete the model.
 - **ProductLine** organizes what the business creates and manages, supports nested rollups, and does not change when sales packaging changes.
 - **Product** is the managed good or service. A `DigitalProduct` may constitute or augment it, but EEMD remains digital-product focused.
 - **Offering** is a sellable commercial promise for a product, including the terms under which it is available.
@@ -205,6 +210,8 @@ The complete model is internal. The user sees the smallest truthful projection:
 
 | Business situation | Default experience | Advanced concept disclosed |
 | --- | --- | --- |
+| Owner-operated business with no internal product organization | The business is the provider; ordinary customers, bookings, or orders establish the consuming party | No product-team, subscriber-type, or delegated-governance setup |
+| Multi-team or multi-business-unit enterprise | Provider ownership and consuming populations are explicit where they affect accountability, access, funding, or service levels | Business unit, product team, consumer type, subscription, entitlement, delegated ownership |
 | One fixed product sold one way | One “what you sell” record; default offering and catalog item are derived | None |
 | Same product with channel, price, or term variants | “Ways customers can buy it” | Offering and catalog-item variants |
 | Standard configurable product | Product plus reusable options/configurations | SKU or standard configuration |
@@ -225,7 +232,7 @@ Initial setup asks **“What does your business sell?”** in business language.
 - vehicle sales plus financing and insurance;
 - construction services plus standard and configured homes.
 
-The platform derives the organization’s archetype composition, product-line hierarchy, starter products, default one-to-one offerings/catalog items, and WWWD context. Technical constructs stay behind the setup projection unless the selections require them. Product-line changes after setup remain a future lifecycle concern, but setup records provenance and effective state so later change management can be added without redefining the model.
+The platform derives the organization’s archetype composition, product-line hierarchy, starter products, default one-to-one offerings/catalog items, provider identity, and WWWD context. For a simple business, the organization is the provider and no separate product-team or subscriber model is requested. Consumer relationships arise from real customer, booking, order, subscription, or fulfillment evidence. Technical constructs stay behind the setup projection unless the selections or observed operating model require them. Product-line changes after setup remain a future lifecycle concern, but setup records provenance and effective state so later change management can be added without redefining the model.
 
 ### 8.4 Product operating context
 
@@ -429,6 +436,7 @@ The rollout is product-selective before becoming an organization default. Existi
 - **Data model:** The design extends `DigitalProduct`, storefront, quote/order, research, battlecard, knowledge, and backlog substrate. New ProductLine, commercial Offering/CatalogItem, optional reusable configuration, Product Sold traceability, and objective/outcome contracts are justified gaps, but their final shapes require child-level schema/code-graph verification. Objective ownership resolves through `Principal`; it does not introduce another identity string.
 - **Single source of truth:** Product/ProductLine owns what the organization manages; CatalogItem owns the canonical purchase option; StorefrontItem is a channel projection; quote/order owns sale-specific configuration snapshots; Product Sold owns fulfilled-customer traceability; demand remains the idea/investment authority; knowledge remains the reviewed narrative authority; roadmap and brief content remain projections.
 - **Substrate fit:** The management experience stays in Products, Catalog Builder stays in internal Storefront management, the scheduler and research executor are reused, reporting UI composes report-kit, and organization/product-line/product query logic converges behind one read model.
+- **Provider–consumer invariant:** Organizational scale changes the projection, not the semantic boundary. `Organization` is the default provider identity; subordinate provider/team structure is disclosed only when real accountability requires it, and consuming parties resolve from canonical customer/transaction evidence rather than placeholder records.
 - **Important (added on re-review):** the existing `ProductTabNav` "Commercial" family already has an
   "Offerings" tab (`/portfolio/product/[id]/offerings`) that renders `ServiceOffering` rows today —
   the exact record §7 flags for reconciliation. §9.1 named this route and its resolution (the

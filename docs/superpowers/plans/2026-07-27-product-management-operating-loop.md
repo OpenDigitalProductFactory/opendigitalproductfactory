@@ -4,7 +4,7 @@
 
 **Goal:** Give professional product managers and small-business owner-operators one coherent loop for managing product lines, products, commercial packaging, customer consumption, intelligence, investment, roadmaps, and outcomes without exposing unnecessary architectural complexity.
 
-**Architecture:** Establish a business ProductLine/Product hierarchy without broadening EEMD, then separate the producer lifecycle from Offering → CatalogItem → optional reusable SKU/configuration → channel → quote/order → Product Sold consumption traceability. Reuse and converge existing storefront, quote/order, research, battlecard, knowledge, demand, decision, scheduling, architecture, and delivery substrate behind an organization/product-line/product `ProductOperatingContext`. Necessary model complexity must ship with derived defaults, guided creation, contextual navigation, and progressive disclosure.
+**Architecture:** Establish a business ProductLine/Product hierarchy without broadening EEMD, preserve the provider–consumer boundary at every organizational scale, then separate the provider lifecycle from Offering → CatalogItem → optional reusable SKU/configuration → channel → quote/order → Product Sold consumption traceability. Reuse and converge existing storefront, quote/order, research, battlecard, knowledge, demand, decision, scheduling, architecture, and delivery substrate behind an organization/product-line/product `ProductOperatingContext`. A simple business defaults the provider to the organization and derives consuming parties from real customer activity; enterprise ownership, team, subscriber, entitlement, and governance detail is disclosed only when it exists. Necessary model complexity must ship with derived defaults, guided creation, contextual navigation, and progressive disclosure.
 
 **Design:** `docs/superpowers/specs/2026-07-27-product-management-operating-loop-design.md`
 
@@ -53,9 +53,10 @@ Across the delivery graph, reserve approximately 20% of total implementation cap
 ### Task 1.3: Capture “what the business sells” during setup
 
 1. Extend setup to select a primary line and common adjacent lines in business language.
-2. Derive archetype composition, starter hierarchy, and default one-to-one commercial records behind the UI.
-3. Provide guided creation and contextual explanation when a mixed business needs additional lines.
-4. Verify hotel+events, restaurant+events, salon+goods, vehicle+finance/insurance, construction+configured-home fixtures.
+2. Derive archetype composition, starter hierarchy, default one-to-one commercial records, and provider identity behind the UI.
+3. Default the organization as provider for a simple business; do not require or fabricate a product team, business unit, subscriber type, or generic consumer.
+4. Provide guided creation and contextual explanation when a mixed business or real ownership boundary needs additional structure.
+5. Verify hotel+events, restaurant+events, salon+goods, vehicle+finance/insurance, construction+configured-home fixtures.
 
 **Phase gate:** schema and invariant tests, production build, migration apply, and setup UX verification across simple and mixed-line archetypes.
 
@@ -65,8 +66,9 @@ Across the delivery graph, reserve approximately 20% of total implementation cap
 
 1. Define tested contracts for Product, commercial Offering, canonical CatalogItem, and channel projection.
 2. Audit `ServiceOffering`, the existing Commercial → Offerings route at `/portfolio/product/[id]/offerings`, `StorefrontItem`, `QuoteLineItem`, actions, and integrations before selecting names or relations.
-3. Prove why every new distinction has a separate lifecycle, ownership, traceability, reuse, or control need.
-4. Record the compatibility and deprecation sequence; do not one-step rename or repurpose live models.
+3. Define the provider–consumer invariant independently of organizational scale: provider identity and consuming-party trace remain canonical even when their maintenance UI is collapsed.
+4. Prove why every new distinction has a separate lifecycle, ownership, traceability, reuse, or control need.
+5. Record the compatibility and deprecation sequence; do not one-step rename or repurpose live models.
 
 ### Task 2.2: Implement expand-first compatibility
 
@@ -79,9 +81,10 @@ Across the delivery graph, reserve approximately 20% of total implementation cap
 
 1. Present the common case as one “what you sell” workflow.
 2. Reveal offerings/catalog items only when channels, terms, prices, or availability diverge.
-3. Add guided creation, sensible defaults, breadcrumbs, related-record navigation, and advanced audit drill-down.
-4. Extend Commercial → Offerings as the product-level commercial home; keep Catalog Builder contextual and prevent it from becoming a competing product-management surface.
-5. Run a portal-navigation audit before adding any route or navigation layer.
+3. Use business language (“your business” and “customers”) for owner-operators; disclose provider organization, team, subscriber, entitlement, and governance terminology only when the operating model requires it.
+4. Add guided creation, sensible defaults, breadcrumbs, related-record navigation, and advanced audit drill-down.
+5. Extend Commercial → Offerings as the product-level commercial home; keep Catalog Builder contextual and prevent it from becoming a competing product-management surface.
+6. Run a portal-navigation audit before adding any route or navigation layer.
 
 **Phase gate:** compatibility/invariant tests, build, representative-data migration, and simple/divergent case UX verification proving the existing Offerings route reconciles `ServiceOffering` without a second product-level commercial home.
 
@@ -115,14 +118,15 @@ Across the delivery graph, reserve approximately 20% of total implementation cap
 
 1. Audit SalesOrder, Quote, Subscription, account/contact, installed-product, and consumer/subscriber concepts.
 2. Document current CSDM boundaries and label Product Sold as a proposed DPF/CSDM extension.
-3. Define identity, lifecycle, fulfillment, configuration snapshot, ownership, and consuming-party rules.
+3. Define identity, lifecycle, fulfillment, configuration snapshot, provider accountability, and consuming-party rules across owner-operated and multi-team organizations.
 
 ### Task 4.2: Add purchase-to-consumption traceability
 
 1. Link fulfilled customer instances to Product, Offering, CatalogItem, selected reusable configuration or sale snapshot, order, and account/consumer/subscriber.
 2. Keep price-list purchases valid without a Quote.
-3. Preserve audit history when catalog definitions, ownership, or status later change.
-4. Add organization isolation, authorization, and duplicate-fulfillment guards.
+3. Resolve consuming parties only from actual account, contact, booking, order, subscription, or fulfillment evidence; preserve honest unknowns rather than fabricating a placeholder consumer.
+4. Preserve audit history when catalog definitions, provider ownership, or status later change.
+5. Add organization isolation, authorization, and duplicate-fulfillment guards.
 
 ### Task 4.3: Add contextual consumption views
 

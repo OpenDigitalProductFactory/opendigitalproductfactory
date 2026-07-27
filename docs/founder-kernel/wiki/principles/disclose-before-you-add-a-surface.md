@@ -3,9 +3,9 @@ title: Preserve the model; disclose complexity progressively
 slug: disclose-before-you-add-a-surface
 pageKind: principle
 status: published
-abstract: Treat necessary architectural complexity as a real cost: preserve the sound model when its benefits justify that cost, then compensate users with defaults, guided creation, contextual navigation, and progressive disclosure.
+abstract: Treat necessary architectural complexity as a real cost: preserve sound semantic boundaries, including provider and consumer, while compensating users with defaults, guided creation, contextual navigation, and progressive disclosure.
 principleTier: core
-principleDirection: Treat necessary architectural complexity as a real cost: preserve the sound model when its benefits justify that cost, then compensate users with defaults, guided creation, contextual navigation, and progressive disclosure.
+principleDirection: Treat necessary architectural complexity as a real cost: preserve sound semantic boundaries, including provider and consumer, while compensating users with defaults, guided creation, contextual navigation, and progressive disclosure.
 principleDimensionVector: {"operator_effort": -0.7, "human_cognitive_load": -0.9, "reusability": 0.5, "schema_grounding": 0.5, "long_term_maintainability": 0.4}
 principleAppliesTo:
   - in_platform_coworker
@@ -40,6 +40,14 @@ see every entity and relationship. Conversely, simplifying the experience is not
 permission to discard traceability or merge concepts that have different
 lifecycles. The more complexity a sound design introduces, the stronger its
 obligation to help users create, understand, and navigate it.
+
+Scale changes exposure, not semantics. A provider–consumer boundary that protects
+accountability and product reporting in a large digital enterprise remains
+meaningful for a salon, restaurant, builder, or hotel. In the smaller business,
+the organization can default as provider and ordinary customer activity can
+resolve the consuming party. The platform retains the boundary without requiring
+the operator to configure product teams, business units, subscriber types,
+entitlements, or governance layers that do not exist.
 
 ## Why
 
@@ -95,7 +103,10 @@ versus what must be exposed now" companion to
    the selected task requires it.
 8. Keep authorized drill-down and audit access available without making it part
    of the default workflow.
-9. Do not delete traceability, overload one concept with multiple lifecycles, or
+9. Preserve provider and consuming-party identity for reporting, but derive it
+   from canonical organization and real customer evidence; do not fabricate
+   enterprise structure or placeholder consumers to make the model look complete.
+10. Do not delete traceability, overload one concept with multiple lifecycles, or
    grow uncontrolled records merely to make the first screen look simpler.
 
 When a surface itself needs to show more, pick the canonical disclosure construct
@@ -122,7 +133,13 @@ history, or full record workflow.
 - **Positive:** A salon defines “haircut” once. The platform derives its default
   Offering and CatalogItem, so setup feels like one record. When the owner adds a
   holiday haircut-and-shave package, Catalog Builder reveals bundle and validity
-  controls and provides contextual links back to the two managed services.
+  controls and provides contextual links back to the two managed services. The
+  salon is the default provider; bookings and purchases establish the consumers,
+  with no fictional product team or subscriber taxonomy.
+- **Positive:** A large enterprise exposes business-unit and product-team
+  accountability, subscriber populations, entitlements, and service commitments
+  because those distinctions affect funding, access, and reporting. It uses the
+  same provider–consumer contract as the salon, with a richer projection.
 - **Positive:** A home builder keeps Product, Offering, reusable configurations,
   and sale-specific configuration snapshots distinct because they have different
   lifecycles. A guided flow starts from a standard model, explains each required
