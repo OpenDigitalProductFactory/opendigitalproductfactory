@@ -127,7 +127,10 @@ terminate_process_tree() {
 
 stop_heartbeat() {
   if [ -n "$heartbeat_pid" ]; then
-    kill "$heartbeat_pid" 2>/dev/null || true
+    # The monitor normally sleeps for hundreds of seconds between renewals.
+    # Kill its child sleep first so a completed gate never waits for the next
+    # heartbeat tick (which previously inflated Linux contract tests by 20m).
+    terminate_process_tree "$heartbeat_pid"
     wait "$heartbeat_pid" 2>/dev/null || true
     heartbeat_pid=""
   fi

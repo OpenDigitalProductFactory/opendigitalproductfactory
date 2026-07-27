@@ -12,7 +12,8 @@ const nativeShellProbe = spawnSync("sh", ["-c", "printf ok"], { encoding: "utf8"
 const shellContractSkipReason = nativeShellProbe.error
   ? "native POSIX shell 'sh' is unavailable on this host; shell contracts run in CI/Linux or Git Bash-equipped worktrees"
   : false;
-const shellContractTest = (name, fn) => test(name, { skip: shellContractSkipReason }, fn);
+const shellContractTest = (name, fn) =>
+  test(name, { skip: shellContractSkipReason, timeout: 30_000 }, fn);
 
 function runGate(args, options = {}) {
   return spawnSync("sh", [script, ...args], {
@@ -394,6 +395,10 @@ if [ "$1" = "rev-parse" ] && [ "$2" = "--git-path" ]; then
   echo "${temp}/$3"
   exit 0
 fi
+if [ "$1" = "rev-parse" ] && [ "$2" = "--git-common-dir" ]; then
+  echo "${temp}"
+  exit 0
+fi
 if [ "$1" = "push" ]; then
   exit 0
 fi
@@ -483,6 +488,10 @@ shellContractTest("gate-worktree.sh --finalize-evidence records pending evidence
   writeFileSync(gitStub, `#!/bin/sh
 if [ "$1" = "rev-parse" ] && [ "$2" = "--git-path" ]; then
   echo "${temp}/$3"
+  exit 0
+fi
+if [ "$1" = "rev-parse" ] && [ "$2" = "--git-common-dir" ]; then
+  echo "${temp}"
   exit 0
 fi
 echo "unexpected git call: $*" >&2
