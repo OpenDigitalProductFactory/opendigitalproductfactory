@@ -9531,7 +9531,10 @@
       "publishedPortal": true,
       "anchors": [
         "use-this-doc-for",
-        "workflow",
+        "choose-the-evidence-surface",
+        "investigate-an-unexpected-action",
+        "separate-the-failure-domains",
+        "change-and-recovery-rules",
         "what-to-watch"
       ]
     },
@@ -9542,7 +9545,10 @@
       "publishedPortal": true,
       "anchors": [
         "use-this-doc-for",
-        "workflow",
+        "what-discovery-does",
+        "configure-a-connection-safely",
+        "review-a-run",
+        "promotion-and-follow-up",
         "what-to-watch"
       ]
     },
@@ -9572,7 +9578,10 @@
       "publishedPortal": true,
       "anchors": [
         "use-this-doc-for",
-        "workflow",
+        "read-the-identity-model",
+        "choose-the-right-surface",
+        "change-access-deliberately",
+        "recovery-and-evidence",
         "what-to-watch"
       ]
     },
@@ -9596,7 +9605,11 @@
       "publishedPortal": true,
       "anchors": [
         "use-this-doc-for",
-        "workflow",
+        "start-with-the-object-you-are-managing",
+        "read-marketplace-readiness",
+        "connect-and-verify",
+        "native-integration-previews",
+        "troubleshooting-and-recovery",
         "what-to-watch"
       ]
     },
