@@ -85,6 +85,27 @@ All must pass. The suite is in the thousands of tests and must sit at **0
 failures on `main`**; the live count is whatever the **Unit Tests** job reports
 on the latest `main` run — don't hard-code a number here, it goes stale.
 
+### Policy guard profiles
+
+Fast source and PR-policy checks are registered in
+[`scripts/lib/ci-policy-guards.mjs`](../../scripts/lib/ci-policy-guards.mjs).
+The registry preserves the former job name, display name, command sequence, and
+profile for every migrated guard. The runner executes every named entry even
+when an earlier entry fails, then writes a per-guard pass/fail/duration table to
+the GitHub job summary and a machine-readable artifact.
+
+Consolidation follows a fail-safe promotion sequence:
+
+1. run the profile as a non-blocking shadow beside every legacy job;
+2. compare the named results on the same PR tree;
+3. remove the legacy jobs only after parity;
+4. remove `continue-on-error` so the profile becomes merge-blocking.
+
+`scripts/ci-policy-guards.test.mjs` freezes the complete legacy-job inventory:
+a removed or duplicated registry entry fails CI. This reduces repeated runner,
+checkout, and Node setup without collapsing guard identity or weakening
+`Merge Readiness`.
+
 ## Where CI runs it
 
 Wired up in [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) as the

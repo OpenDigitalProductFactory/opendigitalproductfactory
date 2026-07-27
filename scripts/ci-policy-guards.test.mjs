@@ -1,0 +1,113 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { describe, it } from "node:test";
+
+import {
+  POLICY_GUARD_PROFILES,
+  runPolicyProfile,
+} from "./lib/ci-policy-guards.mjs";
+
+const EXPECTED_LEGACY_JOBS = [
+  "archetype-completeness-guard",
+  "build-studio-namespace-guard",
+  "bundle-boundary-guard",
+  "capability-consumer-guard",
+  "compose-env-contract-guard",
+  "data-impact-gate",
+  "decision-baseline",
+  "derived-artifact-registry",
+  "design-grounding-gate",
+  "diagram-dependency-pin-guard",
+  "doc-reference-integrity",
+  "docs-impact-gate",
+  "docs-link-integrity",
+  "docs-staleness-detector",
+  "finding-substrate-guard",
+  "instruction-plane-guard",
+  "janitor-tests",
+  "mcp-tool-pack-guard",
+  "mobile-jest-pin-guard",
+  "module-size-guard",
+  "n-minus-one-caller-honesty",
+  "new-dependency-gate",
+  "override-provenance-guard",
+  "package-boundary-guard",
+  "pr-health-test",
+  "repo-guard-loop",
+  "reporting-composition-guard",
+  "sbom-divergence-guard",
+  "seed-fit-gate",
+  "singleton-safety-guard",
+  "spec-plan-doc-gate",
+  "stewardship-scope-guard",
+  "style-drift-guard",
+  "ux-fit-gate",
+];
+
+describe("CI policy guard registry", () => {
+  it("accounts for every migrated legacy job exactly once", () => {
+    const entries = Object.values(POLICY_GUARD_PROFILES).flat();
+    const legacyJobs = entries.map((entry) => entry.legacyJobId).sort();
+
+    assert.deepEqual(legacyJobs, EXPECTED_LEGACY_JOBS);
+    assert.equal(new Set(legacyJobs).size, legacyJobs.length);
+    assert.equal(new Set(entries.map((entry) => entry.id)).size, entries.length);
+    for (const entry of entries) {
+      assert.ok(entry.name);
+      assert.ok(entry.commands.length > 0);
+    }
+  });
+
+  it("runs every named guard and retains all failures", async () => {
+    const calls = [];
+    const result = await runPolicyProfile({
+      entries: [
+        {
+          id: "first",
+          legacyJobId: "first-job",
+          name: "First",
+          commands: [["node", ["first.mjs"]]],
+        },
+        {
+          id: "second",
+          legacyJobId: "second-job",
+          name: "Second",
+          commands: [["node", ["second.mjs"]]],
+        },
+      ],
+      execute(command, args) {
+        calls.push([command, args]);
+        return command === "node" && args[0] === "first.mjs" ? 1 : 0;
+      },
+      now: (() => {
+        let value = 0;
+        return () => (value += 10);
+      })(),
+    });
+
+    assert.deepEqual(calls, [
+      ["node", ["first.mjs"]],
+      ["node", ["second.mjs"]],
+    ]);
+    assert.equal(result.ok, false);
+    assert.deepEqual(
+      result.entries.map(({ id, status }) => ({ id, status })),
+      [
+        { id: "first", status: "failed" },
+        { id: "second", status: "passed" },
+      ],
+    );
+  });
+
+  it("wires source and pull-request shadow profiles in CI", () => {
+    const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
+    assert.match(workflow, /^  policy-guards-source-shadow:$/m);
+    assert.match(workflow, /node scripts\/ci-policy-guards\.mjs --profile source/);
+    assert.match(workflow, /^  policy-guards-pr-shadow:$/m);
+    assert.match(workflow, /node scripts\/ci-policy-guards\.mjs --profile pull-request/);
+    assert.equal(
+      (workflow.match(/continue-on-error:\s*true/g) ?? []).length,
+      2,
+    );
+  });
+});
