@@ -27,6 +27,7 @@ const catalog: CoworkerCatalog = {
       contractTerms: {},
       dataBoundary: { sensitivity: "confidential" },
       metadata: {},
+      portfolio: { slug: "foundation", name: "Foundation" },
       provider: {
         agentId: "legal-operations-counsel",
         displayName: "Legal Operations Counsel",
@@ -92,4 +93,3 @@ describe("CoworkerCatalogView", () => {
     expect(html).toContain("attorney-review-required");
   });
 });
-

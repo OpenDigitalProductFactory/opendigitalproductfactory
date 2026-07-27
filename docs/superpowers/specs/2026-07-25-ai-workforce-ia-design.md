@@ -2,7 +2,9 @@
 
 ## Status
 
-Draft reviewed design for `BI-ADFDC62F` under `EP-UX-SYSTEM`.
+Accepted design under `EP-UX-SYSTEM`. Availability and authority projections
+are merged; the four-area roster and coworker-record consumption are in
+delivery under `BI-C810CC5A` and Work Capsule `WC-D6E5F3F4`.
 
 ## Problem
 
@@ -183,6 +185,13 @@ Recommended first-screen order:
 4. **Platform and back office**
    - Finance, compliance, admin, Build Lead, Platform Engineer, Enterprise Architect, UX Design Critic, Data Architect, External Catalog Scout, and internal improvement coworkers.
 
+The examples above are a target classification, not permission to infer areas
+from names, role types, or `Agent.portfolioId`. The source of truth is the
+portfolio assigned to each active `CoworkerService`. A coworker with services
+in several areas is grouped by the most customer-inward assigned area and keeps
+all assigned areas in Work Offered. A coworker with no classified active
+service appears under **Other**.
+
 Each coworker card should show:
 
 - Coworker name.
@@ -194,8 +203,9 @@ Each coworker card should show:
 - Availability badge:
   - `Available for your business type`
   - `Setup needed`
-  - `Not available`
-  - `Coming later`
+  - `Needs attention`
+  - `Not available for your business type`
+  - `Coverage not defined`
 - Approval/autonomy badge:
   - Use the canonical owner labels from Deliverable 2 of
     `docs/superpowers/plans/2026-07-26-ai-workforce-availability-authority-projections.md`.
@@ -270,7 +280,7 @@ Roster-card examples:
 - `Available for restaurants`
 - `Available after setup`
 - `Not available for your business type`
-- `Coming later for your business type`
+- `Coverage not defined for your business type`
 
 Coworker detail examples:
 
@@ -313,15 +323,15 @@ Precedence:
    - The current category is explicitly supported and setup prerequisites are satisfied.
    - Show `Available for your business type`.
 
-5. **Coming later**
-   - The offer is intended for this category or similar businesses, but capability coverage is not ready.
-   - Show `Coming later`.
-
-6. **Not available**
+5. **Not available**
    - The work is not applicable to the current business type.
    - Show `Not available for your business type`.
 
-Universal availability must not be inferred from an empty list or `*`. When a governed universal encoding is introduced, it applies only if no stricter category, leaf, setup, or safety signal overrides it.
+6. **Coverage not defined**
+   - No explicit leaf, category, or governed universal declaration establishes support.
+   - Show `Coverage not defined for your business type`; do not infer future intent.
+
+Universal availability must not be inferred from an empty list or `*`. Future intent such as `Coming later` also requires its own governed encoding and must not be inferred from missing coverage. When a governed universal encoding is introduced, it applies only if no stricter category, leaf, setup, or safety signal overrides it.
 
 ## Offer as the Core Discovery Object
 
@@ -521,11 +531,16 @@ Phase 4: Retire redirect-only and low-value peer destinations.
 - The coworker record is the durable management home.
 - Fleet modes are for cross-coworker comparison, exception handling, and setup workflows.
 - Technical raw detail must use progressive disclosure.
+- On phone-width viewports, global and Platform navigation collapse to compact,
+  route-aware controls. Their full option sets remain one deliberate action
+  away; they must not consume the roster's first viewport.
+- The shared AI coworker launcher remains available on mobile and opens as a
+  viewport modal rather than a docked or floating desktop panel.
 
 ## Acceptance Criteria
 
 - Given a restaurant-like current archetype, an owner can identify coworkers that `Talk to customers`, `Work with partners`, and are `Internal only` from the AI Workforce first viewport without opening provider/admin pages.
-- Given coworkers in available, setup-needed, not-available, and coming-later states, the roster shows one owner-readable availability badge per coworker or offer.
+- Given coworkers in available, setup-needed, not-available, and coverage-not-defined states, the roster shows one owner-readable availability badge per coworker or offer.
 - Given a customer-facing coworker with missing setup dependencies, the roster shows `Setup needed` and the coworker detail explains the missing prerequisite before technical capability data.
 - Given a governance user looking for unresolved AI decisions, they can reach the cross-coworker review queue from AI Workforce > Decision Governance without using `/coworker-decisions`.
 - Given an operator troubleshooting degraded AI work, Systems Health gives a symptom-oriented entry before raw provider/model/routing tables.
@@ -533,6 +548,12 @@ Phase 4: Retire redirect-only and low-value peer destinations.
 - Given a redirect-only or compatibility route, it does not appear as a visible primary nav destination.
 - Given a selected coworker record, the first viewport shows identity, work offered, current-business availability, attention state, and approval/autonomy posture without requiring the operator to inspect prompts, models, or provider routes.
 - Given a Build Studio operator, Build Studio remains the place to start product-building work; AI Workforce provides coworker records and runtime/governance context for the coworkers doing that work.
+- Given a `390x844` viewport, the AI Workforce title and coworker search are
+  visible in the first viewport, the document has no horizontal overflow, and
+  optional global/Platform navigation is collapsed.
+- Given the same mobile viewport, the shared AI coworker launcher is reachable;
+  opening it creates a full-viewport modal with background isolation, scroll
+  lock, keyboard dismissal, and restored page state after close.
 
 ## Review Synthesis
 
@@ -557,7 +578,13 @@ Accepted critique:
 These are non-blocking defaults for implementation planning:
 
 - Use the four owner-facing roster areas confirmed by the live audit: `Customers and sales`, `Your team`, `Operations and delivery`, and `Platform and back office`.
-- Seeded offer applicability determines whether a coworker can ever support an archetype/category. Install setup state determines whether the currently selected install is available now or setup-needed.
+- Active service portfolio assignments determine the owner-facing area;
+  unassigned work remains in `Other`. Agent workforce placement is not a
+  substitute.
+- Seeded service applicability determines whether a coworker can support an
+  archetype/category. Explicit readiness evidence determines whether matching
+  work is available now, setup-needed, or blocked. Unevaluated readiness stays
+  `Coverage not defined`.
 - If telemetry is unavailable, no route is retired. Routes may be hidden from visible nav only when the new AI Workforce destination exists and compatibility links remain readable.
 
 ## Telemetry for Route Retirement

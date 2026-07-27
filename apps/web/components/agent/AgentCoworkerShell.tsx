@@ -25,10 +25,12 @@ import {
   getDockedPanelFrame,
   getReservedPanelWidth,
   isDockedPanelViewport,
+  isMobilePanelViewport,
   type DockedPanelFrame,
   type PanelPosition,
   type PanelSize,
 } from "./agent-panel-layout";
+import { useMobilePanelModal } from "./use-mobile-panel-modal";
 import {
   loadPanelOpen,
   loadPanelPosition,
@@ -169,6 +171,7 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
   const providerConsultationInFlightRef = useRef<string | null>(null);
   const [guidedRouteContext, setGuidedRouteContext] = useState<string | null>(null);
   const [dockedFrame, setDockedFrame] = useState<DockedPanelFrame | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
   const lastAutoMessageRef = useRef<{ signature: string; at: number } | null>(null);
   // Queue auto-messages whose target thread hasn't loaded yet. The panel
   // can't submit to a thread until threadId is set; if the open-agent-panel
@@ -218,6 +221,7 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
     positionRef.current = initialPosition;
     setSize(initialSize);
     setPosition(initialPosition);
+    setIsMobile(isMobilePanelViewport(viewport));
 
     if (loadPanelOpen(userKey)) {
       setIsOpen(true);
@@ -226,6 +230,7 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
 
     function handleResize() {
       const viewport = getViewport();
+      setIsMobile(isMobilePanelViewport(viewport));
       const clampedSize = clampPanelSize(sizeRef.current, viewport);
       const clampedPosition = clampPanelPosition(positionRef.current, clampedSize, viewport);
 
@@ -425,7 +430,7 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
     savePanelOpen(userKey, true);
   }
 
-  function handleClose() {
+  const handleClose = useCallback(() => {
     setIsOpen(false);
     savePanelOpen(userKey, false);
     window.setTimeout(() => {
@@ -437,12 +442,19 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
 
       document.querySelector<HTMLElement>("[data-agent-fab='true']")?.focus();
     }, 0);
-  }
+  }, [userKey]);
 
   useEffect(() => {
     if (!isOpen) return;
     panelRef.current?.focus();
   }, [isOpen]);
+
+  useMobilePanelModal({
+    isOpen,
+    isMobile,
+    panelRef,
+    onClose: handleClose,
+  });
 
   // Listen for panel open requests (feedback button, build creation, etc.)
   useEffect(() => {
@@ -668,7 +680,30 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
   if (!hydrated) return null;
 
   const isDocked = dockedFrame !== null;
-  const panelStyle = isDocked && dockedFrame
+  const usesFixedFrame = isDocked || isMobile;
+  const namedCoworkerEntryOwnsRoute =
+    pathname === "/platform/ai/overview" ||
+    pathname.startsWith("/platform/ai/agent/");
+  const panelStyle = isMobile
+    ? {
+        position: "fixed" as const,
+        zIndex: 50,
+        inset: 0,
+        width: "100vw",
+        maxWidth: "100vw",
+        minWidth: 0,
+        height: "100dvh",
+        maxHeight: "100dvh",
+        borderRadius: 0,
+        background: "var(--dpf-surface-1)",
+        border: 0,
+        boxShadow: "none",
+        boxSizing: "border-box" as const,
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column" as const,
+      }
+    : isDocked && dockedFrame
     ? {
         position: "fixed" as const,
         zIndex: 50,
@@ -706,16 +741,20 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
 
   return (
     <>
-      {!isOpen && <AgentFAB onClick={handleOpen} />}
+      {!isOpen && !namedCoworkerEntryOwnsRoute && (
+        <AgentFAB onClick={handleOpen} />
+      )}
 
       {isOpen && (
         <div
           ref={panelRef}
           data-agent-panel="true"
           role="dialog"
+          aria-modal={isMobile ? true : undefined}
           aria-label="AI coworker panel"
           tabIndex={-1}
           style={panelStyle}
+          data-panel-layout={isMobile ? "mobile-viewport" : isDocked ? "desktop-docked" : "floating"}
         >
           <AgentCoworkerPanel
             threadId={threadId}
@@ -729,11 +768,11 @@ export function AgentCoworkerShell({ userContext, useUnifiedCoworker, cooConvers
             onAutoMessageConsumed={() => setPendingAutoMessage(null)}
             onConversationCleared={() => setInitialMessages([])}
             routeContextOverride={guidedRouteContext ?? undefined}
-            isDocked={isDocked}
+            isDocked={usesFixedFrame}
             threadLoadState={threadLoadState}
             onReloadToReconnect={handleReloadToReconnect}
           />
-          {!isDocked && (
+          {!usesFixedFrame && (
             <div
               onMouseDown={handleResizeStart}
               title="Resize coworker panel"

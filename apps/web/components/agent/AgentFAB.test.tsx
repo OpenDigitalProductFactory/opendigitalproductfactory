@@ -26,6 +26,8 @@ describe("AgentFAB", () => {
     await waitFor(() => {
       expect(launcher).toHaveStyle({ top: "82%" });
     });
+    expect(launcher).toHaveClass("flex", "h-11", "w-11");
+    expect(launcher).not.toHaveClass("hidden");
   });
 
   it("migrates an old midpoint preference out of the page action lane", async () => {

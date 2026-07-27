@@ -45,6 +45,7 @@ export type CatalogServiceRow = {
   metadata: unknown;
   digitalProductId: string | null;
   serviceOfferingId: string | null;
+  portfolio?: { slug: string; name: string } | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -111,6 +112,21 @@ export type CoworkerCatalog = {
   offers: CoworkerOfferCatalogItem[];
 };
 
+export type CoworkerDiscoveryService = {
+  serviceId: string;
+  providerAgentId: string;
+  name: string;
+  summary: string | null;
+  status: string;
+  hitlTier: number | null;
+  authorityBoundary: string;
+  availabilityScope: string;
+  personas: unknown;
+  archetypes: unknown;
+  metadata: unknown;
+  portfolio: { slug: string; name: string } | null;
+};
+
 export type CoworkerProviderSummary = {
   agentId: string;
   displayName: string;
@@ -142,6 +158,7 @@ export type CoworkerServiceCatalogItem = {
   contractTerms: JsonRecord;
   dataBoundary: JsonRecord;
   metadata: JsonRecord;
+  portfolio: { slug: string; name: string } | null;
   provider: CoworkerProviderSummary;
   backing: {
     skillIds: string[];
@@ -194,7 +211,10 @@ export type CoworkerOfferFilters = {
 
 export async function loadCoworkerCatalog(): Promise<CoworkerCatalog> {
   const [services, offers, agents, skills, digitalProducts] = await Promise.all([
-    prisma.coworkerService.findMany({ orderBy: [{ status: "asc" }, { name: "asc" }] }),
+    prisma.coworkerService.findMany({
+      orderBy: [{ status: "asc" }, { name: "asc" }],
+      include: { portfolio: { select: { slug: true, name: true } } },
+    }),
     prisma.coworkerOffer.findMany({ orderBy: [{ status: "asc" }, { name: "asc" }] }),
     prisma.agent.findMany({
       where: { archived: false },
@@ -210,6 +230,32 @@ export async function loadCoworkerCatalog(): Promise<CoworkerCatalog> {
   ]);
 
   return buildCoworkerCatalog({ services, offers, agents, skills, digitalProducts });
+}
+
+export async function loadCoworkerDiscoveryServices(
+  providerAgentIds?: readonly string[],
+): Promise<CoworkerDiscoveryService[]> {
+  return prisma.coworkerService.findMany({
+    where:
+      providerAgentIds && providerAgentIds.length > 0
+        ? { providerAgentId: { in: [...new Set(providerAgentIds)] } }
+        : undefined,
+    orderBy: [{ status: "asc" }, { name: "asc" }],
+    select: {
+      serviceId: true,
+      providerAgentId: true,
+      name: true,
+      summary: true,
+      status: true,
+      hitlTier: true,
+      authorityBoundary: true,
+      availabilityScope: true,
+      personas: true,
+      archetypes: true,
+      metadata: true,
+      portfolio: { select: { slug: true, name: true } },
+    },
+  });
 }
 
 export function buildCoworkerCatalog(rows: CoworkerCatalogRows): CoworkerCatalog {
@@ -248,6 +294,7 @@ export function buildCoworkerCatalog(rows: CoworkerCatalogRows): CoworkerCatalog
         contractTerms: record(service.contractTerms),
         dataBoundary: record(service.dataBoundary),
         metadata: record(service.metadata),
+        portfolio: service.portfolio ?? null,
         provider: providerSummary(agent),
         backing: {
           skillIds: explicitSkillIds,

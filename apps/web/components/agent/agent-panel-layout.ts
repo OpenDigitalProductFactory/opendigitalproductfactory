@@ -4,6 +4,7 @@ export const DEFAULT_PANEL_HEIGHT = 480;
 export const MIN_PANEL_WIDTH = 320;
 export const MIN_PANEL_HEIGHT = 320;
 export const DESKTOP_PANEL_RESERVE_BREAKPOINT = 1280;
+export const MOBILE_PANEL_BREAKPOINT = 640;
 
 export type ViewportSize = { width: number; height: number };
 export type PanelSize = { width: number; height: number };
@@ -61,6 +62,10 @@ export function getReservedPanelWidth({
 
 export function isDockedPanelViewport(viewport: ViewportSize): boolean {
   return viewport.width >= DESKTOP_PANEL_RESERVE_BREAKPOINT;
+}
+
+export function isMobilePanelViewport(viewport: ViewportSize): boolean {
+  return viewport.width < MOBILE_PANEL_BREAKPOINT;
 }
 
 export function getDockedPanelFrame({

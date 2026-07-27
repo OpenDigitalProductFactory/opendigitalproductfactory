@@ -215,6 +215,7 @@ export function AgentPanelHeader({
             {formatSensitivityLabel(agent.sensitivity)}
           </span>
           <span
+            className="hidden sm:inline"
             style={{
               fontSize: 10,
               color: "var(--dpf-muted)",

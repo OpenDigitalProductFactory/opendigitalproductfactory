@@ -5,6 +5,7 @@ let pathname = "/platform/identity";
 
 vi.mock("next/navigation", () => ({
   usePathname: () => pathname,
+  useRouter: () => ({ push: () => {} }),
 }));
 
 vi.mock("next/link", () => ({
