@@ -72,6 +72,7 @@ if (!fs.existsSync(path.join(rootDir, "pnpm-lock.yaml"))) {
 }
 
 let reportPath = valueAfter("--report");
+if (!reportPath) reportPath = process.env.DPF_LOCAL_CI_FRESHNESS_REPORT_FILE || "";
 if (!reportPath) {
   const gitPath = git(rootDir, ["rev-parse", "--git-path", "dpf-sandbox-freshness.json"]);
   reportPath = gitPath ? path.resolve(rootDir, gitPath) : path.join(rootDir, ".dpf-sandbox-freshness.json");

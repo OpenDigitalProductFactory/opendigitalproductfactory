@@ -211,6 +211,14 @@ Node's experimental host web-storage disabled so Node 26 cannot shadow the
 `localStorage` and `sessionStorage` implementations owned by jsdom. This is a
 test-runner compatibility setting, not a change to application runtime policy.
 
+The candidate wrapper owns the freshness-evidence handoff path. Before each
+run it removes any prior report from the candidate gitdir and passes
+`DPF_LOCAL_CI_FRESHNESS_REPORT_FILE` through the runner to the freshness
+preflight in the scratch integration worktree. The preflight writes there and
+the wrapper reads that exact path. This prevents the two linked worktrees'
+different gitdirs from turning a green preflight into `freshness: unknown`, and
+prevents a stale prior report from classifying a new run.
+
 The sandbox-freshness step checks the load-bearing runtime and gate packages,
 including the Vitest runner used by the next step. Vitest is checked for both
 locked version and runnable entrypoint imports, so an incomplete package cannot

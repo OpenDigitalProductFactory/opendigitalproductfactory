@@ -6,7 +6,7 @@
 // reserved exit codes.
 // node --test scripts/sandbox-freshness-preflight.test.mjs — pure node, no docker.
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -148,6 +148,36 @@ test("green when workspace links match the lockfile", () => {
   assert.equal(next.lockedVersion, "16.2.9");
   assert.equal(next.resolvedVersion, "16.2.9");
   rmSync(root, { recursive: true, force: true });
+});
+
+test("writes the report to the gate-owned handoff path when --report is omitted", () => {
+  const root = scaffold();
+  const handoffDir = mkdtempSync(join(tmpdir(), "dpf-freshness-handoff-"));
+  const reportPath = join(handoffDir, "candidate-gitdir", "dpf-sandbox-freshness.json");
+  const result = spawnSync(
+    "node",
+    [cli, "--dir", root, "--skip-install-scan"],
+    {
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        DPF_LOCAL_CI_FRESHNESS_REPORT_FILE: reportPath,
+      },
+    },
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  const report = JSON.parse(readFileSync(reportPath, "utf8"));
+  assert.equal(report.verdict, "green");
+  assert.equal(report.dir, root);
+  assert.equal(
+    existsSync(join(root, ".dpf-sandbox-freshness.json")),
+    false,
+    "the scratch checkout must not retain a second implicit report",
+  );
+
+  rmSync(root, { recursive: true, force: true });
+  rmSync(handoffDir, { recursive: true, force: true });
 });
 
 test("detects the incident: stale next@16.2.7 store link while lockfile requires 16.2.9", () => {

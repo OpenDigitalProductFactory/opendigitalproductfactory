@@ -10,7 +10,7 @@
 // between POSIX and Windows contributor surfaces.
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
@@ -209,6 +209,11 @@ async function main() {
 
   const stateFile = gitPath(gitBin, worktreePath, "dpf-local-ci-gate.json");
   const metadataFile = gitPath(gitBin, worktreePath, "dpf-local-ci-metadata.json");
+  const freshnessReportFile = gitPath(
+    gitBin,
+    worktreePath,
+    "dpf-sandbox-freshness.json",
+  );
   const gitCommonDir = resolvePath(
     worktreePath,
     gitOrEmpty(gitBin, ["rev-parse", "--git-common-dir"], worktreePath),
@@ -222,6 +227,7 @@ async function main() {
     process.stdout.write("gate-worktree dry-run\n");
     process.stdout.write(`branch=${branch}\nsha=${sha}\nworktree=${worktreePath}\nremote=${options.remote}\nmcpUrl=${options.mcpUrl}\n`);
     process.stdout.write(`metadataFile=${metadataFile}\n`);
+    process.stdout.write(`freshnessReportFile=${freshnessReportFile}\n`);
     process.stdout.write(`pushBeforeLease=${options.pushBranch}\n`);
     if (commandSpec) {
       process.stdout.write(`localCiCommand=${commandSpec.label}\n`);
@@ -266,6 +272,17 @@ async function main() {
       continue;
     }
     localFenceToken = localFence.record.token;
+    // Only the local fence owner may mutate shared-run evidence. Clearing
+    // earlier lets a queued waiter delete the active owner's fresh report.
+    // Do this before the remote lease claim so a filesystem error cannot
+    // strand a governed lease.
+    try {
+      rmSync(freshnessReportFile, { force: true });
+    } catch (error) {
+      releaseLocalSandboxFence({ path: localFencePath, token: localFenceToken });
+      localFenceToken = "";
+      throw error;
+    }
     expiresAt = new Date(Date.now() + leaseTtlMs).toISOString();
     const claimResponse = await mcpCall("claim_nonprod_environment_lease", {
       environmentKey: "local-integration-ci",
@@ -299,11 +316,16 @@ async function main() {
   if (commandSpec) process.stdout.write(`running local-CI command: ${commandSpec.label}\n`);
   else process.stdout.write("sandbox checkout/build stub: gate passed (explicit test-only mode)\n");
 
+  // The preflight executes in the shared scratch integration worktree, whose
+  // gitdir differs from this candidate worktree's gitdir. Give the descendant
+  // process one explicit handoff path so the wrapper reads evidence from the
+  // same location the preflight writes.
   const gateCommand = createGateCommand(commandSpec, {
     cwd: worktreePath,
     env: {
       ...process.env,
       DPF_LOCAL_CI_METADATA_FILE: metadataFile,
+      DPF_LOCAL_CI_FRESHNESS_REPORT_FILE: freshnessReportFile,
       DPF_NONPROD_LEASE_ID: leaseId,
       DPF_NONPROD_OWNER_SESSION_ID: ownerSessionId,
     },
@@ -372,9 +394,10 @@ async function main() {
 
   let freshnessReport = null;
   try {
-    freshnessReport = JSON.parse(readFileSync(gitPath(gitBin, worktreePath, "dpf-sandbox-freshness.json"), "utf8"));
+    freshnessReport = JSON.parse(readFileSync(freshnessReportFile, "utf8"));
   } catch {
-    // no report produced — classifyGateOutcome treats an empty verdict as "not green".
+    // No report produced; the command exit code remains authoritative and the
+    // evidence records freshness as unknown.
   }
   const outcome = classifyGateOutcome({
     freshnessVerdict: freshnessReport ? freshnessReport.verdict : "",
