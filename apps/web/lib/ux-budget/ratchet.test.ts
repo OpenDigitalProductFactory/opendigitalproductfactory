@@ -6,9 +6,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  compareBaselineReproducibility,
   evaluateSweep,
   formatSweepReport,
   freezeBaseline,
+  mergeReproducibleBaselines,
   normaliseSnapshot,
   normaliseVolatileText,
   verdictForRoute,
@@ -326,5 +328,46 @@ describe("sweep-level verdict", () => {
     expect(Object.keys(frozen.routes)).toEqual(["/a", "/b"]);
     expect(freezeBaseline(measurements, "test")).toEqual(frozen);
     expect(frozen.bootstrapped).toBe(true);
+  });
+});
+
+describe("same-SHA baseline reproducibility", () => {
+  const source = freezeBaseline([
+    measurement({ routePath: "/a", html: "<main><p>one two three</p></main>" }),
+  ], "test");
+
+  it("accepts only the measured word floor and merges its conservative envelope", () => {
+    const twin = structuredClone(source);
+    twin.routes["/a"].defaultVisibleWords += 2;
+
+    expect(compareBaselineReproducibility(source, twin)).toEqual([]);
+    expect(mergeReproducibleBaselines(source, twin).routes["/a"].defaultVisibleWords).toBe(
+      twin.routes["/a"].defaultVisibleWords,
+    );
+  });
+
+  it("rejects word drift above the floor", () => {
+    const twin = structuredClone(source);
+    twin.routes["/a"].defaultVisibleWords += 3;
+
+    expect(compareBaselineReproducibility(source, twin)).toMatchObject([
+      { routePath: "/a", axis: "defaultVisibleWords" },
+    ]);
+    expect(() => mergeReproducibleBaselines(source, twin)).toThrow(/not reproducible/i);
+  });
+
+  it("rejects structure drift and incomplete route accounting", () => {
+    const changed = structuredClone(source);
+    changed.routes["/a"].ariaSnapshot =
+      "- banner\n- main\n  - heading [level=1]\n  - link";
+    expect(compareBaselineReproducibility(source, changed)).toMatchObject([
+      { routePath: "/a", axis: "ariaSnapshot" },
+    ]);
+
+    const missing = structuredClone(source);
+    delete missing.routes["/a"];
+    expect(compareBaselineReproducibility(source, missing)).toMatchObject([
+      { routePath: "/a", axis: "route", second: "missing" },
+    ]);
   });
 });

@@ -13,8 +13,12 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useState, useTransition } from "react";
+import { type ReactNode, useMemo, useState, useTransition } from "react";
 import { confirmDialog } from "@/components/ui/Dialog";
+import {
+  type McpTokenRow as TokenRow,
+  useMcpTokenManagerInitialState,
+} from "@/lib/mcp/use-token-manager-initial-state";
 
 import {
   bulkRevokeMyMcpTokens,
@@ -23,16 +27,13 @@ import {
   issueMyMcpToken,
   issueMyTemplateMcpToken,
   issueMyWriteMcpToken,
-  listAvailableMcpScopes,
-  listMcpTokenTemplates,
   listMyMcpTokens,
   revokeMyMcpToken,
   rotateMyMcpToken,
   rotateMyMcpTokenWithEdit,
-  upgradeMyMcpTokenForCodingAgent,
   type McpTokenTemplateSummary,
+  upgradeMyMcpTokenForCodingAgent,
 } from "@/lib/actions/mcp-tokens";
-import type { ContributorMcpReadiness } from "@/lib/mcp/contributor-readiness";
 import {
   defaultMcpTokenScopes,
   MCP_TOKEN_DEFAULT_STALE_DAYS,
@@ -40,36 +41,11 @@ import {
   type McpTokenScopeTier,
   type McpTokenTemplateId,
 } from "@/lib/mcp-token-scopes";
+import type { ContributorMcpReadiness } from "@/lib/mcp/contributor-readiness";
 
 export interface McpTokenManagerProps {
   baseUrl: string;
 }
-
-type TokenRow = {
-  id: string;
-  name: string;
-  prefix: string;
-  tokenSuffix: string;
-  canCopy: boolean;
-  capability: "read" | "write";
-  scope: McpTokenScopeTier;
-  scopes: string[];
-  lastUsedAt: string | null;
-  // Derived server-side in listMyMcpTokens. Null when the token has never
-  // been used, when revoked, or when expired — see MCP_TOKEN_DEFAULT_STALE_DAYS.
-  idleDays: number | null;
-  // Lifecycle kind: "operator" (default) or "ephemeral_ship" (auto-managed
-  // by transitionBuildPhase). Server defines the canonical set; we treat
-  // anything other than "operator" as lifecycle-managed for UI purposes.
-  kind: string;
-  // FeatureBuild.buildId when kind = "ephemeral_ship"; null for operator
-  // tokens. Surfaced in the ephemeral pill so the operator can trace a
-  // ship token back to its owning build.
-  buildId: string | null;
-  expiresAt: string | null;
-  revokedAt: string | null;
-  createdAt: string;
-};
 
 // Convenience predicate — anything with kind != "operator" is managed by a
 // lifecycle hook somewhere (today only the ship phase). The UI uses this
@@ -224,13 +200,21 @@ function ContributorReadinessBanner(props: { readiness: ContributorMcpReadiness 
 }
 
 export function McpTokenManager(props: McpTokenManagerProps) {
-  const [tokens, setTokens] = useState<TokenRow[]>([]);
-  const [contributorReadiness, setContributorReadiness] =
-    useState<ContributorMcpReadiness | null>(null);
-  const [scopes, setScopes] = useState<string[]>([]);
-  const [templates, setTemplates] = useState<McpTokenTemplateSummary[]>([]);
   const [view, setView] = useState<View>({ kind: "idle" });
   const [inlineError, setInlineError] = useState<string | null>(null);
+  const {
+    archivedCount,
+    contributorReadiness,
+    formScopes,
+    initialLoadPending,
+    scopes,
+    setArchivedCount,
+    setContributorReadiness,
+    setFormScopes,
+    setTokens,
+    templates,
+    tokens,
+  } = useMcpTokenManagerInitialState(setInlineError);
   const [notice, setNotice] = useState<Notice>(null);
   const [pendingTokenId, setPendingTokenId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -238,7 +222,6 @@ export function McpTokenManager(props: McpTokenManagerProps) {
   const [formName, setFormName] = useState("");
   const [formTemplateId, setFormTemplateId] = useState<McpTokenTemplateId>("development");
   const [formScope, setFormScope] = useState<McpTokenScopeTier>("read");
-  const [formScopes, setFormScopes] = useState<Set<string>>(() => new Set());
   const [formExpires, setFormExpires] = useState<string>("90");
   // null = "issue new token" mode (default). When set to a tokenId, the
   // form's submit runs rotateMyMcpTokenWithEdit against that token instead
@@ -252,41 +235,7 @@ export function McpTokenManager(props: McpTokenManagerProps) {
   // Revoked tokens are hidden by default to keep the active-token list
   // legible. Operator toggles this on for triage / cleanup work.
   const [showRevoked, setShowRevoked] = useState(false);
-  // Reported by the server: count of tokens auto-archived (revoked >
-  // REVOKED_ARCHIVE_DAYS ago) and dropped from the response. Surfaced in the
-  // toolbar so the operator knows older revocations aren't gone, just hidden.
-  const [archivedCount, setArchivedCount] = useState(0);
-
   const defaultScopes = useMemo(() => defaultMcpTokenScopes(scopes), [scopes]);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const [tokensResult, scopesResult, templatesResult, readinessResult] = await Promise.all([
-        listMyMcpTokens(),
-        listAvailableMcpScopes(),
-        listMcpTokenTemplates(),
-        getMyContributorMcpReadiness({ probe: false }),
-      ]);
-      if (cancelled) return;
-      if (tokensResult.ok) {
-        setTokens(tokensResult.tokens);
-        setArchivedCount(tokensResult.archivedCount);
-      }
-      if (readinessResult.ok) {
-        setContributorReadiness(readinessResult.readiness);
-      }
-      const availableScopes = scopesResult.scopes;
-      setScopes(availableScopes);
-      setTemplates(templatesResult.templates);
-      setFormScopes((current) =>
-        current.size > 0 ? current : new Set(defaultMcpTokenScopes(availableScopes)),
-      );
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   function refresh() {
     startTransition(async () => {
@@ -582,7 +531,11 @@ export function McpTokenManager(props: McpTokenManagerProps) {
   }
 
   return (
-    <section className="mt-6 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+    <section
+      aria-busy={initialLoadPending || undefined}
+      data-dpf-ux-settle={initialLoadPending ? "pending" : undefined}
+      className="mt-6 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
+    >
       <div className="flex flex-col gap-3 border-b border-[var(--dpf-border)] p-5 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">

@@ -41,6 +41,14 @@ async function requireGovernedWorkWriteAccess(): Promise<string> {
 }
 
 function resolveRepoRoot(): string {
+  // The UX route sweep runs under more than one GitHub checkout mode:
+  // workflow_dispatch has a named branch, while pull_request is detached. If
+  // Work Control scans that ambient checkout, the same source tree renders a
+  // populated or empty "Adoptable work" table solely because of the trigger.
+  // Give the sweep one narrow fixture seam; production keeps using the
+  // canonical host clone via DPF_REPO_ROOT.
+  const workControlFixture = process.env.DPF_WORK_CONTROL_REPO_ROOT?.trim();
+  if (workControlFixture) return path.resolve(workControlFixture);
   const override = process.env.DPF_REPO_ROOT?.trim();
   if (override) return path.resolve(override);
   return process.cwd();
