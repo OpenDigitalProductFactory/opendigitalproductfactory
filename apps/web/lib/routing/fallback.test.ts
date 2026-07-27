@@ -112,7 +112,6 @@ const makeCandidate = (
   endpointId: string,
   providerId: string,
   modelId: string,
-  overrides: Partial<RouteDecision["candidates"][number]> = {},
 ): RouteDecision["candidates"][number] => ({
   endpointId,
   providerId,
@@ -122,34 +121,7 @@ const makeCandidate = (
   dimensionScores: {},
   costPerOutputMToken: null,
   excluded: false,
-  ...overrides,
 });
-
-const safeScreenReceipt: NonNullable<RouteDecision["inferenceDataScreenReceipt"]> = {
-  schemaVersion: "inference-data-screen/v1",
-  screenId: "screen_safe",
-  decisionIds: ["decision-safe"],
-  inputHash: "hash-safe",
-  classifiedDataClasses: ["employee-records"],
-  policyEffect: "deny",
-  routeEffect: "local-only",
-  destinationClass: "external-service",
-  transformation: "blocked",
-  explanationCodes: ["restricted-external-denied"],
-  obligationKinds: [],
-  rawPayloadStored: false,
-};
-
-const allowScreenReceipt: NonNullable<RouteDecision["inferenceDataScreenReceipt"]> = {
-  ...safeScreenReceipt,
-  screenId: "screen_allow",
-  decisionIds: ["decision-allow"],
-  inputHash: "hash-allow",
-  policyEffect: "allow",
-  routeEffect: "allow",
-  transformation: "none",
-  explanationCodes: ["dispatch-allowed"],
-};
 
 it("keeps restricted OpenRouter obligations load-bearing when OpenRouter is a fallback", () => {
   const plan = buildFallbackPlan(
@@ -217,7 +189,6 @@ const mockRefreshOAuthToken = refreshOAuthToken as ReturnType<typeof vi.fn>;
 beforeEach(() => {
   vi.useFakeTimers();
   vi.clearAllMocks();
-  mockCallProvider.mockReset();
 
   // Default: provider lookup returns a valid provider
   mockPrisma.modelProvider.findUnique.mockResolvedValue({
@@ -251,101 +222,6 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
   // ── Success path ─────────────────────────────────────────────────────────
 
   describe("successful call", () => {
-    it("requires a data-screen receipt before governed inference dispatch", async () => {
-      await expect(
-        callWithFallbackChain(
-          {
-            ...makeDecision("prov1", "model1"),
-            policyRulesApplied: ["inference-dispatch"],
-          },
-          [{ role: "user", content: "employee salary note" }],
-          "system",
-        ),
-      ).rejects.toThrow("missing inference data screen receipt");
-
-      expect(mockCallProvider).not.toHaveBeenCalled();
-    });
-
-    it("does not dispatch a governed fallback candidate that was excluded by the original route decision", async () => {
-      mockPrisma.modelProvider.findUnique
-        .mockResolvedValueOnce({ providerId: "openai", name: "OpenAI" });
-      mockCallProvider.mockRejectedValueOnce(new Error("primary unavailable"));
-
-      const decision: RouteDecision = {
-        ...makeDecision("openai-ep", "gpt-4.1"),
-        selectedEndpoint: "openai-ep",
-        selectedModelId: "gpt-4.1",
-        fallbackChain: ["unsafe-public-ep"],
-        policyRulesApplied: ["inference-dispatch"],
-        inferenceDataScreenReceipt: allowScreenReceipt,
-        candidates: [
-          makeCandidate("openai-ep", "openai", "gpt-4.1"),
-          makeCandidate("unsafe-public-ep", "cheap-public", "cheap-model", {
-            excluded: true,
-            excludedReason: "sensitivityClearance excludes restricted data",
-          }),
-        ],
-      };
-
-      const pending = callWithFallbackChain(
-        decision,
-        [{ role: "user", content: "employee salary note" }],
-        "system",
-      );
-      const rejection = expect(pending).rejects.toThrow("All endpoints failed");
-      await vi.runAllTimersAsync();
-      await rejection;
-
-      expect(mockCallProvider).toHaveBeenCalledTimes(1);
-      expect(mockCallProvider).toHaveBeenCalledWith(
-        "openai",
-        "gpt-4.1",
-        expect.any(Array),
-        "system",
-        undefined,
-        expect.any(Object),
-        undefined,
-        undefined,
-        expect.any(Object),
-      );
-      expect(mockCallProvider).not.toHaveBeenCalledWith(
-        "cheap-public",
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-        expect.anything(),
-      );
-    });
-
-    it("does not dispatch a non-local candidate when the screen receipt requires local-only routing", async () => {
-      const decision: RouteDecision = {
-        ...makeDecision("cloud-ep", "cloud-model"),
-        selectedEndpoint: "cloud-ep",
-        selectedModelId: "cloud-model",
-        policyRulesApplied: ["inference-dispatch"],
-        inferenceDataScreenReceipt: safeScreenReceipt,
-        candidates: [
-          makeCandidate("cloud-ep", "cheap-public", "cloud-model", {
-            excluded: false,
-          }),
-        ],
-      };
-
-      await expect(
-        callWithFallbackChain(
-          decision,
-          [{ role: "user", content: "employee salary note" }],
-          "system",
-        ),
-      ).rejects.toThrow("No eligible screened endpoint available");
-
-      expect(mockCallProvider).not.toHaveBeenCalled();
-    });
-
     it("records request with token count on success", async () => {
       mockCallProvider.mockResolvedValue({
         content: "hello",

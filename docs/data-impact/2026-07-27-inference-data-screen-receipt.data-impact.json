@@ -14,7 +14,7 @@
     "packages/db/src/provider-suitability-evidence-schema.test.ts",
     "apps/web/lib/inference/routed-inference.activity-overrides.test.ts",
     "apps/web/lib/routing/loader.test.ts",
-    "apps/web/lib/routing/fallback.test.ts",
+    "apps/web/lib/routing/fallback-screened-dispatch.test.ts",
     "apps/web/lib/routing/task-dispatcher.test.ts",
     "apps/web/components/platform/RouteDecisionLogClient.test.tsx"
   ],
