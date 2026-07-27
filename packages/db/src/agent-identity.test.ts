@@ -95,6 +95,16 @@ describe("dual-seed slug → canonical map (BI-74FD6420)", () => {
     }
   });
 
+  it("collapses the Change Reviewer registry mirror onto its coworker slug", () => {
+    expect(resolveCanonicalAgentId("change-reviewer")).toBe("AGT-WS-REVIEW");
+    expect(resolveAgentIdentity({ agentId: "change-reviewer", name: "change-reviewer" }).displayName).toBe(
+      "Change Reviewer",
+    );
+    expect(resolveAgentIdentity({ agentId: "AGT-WS-REVIEW", name: "change-reviewer" }).displayName).toBe(
+      "Change Reviewer",
+    );
+  });
+
   it("gives Onboarding COO a consistent Title-Case label", () => {
     expect(resolveAgentIdentity({ agentId: "AGT-WS-ONBOARD", name: "onboarding-coo" }).displayName).toBe(
       "Onboarding COO",

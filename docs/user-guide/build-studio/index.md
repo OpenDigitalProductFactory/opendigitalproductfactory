@@ -29,10 +29,17 @@ higher-authority cases remain escalations.
 - **Phases** — The five stages every feature moves through: Ideate (define the problem), Plan (design the solution), Build (generate and test code), Review (quality gates), Ship (deploy to production).
 - **Feature Brief** — The structured output of the Ideate phase. It captures the problem, desired outcome, constraints, and acceptance criteria. Everything downstream is built from this.
 - **AI Coworker** — The Software Engineer agent that works with you through each phase. It searches the codebase, writes code, runs tests, and deploys features. You guide it with plain language.
+- **Change Reviewer** — An independent, read-only coworker for governed Work Capsules. It inspects committed source, tests, architecture, and evidence, but cannot edit the change, advance the build, waive findings, or publish a release. The Software Engineer remains the authoring coworker on the main Build Studio surface.
 - **Build runtime** — The isolated execution environment where the AI Coworker generates and tests code. Has its own database, file system, and network — completely separated from the live platform. The Build Studio canvas surfaces it as **Live preview**; the technical name *sandbox* still appears in diagnostics. See [Build Runtime](sandbox.md) for the full operating model.
 - **Shared Workspace** — The durable source workspace for this install. Build Studio reads and writes here, and in customizable installs VS Code uses the same codebase.
 - **Live Preview** — During the Build phase, a real-time preview shows the generated UI in an iframe. The preview updates automatically as the AI Coworker writes code.
 - **Documentation Specialist** — The cross-cutting coworker that checks whether a change affects the user guide, public site, architecture docs, `AGENTS.md`, prompts, route maps, or other human-readable docs. Docs updates, or a concrete no-docs-needed attestation, are part of done.
+
+New coworkers enter the roster as drafts. They are not available for normal
+work until their definition has landed, a read-only golden journey has passed
+through the real execution path, and the coworker factory explicitly promotes
+them. A normal seed or upgrade preserves that lifecycle state; deployment alone
+does not certify or activate a coworker.
 - **Quality Gates** — Automated checks between phases. Each gate requires specific evidence before the feature can advance (design review, plan review, documentation impact, test results, typecheck).
 - **Promotion** — The governed process for moving a completed feature from the Build runtime into production where the install is configured for it. Includes evidence capture, backup/rebuild/health-check discipline, and rollback planning.
 

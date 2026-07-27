@@ -9,6 +9,8 @@ export type CoworkerAgentSeed = {
   description: string;
   valueStream: string;
   sensitivity: "internal" | "confidential" | "restricted";
+  /** Initial stage for a newly seeded row. Reseeding never changes a live stage. */
+  initialLifecycleStage?: "draft" | "production";
   delegatesTo?: readonly string[];
 };
 
@@ -139,6 +141,21 @@ export const COWORKER_AGENT_SEEDS: readonly CoworkerAgentSeed[] = [
     description: "Feature development, code generation, and implementation",
     valueStream: "integrate",
     sensitivity: "internal",
+  },
+  {
+    // BI-DED7D653: independent semantic reviewer for committed changes. This
+    // coworker is deliberately separate from build-specialist so the author
+    // cannot provide its own independent review receipt.
+    agentId: "change-reviewer",
+    slugId: "change-reviewer",
+    name: "Change Reviewer",
+    tier: 2,
+    type: "coworker",
+    description:
+      "Independent semantic review of committed software changes for correctness, security, maintainability, architecture fit, test adequacy, accessibility routing, and evidence quality",
+    valueStream: "evaluate",
+    sensitivity: "confidential",
+    initialLifecycleStage: "draft",
   },
   {
     agentId: "data-architect",
@@ -325,6 +342,17 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     // canonical read-heavy filtering case (EP-27FD96BC BI-9893614D).
     "tool_script_exec",
   ],
+  // Read-only by construction. The reviewer may inspect the change and its
+  // governed context, but cannot edit code, advance a build, waive findings,
+  // or publish a release.
+  "change-reviewer": [
+    "file_read",
+    "code_graph_read",
+    "architecture_read",
+    "spec_plan_read",
+    "backlog_read",
+    "registry_read",
+  ],
   "data-architect": ["file_read", "sandbox_execute", "architecture_read", "registry_read", "tool_script_exec"],
   "admin-assistant": ["admin_read", "admin_write", "agent_control_read", "registry_read", "web_search", "file_read"],
   coo: ["portfolio_read", "registry_read", "backlog_read", "backlog_write", "agent_control_read", "email_config", "thread_write"],
@@ -380,6 +408,21 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "registry_read",
   ],
 };
+
+/**
+ * Seed-time lifecycle policy. Creation may start a newly defined coworker in
+ * draft; updates deliberately carry no lifecycle field so certification and
+ * explicit promotion remain authoritative.
+ */
+export function resolveCoworkerLifecycleSeedPolicy(seed: CoworkerAgentSeed): {
+  create: { lifecycleStage: "draft" | "production" };
+  update: Record<string, never>;
+} {
+  return {
+    create: { lifecycleStage: seed.initialLifecycleStage ?? "production" },
+    update: {},
+  };
+}
 
 // onboarding-coo is created by bootstrap-first-run.ts during portal startup.
 // Keep its grants here too so reseeding an initialized install stays consistent.

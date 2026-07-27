@@ -72,6 +72,18 @@ describe("resolveAgentForRoute", () => {
     expect(result.canAssist).toBe(true);
   });
 
+  it("keeps the Software Engineer on /build and routes governed work to the Change Reviewer", () => {
+    const build = resolveAgentForRoute("/build", superuser);
+    const work = resolveAgentForRoute("/build/work/WC-123", superuser);
+
+    expect(build.agentId).toBe("build-specialist");
+    expect(work.agentId).toBe("change-reviewer");
+    expect(work.agentName).toBe("Change Reviewer");
+    expect(work.sensitivity).toBe("confidential");
+    expect(work.systemPrompt).toContain("You are not the author");
+    expect(work.systemPrompt).toContain("cannot edit code");
+  });
+
   it("routes finance pages to the finance agent", () => {
     const result = resolveAgentForRoute("/finance/settings/tax", superuser);
     expect(result.agentId).toBe("finance-agent");

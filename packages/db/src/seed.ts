@@ -36,6 +36,7 @@ import {
   COWORKER_AGENT_SEEDS,
   HARDCODED_COWORKER_GRANTS,
   ONBOARDING_AGENT_GRANTS,
+  resolveCoworkerLifecycleSeedPolicy,
   seedWorkforceReferenceData,
 } from "./workforce-seed.js";
 import { seedStorefrontArchetypes } from "./seed-storefront-archetypes.js";
@@ -1058,7 +1059,8 @@ async function seedCoworkerAgents(): Promise<void> {
     // agent-model-defaults). Dual-seed AGT-* twins from seedAgents() remain;
     // AI Workforce roster display collapses them via dropDualSeedAliasAgents
     // (BI-74FD6420) until a full FK migration lands.
-    const { agentId, slugId, delegatesTo, ...rest } = cw;
+    const { agentId, slugId, delegatesTo, initialLifecycleStage, ...rest } = cw;
+    const lifecyclePolicy = resolveCoworkerLifecycleSeedPolicy(cw);
     const identity = resolveAgentIdentity({ agentId, name: rest.name, slugId, displayName: rest.name });
     // BI-3073F13B: this upsert keys on agentId but its create branch writes the
     // @unique slugId, so a new agentId re-using an existing slugId throws P2002
@@ -1074,7 +1076,7 @@ async function seedCoworkerAgents(): Promise<void> {
         kind: identity.kind,
         ...rest,
         ...(delegatesTo ? { delegatesTo: [...delegatesTo] } : {}),
-        lifecycleStage: "production",
+        ...lifecyclePolicy.create,
       },
       update: {
         slugId,
@@ -1090,7 +1092,11 @@ async function seedCoworkerAgents(): Promise<void> {
         // Un-retire if a prior broken seed pass archived the slug twin.
         archived: false,
         status: "active",
-        lifecycleStage: "production",
+        // Preserve the live lifecycle stage. New coworkers may seed as draft
+        // and only establish_coworker(action="promote") may move them to
+        // production after behavioral certification. Reseeding must not
+        // silently bypass that gate or demote an already promoted coworker.
+        ...lifecyclePolicy.update,
       },
     });
     if (agent.outcome === "reresolved_slug_collision") {
