@@ -4526,7 +4526,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 13
+    "textMass": 18
   },
   "apps/web/components/docs/DocsSidebar.tsx": {
     "vocabulary": 0,
