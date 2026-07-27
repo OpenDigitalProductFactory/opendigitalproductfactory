@@ -18,7 +18,9 @@ The family's relationship to NIST, ISO/IEC, IEEE, W3C, IETF, OpenID, 1EdTech, an
 protocol work is maintained in the informative
 [External Standards Alignment](agent-standards-external-alignment.md) companion. That document is
 the single source of truth for cross-standard gap analysis, synergy, augmentation boundaries, and
-standards-body contribution routes.
+venue allocation. The informative
+[Standards Contribution Roadmap](agent-standards-contribution-roadmap.md) owns engagement
+sequencing, readiness gates, contribution packages, and go/no-go criteria.
 
 ## Composition rule
 
@@ -61,6 +63,8 @@ Normative requirements belong in exactly one standard:
 White papers, conformance rubrics, diagrams, DPF assessments, and generated Word files are derived
 companions. They may summarize the standards but must link back to the canonical normative source.
 
-External crosswalks and submission-positioning material are also derived companions. They belong
-in [agent-standards-external-alignment.md](agent-standards-external-alignment.md), while specific
+External crosswalks are derived companions and belong in
+[agent-standards-external-alignment.md](agent-standards-external-alignment.md). Submission
+execution guidance belongs in
+[agent-standards-contribution-roadmap.md](agent-standards-contribution-roadmap.md). Specific
 technical requirements remain with the normative owner named above.
