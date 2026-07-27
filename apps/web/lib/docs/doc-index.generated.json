@@ -2573,11 +2573,14 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "disclose-before-you-add-a-surface",
+        "preserve-the-model-disclose-complexity-progressively",
+        "rule",
         "why",
         "applies-to",
         "how-to-apply",
         "decision-dimensions",
+        "examples",
+        "sources",
         "overlap-scan-43"
       ]
     },
