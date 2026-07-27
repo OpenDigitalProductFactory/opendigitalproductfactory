@@ -254,10 +254,10 @@ describe("projectRoutingEvidenceConformance", () => {
       fallbacksUsed: null,
       screenReceipt: {
         screenId: "screen_canary",
-        routeEffect: "block",
-        transformation: "blocked",
+        routeEffect: "block" as const,
+        transformation: "blocked" as const,
         classifiedDataClasses: ["secrets-credentials"],
-        rawPayloadStored: false,
+        rawPayloadStored: false as const,
         rawPrompt: canary,
       },
       createdAt: new Date("2026-07-27T03:00:00.000Z"),
