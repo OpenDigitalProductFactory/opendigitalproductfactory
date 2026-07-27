@@ -77,7 +77,7 @@ describe("data processing governance schema", () => {
   it("backfills only provenance-linked review proposals from trustworthy settings", () => {
     expect(migration).toContain('"handlesCardPayments" = true');
     expect(migration).toContain("'review'");
-    expect(migration).toContain('"sourceField", \'BusinessContext.handlesCardPayments\'');
+    expect(migration).toContain("'sourceField', 'BusinessContext.handlesCardPayments'");
     expect(migration).not.toMatch(
       /INSERT INTO "DataProcessingActivity"[\s\S]*?VALUES[\s\S]*?'confirmed'/,
     );

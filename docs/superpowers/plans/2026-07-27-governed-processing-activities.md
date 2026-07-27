@@ -14,9 +14,10 @@ Replace inferred compliance-string authority with explicit, organization-owned p
 
 ## Backlog coverage
 
-- Decision: `atomic`
-- Coverage receipt: `cms3ri1kh0m8e01p513zy2vd7`
-- Parent BI: `BI-DG-011`
+- Decision: atomic
+- Parent: `BI-DG-011`
+- Receipt: `cms3ri1kh0m8e01p513zy2vd7`
+- Dependencies: `BI-DG-002` (done)
 - Deliverable: `governed-processing-activities` → `BI-DG-011`
 - Live prerequisite: `BI-DG-002` is done.
 - Rationale: the schema, migration, validation service, applicability/retention consumers, and inactive archetype templates are one safety boundary. Models without authoritative consumers leave string matching in control; consumers without persisted confirmations create false legal authority; templates without the validation service could activate unsafe assumptions.
