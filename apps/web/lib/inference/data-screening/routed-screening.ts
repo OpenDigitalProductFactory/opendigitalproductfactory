@@ -7,6 +7,10 @@ import {
   maskForContext,
   type SensitiveDetailUse,
 } from "@/lib/govern/data/mask-for-context";
+import type {
+  RehydrationAuthorizationBinding,
+  RehydrationRouteBinding,
+} from "@/lib/govern/data/rehydration-token-vault";
 import {
   screenInferencePayload,
   type ScreenInferencePayloadInput,
@@ -21,15 +25,31 @@ type RoutedScreenInput = {
   activityContract?: ActivityContract;
   policyVersionSource?: ScreenInferencePayloadInput["policyVersionSource"];
   sensitiveDetailUse?: SensitiveDetailUse;
+  responseRehydration?: RehydrationRouteBinding | readonly RehydrationRouteBinding[];
 };
+
+export class ResponseRehydrationBindingError extends Error {
+  constructor() {
+    super("Response rehydration bindings must share one actor, purpose, and surface.");
+    this.name = "ResponseRehydrationBindingError";
+  }
+}
 
 export function routedRehydrationHandle(rehydrationHandle?: string) {
   return rehydrationHandle ? { rehydrationHandle } : {};
 }
 
 export function createRoutedInferenceScreen(input: RoutedScreenInput) {
-  const { sensitiveDetailUse = "unknown", ...baseInput } = input;
-  const screenInput = { ...baseInput } satisfies ScreenInferencePayloadInput;
+  const {
+    sensitiveDetailUse = "unknown",
+    responseRehydration,
+    ...baseInput
+  } = input;
+  const routeBindings = normalizeRouteBindings(responseRehydration);
+  const screenInput = {
+    ...baseInput,
+    ...(routeBindings[0] ? { purpose: routeBindings[0].purpose } : {}),
+  } satisfies ScreenInferencePayloadInput;
   const rawScreen = screenInferencePayload(screenInput);
   const directMaskDecision = rawScreen.decisions.find(hasMaskObligation);
   const projectionScreen = directMaskDecision
@@ -43,6 +63,7 @@ export function createRoutedInferenceScreen(input: RoutedScreenInput) {
   }
 
   try {
+    const authorityReceipt = (projectionScreen ?? rawScreen).receipt;
     const masked = maskForContext(
       {
         messages: screenInput.messages,
@@ -53,6 +74,15 @@ export function createRoutedInferenceScreen(input: RoutedScreenInput) {
         decision: maskDecision,
         matches: rawScreen.classification.matches,
         detailUse: sensitiveDetailUse,
+        ...(routeBindings.length > 0
+          ? {
+              rehydrationBindings: bindingsFromScreen(
+                routeBindings,
+                rawScreen,
+                authorityReceipt,
+              ),
+            }
+          : {}),
       },
     );
     const transformation = masked.transformation;
@@ -60,7 +90,6 @@ export function createRoutedInferenceScreen(input: RoutedScreenInput) {
       return { screenInput, screen: rawScreen, rehydrationHandle: undefined };
     }
 
-    const authorityReceipt = (projectionScreen ?? rawScreen).receipt;
     const appliedTransformation = transformationEvidence(
       authorityReceipt,
       rawScreen,
@@ -104,6 +133,41 @@ export function createRoutedInferenceScreen(input: RoutedScreenInput) {
     }
     throw error;
   }
+}
+
+function bindingsFromScreen(
+  routeBindings: readonly RehydrationRouteBinding[],
+  rawScreen: ReturnType<typeof screenInferencePayload>,
+  authorityReceipt: ReturnType<typeof screenInferencePayload>["receipt"],
+): RehydrationAuthorizationBinding[] {
+  return routeBindings.map((binding) => ({
+    ...binding,
+    sensitivity: rawScreen.classification.overallSensitivity,
+    decisionVersions: authorityReceipt.decisionVersions.map((version) => ({
+      ...version,
+    })),
+    dataClasses: [...rawScreen.receipt.classifiedDataClasses],
+  }));
+}
+
+function normalizeRouteBindings(
+  input: RehydrationRouteBinding | readonly RehydrationRouteBinding[] | undefined,
+): RehydrationRouteBinding[] {
+  if (!input) return [];
+  const bindings = Array.isArray(input) ? [...input] : [input];
+  const first = bindings[0];
+  if (!first) return [];
+  const actorKey = JSON.stringify(first.expectedActor);
+  if (
+    bindings.some((binding) =>
+      binding.purpose !== first.purpose ||
+      binding.surface !== first.surface ||
+      JSON.stringify(binding.expectedActor) !== actorKey
+    )
+  ) {
+    throw new ResponseRehydrationBindingError();
+  }
+  return bindings;
 }
 
 function transformationEvidence(

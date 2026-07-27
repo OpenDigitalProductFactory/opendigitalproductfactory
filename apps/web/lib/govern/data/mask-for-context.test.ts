@@ -7,6 +7,8 @@ import {
   applyContextTransform,
   maskForContext,
 } from "./mask-for-context";
+import { readRehydrationTokenMap } from "./rehydration-token-vault";
+import type { RehydrationAuthorizationBinding } from "./rehydration-token-vault";
 
 function maskingDecision(): DataPolicyDecision {
   return {
@@ -195,5 +197,67 @@ describe("maskForContext", () => {
     );
     expect(JSON.stringify(result)).not.toContain("4455661122");
     expect(JSON.stringify(result)).toContain("[DPF_TOKEN_");
+  });
+
+  it("keeps a legacy token map unbound and therefore non-rehydratable", () => {
+    const result = maskForContext(
+      { email: "ada@example.com" },
+      {
+        decision: maskingDecision(),
+        detailUse: "replaceable",
+        matches: [
+          { dataClass: "customer-records", path: "email", reason: "contact-detail", confidence: "deterministic" },
+        ],
+      },
+    );
+    const read = readRehydrationTokenMap(result.rehydrationHandle ?? "");
+
+    expect(read.status).toBe("available");
+    if (read.status !== "available") return;
+    expect([...read.tokens.values()][0]?.bindings).toEqual([]);
+  });
+
+  it("marks a repeated token non-rehydratable when any occurrence lacks a path binding", () => {
+    const raw = "ada@example.com";
+    const binding: RehydrationAuthorizationBinding = {
+      expectedActor: {
+        principalId: "PRN-1",
+        actingHumanUserId: "user-1",
+        actingAgentId: null,
+        delegationGrantId: null,
+      },
+      purpose: "customer-support",
+      surface: "private-customer",
+      subject: { kind: "account", id: "account-1" },
+      sensitivity: "confidential",
+      decisionVersions: [{
+        decisionId: "decision-mask-1",
+        assetVersion: "asset-v1",
+        classificationVersion: "classification-v1",
+        authorityVersion: "authority-v1",
+      }],
+      dataClasses: ["customer-records"],
+      pathPrefixes: ["customer"],
+    };
+    const result = maskForContext(
+      { customer: { email: raw }, unrelated: { email: raw } },
+      {
+        decision: maskingDecision(),
+        detailUse: "replaceable",
+        rehydrationBindings: [binding],
+        matches: [
+          { dataClass: "customer-records", path: "customer.email", reason: "contact-detail", confidence: "deterministic" },
+          { dataClass: "customer-records", path: "unrelated.email", reason: "contact-detail", confidence: "deterministic" },
+        ],
+      },
+    );
+    const read = readRehydrationTokenMap(result.rehydrationHandle ?? "");
+
+    expect(read.status).toBe("available");
+    if (read.status !== "available") return;
+    expect([...read.tokens.values()][0]).toMatchObject({
+      bindings: [binding],
+      hasUnboundOccurrence: true,
+    });
   });
 });

@@ -4,6 +4,7 @@ import {
   ACTIVITY_HARNESS_CONFIDENCE_OVERRIDE_ACTION,
   activityHarnessProposalParameters,
 } from "@/lib/routing/activity-harness-approval-source";
+import { readRehydrationTokenMap } from "@/lib/govern/data/rehydration-token-vault";
 
 const mocks = vi.hoisted(() => ({
   routeEndpointV2: vi.fn(),
@@ -382,6 +383,17 @@ describe("routeAndCall activity harness overrides", () => {
       {
         taskType: "draft",
         sensitiveDetailUse: "replaceable",
+        responseRehydration: {
+          expectedActor: {
+            principalId: "PRN-user",
+            actingHumanUserId: "user-1",
+            actingAgentId: null,
+            delegationGrantId: null,
+          },
+          purpose: "coworker-assistance",
+          surface: "private-customer",
+          subject: { kind: "account", id: "account-1" },
+        },
         persistDecision: false,
       },
     );
@@ -399,6 +411,15 @@ describe("routeAndCall activity harness overrides", () => {
       rawPayloadStored: false,
     });
     expect(result.rehydrationHandle).toMatch(/^rehydration_/);
+    const stored = readRehydrationTokenMap(result.rehydrationHandle ?? "");
+    expect(stored.status).toBe("available");
+    if (stored.status === "available") {
+      expect([...stored.tokens.values()][0]?.bindings[0]).toMatchObject({
+        purpose: "coworker-assistance",
+        surface: "private-customer",
+        subject: { kind: "account", id: "account-1" },
+      });
+    }
   });
 
   it("intersects screen allowlists with provider suitability and unions denials before routing", async () => {

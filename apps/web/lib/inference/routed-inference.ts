@@ -180,6 +180,7 @@ async function prepareRoute(
     activityContract: options?.activityContract,
     policyVersionSource: options?.inferencePolicyVersionSource,
     sensitiveDetailUse: options?.sensitiveDetailUse,
+    responseRehydration: options?.responseRehydration,
   });
 
   // 1. Infer contract

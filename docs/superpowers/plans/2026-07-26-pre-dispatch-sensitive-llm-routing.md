@@ -21,7 +21,7 @@
   - `inference-pep` -> `BI-DG-012`, depends on `classifier-contract`
   - `mask-before-dispatch` -> `BI-DG-009`, depends on `classifier-contract` and `inference-pep`
   - `routing-binding` -> `BI-3D210AF8`, depends on `inference-pep` and `mask-before-dispatch`
-  - `response-rehydration-authz` -> `BI-749EB750`, depends on `inference-pep` and `mask-before-dispatch`
+  - `response-rehydration-authz` -> `BI-6A8B3910`, depends on `inference-pep`, `mask-before-dispatch`, and `BI-749EB750`
   - `employee-surface-authorization` -> `BI-62BFAA95`, depends on `inference-pep` and `mask-before-dispatch`
   - `vertical-policy-packs` -> `BI-F6018DB3`, depends on `classifier-contract` and `inference-pep`
   - `provider-onboarding-ux` -> `BI-ECBD6924`, depends on `classifier-contract` and `inference-pep`
@@ -303,7 +303,7 @@ pnpm --filter web exec vitest run lib/inference/routed-inference.activity-overri
 git diff --check
 ```
 
-### Chunk 5: BI-749EB750 / BI-62BFAA95 - Human And Employee Visibility
+### Chunk 5: BI-6A8B3910 / BI-749EB750 / BI-62BFAA95 - Human And Employee Visibility
 
 **Files:**
 

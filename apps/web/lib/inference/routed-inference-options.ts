@@ -32,6 +32,16 @@ export interface RouteAndCallOptions {
   sensitiveDetailUse?: import(
     "@/lib/govern/data/mask-for-context"
   ).SensitiveDetailUse;
+  /**
+   * Immutable actor/subject/final-surface intent for a later response PEP.
+   * Screening derives sensitivity and decision versions; this never authorizes
+   * automatic rehydration inside the routing or provider-dispatch boundary.
+   */
+  responseRehydration?: import(
+    "@/lib/govern/data/rehydration-token-vault"
+  ).RehydrationRouteBinding | readonly import(
+    "@/lib/govern/data/rehydration-token-vault"
+  ).RehydrationRouteBinding[];
   modelTier?: "local" | "robust";
   minimumDimensions?: Record<string, number>;
   requiredModelClass?: ModelClass;

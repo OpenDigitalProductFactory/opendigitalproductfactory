@@ -86,7 +86,9 @@ describe("buildAiRoutingArchitectureModels", () => {
     expect(status.get("compile-request-contract")).toBe("partial");
     expect(status.get("eligible-fallback")).toBe("partial");
     expect(status.get("record-safe-receipt")).toBe("partial");
-    expect(status.get("rehydration-gateway")).toBe("proposed");
+    expect(status.get("rehydration-gateway")).toBe("implemented");
+    expect(status.get("return-masked-response")).toBe("implemented");
+    expect(status.get("return-authorized-response")).toBe("implemented");
 
     const sensitiveScreen = AI_ROUTING_STAGES.find(
       (stage) => stage.id === "sensitive-screen",
