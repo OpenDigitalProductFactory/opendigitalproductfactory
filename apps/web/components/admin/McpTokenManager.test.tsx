@@ -160,19 +160,11 @@ describe("McpTokenManager", () => {
         releaseTokens = resolve;
       }),
     );
-
     const { container } = render(<McpTokenManager baseUrl="http://localhost:3000" />);
     const manager = container.querySelector("section");
-
     expect(manager?.getAttribute("aria-busy")).toBe("true");
     expect(manager?.getAttribute("data-dpf-ux-settle")).toBe("pending");
-
-    releaseTokens?.({
-      ok: true,
-      archivedCount: 0,
-      tokens: [],
-    });
-
+    releaseTokens?.({ ok: true, archivedCount: 0, tokens: [] });
     await waitFor(() => {
       expect(manager?.hasAttribute("aria-busy")).toBe(false);
       expect(manager?.hasAttribute("data-dpf-ux-settle")).toBe(false);
