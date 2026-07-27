@@ -2,6 +2,7 @@ import { prisma } from "@dpf/db";
 import {
   regulationApplies,
   parseApplicability,
+  resolveConfirmedProcessingAuthority,
   type RegionProfile,
   type RegulationApplicability,
 } from "@dpf/db/regulation-applicability";
@@ -264,9 +265,11 @@ export function classifyRegulationForInstall(
         `Matches ${currentLabel}, but the applicable state has not been captured for state-specific validation.`,
       );
     }
-    const confirmedAuthorityRefs =
-      context.processingActivities?.confirmedAuthorityRefs ?? [];
-    if (confirmedAuthorityRefs.includes(regulation.regulationId)) {
+    const processingAuthority = resolveConfirmedProcessingAuthority(
+      regulation.regulationId,
+      context.processingActivities?.confirmedAuthorityRefs ?? [],
+    );
+    if (processingAuthority.confirmed) {
       return applicability(
         "applies",
         `A confirmed processing activity links ${regulation.shortName || regulation.name} to this organization.`,

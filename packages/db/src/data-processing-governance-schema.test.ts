@@ -3,6 +3,13 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const schema = readFileSync(resolve(import.meta.dirname, "../prisma/schema.prisma"), "utf8");
+const migration = readFileSync(
+  resolve(
+    import.meta.dirname,
+    "../prisma/migrations/20260727221500_backfill_card_payment_processing_proposal/migration.sql",
+  ),
+  "utf8",
+);
 
 function model(name: string): string {
   const match = schema.match(new RegExp(`model ${name} \\{([\\s\\S]*?)\\n\\}`));
@@ -65,5 +72,14 @@ describe("data processing governance schema", () => {
 
     expect(model("Policy")).toMatch(/\bexecutablePolicyIds\b/);
     expect(model("PolicyRequirement")).toMatch(/\bexecutablePolicyIds\b/);
+  });
+
+  it("backfills only provenance-linked review proposals from trustworthy settings", () => {
+    expect(migration).toContain('"handlesCardPayments" = true');
+    expect(migration).toContain("'review'");
+    expect(migration).toContain('"sourceField", \'BusinessContext.handlesCardPayments\'');
+    expect(migration).not.toMatch(
+      /INSERT INTO "DataProcessingActivity"[\s\S]*?VALUES[\s\S]*?'confirmed'/,
+    );
   });
 });
