@@ -134,6 +134,10 @@ if [ "$1" = "rev-parse" ] && [ "$2" = "--git-path" ]; then
   echo "${temp}/$3"
   exit 0
 fi
+if [ "$1" = "rev-parse" ] && [ "$2" = "--git-common-dir" ]; then
+  echo "${temp}"
+  exit 0
+fi
 if [ "$1" = "push" ]; then
   exit 0
 fi
@@ -211,6 +215,10 @@ if [ "$1" = "rev-parse" ] && [ "$2" = "--git-path" ]; then
   echo "${temp}/gate.json"
   exit 0
 fi
+if [ "$1" = "rev-parse" ] && [ "$2" = "--git-common-dir" ]; then
+  echo "${temp}"
+  exit 0
+fi
 if [ "$1" = "push" ]; then
   exit 0
 fi
@@ -232,6 +240,9 @@ EOF
 )"
 case "$tool" in
   claim_nonprod_environment_lease)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
+    ;;
+  renew_nonprod_environment_lease)
     printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
     ;;
   record_local_integration_result)
@@ -272,8 +283,8 @@ esac
     .map((line) => JSON.parse(line).params.name);
   assert.deepEqual(calls, [
     "claim_nonprod_environment_lease",
-    "record_local_integration_result",
     "release_nonprod_environment_lease",
+    "record_local_integration_result",
   ]);
 });
 
@@ -286,6 +297,10 @@ test("gate-worktree.sh does not push before claiming the local-CI lease by defau
   writeFileSync(gitStub, `#!/bin/sh
 if [ "$1" = "rev-parse" ] && [ "$2" = "--git-path" ]; then
   echo "${temp}/gate.json"
+  exit 0
+fi
+if [ "$1" = "rev-parse" ] && [ "$2" = "--git-common-dir" ]; then
+  echo "${temp}"
   exit 0
 fi
 if [ "$1" = "push" ]; then
@@ -312,6 +327,9 @@ case "$tool" in
   claim_nonprod_environment_lease)
     printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
     ;;
+  renew_nonprod_environment_lease)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
+    ;;
   record_local_integration_result)
     printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"EXT-TEST\\"}"}]}}'
     ;;
@@ -350,8 +368,8 @@ esac
     .map((line) => JSON.parse(line).params.name);
   assert.deepEqual(calls, [
     "claim_nonprod_environment_lease",
-    "record_local_integration_result",
     "release_nonprod_environment_lease",
+    "record_local_integration_result",
   ]);
 });
 
@@ -365,6 +383,10 @@ test("gate-worktree.sh includes content-addressed local integration metadata in 
   writeFileSync(gitStub, `#!/bin/sh
 if [ "$1" = "rev-parse" ] && [ "$2" = "--git-path" ]; then
   echo "${temp}/$3"
+  exit 0
+fi
+if [ "$1" = "rev-parse" ] && [ "$2" = "--git-common-dir" ]; then
+  echo "${temp}"
   exit 0
 fi
 echo "unexpected git call: $*" >&2
@@ -385,6 +407,9 @@ EOF
 )"
 case "$tool" in
   claim_nonprod_environment_lease)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
+    ;;
+  renew_nonprod_environment_lease)
     printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-TEST\\"}"}]}}'
     ;;
   record_local_integration_result)
@@ -487,6 +512,10 @@ if [ "$1" = "remote" ] && [ "$2" = "update" ]; then
 fi
 if [ "$1" = "rev-parse" ] && [ "$2" = "--git-path" ]; then
   echo "${dir}/.git/$3"
+  exit 0
+fi
+if [ "$1" = "rev-parse" ] && [ "$2" = "--git-common-dir" ]; then
+  echo "${dir}/.git"
   exit 0
 fi
 echo "unexpected gate git call: $*" >&2
