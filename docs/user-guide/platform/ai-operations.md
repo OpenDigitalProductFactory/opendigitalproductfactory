@@ -31,6 +31,11 @@ order: 2
   `docs/architecture/ai-routing-document-map.md`, which classifies the proposed
   owner-readable subway map, technical drill-through, target-state designs, and
   historical records.
+- Authorized architecture users can open a routing element in `/ea` and use
+  **Architecture context** to move to its related BPMN, SysML, or ArchiMate element,
+  inspect the governed decision vocabulary and source version, or open the same
+  station in the Operations Map Compare lens. The inspector shows bounded labels and
+  evidence freshness; it never shows prompt or protected-data content.
 
 ## What To Watch
 

@@ -9,6 +9,7 @@ import {
   type TraversalPatternInfo,
   type TraversalRunResult,
 } from "@/lib/actions/ea-traversal";
+import { ArchitectureDrillthroughPanel } from "./ArchitectureDrillthroughPanel";
 
 type Props = {
   selected: SerializedViewElement | null;
@@ -139,6 +140,8 @@ export function ElementInspector({ selected, notationSlug, onUpdated }: Props) {
             />
           </div>
         )}
+
+        <ArchitectureDrillthroughPanel drillthrough={selected.drillthrough} />
 
         {/* Traversal Run Panel */}
         <div style={{ borderTop: "1px solid var(--dpf-border)", marginTop: 4, paddingTop: 6 }}>

@@ -7,20 +7,25 @@
 // the 04:00 UTC pass. Mirrors refreshDataArchitecture.
 import { revalidatePath } from "next/cache";
 
-import { auth } from "@/lib/auth";
+import { requireCapability } from "@/lib/actions/shared/guards";
 import { reconcileSysmlProjections } from "@/lib/ea/reconcile-sysml-projections";
 
 type DomainSummary = { status: string; created: number; updated: number; removed: number };
 
 export type RefreshSysmlProjectionsResult =
-  | { ok: true; mcpAuthority: DomainSummary & { toolCount: number; grantCount: number }; coworkerAuthority: DomainSummary }
+  | {
+      ok: true;
+      mcpAuthority: DomainSummary & { toolCount: number; grantCount: number };
+      coworkerAuthority: DomainSummary;
+      aiRoutingArchitecture: DomainSummary & {
+        crossLayerLinked: number;
+        crossLayerUnresolved: number;
+      };
+    }
   | { ok: false; error: string };
 
 export async function refreshSysmlProjections(): Promise<RefreshSysmlProjectionsResult> {
-  const session = await auth();
-  if (!session?.user) {
-    return { ok: false, error: "Not authorized." };
-  }
+  await requireCapability("manage_ea_model");
 
   try {
     const result = await reconcileSysmlProjections();
@@ -40,6 +45,14 @@ export async function refreshSysmlProjections(): Promise<RefreshSysmlProjections
         created: result.coworkerAuthority.created,
         updated: result.coworkerAuthority.updated,
         removed: result.coworkerAuthority.removed,
+      },
+      aiRoutingArchitecture: {
+        status: result.aiRoutingArchitecture.status,
+        created: result.aiRoutingArchitecture.created,
+        updated: result.aiRoutingArchitecture.updated,
+        removed: result.aiRoutingArchitecture.removed,
+        crossLayerLinked: result.aiRoutingArchitecture.crossLayerLinked ?? 0,
+        crossLayerUnresolved: result.aiRoutingArchitecture.crossLayerUnresolved ?? 0,
       },
     };
   } catch (err) {

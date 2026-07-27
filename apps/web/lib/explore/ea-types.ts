@@ -1,4 +1,5 @@
 // Shared types used by both client components and server actions for EA canvas.
+import type { ArchitectureDrillthrough } from "@/lib/ea/architecture-drillthrough";
 
 export type EaViewMode = "new" | "reference" | "propose";
 
@@ -49,6 +50,7 @@ export type SerializedViewElement = {
     lifecycleStatus: string;
     properties: Record<string, unknown> | null;
   };
+  drillthrough?: ArchitectureDrillthrough | null;
   childViewElements?: SerializedViewElement[];
   isReadOnly?: boolean;
   onMoveStructuredChild?: (input: {

@@ -734,6 +734,13 @@
     "longSentences": 0,
     "textMass": 60
   },
+  "apps/web/app/(shell)/ea/views/[id]/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
+  },
   "apps/web/app/(shell)/ea/views/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -4535,6 +4542,13 @@
     "longSentences": 0,
     "textMass": 10
   },
+  "apps/web/components/ea/ArchitectureDrillthroughPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 36
+  },
   "apps/web/components/ea/CreateViewButton.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -4547,7 +4561,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 1,
-    "textMass": 141
+    "textMass": 146
   },
   "apps/web/components/ea/EaRelationshipEdge.tsx": {
     "vocabulary": 0,

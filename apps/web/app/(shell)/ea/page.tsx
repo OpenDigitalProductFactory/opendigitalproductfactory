@@ -5,7 +5,10 @@ import { EaTabNav } from "@/components/ea/EaTabNav";
 import { ReferenceModelSummary } from "@/components/ea/ReferenceModelSummary";
 import { CreateViewButton } from "@/components/ea/CreateViewButton";
 import { It4itConformanceCard } from "@/components/ea/It4itConformanceCard";
+import { ArchitectureProjectionActions } from "@/components/ea/ArchitectureProjectionActions";
 import { getReferenceModelsSummary, getIt4itCoverageHeatmap } from "@/lib/ea-data";
+import { auth } from "@/lib/auth";
+import { can } from "@/lib/permissions";
 
 const LAYOUT_LABELS: Record<string, string> = {
   graph:    "Graph",
@@ -21,7 +24,7 @@ const SCOPE_LABELS: Record<string, string> = {
 };
 
 export default async function EaPage() {
-  const [views, models, it4itCoverage] = await Promise.all([
+  const [views, models, it4itCoverage, session] = await Promise.all([
     prisma.eaView.findMany({
       orderBy: [{ createdAt: "desc" }],
       select: {
@@ -37,7 +40,18 @@ export default async function EaPage() {
     }),
     getReferenceModelsSummary(),
     getIt4itCoverageHeatmap("it4it_v3_0_1").catch(() => null),
+    auth(),
   ]);
+  const canManageArchitecture = Boolean(
+    session?.user &&
+    can(
+      {
+        platformRole: session.user.platformRole,
+        isSuperuser: session.user.isSuperuser,
+      },
+      "manage_ea_model",
+    ),
+  );
 
   return (
     <div>
@@ -70,11 +84,15 @@ export default async function EaPage() {
 
       {it4itCoverage && <It4itConformanceCard data={it4itCoverage} />}
 
+      {canManageArchitecture ? (
+        <div className="mb-4 flex flex-wrap items-start justify-end gap-3">
+          <ArchitectureProjectionActions />
+          <CreateViewButton />
+        </div>
+      ) : null}
+
       {views.length > 0 ? (
         <>
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
-            <CreateViewButton />
-          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {views.map((v) => (
               <Link key={v.id} href={`/ea/views/${v.id}`} style={{ textDecoration: "none" }}>
@@ -104,7 +122,11 @@ export default async function EaPage() {
           <p className="text-sm text-[var(--dpf-muted)] mb-4">
             No views yet. Create your first view to start modeling.
           </p>
-          <CreateViewButton />
+          <p className="text-xs text-[var(--dpf-muted)]">
+            {canManageArchitecture
+              ? "Use New view above, or refresh live projections to load governed architecture."
+              : "No architecture views are available for this workspace yet."}
+          </p>
         </div>
       )}
     </div>

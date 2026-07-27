@@ -8855,7 +8855,8 @@
       "anchors": [
         "overview",
         "key-concepts",
-        "what-you-can-do"
+        "what-you-can-do",
+        "following-a-concern-across-views"
       ]
     },
     "docs/user-guide/build-studio/deployment.md": {

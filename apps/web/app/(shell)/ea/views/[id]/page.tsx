@@ -6,8 +6,15 @@ import { getEaView } from "@/lib/ea-data";
 import { prisma } from "@dpf/db";
 import { EaCanvas } from "@/components/ea/EaCanvas";
 
-export default async function EaViewPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EaViewPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ element?: string }>;
+}) {
   const { id } = await params;
+  const { element: initialFocusElementId } = await searchParams;
   const session = await auth();
   const user = session?.user;
 
@@ -44,6 +51,7 @@ export default async function EaViewPage({ params }: { params: Promise<{ id: str
         initialElements={view.elements}
         initialEdges={view.edges}
         initialCanvasState={view.canvasState}
+        initialFocusElementId={initialFocusElementId ?? null}
         isReadOnly={isReadOnly}
       />
     </div>

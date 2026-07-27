@@ -10,6 +10,9 @@ vi.mock("@dpf/db", () => ({
     eaStructureRule: { findMany: vi.fn() },
     eaConformanceIssue: { findMany: vi.fn() },
     eaRelationship: { findMany: vi.fn() },
+    eaElement: { findMany: vi.fn() },
+    eaViewElement: { findMany: vi.fn() },
+    routeDecisionLog: { aggregate: vi.fn() },
   },
 }));
 
@@ -21,6 +24,9 @@ const mockPrisma = prisma as unknown as {
   eaStructureRule: { findMany: ReturnType<typeof vi.fn> };
   eaConformanceIssue: { findMany: ReturnType<typeof vi.fn> };
   eaRelationship: { findMany: ReturnType<typeof vi.fn> };
+  eaElement: { findMany: ReturnType<typeof vi.fn> };
+  eaViewElement: { findMany: ReturnType<typeof vi.fn> };
+  routeDecisionLog: { aggregate: ReturnType<typeof vi.fn> };
 };
 
 beforeEach(() => {
@@ -74,6 +80,27 @@ beforeEach(() => {
   ]);
   mockPrisma.eaConformanceIssue.findMany.mockResolvedValue([]);
   mockPrisma.eaRelationship.findMany.mockResolvedValue([]);
+  mockPrisma.eaElement.findMany.mockResolvedValue([
+    {
+      id: "el-stream-1",
+      name: "Evaluate",
+      properties: {},
+      elementType: { notation: { slug: "it4it" } },
+    },
+  ]);
+  mockPrisma.eaViewElement.findMany.mockResolvedValue([
+    {
+      elementId: "el-stream-1",
+      view: {
+        id: "view-1",
+        name: "IT4IT value streams",
+        notation: { slug: "it4it", name: "IT4IT" },
+      },
+    },
+  ]);
+  mockPrisma.routeDecisionLog.aggregate.mockResolvedValue({
+    _max: { createdAt: null },
+  });
 });
 
 describe("getEaView", () => {

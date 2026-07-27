@@ -4,9 +4,10 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createEaView } from "@/lib/actions/ea";
 
-const NOTATION_OPTIONS = [
+export const NOTATION_OPTIONS = [
   { slug: "archimate4", label: "ArchiMate 4" },
   { slug: "bpmn20", label: "BPMN 2.0" },
+  { slug: "sysml2", label: "SysML 2" },
 ] as const;
 
 const LAYOUT_OPTIONS = [

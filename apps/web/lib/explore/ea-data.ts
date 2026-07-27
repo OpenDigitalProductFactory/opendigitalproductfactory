@@ -7,6 +7,7 @@ import {
   type It4itStageParticipationRow,
 } from "./it4it-participation-view";
 import type { SerializedViewElement, SerializedEdge, CanvasState } from "./ea-types";
+import { loadArchitectureDrillthroughForView } from "@/lib/ea/architecture-drillthrough-data";
 import type {
   CoverageStatus,
   It4itCoverageHeatmap,
@@ -124,7 +125,7 @@ export const getEaView = cache(async (id: string) => {
       })
     : [];
 
-  const serializedElements: SerializedViewElement[] = view.viewElements.map((ve) => ({
+  const baseSerializedElements: SerializedViewElement[] = view.viewElements.map((ve) => ({
     viewElementId: ve.id,
     elementId: ve.elementId,
     mode: ve.mode as SerializedViewElement["mode"],
@@ -145,6 +146,19 @@ export const getEaView = cache(async (id: string) => {
       lifecycleStatus: ve.element.lifecycleStatus,
       properties: (ve.element.properties as Record<string, unknown> | null) ?? null,
     },
+  }));
+  const drillthrough = await loadArchitectureDrillthroughForView({
+    viewId: view.id,
+    elements: baseSerializedElements.map((entry) => ({
+      id: entry.elementId,
+      name: entry.element.name,
+      notationSlug: view.notation.slug,
+      properties: entry.element.properties ?? {},
+    })),
+  });
+  const serializedElements = baseSerializedElements.map((entry) => ({
+    ...entry,
+    drillthrough: drillthrough[entry.elementId] ?? null,
   }));
 
   const serializedEdges: SerializedEdge[] = relationships
