@@ -27,6 +27,8 @@ import {
 } from "@/lib/inference/provider-reconciliation";
 
 type RouteOutcomeAttribution = {
+  /** Request-scoped correlation shared by decision, attempts, outcomes, and usage. */
+  traceId?: string | null;
   agentId?: string | null;
   /**
    * Pre-allocated AgentMessage id for the assistant turn this call is part of.
@@ -218,6 +220,7 @@ export async function callWithFallbackChain(
   let transientRetried = false;
   let authRefreshRetried = false;
   const agentId = outcomeAttribution?.agentId?.trim() || mcpSession?.agentId?.trim() || null;
+  const traceId = outcomeAttribution?.traceId?.trim() || decision.traceId?.trim() || null;
   const agentMessageId = outcomeAttribution?.agentMessageId?.trim() || null;
   const buildId = outcomeAttribution?.buildId?.trim() || null;
 
@@ -282,7 +285,7 @@ export async function callWithFallbackChain(
         entryPlan,
         i === 0 ? previousResponseId : undefined,
         mcpSession,
-        { agentId, agentMessageId, buildId },
+        { traceId, agentId, agentMessageId, buildId },
       );
 
       // EP-INF-004: Record successful request for rate tracking
@@ -295,6 +298,7 @@ export async function callWithFallbackChain(
 
       // EP-INF-006: Record route outcome (fire-and-forget)
       recordRouteOutcome({
+        traceId,
         providerId: entry.providerId,
         modelId: entry.modelId,
         recipeId: i === 0 ? (plan?.recipeId ?? null) : null,
@@ -517,6 +521,7 @@ export async function callWithFallbackChain(
 
         // EP-INF-006: Record error outcome (fire-and-forget)
         recordRouteOutcome({
+          traceId,
           providerId: entry.providerId,
           modelId: entry.modelId,
           recipeId: i === 0 ? (plan?.recipeId ?? null) : null,

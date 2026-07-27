@@ -45,6 +45,8 @@ import {
   screenInferencePayload,
   type ScreenInferencePayloadInput,
 } from "@/lib/inference/data-screening/screen-inference-payload";
+import { createRoutingTraceId } from "@/lib/routing/routing-trace";
+import { AI_ROUTING_ARCHITECTURE_VERSION } from "@/lib/routing/routing-architecture-version";
 export type { RouteAndCallOptions } from "./routed-inference-options";
 
 // ─── Result type ────────────────────────────────────────────────────────────
@@ -347,6 +349,7 @@ export async function routeAndCall(
   const prepared = await prepareRoute(messages, systemPrompt, sensitivity, options);
   const { contract, manifests, policies, overrides, taskType } = prepared;
   let decision = prepared.decision;
+  const traceId = createRoutingTraceId();
   let toolsStripped = false;
 
   // EP-INF-013: Inject effort into the execution plan so adapters can translate it
@@ -557,12 +560,15 @@ export async function routeAndCall(
   if (prepared.suitability) {
     attachProviderSuitabilityReceipt(decision, manifests, prepared.suitability);
   }
+  decision.traceId = traceId;
+  decision.designRevision = AI_ROUTING_ARCHITECTURE_VERSION;
 
   // 4. Persist route decision (fire-and-forget unless disabled)
   let routeDecisionLogId: Promise<string | null> = Promise.resolve(null);
   if (options?.persistDecision !== false) {
     routeDecisionLogId = persistRouteDecision(decision, {
       actor: options?.routingActor ?? (options?.agentId ? { kind: "agent", id: options.agentId } : { kind: "system", id: "routed-inference" }),
+      agentMessageId: options?.agentMessageId ?? null,
     }).catch((err) => {
       console.error("[routeAndCall] Failed to persist route decision:", err);
       return null;
@@ -580,7 +586,7 @@ export async function routeAndCall(
       decision.executionPlan,
       options?.previousResponseId,
       options?.mcpSession,
-      { agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null, buildId: options?.buildId ?? null },
+      { traceId, agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null, buildId: options?.buildId ?? null },
     );
     applyObservedRouterEvidence(decision, result.routingEvidence, routeDecisionLogId);
 
@@ -618,6 +624,7 @@ export async function routeAndCall(
     // a TokenUsage row regardless of which adapter served it. The CLI
     // subprocess paths (claude-cli, codex-cli) previously bypassed this.
     void persistRoutedTokenUsage({
+      traceId,
       agentId: options?.agentId ?? "unknown",
       providerId: result.providerId,
       contextKey: options?.threadId ?? options?.taskType ?? "routed-call",
@@ -648,7 +655,7 @@ export async function routeAndCall(
     decision.executionPlan,
     options?.previousResponseId,
     options?.mcpSession,
-    { agentId: options?.agentId ?? null, buildId: options?.buildId ?? null },
+    { traceId, agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null, buildId: options?.buildId ?? null },
   );
   applyObservedRouterEvidence(decision, result.routingEvidence, routeDecisionLogId);
 
@@ -682,6 +689,7 @@ export async function routeAndCall(
   // on failure is the floor; the bus-check enforcement detector (separate
   // follow-up) is the durable guarantee that drift surfaces.
   void persistRoutedTokenUsage({
+    traceId,
     agentId: options?.agentId ?? "unknown",
     providerId: result.providerId,
     contextKey: options?.threadId ?? options?.taskType ?? "routed-call",
@@ -722,6 +730,7 @@ export async function routeAndCall(
 //
 // Errors are logged but never thrown — metering must never block the response.
 async function persistRoutedTokenUsage(input: {
+  traceId?: string | null;
   agentId: string;
   providerId: string;
   contextKey: string;

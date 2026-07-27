@@ -51,7 +51,7 @@ describe("writeAdapterTelemetry", () => {
     );
   });
 
-  it("includes optional attribution fields when provided (agentId, skillId, threadId)", async () => {
+  it("includes optional correlation and attribution fields when provided", async () => {
     await writeAdapterTelemetry({
       adapterKind: "http-anthropic",
       adapterVersion: "anthropic-http/2024-06-01",
@@ -60,6 +60,7 @@ describe("writeAdapterTelemetry", () => {
       executionMode: "single",
       startedAt: new Date(),
       status: "success",
+      traceId: "0123456789abcdef0123456789abcdef",
       threadId: "thread_123",
       agentId: "agent_456",
       skillId: "skill_789",
@@ -67,6 +68,7 @@ describe("writeAdapterTelemetry", () => {
     });
     expect(writeOverride).toHaveBeenCalledWith(
       expect.objectContaining({
+        traceId: "0123456789abcdef0123456789abcdef",
         threadId: "thread_123",
         agentId: "agent_456",
         skillId: "skill_789",
@@ -204,4 +206,3 @@ describe("writeAdapterTelemetry — buildId attribution (BI-0A6B8B38)", () => {
     expect(row.buildId).toBeUndefined();
   });
 });
-

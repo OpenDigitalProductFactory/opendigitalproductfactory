@@ -145,6 +145,10 @@ export interface CandidateTrace {
 }
 
 export interface RouteDecision {
+  /** Request-scoped W3C Trace Context-compatible correlation id. */
+  traceId?: string;
+  /** Governed routing design revision used for this live dispatch. */
+  designRevision?: string;
   selectedEndpoint: string | null;
   selectedModelId: string | null;
   reason: string;

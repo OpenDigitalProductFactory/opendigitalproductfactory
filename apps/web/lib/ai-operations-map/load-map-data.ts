@@ -9,6 +9,8 @@ import {
   projectToolExecutionReceipt,
 } from "./project-events";
 import { projectRoutingTopology } from "./project-routing-topology";
+import type { RoutingEvidenceConformanceProjection } from "./routing-evidence-conformance";
+import { projectLoadedRoutingEvidence } from "./routing-evidence-loader-projection";
 import { resolveModelSelectionByPhase } from "@/lib/inference/phase-model-resolution";
 import { projectActivityRoutingFromLiveState } from "./activity-routing-live-state";
 import {
@@ -87,6 +89,7 @@ export type OperationsMapData = {
   agents: StationedOperationsMapAgent[];
   projections: OperationsMapProjection[];
   routingTopology: OperationsMapRoutingTopology;
+  routingEvidence: RoutingEvidenceConformanceProjection;
   recentWindowLabel: string;
   /**
    * Global min/max evidence timestamps across the routing evidence tables,
@@ -128,6 +131,8 @@ export async function loadOperationsMapData(
     modelProfiles,
     tokenUsage,
     routeOutcomes,
+    adapterRuns,
+    providerCapacity,
     scheduledAgentTasks,
     scheduledJobs,
     delegationChains,
@@ -292,6 +297,8 @@ export async function loadOperationsMapData(
       take: evidenceTake,
       select: {
         id: true,
+        traceId: true,
+        designRevision: true,
         agentMessageId: true,
         actorKind: true,
         actorId: true,
@@ -341,6 +348,7 @@ export async function loadOperationsMapData(
       take: evidenceTake,
       select: {
         id: true,
+        traceId: true,
         agentId: true,
         providerId: true,
         contextKey: true,
@@ -352,24 +360,52 @@ export async function loadOperationsMapData(
       },
     }),
     prisma.routeOutcome.findMany({
-      where: {
-        OR: [
-          { providerErrorCode: { not: null } },
-          { fallbackOccurred: true },
-        ],
-        ...createdAtWindow,
-      },
+      where: { ...createdAtWindow },
       orderBy: { createdAt: "desc" },
       take: evidenceTake,
       select: {
         id: true,
+        traceId: true,
         agentId: true,
         providerId: true,
         modelId: true,
         taskType: true,
         fallbackOccurred: true,
         providerErrorCode: true,
+        latencyMs: true,
+        inputTokens: true,
+        outputTokens: true,
+        costUsd: true,
         createdAt: true,
+      },
+    }),
+    prisma.adapterRunTelemetry.findMany({
+      where: { ...startedAtWindow },
+      orderBy: { startedAt: "desc" },
+      take: evidenceTake,
+      select: {
+        id: true,
+        traceId: true,
+        providerId: true,
+        modelId: true,
+        adapterKind: true,
+        status: true,
+        durationMs: true,
+        inputTokens: true,
+        outputTokens: true,
+        estimatedCostUsd: true,
+        startedAt: true,
+      },
+    }),
+    prisma.providerCapacityStatus.findMany({
+      where: evidenceWindow
+        ? { lastObservedAt: { gte: evidenceWindow.start, lte: evidenceWindow.end } }
+        : {},
+      orderBy: { lastObservedAt: "desc" },
+      select: {
+        providerId: true,
+        state: true,
+        lastObservedAt: true,
       },
     }),
     prisma.scheduledAgentTask.findMany({
@@ -613,6 +649,15 @@ export async function loadOperationsMapData(
     scheduledAgentTasks,
     scheduledJobs,
   });
+  const routingEvidence = projectLoadedRoutingEvidence({
+    window: evidenceWindow,
+    decisions: routeDecisionRows,
+    adapterRuns,
+    outcomes: routeOutcomes,
+    tokenUsage,
+    capacity: providerCapacity,
+    providers,
+  });
 
   // ── Compose coworker-to-coworker (A2A) interactions ──────────────────
   // Project A2A edges from existing substrate and merge them into the
@@ -729,6 +774,7 @@ export async function loadOperationsMapData(
       deliberations,
       timeline: mergedTimeline,
     },
+    routingEvidence,
     recentWindowLabel: evidenceWindow
       ? `Up to ${WINDOWED_SOURCE_LIMIT} records per evidence source in the selected window`
       : `Last ${RECENT_TOOL_LIMIT} records per evidence source`,

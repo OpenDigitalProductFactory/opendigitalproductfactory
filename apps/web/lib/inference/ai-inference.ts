@@ -443,7 +443,14 @@ export async function callProvider(
   plan?: RoutedExecutionPlan,
   previousResponseId?: string,
   mcpSession?: import("@/lib/routing/adapter-types").AdapterMcpSession,
-  attribution?: { agentId?: string | null; threadId?: string | null; skillId?: string | null; agentMessageId?: string | null; buildId?: string | null },
+  attribution?: {
+    traceId?: string | null;
+    agentId?: string | null;
+    threadId?: string | null;
+    skillId?: string | null;
+    agentMessageId?: string | null;
+    buildId?: string | null;
+  },
 ): Promise<InferenceResult> {
   // 0. EP-COST-001 Phase 2 — pre-call budget gate.
   // Check the agent's daily token budget before dispatching. If the agent has
@@ -605,6 +612,7 @@ export async function callProvider(
     // swallows its own errors so we never mask the original throw.
     const finishedAt = new Date();
     void writeAdapterTelemetry({
+      traceId: attribution?.traceId ?? undefined,
       adapterKind: telemetryAdapterKind,
       adapterVersion: selector?.version ?? "unknown",
       providerId,
@@ -658,6 +666,7 @@ export async function callProvider(
   // can't break the user's reply.
   const telemetryFinishedAt = new Date();
   void writeAdapterTelemetry({
+    traceId: attribution?.traceId ?? undefined,
     adapterKind: telemetryAdapterKind,
     adapterVersion: selector?.version ?? "unknown",
     providerId,
@@ -695,6 +704,7 @@ export async function callProvider(
 // ─── Token Usage Logging ─────────────────────────────────────────────────────
 
 export async function logTokenUsage(input: {
+  traceId?: string | null;
   agentId: string;
   providerId: string;
   contextKey: string;
@@ -729,6 +739,7 @@ export async function logTokenUsage(input: {
 
   await prisma.tokenUsage.create({
     data: {
+      traceId:      input.traceId ?? null,
       agentId:      input.agentId,
       providerId:   input.providerId,
       contextKey:   input.contextKey,
