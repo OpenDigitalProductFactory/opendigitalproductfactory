@@ -66,6 +66,21 @@ describe("Work Room read model", () => {
       caseKey: "booking%3ABK-100",
       detail: caseDetail(),
       boundary: completeBoundary(),
+      participants: [
+        {
+          principalRef: "prn-user-1",
+          displayName: "Casey Morgan",
+          kind: "person",
+          roles: ["accountable"],
+          workState: "working",
+          presence: "unknown",
+          currentWorkSummary: "Coordinating repair.",
+          enteredReason: "Assigned accountable owner.",
+          sponsorPrincipalRef: null,
+          authoritySummary: "Can act within the approved booking scope",
+          sourceRefs: [sourceRef],
+        },
+      ],
       context: {
         refs: [sourceRef],
         digest: "Booking, repair scope, and current work status.",
@@ -99,12 +114,18 @@ describe("Work Room read model", () => {
   });
 
   it("derives standing mode only from typed source policy", () => {
+    const scheduledRef: WorkCaseSourceRef = {
+      kind: "source",
+      id: "WEEKLY-CASH",
+      sourceType: "scheduled",
+    };
     const room = buildWorkRoomView({
       caseKey: "scheduled%3AWEEKLY-CASH",
       detail: caseDetail({
         caseId: "scheduled:WEEKLY-CASH",
         title: "Weekly cash review",
         sourceLabel: "Scheduled work",
+        sourceRefs: [scheduledRef],
       }),
       boundary: completeBoundary(),
       context: {

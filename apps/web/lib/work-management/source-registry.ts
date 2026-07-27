@@ -2,6 +2,10 @@ import {
   WORK_CASE_ACTION_VERBS,
   type WorkCaseActionVerb,
 } from "./case-types";
+import type {
+  WorkRoomMode,
+  WorkRoomOutcomePacketCategory,
+} from "./room-types";
 
 export const WORK_CASE_WORK_ITEM_SOURCE_TYPES = [
   "task-node",
@@ -35,6 +39,13 @@ export interface WorkCaseReceiptPolicy {
   receiptRequiredForConsequentialTransition: boolean;
 }
 
+export interface WorkCaseRoomProjectionPolicy {
+  mode: WorkRoomMode;
+  outcomePacket: {
+    requiredCategories: readonly WorkRoomOutcomePacketCategory[];
+  };
+}
+
 export interface WorkCaseSourceRegistryEntry {
   sourceKey: string;
   displayLabel: string;
@@ -46,6 +57,7 @@ export interface WorkCaseSourceRegistryEntry {
   summaryProjection: string;
   supportedTransitions: readonly WorkCaseSupportedTransition[];
   receiptPolicy: WorkCaseReceiptPolicy;
+  roomProjection: WorkCaseRoomProjectionPolicy;
 }
 
 const STANDARD_TRANSITIONS =
@@ -80,6 +92,27 @@ const OBSERVED_RECEIPT_POLICY = {
   receiptRequiredForConsequentialTransition: true,
 } as const satisfies WorkCaseReceiptPolicy;
 
+const FINITE_ROOM_PROJECTION = {
+  mode: "finite",
+  outcomePacket: {
+    requiredCategories: ["evidence"],
+  },
+} as const satisfies WorkCaseRoomProjectionPolicy;
+
+const APPROVAL_ROOM_PROJECTION = {
+  mode: "finite",
+  outcomePacket: {
+    requiredCategories: ["decisions", "receipts", "evidence"],
+  },
+} as const satisfies WorkCaseRoomProjectionPolicy;
+
+const STANDING_ROOM_PROJECTION = {
+  mode: "standing",
+  outcomePacket: {
+    requiredCategories: ["receipts", "evidence"],
+  },
+} as const satisfies WorkCaseRoomProjectionPolicy;
+
 export const WORK_CASE_SOURCE_REGISTRY = [
   {
     sourceKey: "task-node",
@@ -92,6 +125,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     summaryProjection: "Use the task node description and current assignee.",
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
+    roomProjection: FINITE_ROOM_PROJECTION,
   },
   {
     sourceKey: "backlog-item",
@@ -104,6 +138,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     summaryProjection: "Use the backlog body, triage outcome, and linked epic.",
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
+    roomProjection: FINITE_ROOM_PROJECTION,
   },
   {
     sourceKey: "approval",
@@ -116,6 +151,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     summaryProjection: "Use the requested action, options, and evidence bundle.",
     supportedTransitions: APPROVAL_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
+    roomProjection: APPROVAL_ROOM_PROJECTION,
   },
   {
     sourceKey: "manual-task",
@@ -128,6 +164,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     summaryProjection: "Use the manual task description and assignee context.",
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
+    roomProjection: FINITE_ROOM_PROJECTION,
   },
   {
     sourceKey: "scheduled",
@@ -140,6 +177,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     summaryProjection: "Use schedule cadence, owner, and due window.",
     supportedTransitions: SCHEDULED_TRANSITIONS,
     receiptPolicy: OBSERVED_RECEIPT_POLICY,
+    roomProjection: STANDING_ROOM_PROJECTION,
   },
   {
     sourceKey: "engagement",
@@ -152,6 +190,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     summaryProjection: "Use engagement account, scope, and current stage.",
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: OBSERVED_RECEIPT_POLICY,
+    roomProjection: FINITE_ROOM_PROJECTION,
   },
   {
     sourceKey: "opportunity",
@@ -164,6 +203,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     summaryProjection: "Use opportunity account, value, and stage.",
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: OBSERVED_RECEIPT_POLICY,
+    roomProjection: FINITE_ROOM_PROJECTION,
   },
   {
     sourceKey: "booking",
@@ -176,6 +216,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     summaryProjection: "Use booking contact, account, requested service, and window.",
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: OBSERVED_RECEIPT_POLICY,
+    roomProjection: FINITE_ROOM_PROJECTION,
   },
   {
     sourceKey: "storefront-booking",
@@ -188,6 +229,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     summaryProjection: "Backward-compatible alias for the booking source projection.",
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: OBSERVED_RECEIPT_POLICY,
+    roomProjection: FINITE_ROOM_PROJECTION,
   },
   {
     sourceKey: "activity",
@@ -200,6 +242,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     summaryProjection: "Use activity account, owner, and due context.",
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: OBSERVED_RECEIPT_POLICY,
+    roomProjection: FINITE_ROOM_PROJECTION,
   },
   {
     // A field-service job dispatched to a provider from a confirmed booking.
@@ -215,6 +258,7 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     summaryProjection: "Use the assigned provider, customer, service, and scheduled time.",
     supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: OBSERVED_RECEIPT_POLICY,
+    roomProjection: FINITE_ROOM_PROJECTION,
   },
 ] as const satisfies readonly WorkCaseSourceRegistryEntry[];
 
