@@ -40,6 +40,7 @@ vi.mock("@dpf/db", () => ({
         phaseRuns.set(key, { ...existing, ...data });
         return phaseRuns.get(key)!;
       }),
+      updateMany: vi.fn(async () => ({ count: 1 })),
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
         const key = `${data.buildId}:${data.phase}`;
         phaseRuns.set(key, { ...data });
@@ -55,7 +56,11 @@ vi.mock("@dpf/db", () => ({
   },
 }));
 
-import { startBuildPhaseRun, completeBuildPhaseRun } from "./build-phase-run";
+import {
+  completeBuildPhaseRun,
+  stampBuildPhaseExecutionProfile,
+  startBuildPhaseRun,
+} from "./build-phase-run";
 import { prisma } from "@dpf/db";
 
 beforeEach(() => {
@@ -79,6 +84,32 @@ describe("startBuildPhaseRun", () => {
     // update: {} means no overwrite on second call
     const secondCall = vi.mocked(prisma.buildPhaseRun.upsert).mock.calls[1]![0];
     expect(secondCall.update).toEqual({});
+  });
+
+  it("stamps the compact resolved execution profile on the actual phase row", async () => {
+    const executionProfileRef = {
+      schemaVersion: 1 as const,
+      patternKey: "autonomous-build",
+      patternVersion: 2,
+      bindingId: "AB-active",
+      activityKey: "build.implement",
+      riskClass: "internal-reversible" as const,
+      modelProfileId: "quality-first",
+      providerId: "openai",
+      modelId: "gpt-5",
+      promotionPolicyKey: "governed-playbook",
+      promotionPolicyVersion: 1,
+      sourceExperimentTaskRunId: "TR-experiment",
+      recoveryPolicyVersion: "autonomous-build-recovery/v1" as const,
+    };
+
+    await startBuildPhaseRun("build-profile", "build", {
+      executionProfileRef,
+    });
+
+    const call = vi.mocked(prisma.buildPhaseRun.upsert).mock.calls[0]![0];
+    expect(call.create.executionProfileRef).toEqual(executionProfileRef);
+    expect(call.update).toEqual({});
   });
 
   it("swallows db errors without throwing", async () => {
@@ -120,8 +151,68 @@ describe("completeBuildPhaseRun", () => {
     expect(updateCall.data.providerId).toBe("anthropic");
   });
 
+  it("stamps the profile when completing a legacy phase without a start row", async () => {
+    const executionProfileRef = {
+      schemaVersion: 1 as const,
+      patternKey: "autonomous-build",
+      patternVersion: 2,
+      bindingId: "AB-active",
+      activityKey: "build.implement",
+      riskClass: "internal-reversible" as const,
+      modelProfileId: "quality-first",
+      providerId: "openai",
+      modelId: "gpt-5",
+      promotionPolicyKey: "governed-playbook",
+      promotionPolicyVersion: 1,
+      sourceExperimentTaskRunId: "TR-experiment",
+      recoveryPolicyVersion: "autonomous-build-recovery/v1" as const,
+    };
+
+    await completeBuildPhaseRun("build-retro-profile", "review", {
+      executionProfileRef,
+    });
+
+    const createCall = vi.mocked(prisma.buildPhaseRun.create).mock.calls[0]![0];
+    expect(createCall.data.executionProfileRef).toEqual(executionProfileRef);
+  });
+
   it("swallows db errors without throwing", async () => {
     vi.mocked(prisma.buildPhaseRun.findUnique).mockRejectedValueOnce(new Error("db down"));
     await expect(completeBuildPhaseRun("build-123", "ideate")).resolves.not.toThrow();
+  });
+});
+
+describe("stampBuildPhaseExecutionProfile", () => {
+  it("updates only the open actual phase row", async () => {
+    const executionProfileRef = {
+      schemaVersion: 1 as const,
+      patternKey: "build-review",
+      patternVersion: 2,
+      bindingId: "AB-active",
+      activityKey: "build.implement",
+      riskClass: "internal-reversible" as const,
+      modelProfileId: "frontier-coding",
+      providerId: "fallback",
+      modelId: "fallback-model",
+      promotionPolicyKey: "governed-build-playbook-promotion",
+      promotionPolicyVersion: 1,
+      sourceExperimentTaskRunId: "TR-experiment",
+      recoveryPolicyVersion: "autonomous-build-recovery/v1" as const,
+    };
+
+    await stampBuildPhaseExecutionProfile(
+      "build-profile",
+      "ideate",
+      executionProfileRef,
+    );
+
+    expect(prisma.buildPhaseRun.updateMany).toHaveBeenCalledWith({
+      where: {
+        buildId: "build-profile",
+        phase: "ideate",
+        completedAt: null,
+      },
+      data: { executionProfileRef },
+    });
   });
 });

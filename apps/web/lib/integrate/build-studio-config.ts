@@ -292,6 +292,23 @@ export function isOneShotLaneEnabled(): boolean {
   return v === "1" || v === "true";
 }
 
+export type AutonomousPlaybookMode = "off" | "shadow" | "enforce";
+
+/**
+ * Delivery 3 rollout control. The eligibility projection always remains
+ * read-only; `shadow` records its decision while preserving the legacy human
+ * seam, and `enforce` may actuate only an evidence-cleared projection. Existing
+ * graduated/one-shot/auto-complete switches remain narrower emergency kills.
+ */
+export function getAutonomousPlaybookMode(
+  env: Record<string, string | undefined> = process.env,
+): AutonomousPlaybookMode {
+  const value = env.DPF_BUILD_AUTONOMOUS_PLAYBOOK_MODE
+    ?.trim()
+    .toLowerCase();
+  return value === "shadow" || value === "enforce" ? value : "off";
+}
+
 /** PlatformConfig key for the global build Cost/Quality/Time posture (P2). */
 export const BUILD_GOLDEN_TRIANGLE_POSTURE_KEY = "BUILD_GOLDEN_TRIANGLE_POSTURE";
 

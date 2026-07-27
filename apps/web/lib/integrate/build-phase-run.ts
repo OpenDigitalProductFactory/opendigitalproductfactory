@@ -22,6 +22,7 @@ import { prisma } from "@dpf/db";
 import { emitRing12FromCompletedPhase } from "@/lib/gear-interface/emit-ring-1-2";
 import { emitRing23FromCompletedShip } from "@/lib/gear-interface/emit-ring-2-3";
 import { getQuiescenceLevel, QuiescingError } from "@/lib/self-upgrade/quiescence";
+import type { AutonomousBuildExecutionProfileRefV1 } from "@/lib/build/autonomous-build-eligibility-reader";
 
 export type BuildPhaseName = "ideate" | "plan" | "build" | "review" | "ship";
 
@@ -32,6 +33,9 @@ export type BuildPhaseName = "ideate" | "plan" | "build" | "review" | "ship";
 export async function startBuildPhaseRun(
   buildId: string,
   phase: BuildPhaseName,
+  opts?: {
+    executionProfileRef?: AutonomousBuildExecutionProfileRefV1;
+  },
 ): Promise<void> {
   // BI-QUIESCE-005 entry-point gate: refuse new phase transitions during
   // quiescence drain. The idempotency property at upsert means restarting
@@ -47,11 +51,35 @@ export async function startBuildPhaseRun(
     const now = new Date();
     await prisma.buildPhaseRun.upsert({
       where: { buildId_phase: { buildId, phase } },
-      create: { buildId, phase, startedAt: now },
+      create: {
+        buildId,
+        phase,
+        startedAt: now,
+        executionProfileRef: opts?.executionProfileRef,
+      },
       update: {}, // Don't overwrite if already started — phase may restart rarely
     });
   } catch (err) {
     console.warn("[build-phase-run] Failed to start phase run:", { buildId, phase }, err);
+  }
+}
+
+export async function stampBuildPhaseExecutionProfile(
+  buildId: string,
+  phase: BuildPhaseName,
+  executionProfileRef: AutonomousBuildExecutionProfileRefV1,
+): Promise<void> {
+  try {
+    await prisma.buildPhaseRun.updateMany({
+      where: { buildId, phase, completedAt: null },
+      data: { executionProfileRef },
+    });
+  } catch (err) {
+    console.warn(
+      "[build-phase-run] Failed to stamp execution profile:",
+      { buildId, phase },
+      err,
+    );
   }
 }
 
@@ -67,6 +95,7 @@ export async function completeBuildPhaseRun(
   phase: BuildPhaseName,
   opts?: {
     providerId?: string;
+    executionProfileRef?: AutonomousBuildExecutionProfileRefV1;
   },
 ): Promise<void> {
   try {
@@ -126,6 +155,7 @@ export async function completeBuildPhaseRun(
           costUsd: costUsd != null ? costUsd : undefined,
           inferenceCount,
           providerId: opts?.providerId,
+          executionProfileRef: opts?.executionProfileRef,
         },
       });
     }

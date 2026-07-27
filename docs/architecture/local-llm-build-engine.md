@@ -100,6 +100,14 @@ account-tier/model-entitlement failures from the provider call.
 The in-sandbox agent loop, JSON event parsing, dispatch-attempt evidence, and governed
 phase gates stay shared across local and credentialed opencode targets.
 
+For an autonomous Living Playbook lane, routing is part of the evidence contract rather than an
+implementation detail. The active binding is matched against a model profile (`local-coding` or
+`frontier-coding`), while the phase execution profile records the provider and model actually
+selected. Changing the model tier, provider readiness, or scope invalidates the prior eligibility
+decision and forces a new check before the next consequential transition. A local-model result
+therefore supports only the method/model/scope combination that produced it; it cannot authorize a
+different provider or higher-risk lane.
+
 > **Versioning note:** the opencode CLI contract above is pinned to a specific release
 > and was researched against opencode's own documentation. Re-verify the `run` flags and
 > config schema on any version bump.

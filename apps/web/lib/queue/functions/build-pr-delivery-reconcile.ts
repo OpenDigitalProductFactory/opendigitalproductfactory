@@ -86,6 +86,57 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
     const state = existing ?? createBuildPrDeliveryState({ repository, prNumber, prUrl });
 
     try {
+      const { getAutonomousPlaybookMode } = await import(
+        "@/lib/integrate/build-studio-config"
+      );
+      const autonomousMode = getAutonomousPlaybookMode();
+      let semanticBuildId: string | null = null;
+      if (autonomousMode !== "off") {
+        semanticBuildId = (
+          await prisma.featureBuild.findUnique({
+            where: { id: capsule.featureBuildId },
+            select: { buildId: true },
+          })
+        )?.buildId ?? null;
+        if (!semanticBuildId && autonomousMode === "enforce") {
+          throw new Error("autonomous_pr_build_identity_missing");
+        }
+        if (semanticBuildId) {
+          const { resolveAutonomousBuildPhaseEligibility } = await import(
+            "@/lib/build/autonomous-build-phase-runtime"
+          );
+          const autonomy = await resolveAutonomousBuildPhaseEligibility({
+            buildId: semanticBuildId,
+            checkpoint: "pr",
+            gateOutcome: "recommend",
+            deliveryStatusOverride: state.status,
+          });
+          if (autonomousMode === "enforce" && !autonomy.mayAct) {
+            const blockedState = {
+              ...state,
+              status: "escalated" as const,
+              escalationKey:
+                state.escalationKey
+                ?? `build-pr-delivery:${prNumber}:autonomous-eligibility-withheld`,
+              lastError:
+                autonomy.eligibility.blockers.join(",")
+                || "autonomous-eligibility-withheld",
+            };
+            const saved = await prisma.workCapsule.updateMany({
+              where: { id: capsule.id, updatedAt: capsule.updatedAt },
+              data: {
+                workspaceState: writeBuildPrDeliveryState(
+                  capsule.workspaceState,
+                  blockedState,
+                ) as unknown as import("@dpf/db").Prisma.InputJsonValue,
+              },
+            });
+            if (saved.count === 0) compareAndSwapLost += 1;
+            else escalated += 1;
+            continue;
+          }
+        }
+      }
       const observation = await observeGithubPullRequest({ owner, repo, prNumber, token });
       observed += 1;
       const readiness = projectGithubPrReadiness(observation);
@@ -113,6 +164,21 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
       if (saved.count === 0) {
         compareAndSwapLost += 1;
         continue;
+      }
+
+      if (
+        semanticBuildId
+        && outcome.state.status === "awaiting-release"
+      ) {
+        const { resolveAutonomousBuildPhaseEligibility } = await import(
+          "@/lib/build/autonomous-build-phase-runtime"
+        );
+        await resolveAutonomousBuildPhaseEligibility({
+          buildId: semanticBuildId,
+          checkpoint: "release",
+          gateOutcome: "recommend",
+          deliveryStatusOverride: "awaiting-release",
+        }).catch(() => {});
       }
 
       if (

@@ -97,6 +97,8 @@ export async function dispatchIdeateForApprovedBuild(params: {
         designDoc: true,
         title: true,
         description: true,
+        planReview: true,
+        deliberationSummary: true,
       },
     });
 
@@ -172,6 +174,83 @@ export async function dispatchIdeateForApprovedBuild(params: {
     }
     await logActivity(formatBuildEngineSelectionEvidence(selection));
 
+    let executionProfileRef: import(
+      "@/lib/build/autonomous-build-eligibility-reader"
+    ).AutonomousBuildExecutionProfileRefV1 | null = null;
+    const { getAutonomousPlaybookMode } = await import(
+      "@/lib/integrate/build-studio-config"
+    );
+    const autonomousMode = getAutonomousPlaybookMode();
+    if (autonomousMode !== "off") {
+      try {
+        const { evaluateBuildStudioIdeateStartGate } = await import(
+          "@/lib/decision-perspective/build-studio-ship-gate"
+        );
+        const gate = await evaluateBuildStudioIdeateStartGate({
+          db: prisma,
+          build: {
+            buildId,
+            planReview: build.planReview as Parameters<
+              typeof evaluateBuildStudioIdeateStartGate
+            >[0]["build"]["planReview"],
+            deliberationSummary: build.deliberationSummary as Parameters<
+              typeof evaluateBuildStudioIdeateStartGate
+            >[0]["build"]["deliberationSummary"],
+          },
+          sensitivity: deliverableSensitivity,
+          triggeredByUserId: userId,
+        });
+        if (!gate.allowed && autonomousMode === "enforce") {
+          await logActivity(
+            gate.operatorMessage
+            || "Needs your decision before governed design work can begin.",
+          );
+          return {
+            kind: "dispatched-failure",
+            error: gate.operatorMessage || "graduated ideate gate withheld",
+            durationMs: 0,
+          };
+        }
+        const { resolveAutonomousBuildPhaseEligibility } = await import(
+          "@/lib/build/autonomous-build-phase-runtime"
+        );
+        const autonomy = await resolveAutonomousBuildPhaseEligibility({
+          buildId,
+          checkpoint: "ideate",
+          gateOutcome: gate.evaluation.outcomeType,
+          sensitivityOverride: deliverableSensitivity,
+        });
+        executionProfileRef = autonomy.executionProfileRef;
+        if (autonomousMode === "enforce" && !autonomy.mayAct) {
+          const reason =
+            autonomy.eligibility.blockers.join(", ")
+            || "autonomous ideate start is not evidence-cleared";
+          await logActivity(`Needs your decision: ${reason}.`);
+          return {
+            kind: "dispatched-failure",
+            error: reason,
+            durationMs: 0,
+          };
+        }
+      } catch (error) {
+        if (autonomousMode === "enforce") {
+          const reason = `autonomous ideate gate unavailable: ${String(
+            error instanceof Error ? error.message : error,
+          ).slice(0, 180)}`;
+          await logActivity(`Needs your decision: ${reason}.`);
+          return { kind: "dispatched-failure", error: reason, durationMs: 0 };
+        }
+      }
+    }
+    try {
+      const { startBuildPhaseRun } = await import("./build-phase-run");
+      void startBuildPhaseRun(buildId, "ideate", {
+        ...(executionProfileRef ? { executionProfileRef } : {}),
+      }).catch(() => {});
+    } catch {
+      /* phase attribution remains best-effort */
+    }
+
     // The BI body is the canonical context for backlog-promoted drafts.
     // It typically contains problem statement, acceptance criteria, and
     // architectural notes — exactly what the research prompt needs.
@@ -190,8 +269,10 @@ export async function dispatchIdeateForApprovedBuild(params: {
     const { dispatchIdeateResearch } = await import("./ideate-dispatch");
     const attemptCandidates = [selection.selected, ...selection.fallbackChain.slice(0, 1)];
     let ideateResult: Awaited<ReturnType<typeof dispatchIdeateResearch>> | null = null;
+    let resolvedAttempt = selection.selected;
     for (let attemptIndex = 0; attemptIndex < attemptCandidates.length; attemptIndex += 1) {
       const attempt = attemptCandidates[attemptIndex]!;
+      resolvedAttempt = attempt;
       await logActivity(
         `${attemptIndex === 0 ? "Dispatching" : "Retrying"} ideate research via ${attempt.engine} `
         + `(provider=${attempt.providerId}, model=${attempt.modelId || "default"})`,
@@ -235,6 +316,21 @@ export async function dispatchIdeateForApprovedBuild(params: {
       };
       await logActivity(`Auto-dispatch failed after ${(durationMs / 1000).toFixed(1)}s: ${outcome.error.slice(0, 200)}`);
       return outcome;
+    }
+    if (executionProfileRef) {
+      const { stampBuildPhaseExecutionProfile } = await import(
+        "./build-phase-run"
+      );
+      executionProfileRef = {
+        ...executionProfileRef,
+        providerId: resolvedAttempt.providerId,
+        modelId: resolvedAttempt.modelId,
+      };
+      await stampBuildPhaseExecutionProfile(
+        buildId,
+        "ideate",
+        executionProfileRef,
+      );
     }
 
     // Persist via the same code path the agentic coworker uses, so the

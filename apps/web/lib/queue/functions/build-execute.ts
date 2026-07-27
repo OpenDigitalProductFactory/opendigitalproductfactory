@@ -81,6 +81,21 @@ export const buildExecute = inngest.createFunction(
       return ensureBuildTaskRun(buildId);
     })) as string;
 
+    const autonomy = (await step.run("autonomous-eligibility", async () => {
+      const { recheckAutonomousBuildExecution } = await import(
+        "@/lib/integrate/build-execute-helpers"
+      );
+      return recheckAutonomousBuildExecution({ buildId, taskRunId });
+    })) as { mayContinue: boolean; reason: string | null };
+    if (!autonomy.mayContinue) {
+      return {
+        buildId,
+        taskRunId,
+        terminal: "input-required",
+        reason: autonomy.reason,
+      };
+    }
+
     let state = (await step.run("load-exec-state", async () => {
       const { loadBuildExecState } = await import("@/lib/integrate/build-execute-helpers");
       return loadBuildExecState(buildId);

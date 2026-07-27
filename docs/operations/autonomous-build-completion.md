@@ -1,107 +1,131 @@
-# Autonomous Build Completion (operator runbook)
+# Autonomous Build Studio (operator runbook)
 
-Build Studio can finish verified builds on its own — from `ship` all the way to
-`complete` — without an operator clicking through each ship step. This is
-**opt-in and off by default**; turn it on deliberately and watch the first run.
+Build Studio can own an eligible build from intake through deployed completion without routine
+operator clicks. Autonomy is evidence-cleared, scoped, and off by default. It does not enlarge an
+agent's authority, bypass a phase gate, merge directly, or replace governed self-upgrade.
 
-## What it does
+## Control switches
 
-When enabled, a build that passes review and reaches the `ship` phase:
+| Setting | Values | Purpose |
+| --- | --- | --- |
+| `DPF_BUILD_AUTONOMOUS_PLAYBOOK_MODE` | `off` (default), `shadow`, `enforce` | Observe or actuate Living Playbook eligibility at every consequential seam. |
+| `DPF_AUTO_COMPLETE_VERIFIED_BUILDS` | `1`, `true`, `on` (default off) | Allows verified ship forks and deployed completion. |
+| `DPF_BUILD_PR_DELIVERY_RECONCILER_MODE` | `off`, `shadow`, `enforce` | Controls PR observation and compare-and-swap delivery actions. |
 
-1. **Pushes its PR** upstream (`contribute_to_hive`) — the "upstream" delivery
-   fork.
-2. **Registers the product + promotion** (`register_digital_product_from_build`)
-   — the "promote" delivery fork.
-3. **Completes itself** once its merged code is actually live on this install via
-   the **platform self-upgrade** (the deploy you already run) — _not_ a per-build
-   `dpf-promoter` deploy.
+The legacy switches remain independent kill switches. Full autonomous custody requires the
+autonomous playbook and the relevant downstream switch to be in `enforce`. `shadow` records what
+would happen but never grants a new transition.
 
-Between steps 1 and 3, Build Studio now owns PR delivery recovery:
+## Eligibility contract
 
-- it evaluates checks and unresolved review threads at the PR's exact head SHA;
-- it safely updates a stale branch using GitHub's expected-head comparison;
-- it enrolls an evidence-cleared PR in the repository merge queue;
-- it resumes after portal restarts through versioned Work Capsule state; and
-- it escalates true conflicts, closed PRs, ambiguous state, or exhausted retry
-  budgets without direct merge or force-push.
+One pure projection is re-evaluated before intake, ideate, plan, build, review, ship, PR, and
+release actions. A lane is eligible only when all of these are true:
 
-Completion is handled by a periodic reconciler that runs on boot and every ~10
-minutes (`reconcileDeployedShipBuilds`): for each build sitting at `ship` whose
-merged commit is now in the deployed runtime (`isFeatureBuildDeployed`), it marks
-the promotion `deployed` (the self-upgrade _was_ the deploy) so the promote fork
-is terminal, then advances the build `ship → complete`.
+- an active Governed Work Pattern binding matches the current activity, `dpf_dogfood` install,
+  DPF repository corpus, and selected model profile;
+- the binding's evidence is fresh and its authority remains active;
+- the decision gate permits the transition and the regulatory ceiling permits autopilot;
+- provider, sandbox, verification-oracle, recovery-budget, and delivery evidence are ready for
+  that checkpoint; and
+- sensitivity is below the high-risk ceiling.
 
-End-to-end, with no operator clicks:
+The binding does not confer authority by itself. Existing `AuthorityBinding`,
+`DecisionInteraction`, `DecisionShadowLedger`, `TaskRun`, `BuildPhaseRun`, Work Capsule, Feature
+Build, merge-queue, and self-upgrade records remain the owners of authority and evidence.
+`BuildPhaseRun.executionProfileRef` and TaskRun metadata record the method version, model profile,
+provider, and model actually used.
 
+## Autonomous path
+
+```text
+intake -> ideate -> plan -> build -> review -> ship
+       -> exact-head PR checks -> merge queue -> awaiting release
+       -> governed self-upgrade -> deployed-SHA check -> complete
 ```
-ideate → plan → build → review → ship → (PR merges + next self-upgrade) → complete
-```
 
-## The switch
+Every arrow is separately eligible. A binding that expires, a provider that disappears, a
+regulatory change, red or missing verification, a human-closed PR, or an authority ceiling parks
+the build before the next mutation.
 
-```
-DPF_AUTO_COMPLETE_VERIFIED_BUILDS = "1" | "true" | "on"     # default OFF
-DPF_BUILD_PR_DELIVERY_RECONCILER_MODE = "off" | "shadow" | "enforce"
-```
+Merge is not deployment. A merge-queued or merely merged change cannot complete. Build Studio
+shows **Waiting for governed release** until the self-upgrade path proves the merged code is in the
+running version. The completion reconciler then rechecks release eligibility, marks the existing
+promotion deployed, and advances `ship -> complete`.
 
-Set on the `dpf-portal` container's environment. Unset / anything else = OFF —
-builds reach `ship` and wait for a manual ship, exactly as before.
+Private and `fork_only` installs preserve their existing local-delivery path. The registered local
+product version is their delivery evidence; they do not fabricate a PR.
 
-The delivery reconciler defaults to `shadow`: it records the action it would
-take but does not mutate GitHub. Use `enforce` only after shadow evidence is
-reviewed for the install. `off` disables both observation and actuation. The
-outer autonomous-completion switch still controls whether Build Studio creates
-and resolves the autonomous ship forks.
+## Bounded recovery
 
-## How to turn it on
+Recovery state is serializable and resumes after process restart. The v1 policy permits:
 
-1. **Deploy the code.** Run a platform **self-upgrade** so the build-completion
-   code (PRs #2180 + #2188) is live. Until then builds still loop/stall at
-   `review`/`ship`.
-2. **Set the flag.** Add `DPF_AUTO_COMPLETE_VERIFIED_BUILDS=1` to the portal
-   environment and redeploy/restart the portal so it takes effect.
-3. **Watch the first one.** It pushes a real upstream PR — eyeball the first
-   autonomous delivery end-to-end before leaving it on for the fleet.
+| Failure | Autonomous action | Bound |
+| --- | --- | --- |
+| provider rate/capacity | backoff or eligible fallback | 2 |
+| tool protocol mismatch | normalize, then compatible fallback | 2 |
+| context overflow | compact and replay | 1 |
+| verification or reproduced review finding | repair and verify | 2 |
+| plan oscillation | decompose | 1 |
+| post-push CI | repair, push a new SHA, re-observe | 2 |
+| stale merge-queue base | leave queue, replay, re-enroll | 1 |
+| unresolved review thread | address and re-review | 2 |
+| remote SHA race | discard stale decision and re-observe | 1 |
+| deployed SHA timeout | continue bounded observation | 1 |
 
-## Safety
+Sandbox drift is routed to the governed sandbox convergence path and is not charged as a product
+failure. Self-upgrade failure stays with the governed runner and its recovery point/rollback
+contract. The policy deliberately has no direct Compose rebuild, direct redeploy, force-push,
+admin merge, or PR-reopen action.
 
-- **Default OFF** — nothing happens until you set the flag.
-- **No per-build production deploy** — completion follows your self-upgrade, not
-  the `dpf-promoter`. (Per-build promoter deploys are a separate, heavier option;
-  this runbook is the self-upgrade path.)
-- **Idempotent + non-throwing** — re-runs skip already-pushed PRs and
-  already-registered products; any unresolved fork simply parks the build at
-  `ship` for an operator.
-- **No direct merge** — the protected repository merge queue remains the
-  integration authority.
-- **Exact-head compare-and-swap** — a concurrent branch update cancels the old
-  decision and triggers a fresh observation.
-- **Merge is not deployment** — merged work displays “Waiting for governed
-  release” until self-upgrade evidence proves it live.
-- **Real artifacts only** — a build reads `complete` only when it genuinely has a
-  pushed PR, a product/promotion, and its merged code live in the runtime. It
-  never writes a `complete` status without those.
+Ambiguous feedback, an authority/regulatory ceiling, exhausted recovery, or a human-closed PR
+parks the run. Escalation is deduplicated so one failure does not create an attention storm.
 
-## Notes / limitations
+## What the operator sees
 
-- **Legacy stranded builds** — builds created before these fixes (sandbox torn
-  down, or code merged via a manual PR with no build-linked records) will not
-  auto-complete cleanly; they predate the flow. Re-run or retire them rather than
-  forcing them.
-- **Contribution mode matters** — in `private` / `fork_only` mode the upstream PR
-  fork auto-skips (no PR needed); in `contributing` mode a PR is pushed per the
-  steps above.
+The existing Build Studio solution band displays one plain-language custody state:
 
-## Related
+- **Build Studio is working**
+- **Build Studio is recovering**
+- **Checking the pull request**
+- **Waiting for governed release**
+- **Needs your decision**
+- **Build Studio may be stalled**
+- **Live and complete**
 
-- **PR #2180** — fixes the review→ship loop (`deploy_feature` extracted the diff
-  but never advanced the phase, so verified builds spun at `review` forever).
-- **PR #2188** — this feature: the fork resolver, the ship-completion reconciler,
-  and the session-less `shipBuild` enabler.
-- Code:
-  - `apps/web/lib/integrate/ship-on-review-approval.ts` — `autoResolveShipForks`,
-    `isAutoCompleteEnabled`.
-  - `apps/web/instrumentation.ts` — `reconcileDeployedShipBuilds` (boot + 10-min
-    interval).
-  - `apps/web/lib/build-flow-state.ts` — `reconcileBuildCompletion` (the
-    forks-terminal + deployed gate).
+Method version, provider/model, checkpoint, blockers, and attempt counts remain under **Engineer
+details**. The surface adds no new route, tab, dashboard, or prompt-sending action.
+
+## Rollout and rollback
+
+1. Keep all three switches off while deploying the code.
+2. Enable autonomous playbook `shadow` and compare recorded decisions with existing gates.
+3. Enable one contained, low-risk `dpf_dogfood` binding whose evidence scope exactly matches.
+4. Exercise happy path plus provider, sandbox, verification, PR, queue, release, stale-heartbeat,
+   and authority-ceiling cases.
+5. Move the autonomous consumer and PR reconciler to `enforce` only after evidence is clean.
+6. Broaden only to other evidence-cleared dogfood bindings. Customer/fleet authority requires
+   separately corroborated portable evidence.
+
+Emergency stop: set `DPF_BUILD_AUTONOMOUS_PLAYBOOK_MODE=off` and disable the downstream completion
+and PR reconciler switches. Existing records and in-flight evidence remain available; no schema
+rollback is required.
+
+## Verification checklist
+
+- Confirm shadow mode creates observations but no new autonomous transitions.
+- Confirm an active, exact-scope binding produces an execution profile reference on each phase.
+- Confirm stale/mismatched/missing bindings and high/regulatory cases park before mutation.
+- Confirm recovery counters survive restart and exhaust into one escalation.
+- Confirm exact-head PR compare-and-swap, unresolved-thread handling, queue enrollment, and human
+  closure.
+- Confirm sandbox drift is `blocked_sandbox_drift`, not a product red.
+- Confirm merged work waits for governed self-upgrade and exact deployed-SHA evidence.
+- Confirm the operator band in light/dark and narrow/wide viewports, including collapsed engineer
+  details and stale-heartbeat attention.
+
+## Related contracts
+
+- [Build Studio autonomous lanes](../user-guide/build-studio/autonomous-builds.md)
+- [Governed playbook experimentation and autonomous Build Studio design](../superpowers/specs/2026-07-25-governed-playbook-experimentation-autonomous-build-studio-design.md)
+- [PR delivery recovery design](../superpowers/specs/2026-07-25-build-studio-pr-delivery-recovery-design.md)
+- [Self-upgrade user guide](../user-guide/operations/self-upgrade.md)

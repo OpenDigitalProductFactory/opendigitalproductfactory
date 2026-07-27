@@ -13,6 +13,10 @@
 // ProcessGraph behind an "Engineer view" disclosure — is BI-90670010's separate
 // restructure step and is intentionally NOT part of this additive component.
 
+import { StatusBadge } from "@/components/ui/report-kit";
+import type { Intent } from "@/components/ui/report-kit/statusColors";
+import type { AutonomousBuildCustodyView } from "@/lib/build/autonomous-build-custody";
+
 type Props = {
   /** designDoc.problemStatement, if a design has been produced. */
   problemStatement?: string | null;
@@ -21,6 +25,8 @@ type Props = {
   /** Captured intent (originating backlog item description) — shown before a
    *  design doc exists so the band is never empty during early ideation. */
   fallbackIntent?: string | null;
+  /** Plain-language autonomous custody state; provenance stays collapsed. */
+  custody?: AutonomousBuildCustodyView | null;
 };
 
 const OPERATOR_SUMMARY_LIMIT = 260;
@@ -48,6 +54,7 @@ export function BuildSolutionSummaryBand({
   problemStatement,
   proposedApproach,
   fallbackIntent,
+  custody,
 }: Props) {
   const problem = problemStatement?.trim() || null;
   const approach = proposedApproach?.trim() || null;
@@ -58,7 +65,17 @@ export function BuildSolutionSummaryBand({
   const operatorApproach = showApproach ? compactCopy(approach, OPERATOR_APPROACH_LIMIT) : null;
 
   // Nothing to say yet → render nothing (the caller also gates, but stay safe).
-  if (!problem && !approach && !fallback) return null;
+  if (!problem && !approach && !fallback && !custody) return null;
+  const custodyIntent: Intent =
+    custody?.state === "complete"
+      ? "success"
+      : custody?.state === "needs-decision"
+        ? "danger"
+        : custody?.state === "recovering"
+          ? "warning"
+          : custody?.state === "shadow"
+            ? "neutral"
+            : "info";
 
   return (
     <section
@@ -96,6 +113,65 @@ export function BuildSolutionSummaryBand({
         <p className="mt-2 text-[11px] font-medium text-[var(--dpf-muted)]">
           AI Coworker has the technical plan.
         </p>
+      ) : null}
+
+      {custody ? (
+        <div
+          className="mt-3 border-t border-[var(--dpf-border)] pt-3"
+          data-testid="autonomous-build-custody"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge
+              intent={custodyIntent}
+              label={custody.title}
+              variant="soft"
+              uppercase={false}
+            />
+            {custody.attentionRequired ? (
+              <span className="text-xs font-medium text-[var(--dpf-text)]">
+                Attention required
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-[var(--dpf-muted)]">
+            {custody.detail}
+          </p>
+          <details className="mt-2 text-xs text-[var(--dpf-muted)]">
+            <summary className="cursor-pointer font-medium text-[var(--dpf-text)]">
+              Engineer details
+            </summary>
+            <dl className="mt-2 grid gap-1 border-l border-[var(--dpf-border)] pl-3">
+              <div>
+                <dt className="inline font-medium">Checkpoint: </dt>
+                <dd className="inline">{custody.engineer.checkpoint}</dd>
+              </div>
+              <div>
+                <dt className="inline font-medium">Policy: </dt>
+                <dd className="inline">
+                  {custody.engineer.method ?? "governed default"}
+                  {custody.engineer.patternVersion != null
+                    ? ` v${custody.engineer.patternVersion}`
+                    : ""}
+                </dd>
+              </div>
+              {custody.engineer.provider ? (
+                <div>
+                  <dt className="inline font-medium">Execution: </dt>
+                  <dd className="inline">
+                    {custody.engineer.provider}
+                    {custody.engineer.model ? ` / ${custody.engineer.model}` : ""}
+                  </dd>
+                </div>
+              ) : null}
+              {custody.engineer.blockers.length > 0 ? (
+                <div>
+                  <dt className="inline font-medium">Evidence blockers: </dt>
+                  <dd className="inline">{custody.engineer.blockers.join(", ")}</dd>
+                </div>
+              ) : null}
+            </dl>
+          </details>
+        </div>
       ) : null}
     </section>
   );

@@ -178,7 +178,40 @@ export async function runBuildPipeline(params: {
           break; // step succeeded — move on
         } catch (err) {
           attempt++;
-          const errorMsg = getErrorMessage(err);
+          let errorMsg = getErrorMessage(err);
+          const { getAutonomousPlaybookMode } = await import(
+            "@/lib/integrate/build-studio-config"
+          );
+          if (getAutonomousPlaybookMode() !== "off") {
+            const {
+              classifyAutonomousBuildFailure,
+              decideAutonomousRecovery,
+              initialAutonomousRecoveryState,
+            } = await import("@/lib/build/autonomous-recovery-policy");
+            const failureClass = classifyAutonomousBuildFailure({
+              message: errorMsg,
+              step,
+            });
+            const recovery = decideAutonomousRecovery({
+              failureClass,
+              state: state.autonomousRecovery
+                ?? initialAutonomousRecoveryState(),
+            });
+            state = {
+              ...state,
+              autonomousRecovery: recovery.state,
+              retryCount: attempt,
+            };
+            await updateState(state);
+            if (failureClass === "sandbox-drift") {
+              errorMsg = `blocked_sandbox_drift: ${errorMsg}`;
+            }
+            if (recovery.terminal) {
+              const failed = buildFailedState(state, step, errorMsg);
+              await updateState(failed);
+              return failed;
+            }
+          }
           if (attempt < maxAttempts) {
             const delay = RETRY_DELAYS_MS[attempt - 1] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1]!;
             await new Promise<void>((resolve) => setTimeout(resolve, delay));

@@ -432,6 +432,38 @@ describe("governed backlog tee-up", () => {
     expect(mockPrisma.featureBuild.create).not.toHaveBeenCalled();
   });
 
+  it("requires an evidence-cleared active playbook before enforce-mode auto-start", async () => {
+    const { shouldAutoApproveGovernedDraft } = await import(
+      "./governed-backlog-tee-up"
+    );
+    const ineligible = {
+      eligible: false,
+      lane: "standard" as const,
+      sensitivity: "low" as const,
+      blockers: ["active_pattern_binding_missing"],
+      nextGovernedAction: "escalate" as const,
+    };
+    const eligible = {
+      eligible: true,
+      lane: "one-shot" as const,
+      sensitivity: "low" as const,
+      activePatternVersion: 2,
+      blockers: [],
+      nextGovernedAction: "auto-start" as const,
+    };
+
+    expect(shouldAutoApproveGovernedDraft({
+      governedBacklogEnabled: true,
+      hasBody: true,
+      autonomousStart: { mode: "enforce", eligibility: ineligible },
+    })).toBe(false);
+    expect(shouldAutoApproveGovernedDraft({
+      governedBacklogEnabled: true,
+      hasBody: true,
+      autonomousStart: { mode: "enforce", eligibility: eligible },
+    })).toBe(true);
+  });
+
   describe("promoteBacklogItemToBuildDraft intake initialization", () => {
     it("seeds happyPathState.intake from a BI with an existing epic and taxonomy", async () => {
       mockPrisma.backlogItem.findUnique.mockResolvedValueOnce({

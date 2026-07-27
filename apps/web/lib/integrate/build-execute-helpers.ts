@@ -123,6 +123,64 @@ export async function loadBuildExecState(
   return (row?.buildExecState as BuildExecutionState | null) ?? null;
 }
 
+export async function recheckAutonomousBuildExecution(input: {
+  buildId: string;
+  taskRunId: string;
+}): Promise<{ mayContinue: boolean; reason: string | null }> {
+  const { getAutonomousPlaybookMode } = await import(
+    "@/lib/integrate/build-studio-config"
+  );
+  const mode = getAutonomousPlaybookMode();
+  if (mode === "off") return { mayContinue: true, reason: null };
+
+  try {
+    const { resolveAutonomousBuildPhaseEligibility } = await import(
+      "@/lib/build/autonomous-build-phase-runtime"
+    );
+    const autonomy = await resolveAutonomousBuildPhaseEligibility({
+      buildId: input.buildId,
+      checkpoint: "build",
+      gateOutcome: "recommend",
+    });
+    if (mode === "enforce" && !autonomy.mayAct) {
+      const reason =
+        autonomy.eligibility.blockers.join(", ")
+        || "autonomous build dispatch is not evidence-cleared";
+      const { prisma } = await import("@dpf/db");
+      await prisma.taskRun.updateMany({
+        where: {
+          taskRunId: input.taskRunId,
+          status: { in: ["submitted", "working"] },
+        },
+        data: { status: "input-required" },
+      });
+      await prisma.buildActivity.create({
+        data: {
+          buildId: input.buildId,
+          tool: "autonomous:needs-decision",
+          summary: `Build dispatch parked: ${reason}.`,
+        },
+      });
+      return { mayContinue: false, reason };
+    }
+    const { startBuildPhaseRun } = await import("./build-phase-run");
+    await startBuildPhaseRun(input.buildId, "build", {
+      ...(autonomy.executionProfileRef
+        ? { executionProfileRef: autonomy.executionProfileRef }
+        : {}),
+    });
+    return { mayContinue: true, reason: null };
+  } catch (error) {
+    if (mode !== "enforce") return { mayContinue: true, reason: null };
+    return {
+      mayContinue: false,
+      reason: `autonomous build eligibility unavailable: ${String(
+        error instanceof Error ? error.message : error,
+      ).slice(0, 180)}`,
+    };
+  }
+}
+
 /**
  * Dual-write of buildExecState — a faithful port of autoExecuteBuild's
  * updateState closure (sourceCurrency preservation + sandbox pointer
@@ -236,7 +294,38 @@ export async function runPipelineStepDurable(params: {
       return state;
     } catch (err) {
       attempt++;
-      const errorMsg = getErrorMessage(err);
+      let errorMsg = getErrorMessage(err);
+      const { getAutonomousPlaybookMode } = await import("./build-studio-config");
+      if (getAutonomousPlaybookMode() !== "off") {
+        const {
+          classifyAutonomousBuildFailure,
+          decideAutonomousRecovery,
+          initialAutonomousRecoveryState,
+        } = await import("@/lib/build/autonomous-recovery-policy");
+        const failureClass = classifyAutonomousBuildFailure({
+          message: errorMsg,
+          step,
+        });
+        const recovery = decideAutonomousRecovery({
+          failureClass,
+          state: state.autonomousRecovery
+            ?? initialAutonomousRecoveryState(),
+        });
+        state = {
+          ...state,
+          autonomousRecovery: recovery.state,
+          retryCount: attempt,
+        };
+        await persistBuildExecState(buildId, state);
+        if (failureClass === "sandbox-drift") {
+          errorMsg = `blocked_sandbox_drift: ${errorMsg}`;
+        }
+        if (recovery.terminal) {
+          const failed = buildFailedState(state, step, errorMsg);
+          await persistBuildExecState(buildId, failed);
+          return failed;
+        }
+      }
       if (attempt < maxAttempts) {
         const delay =
           RETRY_DELAYS_MS[attempt - 1] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1]!;

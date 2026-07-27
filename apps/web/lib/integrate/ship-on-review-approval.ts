@@ -159,24 +159,6 @@ export async function advanceReviewedBuildToShip(
   log: (summary: string) => Promise<void>,
   t0: number,
 ): Promise<ShipDispatchOutcome> {
-  // Evidence-gated autonomous acceptance (kernel DI-53037C92BC0A, default-OFF flag).
-  // Runs BEFORE the review→ship gate read below so a governed-autopilot build with
-  // fully-green evidence records acceptance and clears the `acceptance-evaluated`
-  // requirement. This is the single autonomous choke point every advance route
-  // funnels through (fresh UX pass, UX-skipped, diff-re-entry, reconciler re-drive).
-  // Fail-closed + never throws: if it declines, the gate blocks exactly as before.
-  try {
-    const { autoAcceptBuildOnEvidence } = await import("@/lib/build/auto-accept");
-    const auto = await autoAcceptBuildOnEvidence(buildId);
-    if (auto.accepted) {
-      await log(
-        `Auto-recorded acceptance on green evidence (${auto.acceptanceMet?.length ?? 0} criteria) — evidence-gated autopilot.`,
-      );
-    }
-  } catch {
-    /* never blocks the ship path */
-  }
-
   const build = await prisma.featureBuild.findUnique({
     where: { buildId },
     select: {
@@ -192,6 +174,8 @@ export async function advanceReviewedBuildToShip(
       acceptanceMet: true,
       threadId: true,
       diffPatch: true,
+      createdById: true,
+      deliberationSummary: true,
     },
   });
 
@@ -201,6 +185,88 @@ export async function advanceReviewedBuildToShip(
   if (build.phase !== "review") {
     // Another path (live advance / a prior tick) already moved it on.
     return { kind: "skipped", reason: `phase=${build.phase}` };
+  }
+
+  let executionProfileRef: import(
+    "@/lib/build/autonomous-build-eligibility-reader"
+  ).AutonomousBuildExecutionProfileRefV1 | null = null;
+  const { getAutonomousPlaybookMode } = await import("./build-studio-config");
+  const autonomousMode = getAutonomousPlaybookMode();
+  if (autonomousMode !== "off") {
+    try {
+      const { deriveBlastRadiusSensitivity } = await import("./change-impact");
+      const actualSensitivity = await deriveBlastRadiusSensitivity(
+        (build.diffPatch as string | null) ?? "",
+      );
+      const { evaluateBuildStudioShipGate } = await import(
+        "@/lib/decision-perspective/build-studio-ship-gate"
+      );
+      const shipGate = await evaluateBuildStudioShipGate({
+        db: prisma,
+        build: {
+          buildId,
+          planReview: build.planReview as Parameters<
+            typeof evaluateBuildStudioShipGate
+          >[0]["build"]["planReview"],
+          deliberationSummary: build.deliberationSummary as Parameters<
+            typeof evaluateBuildStudioShipGate
+          >[0]["build"]["deliberationSummary"],
+        },
+        sensitivity: actualSensitivity,
+        triggeredByUserId: build.createdById,
+      });
+      if (!shipGate.allowed && autonomousMode === "enforce") {
+        await log(
+          shipGate.operatorMessage
+          || "Needs your decision before this verified build can ship.",
+        );
+        return {
+          kind: "skipped",
+          reason: shipGate.operatorMessage || "graduated ship gate withheld",
+        };
+      }
+      const { resolveAutonomousBuildPhaseEligibility } = await import(
+        "@/lib/build/autonomous-build-phase-runtime"
+      );
+      const autonomy = await resolveAutonomousBuildPhaseEligibility({
+        buildId,
+        checkpoint: "ship",
+        gateOutcome: shipGate.evaluation.outcomeType,
+        sensitivityOverride: actualSensitivity,
+      });
+      executionProfileRef = autonomy.executionProfileRef;
+      if (autonomousMode === "enforce" && !autonomy.mayAct) {
+        const reason =
+          autonomy.eligibility.blockers.join(", ")
+          || "autonomous ship is not evidence-cleared";
+        await log(`Needs your decision: ${reason}.`);
+        return { kind: "skipped", reason };
+      }
+    } catch (error) {
+      if (autonomousMode === "enforce") {
+        const reason = `autonomous ship gate unavailable: ${String(
+          error instanceof Error ? error.message : error,
+        ).slice(0, 180)}`;
+        await log(`Needs your decision: ${reason}.`);
+        return { kind: "skipped", reason };
+      }
+    }
+  }
+
+  // Evidence-gated autonomous acceptance (kernel DI-53037C92BC0A, default-OFF
+  // flag). It runs only after the autonomous ship gate above, so a high-risk or
+  // authority-ceiling case cannot manufacture acceptance before escalating.
+  try {
+    const { autoAcceptBuildOnEvidence } = await import("@/lib/build/auto-accept");
+    const auto = await autoAcceptBuildOnEvidence(buildId);
+    if (auto.accepted) {
+      await log(
+        `Auto-recorded acceptance on green evidence (${auto.acceptanceMet?.length ?? 0} criteria) — evidence-gated autopilot.`,
+      );
+      build.acceptanceMet = auto.acceptanceMet as typeof build.acceptanceMet;
+    }
+  } catch {
+    /* never blocks the manual/off path */
   }
 
   const { checkPhaseGate, canTransitionPhase, normalizeHappyPathState } = await import(
@@ -237,6 +303,17 @@ export async function advanceReviewedBuildToShip(
   });
   if (flipped.count === 0) {
     return { kind: "skipped", reason: "already advanced" };
+  }
+  try {
+    const { completeBuildPhaseRun, startBuildPhaseRun } = await import(
+      "@/lib/integrate/build-phase-run"
+    );
+    void completeBuildPhaseRun(buildId, "review");
+    void startBuildPhaseRun(buildId, "ship", {
+      ...(executionProfileRef ? { executionProfileRef } : {}),
+    }).catch(() => {});
+  } catch {
+    /* phase evidence is best-effort and never replaces the lifecycle row */
   }
   await log(
     "Advanced review→ship (diff already extracted). Push to GitHub remains a human gate.",

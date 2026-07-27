@@ -4,6 +4,12 @@
 > foundation described here has shipped. Executable method variants, controlled baseline/candidate
 > trials, evidence-scope promotion, and the fully autonomous Build Studio consumer are specified in
 > [`2026-07-25-governed-playbook-experimentation-autonomous-build-studio-design.md`](2026-07-25-governed-playbook-experimentation-autonomous-build-studio-design.md).
+>
+> **2026-07-27 implementation status:** The Delivery 3 consumer is implemented under
+> `BI-356E69B1`: one consolidated eligibility projection/read seam, phase-by-phase rechecks,
+> versioned bounded recovery, exact-head PR/merge-queue custody, governed-release/deployed-SHA
+> closure, execution-profile attribution, and the operator custody band. Rollout remains
+> default-off and proceeds through shadow and a contained `dpf_dogfood` canary.
 
 - **Status:** Design analysis
 - **Date:** 2026-06-27

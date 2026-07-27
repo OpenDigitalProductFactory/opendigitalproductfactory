@@ -2,6 +2,8 @@
 // Types for the checkpoint-based build execution pipeline.
 
 import type { SandboxSourceCurrencySnapshot } from "./sandbox/sandbox-source-currency";
+import type { AutonomousRecoveryStateV1 } from "@/lib/build/autonomous-recovery-policy";
+import type { AutonomousBuildPhaseRuntimeRecord } from "@/lib/build/autonomous-build-phase-runtime";
 
 export type BuildExecStep =
   | "pending"
@@ -27,6 +29,8 @@ export type BuildExecutionState = {
   networkId?: string;
   hostPort?: number;
   sourceCurrency?: SandboxSourceCurrencySnapshot | null;
+  autonomousRecovery?: AutonomousRecoveryStateV1;
+  autonomousCustody?: AutonomousBuildPhaseRuntimeRecord;
   startedAt: string;
   completedAt?: string;
 };

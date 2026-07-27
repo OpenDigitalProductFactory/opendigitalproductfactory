@@ -14,15 +14,19 @@ Build Studio is not a separate code universe. It works from the install's shared
 
 ## Current Maturity
 
-Build Studio is real, but it is still being hardened. It should be described as the governed self-development surface and evidence trail, not as a fully autonomous replacement for every developer workflow today.
+Build Studio is real and can now run fully autonomously for explicitly enabled, evidence-cleared
+lower-risk lanes. It remains a governed self-development surface rather than blanket developer
+authority: high-risk, regulatory, ambiguous, or evidence-incomplete work still pauses for a
+decision, and complex unsupported source workflows may still use an external development surface.
 
 Recent hardening work includes plan-review trajectory, design-time decomposition for oversized builds, activity quiescence for safer portal upgrades, and voice/follow-up guards in coworker chat. Complex source changes may still need VS Code in customizable installs while Build Studio keeps the design, review, test, and promotion record.
 
 Build Studio also has a governed experimentation substrate for reviewed Living Playbook candidates.
-Eligible immutable replay lanes can run autonomously in shadow, compare method and model factors,
-and record reproducible evidence without advancing a feature phase, creating a pull request,
-joining the merge queue, releasing software, or changing live customer state. Unsupported or
-higher-authority cases remain escalations.
+Eligible immutable replay lanes can run autonomously in shadow to compare method and model
+factors. A separately enabled active Living Playbook binding can then govern a contained
+lower-risk Build Studio lane through phase transitions, bounded recovery, exact-head PR checks,
+the merge queue, and deployed completion. Unsupported or higher-authority cases remain
+escalations.
 
 ## Key Concepts
 
@@ -80,6 +84,7 @@ The AI Coworker prepares the promotion record and evidence. Where promotion is e
 ## Related
 
 - [Feature Deployment](deployment.md) — How the deployment pipeline works, safety guarantees, and rollback
+- [Autonomous Build Studio lanes](autonomous-builds.md) — Eligibility, visible custody states, bounded recovery, and attention boundaries
 - [Development Workspace](../development-workspace.md) — How Build Studio, VS Code, policy states, and validation environments fit together
 - [Market Archetypes And Coworkers](../market-archetypes.md) — Why user-facing docs should lead with business work before Build Studio internals
 
