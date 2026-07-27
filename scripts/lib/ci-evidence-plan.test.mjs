@@ -87,6 +87,23 @@ describe("createEvidencePlan", () => {
     ]);
   });
 
+  it("keeps the digest stable across synthetic merge commits with identical trees", () => {
+    const first = createEvidencePlan(input({
+      baseSha: "accepted-base-commit",
+      headSha: "local-merge-one",
+      changedFiles: ["docs/testing/ci-evidence.md"],
+    }));
+    const second = createEvidencePlan(input({
+      baseSha: "other-ref-to-the-same-base-tree",
+      headSha: "local-merge-two",
+      changedFiles: ["docs/testing/ci-evidence.md"],
+    }));
+
+    assert.notEqual(first.headSha, second.headSha);
+    assert.equal(first.headTreeSha, second.headTreeSha);
+    assert.equal(first.digest, second.digest);
+  });
+
   it("preserves the existing docs-only exemption without graph input", () => {
     const plan = createEvidencePlan(input({
       changedFiles: [
@@ -139,8 +156,23 @@ describe("createEvidencePlan", () => {
     assert.equal(plan.fullSuite, false);
   });
 
+  it("accepts a different commit alias when graph advice matches the exact tree", () => {
+    const plan = createEvidencePlan(input({
+      changedFiles: ["apps/web/lib/orders.ts"],
+      knownTests: ["apps/web/lib/orders.test.ts"],
+      codeGraphAdvice: {
+        ...trustedGraph({
+          "apps/web/lib/orders.ts": ["apps/web/lib/orders.test.ts"],
+        }),
+        indexedHeadSha: "candidate-before-synthetic-merge",
+      },
+    }));
+
+    assert.equal(plan.graph.trusted, true);
+    assert.equal(plan.fullSuite, false);
+  });
+
   for (const [name, advice, code] of [
-    ["stale head", { ...trustedGraph(), indexedHeadSha: "other-head" }, "graph-head-mismatch"],
     ["dirty workspace", { ...trustedGraph(), workspaceDirty: true }, "graph-dirty"],
     ["incompatible schema", { ...trustedGraph(), schemaVersion: 2 }, "graph-schema-mismatch"],
     ["stale tree", { ...trustedGraph(), indexedTreeSha: "other-tree" }, "graph-tree-mismatch"],

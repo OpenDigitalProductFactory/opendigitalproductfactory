@@ -114,9 +114,6 @@ function graphVerdict(advice, input, policy) {
   }
   if (advice.indexStatus !== "ready") return { trusted: false, code: "graph-not-ready" };
   if (advice.workspaceDirty) return { trusted: false, code: "graph-dirty" };
-  if (advice.indexedHeadSha !== input.headSha) {
-    return { trusted: false, code: "graph-head-mismatch" };
-  }
   if (advice.indexedTreeSha !== input.headTreeSha) {
     return { trusted: false, code: "graph-tree-mismatch" };
   }
@@ -357,6 +354,10 @@ export function createEvidencePlan(input) {
       thresholdPercentage: policy.selectionThresholdPercent,
     },
   };
-  const digest = createHash("sha256").update(canonicalJson(semanticPlan)).digest("hex");
+  // Local-CI synthesizes a fresh merge commit on every retry. Commit SHAs are
+  // valuable provenance, but the Git tree is the immutable content identity:
+  // two commits with the same tree require the same evidence recommendation.
+  const { baseSha: _baseSha, headSha: _headSha, ...digestPlan } = semanticPlan;
+  const digest = createHash("sha256").update(canonicalJson(digestPlan)).digest("hex");
   return { ...semanticPlan, digest };
 }

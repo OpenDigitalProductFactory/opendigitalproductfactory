@@ -125,13 +125,16 @@ The planner recommends:
 - an explicit disposition for every changed file and visible missing-test
   observations.
 
-The digest covers semantic data only. Generation time, runner path, logs, and
-other host-specific diagnostics are intentionally excluded so the same
-immutable inputs produce the same digest on GitHub and local-CI.
+The digest covers semantic data and exact base/head tree identities. Commit
+SHAs remain in the document as provenance but are excluded from the digest
+because local-CI synthesizes a new merge commit on every retry even when its
+tree is byte-identical. Generation time, runner path, logs, and other
+host-specific diagnostics are also excluded so the same immutable content
+produces the same digest on GitHub and local-CI.
 
 Code-graph advice is optional and is never a hidden live dependency. Advice is
 trusted only when its schema matches policy, the index is `ready`, the
-workspace is clean, both the indexed commit and tree match the candidate, and
+workspace is clean, the indexed tree matches the candidate exactly, and
 the required `DEFINES`, `IMPORTS`, `IMPLEMENTS_ROUTE`, `EXPOSES_TOOL`, and
 `TESTED_BY` relationships are populated. Missing, stale, dirty, structurally
 incomplete, or malformed advice expands runtime-source evidence to exhaustive.
