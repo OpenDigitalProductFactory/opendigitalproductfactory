@@ -48,8 +48,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "get_quiescence_status",
-    description:
-      "Read the portal quiescence status for delivery-loop coordination: current level, active coordinator run, trigger, drain blockers, active task count, retry-after guidance, and whether mutating MCP writes are currently refused. Use this before expensive local-CI gates or evidence publication. Read-only and safe during quiescence.",
+    description: "Read quiescence, blockers, write availability, coordinator state, and retry guidance before CI.",
     inputSchema: {
       type: "object",
       properties: {},

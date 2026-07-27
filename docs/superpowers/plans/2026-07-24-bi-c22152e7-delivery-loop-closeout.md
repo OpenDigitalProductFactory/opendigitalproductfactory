@@ -119,3 +119,27 @@ working Node or POSIX implementation.
 Run `pnpm run pregate`, record the evidence id, push the exact gated SHA, open
 a ready non-draft PR, verify with `pnpm pr:health`, and enroll through the merge
 queue.
+
+### UX fit review - quiescence status on existing operator surfaces
+
+- **Decision:** fits-with-guardrails
+- **Owning area:** Platform
+- **Route family:** `/ops/self-upgrade` and `/platform/audit/authority`
+- **Primary persona:** platform operator coordinating delivery without needing
+  to infer whether writes or a local-CI run are safe
+- **Navigation layer touched:** no navigation change; existing page content only
+- **Reuse/convergence:** the existing Self-Upgrade owner card remains the
+  operator status surface, and the existing Effective Permissions inspector
+  remains the tool-authority surface; no route or component family is added
+- **Source truth:** self-upgrade quiescence activity and the canonical MCP tool
+  registry/grant map
+- **Empty/failure behavior:** the existing pages retain their current fallback
+  states; the new read tool reports normal or quiescing state explicitly
+- **AI boundary:** no prompt send
+- **Required edits:** keep the tool description concise, remove duplicate
+  on-arrival instructions, preserve the visible primary upgrade action, and
+  mirror the release-plan grant in the existing client inspector contract
+- **Evidence before merge:** focused component/page tests, style/module guards,
+  governed exact-SHA tests/typecheck/build, and the served Playwright UX Route
+  Budget Sweep over both affected routes
+- **Captured in:** this closeout plan and PR #3667

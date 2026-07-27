@@ -191,6 +191,8 @@ describe("SelfUpgradePage", () => {
     expect(html).toContain("Self-Upgrade");
     expect(html).toContain('data-testid="ops-tab-nav"');
     expect(html).toContain('data-testid="self-upgrade-client"');
+    expect(html).not.toContain("plain-language status");
+    expect(html).not.toContain("Run logs, runtime and security checks");
   });
 
   it("passes status fields to SelfUpgradeClient", async () => {
