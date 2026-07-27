@@ -651,7 +651,6 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   repair_promoter_image: ["admin_write"],
   get_self_upgrade_queue_status: ["release_plan_read"],
   get_quiescence_status: ["release_plan_read"],
-
   // Design intelligence (read-only references)
   search_design_intelligence: ["file_read"],
   generate_design_system:     ["file_read"],
