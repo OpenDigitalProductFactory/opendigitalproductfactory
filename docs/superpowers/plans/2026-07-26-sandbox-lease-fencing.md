@@ -85,9 +85,11 @@ and use the merge queue.
 
 ## Backlog coverage
 
-**Decision:** atomic
-**Receipt:** `cms2ag3v501bq01odtq7x2dd8`
-**Parent BI:** `BI-52500C0D`
+- Decision: atomic
+- Parent: BI-52500C0D
+- Receipt: cms2ag3v501bq01odtq7x2dd8
+- Rationale: Heartbeat renewal, ownership fencing, child process-tree termination, idempotent cleanup, and evidence attribution are one inseparable safety contract; shipping a subset would still permit overlap or create false confidence in the lease.
+- Dependencies: none
 
 | Deliverable | Backlog item | Depends on |
 | --- | --- | --- |
