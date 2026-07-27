@@ -5,12 +5,15 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AlertTriangle, ExternalLink, Play, RotateCcw } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
+import { LocalTime } from "@/components/ui/LocalTime";
+import { StatusBadge } from "@/components/ui/report-kit/StatusBadge";
 import { deleteBacklogItem, escalateBacklogItemUpstream } from "@/lib/actions/backlog";
 import { startBacklogBuild } from "@/lib/actions/backlog-build";
 import { type BacklogItemWithRelations } from "@/lib/backlog";
 import { resolveBacklogBuildActionState } from "@/lib/backlog-build-action-state";
 import { AGENT_NAME_MAP } from "@/lib/agent-routing";
 import { backlogItemOrigin, BACKLOG_ORIGIN_LABEL } from "@/lib/ops/backlog-origin";
+import { backlogItemLifecycleLabel } from "./backlogVisibility";
 
 type Props = {
   item: BacklogItemWithRelations;
@@ -68,6 +71,7 @@ function BacklogItemRowImpl({ item, onEdit, focused = false }: Props) {
   }
 
   const buildAction = resolveBacklogBuildActionState(item);
+  const lifecycleLabel = backlogItemLifecycleLabel(item);
 
   return (
     <div
@@ -106,8 +110,12 @@ function BacklogItemRowImpl({ item, onEdit, focused = false }: Props) {
           {item.digitalProduct ? ` · ${item.digitalProduct.name}` : ""}
           {item.agentId ? ` · ${AGENT_NAME_MAP[item.agentId] ?? item.agentId}` : ""}
           {item.submittedBy ? ` · by ${item.submittedBy.email}` : ""}
-          {" · "}{new Date(item.createdAt).toLocaleDateString()}
-          {item.completedAt ? ` · done ${new Date(item.completedAt).toLocaleDateString()}` : ""}
+          {" · "}<LocalTime value={item.createdAt} mode="date" />
+          {item.completedAt ? (
+            <> · {lifecycleLabel === "retired duplicate" ? "retired" : lifecycleLabel}{" "}
+              <LocalTime value={item.completedAt} mode="date" />
+            </>
+          ) : null}
         </p>
       </div>
 
@@ -137,12 +145,21 @@ function BacklogItemRowImpl({ item, onEdit, focused = false }: Props) {
 
       {/* Status badge */}
       <span
-        className={[
-          "shrink-0 rounded border px-2 py-0.5 text-[10px] font-semibold",
-          statusBadgeClassName(item.status),
-        ].join(" ")}
+        className="shrink-0"
+        title={
+          lifecycleLabel === "retired duplicate"
+            ? "Retired because another backlog item is the canonical record."
+            : item.status === "deferred"
+              ? "Not active and not completed. It remains deferred until someone reopens it; there is no automatic resume date."
+              : undefined
+        }
       >
-        {item.status}
+        <StatusBadge
+          domain="backlogItem"
+          status={item.status}
+          label={lifecycleLabel}
+          uppercase={false}
+        />
       </span>
 
       {/* Actions */}
@@ -266,18 +283,6 @@ function BacklogBuildActionButton({
       <span>{action.label}</span>
     </span>
   );
-}
-
-function statusBadgeClassName(status: string): string {
-  const classes: Record<string, string> = {
-    triaging: "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]",
-    open: "border-[var(--dpf-accent)] bg-[var(--dpf-accent-soft)] text-[var(--dpf-text)]",
-    "in-progress": "border-[var(--dpf-warning)]/30 bg-[var(--dpf-warning)]/10 text-[var(--dpf-warning)]",
-    done: "border-[var(--dpf-success)]/30 bg-[var(--dpf-success)]/10 text-[var(--dpf-success)]",
-    deferred: "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]",
-  };
-
-  return classes[status] ?? classes.deferred;
 }
 
 const WORK_TYPE_BADGE_CLASS: Record<string, string> = {

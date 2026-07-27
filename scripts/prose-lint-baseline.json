@@ -5618,7 +5618,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 13
+    "textMass": 27
   },
   "apps/web/components/ops/EpicPanel.tsx": {
     "vocabulary": 0,
@@ -5681,7 +5681,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 35
+    "textMass": 49
   },
   "apps/web/components/ops/OpsTabNav.tsx": {
     "vocabulary": 0,
