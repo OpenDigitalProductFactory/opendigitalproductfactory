@@ -21,4 +21,17 @@ describe("executable policy bundle", () => {
     expect(kinds.has("mask")).toBe(true);
     expect(kinds.has("disposition-evidence")).toBe(true);
   });
+
+  it("separates raw external denial from authorized protected projection", () => {
+    const restrictedRaw = DATA_EXECUTABLE_POLICIES.find(
+      (policy) => policy.id === "restricted-external-destination",
+    );
+    const protected = DATA_EXECUTABLE_POLICIES.find(
+      (policy) => policy.id === "protected-external-projection",
+    );
+
+    expect(restrictedRaw?.match.transformations).toEqual(["none"]);
+    expect(protected?.match.transformations).toEqual(["masked", "tokenized"]);
+    expect(protected?.effect).toBe("allow");
+  });
 });

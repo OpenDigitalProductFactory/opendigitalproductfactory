@@ -44,13 +44,14 @@ import {
 import type { ScreenInferencePayloadInput } from "@/lib/inference/data-screening/screen-inference-payload";
 import {
   createRoutedInferenceScreen,
+  rescreenRoutedInferencePayload,
   rescreenRoutedInferenceWithoutTools,
+  routedRehydrationHandle,
 } from "@/lib/inference/data-screening/routed-screening";
 import { screenedLocalOnlyBlockReason } from "@/lib/inference/data-screening/blocked-route-explanation";
 import { createRoutingTraceId } from "@/lib/routing/routing-trace";
 import { AI_ROUTING_ARCHITECTURE_VERSION } from "@/lib/routing/routing-architecture-version";
 export type { RouteAndCallOptions } from "./routed-inference-options";
-
 // ─── Result type ────────────────────────────────────────────────────────────
 
 /** Unified inference result — flat token fields, V2 metadata included. */
@@ -71,12 +72,13 @@ export interface RoutedInferenceResult {
   routeDecision: RouteDecision;
   /** EP-INF-009d: Set when interactionMode is "background". Poll via pollAsyncOperation(). */
   asyncOperationId?: string;
+  /** Opaque handle for the later actor/surface-authorized rehydration gate. */
+  rehydrationHandle?: string;
   /** Resolved endpoint's context window (tokens) when known; null for local /
    *  unknown. The agentic loop learns this from the first dispatch to size
    *  compaction + the context-pressure gauge to the real window (BI-9679EB1A). */
   resolvedMaxContextTokens?: number | null;
 }
-
 // ─── Error ──────────────────────────────────────────────────────────────────
 
 export class NoEligibleEndpointsError extends Error {
@@ -110,6 +112,7 @@ interface PreparedRoute {
   taskType: string;
   /** Ephemeral, non-persisted input used to re-screen the actual dispatch payload. */
   screenInput: ScreenInferencePayloadInput;
+  rehydrationHandle?: string;
   /** EP-GOLDEN-TRIANGLE: the resolved posture applied to this route (null = none/Balanced). */
   posture: DispatchPosture | null;
   suitability: ProviderSuitabilityRuntime | null;
@@ -168,7 +171,7 @@ async function prepareRoute(
         : options?.residencyPolicy,
     requiredModelClass: options?.requiredModelClass,
   };
-  const { screenInput, screen } = createRoutedInferenceScreen({
+  const { screenInput, screen, rehydrationHandle } = createRoutedInferenceScreen({
     messages,
     systemPrompt,
     tools: options?.tools,
@@ -176,13 +179,14 @@ async function prepareRoute(
     routeContext: initialRouteContext,
     activityContract: options?.activityContract,
     policyVersionSource: options?.inferencePolicyVersionSource,
+    sensitiveDetailUse: options?.sensitiveDetailUse,
   });
 
   // 1. Infer contract
   let contract = await inferContract(
     taskType,
-    messages,
-    options?.tools,
+    screenInput.messages,
+    screenInput.tools,
     undefined, // outputSchema
     {
       ...initialRouteContext,
@@ -287,6 +291,7 @@ async function prepareRoute(
     overrides,
     taskType,
     screenInput,
+    rehydrationHandle,
     posture,
     suitability,
   };
@@ -363,6 +368,8 @@ export async function routeAndCall(
   // executionPlan is built for dispatch below.
   const prepared = await prepareRoute(messages, systemPrompt, sensitivity, options);
   const { contract, manifests, policies, overrides, taskType } = prepared;
+  messages = prepared.screenInput.messages;
+  systemPrompt = prepared.screenInput.systemPrompt;
   let decision = prepared.decision;
   let dispatchScreenInput = prepared.screenInput;
   const traceId = createRoutingTraceId();
@@ -524,6 +531,14 @@ export async function routeAndCall(
       messages = [lastUserMsg];
     }
 
+    const degradedScreen = rescreenRoutedInferencePayload(dispatchScreenInput, {
+      messages,
+      systemPrompt,
+      tools: undefined,
+    });
+    dispatchScreenInput = degradedScreen.screenInput;
+    decision.inferenceDataScreenReceipt = degradedScreen.receipt;
+
     console.log(`[routing] Tools stripped for ${name} — using degraded identity prompt`);
   }
 
@@ -606,7 +621,7 @@ export async function routeAndCall(
       decision,
       messages,
       systemPrompt,
-      toolsStripped ? undefined : options?.tools,
+      toolsStripped ? undefined : dispatchScreenInput.tools,
       decision.executionPlan,
       options?.previousResponseId,
       options?.mcpSession,
@@ -641,6 +656,7 @@ export async function routeAndCall(
         toolsStripped,
         routeDecision: decision,
         asyncOperationId: asyncOpId,
+        ...routedRehydrationHandle(prepared.rehydrationHandle),
       };
     }
 
@@ -668,6 +684,7 @@ export async function routeAndCall(
       downgradeMessage: result.downgradeMessage,
       toolsStripped,
       routeDecision: decision,
+      ...routedRehydrationHandle(prepared.rehydrationHandle),
     };
   }
 
@@ -676,7 +693,7 @@ export async function routeAndCall(
     decision,
     messages,
     systemPrompt,
-    toolsStripped ? undefined : options?.tools,
+    toolsStripped ? undefined : dispatchScreenInput.tools,
     decision.executionPlan,
     options?.previousResponseId,
     options?.mcpSession,
@@ -737,6 +754,7 @@ export async function routeAndCall(
     routeDecision: decision,
     responseId: result.responseId,
     resolvedMaxContextTokens: selectedManifest?.maxContextTokens ?? null,
+    ...routedRehydrationHandle(prepared.rehydrationHandle),
   };
 }
 

@@ -63,6 +63,22 @@ describe("hard constraints and precedence", () => {
     expect(d.explanationCode).toBe("restricted-cannot-leave-boundary");
   });
 
+  it.each(["masked", "tokenized"] as const)(
+    "allows a PDP-authorized %s projection to leave without lowering source classification",
+    (transformation) => {
+      const d = evaluateDataPolicy(
+        ctx({
+          action: "export",
+          destination: "external-service",
+          transformation,
+          classification: { known: true, sensitivity: "restricted" },
+        }),
+      );
+      expect(d.effect).toBe("allow");
+      expect(d.explanationCode).toBe("protected-projection-may-leave-boundary");
+    },
+  );
+
   it("lets a stronger deny outrank a weaker allow regardless of array order", () => {
     const policies: DataExecutablePolicy[] = [
       {
@@ -101,6 +117,32 @@ describe("allow-with-obligations", () => {
     );
     expect(d.effect).toBe("allow-with-obligations");
     expect(d.obligations.some((o) => o.kind === "mask")).toBe(true);
+  });
+
+  it("requires the mask obligation before confidential external export", () => {
+    const d = evaluateDataPolicy(
+      ctx({
+        action: "export",
+        destination: "external-service",
+        transformation: "none",
+        classification: { known: true, sensitivity: "confidential", categories: ["content"] },
+      }),
+    );
+    expect(d.effect).toBe("allow-with-obligations");
+    expect(d.obligations).toContainEqual({ kind: "mask", profileId: "default-confidential" });
+  });
+
+  it("authorizes restricted masking only inside the controlled runtime", () => {
+    const d = evaluateDataPolicy(
+      ctx({
+        action: "project",
+        destination: "in-process",
+        transformation: "none",
+        classification: { known: true, sensitivity: "restricted" },
+      }),
+    );
+    expect(d.effect).toBe("allow-with-obligations");
+    expect(d.obligations).toContainEqual({ kind: "mask", profileId: "default-restricted" });
   });
 });
 

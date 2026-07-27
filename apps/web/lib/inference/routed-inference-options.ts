@@ -25,6 +25,13 @@ export interface RouteAndCallOptions {
   inferencePolicyVersionSource?: import(
     "@/lib/inference/data-screening/screen-inference-payload"
   ).ScreenInferencePayloadInput["policyVersionSource"];
+  /**
+   * Whether exact sensitive values are replaceable for this task. Unknown is
+   * fail-closed and never authorizes a transform.
+   */
+  sensitiveDetailUse?: import(
+    "@/lib/govern/data/mask-for-context"
+  ).SensitiveDetailUse;
   modelTier?: "local" | "robust";
   minimumDimensions?: Record<string, number>;
   requiredModelClass?: ModelClass;

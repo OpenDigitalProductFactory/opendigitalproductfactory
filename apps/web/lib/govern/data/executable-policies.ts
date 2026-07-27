@@ -10,6 +10,7 @@ import type {
   DataAssetId,
   DataCategory,
   DataEffect,
+  DataProtectionTransformation,
   DataSensitivity,
   DestinationClass,
   MasterDataDomainKey,
@@ -40,6 +41,7 @@ export type PolicyMatch = {
   purposes?: readonly ProcessingPurposeKey[];
   subjectRoles?: readonly SubjectRole[];
   destinations?: readonly DestinationClass[];
+  transformations?: readonly DataProtectionTransformation[];
 };
 
 export type DataExecutablePolicy = {
@@ -72,16 +74,50 @@ const POLICIES: readonly DataExecutablePolicy[] = [
       actions: ["project", "export"],
       sensitivities: ["restricted"],
       destinations: ["external-service"],
+      transformations: ["none"],
     },
     effect: "deny",
     explanationCode: "restricted-cannot-leave-boundary",
     effectiveFrom: "2026-07-17",
   },
   {
+    id: "protected-external-projection",
+    version: "1",
+    precedenceLevel: "mandatory-authority",
+    match: {
+      actions: ["export"],
+      sensitivities: ["confidential", "restricted"],
+      destinations: ["external-service"],
+      transformations: ["masked", "tokenized"],
+    },
+    effect: "allow",
+    explanationCode: "protected-projection-may-leave-boundary",
+    effectiveFrom: "2026-07-27",
+  },
+  {
+    id: "restricted-in-process-mask",
+    version: "1",
+    precedenceLevel: "mandatory-authority",
+    match: {
+      actions: ["project"],
+      sensitivities: ["restricted"],
+      destinations: ["in-process", "internal-store", "derived-index"],
+      transformations: ["none"],
+    },
+    effect: "allow-with-obligations",
+    obligations: [{ kind: "mask", profileId: "default-restricted" }],
+    explanationCode: "restricted-masked-inside-controlled-runtime",
+    effectiveFrom: "2026-07-27",
+  },
+  {
     id: "confidential-projection-mask",
     version: "1",
     precedenceLevel: "organization-policy",
-    match: { actions: ["project"], sensitivities: ["confidential"] },
+    match: {
+      actions: ["project", "export"],
+      sensitivities: ["confidential"],
+      transformations: ["none"],
+    },
     effect: "allow-with-obligations",
     obligations: [{ kind: "mask", profileId: "default-confidential" }],
     explanationCode: "confidential-masked-before-projection",

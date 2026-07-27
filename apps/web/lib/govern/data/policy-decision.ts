@@ -15,6 +15,7 @@ import {
   type DataCategory,
   type DataEffect,
   type DataFieldId,
+  type DataProtectionTransformation,
   type DataSensitivity,
   type DestinationClass,
   type MasterDataDomainKey,
@@ -37,6 +38,7 @@ export type PolicyEvaluationContext = {
   fields?: readonly DataFieldId[];
   purpose: ProcessingPurposeKey;
   destination?: DestinationClass;
+  transformation?: DataProtectionTransformation;
   classification: {
     known: boolean;
     sensitivity?: DataSensitivity;
@@ -138,6 +140,7 @@ function policyMatches(m: PolicyMatch, ctx: PolicyEvaluationContext): boolean {
     inList(m.assets, ctx.asset) &&
     inList(m.purposes, ctx.purpose) &&
     inList(m.destinations, ctx.destination) &&
+    inList(m.transformations, ctx.transformation ?? "none") &&
     inList(m.sensitivities, ctx.classification.sensitivity) &&
     inList(m.domains, ctx.classification.masterDataDomain) &&
     anyIn(m.categories, ctx.classification.categories) &&
@@ -177,6 +180,7 @@ function decision(
       ctx.asset,
       ctx.purpose,
       ctx.destination ?? "-",
+      ctx.transformation ?? "none",
       ctx.assetVersion,
       ctx.classificationVersion,
       ctx.authorityVersion,

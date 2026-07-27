@@ -290,6 +290,27 @@ describe("semantic memory storage sensitivity gate (BI-DG-001)", () => {
     expect(upsertVectors).not.toHaveBeenCalled();
   });
 
+  it("omits confidential free text when no safe field transform can be proven", async () => {
+    const { generateEmbedding } = await import("./embedding");
+    const { upsertVectors } = await import("@dpf/db");
+    const { storeConversationMemory } = await import("./semantic-memory");
+
+    await storeConversationMemory({
+      messageId: "msg-confidential-unknown",
+      content: "Discuss the selected private record.",
+      role: "user",
+      userId: "user-1",
+      agentId: "customer-agent",
+      routeContext: "/customer/private",
+      threadId: "thread-private",
+      sensitivity: "confidential",
+      operatingProfileFingerprint: "fp-1",
+    });
+
+    expect(generateEmbedding).not.toHaveBeenCalled();
+    expect(upsertVectors).not.toHaveBeenCalled();
+  });
+
   it("masks confidential content through a deterministic seam before storage", async () => {
     const { generateEmbedding } = await import("./embedding");
     const { upsertVectors } = await import("@dpf/db");

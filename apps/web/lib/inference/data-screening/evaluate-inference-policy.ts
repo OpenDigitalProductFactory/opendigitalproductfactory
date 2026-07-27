@@ -7,6 +7,7 @@ import {
   type DataEffect,
   type DataAssetId,
   type DataFieldId,
+  type DataProtectionTransformation,
   type DestinationClass,
   type ProcessingPurposeKey,
 } from "@/lib/govern/data/taxonomy";
@@ -53,6 +54,7 @@ export type InferencePolicyEvaluationInput = {
   authorityVersion?: string;
   policyBundleVersion?: string;
   policies?: readonly DataExecutablePolicy[];
+  transformation?: DataProtectionTransformation;
 };
 
 export type InferencePolicyEvaluation = {
@@ -142,6 +144,7 @@ function buildPolicyContext(input: InferencePolicyEvaluationInput): PolicyEvalua
     fields,
     purpose: resolvePurpose(input.purpose, governedData),
     destination: input.destinationClass,
+    transformation: input.transformation ?? "none",
     classification: {
       known: classificationKnown,
       sensitivity: input.classification.overallSensitivity,
