@@ -1,0 +1,82 @@
+{
+  "version": "1",
+  "accountableOwner": "data-governance",
+  "affectedCopies": [
+    "Prisma-to-EA current-state data-model mirror",
+    "Organization compliance applicability projection",
+    "Retention-policy registry"
+  ],
+  "migration": {
+    "name": "20260727220000_add_data_processing_governance and 20260727221500_backfill_card_payment_processing_proposal",
+    "backfill": "review-only, provenance-linked DataProcessingActivity proposals from BusinessContext.handlesCardPayments=true; no activity is confirmed or granted legal authority"
+  },
+  "tests": [
+    "packages/db/src/data-processing-governance-schema.test.ts",
+    "apps/web/lib/govern/data/processing-activity-service.test.ts",
+    "apps/web/lib/compliance-library.test.ts",
+    "packages/db/src/regulation-applicability.test.ts",
+    "apps/web/lib/operate/retention/retention.test.ts",
+    "packages/storefront-templates/src/processing-activity-templates.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:processing-activity",
+      "prismaModel": "DataProcessingActivity",
+      "lifecycleDisposition": "legal evidence retained for at least seven years and never auto-purged",
+      "fields": [
+        {
+          "fieldId": "data:processing-activity#processing-scope",
+          "resolution": "governed",
+          "reason": "organization-specific asset, field, category, subject, recipient, destination, residency, and transfer scope",
+          "provenance": "accountable privacy owner confirmation",
+          "flags": [
+            "sensitive",
+            "subject"
+          ],
+          "fieldPolicy": "mask on read outside governed privacy and policy views; never infer confirmation from archetype, region, or legacy text"
+        },
+        {
+          "fieldId": "data:processing-activity#authority-and-provenance",
+          "resolution": "governed",
+          "reason": "records the accountable owner, authority references, confirmation actor, and source provenance",
+          "provenance": "confirmed organization processing-activity record",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": "expose only through governed compliance administration and preserve the confirmation audit trail"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:policy-exception",
+      "prismaModel": "DataPolicyException",
+      "lifecycleDisposition": "restricted legal evidence retained for at least seven years and never auto-purged",
+      "fields": [
+        {
+          "fieldId": "data:policy-exception#bounded-exception",
+          "resolution": "governed",
+          "reason": "exception scope, rationale, approval, compensating control, expiry, and remediation can reveal policy bypass conditions",
+          "provenance": "accountable approver decision",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": "encrypt and mask; require complete bounded approval and reject expired or incomplete exceptions"
+        }
+      ]
+    },
+    {
+      "kind": "policy",
+      "policyId": "confirmed-processing-authority",
+      "testVectors": {
+        "allow": true,
+        "deny": true,
+        "obligation": true,
+        "unknownContext": true,
+        "precedence": true,
+        "exceptionExpiry": true
+      }
+    }
+  ]
+}

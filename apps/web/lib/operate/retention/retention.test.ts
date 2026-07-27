@@ -77,6 +77,12 @@ describe("retention registry invariants", () => {
 });
 
 describe("industry / archetype retention floors", () => {
+  it("lets a confirmed processing activity lengthen, never shorten, the effective floor", () => {
+    const policy = { category: "audit-log" as const, baseRetentionDays: 365 };
+    expect(resolveEffectiveRetentionDays(policy, null, 730)).toBe(730);
+    expect(resolveEffectiveRetentionDays(policy, null, 30)).toBe(365);
+  });
+
   const auditPolicy = { category: "audit-log" as const, baseRetentionDays: 365 };
 
   it("applies the base window when industry is null/unknown", () => {

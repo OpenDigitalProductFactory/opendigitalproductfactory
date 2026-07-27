@@ -1,0 +1,130 @@
+import type { DataAssetDefinition } from "./assets";
+import type {
+  DataCategory,
+  DataFieldId,
+  DataSensitivity,
+  ProjectionClass,
+  ProtectionProfileKey,
+} from "./taxonomy";
+
+const EFFECTIVE_FROM = "2026-07-27";
+const PROVENANCE = {
+  source: "manual" as const,
+  state: "confirmed" as const,
+  assertedBy: "data-steward",
+  effectiveFrom: EFFECTIVE_FROM,
+};
+
+function governedFields(
+  assetId: "data:processing-activity" | "data:policy-exception",
+  physicalNames: readonly string[],
+  sensitivity: DataSensitivity,
+  protection: ProtectionProfileKey,
+  projectionOverride: ProjectionClass,
+  resolutionReason: string,
+) {
+  return physicalNames.map((physicalName) => ({
+    id: `${assetId}#${physicalName}` as DataFieldId,
+    physicalName,
+    resolution: "governed" as const,
+    resolutionReason,
+    categories: ["authorization", "security-audit"] as DataCategory[],
+    sensitivity,
+    collectionRule: "minimize" as const,
+    protection,
+    projectionOverride,
+    provenance: PROVENANCE,
+  }));
+}
+
+export const PROCESSING_GOVERNANCE_ASSETS: readonly DataAssetDefinition[] = [
+  {
+    id: "data:processing-activity",
+    physical: { prismaModel: "DataProcessingActivity" },
+    domain: "data-governance",
+    ownerRole: "privacy-owner",
+    stewardRole: "data-steward",
+    categories: ["configuration", "authorization", "security-audit"],
+    sensitivity: "confidential",
+    criticality: "high",
+    subjectLocators: [{ role: "organization", fieldPath: "organization" }],
+    lifecycleClass: "legal-evidence",
+    purposeCapabilities: ["compliance-and-legal", "platform-operations"],
+    residencyClass: "local-only",
+    projectionClass: "masked-content",
+    classification: {
+      state: "confirmed",
+      source: "manual",
+      effectiveFrom: EFFECTIVE_FROM,
+    },
+    fields: [
+      ...governedFields(
+        "data:processing-activity",
+        [
+          "assetIds",
+          "fieldIds",
+          "dataCategories",
+          "subjectTypes",
+          "authorityRefs",
+          "recipientRefs",
+          "destinationClasses",
+          "residencyConstraints",
+          "transferConstraints",
+          "derivedCopyContractIds",
+          "erasureExceptionRefs",
+          "controlIds",
+          "evidenceIds",
+          "executablePolicyIds",
+        ],
+        "confidential",
+        "mask-on-read",
+        "masked-content",
+        "Organization-specific processing scope or authority evidence; disclose only through governed policy and privacy views.",
+      ),
+      ...governedFields(
+        "data:processing-activity",
+        ["ownerRef", "confirmedByRef", "provenance"],
+        "confidential",
+        "mask-on-read",
+        "metadata",
+        "Accountability and provenance evidence for organization-specific processing authority.",
+      ),
+    ],
+  },
+  {
+    id: "data:policy-exception",
+    physical: { prismaModel: "DataPolicyException" },
+    domain: "data-governance",
+    ownerRole: "privacy-owner",
+    stewardRole: "data-steward",
+    categories: ["authorization", "security-audit", "content"],
+    sensitivity: "restricted",
+    criticality: "high",
+    subjectLocators: [{ role: "organization", fieldPath: "organization" }],
+    lifecycleClass: "legal-evidence",
+    purposeCapabilities: ["compliance-and-legal", "platform-operations"],
+    residencyClass: "local-only",
+    projectionClass: "masked-content",
+    classification: {
+      state: "confirmed",
+      source: "manual",
+      effectiveFrom: EFFECTIVE_FROM,
+    },
+    fields: governedFields(
+      "data:policy-exception",
+      [
+        "scope",
+        "executablePolicyIds",
+        "approverRef",
+        "rationale",
+        "compensatingControl",
+        "remediationItemId",
+        "provenance",
+      ],
+      "restricted",
+      "encrypt-and-mask",
+      "masked-content",
+      "Restricted exception scope, approval, rationale, control, or remediation evidence; exposure could reveal policy bypass conditions.",
+    ),
+  },
+];

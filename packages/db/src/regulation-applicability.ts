@@ -92,6 +92,30 @@ export interface ApplicabilityResult {
   undeclared: boolean;
 }
 
+export interface ConfirmedProcessingAuthorityResult {
+  confirmed: boolean;
+  reason: string;
+}
+
+/**
+ * Resolve whether an organization-owned, confirmed processing activity links a
+ * legacy regulation record. Regional/archetype matching can nominate a record
+ * for review, but it cannot create organization-specific processing authority.
+ */
+export function resolveConfirmedProcessingAuthority(
+  regulationId: string,
+  confirmedAuthorityRefs: readonly string[],
+): ConfirmedProcessingAuthorityResult {
+  const normalizedId = regulationId.trim();
+  const confirmed = normalizedId.length > 0 && confirmedAuthorityRefs.includes(normalizedId);
+  return {
+    confirmed,
+    reason: confirmed
+      ? `confirmed processing activity links ${normalizedId}`
+      : `no confirmed processing activity links ${normalizedId || "the regulation"}`,
+  };
+}
+
 function setForBasis(profile: RegionProfile, basis: ProfessionJurisdictionBasis): string[] {
   switch (basis) {
     case "operating":

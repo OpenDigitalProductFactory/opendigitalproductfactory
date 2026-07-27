@@ -19,6 +19,25 @@ obligation record to state one requirement your organization must address.
 Controls and evidence should trace back to these records so reviewers can see
 why the work exists.
 
+## Why an industry match is not an approval
+
+DPF separates four signals that can look similar but carry different authority:
+
+- a **technical purpose capability** means the platform can perform that kind of processing;
+- a **regional or archetype match** means a regulation or template may be relevant;
+- an **archetype processing template** is a review-only proposal;
+- a **confirmed processing activity** is the organization-owned record that a named owner approved for a bounded purpose, data scope, authority, destination, lifecycle, and effective period.
+
+Only the last signal can make a legacy compliance-pack match authoritative. If
+an industry pack matches the installed archetype but no confirmed processing
+activity links the relevant authority, DPF shows **Needs review**, not
+**Applies**. Templates never arrive confirmed, and an expired or incomplete
+activity fails closed.
+
+An approved policy exception also requires a defined scope, approver and
+approval time, rationale, compensating control, future expiry, and remediation
+backlog item.
+
 ## Before You Start
 
 - Obtain the official source URL or document and confirm its jurisdiction.

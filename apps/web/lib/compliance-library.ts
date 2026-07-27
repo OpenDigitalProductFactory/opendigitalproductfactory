@@ -2,6 +2,7 @@ import { prisma } from "@dpf/db";
 import {
   regulationApplies,
   parseApplicability,
+  resolveConfirmedProcessingAuthority,
   type RegionProfile,
   type RegulationApplicability,
 } from "@dpf/db/regulation-applicability";
@@ -35,6 +36,9 @@ export type ComplianceLibraryContext = {
     handlesCardPayments: boolean;
   };
   regional: RegionProfile;
+  processingActivities?: {
+    confirmedAuthorityRefs: string[];
+  };
 };
 
 export type ClassifiableRegulation = {
@@ -104,6 +108,12 @@ export type ComplianceLibraryClient = {
       handlesCardPayments: boolean;
       listingStatus: string | null;
     } | null>;
+  };
+  dataProcessingActivity?: {
+    findMany(args: {
+      where: { status: "confirmed" };
+      select: { authorityRefs: true };
+    }): Promise<Array<{ authorityRefs: unknown }>>;
   };
 };
 
@@ -236,8 +246,9 @@ export function classifyRegulationForInstall(
     return classifyByApplicability(regulation, spec, context);
   }
 
-  // Legacy fallback: regulations without a data-driven spec (the industry
-  // compliance packs) are matched by jurisdiction/industry string heuristics.
+  // Compatibility path for records that predate data-driven applicability.
+  // Industry/archetype strings may identify a review candidate, but only a
+  // confirmed processing activity may promote that candidate to "applies".
   const currentLabel = installedArchetypeLabel(context);
   const regIndustry = normalize(regulation.industry);
   if (!regIndustry) {
@@ -254,9 +265,19 @@ export function classifyRegulationForInstall(
         `Matches ${currentLabel}, but the applicable state has not been captured for state-specific validation.`,
       );
     }
+    const processingAuthority = resolveConfirmedProcessingAuthority(
+      regulation.regulationId,
+      context.processingActivities?.confirmedAuthorityRefs ?? [],
+    );
+    if (processingAuthority.confirmed) {
+      return applicability(
+        "applies",
+        `A confirmed processing activity links ${regulation.shortName || regulation.name} to this organization.`,
+      );
+    }
     return applicability(
-      "applies",
-      `Matches the installed ${currentLabel} archetype through the ${sourceIndustryLabel(regulation.industry)} compliance pack.`,
+      "review",
+      `The ${sourceIndustryLabel(regulation.industry)} compliance pack matches ${currentLabel}, but no confirmed processing activity links this authority yet.`,
     );
   }
 
@@ -403,7 +424,7 @@ export async function resolveApplicableRegulationDbIds(
 export async function resolveComplianceLibraryContext(
   db: ComplianceLibraryClient = prisma,
 ): Promise<ComplianceLibraryContext> {
-  const [storefront, businessContext] = await Promise.all([
+  const [storefront, businessContext, activities] = await Promise.all([
     db.storefrontConfig.findFirst({
       orderBy: { createdAt: "asc" },
       select: { archetype: { select: { archetypeId: true, name: true, category: true } } },
@@ -421,7 +442,21 @@ export async function resolveComplianceLibraryContext(
         listingStatus: true,
       },
     }),
+    db.dataProcessingActivity?.findMany({
+      where: { status: "confirmed" },
+      select: { authorityRefs: true },
+    }) ?? Promise.resolve([]),
   ]);
+
+  const confirmedAuthorityRefs = [
+    ...new Set(
+      activities.flatMap((activity) =>
+        Array.isArray(activity.authorityRefs)
+          ? activity.authorityRefs.filter((value): value is string => typeof value === "string")
+          : [],
+      ),
+    ),
+  ].sort();
 
   return {
     archetype: storefront?.archetype ?? null,
@@ -439,5 +474,6 @@ export async function resolveComplianceLibraryContext(
       dataResidency: businessContext?.dataResidency ?? [],
       listingStatus: businessContext?.listingStatus ?? undefined,
     },
+    processingActivities: { confirmedAuthorityRefs },
   };
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   regulationApplies,
+  resolveConfirmedProcessingAuthority,
   parseApplicability,
   CADA_APPLICABILITY,
   UK_CORP_GOV_CODE_APPLICABILITY,
@@ -8,6 +9,20 @@ import {
   type RegionProfile,
   type RegulationApplicability,
 } from "./regulation-applicability";
+
+describe("confirmed processing authority", () => {
+  it("requires an exact confirmed authority reference", () => {
+    expect(
+      resolveConfirmedProcessingAuthority("REG-PCI-DSS", ["REG-PCI-DSS"]),
+    ).toEqual({
+      confirmed: true,
+      reason: "confirmed processing activity links REG-PCI-DSS",
+    });
+    expect(
+      resolveConfirmedProcessingAuthority("REG-PCI-DSS", ["pci", "REG-GDPR"]).confirmed,
+    ).toBe(false);
+  });
+});
 
 const empty: RegionProfile = { operatesIn: [], sellsTo: [], employsIn: [], dataResidency: [] };
 

@@ -168,4 +168,30 @@ describe("seeded registry", () => {
       projectionOverride: "metadata",
     });
   });
+
+  it("governs processing authority and policy exceptions as masked legal evidence", () => {
+    expect(lookupAsset(DATA_ASSET_REGISTRY, "data:processing-activity")).toMatchObject({
+      physical: { prismaModel: "DataProcessingActivity" },
+      sensitivity: "confidential",
+      lifecycleClass: "legal-evidence",
+      projectionClass: "masked-content",
+    });
+    expect(
+      resolveField(DATA_ASSET_REGISTRY, "data:processing-activity#authorityRefs"),
+    ).toMatchObject({
+      resolution: "governed",
+      protection: "mask-on-read",
+    });
+    expect(lookupAsset(DATA_ASSET_REGISTRY, "data:policy-exception")).toMatchObject({
+      physical: { prismaModel: "DataPolicyException" },
+      sensitivity: "restricted",
+      lifecycleClass: "legal-evidence",
+    });
+    expect(
+      resolveField(DATA_ASSET_REGISTRY, "data:policy-exception#compensatingControl"),
+    ).toMatchObject({
+      protection: "encrypt-and-mask",
+      projectionOverride: "masked-content",
+    });
+  });
 });
