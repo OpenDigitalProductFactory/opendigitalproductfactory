@@ -20,6 +20,9 @@ vi.mock("@dpf/db", () => ({
     },
     customerSite: {
       create: vi.fn(),
+      findFirst: vi.fn(),
+      findUniqueOrThrow: vi.fn(),
+      update: vi.fn(),
     },
     customerSiteNode: {
       create: vi.fn(),

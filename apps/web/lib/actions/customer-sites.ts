@@ -150,7 +150,8 @@ async function materializeValidatedSiteAddress(
   return address.id;
 }
 
-export type CreateCustomerSiteResult =
+// Type kept local — "use server" modules must not export type aliases.
+type CreateCustomerSiteResult =
   | { outcome: "created"; site: Awaited<ReturnType<typeof prisma.customerSite.create>> }
   | { outcome: "existing"; site: Awaited<ReturnType<typeof prisma.customerSite.create>> }
   | { outcome: "duplicates-found"; check: DedupCheckResult };

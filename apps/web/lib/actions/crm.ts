@@ -14,12 +14,10 @@ import {
   type DedupResolution,
 } from "@/lib/mdm/dedup-gate";
 
-// Site create/update live in customer-sites.ts (module-size ratchet).
-export {
-  searchCustomerSiteAddresses,
-  createCustomerSite,
-  updateCustomerSite,
-  type CreateCustomerSiteResult,
+import {
+  searchCustomerSiteAddresses as searchCustomerSiteAddressesImpl,
+  createCustomerSite as createCustomerSiteImpl,
+  updateCustomerSite as updateCustomerSiteImpl,
 } from "./customer-sites";
 import {
   buildCustomerConfigurationItemLifecycleState,
@@ -29,6 +27,26 @@ import {
   trimOrNull,
   type CustomerConfigurationItemInput,
 } from "@/lib/crm/crm-core";
+
+// Thin async wrappers — "use server" files may only export async functions
+// (no `export { … } from` re-exports; that zeroes the whole module in Turbopack).
+export async function searchCustomerSiteAddresses(
+  ...args: Parameters<typeof searchCustomerSiteAddressesImpl>
+) {
+  return searchCustomerSiteAddressesImpl(...args);
+}
+
+export async function createCustomerSite(
+  ...args: Parameters<typeof createCustomerSiteImpl>
+) {
+  return createCustomerSiteImpl(...args);
+}
+
+export async function updateCustomerSite(
+  ...args: Parameters<typeof updateCustomerSiteImpl>
+) {
+  return updateCustomerSiteImpl(...args);
+}
 
 // ─── Activity Logging (used by all other actions) ───────────────────────────
 

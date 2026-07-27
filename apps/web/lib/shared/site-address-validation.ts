@@ -162,8 +162,6 @@ async function searchNominatim(
       // Nominatim requires a descriptive User-Agent.
       "User-Agent": "OpenDigitalProductFactory/site-address-validation (ops@local)",
     },
-    // Avoid hanging server actions forever when the free endpoint is slow.
-    signal: AbortSignal.timeout(8_000),
   });
 
   if (!response.ok) {
