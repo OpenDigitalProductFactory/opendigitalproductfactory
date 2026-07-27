@@ -6367,7 +6367,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 106
+    "textMass": 133
   },
   "apps/web/components/platform/coworker-record/ProfessionCorpusPanel.tsx": {
     "vocabulary": 0,
@@ -6389,6 +6389,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 63
+  },
+  "apps/web/components/platform/coworker-record/WorkPatternBindingCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
   },
   "apps/web/components/platform/coworker-record/WorkforceSummaryPanel.tsx": {
     "vocabulary": 0,

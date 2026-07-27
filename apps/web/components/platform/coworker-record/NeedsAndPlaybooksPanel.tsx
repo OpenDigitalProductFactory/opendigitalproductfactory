@@ -12,6 +12,7 @@ import {
 } from "@/lib/actions/work-pattern-review";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { Chip, deepLink, EmptyState, Section } from "./panels";
+import { WorkPatternBindingCard } from "./WorkPatternBindingCard";
 
 type ShadowEvaluation = NonNullable<WorkPatternSummary["shadowEvaluation"]>;
 type CaseStaging = NonNullable<WorkPatternSummary["caseStaging"]>;
@@ -43,6 +44,13 @@ export function NeedsAndPlaybooksPanel({
   canWrite: boolean;
 }) {
   const visibleNeeds = needs.needs.slice(0, 5);
+  const bindings = workPatterns.bindings ?? [];
+  const activeBindings = bindings.filter((binding) => binding.status === "active");
+  const bindingHistory = bindings.filter((binding) => binding.status !== "active");
+  const livingPlaybookCount = Math.max(
+    workPatterns.summary.totalPatterns,
+    bindings.length,
+  );
   return (
     <div>
       <Section
@@ -61,9 +69,31 @@ export function NeedsAndPlaybooksPanel({
         )}
       </Section>
 
-      <Section title="Living Playbooks" count={workPatterns.summary.totalPatterns}>
-        {workPatterns.patterns.length > 0 ? (
+      <Section title="Living Playbooks" count={livingPlaybookCount}>
+        {bindings.length > 0 || workPatterns.patterns.length > 0 ? (
           <div style={{ display: "grid", gap: 10 }}>
+            {activeBindings.map((binding) => (
+              <WorkPatternBindingCard key={binding.bindingId} binding={binding} />
+            ))}
+            {bindingHistory.length > 0 ? (
+              <details>
+                <summary
+                  style={{
+                    cursor: "pointer",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "var(--dpf-accent)",
+                  }}
+                >
+                  Replaced and rolled-back method history
+                </summary>
+                <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                  {bindingHistory.map((binding) => (
+                    <WorkPatternBindingCard key={binding.bindingId} binding={binding} />
+                  ))}
+                </div>
+              </details>
+            ) : null}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               <Chip tone="accent">{workPatterns.summary.totalObservedRuns} observed runs</Chip>
               <Chip tone={workPatterns.summary.openNeedCount > 0 ? "warning" : "muted"}>
@@ -348,7 +378,7 @@ function PlaybookReviewRow({ pattern, canWrite }: { pattern: WorkPatternSummary;
   if (pattern.reviewState) {
     const tone = reviewActionTone(pattern.reviewState.action);
     const caseStaging = pattern.caseStaging ?? pattern.reviewState.caseStaging ?? null;
-    return (
+    const decision = (
       <div
         style={{
           display: "grid",
@@ -363,7 +393,6 @@ function PlaybookReviewRow({ pattern, canWrite }: { pattern: WorkPatternSummary;
         <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
           <Chip tone="success">Decision recorded</Chip>
           <Chip tone={tone}>{reviewActionLabel(pattern.reviewState.action)}</Chip>
-          <Chip tone="muted">{pattern.reviewState.decisionInteractionId}</Chip>
           {pattern.activationCandidate ? <Chip tone="accent">activation candidate</Chip> : null}
           <span style={{ fontSize: 10, color: "var(--dpf-muted)", marginLeft: "auto" }}>
             <LocalTime value={pattern.reviewState.reviewedAt} mode="date" />
@@ -380,6 +409,21 @@ function PlaybookReviewRow({ pattern, canWrite }: { pattern: WorkPatternSummary;
         />
       </div>
     );
+    return pattern.reviewState.action === "reject" ? (
+      <details style={{ marginTop: 8 }}>
+        <summary
+          style={{
+            cursor: "pointer",
+            fontSize: 11,
+            fontWeight: 600,
+            color: "var(--dpf-accent)",
+          }}
+        >
+          Rejected candidate history
+        </summary>
+        {decision}
+      </details>
+    ) : decision;
   }
 
   const needId = pattern.linkedNeedIds[0];
