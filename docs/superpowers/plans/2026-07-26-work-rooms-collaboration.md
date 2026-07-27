@@ -2,7 +2,7 @@
 
 Date: 2026-07-26
 
-Status: Ready for backlog-sequenced implementation
+Status: Review-hardened; ready for backlog-sequenced implementation
 
 Umbrella backlog item: BI-29BF297B
 
@@ -65,6 +65,9 @@ The live coverage receipt records `participation-channels` as dependent on the p
 8. Treat coworker-starting actions as governed actions with preview and confirmation.
 9. Record docs impact in every PR. Update operator docs when the feature becomes user-visible.
 10. Reserve at least 20 percent of effort in every slice for convergence/refactoring and name the removed duplication in the PR.
+11. Keep `roomKey === caseKey`; do not introduce a second room keyspace or route family.
+12. Keep `/portal/cases/[caseKey]` a customer-safe case digest. Internal participants, coworker collaboration, A2A diagnostics, and employee actions remain Workspace-only.
+13. Phase 1 uses server loads, action-triggered revalidation, existing presence heartbeat, and optional soft refresh. A new realtime transport is not a prerequisite.
 
 ## 5. BI-ADDF27FE — Projection contract and Work Case convergence
 
@@ -90,9 +93,13 @@ Do not create a separate `apps/web/lib/work-rooms/` stack unless the existing wo
 ### Red tests
 
 - finite Work Case projects to a room with purpose, outcome, boundary, next action, and source attribution;
-- standing source projects to `mode: "standing"` without a new DB enum;
-- missing purpose/outcome/accountable owner produces explicit boundary gaps;
+- `roomKey` equals the existing encoded `caseKey`;
+- standing source projects to `mode: "standing"` from typed source-registry policy without a new DB enum;
+- unknown sources default finite with lowered projection confidence; mode is never guessed from age, messages, or participant count;
+- missing purpose/outcome/scope/participants/accountable owner/authority/sensitivity/context/measures/time/closure produces explicit boundary gaps;
+- participant roles, current work state, and presence remain separate axes;
 - every participant/activity/outcome field has a source reference;
+- activity `eventId` remains stable through reprojection and duplicate source delivery;
 - raw messages do not become decisions, artifacts, or outcome facts;
 - closed cases remain terminal and sealed;
 - existing Work Case summary/state tests remain unchanged or intentionally adapted.
@@ -101,11 +108,12 @@ Do not create a separate `apps/web/lib/work-rooms/` stack unless the existing wo
 
 1. Characterize current `buildWorkCaseDetail`, `loadWorkspaceWorkCaseDetail`, case-key encoding, attention, and source reference behavior.
 2. Define pure room types. Keep mode, participant roles, activity kinds, and outcome states as projection unions.
-3. Build boundary projection from source registry, WorkItem, policy envelope, accountability, and context references.
-4. Add activity normalization for messages, capsules, TaskRuns, decisions, evidence, and receipts.
-5. Produce presentation-ready labels separately from canonical statuses.
-6. Extend the Workspace loader through composable query adapters; do not format raw Prisma rows in React.
-7. Refactor duplicate source/status/evidence formatting discovered during steps 1-6.
+3. Extend the source-registry projection contract with typed room-mode and packet-completeness policy; default unknown sources to finite with explicit low confidence.
+4. Build boundary projection from source registry, WorkItem, policy envelope, accountability, and context references.
+5. Add activity normalization for messages, capsules, TaskRuns, decisions, evidence, and receipts with stable source-derived event ids.
+6. Produce presentation-ready labels separately from canonical statuses.
+7. Extend the Workspace loader through composable query adapters; do not format raw Prisma rows in React.
+8. Refactor duplicate source/status/evidence formatting discovered during steps 1-7.
 
 ### Verification
 
@@ -145,11 +153,13 @@ The existing Work Case detail route becomes a Work Room experience that is under
 ### Red tests
 
 - heading and back navigation use Work Room/My Work language;
+- attention-lens entry copy uses "Open room" while preserving the existing case URL;
 - first viewport exposes outcome, attention, accountability, participants, and next action;
 - A2A status and raw source IDs are not primary-header content;
 - empty room, incomplete boundary, unavailable source, and permission-denied states have honest outcomes;
 - informational panel controls never send prompts;
 - any coworker-starting action requires preview plus confirmation;
+- consequential confirmation uses `confirmDialog` outside React transitions; native browser dialogs are absent;
 - activity kinds render with distinct accessible labels.
 
 ### Implementation
@@ -162,6 +172,7 @@ The existing Work Case detail route becomes a Work Room experience that is under
 6. Integrate the existing comment composer into the activity grammar rather than presenting it as an unrelated final card.
 7. Implement all empty/failure/permission states from the design.
 8. Update user-facing documentation and route terminology.
+9. Use action-triggered revalidation and optional soft refresh; do not add SSE/WebSocket infrastructure in this slice.
 
 ### UX guardrails
 
@@ -183,6 +194,7 @@ The existing Work Case detail route becomes a Work Room experience that is under
 - no horizontal overflow or overlap;
 - permission-denied fixture proves no metadata leak;
 - unavailable-source and unavailable-coworker fixtures show one next action;
+- `/portal/cases/[caseKey]` regression proves no internal Work Room chrome appears;
 - `rg`/lint scan for hardcoded colors in changed UI.
 
 ### Refactoring budget
@@ -239,6 +251,7 @@ If an invariant fails:
 - standing room cannot be "active" without a current cycle or explicit healthy-idle state;
 - cycle requires trigger, objective, accountable principal, stop condition, measure, and scoped context;
 - completing a cycle emits an Outcome Packet;
+- source-registry packet policy determines required categories; non-required categories may remain empty;
 - unresolved work requires carry-over, new case, defer, or accepted disposition;
 - renewal, split, and archive are governed receipt-emitting actions;
 - closed cycles reject consequential writes;
@@ -248,12 +261,13 @@ If an invariant fails:
 
 1. Define cycle and outcome projection types.
 2. Add source-registry rules that select child WorkItem, WorkCapsule, or TaskRun as the cycle carrier.
-3. Add boundary validation for standing charter and current cycle.
-4. Normalize decisions, artifacts, actions, evidence, and receipts into the packet.
-5. Register cycle/renew/split/archive behavior through the existing governed action path.
-6. Render current-cycle status and completed packets in the room.
-7. Add carry-over creation/attachment behavior with idempotency.
-8. Run the persistence invariant gate and record its result in the PR.
+3. Record and test a per-source precedence table for cases where multiple carrier types exist.
+4. Add boundary validation for standing charter and current cycle.
+5. Normalize decisions, artifacts, actions, evidence, and receipts into the packet.
+6. Register cycle/renew/split/archive behavior through the existing governed action path.
+7. Render current-cycle status and completed packets in the room.
+8. Add carry-over creation/attachment behavior with idempotency.
+9. Run the persistence invariant gate and record its result in the PR.
 
 ### Verification
 
@@ -303,7 +317,7 @@ The room shows governed human and AI participation, enforces discovery/content/a
 - secondary coworker activity appears automatically from thread/TaskRun lineage; no human summon picker;
 - inbound channel event resolves PrincipalAlias and canonical room context;
 - unresolved identity is quarantined;
-- duplicate webhook/event delivery does not duplicate room activity or action;
+- duplicate webhook/event delivery reuses the stable event/delivery id and does not duplicate room activity or action;
 - sensitive action enters auth-required/step-up and cannot complete from a delivery receipt;
 - provider unsupported/degraded state leaves the DPF room usable.
 
@@ -318,6 +332,7 @@ The room shows governed human and AI participation, enforces discovery/content/a
 7. Add DPF deep links and concise channel-safe summaries.
 8. Enforce sensitivity, capability flags, step-up, idempotency, and provider degradation.
 9. Keep Teams/Slack provider feature work out of this BI; file or reuse Employee Communication Fabric items for adapter-specific expansion.
+10. Preserve `/portal/cases/[caseKey]` as a constrained external digest; participant and channel-continuity UI remains on the Workspace room.
 
 ### Verification
 
@@ -367,6 +382,7 @@ The umbrella is not complete until:
 9. Changed user, architecture, and operator documentation is current.
 10. Each PR records its refactor percentage and the duplication or leaky abstraction removed; aggregate refactor effort is at least 20 percent.
 11. `pnpm pr:health <number>` reports terminal passing checks, no conflicts, and no unresolved review threads for every PR.
+12. `roomKey === caseKey`, portal case routes remain customer-safe digests, and phase 1 passes without a new realtime transport.
 
 ## 10. Risks
 
