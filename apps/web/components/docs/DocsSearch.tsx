@@ -8,6 +8,7 @@ type SearchItem = {
   slug: string;
   title: string;
   area: string;
+  description: string;
   content: string;
 };
 
@@ -23,7 +24,8 @@ export function DocsSearch({ items }: Props) {
     () =>
       new Fuse(items, {
         keys: [
-          { name: "title", weight: 2 },
+          { name: "title", weight: 3 },
+          { name: "description", weight: 2 },
           { name: "content", weight: 1 },
         ],
         threshold: 0.4,
@@ -55,6 +57,11 @@ export function DocsSearch({ items }: Props) {
             >
               <span className="text-[var(--dpf-text)] font-medium">{r.item.title}</span>
               <span className="text-[var(--dpf-muted)] ml-2">{r.item.area}</span>
+              {r.item.description && (
+                <span className="mt-1 block text-[11px] leading-4 text-[var(--dpf-muted)]">
+                  {r.item.description}
+                </span>
+              )}
             </Link>
           ))}
         </div>

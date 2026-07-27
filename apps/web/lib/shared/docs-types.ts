@@ -7,6 +7,7 @@
 export type DocPage = {
   slug: string;           // e.g. "getting-started/index"
   title: string;
+  description: string;    // authored frontmatter description or derived first prose paragraph
   area: string;           // e.g. "getting-started"
   order: number;
   content: string;        // markdown body (no frontmatter)

@@ -24,6 +24,15 @@ flowchart LR
 
 **Text alternative:** New users start with Getting Started. Day-to-day operators use the job guides below. People supervising AI or platform services use the governance guides. People changing DPF use Build Studio or the contributor setup.
 
+### Find a guide quickly
+
+Use **Search docs** in the guide sidebar when you know the task or outcome but
+not its area. Search ranks page titles first, then the page summary, then the
+workflow body. Results show a short description so you can choose the right
+page before opening it. Terms from later sections such as recovery,
+verification, or evidence are searchable too; they are not limited to the
+opening paragraph.
+
 ### Quick paths by responsibility
 
 - **Owner or operator:** start with [Getting Started](getting-started/index.md), then use [Storefront](storefront/index.md), [Customers](customers/index.md), [Operations](operations/index.md), and [Finance](finance/index.md).

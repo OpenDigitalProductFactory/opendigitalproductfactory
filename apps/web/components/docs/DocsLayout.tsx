@@ -7,7 +7,13 @@ import type { DocHeading, DocsIndex } from "@/lib/docs-types";
 type Props = {
   index: DocsIndex;
   currentSlug: string;
-  searchItems: Array<{ slug: string; title: string; area: string; content: string }>;
+  searchItems: Array<{
+    slug: string;
+    title: string;
+    area: string;
+    description: string;
+    content: string;
+  }>;
   headings?: DocHeading[];
   /** Demote the full area catalog into a collapsed disclosure (contextual arrival). */
   collapseCatalog?: boolean;

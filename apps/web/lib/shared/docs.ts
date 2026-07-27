@@ -15,14 +15,55 @@ import type { DocPage, DocHeading, DocsIndex } from "./docs-types";
 
 // ── Frontmatter parsing ─────────────────────────────────────────────────────
 
+function markdownToPlainText(markdown: string): string {
+  return markdown
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/~~~[\s\S]*?~~~/g, " ")
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/^\s*[-*+]\s+/gm, "")
+    .replace(/^\s*\d+\.\s+/gm, "")
+    .replace(/[`*_~>|]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function deriveDocDescription(markdown: string): string {
+  const prose = markdown
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/~~~[\s\S]*?~~~/g, "")
+    .split(/\n\s*\n/)
+    .find((block) => {
+      const trimmed = block.trim();
+      return (
+        trimmed.length > 0 &&
+        !/^(#{1,6}\s|[-*+]\s|\d+\.\s|\|)/.test(trimmed)
+      );
+    });
+
+  const description = prose ? markdownToPlainText(prose) : "";
+  return description.length > 240 ? `${description.slice(0, 237).trimEnd()}...` : description;
+}
+
+/** Convert enough of a page to readable Fuse.js input without shipping raw Markdown noise. */
+export function buildDocSearchText(markdown: string, limit = 4_000): string {
+  return markdownToPlainText(markdown).slice(0, limit).trimEnd();
+}
+
 export function parseDocFrontmatter(raw: string): DocPage {
   const { data, content } = matter(raw);
+  const normalizedContent = content.trim();
+  const authoredDescription =
+    typeof data.description === "string" ? data.description.trim() : "";
   return {
     slug: "",
     title: (data.title as string) ?? "Untitled",
+    description: authoredDescription || deriveDocDescription(normalizedContent),
     area: (data.area as string) ?? "unknown",
     order: (data.order as number) ?? 99,
-    content: content.trim(),
+    content: normalizedContent,
     relatedSpecs: (data.relatedSpecs as string[]) ?? [],
     roles: (data.roles as string[]) ?? [],
   };
