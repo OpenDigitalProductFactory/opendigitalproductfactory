@@ -40,7 +40,7 @@ describe("WorkControlPanel", () => {
     expect(html).toContain("Work Control");
     expect(html).toContain("Adopt work");
     expect(html).toContain("WWWD");
-    expect(html).toContain("Products &amp; Services Sold");
+    expect(html).toContain("Goods and Services for Sale");
     expect(html).toContain("customer");
     expect(html).toContain("Onboard Contoso");
     expect(html).toContain("feat/adopt");
