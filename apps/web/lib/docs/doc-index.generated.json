@@ -9206,9 +9206,18 @@
       "publishedPublic": true,
       "publishedPortal": true,
       "anchors": [
-        "overview",
-        "key-concepts",
-        "what-you-can-do"
+        "use-this-guide-for",
+        "the-customer-lifecycle",
+        "find-the-right-view",
+        "start-the-day-with-attention-not-the-database",
+        "capture-and-qualify-a-lead",
+        "manual-lead",
+        "storefront-or-connected-signal",
+        "work-an-opportunity",
+        "quote-accept-and-fulfil",
+        "maintain-the-account-record",
+        "evidence-and-recovery-checklist",
+        "related-guides"
       ]
     },
     "docs/user-guide/customers/marketing.md": {
@@ -9217,11 +9226,20 @@
       "publishedPublic": true,
       "publishedPortal": true,
       "anchors": [
-        "use-this-doc-for",
-        "workflow",
-        "off-archetype-imported-test-artifacts",
-        "funnel-two-different-views",
-        "what-to-watch"
+        "use-this-guide-for",
+        "begin-with-one-decision",
+        "review-strategy-assumptions-and-proof",
+        "build-a-campaign-before-building-assets",
+        "review-and-publish",
+        "quarantined-or-imported-content",
+        "understand-the-two-funnels",
+        "treat-automation-as-a-proposal",
+        "a-practical-operating-rhythm",
+        "before-launch",
+        "during-the-campaign",
+        "after-the-review-window",
+        "what-to-watch",
+        "related-guides"
       ]
     },
     "docs/user-guide/development-workspace.md": {
