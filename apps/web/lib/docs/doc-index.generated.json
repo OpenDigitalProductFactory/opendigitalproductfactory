@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 562,
+  "pageCount": 563,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -8877,6 +8877,20 @@
         "cost-model",
         "troubleshooting",
         "related-specs"
+      ]
+    },
+    "docs/user-guide/ai-workforce/sensitive-data-policy-packs.md": {
+      "publicHref": "/user-guide/ai-workforce/sensitive-data-policy-packs/",
+      "portalHref": "/docs/ai-workforce/sensitive-data-policy-packs",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "what-the-packs-do",
+        "possible-outcomes",
+        "initial-boundaries",
+        "masking-and-correctness",
+        "retention-prompts",
+        "standards-and-qualified-review"
       ]
     },
     "docs/user-guide/architecture/index.md": {

@@ -53,8 +53,13 @@ export function deriveOnboardingWorkloadClasses(input: {
   const classes: AiWorkloadClassKey[] = ["public-marketing", "internal-operations", "customer-records"];
   if (input.handlesCardPayments) classes.push("payments-finance");
   if (/health|care|medical/.test(category)) classes.push("health-phi");
-  if (/education|school|university|student/.test(category)) classes.push("student-records");
+  if (/education|school|university|student/.test(category)) {
+    classes.push("student-records", "youth-sensitive");
+  }
   if (/public|government|civic/.test(category)) classes.push("public-sector-records");
+  if (/security|public-safety|emergency/.test(category)) {
+    classes.push("security-logs", "safety-sensitive");
+  }
   if (/bank|financ|insurance/.test(category)) classes.push("regulated-decisioning", "payments-finance");
   if (/software|technology|digital-product/.test(category)) classes.push("source-code");
   return sortedUnique(classes);

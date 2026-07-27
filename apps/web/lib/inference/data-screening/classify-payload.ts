@@ -107,6 +107,33 @@ const CLASS_RULES: readonly ClassRule[] = [
     pathPattern: /\b(?:security[-_]?log|audit[-_]?log|incident|ip[-_]?address|siem|threat)\b/i,
   },
   {
+    dataClass: "criminal-justice",
+    reason: "criminal-justice-field",
+    confidence: "inferred",
+    pathPattern:
+      /\b(?:criminal[-_ ]?justice|cji|ncic|criminal[-_ ]?history|arrest[-_ ]?record|rap[-_ ]?sheet)\b/i,
+    textPattern:
+      /\b(?:criminal justice information|CJI|NCIC|criminal history|arrest record|rap sheet)\b/i,
+  },
+  {
+    dataClass: "safety-sensitive",
+    reason: "safety-sensitive-field",
+    confidence: "inferred",
+    pathPattern:
+      /\b(?:threat[-_ ]?assessment|safety[-_ ]?plan|shelter[-_ ]?location|domestic[-_ ]?violence|emergency[-_ ]?response)\b/i,
+    textPattern:
+      /\b(?:threat assessment|protected shelter location|domestic violence safety plan)\b/i,
+  },
+  {
+    dataClass: "youth-sensitive",
+    reason: "youth-sensitive-field",
+    confidence: "inferred",
+    pathPattern:
+      /\b(?:parental[-_ ]?consent|guardian|minor|child[-_ ]?(?:record|profile|age|birth)|youth)\b/i,
+    textPattern:
+      /\b(?:child under 13|parental consent|legal guardian|minor child|youth record)\b/i,
+  },
+  {
     dataClass: "regulated-decisioning",
     reason: "regulated-decisioning-field",
     confidence: "inferred",
@@ -153,7 +180,10 @@ export function classifyInferencePayload(
 
   for (const probe of probes) {
     for (const rule of CLASS_RULES) {
-      if (rule.pathPattern?.test(probe.path) || rule.textPattern?.test(probe.text)) {
+      if (
+        rule.pathPattern?.test(normalizeProbePath(probe.path)) ||
+        rule.textPattern?.test(probe.text)
+      ) {
         matches.push({
           dataClass: rule.dataClass,
           path: probe.path,
@@ -190,6 +220,13 @@ export function classifyInferencePayload(
       rawPayloadStored: false,
     },
   };
+}
+
+function normalizeProbePath(path: string): string {
+  return path
+    .replace(/([a-z0-9])([A-Z])/g, "$1-$2")
+    .replace(/[.[\]]+/g, "-")
+    .toLowerCase();
 }
 
 function collectTextProbes(input: InferencePayloadClassificationInput): TextProbe[] {

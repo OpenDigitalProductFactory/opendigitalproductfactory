@@ -135,4 +135,97 @@ describe("evaluateInferenceDispatchPolicy", () => {
     expect(result.effect).toBe("deny");
     expect(result.explanationCodes).toContain("inference-pep-obligation-unenforceable");
   });
+
+  it("allows protected clinical data only with pack obligations and version evidence", () => {
+    const classification = classifyInferencePayload({
+      systemPrompt: "",
+      messages: [{
+        role: "assistant",
+        content: "",
+        toolCalls: [{
+          id: "call-health",
+          name: "summarize",
+          arguments: { patientDiagnosis: "masked-fixture" },
+        }],
+      }],
+    });
+
+    const result = evaluateInferenceDispatchPolicy({
+      organizationId: "org-1",
+      classification,
+      destinationClass: "external-service",
+      transformation: "tokenized",
+    });
+
+    expect(result.effect).toBe("allow-with-obligations");
+    expect(result.obligations.map((obligation) => obligation.kind)).toContain("log-use");
+    expect(result.policyPackVersions).toContain("vertical-health-phi@1.0.0");
+  });
+
+  it.each([
+    ["legal-privileged", "attorneyClientPrivilege", "review"],
+    ["youth-sensitive", "parentalConsent", "review"],
+    ["safety-sensitive", "threatAssessment", "review"],
+    ["criminal-justice", "criminalJusticeInformation", "deny"],
+    ["secrets-credentials", "accessToken", "deny"],
+  ] as const)(
+    "keeps protected %s data behind its %s boundary",
+    (dataClass, field, expectedEffect) => {
+      const classification = classifyInferencePayload({
+        systemPrompt: "",
+        messages: [{
+          role: "assistant",
+          content: "",
+          toolCalls: [{
+            id: "call-boundary",
+            name: "inspect",
+            arguments: { [field]: "regulated-fixture" },
+          }],
+        }],
+      });
+
+      const result = evaluateInferenceDispatchPolicy({
+        organizationId: "org-1",
+        classification,
+        destinationClass: "external-service",
+        transformation: "tokenized",
+      });
+
+      expect(classification.dataClasses).toContain(dataClass);
+      expect(result.effect).toBe(expectedEffect);
+      expect(result.policyPackVersions).toContain(`vertical-${dataClass}@1.0.0`);
+    },
+  );
+
+  it("combines mixed-class decisions by strongest effect instead of pack order", () => {
+    const classification = classifyInferencePayload({
+      systemPrompt: "",
+      messages: [{
+        role: "assistant",
+        content: "",
+        toolCalls: [{
+          id: "call-mixed",
+          name: "inspect",
+          arguments: {
+            customerEmail: "masked@example.test",
+            attorneyClientPrivilege: "privileged-fixture",
+          },
+        }],
+      }],
+    });
+
+    const result = evaluateInferenceDispatchPolicy({
+      organizationId: "org-1",
+      classification,
+      destinationClass: "external-service",
+      transformation: "masked",
+    });
+
+    expect(result.effect).toBe("review");
+    expect(result.decisions).toHaveLength(2);
+    expect(result.policyPackVersions).toEqual([
+      "vertical-customer-records@1.0.0",
+      "vertical-legal-privileged@1.0.0",
+    ]);
+  });
 });

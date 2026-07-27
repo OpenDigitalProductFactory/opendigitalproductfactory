@@ -15,6 +15,7 @@ import type {
   InferencePayloadSensitivity,
   InferencePolicyVersionSnapshot,
 } from "./types";
+import { hasVerticalPolicyPacks } from "./vertical-policy-packs";
 
 const DEFAULT_ORGANIZATION_ID = "org:local-install";
 
@@ -106,7 +107,9 @@ export function screenInferencePayload(
     : "allow";
   const residencyPolicy = routeEffect === "local-only"
     ? stricterResidency(input.routeContext?.residencyPolicy, "local_only")
-    : input.routeContext?.residencyPolicy;
+    : prior && hasVerticalPolicyPacks(policy.classifiedDataClasses)
+      ? stricterResidency(input.routeContext?.residencyPolicy, "approved_cloud")
+      : input.routeContext?.residencyPolicy;
   const allowedProviders = input.routeContext?.allowedProviders === undefined
     ? undefined
     : localOnlyAllowedProviders(
@@ -153,6 +156,7 @@ export function screenInferencePayload(
         ...(prior?.obligationKinds ?? []),
         ...policy.obligations.map((obligation) => obligation.kind),
       ]),
+      policyPackVersions: policy.policyPackVersions,
       rawPayloadStored: false,
     },
     classification,

@@ -176,4 +176,37 @@ describe("classifyInferencePayload", () => {
       reason: "secret-field-name",
     }));
   });
+
+  it.each([
+    ["health-phi", "patientDiagnosis", "Type 1 diabetes"],
+    ["payments-finance", "bankAccountNumber", "000123456789"],
+    ["legal-privileged", "attorneyClientPrivilege", "litigation strategy"],
+    ["criminal-justice", "criminalJusticeInformation", "NCIC criminal history"],
+    ["safety-sensitive", "threatAssessment", "protected shelter location"],
+    ["youth-sensitive", "parentalConsent", "child under 13"],
+    ["employee-records", "employeeDiscipline", "manager-only note"],
+    ["source-code", "sourceCode", "export function privateHandler() {}"],
+    ["secrets-credentials", "accessToken", "not-a-real-credential"],
+    ["customer-records", "customerEmail", "case-owner@example.test"],
+  ] as const)(
+    "detects the %s acceptance fixture without retaining its value",
+    (dataClass, field, value) => {
+      const result = classifyInferencePayload({
+        messages: [{
+          role: "assistant",
+          content: "",
+          toolCalls: [{
+            id: "call-regulated-fixture",
+            name: "inspect_governed_record",
+            arguments: { [field]: value },
+          }],
+        }],
+        systemPrompt: "",
+        taskType: "tool-action",
+      });
+
+      expect(result.dataClasses).toContain(dataClass);
+      expect(JSON.stringify(result)).not.toContain(value);
+    },
+  );
 });
