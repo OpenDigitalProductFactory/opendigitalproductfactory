@@ -277,11 +277,11 @@ const STATUS_MIX_PARTS: Array<{
 function EpicStatusMix({ summary }: { summary: BacklogStatusSummary }) {
   const populated = STATUS_MIX_PARTS.filter(({ key }) => summary[key] > 0);
   if (populated.length === 0) {
-    return <span className="text-[9px] text-[var(--dpf-muted)]">No items</span>;
+    return <span className="text-dpf-caption text-[var(--dpf-muted)]">No items</span>;
   }
   return (
     <div
-      className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[9px] leading-3 tabular-nums"
+      className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-dpf-caption tabular-nums"
       aria-label={populated.map(({ key, label }) => `${summary[key]} ${label}`).join(", ")}
     >
       {populated.map(({ key, label, className }, index) => (

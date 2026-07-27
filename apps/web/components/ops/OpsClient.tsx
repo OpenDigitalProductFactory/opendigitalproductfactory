@@ -260,7 +260,7 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
                   </div>
                   {/* col: status mix — w-64 hidden below sm */}
                   <div className="hidden sm:flex w-64 shrink-0 items-center gap-1">
-                    <span className="mr-auto text-[9px] text-[var(--dpf-muted)]">Items by status</span>
+                    <span className="mr-auto text-dpf-caption text-[var(--dpf-muted)]">Items by status</span>
                     <SortButton label="Done %" field="progress" sort={epicSort} onSort={setEpicSort} />
                     <SortButton label="Total" field="stories" sort={epicSort} onSort={setEpicSort} />
                   </div>

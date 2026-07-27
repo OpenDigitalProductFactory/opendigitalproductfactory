@@ -27,12 +27,12 @@ Make the existing `/ops` epic list explain its own status composition so a found
 
 ## Backlog coverage
 
-- **Decision:** atomic
-- **Receipt:** `cms2mory401hr01qqhgyrqckq`
-- **Parent BI:** `BI-6F308164`
-- **Deliverable:** `ops-epic-status-clarity` → `BI-6F308164`
-- **Dependencies:** none
-- **Rationale:** the status helper, row summary, terminal-filter language, expanded deferred meaning, regression tests, and operator documentation form one user-visible contract. Shipping a subset would preserve contradictory counts or labels.
+- Decision: atomic
+- Parent: `BI-6F308164`
+- Deliverable: `ops-epic-status-clarity` → `BI-6F308164`
+- Dependencies: none
+- Receipt: `cms2os8dj07gf01qq6lb73tka`
+- Rationale: the status summary, Active only semantics, deferred lifecycle labels, shared counting logic, and operator documentation form one coherent UX contract. Shipping any subset would leave the `/ops` page internally contradictory.
 
 ## Phase 1 — Test the truthful presentation contract
 
