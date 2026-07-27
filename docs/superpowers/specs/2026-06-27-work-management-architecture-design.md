@@ -20,6 +20,7 @@ Wave 5 plan: docs/superpowers/plans/2026-06-28-work-case-wave-5-adoption-views.m
 Wave 6 BI: BI-WC-WAVE6-DRILLDOWN - Customer-safe Work Case portal drill-down
 Wave 6 plan: docs/superpowers/plans/2026-06-28-work-case-wave-6-portal-drilldown.md
 Sibling spec: docs/superpowers/specs/2026-06-27-governed-adaptive-playbooks-design.md (the method-improvement pillar that binds to this object)
+Experience extension: docs/superpowers/specs/2026-07-26-work-rooms-collaboration-design.md (Work Room as the outcome-bound collaboration projection over a governed Work Case)
 
 ## Summary
 
