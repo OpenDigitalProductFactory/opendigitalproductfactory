@@ -147,3 +147,20 @@ export function sanitizeBacklogCreateClaims(
 
   return { content: next, strippedClaimIds, verifiedIds };
 }
+
+/**
+ * Apply create-claim sanitization for the agentic loop. Logs when claims are
+ * stripped so operators can find the incident in portal logs.
+ */
+export function applyBacklogCreateClaimGuard(
+  content: string,
+  executedTools: readonly ExecutedToolLike[],
+): string {
+  const guarded = sanitizeBacklogCreateClaims(content, executedTools);
+  if (guarded.strippedClaimIds.length > 0) {
+    console.warn(
+      `[agentic-loop] BI-1BB7408D stripped unproven backlog create claims: ${guarded.strippedClaimIds.join(",")}`,
+    );
+  }
+  return guarded.content;
+}

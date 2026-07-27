@@ -45,7 +45,7 @@ import {
 import { persistExecutionPlan, loadExecutionPlan } from "./execution-plan-store";
 import { estimateContextTokens, classifyContextPressure, deriveCompactionCaps } from "./context-pressure";
 import { clampToolResultForModel, resolveToolResultCharCap } from "./tool-result-budget";
-import { sanitizeBacklogCreateClaims } from "./backlog-create-claim-guard";
+import { applyBacklogCreateClaimGuard } from "./backlog-create-claim-guard";
 import { assessToolSurface, computeToolSelectionAccuracy, contextEconomyTurnMetricFields } from "./context-economy-metrics";
 import { summarizeDroppedMessages } from "./compaction-digest";
 import {
@@ -2070,23 +2070,20 @@ export async function runAgenticLoop(params: {
           console.warn(
             `[agentic-loop] conversational fabrication retry exhausted — keeping the advice${makesHardCompletionClaim ? " with an unsaved-work note" : ""} rather than discarding it.`,
           );
-          {
-            const base = makesHardCompletionClaim
-              ? `${trimmed}\n\n${buildUnsavedAdviceNote(routeContext)}`
-              : trimmed;
-            const guarded = sanitizeBacklogCreateClaims(base, executedTools);
-            return {
-              content: guarded.content,
-              providerId: result.providerId,
-              modelId: result.modelId,
-              downgraded: result.downgraded,
-              downgradeMessage: result.downgradeMessage,
-              totalInputTokens,
-              totalOutputTokens,
-              executedTools,
-              proposal: null,
-            };
-          }
+          const base = makesHardCompletionClaim
+            ? `${trimmed}\n\n${buildUnsavedAdviceNote(routeContext)}`
+            : trimmed;
+          return {
+            content: applyBacklogCreateClaimGuard(base, executedTools),
+            providerId: result.providerId,
+            modelId: result.modelId,
+            downgraded: result.downgraded,
+            downgradeMessage: result.downgradeMessage,
+            totalInputTokens,
+            totalOutputTokens,
+            executedTools,
+            proposal: null,
+          };
         }
 
         // BI-PIR-cc091267 — a build-route fabrication signal (completion claim
@@ -2310,26 +2307,12 @@ export async function runAgenticLoop(params: {
         }
       }
 
-      // If the final response is empty but we had a good pre-nudge response,
-      // use that instead of returning nothing. This prevents quality-gate
-      // failures when the nudge causes the model to return empty.
-      let finalContent = trimmed.length > 0 ? result.content : (bestPreNudgeContent || result.content);
+      // Prefer pre-nudge content over empty; BI-1BB7408D strips unproven create claims.
       if (trimmed.length === 0 && bestPreNudgeContent.length > 0) {
         console.log(`[agentic-loop] recovering pre-nudge content (${bestPreNudgeContent.length} chars)`);
       }
-
-      // BI-1BB7408D: never render "Created: BI-XXXX" unless create_backlog_item
-      // succeeded this turn for that id (structural-verification-is-not-functional).
-      {
-        const guarded = sanitizeBacklogCreateClaims(finalContent, executedTools);
-        if (guarded.strippedClaimIds.length > 0) {
-          console.warn(
-            `[agentic-loop] BI-1BB7408D stripped unproven backlog create claims: ${guarded.strippedClaimIds.join(",")}`,
-          );
-          finalContent = guarded.content;
-        }
-      }
-
+      const finalContent = applyBacklogCreateClaimGuard(
+        trimmed.length > 0 ? result.content : (bestPreNudgeContent || result.content), executedTools);
       logTurnSummary(result.providerId, result.modelId);
       return {
         content: finalContent,
