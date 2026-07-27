@@ -11,7 +11,11 @@ import {
 } from "@/lib/backlog";
 import { AGENT_NAME_MAP } from "@/lib/agent-routing";
 import { BacklogItemRow } from "./BacklogItemRow";
-import { isTerminalBacklogItemStatus } from "./backlogVisibility";
+import {
+  summarizeBacklogStatuses,
+  visibleUnderActiveOnly,
+  type BacklogStatusSummary,
+} from "./backlogVisibility";
 
 // Must stay in sync with OpsClient SortField / SortState
 export type EpicSortField = "title" | "status" | "progress" | "stories";
@@ -41,7 +45,7 @@ function sortedItems(
 type Props = {
   epic: EpicWithRelations;
   sort: EpicSort;
-  hideDoneItems: boolean;
+  activeOnly: boolean;
   onEdit: (epic: EpicWithRelations) => void;
   onItemEdit: (item: BacklogItemWithRelations) => void;
   focusedItemId?: string;
@@ -58,7 +62,7 @@ const EXPAND_PAGE_SIZE = 25;
 // the whole tree each time. Props are stable (epic identity + stable callbacks).
 export const EpicCard = memo(EpicCardImpl);
 
-function EpicCardImpl({ epic, sort, hideDoneItems, onEdit, onItemEdit, focusedItemId }: Props) {
+function EpicCardImpl({ epic, sort, activeOnly, onEdit, onItemEdit, focusedItemId }: Props) {
   const router = useRouter();
   const hasFocusedItem = epic.items.some((item) => isFocusedBacklogItem(item, focusedItemId));
   const [expanded, setExpanded] = useState(hasFocusedItem);
@@ -70,13 +74,12 @@ function EpicCardImpl({ epic, sort, hideDoneItems, onEdit, onItemEdit, focusedIt
     hasFocusedItem ? Number.MAX_SAFE_INTEGER : EXPAND_PAGE_SIZE,
   );
 
-  const visibleItems = hideDoneItems
-    ? epic.items.filter((item) => !isTerminalBacklogItemStatus(item.status))
-    : epic.items;
+  const statusSummary = summarizeBacklogStatuses(epic.items);
+  const visibleItems = visibleUnderActiveOnly(epic.items, activeOnly);
   const hiddenItemCount = epic.items.length - visibleItems.length;
-  const doneCount = epic.items.filter((i) => i.status === "done").length;
-  const totalCount = epic.items.length;
-  const progressPct = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
+  const progressPct = statusSummary.total > 0
+    ? Math.round((statusSummary.done / statusSummary.total) * 100)
+    : 0;
 
   const portfolioLabels = epic.portfolios.filter((p) => p.portfolio).map((p) => p.portfolio.name).join(" · ");
 
@@ -109,34 +112,46 @@ function EpicCardImpl({ epic, sort, hideDoneItems, onEdit, onItemEdit, focusedIt
           />
         </div>
 
-        {/* col: title — flex-1 */}
-        <p className="flex-1 min-w-0 text-xs text-[var(--dpf-text)] truncate">
-          {epic.title}
-          <span className="ml-1.5 text-[9px] text-[var(--dpf-muted)] tabular-nums">({totalCount})</span>
-          <span className="ml-2 text-[9px] text-[var(--dpf-muted)]">
-            <LocalTime value={epic.createdAt} mode="date" />
-            {epic.agentId ? ` · ${AGENT_NAME_MAP[epic.agentId] ?? epic.agentId}` : ""}
-            {epic.submittedBy ? ` · ${epic.submittedBy.email}` : ""}
-            {epic.completedAt ? <> · done <LocalTime value={epic.completedAt} mode="date" /></> : ""}
-          </span>
-        </p>
+        {/* col: title — flex-1; status mix drops beneath it on narrow screens */}
+        <div className="flex-1 min-w-0">
+          <p className="text-xs text-[var(--dpf-text)] truncate">
+            {epic.title}
+            <span className="ml-1.5 text-[9px] text-[var(--dpf-muted)] tabular-nums">({statusSummary.total})</span>
+            <span className="ml-2 text-[9px] text-[var(--dpf-muted)]">
+              <LocalTime value={epic.createdAt} mode="date" />
+              {epic.agentId ? ` · ${AGENT_NAME_MAP[epic.agentId] ?? epic.agentId}` : ""}
+              {epic.submittedBy ? ` · ${epic.submittedBy.email}` : ""}
+              {epic.completedAt ? <> · done <LocalTime value={epic.completedAt} mode="date" /></> : ""}
+            </span>
+          </p>
+          <div className="mt-0.5 sm:hidden">
+            <EpicStatusMix summary={statusSummary} />
+          </div>
+        </div>
 
-        {/* col: portfolio — w-36 hidden sm */}
-        <span className="hidden sm:block w-36 shrink-0 text-[9px] text-[var(--dpf-muted)] truncate">
+        {/* col: portfolio — w-36 hidden below lg */}
+        <span className="hidden lg:block w-36 shrink-0 text-[9px] text-[var(--dpf-muted)] truncate">
           {portfolioLabels}
         </span>
 
-        {/* col: progress — w-28 */}
-        <div className="w-28 shrink-0 flex items-center gap-1.5">
-          <div className="flex-1 h-0.5 rounded-full bg-[var(--dpf-surface-2)]">
+        {/* col: status mix — explicit counts first, done-only progress second */}
+        <div className="hidden sm:flex w-64 shrink-0 flex-col gap-1">
+          <EpicStatusMix summary={statusSummary} />
+          {statusSummary.total > 0 ? (
             <div
-              className="h-0.5 rounded-full bg-[var(--dpf-accent)]"
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
-          <span className="text-[9px] text-[var(--dpf-muted)] tabular-nums w-8 text-right">
-            {doneCount}/{totalCount}
-          </span>
+              className="h-0.5 rounded-full bg-[var(--dpf-surface-2)]"
+              role="progressbar"
+              aria-label={`${statusSummary.done} of ${statusSummary.total} items done`}
+              aria-valuemin={0}
+              aria-valuemax={statusSummary.total}
+              aria-valuenow={statusSummary.done}
+            >
+              <div
+                className="h-0.5 rounded-full bg-[var(--dpf-success)]"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+          ) : null}
         </div>
 
         {/* col: actions — w-14, visible on hover */}
@@ -206,7 +221,7 @@ function EpicCardImpl({ epic, sort, hideDoneItems, onEdit, onItemEdit, focusedIt
             <p className="text-xs text-[var(--dpf-muted)]">No items in this epic yet.</p>
           ) : visibleItems.length === 0 ? (
             <p className="text-xs text-[var(--dpf-muted)]">
-              All {epic.items.length} items in this epic are done or deferred. Uncheck &quot;Hide done&quot; to see them.
+              No active items. <TerminalStatusText summary={statusSummary} /> Turn off &quot;Active only&quot; to review them.
             </p>
           ) : (
             (() => {
@@ -237,12 +252,55 @@ function EpicCardImpl({ epic, sort, hideDoneItems, onEdit, onItemEdit, focusedIt
           )}
           {hiddenItemCount > 0 && (
             <p className="mt-1.5 text-[10px] text-[var(--dpf-muted)]">
-              {hiddenItemCount} completed item{hiddenItemCount !== 1 ? "s" : ""} hidden
+              {hiddenItemCount} non-active item{hiddenItemCount !== 1 ? "s" : ""} hidden
+              {" — "}<TerminalStatusText summary={statusSummary} />
             </p>
           )}
         </div>
       )}
     </div>
+  );
+}
+
+const STATUS_MIX_PARTS: Array<{
+  key: keyof Pick<BacklogStatusSummary, "triaging" | "open" | "inProgress" | "done" | "deferred">;
+  label: string;
+  className: string;
+}> = [
+  { key: "triaging", label: "triaging", className: "text-[var(--dpf-muted)]" },
+  { key: "open", label: "open", className: "text-[var(--dpf-info)]" },
+  { key: "inProgress", label: "in progress", className: "text-[var(--dpf-accent)]" },
+  { key: "done", label: "done", className: "text-[var(--dpf-success)]" },
+  { key: "deferred", label: "deferred", className: "text-[var(--dpf-muted)]" },
+];
+
+function EpicStatusMix({ summary }: { summary: BacklogStatusSummary }) {
+  const populated = STATUS_MIX_PARTS.filter(({ key }) => summary[key] > 0);
+  if (populated.length === 0) {
+    return <span className="text-[9px] text-[var(--dpf-muted)]">No items</span>;
+  }
+  return (
+    <div
+      className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[9px] leading-3 tabular-nums"
+      aria-label={populated.map(({ key, label }) => `${summary[key]} ${label}`).join(", ")}
+    >
+      {populated.map(({ key, label, className }, index) => (
+        <span key={key} className={`shrink-0 ${className}`}>
+          {index > 0 ? <span className="mr-1.5 text-[var(--dpf-border)]">·</span> : null}
+          {summary[key]} {label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function TerminalStatusText({ summary }: { summary: BacklogStatusSummary }) {
+  return (
+    <>
+      {summary.done > 0 ? `${summary.done} done` : ""}
+      {summary.done > 0 && summary.deferred > 0 ? " · " : ""}
+      {summary.deferred > 0 ? `${summary.deferred} deferred` : ""}
+    </>
   );
 }
 

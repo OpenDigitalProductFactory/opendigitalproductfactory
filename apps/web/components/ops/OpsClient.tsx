@@ -7,7 +7,7 @@ import { BacklogItemRow } from "./BacklogItemRow";
 import { EpicCard, type EpicSort } from "./EpicCard";
 import { EpicPanel } from "./EpicPanel";
 import { OperatorTriageBand } from "./OperatorTriageBand";
-import { visibleUnderHideDone } from "./backlogVisibility";
+import { summarizeBacklogStatuses, visibleUnderActiveOnly } from "./backlogVisibility";
 import { FilterBar, type FacetDef } from "@/components/ui/report-kit";
 import { backlogItemOrigin, BACKLOG_ORIGIN_FILTERS } from "@/lib/ops/backlog-origin";
 import type {
@@ -109,7 +109,7 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
   const [panel, setPanel] = useState<ItemPanelState>({ open: false });
   const [epicPanel, setEpicPanel] = useState<EpicPanelState>(null);
   const [epicSort, setEpicSort] = useState<SortState>(null);
-  const [hideDone, setHideDone] = useState(true);
+  const [activeOnly, setActiveOnly] = useState(true);
   const [filters, setFilters] = useState<Record<string, string>>(
     // Pre-apply a valid ?origin=… lens from the URL so origin deep-links (e.g. the
     // converged "Capability Needs" links) land on the filtered backlog, not the raw list.
@@ -146,10 +146,10 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
   const unassigned = items.filter(
     (i) => i.epicId === null && matchesOrigin(i) && !portfolioFilter,
   );
-  // Count badges must reflect the same hideDone filter the list applies, so the
+  // Count badges must reflect the same active-only filter the list applies, so the
   // headline "Unassigned" number is actionable work — not the raw pile inflated
   // by hidden deferred/done items (BI-7CB3C1CD).
-  const visibleUnassigned = visibleUnderHideDone(unassigned, hideDone);
+  const visibleUnassigned = visibleUnderActiveOnly(unassigned, activeOnly);
   const types = ["portfolio", "product"] as const;
   const byType = new Map(types.map((t) => [t, unassigned.filter((i) => i.type === t)]));
 
@@ -208,11 +208,12 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
             <label className="flex items-center gap-1.5 cursor-pointer select-none">
               <input
                 type="checkbox"
-                checked={hideDone}
-                onChange={(e) => setHideDone(e.target.checked)}
+                checked={activeOnly}
+                onChange={(e) => setActiveOnly(e.target.checked)}
                 className="w-3 h-3 rounded border-[var(--dpf-border)] accent-[var(--dpf-accent)]"
+                title="Show triaging, open, and in-progress work; hide done and deferred items."
               />
-              <span className="text-[10px] text-[var(--dpf-muted)]">Hide done</span>
+              <span className="text-[10px] text-[var(--dpf-muted)]">Active only</span>
             </label>
           </div>
           <button
@@ -224,16 +225,16 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
         </div>
 
         {(() => {
-          const byHideDone = hideDone ? epics.filter((e) => e.status !== "done") : epics;
+          const byActiveOnly = activeOnly ? epics.filter((e) => e.status !== "done") : epics;
           // When a lens is active, show epics that carry a matching item (origin)
           // and that belong to the selected portfolio. Epics stay whole — no skew.
-          const filteredEpics = byHideDone.filter(
+          const filteredEpics = byActiveOnly.filter(
             (e) =>
               (!originFilter || (e.items ?? []).some(matchesOrigin)) &&
               (!portfolioFilter || (e.portfolios ?? []).some((l) => l.portfolio?.id === portfolioFilter)),
           );
-          // Footnote counts epics hidden by the "Hide done" toggle (not the origin lens).
-          const hiddenCount = hideDone ? epics.filter((e) => e.status === "done").length : 0;
+          // Footnote counts epics hidden by the active-only toggle (not the origin lens).
+          const hiddenCount = activeOnly ? epics.filter((e) => e.status === "done").length : 0;
 
           if (epics.length === 0) {
             return <p className="text-xs text-[var(--dpf-muted)]">No epics yet. Add one to start organising your backlog.</p>;
@@ -253,14 +254,15 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
                   <div className="flex-1 min-w-0">
                     <SortButton label="Title" field="title" sort={epicSort} onSort={setEpicSort} />
                   </div>
-                  {/* col: portfolio — w-36 hidden sm */}
-                  <div className="hidden sm:block w-36 shrink-0">
+                  {/* col: portfolio — w-36 hidden below lg */}
+                  <div className="hidden lg:block w-36 shrink-0">
                     <span className="text-[9px] text-[var(--dpf-muted)]">Portfolio</span>
                   </div>
-                  {/* col: progress — w-28 */}
-                  <div className="w-28 shrink-0 flex items-center gap-1">
-                    <SortButton label="Progress" field="progress" sort={epicSort} onSort={setEpicSort} />
-                    <SortButton label="Stories"  field="stories"  sort={epicSort} onSort={setEpicSort} />
+                  {/* col: status mix — w-64 hidden below sm */}
+                  <div className="hidden sm:flex w-64 shrink-0 items-center gap-1">
+                    <span className="mr-auto text-[9px] text-[var(--dpf-muted)]">Items by status</span>
+                    <SortButton label="Done %" field="progress" sort={epicSort} onSort={setEpicSort} />
+                    <SortButton label="Total" field="stories" sort={epicSort} onSort={setEpicSort} />
                   </div>
                   <div className="w-14 shrink-0" />
                 </div>
@@ -270,7 +272,7 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
                     <p className="text-xs text-[var(--dpf-muted)]">
                       {originFilter || portfolioFilter
                         ? "No epics match the current filters."
-                        : `All ${epics.length} epics are done. Uncheck "Hide done" to see them.`}
+                        : `All ${epics.length} epics are done. Turn off "Active only" to see them.`}
                     </p>
                   </div>
                 ) : (
@@ -279,7 +281,7 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
                       key={epic.id}
                       epic={epic}
                       sort={epicSort}
-                      hideDoneItems={hideDone}
+                      activeOnly={activeOnly}
                       onEdit={openEditEpic}
                       onItemEdit={openEdit}
                       focusedItemId={focusedItemId}
@@ -306,8 +308,9 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
 
         {types.map((t) => {
           const typeItems = byType.get(t) ?? [];
-          const filteredItems = visibleUnderHideDone(typeItems, hideDone);
+          const filteredItems = visibleUnderActiveOnly(typeItems, activeOnly);
           const hiddenItemCount = typeItems.length - filteredItems.length;
+          const statusSummary = summarizeBacklogStatuses(typeItems);
           const label = TYPE_LABELS[t] ?? t;
 
           return (
@@ -328,7 +331,7 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
                 <p className="text-xs text-[var(--dpf-muted)]">
                   {typeItems.length === 0
                     ? `No unassigned ${label.toLowerCase()} items.`
-                    : `All ${typeItems.length} items are done. Uncheck "Hide done" to see them.`}
+                    : `No active ${label.toLowerCase()} items. Turn off "Active only" to review ${statusSummary.done} done and ${statusSummary.deferred} deferred.`}
                 </p>
               ) : (
                 <div className="flex flex-col gap-2">
@@ -344,7 +347,8 @@ export function OpsClient({ items, digitalProducts, taxonomyNodes, epics, portfo
               )}
               {hiddenItemCount > 0 && (
                 <p className="text-[10px] text-[var(--dpf-muted)] mt-1">
-                  {hiddenItemCount} completed item{hiddenItemCount !== 1 ? "s" : ""} hidden
+                  {hiddenItemCount} non-active item{hiddenItemCount !== 1 ? "s" : ""} hidden
+                  {" — "}{statusSummary.done} done · {statusSummary.deferred} deferred
                 </p>
               )}
             </section>

@@ -30,6 +30,7 @@ export type BacklogItemWithRelations = {
   priority: number | null;
   epicId: string | null;
   triageOutcome: string | null;
+  duplicateOfId?: string | null;
   effortSize: string | null;
   activeBuildId: string | null;
   scopeKind?: string | null;
