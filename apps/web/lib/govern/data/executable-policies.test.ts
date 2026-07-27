@@ -26,12 +26,12 @@ describe("executable policy bundle", () => {
     const restrictedRaw = DATA_EXECUTABLE_POLICIES.find(
       (policy) => policy.id === "restricted-external-destination",
     );
-    const protected = DATA_EXECUTABLE_POLICIES.find(
+    const protectedPolicy = DATA_EXECUTABLE_POLICIES.find(
       (policy) => policy.id === "protected-external-projection",
     );
 
     expect(restrictedRaw?.match.transformations).toEqual(["none"]);
-    expect(protected?.match.transformations).toEqual(["masked", "tokenized"]);
-    expect(protected?.effect).toBe("allow");
+    expect(protectedPolicy?.match.transformations).toEqual(["masked", "tokenized"]);
+    expect(protectedPolicy?.effect).toBe("allow");
   });
 });
