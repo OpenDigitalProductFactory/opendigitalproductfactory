@@ -1168,6 +1168,17 @@
         "prod"
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
+    },
+    "@vitest/coverage-v8": {
+      "added": "2026-07-27",
+      "workspaces": [
+        "apps/web",
+        "packages/db"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "BI-2F60FDCE observation-mode V8 coverage for web and @dpf/db; non-blocking thresholds"
     }
   }
 }
