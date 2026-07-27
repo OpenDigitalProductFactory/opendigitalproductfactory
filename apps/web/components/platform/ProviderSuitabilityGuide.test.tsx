@@ -48,6 +48,11 @@ describe("ProviderSuitabilityGuide", () => {
       }),
     }} />);
     fireEvent.click(screen.getByRole("button", { name: "Ask my COO for the next step" }));
+    expect(events).toHaveLength(0);
+    expect(screen.getByRole("region", { name: "Review what your COO will receive" })).toBeTruthy();
+    expect(screen.getByText(/Credentials and raw prompts are excluded/)).toBeTruthy();
+    expect(screen.getByText(/direct answer, safe interim behavior, and one next action/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Send to my COO" }));
 
     document.removeEventListener("open-agent-panel", handler);
     expect(events).toHaveLength(1);
@@ -100,8 +105,8 @@ describe("ProviderSuitabilityGuide", () => {
     expect(screen.getByRole("heading", { name: recommendation.headline })).toBeTruthy();
     expect(screen.getByRole("region", { name: "Recommendation summary" }).textContent).toContain(recommendation.caveat);
     expect(screen.getByRole("region", { name: "What DPF will do" }).textContent).toContain("No company data may leave yet.");
-    expect(screen.getByRole("button", { name: "Review provider choices" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Review protected work and evidence" })).toBeTruthy();
+    expect(screen.getByText("Review provider choices").closest("details")?.open).toBe(false);
+    expect(screen.getByText("Review protected work and evidence").closest("details")?.open).toBe(false);
     expect(screen.getByText(/Your COO will give one short next step/)).toBeTruthy();
     expect(screen.getByText(/Next action:/).textContent).toContain(recommendation.nextAction);
   });

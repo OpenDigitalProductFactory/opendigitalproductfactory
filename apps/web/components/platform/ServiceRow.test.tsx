@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ProviderRow, ProviderWithCredential, ProviderModelSummary } from "@/lib/ai-provider-types";
 import type { RoutingEligibility } from "@/lib/routing/provider-routing-eligibility";
 
@@ -15,6 +15,8 @@ vi.mock("./ProviderStatusToggle", () => ({
 }));
 
 import { ServiceRow } from "./ServiceRow";
+
+afterEach(cleanup);
 
 function provider(overrides: Partial<ProviderRow> = {}): ProviderRow {
   return {

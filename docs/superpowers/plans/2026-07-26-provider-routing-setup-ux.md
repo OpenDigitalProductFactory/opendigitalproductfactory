@@ -26,8 +26,8 @@ The Providers & Routing setup surface should help a non-technical operator make 
 - Reuse/convergence: reuse `ProviderSuitabilityGuide`, `ServiceSection`, `ServiceRow`, `StatusBadge`, and native `details`; add no new route, dashboard, policy store, or compliance chatbot.
 - Source truth: `ProviderOnboardingRecommendation`, `deriveRoutingEligibility`, provider model summaries, CLI pool status, budget/spend read models.
 - Empty/failure behavior: no approved provider remains a clear restricted state with one recovery action; review evidence remains reachable.
-- AI boundary: clicking the COO action sends only the minimized provider-review packet and asks for a short answer, safe interim behavior, and one next action. It cannot activate providers or widen posture.
-- Required edits: compact the guide, move operational evidence behind disclosure, simplify default provider rows, improve the coworker prompt, and keep policy internals available.
+- AI boundary: the COO action first previews the minimized context and expected next step, then requires explicit confirmation. Confirmation sends only the minimized provider-review packet and asks for a short answer, safe interim behavior, and one next action. It cannot activate providers or widen posture.
+- Required edits: compact the guide, move operational evidence behind disclosure, simplify default provider rows, improve the coworker prompt, require preview and confirmation, and keep policy internals available.
 - Evidence before merge: component/route tests, diff/style checks, desktop/mobile UX verification or CI-backed route evidence, and PR health.
 - Captured in: this plan and the PR body.
 
@@ -44,7 +44,7 @@ Deliverables:
 | coworker-prompt | COO prompt contract for brief, grounded next-action answers | BI-ECBD6924 | No |
 | tests-docs | Tests and documentation/evidence updates | BI-ECBD6924 | No |
 
-Coverage receipt: `cms1xvncg01j201lhhwz7xdz7`.
+Coverage receipt: `cms3hld7a09ww01p5esycev0e`.
 
 ## Implementation steps
 

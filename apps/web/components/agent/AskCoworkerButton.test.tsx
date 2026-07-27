@@ -99,4 +99,37 @@ describe("AskCoworkerButton", () => {
       providerReviewPacket: packet,
     });
   });
+
+  it("previews context and requires confirmation before dispatch", () => {
+    const events: CustomEvent[] = [];
+    const handler = (e: Event) => events.push(e as CustomEvent);
+    document.addEventListener("open-agent-panel", handler);
+
+    render(
+      <AskCoworkerButton
+        prompt="Review provider setup"
+        routeContext="/workspace"
+        confirmation={{
+          title: "Review what your COO will receive",
+          contextSummary: "Provider recommendation and safeguard evidence.",
+          expectedNextStep: "A short answer and one next action.",
+          confirmLabel: "Send to my COO",
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Ask coworker" }));
+    expect(events).toHaveLength(0);
+    expect(screen.getByRole("region", { name: "Review what your COO will receive" })).toBeTruthy();
+    expect(screen.getByText("Provider recommendation and safeguard evidence.")).toBeTruthy();
+    expect(screen.getByText("A short answer and one next action.")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Send to my COO" }));
+    document.removeEventListener("open-agent-panel", handler);
+    expect(events).toHaveLength(1);
+    expect(events[0]?.detail).toEqual({
+      autoMessage: "Review provider setup",
+      routeContext: "/workspace",
+    });
+  });
 });

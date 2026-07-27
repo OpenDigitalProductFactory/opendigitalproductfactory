@@ -162,6 +162,7 @@ export function ServiceRow({ pw, modelSummary, eligibility, resolvesPhases, week
     : eligibility.reason;
   const typeLabel   = provider.endpointType === "service" ? "MCP" : "LLM";
   const costView = buildProviderCostView({ provider, financeProfile: null, internalUsage: null });
+  const detailId = `provider-${provider.providerId.replaceAll(/[^a-zA-Z0-9_-]/g, "-")}-details`;
 
   return (
     <div
@@ -174,9 +175,15 @@ export function ServiceRow({ pw, modelSummary, eligibility, resolvesPhases, week
         role="button"
         tabIndex={0}
         aria-expanded={expanded}
+        aria-controls={detailId}
         aria-label={`${provider.name}: ${eligibility.label}`}
         onClick={() => setExpanded((v) => !v)}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setExpanded((v) => !v); }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setExpanded((v) => !v);
+          }
+        }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{
@@ -305,6 +312,7 @@ export function ServiceRow({ pw, modelSummary, eligibility, resolvesPhases, week
       {/* Expanded detail */}
       {expanded && (
         <div
+          id={detailId}
           style={{
             padding: "10px 14px 12px 26px",
             background: "var(--dpf-surface-1)",

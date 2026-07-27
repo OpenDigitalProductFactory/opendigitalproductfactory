@@ -53,6 +53,12 @@ export function ProviderSuitabilityGuide({ recommendation, telemetry }: { recomm
             routeContext="/workspace"
             providerReviewPacket={recommendation.reviewPacket}
             label="Ask my COO for the next step"
+            confirmation={{
+              title: "Review what your COO will receive",
+              contextSummary: "The minimized provider recommendation, allowed and blocked lanes, and safeguard evidence. Credentials and raw prompts are excluded.",
+              expectedNextStep: "Your COO will return a direct answer, safe interim behavior, and one next action.",
+              confirmLabel: "Send to my COO",
+            }}
             ariaDescribedBy="provider-coo-coordination"
             className="rounded-md border border-[var(--dpf-border)] px-3 py-2 text-xs font-semibold text-[var(--dpf-accent)] hover:bg-[var(--dpf-surface-2)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
           />
