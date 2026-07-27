@@ -48,9 +48,16 @@ export async function POST(request: Request) {
   }
   if (
     result.governance?.rejected === "forbidden_capability" ||
-    result.governance?.rejected === "forbidden_grant"
+    result.governance?.rejected === "forbidden_grant" ||
+    result.governance?.rejected === "authority_denied"
   ) {
     return Response.json(result, { status: 403 });
+  }
+  if (result.governance?.rejected === "approval_required") {
+    return Response.json(result, { status: 202 });
+  }
+  if (result.governance?.rejected === "authority_evidence_unavailable") {
+    return Response.json(result, { status: 503 });
   }
 
   return Response.json(result);

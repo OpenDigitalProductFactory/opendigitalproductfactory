@@ -1,0 +1,78 @@
+{
+  "version": "1",
+  "accountableOwner": "identity-and-access-management",
+  "affectedCopies": [
+    "Prisma-to-EA current-state data-model mirror",
+    "Coworker approval attention and decision projections",
+    "AuthorizationDecisionLog and ToolExecution evidence joins"
+  ],
+  "migration": {
+    "name": "20260727160000_bind_coworker_authority_envelopes",
+    "backfill": "none - every new binding is nullable and historical envelopes remain explicitly unbound rather than receiving fabricated authority evidence"
+  },
+  "tests": [
+    "apps/web/lib/coworker/authority-approval-envelope.test.ts",
+    "apps/web/lib/govern/authority/coworker-authority-decision.test.ts",
+    "apps/web/lib/govern/authority/resolve-coworker-tool-authority.test.ts",
+    "apps/web/lib/mcp-governed-execute.test.ts",
+    "apps/web/app/api/mcp/call/route.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:coworker-action-envelope#authority-binding",
+      "prismaModel": "CoworkerActionEnvelope",
+      "lifecycleDisposition": "retained and resolved with the canonical coworker approval envelope; terminal envelopes follow the existing approval-evidence lifecycle",
+      "fields": [
+        {
+          "fieldId": "data:coworker-action-envelope#taskRunId",
+          "resolution": "governed",
+          "reason": "binds approval pause and resume to the exact originating task node",
+          "provenance": "server-resolved governed execution context",
+          "flags": ["sensitive"],
+          "fieldPolicy": "authorization evidence only; never accept from model output and expose only through bounded approval/task projections"
+        },
+        {
+          "fieldId": "data:coworker-action-envelope#delegationChainId",
+          "resolution": "governed",
+          "reason": "prevents approval reuse outside the active narrowing chain of custody",
+          "provenance": "server-resolved active DelegationChain",
+          "flags": ["sensitive"],
+          "fieldPolicy": "authorization evidence only; never use the identifier itself to widen authority"
+        },
+        {
+          "fieldId": "data:coworker-action-envelope#authorityDecisionId",
+          "resolution": "governed",
+          "reason": "joins the approval lifecycle to the exact privacy-safe authorization decision",
+          "provenance": "AuthorizationDecisionLog writer at the universal execution seam",
+          "flags": ["sensitive"],
+          "fieldPolicy": "opaque evidence reference only; do not project decision internals or raw parameters"
+        },
+        {
+          "fieldId": "data:coworker-action-envelope#inputFingerprint",
+          "resolution": "governed",
+          "reason": "detects changed arguments without persisting the governed input payload",
+          "provenance": "server-side canonical input fingerprinting",
+          "flags": ["sensitive"],
+          "fieldPolicy": "one-way fingerprint only; prohibit raw arguments, secrets, employee data, customer data, and reversible encodings"
+        },
+        {
+          "fieldId": "data:coworker-action-envelope#approvalBindingFingerprint",
+          "resolution": "governed",
+          "reason": "provides idempotency and exact-match replay protection across the full approval binding",
+          "provenance": "server-side canonical approval-binding fingerprinting",
+          "flags": ["sensitive"],
+          "fieldPolicy": "one-way fingerprint only; use for exact lookup and active-envelope uniqueness, never as an authorization grant by itself"
+        },
+        {
+          "fieldId": "data:coworker-action-envelope#expiresAt",
+          "resolution": "governed",
+          "reason": "bounds the period during which an exact human approval may be re-evaluated for execution",
+          "provenance": "server-owned approval policy TTL",
+          "flags": [],
+          "fieldPolicy": "server-owned timestamp; expired approvals fail closed and cannot be revived by callers"
+        }
+      ]
+    }
+  ]
+}

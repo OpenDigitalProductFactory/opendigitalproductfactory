@@ -1,7 +1,7 @@
 import type { PrincipalSensitivity } from "@dpf/db/principal-sensitivity";
 
 import type { EffectiveAuthContext } from "@/lib/identity/effective-auth-context";
-import { canAccessEmployeeRecord } from "@/lib/govern/permissions";
+import { canAccessAuthoritySubject } from "@/lib/govern/authority/authority-subject";
 import {
   isDecisionVersionSnapshotStillFresh,
   type DecisionVersionSnapshot,
@@ -197,43 +197,7 @@ function canAccessSubject(
   context: EffectiveAuthContext,
   subject: RehydrationSubject,
 ): boolean {
-  switch (subject.kind) {
-    case "employee":
-      return canAccessEmployeeRecord(context, subject.id);
-    case "account":
-      return canAccessCustomerScope(
-        context,
-        context.accountScope.accountIds,
-        subject.id,
-      );
-    case "contact":
-      return canAccessCustomerScope(
-        context,
-        context.accountScope.contactIds,
-        subject.id,
-      );
-    case "partner-account":
-      return canAccessCustomerScope(
-        context,
-        context.accountScope.partnerAccountIds,
-        subject.id,
-      );
-    case "principal":
-      return context.principalId === subject.id;
-    case "team":
-      return context.teamIds.includes(subject.id);
-  }
-}
-
-function canAccessCustomerScope(
-  context: EffectiveAuthContext,
-  ids: readonly string[],
-  subjectId: string,
-): boolean {
-  if (!ids.includes(subjectId)) return false;
-  return context.population === "customer" ||
-    context.population === "partner" ||
-    context.grantedCapabilities.includes("view_customer");
+  return canAccessAuthoritySubject(context, subject);
 }
 
 function hasClearance(

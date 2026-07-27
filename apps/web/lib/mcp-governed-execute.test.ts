@@ -5,21 +5,24 @@ import {
   governedExecuteTool,
   registerToolLifecycleHook,
 } from "./mcp-governed-execute";
+import type {
+  AuthorityApprovalEnvelopeCreate,
+  AuthorityApprovalEnvelopeFinalize,
+  AuthorityApprovalTaskResume,
+} from "./mcp-governed-execute";
+import type { CoworkerAuthorityInput } from "./govern/authority/coworker-authority-decision";
 import type { ToolResult } from "./mcp-tools";
-
+import { registerCoworkerAuthorityCases } from "./mcp-governed-execute-authority.cases";
 type AuditRow = Record<string, unknown>;
-
 function captureAudit(rows: AuditRow[]) {
   return async (data: AuditRow) => {
     rows.push(data);
   };
 }
-
 const NORMAL_USER = {
   platformRole: "ceo",
   isSuperuser: true,
 };
-
 type ExecuteFn = (
   toolName: string,
   params: Record<string, unknown>,
@@ -31,14 +34,92 @@ type ExecuteFn = (
     taskRunId?: string;
   },
 ) => Promise<ToolResult>;
-
 let auditRows: AuditRow[];
 let receiptRows: AuditRow[];
+let authorityRows: AuditRow[];
 let executeMock: ReturnType<typeof vi.fn> & ExecuteFn;
+let approvalEnvelopeCreate: AuthorityApprovalEnvelopeCreate;
+let approvalTaskResume: AuthorityApprovalTaskResume;
+let approvalEnvelopeFinalize: AuthorityApprovalEnvelopeFinalize;
+function authorityInput(
+  overrides: Partial<CoworkerAuthorityInput> = {},
+): CoworkerAuthorityInput {
+  return {
+    authContext: {
+      principalId: "PRN-1",
+      principalAliases: [],
+      population: "workforce",
+      platformRole: "HR-000",
+      isSuperuser: true,
+      employeeId: "EMP-1",
+      managerScope: { directReportIds: [], indirectReportIds: [] },
+      teamIds: [],
+      accountScope: {
+        accountIds: [],
+        contactIds: [],
+        partnerAccountIds: [],
+      },
+      sensitivityClearance: [
+        "public",
+        "internal",
+        "confidential",
+        "restricted",
+      ],
+      authentication: {
+        source: "session",
+        methods: ["mfa"],
+        contextClassReference: null,
+      },
+      actingHumanUserId: "user-1",
+      actingAgentId: "AGT-100",
+      delegationGrantIds: [],
+      grantedCapabilities: ["view_platform", "view_backlog", "manage_backlog"],
+    },
+    action: {
+      toolName: "query_backlog",
+      requiredCapability: "view_platform",
+      agentGrantAllowed: true,
+      sideEffect: false,
+      executionMode: "immediate",
+      routeContext: "/ops",
+      approvalPolicy: "none",
+    },
+    subject: { kind: "platform", id: "dpf" },
+    delegation: null,
+    integration: { required: false, state: "not-required" },
+    dataPolicy: {
+      sensitivity: "internal",
+      maskingRequired: false,
+      maskingSatisfied: true,
+      decisionVersionsCurrent: true,
+    },
+    task: null,
+    rawParams: {},
+    ...overrides,
+  };
+}
+function applyAuthorityOverrides(
+  overrides: Parameters<typeof _setGovernanceForTests>[0],
+): void {
+  _setGovernanceForTests({
+    resolveAgentGrants: async () => ["backlog_read", "backlog_write"],
+    isAllowedByGrants: () => true,
+    executeTool: executeMock,
+    toolExecutionCreate: captureAudit(auditRows),
+    toolExecutionReceiptCreate: captureAudit(receiptRows),
+    resolveCoworkerAuthorityInput: async () => authorityInput(),
+    authorizationDecisionCreate: captureAudit(authorityRows),
+    authorityApprovalEnvelopeCreate: approvalEnvelopeCreate,
+    authorityApprovalTaskResume: approvalTaskResume,
+    authorityApprovalEnvelopeFinalize: approvalEnvelopeFinalize,
+    ...overrides,
+  });
+}
 
 beforeEach(() => {
   auditRows = [];
   receiptRows = [];
+  authorityRows = [];
   executeMock = vi.fn(
     async (): Promise<ToolResult> => ({
       success: true,
@@ -46,12 +127,24 @@ beforeEach(() => {
       entityId: "BI-FAKE",
     }),
   ) as ReturnType<typeof vi.fn> & ExecuteFn;
+  approvalEnvelopeCreate = vi.fn(async () => ({
+    id: "ENV-1",
+    status: "proposed",
+    expiresAt: new Date("2026-07-27T12:00:00Z"),
+  }));
+  approvalTaskResume = vi.fn(async () => undefined);
+  approvalEnvelopeFinalize = vi.fn(async () => undefined);
   _setGovernanceForTests({
     resolveAgentGrants: async () => ["backlog_read", "backlog_write"],
     isAllowedByGrants: () => true,
     executeTool: executeMock,
     toolExecutionCreate: captureAudit(auditRows),
     toolExecutionReceiptCreate: captureAudit(receiptRows),
+    resolveCoworkerAuthorityInput: async () => authorityInput(),
+    authorizationDecisionCreate: captureAudit(authorityRows),
+    authorityApprovalEnvelopeCreate: approvalEnvelopeCreate,
+    authorityApprovalTaskResume: approvalTaskResume,
+    authorityApprovalEnvelopeFinalize: approvalEnvelopeFinalize,
   });
 });
 
@@ -62,10 +155,22 @@ afterEach(() => {
     executeTool: null,
     toolExecutionCreate: null,
     toolExecutionReceiptCreate: null,
+    resolveCoworkerAuthorityInput: null,
+    authorizationDecisionCreate: null,
+    authorityApprovalEnvelopeCreate: null,
+    authorityApprovalTaskResume: null,
+    authorityApprovalEnvelopeFinalize: null,
   });
 });
 
 describe("governedExecuteTool — happy path", () => {
+  registerCoworkerAuthorityCases({
+    applyOverrides: applyAuthorityOverrides, authorityInput,
+    normalUser: NORMAL_USER, executeMock: () => executeMock,
+    authorityRows: () => authorityRows, auditRows: () => auditRows,
+    approvalEnvelopeCreate: () => approvalEnvelopeCreate, approvalTaskResume: () => approvalTaskResume,
+    approvalEnvelopeFinalize: () => approvalEnvelopeFinalize,
+  });
   it("supports registering and unregistering lifecycle hooks", async () => {
     const calls: string[] = [];
     const unregister = registerToolLifecycleHook({
@@ -348,29 +453,6 @@ describe("governedExecuteTool — rejection paths", () => {
     expect(auditRows).toHaveLength(0);
   });
 
-  it("rejects on forbidden_grant and audits the failure (executeTool never runs)", async () => {
-    _setGovernanceForTests({
-      resolveAgentGrants: async () => ["registry_read"], // no backlog_write
-      isAllowedByGrants: () => false,
-      executeTool: executeMock,
-      toolExecutionCreate: captureAudit(auditRows),
-    });
-    const result = await governedExecuteTool({
-      toolName: "create_backlog_item",
-      rawParams: { title: "x", type: "product", source: "user-request" },
-      userId: "u",
-      userContext: NORMAL_USER,
-      context: { agentId: "AGT-100" },
-      source: "rest",
-    });
-    expect(result.success).toBe(false);
-    expect(result.error).toBe("forbidden_grant");
-    expect(executeMock).not.toHaveBeenCalled();
-    expect(auditRows).toHaveLength(1);
-    expect(auditRows[0]?.success).toBe(false);
-    expect(auditRows[0]?.toolName).toBe("create_backlog_item");
-  });
-
   it("rejects on forbidden_capability and audits the failure", async () => {
     const lowPrivilege = { platformRole: "viewer", isSuperuser: false };
     const result = await governedExecuteTool({
@@ -542,7 +624,10 @@ describe("governedExecuteTool — coworker read-baseline at execution time", () 
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe("forbidden_grant");
+    expect(result).toMatchObject({
+      error: "authority_denied",
+      governance: { authorityReason: "agent-grant-denied" },
+    });
     expect(executeMock).not.toHaveBeenCalled();
     expect(auditRows[0]?.success).toBe(false);
   });
@@ -566,7 +651,10 @@ describe("governedExecuteTool — coworker read-baseline at execution time", () 
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe("forbidden_grant");
+    expect(result).toMatchObject({
+      error: "authority_denied",
+      governance: { authorityReason: "agent-grant-denied" },
+    });
     expect(executeMock).not.toHaveBeenCalled();
   });
 });
