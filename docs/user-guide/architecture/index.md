@@ -24,3 +24,29 @@ The EA Modeler is a canvas-based tool for building and maintaining your organiza
 - Start from reference models and tailor them to your organization
 - Map value streams to the products and capabilities that support them
 - Use the AI coworker to generate a draft architecture view from a description
+- Select an element to open its **Architecture context**, then follow the shortest
+  available links to the same concern in related ArchiMate, BPMN, or SysML views
+- For projected AI routing elements, open the matching operational evidence and
+  inspect the safe decision inputs, possible outcomes, design version, evidence
+  freshness, and implementation source
+- Use **Refresh live projections** when you are authorized to rebuild governed
+  BPMN, SysML, and ArchiMate views from their canonical sources
+
+## Following a Concern Across Views
+
+Select an element on an architecture canvas and open **Architecture context** in
+the inspector. **Related viewpoints** lists the nearest views that explain the
+same element or a directly linked concern. Each link names the notation, target
+view, and link distance so you can see why it is being suggested.
+
+AI routing elements can also offer **Open operational evidence**. This opens the
+AI Operations Map in Compare mode, focused on the same routing stage. The
+architecture remains the designed projection; the Operations Map supplies the
+observed evidence and calls out gaps rather than treating missing evidence as
+proof that the design ran.
+
+The **Why this decision works this way** section deliberately shows only safe
+metadata. It can include decision inputs such as sensitivity class or provider
+eligibility, possible outcomes, the design version, implementation status, and
+the latest evidence time. It never exposes prompt text or protected payload
+values.
