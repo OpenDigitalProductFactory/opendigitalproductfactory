@@ -106,6 +106,60 @@ Before any PR suite-skipping activates (BI-4527C1DA and dependents):
 
 Until then, exhaustive PR and merge-group execution remains the default.
 
+## UX route-sweep stability
+
+Workflow: `.github/workflows/ux-route-sweep.yml` (`UX Route Budget Sweep`)
+
+The sweep keeps the canonical 308-route inventory and gives every route one
+generated disposition in
+`apps/web/lib/ux-budget/route-shells.generated.json`:
+
+- **201 eligible routes** must each produce exactly one measurement;
+- **81 dynamic routes** remain visible as `dynamic-fixture-required`;
+- **26 contextual routes** carry an explicit customer-session, storefront,
+  setup-phase, fixture-capability, or dynamic-redirect exclusion.
+
+There is no percentage-based capability threshold. A missing, duplicate,
+unexpected, or failed eligible route makes the check red after the remaining
+inventory finishes. The always-uploaded
+`route-sweep-execution.json` records the source SHA, worker count, duration,
+full eligibility accounting, and route outcomes in deterministic inventory
+order. Up to 12 failure screenshots are uploaded only when eligible routes
+fail; the execution record still reports every failure.
+
+Hierarchy capture reads the browser-resolved semantic DOM and projects it
+directly to implicit/explicit role, nesting, heading level, and structural
+control state. Accessible names are never serialised into the comparison: the
+ratchet does not consume them, and doing so made large data-owner routes spend
+tens of seconds producing values that were immediately discarded.
+
+The runner waits for 300 ms of DOM mutation quiet, capped at 5 seconds, before
+capture. This is the deterministic hydration boundary: `networkidle` is not
+valid for a portal with long-lived streams, while measuring immediately after
+`load` races client-populated rows and status labels.
+
+Manual workflow dispatch accepts a bounded worker count of `1`, `2`, or `4`;
+the measured default is **2**. On candidate `37e848084f`, all three settings
+completed 201/201 routes with zero failures: worker 1 took 865,504 ms, worker 2
+took 696,589 ms, and worker 4 took 765,651 ms. Four workers added load without
+improving the critical path because `/admin/reference-data` alone consumed
+roughly 11-13 minutes; that product defect is tracked as `BI-CC7CA516`.
+Each worker owns an authenticated browser context and each route owns a fresh
+page, so route teardown cannot interrupt the next navigation.
+
+The checked-in route-budget ratchet may move from `bootstrapped:false` to
+`bootstrapped:true` only after:
+
+1. two baseline artifacts from consecutive runs on the same SHA are identical;
+2. both runs measure all 201 eligible routes with zero failures;
+3. an enforcing run against the accepted baseline reports zero regressions;
+4. the 1/2/4-worker experiment records completion, variance, failures, and
+   sweep duration.
+
+Functional UX journeys remain separate evidence. This sweep measures structural
+and cognitive-load budgets; it does not prove login, persistence, or workflow
+outcomes.
+
 ## Baseline snapshot
 
 Checked-in seed report (structure only; metrics fill from calibration runs):

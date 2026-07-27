@@ -62,6 +62,61 @@ export const MIGRATED_ROUTES: ReadonlySet<string> = new Set<string>([]);
 export const PRE_MIGRATION_EXEMPT_CHECKS = ["next-action-marker", "lead-band"] as const;
 export type ExemptCheck = (typeof PRE_MIGRATION_EXEMPT_CHECKS)[number];
 
+export const ROUTE_SWEEP_EXCLUSION_REASONS = [
+  "dynamic-fixture-required",
+  "customer-session-required",
+  "storefront-setup-required",
+  "setup-phase-only",
+  "fixture-capability-unavailable",
+  "redirects-to-dynamic-resource",
+] as const;
+export type RouteSweepExclusionReason =
+  (typeof ROUTE_SWEEP_EXCLUSION_REASONS)[number];
+
+/**
+ * Static routes the owner-fixture sweep cannot measure honestly.
+ *
+ * This is policy layered on the canonical route inventory, not a second inventory:
+ * the generated registry below includes every route and records either measurable or
+ * one explicit reason. These 26 routes were confirmed across repeated same-SHA CI
+ * runs. They need a different authenticated/fixture context, intentionally redirect,
+ * or depend on a capability the generic fixture does not provision.
+ *
+ * Keep this list shrink-only where possible. A route becomes eligible in the same PR
+ * that adds its honest fixture context.
+ */
+export const ROUTE_SWEEP_EXCLUSIONS = {
+  "/admin/backups": "fixture-capability-unavailable",
+  "/finance/funds": "fixture-capability-unavailable",
+  "/governance": "fixture-capability-unavailable",
+  "/governance/records-requests": "fixture-capability-unavailable",
+  "/member-equity": "fixture-capability-unavailable",
+  "/rental": "fixture-capability-unavailable",
+  "/service-requests": "fixture-capability-unavailable",
+
+  "/customer-login": "customer-session-required",
+  "/portal": "customer-session-required",
+  "/portal/account": "customer-session-required",
+  "/portal/cases": "customer-session-required",
+  "/portal/health": "customer-session-required",
+  "/portal/orders": "customer-session-required",
+  "/portal/services": "customer-session-required",
+  "/portal/sign-up": "customer-session-required",
+  "/portal/support": "customer-session-required",
+
+  "/storefront/animals": "storefront-setup-required",
+  "/storefront/inbox": "storefront-setup-required",
+  "/storefront/items": "storefront-setup-required",
+  "/storefront/sections": "storefront-setup-required",
+  "/storefront/settings": "storefront-setup-required",
+  "/storefront/tables": "storefront-setup-required",
+  "/storefront/units": "storefront-setup-required",
+
+  "/setup": "setup-phase-only",
+  "/welcome": "setup-phase-only",
+  "/ops/health": "redirects-to-dynamic-resource",
+} as const satisfies Record<string, RouteSweepExclusionReason>;
+
 export type RouteShellPolicy = {
   routePath: string;
   shell: UxShell;
@@ -69,14 +124,23 @@ export type RouteShellPolicy = {
   migrated: boolean;
   /** Checks waived while the route is pre-migration — recorded baseline debt. */
   exemptChecks: readonly ExemptCheck[];
+  /** Whether the generic owner fixture can measure this route honestly. */
+  sweepEligible: boolean;
+  /** Why the route remains in inventory but outside this fixture context. */
+  sweepExclusionReason?: RouteSweepExclusionReason;
 };
 
 export function shellPolicyFor(routePath: string, c: ShellClassifiable): RouteShellPolicy {
   const migrated = MIGRATED_ROUTES.has(routePath);
+  const sweepExclusionReason = routePath.includes("[")
+    ? "dynamic-fixture-required"
+    : ROUTE_SWEEP_EXCLUSIONS[routePath as keyof typeof ROUTE_SWEEP_EXCLUSIONS];
   return {
     routePath,
     shell: shellForRoute(c),
     migrated,
     exemptChecks: migrated ? [] : PRE_MIGRATION_EXEMPT_CHECKS,
+    sweepEligible: sweepExclusionReason === undefined,
+    ...(sweepExclusionReason ? { sweepExclusionReason } : {}),
   };
 }

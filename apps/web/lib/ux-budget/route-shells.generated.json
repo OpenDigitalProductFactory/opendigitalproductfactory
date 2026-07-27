@@ -20,6 +20,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -30,6 +31,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -40,6 +42,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "fixture-capability-unavailable",
       "confidence": "high"
     },
     {
@@ -50,6 +54,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -60,6 +65,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -70,6 +76,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -80,6 +87,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -90,6 +98,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -100,6 +109,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -110,6 +120,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -120,6 +131,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -130,6 +142,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -140,6 +153,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -150,6 +164,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -160,6 +175,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -170,6 +186,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -180,6 +197,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -190,6 +208,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -200,6 +219,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -210,6 +231,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -220,6 +242,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -230,6 +253,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -240,6 +264,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -250,6 +275,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -260,6 +287,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -270,6 +298,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -280,6 +309,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -290,6 +320,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -300,6 +332,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -310,6 +343,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -320,6 +355,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -330,6 +366,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -340,6 +378,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -350,6 +389,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -360,6 +401,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -370,6 +412,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -380,6 +423,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -390,6 +435,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -400,6 +446,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -410,6 +457,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -420,6 +469,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -430,6 +480,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -440,6 +491,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -450,6 +503,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -460,6 +514,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -470,6 +525,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -480,6 +537,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -490,6 +548,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -500,6 +560,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -510,6 +571,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -520,6 +583,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -530,6 +594,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -540,6 +606,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -550,6 +617,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -560,6 +629,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -570,6 +640,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -580,6 +652,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -590,6 +664,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -600,6 +675,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -610,6 +686,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -620,6 +698,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -630,6 +709,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -640,6 +720,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -650,6 +731,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -660,6 +742,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -670,6 +753,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -680,6 +764,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "customer-session-required",
       "confidence": "high"
     },
     {
@@ -690,6 +776,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -700,6 +788,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -710,6 +799,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -720,6 +810,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -730,6 +821,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -740,6 +832,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -750,6 +843,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -760,6 +854,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -770,6 +865,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -780,6 +876,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -790,6 +888,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -800,6 +899,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -810,6 +911,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -820,6 +922,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -830,6 +933,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -840,6 +945,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -850,6 +956,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -860,6 +967,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -870,6 +978,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -880,6 +989,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -890,6 +1001,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -900,6 +1012,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -910,6 +1023,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -920,6 +1035,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -930,6 +1046,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -940,6 +1057,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -950,6 +1068,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -960,6 +1080,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -970,6 +1091,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -980,6 +1102,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -990,6 +1114,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -1000,6 +1126,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -1010,6 +1138,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1020,6 +1149,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1030,6 +1160,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1040,6 +1171,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -1050,6 +1183,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1060,6 +1194,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1070,6 +1205,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1080,6 +1216,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1090,6 +1227,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -1100,6 +1239,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "fixture-capability-unavailable",
       "confidence": "high"
     },
     {
@@ -1110,6 +1251,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1120,6 +1262,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -1130,6 +1274,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1140,6 +1285,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1150,6 +1296,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1160,6 +1307,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1170,6 +1318,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1180,6 +1329,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1190,6 +1340,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -1200,6 +1352,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1210,6 +1363,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1220,6 +1374,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -1230,6 +1386,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1240,6 +1397,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1250,6 +1408,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1260,6 +1419,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1270,6 +1430,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1280,6 +1441,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1290,6 +1452,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1300,6 +1463,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1310,6 +1474,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1320,6 +1485,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1330,6 +1496,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1340,6 +1507,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1350,6 +1518,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1360,6 +1529,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1370,6 +1540,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1380,6 +1551,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1390,6 +1562,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1400,6 +1573,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1410,6 +1584,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1420,6 +1595,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1430,6 +1606,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -1440,6 +1618,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1450,6 +1629,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1460,6 +1640,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "fixture-capability-unavailable",
       "confidence": "high"
     },
     {
@@ -1470,6 +1652,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "fixture-capability-unavailable",
       "confidence": "high"
     },
     {
@@ -1480,6 +1664,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1490,6 +1675,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -1500,6 +1687,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1510,6 +1698,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -1520,6 +1710,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1530,6 +1721,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1540,6 +1732,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "fixture-capability-unavailable",
       "confidence": "high"
     },
     {
@@ -1550,6 +1744,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1560,6 +1755,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1570,6 +1766,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1580,6 +1777,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1590,6 +1788,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "redirects-to-dynamic-resource",
       "confidence": "high"
     },
     {
@@ -1600,6 +1800,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1610,6 +1811,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1620,6 +1822,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1630,6 +1833,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1640,6 +1844,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1650,6 +1855,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -1660,6 +1867,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1670,6 +1878,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -1680,6 +1890,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1690,6 +1901,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1700,6 +1912,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1710,6 +1923,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1720,6 +1934,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1730,6 +1945,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -1740,6 +1957,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1750,6 +1968,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1760,6 +1979,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1770,6 +1990,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1780,6 +2001,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1790,6 +2012,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1800,6 +2023,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1810,6 +2034,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -1820,6 +2046,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1830,6 +2057,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1840,6 +2068,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1850,6 +2079,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1860,6 +2090,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1870,6 +2101,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1880,6 +2112,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1890,6 +2123,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1900,6 +2134,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1910,6 +2145,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1920,6 +2156,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1930,6 +2167,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1940,6 +2178,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1950,6 +2189,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1960,6 +2200,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1970,6 +2211,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1980,6 +2222,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -1990,6 +2233,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2000,6 +2244,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2010,6 +2255,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2020,6 +2267,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2030,6 +2278,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2040,6 +2289,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2050,6 +2300,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2060,6 +2311,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2070,6 +2322,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2080,6 +2333,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2090,6 +2345,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2100,6 +2356,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2110,6 +2367,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2120,6 +2378,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2130,6 +2389,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2140,6 +2400,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2150,6 +2411,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2160,6 +2422,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2170,6 +2433,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2180,6 +2444,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2190,6 +2455,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2200,6 +2466,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2210,6 +2477,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2220,6 +2488,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2230,6 +2499,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2240,6 +2510,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2250,6 +2521,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2260,6 +2532,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2270,6 +2543,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2280,6 +2554,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2290,6 +2565,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2300,6 +2576,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2310,6 +2587,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2320,6 +2598,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2330,6 +2609,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2340,6 +2621,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2350,6 +2632,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "customer-session-required",
       "confidence": "high"
     },
     {
@@ -2360,6 +2644,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "customer-session-required",
       "confidence": "high"
     },
     {
@@ -2370,6 +2656,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "customer-session-required",
       "confidence": "high"
     },
     {
@@ -2380,6 +2668,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2390,6 +2680,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "customer-session-required",
       "confidence": "high"
     },
     {
@@ -2400,6 +2692,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2410,6 +2704,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "customer-session-required",
       "confidence": "high"
     },
     {
@@ -2420,6 +2716,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "customer-session-required",
       "confidence": "high"
     },
     {
@@ -2430,6 +2728,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2440,6 +2739,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "customer-session-required",
       "confidence": "high"
     },
     {
@@ -2450,6 +2751,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "customer-session-required",
       "confidence": "high"
     },
     {
@@ -2460,6 +2763,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2470,6 +2775,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2480,6 +2787,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2490,6 +2799,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2500,6 +2811,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2510,6 +2823,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2520,6 +2835,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2530,6 +2847,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2540,6 +2859,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2550,6 +2871,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2560,6 +2883,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2570,6 +2895,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2580,6 +2907,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2590,6 +2919,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "fixture-capability-unavailable",
       "confidence": "high"
     },
     {
@@ -2600,6 +2931,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2610,6 +2942,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2620,6 +2954,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2630,6 +2966,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2640,6 +2978,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2650,6 +2990,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2660,6 +3002,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2670,6 +3014,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2680,6 +3026,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2690,6 +3038,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2700,6 +3050,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2710,6 +3062,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2720,6 +3074,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2730,6 +3086,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2740,6 +3098,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2750,6 +3110,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2760,6 +3122,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2770,6 +3134,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2780,6 +3146,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2790,6 +3158,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -2800,6 +3170,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2810,6 +3181,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "fixture-capability-unavailable",
       "confidence": "high"
     },
     {
@@ -2820,6 +3193,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "setup-phase-only",
       "confidence": "high"
     },
     {
@@ -2830,6 +3205,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2840,6 +3216,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "storefront-setup-required",
       "confidence": "high"
     },
     {
@@ -2850,6 +3228,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2860,6 +3239,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "storefront-setup-required",
       "confidence": "high"
     },
     {
@@ -2870,6 +3251,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2880,6 +3262,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "storefront-setup-required",
       "confidence": "high"
     },
     {
@@ -2890,6 +3274,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "storefront-setup-required",
       "confidence": "high"
     },
     {
@@ -2900,6 +3286,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "storefront-setup-required",
       "confidence": "high"
     },
     {
@@ -2910,6 +3298,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2920,6 +3309,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2930,6 +3320,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2940,6 +3331,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2950,6 +3342,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "storefront-setup-required",
       "confidence": "high"
     },
     {
@@ -2960,6 +3354,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -2970,6 +3365,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "storefront-setup-required",
       "confidence": "high"
     },
     {
@@ -2980,6 +3377,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "setup-phase-only",
       "confidence": "high"
     },
     {
@@ -2990,6 +3389,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -3000,6 +3401,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -3010,6 +3412,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -3020,6 +3424,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -3030,6 +3436,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -3040,6 +3447,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -3050,6 +3458,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -3060,6 +3470,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -3070,6 +3481,8 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
@@ -3080,6 +3493,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {
@@ -3090,6 +3504,7 @@
         "next-action-marker",
         "lead-band"
       ],
+      "sweepEligible": true,
       "confidence": "high"
     }
   ]
