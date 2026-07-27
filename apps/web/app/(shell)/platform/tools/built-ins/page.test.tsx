@@ -52,7 +52,8 @@ describe("BuiltInToolsPage", () => {
     expect(html).toContain("Brave Search");
     expect(html).toContain("search_public_web");
     expect(html).toContain("platform-keys-panel");
-    expect(html).toContain("Address validation providers");
+    expect(html).toContain("Address validation");
+    expect(html).toContain("Provider choices");
     expect(html).toContain("Smarty");
     expect(html).toContain("Mapbox");
   });

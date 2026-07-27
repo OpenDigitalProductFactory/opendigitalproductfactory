@@ -93,6 +93,13 @@ beforeEach(() => {
     keyData: {
       brave_search_api_key: { configured: true, currentValue: "configured" },
     },
+    addressValidation: {
+      commercialProviderDetected: false,
+      siteLookupReady: false,
+      headline: "No address validation provider is configured.",
+      nextStep: "Choose Smarty or Mapbox.",
+      primaryCountry: null,
+    },
   });
 
   vi.mocked(prisma.taskRequirement.findUnique).mockImplementation((input) => Promise.resolve({

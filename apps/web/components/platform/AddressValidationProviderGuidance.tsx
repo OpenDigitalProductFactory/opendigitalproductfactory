@@ -15,7 +15,8 @@ type Props = {
 
 /**
  * BI-SITE-5E6A18 — compact provider-choice guidance for address validation.
- * Progressive disclosure: status first, then Smarty vs Mapbox choices.
+ * Default viewport: status + next step only. Provider comparison stays collapsed
+ * so the Built-in Tools route does not regress the UX word budget.
  */
 export function AddressValidationProviderGuidance({ status, primaryCountry }: Props) {
   const suggested = suggestProviderForGeography({ primaryCountry });
@@ -24,15 +25,16 @@ export function AddressValidationProviderGuidance({ status, primaryCountry }: Pr
 
   return (
     <section
-      className="space-y-4 rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5"
+      className="space-y-3 rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5"
       aria-labelledby="address-validation-guidance-heading"
+      data-dpf-lead
     >
       <div>
         <h2
           id="address-validation-guidance-heading"
           className="text-dpf-title font-dpf-semibold text-[var(--dpf-text)]"
         >
-          Address validation providers
+          Address validation
         </h2>
         <p className="mt-1 text-dpf-body text-[var(--dpf-muted)]">{status.headline}</p>
         <p className="mt-2 text-dpf-caption text-[var(--dpf-muted)]">
@@ -40,57 +42,60 @@ export function AddressValidationProviderGuidance({ status, primaryCountry }: Pr
         </p>
       </div>
 
-      <p className="text-dpf-caption text-[var(--dpf-text)]">
-        {ADDRESS_VALIDATION_ONE_ACTIVE_POLICY}
+      <p className="text-dpf-caption text-[var(--dpf-muted)]">
+        Suggested: <span className="text-[var(--dpf-text)]">{suggestedName}</span>
+        {primaryCountry ? ` (${primaryCountry})` : ""}. One commercial key at a time.
       </p>
 
-      <p className="text-dpf-caption text-[var(--dpf-muted)]">
-        Suggested for this install: <span className="text-[var(--dpf-text)]">{suggestedName}</span>
-        {primaryCountry ? ` (${primaryCountry})` : ""}.
-      </p>
+      <details className="rounded-dpf-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
+        <summary className="cursor-pointer text-dpf-body font-dpf-medium text-[var(--dpf-text)]">
+          Provider choices
+        </summary>
+        <div className="mt-3 space-y-3">
+          <p className="text-dpf-caption text-[var(--dpf-text)]">
+            {ADDRESS_VALIDATION_ONE_ACTIVE_POLICY}
+          </p>
+          <ul className="space-y-3">
+            {ADDRESS_VALIDATION_PROVIDERS.map((provider) => (
+              <li
+                key={provider.id}
+                className="rounded-dpf-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-dpf-body font-dpf-semibold text-[var(--dpf-text)]">
+                    {provider.name}
+                  </span>
+                  {provider.id === suggested ? (
+                    <span className="rounded-full border border-[var(--dpf-accent)] px-2 py-0.5 text-dpf-caption text-[var(--dpf-accent)]">
+                      Suggested
+                    </span>
+                  ) : null}
+                  <span className="text-dpf-caption text-[var(--dpf-muted)]">
+                    {provider.needsApiKey ? "API key" : "No key"}
+                  </span>
+                </div>
+                <p className="mt-1 text-dpf-caption text-[var(--dpf-muted)]">
+                  Best for: {provider.bestFor}
+                </p>
+                <p className="mt-1 text-dpf-caption text-[var(--dpf-muted)]">{provider.notes}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </details>
 
-      <ul className="space-y-3">
-        {ADDRESS_VALIDATION_PROVIDERS.map((provider) => (
-          <li
-            key={provider.id}
-            className="rounded-dpf-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3"
-          >
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-dpf-body font-dpf-semibold text-[var(--dpf-text)]">
-                {provider.name}
-              </span>
-              {provider.id === suggested ? (
-                <span className="rounded-full border border-[var(--dpf-accent)] px-2 py-0.5 text-dpf-caption text-[var(--dpf-accent)]">
-                  Suggested
-                </span>
-              ) : null}
-              {provider.needsApiKey ? (
-                <span className="text-dpf-caption text-[var(--dpf-muted)]">API key</span>
-              ) : (
-                <span className="text-dpf-caption text-[var(--dpf-muted)]">No key</span>
-              )}
-            </div>
-            <p className="mt-1 text-dpf-caption text-[var(--dpf-muted)]">
-              Best for: {provider.bestFor}
-            </p>
-            <p className="mt-1 text-dpf-caption text-[var(--dpf-muted)]">{provider.notes}</p>
-          </li>
-        ))}
-      </ul>
-
       <p className="text-dpf-caption text-[var(--dpf-muted)]">
-        Full notes:{" "}
+        Docs:{" "}
         <Link
           href="/docs/platform/address-validation-providers"
           className="text-[var(--dpf-accent)] hover:underline"
         >
-          Address validation setup
+          setup guide
         </Link>
-        . Service registry:{" "}
+        {" · "}
         <Link href="/platform/tools/services" className="text-[var(--dpf-accent)] hover:underline">
           MCP Services
         </Link>
-        .
       </p>
     </section>
   );

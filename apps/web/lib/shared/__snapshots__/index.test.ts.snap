@@ -2,6 +2,8 @@
 
 exports[`shared barrel export > exports all public symbols 1`] = `
 [
+  "ADDRESS_VALIDATION_ONE_ACTIVE_POLICY",
+  "ADDRESS_VALIDATION_PROVIDERS",
   "AREA_META",
   "AREA_ORDER",
   "asNumber",
@@ -14,6 +16,7 @@ exports[`shared barrel export > exports all public symbols 1`] = `
   "composeInvoiceEmail",
   "composeSignedConfirmationEmail",
   "deleteAttachmentsForThread",
+  "describeAddressValidationSetup",
   "err",
   "escapeCsvField",
   "extractHeadings",
@@ -44,6 +47,7 @@ exports[`shared barrel export > exports all public symbols 1`] = `
   "safeRenderValue",
   "sendEmail",
   "slugify",
+  "suggestProviderForGeography",
   "toCsv",
   "validateAddress",
 ]
