@@ -23,6 +23,7 @@
 // build with no capsule yet (or missing inputs) is a non-error that returns
 // `{ captured: 0 }` rather than throwing.
 
+import type { Prisma } from "@dpf/db";
 import {
   createBuildPrDeliveryState,
   writeBuildPrDeliveryState,
@@ -40,7 +41,11 @@ export interface CaptureBuildPrDeps {
     }): Promise<Array<{ id: string; workspaceState: unknown; updatedAt: Date }>>;
     updateMany(args: {
       where: { id: string; updatedAt: Date };
-      data: { pullRequestUrl: string; pullRequestNumber: number; workspaceState: Record<string, unknown> };
+      data: {
+        pullRequestUrl: string;
+        pullRequestNumber: number;
+        workspaceState: Prisma.InputJsonValue;
+      };
     }): Promise<{ count: number }>;
   };
 }
@@ -72,7 +77,10 @@ export async function persistBuildPrDeliveryStateForBuild(input: {
       data: {
         pullRequestUrl: input.delivery.prUrl,
         pullRequestNumber: input.delivery.prNumber,
-        workspaceState: writeBuildPrDeliveryState(capsule.workspaceState, input.delivery),
+        workspaceState: writeBuildPrDeliveryState(
+          capsule.workspaceState,
+          input.delivery,
+        ) as unknown as Prisma.InputJsonValue,
       },
     }),
   ));
