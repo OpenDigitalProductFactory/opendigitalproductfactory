@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -162,8 +162,21 @@ test("renewal loss kills the real child process tree before later mutation", asy
   const address = server.address();
 
   try {
-    const code = `const fs=require("node:fs");setTimeout(()=>fs.writeFileSync(${JSON.stringify(lateWrite)},"late"),2000)`;
-    const encoded = Buffer.from(code).toString("base64");
+    // Write a real child script instead of eval(base64) so CodeQL does not
+    // flag improperly sanitized code construction in this contract test.
+    // The child sleeps and would write a file after 2s unless the gate fences
+    // and kills the process tree when renewal fails.
+    const childScript = join(temp, "slow-child.mjs");
+    writeFileSync(
+      childScript,
+      [
+        "import { writeFileSync } from \"node:fs\";",
+        `const target = ${JSON.stringify(lateWrite)};`,
+        "await new Promise((r) => setTimeout(r, 2000));",
+        "writeFileSync(target, \"late\");",
+        "",
+      ].join("\n"),
+    );
     const result = await run(process.execPath, [
       "scripts/gate-worktree.mjs",
       "--branch", "fix/sandbox-lease-fencing",
@@ -176,7 +189,8 @@ test("renewal loss kills the real child process tree before later mutation", asy
       env: {
         ...process.env,
         DPF_MCP_BEARER_TOKEN: "test-token",
-        DPF_LOCAL_CI_COMMAND: `"${process.execPath}" -e "eval(Buffer.from('${encoded}','base64').toString())"`,
+        // Quote-safe: no shell interpolation of untrusted strings into -e eval.
+        DPF_LOCAL_CI_COMMAND: `${JSON.stringify(process.execPath)} ${JSON.stringify(childScript)}`,
         DPF_LOCAL_SANDBOX_FENCE_PATH: isolatedFencePath(),
       },
     });

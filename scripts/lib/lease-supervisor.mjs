@@ -18,7 +18,6 @@ export async function superviseLeaseRun({
   const startedAt = new Date().toISOString();
   let fencedReason = "";
   let heartbeatInFlight = null;
-  let releaseAttempted = false;
 
   onEvent({ type: "started", at: startedAt });
 
@@ -54,12 +53,11 @@ export async function superviseLeaseRun({
     if (fencedReason) return { status: "fenced", reason: fencedReason, result };
     return { status: "completed", result };
   } finally {
+    // finally runs once per superviseLeaseRun call — release is always owned here
+    // (idempotent release is the caller's responsibility if they wrap again).
     cancelSchedule(timer);
     if (heartbeatInFlight) await heartbeatInFlight;
-    if (!releaseAttempted) {
-      releaseAttempted = true;
-      await release();
-      onEvent({ type: "released", at: new Date().toISOString() });
-    }
+    await release();
+    onEvent({ type: "released", at: new Date().toISOString() });
   }
 }
