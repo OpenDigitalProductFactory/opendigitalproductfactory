@@ -225,9 +225,11 @@ describe("attention and URL state", () => {
       needsAttention(
         row({
           availability: {
-            ...base.availability,
             state: "setup-needed",
             label: "Setup needed",
+            reason: base.availability.reason,
+            matchLevel: "leaf",
+            evidence: base.availability.evidence,
           },
         }),
       ),

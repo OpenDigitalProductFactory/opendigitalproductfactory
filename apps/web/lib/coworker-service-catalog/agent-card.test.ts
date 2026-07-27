@@ -25,6 +25,7 @@ function offer(overrides: Partial<CoworkerOfferCatalogItem> = {}): CoworkerOffer
     contractTerms: { posture: "internal" },
     dataBoundary: { sensitivity: "confidential" },
     metadata: { gaid: "gaid:private:legal", aidocRef: "aidoc://legal/private" },
+    portfolio: { slug: "platform", name: "Platform" },
     provider: {
       agentId: "legal-operations-counsel",
       displayName: "Legal Operations Counsel",

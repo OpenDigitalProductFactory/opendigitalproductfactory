@@ -19,9 +19,18 @@ vi.mock("@/lib/actions/proactivity", () => ({
 import { ProactivityRosterList } from "./ProactivityRosterList";
 import type { ProactivityRosterRow } from "@/lib/proactivity/proactivity-roster";
 import { SHELL_TAP_TARGET_CLASS } from "@/lib/shell/shell-action-contract";
+import type { OwnerFacingArea } from "@/lib/coworker-record/owner-areas";
 
-const CUSTOMERS = { key: "products_and_services_sold", label: "Customers and sales", order: 1 };
-const PLATFORM = { key: "foundational", label: "Platform and back office", order: 4 };
+const CUSTOMERS: OwnerFacingArea = {
+  key: "products_and_services_sold",
+  label: "Customers and sales",
+  order: 1,
+};
+const PLATFORM: OwnerFacingArea = {
+  key: "foundational",
+  label: "Platform and back office",
+  order: 4,
+};
 
 const rows: ProactivityRosterRow[] = [
   {

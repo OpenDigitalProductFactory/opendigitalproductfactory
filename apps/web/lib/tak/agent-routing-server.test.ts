@@ -79,7 +79,7 @@ describe("resolveAgentForRouteWithPrompts", () => {
       name: "External Catalog Scout",
       description: "Researches external providers.",
       sensitivity: "internal",
-    });
+    } as never);
     vi.mocked(evaluateLifecycleGate).mockResolvedValue({ allowed: true });
     vi.mocked(ensureAgentPrincipalIdentity).mockResolvedValue(null);
   });
@@ -170,7 +170,7 @@ describe("resolveAgentForRouteWithPrompts", () => {
         name: "External Catalog Scout",
         description: "Researches external providers.",
         sensitivity: "internal",
-      })
+      } as never)
       .mockResolvedValueOnce(null);
 
     const result = await resolveAgentByIdWithPrompts("AGT-WS-SCOUT", {

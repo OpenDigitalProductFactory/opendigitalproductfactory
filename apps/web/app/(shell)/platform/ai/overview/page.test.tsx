@@ -31,6 +31,8 @@ function row(over: Partial<RosterRow> = {}): RosterRow {
     valueStream: "operate",
     lifecycleStage: "production",
     plainJob: "Supports the employee lifecycle.",
+    workSearchText: "Employee lifecycle support",
+    canStartConversation: true,
     area: { key: "for_employees", label: "Your team", order: 2 },
     areas: [{ key: "for_employees", label: "Your team", order: 2 }],
     interaction: { scopes: ["internal-only"], labels: ["Internal only"] },
