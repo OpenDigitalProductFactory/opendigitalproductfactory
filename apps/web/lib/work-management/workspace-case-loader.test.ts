@@ -120,7 +120,7 @@ describe("workspace Work Case loader", () => {
         attentionRequired: true,
       },
     });
-    expect(detail?.room.boundary.gaps).toEqual(expect.arrayContaining([
+    expect(detail?.room?.boundary.gaps).toEqual(expect.arrayContaining([
       "outcome",
       "scope",
       "participants",
@@ -130,7 +130,7 @@ describe("workspace Work Case loader", () => {
       "measures",
       "closure-rule",
     ]));
-    expect(detail?.room.activity).toContainEqual(expect.objectContaining({
+    expect(detail?.room?.activity).toContainEqual(expect.objectContaining({
       eventId: "work-item:WIM-1",
       kind: "message",
       occurredAt: "2026-06-28T10:10:00.000Z",
