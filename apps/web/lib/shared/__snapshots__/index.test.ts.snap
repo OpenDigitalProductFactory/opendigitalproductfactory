@@ -8,6 +8,7 @@ exports[`shared barrel export > exports all public symbols 1`] = `
   "AREA_ORDER",
   "asNumber",
   "asString",
+  "buildDocSearchText",
   "buildDocsIndex",
   "capParsedContentSize",
   "composeApprovalEmail",

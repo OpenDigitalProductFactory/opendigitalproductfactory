@@ -1,6 +1,15 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@dpf/db";
-import { loadDocPage, loadAllDocs, buildDocsIndex, extractHeadings, AREA_META, AREA_ORDER, type DocsIndex } from "@/lib/docs";
+import {
+  loadDocPage,
+  loadAllDocs,
+  buildDocsIndex,
+  buildDocSearchText,
+  extractHeadings,
+  AREA_META,
+  AREA_ORDER,
+  type DocsIndex,
+} from "@/lib/docs";
 import { DocsLayout } from "@/components/docs/DocsLayout";
 import { DocRenderer } from "@/components/docs/DocRenderer";
 import { ContextualQuickHelp } from "@/components/docs/ContextualQuickHelp";
@@ -58,12 +67,14 @@ export default async function DocsPage({ params, searchParams }: Props) {
     sidebarIndex[area] = pages.map((p) => ({ ...p, content: "" }));
   }
 
-  // Search items — truncated content for Fuse.js
+  // Prefer concise operator-readable summaries, while retaining enough cleaned
+  // body text for terms that appear later in a workflow or recovery section.
   const searchItems = allDocs.map((d) => ({
     slug: d.slug,
     title: d.title,
     area: d.area,
-    content: d.content.slice(0, 500),
+    description: d.description,
+    content: buildDocSearchText(d.content),
   }));
 
   // Arrived contextually from a specific page — demote the catalog so the
