@@ -80,11 +80,28 @@ const mockContext: DispatchContext = {
   agentMessageId: "msg-1",
 };
 
+const allowScreenReceipt: NonNullable<TaskRouteDecision["inferenceDataScreenReceipt"]> = {
+  schemaVersion: "inference-data-screen/v1",
+  screenId: "screen_allow",
+  decisionIds: ["decision-allow"],
+  inputHash: "hash-allow",
+  classifiedDataClasses: ["employee-records"],
+  policyEffect: "allow",
+  routeEffect: "allow",
+  destinationClass: "external-service",
+  transformation: "none",
+  explanationCodes: ["dispatch-allowed"],
+  obligationKinds: [],
+  rawPayloadStored: false,
+};
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe("callWithFallbackChain", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCallProvider.mockReset();
+    mockLogTokenUsage.mockReset().mockResolvedValue(undefined);
     mockPrisma.routeDecisionLog.create.mockResolvedValue({ id: "log-1" });
   });
 
@@ -114,6 +131,55 @@ describe("callWithFallbackChain", () => {
       agentId: "test-agent",
     }));
     expect(mockObserve).not.toHaveBeenCalled();
+  });
+
+  it("requires a data-screen receipt before governed legacy dispatch", async () => {
+    await expect(
+      callWithFallbackChain(
+        { ...mockDecision, policyRulesApplied: ["inference-dispatch"] },
+        mockPayload,
+        mockContext,
+      ),
+    ).rejects.toThrow("missing inference data screen receipt");
+
+    expect(mockCallProvider).not.toHaveBeenCalled();
+    expect(mockPrisma.routeDecisionLog.create).not.toHaveBeenCalled();
+  });
+
+  it("does not dispatch an excluded governed fallback candidate", async () => {
+    mockCallProvider.mockRejectedValueOnce(new Error("primary unavailable"));
+
+    await expect(
+      callWithFallbackChain(
+        {
+          ...mockDecision,
+          policyRulesApplied: ["inference-dispatch"],
+          inferenceDataScreenReceipt: allowScreenReceipt,
+          fallbackChain: ["ep-2"],
+          candidates: [
+            makeCandidate({ endpointId: "ep-1", providerId: "provider-1", modelId: "model-a" }),
+            makeCandidate({
+              endpointId: "ep-2",
+              providerId: "provider-2",
+              modelId: "model-b",
+              excluded: true,
+              excludedReason: "sensitivityClearance excludes restricted data",
+            }),
+          ],
+        },
+        mockPayload,
+        mockContext,
+      ),
+    ).rejects.toThrow(NoEndpointAvailableError);
+
+    expect(mockCallProvider).toHaveBeenCalledTimes(1);
+    expect(mockCallProvider).toHaveBeenCalledWith(
+      "provider-1",
+      "model-a",
+      mockPayload.messages,
+      mockPayload.systemPrompt,
+      undefined,
+    );
   });
 
   it("persists a supplied provider suitability receipt without request content", async () => {
@@ -146,6 +212,21 @@ describe("callWithFallbackChain", () => {
     const persisted = mockPrisma.routeDecisionLog.create.mock.calls[0][0].data;
     expect(persisted.suitabilityReceipt).toEqual(suitabilityReceipt);
     expect(JSON.stringify(persisted.suitabilityReceipt)).not.toContain("Hello");
+  });
+
+  it("persists a supplied inference data screen receipt without request content", async () => {
+    mockCallProvider.mockResolvedValueOnce({
+      content: "success",
+      inputTokens: 10,
+      outputTokens: 20,
+      inferenceMs: 500,
+    });
+
+    await callWithFallbackChain({ ...mockDecision, inferenceDataScreenReceipt: allowScreenReceipt }, mockPayload, mockContext);
+
+    const persisted = mockPrisma.routeDecisionLog.create.mock.calls[0][0].data;
+    expect(persisted.inferenceDataScreenReceipt).toEqual(allowScreenReceipt);
+    expect(JSON.stringify(persisted.inferenceDataScreenReceipt)).not.toContain("Hello");
   });
 
   it("logs token usage with correct shape after success", async () => {

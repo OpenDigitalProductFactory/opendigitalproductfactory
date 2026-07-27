@@ -132,4 +132,6 @@ export interface TaskRouteDecision {
   timestamp: Date;
   /** Policy-safe provider suitability audit receipt; never contains request content or raw account ids. */
   providerSuitabilityReceipt?: import("./provider-suitability/evidence").ProviderSuitabilityRouteReceipt;
+  /** Policy-safe inference data screen receipt; never contains prompts, tool payloads, or detected values. */
+  inferenceDataScreenReceipt?: import("@/lib/inference/data-screening/types").InferenceDataScreenReceipt;
 }

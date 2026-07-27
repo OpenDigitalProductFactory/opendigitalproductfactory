@@ -35,7 +35,7 @@ describe("screenInferencePayload", () => {
     expect(result.routeContext).toMatchObject({
       sensitivity: "restricted",
       residencyPolicy: "local_only",
-      allowedProviders: ["local", "openai"],
+      allowedProviders: ["local"],
     });
     expect(result.receipt).toMatchObject({
       schemaVersion: "inference-data-screen/v1",

@@ -5,6 +5,7 @@ import type {
 } from "@/lib/govern/data/taxonomy";
 import type { RequestContract } from "@/lib/routing/request-contract";
 import type { ActivityContract } from "@/lib/routing/activity-contract";
+import { isLocalProviderId } from "@/lib/routing/provider-locality";
 import { classifyInferencePayload } from "./classify-payload";
 import { evaluateInferenceDispatchPolicy } from "./evaluate-inference-policy";
 import type {
@@ -70,13 +71,17 @@ export function screenInferencePayload(
   const residencyPolicy = routeEffect === "local-only"
     ? stricterResidency(input.routeContext?.residencyPolicy, "local_only")
     : input.routeContext?.residencyPolicy;
+  const allowedProviders = input.routeContext?.allowedProviders === undefined
+    ? undefined
+    : localOnlyAllowedProviders(
+        normalizeProviderIds(input.routeContext.allowedProviders),
+        routeEffect,
+      );
 
   return {
     routeContext: {
       sensitivity,
-      ...(input.routeContext?.allowedProviders !== undefined
-        ? { allowedProviders: normalizeProviderIds(input.routeContext.allowedProviders) }
-        : {}),
+      ...(allowedProviders !== undefined ? { allowedProviders } : {}),
       ...(input.routeContext?.deniedProviders !== undefined
         ? { deniedProviders: normalizeProviderIds(input.routeContext.deniedProviders) }
         : {}),
@@ -126,6 +131,15 @@ function stricterResidency(
 
 function normalizeProviderIds(providerIds: readonly string[]): string[] {
   return [...new Set(providerIds.map((providerId) => providerId.trim()).filter(Boolean))].sort();
+}
+
+function localOnlyAllowedProviders(
+  providerIds: string[],
+  routeEffect: InferenceDataScreenResult["receipt"]["routeEffect"],
+): string[] {
+  return routeEffect === "local-only"
+    ? providerIds.filter(isLocalProviderId)
+    : providerIds;
 }
 
 function hintsFromActivity(activity: ActivityContract | undefined): GovernedPayloadHint[] {

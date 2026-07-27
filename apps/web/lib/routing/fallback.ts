@@ -25,6 +25,11 @@ import {
   shouldDegradeModelForInterfaceDrift,
   shouldReconcileProviderAfterError,
 } from "@/lib/inference/provider-reconciliation";
+import {
+  assertInferenceDispatchScreen,
+  isEligibleForScreenedDispatch,
+  requiresInferenceDispatchScreen,
+} from "./inference-dispatch-guard";
 
 type RouteOutcomeAttribution = {
   /** Request-scoped correlation shared by decision, attempts, outcomes, and usage. */
@@ -185,23 +190,36 @@ export async function callWithFallbackChain(
       `No endpoint available for ${decision.taskType}: ${decision.reason}`,
     );
   }
+  assertInferenceDispatchScreen(decision);
+  const requireScreenedCandidates = requiresInferenceDispatchScreen(decision);
 
   // Build chain from RouteDecision — resolve actual providerId from candidate traces
   const resolveEntry = (endpointId: string) => {
-    const candidate = decision.candidates.find(c => c.endpointId === endpointId && !c.excluded);
+    const candidate = decision.candidates.find(c => c.endpointId === endpointId);
+    if (requireScreenedCandidates && !isEligibleForScreenedDispatch(decision, candidate)) {
+      return null;
+    }
+    const eligibleCandidate = candidate && !candidate.excluded ? candidate : undefined;
     return {
       endpointId,
-      providerId: candidate?.providerId ?? endpointId,
-      modelId: candidate?.modelId ?? "",
+      providerId: eligibleCandidate?.providerId ?? endpointId,
+      modelId: eligibleCandidate?.modelId ?? "",
     };
   };
 
   const selectedEntry = resolveEntry(decision.selectedEndpoint!);
+  if (!selectedEntry) {
+    throw new Error(
+      `No eligible screened endpoint available for ${decision.taskType}: ${decision.reason}`,
+    );
+  }
   // Override modelId with the authoritative value from the decision
   selectedEntry.modelId = decision.selectedModelId!;
 
   // Get fallback entries from the candidates in the decision trace
-  const fallbackEntries = decision.fallbackChain.map(epId => resolveEntry(epId));
+  const fallbackEntries = decision.fallbackChain
+    .map(epId => resolveEntry(epId))
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
 
   const allEntries = [selectedEntry, ...fallbackEntries];
 

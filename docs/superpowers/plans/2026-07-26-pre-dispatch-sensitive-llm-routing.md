@@ -23,7 +23,8 @@
   - `routing-binding` -> `BI-3D210AF8`, depends on `inference-pep` and `mask-before-dispatch`
   - `response-rehydration-authz` -> `BI-749EB750`, depends on `inference-pep` and `mask-before-dispatch`
   - `employee-surface-authorization` -> `BI-62BFAA95`, depends on `inference-pep` and `mask-before-dispatch`
-  - `provider-onboarding-ux` -> `BI-F6018DB3`, depends on `classifier-contract` and `inference-pep`
+  - `vertical-policy-packs` -> `BI-F6018DB3`, depends on `classifier-contract` and `inference-pep`
+  - `provider-onboarding-ux` -> `BI-ECBD6924`, depends on `classifier-contract` and `inference-pep`
 - Receipt: `cms1za88b03pu01lheg0rg3ii`
 
 ## Grounding
@@ -224,10 +225,10 @@ git diff --check
 - [x] Add an inference dispatch PEP capability matrix that can enforce `mask`, `destination`, `log-use`, and `human-approval` only when a human-in-loop surface exists.
 - [x] Evaluate screened prompt/tool payloads as `DataAction="export"` and `DestinationClass="external-service"` for cloud/router/subscription endpoints; local in-process endpoints stay `in-process`.
 - [x] Fail closed when classification, purpose, authority, or provider destination is unknown for high-risk work.
-- [ ] Persist only decision IDs, hashes, versions, explanation codes, and obligations.
+- [x] Persist only decision IDs, hashes, versions, explanation codes, and obligations.
 - [ ] Add TOCTOU freshness checks before dispatch and before response rehydration.
 
-**Slice 2 progress:** `evaluateInferenceDispatchPolicy` now provides the pure inference PEP adapter over the existing PDP. It treats no-detected-governed-data payloads as eligible for normal routing, evaluates governed/sensitive external dispatch as `export` to `external-service`, denies restricted or unknown-governed external payloads by default, and refuses policies whose obligations exceed the `inference-dispatch` PEP matrix. Dispatch integration, durable evidence persistence, and TOCTOU revalidation remain next.
+**Slice 2 progress:** `evaluateInferenceDispatchPolicy` now provides the pure inference PEP adapter over the existing PDP. It treats no-detected-governed-data payloads as eligible for normal routing, evaluates governed/sensitive external dispatch as `export` to `external-service`, denies restricted or unknown-governed external payloads by default, and refuses policies whose obligations exceed the `inference-dispatch` PEP matrix. RouteDecisionLog now persists the safe `inference-data-screen/v1` receipt beside the existing provider-suitability receipt, storing only receipt ids, hashes, classes, effects, explanation codes, obligations, destination, transformation status, and `rawPayloadStored=false`. TOCTOU revalidation remains next.
 
 **Verification:**
 
@@ -273,13 +274,15 @@ git diff --check
 - Modify: `apps/web/lib/routing/pipeline-v2.provider-policy.test.ts`
 
 - [x] Run the screen before `inferContract()` so sensitivity, allowed/denied providers, and residency are compiled into the route preview and live route.
-- [ ] Re-run or validate the screen immediately before provider dispatch so direct fallback execution cannot bypass the PEP.
-- [ ] Intersect allowed providers and union denied providers with any provider suitability policy already compiled from the activity contract.
+- [x] Re-run or validate the screen immediately before provider dispatch so direct fallback execution cannot bypass the PEP.
+- [x] Intersect allowed providers and union denied providers with any provider suitability policy already compiled from the activity contract.
 - [x] Prove `routeEndpointV2` excludes public/non-enterprise providers when the transformed payload still carries restricted data.
-- [ ] Prove fallback never sends a transformed payload to a provider that was not eligible for the original decision.
-- [ ] Surface blocked routing as a short, actionable explanation: what class of data blocked the route, what safer route is needed, and whether masking is possible.
+- [x] Prove fallback never sends a transformed payload to a provider that was not eligible for the original decision.
+- [x] Surface blocked routing as a short, actionable explanation: what class of data blocked the route, what safer route is needed, and whether masking is possible.
 
 **Slice 3 progress:** `screenInferencePayload` now builds a privacy-safe `inference-data-screen/v1` receipt from the classifier/PDP result and narrows preview/live `RequestContract` inputs before `inferContract()`. When external dispatch is denied or needs review and masking/tokenization is not yet available, the screen escalates sensitivity and applies `residencyPolicy="local_only"` so `routeEndpointV2` owns provider exclusion and fallback inherits the eligible candidate set. The receipt is attached to the in-memory `RouteDecision` and contains only hashes, classes, decision IDs, effect codes, obligation kinds, destination class, and transformation status. Remaining work: durable receipt persistence, final pre-dispatch TOCTOU validation, mask/token transform, direct fallback/legacy dispatcher receipt enforcement, and blocked-route UX copy.
+
+**Slice 4 progress:** `fallback.ts` and the legacy `task-dispatcher.ts` now require an `inference-data-screen/v1` receipt for governed/sensitive dispatch and refuse to walk excluded fallback candidates when the screen applies. The route reroute path that strips unsupported tools preserves the original screen receipt before dispatch. Local-only screen results tighten existing provider allowlists to locally routable provider ids before provider-suitability policy is applied, so allowlists intersect, denials union, and residency cannot loosen across the combined screen/suitability contract. Screen-blocked no-endpoint failures now produce a concise explanation from the safe receipt only: blocked data class, safer route, masking/tokenization status, and router detail without raw payload values. This closes the direct fallback bypass while keeping raw prompts, tool payloads, and detected values out of receipts. Remaining work: full hash/freshness TOCTOU validation and mask/token transform.
 
 **Verification:**
 
@@ -311,12 +314,32 @@ pnpm --filter web exec vitest run lib/actions/agent-coworker.test.ts lib/tak/pro
 git diff --check
 ```
 
-### Chunk 6: BI-F6018DB3 - Setup, Onboarding, And Public Explanation
+### Chunk 6A: BI-F6018DB3 - Vertical Sensitive-Data Policy Packs
+
+**Files:**
+
+- Create/modify: vertical data-governance policy-pack modules identified by `BI-F6018DB3`
+- Create/modify: executable allow, deny, review, and masking test vectors for each supported vertical
+- Modify: policy-pack registry and governed setup documentation
+
+- [ ] Encode healthcare, legal, financial-services, public-sector, and other regulated boundaries as versioned policy packs over the shared classifier/PDP/PEP substrate.
+- [ ] Keep vertical vocabulary and obligations out of provider adapters and routing UI components.
+- [ ] Cover allow, deny, review, unknown-context, precedence, and exception-expiry behavior for every pack.
+- [ ] Document the evidence required before an external provider can satisfy each regulated boundary.
+
+**Verification:**
+
+```powershell
+pnpm --filter web exec vitest run <affected-policy-pack-tests>
+git diff --check
+```
+
+### Chunk 6B: BI-ECBD6924 - Setup, Onboarding, And Public Explanation
 
 **Files:**
 
 - Modify: `apps/web/app/admin/ai/providers/page.tsx` or successor provider setup route
-- Modify: provider setup components identified by `BI-F6018DB3`
+- Modify: provider setup components identified by `BI-ECBD6924`
 - Modify: `docs/user-guide/ai-workforce/model-routing-lifecycle.md`
 - Modify: public/onboarding copy for the platform approach, if this plan touches those routes
 
