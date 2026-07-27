@@ -115,6 +115,20 @@ jobs:
       - name: Mark platform setup complete for the fixture org
         run: pnpm --filter web ux:sweep-fixture
 
+      # Work Control inventories the host clone's worktrees. GitHub checks out a
+      # named branch for workflow_dispatch but a detached ref for pull_request,
+      # so scanning the ambient checkout made /build/work change structure for
+      # identical source. Give both triggers the same one-branch fixture repo.
+      - name: Create deterministic Work Control repository fixture
+        run: |
+          fixture_root="$RUNNER_TEMP/dpf-ux-sweep-work-control"
+          rm -rf "$fixture_root"
+          git init --initial-branch=ux-sweep-fixture "$fixture_root"
+          git -C "$fixture_root" config user.name "DPF UX Sweep"
+          git -C "$fixture_root" config user.email "ux-sweep@opendigitalproductfactory.com"
+          git -C "$fixture_root" commit --allow-empty -m "fixture"
+          echo "DPF_WORK_CONTROL_REPO_ROOT=$fixture_root" >> "$GITHUB_ENV"
+
       - name: Build the portal
         run: pnpm --filter web build
 

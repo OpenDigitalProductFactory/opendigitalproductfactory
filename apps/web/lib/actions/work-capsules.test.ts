@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   mockAuth,
@@ -38,9 +38,14 @@ vi.mock("@/lib/work-capsules/work-capsule-store", () => ({
   planCapsuleWorkspace: mockPlanCapsuleWorkspace,
 }));
 
+afterEach(() => {
+  delete process.env.DPF_WORK_CONTROL_REPO_ROOT;
+});
+
 describe("getWorkControlData", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.DPF_WORK_CONTROL_REPO_ROOT;
     mockAuth.mockResolvedValue({
       user: { id: "user-1", platformRole: "HR-100", isSuperuser: true },
     });
@@ -134,6 +139,17 @@ describe("getWorkControlData", () => {
       expect.objectContaining({ path: "D:/DPF-feature", branch: "feat/real-work" }),
     ]);
     expect(mockGetWorktreeDirtySummary).not.toHaveBeenCalledWith("D:/DPF");
+  });
+
+  it("uses the route-sweep work-control fixture instead of the ambient checkout", async () => {
+    process.env.DPF_WORK_CONTROL_REPO_ROOT = "D:/ux-sweep-fixture";
+
+    const { getWorkControlData } = await import("./work-capsules");
+    await getWorkControlData();
+
+    expect(mockScanGitWorktrees).toHaveBeenCalledWith(
+      expect.stringMatching(/[\\/]ux-sweep-fixture$/),
+    );
   });
 });
 

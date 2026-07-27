@@ -141,6 +141,13 @@ measuring immediately after `load` races client-populated rows and status labels
 The marker is an explicit component-owned readiness contract, not a route-name
 exception in the test harness.
 
+The sweep also supplies `/build/work` with a deterministic one-branch Git
+repository through `DPF_WORK_CONTROL_REPO_ROOT`. GitHub's named
+`workflow_dispatch` checkout and detached `pull_request` checkout otherwise
+produce different "Adoptable work" structures for identical source. Production
+continues to resolve the real host clone from `DPF_REPO_ROOT`; the narrow
+override exists only for the route-sweep fixture.
+
 Manual workflow dispatch accepts a bounded worker count of `1`, `2`, or `4`;
 the measured default is **2**. On candidate `37e848084f`, all three settings
 completed 201/201 routes with zero failures: worker 1 took 865,504 ms, worker 2
