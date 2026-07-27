@@ -29,4 +29,9 @@ test("Contributor preview waits for a pgvector-capable database", async () => {
     /dev-postgres:\n        condition: service_healthy/,
     "dev-init must not run migrations until extension-aware readiness passes",
   );
+  assert.match(
+    init,
+    /dev-preview-migrate-deploy/,
+    "dev-init must use the disposable migrate converge wrapper (BI-4DB4B415)",
+  );
 });
