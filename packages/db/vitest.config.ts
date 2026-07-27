@@ -21,5 +21,21 @@ export default defineConfig({
       "src/**/*.test.ts",
       "scripts/**/*.test.ts",
     ],
+    // BI-2F60FDCE — explicit includes keep unimported owned source visible in
+    // Vitest 4 reports.
+    coverage: {
+      provider: "v8",
+      include: ["src/**/*.ts"],
+      exclude: [
+        "**/*.{test,spec}.ts",
+        "**/__tests__/**",
+        "**/*.d.ts",
+        "**/generated/**",
+        "**/node_modules/**",
+      ],
+      reporter: ["text-summary", "json-summary", "json"],
+      reportsDirectory: process.env.CI_COVERAGE_DIR ?? "./coverage",
+      reportOnFailure: true,
+    },
   },
 });

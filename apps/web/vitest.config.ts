@@ -73,6 +73,32 @@ export default defineConfig({
         inline: ["next-auth"],
       },
     },
+    // BI-2F60FDCE — observation-mode V8 coverage (non-blocking thresholds).
+    // Explicit includes keep unimported owned production files visible in
+    // Vitest 4 reports so unloaded inventory remains measurable.
+    coverage: {
+      provider: "v8",
+      include: [
+        "app/**/*.{ts,tsx}",
+        "components/**/*.{ts,tsx}",
+        "lib/**/*.{ts,tsx}",
+        "proxy.ts",
+        "instrumentation.ts",
+      ],
+      exclude: [
+        "**/*.{test,spec}.{ts,tsx}",
+        "**/__tests__/**",
+        "**/*.d.ts",
+        "**/generated/**",
+        "**/.next/**",
+        "**/node_modules/**",
+      ],
+      reporter: ["text-summary", "json-summary", "json"],
+      reportsDirectory: process.env.CI_COVERAGE_DIR ?? "./coverage",
+      // Keep coverage output even when the suite fails so calibration can
+      // still measure incomplete runs.
+      reportOnFailure: true,
+    },
   },
   resolve: {
     dedupe: ["react", "react-dom"],

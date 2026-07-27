@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "note": "Seed baseline for BI-2F60FDCE. Metrics are intentionally empty until calibration runs publish measured values. Do not invent coverage percentages.",
+  "identity": {
+    "repository": "OpenDigitalProductFactory/opendigitalproductfactory",
+    "treeSha": "0000000000000000000000000000000000000000",
+    "eventName": "baseline-seed",
+    "runId": "seed",
+    "runAttempt": 1
+  },
+  "createdAt": "2026-07-27T00:00:00.000Z",
+  "coverage": [],
+  "timings": [],
+  "shadowSelection": null,
+  "flakeHistory": {
+    "suspectedFlakes": [],
+    "insufficientHistory": []
+  },
+  "cacheEconomics": [],
+  "targets": {
+    "prFeedbackP90Minutes": 5,
+    "mergeGroupP90Minutes": 8,
+    "runnerMinuteReductionPct": 40,
+    "selectionFailureRecallPct": 100
+  },
+  "baselineReference": {
+    "measuredAt": "2026-07-26",
+    "representativePrRunnerMinutes": 65.7,
+    "source": "docs/superpowers/specs/2026-07-26-ci-evidence-efficiency-design.md"
+  }
+}

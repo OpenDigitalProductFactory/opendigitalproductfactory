@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 559,
+  "pageCount": 560,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -7172,6 +7172,22 @@
         "9-cross-cutting-test-matrix",
         "10-post-audit-actions",
         "appendix-a-full-open-epic-list-2026-06-10-snapshot"
+      ]
+    },
+    "docs/testing/ci-evidence.md": {
+      "publicHref": "/testing/ci-evidence/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "ci-evidence-efficiency-observation-phase",
+        "what-this-phase-does",
+        "local-library-and-cli",
+        "coverage-commands-observation",
+        "standards-grounding",
+        "scheduled-calibration",
+        "activation-gate-later-waves",
+        "baseline-snapshot"
       ]
     },
     "docs/testing/findings/run-0-findings.md": {
