@@ -110,11 +110,12 @@ jobs:
       - name: Download prior observation
         env:
           GH_TOKEN: ${{ github.token }}
+          CURRENT_REF: ${{ github.ref_name }}
         run: |
           mkdir -p artifacts/prior
           prior_run=$(gh run list \
             --workflow ci-calibration.yml \
-            --branch "${{ github.ref_name }}" \
+            --branch "$CURRENT_REF" \
             --status success \
             --limit 1 \
             --json databaseId \
@@ -171,6 +172,8 @@ jobs:
 
       - name: Classify changed files for shadow selection
         id: shadow-plan
+        env:
+          CURRENT_SHA: ${{ github.sha }}
         run: |
           prior=artifacts/prior/ci-observation.json
           base_sha=""
@@ -185,7 +188,7 @@ jobs:
           escalated=true
           if [[ "$base_sha" =~ ^[0-9a-f]{40}$ ]] \
             && git cat-file -e "$base_sha^{commit}"; then
-            git diff --name-only "$base_sha" "${{ github.sha }}" \
+            git diff --name-only "$base_sha" "$CURRENT_SHA" \
               > artifacts/ci-observation/changed-files.txt
             while IFS= read -r path; do
               if [[ ! "$path" =~ ^apps/web/(app|components|lib)/.*\.(ts|tsx)$ ]] \
@@ -295,6 +298,11 @@ jobs:
 
       - name: Assemble CI observation
         env:
+          OBS_REPOSITORY: ${{ github.repository }}
+          OBS_TREE_SHA: ${{ github.sha }}
+          OBS_EVENT_NAME: ${{ github.event_name }}
+          OBS_RUN_ID: ${{ github.run_id }}
+          OBS_RUN_ATTEMPT: ${{ github.run_attempt }}
           PNPM_CACHE_HIT: ${{ steps.pnpm-cache-restore.outputs.cache-hit }}
           PNPM_RESTORE_MS: ${{ steps.pnpm-restore-measure.outputs.pnpmRestoreMs }}
           PNPM_SAVE_MS: ${{ steps.pnpm-save-measure.outputs.pnpmSaveMs }}
@@ -355,11 +363,11 @@ jobs:
           );
           NODE
           args=(
-            --repository "${{ github.repository }}"
-            --tree-sha "${{ github.sha }}"
-            --event "${{ github.event_name }}"
-            --run-id "${{ github.run_id }}"
-            --run-attempt "${{ github.run_attempt }}"
+            --repository "$OBS_REPOSITORY"
+            --tree-sha "$OBS_TREE_SHA"
+            --event "$OBS_EVENT_NAME"
+            --run-id "$OBS_RUN_ID"
+            --run-attempt "$OBS_RUN_ATTEMPT"
             --coverage web=artifacts/ci-observation/web/coverage/coverage-summary.json
             --coverage @dpf/db=artifacts/ci-observation/db/coverage/coverage-summary.json
             --vitest web=artifacts/ci-observation/web/vitest.json

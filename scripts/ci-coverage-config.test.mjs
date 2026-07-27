@@ -61,6 +61,10 @@ test("calibration workflow is scheduled, manual, observable, and non-blocking to
   assert.match(calibrationWorkflow, /--reporter=json/);
   assert.match(calibrationWorkflow, /--previous-observation/);
   assert.match(calibrationWorkflow, /path:\s*artifacts\/ci-observation/);
+  assert.doesNotMatch(
+    calibrationWorkflow,
+    /"\$\{\{\s*github\.(?:ref_name|sha|repository|event_name|run_id|run_attempt)\s*\}\}"/,
+  );
 });
 
 test("calibration measures both pnpm and exact-key Turbopack cache economics", () => {
