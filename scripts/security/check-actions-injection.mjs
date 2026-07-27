@@ -29,7 +29,7 @@
  *
  * Why this auditor exists alongside CodeQL
  * ----------------------------------------
- * CodeQL Advanced already detects this (`actions/code-injection/*`).
+ * CodeQL already detects this (default-setup `actions/code-injection/*`).
  * This auditor adds:
  *   - Speed:        runs in seconds on PR open, doesn't wait for CodeQL.
  *   - Independence: catches the pattern even if CodeQL is misconfigured

@@ -10,8 +10,7 @@ name: Security Inflow Gate
 # currently empty) are accepted findings — false positives with documented
 # dismissals or tracked debt — and don't block unrelated PRs.
 #
-# Trigger: workflow_run after the authoritative "CodeQL Advanced" workflow
-# completes.
+# Trigger: workflow_run after the default-setup "CodeQL" workflow completes.
 # Reason: we need CodeQL to have analyzed the PR's head SHA before we can
 # diff its alerts. Running directly on `pull_request` would race against
 # CodeQL and see stale alerts (effectively giving every PR a pass).
@@ -35,7 +34,7 @@ name: Security Inflow Gate
 
 on:
   workflow_run:
-    workflows: ["CodeQL Advanced"]
+    workflows: ["CodeQL"]
     types: [completed]
   workflow_dispatch:
 
