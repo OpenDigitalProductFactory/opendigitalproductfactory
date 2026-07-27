@@ -82,6 +82,11 @@ DPF checks those references before returning the specialist's answer. A material
 
 Local processing reduces external egress but is not automatically compliant. Security, retention, lawful basis, access control, capability, and sector obligations still apply.
 
+See [Sensitive-Data Policy Packs](./sensitive-data-policy-packs.md) for the
+technical boundaries DPF applies to clinical, financial, legal,
+criminal-justice, safety, youth, employee, source-code, credential, customer,
+and unknown governed data before provider selection.
+
 ### OpenRouter and other router accounts
 
 A router connection is two trust decisions: the OpenRouter account and the underlying provider that actually handles the request. For public work, DPF may use normal price or latency routing. For private or regulated work, DPF requires an explicit underlying-provider allowlist, disables unbounded fallback, requests parameter-compatible endpoints, enables Zero Data Retention, denies provider data collection, and requires returned router metadata before releasing the answer.

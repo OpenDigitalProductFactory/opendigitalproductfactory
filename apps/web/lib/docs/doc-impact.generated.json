@@ -288,11 +288,20 @@
     "apps/web/lib/attention/owner-projection.ts": [
       "docs/user-guide/workspace/attention-inbox.md"
     ],
+    "apps/web/lib/inference/data-screening/evaluate-inference-policy.ts": [
+      "docs/user-guide/ai-workforce/sensitive-data-policy-packs.md"
+    ],
+    "apps/web/lib/inference/data-screening/vertical-policy-packs.ts": [
+      "docs/user-guide/ai-workforce/sensitive-data-policy-packs.md"
+    ],
     "apps/web/lib/integrate/build-orchestrator.ts": [
       "docs/user-guide/build-studio/index.md"
     ],
     "apps/web/lib/proactivity/proactivity-roster.ts": [
       "docs/user-guide/ai-workforce/coworker-proactivity.md"
+    ],
+    "apps/web/lib/routing/provider-suitability/workload-profile.ts": [
+      "docs/user-guide/ai-workforce/sensitive-data-policy-packs.md"
     ],
     "scripts/dpf-bootstrap-agent-toolchain.ps1": [
       "docs/user-guide/contributing/agent-dev-environments.md"
@@ -494,6 +503,11 @@
       "apps/web/app/(shell)/coworker-decisions/proactivity/page.tsx",
       "apps/web/components/proactivity/ProactivityRosterList.tsx",
       "apps/web/lib/proactivity/proactivity-roster.ts"
+    ],
+    "docs/user-guide/ai-workforce/sensitive-data-policy-packs.md": [
+      "apps/web/lib/inference/data-screening/evaluate-inference-policy.ts",
+      "apps/web/lib/inference/data-screening/vertical-policy-packs.ts",
+      "apps/web/lib/routing/provider-suitability/workload-profile.ts"
     ],
     "docs/user-guide/build-studio/index.md": [
       "apps/web/lib/integrate/build-orchestrator.ts"

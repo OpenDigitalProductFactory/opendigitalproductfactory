@@ -110,4 +110,73 @@ describe("screenInferencePayload", () => {
     expect(result.receipt.classifiedDataClasses).toContain("unknown-governed-data");
     expect(JSON.stringify(result.receipt)).not.toContain("selected records");
   });
+
+  it("tightens a protected customer projection to approved cloud and records its pack", () => {
+    const result = screenInferencePayload({
+      messages: [{ role: "user", content: "Summarize customer jane@example.test." }],
+      systemPrompt: "",
+      taskType: "summarization",
+      routeContext: {
+        sensitivity: "internal",
+        residencyPolicy: "any_enabled",
+      },
+      appliedTransformation: {
+        transformation: "tokenized",
+        decisionIds: ["ddp_transform"],
+        decisionVersions: [{
+          decisionId: "ddp_transform",
+          assetVersion: "asset-1",
+          classificationVersion: "class-1",
+          authorityVersion: "authority-1",
+        }],
+        classifiedDataClasses: ["customer-records"],
+        explanationCodes: ["protected-projection"],
+        obligationKinds: ["mask"],
+      },
+    });
+
+    expect(result.routeContext).toMatchObject({
+      sensitivity: "internal",
+      residencyPolicy: "approved_cloud",
+    });
+    expect(result.receipt).toMatchObject({
+      routeEffect: "allow",
+      policyPackVersions: ["vertical-customer-records@1.0.0"],
+    });
+  });
+
+  it("keeps protected legal work local-only because the pack requires review", () => {
+    const result = screenInferencePayload({
+      messages: [{
+        role: "assistant",
+        content: "",
+        toolCalls: [{
+          id: "call-legal",
+          name: "review",
+          arguments: { attorneyClientPrivilege: "masked-fixture" },
+        }],
+      }],
+      systemPrompt: "",
+      appliedTransformation: {
+        transformation: "tokenized",
+        decisionIds: ["ddp_transform"],
+        decisionVersions: [{
+          decisionId: "ddp_transform",
+          assetVersion: "asset-1",
+          classificationVersion: "class-1",
+          authorityVersion: "authority-1",
+        }],
+        classifiedDataClasses: ["legal-privileged"],
+        explanationCodes: ["protected-projection"],
+        obligationKinds: ["mask"],
+      },
+    });
+
+    expect(result.routeContext.residencyPolicy).toBe("local_only");
+    expect(result.receipt).toMatchObject({
+      policyEffect: "review",
+      routeEffect: "local-only",
+      policyPackVersions: ["vertical-legal-privileged@1.0.0"],
+    });
+  });
 });
