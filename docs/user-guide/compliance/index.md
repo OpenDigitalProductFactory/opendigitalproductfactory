@@ -6,7 +6,36 @@ order: 1
 
 ## Overview
 
-The Compliance area manages your organization's regulatory posture end-to-end. From onboarding a regulation through to submitting evidence to an auditor, all compliance activity is tracked, scored, and linked to the obligations that drive it.
+The Compliance area connects the external rules that apply to your organization
+to the controls, evidence, issues, and submissions used to manage them. Use it
+as an operational record of what the organization knows and is doing—not as a
+substitute for an official source, regulator direction, or qualified advice.
+
+```mermaid
+flowchart TB
+    source["Official regulation or standard"] --> obligation["Applicable obligations"]
+    obligation --> control["Owned controls"]
+    control --> evidence["Current evidence"]
+    evidence --> posture["Posture and gap signals"]
+    posture --> issue["Risk, incident, or audit finding"]
+    issue --> action["Corrective action"]
+    action --> verify["Independent verification"]
+    verify --> evidence
+    obligation --> submission["Required submission"]
+
+    classDef source fill:#dbeafe,stroke:#2563eb,color:#172554
+    classDef record fill:#ecfdf5,stroke:#059669,color:#052e16
+    classDef response fill:#fff7ed,stroke:#ea580c,color:#431407
+    class source source
+    class obligation,control,evidence,posture,submission record
+    class issue,action,verify response
+```
+
+Text alternative: start from an official source, identify applicable
+obligations, connect them to owned controls and current evidence, use posture
+and gap signals to find issues, and carry risks, incidents, or audit findings
+through corrective action and verification. Required submissions branch from
+the obligation record.
 
 ## Key Concepts
 
@@ -17,12 +46,47 @@ The Compliance area manages your organization's regulatory posture end-to-end. F
 - **Gap Assessment** — An analysis of which obligations are not yet covered by sufficient controls or evidence. The starting point for a remediation plan.
 - **Licensing Readiness** — A workspace for business licenses, permits, postings, fees, credentials, authority layers, and unresolved readiness questions.
 
-## What You Can Do
+## Before You Change A Record
 
-- Onboard a new regulation or standard using the guided wizard
-- Map controls to obligations and collect evidence against them
-- Review your current compliance posture score and trending direction
-- Run a gap assessment and create corrective actions for identified gaps
-- Manage risk assessments, incidents, audits, and regulatory submissions
-- Maintain your policy library and link policies to the obligations they address
-- Track [licensing readiness](licensing-readiness.md) before starting, expanding, or changing regulated activity
+- Confirm the source, jurisdiction, effective date, and business scope.
+- Name an accountable owner and a review or due date where the workflow
+  provides them.
+- Decide what evidence would let another reviewer verify the claim.
+- Use a compliance-management account for changes. View-only access can inspect
+  the record but cannot perform managed transitions.
+
+## Choose The Workflow
+
+- [Regulations and obligations](regulations-and-obligations.md) — establish the
+  source and the requirements that flow from it.
+- [Controls and evidence](controls-and-evidence.md) — show how an obligation is
+  addressed and preserve the proof.
+- [Posture and gaps](posture-and-gaps.md) — find uncovered or partially covered
+  obligations and prioritize remediation.
+- [Incidents, risks, and response](incidents-risks-and-response.md) — separate
+  immediate response from longer-term mitigation.
+- [Audits and corrective actions](audits-and-corrective-actions.md) — move a
+  finding through ownership, completion, and verification.
+- [Policies and acknowledgements](policies-and-acknowledgements.md) — govern a
+  policy version from draft through publication and retirement.
+- [Regulatory submissions](regulatory-submissions.md) — prepare and record a
+  filing without confusing the platform record with transmission.
+- [Licensing readiness](licensing-readiness.md) — track permits, licenses,
+  authority layers, credentials, fees, and unresolved questions.
+
+## Read Posture Carefully
+
+The gap view classifies an active obligation as **covered** when it has at
+least one active, implemented control; **partial** when controls exist but none
+is implemented; and **uncovered** when it has no active controls. The posture
+score combines obligation coverage, control implementation, open incidents,
+and overdue corrective actions. These are operational signals. A high score
+does not prove legal compliance, evidence quality, or control effectiveness.
+
+## Recovery Rule
+
+Preserve the record. Correct relationships, supersede evidence or regulation
+versions when the platform supports it, and document why a status changed.
+Avoid deleting history merely to improve a dashboard. If the official
+requirement is uncertain, record the uncertainty and assign follow-up rather
+than converting an assumption into a compliance claim.
