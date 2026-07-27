@@ -24,6 +24,7 @@ import {
   type ResidencyClassKey,
   type SubjectLocator,
 } from "./taxonomy";
+import { PROCESSING_GOVERNANCE_ASSETS } from "./processing-governance-assets";
 
 // ─── Definitions (spec §6.1) ─────────────────────────────────────────────────
 
@@ -567,6 +568,7 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
     classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-07-17" },
     fields: [],
   },
+  ...PROCESSING_GOVERNANCE_ASSETS,
    {
     id: "data:agent-conversation",
     physical: { prismaModel: "AgentMessage" },
