@@ -17,6 +17,11 @@ on:
         description: "Measure and emit a fresh route-budget-baseline.json artifact to arm the ratchet"
         type: boolean
         default: false
+      workers:
+        description: "Bounded route workers (use 1/2/4 to run the reliability experiment)"
+        type: choice
+        options: ["1", "2", "4"]
+        default: "2"
 
 concurrency:
   group: ux-route-sweep-${{ github.ref }}
@@ -45,12 +50,11 @@ concurrency:
 # visibility, so computed-invisible nodes are pruned in the page before measuring.
 #
 # BOOTSTRAP: route-budget-baseline.json ships with `bootstrapped: false`, so the sweep
-# REPORTS without blocking until a measured baseline is committed. Arming it is one
-# mechanical step, not a calibration debate:
-#   pnpm --filter web ux:sweep -- --update-baseline   # against a running portal
-#   git add apps/web/lib/ux-budget/route-budget-baseline.json && commit
-# The set of routes present at that moment defines "pre-existing"; anything added later
-# is net-new and meets the absolutes.
+# REPORTS without blocking until a reproducible measured baseline is committed. Arm it
+# only after two same-SHA freezes are identical, both account for every eligible route,
+# an enforcing run reports zero regressions, and the 1/2/4 worker experiment has selected
+# the reliable default. See docs/testing/ci-evidence.md. The set of routes in the accepted
+# freeze defines "pre-existing"; anything added later is net-new and meets the absolutes.
 
 jobs:
   sweep:
@@ -76,6 +80,7 @@ jobs:
       NEXTAUTH_SECRET: ci_sweep_secret
       NEXTAUTH_URL: http://localhost:3000
       UX_SWEEP_BASE_URL: http://localhost:3000
+      UX_SWEEP_WORKERS: ${{ github.event.inputs.workers || '2' }}
 
     steps:
       - uses: actions/checkout@v7
@@ -136,7 +141,7 @@ jobs:
 
       - name: Run the sweep
         if: ${{ github.event.inputs.update_baseline != 'true' }}
-        run: pnpm --filter web ux:sweep
+        run: pnpm --filter web ux:sweep -- --workers "$UX_SWEEP_WORKERS"
 
       # Manual arming path: measure the running portal and emit the baseline as an
       # artifact for a human to commit via PR. Deliberately NOT committed from CI —
@@ -144,7 +149,7 @@ jobs:
       # contents permission.
       - name: Measure and emit a fresh baseline
         if: ${{ github.event.inputs.update_baseline == 'true' }}
-        run: pnpm --filter web ux:sweep -- --update-baseline
+        run: pnpm --filter web ux:sweep -- --workers "$UX_SWEEP_WORKERS" --update-baseline
 
       - name: Upload the fresh baseline
         if: ${{ github.event.inputs.update_baseline == 'true' }}
@@ -159,5 +164,17 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ux-route-budget-report
-          path: apps/web/lib/ux-budget/route-budget-report.json
+          path: |
+            apps/web/lib/ux-budget/route-budget-report.json
+            apps/web/test-results/ux-route-sweep/route-sweep-execution.json
+          if-no-files-found: warn
+
+      # Screenshots exist only for failed eligible routes. Keeping them out of green
+      # artifacts avoids paying storage and download cost for 201 healthy surfaces.
+      - name: Upload failure-only route diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ux-route-sweep-failure-diagnostics
+          path: apps/web/test-results/ux-route-sweep/screenshots
           if-no-files-found: ignore

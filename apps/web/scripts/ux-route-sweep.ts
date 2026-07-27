@@ -18,9 +18,14 @@
  *   pnpm --filter web ux:sweep -- --base-url http://localhost:3000
  */
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { chromium, type Browser, type Page } from "@playwright/test";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import {
+  chromium,
+  type Browser,
+  type BrowserContext,
+  type Page,
+} from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
 import { measureUxBudget } from "../lib/ux-budget/measure";
@@ -33,7 +38,17 @@ import {
   type RouteMeasurement,
 } from "../lib/ux-budget/ratchet";
 import type { UxShell } from "../lib/ux-budget/budgets";
-import type { ExemptCheck } from "../lib/ux-budget/route-shells";
+import type {
+  ExemptCheck,
+  RouteSweepExclusionReason,
+} from "../lib/ux-budget/route-shells";
+import {
+  parseSweepWorkerCount,
+  runBoundedRouteWork,
+  serialiseSemanticStructure,
+  type SemanticStructureNode,
+  type RouteWorkResult,
+} from "./ux-route-sweep-runner";
 
 function repoRoot(): string {
   let dir = process.cwd();
@@ -48,13 +63,20 @@ const ROOT = repoRoot();
 const SHELLS_REL = "apps/web/lib/ux-budget/route-shells.generated.json";
 const BASELINE_REL = "apps/web/lib/ux-budget/route-budget-baseline.json";
 const REPORT_REL = "apps/web/lib/ux-budget/route-budget-report.json";
+const EXECUTION_REL =
+  "apps/web/test-results/ux-route-sweep/route-sweep-execution.json";
+const DIAGNOSTICS_REL = "apps/web/test-results/ux-route-sweep/screenshots";
+const MAX_FAILURE_SCREENSHOTS = 12;
 const GENERATOR = "apps/web/scripts/ux-route-sweep.ts";
+let failureScreenshotCount = 0;
 
 type ShellRow = {
   routePath: string;
   shell: UxShell;
   migrated: boolean;
   exemptChecks: ExemptCheck[];
+  sweepEligible: boolean;
+  sweepExclusionReason?: RouteSweepExclusionReason;
 };
 
 function arg(name: string, fallback: string): string {
@@ -88,9 +110,6 @@ function pruneInvisible(): string {
   return doc.querySelector("body")?.innerHTML ?? "";
 }
 
-/** Why a route produced no measurement — reported, never silently dropped. */
-export type SkipReason = { routePath: string; reason: string };
-
 /**
  * Give one route exclusive ownership of one page.
  *
@@ -114,12 +133,218 @@ export async function withIsolatedSweepPage<
   }
 }
 
+function captureSemanticStructureFromDom(): SemanticStructureNode[] {
+  const named = (element: Element): boolean =>
+    element.hasAttribute("aria-label") ||
+    element.hasAttribute("aria-labelledby");
+
+  const implicitRole = (element: Element): string | null => {
+    const tag = element.tagName.toLowerCase();
+    if (tag === "a" && element.hasAttribute("href")) return "link";
+    if (tag === "button" || tag === "summary") return "button";
+    if (/^h[1-6]$/.test(tag)) return "heading";
+    if (tag === "main") return "main";
+    if (tag === "nav") return "navigation";
+    if (tag === "header") {
+      return element.closest("article, aside, main, nav, section")
+        ? null
+        : "banner";
+    }
+    if (tag === "footer") {
+      return element.closest("article, aside, main, nav, section")
+        ? null
+        : "contentinfo";
+    }
+    if (tag === "aside") return "complementary";
+    if (tag === "form") return named(element) ? "form" : null;
+    if (tag === "section") return named(element) ? "region" : null;
+    if (tag === "dialog") return "dialog";
+    if (tag === "details" || tag === "fieldset") return "group";
+    if (tag === "table") return "table";
+    if (tag === "thead" || tag === "tbody" || tag === "tfoot") return "rowgroup";
+    if (tag === "tr") return "row";
+    if (tag === "th") {
+      return element.getAttribute("scope") === "row"
+        ? "rowheader"
+        : "columnheader";
+    }
+    if (tag === "td") return "cell";
+    if (tag === "ul" || tag === "ol") return "list";
+    if (tag === "li") return "listitem";
+    if (tag === "select") {
+      const select = element as HTMLSelectElement;
+      return select.multiple || select.size > 1 ? "listbox" : "combobox";
+    }
+    if (tag === "option") return "option";
+    if (tag === "textarea") return "textbox";
+    if (tag === "input") {
+      const input = element as HTMLInputElement;
+      if (["button", "submit", "reset", "image"].includes(input.type)) return "button";
+      if (input.type === "checkbox") return "checkbox";
+      if (input.type === "radio") return "radio";
+      if (input.type === "number") return "spinbutton";
+      if (input.type === "range") return "slider";
+      if (input.type === "search") return "searchbox";
+      if (input.type === "hidden") return null;
+      return "textbox";
+    }
+    if (tag === "img") {
+      return element.getAttribute("alt") === "" ? null : "img";
+    }
+    if (tag === "hr") return "separator";
+    if (tag === "progress") return "progressbar";
+    if (tag === "meter") return "meter";
+    if (tag === "p") return "paragraph";
+    if (tag === "code") return "code";
+    if (tag === "strong") return "strong";
+    return null;
+  };
+
+  const structuralAttributes = (element: Element, role: string): string[] => {
+    const attributes: string[] = [];
+    if (role === "heading") {
+      const level =
+        element.getAttribute("aria-level") ??
+        (/^h[1-6]$/i.test(element.tagName) ? element.tagName.slice(1) : null);
+      if (level) attributes.push(`[level=${level}]`);
+    }
+    for (const state of ["pressed", "checked", "expanded", "selected", "disabled"]) {
+      const value = element.getAttribute(`aria-${state}`);
+      if (value === "true") attributes.push(`[${state}]`);
+      else if (value && value !== "false") attributes.push(`[${state}=${value}]`);
+    }
+    const control = element as HTMLInputElement | HTMLSelectElement | HTMLOptionElement;
+    if ("checked" in control && control.checked && !attributes.includes("[checked]")) {
+      attributes.push("[checked]");
+    }
+    if ("selected" in control && control.selected && !attributes.includes("[selected]")) {
+      attributes.push("[selected]");
+    }
+    if ("disabled" in control && control.disabled && !attributes.includes("[disabled]")) {
+      attributes.push("[disabled]");
+    }
+    if (element instanceof HTMLDetailsElement && element.open) {
+      attributes.push("[expanded]");
+    }
+    return attributes;
+  };
+
+  const nameFromContentRoles = new Set([
+    "button",
+    "checkbox",
+    "columnheader",
+    "heading",
+    "link",
+    "listitem",
+    "option",
+    "radio",
+    "rowheader",
+    "tab",
+  ]);
+
+  const walk = (node: Node, suppressText = false): SemanticStructureNode[] => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      return !suppressText && node.textContent?.trim()
+        ? [{ role: "text" }]
+        : [];
+    }
+    if (!(node instanceof Element)) return [];
+    if (
+      node.hasAttribute("hidden") ||
+      node.getAttribute("aria-hidden") === "true"
+    ) {
+      return [];
+    }
+    const style = getComputedStyle(node);
+    if (style.display === "none" || style.visibility === "hidden") return [];
+
+    const explicitRole = node
+      .getAttribute("role")
+      ?.trim()
+      .split(/\s+/)[0]
+      ?.toLowerCase();
+    const role =
+      explicitRole === "none" || explicitRole === "presentation"
+        ? null
+        : explicitRole || implicitRole(node);
+    const children = [...node.childNodes].flatMap((child) =>
+      walk(child, role ? nameFromContentRoles.has(role) : false),
+    );
+    if (!role) return children;
+    return [{
+      role,
+      attributes: structuralAttributes(node, role),
+      children,
+    }];
+  }
+
+  return walk(document.body);
+}
+
+/**
+ * tsx/esbuild preserves nested function names by referencing its `__name` helper.
+ * Playwright serialises only the callback passed to page.evaluate, so that helper is
+ * outside the browser realm unless we install the matching runtime primitive there.
+ *
+ * Keep this as a string expression: compiling another callback to install the helper
+ * would recreate the same cross-realm dependency we are repairing.
+ */
+export const BROWSER_EVALUATION_RUNTIME =
+  "globalThis.__name = (target, value) => Object.defineProperty(target, 'name', { value, configurable: true })";
+
+/**
+ * Resolve after the hydrated DOM has been mutation-free for a short interval.
+ *
+ * `networkidle` is invalid for this portal because event streams and polling are
+ * intentionally long-lived. Capturing immediately after `load` is also invalid:
+ * client-populated cards then race the measurement and move word counts by a row or
+ * status label between identical runs. The hard deadline keeps a genuinely live DOM
+ * from hanging the sweep.
+ *
+ * This remains a string expression for the same cross-realm reason as the transpiler
+ * runtime above: nested callbacks compiled by tsx would otherwise depend on `__name`.
+ */
+export const DOM_SETTLE_EXPRESSION = `(() => new Promise((resolve) => {
+  const quietMs = 300;
+  const deadlineMs = 5000;
+  let quietTimer;
+  let deadlineTimer;
+  const observer = new MutationObserver(() => armQuietTimer());
+  const finish = () => {
+    clearTimeout(quietTimer);
+    clearTimeout(deadlineTimer);
+    observer.disconnect();
+    resolve(undefined);
+  };
+  const armQuietTimer = () => {
+    clearTimeout(quietTimer);
+    quietTimer = setTimeout(finish, quietMs);
+  };
+  observer.observe(document.body, {
+    attributes: true,
+    childList: true,
+    characterData: true,
+    subtree: true
+  });
+  deadlineTimer = setTimeout(finish, deadlineMs);
+  armQuietTimer();
+}))()`;
+
+export async function waitForRouteDomToSettle(page: Page): Promise<void> {
+  await page.evaluate(DOM_SETTLE_EXPRESSION);
+}
+
+export async function captureAccessibilityStructure(page: Page): Promise<string> {
+  await page.evaluate(BROWSER_EVALUATION_RUNTIME);
+  const structure = await page.evaluate(captureSemanticStructureFromDom);
+  return serialiseSemanticStructure(structure);
+}
+
 async function measureRoute(
   page: Page,
   row: ShellRow,
   baseUrl: string,
-  skipped: SkipReason[],
-): Promise<RouteMeasurement | null> {
+): Promise<RouteMeasurement> {
   // NOT networkidle: this portal holds long-lived connections (activity streams,
   // polling), so networkidle never settles and every route would time out.
   const response = await page.goto(`${baseUrl}${row.routePath}`, {
@@ -128,32 +353,33 @@ async function measureRoute(
   });
   // Give client components a beat to hydrate; the whole point is the served DOM.
   await page.waitForLoadState("load", { timeout: 15_000 }).catch(() => {});
+  await waitForRouteDomToSettle(page);
 
   // A route that errors or redirects to auth is not a surface to budget; recording a
   // measurement for it would freeze a login page as the route's baseline.
   if (!response) {
-    skipped.push({ routePath: row.routePath, reason: "no response" });
-    return null;
+    throw new Error("no response");
   }
   if (response.status() >= 400) {
-    skipped.push({ routePath: row.routePath, reason: `http ${response.status()}` });
-    return null;
+    throw new Error(`http ${response.status()}`);
   }
   const landed = new URL(page.url()).pathname.replace(/\/$/, "") || "/";
   const wanted = row.routePath.replace(/\/$/, "") || "/";
   if (landed !== wanted) {
-    skipped.push({ routePath: row.routePath, reason: `redirected to ${landed}` });
-    return null;
+    throw new Error(`redirected to ${landed}`);
   }
 
   const html = await page.evaluate(pruneInvisible);
   if (typeof html !== "string" || html.length === 0) {
     // Never hand an empty/undefined document to the measurer: it would score as a
     // perfectly compliant zero-word surface and freeze that as the route's baseline.
-    skipped.push({ routePath: row.routePath, reason: "empty document after pruning" });
-    return null;
+    throw new Error("empty document after pruning");
   }
-  const ariaSnapshot = await page.locator("body").ariaSnapshot({ timeout: 15_000 });
+  // Project the browser-resolved semantic DOM to role/nesting/state only. The
+  // ratchet deliberately ignores accessible names, so asking Playwright or CDP to
+  // serialise the full named AX tree first is both wasted work and unbounded on
+  // large data-owner pages such as /admin/reference-data.
+  const ariaSnapshot = await captureAccessibilityStructure(page);
 
   // Necessary, never sufficient — axe green is not "accessible" (spec §5.4).
   // A failing SCAN must not cost us the whole route's budget measurement: axe threw
@@ -185,75 +411,162 @@ function loadBaseline(path: string): BaselineFile {
   return JSON.parse(readFileSync(path, "utf8")) as BaselineFile;
 }
 
+function routeArtifactSlug(routePath: string): string {
+  return (
+    routePath
+      .replace(/^\/+/, "")
+      .replace(/[^a-zA-Z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "root"
+  );
+}
+
+async function captureFailureScreenshot(page: Page, routePath: string): Promise<void> {
+  if (failureScreenshotCount >= MAX_FAILURE_SCREENSHOTS) return;
+  failureScreenshotCount += 1;
+  const diagnosticsDir = join(ROOT, DIAGNOSTICS_REL);
+  mkdirSync(diagnosticsDir, { recursive: true });
+  await page
+    .screenshot({
+      path: join(diagnosticsDir, `${routeArtifactSlug(routePath)}.png`),
+      fullPage: true,
+      animations: "disabled",
+      timeout: 10_000,
+    })
+    .catch(() => {});
+}
+
+function executionOutcome<T>(
+  outcome: RouteWorkResult<T>["outcomes"][number],
+): {
+  routePath: string;
+  status: "measured" | "failed";
+  durationMs: number;
+  reason?: string;
+} {
+  return outcome.status === "measured"
+    ? {
+        routePath: outcome.routePath,
+        status: outcome.status,
+        durationMs: outcome.durationMs,
+      }
+    : {
+        routePath: outcome.routePath,
+        status: outcome.status,
+        durationMs: outcome.durationMs,
+        reason: outcome.reason,
+      };
+}
+
 async function main(): Promise<void> {
   const baseUrl = arg("base-url", process.env.UX_SWEEP_BASE_URL ?? "http://localhost:3000");
   const storageState = arg("storage-state", "e2e/.auth/state.json");
+  const workerCount = parseSweepWorkerCount(
+    arg("workers", process.env.UX_SWEEP_WORKERS ?? "2"),
+  );
   const updateBaseline = process.argv.includes("--update-baseline");
 
-  const rows = (
+  const inventory = (
     JSON.parse(readFileSync(join(ROOT, SHELLS_REL), "utf8")) as { routes: ShellRow[] }
-  ).routes
-    // Dynamic routes need per-route fixtures to be meaningful; they join when the
-    // fixture org can supply real ids. Recorded as skipped rather than silently dropped.
-    .filter((r) => !r.routePath.includes("["));
+  ).routes;
+  const rows = inventory.filter((row) => row.sweepEligible);
+  const excluded = inventory
+    .filter((row) => !row.sweepEligible)
+    .map((row) => ({
+      routePath: row.routePath,
+      reason: row.sweepExclusionReason ?? "missing-generated-exclusion-reason",
+    }));
 
   const statePath = join(ROOT, storageState);
   let browser: Browser | undefined;
-  const measurements: RouteMeasurement[] = [];
-  const skipped: SkipReason[] = [];
+  let contexts: BrowserContext[] = [];
+  let routeRun: RouteWorkResult<RouteMeasurement> | undefined;
   if (!existsSync(statePath)) {
-    console.error(`[ux-sweep] WARNING: no storage state at ${storageState} — every authenticated route will redirect to login and be skipped.`);
+    console.error(
+      `[ux-sweep] WARNING: no storage state at ${storageState} — authenticated route measurement will fail.`,
+    );
   }
 
   try {
     browser = await chromium.launch();
-    const context = await browser.newContext({
-      viewport: { width: 1280, height: 900 },
-      ...(existsSync(statePath) ? { storageState: statePath } : {}),
-    });
+    contexts = await Promise.all(
+      Array.from({ length: workerCount }, () =>
+        browser!.newContext({
+          viewport: { width: 1280, height: 900 },
+          ...(existsSync(statePath) ? { storageState: statePath } : {}),
+        }),
+      ),
+    );
 
-    for (const row of rows) {
-      try {
-        const m = await withIsolatedSweepPage(context, (page) =>
-          measureRoute(page, row, baseUrl, skipped),
-        );
-        if (m) measurements.push(m);
-      } catch (err) {
-        // One unreachable route must not abort the sweep; it is reported as skipped.
-        const first = (err as Error).message.split(/\r?\n/)[0];
-        skipped.push({ routePath: row.routePath, reason: `error: ${first}` });
-      }
-    }
+    routeRun = await runBoundedRouteWork(
+      rows,
+      workerCount,
+      async (row, workerIndex) =>
+        withIsolatedSweepPage(contexts[workerIndex], async (page) => {
+          try {
+            return await measureRoute(page, row, baseUrl);
+          } catch (error) {
+            await captureFailureScreenshot(page, row.routePath);
+            throw error;
+          }
+        }),
+    );
   } finally {
+    await Promise.all(contexts.map((context) => context.close().catch(() => {})));
     await browser?.close();
   }
 
-  console.error(`[ux-sweep] measured ${measurements.length} routes, skipped ${skipped.length}`);
-  if (skipped.length) {
-    const byReason = new Map<string, string[]>();
-    for (const s of skipped) {
-      const key = s.reason.replace(/\d+/g, "N");
-      byReason.set(key, [...(byReason.get(key) ?? []), s.routePath]);
-    }
-    for (const [reason, routes] of [...byReason].sort((a, b) => b[1].length - a[1].length)) {
-      console.error(`[ux-sweep]   ${routes.length}x ${reason} — e.g. ${routes.slice(0, 5).join(", ")}`);
-    }
-  }
+  if (!routeRun) throw new Error("route worker orchestration did not produce a result");
+  const measurements = routeRun.outcomes.flatMap((outcome) =>
+    outcome.status === "measured" ? [outcome.value] : [],
+  );
+  const executionReport = {
+    schemaVersion: 1,
+    sourceSha: process.env.GITHUB_SHA ?? process.env.UX_SWEEP_SOURCE_SHA ?? "unknown",
+    workerCount,
+    durationMs: routeRun.durationMs,
+    inventory: {
+      totalRouteCount: inventory.length,
+      eligibleRouteCount: rows.length,
+      excludedRouteCount: excluded.length,
+      excluded,
+    },
+    accounting: routeRun.accounting,
+    routes: routeRun.outcomes.map(executionOutcome),
+  };
+  const executionPath = join(ROOT, EXECUTION_REL);
+  mkdirSync(dirname(executionPath), { recursive: true });
+  writeFileSync(
+    executionPath,
+    `${JSON.stringify(executionReport, null, 2)}\n`,
+    "utf8",
+  );
 
-  // CAPABILITY PROBE (spec §6 L5): a checker that measures nothing must be RED.
-  // A sweep that skips every route and reports OK is the silent-empty failure this
-  // epic exists to remove — it would sit green forever while measuring no UX at all.
-  // The threshold is deliberately blunt: any run that cannot measure a majority of
-  // the routes it was asked to measure has not done its job.
-  const attempted = measurements.length + skipped.length;
-  if (measurements.length === 0 || measurements.length * 2 < attempted) {
+  console.error(
+    `[ux-sweep] measured ${measurements.length}/${rows.length} eligible routes with ${workerCount} worker(s); ${excluded.length} explicitly excluded from this fixture context`,
+  );
+  if (!routeRun.accounting.complete) {
+    for (const outcome of routeRun.outcomes) {
+      if (outcome.status === "failed") {
+        console.error(`[ux-sweep] FAILED ${outcome.routePath}: ${outcome.reason}`);
+      }
+    }
+    if (routeRun.accounting.missingRoutes.length > 0) {
+      console.error(
+        `[ux-sweep] missing results: ${routeRun.accounting.missingRoutes.join(", ")}`,
+      );
+    }
+    if (routeRun.accounting.duplicateRoutes.length > 0) {
+      console.error(
+        `[ux-sweep] duplicate results: ${routeRun.accounting.duplicateRoutes.join(", ")}`,
+      );
+    }
+    if (routeRun.accounting.unexpectedRoutes.length > 0) {
+      console.error(
+        `[ux-sweep] unexpected results: ${routeRun.accounting.unexpectedRoutes.join(", ")}`,
+      );
+    }
     console.error(
-      [
-        "",
-        `[ux-sweep] FAILED CAPABILITY PROBE — measured ${measurements.length} of ${attempted} routes.`,
-        "A sweep that cannot see the portal is not evidence of a healthy portal.",
-        `Check the authenticated session (${storageState}) and that ${baseUrl} is serving.`,
-      ].join("\n"),
+      `[ux-sweep] FAILED COMPLETENESS CONTRACT — see ${EXECUTION_REL} and failure-only screenshots.`,
     );
     process.exit(1);
   }

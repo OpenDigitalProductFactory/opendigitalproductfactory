@@ -22,6 +22,7 @@ import {
   UX_SHELLS,
 } from "./index";
 import { countWords } from "../owner-first/ux-audit";
+import { ROUTE_SWEEP_EXCLUSIONS } from "./route-shells";
 
 describe("disclosure scoping — collapsed detail is excised, never taxed", () => {
   it("does not count words inside a collapsed <details>", () => {
@@ -253,7 +254,14 @@ describe("generated route-shell registry", () => {
     pageRouteCount: number;
     migratedCount: number;
     summary: Record<string, number>;
-    routes: { routePath: string; shell: string; migrated: boolean; exemptChecks: string[] }[];
+    routes: {
+      routePath: string;
+      shell: string;
+      migrated: boolean;
+      exemptChecks: string[];
+      sweepEligible: boolean;
+      sweepExclusionReason?: string;
+    }[];
   };
 
   const manifest = JSON.parse(
@@ -285,6 +293,30 @@ describe("generated route-shell registry", () => {
     const sum = Object.values(registry.summary).reduce((a, b) => a + b, 0);
     expect(sum).toBe(registry.pageRouteCount);
     expect(registry.pageRouteCount).toBe(registry.routes.length);
+  });
+
+  it("accounts for every route as measurable or explicitly excluded", () => {
+    expect(
+      registry.routes.filter(
+        (route) => route.sweepEligible === Boolean(route.sweepExclusionReason),
+      ),
+    ).toEqual([]);
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(201);
+    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(107);
+  });
+
+  it("keeps contextual sweep exclusions explicit, valid, and non-stale", () => {
+    const manifestRoutes = new Set(registry.routes.map((route) => route.routePath));
+    expect(
+      Object.keys(ROUTE_SWEEP_EXCLUSIONS).filter((routePath) => !manifestRoutes.has(routePath)),
+    ).toEqual([]);
+
+    for (const [routePath, reason] of Object.entries(ROUTE_SWEEP_EXCLUSIONS)) {
+      expect(registry.routes.find((route) => route.routePath === routePath)).toMatchObject({
+        sweepEligible: false,
+        sweepExclusionReason: reason,
+      });
+    }
   });
 
   it("the committed registry is in sync with its generator", async () => {
