@@ -67,14 +67,14 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 13
+    "textMass": 27
   },
   "apps/web/app/(portal)/portal/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 35
+    "textMass": 49
   },
   "apps/web/app/(portal)/portal/services/page.tsx": {
     "vocabulary": 0,
