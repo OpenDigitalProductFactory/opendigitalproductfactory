@@ -92,6 +92,68 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=8192
         run: pnpm typecheck
 
+  # BI-0580AFD3 parity phase. These two profiles replay the startup-heavy
+  # policy jobs through one checkout/runtime each while the legacy jobs remain
+  # authoritative. Named results and durations are published as an artifact
+  # and job summary. After parity is observed, the legacy jobs are removed and
+  # these profiles become blocking.
+  policy-guards-source-shadow:
+    name: Policy Guards (source shadow)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # N-1 Caller Honesty reads the merge base.
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24
+      - name: Install guard AST dependency
+        run: |
+          corepack enable && corepack prepare pnpm@10.33.2 --activate
+          pnpm install --frozen-lockfile --ignore-scripts --filter @dpf/repo-guard-runtime
+      - name: Run named source policy guards
+        continue-on-error: true
+        run: node scripts/ci-policy-guards.mjs --profile source --results "$RUNNER_TEMP/policy-guards-source.json"
+      - name: Upload source policy results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: policy-guards-source-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/policy-guards-source.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  policy-guards-pr-shadow:
+    name: Policy Guards (PR shadow)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24
+      - name: Run named pull-request policy guards
+        continue-on-error: true
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS_JSON: ${{ toJSON(github.event.pull_request.labels) }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+        run: node scripts/ci-policy-guards.mjs --profile pull-request --results "$RUNNER_TEMP/policy-guards-pr.json"
+      - name: Upload pull-request policy results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: policy-guards-pr-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/policy-guards-pr.json
+          if-no-files-found: warn
+          retention-days: 30
+
   repo-guard-loop:
     name: Repo Guard Loop
     runs-on: ubuntu-latest
@@ -1224,6 +1286,8 @@ jobs:
     needs:
       - changes
       - typecheck
+      - policy-guards-source-shadow
+      - policy-guards-pr-shadow
       - repo-guard-loop
       - docs-link-integrity
       - derived-artifact-registry

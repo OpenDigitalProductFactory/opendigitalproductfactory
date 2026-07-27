@@ -8465,6 +8465,7 @@
         "the-contract-read-this-first",
         "which-gate-runs-where",
         "what-runs-in-ci",
+        "policy-guard-profiles",
         "where-ci-runs-it",
         "run-locally-before-pushing",
         "the-pre-push-gate-pregate-default-on",
