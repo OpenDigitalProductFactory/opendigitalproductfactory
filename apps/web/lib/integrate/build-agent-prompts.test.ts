@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { bumpVersion } from "@/lib/feature-build-types";
 import { getBuildPhasePrompt, getBuildContextSection } from "./build-agent-prompts";
 import { buildSpecialistPrompt, SPECIALIST_TOOLS } from "./specialist-prompts";
 import type { FeatureBrief } from "@/lib/feature-build-types";
+
+vi.mock("@/lib/tak/prompt-loader", () => ({
+  loadPrompt: vi.fn(async (_category: string, _slug: string, fallback?: string) => fallback ?? ""),
+}));
 
 describe("bumpVersion", () => {
   it("bumps patch version", () => {
