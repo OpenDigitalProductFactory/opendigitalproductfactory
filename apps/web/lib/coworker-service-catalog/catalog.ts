@@ -123,6 +123,9 @@ export type CoworkerDiscoveryService = {
   availabilityScope: string;
   personas: unknown;
   archetypes: unknown;
+  backingSkillIds: unknown;
+  backingToolNames: unknown;
+  backingGrantKeys: unknown;
   metadata: unknown;
   portfolio: { slug: string; name: string } | null;
 };
@@ -252,6 +255,9 @@ export async function loadCoworkerDiscoveryServices(
       availabilityScope: true,
       personas: true,
       archetypes: true,
+      backingSkillIds: true,
+      backingToolNames: true,
+      backingGrantKeys: true,
       metadata: true,
       portfolio: { select: { slug: true, name: true } },
     },

@@ -26,6 +26,11 @@ import {
   type CoworkerAvailabilityProjection,
 } from "@/lib/coworker-service-catalog/availability-projection";
 import { loadCoworkerDiscoveryServices } from "@/lib/coworker-service-catalog/catalog";
+import {
+  evaluateCoworkerServicesReadiness,
+  hasHealthyCoworkerProvider,
+} from "@/lib/coworker-service-catalog/service-readiness";
+import { VERIFIED_COWORKER_SERVICE_TOOL_NAMES } from "@/lib/coworker-service-catalog/registered-service-tools";
 import { normalizeVariantAxes } from "./variant-axes";
 import { loadInstallAvailabilityContext } from "./availability-context";
 import type { OwnerFacingArea } from "./owner-areas";
@@ -36,7 +41,10 @@ import {
   type CoworkerInteractionProjection,
   type RosterServiceEvidence,
 } from "./roster-presentation";
-import { SELECTABLE_COWORKER_STATE } from "./selectable-coworker";
+import {
+  SELECTABLE_COWORKER_STATE,
+  selectableCoworkerIdentityRefs,
+} from "./selectable-coworker";
 
 // BI-74FD6420: roster collapses dual-seed slug + AGT-* pairs for display only.
 // Seed still creates slug agentId rows for FK consumers (service catalog, etc.).
@@ -206,14 +214,6 @@ function addByCanonicalAgentId<T>(
   target.set(canonicalId, values);
 }
 
-function setByCanonicalAgentId<T>(
-  target: Map<string, T>,
-  agentId: string,
-  value: T,
-) {
-  target.set(resolveCanonicalAgentId(agentId), value);
-}
-
 export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterFacets }> {
   const [
     agentsRaw,
@@ -224,6 +224,7 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
     lastActivity,
     services,
     installAvailability,
+    skillAssignments,
   ] = await Promise.all([
     prisma.agent.findMany({
       where: SELECTABLE_COWORKER_STATE,
@@ -240,11 +241,21 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
         lifecycleStage: true,
         hitlTierDefault: true,
         governanceProfile: { select: { id: true, hitlPolicy: true } },
+        toolGrants: { select: { grantKey: true } },
       },
     }),
     loadAllCoverage(),
     prisma.agentModelConfig.findMany({ select: { agentId: true, pinnedProviderId: true } }),
-    prisma.modelProvider.findMany({ select: { providerId: true, status: true } }),
+    prisma.modelProvider.findMany({
+      select: {
+        providerId: true,
+        status: true,
+        modelProfiles: {
+          where: { modelStatus: "active", supportsToolUse: true },
+          select: { modelId: true },
+        },
+      },
+    }),
     prisma.coworkerCapabilityNeed
       .groupBy({
         by: ["agentId"],
@@ -257,26 +268,35 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
     loadLastActivity(),
     loadCoworkerDiscoveryServices(),
     loadInstallAvailabilityContext(),
+    prisma.skillAssignment.findMany({
+      where: { enabled: true },
+      select: { agentId: true, skillId: true },
+    }),
   ]);
 
   // Belt-and-suspenders: drop any residual dual-seed alias twin still active.
   const agents = dropDualSeedAliasAgents(agentsRaw);
-
-  const providerStatus = new Map(providers.map((p) => [p.providerId, p.status]));
+  const assignedSkillsByAgent = new Map<string, string[]>();
+  for (const assignment of skillAssignments) {
+    const current = assignedSkillsByAgent.get(assignment.agentId) ?? [];
+    current.push(assignment.skillId);
+    assignedSkillsByAgent.set(assignment.agentId, current);
+  }
+  const heldGrantsByAgent = new Map(
+    agentsRaw.map((agent) => [
+      agent.agentId,
+      agent.toolGrants.map((grant) => grant.grantKey),
+    ]),
+  );
   const pinnedByAgent = new Map<string, string | null>();
   for (const config of modelConfigs) {
-    setByCanonicalAgentId(
-      pinnedByAgent,
-      config.agentId,
-      config.pinnedProviderId,
-    );
+    pinnedByAgent.set(config.agentId, config.pinnedProviderId);
   }
   const blockersByAgent = new Map<string, number>();
   for (const blocker of blockerRows) {
-    const canonicalId = resolveCanonicalAgentId(blocker.agentId);
     blockersByAgent.set(
-      canonicalId,
-      (blockersByAgent.get(canonicalId) ?? 0) + blocker._count._all,
+      blocker.agentId,
+      (blockersByAgent.get(blocker.agentId) ?? 0) + blocker._count._all,
     );
   }
   const servicesByAgent = new Map<string, RosterServiceEvidence[]>();
@@ -315,15 +335,34 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
           ? 0
           : null;
     const canonicalId = resolveCanonicalAgentId(agent.agentId);
-    const pinned = pinnedByAgent.get(canonicalId) ?? null;
-    const providerHealthy = !pinned || providerStatus.get(pinned) === "active";
+    const { runtimeAgentId } = selectableCoworkerIdentityRefs(agent.agentId);
+    const pinned = pinnedByAgent.get(runtimeAgentId) ?? null;
+    const providerHealthy = hasHealthyCoworkerProvider(
+      pinned,
+      providers.map((provider) => ({
+        providerId: provider.providerId,
+        status: provider.status,
+        activeToolModelCount: provider.modelProfiles.length,
+      })),
+    );
     const profileId = fam ? professionProfileId(fam.professionKey) : null;
-    const openBlockers = blockersByAgent.get(canonicalId) ?? 0;
+    const openBlockers = blockersByAgent.get(runtimeAgentId) ?? 0;
     const agentServices = servicesByAgent.get(canonicalId) ?? [];
     const discovery = projectCoworkerDiscovery({
       agentDescription: agent.description,
       services: agentServices,
       install: installAvailability,
+      readinessByServiceId: evaluateCoworkerServicesReadiness(agentServices, {
+        assignedSkillIds: [
+          ...new Set(assignedSkillsByAgent.get(runtimeAgentId) ?? []),
+        ],
+        registeredToolNames: VERIFIED_COWORKER_SERVICE_TOOL_NAMES,
+        heldGrantKeys: [
+          ...new Set(heldGrantsByAgent.get(runtimeAgentId) ?? []),
+        ],
+        providerHealthy,
+        blockingCapabilityNeedCount: openBlockers,
+      }),
     });
 
     return {

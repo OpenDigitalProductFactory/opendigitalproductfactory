@@ -19,8 +19,10 @@ export type CoworkerInstallArchetype = {
 export type CoworkerAvailabilityEvidence = {
   source:
     | "storefront-archetype"
+    | "coworker-service"
     | "coworker-service-archetypes"
     | "readiness-evaluation"
+    | "readiness-detail"
     | "availability-blocker"
     | "setup-prerequisite";
   values: string[];
@@ -65,6 +67,7 @@ export type CoworkerAvailabilityReadiness =
       status: "evaluated";
       blockers: readonly string[];
       missingPrerequisites: readonly string[];
+      details?: readonly string[];
     }
   | {
       status: "not-evaluated";
@@ -207,6 +210,11 @@ export function projectCoworkerAvailability(
     source: "readiness-evaluation",
     values: ["evaluated"],
   };
+  const readinessDetails = normalizedFacts(input.readiness.details);
+  const detailEvidence: CoworkerAvailabilityEvidence[] =
+    readinessDetails.length > 0
+      ? [{ source: "readiness-detail", values: readinessDetails }]
+      : [];
   const blockers = normalizedFacts(input.readiness.blockers);
   if (blockers.length > 0) {
     return {
@@ -217,6 +225,7 @@ export function projectCoworkerAvailability(
       evidence: [
         ...baseEvidence,
         readinessEvidence,
+        ...detailEvidence,
         {
           source: "availability-blocker",
           values: blockers,
@@ -235,6 +244,7 @@ export function projectCoworkerAvailability(
       evidence: [
         ...baseEvidence,
         readinessEvidence,
+        ...detailEvidence,
         {
           source: "setup-prerequisite",
           values: missingPrerequisites,
@@ -251,7 +261,7 @@ export function projectCoworkerAvailability(
         ? `This coworker explicitly supports the ${install.archetypeId} business type.`
         : `This coworker supports the ${install.category} business category.`,
     matchLevel,
-    evidence: [...baseEvidence, readinessEvidence],
+    evidence: [...baseEvidence, readinessEvidence, ...detailEvidence],
   };
 }
 

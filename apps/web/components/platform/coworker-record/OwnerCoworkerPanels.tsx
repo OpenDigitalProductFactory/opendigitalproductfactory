@@ -9,6 +9,7 @@ import {
   activeRosterServices,
   projectCoworkerInteraction,
   projectCoworkerOwnerAreas,
+  type CoworkerServiceAvailability,
 } from "@/lib/coworker-record/roster-presentation";
 
 export function HeaderChip({
@@ -53,10 +54,18 @@ export function OwnerStatus({
 
 export function WorkOfferedPanel({
   services,
+  serviceAvailability,
 }: {
   services: CoworkerRecord["services"];
+  serviceAvailability: CoworkerServiceAvailability[];
 }) {
   const activeServices = activeRosterServices(services);
+  const availabilityByService = new Map(
+    serviceAvailability.map((service) => [
+      service.serviceId,
+      service.availability,
+    ]),
+  );
   if (activeServices.length === 0) {
     return (
       <p className="border-y border-[var(--dpf-border)] py-6 text-sm text-[var(--dpf-muted)]">
@@ -70,6 +79,7 @@ export function WorkOfferedPanel({
       {activeServices.map((service) => {
         const serviceInteraction = projectCoworkerInteraction([service]);
         const area = projectCoworkerOwnerAreas([service]).primary;
+        const availability = availabilityByService.get(service.serviceId);
         return (
           <article
             key={service.serviceId}
@@ -85,6 +95,13 @@ export function WorkOfferedPanel({
                   label={area.label}
                   uppercase={false}
                 />
+                {availability && (
+                  <StatusBadge
+                    intent={availabilityIntent(availability.state)}
+                    label={availability.label}
+                    uppercase={false}
+                  />
+                )}
                 {serviceInteraction.labels.map((label, index) => (
                   <StatusBadge
                     key={serviceInteraction.scopes[index]}
@@ -104,6 +121,11 @@ export function WorkOfferedPanel({
               {service.summary ||
                 "A plain-language work summary is not defined."}
             </p>
+            {availability && availability.state !== "available" && (
+              <p className="mt-2 text-xs leading-5 text-[var(--dpf-muted)]">
+                {availability.reason}
+              </p>
+            )}
           </article>
         );
       })}
@@ -113,14 +135,23 @@ export function WorkOfferedPanel({
 
 export function WorkHighlights({
   services,
+  serviceAvailability,
 }: {
   services: CoworkerRecord["services"];
+  serviceAvailability: CoworkerServiceAvailability[];
 }) {
-  const highlighted = activeRosterServices(services).slice(0, 3);
+  const readyIds = new Set(
+    serviceAvailability
+      .filter((service) => service.availability.state === "available")
+      .map((service) => service.serviceId),
+  );
+  const highlighted = activeRosterServices(services)
+    .filter((service) => readyIds.has(service.serviceId))
+    .slice(0, 3);
   if (highlighted.length === 0) {
     return (
       <p className="text-sm text-[var(--dpf-muted)]">
-        No active work has been declared for this coworker yet.
+        No advertised service is ready for this business type yet.
       </p>
     );
   }
@@ -145,16 +176,16 @@ export function WorkHighlights({
 
 export function AvailabilityPanel({
   availability,
+  serviceAvailability,
   authority,
   interactionLabel,
   installArchetypeId,
-  canStartConversation,
 }: {
   availability: CoworkerAvailabilityProjection;
+  serviceAvailability: CoworkerServiceAvailability[];
   authority: CoworkerAuthorityProjection;
   interactionLabel: string;
   installArchetypeId: string | null;
-  canStartConversation: boolean;
 }) {
   return (
     <div className="space-y-5">
@@ -172,9 +203,7 @@ export function AvailabilityPanel({
           detail={
             availability.state === "available"
               ? "This coworker's declared work can be used for this business type."
-              : canStartConversation
-                ? "You can ask this coworker questions; service readiness remains separate."
-                : "Conversation and service entry remain unavailable until this status changes."
+              : "Conversation and service entry remain unavailable until this status changes."
           }
         />
         <OwnerStatus
@@ -185,17 +214,32 @@ export function AvailabilityPanel({
       </dl>
 
       <OwnerFirstDisclosure summary="Availability evidence">
-        <ul className="space-y-2 text-xs text-[var(--dpf-text-secondary)]">
-          {availability.evidence.map((evidence, index) => (
-            <li key={`${evidence.source}-${index}`}>
-              <span className="font-medium text-[var(--dpf-text)]">
-                {titleCase(evidence.source)}
-              </span>
-              {": "}
-              {evidence.values.join(", ") || "No values declared"}
-            </li>
-          ))}
-        </ul>
+        <div className="space-y-4 text-xs text-[var(--dpf-text-secondary)]">
+          <ul className="space-y-2">
+            {serviceAvailability.map((service) => (
+              <li key={service.serviceId}>
+                <span className="font-medium text-[var(--dpf-text)]">
+                  {service.serviceName}
+                </span>
+                {": "}
+                {service.availability.label}
+                {". "}
+                {service.availability.reason}
+              </li>
+            ))}
+          </ul>
+          <ul className="space-y-2 border-t border-[var(--dpf-border)] pt-3">
+            {availability.evidence.map((evidence, index) => (
+              <li key={`${evidence.source}-${index}`}>
+                <span className="font-medium text-[var(--dpf-text)]">
+                  {titleCase(evidence.source)}
+                </span>
+                {": "}
+                {evidence.values.join(", ") || "No values declared"}
+              </li>
+            ))}
+          </ul>
+        </div>
       </OwnerFirstDisclosure>
     </div>
   );
@@ -219,4 +263,13 @@ function titleCase(value: string): string {
   return value
     .replace(/[-_]/g, " ")
     .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function availabilityIntent(
+  state: CoworkerAvailabilityProjection["state"],
+): "success" | "warning" | "danger" | "neutral" {
+  if (state === "available") return "success";
+  if (state === "needs-attention") return "danger";
+  if (state === "setup-needed") return "warning";
+  return "neutral";
 }

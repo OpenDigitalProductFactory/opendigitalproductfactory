@@ -29,6 +29,11 @@ import {
 import { resolveInstallVariantContext } from "@/lib/decision-perspective/install-variant-context";
 import { knownGrantKeys } from "@/lib/tak/agent-grants";
 import {
+  evaluateCoworkerServicesReadiness,
+  hasHealthyCoworkerProvider,
+} from "@/lib/coworker-service-catalog/service-readiness";
+import { VERIFIED_COWORKER_SERVICE_TOOL_NAMES } from "@/lib/coworker-service-catalog/registered-service-tools";
+import {
   getWorkPatternReadModel,
   type WorkPatternReadModel,
 } from "@/lib/tak/work-pattern-read-model";
@@ -152,7 +157,7 @@ export default async function AgentDetailPage({
   ] =
     await Promise.all([
       auth(),
-      prisma.agentModelConfig.findUnique({ where: { agentId: agent.agentId } }).catch(() => null),
+      prisma.agentModelConfig.findUnique({ where: { agentId: record.runtime.agentId } }).catch(() => null),
       prisma.$queryRaw<Array<{ agentId: string; providerId: string }>>`
         SELECT DISTINCT ON ("agentId") "agentId", "providerId"
         FROM "AgentMessage"
@@ -175,7 +180,7 @@ export default async function AgentDetailPage({
       }).catch(() => []),
       prisma.skillAssignment
         .findMany({
-          where: { agentId: agent.agentId, enabled: true },
+          where: { agentId: record.runtime.agentId, enabled: true },
           orderBy: { priority: "desc" },
           select: { skill: { select: { skillId: true, name: true, capability: true } } },
         })
@@ -188,9 +193,18 @@ export default async function AgentDetailPage({
         })
         .catch(() => [] as Array<{ skillId: string; name: string; category: string; riskBand: string }>),
       // Provider statuses for the summary health chip (mirrors roster.ts logic).
-      prisma.modelProvider.findMany({ select: { providerId: true, status: true } }).catch(() => []),
-      getCoworkerCapabilityNeedReview({ agentId: agent.agentId }).catch(() => emptyNeedReview()),
-      getWorkPatternReadModel({ agentId: agent.agentId }).catch(() => emptyWorkPatternReadModel()),
+      prisma.modelProvider.findMany({
+        select: {
+          providerId: true,
+          status: true,
+          modelProfiles: {
+            where: { modelStatus: "active", supportsToolUse: true },
+            select: { modelId: true },
+          },
+        },
+      }).catch(() => []),
+      getCoworkerCapabilityNeedReview({ agentId: record.runtime.agentId }).catch(() => emptyNeedReview()),
+      getWorkPatternReadModel({ agentId: record.runtime.agentId }).catch(() => emptyWorkPatternReadModel()),
     ]);
 
   const canWrite = !!session?.user && can(
@@ -217,17 +231,21 @@ export default async function AgentDetailPage({
         (modelConfig?.minimumTier as keyof typeof QUALITY_TIER_LABELS) ?? "adequate"
       ] ?? "Adequate";
   const priorityLabel = BUDGET_CLASS_LABELS[modelConfig?.budgetClass ?? "balanced"] ?? "Balanced";
-  // Provider health: a pinned provider must be active; unpinned coworkers are
-  // healthy by default (the router picks an active provider) — same rule as roster.ts.
-  const providerStatusById = new Map(allProviderStatuses.map((p) => [p.providerId, p.status]));
   const pinnedProvider = modelConfig?.pinnedProviderId ?? null;
-  const providerHealthy = !pinnedProvider || providerStatusById.get(pinnedProvider) === "active";
+  const providerHealthy = hasHealthyCoworkerProvider(
+    pinnedProvider,
+    allProviderStatuses.map((provider) => ({
+      providerId: provider.providerId,
+      status: provider.status,
+      activeToolModelCount: provider.modelProfiles.length,
+    })),
+  );
 
   const summary = {
     modelTier,
     priority: priorityLabel,
     skillCount: assignedSkills.length,
-    toolCount: agent.toolGrants.length,
+    toolCount: record.runtime.heldGrantKeys.length,
     hitlTier: agent.hitlTierDefault,
     providerHealthy,
   };
@@ -235,6 +253,14 @@ export default async function AgentDetailPage({
     agentDescription: agent.description,
     services: record.services,
     install: record.installAvailability,
+    readinessByServiceId: evaluateCoworkerServicesReadiness(record.services, {
+      assignedSkillIds: record.runtime.assignedSkillIds,
+      registeredToolNames: VERIFIED_COWORKER_SERVICE_TOOL_NAMES,
+      heldGrantKeys: record.runtime.heldGrantKeys,
+      providerHealthy,
+      blockingCapabilityNeedCount:
+        capabilityNeedReview.summary.byStatus["blocked"] ?? 0,
+    }),
   });
   const {
     area,
@@ -267,10 +293,10 @@ export default async function AgentDetailPage({
 
   const capabilitiesEditor = (
     <CapabilitiesEditor
-      agentCuid={agent.id}
-      agentBusinessId={agent.agentId}
-      slugId={agent.slugId}
-      heldGrants={agent.toolGrants.map((g) => g.grantKey)}
+      agentCuid={record.runtime.id}
+      agentBusinessId={record.runtime.agentId}
+      slugId={record.runtime.slugId}
+      heldGrants={record.runtime.heldGrantKeys}
       allGrantKeys={knownGrantKeys()}
       assignedSkills={assignedSkills}
       catalogSkills={catalogSkillRows}
@@ -280,7 +306,7 @@ export default async function AgentDetailPage({
 
   const routingCard = (
     <AgentModelRoutingCard
-      agentId={agent.agentId}
+      agentId={record.runtime.agentId}
       minimumTier={modelConfig?.minimumTier ?? "adequate"}
       budgetClass={modelConfig?.budgetClass ?? "balanced"}
       pinnedProviderId={modelConfig?.pinnedProviderId ?? null}
@@ -326,7 +352,7 @@ export default async function AgentDetailPage({
     {
       id: "capabilities",
       label: "Capabilities",
-      badge: String(agent.toolGrants.length),
+      badge: String(record.runtime.heldGrantKeys.length),
     },
     {
       id: "autonomy",
@@ -376,20 +402,29 @@ export default async function AgentDetailPage({
             {canStartConversation && (
               <AskCoworkerButton
                 routeContext={detailRoute}
-                label="Ask this coworker"
+                label={`Ask ${agent.displayName}`}
                 className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--dpf-accent)] px-3 text-sm font-semibold text-[var(--dpf-accent)] hover:bg-[var(--dpf-surface-2)]"
               >
                 <MessageSquare aria-hidden className="h-4 w-4" />
-                <span>Ask this coworker</span>
+                <span>{`Ask ${agent.displayName}`}</span>
               </AskCoworkerButton>
             )}
             {availability.state === "setup-needed" && (
               <Link
-                href="/setup"
+                href={`${detailRoute}#capabilities`}
                 className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--dpf-border)] px-3 text-sm font-semibold text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
               >
                 <Settings2 aria-hidden className="h-4 w-4" />
-                Finish setup
+                Review capabilities
+              </Link>
+            )}
+            {availability.state === "needs-attention" && (
+              <Link
+                href="/platform/ai/readiness"
+                className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--dpf-border)] px-3 text-sm font-semibold text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
+              >
+                <Settings2 aria-hidden className="h-4 w-4" />
+                Review AI readiness
               </Link>
             )}
             {availability.state === "coverage-not-defined" && (
@@ -471,22 +506,28 @@ export default async function AgentDetailPage({
         <div className="space-y-5">
           <section>
             <h2 className="text-base font-semibold text-[var(--dpf-text)]">
-              Work offered now
+              Ready work
             </h2>
             <div className="mt-2">
-              <WorkHighlights services={record.services} />
+              <WorkHighlights
+                services={record.services}
+                serviceAvailability={discovery.serviceAvailability}
+              />
             </div>
           </section>
           <AdvancedDetail summary="Operational profile">
             <OverviewPanel record={record} summary={summary} />
           </AdvancedDetail>
         </div>
-        <WorkOfferedPanel services={record.services} />
+        <WorkOfferedPanel
+          services={record.services}
+          serviceAvailability={discovery.serviceAvailability}
+        />
         <AvailabilityPanel
           availability={availability}
+          serviceAvailability={discovery.serviceAvailability}
           authority={authority}
           interactionLabel={interactionLabel}
-          canStartConversation={canStartConversation}
           installArchetypeId={
             record.installAvailability.install?.archetypeId ?? null
           }

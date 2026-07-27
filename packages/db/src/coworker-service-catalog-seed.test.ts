@@ -87,6 +87,18 @@ describe("coworker service catalog seed data", () => {
     }
   });
 
+  it("declares only the verified Marketing campaign service for food and hospitality", () => {
+    const marketing = COWORKER_SERVICE_CATALOG_SERVICE_SEEDS.find(
+      (service) => service.serviceId === "svc-marketing-campaign-execution",
+    );
+    const customerAdvisor = COWORKER_SERVICE_CATALOG_SERVICE_SEEDS.find(
+      (service) => service.serviceId === "svc-customer-sales-intake",
+    );
+
+    expect(marketing?.archetypes).toEqual(["food-hospitality"]);
+    expect(customerAdvisor?.archetypes).toEqual([]);
+  });
+
   it("includes verified GAID authority metadata for public A2A offers", () => {
     const externalOffers = COWORKER_SERVICE_CATALOG_OFFER_SEEDS.filter(
       (offer) => offer.availabilityScope === "external",
@@ -155,7 +167,13 @@ describe("coworker service catalog seed data", () => {
       expect(args["update"]).not.toHaveProperty("ownerAreaSlug");
       expect(args["create"]).toHaveProperty("portfolioId");
       expect(args["update"]).toHaveProperty("portfolioId");
-      expect(args["create"]).toHaveProperty("archetypes", []);
+      const create = args["create"] as { serviceId?: string };
+      expect(args["create"]).toHaveProperty(
+        "archetypes",
+        create.serviceId === "svc-marketing-campaign-execution"
+          ? ["food-hospitality"]
+          : [],
+      );
       expect(args["update"]).not.toHaveProperty("archetypes");
     }
     // BI-74FD6420 seed-FK contract: providerAgentId stays the slug agentId
@@ -176,6 +194,13 @@ describe("coworker service catalog seed data", () => {
           archetypes: { equals: ["software-and-platforms"] },
         }),
         data: { archetypes: [] },
+      }),
+      expect.objectContaining({
+        where: expect.objectContaining({
+          serviceId: "svc-marketing-campaign-execution",
+          archetypes: { equals: [] },
+        }),
+        data: { archetypes: ["food-hospitality"] },
       }),
       expect.objectContaining({
         where: expect.objectContaining({ digitalProductId: "dpf-portal" }),
