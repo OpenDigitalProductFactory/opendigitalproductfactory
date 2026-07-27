@@ -104,5 +104,37 @@ describe("workspace Work Case loader", () => {
       "Need a human confirmation before booking.",
     ]);
     expect(detail?.sourceRefs.map((ref) => ref.kind)).toContain("work-item");
+    expect(detail?.room).toMatchObject({
+      roomKey: "booking%3ABK-1",
+      caseRef: {
+        caseId: "booking:BK-1",
+        sourceType: "booking",
+        sourceId: "BK-1",
+      },
+      mode: "finite",
+      title: "Confirm condenser appointment",
+      purpose: "Customer needs a scheduling confirmation.",
+      state: "waiting-on-person",
+      work: {
+        nextAction: "Collect required input",
+        attentionRequired: true,
+      },
+    });
+    expect(detail?.room.boundary.gaps).toEqual(expect.arrayContaining([
+      "outcome",
+      "scope",
+      "participants",
+      "accountable",
+      "authority",
+      "sensitivity",
+      "measures",
+      "closure-rule",
+    ]));
+    expect(detail?.room.activity).toContainEqual(expect.objectContaining({
+      eventId: "work-item:WIM-1",
+      kind: "message",
+      occurredAt: "2026-06-28T10:10:00.000Z",
+      emphasis: "quiet",
+    }));
   });
 });

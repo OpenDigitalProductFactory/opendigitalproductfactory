@@ -33,7 +33,14 @@ describe("Work Case source registry", () => {
       expect(entry.receiptPolicy.defaultReceiptKind.length).toBeGreaterThan(0);
       expect(entry.titleProjection.length).toBeGreaterThan(0);
       expect(entry.summaryProjection.length).toBeGreaterThan(0);
+      expect(["finite", "standing"]).toContain(entry.roomProjection.mode);
+      expect(Array.isArray(entry.roomProjection.outcomePacket.requiredCategories)).toBe(true);
     }
+  });
+
+  it("makes standing room mode an explicit source-registry decision", () => {
+    expect(getWorkCaseSourceEntry("scheduled")?.roomProjection.mode).toBe("standing");
+    expect(getWorkCaseSourceEntry("booking")?.roomProjection.mode).toBe("finite");
   });
 
   it("normalizes unknown, missing, and whitespace source keys safely", () => {
