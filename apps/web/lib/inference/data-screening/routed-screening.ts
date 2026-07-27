@@ -55,7 +55,8 @@ export function createRoutedInferenceScreen(input: RoutedScreenInput) {
         detailUse: sensitiveDetailUse,
       },
     );
-    if (masked.transformation === "none") {
+    const transformation = masked.transformation;
+    if (transformation === "none") {
       return { screenInput, screen: rawScreen, rehydrationHandle: undefined };
     }
 
@@ -63,7 +64,7 @@ export function createRoutedInferenceScreen(input: RoutedScreenInput) {
     const appliedTransformation = transformationEvidence(
       authorityReceipt,
       rawScreen,
-      masked.transformation,
+      transformation,
     );
     const appliedTransformationSource = () => {
       const refreshedRaw = screenInferencePayload(screenInput);
@@ -77,7 +78,7 @@ export function createRoutedInferenceScreen(input: RoutedScreenInput) {
       return transformationEvidence(
         (refreshedProjection ?? refreshedRaw).receipt,
         refreshedRaw,
-        masked.transformation,
+        transformation,
       );
     };
     const transformedInput = {
