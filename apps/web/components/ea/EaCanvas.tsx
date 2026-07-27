@@ -66,6 +66,7 @@ type Props = {
   initialElements: SerializedViewElement[];
   initialEdges: SerializedEdge[];
   initialCanvasState: CanvasState | null;
+  initialFocusElementId?: string | null;
   isReadOnly: boolean;
 };
 
@@ -389,7 +390,7 @@ const EDGE_VARIANT_LABELS: Record<EdgeVariant, string> = {
 
 export function EaCanvas({
   viewId, viewName, viewStatus, notationSlug, viewpoint, allElementTypes,
-  initialElements, initialEdges, initialCanvasState, isReadOnly,
+  initialElements, initialEdges, initialCanvasState, initialFocusElementId, isReadOnly,
 }: Props) {
   const paletteTypes = viewpoint
     ? allElementTypes.filter((et) => viewpoint.allowedElementTypeSlugs.includes(et.slug))
@@ -445,7 +446,9 @@ export function EaCanvas({
   const initialNodeLayout = buildNodes(visibleElements, initialCanvasState, layoutEdges);
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodeLayout.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(buildEdges(visibleEdges, handleDeleteEdge, edgeVariant));
-  const [selectedViewElement, setSelectedViewElement] = useState<SerializedViewElement | null>(null);
+  const [selectedViewElement, setSelectedViewElement] = useState<SerializedViewElement | null>(
+    () => visibleElements.find((element) => element.elementId === initialFocusElementId) ?? null,
+  );
   const [isLayouting, setIsLayouting] = useState(false);
   const [revMenuOpen, setRevMenuOpen] = useState(false);
   const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);

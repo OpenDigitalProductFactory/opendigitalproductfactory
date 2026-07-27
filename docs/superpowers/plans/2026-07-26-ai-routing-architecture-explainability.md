@@ -220,16 +220,39 @@ Make related BPMN, SysML, ArchiMate, source and evidence viewpoints navigable.
 
 ### Work
 
-- [ ] Derive related views from shared `EaElement` membership and existing
+- [x] Derive related views from shared `EaElement` membership and existing
       `EaRelationship`/source identities.
-- [ ] Add authorized SysML view creation/refresh to the existing architecture flow.
-- [ ] Add related-view actions to the element inspector.
-- [ ] Add a governed routing-decision inspector showing safe inputs, source/version,
+- [x] Add authorized SysML view creation/refresh to the existing architecture flow.
+- [x] Add related-view actions to the element inspector.
+- [x] Add a governed routing-decision inspector showing safe inputs, source/version,
       outcome vocabulary and evidence freshness.
-- [ ] Decide from evidence whether the inspector is sufficient or a future DMN
+- [x] Decide from evidence whether the inspector is sufficient or a future DMN
       notation BI is justified.
-- [ ] Keep SysML details behind architecture permissions and progressive disclosure.
-- [ ] Add keyboard, screen-reader and no-color-only navigation tests.
+- [x] Keep SysML details behind architecture permissions and progressive disclosure.
+- [x] Add keyboard, screen-reader and no-color-only navigation tests.
+
+### Phase 4 implementation advisory — 2026-07-27
+
+- Existing `EaElement`, `EaRelationship`, and `EaViewElement` rows are sufficient:
+  drill-through is a bounded, deterministic read projection and no canonical
+  view-link table or schema change is needed.
+- Routing views load the elements for the named architecture revision once, then
+  derive shortest relationship paths in memory. This keeps the inspector aligned
+  with the same BPMN/SysML/ArchiMate projection instead of introducing manually
+  curated links.
+- The architecture element inspector opens the exact related element in its target
+  view and links to the Operations Map Compare lens and repository source.
+- Governed business-rule tasks and gateways expose only enumerated contract inputs
+  and outcome vocabulary. Raw prompts, tool values, detected sensitive values,
+  account identifiers, and policy payloads are not queried or serialized.
+- The existing inspector is sufficient for current explainability. DMN remains a
+  future option only if operators need authorable decision tables or hit policies
+  that cannot be explained by the bounded rule-source metadata.
+- Projection refresh now requires `manage_ea_model`; technical drill-through still
+  requires `view_ea_modeler`. SysML is available in the existing New view flow.
+- UX fit: architecture context is progressive disclosure in the existing inspector,
+  exact links use keyboard-focusable controls and text labels, and operational
+  evidence remains on the canonical `/platform/ai/operations-map` route.
 
 ### Likely files
 

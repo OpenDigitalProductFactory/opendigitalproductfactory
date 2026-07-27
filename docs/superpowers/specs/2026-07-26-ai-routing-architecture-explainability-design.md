@@ -2,7 +2,7 @@
 
 | Field | Value |
 | --- | --- |
-| Status | Approved — documentation authority and deterministic Designed EA projection implemented; Observed/Compare delivery remains |
+| Status | Approved — documentation authority, deterministic Designed EA projection, and architecture drill-through implemented; Operations Map Observed/Compare delivery remains |
 | Date | 2026-07-26 |
 | Epic | `EP-CFACFA9F` — AI Routing Architecture & Explainability |
 | Umbrella BI | `BI-3FA17F95` |
@@ -607,6 +607,28 @@ Reserve approximately 20 percent of implementation capacity:
 - **Standards:** the implementation remains within the ISO/IEC/IEEE 42010 viewpoint
   separation and existing OMG BPMN 2.0.2, SysML 2.0, and ArchiMate model-kind
   decisions in this design; no new external standard or tool was introduced.
+
+### Phase 4 implementation advisory
+
+- **Decision:** aligned with the existing EA substrate and the approved progressive
+  disclosure model.
+- **Data model:** no schema change or canonical view-link table was added. Related
+  navigation is derived from current `EaElement` membership and the existing
+  relationship graph for the applicable architecture revision.
+- **Source of truth:** BPMN, SysML, ArchiMate, implementation source, and Operations
+  Map links all originate from the deterministic projection metadata; the inspector
+  owns no independent route rules.
+- **Security:** the decision inspector serializes an explicit allowlist of
+  architecture-safe input classes and bounded outcome labels. It does not load raw
+  prompt, tool, detected-value, token-map, account, or policy payload content.
+- **Authorization:** viewing technical detail requires `view_ea_modeler`; creating
+  SysML views and refreshing deterministic projections requires `manage_ea_model`.
+- **DMN decision:** a governed inspector is sufficient for the current read-only
+  explainability need. DMN is deferred until an authorable decision-table need is
+  demonstrated; adding notation now would duplicate rule authority.
+- **Performance:** routing drill-through loads the bounded named design revision and
+  derives shortest paths in memory, avoiding repeated depth-by-depth database
+  traversal while preserving deterministic exact-element links.
 
 ## 19. Standards
 
