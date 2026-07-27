@@ -9,6 +9,11 @@ import {
   buildWorkCaseSummary,
   type WorkCaseReadModelEvidenceInput,
 } from "./case-read-model";
+import {
+  buildWorkRoomView,
+  type WorkRoomActivityInput,
+} from "./room-read-model";
+import type { WorkRoomView } from "./room-types";
 
 const CLOSED_WORK_ITEM_STATUSES = ["completed", "cancelled"];
 
@@ -55,6 +60,8 @@ type WorkspaceWorkItemRecord = {
 type WorkspaceWorkItemMessageRecord = {
   messageId: string;
   senderType: string;
+  senderUserId?: string | null;
+  senderAgentId?: string | null;
   messageType: string;
   body: string;
   createdAt: Date | string;
@@ -111,6 +118,10 @@ export type WorkspaceWorkCaseDetailView = {
   // a comment (WorkItemMessage.workItemId) with @mention notification.
   workItemId: string;
   workItemTitle: string;
+  // Transitional compatibility seam. The loader always returns the room
+  // projection; the optional marker lets the existing detail component remain
+  // unchanged until BI-32E26F62 replaces its composition on the same route.
+  room?: WorkRoomView;
 };
 
 function iso(value: Date | string | null | undefined): string | null {
@@ -278,6 +289,37 @@ function evidenceFromMessages(messages: WorkspaceWorkItemMessageRecord[]): WorkC
   }));
 }
 
+function roomActivitiesFromMessages(
+  item: WorkspaceWorkItemRecord,
+  messages: WorkspaceWorkItemMessageRecord[],
+): WorkRoomActivityInput[] {
+  return messages.map((message) => ({
+    sourceEventId: message.messageId,
+    // Free text remains a message regardless of messageType. Structured
+    // decisions, artifacts, and outcomes require their canonical write paths.
+    kind: "message",
+    occurredAt: message.createdAt,
+    actorRef: {
+      actorKind:
+        message.senderType === "agent"
+          ? "agent"
+          : message.senderType === "user"
+            ? "person"
+            : "system",
+      actorId:
+        message.senderAgentId
+        ?? message.senderUserId
+        ?? undefined,
+    },
+    summary: message.body,
+    sourceRef: {
+      kind: "work-item",
+      id: item.itemId,
+      status: message.messageType,
+    },
+  }));
+}
+
 export async function loadWorkspaceWorkCaseDetail({
   prismaClient,
   caseKey,
@@ -335,6 +377,35 @@ export async function loadWorkspaceWorkCaseDetail({
     },
     evidence,
   });
+  const sourceRefs = detail.summary.sourceRefs;
+  const room = buildWorkRoomView({
+    caseKey,
+    detail,
+    boundary: {
+      purpose: item.description,
+      outcome: null,
+      scopeIncluded: [],
+      scopeExcluded: [],
+      accountablePrincipalRef: null,
+      admittedRoleSummary: [],
+      authoritySummary: [],
+      sensitivityCeiling: null,
+      measures: [],
+      timeBoundary: {
+        dueAt: iso(item.dueAt),
+        reviewAt: null,
+        stopConditionSummary: null,
+      },
+      closureRuleSummary: null,
+      sourceRefs,
+    },
+    activities: roomActivitiesFromMessages(item, messages),
+    context: {
+      refs: sourceRefs,
+      digest: null,
+      sensitivityCeiling: null,
+    },
+  });
 
   return {
     summary: toListItem(item, userId, now),
@@ -342,5 +413,6 @@ export async function loadWorkspaceWorkCaseDetail({
     sourceRefs: detail.summary.sourceRefs,
     workItemId: item.id,
     workItemTitle: item.title,
+    room,
   };
 }
