@@ -103,12 +103,13 @@ Consolidation follows a fail-safe promotion sequence:
 4. prove the blocking profiles on GitHub, then remove the disabled definitions.
 
 `scripts/ci-policy-guards.test.mjs` freezes the complete legacy-job inventory:
-a removed or duplicated registry entry fails CI, and a retained legacy
-definition cannot silently allocate a runner again. Exact-tree parity on PR
-#3675 run `30309641352` matched all 34 named guards. The source profile used
-31.7 seconds of guard execution and the pull-request profile used 3.3 seconds.
-This reduces repeated runner, checkout, and Node setup without collapsing guard
-identity or weakening `Merge Readiness`.
+a removed or duplicated registry entry fails CI, and a migrated legacy job
+cannot silently regain a standalone runner or merge-readiness dependency.
+Exact-tree parity on PR #3675 run `30309641352` matched all 34 named guards.
+Blocking proof on PR #3678 run `30313483522` then passed with every legacy job
+skipped before the definitions were removed. This reduces repeated runner,
+checkout, and Node setup without collapsing guard identity or weakening
+`Merge Readiness`.
 
 ## Where CI runs it
 

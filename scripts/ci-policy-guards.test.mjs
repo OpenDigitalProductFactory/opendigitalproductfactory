@@ -111,18 +111,20 @@ describe("CI policy guard registry", () => {
     );
   });
 
-  it("keeps every migrated legacy job disabled while its definition remains", () => {
+  it("does not retain migrated legacy job definitions or aggregate dependencies", () => {
     const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
 
     for (const legacyJobId of EXPECTED_LEGACY_JOBS) {
       const escapedJobId = legacyJobId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      assert.match(
+      assert.doesNotMatch(
         workflow,
-        new RegExp(
-          `^  ${escapedJobId}:\\r?\\n(?:^[ \\t].*\\r?\\n)*?^    if: \\$\\{\\{ false \\}\\} # Migrated to policy-guards-(?:source|pr)\\.$`,
-          "m",
-        ),
-        `${legacyJobId} must remain disabled until its definition is removed`,
+        new RegExp(`^  ${escapedJobId}:$`, "m"),
+        `${legacyJobId} must not allocate a standalone runner`,
+      );
+      assert.doesNotMatch(
+        workflow,
+        new RegExp(`^      - ${escapedJobId}$`, "m"),
+        `${legacyJobId} must not remain in Merge Readiness dependencies`,
       );
     }
   });
