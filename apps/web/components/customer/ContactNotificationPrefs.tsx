@@ -9,15 +9,15 @@ const selectClasses =
 const labelClasses = "mb-1 block text-dpf-caption text-[var(--dpf-muted)]";
 
 const CHANNEL_OPTIONS = [
-  { value: "", label: "Not set" },
+  { value: "", label: "—" },
   { value: "sms", label: "SMS" },
   { value: "voice", label: "Voice" },
   { value: "email", label: "Email" },
-  { value: "none", label: "Do not notify" },
+  { value: "none", label: "None" },
 ] as const;
 
 const PHONE_TYPE_OPTIONS = [
-  { value: "", label: "Not set" },
+  { value: "", label: "—" },
   { value: "mobile", label: "Mobile" },
   { value: "landline", label: "Landline" },
   { value: "unknown", label: "Unknown" },
@@ -65,26 +65,23 @@ export function ContactNotificationPrefs({
           phoneType: (type || null) as "mobile" | "landline" | "unknown" | null,
         });
         if (result.outcome === "not-found") {
-          setError("Contact not found.");
+          setError("Not found.");
           return;
         }
         setSaved(true);
         router.refresh();
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Could not save preferences.");
+        setError(e instanceof Error ? e.message : "Save failed.");
       }
     });
   }
 
   return (
     <div className="mt-2 space-y-2 border-t border-[var(--dpf-border)] pt-2">
-      <p className="text-dpf-caption font-dpf-medium text-[var(--dpf-muted)]">
-        Notification preferences
-      </p>
       <div className="grid grid-cols-2 gap-2">
         <div>
           <label className={labelClasses} htmlFor={`channel-${contactId}`}>
-            Preferred channel
+            Notify via
           </label>
           <select
             id={`channel-${contactId}`}
@@ -95,6 +92,7 @@ export function ContactNotificationPrefs({
               setSaved(false);
             }}
             disabled={isPending}
+            aria-label="Preferred notification channel"
           >
             {CHANNEL_OPTIONS.map((opt) => (
               <option
@@ -109,7 +107,7 @@ export function ContactNotificationPrefs({
         </div>
         <div>
           <label className={labelClasses} htmlFor={`phoneType-${contactId}`}>
-            Phone type
+            Phone
           </label>
           <select
             id={`phoneType-${contactId}`}
@@ -120,6 +118,7 @@ export function ContactNotificationPrefs({
               setSaved(false);
             }}
             disabled={isPending}
+            aria-label="Phone type"
           >
             {PHONE_TYPE_OPTIONS.map((opt) => (
               <option
@@ -133,9 +132,6 @@ export function ContactNotificationPrefs({
           </select>
         </div>
       </div>
-      <p className="text-dpf-caption text-[var(--dpf-muted)]">
-        Dispatch uses these before SMS or voice. Landline phones cannot receive texts.
-      </p>
       {error ? (
         <p className="text-dpf-caption text-[var(--dpf-accent)]" role="alert">
           {error}
@@ -151,7 +147,7 @@ export function ContactNotificationPrefs({
           disabled={isPending}
           onClick={save}
         >
-          {isPending ? "Saving…" : "Save preferences"}
+          {isPending ? "Saving…" : "Save"}
         </button>
       ) : null}
     </div>
