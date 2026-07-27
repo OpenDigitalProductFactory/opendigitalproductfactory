@@ -13,10 +13,11 @@ coverage_receipt: cms3quvuy0lb301p5ilijw2qz
 ## Outcome
 
 Remove measured CI duplication without changing the applicable quality
-contract. Each refactor lands through its own child BI and PR because CodeQL
-ownership, policy-guard aggregation, TypeScript proof reuse, production-build
-artifact reuse, and test-shard balancing have independent evidence and
-rollback boundaries.
+contract. Each viable refactor lands through its own child BI and PR because
+policy-guard aggregation, TypeScript proof reuse, production-build artifact
+reuse, and test-shard balancing have independent evidence and rollback
+boundaries. CodeQL parity was evaluated first and rejected: the two scans use
+the same engine but deliver different security and code-quality products.
 
 The existing stable aggregate checks remain the merge authority. Unknown,
 missing, stale, mismatched, or corrupt evidence runs the original exhaustive
@@ -41,15 +42,28 @@ execution baseline:
 - 38 startup-heavy source/policy jobs: 10.3 runner-minutes;
 - standalone typecheck: 189 seconds; production build: 268 seconds;
 - four web test shards: 175, 190, 190, and 175 seconds;
-- repository Advanced CodeQL: about 10.9 runner-minutes;
-- organization-managed CodeQL: about 7.9 runner-minutes;
+- repository CodeQL Advanced security scan: about 10.9 runner-minutes;
+- GitHub Code Quality scan: about 7.9 runner-minutes;
 - UX route sweep: 1,071 seconds, including a separate 216-second portal build.
 
-The CodeQL REST/configuration audit found the repository attached to the
-unenforced global `GitHub recommended` configuration with default setup
-enabled, while `.github/workflows/codeql.yml` runs the same
-JavaScript/TypeScript, Python, and Go analyses plus Actions. Both authorities
-posted checks for the same PR head.
+The live repository settings and GitHub documentation corrected the initial
+CodeQL interpretation:
+
+- repository security scanning is already in **Advanced setup**, using
+  `.github/workflows/codeql.yml` and the `security-extended` suite;
+- the dynamic runs labeled `Code Quality: ...` are the separate GitHub Code
+  Quality product, enabled for Go, JavaScript/TypeScript, and Python;
+- Code Quality produces maintainability/reliability findings, repository
+  scores, PR bot comments and autofixes, and optional quality rules. Those
+  outputs are not emitted by the advanced security workflow;
+- GitHub identifies Code Quality runs by their run label even though their
+  workflow name is also `CodeQL`.
+
+Therefore the matching language databases are not evidence of duplicate
+coverage. GitHub does not expose a supported contract for moving the managed
+Code Quality query/result product into the advanced security workflow.
+Disabling either scan would weaken the applicable contract, so
+`BI-A6642373` is a verified no-consolidation outcome rather than a code change.
 
 ## Architecture and prior-design reconciliation
 
@@ -75,7 +89,7 @@ Coverage receipt: `cms3quvuy0lb301p5ilijw2qz`.
 
 | Deliverable | Backlog item | Depends on | Independently shippable |
 | --- | --- | --- | --- |
-| One CodeQL authority per language | `BI-A6642373` | none | yes |
+| Evaluate CodeQL scan parity | `BI-A6642373` | none | verified distinct coverage; no delivery |
 | Aggregate startup-heavy policy guards | `BI-0580AFD3` | none | yes |
 | Reuse production-build web TypeScript proof | `BI-FE4C70DD` | `BI-2F60FDCE` observations | yes |
 | Reuse production build in UX route sweep | `BI-959F4F38` | coordinates with `BI-9585E580` | yes |
@@ -83,9 +97,9 @@ Coverage receipt: `cms3quvuy0lb301p5ilijw2qz`.
 
 ## Delivery order
 
-1. **CodeQL authority (`BI-A6642373`).** Remove duplicate language ownership,
-   keep Actions/JavaScript-TypeScript/Python/Go coverage, add a configuration
-   guard, and record before/after runner-minutes.
+1. **CodeQL parity (`BI-A6642373`).** Complete as a no-consolidation decision:
+   retain Advanced security scanning and GitHub Code Quality because their
+   outputs are not substitutable.
 2. **Policy guards (`BI-0580AFD3`).** Introduce a versioned guard registry and
    a small profile matrix. Emit named results and make the merge aggregate
    reject missing registry entries.
@@ -98,18 +112,28 @@ Coverage receipt: `cms3quvuy0lb301p5ilijw2qz`.
 5. **Shard balancing (`BI-5232B1DA`).** Generate and validate a
    duration-weighted manifest, then compare measured shard spread.
 
-Each phase gets a separate exact-SHA local gate, PR, GitHub timing record, and
-rollback. The parent `BI-4DB73C5E` closes only when all five children meet
-their acceptance criteria.
+Each implementation phase gets a separate exact-SHA local gate, PR, GitHub
+timing record, and rollback. The parent `BI-4DB73C5E` closes when the CodeQL
+evaluation is recorded and the four viable implementation children meet their
+acceptance criteria.
 
 ## Completion criteria
 
-- Every child BI is done through the governed merge queue.
+- The CodeQL evaluation BI is closed with its live-settings and product-contract
+  evidence; every implementation child is done through the governed merge
+  queue.
 - Build and TypeScript work execute once per exact tree where parity is proved.
-- Each supported CodeQL language has one authoritative scan.
+- Advanced CodeQL security coverage and GitHub Code Quality coverage both
+  remain enabled until GitHub offers an evidence-backed single-run equivalent.
 - Policy results remain individually visible and merge-blocking.
 - Test inventory remains exhaustive and shard duration is measurement-based.
 - Before/after critical path and runner-minutes are recorded for every child.
 - No broad or unvalidated cache fallback is introduced.
 - Documentation impact is contributor/operations only; UI and schema changes
   are not applicable.
+
+## Standards references
+
+- [About GitHub Code Quality](https://docs.github.com/en/code-security/concepts/about-code-quality)
+- [CodeQL-powered analysis for Code Quality](https://docs.github.com/en/code-security/reference/code-quality/codeql-detection)
+- [CodeQL query suites](https://docs.github.com/en/code-security/concepts/code-scanning/codeql/codeql-query-suites)
