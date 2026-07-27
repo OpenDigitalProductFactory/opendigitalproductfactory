@@ -1,9 +1,9 @@
 # Governed processing activities implementation plan
 
-**Backlog item:** BI-DG-011  
-**Parent epic:** EP-DATA-GOVERNANCE  
-**Depends on:** BI-DG-002 (done)  
-**Design authority:** `docs/superpowers/specs/2026-07-17-data-management-governance-design.md` §6.5  
+**Backlog item:** BI-DG-011
+**Parent epic:** EP-DATA-GOVERNANCE
+**Depends on:** BI-DG-002 (done)
+**Design authority:** `docs/superpowers/specs/2026-07-17-data-management-governance-design.md` §6.5
 **Existing umbrella plan:** `docs/superpowers/plans/2026-07-17-data-management-governance-plan.md` Task 15
 
 > **For agentic workers:** execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff.
@@ -152,4 +152,3 @@ Reserve approximately 20 percent of implementation effort for boundary cleanup:
 - **Retention regression:** new activity facts must never shorten retention. Mitigation: monotonic `max` tests.
 - **Migration drift:** tightening constraints could wedge populated installs. Mitigation: additive nullable/JSON fields where appropriate, inline safety attestations, and sandbox migration evidence.
 - **Rollback:** revert the application/service changes and additive migration together. The new tables/columns may remain unused safely; do not write a destructive down migration.
-
