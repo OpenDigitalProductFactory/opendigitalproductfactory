@@ -10,25 +10,19 @@ import type {
   AuthorityApprovalEnvelopeFinalize,
   AuthorityApprovalTaskResume,
 } from "./mcp-governed-execute";
-import {
-  buildCoworkerApprovalBinding,
-  type CoworkerAuthorityInput,
-} from "./govern/authority/coworker-authority-decision";
+import type { CoworkerAuthorityInput } from "./govern/authority/coworker-authority-decision";
 import type { ToolResult } from "./mcp-tools";
-
+import { registerCoworkerAuthorityCases } from "./mcp-governed-execute-authority.cases";
 type AuditRow = Record<string, unknown>;
-
 function captureAudit(rows: AuditRow[]) {
   return async (data: AuditRow) => {
     rows.push(data);
   };
 }
-
 const NORMAL_USER = {
   platformRole: "ceo",
   isSuperuser: true,
 };
-
 type ExecuteFn = (
   toolName: string,
   params: Record<string, unknown>,
@@ -40,7 +34,6 @@ type ExecuteFn = (
     taskRunId?: string;
   },
 ) => Promise<ToolResult>;
-
 let auditRows: AuditRow[];
 let receiptRows: AuditRow[];
 let authorityRows: AuditRow[];
@@ -48,7 +41,6 @@ let executeMock: ReturnType<typeof vi.fn> & ExecuteFn;
 let approvalEnvelopeCreate: AuthorityApprovalEnvelopeCreate;
 let approvalTaskResume: AuthorityApprovalTaskResume;
 let approvalEnvelopeFinalize: AuthorityApprovalEnvelopeFinalize;
-
 function authorityInput(
   overrides: Partial<CoworkerAuthorityInput> = {},
 ): CoworkerAuthorityInput {
@@ -106,6 +98,23 @@ function authorityInput(
     ...overrides,
   };
 }
+function applyAuthorityOverrides(
+  overrides: Parameters<typeof _setGovernanceForTests>[0],
+): void {
+  _setGovernanceForTests({
+    resolveAgentGrants: async () => ["backlog_read", "backlog_write"],
+    isAllowedByGrants: () => true,
+    executeTool: executeMock,
+    toolExecutionCreate: captureAudit(auditRows),
+    toolExecutionReceiptCreate: captureAudit(receiptRows),
+    resolveCoworkerAuthorityInput: async () => authorityInput(),
+    authorizationDecisionCreate: captureAudit(authorityRows),
+    authorityApprovalEnvelopeCreate: approvalEnvelopeCreate,
+    authorityApprovalTaskResume: approvalTaskResume,
+    authorityApprovalEnvelopeFinalize: approvalEnvelopeFinalize,
+    ...overrides,
+  });
+}
 
 beforeEach(() => {
   auditRows = [];
@@ -155,243 +164,13 @@ afterEach(() => {
 });
 
 describe("governedExecuteTool — happy path", () => {
-  it("evaluates and records every coworker tool action at the universal seam", async () => {
-    const result = await governedExecuteTool({
-      toolName: "query_backlog",
-      rawParams: { status: "open" },
-      userId: "user-1",
-      userContext: NORMAL_USER,
-      context: { agentId: "AGT-100", routeContext: "/ops" },
-      source: "agentic-loop",
-    });
-
-    expect(result.success).toBe(true);
-    expect(executeMock).toHaveBeenCalledOnce();
-    expect(authorityRows).toHaveLength(1);
-    expect(authorityRows[0]).toMatchObject({
-      actorType: "ai-coworker",
-      actorRef: "AGT-100",
-      humanContextRef: "user-1",
-      actionKey: "query_backlog",
-      decision: "allow",
-      routeContext: "/ops",
-      sensitivityLevel: "internal",
-    });
+  registerCoworkerAuthorityCases({
+    applyOverrides: applyAuthorityOverrides, authorityInput,
+    normalUser: NORMAL_USER, executeMock: () => executeMock,
+    authorityRows: () => authorityRows, auditRows: () => auditRows,
+    approvalEnvelopeCreate: () => approvalEnvelopeCreate, approvalTaskResume: () => approvalTaskResume,
+    approvalEnvelopeFinalize: () => approvalEnvelopeFinalize,
   });
-
-  it("denies without executing when universal authority rejects the action", async () => {
-    _setGovernanceForTests({
-      resolveAgentGrants: async () => ["backlog_write"],
-      isAllowedByGrants: () => true,
-      executeTool: executeMock,
-      toolExecutionCreate: captureAudit(auditRows),
-      authorizationDecisionCreate: captureAudit(authorityRows),
-      resolveCoworkerAuthorityInput: async () =>
-        authorityInput({
-          authContext: {
-            ...authorityInput().authContext,
-            grantedCapabilities: ["view_platform"],
-          },
-          action: {
-            ...authorityInput().action,
-            toolName: "create_backlog_item",
-            requiredCapability: "manage_backlog",
-            sideEffect: true,
-            approvalPolicy: "side-effects",
-          },
-        }),
-    });
-
-    const result = await governedExecuteTool({
-      toolName: "create_backlog_item",
-      rawParams: { title: "private title" },
-      userId: "user-1",
-      userContext: NORMAL_USER,
-      context: { agentId: "AGT-100", routeContext: "/ops" },
-      source: "agentic-loop",
-    });
-
-    expect(result).toMatchObject({
-      success: false,
-      error: "authority_denied",
-      governance: {
-        rejected: "authority_denied",
-        authorityReason: "human-capability-denied",
-      },
-    });
-    expect(executeMock).not.toHaveBeenCalled();
-    expect(authorityRows.at(-1)).toMatchObject({
-      decision: "deny",
-      rationale: {
-        reasonCode: "human-capability-denied",
-      },
-    });
-    expect(JSON.stringify(authorityRows)).not.toContain("private title");
-  });
-
-  it("returns a bounded approval requirement without executing", async () => {
-    _setGovernanceForTests({
-      resolveAgentGrants: async () => ["backlog_write"],
-      isAllowedByGrants: () => true,
-      executeTool: executeMock,
-      toolExecutionCreate: captureAudit(auditRows),
-      authorizationDecisionCreate: captureAudit(authorityRows),
-      resolveCoworkerAuthorityInput: async () =>
-        authorityInput({
-          action: {
-            ...authorityInput().action,
-            toolName: "create_backlog_item",
-            requiredCapability: "manage_backlog",
-            sideEffect: true,
-            approvalPolicy: "side-effects",
-          },
-          rawParams: { title: "private title" },
-        }),
-    });
-
-    const result = await governedExecuteTool({
-      toolName: "create_backlog_item",
-      rawParams: { title: "private title" },
-      userId: "user-1",
-      userContext: NORMAL_USER,
-      context: {
-        agentId: "AGT-100",
-        routeContext: "/ops",
-        taskRunId: "TASK-1",
-      },
-      source: "agentic-loop",
-    });
-
-    expect(result).toMatchObject({
-      success: false,
-      error: "approval_required",
-      governance: {
-        rejected: "approval_required",
-        authorityReason: "approval-required",
-      },
-      data: {
-        envelopeId: "ENV-1",
-        approvalBinding: {
-          actingHumanUserId: "user-1",
-          actingAgentId: "AGT-100",
-          toolName: "create_backlog_item",
-        },
-      },
-    });
-    expect(executeMock).not.toHaveBeenCalled();
-    expect(approvalEnvelopeCreate).toHaveBeenCalledOnce();
-    expect(JSON.stringify(result)).not.toContain("private title");
-    expect(authorityRows.at(-1)).toMatchObject({
-      decision: "require-approval",
-    });
-  });
-
-  it("resumes and finalizes only the exact task bound to an approved call", async () => {
-    const pending = authorityInput({
-      action: {
-        ...authorityInput().action,
-        toolName: "create_backlog_item",
-        requiredCapability: "manage_backlog",
-        sideEffect: true,
-        approvalPolicy: "side-effects",
-      },
-      task: { taskRunId: "TASK-1", parentTaskRunId: "TASK-PARENT" },
-      rawParams: { title: "approved title" },
-    });
-    const binding = buildCoworkerApprovalBinding(pending);
-    _setGovernanceForTests({
-      resolveAgentGrants: async () => ["backlog_write"],
-      isAllowedByGrants: () => true,
-      executeTool: executeMock,
-      toolExecutionCreate: captureAudit(auditRows),
-      toolExecutionReceiptCreate: captureAudit(receiptRows),
-      authorizationDecisionCreate: captureAudit(authorityRows),
-      authorityApprovalEnvelopeCreate: approvalEnvelopeCreate,
-      authorityApprovalTaskResume: approvalTaskResume,
-      authorityApprovalEnvelopeFinalize: approvalEnvelopeFinalize,
-      resolveCoworkerAuthorityInput: async () => ({
-        ...pending,
-        approval: {
-          envelopeId: "ENV-APPROVED",
-          status: "approved",
-          expiresAt: new Date(Date.now() + 60_000),
-          binding,
-        },
-      }),
-    });
-
-    const result = await governedExecuteTool({
-      toolName: "create_backlog_item",
-      rawParams: { title: "approved title" },
-      userId: "user-1",
-      userContext: NORMAL_USER,
-      context: {
-        agentId: "AGT-100",
-        routeContext: "/ops",
-        taskRunId: "TASK-1",
-      },
-      source: "agentic-loop",
-    });
-
-    expect(result.success).toBe(true);
-    expect(approvalTaskResume).toHaveBeenCalledWith("TASK-1");
-    expect(approvalTaskResume).not.toHaveBeenCalledWith("TASK-SIBLING");
-    expect(approvalEnvelopeFinalize).toHaveBeenCalledWith(
-      "ENV-APPROVED",
-      true,
-    );
-  });
-
-  it("fails closed when authority evidence cannot be recorded", async () => {
-    _setGovernanceForTests({
-      resolveAgentGrants: async () => ["backlog_read"],
-      isAllowedByGrants: () => true,
-      executeTool: executeMock,
-      toolExecutionCreate: captureAudit(auditRows),
-      resolveCoworkerAuthorityInput: async () => authorityInput(),
-      authorizationDecisionCreate: async () => {
-        throw new Error("decision store unavailable");
-      },
-    });
-
-    const result = await governedExecuteTool({
-      toolName: "query_backlog",
-      rawParams: {},
-      userId: "user-1",
-      userContext: NORMAL_USER,
-      context: { agentId: "AGT-100" },
-      source: "agentic-loop",
-    });
-
-    expect(result).toMatchObject({
-      success: false,
-      error: "authority_evidence_unavailable",
-    });
-    expect(executeMock).not.toHaveBeenCalled();
-  });
-
-  it("keeps direct human REST calls on the existing capability seam", async () => {
-    _setGovernanceForTests({
-      executeTool: executeMock,
-      toolExecutionCreate: captureAudit(auditRows),
-      resolveCoworkerAuthorityInput: async () => {
-        throw new Error("must not resolve coworker authority");
-      },
-      authorizationDecisionCreate: captureAudit(authorityRows),
-    });
-
-    const result = await governedExecuteTool({
-      toolName: "query_backlog",
-      rawParams: {},
-      userId: "user-1",
-      userContext: NORMAL_USER,
-      source: "rest",
-    });
-
-    expect(result.success).toBe(true);
-    expect(authorityRows).toHaveLength(0);
-  });
-
   it("supports registering and unregistering lifecycle hooks", async () => {
     const calls: string[] = [];
     const unregister = registerToolLifecycleHook({
@@ -672,32 +451,6 @@ describe("governedExecuteTool — rejection paths", () => {
     expect(executeMock).not.toHaveBeenCalled();
     // unknown_tool is rejected before audit write
     expect(auditRows).toHaveLength(0);
-  });
-
-  it("rejects a missing grant through the unified authority decision and audits the failure", async () => {
-    _setGovernanceForTests({
-      resolveAgentGrants: async () => ["registry_read"], // no backlog_write
-      isAllowedByGrants: () => false,
-      executeTool: executeMock,
-      toolExecutionCreate: captureAudit(auditRows),
-    });
-    const result = await governedExecuteTool({
-      toolName: "create_backlog_item",
-      rawParams: { title: "x", type: "product", source: "user-request" },
-      userId: "u",
-      userContext: NORMAL_USER,
-      context: { agentId: "AGT-100" },
-      source: "rest",
-    });
-    expect(result.success).toBe(false);
-    expect(result).toMatchObject({
-      error: "authority_denied",
-      governance: { authorityReason: "agent-grant-denied" },
-    });
-    expect(executeMock).not.toHaveBeenCalled();
-    expect(auditRows).toHaveLength(1);
-    expect(auditRows[0]?.success).toBe(false);
-    expect(auditRows[0]?.toolName).toBe("create_backlog_item");
   });
 
   it("rejects on forbidden_capability and audits the failure", async () => {

@@ -8,9 +8,11 @@
 
 ## Backlog Coverage
 
-- Decision: `atomic`
+- Decision: atomic
 - Receipt: `cms3cwgnq03kq01p5c89v774q`
-- Parent BI: `BI-62BFAA95`
+- Parent: `BI-62BFAA95`
+- Dependencies: none
+- Rationale: The evaluator, universal enforcement seam, approval return path, and regression proof are mutually dependent parts of one safe release; shipping any phase alone would either enforce nothing or dead-end approved work.
 - Delivery graph:
   - `authority-decision-contract` -> `BI-62BFAA95`
   - `universal-execution-seam` -> `BI-62BFAA95`, depends on `authority-decision-contract`
@@ -18,6 +20,19 @@
   - `consumer-and-regression-tests` -> `BI-62BFAA95`, depends on all preceding phases
 
 The phases are internal sequencing, not independently safe releases. A chain-only release would improve provenance while still allowing actions that should require approval. An evaluator without the universal seam would not enforce anything. A `require-approval` result without a return path to the originating `TaskRun`/envelope would dead-end work. The complete seam must therefore land as one PR.
+
+## Design Grounding
+
+- Existing specs/plans reviewed:
+  - `docs/superpowers/specs/2026-07-17-coworker-authority-model-completion-design.md`
+  - `docs/superpowers/plans/2026-07-26-pre-dispatch-sensitive-llm-routing.md`
+  - this atomic plan and its live backlog-coverage receipt
+- Current code substrate reviewed:
+  - `apps/web/lib/mcp-governed-execute.ts` as the universal enforcement point
+  - `apps/web/lib/identity/load-effective-auth-context.ts` as the verified human-context loader
+  - `apps/web/lib/tak/delegation-authority.ts`, `CoworkerActionEnvelope`, and `TaskRun` as the existing chain, approval, and return-path substrate
+- Source of truth: the deterministic authority evaluator owns the decision, `AuthorizationDecisionLog` owns decision evidence, `CoworkerActionEnvelope` owns approval lifecycle, and `ToolExecution` owns execution outcome.
+- Decision: extend those existing contracts at the universal seam and keep caller routes thin; do not create a parallel authority store, caller-specific policy branch, or prompt-owned approval path.
 
 ## Architecture Decision
 

@@ -2532,13 +2532,7 @@ export async function runAgenticLoop(params: {
             // time (BI-FD7E4D72) — otherwise a coworker whose own grants lack a
             // baseline read grant gets the tool attached but rejected on call.
             // Autonomous turns leave this false, so their authority is unchanged.
-            coworkerReadBaseline: interactionMode === "chat",
-            // This call already passed the server-owned available-tool check
-            // above. Mark external access connected only for a tool admitted
-            // by that registry; caller/model arguments cannot set this.
-            externalAccessEnabled: toolDef.requiresExternalAccess
-              ? true
-              : undefined,
+            coworkerReadBaseline: interactionMode === "chat", externalAccessEnabled: toolDef.requiresExternalAccess || undefined,
             // BI-F4A30FCB (Dale dogfood 2026-05-24): plumb the build the
             // user is messaging from into tool context so phase-scoped
             // tools (start_ideate_research, start_scout_research) can
