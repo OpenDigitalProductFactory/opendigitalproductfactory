@@ -7,6 +7,10 @@ vi.mock("./NewCustomerSiteNodeButton", () => ({
   ),
 }));
 
+vi.mock("./EditCustomerSiteButton", () => ({
+  EditCustomerSiteButton: () => <button type="button">Edit</button>,
+}));
+
 import { CustomerSiteTree } from "./CustomerSiteTree";
 
 describe("CustomerSiteTree", () => {
@@ -83,5 +87,6 @@ describe("CustomerSiteTree", () => {
     expect(html).toContain("Floor 3");
     expect(html).toContain("Server Room");
     expect(html).toContain("Badge required.");
+    expect(html).toContain("Edit");
   });
 });

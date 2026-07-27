@@ -1,4 +1,5 @@
 import { NewCustomerSiteNodeButton } from "@/components/customer/NewCustomerSiteNodeButton";
+import { EditCustomerSiteButton } from "@/components/customer/EditCustomerSiteButton";
 
 type SiteAddress = {
   addressLine1: string;
@@ -143,6 +144,23 @@ export function CustomerSiteTree({
               {site.timezone ? (
                 <span className="text-[10px] text-[var(--dpf-muted)]">{site.timezone}</span>
               ) : null}
+              <div className="ml-auto">
+                <EditCustomerSiteButton
+                  accountId={accountId}
+                  site={{
+                    id: site.id,
+                    name: site.name,
+                    siteType: site.siteType,
+                    status: site.status,
+                    timezone: site.timezone,
+                    accessInstructions: site.accessInstructions,
+                    hoursNotes: site.hoursNotes,
+                    serviceNotes: site.serviceNotes,
+                    addressLabel: address,
+                    hasPrimaryAddress: Boolean(site.primaryAddress),
+                  }}
+                />
+              </div>
             </div>
 
             {address ? (

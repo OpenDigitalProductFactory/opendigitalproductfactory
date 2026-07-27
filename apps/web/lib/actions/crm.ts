@@ -10,6 +10,7 @@ import { generateInvoiceFromSalesOrder } from "@/lib/actions/finance";
 import {
   resolveValidatedSiteAddress,
   searchValidatedSiteAddresses,
+  type ValidatedSiteAddress,
 } from "@/lib/shared/site-address-validation";
 import {
   checkCustomerAccountDuplicates,
@@ -158,6 +159,113 @@ export async function searchCustomerSiteAddresses(query: string) {
   return searchValidatedSiteAddresses(query);
 }
 
+type SiteAddressTx = {
+  country: {
+    findFirst: (args: unknown) => Promise<{ id: string } | null>;
+  };
+  region: {
+    findFirst: (args: unknown) => Promise<{ id: string } | null>;
+    create: (args: unknown) => Promise<{ id: string }>;
+  };
+  city: {
+    findFirst: (args: unknown) => Promise<{ id: string } | null>;
+    create: (args: unknown) => Promise<{ id: string }>;
+  };
+  address: {
+    create: (args: unknown) => Promise<{ id: string }>;
+  };
+};
+
+/** Persist a provider-validated address + locality hierarchy; shared by create/update. */
+async function materializeValidatedSiteAddress(
+  tx: SiteAddressTx,
+  validatedAddress: ValidatedSiteAddress,
+): Promise<string> {
+  const country = await tx.country.findFirst({
+    where: {
+      status: "active",
+      OR: [
+        { iso2: validatedAddress.countryCode },
+        { name: validatedAddress.country },
+      ],
+    },
+    select: { id: true },
+  });
+
+  if (!country) {
+    throw new Error(
+      `Country reference data is missing for ${validatedAddress.country}.`,
+    );
+  }
+
+  let region = await tx.region.findFirst({
+    where: {
+      countryId: country.id,
+      status: "active",
+      OR: [
+        ...(validatedAddress.regionCode
+          ? [{ code: validatedAddress.regionCode }]
+          : []),
+        { name: validatedAddress.region },
+      ],
+    },
+    select: { id: true },
+  });
+
+  if (!region) {
+    region = await tx.region.create({
+      data: {
+        countryId: country.id,
+        name: validatedAddress.region,
+        code: validatedAddress.regionCode,
+        status: "active",
+      },
+      select: { id: true },
+    });
+  }
+
+  let city = await tx.city.findFirst({
+    where: {
+      regionId: region.id,
+      status: "active",
+      nameNormalized: normalizeLocalityName(validatedAddress.city),
+    },
+    select: { id: true },
+  });
+
+  if (!city) {
+    city = await tx.city.create({
+      data: {
+        regionId: region.id,
+        name: validatedAddress.city,
+        nameNormalized: normalizeLocalityName(validatedAddress.city),
+        source: "validated-address",
+        sourceProvider: validatedAddress.validationSource,
+        status: "active",
+      },
+      select: { id: true },
+    });
+  }
+
+  const address = await tx.address.create({
+    data: {
+      label: "site",
+      addressLine1: validatedAddress.addressLine1,
+      addressLine2: validatedAddress.addressLine2,
+      cityId: city.id,
+      postalCode: validatedAddress.postalCode,
+      latitude: validatedAddress.latitude,
+      longitude: validatedAddress.longitude,
+      validatedAt: new Date(),
+      validationSource: validatedAddress.validationSource,
+      status: "active",
+    },
+    select: { id: true },
+  });
+
+  return address.id;
+}
+
 export type CreateCustomerSiteResult =
   | { outcome: "created"; site: Awaited<ReturnType<typeof prisma.customerSite.create>> }
   | { outcome: "existing"; site: Awaited<ReturnType<typeof prisma.customerSite.create>> }
@@ -205,87 +313,9 @@ export async function createCustomerSite(
   );
 
   const site = await prisma.$transaction(async (tx) => {
-    const country = await tx.country.findFirst({
-      where: {
-        status: "active",
-        OR: [
-          { iso2: validatedAddress.countryCode },
-          { name: validatedAddress.country },
-        ],
-      },
-      select: { id: true },
-    });
-
-    if (!country) {
-      throw new Error(
-        `Country reference data is missing for ${validatedAddress.country}.`,
-      );
-    }
-
-    let region = await tx.region.findFirst({
-      where: {
-        countryId: country.id,
-        status: "active",
-        OR: [
-          ...(validatedAddress.regionCode
-            ? [{ code: validatedAddress.regionCode }]
-            : []),
-          { name: validatedAddress.region },
-        ],
-      },
-      select: { id: true },
-    });
-
-    if (!region) {
-      region = await tx.region.create({
-        data: {
-          countryId: country.id,
-          name: validatedAddress.region,
-          code: validatedAddress.regionCode,
-          status: "active",
-        },
-        select: { id: true },
-      });
-    }
-
-    let city = await tx.city.findFirst({
-      where: {
-        regionId: region.id,
-        status: "active",
-        nameNormalized: normalizeLocalityName(validatedAddress.city),
-      },
-      select: { id: true },
-    });
-
-    if (!city) {
-      city = await tx.city.create({
-        data: {
-          regionId: region.id,
-          name: validatedAddress.city,
-          nameNormalized: normalizeLocalityName(validatedAddress.city),
-          source: "validated-address",
-          sourceProvider: validatedAddress.validationSource,
-          status: "active",
-        },
-        select: { id: true },
-      });
-    }
-
-    const address = await tx.address.create({
-      data: {
-        label: "site",
-        addressLine1: validatedAddress.addressLine1,
-        addressLine2: validatedAddress.addressLine2,
-        cityId: city.id,
-        postalCode: validatedAddress.postalCode,
-        latitude: validatedAddress.latitude,
-        longitude: validatedAddress.longitude,
-        validatedAt: new Date(),
-        validationSource: validatedAddress.validationSource,
-        status: "active",
-      },
-      select: { id: true },
-    });
+    const addressId =
+      input.primaryAddressId ||
+      (await materializeValidatedSiteAddress(tx as unknown as SiteAddressTx, validatedAddress));
 
     return tx.customerSite.create({
       data: {
@@ -299,7 +329,7 @@ export async function createCustomerSite(
         accessInstructions: input.accessInstructions?.trim() || null,
         hoursNotes: input.hoursNotes?.trim() || null,
         serviceNotes: input.serviceNotes?.trim() || null,
-        primaryAddressId: input.primaryAddressId || address.id,
+        primaryAddressId: addressId,
       },
     });
   });
@@ -312,6 +342,110 @@ export async function createCustomerSite(
   revalidatePath("/customer");
   revalidatePath(`/customer/${input.accountId}`);
   return { outcome: "created", site };
+}
+
+/**
+ * Update an existing customer site (BI-SITE-4F2C93).
+ * Optional validatedAddressRef re-runs lookup and refreshes primaryAddress + coordinates.
+ */
+export async function updateCustomerSite(input: {
+  id: string;
+  accountId: string;
+  name?: string;
+  siteType?: string;
+  status?: string;
+  timezone?: string;
+  accessInstructions?: string;
+  hoursNotes?: string;
+  serviceNotes?: string;
+  /** When set, revalidate and replace the site primary address. */
+  validatedAddressRef?: string;
+}) {
+  const existing = await prisma.customerSite.findFirst({
+    where: { id: input.id, accountId: input.accountId },
+    select: {
+      id: true,
+      name: true,
+      siteType: true,
+      status: true,
+      timezone: true,
+      accessInstructions: true,
+      hoursNotes: true,
+      serviceNotes: true,
+      primaryAddressId: true,
+    },
+  });
+
+  if (!existing) {
+    throw new Error("Customer site not found");
+  }
+
+  const nextName =
+    input.name !== undefined ? input.name.trim() : existing.name;
+  if (!nextName) {
+    throw new Error("Site name is required");
+  }
+
+  let validatedAddress: ValidatedSiteAddress | null = null;
+  if (input.validatedAddressRef?.trim()) {
+    validatedAddress = await resolveValidatedSiteAddress(input.validatedAddressRef);
+  } else if (!existing.primaryAddressId) {
+    throw new Error(
+      "A validated address selection is required when the site has no address yet.",
+    );
+  }
+
+  const site = await prisma.$transaction(async (tx) => {
+    let primaryAddressId = existing.primaryAddressId;
+    if (validatedAddress) {
+      primaryAddressId = await materializeValidatedSiteAddress(
+        tx as unknown as SiteAddressTx,
+        validatedAddress,
+      );
+    }
+
+    return tx.customerSite.update({
+      where: { id: existing.id },
+      data: {
+        name: nextName,
+        ...customerSiteNormalizedColumns({ name: nextName }),
+        siteType:
+          input.siteType !== undefined
+            ? input.siteType.trim() || "office"
+            : existing.siteType,
+        status:
+          input.status !== undefined
+            ? input.status.trim() || "active"
+            : existing.status,
+        timezone:
+          input.timezone !== undefined
+            ? input.timezone.trim() || null
+            : existing.timezone,
+        accessInstructions:
+          input.accessInstructions !== undefined
+            ? input.accessInstructions.trim() || null
+            : existing.accessInstructions,
+        hoursNotes:
+          input.hoursNotes !== undefined
+            ? input.hoursNotes.trim() || null
+            : existing.hoursNotes,
+        serviceNotes:
+          input.serviceNotes !== undefined
+            ? input.serviceNotes.trim() || null
+            : existing.serviceNotes,
+        primaryAddressId,
+      },
+    });
+  });
+
+  await logSystemActivity(`Customer site "${site.name}" updated`, {
+    type: "account_created",
+    accountId: input.accountId,
+  });
+
+  revalidatePath("/customer");
+  revalidatePath(`/customer/${input.accountId}`);
+  return site;
 }
 
 export async function createCustomerSiteNode(input: {

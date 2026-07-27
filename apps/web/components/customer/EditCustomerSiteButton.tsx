@@ -2,48 +2,63 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { createCustomerSite } from "@/lib/actions/crm";
-import type { DedupCandidate } from "@/lib/mdm/dedup-gate";
-import { ValidatedSiteAddressField } from "@/components/customer/ValidatedSiteAddressField";
+import { updateCustomerSite } from "@/lib/actions/crm";
+import {
+  ValidatedSiteAddressField,
+} from "@/components/customer/ValidatedSiteAddressField";
 import type { ValidatedSiteAddress } from "@/lib/shared/site-address-validation";
 
 const inputClasses =
   "w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:border-[var(--dpf-accent)] focus:outline-none";
 const labelClasses = "mb-1 block text-xs text-[var(--dpf-muted)]";
 
-export function NewCustomerSiteButton({ accountId }: { accountId: string }) {
+export type EditableCustomerSite = {
+  id: string;
+  name: string;
+  siteType: string;
+  status: string;
+  timezone?: string | null;
+  accessInstructions?: string | null;
+  hoursNotes?: string | null;
+  serviceNotes?: string | null;
+  addressLabel?: string | null;
+  hasPrimaryAddress: boolean;
+};
+
+export function EditCustomerSiteButton({
+  accountId,
+  site,
+}: {
+  accountId: string;
+  site: EditableCustomerSite;
+}) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [name, setName] = useState("");
-  const [siteType, setSiteType] = useState("office");
-  const [status, setStatus] = useState("active");
-  const [timezone, setTimezone] = useState("");
-  const [accessInstructions, setAccessInstructions] = useState("");
-  const [hoursNotes, setHoursNotes] = useState("");
-  const [serviceNotes, setServiceNotes] = useState("");
+  const [name, setName] = useState(site.name);
+  const [siteType, setSiteType] = useState(site.siteType);
+  const [status, setStatus] = useState(site.status);
+  const [timezone, setTimezone] = useState(site.timezone ?? "");
+  const [accessInstructions, setAccessInstructions] = useState(
+    site.accessInstructions ?? "",
+  );
+  const [hoursNotes, setHoursNotes] = useState(site.hoursNotes ?? "");
+  const [serviceNotes, setServiceNotes] = useState(site.serviceNotes ?? "");
   const [selectedAddress, setSelectedAddress] =
     useState<ValidatedSiteAddress | null>(null);
-  // MDM dedup gate: similar existing sites for this account, shown inline.
-  const [duplicates, setDuplicates] = useState<DedupCandidate[] | null>(null);
   const router = useRouter();
-
-  function resetForm() {
-    setName("");
-    setSiteType("office");
-    setStatus("active");
-    setTimezone("");
-    setAccessInstructions("");
-    setHoursNotes("");
-    setServiceNotes("");
-    setSelectedAddress(null);
-    setDuplicates(null);
-    setError(null);
-  }
 
   function closeModal() {
     setOpen(false);
-    resetForm();
+    setError(null);
+    setName(site.name);
+    setSiteType(site.siteType);
+    setStatus(site.status);
+    setTimezone(site.timezone ?? "");
+    setAccessInstructions(site.accessInstructions ?? "");
+    setHoursNotes(site.hoursNotes ?? "");
+    setServiceNotes(site.serviceNotes ?? "");
+    setSelectedAddress(null);
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -52,41 +67,33 @@ export function NewCustomerSiteButton({ accountId }: { accountId: string }) {
       setError("Site name is required.");
       return;
     }
-    if (!selectedAddress) {
-      setError("Select a validated address from the lookup results.");
+    if (!site.hasPrimaryAddress && !selectedAddress) {
+      setError("Select a validated address for this site.");
       return;
     }
 
     setError(null);
     startTransition(async () => {
       try {
-        const result = await createCustomerSite(
-          {
-            accountId,
-            name,
-            siteType,
-            status,
-            timezone,
-            accessInstructions,
-            hoursNotes,
-            serviceNotes,
-            validatedAddressRef: selectedAddress.providerRef,
-          },
-          // Second submit after the duplicate notice = explicit confirm-new.
-          duplicates ? { kind: "confirm-new", reason: "confirmed distinct site in + New Site" } : undefined,
-        );
-        if (result.outcome === "duplicates-found") {
-          setDuplicates(result.check.candidates);
-          setError(null);
-          return;
-        }
+        await updateCustomerSite({
+          id: site.id,
+          accountId,
+          name,
+          siteType,
+          status,
+          timezone,
+          accessInstructions,
+          hoursNotes,
+          serviceNotes,
+          validatedAddressRef: selectedAddress?.providerRef,
+        });
         closeModal();
         router.refresh();
       } catch (submitError) {
         setError(
           submitError instanceof Error
             ? submitError.message
-            : "Failed to create customer site.",
+            : "Failed to update customer site.",
         );
       }
     });
@@ -97,9 +104,9 @@ export function NewCustomerSiteButton({ accountId }: { accountId: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-md bg-[var(--dpf-accent)] px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
+        className="rounded-md border border-[var(--dpf-border)] px-2 py-1 text-[10px] font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
       >
-        + New Site
+        Edit
       </button>
     );
   }
@@ -109,7 +116,9 @@ export function NewCustomerSiteButton({ accountId }: { accountId: string }) {
       <div className="fixed inset-0 z-40 bg-black/40" onClick={closeModal} />
       <div className="fixed right-8 top-20 z-50 w-[460px] rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] shadow-xl">
         <div className="flex items-center justify-between border-b border-[var(--dpf-border)] px-4 py-3">
-          <h2 className="text-sm font-semibold text-[var(--dpf-text)]">New Customer Site</h2>
+          <h2 className="text-sm font-semibold text-[var(--dpf-text)]">
+            Edit Customer Site
+          </h2>
           <button
             type="button"
             onClick={closeModal}
@@ -126,7 +135,6 @@ export function NewCustomerSiteButton({ accountId }: { accountId: string }) {
               autoFocus
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="e.g. Dallas HQ"
               className={inputClasses}
             />
           </div>
@@ -134,7 +142,8 @@ export function NewCustomerSiteButton({ accountId }: { accountId: string }) {
           <ValidatedSiteAddressField
             value={selectedAddress}
             onChange={setSelectedAddress}
-            required
+            currentAddressLabel={site.addressLabel}
+            required={!site.hasPrimaryAddress}
           />
 
           <div className="grid grid-cols-2 gap-3">
@@ -152,7 +161,6 @@ export function NewCustomerSiteButton({ accountId }: { accountId: string }) {
                 <option className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]" value="warehouse">Warehouse</option>
               </select>
             </div>
-
             <div>
               <label className={labelClasses}>Status</label>
               <select
@@ -183,7 +191,6 @@ export function NewCustomerSiteButton({ accountId }: { accountId: string }) {
               rows={2}
               value={accessInstructions}
               onChange={(event) => setAccessInstructions(event.target.value)}
-              placeholder="Badge desk, suite access, entry notes..."
               className={inputClasses}
             />
           </div>
@@ -194,7 +201,6 @@ export function NewCustomerSiteButton({ accountId }: { accountId: string }) {
               rows={2}
               value={hoursNotes}
               onChange={(event) => setHoursNotes(event.target.value)}
-              placeholder="Support window, after-hours notes..."
               className={inputClasses}
             />
           </div>
@@ -205,22 +211,11 @@ export function NewCustomerSiteButton({ accountId }: { accountId: string }) {
               rows={2}
               value={serviceNotes}
               onChange={(event) => setServiceNotes(event.target.value)}
-              placeholder="Operational notes for the site..."
               className={inputClasses}
             />
           </div>
 
           {error ? <p className="text-xs text-[var(--dpf-text)]">{error}</p> : null}
-
-          {duplicates ? (
-            <div className="rounded border border-[var(--dpf-border)] px-3 py-2">
-              <p className="text-xs text-[var(--dpf-text)]">
-                This account already has {duplicates.length === 1 ? "a site" : "sites"} with a similar
-                name: {duplicates.slice(0, 3).map((d) => d.label).join(", ")}. Submit again to create
-                it anyway.
-              </p>
-            </div>
-          ) : null}
 
           <div className="flex justify-end gap-2">
             <button
@@ -235,7 +230,7 @@ export function NewCustomerSiteButton({ accountId }: { accountId: string }) {
               disabled={isPending}
               className="rounded-md bg-[var(--dpf-accent)] px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
             >
-              {isPending ? "Creating..." : "Create Site"}
+              {isPending ? "Saving..." : "Save changes"}
             </button>
           </div>
         </form>

@@ -70,6 +70,7 @@ import {
   searchCustomerSiteAddresses,
   createCustomerSite,
   createCustomerSiteNode,
+  updateCustomerSite,
   advanceOpportunityStage,
   updateOpportunityStageFromForm,
   updateCustomerConfigurationItem,
@@ -220,6 +221,128 @@ describe("createCustomerSite", () => {
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(revalidatePath).toHaveBeenCalledWith("/customer");
     expect(revalidatePath).toHaveBeenCalledWith("/customer/acct-1");
+  });
+});
+
+describe("updateCustomerSite", () => {
+  const existingSite = {
+    id: "site-1",
+    name: "Dallas HQ",
+    siteType: "office",
+    status: "active",
+    timezone: "America/Chicago",
+    accessInstructions: "Reception",
+    hoursNotes: "Weekdays",
+    serviceNotes: "Primary",
+    primaryAddressId: "address-old",
+  };
+
+  it("rejects missing sites", async () => {
+    vi.mocked(prisma.customerSite.findFirst).mockResolvedValue(null);
+    await expect(
+      updateCustomerSite({
+        id: "missing",
+        accountId: "acct-1",
+        name: "Nope",
+      }),
+    ).rejects.toThrow(/not found/i);
+  });
+
+  it("requires a validated address when the site has none", async () => {
+    vi.mocked(prisma.customerSite.findFirst).mockResolvedValue({
+      ...existingSite,
+      primaryAddressId: null,
+    } as never);
+
+    await expect(
+      updateCustomerSite({
+        id: "site-1",
+        accountId: "acct-1",
+        name: "Dallas HQ",
+      }),
+    ).rejects.toThrow(/validated address/i);
+  });
+
+  it("revalidates and refreshes primaryAddress when a new selection is provided", async () => {
+    vi.mocked(prisma.customerSite.findFirst).mockResolvedValue(existingSite as never);
+    vi.mocked(resolveValidatedSiteAddress).mockResolvedValue({
+      providerRef: "provider-ref-2",
+      label: "456 Oak Ave, Dallas, Texas 75202, United States",
+      addressLine1: "456 Oak Ave",
+      addressLine2: null,
+      city: "Dallas",
+      region: "Texas",
+      regionCode: "TX",
+      country: "United States",
+      countryCode: "US",
+      postalCode: "75202",
+      latitude: 32.78,
+      longitude: -96.81,
+      precision: "rooftop",
+      validationSource: "nominatim",
+    });
+
+    vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => {
+      const tx = {
+        country: {
+          findFirst: vi.fn().mockResolvedValue({ id: "country-1" }),
+        },
+        region: {
+          findFirst: vi.fn().mockResolvedValue({ id: "region-1" }),
+          create: vi.fn(),
+        },
+        city: {
+          findFirst: vi.fn().mockResolvedValue({ id: "city-1" }),
+          create: vi.fn(),
+        },
+        address: {
+          create: vi.fn().mockResolvedValue({ id: "address-new" }),
+        },
+        customerSite: {
+          update: vi.fn().mockResolvedValue({
+            ...existingSite,
+            name: "Dallas HQ Renamed",
+            primaryAddressId: "address-new",
+          }),
+        },
+      };
+      return callback(tx);
+    });
+
+    const site = await updateCustomerSite({
+      id: "site-1",
+      accountId: "acct-1",
+      name: "Dallas HQ Renamed",
+      validatedAddressRef: "provider-ref-2",
+    });
+
+    expect(site.primaryAddressId).toBe("address-new");
+    expect(resolveValidatedSiteAddress).toHaveBeenCalledWith("provider-ref-2");
+    expect(revalidatePath).toHaveBeenCalledWith("/customer/acct-1");
+  });
+
+  it("allows metadata-only updates when a primary address already exists", async () => {
+    vi.mocked(prisma.customerSite.findFirst).mockResolvedValue(existingSite as never);
+    vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => {
+      const tx = {
+        customerSite: {
+          update: vi.fn().mockResolvedValue({
+            ...existingSite,
+            serviceNotes: "Updated note",
+          }),
+        },
+      };
+      return callback(tx);
+    });
+
+    const site = await updateCustomerSite({
+      id: "site-1",
+      accountId: "acct-1",
+      serviceNotes: "Updated note",
+    });
+
+    expect(site.serviceNotes).toBe("Updated note");
+    expect(resolveValidatedSiteAddress).not.toHaveBeenCalled();
   });
 });
 
