@@ -91,11 +91,21 @@ describe("compliance library applicability", () => {
     expect(result.reason).toContain("Software Platform");
   });
 
-  it("classifies banking regulations as applicable for a banking archetype", () => {
+  it("keeps a banking pack match in review until a processing activity confirms authority", () => {
     const result = classifyRegulationForInstall(regulation({}), bankingContext);
 
-    expect(result.scope).toBe("applies");
+    expect(result.scope).toBe("review");
     expect(result.reason).toContain("Community Bank");
+  });
+
+  it("classifies a legacy regulation as applicable when confirmed activity links it", () => {
+    const result = classifyRegulationForInstall(regulation({}), {
+      ...bankingContext,
+      processingActivities: { confirmedAuthorityRefs: ["REG-US-BSA-AML"] },
+    });
+
+    expect(result.scope).toBe("applies");
+    expect(result.reason).toContain("confirmed processing activity");
   });
 
   it("marks state-law matches for review when the state has not been captured", () => {
@@ -236,9 +246,9 @@ describe("compliance library applicability", () => {
       expect(result.reason).toContain("out of scope");
     });
 
-    it("falls back to the legacy industry matcher when no applicability spec is present", () => {
+    it("uses the legacy industry matcher only to route review", () => {
       const legacyBanking = regulation({ industry: "financial" }); // no applicability
-      expect(classifyRegulationForInstall(legacyBanking, bankingContext).scope).toBe("applies");
+      expect(classifyRegulationForInstall(legacyBanking, bankingContext).scope).toBe("review");
       expect(classifyRegulationForInstall(legacyBanking, softwareContext).scope).toBe("reference");
     });
   });

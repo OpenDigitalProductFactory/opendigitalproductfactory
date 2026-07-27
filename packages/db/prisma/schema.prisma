@@ -3950,6 +3950,8 @@ model Organization {
   aiProviderConnections         AiProviderConnection[]
   partnerAccounts               PartnerAccount[]
   founderDemandClusters         FounderDemandCluster[]
+  dataProcessingActivities      DataProcessingActivity[]
+  dataPolicyExceptions          DataPolicyException[]
 }
 
 // Founder Hub's shared-portfolio curation layer. FederatedRecordMirror remains
@@ -8587,6 +8589,7 @@ model Policy {
   notes                String?
   agentId              String?
   status               String                 @default("active")
+  executablePolicyIds  Json                   @default("[]")
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
   approvedBy           EmployeeProfile?       @relation("PolicyApprover", fields: [approvedByEmployeeId], references: [id])
@@ -8616,6 +8619,7 @@ model PolicyRequirement {
   dueDays             Int?
   agentId             String?
   status              String                  @default("active")
+  executablePolicyIds Json                    @default("[]")
   createdAt           DateTime                @default(now())
   updatedAt           DateTime                @updatedAt
   policy              Policy                  @relation(fields: [policyId], references: [id], onDelete: Cascade)
@@ -8625,6 +8629,78 @@ model PolicyRequirement {
   @@index([policyId])
   @@index([requirementType])
   @@index([status])
+}
+
+/// Organization-specific confirmation of why a bounded data scope is processed.
+/// Archetype proposals remain status="review" until an accountable owner confirms them.
+model DataProcessingActivity {
+  id                     String       @id @default(cuid())
+  activityId             String
+  organizationId         String
+  name                   String
+  purposeKey             String
+  ownerRef               String
+  status                 String       @default("review")
+  assetIds               Json         @default("[]")
+  fieldIds               Json         @default("[]")
+  dataCategories         Json         @default("[]")
+  subjectTypes           Json         @default("[]")
+  authorityRefs          Json         @default("[]")
+  recipientRefs          Json         @default("[]")
+  destinationClasses     Json         @default("[]")
+  residencyConstraints   Json         @default("[]")
+  transferConstraints    Json         @default("[]")
+  derivedCopyContractIds Json         @default("[]")
+  lifecycleClassIds      Json         @default("[]")
+  erasureExceptionRefs   Json         @default("[]")
+  controlIds             Json         @default("[]")
+  evidenceIds            Json         @default("[]")
+  executablePolicyIds    Json         @default("[]")
+  controllerProcessorRole String?
+  riskLevel              String?
+  highRisk               Boolean      @default(false)
+  dpiaRequired           Boolean      @default(false)
+  effectiveFrom          DateTime?
+  effectiveUntil         DateTime?
+  reviewAt               DateTime?
+  confirmedAt            DateTime?
+  confirmedByRef         String?
+  provenance             Json
+  version                Int          @default(1)
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+  organization           Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, activityId])
+  @@index([organizationId, status, purposeKey])
+  @@index([effectiveUntil])
+  @@index([reviewAt])
+}
+
+/// Time-bounded, explicitly approved exception to executable data policy.
+model DataPolicyException {
+  id                    String       @id @default(cuid())
+  exceptionId           String
+  organizationId        String
+  name                  String
+  status                String       @default("draft")
+  scope                 Json
+  executablePolicyIds   Json         @default("[]")
+  approverRef           String?
+  approvedAt            DateTime?
+  rationale             String?
+  compensatingControl   String?
+  expiresAt             DateTime?
+  remediationItemId     String?
+  provenance            Json
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, exceptionId])
+  @@index([organizationId, status])
+  @@index([expiresAt])
+  @@index([remediationItemId])
 }
 
 model RequirementCompletion {

@@ -109,13 +109,18 @@ export const INDUSTRY_ALIASES: Record<string, string> = {
 export function resolveEffectiveRetentionDays(
   policy: { category: RetentionCategory; baseRetentionDays: number },
   industryKey: string | null | undefined,
+  confirmedProcessingActivityFloorDays = 0,
 ): number {
   const floorKey = industryKey != null ? toFloorKey(industryKey) : null;
   const floor =
     floorKey != null
       ? INDUSTRY_RETENTION_FLOORS[floorKey]?.[policy.category]
       : undefined;
-  return Math.max(policy.baseRetentionDays, floor ?? 0);
+  return Math.max(
+    policy.baseRetentionDays,
+    floor ?? 0,
+    confirmedProcessingActivityFloorDays,
+  );
 }
 
 /**

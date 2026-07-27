@@ -13,4 +13,5 @@ export * from "./twin-value-stream";
 export * from "./demo-business";
 export * from "./demo-business-load";
 export * from "./demo-flavor";
+export * from "./processing-activity-templates";
 export * from "./sections/schemas";
