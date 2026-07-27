@@ -30,6 +30,8 @@ export async function createCustomerContact(
     phone?: string;
     jobTitle?: string;
     notes?: string;
+    preferredNotificationChannel?: "sms" | "voice" | "email" | "none" | null;
+    phoneType?: "mobile" | "landline" | "unknown" | null;
   },
   dedup?: DedupResolution,
 ): Promise<CreateCustomerContactResult> {
@@ -81,6 +83,11 @@ export async function createCustomerContact(
       nameNormalized: standardizeName(displayName),
       phone: input.phone?.trim() || null,
       jobTitle: input.jobTitle?.trim() || null,
+      preferredNotificationChannel: input.preferredNotificationChannel ?? null,
+      // Default phoneType to unknown when a phone is captured without a type (BI-FS-003).
+      phoneType:
+        input.phoneType ??
+        (input.phone?.trim() ? "unknown" : null),
       source: "manual",
     },
   });
@@ -103,4 +110,46 @@ export async function createCustomerContact(
   revalidatePath(`/customer/${input.accountId}`);
   revalidatePath("/customer");
   return { outcome: "created", contact };
+}
+
+export type UpdateCustomerContactResult =
+  | { outcome: "updated"; contact: Awaited<ReturnType<typeof prisma.customerContact.update>> }
+  | { outcome: "not-found" };
+
+/** Update notification preference fields (BI-FS-003) and other contact attributes. */
+export async function updateCustomerContact(input: {
+  contactId: string;
+  preferredNotificationChannel?: "sms" | "voice" | "email" | "none" | null;
+  phoneType?: "mobile" | "landline" | "unknown" | null;
+  phone?: string | null;
+  jobTitle?: string | null;
+}): Promise<UpdateCustomerContactResult> {
+  const existing = await prisma.customerContact.findUnique({
+    where: { id: input.contactId },
+    select: { id: true, accountId: true },
+  });
+  if (!existing) return { outcome: "not-found" };
+
+  const data: Record<string, string | null> = {};
+  if (input.preferredNotificationChannel !== undefined) {
+    data.preferredNotificationChannel = input.preferredNotificationChannel;
+  }
+  if (input.phoneType !== undefined) {
+    data.phoneType = input.phoneType;
+  }
+  if (input.phone !== undefined) {
+    data.phone = input.phone?.trim() || null;
+  }
+  if (input.jobTitle !== undefined) {
+    data.jobTitle = input.jobTitle?.trim() || null;
+  }
+
+  const contact = await prisma.customerContact.update({
+    where: { id: input.contactId },
+    data,
+  });
+
+  revalidatePath(`/customer/${existing.accountId}`);
+  revalidatePath("/customer");
+  return { outcome: "updated", contact };
 }

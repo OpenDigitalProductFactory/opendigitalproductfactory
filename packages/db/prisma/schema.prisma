@@ -144,6 +144,12 @@ model CustomerContact {
   // email stays the unique identity key.
   nameNormalized   String               @default("")
   phone            String?
+  // Field-service dispatch (BI-FS-003): how to reach this contact and whether
+  // the phone is SMS-capable. Nullable = operator has not set a preference yet.
+  // Allowed values enforced in packages/validators (not a Prisma enum — closed
+  // set may grow without a DB migration).
+  preferredNotificationChannel String? // sms | voice | email | none
+  phoneType                    String? // mobile | landline | unknown
   jobTitle         String?
   linkedinUrl      String?
   source           String? // web | referral | import | manual

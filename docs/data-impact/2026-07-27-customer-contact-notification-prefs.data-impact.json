@@ -1,0 +1,42 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "Customer account contact card UI on /customer/[id]",
+    "CRM contact PATCH API attribute history",
+    "Field-service dispatcher preference reads (BI-FS-005/006 consumers)"
+  ],
+  "migration": {
+    "name": "20260727150000_customer_contact_notification_prefs",
+    "backfill": "none; both columns are nullable TEXT. Existing CustomerContact rows remain valid with NULL meaning preference not set yet. No delete, drop, or overwrite."
+  },
+  "tests": [
+    "packages/validators/src/customer-notification-preference.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:customer-contact",
+      "prismaModel": "CustomerContact",
+      "lifecycleDisposition": "contact-scoped operational preference; cleared when the contact is merged/deactivated or set to none by the operator; retained with the contact record under existing confidential contact retention",
+      "fields": [
+        {
+          "fieldId": "data:customer-contact#preferredNotificationChannel",
+          "resolution": "governed",
+          "reason": "states how the operator prefers the platform to reach this person for field-service and CRM outreach (sms|voice|email|none); drives dispatch channel selection and must not be inferred silently from free text",
+          "provenance": "BI-FS-003; docs/superpowers/specs/2026-05-19-field-service-trades-ai-dispatch-design.md; docs/superpowers/plans/2026-05-19-field-service-sprint-1.md",
+          "flags": ["subject"],
+          "fieldPolicy": "organization-operational contact preference only; not a principal, auth factor, or routing identity key; closed set enforced in packages/validators"
+        },
+        {
+          "fieldId": "data:customer-contact#phoneType",
+          "resolution": "governed",
+          "reason": "distinguishes mobile vs landline so SMS is not sent to non-SMS numbers; supports TCPA-aware dispatch without inventing a second phone table",
+          "provenance": "BI-FS-003; field-service AI dispatch design §customer notification preference",
+          "flags": ["subject"],
+          "fieldPolicy": "organization-operational contact attribute for the existing phone string; not used as identity; closed set enforced in packages/validators"
+        }
+      ]
+    }
+  ]
+}
