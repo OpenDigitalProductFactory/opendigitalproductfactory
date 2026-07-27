@@ -1,0 +1,109 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "Prisma-to-EA current-state data-model mirror",
+    "Operations Map privacy-safe routing evidence projection",
+    "EnterpriseArchitectureIssue routing-conformance findings"
+  ],
+  "migration": {
+    "name": "20260727020000_add_routing_evidence_correlation",
+    "backfill": "none — all correlation and design-revision fields are nullable; historical rows remain explicitly unproven because independently-keyed ledgers cannot be joined reliably after the fact"
+  },
+  "tests": [
+    "apps/web/lib/ai-operations-map/routing-evidence-conformance.test.ts",
+    "apps/web/lib/ai-operations-map/load-map-data.test.ts",
+    "apps/web/lib/ea/routing-evidence-conformance-reconciler.test.ts",
+    "apps/web/lib/routing/routing-trace.test.ts",
+    "apps/web/lib/routing/loader.test.ts",
+    "apps/web/lib/routing/adapter-telemetry-writer.test.ts",
+    "apps/web/lib/routing/route-outcome.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:token-usage#routing-trace",
+      "prismaModel": "TokenUsage",
+      "lifecycleDisposition": "retained with the existing restricted token-usage and cost-metering evidence lifecycle",
+      "fields": [
+        {
+          "fieldId": "data:token-usage#traceId",
+          "resolution": "governed",
+          "reason": "correlates aggregate token and cost evidence to one request without storing prompt or response content",
+          "provenance": "request-scoped routing trace generator",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": "internal correlation only; expose only through allowlisted aggregate projections and never as request content or external identity"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:route-outcome#routing-trace",
+      "prismaModel": "RouteOutcome",
+      "lifecycleDisposition": "retained with the existing restricted route-outcome performance evidence lifecycle",
+      "fields": [
+        {
+          "fieldId": "data:route-outcome#traceId",
+          "resolution": "governed",
+          "reason": "correlates the final route result with its decision and adapter attempts without copying transaction content",
+          "provenance": "request-scoped routing trace generator",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": "internal correlation only; expose only through allowlisted aggregate projections and never as request content or external identity"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:adapter-run-telemetry#routing-trace",
+      "prismaModel": "AdapterRunTelemetry",
+      "lifecycleDisposition": "retained with the existing per-attempt operational telemetry lifecycle",
+      "fields": [
+        {
+          "fieldId": "data:adapter-run-telemetry#traceId",
+          "resolution": "governed",
+          "reason": "correlates every provider attempt and fallback with the request-level routing decision",
+          "provenance": "request-scoped routing trace generator",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": "internal correlation only; expose only through allowlisted aggregate projections and never as request content or external identity"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:route-decision-log#architecture-correlation",
+      "prismaModel": "RouteDecisionLog",
+      "lifecycleDisposition": "retained with the existing confidential route-decision audit lifecycle and never used as authorization",
+      "fields": [
+        {
+          "fieldId": "data:route-decision-log#traceId",
+          "resolution": "governed",
+          "reason": "anchors one request across decision, dispatch, outcome, and token ledgers",
+          "provenance": "request-scoped routing trace generator",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": "internal correlation only; expose only through allowlisted aggregate projections and never as request content or external identity"
+        },
+        {
+          "fieldId": "data:route-decision-log#designRevision",
+          "resolution": "governed",
+          "reason": "binds the observed route decision to the immutable architecture revision that defined the expected path",
+          "provenance": "canonical AI routing architecture registry"
+        }
+      ]
+    },
+    {
+      "kind": "projection",
+      "store": "Operations Map response and EnterpriseArchitectureIssue",
+      "derivedContractId": "routing-ledgers->privacy-safe-architecture-conformance",
+      "cleanupTest": "apps/web/lib/ea/routing-evidence-conformance-reconciler.test.ts",
+      "reconciliationTest": "apps/web/lib/ea/routing-evidence-conformance-reconciler.test.ts"
+    }
+  ]
+}

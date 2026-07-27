@@ -38,6 +38,7 @@ vi.mock("@/lib/actions/backlog-build", () => ({
 }));
 
 import { OpsClient } from "./OpsClient";
+import { BacklogItemRow } from "./BacklogItemRow";
 
 const now = new Date("2026-05-25T12:00:00Z");
 
@@ -89,7 +90,7 @@ function epic(overrides: Partial<EpicWithRelations>): EpicWithRelations {
 }
 
 describe("OpsClient", () => {
-  it("hides terminal backlog items inside expanded epics when Hide done is active", () => {
+  it("shows an honest status mix while hiding terminal rows in Active only mode", () => {
     const openItem = item({
       id: "open-item-id",
       itemId: "BI-OPEN",
@@ -124,7 +125,69 @@ describe("OpsClient", () => {
     expect(html).toContain("Visible active child");
     expect(html).not.toContain("Hidden completed child");
     expect(html).not.toContain("Hidden deferred child");
-    expect(html).toContain("2 completed items hidden");
+    expect(html).toContain("Active only");
+    expect(html).toContain("1 in progress");
+    expect(html).toContain("1 done");
+    expect(html).toContain("1 deferred");
+    expect(html).toContain("2 non-active items hidden");
+  });
+
+  it("explains an all-terminal epic without calling deferred items completed", () => {
+    const doneItem = item({ id: "done", itemId: "BI-DONE", status: "done", completedAt: now });
+    const duplicateItem = item({
+      id: "duplicate",
+      itemId: "BI-DUPLICATE",
+      status: "deferred",
+      triageOutcome: "duplicate",
+      completedAt: now,
+    });
+
+    const html = renderToStaticMarkup(
+      <OpsClient
+        items={[doneItem, duplicateItem]}
+        digitalProducts={[]}
+        taxonomyNodes={[]}
+        epics={[epic({ items: [doneItem, duplicateItem] })]}
+        portfolios={[]}
+        focusedItemId="BI-DONE"
+      />,
+    );
+
+    expect(html).toContain("No active items");
+    expect(html).toContain("1 done");
+    expect(html).toContain("1 deferred");
+    expect(html).not.toContain("2 completed");
+  });
+
+  it("labels a deferred duplicate as a retired duplicate when terminal rows are reviewed", () => {
+    const html = renderToStaticMarkup(
+      <BacklogItemRow
+        item={item({
+          status: "deferred",
+          triageOutcome: "duplicate",
+          completedAt: now,
+        })}
+        onEdit={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain("retired duplicate");
+    expect(html).toContain("Retired because another backlog item is the canonical record.");
+    expect(html).not.toContain("done 5/25/2026");
+  });
+
+  it("keeps a zero-item epic explicit", () => {
+    const html = renderToStaticMarkup(
+      <OpsClient
+        items={[]}
+        digitalProducts={[]}
+        taxonomyNodes={[]}
+        epics={[epic({ items: [] })]}
+        portfolios={[]}
+      />,
+    );
+
+    expect(html).toContain("No items");
   });
 
   it("renders a Portfolio facet listing each portfolio when portfolios exist", () => {

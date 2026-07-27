@@ -10,8 +10,8 @@ Operations is the delivery backlog for the platform. It tracks the work items, e
 
 ## Key Concepts
 
-- **Backlog Items** — Individual units of work with a status, priority, epic, owner, and optional due date. Items move through statuses: open, in-progress, done, deferred.
-- **Epics** — Groups of related backlog items that together deliver a meaningful outcome. Epics have their own progress tracking based on the status of their items.
+- **Backlog Items** — Individual units of work with a status, priority, epic, and owner. Items move through triaging, open, in-progress, done, or deferred.
+- **Epics** — Groups of related backlog items that together deliver a meaningful outcome. The list shows the item mix by status and calculates progress from items marked done only.
 - **Archetype Scope** — Planning metadata that indicates whether work is platform-wide, common across businesses, or specific to an archetype category or leaf archetype. This helps separate market-specific gaps from common finance, workforce, identity, and platform substrate work.
 - **Priority** — Items are ranked by priority to make the most important work visible. Priorities can be adjusted as circumstances change.
 - **Promotions** — Records of features moving from the Build Studio sandbox to production. Each promotion tracks its status (pending, approved, deployed, rolled back), deployment log, and backup reference.
@@ -22,7 +22,7 @@ Operations is the delivery backlog for the platform. It tracks the work items, e
 
 - View the full delivery backlog and filter by epic, status, priority, or owner
 - Review archetype scope fields in backlog workbook grids when planning roadmap or budget slices
-- Create and update backlog items, assign owners, and set due dates
+- Create and update backlog items and assign owners
 - Group items into epics and track epic-level progress
 - Identify and resolve blockers before they stall delivery
 - Review and approve promotions for deployment
@@ -30,6 +30,28 @@ Operations is the delivery backlog for the platform. It tracks the work items, e
 - Monitor deployment status in real time (the page polls for updates)
 - Review deployment logs and backup references for completed promotions
 - Track change requests and their lifecycle (draft, approved, in-progress, completed)
+
+## Reading Epic Progress
+
+Each epic row separates active, done, and deferred work. For example, `1 open ·
+16 done · 2 deferred` means exactly that: 16 items are complete, two are not
+currently planned, and one remains active. Deferred work does not increase the
+done count.
+
+**Active only** is enabled by default. It hides done and deferred item rows when
+you expand an epic, while the row-level status mix stays visible. Turn it off to
+inspect terminal items.
+
+- **Triaging** — Waiting for an intake decision.
+- **Open** — Accepted work that has not started.
+- **In progress** — Work is actively underway.
+- **Done** — Completed work; this is the only status counted as done in epic progress.
+- **Deferred** — Not active and not complete. It remains deferred until someone explicitly reopens it; there is no automatic resume date.
+
+A deferred item classified as discarded is labeled **discarded**. A duplicate
+is labeled **retired duplicate**; the other backlog item is the canonical
+record, so the duplicate is intentionally retained for history without being
+counted as completed.
 
 ## Shared Demand
 

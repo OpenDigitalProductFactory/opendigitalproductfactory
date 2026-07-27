@@ -41,7 +41,7 @@ This README is the source-facing entry point. The [public tour](https://opendigi
 | Install or pilot it | [Quick install](#quick-install) | Supported hosts, early-access paths, installer commands, and verification reporting |
 | Run the platform | [User guide](docs/user-guide/) | Setup, everyday work, coworkers, compliance, administration, and in-product help |
 | Extend or contribute | [Developer setup](docs/user-guide/contributing/developer-setup.md) and [AGENTS.md](AGENTS.md) | Worktrees, architecture rules, verification, DCO, CI, and pull-request delivery |
-| Review the trust model | [Standards family](docs/architecture/agent-standards-family.md), [external alignment](docs/architecture/agent-standards-external-alignment.md), and [conformance](docs/architecture/agent-standards-dpf-conformance.md) | Runtime authority, agent identity, job qualification, delegation, evidence, assurance, and relationship to NIST, ISO/IEC, IEEE, W3C, IETF, and OpenID work |
+| Review the trust model | [Standards family](docs/architecture/agent-standards-family.md), [external alignment](docs/architecture/agent-standards-external-alignment.md), [contribution roadmap](docs/architecture/agent-standards-contribution-roadmap.md), and [conformance](docs/architecture/agent-standards-dpf-conformance.md) | Runtime authority, agent identity, job qualification, delegation, evidence, assurance, and relationship to NIST, ISO/IEC, IEEE, W3C, IETF, and OpenID work |
 
 ## The platform in one view
 
@@ -78,6 +78,7 @@ This repository hosts a draft standards family for trustworthy AI-agent operatio
 - [Global AI Agent Identification and Governance (GAID)](docs/architecture/GAID.md) — identity, issuer / accreditation, badging, assurance, authorization classes, chain-of-custody
 - [Job-Specific Intelligence (TAK-JSI)](docs/architecture/job-specific-intelligence.md) — qualification of a versioned agent operating profile for a bounded job, data scope, tool surface, and risk context
 - [External Standards Alignment](docs/architecture/agent-standards-external-alignment.md) — clause-level synergy and augmentation boundaries across NIST, ISO/IEC, IEEE, W3C, IETF, OpenID, and 1EdTech work
+- [Standards Contribution Roadmap](docs/architecture/agent-standards-contribution-roadmap.md) — readiness gates, venue-specific packages, pilots, interoperability evidence, and staged formalization
 - [Trusted AI Agent Governance White Paper](docs/architecture/2026-04-18-trusted-ai-agent-governance-white-paper.md) — market, policy, and implementation case
 - [DPF Standards Conformance Assessment](docs/architecture/agent-standards-dpf-conformance.md) — how the platform maps to the proposed controls today
 

@@ -1,11 +1,24 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   getAuthorityBindingFilterOptions,
+  listAuthorityBindingRecords,
   parseAuthorityBindingFilters,
   shapeAuthorityBindingRows,
   type AuthorityBindingRecord,
 } from "./bindings";
+
+const { mockFindMany } = vi.hoisted(() => ({
+  mockFindMany: vi.fn(),
+}));
+
+vi.mock("@dpf/db", () => ({
+  prisma: {
+    authorityBinding: {
+      findMany: mockFindMany,
+    },
+  },
+}));
 
 const SAMPLE_RECORDS: AuthorityBindingRecord[] = [
   {
@@ -86,5 +99,21 @@ describe("getAuthorityBindingFilterOptions", () => {
       appliedAgents: [{ agentId: "AGT-400", agentName: "Finance Controller" }],
       subjectRefs: ["HR-400", "finance"],
     });
+  });
+});
+
+describe("listAuthorityBindingRecords", () => {
+  it("filters work-pattern authority out of the route-authorization admin reader", async () => {
+    mockFindMany.mockResolvedValue([]);
+
+    await listAuthorityBindingRecords();
+
+    expect(mockFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          resourceType: { not: "work-pattern" },
+        }),
+      }),
+    );
   });
 });

@@ -58,6 +58,7 @@ Domain-specific operating guides (admin, AI workforce, build studio, compliance,
 - [Global AI Agent Identification and Governance](architecture/GAID.md) — enduring identity, operating-profile state, assurance claims, badges, receipts, and lifecycle.
 - [Job-Specific Intelligence](architecture/job-specific-intelligence.md) — job- and context-specific qualification, evaluation, surveillance, and revalidation for agent operating profiles.
 - [External Standards Alignment](architecture/agent-standards-external-alignment.md) — specific synergy and augmentation boundaries across NIST, ISO/IEC, IEEE, W3C, IETF, OpenID, and 1EdTech work.
+- [Standards Contribution Roadmap](architecture/agent-standards-contribution-roadmap.md) — staged incubation, evidence, interoperability, and formal-submission readiness for TAK, GAID, and TAK-JSI.
 - [AI Coworker Development Principles](architecture/ai-coworker-development-principles.md) — the contract AI coworkers are expected to honor.
 - `ea-diagrams/`, `tak-diagrams/`, `monitoring-diagrams/` — Mermaid sources used by the architecture docs.
 

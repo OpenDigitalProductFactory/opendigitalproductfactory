@@ -14,6 +14,7 @@ import { updateRecipePerformance } from "./recipe-performance";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface RouteOutcomeInput {
+  traceId?: string | null;
   providerId: string;
   modelId: string;
   recipeId: string | null;
@@ -46,6 +47,7 @@ export async function recordRouteOutcome(outcome: RouteOutcomeInput): Promise<vo
     await prisma.routeOutcome.create({
       data: {
         requestId,
+        traceId: outcome.traceId ?? null,
         providerId: outcome.providerId,
         modelId: outcome.modelId,
         recipeId: outcome.recipeId,

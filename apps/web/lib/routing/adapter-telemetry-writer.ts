@@ -33,6 +33,7 @@ export type AdapterTelemetryInput = {
   executionMode: string;
   startedAt: Date;
   status: string;
+  traceId?: string;
 
   // Attribution (PR #607 + PR #623 conventions)
   threadId?: string;
@@ -116,6 +117,7 @@ export async function writeAdapterTelemetry(
       startedAt: input.startedAt,
       status: input.status,
     };
+    if (input.traceId !== undefined) data.traceId = input.traceId;
     if (input.threadId !== undefined) data.threadId = input.threadId;
     if (input.agentMessageId !== undefined) data.agentMessageId = input.agentMessageId;
     if (input.buildId !== undefined) data.buildId = input.buildId;

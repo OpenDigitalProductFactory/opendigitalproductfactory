@@ -2264,6 +2264,7 @@ model ModelCapabilityChangeLog {
 
 model TokenUsage {
   id           String   @id @default(cuid())
+  traceId      String?
   agentId      String
   providerId   String
   contextKey   String
@@ -2274,6 +2275,7 @@ model TokenUsage {
   createdAt    DateTime @default(now())
 
   @@index([createdAt])
+  @@index([traceId])
 }
 
 model EndpointTaskPerformance {
@@ -3465,6 +3467,7 @@ model ContactAccountRole {
 model RouteOutcome {
   id                String   @id @default(cuid())
   requestId         String   @unique
+  traceId           String?
   providerId        String
   modelId           String
   recipeId          String?
@@ -3486,6 +3489,7 @@ model RouteOutcome {
   @@index([recipeId, contractFamily])
   @@index([providerId, modelId])
   @@index([agentId, createdAt])
+  @@index([traceId])
 }
 
 model RecipePerformance {
@@ -3548,6 +3552,7 @@ model AdapterCapabilityProfile {
 // modes via raceCohortId grouping. Feeds nightly outcome scoring (§6.4).
 model AdapterRunTelemetry {
   id             String  @id @default(cuid())
+  traceId        String? // W3C Trace Context-compatible request correlation id
   threadId       String? // null for non-coworker runs (probes, eval)
   agentMessageId String? // joins to AgentMessage when applicable
   buildId        String? // for Build Studio dispatch via the substrate
@@ -3595,6 +3600,7 @@ model AdapterRunTelemetry {
   @@index([threadId, startedAt])
   @@index([agentId, startedAt])
   @@index([startedAt])
+  @@index([traceId])
 }
 
 // EP-COST Phase 2 prerequisite — one row per budget event so the
@@ -8816,6 +8822,8 @@ model PolicyRule {
 
 model RouteDecisionLog {
   id                 String   @id @default(cuid())
+  traceId            String?
+  designRevision     String?
   agentMessageId     String?
   actorKind          String
   actorId            String
@@ -8840,6 +8848,8 @@ model RouteDecisionLog {
   @@index([agentId, createdAt])
   @@index([selectedEndpointId])
   @@index([createdAt])
+  @@index([traceId])
+  @@index([designRevision, createdAt])
 }
 
 model CustomEvalDimension {

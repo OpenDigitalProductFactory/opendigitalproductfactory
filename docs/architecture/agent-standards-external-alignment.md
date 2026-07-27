@@ -47,6 +47,11 @@ This document does not:
 - define a new credential transport, cryptographic primitive, directory protocol, occupational
   taxonomy, or certification-body accreditation model
 
+The execution sequence, readiness gates, contribution packages, and go/no-go criteria for external
+engagement are maintained separately in the informative
+[Standards Contribution Roadmap](agent-standards-contribution-roadmap.md). This document remains
+the source of truth for technical overlap, synergy, augmentation, and non-duplication boundaries.
+
 ## 2. Alignment Vocabulary
 
 The following relationship terms are used throughout this document:
@@ -387,6 +392,9 @@ A contribution derived from this family should contain:
 - at least two independent implementation or pilot contexts
 - privacy, security, safety, accessibility, and internationalization considerations where applicable
 - patent, copyright, contribution-license, and reference-implementation terms
+
+The complete artifact matrix and staged readiness criteria are defined in the
+[Standards Contribution Roadmap](agent-standards-contribution-roadmap.md).
 
 The preferred contribution allocation is:
 

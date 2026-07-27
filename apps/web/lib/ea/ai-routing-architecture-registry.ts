@@ -2,7 +2,8 @@
 // This is the one design-stage source consumed by the BPMN, SysML, and ArchiMate
 // projectors. It contains no prompt, customer, credential, or token-map content.
 
-export const AI_ROUTING_ARCHITECTURE_VERSION = "2026-07-26.1";
+export { AI_ROUTING_ARCHITECTURE_VERSION } from "@/lib/routing/routing-architecture-version";
+import { AI_ROUTING_ARCHITECTURE_VERSION } from "@/lib/routing/routing-architecture-version";
 
 export type AiRoutingLane =
   | "request"

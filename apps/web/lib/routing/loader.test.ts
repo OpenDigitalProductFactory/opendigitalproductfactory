@@ -43,10 +43,15 @@ describe("persistRouteDecision", () => {
   });
 
   it("persists agent attribution as both the actor and coworker id", async () => {
-    await persistRouteDecision(makeDecision(), { actor: { kind: "agent", id: "build-specialist" } });
+    const decision = makeDecision();
+    decision.traceId = "0123456789abcdef0123456789abcdef";
+    decision.designRevision = "2026-07-26.1";
+    await persistRouteDecision(decision, { actor: { kind: "agent", id: "build-specialist" } });
 
     expect(mockPrisma.routeDecisionLog.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
+        traceId: "0123456789abcdef0123456789abcdef",
+        designRevision: "2026-07-26.1",
         actorKind: "agent",
         actorId: "build-specialist",
         agentId: "build-specialist",

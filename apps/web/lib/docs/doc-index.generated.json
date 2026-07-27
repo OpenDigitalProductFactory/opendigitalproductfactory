@@ -429,6 +429,40 @@
         "dpf-platform-skill-index"
       ]
     },
+    "docs/architecture/agent-standards-contribution-roadmap.md": {
+      "publicHref": "/architecture/agent-standards-contribution-roadmap/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "trustworthy-ai-agent-standards-family-contribution-roadmap",
+        "status",
+        "1-purpose",
+        "2-contribution-thesis",
+        "3-readiness-levels",
+        "4-venue-allocation",
+        "41-w3c-incubation",
+        "42-ieee-contribution",
+        "43-nist-measurement-partnership",
+        "44-ietf-and-openid-protocol-contributions",
+        "45-incits-and-isoiec-progression",
+        "5-candidate-specification-package",
+        "6-pilot-and-evidence-program",
+        "61-required-pilot-diversity",
+        "62-evidence-each-pilot-must-preserve",
+        "63-pilot-acceptance",
+        "7-phased-engagement",
+        "phase-a-candidate-release-and-incubation-03-months",
+        "phase-b-evidence-and-coalition-39-months",
+        "phase-c-formalization-918-months",
+        "8-governance-decisions-required-before-filing",
+        "9-gono-go-gates",
+        "91-public-incubation-gono-go",
+        "92-formal-proposal-gono-go",
+        "10-submission-package-template",
+        "11-immediate-next-actions"
+      ]
+    },
     "docs/architecture/agent-standards-dpf-conformance.md": {
       "publicHref": "/architecture/agent-standards-dpf-conformance/",
       "portalHref": null,
@@ -791,6 +825,7 @@
         "the-n1-trap-stated-precisely",
         "the-four-portfolio-view-is-the-same-line",
         "this-separation-is-already-enforced-for-capability-maturity",
+        "living-playbooks-carry-the-same-boundary",
         "the-gap-no-equivalent-separation-for-learned-decision-weights",
         "what-to-claim-and-when",
         "see-also"
@@ -9306,6 +9341,7 @@
         "overview",
         "key-concepts",
         "what-you-can-do",
+        "reading-epic-progress",
         "shared-demand",
         "founder-shared-portfolio",
         "promotions",
