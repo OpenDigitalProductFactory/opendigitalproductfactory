@@ -24,7 +24,7 @@ export function ArchitectureDrillthroughPanel({ drillthrough }: Props) {
     >
       <h3
         id="architecture-context-title"
-        className="m-0 text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--dpf-accent)]"
+        className="m-0 text-dpf-caption font-bold uppercase tracking-[0.12em] text-[var(--dpf-accent)]"
       >
         Architecture context
       </h3>
@@ -41,7 +41,7 @@ export function ArchitectureDrillthroughPanel({ drillthrough }: Props) {
 
       {drillthrough.relatedViews.length > 0 ? (
         <details className="mt-2" open>
-          <summary className="cursor-pointer text-[11px] font-semibold text-[var(--dpf-text)]">
+          <summary className="cursor-pointer text-dpf-caption font-semibold text-[var(--dpf-text)]">
             Related viewpoints ({drillthrough.relatedViews.length})
           </summary>
           <ul className="mt-2 grid list-none gap-1.5 p-0">
@@ -52,10 +52,10 @@ export function ArchitectureDrillthroughPanel({ drillthrough }: Props) {
                   className="block min-h-11 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2.5 py-2 no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
                   aria-label={`Open ${link.elementName} in ${link.viewName}, ${link.notationName}`}
                 >
-                  <span className="block text-[10px] font-semibold text-[var(--dpf-text)]">
+                  <span className="block text-dpf-caption font-semibold text-[var(--dpf-text)]">
                     {link.elementName}
                   </span>
-                  <span className="mt-0.5 block text-[9px] text-[var(--dpf-muted)]">
+                  <span className="mt-0.5 block text-dpf-caption text-[var(--dpf-muted)]">
                     {link.notationName} · {link.viewName} · {link.distance} link{link.distance === 1 ? "" : "s"} away
                   </span>
                 </Link>
@@ -67,10 +67,10 @@ export function ArchitectureDrillthroughPanel({ drillthrough }: Props) {
 
       {drillthrough.decision ? (
         <details className="mt-3 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2.5">
-          <summary className="cursor-pointer text-[11px] font-semibold text-[var(--dpf-text)]">
+          <summary className="cursor-pointer text-dpf-caption font-semibold text-[var(--dpf-text)]">
             Why this decision works this way
           </summary>
-          <div className="mt-2 grid gap-2 text-[10px] text-[var(--dpf-muted)]">
+          <div className="mt-2 grid gap-2 text-dpf-caption text-[var(--dpf-muted)]">
             <div>
               <p className="m-0 font-semibold text-[var(--dpf-text)]">
                 {drillthrough.decision.title}
@@ -110,7 +110,7 @@ export function ArchitectureDrillthroughPanel({ drillthrough }: Props) {
       ) : null}
 
       {drillthrough.source ? (
-        <div className="mt-2 rounded-md border border-[var(--dpf-border)] px-2.5 py-2 text-[10px]">
+        <div className="mt-2 rounded-md border border-[var(--dpf-border)] px-2.5 py-2 text-dpf-caption">
           <p className="m-0 font-semibold text-[var(--dpf-text)]">Implementation source</p>
           <a
             href={drillthrough.source.href}

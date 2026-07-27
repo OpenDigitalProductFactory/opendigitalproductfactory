@@ -69,7 +69,6 @@ type Props = {
   initialFocusElementId?: string | null;
   isReadOnly: boolean;
 };
-
 const MAX_LAYOUT_REVISIONS = 10;
 
 function defaultLayoutAlgo(): EaLayoutAlgorithm {
@@ -387,7 +386,6 @@ const EDGE_VARIANT_LABELS: Record<EdgeVariant, string> = {
   bezier:   "⌒ Curved",
   step:     "⌐ Angled",
 };
-
 export function EaCanvas({
   viewId, viewName, viewStatus, notationSlug, viewpoint, allElementTypes,
   initialElements, initialEdges, initialCanvasState, initialFocusElementId, isReadOnly,
@@ -446,9 +444,8 @@ export function EaCanvas({
   const initialNodeLayout = buildNodes(visibleElements, initialCanvasState, layoutEdges);
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodeLayout.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(buildEdges(visibleEdges, handleDeleteEdge, edgeVariant));
-  const [selectedViewElement, setSelectedViewElement] = useState<SerializedViewElement | null>(
-    () => visibleElements.find((element) => element.elementId === initialFocusElementId) ?? null,
-  );
+  const initialSelectedElement = visibleElements.find((element) => element.elementId === initialFocusElementId) ?? null;
+  const [selectedViewElement, setSelectedViewElement] = useState<SerializedViewElement | null>(initialSelectedElement);
   const [isLayouting, setIsLayouting] = useState(false);
   const [revMenuOpen, setRevMenuOpen] = useState(false);
   const [layoutMenuOpen, setLayoutMenuOpen] = useState(false);

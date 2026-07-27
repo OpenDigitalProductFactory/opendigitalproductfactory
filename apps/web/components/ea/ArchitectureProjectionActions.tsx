@@ -38,7 +38,7 @@ export function ArchitectureProjectionActions() {
       >
         {isPending ? "Refreshing architecture…" : "Refresh live projections"}
       </button>
-      <p aria-live="polite" className="m-0 max-w-md text-right text-[10px] text-[var(--dpf-muted)]">
+      <p aria-live="polite" className="m-0 max-w-md text-right text-dpf-caption text-[var(--dpf-muted)]">
         {message ?? "Rebuilds governed BPMN, SysML, and ArchiMate views from their canonical sources."}
       </p>
     </div>
