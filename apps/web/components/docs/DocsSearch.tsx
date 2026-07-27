@@ -74,7 +74,7 @@ export function DocsSearch({ items }: Props) {
               <span className="text-[var(--dpf-text)] font-medium">{r.item.title}</span>
               <span className="text-[var(--dpf-muted)] ml-2">{r.item.area}</span>
               {r.item.description && (
-                <span className="mt-1 block text-[11px] leading-4 text-[var(--dpf-muted)]">
+                <span className="mt-1 block text-dpf-caption text-[var(--dpf-muted)]">
                   {r.item.description}
                 </span>
               )}
