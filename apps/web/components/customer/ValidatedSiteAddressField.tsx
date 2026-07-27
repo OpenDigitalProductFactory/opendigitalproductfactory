@@ -5,8 +5,8 @@ import { searchCustomerSiteAddresses } from "@/lib/actions/crm";
 import type { ValidatedSiteAddress } from "@/lib/shared/site-address-validation";
 
 const inputClasses =
-  "w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:border-[var(--dpf-accent)] focus:outline-none";
-const labelClasses = "mb-1 block text-xs text-[var(--dpf-muted)]";
+  "w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-dpf-body text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:border-[var(--dpf-accent)] focus:outline-none";
+const labelClasses = "mb-1 block text-dpf-caption text-[var(--dpf-muted)]";
 
 type Props = {
   value: ValidatedSiteAddress | null;
@@ -69,10 +69,10 @@ export function ValidatedSiteAddressField({
 
       {value ? (
         <div className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2">
-          <p className="text-xs text-[var(--dpf-text)]">{value.label}</p>
+          <p className="text-dpf-caption text-[var(--dpf-text)]">{value.label}</p>
           <button
             type="button"
-            className="mt-1 text-[10px] text-[var(--dpf-accent)] hover:underline"
+            className="mt-1 text-dpf-caption text-[var(--dpf-accent)] hover:underline"
             onClick={() => {
               onChange(null);
               setQuery("");
@@ -85,7 +85,7 @@ export function ValidatedSiteAddressField({
       ) : (
         <>
           {currentAddressLabel ? (
-            <p className="text-[10px] text-[var(--dpf-muted)]">
+            <p className="text-dpf-caption text-[var(--dpf-muted)]">
               Current: {currentAddressLabel}. Search to revalidate and replace.
             </p>
           ) : null}
@@ -101,7 +101,7 @@ export function ValidatedSiteAddressField({
             autoComplete="off"
           />
           {isPending ? (
-            <p className="text-[10px] text-[var(--dpf-muted)]">Searching...</p>
+            <p className="text-dpf-caption text-[var(--dpf-muted)]">Searching...</p>
           ) : null}
           {results.length > 0 ? (
             <ul
@@ -113,7 +113,7 @@ export function ValidatedSiteAddressField({
                 <li key={candidate.providerRef} role="option">
                   <button
                     type="button"
-                    className="block w-full px-3 py-2 text-left text-xs text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
+                    className="block w-full px-3 py-2 text-left text-dpf-caption text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
                     onClick={() => {
                       onChange(candidate);
                       setResults([]);
@@ -130,7 +130,7 @@ export function ValidatedSiteAddressField({
         </>
       )}
 
-      {error ? <p className="text-xs text-[var(--dpf-text)]">{error}</p> : null}
+      {error ? <p className="text-dpf-caption text-[var(--dpf-text)]">{error}</p> : null}
     </div>
   );
 }

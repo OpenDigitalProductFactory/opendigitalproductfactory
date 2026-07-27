@@ -9,8 +9,8 @@ import {
 import type { ValidatedSiteAddress } from "@/lib/shared/site-address-validation";
 
 const inputClasses =
-  "w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-sm text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:border-[var(--dpf-accent)] focus:outline-none";
-const labelClasses = "mb-1 block text-xs text-[var(--dpf-muted)]";
+  "w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-dpf-body text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)] focus:border-[var(--dpf-accent)] focus:outline-none";
+const labelClasses = "mb-1 block text-dpf-caption text-[var(--dpf-muted)]";
 
 export type EditableCustomerSite = {
   id: string;
@@ -104,7 +104,7 @@ export function EditCustomerSiteButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="rounded-md border border-[var(--dpf-border)] px-2 py-1 text-[10px] font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
+        className="rounded-md border border-[var(--dpf-border)] px-2 py-1 text-dpf-caption font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
       >
         Edit
       </button>
@@ -116,13 +116,13 @@ export function EditCustomerSiteButton({
       <div className="fixed inset-0 z-40 bg-black/40" onClick={closeModal} />
       <div className="fixed right-8 top-20 z-50 w-[460px] rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] shadow-xl">
         <div className="flex items-center justify-between border-b border-[var(--dpf-border)] px-4 py-3">
-          <h2 className="text-sm font-semibold text-[var(--dpf-text)]">
+          <h2 className="text-dpf-body font-semibold text-[var(--dpf-text)]">
             Edit Customer Site
           </h2>
           <button
             type="button"
             onClick={closeModal}
-            className="text-lg text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+            className="text-dpf-title text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
           >
             x
           </button>
@@ -215,20 +215,20 @@ export function EditCustomerSiteButton({
             />
           </div>
 
-          {error ? <p className="text-xs text-[var(--dpf-text)]">{error}</p> : null}
+          {error ? <p className="text-dpf-caption text-[var(--dpf-text)]">{error}</p> : null}
 
           <div className="flex justify-end gap-2">
             <button
               type="button"
               onClick={closeModal}
-              className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+              className="rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-dpf-caption text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isPending}
-              className="rounded-md bg-[var(--dpf-accent)] px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="rounded-md bg-[var(--dpf-accent)] px-3 py-1.5 text-dpf-caption font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               {isPending ? "Saving..." : "Save changes"}
             </button>

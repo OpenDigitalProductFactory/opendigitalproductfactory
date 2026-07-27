@@ -4414,7 +4414,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 1,
-    "textMass": 95
+    "textMass": 101
   },
   "apps/web/components/customer/NewCustomerSiteNodeButton.tsx": {
     "vocabulary": 0,
@@ -7705,5 +7705,19 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 39
+  },
+  "apps/web/components/customer/EditCustomerSiteButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 72
+  },
+  "apps/web/components/customer/ValidatedSiteAddressField.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
   }
 }
