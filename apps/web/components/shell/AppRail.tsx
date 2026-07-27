@@ -106,7 +106,7 @@ export function AppRail({ sections, mode = "operator" }: Props) {
         ].join(" ")}
       >
         <span className="min-w-0">
-          <span className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
+          <span className="text-dpf-caption block font-semibold uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
             Navigation
           </span>
           <span className="block truncate text-sm font-semibold">
