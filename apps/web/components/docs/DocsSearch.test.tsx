@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+import "@/components/build-studio/test-setup";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { DocsSearch } from "./DocsSearch";
