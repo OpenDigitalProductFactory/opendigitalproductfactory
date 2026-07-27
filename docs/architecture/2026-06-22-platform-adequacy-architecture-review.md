@@ -1,7 +1,8 @@
 # Platform Adequacy Architecture Review
 
-> Status: architecture review, preserved from a Codex review thread on 2026-06-22.
-> Scope: resilience, scalability, reusability, UI/IA fit, and archetype coverage adequacy for using DPF as the single operating platform for small-to-mid-size businesses in the covered archetypes.
+> Status: architecture + commercial-readiness review. Preserved from a Codex review thread on 2026-06-22; later extended with a chief-architect pass (security/data-protection, observability, AI-action integrity) and a business-development pass (competitive frame, go-to-market sequencing, commercial gating).
+> Scope: resilience, security/data-protection, observability, scalability, reusability, AI-action integrity, UI/IA fit, and archetype-coverage adequacy for using DPF as the single operating platform for small-to-mid-size businesses in the covered archetypes - plus the commercial-readiness implications of that adequacy.
+> Counts and backlog states in this document are point-in-time snapshots verified against live source and the DPF MCP backlog on 2026-06-22. Treat them as evidence with an expiry, not standing facts; re-verify before quoting externally.
 
 ## Executive Verdict
 
@@ -15,18 +16,23 @@ The current architecture is best described as:
 
 The opportunity is real. DPF can plausibly become the one platform a small-to-mid-size business runs on. The immediate architectural risk is breadth outrunning operational depth.
 
+**Commercial thesis.** DPF's true competitor is not another all-in-one suite; it is the *stack* a small business already rents - accounting, CRM, scheduling/dispatch, POS, payroll, point compliance tools - plus the integration tax of holding that stack together. DPF's wedge is to **collapse that stack into one governed install and run AI coworkers on top of it**, which reframes the buyer's budget from software seats to back-office labor. That is a large, defensible opportunity. The corresponding commercial risk is the mirror of the architectural one: selling breadth ("95 archetypes") ahead of proven depth produces failed implementations, and in tight SMB referral communities (trades, clinics, franchises) a failed implementation is a reputational event, not just a lost renewal. The same readiness discipline that protects the architecture is therefore the instrument that protects the brand and qualifies the pipeline.
+
 ## Evidence Base
 
 This review combines:
 
 - Source review in the repo, saved on branch `doc/platform-adequacy-review` from latest `origin/main` on 2026-06-22.
 - Live DPF MCP backlog reads on 2026-06-22.
+- A 2026-06-22 re-verification pass: every source count and backlog rollup cited in the original review was re-checked against then-current source and live MCP state. Those counts are point-in-time evidence; current source coverage has since moved to 95 archetypes across 21 categories per the 2026-07-18 documentation sweep noted below.
 - The earlier review pass in this thread, which initially observed the root checkout on `dpf/deploy` behind `origin/main`; this file updates that finding where latest `origin/main` has moved.
 - External standards used as review lenses:
   - [ISO/IEC 25010:2023](https://www.iso.org/standard/78176.html) for product quality characteristics.
   - [NIST Cybersecurity Framework 2.0](https://nvlpubs.nist.gov/nistpubs/CSWP/NIST.CSWP.29.pdf) for govern/identify/protect/detect/respond/recover resilience framing.
   - [The Twelve-Factor App](https://12factor.net/) for deployability, configuration, backing services, logs, and process discipline.
   - [WCAG 2.2 contrast guidance](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum) for user-facing readability and accessibility.
+  - [NIST Privacy Framework](https://www.nist.gov/privacy-framework), plus SOC 2 / HIPAA / GDPR expectations, as the commercial gates for regulated-vertical sales.
+  - [Crossing the Chasm](https://en.wikipedia.org/wiki/Crossing_the_Chasm) (Moore) for beachhead and bowling-pin go-to-market sequencing.
 
 This is a review artifact, not a build-gate artifact. No production build, browser UX walkthrough, or migration gate was run for this document because no runtime behavior was changed.
 
@@ -78,7 +84,7 @@ The gap is consistency. The direction is strong, but one-off cards, badges, dash
 If DPF is the one platform a business runs on, backup, restore, update, and state integrity are existential. The live backlog still has open disaster-recovery and upgrade-lifecycle work:
 
 - `EP-DR-HARDENING-2026-05-23` remains open with 17 total items, 8 open, 1 in progress, and 8 done.
-- `EP-UPGRADE-LIFECYCLE` remains open with 14 total items, 8 open, 1 in progress, and 3 done.
+- `EP-UPGRADE-LIFECYCLE` remains open with 14 total items: 8 open, 1 in progress, 3 done, and 2 deferred.
 - `BI-EA67A758` is open P1: "Silent backup corruption - trial-restore failure never alerts operator."
 
 The Postgres backup design is valuable, but it explicitly scopes out Neo4j/Qdrant backup, off-host/cloud backups, encryption, PITR, partial restore, and cross-install federation in the current slice. That is acceptable for an early self-hosted local platform, but not enough to claim appliance-grade business continuity.
@@ -147,6 +153,16 @@ For an SMB operator, the platform must feel like:
 
 It should not feel like a map of the platform's internal architecture.
 
+### 6. Security, Compliance Evidence, And Data Exit Are Not Yet Regulated-Grade
+
+The governance *design* is strong (MCP token scopes, `ToolExecution` receipts, the propose->approve->commit envelope). But three things gate any regulated or finance-critical "sole platform" claim, and all three are observable in current source:
+
+- **Encryption at rest is host-level only.** Integration credentials are application-encrypted (AES-256-GCM in `packages/integration-shared/src/credential-crypto.ts`), but the Postgres business data itself relies on volume/substrate encryption (per the secrets deployment contract) - there is no application-managed at-rest encryption for the system of record.
+- **Compliance models capture evidence but do not attest.** `ComplianceEvidence`, `ComplianceAudit`, `ComplianceIncident`, and `CorrectiveAction` exist to *record* compliance, but there is no certified attestation (SOC 2 Type II, HIPAA BAA) or attestation-readiness surface - and for regulated buyers those artifacts gate the deal regardless of code quality.
+- **The exit story is weak.** Data export is per-table CSV (`ExportButton` / `toCsv`); there is no whole-account export. A buyer betting an entire business on one platform needs a credible, demonstrable way to take all of it back.
+
+**Adequacy implication:** non-regulated archetypes can proceed on the current security posture; regulated archetypes cannot be claimed until encryption-at-rest, certified-attestation readiness, and whole-account portability are routine release evidence. See the Security & Data Protection and AI-Action Integrity dimensions below, and the regulated-tier prerequisites in Business Development.
+
 ## Dimension Review
 
 ### Resilience
@@ -170,6 +186,50 @@ Gaps:
 Recommendation:
 
 Treat resilience as the first readiness gate for any "sole system" claim. Close DR and upgrade P1s before market-facing language says DPF can run an entire business without caveat.
+
+### Security And Data Protection
+
+Rating: **medium for selected non-regulated archetypes; not yet regulated-grade.**
+
+Strengths:
+
+- MCP token scopes plus granular per-tool grants gate every agent action; `ToolExecution` (and `ToolExecutionReceipt` digests) record params, result, success, and cost.
+- Role/capability-filtered navigation and authority surfaces make permissions legible.
+- Application-level AES-256-GCM encryption for integration credentials/secrets (`credential-crypto.ts`), with PII redaction/log sanitization that strips SSN/DOB/bank patterns and flags injected content (`redact.ts`).
+- Local-inference residency is enforced where it matters: build/codegen routes to the local provider (`residencyPolicy=local_only`) and fails loud rather than silently calling out, and outbound URLs are SSRF-gated (`assertSafeOutboundUrl`).
+- A uniform, substrate-agnostic secrets deployment contract with a rotation protocol.
+- Compliance-evidence data models (`ComplianceEvidence`/`ComplianceAudit`/`ComplianceIncident`/`CorrectiveAction`) provide a home for regulated obligations.
+
+Gaps:
+
+- Business data encryption-at-rest is host/volume-level only; only credentials are application-encrypted (see Critical Gap 6).
+- Egress controls are point solutions, not a unified policy plane: inference residency (fail-loud) and SSRF URL gating exist, and destructive coworker sends pass the HITL envelope, but CADA/sovereignty is computed as an *assurance score* (`sovereignty-assessment.ts`, pure logic) rather than enforced as a runtime data-egress veto - there is no single policy plane governing arbitrary outbound data.
+- Compliance models capture evidence but there is no certified attestation (SOC 2 Type II, HIPAA BAA) or attestation-readiness surface.
+- This review cites NIST CSF 2.0 as a lens but the codebase does not yet map protect/detect/respond/recover to named owners and evidence.
+
+Recommendation:
+
+Define a security baseline as release evidence per archetype tier. Treat encryption-at-rest, egress governance, and certified-attestation readiness as the gating work for any regulated-archetype claim, and make the NIST CSF 2.0 mapping explicit so each function has an owner and an evidence definition rather than a citation.
+
+### Observability And Operability
+
+Rating: **medium-low for sole-platform day-2 operations; foundation in place.**
+
+Strengths:
+
+- A runtime-health surface (`/platform/ai/runtime-health`) shows the model/provider/engine routing verdict per build phase with remediation guidance.
+- `PlatformNotification` is a real operator-alert primitive (severity/category/resolved-at), and `ToolExecution` carries token/cost metering.
+- The governed self-upgrade path owns quiescence, recovery-point creation, health evidence, and rollback - a genuine operability contract for the highest-risk action.
+
+Gaps:
+
+- OpenTelemetry export is Phase-0 and feature-flagged (`DPF_GEAR_OTEL_EXPORT`, default off); it is not wired to a production observability pipeline, and there are no platform-wide metrics/traces/SLOs.
+- The alerting fabric exists but is not uniformly applied: the open P1 `BI-EA67A758` shows trial-restore failure never creates a `PlatformNotification` - the canonical pattern is present but not yet everywhere it must be.
+- Full-observability work should be treated as a readiness dependency rather than background plumbing.
+
+Recommendation:
+
+For a sole platform, day-2 operability is a feature, not plumbing. Make `PlatformNotification` the uniform alerting spine (closing `BI-EA67A758` as the canonical pattern), and decide whether OTel graduates from a flagged Phase-0 experiment to a supported observability contract before the platform is sold as a business's only system.
 
 ### Scalability
 
@@ -208,11 +268,31 @@ Gaps:
 - Some UI surfaces still implement local metric/status/card patterns instead of converging on report-kit.
 - Finding/assurance/risk/issue-shaped models need unification before additional parallel models appear.
 - Workspace contribution substrate exists, but concrete category/default contributions are not yet broadly registered.
-- Docs can drift from source counts, as shown by the 56/15 → 87/19 → 95/21 archetype coverage progression.
+- Docs can drift from source counts, as shown by the 56/15 -> 87/19 -> 95/21 archetype coverage progression.
 
 Recommendation:
 
 Spend roughly 20 percent of every workstream on refactoring and convergence until the reusable substrate catches up with feature breadth.
+
+### AI-Action Integrity And Trust
+
+Rating: **medium-high in governance design; the platform's signature strength and its signature risk.**
+
+Strengths:
+
+- The propose->approve->commit pattern is real substrate, not a slogan: `AgentActionProposal` carries a proposed/decided/executed lifecycle with a human `decidedBy`; the `CoworkerActionEnvelope` state machine gates destructive/irreversible actions behind human approval; `ToolExecution` + `ToolExecutionReceipt` record every call.
+- The horizontal engines are built the same way - the field-dispatch decision cores are explicitly *pure* ("dispatcher proposes; the runtime commits each through governance"), so the human-in-the-loop boundary is in the architecture, not bolted on.
+- Authority/audit surfaces (`/platform/audit/authority`, the capability journal) make agent action observable and attributable.
+
+Gaps:
+
+- Reversibility is action-specific: the audit trail is comprehensive but there is no global undo, so a wrong AI action on a financial or compliance record is recoverable only by manual corrective workflow.
+- The propose->commit envelope is not yet uniformly enforced across *every* side-effecting surface - it is strongest for destructive/browser-driving actions.
+- For "sole platform," the blast radius of an unattended agent action on the system of record is the trust question that gates regulated and finance-critical archetypes.
+
+Recommendation:
+
+Make the propose->commit envelope the mandatory contract for every business-record-mutating agent action, not just destructive and browser-driving ones, and pair high-stakes actions (money movement, regulated submissions, irreversible external sends) with explicit reversibility or a hold/confirm window. This is both an architecture requirement and the single most important trust story for the sales motion.
 
 ### UI And Operator Experience
 
@@ -265,6 +345,74 @@ These categories need stronger vertical proof:
 
 Why: their hardest business decisions depend on capacity, compliance, field signals, assets, routing, regulated evidence, or external systems. DPF has the beginnings of those engines, but readiness must be proven archetype by archetype.
 
+## Business Development And Commercial Readiness
+
+The architecture analysis above answers "can it work?" This section answers the questions a buyer, a partner, and a go-to-market team actually ask: what does it replace, who should we sell it to first, and what must be true before we say so? The readiness matrix is the hinge between the two - it is an engineering tracker and a sales-qualification instrument at the same time.
+
+### What DPF Actually Displaces
+
+DPF is usually mis-framed as competing with horizontal all-in-one suites. The real incumbent in each target archetype is a *stack of point solutions plus the integration tax of holding them together*:
+
+- Professional services: accounting + CRM + time/billing + e-sign + docs.
+- Field service / trades: accounting + a vertical FSM (ServiceTitan, Jobber, Housecall Pro) + scheduling + payments.
+- Retail / storefront: POS (Square, Toast) + accounting + inventory + a website/booking tool.
+- Healthcare / wellness: an EHR/practice-management system + scheduling + billing + a compliance binder.
+- Banking / financial services: core/ledger systems + KYC/AML tooling + case management + audit evidence.
+
+The buyer is not paying one vendor; they are paying five, plus the spreadsheets, the manual re-keying, and the part-time bookkeeper who reconciles them. DPF's wedge is to **collapse the stack into one governed install and run AI coworkers across it** - one source of truth, no integration tax, and labor leverage on top. That is the message; the readiness matrix governs *which archetypes can hear it yet*.
+
+### The Two Value Propositions And The TAM Reframe
+
+1. **Stack collapse.** Fewer subscriptions, one data model, no swivel-chair reconciliation. This is a cost-and-coherence argument any SMB understands immediately.
+2. **AI coworkers that do the work.** The platform does not merely *record* the business; it *operates* it - drafts the invoice, proposes the dispatch, prepares the compliance evidence, with a human approving at the envelope. This reframes the budget from *software seats* (a few hundred dollars a month) to *back-office labor* (the bookkeeper, the dispatcher, the scheduler, the compliance clerk). That reframe is the real TAM expander and the reason "sole platform" is worth the difficulty - but it only lands where AI-action integrity (above) is proven, because an agent that mis-files a remittance is a trust-ending event.
+
+Local-first compounds both: the data lives on the customer's infrastructure (a sovereignty and "no per-seat SaaS rent" argument, and a genuine differentiator for regulated and privacy-sensitive buyers), and the platform is an owned asset rather than a metered subscription.
+
+### Local-First Is A Commercial Double-Edge
+
+The same one-install, local-first model that is an architectural strength is a go-to-market constraint, and the commercial plan must hold both at once:
+
+- **Asset, not edge:** no instant self-serve SaaS trial, a real install/onboarding step, and a support surface that lives on the customer's hardware. This raises cost-to-acquire and cost-to-support per logo relative to pure SaaS.
+- **Implications:** pricing leans toward a license (asset) plus an optional managed/support subscription rather than per-seat SaaS; the partner/reseller channel is not optional polish but the primary mechanism for scaling installs and first-line support; and a managed-install / hosted-appliance option may be needed to reach buyers who will not run their own infrastructure.
+
+### Readiness Matrix As A Go-To-Market Instrument
+
+Re-read the five-state readiness matrix (Critical Gap 3) as a commercial gating ladder. Each state authorizes a specific motion and forbids the ones above it:
+
+- **Template-ready -> demo and discovery only.** Show the vocabulary; do not sell production.
+- **Ops-ready -> paid pilot / design partner.** Core internal workflows work and are UX-verified; sell a time-boxed pilot, not a system-of-record migration.
+- **Connector-ready -> switch-from-incumbent deal.** Imports/syncs and reconciliation work; now you can credibly say "move off QuickBooks / your FSM."
+- **Regulated-ready -> regulated-vertical sale.** Compliance obligations, audit evidence, role separation, and retention are verified *and the commercial/legal artifacts below are in place.*
+- **Sole-platform-ready -> "run your business on it" GA.** Every gate passed with release evidence for that archetype.
+
+The discipline is to **let the matrix, not the catalog, set the sales claim.** Overclaiming a tier converts pipeline into failed implementations, and SMB verticals are referral economies where one public failure poisons a segment. The matrix is how DPF scales its claims exactly as fast as its evidence - and no faster.
+
+### Beachhead Sequencing (Bowling-Pin)
+
+Following a Moore-style beachhead model, lead where depth already exists and let each win knock down the next pin via shared horizontal engines:
+
+1. **Beachhead - software/product teams (dogfood).** DPF builds DPF; this is the strongest available reference and the lowest-risk first claim.
+2. **First pins - professional services, appointment/service businesses, simple retail.** Lower regulated/field/inventory complexity; the workflows are mostly internal; pilots can be evidenced quickly.
+3. **Adjacent expansion via the field-dispatch engine.** Dispatch is being generalized from HVAC into a horizontal (`BI-69A992A4` / `F9A64A54` / `3C3DD529` done as pure decision cores), so trades and field-service archetypes share one engine - land one and the rest get cheaper.
+4. **Deferred - banking, healthcare, public sector, logistics, rental fleets, MSP, construction.** Pursue only with the regulated-tier prerequisites below; these are the highest-value but highest-liability segments.
+
+Generate a referenceable case study at each pin *before* opening the next; the readiness gates are exactly the evidence that converts a pilot into that case study.
+
+### Regulated-Tier Prerequisites Are Commercial, Not Just Technical
+
+For banking, healthcare, and public sector, "regulated-ready" must bundle artifacts that are sales blockers regardless of code quality. These are absent today - the platform has compliance-*evidence* data models but no certified attestations:
+
+- **Healthcare:** a HIPAA Business Associate Agreement and the safeguards behind it.
+- **Cross-vertical trust:** a SOC 2 Type II report (or a credible roadmap to one) and a Data Processing Agreement / GDPR posture.
+- **Data protection:** business-data encryption-at-rest (today host-level only) and data-residency attestations.
+- **Examination support:** for banking, the ability to support a customer's examiner/auditor with evidence exports.
+
+Sequence these legal and assurance artifacts *alongside* the engineering readiness for those archetypes; a regulated deal stalls on a missing BAA just as surely as on a missing feature, and these artifacts have long lead times.
+
+### Trust, Lock-In, And The Exit Story
+
+No owner bets an entire business on a single platform without a credible way out. Today the exit story is weak: data export is per-table CSV with no whole-account export. Local-first helps (the data physically lives on the customer's infrastructure), but "your data is here, and you can take all of it, in a usable shape, whenever you want" should be an explicit, demonstrable feature and a standard objection-handler. A strong portability story lowers the perceived risk of "sole platform" more than any feature checkbox.
+
 ## Refactoring Spine
 
 To keep breadth from becoming debt, reserve about 20 percent of related work for architectural refactoring. Prioritize:
@@ -316,10 +464,24 @@ To keep breadth from becoming debt, reserve about 20 percent of related work for
 - Hide AI/build/runtime plumbing unless the user is in an admin/operator context.
 - Enforce report-kit, theme-token, and WCAG checks on every UI-impacting change.
 
+### Commercial Track (Runs In Parallel)
+
+The five phases above are the engineering gate ladder; the commercial motion runs alongside and is gated by it, not after it:
+
+- **Name the beachhead and sign design partners** for the pilot-ready archetypes now; their pilots produce the readiness evidence Phases 2-3 depend on.
+- **Adopt the readiness matrix as the sales-qualification gate** so no motion outruns its tier (demo -> pilot -> switch -> regulated -> GA).
+- **Stand up the partner/reseller channel** (`EP-PARTNER-CHANNEL`) as the install and first-line support mechanism before logo count outruns direct support capacity.
+- **Begin the regulated-tier legal/assurance artifacts** (BAA, SOC 2 roadmap, DPA, data-residency) in parallel with Phase 1 security work, since they have long lead times.
+- **Define packaging** - license (asset) + managed/support subscription + AI-compute tier - and tie offer tiers to readiness tiers.
+
+Give each engineering phase an owner and an evidence definition; a gate that cannot name its evidence is not a gate.
+
 ## Final Assessment
 
 DPF has the architecture of a real SMB operating platform, not just a collection of pages. The combination of archetypes, governance, AI coworkers, MDM, finance/compliance/customer surfaces, and local-first deployment is strategically coherent.
 
 The main risk is overclaiming readiness. The platform should not say "we cover 95 archetypes" as though every archetype is equally ready to run a business end to end. It should say "we have an archetype-governed platform, and each archetype progresses through explicit readiness gates."
 
-With resilience hardening, concrete vertical workspace homes, connector readiness, MDM completion, and disciplined UI/refactoring, DPF can become the single platform for many small-to-mid-size businesses. Until those gates are passed, it is a strong foundation and pilot platform, not yet a universal sole-system replacement.
+Commercially, that same discipline is the growth strategy, not a brake on it. DPF's opportunity - collapse the SMB software stack and run AI coworkers across it - is large enough to be worth winning the hard way: a beachhead, evidenced pilots, referenceable case studies, and claims that expand exactly as fast as the readiness matrix fills in. The failure mode is not "too cautious"; it is selling depth that is not there into referral communities that remember.
+
+With resilience hardening, a uniform security and AI-action-integrity baseline, concrete vertical workspace homes, connector and data-portability readiness, MDM completion, disciplined UI/refactoring, and a matrix-gated commercial motion, DPF can become the single platform for many small-to-mid-size businesses. Until those gates are passed, it is a strong foundation and a pilot platform - an exceptional one - not yet a universal sole-system replacement.
