@@ -83,6 +83,18 @@ export async function seedViewpointsForNotation(
 
 export const ARCHIMATE_VIEWPOINTS: ViewpointSpec[] = [
   {
+    name: "AI Routing Realization",
+    description:
+      "Governed AI-routing capability and process, the application components that realize them, and the privacy-safe evidence that verifies operation.",
+    elementSlugs: [
+      "business_capability",
+      "business_process",
+      "application_component",
+      "event_evidence",
+    ],
+    relSlugs: ["realizes", "associated_with"],
+  },
+  {
     name: "Application Architecture",
     description: "Application components, services, data objects, and their relationships.",
     elementSlugs: ["application_component", "application_service", "data_object", "technology_node", "technology_service", "system_software"],

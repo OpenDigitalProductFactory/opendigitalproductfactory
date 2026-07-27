@@ -26,6 +26,7 @@
 // index.ts: this module is pulled into the apps/web Next/Turbopack build via the
 // @dpf/db barrel + subpath, and Turbopack cannot resolve the ".js" specifier there.
 import { prisma } from "./client";
+import type { Prisma } from "../generated/client/client";
 
 export interface SysmlDesiredElement {
   /** Stable source key → EaElement.infraCiKey. */
@@ -42,6 +43,14 @@ export interface SysmlDesiredRel {
   fromKey: string;
   toKey: string;
   relSlug: string;
+  /** Relationship metadata carried into EaRelationship.properties. Use this for
+   * bounded explanation codes, condition labels, and source revisions — never
+   * payload content. */
+  properties?: Prisma.InputJsonObject;
+  /** Relationship types normally resolve inside the model notation. Set this
+   * only for an explicitly seeded cross-notation type such as
+   * "dpf-cross-notation". */
+  relationshipNotationSlug?: string;
 }
 
 /** A conformance issue to file against a desired element. Idempotent by element+issueType. */
@@ -75,8 +84,9 @@ export interface SysmlDesiredModel {
    *  occurrence `allocates`/`traces` to the logical part it realizes. Endpoints are
    *  resolved in-model first, then against the live graph; an unresolved endpoint is
    *  logged and counted (never silently dropped) and is linked on a later reconcile once
-   *  its projection exists. relSlugs used here MUST appear in `relTypeSlugs`. Ordinary
-   *  same-projection edges belong in `relationships`, not here. */
+   *  its projection exists. Same-notation relSlugs must appear in `relTypeSlugs`;
+   *  an explicitly named `relationshipNotationSlug` is resolved and rule-validated
+   *  dynamically. Ordinary same-projection edges belong in `relationships`, not here. */
   crossLayerRelationships?: SysmlDesiredRel[];
 }
 
@@ -112,11 +122,46 @@ export async function applySysmlModel(
     const et = await db.eaElementType.findUniqueOrThrow({ where: { notationId_slug: { notationId, slug } }, select: { id: true } });
     etId.set(slug, et.id);
   }
+  const notationIdBySlug = new Map<string, string>([[notationSlug, notationId]]);
   const rtId = new Map<string, string>();
+  const relTypeKey = (relNotationSlug: string, slug: string) => `${relNotationSlug}\u0000${slug}`;
   for (const slug of model.relTypeSlugs) {
     const rt = await db.eaRelationshipType.findUniqueOrThrow({ where: { notationId_slug: { notationId, slug } }, select: { id: true } });
-    rtId.set(slug, rt.id);
+    rtId.set(relTypeKey(notationSlug, slug), rt.id);
   }
+  const resolveRelationshipTypeId = async (
+    slug: string,
+    relNotationSlug = notationSlug,
+  ): Promise<string> => {
+    const key = relTypeKey(relNotationSlug, slug);
+    const cached = rtId.get(key);
+    if (cached) return cached;
+    let relNotationId = notationIdBySlug.get(relNotationSlug);
+    if (!relNotationId) {
+      const relNotation = await db.eaNotation.findUnique({
+        where: { slug: relNotationSlug },
+        select: { id: true },
+      });
+      if (!relNotation) {
+        throw new Error(
+          `[sysml-model-seed] relationship notation "${relNotationSlug}" not seeded`,
+        );
+      }
+      relNotationId = relNotation.id;
+      notationIdBySlug.set(relNotationSlug, relNotationId);
+    }
+    const rt = await db.eaRelationshipType.findUniqueOrThrow({
+      where: {
+        notationId_slug: {
+          notationId: relNotationId,
+          slug,
+        },
+      },
+      select: { id: true },
+    });
+    rtId.set(key, rt.id);
+    return rt.id;
+  };
 
   // Load existing elements for diff + soft-remove (scoped to the prefix when given).
   const existing: Array<{ id: string; infraCiKey: string | null; properties: unknown }> = model.softRemovePrefix
@@ -131,6 +176,8 @@ export async function applySysmlModel(
   let crossLayerLinked = 0;
   let crossLayerUnresolved = 0;
   const idByKey = new Map<string, string>();
+  const elementTypeIdByKey = new Map<string, string>();
+  const staleElementIds: string[] = [];
 
   for (const el of model.elements) {
     const elementTypeId = etId.get(el.typeSlug);
@@ -149,18 +196,43 @@ export async function applySysmlModel(
     if (prior) {
       await db.eaElement.update({ where: { id: prior.id }, data });
       idByKey.set(el.sysmlKey, prior.id);
+      elementTypeIdByKey.set(el.sysmlKey, elementTypeId);
       updated++;
     } else {
       const row = await db.eaElement.create({ data, select: { id: true } });
       idByKey.set(el.sysmlKey, row.id);
+      elementTypeIdByKey.set(el.sysmlKey, elementTypeId);
       created++;
     }
   }
+
+  const assertExplicitRelationshipRule = async (
+    rel: SysmlDesiredRel,
+    fromElementTypeId: string,
+    toElementTypeId: string,
+    relationshipTypeId: string,
+  ): Promise<void> => {
+    if (!rel.relationshipNotationSlug) return;
+    const rule = await db.eaRelationshipRule.findFirst({
+      where: {
+        fromElementTypeId,
+        toElementTypeId,
+        relationshipTypeId,
+      },
+      select: { id: true },
+    });
+    if (!rule) {
+      throw new Error(
+        `[sysml-model-seed] relationship rule not seeded for ${rel.fromKey} -[${rel.relationshipNotationSlug}:${rel.relSlug}]-> ${rel.toKey}`,
+      );
+    }
+  };
 
   if (model.softRemovePrefix) {
     for (const e of existing) {
       if (desiredKeys.has(e.infraCiKey ?? "")) continue;
       const props = (e.properties && typeof e.properties === "object" ? e.properties : {}) as Record<string, unknown>;
+      staleElementIds.push(e.id);
       if (props.mirrorRemoved === true) continue;
       await db.eaElement.update({ where: { id: e.id }, data: { lifecycleStatus: "inactive", properties: { ...props, mirrorRemoved: true } } });
       removed++;
@@ -170,11 +242,41 @@ export async function applySysmlModel(
   for (const rel of model.relationships) {
     const fromElementId = idByKey.get(rel.fromKey);
     const toElementId = idByKey.get(rel.toKey);
-    const relationshipTypeId = rtId.get(rel.relSlug);
-    if (!fromElementId || !toElementId || !relationshipTypeId) continue;
-    const found = await db.eaRelationship.findFirst({ where: { fromElementId, toElementId, relationshipTypeId }, select: { id: true } });
+    if (!fromElementId || !toElementId) continue;
+    const relNotationSlug = rel.relationshipNotationSlug ?? notationSlug;
+    const relationshipTypeId = await resolveRelationshipTypeId(
+      rel.relSlug,
+      relNotationSlug,
+    );
+    await assertExplicitRelationshipRule(
+      rel,
+      elementTypeIdByKey.get(rel.fromKey)!,
+      elementTypeIdByKey.get(rel.toKey)!,
+      relationshipTypeId,
+    );
+    const properties: Prisma.InputJsonObject = rel.properties ?? {};
+    const found = await db.eaRelationship.findFirst({
+      where: { fromElementId, toElementId, relationshipTypeId },
+      select: { id: true, properties: true, notationSlug: true },
+    });
     if (!found) {
-      await db.eaRelationship.create({ data: { fromElementId, toElementId, relationshipTypeId, notationSlug, properties: {} } });
+      await db.eaRelationship.create({
+        data: {
+          fromElementId,
+          toElementId,
+          relationshipTypeId,
+          notationSlug: relNotationSlug,
+          properties,
+        },
+      });
+    } else if (
+      found.notationSlug !== relNotationSlug ||
+      JSON.stringify(found.properties ?? {}) !== JSON.stringify(properties)
+    ) {
+      await db.eaRelationship.update({
+        where: { id: found.id },
+        data: { notationSlug: relNotationSlug, properties },
+      });
     }
   }
 
@@ -183,27 +285,68 @@ export async function applySysmlModel(
   // bridge that lets blast_radius span layers). A miss is logged + counted, never
   // silently dropped — the next reconcile links it once the target projection exists.
   if (model.crossLayerRelationships?.length) {
-    const resolveId = async (key: string): Promise<string | null> => {
+    const resolveEndpoint = async (
+      key: string,
+    ): Promise<{ id: string; elementTypeId: string } | null> => {
       const inModel = idByKey.get(key);
-      if (inModel) return inModel;
-      const found = await db.eaElement.findFirst({ where: { infraCiKey: key }, select: { id: true } });
-      return found?.id ?? null;
+      const inModelType = elementTypeIdByKey.get(key);
+      if (inModel && inModelType) {
+        return { id: inModel, elementTypeId: inModelType };
+      }
+      return db.eaElement.findFirst({
+        where: { infraCiKey: key },
+        select: { id: true, elementTypeId: true },
+      });
     };
     for (const rel of model.crossLayerRelationships) {
-      const relationshipTypeId = rtId.get(rel.relSlug);
-      if (!relationshipTypeId) continue;
-      const fromElementId = await resolveId(rel.fromKey);
-      const toElementId = await resolveId(rel.toKey);
-      if (!fromElementId || !toElementId) {
+      const relNotationSlug = rel.relationshipNotationSlug ?? notationSlug;
+      const relationshipTypeId = await resolveRelationshipTypeId(
+        rel.relSlug,
+        relNotationSlug,
+      );
+      const fromElement = await resolveEndpoint(rel.fromKey);
+      const toElement = await resolveEndpoint(rel.toKey);
+      if (!fromElement || !toElement) {
         crossLayerUnresolved++;
         console.warn(
-          `[sysml-model-seed] cross-layer ${rel.fromKey} -[${rel.relSlug}]-> ${rel.toKey}: ${!fromElementId ? "from" : "to"} endpoint unresolved — skipping (links on a later reconcile once its projection exists)`,
+          `[sysml-model-seed] cross-layer ${rel.fromKey} -[${rel.relSlug}]-> ${rel.toKey}: ${!fromElement ? "from" : "to"} endpoint unresolved — skipping (links on a later reconcile once its projection exists)`,
         );
         continue;
       }
-      const found = await db.eaRelationship.findFirst({ where: { fromElementId, toElementId, relationshipTypeId }, select: { id: true } });
+      const fromElementId = fromElement.id;
+      const toElementId = toElement.id;
+      await assertExplicitRelationshipRule(
+        rel,
+        fromElement.elementTypeId,
+        toElement.elementTypeId,
+        relationshipTypeId,
+      );
+      const properties: Prisma.InputJsonObject = {
+        crossLayer: true,
+        ...(rel.properties ?? {}),
+      };
+      const found = await db.eaRelationship.findFirst({
+        where: { fromElementId, toElementId, relationshipTypeId },
+        select: { id: true, properties: true, notationSlug: true },
+      });
       if (!found) {
-        await db.eaRelationship.create({ data: { fromElementId, toElementId, relationshipTypeId, notationSlug, properties: { crossLayer: true } } });
+        await db.eaRelationship.create({
+          data: {
+            fromElementId,
+            toElementId,
+            relationshipTypeId,
+            notationSlug: relNotationSlug,
+            properties,
+          },
+        });
+      } else if (
+        found.notationSlug !== relNotationSlug ||
+        JSON.stringify(found.properties ?? {}) !== JSON.stringify(properties)
+      ) {
+        await db.eaRelationship.update({
+          where: { id: found.id },
+          data: { notationSlug: relNotationSlug, properties },
+        });
       }
       crossLayerLinked++;
     }
@@ -224,9 +367,18 @@ export async function applySysmlModel(
   }
 
   const viewpoint = await db.viewpointDefinition.findUnique({ where: { name: model.view.viewpointName }, select: { id: true } });
-  let view = await db.eaView.findFirst({ where: { notationId, name: model.view.name }, select: { id: true } });
-  if (!view) {
-    view = await db.eaView.create({
+  const existingView = await db.eaView.findFirst({
+    where: { notationId, name: model.view.name },
+    select: {
+      id: true,
+      description: true,
+      viewpointId: true,
+      scopeRef: true,
+    },
+  });
+  let viewId: string;
+  if (!existingView) {
+    const createdView = await db.eaView.create({
       data: {
         notationId, name: model.view.name, description: model.view.description,
         layoutType: "graph", scopeType: "custom", scopeRef: model.view.scopeRef,
@@ -234,12 +386,37 @@ export async function applySysmlModel(
       },
       select: { id: true },
     });
+    viewId = createdView.id;
+  } else if (
+    existingView.description !== model.view.description ||
+    existingView.viewpointId !== (viewpoint?.id ?? null) ||
+    existingView.scopeRef !== model.view.scopeRef
+  ) {
+    await db.eaView.update({
+      where: { id: existingView.id },
+      data: {
+        description: model.view.description,
+        viewpointId: viewpoint?.id ?? null,
+        scopeRef: model.view.scopeRef,
+      },
+    });
+    viewId = existingView.id;
+  } else {
+    viewId = existingView.id;
   }
   for (const id of idByKey.values()) {
     await db.eaViewElement.upsert({
-      where: { viewId_elementId: { viewId: view.id, elementId: id } },
+      where: { viewId_elementId: { viewId, elementId: id } },
       update: {},
-      create: { viewId: view.id, elementId: id, mode: "existing" },
+      create: { viewId, elementId: id, mode: "existing" },
+    });
+  }
+  if (staleElementIds.length > 0) {
+    await db.eaViewElement.deleteMany({
+      where: {
+        viewId,
+        elementId: { in: staleElementIds },
+      },
     });
   }
 

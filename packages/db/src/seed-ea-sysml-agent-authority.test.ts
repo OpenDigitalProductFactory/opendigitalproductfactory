@@ -76,9 +76,19 @@ describe("seedEaSysmlAgentAuthority", () => {
 
   it("is idempotent on re-run: updates elements, no duplicate rels/view/conformance issue", async () => {
     m.eaElement.findFirst.mockResolvedValue({ id: "existing-el" });
-    m.eaRelationship.findFirst.mockResolvedValue({ id: "existing-rel" });
+    m.eaRelationship.findFirst.mockResolvedValue({
+      id: "existing-rel",
+      notationSlug: "sysml2",
+      properties: {},
+    });
     m.eaConformanceIssue.findFirst.mockResolvedValue({ id: "existing-issue" });
-    m.eaView.findFirst.mockResolvedValue({ id: "existing-view" });
+    m.eaView.findFirst.mockResolvedValue({
+      id: "existing-view",
+      description:
+        "Current-state authority model: parts (identity→token), the invariants they satisfy, and the audit records that verify them.",
+      viewpointId: "vp-1",
+      scopeRef: "agent-authority",
+    });
 
     await seedEaSysmlAgentAuthority();
 

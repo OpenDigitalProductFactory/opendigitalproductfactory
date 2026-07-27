@@ -80,8 +80,18 @@ describe("seedEaSysmlCada", () => {
 
   it("is idempotent on re-run", async () => {
     m.eaElement.findFirst.mockResolvedValue({ id: "existing-el" });
-    m.eaRelationship.findFirst.mockResolvedValue({ id: "existing-rel" });
-    m.eaView.findFirst.mockResolvedValue({ id: "existing-view" });
+    m.eaRelationship.findFirst.mockResolvedValue({
+      id: "existing-rel",
+      notationSlug: "sysml2",
+      properties: {},
+    });
+    m.eaView.findFirst.mockResolvedValue({
+      id: "existing-view",
+      description:
+        "CADA requirements, the DPF substrate parts allocated to them, and the verification cases that prove or track them.",
+      viewpointId: "vp-1",
+      scopeRef: "cada-cloud-sovereignty",
+    });
 
     await seedEaSysmlCada();
 

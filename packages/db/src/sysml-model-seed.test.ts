@@ -29,16 +29,36 @@ function makeDb(
       // otherwise null (the prior behaviour every existing test relies on).
       findFirst: vi.fn(async (a: { where: { infraCiKey: string } }) => {
         const id = opts.crossTargets?.[a.where.infraCiKey];
-        return id ? { id } : null;
+        return id ? { id, elementTypeId: `et-${a.where.infraCiKey}` } : null;
       }),
       create: vi.fn(async (a: { data: { infraCiKey: string } }) => ({ id: `el-${a.data.infraCiKey}` })),
       update: vi.fn(async (a: { where: { id: string } }) => ({ id: a.where.id })),
     },
-    eaRelationship: { findFirst: vi.fn().mockResolvedValue(opts.relExists ? { id: "r" } : null), create: vi.fn().mockResolvedValue({}) },
+    eaRelationship: {
+      findFirst: vi.fn().mockResolvedValue(
+        opts.relExists ? { id: "r", properties: {}, notationSlug: "sysml2" } : null,
+      ),
+      create: vi.fn().mockResolvedValue({}),
+      update: vi.fn().mockResolvedValue({}),
+    },
+    eaRelationshipRule: {
+      findFirst: vi.fn().mockResolvedValue({ id: "rule" }),
+    },
     eaConformanceIssue: { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({}) },
     viewpointDefinition: { findUnique: vi.fn().mockResolvedValue({ id: "vp" }) },
-    eaView: { findFirst: vi.fn().mockResolvedValue(opts.viewExists ? { id: "v" } : null), create: vi.fn().mockResolvedValue({ id: "v" }) },
-    eaViewElement: { upsert: vi.fn().mockResolvedValue({}) },
+    eaView: {
+      findFirst: vi.fn().mockResolvedValue(
+        opts.viewExists
+          ? { id: "v", description: "d", viewpointId: "vp", scopeRef: "x" }
+          : null,
+      ),
+      create: vi.fn().mockResolvedValue({ id: "v" }),
+      update: vi.fn().mockResolvedValue({ id: "v" }),
+    },
+    eaViewElement: {
+      upsert: vi.fn().mockResolvedValue({}),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
   };
 }
 
@@ -75,6 +95,12 @@ describe("applySysmlModel", () => {
     expect(r.removed).toBe(1);
     const call = db.eaElement.update.mock.calls.find(([a]) => (a as { where: { id: string } }).where.id === "el-stale");
     expect((call![0] as unknown as { data: { properties: { mirrorRemoved: boolean } } }).data.properties.mirrorRemoved).toBe(true);
+    expect(db.eaViewElement.deleteMany).toHaveBeenCalledWith({
+      where: {
+        viewId: "v",
+        elementId: { in: ["el-stale"] },
+      },
+    });
   });
 
   it("skips when the notation is not seeded", async () => {
@@ -176,5 +202,90 @@ describe("applySysmlModel", () => {
     const r = await applySysmlModel(crossModel, { db: db as never });
     expect(r.crossLayerLinked).toBe(1);
     expect(db.eaRelationship.create).not.toHaveBeenCalled();
+  });
+
+  it("resolves a dedicated cross-notation relationship type and preserves safe edge metadata", async () => {
+    const db = makeDb([], { crossTargets: { "other:logical": "el-other" } });
+    const model: SysmlDesiredModel = {
+      ...MODEL,
+      softRemovePrefix: undefined,
+      crossLayerRelationships: [
+        {
+          fromKey: "x:a",
+          toKey: "other:logical",
+          relSlug: "sysml_allocates",
+          relationshipNotationSlug: "dpf-cross-notation",
+          properties: { sourceVersion: "2026-07-26.1", explanationCode: "allocated-to-realizer" },
+        },
+      ],
+    };
+
+    await applySysmlModel(model, { db: db as never });
+
+    expect(db.eaNotation.findUnique).toHaveBeenCalledWith({
+      where: { slug: "dpf-cross-notation" },
+      select: { id: true },
+    });
+    expect(db.eaRelationshipType.findUniqueOrThrow).toHaveBeenCalledWith({
+      where: { notationId_slug: { notationId: "n", slug: "sysml_allocates" } },
+      select: { id: true },
+    });
+    expect(db.eaRelationship.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        relationshipTypeId: "rt-sysml_allocates",
+        notationSlug: "dpf-cross-notation",
+        properties: {
+          crossLayer: true,
+          sourceVersion: "2026-07-26.1",
+          explanationCode: "allocated-to-realizer",
+        },
+      }),
+    });
+  });
+
+  it("persists relationship metadata used for conditional routing explanations", async () => {
+    const db = makeDb([]);
+    const model: SysmlDesiredModel = {
+      ...MODEL,
+      softRemovePrefix: undefined,
+      relationships: [
+        {
+          fromKey: "x:pkg",
+          toKey: "x:a",
+          relSlug: "contains",
+          properties: { conditionCode: "allow", ownerLabel: "Allowed by policy" },
+        },
+      ],
+    };
+
+    await applySysmlModel(model, { db: db as never });
+
+    expect(db.eaRelationship.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        properties: { conditionCode: "allow", ownerLabel: "Allowed by policy" },
+      }),
+    });
+  });
+
+  it("rejects an explicit cross-notation edge when its seeded relationship rule is absent", async () => {
+    const db = makeDb([], { crossTargets: { "other:logical": "el-other" } });
+    db.eaRelationshipRule.findFirst.mockResolvedValue(null);
+    const model: SysmlDesiredModel = {
+      ...MODEL,
+      softRemovePrefix: undefined,
+      crossLayerRelationships: [
+        {
+          fromKey: "x:a",
+          toKey: "other:logical",
+          relSlug: "sysml_allocates",
+          relationshipNotationSlug: "dpf-cross-notation",
+        },
+      ],
+    };
+
+    await expect(applySysmlModel(model, { db: db as never })).rejects.toThrow(
+      /relationship rule not seeded/,
+    );
+    expect(db.eaRelationship.create).toHaveBeenCalledTimes(1);
   });
 });

@@ -18,7 +18,7 @@ type RelTypeDef = {
   description: string;
 };
 
-const CROSS_NOTATION_REL_TYPES: RelTypeDef[] = [
+export const CROSS_NOTATION_REL_TYPES: RelTypeDef[] = [
   {
     slug: "details",
     name: "Details",
@@ -71,7 +71,7 @@ type CrossRuleDef = {
   relSlug: string;
 };
 
-const CROSS_RULES: CrossRuleDef[] = [
+export const CROSS_RULES: CrossRuleDef[] = [
   // details: BPMN provides behavioural detail for ArchiMate
   { fromNotation: "bpmn20",     fromSlug: "bpmn_process",       toNotation: "archimate4", toSlug: "business_process",       relSlug: "details" },
   { fromNotation: "bpmn20",     fromSlug: "bpmn_service_task",  toNotation: "archimate4", toSlug: "business_function",      relSlug: "details" },
