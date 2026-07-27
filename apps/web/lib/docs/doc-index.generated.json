@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 560,
+  "pageCount": 561,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -308,6 +308,23 @@
         "open-questions-for-the-forum",
         "recommendation",
         "references"
+      ]
+    },
+    "docs/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map.md": {
+      "publicHref": "/architecture/2026-07-27-platform-adequacy-roadmap-backlog-map/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "platform-adequacy-roadmap-backlog-map",
+        "purpose",
+        "decision",
+        "new-live-backlog-items",
+        "existing-coverage",
+        "execution-sequence",
+        "gap-analysis-by-platform-adequacy-dimension",
+        "guardrails-for-future-agents",
+        "recovery-notes"
       ]
     },
     "docs/architecture/GAID.md": {
