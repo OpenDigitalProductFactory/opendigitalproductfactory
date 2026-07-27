@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 563,
+  "pageCount": 564,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -9528,6 +9528,21 @@
         "what-is-reversible",
         "recovery-and-help",
         "what-to-watch"
+      ]
+    },
+    "docs/user-guide/platform/address-validation-providers.md": {
+      "publicHref": "/user-guide/platform/address-validation-providers/",
+      "portalHref": "/docs/platform/address-validation-providers",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "use-this-doc-for",
+        "why-it-matters",
+        "choose-a-provider",
+        "geography-hint",
+        "setup-steps",
+        "what-to-watch",
+        "related"
       ]
     },
     "docs/user-guide/platform/ai-operations.md": {

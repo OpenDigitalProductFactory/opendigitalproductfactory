@@ -63,6 +63,13 @@ beforeEach(() => {
         currentValue: null,
       },
     },
+    addressValidation: {
+      commercialProviderDetected: false,
+      siteLookupReady: false,
+      headline: "No address validation provider is configured.",
+      nextStep: "Choose Smarty or Mapbox.",
+      primaryCountry: null,
+    },
   });
   vi.mocked(prisma.integrationCredential.findMany).mockResolvedValue([
     { integrationId: "quickbooks-online-accounting", status: "connected" },
