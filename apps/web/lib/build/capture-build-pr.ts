@@ -34,12 +34,12 @@ export interface CaptureBuildPrDeps {
   workCapsule: {
     findMany: (args: {
       where: { featureBuildId: string };
-      select: { id: true; workspaceState: true };
-    }) => Promise<Array<{ id: string; workspaceState: unknown }>>;
-    update: (args: {
-      where: { id: string };
+      select: { id: true; workspaceState: true; updatedAt: true };
+    }) => Promise<Array<{ id: string; workspaceState: unknown; updatedAt: Date }>>;
+    updateMany: (args: {
+      where: { id: string; updatedAt: Date };
       data: { pullRequestUrl: string; pullRequestNumber: number; workspaceState: Record<string, unknown> };
-    }) => Promise<unknown>;
+    }) => Promise<{ count: number }>;
   };
 }
 
@@ -62,11 +62,11 @@ export async function persistBuildPrDeliveryStateForBuild(input: {
 }): Promise<number> {
   const capsules = await input.db.workCapsule.findMany({
     where: { featureBuildId: input.featureBuildId },
-    select: { id: true, workspaceState: true },
+    select: { id: true, workspaceState: true, updatedAt: true },
   });
-  await Promise.all(capsules.map((capsule) =>
-    input.db.workCapsule.update({
-      where: { id: capsule.id },
+  const writes = await Promise.all(capsules.map((capsule) =>
+    input.db.workCapsule.updateMany({
+      where: { id: capsule.id, updatedAt: capsule.updatedAt },
       data: {
         pullRequestUrl: input.delivery.prUrl,
         pullRequestNumber: input.delivery.prNumber,
@@ -74,7 +74,7 @@ export async function persistBuildPrDeliveryStateForBuild(input: {
       },
     }),
   ));
-  return capsules.length;
+  return writes.reduce((total, write) => total + write.count, 0);
 }
 
 /**

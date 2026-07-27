@@ -7,23 +7,24 @@ function mkDb(count = 1) {
     Array.from({ length: count }, (_, index) => ({
       id: `capsule-${index + 1}`,
       workspaceState: { retained: true },
+      updatedAt: new Date("2026-07-27T00:00:00Z"),
     })),
   );
-  const update = vi.fn().mockResolvedValue({});
-  return { db: { workCapsule: { findMany, update } }, findMany, update };
+  const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+  return { db: { workCapsule: { findMany, updateMany } }, findMany, updateMany };
 }
 
 describe("captureBuildPrOntoCapsule (delivery visibility — PR capture onto the WorkCapsule)", () => {
   it("stamps url + number onto the build's capsule(s), keyed by featureBuildId (the cuid)", async () => {
-    const { db, update } = mkDb(1);
+    const { db, updateMany } = mkDb(1);
     const out = await captureBuildPrOntoCapsule({
       db,
       featureBuildId: "ckcuid123",
       prNumber: 2145,
       prUrl: "https://github.com/o/r/pull/2145",
     });
-    expect(update).toHaveBeenCalledWith({
-      where: { id: "capsule-1" },
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: "capsule-1", updatedAt: new Date("2026-07-27T00:00:00Z") },
       data: expect.objectContaining({
         pullRequestUrl: "https://github.com/o/r/pull/2145",
         pullRequestNumber: 2145,
