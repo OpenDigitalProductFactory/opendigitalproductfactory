@@ -80,17 +80,17 @@ const mockContext: DispatchContext = {
   agentMessageId: "msg-1",
 };
 
-const safeScreenReceipt: NonNullable<TaskRouteDecision["inferenceDataScreenReceipt"]> = {
+const allowScreenReceipt: NonNullable<TaskRouteDecision["inferenceDataScreenReceipt"]> = {
   schemaVersion: "inference-data-screen/v1",
-  screenId: "screen_safe",
-  decisionIds: ["decision-safe"],
-  inputHash: "hash-safe",
+  screenId: "screen_allow",
+  decisionIds: ["decision-allow"],
+  inputHash: "hash-allow",
   classifiedDataClasses: ["employee-records"],
-  policyEffect: "deny",
-  routeEffect: "local-only",
+  policyEffect: "allow",
+  routeEffect: "allow",
   destinationClass: "external-service",
-  transformation: "blocked",
-  explanationCodes: ["restricted-external-denied"],
+  transformation: "none",
+  explanationCodes: ["dispatch-allowed"],
   obligationKinds: [],
   rawPayloadStored: false,
 };
@@ -100,6 +100,8 @@ const safeScreenReceipt: NonNullable<TaskRouteDecision["inferenceDataScreenRecei
 describe("callWithFallbackChain", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockCallProvider.mockReset();
+    mockLogTokenUsage.mockReset().mockResolvedValue(undefined);
     mockPrisma.routeDecisionLog.create.mockResolvedValue({ id: "log-1" });
   });
 
@@ -152,7 +154,7 @@ describe("callWithFallbackChain", () => {
         {
           ...mockDecision,
           policyRulesApplied: ["inference-dispatch"],
-          inferenceDataScreenReceipt: safeScreenReceipt,
+          inferenceDataScreenReceipt: allowScreenReceipt,
           fallbackChain: ["ep-2"],
           candidates: [
             makeCandidate({ endpointId: "ep-1", providerId: "provider-1", modelId: "model-a" }),
@@ -220,10 +222,10 @@ describe("callWithFallbackChain", () => {
       inferenceMs: 500,
     });
 
-    await callWithFallbackChain({ ...mockDecision, inferenceDataScreenReceipt: safeScreenReceipt }, mockPayload, mockContext);
+    await callWithFallbackChain({ ...mockDecision, inferenceDataScreenReceipt: allowScreenReceipt }, mockPayload, mockContext);
 
     const persisted = mockPrisma.routeDecisionLog.create.mock.calls[0][0].data;
-    expect(persisted.inferenceDataScreenReceipt).toEqual(safeScreenReceipt);
+    expect(persisted.inferenceDataScreenReceipt).toEqual(allowScreenReceipt);
     expect(JSON.stringify(persisted.inferenceDataScreenReceipt)).not.toContain("Hello");
   });
 

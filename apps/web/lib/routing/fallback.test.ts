@@ -140,6 +140,17 @@ const safeScreenReceipt: NonNullable<RouteDecision["inferenceDataScreenReceipt"]
   rawPayloadStored: false,
 };
 
+const allowScreenReceipt: NonNullable<RouteDecision["inferenceDataScreenReceipt"]> = {
+  ...safeScreenReceipt,
+  screenId: "screen_allow",
+  decisionIds: ["decision-allow"],
+  inputHash: "hash-allow",
+  policyEffect: "allow",
+  routeEffect: "allow",
+  transformation: "none",
+  explanationCodes: ["dispatch-allowed"],
+};
+
 it("keeps restricted OpenRouter obligations load-bearing when OpenRouter is a fallback", () => {
   const plan = buildFallbackPlan(
     { providerId: "openrouter", modelId: "anthropic/claude" },
@@ -206,6 +217,7 @@ const mockRefreshOAuthToken = refreshOAuthToken as ReturnType<typeof vi.fn>;
 beforeEach(() => {
   vi.useFakeTimers();
   vi.clearAllMocks();
+  mockCallProvider.mockReset();
 
   // Default: provider lookup returns a valid provider
   mockPrisma.modelProvider.findUnique.mockResolvedValue({
@@ -265,7 +277,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
         selectedModelId: "gpt-4.1",
         fallbackChain: ["unsafe-public-ep"],
         policyRulesApplied: ["inference-dispatch"],
-        inferenceDataScreenReceipt: safeScreenReceipt,
+        inferenceDataScreenReceipt: allowScreenReceipt,
         candidates: [
           makeCandidate("openai-ep", "openai", "gpt-4.1"),
           makeCandidate("unsafe-public-ep", "cheap-public", "cheap-model", {
@@ -310,13 +322,6 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
     });
 
     it("does not dispatch a non-local candidate when the screen receipt requires local-only routing", async () => {
-      mockCallProvider.mockResolvedValue({
-        content: "must not dispatch",
-        inputTokens: 10,
-        outputTokens: 5,
-        inferenceMs: 100,
-      });
-
       const decision: RouteDecision = {
         ...makeDecision("cloud-ep", "cloud-model"),
         selectedEndpoint: "cloud-ep",
@@ -336,7 +341,7 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
           [{ role: "user", content: "employee salary note" }],
           "system",
         ),
-      ).rejects.toThrow("All endpoints failed");
+      ).rejects.toThrow("No eligible screened endpoint available");
 
       expect(mockCallProvider).not.toHaveBeenCalled();
     });
