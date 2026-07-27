@@ -65,6 +65,7 @@ References:
 - Decision: atomic
 - Parent: `BI-749EB750`
 - Receipt: `cms35mgcp0b3101l75ssc51zn`
+- Dependencies: none
 - Dependency order: principal clearance -> normalized context -> shared loader
   -> authorization consumers.
 - Rationale: persisted clearance without a context is dormant authorization
