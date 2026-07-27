@@ -1243,7 +1243,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 85
+    "textMass": 103
   },
   "apps/web/app/(shell)/platform/ai/assignments/bindings/[bindingId]/page.tsx": {
     "vocabulary": 0,
@@ -3315,7 +3315,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 2,
-    "textMass": 207
+    "textMass": 212
   },
   "apps/web/components/agent/AgentFAB.tsx": {
     "vocabulary": 0,
@@ -6075,6 +6075,13 @@
     "longSentences": 0,
     "textMass": 33
   },
+  "apps/web/components/platform/PlatformTabNav.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
   "apps/web/components/platform/ProposalHistoryClient.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -6360,7 +6367,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 2
+    "textMass": 4
   },
   "apps/web/components/platform/coworker-record/NeedsAndPlaybooksPanel.tsx": {
     "vocabulary": 0,
@@ -6368,6 +6375,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 106
+  },
+  "apps/web/components/platform/coworker-record/OwnerCoworkerPanels.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 30
   },
   "apps/web/components/platform/coworker-record/ProfessionCorpusPanel.tsx": {
     "vocabulary": 0,
@@ -6388,7 +6402,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 63
+    "textMass": 92
   },
   "apps/web/components/platform/coworker-record/WorkforceSummaryPanel.tsx": {
     "vocabulary": 0,
@@ -6843,7 +6857,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 58
+    "textMass": 62
   },
   "apps/web/components/shell/DeploymentSkewBanner.tsx": {
     "vocabulary": 0,
