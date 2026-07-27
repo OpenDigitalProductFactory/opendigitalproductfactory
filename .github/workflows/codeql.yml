@@ -1,6 +1,8 @@
 name: "CodeQL Advanced"
 
-# Advanced-setup CodeQL workflow. Replaces the default setup so that:
+# Authoritative CodeQL workflow for Actions, JavaScript/TypeScript, Python, and
+# Go. The repository is detached from the organization's default-setup
+# configuration so each language is analyzed exactly once. This workflow:
 #   1. The query config can be tuned per language (security-extended suite).
 #   2. Per-language build modes and a weekly scheduled re-scan.
 #
@@ -9,14 +11,6 @@ name: "CodeQL Advanced"
 # JS/TS model packs at all — see the long note in
 # .github/codeql/codeql-config.yml. JS/TS false positives on DPF's security
 # helpers are dispositioned by dismissal-with-justification in the Security tab.
-#
-# IMPORTANT — activation requires a one-time repo settings change:
-#   Settings → Code security → "Code scanning" → CodeQL → Switch to
-#   "Advanced" mode. Once switched, default setup is disabled and this
-#   workflow becomes the source of truth for code scans.
-#
-# Until that toggle flips, this workflow is committed but inert (default
-# setup keeps running). After the toggle, this file controls scans.
 
 on:
   push:
@@ -67,16 +61,7 @@ jobs:
           build-mode: ${{ matrix.build-mode }}
           config-file: ./.github/codeql/codeql-config.yml
 
-      # continue-on-error keeps this workflow non-blocking until the one-time
-      # "Settings → Code security → CodeQL → Advanced" toggle flips. While
-      # default-setup is still enabled, the SARIF upload returns:
-      #   "CodeQL analyses from advanced configurations cannot be processed
-      #    when the default setup is enabled"
-      # After the toggle, this step succeeds and the model pack takes effect.
-      # The flag is harmless post-activation — the step still records green
-      # on success.
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
-        continue-on-error: true
         with:
           category: "/language:${{ matrix.language }}"

@@ -207,6 +207,7 @@ jobs:
           scripts/ci-change-scope.test.mjs
           scripts/ci-evidence-plan.test.mjs
           scripts/ci-evidence-workflow.test.mjs
+          scripts/codeql-authority.test.mjs
           scripts/lib/ci-evidence-plan.test.mjs
 
   mobile-jest-pin-guard:

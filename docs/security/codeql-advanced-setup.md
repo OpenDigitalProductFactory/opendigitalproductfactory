@@ -55,6 +55,25 @@ code scanning regardless of how it is referenced.
 | `.github/codeql/dpf-sanitizers/qlpack.yml` | Model pack manifest (local CLI use only) |
 | `.github/codeql/dpf-sanitizers/dpf-sanitizers.model.yml` | Sanitiser declarations (local CLI use only) |
 
+## Scan authority
+
+`.github/workflows/codeql.yml` is the single scan authority for Actions,
+JavaScript/TypeScript, Python, and Go. The repository is detached from the
+organization's GitHub-recommended code-security configuration, whose
+default-setup CodeQL scan previously repeated the same four analyses.
+
+The advanced workflow is blocking: its analysis step does not use
+`continue-on-error`. The security inflow gate listens for completion of
+`CodeQL Advanced`, so consolidating scan ownership does not weaken the
+post-analysis alert check.
+
+The source contract is regression-tested by
+`scripts/codeql-authority.test.mjs`. Operationally, the associated repository
+configuration should remain detached. If the organization configuration is
+intentionally reattached, disable this advanced workflow in the same governed
+change; GitHub does not support default and advanced setup as simultaneous
+authorities.
+
 ## How JS/TS false positives are actually dispositioned
 
 Dismissal with justification in the **Security → Code scanning** tab (or via the

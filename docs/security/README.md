@@ -31,7 +31,7 @@ We run three complementary loops:
 | `codeql-baseline.json` | Snapshot of CodeQL alerts that pre-existed when the gate landed. PRs are allowed to leave these alone; they're burned down through the BS pipeline. |
 | `../../scripts/security/check-inflow-gate.mjs` | The gate script. Fetches current open alerts, diffs against baseline, fails if a new critical/high appears. |
 | `../../scripts/security/regenerate-baseline.mjs` | Re-snapshot the baseline. Run after fixing or dismissing alerts. |
-| `../../.github/workflows/security-inflow-gate.yml` | Wires the gate to run after every CodeQL completion. |
+| `../../.github/workflows/security-inflow-gate.yml` | Wires the gate to run after every authoritative `CodeQL Advanced` completion. |
 
 ## What the baseline contains
 
