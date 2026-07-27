@@ -14,6 +14,12 @@ type IssueRow = {
 
 const healthy = { status: "noop" as const, created: 0, updated: 0, removed: 0 };
 const skipped = { status: "skipped" as const, created: 0, updated: 0, removed: 0 };
+const healthyAiRouting = {
+  ...healthy,
+  bpmn: healthy,
+  archimate: healthy,
+  sysml: healthy,
+};
 
 function projectionResult(overrides: Partial<SysmlProjectionsResult> = {}): SysmlProjectionsResult {
   return {
@@ -33,6 +39,7 @@ function projectionResult(overrides: Partial<SysmlProjectionsResult> = {}): Sysm
     securityPosture: healthy,
     workPatternArchitecture: healthy,
     federatedDemandArchitecture: healthy,
+    aiRoutingArchitecture: healthyAiRouting,
     ...overrides,
   };
 }

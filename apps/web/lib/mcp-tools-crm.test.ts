@@ -1,6 +1,28 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { getAvailableTools } from "./mcp-tools";
-import { getAgentToolGrants, isToolAllowedByGrants } from "./tak/agent-grants";
+import { getAgentToolGrants, isToolAllowedByGrants } from "@/lib/agent-grants";
+
+const CUSTOMER_ADVISOR_GRANTS = vi.hoisted(() => [
+  "backlog_read",
+  "registry_read",
+  "consumer_read",
+  "crm_read",
+  "crm_write",
+  "web_search",
+]);
+
+vi.mock("@/lib/agent-grants", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/agent-grants")>();
+  return {
+    ...actual,
+    getAgentToolGrants: vi.fn((agentId: string) =>
+      agentId === "customer-advisor" ? CUSTOMER_ADVISOR_GRANTS : actual.getAgentToolGrants(agentId),
+    ),
+    getAgentToolGrantsAsync: vi.fn(async (agentId: string) =>
+      agentId === "customer-advisor" ? CUSTOMER_ADVISOR_GRANTS : actual.getAgentToolGrantsAsync(agentId),
+    ),
+  };
+});
 
 // EP-CRM-COWORKER. The Customer Success Manager (customer-advisor) previously
 // resolved to a backlog/build tool surface with no CRM tools and a dangerous

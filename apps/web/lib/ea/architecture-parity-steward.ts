@@ -66,6 +66,7 @@ const DOMAIN_LABELS: Record<ProjectionDomain, string> = {
   securityPosture: "security operations (SOC) surface",
   workPatternArchitecture: "governed adaptive playbooks",
   federatedDemandArchitecture: "federated demand network",
+  aiRoutingArchitecture: "governed AI-routing architecture",
 };
 
 function projectionEntries(result: SysmlProjectionsResult): Array<[ProjectionDomain, ProjectionStatus]> {

@@ -11,6 +11,7 @@ vi.mock("./client.js", () => ({
 
 import { prisma } from "./client.js";
 import {
+  ARCHIMATE_VIEWPOINTS,
   seedViewpointsForNotation,
   SYSML_VIEWPOINTS,
   type ViewpointSpec,
@@ -78,5 +79,20 @@ describe("SYSML_VIEWPOINTS", () => {
       for (const s of vp.elementSlugs) expect(elementSlugs).toContain(s);
       for (const s of vp.relSlugs) expect(relSlugs).toContain(s);
     }
+  });
+});
+
+describe("ARCHIMATE_VIEWPOINTS", () => {
+  it("defines the mixed business/application realization view used by AI routing", () => {
+    const routing = ARCHIMATE_VIEWPOINTS.find((viewpoint) => viewpoint.name === "AI Routing Realization");
+    expect(routing?.elementSlugs).toEqual(
+      expect.arrayContaining([
+        "business_capability",
+        "business_process",
+        "application_component",
+        "event_evidence",
+      ]),
+    );
+    expect(routing?.relSlugs).toContain("realizes");
   });
 });

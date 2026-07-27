@@ -3,13 +3,21 @@
 | Field | Value |
 | --- | --- |
 | Date | 2026-06-14 |
-| Status | Draft — first SysML model seeded over current state |
+| Status | Historical baseline — superseded by the live AI-routing projection |
 | Notation | SysML v2 (`sysml2` EA notation) — viewpoint over the canonical DPF EA graph |
 | Package | `PKG-AIC` "AI Cockpit & Model Routing" |
 | Owner | Enterprise Architect, AI Platform team |
 | Source design | [`2026-06-14-odysseus-review-depth-pass.md`](2026-06-14-odysseus-review-depth-pass.md), [`2026-06-14-odysseus-ux-routing-model-review.md`](2026-06-14-odysseus-ux-routing-model-review.md) |
 | Substrate spec | [`2026-06-14-sysml-architecture-substrate-design.md`](../superpowers/specs/2026-06-14-sysml-architecture-substrate-design.md) |
-| Model content (seed) | [`packages/db/src/seed-ea-sysml-ai-cockpit.ts`](../../packages/db/src/seed-ea-sysml-ai-cockpit.ts) |
+| Current projection | [`apps/web/lib/ea/ai-routing-architecture-registry.ts`](../../apps/web/lib/ea/ai-routing-architecture-registry.ts) + [`ai-routing-architecture-extract.ts`](../../apps/web/lib/ea/ai-routing-architecture-extract.ts) |
+
+> **Superseded current-state writer (2026-07-26).** This note preserves the first
+> AI-cockpit SysML baseline and its original decisions. The seed-time model writer
+> has been replaced by the versioned Parity Engine projection above, which preserves
+> the `sysml:aic:` stable identities while adding the BPMN route, ArchiMate
+> realization, and materialized cross-notation links. Use the
+> [routing architecture design](../superpowers/specs/2026-07-26-ai-routing-architecture-explainability-design.md)
+> for current viewpoint ownership and status.
 
 This is the first real SysML v2 model seeded over DPF's current state. It applies the
 SysML substrate (Phase 1, landed in this change) to the Odysseus-derived AI-cockpit /
@@ -150,7 +158,10 @@ VC-AIC-E1 ──sysml_verifies──▶ archimate:event_evidence (test run evide
   `inferContract` (REQ-AIC-1 / VC-AIC-MATRIX).
 - Email triage pinned to the utility tier (REQ-AIC-5 / VC-AIC-E1), wired into the live
   marketing inbound responder.
-- This model seeded into the EA graph (`seed-ea-sysml-ai-cockpit.ts`) — runtime EA validation deferred.
+- This historical model was seeded into the EA graph. Its stable identities are now
+  defined by `ai-routing-architecture-registry.ts` and reconciled by
+  `ai-routing-architecture-extract.ts`; runtime projection evidence is owned by
+  `BI-AA314BF4`.
 
 **Modeled, realized later `[J]`:** REQ-AIC-2 (receipt view), REQ-AIC-3/4 (escalation reason
 codes), REQ-AIC-6 (tasks/submit), REQ-AIC-8 (OAuth transport), REQ-AIC-9 (thread fields).

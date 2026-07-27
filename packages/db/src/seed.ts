@@ -15,7 +15,6 @@ import { resolveSeedPrice } from "./model-pricing-brackets.js";
 import { seedEaReferenceModels } from "./seed-ea-reference-models.js";
 import { seedEaStructureRules } from "./seed-ea-structure-rules.js";
 import { seedEaSysml2 } from "./seed-ea-sysml2.js";
-import { seedEaSysmlAiCockpit } from "./seed-ea-sysml-ai-cockpit.js";
 import { seedEaSysmlAgentAuthority } from "./seed-ea-sysml-agent-authority.js";
 import { seedEaSysmlCada } from "./seed-ea-sysml-cada.js";
 import { seedEaSysmlDataAuthority } from "./seed-ea-sysml-data-authority.js";
@@ -2425,7 +2424,6 @@ async function main(): Promise<void> {
   await step("eaStructureRules", () => seedEaStructureRules());
   await step("eaViewpoints", () => seedEaViewpoints());
   await step("eaViews", () => seedEaViews());
-  await step("eaSysmlAiCockpit", () => seedEaSysmlAiCockpit());
   await step("eaSysmlAgentAuthority", () => seedEaSysmlAgentAuthority());
   await step("eaSysmlCada", () => seedEaSysmlCada());
   await step("eaSysmlDataAuthority", () => seedEaSysmlDataAuthority());
