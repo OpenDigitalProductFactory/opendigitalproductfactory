@@ -53,6 +53,7 @@
     "./workforce-portfolio": "./src/workforce-portfolio.ts",
     "./workforce-seed": "./src/workforce-seed.ts",
     "./agent-identity": "./src/agent-identity.ts",
+    "./principal-sensitivity": "./src/principal-sensitivity.ts",
     "./agent-model-defaults": "./src/agent-model-defaults.ts",
     "./healthcare-patient-authority": "./src/healthcare-patient-authority.ts",
     "./healthcare-care-appointment": "./src/healthcare-care-appointment.ts",

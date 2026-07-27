@@ -1,7 +1,9 @@
 // apps/web/lib/agent-router-types.ts
 // Core types for the unified MCP agent router.
 
-export type SensitivityLevel = "public" | "internal" | "confidential" | "restricted";
+import type { PrincipalSensitivity } from "@dpf/db/principal-sensitivity";
+
+export type SensitivityLevel = PrincipalSensitivity;
 export type CapabilityTier = "basic" | "routine" | "analytical" | "deep-thinker";
 export type CostBand = "free" | "low" | "medium" | "high";
 

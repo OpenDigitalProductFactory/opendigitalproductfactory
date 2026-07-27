@@ -1,0 +1,39 @@
+{
+  "version": "1",
+  "accountableOwner": "identity-and-access-management",
+  "affectedCopies": [
+    "Prisma-to-EA current-state data-model mirror",
+    "Request-scoped EffectiveAuthContext authorization projection"
+  ],
+  "migration": {
+    "name": "20260727115000_add_principal_sensitivity_clearance",
+    "backfill": "none - the non-null public-only default preserves least privilege for every existing principal"
+  },
+  "tests": [
+    "packages/db/src/principal-sensitivity.test.ts",
+    "apps/web/lib/identity/effective-auth-context.test.ts",
+    "apps/web/lib/identity/load-effective-auth-context.test.ts",
+    "apps/web/lib/api/auth-middleware.test.ts",
+    "apps/web/lib/govern/manager-scope.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:principal#sensitivity-clearance",
+      "prismaModel": "Principal",
+      "lifecycleDisposition": "retained and removed with the canonical principal identity record",
+      "fields": [
+        {
+          "fieldId": "data:principal#sensitivityClearance",
+          "resolution": "governed",
+          "reason": "records the maximum data-sensitivity classes explicitly granted to the canonical principal so authorization does not infer clearance from role or caller input",
+          "provenance": "identity-and-access-management policy administration",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": "authorization-only; expose only through the normalized request-scoped authorization context, default absent or legacy values to public-only, and never treat role, population, or authentication method as an implicit clearance grant"
+        }
+      ]
+    }
+  ]
+}

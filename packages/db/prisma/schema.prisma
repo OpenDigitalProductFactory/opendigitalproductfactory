@@ -37,6 +37,13 @@ enum BriefStatus {
   superseded
 }
 
+enum PrincipalSensitivity {
+  public
+  internal
+  confidential
+  restricted
+}
+
 model User {
   id                            String                        @id @default(cuid())
   email                         String                        @unique
@@ -313,6 +320,7 @@ model Principal {
   displayName                         String
   sponsorPrincipalId                  String?
   authorityMode                       String?
+  sensitivityClearance                PrincipalSensitivity[]              @default([public])
   aliases                             PrincipalAlias[]
   sponsorPrincipal                    Principal?                          @relation("PrincipalSponsor", fields: [sponsorPrincipalId], references: [id])
   sponsoredPrincipals                 Principal[]                         @relation("PrincipalSponsor")

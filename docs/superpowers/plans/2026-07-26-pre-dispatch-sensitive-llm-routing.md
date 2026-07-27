@@ -319,6 +319,17 @@ git diff --check
 - [ ] Ensure the human decision returns to the originating work item/call chain without broadening context for sibling agents.
 - [ ] Keep AI coworker explanations concise and non-legalistic; they should state the decision and next action, not dump policy evidence.
 
+**BI-749EB750 substrate progress:** The request auth context now has one
+identity-owned loader for canonical principal/alias identity, public-only
+fail-closed sensitivity clearance, direct and transitive indirect reports,
+teams, customer/partner account scope, explicit authentication evidence, and
+applicable delegation identifiers. Bearer and session requests consume the
+same normalized contract, and manager authorization recognizes indirect
+reports without granting peer or shared-team access. This enables the
+rehydration PEP to make actor/relationship/surface decisions; it does not itself
+rehydrate responses. The two rehydration tasks above and the separate
+`BI-62BFAA95` HITL/call-chain tasks remain open.
+
 **Verification:**
 
 ```powershell

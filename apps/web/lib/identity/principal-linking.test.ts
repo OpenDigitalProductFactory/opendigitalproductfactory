@@ -56,6 +56,7 @@ describe("syncEmployeePrincipal", () => {
       displayName: "Ada Lovelace",
       sponsorPrincipalId: null,
       authorityMode: null,
+      sensitivityClearance: ["public"],
       createdAt: new Date("2026-04-23T00:00:00Z"),
       updatedAt: new Date("2026-04-23T00:00:00Z"),
     });
@@ -109,6 +110,7 @@ describe("syncAgentPrincipal", () => {
       displayName: "Finance Specialist",
       sponsorPrincipalId: null,
       authorityMode: null,
+      sensitivityClearance: ["public"],
       createdAt: new Date("2026-04-23T00:00:00Z"),
       updatedAt: new Date("2026-04-23T00:00:00Z"),
     });
@@ -163,6 +165,7 @@ describe("syncCustomerPrincipal", () => {
       displayName: "Buyer@Example.com",
       sponsorPrincipalId: null,
       authorityMode: null,
+      sensitivityClearance: ["public"],
       createdAt: new Date("2026-04-26T00:00:00Z"),
       updatedAt: new Date("2026-04-26T00:00:00Z"),
     });
@@ -219,6 +222,7 @@ describe("syncCustomerPrincipal", () => {
       displayName: "former@example.com",
       sponsorPrincipalId: null,
       authorityMode: null,
+      sensitivityClearance: ["public"],
       createdAt: new Date("2026-04-26T00:00:00Z"),
       updatedAt: new Date("2026-04-26T00:00:00Z"),
     });

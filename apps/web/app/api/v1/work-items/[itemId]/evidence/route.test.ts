@@ -41,10 +41,23 @@ const USER = {
   capabilities: [] as string[],
   authContext: {
     principalId: null,
+    principalAliases: [],
+    population: "workforce" as const,
     platformRole: null,
     isSuperuser: false,
     employeeId: "emp_1",
     managerScope: null,
+    teamIds: [],
+    accountScope: { accountIds: [], contactIds: [], partnerAccountIds: [] },
+    sensitivityClearance: ["public" as const],
+    authentication: {
+      source: "session" as const,
+      methods: [],
+      contextClassReference: null,
+    },
+    actingHumanUserId: "user_1",
+    actingAgentId: null,
+    delegationGrantIds: [],
     grantedCapabilities: [] as string[],
   },
 };

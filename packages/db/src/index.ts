@@ -14,6 +14,12 @@ export {
 export { Prisma } from "../generated/client/client";
 export type { PrismaClient } from "../generated/client/client";
 export { WriteGateRequirement } from "../generated/client/client";
+export {
+  PRINCIPAL_SENSITIVITIES,
+  isPrincipalSensitivity,
+  normalizePrincipalSensitivities,
+  type PrincipalSensitivity,
+} from "./principal-sensitivity";
 export * from "./healthcare-patient-authority";
 export * from "./healthcare-care-intake";
 

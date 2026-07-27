@@ -49,10 +49,27 @@ const CUSTOMER_AUTH = {
   capabilities: [] as string[],
   authContext: {
     principalId: null,
+    principalAliases: [],
+    population: "customer" as const,
     platformRole: null,
     isSuperuser: false,
     employeeId: null,
     managerScope: null,
+    teamIds: [],
+    accountScope: {
+      accountIds: ["ACCT-1"],
+      contactIds: ["CON-1"],
+      partnerAccountIds: [],
+    },
+    sensitivityClearance: ["public" as const],
+    authentication: {
+      source: "session" as const,
+      methods: [],
+      contextClassReference: null,
+    },
+    actingHumanUserId: null,
+    actingAgentId: null,
+    delegationGrantIds: [],
     grantedCapabilities: [] as string[],
   },
 };

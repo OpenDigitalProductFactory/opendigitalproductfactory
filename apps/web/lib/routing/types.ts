@@ -3,11 +3,13 @@
  * See: docs/superpowers/specs/2026-03-18-ai-routing-and-profiling-design.md
  */
 
+import type { PrincipalSensitivity } from "@dpf/db/principal-sensitivity";
+
 import type { QualityTier } from "./quality-tiers";
 
 // ── Sensitivity ──
 
-export type SensitivityLevel = "public" | "internal" | "confidential" | "restricted";
+export type SensitivityLevel = PrincipalSensitivity;
 
 // ── Endpoint Manifest (loaded from ModelProfile joined with ModelProvider) ──
 

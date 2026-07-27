@@ -274,6 +274,8 @@ describe("canAccessEmployeeRecord()", () => {
       canAccessEmployeeRecord(
         {
           principalId: "PRN-USER-user-1",
+          principalAliases: [],
+          population: "workforce",
           platformRole: "HR-100",
           isSuperuser: false,
           employeeId: "emp-manager",
@@ -281,6 +283,17 @@ describe("canAccessEmployeeRecord()", () => {
             directReportIds: ["emp-report-1"],
             indirectReportIds: [],
           },
+          teamIds: [],
+          accountScope: { accountIds: [], contactIds: [], partnerAccountIds: [] },
+          sensitivityClearance: ["public"],
+          authentication: {
+            source: "session",
+            methods: [],
+            contextClassReference: null,
+          },
+          actingHumanUserId: "user-1",
+          actingAgentId: null,
+          delegationGrantIds: [],
           grantedCapabilities: ["view_employee"],
         },
         "emp-report-1",
@@ -293,6 +306,8 @@ describe("canAccessEmployeeRecord()", () => {
       canAccessEmployeeRecord(
         {
           principalId: "PRN-USER-user-1",
+          principalAliases: [],
+          population: "workforce",
           platformRole: "HR-100",
           isSuperuser: false,
           employeeId: "emp-manager",
@@ -300,6 +315,17 @@ describe("canAccessEmployeeRecord()", () => {
             directReportIds: ["emp-report-1"],
             indirectReportIds: [],
           },
+          teamIds: [],
+          accountScope: { accountIds: [], contactIds: [], partnerAccountIds: [] },
+          sensitivityClearance: ["public"],
+          authentication: {
+            source: "session",
+            methods: [],
+            contextClassReference: null,
+          },
+          actingHumanUserId: "user-1",
+          actingAgentId: null,
+          delegationGrantIds: [],
           grantedCapabilities: [],
         },
         "emp-report-1",

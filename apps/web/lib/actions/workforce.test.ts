@@ -191,6 +191,7 @@ describe("createEmployeeProfile", () => {
       displayName: "Ada Lovelace",
       sponsorPrincipalId: null,
       authorityMode: null,
+      sensitivityClearance: ["public"],
       createdAt: new Date("2026-04-23T00:00:00Z"),
       updatedAt: new Date("2026-04-23T00:00:00Z"),
     });
