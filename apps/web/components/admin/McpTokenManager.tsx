@@ -31,6 +31,7 @@ import {
   revokeMyMcpToken,
   rotateMyMcpToken,
   rotateMyMcpTokenWithEdit,
+  type McpTokenTemplateSummary,
   upgradeMyMcpTokenForCodingAgent,
 } from "@/lib/actions/mcp-tokens";
 import {
