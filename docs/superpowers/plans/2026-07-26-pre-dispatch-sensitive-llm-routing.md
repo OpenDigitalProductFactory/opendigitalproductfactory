@@ -249,11 +249,13 @@ git diff --check
 - Modify: `apps/web/lib/tak/tool-result-budget.ts`
 - Modify: `apps/web/lib/inference/semantic-memory.ts`
 
-- [ ] Apply `omit`, `redact`, `partial`, `tokenize`, `aggregate`, and `pass-through` to nested messages, tool schemas, tool arguments, tool results, prompt blocks, and system prompt text.
-- [ ] Refuse masking when the exact sensitive detail is material to the task and no eligible endpoint exists.
-- [ ] Keep token maps out of route logs, memory, prompt previews, vector storage, and exception text.
-- [ ] Ensure output classification inherits from input classification and transformation state.
-- [ ] Add canary tests proving raw sensitive fixtures never reach prompt serialization, vector memory, tool-result return, or dispatch mocks.
+- [x] Apply `omit`, `redact`, `partial`, `tokenize`, `aggregate`, and `pass-through` to nested messages, tool schemas, tool arguments, tool results, prompt blocks, and system prompt text.
+- [x] Refuse masking when the exact sensitive detail is material to the task and no eligible endpoint exists.
+- [x] Keep token maps out of route logs, memory, prompt previews, vector storage, and exception text.
+- [x] Ensure output classification inherits from input classification and transformation state.
+- [x] Add canary tests proving raw sensitive fixtures never reach prompt serialization, vector memory, tool-result return, or dispatch mocks.
+
+**Slice 6 progress:** The canonical PDP now selects all six context transformations, and `maskForContext` recursively applies them before route inference or provider dispatch. Automatic masking is limited to replaceable detail; material or unknown exact-detail use fails closed. Token values live only in a bounded, five-minute in-memory vault and callers receive an opaque rehydration handle, so token maps never enter receipts, previews, logs, memory, vector storage, or exception text. The final screen preserves the source data classes and decision/version evidence alongside the applied transformation while routing on the transformed payload. Canary tests cover routed prompts, fallback dispatch, semantic/vector memory, and tool-result serialization. Rehydration remains blocked behind the actor, purpose, and surface authorization boundary in Chunk 5.
 
 **Verification:**
 
