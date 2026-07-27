@@ -5,6 +5,7 @@ import type {
 } from "@/lib/govern/data/taxonomy";
 import type { RequestContract } from "@/lib/routing/request-contract";
 import type { ActivityContract } from "@/lib/routing/activity-contract";
+import { isLocalProviderId } from "@/lib/routing/provider-locality";
 import { classifyInferencePayload } from "./classify-payload";
 import { evaluateInferenceDispatchPolicy } from "./evaluate-inference-policy";
 import type {
@@ -14,7 +15,6 @@ import type {
 } from "./types";
 
 const DEFAULT_ORGANIZATION_ID = "org:local-install";
-const LOCAL_PROVIDER_IDS = new Set(["local", "ollama"]);
 
 const SENSITIVITY_RANK: Readonly<Record<RequestContract["sensitivity"], number>> = {
   public: 0,
@@ -138,7 +138,7 @@ function localOnlyAllowedProviders(
   routeEffect: InferenceDataScreenResult["receipt"]["routeEffect"],
 ): string[] {
   return routeEffect === "local-only"
-    ? providerIds.filter((providerId) => LOCAL_PROVIDER_IDS.has(providerId))
+    ? providerIds.filter(isLocalProviderId)
     : providerIds;
 }
 

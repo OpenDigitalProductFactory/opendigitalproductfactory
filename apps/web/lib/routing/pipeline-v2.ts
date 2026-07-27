@@ -26,6 +26,7 @@ import {
 } from "./capacity-routing-exclude";
 import { cliSaturationPercent } from "./cli-concurrency";
 import { usesCodexCli, usesCliAdapter } from "./provider-utils";
+import { isLocalProviderId } from "./provider-locality";
 import { satisfiesMinimumCapabilities } from "./agent-capability-types";
 import {
   estimateSuccessProbability,
@@ -179,7 +180,7 @@ export function getExclusionReasonV2(
   }
 
   // Residency policy
-  if (contract.residencyPolicy === "local_only" && ep.providerId !== "local" && ep.providerId !== "ollama") {
+  if (contract.residencyPolicy === "local_only" && !isLocalProviderId(ep.providerId)) {
     return "Residency policy 'local_only' requires a local provider (Docker Model Runner or Ollama)";
   }
 

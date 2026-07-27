@@ -309,6 +309,38 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       );
     });
 
+    it("does not dispatch a non-local candidate when the screen receipt requires local-only routing", async () => {
+      mockCallProvider.mockResolvedValue({
+        content: "must not dispatch",
+        inputTokens: 10,
+        outputTokens: 5,
+        inferenceMs: 100,
+      });
+
+      const decision: RouteDecision = {
+        ...makeDecision("cloud-ep", "cloud-model"),
+        selectedEndpoint: "cloud-ep",
+        selectedModelId: "cloud-model",
+        policyRulesApplied: ["inference-dispatch"],
+        inferenceDataScreenReceipt: safeScreenReceipt,
+        candidates: [
+          makeCandidate("cloud-ep", "cheap-public", "cloud-model", {
+            excluded: false,
+          }),
+        ],
+      };
+
+      await expect(
+        callWithFallbackChain(
+          decision,
+          [{ role: "user", content: "employee salary note" }],
+          "system",
+        ),
+      ).rejects.toThrow("All endpoints failed");
+
+      expect(mockCallProvider).not.toHaveBeenCalled();
+    });
+
     it("records request with token count on success", async () => {
       mockCallProvider.mockResolvedValue({
         content: "hello",

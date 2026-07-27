@@ -23,7 +23,8 @@
   - `routing-binding` -> `BI-3D210AF8`, depends on `inference-pep` and `mask-before-dispatch`
   - `response-rehydration-authz` -> `BI-749EB750`, depends on `inference-pep` and `mask-before-dispatch`
   - `employee-surface-authorization` -> `BI-62BFAA95`, depends on `inference-pep` and `mask-before-dispatch`
-  - `provider-onboarding-ux` -> `BI-F6018DB3`, depends on `classifier-contract` and `inference-pep`
+  - `vertical-policy-packs` -> `BI-F6018DB3`, depends on `classifier-contract` and `inference-pep`
+  - `provider-onboarding-ux` -> `BI-ECBD6924`, depends on `classifier-contract` and `inference-pep`
 - Receipt: `cms1za88b03pu01lheg0rg3ii`
 
 ## Grounding
@@ -313,12 +314,32 @@ pnpm --filter web exec vitest run lib/actions/agent-coworker.test.ts lib/tak/pro
 git diff --check
 ```
 
-### Chunk 6: BI-F6018DB3 - Setup, Onboarding, And Public Explanation
+### Chunk 6A: BI-F6018DB3 - Vertical Sensitive-Data Policy Packs
+
+**Files:**
+
+- Create/modify: vertical data-governance policy-pack modules identified by `BI-F6018DB3`
+- Create/modify: executable allow, deny, review, and masking test vectors for each supported vertical
+- Modify: policy-pack registry and governed setup documentation
+
+- [ ] Encode healthcare, legal, financial-services, public-sector, and other regulated boundaries as versioned policy packs over the shared classifier/PDP/PEP substrate.
+- [ ] Keep vertical vocabulary and obligations out of provider adapters and routing UI components.
+- [ ] Cover allow, deny, review, unknown-context, precedence, and exception-expiry behavior for every pack.
+- [ ] Document the evidence required before an external provider can satisfy each regulated boundary.
+
+**Verification:**
+
+```powershell
+pnpm --filter web exec vitest run <affected-policy-pack-tests>
+git diff --check
+```
+
+### Chunk 6B: BI-ECBD6924 - Setup, Onboarding, And Public Explanation
 
 **Files:**
 
 - Modify: `apps/web/app/admin/ai/providers/page.tsx` or successor provider setup route
-- Modify: provider setup components identified by `BI-F6018DB3`
+- Modify: provider setup components identified by `BI-ECBD6924`
 - Modify: `docs/user-guide/ai-workforce/model-routing-lifecycle.md`
 - Modify: public/onboarding copy for the platform approach, if this plan touches those routes
 

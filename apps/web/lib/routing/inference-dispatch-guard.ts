@@ -1,4 +1,5 @@
 import type { InferenceDataScreenReceipt } from "@/lib/inference/data-screening/types";
+import { isLocalProviderId } from "./provider-locality";
 import type { SensitivityLevel } from "./types";
 
 type GuardedDecision = {
@@ -9,6 +10,7 @@ type GuardedDecision = {
 
 type GuardedCandidate = {
   endpointId: string;
+  providerId: string;
   excluded: boolean;
   excludedReason?: string;
 };
@@ -55,5 +57,20 @@ export function isEligibleForScreenedDispatch(
   if (!candidate) {
     return false;
   }
-  return !requiresInferenceDispatchScreen(decision) || !candidate.excluded;
+  if (!requiresInferenceDispatchScreen(decision)) {
+    return true;
+  }
+
+  const receipt = decision.inferenceDataScreenReceipt;
+  if (
+    !receipt ||
+    receipt.schemaVersion !== "inference-data-screen/v1" ||
+    receipt.rawPayloadStored !== false ||
+    receipt.routeEffect === "block" ||
+    candidate.excluded
+  ) {
+    return false;
+  }
+
+  return receipt.routeEffect !== "local-only" || isLocalProviderId(candidate.providerId);
 }
