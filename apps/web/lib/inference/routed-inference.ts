@@ -41,10 +41,12 @@ import {
   prepareProviderSuitabilityRuntime,
   type ProviderSuitabilityRuntime,
 } from "@/lib/routing/provider-suitability/runtime";
+import type { ScreenInferencePayloadInput } from "@/lib/inference/data-screening/screen-inference-payload";
 import {
-  screenInferencePayload,
-  type ScreenInferencePayloadInput,
-} from "@/lib/inference/data-screening/screen-inference-payload";
+  createRoutedInferenceScreen,
+  rescreenRoutedInferenceWithoutTools,
+} from "@/lib/inference/data-screening/routed-screening";
+import { screenedLocalOnlyBlockReason } from "@/lib/inference/data-screening/blocked-route-explanation";
 import { createRoutingTraceId } from "@/lib/routing/routing-trace";
 import { AI_ROUTING_ARCHITECTURE_VERSION } from "@/lib/routing/routing-architecture-version";
 export type { RouteAndCallOptions } from "./routed-inference-options";
@@ -106,6 +108,8 @@ interface PreparedRoute {
   policies: PolicyRuleEval[];
   overrides: EndpointOverride[];
   taskType: string;
+  /** Ephemeral, non-persisted input used to re-screen the actual dispatch payload. */
+  screenInput: ScreenInferencePayloadInput;
   /** EP-GOLDEN-TRIANGLE: the resolved posture applied to this route (null = none/Balanced). */
   posture: DispatchPosture | null;
   suitability: ProviderSuitabilityRuntime | null;
@@ -164,14 +168,15 @@ async function prepareRoute(
         : options?.residencyPolicy,
     requiredModelClass: options?.requiredModelClass,
   };
-  const screen = screenInferencePayload({
+  const { screenInput, screen } = createRoutedInferenceScreen({
     messages,
     systemPrompt,
     tools: options?.tools,
     taskType,
     routeContext: initialRouteContext,
     activityContract: options?.activityContract,
-  } satisfies ScreenInferencePayloadInput);
+    policyVersionSource: options?.inferencePolicyVersionSource,
+  });
 
   // 1. Infer contract
   let contract = await inferContract(
@@ -274,7 +279,17 @@ async function prepareRoute(
     decision.policyRulesApplied = [...decision.policyRulesApplied, "inference-dispatch"];
   }
 
-  return { contract, decision, manifests, policies, overrides, taskType, posture, suitability };
+  return {
+    contract,
+    decision,
+    manifests,
+    policies,
+    overrides,
+    taskType,
+    screenInput,
+    posture,
+    suitability,
+  };
 }
 
 /** Result of a side-effect-free routing dry-run. */
@@ -349,6 +364,7 @@ export async function routeAndCall(
   const prepared = await prepareRoute(messages, systemPrompt, sensitivity, options);
   const { contract, manifests, policies, overrides, taskType } = prepared;
   let decision = prepared.decision;
+  let dispatchScreenInput = prepared.screenInput;
   const traceId = createRoutingTraceId();
   let toolsStripped = false;
 
@@ -420,7 +436,9 @@ export async function routeAndCall(
       console.log(`[routing] Retrying without tools requirement for '${taskType}'`);
       const relaxedContract = { ...contract, requiresTools: false };
       decision = await routeEndpointV2(manifests, relaxedContract, policies, overrides);
-      decision.inferenceDataScreenReceipt = prepared.decision.inferenceDataScreenReceipt;
+      const strippedScreen = rescreenRoutedInferenceWithoutTools(prepared.screenInput);
+      dispatchScreenInput = strippedScreen.screenInput;
+      decision.inferenceDataScreenReceipt = strippedScreen.receipt;
       if (!decision.policyRulesApplied.includes("inference-dispatch")) {
         decision.policyRulesApplied = [...decision.policyRulesApplied, "inference-dispatch"];
       }
@@ -593,6 +611,7 @@ export async function routeAndCall(
       options?.previousResponseId,
       options?.mcpSession,
       { traceId, agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null, buildId: options?.buildId ?? null },
+      dispatchScreenInput,
     );
     applyObservedRouterEvidence(decision, result.routingEvidence, routeDecisionLogId);
 
@@ -662,6 +681,7 @@ export async function routeAndCall(
     options?.previousResponseId,
     options?.mcpSession,
     { traceId, agentId: options?.agentId ?? null, agentMessageId: options?.agentMessageId ?? null, buildId: options?.buildId ?? null },
+    dispatchScreenInput,
   );
   applyObservedRouterEvidence(decision, result.routingEvidence, routeDecisionLogId);
 
@@ -758,27 +778,4 @@ async function persistRoutedTokenUsage(input: {
       err,
     );
   }
-}
-
-function screenedLocalOnlyBlockReason(
-  decision: RouteDecision,
-  taskType: string,
-): string | null {
-  const receipt = decision.inferenceDataScreenReceipt;
-  if (!receipt || receipt.routeEffect !== "local-only") return null;
-
-  const dataClasses = receipt.classifiedDataClasses.length > 0
-    ? receipt.classifiedDataClasses.map(humanizeDataClass).join(", ")
-    : "governed data";
-  const saferRoute = "Use an eligible local/private model or an approved provider account with evidence for this data class.";
-  const transform = receipt.transformation === "masked" || receipt.transformation === "tokenized"
-    ? "The payload was transformed before routing; rehydration still needs an authorized surface."
-    : "Masking/tokenization is not available for this route yet; remove sensitive details if exact values are not needed.";
-
-  return `Sensitive-data routing blocked cloud dispatch for task '${taskType}' because the payload includes ${dataClasses}. ` +
-    `${saferRoute} ${transform} Router detail: ${decision.reason}`;
-}
-
-function humanizeDataClass(value: string): string {
-  return value.replace(/-/g, " ");
 }

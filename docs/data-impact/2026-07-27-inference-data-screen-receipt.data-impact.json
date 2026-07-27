@@ -13,8 +13,10 @@
   "tests": [
     "packages/db/src/provider-suitability-evidence-schema.test.ts",
     "apps/web/lib/inference/routed-inference.activity-overrides.test.ts",
+    "apps/web/lib/inference/data-screening/routed-screening.test.ts",
     "apps/web/lib/routing/loader.test.ts",
     "apps/web/lib/routing/fallback-screened-dispatch.test.ts",
+    "apps/web/lib/routing/inference-dispatch-guard.test.ts",
     "apps/web/lib/routing/task-dispatcher.test.ts",
     "apps/web/components/platform/RouteDecisionLogClient.test.tsx"
   ],
@@ -28,12 +30,12 @@
         {
           "fieldId": "data:route-decision-log#inferenceDataScreenReceipt",
           "resolution": "governed",
-          "reason": "records the versioned, privacy-safe classification and policy evidence that constrained the selected endpoint and every fallback",
+          "reason": "records the versioned, privacy-safe classification and policy evidence that constrained the selected endpoint and every fallback, including the asset, classification, and authority versions required for final dispatch revalidation",
           "provenance": "pre-dispatch inference data-screen policy enforcement point",
           "flags": [
             "sensitive"
           ],
-          "fieldPolicy": "allowlist only; exclude prompts, messages, tool payloads, detected values, token maps, secrets, customer or employee details, account identifiers, and free text"
+          "fieldPolicy": "allowlist only; permit decision ids and opaque asset/classification/authority versions; exclude prompts, messages, tool payloads, detected values, token maps, secrets, customer or employee details, account identifiers, and free text"
         }
       ]
     },

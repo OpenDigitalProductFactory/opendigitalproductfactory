@@ -43,10 +43,26 @@ export type InferenceDataScreenRouteContext = Pick<
   "sensitivity" | "allowedProviders" | "deniedProviders" | "residencyPolicy"
 >;
 
+export type InferencePolicyDecisionVersion = {
+  decisionId: string;
+  assetVersion: string;
+  classificationVersion: string;
+  authorityVersion: string;
+};
+
+export type InferencePolicyVersionSnapshot = {
+  assetVersion: string;
+  classificationVersion: string;
+  authorityVersion: string;
+  policyBundleVersion: string;
+};
+
 export type InferenceDataScreenReceipt = {
   schemaVersion: "inference-data-screen/v1";
   screenId: string;
   decisionIds: string[];
+  /** Safe TOCTOU evidence for each governed PDP decision; never contains payload values. */
+  decisionVersions: InferencePolicyDecisionVersion[];
   inputHash: string;
   classifiedDataClasses: InferenceDataClass[];
   policyEffect: DataEffect;

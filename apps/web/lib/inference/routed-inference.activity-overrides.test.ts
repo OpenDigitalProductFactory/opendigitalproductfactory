@@ -366,6 +366,10 @@ describe("routeAndCall activity harness overrides", () => {
       undefined,
       undefined,
       expect.any(Object),
+      expect.objectContaining({
+        messages: expect.any(Array),
+        systemPrompt: expect.any(String),
+      }),
     );
   });
 

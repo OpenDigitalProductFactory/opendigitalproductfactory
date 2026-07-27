@@ -110,6 +110,14 @@ export function isDecisionStillFresh(
   decision: DataPolicyDecision,
   current: DecisionVersionSnapshot,
 ): boolean {
+  return isDecisionVersionSnapshotStillFresh(decision, current);
+}
+
+/** Compare a privacy-safe projected decision snapshot at a final enforcement seam. */
+export function isDecisionVersionSnapshotStillFresh(
+  decision: DecisionVersionSnapshot,
+  current: DecisionVersionSnapshot,
+): boolean {
   return (
     decision.assetVersion === current.assetVersion &&
     decision.classificationVersion === current.classificationVersion &&

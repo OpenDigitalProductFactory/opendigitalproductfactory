@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { callWithFallbackChain, NoEndpointAvailableError } from "./task-dispatcher";
 import type { TaskRouteDecision, CandidateTrace } from "./task-router-types";
 import type { ProviderCallPayload, DispatchContext } from "./task-dispatcher";
+import { screenInferencePayload } from "@/lib/inference/data-screening/screen-inference-payload";
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
@@ -80,20 +81,14 @@ const mockContext: DispatchContext = {
   agentMessageId: "msg-1",
 };
 
-const allowScreenReceipt: NonNullable<TaskRouteDecision["inferenceDataScreenReceipt"]> = {
-  schemaVersion: "inference-data-screen/v1",
-  screenId: "screen_allow",
-  decisionIds: ["decision-allow"],
-  inputHash: "hash-allow",
-  classifiedDataClasses: ["employee-records"],
-  policyEffect: "allow",
-  routeEffect: "allow",
-  destinationClass: "external-service",
-  transformation: "none",
-  explanationCodes: ["dispatch-allowed"],
-  obligationKinds: [],
-  rawPayloadStored: false,
-};
+const allowScreenReceipt: NonNullable<TaskRouteDecision["inferenceDataScreenReceipt"]> =
+  screenInferencePayload({
+    messages: mockPayload.messages,
+    systemPrompt: mockPayload.systemPrompt,
+    tools: mockPayload.tools,
+    taskType: mockDecision.taskType,
+    routeContext: { sensitivity: mockDecision.sensitivity },
+  }).receipt;
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
@@ -144,6 +139,42 @@ describe("callWithFallbackChain", () => {
 
     expect(mockCallProvider).not.toHaveBeenCalled();
     expect(mockPrisma.routeDecisionLog.create).not.toHaveBeenCalled();
+  });
+
+  it("does not trust an internal legacy decision when the actual payload screens as governed", async () => {
+    await expect(
+      callWithFallbackChain(
+        mockDecision,
+        {
+          ...mockPayload,
+          messages: [{ role: "user", content: "Review employee salary notes." }],
+        },
+        mockContext,
+      ),
+    ).rejects.toThrow("missing inference data screen receipt");
+
+    expect(mockCallProvider).not.toHaveBeenCalled();
+  });
+
+  it("rejects a legacy payload that changed after its route-time screen", async () => {
+    const changedPayload: ProviderCallPayload = {
+      ...mockPayload,
+      messages: [{ role: "user", content: "Changed after routing" }],
+    };
+
+    await expect(
+      callWithFallbackChain(
+        {
+          ...mockDecision,
+          policyRulesApplied: ["inference-dispatch"],
+          inferenceDataScreenReceipt: allowScreenReceipt,
+        },
+        changedPayload,
+        mockContext,
+      ),
+    ).rejects.toThrow("stale inference data screen receipt");
+
+    expect(mockCallProvider).not.toHaveBeenCalled();
   });
 
   it("does not dispatch an excluded governed fallback candidate", async () => {

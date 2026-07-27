@@ -19,6 +19,10 @@ import {
   isEligibleForScreenedDispatch,
   requiresInferenceDispatchScreen,
 } from "./inference-dispatch-guard";
+import {
+  screenInferencePayload,
+  type ScreenInferencePayloadInput,
+} from "@/lib/inference/data-screening/screen-inference-payload";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 /** The payload passed to callProvider for each attempt. */
@@ -34,6 +38,11 @@ export interface DispatchContext {
   agentId: string;
   agentMessageId?: string;
   shadowMode?: boolean;
+  /** Governed context for exact final re-screening; payload bytes come from payload. */
+  screeningInput?: Omit<
+    ScreenInferencePayloadInput,
+    "messages" | "systemPrompt" | "tools" | "taskType"
+  >;
 }
 
 // ── Custom error ──────────────────────────────────────────────────────────────
@@ -64,7 +73,7 @@ export async function callWithFallbackChain(
   payload: ProviderCallPayload,
   context: DispatchContext,
 ) {
-  assertInferenceDispatchScreen(decision);
+  revalidateDispatchScreen(decision, payload, context.screeningInput);
   const requireScreenedCandidates = requiresInferenceDispatchScreen(decision);
   const endpointIds = [decision.selectedEndpointId, ...decision.fallbackChain].filter(
     (id): id is string => id !== null,
@@ -87,6 +96,7 @@ export async function callWithFallbackChain(
     }
 
     try {
+      revalidateDispatchScreen(decision, payload, context.screeningInput);
       const result = await callProvider(
         candidate.providerId,
         payload.modelId || candidate.modelId,
@@ -158,6 +168,25 @@ export async function callWithFallbackChain(
     `All ${endpointIds.length} endpoint(s) in the chain failed.`,
     failedDecision,
   );
+}
+
+function revalidateDispatchScreen(
+  decision: TaskRouteDecision,
+  payload: ProviderCallPayload,
+  screeningContext: DispatchContext["screeningInput"],
+): void {
+  const currentReceipt = screenInferencePayload({
+    ...screeningContext,
+    messages: payload.messages,
+    systemPrompt: payload.systemPrompt,
+    tools: payload.tools,
+    taskType: decision.taskType,
+    routeContext: {
+      ...screeningContext?.routeContext,
+      sensitivity: decision.sensitivity,
+    },
+  }).receipt;
+  assertInferenceDispatchScreen(decision, currentReceipt);
 }
 
 // ── Persistence ───────────────────────────────────────────────────────────────

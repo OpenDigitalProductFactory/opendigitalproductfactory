@@ -48,6 +48,30 @@ describe("screenInferencePayload", () => {
     expect(JSON.stringify(result.receipt)).not.toContain("Jane");
   });
 
+  it("projects safe PDP versions from the live version source into the receipt", () => {
+    const result = screenInferencePayload({
+      messages: [{ role: "user", content: "Review employee salary notes." }],
+      systemPrompt: "",
+      taskType: "summarization",
+      policyVersionSource: () => ({
+        assetVersion: "asset-7",
+        classificationVersion: "classification-9",
+        authorityVersion: "authority-3",
+        policyBundleVersion: "bundle-4",
+      }),
+    });
+
+    expect(result.receipt.decisionVersions).toEqual([
+      {
+        decisionId: result.receipt.decisionIds[0],
+        assetVersion: "asset-7",
+        classificationVersion: "classification-9",
+        authorityVersion: "authority-3",
+      },
+    ]);
+    expect(JSON.stringify(result.receipt)).not.toContain("salary notes");
+  });
+
   it("treats activity governed-data hints without classification as unknown governed payload", () => {
     const result = screenInferencePayload({
       messages: [{ role: "user", content: "Summarize the selected records." }],
