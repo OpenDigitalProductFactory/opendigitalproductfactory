@@ -10,6 +10,23 @@
 import { prisma } from "@dpf/db";
 import { createHash, scryptSync } from "crypto";
 import { can, type CapabilityKey, type UserContext } from "./permissions";
+import type { CoworkerAuthorityDecision } from "./govern/authority/coworker-authority-decision";
+import {
+  enforceCoworkerToolAuthority,
+  finalizeCoworkerAuthorityApproval,
+  setCoworkerToolAuthorityOverridesForTests,
+  type AuthorizationDecisionCreate,
+  type AuthorityApprovalEnvelopeCreate,
+  type AuthorityApprovalEnvelopeFinalize,
+  type AuthorityApprovalTaskResume,
+  type CoworkerAuthorityInputResolver,
+} from "./govern/authority/coworker-tool-authority-gate";
+export type {
+  AuthorityApprovalEnvelopeCreate,
+  AuthorityApprovalEnvelopeFinalize,
+  AuthorityApprovalTaskResume,
+  CoworkerAuthorityInputResolver,
+} from "./govern/authority/coworker-tool-authority-gate";
 import {
   PLATFORM_TOOLS,
   executeTool,
@@ -70,6 +87,12 @@ export type GovernedExecuteContext = {
    */
   coworkerReadBaseline?: boolean;
   /**
+   * Server-owned session permission for tools that cross the platform
+   * boundary. Callers may set this only after the tool registry has admitted
+   * the tool for the current session.
+   */
+  externalAccessEnabled?: boolean;
+  /**
    * Optional Work Case context for consequential actions flowing through the
    * governed execution seam. Existing callers omit this and retain their
    * current audit/receipt behavior.
@@ -99,12 +122,16 @@ export type GovernedExecuteRejection =
   | "unknown_tool"
   | "forbidden_capability"
   | "forbidden_grant"
-  | "hook_denied";
+  | "hook_denied"
+  | "authority_denied"
+  | "approval_required"
+  | "authority_evidence_unavailable";
 
 export type GovernedExecuteResult = ToolResult & {
   governance?: {
     rejected?: GovernedExecuteRejection;
     durationMs?: number;
+    authorityReason?: CoworkerAuthorityDecision["reasonCode"];
   };
 };
 
@@ -159,6 +186,11 @@ export function _setGovernanceForTests(overrides: {
   ) => Promise<ToolResult>) | null;
   toolExecutionCreate?: ((data: Record<string, unknown>) => Promise<unknown>) | null;
   toolExecutionReceiptCreate?: ((data: Record<string, unknown>) => Promise<unknown>) | null;
+  resolveCoworkerAuthorityInput?: CoworkerAuthorityInputResolver | null;
+  authorizationDecisionCreate?: AuthorizationDecisionCreate | null;
+  authorityApprovalEnvelopeCreate?: AuthorityApprovalEnvelopeCreate | null;
+  authorityApprovalTaskResume?: AuthorityApprovalTaskResume | null;
+  authorityApprovalEnvelopeFinalize?: AuthorityApprovalEnvelopeFinalize | null;
   lifecycleHooks?: ToolLifecycleHook[] | null;
 }): void {
   _resolveAgentGrants = overrides.resolveAgentGrants ?? null;
@@ -166,6 +198,7 @@ export function _setGovernanceForTests(overrides: {
   _executeToolOverride = overrides.executeTool ?? null;
   _toolExecutionCreateOverride = overrides.toolExecutionCreate ?? null;
   _toolExecutionReceiptCreateOverride = overrides.toolExecutionReceiptCreate ?? null;
+  setCoworkerToolAuthorityOverridesForTests(overrides);
   _lifecycleHooks = overrides.lifecycleHooks ?? [];
 }
 
@@ -438,6 +471,7 @@ async function runPostToolHooks(event: ToolLifecyclePostEvent): Promise<void> {
 export async function governedExecuteTool(
   args: GovernedExecuteArgs,
 ): Promise<GovernedExecuteResult> {
+  let approvedAuthorityEnvelopeId: string | null = null;
   const tool = findTool(args.toolName);
   if (!tool) {
     return {
@@ -461,10 +495,13 @@ export async function governedExecuteTool(
     rawParams: coerceMcpToolArgs(args.rawParams, tool.inputSchema),
   };
 
-  // Capability check — user must have the platform role required by the tool.
-  if (tool.requiredCapability) {
-    const allowed = can(args.userContext, tool.requiredCapability as CapabilityKey);
-    if (!allowed) {
+  const humanCapabilityAllowed = !tool.requiredCapability
+    || can(args.userContext, tool.requiredCapability as CapabilityKey);
+
+  // Direct human transports retain the existing capability contract. Coworker
+  // calls are evaluated below as one combined human + agent + delegation
+  // decision so every attempted action produces one complete authority record.
+  if (!args.context?.agentId && !humanCapabilityAllowed) {
       const result = rejectionResult(
         args.toolName,
         "forbidden_capability",
@@ -480,11 +517,8 @@ export async function governedExecuteTool(
         durationMs: 0,
       });
       return result;
-    }
   }
 
-  // Agent grant check — when an agentId is in the context, the agent must
-  // have a grant that authorises this tool.
   if (args.context?.agentId) {
     let grants = await resolveGrants(args.context.agentId);
     // In-portal coworker chat turns attach COWORKER_READ_BASELINE_GRANTS to the
@@ -500,24 +534,45 @@ export async function governedExecuteTool(
       const { COWORKER_READ_BASELINE_GRANTS } = await import("./tak/agent-grants");
       grants = Array.from(new Set([...grants, ...COWORKER_READ_BASELINE_GRANTS]));
     }
-    const allowed = await isAllowedByGrants(args.toolName, grants);
-    if (!allowed) {
-      const result = rejectionResult(
-        args.toolName,
-        "forbidden_grant",
-        `agent ${args.context.agentId} lacks a required grant for ${args.toolName}`,
-      );
-      await writeAudit({
-        toolName: args.toolName,
-        rawParams: args.rawParams,
-        result,
-        userId: args.userId,
-        source: args.source,
-        context: args.context,
-        durationMs: 0,
-      });
+    const agentGrantAllowed = await isAllowedByGrants(args.toolName, grants);
+
+    const authorityGate = await enforceCoworkerToolAuthority(
+      args,
+      tool,
+      agentGrantAllowed,
+    );
+    if (authorityGate.outcome === "reject") {
+      const result: GovernedExecuteResult = {
+        ...rejectionResult(
+          args.toolName,
+          authorityGate.rejection,
+          authorityGate.message,
+        ),
+        ...(authorityGate.data ? { data: authorityGate.data } : {}),
+        governance: {
+          rejected: authorityGate.rejection,
+          ...(authorityGate.authorityReason
+            ? { authorityReason: authorityGate.authorityReason }
+            : {}),
+        },
+      };
+      if (
+        authorityGate.rejection === "authority_denied"
+        || authorityGate.rejection === "approval_required"
+      ) {
+        await writeAudit({
+          toolName: args.toolName,
+          rawParams: args.rawParams,
+          result,
+          userId: args.userId,
+          source: args.source,
+          context: args.context,
+          durationMs: 0,
+        });
+      }
       return result;
     }
+    approvedAuthorityEnvelopeId = authorityGate.approvedEnvelopeId;
   }
 
   const hookRejection = await runPreToolHooks({
@@ -567,6 +622,25 @@ export async function governedExecuteTool(
     };
   }
   const durationMs = Date.now() - t0;
+
+  if (approvedAuthorityEnvelopeId) {
+    try {
+      await finalizeCoworkerAuthorityApproval(
+        approvedAuthorityEnvelopeId,
+        result.success,
+      );
+    } catch (err) {
+      // The action has already run, so this cannot fail closed without
+      // misreporting the side effect. Preserve the result and surface the
+      // evidence defect in server logs for reconciliation.
+      console.error(
+        "[governed-execute] approval envelope finalization failed envelope=%s tool=%s: %s",
+        JSON.stringify(approvedAuthorityEnvelopeId),
+        JSON.stringify(args.toolName),
+        err instanceof Error ? JSON.stringify(err.message) : JSON.stringify(String(err)),
+      );
+    }
+  }
 
   await runPostToolHooks({
     toolName: args.toolName,

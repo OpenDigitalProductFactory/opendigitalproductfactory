@@ -429,6 +429,7 @@ export async function executeAutonomousWorkTool(input: {
   threadId: string;
   taskRunId: string;
   apiTokenId?: string | null;
+  externalAccessEnabled?: boolean;
 }): Promise<ToolResult> {
   const { governedExecuteTool } = await import("@/lib/mcp-governed-execute");
 
@@ -444,6 +445,7 @@ export async function executeAutonomousWorkTool(input: {
       threadId: input.threadId,
       taskRunId: input.taskRunId,
       apiTokenId: input.apiTokenId ?? undefined,
+      externalAccessEnabled: input.externalAccessEnabled,
     },
   });
 }

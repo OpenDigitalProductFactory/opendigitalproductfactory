@@ -94,7 +94,8 @@ In the registry this is the `config_profile.model_binding` block (`model_id`, `p
 
 - **MCP servers** are first-class records: **`McpServer`** (`serverId`, `transport`, `category`, `status`, `healthStatus`, …) with discovered **`McpServerTool`** rows (`toolName`, `inputSchema`, `isEnabled`). The local DPF server (`serverId="dpf"`) exposes the platform tool catalog over JSON-RPC 2.0 at `apps/web/app/api/mcp/v1/route.ts`.
 - **Tool grants** — an agent's *permitted* surface is `AgentToolGrant` rows (`grantKey`, e.g. `registry_read`, `backlog_write`). Grants are coarse keys, not raw tool names.
-- **Enforcement** — `getAvailableTools()` (`apps/web/lib/mcp-tools.ts`) intersects **user role capability ∩ agent grants**, applies `TOOL_TO_GRANTS` + `GRANT_IMPLICATIONS` (`apps/web/lib/agent-grants.ts`), adds the `COWORKER_READ_BASELINE_GRANTS` every coworker gets, then unions in MCP server tools under the same gating. Default-deny: an unmapped tool is refused. Every call writes to the `ToolExecution` ledger (AGENTS.md §8).
+- **Attachment** — `getAvailableTools()` (`apps/web/lib/mcp-tools.ts`) intersects **user role capability ∩ agent grants**, applies `TOOL_TO_GRANTS` + `GRANT_IMPLICATIONS` (`apps/web/lib/agent-grants.ts`), adds the `COWORKER_READ_BASELINE_GRANTS` every coworker gets, then unions in MCP server tools under the same gating. Default-deny: an unmapped tool is refused.
+- **Execution-time authority** — every coworker call passes through `governedExecuteTool()`, which evaluates the current `EffectiveAuthContext`, coworker grant, `DelegationChain` attenuation, route/record scope, external-connection state, sensitivity clearance, masking obligations, policy version, and HITL policy. Prompt text, model routing fallback, and provider cost are deliberately not authority inputs. The outcome is `allow`, `deny`, or `require-approval`; every outcome writes a privacy-safe `AuthorizationDecisionLog` before execution. A missing authority context or failed decision-log write fails closed.
 
 In the registry this is `config_profile.tool_grants` and `execution_runtime`.
 
@@ -115,7 +116,8 @@ Three prompt sources compose into the system context:
 
 - **`AgentGovernanceProfile`** (schema ~line 2015) — `autonomyLevel`, `hitlPolicy`, `allowDelegation`, `maxDelegationRiskBand`, plus FKs to `AgentCapabilityClass` and `DirectivePolicyClass`.
 - **HITL tier** (`hitlTierDefault` 0–3) — the autonomy dial.
-- **Delegation & authority** — `DelegationGrant` and `AuthorityBinding` carry scoped, time-boxed, risk-banded authority; effectful actions pass through a `CoworkerActionEnvelope` approval gate.
+- **Delegation & authority** — `DelegationGrant` and `AuthorityBinding` carry scoped, time-boxed, risk-banded authority. `DelegationChain` narrows capability scope hop by hop and preserves the human origin at execution.
+- **HITL call-chain return** — an execution-time `require-approval` decision creates or reuses a privacy-safe `CoworkerActionEnvelope` bound to the exact human, coworker, task, delegation chain, tool, subject, route, input fingerprint, sensitivity, and policy-version fingerprint. Only that `TaskRun` moves to `input-required`; an approved re-entry resumes and finalizes only the matching call. Changed inputs or stale policy require a new decision.
 - **Accountability spine** — `humanSupervisorId` (sponsor) + `escalatesTo` (escalation target). The SysML current-state model of these invariants lives in `packages/db/src/seed-ea-sysml-agent-authority.ts` (default-deny, dual-gate, HITL, token-scope, audit, dual-principal, grant-narrowing).
 
 ### 3.7 Lifecycle & performance — *the agent over time*
@@ -213,9 +215,9 @@ Identity and config are static; the live agent is *assembled* per request. `getA
 | MCP servers & tools | `McpServer`, `McpServerTool`, `AgentToolGrant`; `apps/web/app/api/mcp/v1/route.ts`; `apps/web/lib/mcp-tools.ts`; `apps/web/lib/agent-grants.ts` |
 | Prompts | `prompts/<category>/<slug>.prompt.md`; `PromptTemplate`; `AgentPromptContext`; `apps/web/lib/integrate/build-agent-prompts.ts` |
 | Skills | `SkillDefinition`, `SkillAssignment`; `packages/dpf-skill-pack/skills/<slug>/SKILL.md` |
-| Governance & authority | `AgentGovernanceProfile`, `DelegationGrant`, `AuthorityBinding`, `CoworkerActionEnvelope`; `packages/db/src/seed-ea-sysml-agent-authority.ts`; AGENTS.md §8 |
+| Governance & authority | `AgentGovernanceProfile`, `DelegationGrant`, `DelegationChain`, `AuthorityBinding`, `CoworkerActionEnvelope`; `apps/web/lib/govern/authority/`; `apps/web/lib/mcp-governed-execute.ts`; `packages/db/src/seed-ea-sysml-agent-authority.ts`; AGENTS.md §8 |
 | Lifecycle & performance | `Agent.status/lifecycleStage`, `AgentPerformance`, `CoworkerSelfAssessment`, `CoworkerCapabilityNeed` |
-| Audit ledger | `ToolExecution` (`/platform/ai/authority`) |
+| Audit ledger | `AuthorizationDecisionLog` (why authority allowed/denied/paused) + `ToolExecution` (what ran), surfaced at `/platform/ai/authority` |
 
 ---
 

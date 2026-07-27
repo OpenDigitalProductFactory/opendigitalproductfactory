@@ -3009,6 +3009,7 @@ model AuthorizationDecisionLog {
   patientSubjectPrincipal   Principal?               @relation("PatientAuthorizationSubject", fields: [patientSubjectPrincipalId], references: [id], onDelete: SetNull)
   patientAuthority          PatientAuthority?        @relation(fields: [patientAuthorityId], references: [id], onDelete: SetNull)
   patientConsentDirective   PatientConsentDirective? @relation(fields: [patientConsentDirectiveId], references: [id], onDelete: SetNull)
+  actionEnvelopes           CoworkerActionEnvelope[]
 
   @@index([decision])
   @@index([createdAt])
@@ -5534,24 +5535,37 @@ model ToolExecution {
 // ToolExecution.agentId convention; Principal convergence is via
 // PrincipalAlias lookup at query time (AGENTS.md §11), not a direct FK.
 model CoworkerActionEnvelope {
-  id               String    @id @default(cuid())
-  coworkerAgentId  String
-  delegatingUserId String
-  threadId         String
-  chatMessageId    String?
-  manifestActionId String
-  argsJson         Json
-  rationale        String
-  status           String    @default("proposed")
-  createdAt        DateTime  @default(now())
-  resolvedAt       DateTime?
+  id                         String    @id @default(cuid())
+  coworkerAgentId            String
+  delegatingUserId           String
+  threadId                   String
+  chatMessageId              String?
+  manifestActionId           String
+  argsJson                   Json
+  rationale                  String
+  status                     String    @default("proposed")
+  taskRunId                  String?
+  delegationChainId          String?
+  authorityDecisionId        String?
+  inputFingerprint           String?
+  approvalBindingFingerprint String?
+  expiresAt                  DateTime?
+  createdAt                  DateTime  @default(now())
+  resolvedAt                 DateTime?
 
-  toolExecutions ToolExecution[]
+  toolExecutions    ToolExecution[]
+  taskRun           TaskRun?                  @relation(fields: [taskRunId], references: [taskRunId], onDelete: SetNull)
+  authorityDecision AuthorizationDecisionLog? @relation(fields: [authorityDecisionId], references: [decisionId], onDelete: SetNull)
 
   @@index([threadId, createdAt(sort: Desc)])
   @@index([coworkerAgentId, createdAt(sort: Desc)])
   @@index([status])
   @@index([chatMessageId])
+  @@index([taskRunId])
+  @@index([delegationChainId])
+  @@index([authorityDecisionId])
+  @@index([approvalBindingFingerprint])
+  @@index([expiresAt])
 }
 
 model ToolExecutionReceipt {
@@ -6878,6 +6892,7 @@ model TaskRun {
   deliberationRuns     DeliberationRun[]
   decisionInteractions DecisionInteraction[]
   stallEvents          StallEvent[]
+  actionEnvelopes      CoworkerActionEnvelope[]
 
   @@index([userId, status])
   @@index([threadId])

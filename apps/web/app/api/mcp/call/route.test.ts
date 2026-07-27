@@ -115,4 +115,62 @@ describe("POST /api/mcp/call", () => {
     );
     expect(res.status).toBe(403);
   });
+
+  it("maps a unified coworker authority denial to 403", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "u1", platformRole: "ceo", isSuperuser: true },
+    });
+    govMock.mockResolvedValue({
+      success: false,
+      error: "authority_denied",
+      message: "The current human cannot act on the selected record.",
+      governance: {
+        rejected: "authority_denied",
+        authorityReason: "subject-scope-denied",
+      },
+    });
+    const res = await POST(
+      makeRequest({ name: "read_employee", agentId: "AGT-100" }),
+    );
+    expect(res.status).toBe(403);
+  });
+
+  it("returns 202 with the bounded envelope when approval is required", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "u1", platformRole: "ceo", isSuperuser: true },
+    });
+    govMock.mockResolvedValue({
+      success: false,
+      error: "approval_required",
+      message: "Human approval is required.",
+      data: { envelopeId: "ENV-1" },
+      governance: {
+        rejected: "approval_required",
+        authorityReason: "approval-required",
+      },
+    });
+    const res = await POST(
+      makeRequest({ name: "create_backlog_item", agentId: "AGT-100" }),
+    );
+    expect(res.status).toBe(202);
+    await expect(res.json()).resolves.toMatchObject({
+      data: { envelopeId: "ENV-1" },
+    });
+  });
+
+  it("returns 503 when required authority evidence cannot be recorded", async () => {
+    authMock.mockResolvedValue({
+      user: { id: "u1", platformRole: "ceo", isSuperuser: true },
+    });
+    govMock.mockResolvedValue({
+      success: false,
+      error: "authority_evidence_unavailable",
+      message: "Authority evidence could not be recorded.",
+      governance: { rejected: "authority_evidence_unavailable" },
+    });
+    const res = await POST(
+      makeRequest({ name: "query_backlog", agentId: "AGT-100" }),
+    );
+    expect(res.status).toBe(503);
+  });
 });
