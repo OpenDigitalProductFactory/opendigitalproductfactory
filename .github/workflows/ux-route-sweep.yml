@@ -51,10 +51,11 @@ concurrency:
 #
 # BOOTSTRAP: route-budget-baseline.json ships with `bootstrapped: false`, so the sweep
 # REPORTS without blocking until a reproducible measured baseline is committed. Arm it
-# only after two same-SHA freezes are identical, both account for every eligible route,
-# an enforcing run reports zero regressions, and the 1/2/4 worker experiment has selected
-# the reliable default. See docs/testing/ci-evidence.md. The set of routes in the accepted
-# freeze defines "pre-existing"; anything added later is net-new and meets the absolutes.
+# only after two same-SHA freezes satisfy the ratchet's mechanical reproducibility
+# contract, both account for every eligible route, their conservative envelope passes an
+# enforcing run, and the 1/2/4 worker experiment has selected the reliable default. See
+# docs/testing/ci-evidence.md. The accepted freeze defines "pre-existing"; anything added
+# later is net-new and meets the absolutes.
 
 jobs:
   sweep:

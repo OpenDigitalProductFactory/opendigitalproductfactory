@@ -150,7 +150,9 @@ describe("waitForRouteDomToSettle", () => {
 
     expect(evaluations).toEqual([DOM_SETTLE_EXPRESSION]);
     expect(DOM_SETTLE_EXPRESSION).toContain("new MutationObserver");
-    expect(DOM_SETTLE_EXPRESSION).toContain("deadlineMs = 5000");
+    expect(DOM_SETTLE_EXPRESSION).toContain("deadlineMs = 10000");
+    expect(DOM_SETTLE_EXPRESSION).toContain('[data-dpf-ux-settle="pending"]');
+    expect(DOM_SETTLE_EXPRESSION).toContain("reject(new Error");
     expect(DOM_SETTLE_EXPRESSION).not.toContain("__name");
   });
 });

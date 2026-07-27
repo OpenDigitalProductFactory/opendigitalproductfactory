@@ -304,20 +304,29 @@ export const BROWSER_EVALUATION_RUNTIME =
  * This remains a string expression for the same cross-realm reason as the transpiler
  * runtime above: nested callbacks compiled by tsx would otherwise depend on `__name`.
  */
-export const DOM_SETTLE_EXPRESSION = `(() => new Promise((resolve) => {
+export const DOM_SETTLE_EXPRESSION = `(() => new Promise((resolve, reject) => {
   const quietMs = 300;
-  const deadlineMs = 5000;
+  const deadlineMs = 10000;
+  const pendingSelector = '[data-dpf-ux-settle="pending"]';
   let quietTimer;
   let deadlineTimer;
   const observer = new MutationObserver(() => armQuietTimer());
-  const finish = () => {
+  const cleanup = () => {
     clearTimeout(quietTimer);
     clearTimeout(deadlineTimer);
     observer.disconnect();
+  };
+  const finish = () => {
+    cleanup();
     resolve(undefined);
+  };
+  const fail = () => {
+    cleanup();
+    reject(new Error('UX settle boundary remained pending after ' + deadlineMs + 'ms'));
   };
   const armQuietTimer = () => {
     clearTimeout(quietTimer);
+    if (document.querySelector(pendingSelector)) return;
     quietTimer = setTimeout(finish, quietMs);
   };
   observer.observe(document.body, {
@@ -326,7 +335,7 @@ export const DOM_SETTLE_EXPRESSION = `(() => new Promise((resolve) => {
     characterData: true,
     subtree: true
   });
-  deadlineTimer = setTimeout(finish, deadlineMs);
+  deadlineTimer = setTimeout(fail, deadlineMs);
   armQuietTimer();
 }))()`;
 

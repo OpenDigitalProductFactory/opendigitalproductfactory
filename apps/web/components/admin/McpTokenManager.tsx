@@ -225,6 +225,7 @@ function ContributorReadinessBanner(props: { readiness: ContributorMcpReadiness 
 
 export function McpTokenManager(props: McpTokenManagerProps) {
   const [tokens, setTokens] = useState<TokenRow[]>([]);
+  const [initialLoadPending, setInitialLoadPending] = useState(true);
   const [contributorReadiness, setContributorReadiness] =
     useState<ContributorMcpReadiness | null>(null);
   const [scopes, setScopes] = useState<string[]>([]);
@@ -262,26 +263,34 @@ export function McpTokenManager(props: McpTokenManagerProps) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [tokensResult, scopesResult, templatesResult, readinessResult] = await Promise.all([
-        listMyMcpTokens(),
-        listAvailableMcpScopes(),
-        listMcpTokenTemplates(),
-        getMyContributorMcpReadiness({ probe: false }),
-      ]);
-      if (cancelled) return;
-      if (tokensResult.ok) {
-        setTokens(tokensResult.tokens);
-        setArchivedCount(tokensResult.archivedCount);
+      try {
+        const [tokensResult, scopesResult, templatesResult, readinessResult] = await Promise.all([
+          listMyMcpTokens(),
+          listAvailableMcpScopes(),
+          listMcpTokenTemplates(),
+          getMyContributorMcpReadiness({ probe: false }),
+        ]);
+        if (cancelled) return;
+        if (tokensResult.ok) {
+          setTokens(tokensResult.tokens);
+          setArchivedCount(tokensResult.archivedCount);
+        }
+        if (readinessResult.ok) {
+          setContributorReadiness(readinessResult.readiness);
+        }
+        const availableScopes = scopesResult.scopes;
+        setScopes(availableScopes);
+        setTemplates(templatesResult.templates);
+        setFormScopes((current) =>
+          current.size > 0 ? current : new Set(defaultMcpTokenScopes(availableScopes)),
+        );
+      } catch {
+        if (!cancelled) {
+          setInlineError("Could not load MCP token state. Refresh and try again.");
+        }
+      } finally {
+        if (!cancelled) setInitialLoadPending(false);
       }
-      if (readinessResult.ok) {
-        setContributorReadiness(readinessResult.readiness);
-      }
-      const availableScopes = scopesResult.scopes;
-      setScopes(availableScopes);
-      setTemplates(templatesResult.templates);
-      setFormScopes((current) =>
-        current.size > 0 ? current : new Set(defaultMcpTokenScopes(availableScopes)),
-      );
     })();
     return () => {
       cancelled = true;
@@ -582,7 +591,11 @@ export function McpTokenManager(props: McpTokenManagerProps) {
   }
 
   return (
-    <section className="mt-6 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+    <section
+      aria-busy={initialLoadPending || undefined}
+      data-dpf-ux-settle={initialLoadPending ? "pending" : undefined}
+      className="mt-6 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
+    >
       <div className="flex flex-col gap-3 border-b border-[var(--dpf-border)] p-5 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-2">

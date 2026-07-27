@@ -92,7 +92,7 @@ export type RatchetAxis = (typeof RATCHET_AXES)[number];
  * hundreds of words, two orders of magnitude above it. Tighten it if the fixture is
  * ever made clock-deterministic.
  */
-const NOISE_FLOOR: Record<RatchetAxis, number> = {
+export const NOISE_FLOOR: Record<RatchetAxis, number> = {
   defaultVisibleWords: 2,
   leadBandWords: 2,
   primaryActions: 0,
@@ -466,6 +466,106 @@ export function freezeBaseline(measurements: RouteMeasurement[], generator: stri
     };
   }
   return { bootstrapped: true, generator, routes };
+}
+
+export type BaselineReproducibilityIssue = {
+  routePath: string;
+  axis: RatchetAxis | "ariaSnapshot" | "route";
+  first: number | string;
+  second: number | string;
+};
+
+/**
+ * Compare two independent freezes of one source tree using the same contract as
+ * enforcement. Count axes and semantic structure must match exactly; word axes may
+ * differ only inside the empirically measured noise floor documented above.
+ */
+export function compareBaselineReproducibility(
+  first: BaselineFile,
+  second: BaselineFile,
+): BaselineReproducibilityIssue[] {
+  const issues: BaselineReproducibilityIssue[] = [];
+  const routePaths = [...new Set([
+    ...Object.keys(first.routes),
+    ...Object.keys(second.routes),
+  ])].sort();
+
+  for (const routePath of routePaths) {
+    const a = first.routes[routePath];
+    const b = second.routes[routePath];
+    if (!a || !b) {
+      issues.push({
+        routePath,
+        axis: "route",
+        first: a ? "present" : "missing",
+        second: b ? "present" : "missing",
+      });
+      continue;
+    }
+    for (const axis of RATCHET_AXES) {
+      if (Math.abs(a[axis] - b[axis]) > NOISE_FLOOR[axis]) {
+        issues.push({
+          routePath,
+          axis,
+          first: a[axis],
+          second: b[axis],
+        });
+      }
+    }
+    const firstStructure = normaliseSnapshot(a.ariaSnapshot);
+    const secondStructure = normaliseSnapshot(b.ariaSnapshot);
+    if (firstStructure !== secondStructure) {
+      issues.push({
+        routePath,
+        axis: "ariaSnapshot",
+        first: firstStructure,
+        second: secondStructure,
+      });
+    }
+  }
+  return issues;
+}
+
+/**
+ * Produce the conservative envelope of two reproducible freezes. Exact-count axes
+ * are equal by construction, so only word counts can move when the envelope forms.
+ */
+export function mergeReproducibleBaselines(
+  first: BaselineFile,
+  second: BaselineFile,
+): BaselineFile {
+  const issues = compareBaselineReproducibility(first, second);
+  if (issues.length > 0) {
+    const summary = issues
+      .slice(0, 8)
+      .map((issue) => `${issue.routePath}:${issue.axis}`)
+      .join(", ");
+    throw new Error(
+      `UX route baselines are not reproducible (${issues.length} issue(s)): ${summary}`,
+    );
+  }
+
+  const routes: Record<string, RouteBaseline> = {};
+  for (const routePath of Object.keys(first.routes).sort()) {
+    const a = first.routes[routePath];
+    const b = second.routes[routePath];
+    routes[routePath] = {
+      defaultVisibleWords: Math.max(a.defaultVisibleWords, b.defaultVisibleWords),
+      leadBandWords: Math.max(a.leadBandWords, b.leadBandWords),
+      primaryActions: Math.max(a.primaryActions, b.primaryActions),
+      visibleFields: Math.max(a.visibleFields, b.visibleFields),
+      maxChoicesPerControl: Math.max(a.maxChoicesPerControl, b.maxChoicesPerControl),
+      subLegibleControls: Math.max(a.subLegibleControls, b.subLegibleControls),
+      buriedPrimaryAction: Math.max(a.buriedPrimaryAction, b.buriedPrimaryAction),
+      axeViolations: Math.max(a.axeViolations, b.axeViolations),
+      ariaSnapshot: normaliseSnapshot(a.ariaSnapshot),
+    };
+  }
+  return {
+    bootstrapped: true,
+    generator: first.generator,
+    routes,
+  };
 }
 
 /** Human-readable summary for the CI log / PR comment. */

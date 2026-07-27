@@ -133,10 +133,13 @@ control state. Accessible names are never serialised into the comparison: the
 ratchet does not consume them, and doing so made large data-owner routes spend
 tens of seconds producing values that were immediately discarded.
 
-The runner waits for 300 ms of DOM mutation quiet, capped at 5 seconds, before
-capture. This is the deterministic hydration boundary: `networkidle` is not
-valid for a portal with long-lived streams, while measuring immediately after
-`load` races client-populated rows and status labels.
+The runner waits for every opt-in client surface marked
+`data-dpf-ux-settle="pending"` to resolve and then for 300 ms of DOM mutation
+quiet, capped at 10 seconds, before capture. This is the deterministic hydration
+boundary: `networkidle` is not valid for a portal with long-lived streams, while
+measuring immediately after `load` races client-populated rows and status labels.
+The marker is an explicit component-owned readiness contract, not a route-name
+exception in the test harness.
 
 Manual workflow dispatch accepts a bounded worker count of `1`, `2`, or `4`;
 the measured default is **2**. On candidate `37e848084f`, all three settings
@@ -150,9 +153,14 @@ page, so route teardown cannot interrupt the next navigation.
 The checked-in route-budget ratchet may move from `bootstrapped:false` to
 `bootstrapped:true` only after:
 
-1. two baseline artifacts from consecutive runs on the same SHA are identical;
+1. two baseline artifacts from consecutive runs on the same SHA are mechanically
+   reproducible: route sets and semantic structure are exact, count axes are
+   exact, and word axes differ by no more than the ratchet's measured two-word
+   noise floor;
 2. both runs measure all 201 eligible routes with zero failures;
-3. an enforcing run against the accepted baseline reports zero regressions;
+3. `pnpm --filter web ux:sweep-merge-baselines -- --first <run-one.json>
+   --second <run-two.json> --output <accepted.json>` produces the conservative
+   envelope, and an enforcing run against it reports zero regressions;
 4. the 1/2/4-worker experiment records completion, variance, failures, and
    sweep duration.
 

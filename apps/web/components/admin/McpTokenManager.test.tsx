@@ -153,6 +153,32 @@ afterEach(() => {
 });
 
 describe("McpTokenManager", () => {
+  it("exposes its initial client load as an explicit UX-settle boundary", async () => {
+    let releaseTokens: ((value: Awaited<ReturnType<typeof listMyMcpTokens>>) => void) | undefined;
+    tokensMock.mockReturnValueOnce(
+      new Promise((resolve) => {
+        releaseTokens = resolve;
+      }),
+    );
+
+    const { container } = render(<McpTokenManager baseUrl="http://localhost:3000" />);
+    const manager = container.querySelector("section");
+
+    expect(manager?.getAttribute("aria-busy")).toBe("true");
+    expect(manager?.getAttribute("data-dpf-ux-settle")).toBe("pending");
+
+    releaseTokens?.({
+      ok: true,
+      archivedCount: 0,
+      tokens: [],
+    });
+
+    await waitFor(() => {
+      expect(manager?.hasAttribute("aria-busy")).toBe(false);
+      expect(manager?.hasAttribute("data-dpf-ux-settle")).toBe(false);
+    });
+  });
+
   it("shows a compact ready banner for contributor MCP readiness", async () => {
     render(<McpTokenManager baseUrl="http://localhost:3000" />);
 
