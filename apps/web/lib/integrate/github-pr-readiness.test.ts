@@ -39,13 +39,16 @@ describe("projectGithubPrReadiness", () => {
     [{ unresolvedReviewThreads: 1 }, "review-threads-unresolved"],
     [{ checksComplete: false }, "checks-incomplete"],
     [{ reviewThreadsComplete: false }, "review-threads-incomplete"],
-  ] as const)("parks incomplete evidence (%s)", (overrides, reason) => {
-    expect(projectGithubPrReadiness(observed(overrides))).toEqual({
-      kind: "checking",
-      headSha: "abc123",
-      reason,
-    });
-  });
+  ] satisfies Array<[Partial<GithubPrObservation>, string]>)(
+    "parks incomplete evidence (%s)",
+    (overrides, reason) => {
+      expect(projectGithubPrReadiness(observed(overrides))).toEqual({
+        kind: "checking",
+        headSha: "abc123",
+        reason,
+      });
+    },
+  );
 
   it("classifies stale heads for safe update", () => {
     expect(projectGithubPrReadiness(observed({ mergeStateStatus: "BEHIND" }))).toEqual({

@@ -103,7 +103,10 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
       const saved = await prisma.workCapsule.updateMany({
         where: { id: capsule.id, updatedAt: capsule.updatedAt },
         data: {
-          workspaceState: writeBuildPrDeliveryState(capsule.workspaceState, outcome.state),
+          workspaceState: writeBuildPrDeliveryState(
+            capsule.workspaceState,
+            outcome.state,
+          ) as unknown as import("@dpf/db").Prisma.InputJsonValue,
           headSha: outcome.state.lastObservedHeadSha,
         },
       });
@@ -142,7 +145,12 @@ export async function runBuildPrDeliveryReconcile(): Promise<{
       };
       const saved = await prisma.workCapsule.updateMany({
         where: { id: capsule.id, updatedAt: capsule.updatedAt },
-        data: { workspaceState: writeBuildPrDeliveryState(capsule.workspaceState, failed) },
+        data: {
+          workspaceState: writeBuildPrDeliveryState(
+            capsule.workspaceState,
+            failed,
+          ) as unknown as import("@dpf/db").Prisma.InputJsonValue,
+        },
       });
       if (saved.count === 0) compareAndSwapLost += 1;
     }

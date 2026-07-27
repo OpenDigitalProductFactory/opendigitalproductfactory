@@ -32,14 +32,16 @@ import {
 /** The narrow slice of the Prisma client this helper needs (injectable for tests). */
 export interface CaptureBuildPrDeps {
   workCapsule: {
-    findMany: (args: {
+    // Method syntax keeps the real Prisma delegate assignable under
+    // strictFunctionTypes while preserving the narrow test-double contract.
+    findMany(args: {
       where: { featureBuildId: string };
       select: { id: true; workspaceState: true; updatedAt: true };
-    }) => Promise<Array<{ id: string; workspaceState: unknown; updatedAt: Date }>>;
-    updateMany: (args: {
+    }): Promise<Array<{ id: string; workspaceState: unknown; updatedAt: Date }>>;
+    updateMany(args: {
       where: { id: string; updatedAt: Date };
       data: { pullRequestUrl: string; pullRequestNumber: number; workspaceState: Record<string, unknown> };
-    }) => Promise<{ count: number }>;
+    }): Promise<{ count: number }>;
   };
 }
 
