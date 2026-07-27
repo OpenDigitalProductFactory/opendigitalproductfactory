@@ -41,6 +41,15 @@ Login: `admin@dpf.local` / `changeme123`
 - Production promotion still belongs to the portal's governed workflow
 - The sanitized clone runs on first startup — production must be running as the data source
 - Contributor database readiness verifies both PostgreSQL connectivity and pgvector availability before migrations start. If `dev-postgres` remains unhealthy, inspect its health output and recreate that contributor-only service from the checked-in `pgvector/pgvector:pg16` image; do not bypass `dev-init` or edit an applied migration.
+- Migration deploy for the preview runs through a disposable-only converge wrapper (`packages/db/scripts/dev-preview-migrate-deploy.mjs`). If Prisma history is behind a schema that already has the migration’s objects (classic symptom: `column … already exists` / failed `20260605060000_hive_contributions_surface`), the wrapper marks that migration applied only when every structural effect is present, then continues deploy. Partial or non-idempotent failures exit as **`blocked_sandbox_drift`** with one next action.
+- **Disposable recovery (contributor preview only):** when logs say `blocked_sandbox_drift` and name volume `dpf_dev_pgdata`, recreate that volume and re-run the dev profile. Never delete live portal volumes (`dpf_pgdata` / production Postgres). Example:
+
+  ```bash
+  docker compose --profile dev stop dev-portal dev-init dev-postgres
+  docker volume rm dpf_dev_pgdata
+  docker compose --profile dev up -d
+  ```
+
 - The clone resets the disposable development application tables before copying. Restricted provider, credential, token, and connection records are not copied; production-derived search/vector values are omitted rather than carrying source terms or embeddings into the preview.
 - Additive source-schema differences are expected during concurrent development. Source-only columns or tables are left out of the preview, destination-only columns use their migrated defaults, and a shared column with an incompatible type stops the clone with a precise error instead of risking a corrupt preview.
 - Clone publication is fail-safe: if any table cannot be copied or sanitized, the development application tables are cleared again while Prisma migration history is retained. The Contributor preview will not start against a partially copied relational dataset. Correct the reported source/tooling error and restart the development initialization step to retry.
