@@ -92,6 +92,7 @@ Restore the prior configuration from the evidence ledger.`;
     expect(result).toContain("Recovery");
     expect(result).toContain("evidence ledger");
     expect(result).not.toContain("##");
+    expect(result.length).toBeLessThanOrEqual(2_000);
   });
 });
 

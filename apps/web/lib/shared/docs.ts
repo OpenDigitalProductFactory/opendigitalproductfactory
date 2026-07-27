@@ -48,7 +48,7 @@ function deriveDocDescription(markdown: string): string {
 }
 
 /** Convert enough of a page to readable Fuse.js input without shipping raw Markdown noise. */
-export function buildDocSearchText(markdown: string, limit = 4_000): string {
+export function buildDocSearchText(markdown: string, limit = 2_000): string {
   return markdownToPlainText(markdown).slice(0, limit).trimEnd();
 }
 
