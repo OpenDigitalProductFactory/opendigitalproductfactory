@@ -8,13 +8,16 @@
 
 The Providers & Routing setup surface should help a non-technical operator make the next provider decision without reading routing internals. The first viewport must show one recommendation, one plain reason, one active safeguard summary, and one next action. Provider policy, route eligibility, model scoring, quota, cost, and evidence stay available, but move into progressive disclosure or row drilldown.
 
-## Grounding
+## Design grounding
 
+- Existing specs/plans reviewed:
+  - `docs/superpowers/plans/2026-07-20-provider-onboarding-accessibility-comprehension.md` requires one recommendation, one reason, and one next action in the first viewport.
+  - `docs/superpowers/specs/2026-07-19-ai-provider-suitability-routing-design.md` keeps provider suitability as a policy projection, not a second router.
+- Current code substrate reviewed: `ProviderSuitabilityGuide`, `ServiceRow`, `apps/web/app/(shell)/platform/ai/providers/page.tsx`, and `AskCoworkerButton`.
+- Source of truth: `ProviderOnboardingRecommendation`, `deriveRoutingEligibility`, provider model summaries, CLI pool status, and budget/spend read models.
+- Decision: simplify the existing route and components through progressive disclosure and a confirmed coworker handoff; add no route, router, policy store, or provider substrate.
 - User evidence: screenshot of `/platform/ai/providers` showing dense provider setup and a COO response that reads as an unhelpful compliance wall.
 - WWMD: `DI-98F2A9800453` recommended guided task-first setup with high confidence.
-- Existing UX contract: `docs/superpowers/plans/2026-07-20-provider-onboarding-accessibility-comprehension.md` requires one recommendation, one reason, one next action in the first viewport.
-- Existing provider policy contract: `docs/superpowers/specs/2026-07-19-ai-provider-suitability-routing-design.md` keeps provider suitability as a policy projection, not a second router.
-- Existing code: `ProviderSuitabilityGuide`, `ServiceRow`, `/platform/ai/providers/page.tsx`, and `AskCoworkerButton`.
 
 ## UX fit review
 
@@ -33,7 +36,11 @@ The Providers & Routing setup surface should help a non-technical operator make 
 
 ## Backlog coverage
 
-Decision: atomic. The guide, provider rows, route composition, COO prompt, and tests are not independently shippable because a partial change would either hide safety evidence without simplifying setup, or simplify copy while leaving the provider list to recreate the same overload.
+- Decision: atomic
+- Parent: `BI-ECBD6924`
+- Receipt: `cms3hld7a09ww01p5esycev0e`
+- Dependencies: none
+- Rationale: The guide, provider rows, route composition, COO prompt, and tests are not independently shippable because a partial change would either hide safety evidence without simplifying setup, or simplify copy while leaving the provider list to recreate the same overload.
 
 Deliverables:
 
@@ -43,8 +50,6 @@ Deliverables:
 | row-simplification | Simplified provider row default with advanced diagnostics in expansion | BI-ECBD6924 | No |
 | coworker-prompt | COO prompt contract for brief, grounded next-action answers | BI-ECBD6924 | No |
 | tests-docs | Tests and documentation/evidence updates | BI-ECBD6924 | No |
-
-Coverage receipt: `cms3hld7a09ww01p5esycev0e`.
 
 ## Implementation steps
 
@@ -64,4 +69,4 @@ Coverage receipt: `cms3hld7a09ww01p5esycev0e`.
 
 ## Documentation impact
 
-This plan is the durable implementation record. User-facing docs may need a short update only if the visible provider setup workflow changes labels or safe-defer behavior beyond the existing provider-onboarding guide; decide after implementation diff.
+This plan is the durable implementation record. The visible setup workflow and safe-defer wording changed, so `docs/user-guide/ai-workforce/connecting-providers.md` is updated in the same branch.
