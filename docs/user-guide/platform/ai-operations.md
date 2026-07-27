@@ -57,10 +57,14 @@ never projects prompts, credentials, detected sensitive values, customer or
 employee content, or token maps.
 
 The unified coworker/provider/A2A canvas below the owner map is the
-authoritative technical topology. **Replay, filters & technical diagnostics**
-contains the denser time scrubber, provider/A2A controls, activity routing, and
-deliberation detail. Those controls are progressive detail; they are not a
-second owner-level routing architecture.
+authoritative technical topology. Its **View and replay** rail filters provider
+routes and coworker interactions, keeps both halves on one replay clock, and
+preserves the saved A2A filter preference. Open **List and evidence table** for
+the keyboard- and screen-reader-friendly equivalent of every visible
+connection. Select a route, interaction, or evidence marker on the canvas for
+safe source, authority, state, and timing detail. Activity routing and
+deliberation detail remain under **Technical diagnostics**. There are no
+separate provider or A2A diagrams to reconcile with this map.
 
 ## Architecture and evidence
 

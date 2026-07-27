@@ -302,9 +302,9 @@ operational picture.
       and existing EA/Operations Map components rather than a new visual dialect.
 - [x] Treat view/filter/inspect as read-only. Any future route simulation or coworker
       action requires context preview, expected next step and explicit confirmation.
-- [ ] Verify list/table equivalence, keyboard navigation, mobile vertical layout and
+- [x] Verify list/table equivalence, keyboard navigation, mobile vertical layout and
       no-overlap behavior.
-- [ ] Cut over only after parity; delete legacy panels, preview toggles and duplicated
+- [x] Cut over only after parity; delete legacy panels, preview toggles and duplicated
       projection helpers.
 
 ### Design grounding
@@ -335,14 +335,46 @@ operational picture.
   inferred when the ledgers do not carry edge attribution.
 - `?mode=compare&focus=<stage-id>` is the shareable cross-view contract used by
   Enterprise Architecture drill-through.
-- The unified `OperationsTopologyCanvas` is now the always-on technical canvas.
-  The temporary preview switch is removed. Mature replay/filter controls and
-  the prior diagnostic panels remain under progressive disclosure until their
-  controls are extracted; deleting those duplicated panel diagrams is the last
-  cutover/refactor item and must not remove replay or saved-filter parity.
+- The unified `OperationsTopologyCanvas` is the always-on technical canvas.
+  The temporary preview switch and duplicate provider/A2A diagrams are removed.
+  One `OperationsTopologyControls` rail now owns provider/A2A filters, shared
+  replay, persisted A2A preferences, summary counts, and the table-equivalent
+  evidence view. Activity-routing and deliberation diagnostics remain behind
+  progressive disclosure.
 - Request content remains intentionally absent. The owner map accepts only the
   safe conformance DTO and presents counts, rates, timings, identifiers,
   versions, source paths, and bounded findings.
+
+### Phase 5 cutover UX-fit review — 2026-07-27
+
+- Decision: `fits-with-guardrails`.
+- Owning area and route: Platform at the existing
+  `/platform/ai/operations-map`; no navigation layer changes.
+- Primary persona: founder/operator first, with contributor/platform-operator
+  detail progressively disclosed.
+- Convergence: one owner map, one `OperationsTopologyCanvas`, one
+  `OperationsTopologyControls` rail, and report-kit summary/table primitives
+  replace the separate provider and A2A diagram families.
+- Source truth: versioned routing stages plus the sanitized routing topology and
+  conformance DTOs; the cutover adds no ledger or architecture definition.
+- Empty/failure behavior: the authoritative canvas and evidence table state
+  honestly when no records match the dimension, filters, or replay window.
+- AI boundary: all controls are read-only; none dispatch work or send prompts.
+- Guardrails: preserve A2A saved filters, activity saved views, shared replay,
+  source/authority inspection, keyboard activation, Escape close, mobile
+  vertical layout, theme tokens, and request-content exclusion.
+- Evidence before merge: targeted component tests, production build, style/UX
+  guards, desktop and narrow browser exercises, table equivalence, keyboard
+  interaction, and privacy inspection in governed shared nonproduction.
+- Served UX evidence: the governed contributor preview exercised the five-station
+  map, Designed/Observed/Compare switching, station drill-through and Escape
+  dismissal, the consolidated filter rail, desktop layout, and a 390×844 narrow
+  layout. The narrow page stacked all five stations vertically with no document
+  overflow; the candidate emitted no browser-console errors. Fixture-backed
+  component coverage verified provider/A2A list-table equivalence and replay
+  publication. React Strict Mode exposed and now guards the saved-filter
+  hydration contract so a development remount cannot overwrite the operator's
+  stored topology preferences.
 
 ### Likely files
 

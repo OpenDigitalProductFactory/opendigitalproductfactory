@@ -191,3 +191,29 @@ describe("OperationsTopologyCanvas — marker popover (inspector)", () => {
     expect(detail.textContent).toContain("Not recorded");
   });
 });
+
+describe("OperationsTopologyCanvas — connection inspection", () => {
+  it("opens provider-route detail with keyboard activation and closes with Escape", () => {
+    const { container } = render(<OperationsTopologyCanvas topology={buildOperationsMapTopologyFixture()} />);
+    const route = container.querySelector("[data-canvas-route]") as Element;
+
+    fireEvent.keyDown(route, { key: "Enter" });
+    const detail = container.querySelector("[data-canvas-connection-detail]") as HTMLElement;
+    expect(detail).not.toBeNull();
+    expect(detail.textContent).toContain("Provider route");
+    expect(detail.textContent).toContain("State");
+
+    fireEvent.keyDown(container.querySelector("[data-operations-topology-canvas]") as Element, { key: "Escape" });
+    expect(container.querySelector("[data-canvas-connection-detail]")).toBeNull();
+  });
+
+  it("opens A2A detail with pointer activation and exposes authority/source references", () => {
+    const { container } = render(<OperationsTopologyCanvas topology={buildOperationsMapTopologyFixture()} />);
+    fireEvent.click(container.querySelector("[data-canvas-a2a-arc]") as Element);
+
+    const detail = container.querySelector("[data-canvas-connection-detail]") as HTMLElement;
+    expect(detail.textContent).toContain("A2A");
+    expect(detail.textContent).toContain("Authority");
+    expect(detail.textContent).toContain("Source");
+  });
+});

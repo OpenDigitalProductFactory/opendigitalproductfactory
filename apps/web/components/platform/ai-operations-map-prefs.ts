@@ -82,7 +82,7 @@ export function saveA2aFilterPreference(preference: OperationsMapA2aFilterPrefer
   try {
     localStorage.setItem(OPERATIONS_MAP_A2A_PREFERENCE_KEY, JSON.stringify(preference));
   } catch {
-    // localStorage can be unavailable or full; the panel remains usable without persistence.
+    // localStorage can be unavailable or full; the control rail remains usable without persistence.
   }
 }
 
@@ -90,7 +90,7 @@ export function clearA2aFilterPreference(): void {
   try {
     localStorage.removeItem(OPERATIONS_MAP_A2A_PREFERENCE_KEY);
   } catch {
-    // localStorage can be unavailable; resetting in-memory state still keeps the panel usable.
+    // localStorage can be unavailable; resetting in-memory state still keeps the control rail usable.
   }
 }
 

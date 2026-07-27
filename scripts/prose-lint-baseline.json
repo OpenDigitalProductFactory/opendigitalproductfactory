@@ -725,7 +725,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 22
+    "textMass": 18
   },
   "apps/web/app/(shell)/ea/value-streams/page.tsx": {
     "vocabulary": 0,
@@ -4561,7 +4561,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 1,
-    "textMass": 146
+    "textMass": 120
   },
   "apps/web/components/ea/EaRelationshipEdge.tsx": {
     "vocabulary": 0,
@@ -5795,13 +5795,6 @@
     "longSentences": 0,
     "textMass": 0
   },
-  "apps/web/components/platform/A2aInteractionsPanel.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 175
-  },
   "apps/web/components/platform/ActivityRoutingPresentation.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -5856,7 +5849,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 528
+    "textMass": 156
   },
   "apps/web/components/platform/AiReadinessHeaderLink.tsx": {
     "vocabulary": 0,
@@ -6073,7 +6066,14 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 36
+    "textMass": 47
+  },
+  "apps/web/components/platform/OperationsTopologyControls.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 102
   },
   "apps/web/components/platform/PhaseRemediationActions.tsx": {
     "vocabulary": 0,
