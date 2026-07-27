@@ -146,7 +146,12 @@ describe("AI operations map page", () => {
     vi.mocked(prisma.taskRun.aggregate).mockResolvedValue({ _min: { startedAt: null }, _max: { startedAt: null } } as never);
 
     const { default: OperationsMapPage } = await import("./page");
-    const element = await OperationsMapPage();
+    const element = await OperationsMapPage({
+      searchParams: Promise.resolve({
+        mode: "compare",
+        focus: "data-policy-gateway",
+      }),
+    });
     // The page now renders the live-refresh shell (BI-44D3203D); the loaded
     // snapshot arrives as its initialData prop.
     const props = element.props.initialData;
@@ -164,5 +169,7 @@ describe("AI operations map page", () => {
       ]),
     );
     expect(props.recentWindowLabel).toBe("Last 40 records per evidence source");
+    expect(element.props.initialArchitectureMode).toBe("compare");
+    expect(element.props.initialFocusStageId).toBe("data-policy-gateway");
   });
 });
