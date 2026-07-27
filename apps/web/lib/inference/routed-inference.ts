@@ -49,6 +49,7 @@ import {
   routedRehydrationHandle,
 } from "@/lib/inference/data-screening/routed-screening";
 import { screenedLocalOnlyBlockReason } from "@/lib/inference/data-screening/blocked-route-explanation";
+import { soleCapabilityFloorFailure } from "@/lib/inference/routing-exclusion-attribution";
 import { createRoutingTraceId } from "@/lib/routing/routing-trace";
 import { AI_ROUTING_ARCHITECTURE_VERSION } from "@/lib/routing/routing-architecture-version";
 export type { RouteAndCallOptions } from "./routed-inference-options";
@@ -398,12 +399,9 @@ export async function routeAndCall(
   // other reasons, fall through to the existing error/degradation path instead —
   // surfacing "no tool-capable endpoint" when tools aren't the problem is misleading.
   if (!decision.selectedEndpoint && options?.minimumCapabilities) {
-    const floorExclusions = decision.candidates.filter(
-      (c) => c.excluded && c.excludedReason?.includes("EP-AGENT-CAP-002"),
-    );
-    if (floorExclusions.length > 0) {
-      // Identify which capability was the blocker from the first exclusion reason
-      const missingCap = floorExclusions[0]?.excludedReason?.match(/capability '(\w+)'/)?.[1];
+    const floorFailure = soleCapabilityFloorFailure(decision.candidates);
+    if (floorFailure) {
+      const missingCap = floorFailure.missingCapability;
       throw new NoEligibleEndpointsError(
         taskType,
         `No endpoint satisfies agent capability floor (EP-AGENT-CAP-002). ` +

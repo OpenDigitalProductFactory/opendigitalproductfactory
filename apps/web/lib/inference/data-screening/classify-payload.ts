@@ -217,7 +217,12 @@ function collectTextProbes(input: InferencePayloadClassificationInput): TextProb
     });
   });
 
-  input.tools?.forEach((tool, index) => collectUnknown(tool, `tools[${index}]`, probes));
+  // Tool declarations are transport metadata, not live organization data.
+  // Their static schemas commonly contain field names such as `password`,
+  // `employee`, or `payment`; classifying those names as payload values forces
+  // every broad agentic tool surface into restricted/local-only routing. Keep
+  // declarations in the canonical input hash below, but classify only actual
+  // prompts, messages, tool-call arguments/results, and governed-data hints.
   if (input.taskType) {
     probes.push({ path: "taskType", text: input.taskType });
   }

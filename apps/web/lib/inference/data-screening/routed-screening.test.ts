@@ -120,7 +120,7 @@ describe("routed inference screening", () => {
     );
   });
 
-  it("issues a new receipt when a tool-stripping reroute changes the payload boundary", () => {
+  it("keeps tool declarations in the receipt hash without classifying schema names as live data", () => {
     const routed = createRoutedInferenceScreen({
       messages: [{ role: "user", content: "Summarize the public release." }],
       systemPrompt: "Use only public material.",
@@ -139,7 +139,8 @@ describe("routed inference screening", () => {
 
     const stripped = rescreenRoutedInferenceWithoutTools(routed.screenInput);
 
-    expect(routed.screen.receipt.classifiedDataClasses).toContain("secrets-credentials");
+    expect(routed.screen.receipt.classifiedDataClasses).not.toContain("secrets-credentials");
+    expect(routed.screen.receipt.routeEffect).toBe("allow");
     expect(stripped.receipt.classifiedDataClasses).not.toContain("secrets-credentials");
     expect(stripped.receipt.inputHash).not.toBe(routed.screen.receipt.inputHash);
     expect(stripped.screenInput.tools).toBeUndefined();
