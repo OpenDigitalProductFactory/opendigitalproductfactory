@@ -1,4 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  screenInferencePayload,
+  type ScreenInferencePayloadInput,
+} from "@/lib/inference/data-screening/screen-inference-payload";
 import type { RouteDecision } from "./types";
 
 const mocks = vi.hoisted(() => ({
@@ -94,31 +98,38 @@ function makeDecision(providerId: string, modelId: string): RouteDecision {
   };
 }
 
-const localOnlyReceipt: NonNullable<RouteDecision["inferenceDataScreenReceipt"]> = {
-  schemaVersion: "inference-data-screen/v1",
-  screenId: "screen_local_only",
-  decisionIds: ["decision-local-only"],
-  inputHash: "hash-local-only",
-  classifiedDataClasses: ["employee-records"],
-  policyEffect: "deny",
-  routeEffect: "local-only",
-  destinationClass: "external-service",
-  transformation: "blocked",
-  explanationCodes: ["restricted-external-denied"],
-  obligationKinds: [],
-  rawPayloadStored: false,
+const localOnlyScreenInput: ScreenInferencePayloadInput = {
+  messages: [{ role: "user", content: "employee salary note" }],
+  systemPrompt: "system",
+  taskType: "test",
+  routeContext: { sensitivity: "restricted" },
 };
+const localOnlyReceipt = screenInferencePayload(localOnlyScreenInput).receipt;
 
-const allowReceipt: NonNullable<RouteDecision["inferenceDataScreenReceipt"]> = {
-  ...localOnlyReceipt,
-  screenId: "screen_allow",
-  decisionIds: ["decision-allow"],
-  inputHash: "hash-allow",
-  policyEffect: "allow",
-  routeEffect: "allow",
-  transformation: "none",
-  explanationCodes: ["dispatch-allowed"],
+const allowScreenInput: ScreenInferencePayloadInput = {
+  messages: [{ role: "user", content: "public weather forecast" }],
+  systemPrompt: "system",
+  taskType: "test",
+  routeContext: { sensitivity: "internal" },
 };
+const allowReceipt = screenInferencePayload(allowScreenInput).receipt;
+
+function callScreened(
+  decision: RouteDecision,
+  screenInput: ScreenInferencePayloadInput,
+) {
+  return callWithFallbackChain(
+    decision,
+    screenInput.messages,
+    screenInput.systemPrompt,
+    screenInput.tools,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    screenInput,
+  );
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -169,11 +180,7 @@ describe("screened fallback dispatch", () => {
     };
 
     await expect(
-      callWithFallbackChain(
-        decision,
-        [{ role: "user", content: "employee salary note" }],
-        "system",
-      ),
+      callScreened(decision, allowScreenInput),
     ).rejects.toThrow("All endpoints failed");
 
     expect(mocks.callProvider).toHaveBeenCalledTimes(1);
@@ -203,13 +210,39 @@ describe("screened fallback dispatch", () => {
     };
 
     await expect(
-      callWithFallbackChain(
-        decision,
-        [{ role: "user", content: "employee salary note" }],
-        "system",
-      ),
+      callScreened(decision, localOnlyScreenInput),
     ).rejects.toThrow("No eligible screened endpoint available");
 
+    expect(mocks.callProvider).not.toHaveBeenCalled();
+  });
+
+  it("revalidates live policy versions immediately before the provider attempt", async () => {
+    let versionReads = 0;
+    const screenInput: ScreenInferencePayloadInput = {
+      ...localOnlyScreenInput,
+      policyVersionSource: () => ({
+        assetVersion: "asset-1",
+        classificationVersion: "classification-1",
+        authorityVersion: versionReads++ < 2 ? "authority-1" : "authority-2",
+        policyBundleVersion: "bundle-1",
+      }),
+    };
+    const routedReceipt = screenInferencePayload(screenInput).receipt;
+    const decision: RouteDecision = {
+      ...makeDecision("local-ep", "local-model"),
+      selectedEndpoint: "local-ep",
+      selectedModelId: "local-model",
+      sensitivity: "restricted",
+      policyRulesApplied: ["inference-dispatch"],
+      inferenceDataScreenReceipt: routedReceipt,
+      candidates: [
+        makeCandidate("local-ep", "local", "local-model"),
+      ],
+    };
+
+    await expect(callScreened(decision, screenInput)).rejects.toThrow(
+      "stale inference data screen receipt",
+    );
     expect(mocks.callProvider).not.toHaveBeenCalled();
   });
 });

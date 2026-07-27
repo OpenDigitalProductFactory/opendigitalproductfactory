@@ -402,6 +402,14 @@ function makeInferenceDataScreenReceipt(): InferenceDataScreenReceipt {
     schemaVersion: "inference-data-screen/v1" as const,
     screenId: "screen_safe",
     decisionIds: ["decision-safe"],
+    decisionVersions: [
+      {
+        decisionId: "decision-safe",
+        assetVersion: "asset-v1",
+        classificationVersion: "classification-v1",
+        authorityVersion: "authority-v1",
+      },
+    ],
     inputHash: "hash-safe",
     classifiedDataClasses: ["employee-records"],
     policyEffect: "deny" as const,

@@ -21,6 +21,10 @@ export interface RouteAndCallOptions {
   residencyPolicy?: RequestContract["residencyPolicy"];
   /** Optional system prompt text for side-effect-free route previews that need data screening parity. */
   screeningSystemPrompt?: string;
+  /** Live governed-version reader, invoked again immediately before each provider attempt. */
+  inferencePolicyVersionSource?: import(
+    "@/lib/inference/data-screening/screen-inference-payload"
+  ).ScreenInferencePayloadInput["policyVersionSource"];
   modelTier?: "local" | "robust";
   minimumDimensions?: Record<string, number>;
   requiredModelClass?: ModelClass;

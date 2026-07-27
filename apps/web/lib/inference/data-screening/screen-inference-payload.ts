@@ -12,6 +12,7 @@ import type {
   GovernedPayloadHint,
   InferenceDataScreenResult,
   InferencePayloadSensitivity,
+  InferencePolicyVersionSnapshot,
 } from "./types";
 
 const DEFAULT_ORGANIZATION_ID = "org:local-install";
@@ -38,6 +39,11 @@ export type ScreenInferencePayloadInput = {
   governedData?: readonly GovernedPayloadHint[];
   destinationClass?: DestinationClass;
   purpose?: ProcessingPurposeKey | string;
+  /**
+   * Reads live asset/classification/authority versions. The callback is ephemeral
+   * and invoked again at the final dispatch seam; it is never persisted.
+   */
+  policyVersionSource?: () => Partial<InferencePolicyVersionSnapshot>;
 };
 
 export function screenInferencePayload(
@@ -55,12 +61,17 @@ export function screenInferencePayload(
     governedData,
   });
   const destinationClass = input.destinationClass ?? "external-service";
+  const policyVersions = input.policyVersionSource?.();
   const policy = evaluateInferenceDispatchPolicy({
     organizationId: input.organizationId ?? DEFAULT_ORGANIZATION_ID,
     classification,
     governedData,
     destinationClass,
     purpose: input.purpose,
+    assetVersion: policyVersions?.assetVersion,
+    classificationVersion: policyVersions?.classificationVersion,
+    authorityVersion: policyVersions?.authorityVersion,
+    policyBundleVersion: policyVersions?.policyBundleVersion,
   });
 
   const originalSensitivity = normalizeSensitivity(input.routeContext?.sensitivity);
@@ -91,6 +102,12 @@ export function screenInferencePayload(
       schemaVersion: "inference-data-screen/v1",
       screenId: classification.receipt.screenId,
       decisionIds: policy.decisionIds,
+      decisionVersions: policy.decisions.map((decision) => ({
+        decisionId: decision.decisionId,
+        assetVersion: decision.assetVersion,
+        classificationVersion: decision.classificationVersion,
+        authorityVersion: decision.authorityVersion,
+      })),
       inputHash: classification.receipt.inputHash,
       classifiedDataClasses: policy.classifiedDataClasses,
       policyEffect: policy.effect,

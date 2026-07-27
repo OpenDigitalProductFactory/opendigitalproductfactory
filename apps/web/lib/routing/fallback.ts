@@ -30,6 +30,10 @@ import {
   isEligibleForScreenedDispatch,
   requiresInferenceDispatchScreen,
 } from "./inference-dispatch-guard";
+import {
+  screenInferencePayload,
+  type ScreenInferencePayloadInput,
+} from "@/lib/inference/data-screening/screen-inference-payload";
 
 type RouteOutcomeAttribution = {
   /** Request-scoped correlation shared by decision, attempts, outcomes, and usage. */
@@ -184,13 +188,14 @@ export async function callWithFallbackChain(
   previousResponseId?: string,
   mcpSession?: import("./adapter-types").AdapterMcpSession,
   outcomeAttribution?: RouteOutcomeAttribution,
+  screeningInput?: ScreenInferencePayloadInput,
 ): Promise<FallbackResult> {
   if (!decision.selectedEndpoint) {
     throw new Error(
       `No endpoint available for ${decision.taskType}: ${decision.reason}`,
     );
   }
-  assertInferenceDispatchScreen(decision);
+  revalidateDispatchScreen(decision, screeningInput, messages, systemPrompt, tools);
   const requireScreenedCandidates = requiresInferenceDispatchScreen(decision);
 
   // Build chain from RouteDecision — resolve actual providerId from candidate traces
@@ -289,6 +294,10 @@ export async function callWithFallbackChain(
     }
 
     try {
+      // A retry or fallback can happen well after routing. Re-screen the actual
+      // dispatch payload at every provider attempt so route-time evidence cannot
+      // be replayed after payload or policy-version drift.
+      revalidateDispatchScreen(decision, screeningInput, messages, systemPrompt, tools);
       const entryPlan =
         i === 0 && plan
           ? plan
@@ -562,4 +571,22 @@ export async function callWithFallbackChain(
   throw new Error(
     `All endpoints failed for ${decision.taskType}. Attempts: ${JSON.stringify(attempts)}`,
   );
+}
+
+function revalidateDispatchScreen(
+  decision: RouteDecision,
+  screeningInput: ScreenInferencePayloadInput | undefined,
+  messages: ChatMessage[],
+  systemPrompt: string,
+  tools: Array<Record<string, unknown>> | undefined,
+): void {
+  const currentReceipt = screeningInput
+    ? screenInferencePayload({
+        ...screeningInput,
+        messages,
+        systemPrompt,
+        tools,
+      }).receipt
+    : undefined;
+  assertInferenceDispatchScreen(decision, currentReceipt);
 }

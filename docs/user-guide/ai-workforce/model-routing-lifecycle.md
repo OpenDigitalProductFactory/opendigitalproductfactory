@@ -117,6 +117,7 @@ When an agent needs to call an LLM, the routing pipeline runs in this order:
    target is unavailable or excluded, routing records a warning and keeps the
    V2-selected route.
 
+7. **Revalidate at the dispatch seam.** Immediately before every provider attempt—including retries and fallbacks—DPF screens the actual payload again and compares its safe hash, policy outcome, obligations, destination, and asset/classification/authority versions with the route-time receipt. If anything changed, the call stops and must be routed again. A tool-stripping reroute receives a new receipt for the reduced payload rather than reusing evidence for content that is no longer being sent.
 
 Provider allow/deny constraints are request-level hard policy, distinct from the provider registry's `modelRestrictions` discovery allowlist. An explicitly empty `allowedProviders` list means no provider is eligible; routing returns no endpoint rather than treating the empty list as “allow any.” Cost, quality, provider health, capacity, and pin preferences only rank the providers that remain after the hard filter.
 
