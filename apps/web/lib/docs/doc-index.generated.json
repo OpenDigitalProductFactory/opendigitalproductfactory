@@ -8949,8 +8949,13 @@
       "publishedPortal": true,
       "anchors": [
         "use-this-doc-for",
-        "workflow",
-        "what-to-watch"
+        "purpose",
+        "before-the-audit",
+        "findings-to-verified-action",
+        "decisions-and-consequences",
+        "what-to-watch",
+        "recovery",
+        "related-help"
       ]
     },
     "docs/user-guide/compliance/controls-and-evidence.md": {
@@ -8960,8 +8965,14 @@
       "publishedPortal": true,
       "anchors": [
         "use-this-doc-for",
-        "workflow",
-        "what-to-watch"
+        "purpose",
+        "before-you-start",
+        "record-control-coverage",
+        "record-evidence",
+        "decisions-and-consequences",
+        "what-to-watch",
+        "recovery",
+        "related-help"
       ]
     },
     "docs/user-guide/compliance/incidents-risks-and-response.md": {
@@ -8971,8 +8982,13 @@
       "publishedPortal": true,
       "anchors": [
         "use-this-doc-for",
-        "workflow",
-        "what-to-watch"
+        "purpose",
+        "assess-a-risk",
+        "respond-to-an-incident",
+        "decisions-and-consequences",
+        "what-to-watch",
+        "recovery",
+        "related-help"
       ]
     },
     "docs/user-guide/compliance/index.md": {
@@ -8983,7 +8999,10 @@
       "anchors": [
         "overview",
         "key-concepts",
-        "what-you-can-do"
+        "before-you-change-a-record",
+        "choose-the-workflow",
+        "read-posture-carefully",
+        "recovery-rule"
       ]
     },
     "docs/user-guide/compliance/licensing-readiness.md": {
@@ -8994,9 +9013,13 @@
       "anchors": [
         "use-this-doc-for",
         "workflow",
+        "evidence-to-capture",
         "authoritative-state",
         "ai-coworker-support",
-        "what-to-watch"
+        "decisions-and-consequences",
+        "what-to-watch",
+        "recovery",
+        "related-help"
       ]
     },
     "docs/user-guide/compliance/policies-and-acknowledgements.md": {
@@ -9006,8 +9029,13 @@
       "publishedPortal": true,
       "anchors": [
         "use-this-doc-for",
-        "workflow",
-        "what-to-watch"
+        "purpose",
+        "policy-lifecycle",
+        "publish-a-policy",
+        "decisions-and-consequences",
+        "what-to-watch",
+        "recovery",
+        "related-help"
       ]
     },
     "docs/user-guide/compliance/posture-and-gaps.md": {
@@ -9017,8 +9045,13 @@
       "publishedPortal": true,
       "anchors": [
         "use-this-doc-for",
-        "workflow",
-        "what-to-watch"
+        "purpose",
+        "how-coverage-is-classified",
+        "review-workflow",
+        "decisions-and-consequences",
+        "what-to-watch",
+        "recovery",
+        "related-help"
       ]
     },
     "docs/user-guide/compliance/regulations-and-obligations.md": {
@@ -9028,8 +9061,14 @@
       "publishedPortal": true,
       "anchors": [
         "use-this-doc-for",
-        "workflow",
-        "what-to-watch"
+        "purpose",
+        "before-you-start",
+        "onboard-a-regulation",
+        "decisions-and-consequences",
+        "evidence-of-a-good-record",
+        "what-to-watch",
+        "recovery",
+        "related-help"
       ]
     },
     "docs/user-guide/compliance/regulatory-submissions.md": {
@@ -9039,8 +9078,14 @@
       "publishedPortal": true,
       "anchors": [
         "use-this-doc-for",
-        "workflow",
-        "what-to-watch"
+        "purpose",
+        "before-you-start",
+        "submission-lifecycle",
+        "final-review",
+        "decisions-and-consequences",
+        "what-to-watch",
+        "recovery",
+        "related-help"
       ]
     },
     "docs/user-guide/contributing/agent-dev-environments.md": {
