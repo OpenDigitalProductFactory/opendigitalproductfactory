@@ -72,6 +72,20 @@ export default async function DocsPage({ params, searchParams }: Props) {
 
   // No slug = docs home page
   if (!slug || slug.length === 0) {
+    const landingDoc = loadDocPage("index");
+    if (!contextual && landingDoc) {
+      return (
+        <DocsLayout
+          index={sidebarIndex}
+          currentSlug="index"
+          searchItems={searchItems}
+          headings={extractHeadings(landingDoc.content)}
+        >
+          <DocContent doc={landingDoc} />
+        </DocsLayout>
+      );
+    }
+
     return (
       <DocsLayout index={sidebarIndex} currentSlug="" searchItems={searchItems} collapseCatalog={contextual}>
         <DocsHome index={index} sourceRoute={sourceRoute} quickHelp={quickHelp} />
@@ -172,13 +186,18 @@ function DocContent({
   quickHelp?: QuickHelp | null;
 }) {
   const areaLabel = AREA_META[doc.area]?.label ?? doc.area;
+  const showAreaCrumb = doc.slug !== "index" && doc.area !== "unknown";
   return (
     <div>
       {sourceRoute ? <ContextualQuickHelp sourceRoute={sourceRoute} help={quickHelp} /> : null}
       <div className="mb-2">
         <a href="/docs" className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">Docs</a>
-        <span className="text-xs text-[var(--dpf-muted)]"> / </span>
-        <a href={`/docs/${doc.area}/index`} className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">{areaLabel}</a>
+        {showAreaCrumb ? (
+          <>
+            <span className="text-xs text-[var(--dpf-muted)]"> / </span>
+            <a href={`/docs/${doc.area}/index`} className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">{areaLabel}</a>
+          </>
+        ) : null}
         <span className="text-xs text-[var(--dpf-muted)]"> / </span>
         <span className="text-xs text-[var(--dpf-text)]">{doc.title}</span>
       </div>
