@@ -31,6 +31,11 @@ read-only: it can inspect source, code graph, architecture, plans, backlog
 context, and the registry, but cannot edit code, advance builds, publish
 releases, or waive findings.
 
+Its canonical persona is `prompts/specialist/change-reviewer.prompt.md`. The
+persona must mirror the registry's identity, delegates, value stream, HITL
+tier, and read-only grant envelope; the coworker-persona audit is the blocking
+conformance control for that contract.
+
 GitHub review remains an independent post-publication oracle. It is not
 replaced by this control.
 

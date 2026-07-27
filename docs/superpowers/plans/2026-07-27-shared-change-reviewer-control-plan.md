@@ -55,6 +55,9 @@ Deliverables:
 7. Seed the new definition as `draft` and refactor reseeding to preserve the
    live lifecycle stage, so deploy cannot bypass certification or undo a later
    explicit promotion.
+8. Add the canonical read-only persona at
+   `prompts/specialist/change-reviewer.prompt.md`, aligned exactly with the
+   registry identity, delegates, grants, and evidence-first review boundary.
 
 TDD:
 
@@ -70,6 +73,7 @@ Verification:
 - The golden journey is read-only and proves an evidence-bearing review.
 - A seed/reseed cannot promote the draft or demote an explicitly promoted
   coworker.
+- The coworker-persona audit reports no new error-level violation.
 
 Rollback:
 
