@@ -62,7 +62,7 @@ pnpm --filter @dpf/db run test:coverage
 
 Configs set `coverage.provider = "v8"`, `coverage.all = true`, and `reportOnFailure: true` so owned files with zero tests still appear (0% lines) and feed `unloadedOwnedFiles` in the observation schema. Web includes `proxy.ts` and `instrumentation.ts` as first-class production surfaces.
 
-Requires `@vitest/coverage-v8` (declared on web and `@dpf/db`).
+Coverage runs require `@vitest/coverage-v8` on the runner. The package is not yet a direct workspace dependency (lockfile peer graph needs a clean `pnpm regen:lockfile` intake); calibration treats coverage steps as best-effort (`continue-on-error`) so schema/timing/cache observation still publishes without it.
 
 ## Scheduled calibration
 
