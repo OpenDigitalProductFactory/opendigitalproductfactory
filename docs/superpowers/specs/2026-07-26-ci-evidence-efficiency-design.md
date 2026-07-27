@@ -146,7 +146,7 @@ This is an architecture umbrella, not a competing implementation:
 | `BI-EA221325` | Deterministic, stable route sweep and honest ratchet arming |
 | `BI-72AEDE8B` | Windows local-CI timeout/harness stabilization |
 
-The code graph is currently low-trust for CI selection: its live index is stale/dirty and exposes no trustworthy structural relationships. It may recommend tests after it meets freshness and recall requirements, but it must not yet be a sole blocking selector.
+The code graph is currently low-trust for CI selection: its live index is stale/dirty and exposes no trustworthy structural relationships. It may recommend tests after it meets freshness and recall requirements, but it must not yet be a sole blocking selector. Planner advice is therefore a versioned optional envelope bound to the exact immutable head tree. Commit SHAs remain provenance but do not change the digest because local-CI retries synthesize different merge commits for byte-identical trees. Missing, dirty, stale, schema-incompatible, or structurally incomplete advice is an exhaustive-evidence signal, never an empty selection. The plan digest also excludes volatile timestamps, host paths, and logs so local-CI and GitHub can compare the same semantic recommendation.
 
 ## Prior-design reconciliation
 

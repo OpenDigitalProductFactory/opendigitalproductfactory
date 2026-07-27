@@ -1,0 +1,128 @@
+{
+  "schemaVersion": 1,
+  "policyVersion": "2026-07-27.1",
+  "plannerVersion": "1.0.0-shadow",
+  "mode": "shadow",
+  "selectionThresholdPercent": 70,
+  "graphAdviceSchemaVersion": 1,
+  "requiredGraphRelationships": [
+    "DEFINES",
+    "IMPORTS",
+    "IMPLEMENTS_ROUTE",
+    "EXPOSES_TOOL",
+    "TESTED_BY"
+  ],
+  "exhaustiveEvents": [
+    "merge_group",
+    "push",
+    "workflow_dispatch",
+    "schedule"
+  ],
+  "globalGuards": [
+    "derived-artifacts",
+    "docs-integrity",
+    "repo-guards",
+    "secrets"
+  ],
+  "patterns": {
+    "docs": [
+      "(^|/)docs/",
+      "(^|/)README\\.md$",
+      "\\.mdx?$"
+    ],
+    "tests": [
+      "(^|/)(__tests__)(/|$)",
+      "\\.(test|spec)\\.[cm]?[jt]sx?$"
+    ],
+    "production": [
+      "^(apps|packages)/.*\\.[cm]?[jt]sx?$",
+      "^packages/db/prisma/schema\\.prisma$"
+    ],
+    "mobile": [
+      "^apps/mobile/",
+      "^packages/(api-client|types|validators)/"
+    ],
+    "mobileOnly": [
+      "^apps/mobile/"
+    ]
+  },
+  "packageRoots": {
+    "apps/mobile": "mobile",
+    "apps/web": "web",
+    "packages/api-client": "@dpf/api-client",
+    "packages/bootstrap": "@dpf/bootstrap",
+    "packages/db": "@dpf/db",
+    "packages/types": "@dpf/types",
+    "packages/validators": "@dpf/validators"
+  },
+  "riskRules": [
+    {
+      "code": "workflow",
+      "patterns": [
+        "^\\.github/",
+        "^config/merge-readiness-policy\\.json$"
+      ]
+    },
+    {
+      "code": "lockfile",
+      "patterns": [
+        "(^|/)pnpm-lock\\.yaml$",
+        "(^|/)pnpm-workspace\\.yaml$",
+        "(^|/)package\\.json$"
+      ]
+    },
+    {
+      "code": "migration",
+      "patterns": [
+        "^packages/db/prisma/(schema\\.prisma|migrations/)"
+      ]
+    },
+    {
+      "code": "test-config",
+      "patterns": [
+        "(^|/)(vitest|vite|playwright|jest)(\\.|-).*config",
+        "^apps/.*/vitest\\.config\\.",
+        "^tests/.*/setup\\."
+      ]
+    },
+    {
+      "code": "auth",
+      "patterns": [
+        "^apps/web/(lib|app)/.*(auth|proxy|session)(/|\\.|-)"
+      ]
+    },
+    {
+      "code": "routing-shell",
+      "patterns": [
+        "^apps/web/app/(layout|not-found|global-error)\\.",
+        "^apps/web/(proxy|middleware)\\.",
+        "^apps/web/components/(shell|navigation)/"
+      ]
+    },
+    {
+      "code": "install-seed",
+      "patterns": [
+        "^scripts/(seed|install|dpf-bootstrap|setup)",
+        "^packages/db/src/seed",
+        "^docker-compose",
+        "^Dockerfile"
+      ]
+    },
+    {
+      "code": "generated-contract",
+      "patterns": [
+        "\\.generated\\.",
+        "^apps/web/lib/ea/route-manifest\\.json$",
+        "^apps/web/lib/docs/doc-index\\.generated\\.json$"
+      ]
+    },
+    {
+      "code": "shared-setup",
+      "patterns": [
+        "^scripts/(pregate|gate-worktree|local-ci-runner)",
+        "^scripts/lib/(local-integration-ci|sandbox-freshness)",
+        "^apps/web/(instrumentation|vitest\\.setup)\\."
+      ]
+    }
+  ]
+}

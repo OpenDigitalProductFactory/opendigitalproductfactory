@@ -60,6 +60,7 @@ describe("createLocalIntegrationPlan", () => {
     assert.deepEqual(plan.commands.map((command) => command.join(" ")), [
       "git checkout -B local-integration/doc-build-studio-decision-skill-packs origin/main",
       "git merge --no-ff --no-edit doc/build-studio-decision-skill-packs",
+      "node scripts/ci-evidence-plan.mjs --event local-ci --base origin/main --head HEAD",
       "node scripts/sandbox-freshness-preflight.mjs --converge --branch local-integration/doc-build-studio-decision-skill-packs",
       "pnpm --filter @dpf/db exec prisma generate",
       "node scripts/gen-doc-index.mjs --check",
@@ -141,10 +142,27 @@ describe("createLocalIntegrationPlan", () => {
     });
     const commands = plan.commands.map((command) => command.join(" "));
     const preflightIndex = commands.findIndex((c) => c.includes("sandbox-freshness-preflight.mjs"));
+    const evidencePlanIndex = commands.findIndex((c) => c.includes("ci-evidence-plan.mjs"));
     const lastMergeIndex = commands.map((c, i) => (c.startsWith("git merge") ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
     const firstGateIndex = commands.findIndex((c) => c.includes("vitest run"));
+    assert.ok(evidencePlanIndex > lastMergeIndex);
+    assert.ok(evidencePlanIndex < preflightIndex);
     assert.ok(preflightIndex > lastMergeIndex);
     assert.ok(preflightIndex < firstGateIndex);
+  });
+
+  it("writes the shadow plan beside governed local-CI metadata when requested", () => {
+    const plan = createLocalIntegrationPlan({
+      candidateBranch: "feat/x",
+      mode: "single-branch",
+      siblingBranches: [],
+      hostPlatform: "linux",
+      evidencePlanOutput: "artifacts/dpf-ci-evidence-plan.json",
+    });
+
+    assert.ok(plan.commands.map((command) => command.join(" ")).includes(
+      "node scripts/ci-evidence-plan.mjs --event local-ci --base origin/main --head HEAD --output artifacts/dpf-ci-evidence-plan.json",
+    ));
   });
 
   it("runs fast PR guard parity before the expensive test/build gates", () => {
