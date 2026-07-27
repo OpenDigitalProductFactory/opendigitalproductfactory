@@ -565,7 +565,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
   // remains authoritative for current-head checks, review threads, branch
   // freshness, and merge-queue policy. A PR merge is NOT deployment.
   const fullyVerified = typecheckPassed && testsFailed === 0 && acMet === acTotal && acTotal > 0;
-  let deliveryState = "awaiting-review";
+  let deliveryState: string;
   try {
     const {
       initializeAndReconcileBuildPrDelivery,
