@@ -85,7 +85,7 @@ export function extractToolCreatedBacklogIds(executedTools: readonly ExecutedToo
     }
     // structured data.itemId
     const data = tool.result.data;
-    if (data && typeof data === "object" && data !== null && "itemId" in data) {
+    if (data && typeof data === "object" && "itemId" in data) {
       const itemId = (data as { itemId?: unknown }).itemId;
       if (typeof itemId === "string" && /^BI-/i.test(itemId)) {
         found.add(itemId.toUpperCase());
