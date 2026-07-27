@@ -339,7 +339,6 @@ export function calculateCacheEconomics(samples = []) {
   return [...byName.values()]
     .map((agg) => {
       const hitRate = agg.samples === 0 ? 0 : Math.round((agg.hits / agg.samples) * 10000) / 100;
-      const netValueMs = agg.estimatedTimeSavedMs - agg.saveMs - (agg.misses > 0 ? 0 : 0);
       // Net value: time saved on hits minus restore/save overhead across samples.
       // Spec test: estimatedTimeSavedMs 500, restore 120, save 140 → net 240
       // 500 - 120 - 140 = 240

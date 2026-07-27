@@ -29,7 +29,6 @@ It does **not**:
 # Unit tests for pure observation aggregators + config contracts
 node --test \
   scripts/lib/ci-observation.test.mjs \
-  scripts/lib/ci-coverage-config.test.mjs \
   scripts/ci-coverage-config.test.mjs \
   scripts/ci-observation.test.mjs \
   scripts/ci-shadow-selection.test.mjs
@@ -51,7 +50,8 @@ Optional inputs:
 - `--vitest <pkg>=path` — Vitest JSON reporter output (repeatable)
 - `--shadow-selection path` — shadow selection JSON from `scripts/ci-shadow-selection.mjs`
 - `--cache-samples path` — cache economics sample array
-- `--previous path` — prior observation for flake history continuity
+- `--previous-observation path` — prior observation for flake history continuity
+- `--timing-samples path` — phase timing samples
 
 ## Coverage commands (observation)
 
@@ -60,9 +60,31 @@ pnpm --filter web run test:coverage
 pnpm --filter @dpf/db run test:coverage
 ```
 
-Configs set `coverage.provider = "v8"`, `coverage.all = true`, and `reportOnFailure: true` so owned files with zero tests still appear (0% lines) and feed `unloadedOwnedFiles` in the observation schema. Web includes `proxy.ts` and `instrumentation.ts` as first-class production surfaces.
+Configs set `coverage.provider = "v8"`, explicit `coverage.include` patterns,
+and `reportOnFailure: true` so owned files with zero tests still appear and
+feed `unloadedOwnedFiles` in the observation schema. Vitest 4 removed the
+older `coverage.all` option. Web includes `proxy.ts` and
+`instrumentation.ts` as first-class production surfaces.
 
-Coverage runs require `@vitest/coverage-v8` on the runner. The package is not yet a direct workspace dependency (lockfile peer graph needs a clean `pnpm regen:lockfile` intake); calibration treats coverage steps as best-effort (`continue-on-error`) so schema/timing/cache observation still publishes without it.
+Coverage runs use the direct `@vitest/coverage-v8` development dependency in
+both measured workspaces. The workflow lets a failed coverage or build step
+continue only long enough to upload its diagnostic evidence; the final
+completeness step still fails the calibration run when any required input is
+unsuccessful.
+
+## Standards grounding
+
+- [Vitest coverage configuration](https://vitest.dev/config/coverage.html)
+  defines `coverage.include` as the Vitest 4 mechanism for including
+  unimported source files; `coverage.all` was removed.
+- [Vitest reporters](https://vitest.dev/guide/reporters) define the JSON
+  reporter used for per-file and per-test timing/outcome evidence.
+- [Vitest CLI](https://v4.vitest.dev/guide/cli) defines `vitest related` as
+  static-import-based test discovery. Dynamic or otherwise unmapped changes
+  therefore fail safe to exhaustive execution in shadow evidence.
+- [GitHub Actions cache](https://github.com/actions/cache) defines the granular
+  `restore@v5` and `save@v5` actions used to measure transfer cost separately
+  from downstream install/build duration.
 
 ## Scheduled calibration
 

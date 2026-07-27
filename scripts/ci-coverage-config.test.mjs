@@ -11,6 +11,7 @@ const calibrationWorkflow = readFileSync(".github/workflows/ci-calibration.yml",
 test("web V8 coverage explicitly includes owned production surfaces", () => {
   assert.match(webConfig, /coverage:\s*\{/);
   assert.match(webConfig, /provider:\s*["']v8["']/);
+  assert.doesNotMatch(webConfig, /\ball:\s*true/);
   for (const pattern of [
     "app/**/*.{ts,tsx}",
     "components/**/*.{ts,tsx}",
@@ -27,17 +28,16 @@ test("web V8 coverage explicitly includes owned production surfaces", () => {
 test("database V8 coverage explicitly includes unloaded owned source", () => {
   assert.match(dbConfig, /coverage:\s*\{/);
   assert.match(dbConfig, /provider:\s*["']v8["']/);
+  assert.doesNotMatch(dbConfig, /\ball:\s*true/);
   assert.match(dbConfig, /src\/\*\*\/\*\.ts/);
   assert.match(dbConfig, /\*\*\/\*\.\{test,spec\}\.ts/);
   assert.match(dbConfig, /reportOnFailure:\s*true/);
 });
 
-test("web and database packages declare coverage scripts for observation runs", () => {
+test("web and database packages declare complete coverage runtimes", () => {
   for (const manifest of [webPackage, dbPackage]) {
-    // Provider/includes live in vitest.config.ts. The @vitest/coverage-v8 package
-    // is optional until a full lockfile regen can pin its peer graph without
-    // offline downgrades; calibration continues with continue-on-error when absent.
     assert.equal(manifest.scripts["test:coverage"], "vitest run --coverage");
+    assert.equal(manifest.devDependencies["@vitest/coverage-v8"], "^4.1.10");
   }
 });
 
@@ -56,6 +56,11 @@ test("calibration workflow is scheduled, manual, observable, and non-blocking to
   assert.match(calibrationWorkflow, /name:\s*Assemble CI observation/);
   assert.match(calibrationWorkflow, /name:\s*ci-observation/);
   assert.match(calibrationWorkflow, /retention-days:\s*30/);
+  assert.match(calibrationWorkflow, /pgvector\/pgvector:pg16/);
+  assert.match(calibrationWorkflow, /prisma migrate deploy/);
+  assert.match(calibrationWorkflow, /--reporter=json/);
+  assert.match(calibrationWorkflow, /--previous-observation/);
+  assert.match(calibrationWorkflow, /path:\s*artifacts\/ci-observation/);
 });
 
 test("calibration measures both pnpm and exact-key Turbopack cache economics", () => {
@@ -65,6 +70,9 @@ test("calibration measures both pnpm and exact-key Turbopack cache economics", (
   assert.match(calibrationWorkflow, /pnpmSaveMs/);
   assert.match(calibrationWorkflow, /turbopackRestoreMs/);
   assert.match(calibrationWorkflow, /turbopackSaveMs/);
+  assert.match(calibrationWorkflow, /du -sb "\$PNPM_STORE_PATH"/);
+  assert.match(calibrationWorkflow, /du -sb apps\/web\/\.next\/cache/);
+  assert.doesNotMatch(calibrationWorkflow, /restoreMs:\s*hit\w*\s*\?\s*1/);
   assert.doesNotMatch(
     calibrationWorkflow,
     /key:\s*nextjs-[\s\S]{0,300}restore-keys:/,

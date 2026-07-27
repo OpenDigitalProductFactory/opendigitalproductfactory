@@ -1,223 +1,400 @@
-# BI-2F60FDCE — scheduled CI observation / calibration.
-# Non-blocking: never required for merge. Publishes measurement artifacts only.
-# Does not change PR suite selection or required checks.
+# BI-2F60FDCE - scheduled, non-blocking CI observation.
+# This measures exhaustive evidence and a shadow selector. It never changes
+# pull-request selection or required checks.
 name: CI Calibration
 
 on:
   schedule:
-    # Twice weekly (Mon/Thu 06:00 UTC) — enough for the two-week observation window.
     - cron: "0 6 * * 1,4"
   workflow_dispatch:
 
 permissions:
-  contents: read
   actions: read
+  contents: read
 
 concurrency:
   group: ci-calibration-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   observe:
-    name: Observation coverage + shadow selection
+    name: Coverage, recall, flake, timing, and cache observation
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    env:
+      DATABASE_URL: postgresql://dpf:dpf@localhost:5432/dpf
+      ADMIN_PASSWORD: calibration-only-password
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: dpf
+          POSTGRES_PASSWORD: dpf
+          POSTGRES_DB: dpf
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dpf -d dpf"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
-      - name: Observation library tests
-        run: |
-          node --test \
-            scripts/lib/ci-observation.test.mjs \
-            scripts/lib/ci-coverage-config.test.mjs \
-            scripts/ci-coverage-config.test.mjs \
-            scripts/ci-observation.test.mjs \
-            scripts/ci-shadow-selection.test.mjs
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
 
-      - name: Enable pnpm (corepack)
+      - name: Enable pnpm
         run: corepack enable
+
+      - name: Observation contract tests
+        run: |
+          node --test \
+            scripts/lib/ci-observation.test.mjs \
+            scripts/ci-observation.test.mjs \
+            scripts/ci-shadow-selection.test.mjs \
+            scripts/ci-coverage-config.test.mjs
 
       - name: Resolve pnpm store path
         run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
 
-      # Exact-key cache economics for pnpm store (measure restore/save; no broad prefix reuse).
+      - name: Start pnpm restore timer
+        run: date +%s%3N > "$RUNNER_TEMP/pnpm-restore-start"
+
       - name: Restore pnpm store cache
         id: pnpm-cache-restore
         uses: actions/cache/restore@v5
         with:
           path: ${{ env.PNPM_STORE_PATH }}
-          key: pnpm-store-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
-      - name: Time pnpm install
+      - name: Measure pnpm restore
+        id: pnpm-restore-measure
+        run: |
+          start=$(cat "$RUNNER_TEMP/pnpm-restore-start")
+          echo "pnpmRestoreMs=$(($(date +%s%3N) - start))" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
         id: pnpm-install
         run: |
           start=$(date +%s%3N)
           pnpm install --frozen-lockfile
-          end=$(date +%s%3N)
-          echo "durationMs=$((end - start))" >> "$GITHUB_OUTPUT"
+          echo "durationMs=$(($(date +%s%3N) - start))" >> "$GITHUB_OUTPUT"
+
+      - name: Measure pnpm store bytes
+        id: pnpm-bytes
+        run: echo "bytes=$(du -sb "$PNPM_STORE_PATH" | cut -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Start pnpm save timer
+        if: steps.pnpm-cache-restore.outputs.cache-hit != 'true'
+        run: date +%s%3N > "$RUNNER_TEMP/pnpm-save-start"
 
       - name: Save pnpm store cache
-        id: pnpm-cache-save
         if: steps.pnpm-cache-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ${{ env.PNPM_STORE_PATH }}
-          key: pnpm-store-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
-      # Exact-key Turbopack / Next build cache — no restore-keys prefix fallback
-      # (prefix keys invent soft hits that hide true cache economics).
+      - name: Measure pnpm save
+        id: pnpm-save-measure
+        if: steps.pnpm-cache-restore.outputs.cache-hit != 'true'
+        run: |
+          start=$(cat "$RUNNER_TEMP/pnpm-save-start")
+          echo "pnpmSaveMs=$(($(date +%s%3N) - start))" >> "$GITHUB_OUTPUT"
+
+      - name: Download prior observation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p artifacts/prior
+          prior_run=$(gh run list \
+            --workflow ci-calibration.yml \
+            --branch "${{ github.ref_name }}" \
+            --status success \
+            --limit 1 \
+            --json databaseId \
+            --jq '.[0].databaseId // empty')
+          if [ -n "$prior_run" ]; then
+            gh run download "$prior_run" \
+              --name ci-observation \
+              --dir artifacts/prior \
+              || true
+          fi
+
+      - name: Generate Prisma client and apply migrations
+        run: |
+          pnpm --filter @dpf/db exec prisma generate
+          pnpm --filter @dpf/db exec prisma migrate deploy
+
+      - name: Run web coverage
+        id: web-coverage
+        continue-on-error: true
+        env:
+          CI_COVERAGE_DIR: ../../artifacts/ci-observation/web/coverage
+        run: |
+          mkdir -p artifacts/ci-observation/web
+          start=$(date +%s%3N)
+          set +e
+          pnpm --filter web exec vitest run \
+            --coverage \
+            --reporter=default \
+            --reporter=json \
+            --outputFile=../../artifacts/ci-observation/web/vitest.json
+          status=$?
+          set -e
+          echo "durationMs=$(($(date +%s%3N) - start))" >> "$GITHUB_OUTPUT"
+          exit "$status"
+
+      - name: Run database coverage
+        id: db-coverage
+        continue-on-error: true
+        env:
+          CI_COVERAGE_DIR: ../../artifacts/ci-observation/db/coverage
+        run: |
+          mkdir -p artifacts/ci-observation/db
+          start=$(date +%s%3N)
+          set +e
+          pnpm --filter @dpf/db exec vitest run \
+            --coverage \
+            --reporter=default \
+            --reporter=json \
+            --outputFile=../../artifacts/ci-observation/db/vitest.json
+          status=$?
+          set -e
+          echo "durationMs=$(($(date +%s%3N) - start))" >> "$GITHUB_OUTPUT"
+          exit "$status"
+
+      - name: Classify changed files for shadow selection
+        id: shadow-plan
+        run: |
+          prior=artifacts/prior/ci-observation.json
+          base_sha=""
+          if [ -f "$prior" ]; then
+            base_sha=$(node -e '
+              const value = JSON.parse(require("fs").readFileSync(process.argv[1]));
+              process.stdout.write(value.identity?.treeSha ?? "");
+            ' "$prior")
+          fi
+          : > artifacts/ci-observation/changed-files.txt
+          : > artifacts/ci-observation/unknown-files.txt
+          escalated=true
+          if [[ "$base_sha" =~ ^[0-9a-f]{40}$ ]] \
+            && git cat-file -e "$base_sha^{commit}"; then
+            git diff --name-only "$base_sha" "${{ github.sha }}" \
+              > artifacts/ci-observation/changed-files.txt
+            while IFS= read -r path; do
+              if [[ ! "$path" =~ ^apps/web/(app|components|lib)/.*\.(ts|tsx)$ ]] \
+                && [[ ! "$path" =~ ^apps/web/(proxy|instrumentation)\.ts$ ]]; then
+                echo "$path" >> artifacts/ci-observation/unknown-files.txt
+              fi
+            done < artifacts/ci-observation/changed-files.txt
+            if [ -s artifacts/ci-observation/changed-files.txt ] \
+              && [ ! -s artifacts/ci-observation/unknown-files.txt ]; then
+              escalated=false
+            fi
+          else
+            echo no-prior-calibration-baseline \
+              > artifacts/ci-observation/unknown-files.txt
+          fi
+          echo "escalated=$escalated" >> "$GITHUB_OUTPUT"
+
+      - name: Run shadow related tests
+        id: shadow-related
+        if: steps.shadow-plan.outputs.escalated == 'false'
+        continue-on-error: true
+        run: |
+          mapfile -t changed < artifacts/ci-observation/changed-files.txt
+          start=$(date +%s%3N)
+          set +e
+          pnpm --filter web exec vitest related "${changed[@]}" \
+            --run \
+            --reporter=json \
+            --outputFile=../../artifacts/ci-observation/shadow-vitest.json
+          status=$?
+          set -e
+          echo "durationMs=$(($(date +%s%3N) - start))" >> "$GITHUB_OUTPUT"
+          exit "$status"
+
+      - name: Build shadow selection evidence
+        run: |
+          args=(
+            --full artifacts/ci-observation/web/vitest.json
+            --full artifacts/ci-observation/db/vitest.json
+            --changed-files artifacts/ci-observation/changed-files.txt
+            --unknown-files artifacts/ci-observation/unknown-files.txt
+            --escalated "${{ steps.shadow-plan.outputs.escalated }}"
+            --output artifacts/ci-observation/shadow-selection.json
+          )
+          if [ -f artifacts/ci-observation/shadow-vitest.json ]; then
+            args+=(--selected artifacts/ci-observation/shadow-vitest.json)
+          fi
+          node scripts/ci-shadow-selection.mjs "${args[@]}"
+
+      - name: Start Turbopack restore timer
+        run: date +%s%3N > "$RUNNER_TEMP/turbopack-restore-start"
+
       - name: Restore Turbopack build cache
         id: turbopack-cache-restore
         uses: actions/cache/restore@v5
         with:
           path: apps/web/.next/cache
-          key: turbopack-build-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('apps/web/**/*.{ts,tsx,js,jsx}') }}
+          key: turbopack-build-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'apps/web/**/*.{ts,tsx,js,jsx}') }}
 
-      - name: Generate Prisma client
-        run: pnpm --filter @dpf/db exec prisma generate
-
-      - name: Run web coverage
-        id: web-coverage
-        continue-on-error: true
+      - name: Measure Turbopack restore
+        id: turbopack-restore-measure
         run: |
-          mkdir -p artifacts/ci-observation/web
-          start=$(date +%s%3N)
-          pnpm --filter web run test:coverage
-          end=$(date +%s%3N)
-          echo "durationMs=$((end - start))" >> "$GITHUB_OUTPUT"
-          if [ -f apps/web/coverage/coverage-summary.json ]; then
-            cp apps/web/coverage/coverage-summary.json artifacts/ci-observation/web/coverage-summary.json
-          fi
+          start=$(cat "$RUNNER_TEMP/turbopack-restore-start")
+          echo "turbopackRestoreMs=$(($(date +%s%3N) - start))" >> "$GITHUB_OUTPUT"
 
-      - name: Run database coverage
-        id: db-coverage
+      - name: Run production build
+        id: production-build
         continue-on-error: true
+        env:
+          DPF_TURBOPACK_BUILD_CACHE: "1"
         run: |
-          mkdir -p artifacts/ci-observation/db
           start=$(date +%s%3N)
-          pnpm --filter @dpf/db run test:coverage
-          end=$(date +%s%3N)
-          echo "durationMs=$((end - start))" >> "$GITHUB_OUTPUT"
-          if [ -f packages/db/coverage/coverage-summary.json ]; then
-            cp packages/db/coverage/coverage-summary.json artifacts/ci-observation/db/coverage-summary.json
-          fi
+          set +e
+          pnpm --filter web build
+          status=$?
+          set -e
+          echo "durationMs=$(($(date +%s%3N) - start))" >> "$GITHUB_OUTPUT"
+          exit "$status"
 
-      # Shadow mode only: exercise related-test selection path without skipping full coverage.
-      - name: Run shadow related tests
-        id: shadow-related
-        continue-on-error: true
+      - name: Measure Turbopack cache bytes
+        id: turbopack-bytes
         run: |
-          mkdir -p artifacts/ci-observation
-          # Placeholder related set = a tiny known-stable unit surface (not activation).
-          # Full coverage above remains the authoritative exhaustive suite for recall.
-          start=$(date +%s%3N)
-          pnpm --filter web exec vitest run \
-            lib/shared/coerce.test.ts \
-            --reporter=json \
-            --outputFile=../../artifacts/ci-observation/shadow-vitest.json \
-            || true
-          end=$(date +%s%3N)
-          echo "durationMs=$((end - start))" >> "$GITHUB_OUTPUT"
-          # Build shadow selection document from full vs selected reports when present.
-          if [ -f artifacts/ci-observation/shadow-vitest.json ]; then
-            node scripts/ci-shadow-selection.mjs \
-              --full artifacts/ci-observation/shadow-vitest.json \
-              --selected artifacts/ci-observation/shadow-vitest.json \
-              --output artifacts/ci-observation/shadow-selection.json \
-              || true
+          if [ -d apps/web/.next/cache ]; then
+            bytes=$(du -sb apps/web/.next/cache | cut -f1)
+          else
+            bytes=0
           fi
+          echo "bytes=$bytes" >> "$GITHUB_OUTPUT"
+
+      - name: Start Turbopack save timer
+        if: steps.turbopack-cache-restore.outputs.cache-hit != 'true'
+        run: date +%s%3N > "$RUNNER_TEMP/turbopack-save-start"
 
       - name: Save Turbopack build cache
-        id: turbopack-cache-save
         if: steps.turbopack-cache-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: apps/web/.next/cache
-          key: turbopack-build-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('apps/web/**/*.{ts,tsx,js,jsx}') }}
+          key: turbopack-build-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'apps/web/**/*.{ts,tsx,js,jsx}') }}
+
+      - name: Measure Turbopack save
+        id: turbopack-save-measure
+        if: steps.turbopack-cache-restore.outputs.cache-hit != 'true'
+        run: |
+          start=$(cat "$RUNNER_TEMP/turbopack-save-start")
+          echo "turbopackSaveMs=$(($(date +%s%3N) - start))" >> "$GITHUB_OUTPUT"
 
       - name: Assemble CI observation
         env:
           PNPM_CACHE_HIT: ${{ steps.pnpm-cache-restore.outputs.cache-hit }}
-          TURBOPACK_CACHE_HIT: ${{ steps.turbopack-cache-restore.outputs.cache-hit }}
+          PNPM_RESTORE_MS: ${{ steps.pnpm-restore-measure.outputs.pnpmRestoreMs }}
+          PNPM_SAVE_MS: ${{ steps.pnpm-save-measure.outputs.pnpmSaveMs }}
+          PNPM_BYTES: ${{ steps.pnpm-bytes.outputs.bytes }}
           PNPM_INSTALL_MS: ${{ steps.pnpm-install.outputs.durationMs }}
+          TURBO_CACHE_HIT: ${{ steps.turbopack-cache-restore.outputs.cache-hit }}
+          TURBO_RESTORE_MS: ${{ steps.turbopack-restore-measure.outputs.turbopackRestoreMs }}
+          TURBO_SAVE_MS: ${{ steps.turbopack-save-measure.outputs.turbopackSaveMs }}
+          TURBO_BYTES: ${{ steps.turbopack-bytes.outputs.bytes }}
+          BUILD_MS: ${{ steps.production-build.outputs.durationMs }}
           WEB_COVERAGE_MS: ${{ steps.web-coverage.outputs.durationMs }}
           DB_COVERAGE_MS: ${{ steps.db-coverage.outputs.durationMs }}
+          SHADOW_MS: ${{ steps.shadow-related.outputs.durationMs }}
         run: |
-          mkdir -p artifacts/ci-observation
-          # Cache economics samples — field names must stay stable for the aggregator.
-          # pnpmRestoreMs / pnpmSaveMs / turbopackRestoreMs / turbopackSaveMs are
-          # recorded as restoreMs/saveMs with named cacheName values.
-          node -e '
-            const hitPnpm = process.env.PNPM_CACHE_HIT === "true";
-            const hitTurbo = process.env.TURBOPACK_CACHE_HIT === "true";
-            const installMs = Number(process.env.PNPM_INSTALL_MS || 0);
-            const webMs = Number(process.env.WEB_COVERAGE_MS || 0);
-            const dbMs = Number(process.env.DB_COVERAGE_MS || 0);
-            const samples = [
-              {
-                cacheName: "pnpm-store",
-                hit: hitPnpm,
-                bytes: 0,
-                restoreMs: hitPnpm ? 1 : 0,
-                saveMs: hitPnpm ? 0 : 1,
-                downstreamMs: installMs,
-                coldBaselineMs: 0,
-                pnpmRestoreMs: hitPnpm ? 1 : 0,
-                pnpmSaveMs: hitPnpm ? 0 : 1
-              },
-              {
-                cacheName: "turbopack-build",
-                hit: hitTurbo,
-                bytes: 0,
-                restoreMs: hitTurbo ? 1 : 0,
-                saveMs: hitTurbo ? 0 : 1,
-                downstreamMs: webMs + dbMs,
-                coldBaselineMs: 0,
-                turbopackRestoreMs: hitTurbo ? 1 : 0,
-                turbopackSaveMs: hitTurbo ? 0 : 1
-              }
-            ];
-            require("fs").writeFileSync(
-              "artifacts/ci-observation/cache-samples.json",
-              JSON.stringify(samples, null, 2) + "\n"
-            );
-          '
-
-          OBS_ARGS=(
+          node - <<'NODE'
+          const fs = require("node:fs");
+          const number = (name) => Number(process.env[name] || 0);
+          let prior = {};
+          try {
+            prior = JSON.parse(fs.readFileSync("artifacts/prior/ci-observation.json"));
+          } catch {}
+          const priorP90 = (phase) =>
+            Number(prior.timings?.find((sample) => sample.phase === phase)?.p90Ms || 0);
+          const cacheSamples = [
+            {
+              cacheName: "pnpm-store",
+              hit: process.env.PNPM_CACHE_HIT === "true",
+              bytes: number("PNPM_BYTES"),
+              restoreMs: number("PNPM_RESTORE_MS"),
+              saveMs: number("PNPM_SAVE_MS"),
+              downstreamMs: number("PNPM_INSTALL_MS"),
+              coldBaselineMs: priorP90("install"),
+            },
+            {
+              cacheName: "turbopack-build",
+              hit: process.env.TURBO_CACHE_HIT === "true",
+              bytes: number("TURBO_BYTES"),
+              restoreMs: number("TURBO_RESTORE_MS"),
+              saveMs: number("TURBO_SAVE_MS"),
+              downstreamMs: number("BUILD_MS"),
+              coldBaselineMs: priorP90("build"),
+            },
+          ];
+          const timingSamples = [
+            { phase: "install", durationMs: number("PNPM_INSTALL_MS") },
+            { phase: "coverage:web", durationMs: number("WEB_COVERAGE_MS") },
+            { phase: "coverage:@dpf/db", durationMs: number("DB_COVERAGE_MS") },
+            { phase: "shadow-related", durationMs: number("SHADOW_MS") },
+            { phase: "build", durationMs: number("BUILD_MS") },
+          ];
+          fs.writeFileSync(
+            "artifacts/ci-observation/cache-samples.json",
+            JSON.stringify(cacheSamples, null, 2) + "\n",
+          );
+          fs.writeFileSync(
+            "artifacts/ci-observation/timing-samples.json",
+            JSON.stringify(timingSamples, null, 2) + "\n",
+          );
+          NODE
+          args=(
             --repository "${{ github.repository }}"
             --tree-sha "${{ github.sha }}"
             --event "${{ github.event_name }}"
             --run-id "${{ github.run_id }}"
             --run-attempt "${{ github.run_attempt }}"
+            --coverage web=artifacts/ci-observation/web/coverage/coverage-summary.json
+            --coverage @dpf/db=artifacts/ci-observation/db/coverage/coverage-summary.json
+            --vitest web=artifacts/ci-observation/web/vitest.json
+            --vitest @dpf/db=artifacts/ci-observation/db/vitest.json
+            --shadow-selection artifacts/ci-observation/shadow-selection.json
             --cache-samples artifacts/ci-observation/cache-samples.json
+            --timing-samples artifacts/ci-observation/timing-samples.json
             --output artifacts/ci-observation/ci-observation.json
           )
-
-          if [ -f artifacts/ci-observation/web/coverage-summary.json ]; then
-            OBS_ARGS+=(--coverage "web=artifacts/ci-observation/web/coverage-summary.json")
-            OBS_ARGS+=(--owned-root "web=apps/web/lib")
-            OBS_ARGS+=(--owned-root "web=apps/web/app")
-            OBS_ARGS+=(--owned-root "web=apps/web/components")
+          if [ -f artifacts/prior/ci-observation.json ]; then
+            args+=(--previous-observation artifacts/prior/ci-observation.json)
           fi
-          if [ -f artifacts/ci-observation/db/coverage-summary.json ]; then
-            OBS_ARGS+=(--coverage "@dpf/db=artifacts/ci-observation/db/coverage-summary.json")
-            OBS_ARGS+=(--owned-root "@dpf/db=packages/db/src")
-          fi
-          if [ -f artifacts/ci-observation/shadow-selection.json ]; then
-            OBS_ARGS+=(--shadow-selection artifacts/ci-observation/shadow-selection.json)
-          fi
-
-          node scripts/ci-observation.mjs "${OBS_ARGS[@]}"
+          node scripts/ci-observation.mjs "${args[@]}"
 
       - name: Upload CI observation artifact
-        uses: actions/upload-artifact@v4
+        if: always()
+        uses: actions/upload-artifact@v7
         with:
           name: ci-observation
-          path: artifacts/ci-observation/ci-observation.json
+          path: artifacts/ci-observation
           if-no-files-found: error
           retention-days: 30
+
+      - name: Require complete observation inputs
+        if: always()
+        env:
+          WEB_RESULT: ${{ steps.web-coverage.outcome }}
+          DB_RESULT: ${{ steps.db-coverage.outcome }}
+          SHADOW_RESULT: ${{ steps.shadow-related.outcome }}
+          SHADOW_ESCALATED: ${{ steps.shadow-plan.outputs.escalated }}
+          BUILD_RESULT: ${{ steps.production-build.outcome }}
+        run: |
+          test "$WEB_RESULT" = success
+          test "$DB_RESULT" = success
+          if [ "$SHADOW_ESCALATED" = false ]; then
+            test "$SHADOW_RESULT" = success
+          fi
+          test "$BUILD_RESULT" = success

@@ -191,7 +191,14 @@ jobs:
         with:
           node-version: 24
       - name: Test pr-health verdict logic
-        run: node --test scripts/pr-health.test.mjs scripts/check-ci-build-cache.test.mjs scripts/lib/ci-observation.test.mjs scripts/lib/ci-coverage-config.test.mjs scripts/ci-coverage-config.test.mjs scripts/ci-observation.test.mjs scripts/ci-shadow-selection.test.mjs
+        run: >-
+          node --test
+          scripts/pr-health.test.mjs
+          scripts/check-ci-build-cache.test.mjs
+          scripts/lib/ci-observation.test.mjs
+          scripts/ci-observation.test.mjs
+          scripts/ci-shadow-selection.test.mjs
+          scripts/ci-coverage-config.test.mjs
 
   mobile-jest-pin-guard:
     name: Mobile Jest Pin Guard
