@@ -6,5 +6,9 @@ export function canAccessEmployeeScope(
 ): boolean {
   if (context.isSuperuser) return true;
   if (context.employeeId === targetEmployeeId) return true;
-  return context.managerScope?.directReportIds.includes(targetEmployeeId) ?? false;
+  return (
+    context.managerScope?.directReportIds.includes(targetEmployeeId) ||
+    context.managerScope?.indirectReportIds.includes(targetEmployeeId) ||
+    false
+  );
 }

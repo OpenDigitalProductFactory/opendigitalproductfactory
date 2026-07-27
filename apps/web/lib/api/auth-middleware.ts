@@ -12,8 +12,8 @@
 import { prisma } from "@dpf/db";
 import type { DpfSession } from "../auth";
 import { auth } from "../auth";
-import { buildEffectiveAuthContext, type EffectiveAuthContext } from "../identity/effective-auth-context";
-import { resolvePrincipalIdForUser } from "../identity/principal-linking";
+import type { EffectiveAuthContext } from "../identity/effective-auth-context";
+import { loadEffectiveAuthContext } from "../identity/load-effective-auth-context";
 import { getGrantedCapabilities } from "../permissions";
 import { verifyAccessToken } from "./jwt";
 import { apiError } from "./error";
@@ -51,12 +51,6 @@ export async function authenticateRequest(
       where: { id: payload.sub },
       include: {
         groups: { include: { platformRole: true } },
-        employeeProfile: {
-          select: {
-            id: true,
-            directReports: { select: { id: true } },
-          },
-        },
       },
     });
 
@@ -79,12 +73,14 @@ export async function authenticateRequest(
       platformRole: sessionUser.platformRole,
       isSuperuser: sessionUser.isSuperuser,
     });
-    const principalId = await resolvePrincipalIdForUser(sessionUser.id);
-    const authContext = buildEffectiveAuthContext({
+    const authContext = await loadEffectiveAuthContext({
       user: sessionUser,
       grantedCapabilities: capabilities,
-      principalId,
-      employeeProfile: user.employeeProfile,
+      authentication: {
+        source: "bearer",
+        methods: payload.amr,
+        contextClassReference: payload.acr,
+      },
     });
 
     return { user: sessionUser, capabilities, authContext };
@@ -102,27 +98,10 @@ export async function authenticateRequest(
     platformRole: sessionUser.platformRole,
     isSuperuser: sessionUser.isSuperuser,
   });
-  const principalId =
-    sessionUser.type === "admin" ? await resolvePrincipalIdForUser(sessionUser.id) : null;
-  const workforceUser =
-    sessionUser.type === "admin"
-      ? await prisma.user.findUnique({
-          where: { id: sessionUser.id },
-          include: {
-            employeeProfile: {
-              select: {
-                id: true,
-                directReports: { select: { id: true } },
-              },
-            },
-          },
-        })
-      : null;
-  const authContext = buildEffectiveAuthContext({
+  const authContext = await loadEffectiveAuthContext({
     user: sessionUser,
     grantedCapabilities: capabilities,
-    principalId,
-    employeeProfile: workforceUser?.employeeProfile ?? undefined,
+    authentication: { source: "session" },
   });
 
   return { user: sessionUser, capabilities, authContext };

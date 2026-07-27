@@ -905,31 +905,26 @@ That envelope can be carried directly by APIs or referenced indirectly by `LDAP`
 
 Current route permissions are coarse and role-driven. This design evolves them to be identity-aware.
 
-### Current model
+### Effective context model
 
-- `permissions.ts` maps coarse capabilities to `PlatformRole`
-- `auth-middleware.ts` produces a simple `{ user, capabilities }` result
-- route and tool gating use those coarse capabilities
+`apps/web/lib/identity/effective-auth-context.ts` is the canonical contract and
+`apps/web/lib/identity/load-effective-auth-context.ts` is its authoritative
+request-scoped hydrator. The context preserves coarse platform role and
+capabilities while adding:
 
-### Target model
+- canonical principal identity and aliases;
+- workforce, customer, partner, service, or AI-coworker population;
+- direct and transitive indirect reporting scope;
+- team and population-aware account scope;
+- principal-owned sensitivity clearance;
+- issuer-asserted authentication method/context evidence;
+- explicit acting-human, acting-agent, and active-delegation evidence.
 
-Auth context should become richer:
-
-```ts
-type EffectiveAuthContext = {
-  principalId: string;
-  principalKind: "human" | "service" | "agent";
-  platformRole: string | null;
-  isSuperuser: boolean;
-  employeeId: string | null;
-  managerScope: {
-    directReportIds: string[];
-    indirectReportIds: string[];
-  } | null;
-  grantedCapabilities: string[];
-  routeContext: string | null;
-};
-```
+Missing authority is fail-closed: clearance is public-only, scopes are empty,
+and authentication assurance is unasserted. A cookie or bearer token identifies
+the authentication source but does not by itself establish a NIST assurance
+level. The normalized sensitivity vocabulary is owned by `@dpf/db` and reused
+by routing rather than copied into another authorization enum.
 
 Route access then becomes:
 

@@ -24,15 +24,44 @@ vi.mock("../../permissions.js", () => ({
   getGrantedCapabilities: vi.fn(),
 }));
 
+vi.mock("../../identity/load-effective-auth-context.js", () => ({
+  loadEffectiveAuthContext: vi.fn(),
+}));
+
 import { prisma } from "@dpf/db";
 import { verifyAccessToken } from "../jwt.js";
 import { auth } from "../../auth.js";
 import { getGrantedCapabilities } from "../../permissions.js";
+import { loadEffectiveAuthContext } from "../../identity/load-effective-auth-context.js";
 import { authenticateRequest, requireCapability } from "../auth-middleware.js";
 import { ApiError } from "../error.js";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  (loadEffectiveAuthContext as ReturnType<typeof vi.fn>).mockResolvedValue({
+    principalId: "PRN-000123",
+    principalAliases: [],
+    population: "workforce",
+    platformRole: "HR-000",
+    isSuperuser: false,
+    employeeId: "emp-1",
+    managerScope: {
+      directReportIds: ["emp-2"],
+      indirectReportIds: ["emp-3"],
+    },
+    teamIds: [],
+    accountScope: { accountIds: [], contactIds: [], partnerAccountIds: [] },
+    sensitivityClearance: ["public"],
+    authentication: {
+      source: "bearer",
+      methods: [],
+      contextClassReference: null,
+    },
+    actingHumanUserId: "user-1",
+    actingAgentId: null,
+    delegationGrantIds: [],
+    grantedCapabilities: [],
+  });
 });
 
 // Helper to create a mock NextRequest
@@ -66,21 +95,10 @@ describe("authenticateRequest — Bearer token", () => {
       isActive: true,
       isSuperuser: false,
       groups: [{ platformRole: { roleId: "HR-000" } }],
-      employeeProfile: {
-        id: "emp-1",
-        directReports: [{ id: "emp-2" }],
-      },
     });
 
     const mockCapabilities = getGrantedCapabilities as ReturnType<typeof vi.fn>;
     mockCapabilities.mockReturnValue(["view_admin", "view_portfolio"]);
-    const mockPrincipalAlias = prisma.principalAlias.findFirst as ReturnType<typeof vi.fn>;
-    mockPrincipalAlias.mockResolvedValue({
-      principal: {
-        principalId: "PRN-000123",
-      },
-    });
-
     const req = mockRequest({ authorization: "Bearer my-jwt-token" });
     const result = await authenticateRequest(req as never);
 
@@ -91,6 +109,15 @@ describe("authenticateRequest — Bearer token", () => {
     expect(result.authContext.principalId).toBe("PRN-000123");
     expect(result.authContext.employeeId).toBe("emp-1");
     expect(result.authContext.managerScope?.directReportIds).toEqual(["emp-2"]);
+    expect(loadEffectiveAuthContext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authentication: {
+          source: "bearer",
+          methods: undefined,
+          contextClassReference: undefined,
+        },
+      }),
+    );
   });
 
   it("throws 401 if Bearer token is invalid", async () => {
@@ -130,23 +157,26 @@ describe("authenticateRequest — session fallback", () => {
 
     const mockCapabilities = getGrantedCapabilities as ReturnType<typeof vi.fn>;
     mockCapabilities.mockReturnValue(["view_ea_modeler"]);
-    const mockPrincipalAlias = prisma.principalAlias.findFirst as ReturnType<typeof vi.fn>;
-    mockPrincipalAlias.mockResolvedValue({
-      principal: {
-        principalId: "PRN-000456",
-      },
-    });
-    const mockFindUnique = prisma.user.findUnique as ReturnType<typeof vi.fn>;
-    mockFindUnique.mockResolvedValue({
-      id: "user-2",
-      email: "bob@example.com",
-      isActive: true,
+    (loadEffectiveAuthContext as ReturnType<typeof vi.fn>).mockResolvedValue({
+      principalId: "PRN-000456",
+      principalAliases: [],
+      population: "workforce",
+      platformRole: "HR-300",
       isSuperuser: false,
-      groups: [{ platformRole: { roleId: "HR-300" } }],
-      employeeProfile: {
-        id: "emp-2",
-        directReports: [{ id: "emp-3" }],
+      employeeId: "emp-2",
+      managerScope: { directReportIds: ["emp-3"], indirectReportIds: [] },
+      teamIds: [],
+      accountScope: { accountIds: [], contactIds: [], partnerAccountIds: [] },
+      sensitivityClearance: ["public"],
+      authentication: {
+        source: "session",
+        methods: [],
+        contextClassReference: null,
       },
+      actingHumanUserId: "user-2",
+      actingAgentId: null,
+      delegationGrantIds: [],
+      grantedCapabilities: ["view_ea_modeler"],
     });
 
     const req = mockRequest({});
@@ -158,6 +188,9 @@ describe("authenticateRequest — session fallback", () => {
     expect(result.authContext.principalId).toBe("PRN-000456");
     expect(result.authContext.employeeId).toBe("emp-2");
     expect(result.authContext.managerScope?.directReportIds).toEqual(["emp-3"]);
+    expect(loadEffectiveAuthContext).toHaveBeenCalledWith(
+      expect.objectContaining({ authentication: { source: "session" } }),
+    );
   });
 
   it("throws 401 when no Bearer token and no session", async () => {

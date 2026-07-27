@@ -26,6 +26,10 @@ export type AccessTokenPayload = {
   email: string;
   platformRole: string | null;
   isSuperuser: boolean;
+  /** RFC 8176 authentication-method references asserted by the issuer. */
+  amr?: string[];
+  /** Authentication context class asserted by the issuer; never inferred locally. */
+  acr?: string | null;
 };
 
 const ACCESS_TOKEN_TTL = "15m";
@@ -38,6 +42,8 @@ export async function signAccessToken(payload: AccessTokenPayload): Promise<stri
     email: payload.email,
     platformRole: payload.platformRole,
     isSuperuser: payload.isSuperuser,
+    ...(payload.amr ? { amr: payload.amr } : {}),
+    ...(payload.acr ? { acr: payload.acr } : {}),
   })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(payload.sub)
@@ -57,6 +63,10 @@ export async function verifyAccessToken(token: string): Promise<AccessTokenPaylo
     email: (payload.email as string) ?? "",
     platformRole: (payload.platformRole as string | null) ?? null,
     isSuperuser: (payload.isSuperuser as boolean) ?? false,
+    amr: Array.isArray(payload.amr)
+      ? payload.amr.filter((method): method is string => typeof method === "string")
+      : undefined,
+    acr: typeof payload.acr === "string" ? payload.acr : null,
   };
 }
 

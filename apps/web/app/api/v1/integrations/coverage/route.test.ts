@@ -57,7 +57,27 @@ describe("GET /api/v1/integrations/coverage", () => {
         organizationId: "org-1",
       },
       capabilities: [],
-      authContext: { principalId: null, platformRole: "owner_operator", isSuperuser: false, employeeId: null, managerScope: null, grantedCapabilities: [] },
+      authContext: {
+        principalId: null,
+        principalAliases: [],
+        population: "workforce",
+        platformRole: "owner_operator",
+        isSuperuser: false,
+        employeeId: null,
+        managerScope: null,
+        teamIds: [],
+        accountScope: { accountIds: [], contactIds: [], partnerAccountIds: [] },
+        sensitivityClearance: ["public"],
+        authentication: {
+          source: "session",
+          methods: [],
+          contextClassReference: null,
+        },
+        actingHumanUserId: "user-1",
+        actingAgentId: null,
+        delegationGrantIds: [],
+        grantedCapabilities: [],
+      },
     });
     mockOrgFindFirst.mockResolvedValue({ id: "org-1" });
     mockGetMatrixByOrg.mockResolvedValue([]);
