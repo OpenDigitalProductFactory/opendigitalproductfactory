@@ -7,5 +7,6 @@ export const DIAGRAM_VERSIONS = Object.freeze({
   "contributing/agent-dev-environments/3": "84945e497683c136",
   "development-workspace/0": "2d9cafaaedd6e316",
   "finance/index/0": "2bc2bc07bb5dcef4",
-  "index/0": "fb44ea2ed3fe9781"
+  "index/0": "fb44ea2ed3fe9781",
+  "platform/identity-and-access/0": "cfc84c62e685451a"
 });
