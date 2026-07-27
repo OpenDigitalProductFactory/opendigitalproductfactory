@@ -21,5 +21,23 @@ export default defineConfig({
       "src/**/*.test.ts",
       "scripts/**/*.test.ts",
     ],
+    // BI-2F60FDCE — observation-mode V8 coverage; all owned src included even
+    // when no test imports the file yet.
+    coverage: {
+      provider: "v8",
+      all: true,
+      include: ["src/**/*.ts", "scripts/**/*.ts"],
+      exclude: [
+        "**/*.{test,spec}.ts",
+        "**/__tests__/**",
+        "**/*.d.ts",
+        "**/generated/**",
+        "**/node_modules/**",
+      ],
+      reporter: ["text-summary", "json-summary", "json"],
+      reportsDirectory: "./coverage",
+      reportOnFailure: true,
+      thresholds: undefined,
+    },
   },
 });

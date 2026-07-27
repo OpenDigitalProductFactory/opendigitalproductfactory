@@ -73,6 +73,36 @@ export default defineConfig({
         inline: ["next-auth"],
       },
     },
+    // BI-2F60FDCE — observation-mode V8 coverage (non-blocking thresholds).
+    // `all: true` keeps owned production files that no test imports in the
+    // report so unloaded inventory is measurable (selection later depends on it).
+    coverage: {
+      provider: "v8",
+      all: true,
+      include: [
+        "app/**/*.{ts,tsx}",
+        "components/**/*.{ts,tsx}",
+        "lib/**/*.{ts,tsx}",
+        "scripts/**/*.{ts,tsx}",
+        "proxy.ts",
+        "instrumentation.ts",
+      ],
+      exclude: [
+        "**/*.{test,spec}.{ts,tsx}",
+        "**/__tests__/**",
+        "**/*.d.ts",
+        "**/generated/**",
+        "**/.next/**",
+        "**/node_modules/**",
+      ],
+      reporter: ["text-summary", "json-summary", "json"],
+      reportsDirectory: "./coverage",
+      // Keep coverage output even when the suite fails so calibration can
+      // still measure incomplete runs.
+      reportOnFailure: true,
+      // Observation phase: no hard fail thresholds (publish baseline first).
+      thresholds: undefined,
+    },
   },
   resolve: {
     dedupe: ["react", "react-dom"],

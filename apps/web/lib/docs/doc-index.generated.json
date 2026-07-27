@@ -7126,6 +7126,21 @@
         "appendix-a-full-open-epic-list-2026-06-10-snapshot"
       ]
     },
+    "docs/testing/ci-evidence.md": {
+      "publicHref": "/testing/ci-evidence/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "ci-evidence-efficiency-observation-phase",
+        "what-this-phase-does",
+        "local-library-and-cli",
+        "coverage-commands-observation",
+        "scheduled-calibration",
+        "activation-gate-later-waves",
+        "baseline-snapshot"
+      ]
+    },
     "docs/testing/findings/run-0-findings.md": {
       "publicHref": "/testing/findings/run-0-findings/",
       "portalHref": null,
