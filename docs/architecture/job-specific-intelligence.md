@@ -85,18 +85,40 @@ Job profiles, qualification schemes, and qualification records `MUST` each have 
 or immutable identifier. Updating this standard does not silently update a job qualification, and
 updating a job profile does not silently preserve an earlier qualification.
 
-## 3. Normative References
+## 3. References
+
+### 3.1 Normative References
+
+The following companion standards are indispensable to applying this profile:
+
+| Reference | Normative relationship |
+|---|---|
+| [Trusted AI Kernel](trusted-ai-kernel.md) | Defines runtime authority, oversight, tool/data enforcement, material-change handling, evidence, and autonomy ceilings |
+| [GAID](GAID.md) | Defines agent identity, operating-profile binding, badges, status, receipts, and verification |
+
+### 3.2 Informative External References
+
+The following references informed this profile. The exact relationship—adoption, profiling,
+augmentation, mapping, or adjacency—is maintained in the informative
+[External Standards Alignment](agent-standards-external-alignment.md) companion. Active drafts and
+committee projects are identified as such and are not represented as completed standards.
 
 | Reference | Relevance |
 |---|---|
-| [Trusted AI Kernel](trusted-ai-kernel.md) | Runtime authority, oversight, tool/data enforcement, material-change handling, evidence, and autonomy ceilings |
-| [GAID](GAID.md) | Agent identity, operating-profile binding, badges, status, receipts, and verification |
 | [NIST AI RMF 1.0](https://doi.org/10.6028/NIST.AI.100-1) | Context-of-use risk mapping, measurement, monitoring, and management |
 | [NIST AI RMF Playbook - Measure](https://airc.nist.gov/airmf-resources/playbook/measure/) | Fit-for-purpose evaluation, representative conditions, uncertainty, limits, and ongoing monitoring |
 | [NIST AI Agent Standards Initiative](https://www.nist.gov/artificial-intelligence/ai-agent-standards-initiative) | Agent security, identity, interoperability, and consumer-comparable evaluation activity |
-| [ISO/IEC 17024:2026](https://www.iso.org/standard/17024) | Certification-scheme scope, competence requirements, assessment, surveillance, and periodic reassessment |
+| [NIST AI Consortium](https://www.nist.gov/artificial-intelligence/nist-ai-consortium) | Measurement, evaluation, implementation evidence, and pre-standardization collaboration |
+| [ISO/IEC 17024:2026](https://www.iso.org/standard/17024) | Adjacent lifecycle prior art for scheme scope, assessment, surveillance, reassessment, suspension, and revocation; not the direct conformity basis because its object is a person |
+| [ISO/IEC 17065](https://www.iso.org/standard/46568.html) | Product, process, and service certification model more directly applicable to an AI agent operating profile |
+| [ISO/IEC 17067:2013](https://www.iso.org/standard/55087.html) | Fundamentals and guidance for product, process, and service certification schemes |
+| [ISO/IEC 42006:2025](https://www.iso.org/standard/42006) | Certification-body requirements for AI management systems and a bridge to broader AI product/process/service schemes |
+| [ISO/IEC JTC 1/SC 42](https://www.iso.org/committee/6794475.html) | Horizontal AI committee, including JWG 6 with ISO/CASCO on conformity-assessment schemes for AI systems |
 | [ISO/IEC 25059:2023](https://www.iso.org/standard/80655.html) | Quality model and common terminology for specifying and evaluating AI-system quality |
 | [ISO/IEC 23894:2023](https://www.iso.org/standard/77304.html) | AI risk-management integration |
+| [ISO/IEC 42005:2025](https://www.iso.org/standard/42005) | AI system impact assessment used to establish affected stakeholders, foreseeable impacts, prohibited uses, and reassessment triggers |
+| [ISO/IEC TS 42119-2:2025](https://www.iso.org/standard/84127.html) | Risk-based application of software-testing practices to AI systems |
+| [ISO/IEC 42119-3](https://www.iso.org/standard/85072.html) | Active verification and validation analysis work augmented by job, operating-profile, surveillance, and revalidation semantics |
 | [ISO/IEC 5259-1:2024](https://www.iso.org/standard/81088.html) | Data quality concepts and fit-for-purpose framing for analytics and ML |
 | [ISO/IEC 5259-2:2024](https://www.iso.org/standard/81860.html) | Measurable data-quality characteristics |
 | [ISO/IEC 5259-3:2024](https://www.iso.org/standard/81092.html) | Data-quality lifecycle management requirements and guidance |
@@ -106,7 +128,7 @@ updating a job profile does not silently preserve an earlier qualification.
 | [O*NET Content Model](https://www.onetcenter.org/content.html) | Tasks, knowledge, skills, abilities, work activities, and work context as job descriptors |
 | [ESCO](https://esco.ec.europa.eu/en/about-esco) | Versioned relationships among occupations, skills, competences, and qualifications |
 
-### 3.1 Reuse rule
+### 3.3 Reuse rule
 
 `TAK-JSI` profiles adjacent standards instead of replacing them:
 
@@ -115,6 +137,41 @@ updating a job profile does not silently preserve an earlier qualification.
 - verifiable credentials or open badges `MAY` carry qualification assertions
 - `GAID` `MUST` bind the assertion to the agent subject and operating profile
 - `TAK` `MUST` enforce the resulting operational ceiling
+
+### 3.4 Conformity-Assessment Boundary
+
+The object of a `TAK-JSI` qualification is a versioned AI agent operating profile in a declared
+job and deployment context. It is not a person, a model family in the abstract, or an organization
+management system.
+
+Accordingly:
+
+- ISO/IEC 17024 is used only as adjacent lifecycle prior art and `MUST NOT` be cited as the direct
+  certification basis for an AI agent
+- ISO/IEC 17065 and ISO/IEC 17067 provide the closer product, process, and service scheme model
+- ISO/IEC 42006 certification of an organization's AI management system `MUST NOT` be represented
+  as qualification of every agent operated by that organization
+- ISO/IEC TS 42119-2 and ISO/IEC 42119-3 testing or validation evidence `MAY` support a
+  qualification, but passing a test campaign does not create a job qualification unless the
+  declared scheme, subject, scope, decision rule, and continuing-validity requirements are met
+- accredited certification claims `MUST` identify the applicable scheme, certification body,
+  accreditation basis, scope, status, and validity period
+- organization-attested or independently assessed qualifications `MUST NOT` be labeled accredited
+  certification
+
+### 3.5 Specific Augmentation of AI Testing
+
+`TAK-JSI` augments general AI testing and validation by requiring:
+
+- the qualification subject to include the complete operating-profile fingerprint
+- a versioned job and activity profile rather than a generic capability category
+- representative tools, retrieval sources, memory behavior, data classes, provider routes,
+  authority limits, and human-oversight conditions
+- explicit prohibited uses and foreseeable misuse cases
+- evidence thresholds tied to job outcomes and harms
+- validity, surveillance, material-change, restriction, suspension, revocation, and revalidation
+  rules
+- runtime linkage through `TAK` and portable status disclosure through `GAID`
 
 ## 4. Terms and Definitions
 

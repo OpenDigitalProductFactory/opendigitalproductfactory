@@ -53,7 +53,11 @@ Domain-specific operating guides (admin, AI workforce, build studio, compliance,
 - [Unified Connector Kernel](architecture/unified-connector-kernel.md) — the provider-neutral definition, credential, lifecycle, audit, callback, registry, and extension contract for external integrations.
 - [Unified Development Activity Tracking](architecture/unified-development-tracking.md) — how all development work (Build Studio plus external Claude / Codex / Grok agents) is tracked as one WorkCapsule unit and shown in one cross-surface activity view. Includes an at-a-glance diagram.
 - [Autonomy, WWMD, and trusted coworker decisions](architecture/autonomy-and-wwmd.md) — how the founder-kernel wiki, principle vectors, decision profiles, and audit ledgers let coworkers answer ambiguity without silently overreaching.
-- [Trusted AI Kernel (markdown)](architecture/trusted-ai-kernel.md) / [(Word)](architecture/Trusted-AI-Kernel-Architecture.docx) — the layered enforcement, routing, audit, and immutable-directive architecture for agentic work.
+- [Trustworthy AI Agent Standards Family](architecture/agent-standards-family.md) — the ownership and composition map for TAK, GAID, and TAK-JSI.
+- [Trusted AI Kernel (markdown)](architecture/trusted-ai-kernel.md) / [(Word)](architecture/Trusted-AI-Kernel-Architecture.docx) — the layered runtime harness, authority, oversight, autonomy, evidence, and immutable-directive standard.
+- [Global AI Agent Identification and Governance](architecture/GAID.md) — enduring identity, operating-profile state, assurance claims, badges, receipts, and lifecycle.
+- [Job-Specific Intelligence](architecture/job-specific-intelligence.md) — job- and context-specific qualification, evaluation, surveillance, and revalidation for agent operating profiles.
+- [External Standards Alignment](architecture/agent-standards-external-alignment.md) — specific synergy and augmentation boundaries across NIST, ISO/IEC, IEEE, W3C, IETF, OpenID, and 1EdTech work.
 - [AI Coworker Development Principles](architecture/ai-coworker-development-principles.md) — the contract AI coworkers are expected to honor.
 - `ea-diagrams/`, `tak-diagrams/`, `monitoring-diagrams/` — Mermaid sources used by the architecture docs.
 

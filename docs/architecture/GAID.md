@@ -80,9 +80,23 @@ The intended lifecycle of `GAID` is open standards progression through multistak
 
 The preferred near-term disposition is publication as an open industry specification with explicit liaison to `OpenID AIIM`, the `W3C` Agent Identity Registry Protocol Community Group, `CoSAI`, and relevant `IETF` OAuth / `GNAP` work, with later venue-specific profiles or registrations preserving the same identity and evidence semantics.
 
-## 3. Normative References
+## 3. References
 
-The following references are relevant to this standard and informed its design:
+### 3.1 Normative References
+
+The following companion standards are indispensable to applying this document:
+
+| Reference | Normative relationship |
+|---|---|
+| [Trusted AI Kernel](trusted-ai-kernel.md) | Defines the runtime authority, enforcement, oversight, and evidence controls associated with an identified agent |
+| [Job-Specific Intelligence (`TAK-JSI`)](job-specific-intelligence.md) | Defines the qualification scheme whose scoped claims and status are carried by `GAID` |
+
+### 3.2 Informative External References
+
+The following references are relevant to this standard and informed its design. Publication in
+this table does not imply endorsement or wholesale normative incorporation. The exact relationship
+to each external work is maintained in the informative
+[External Standards Alignment](agent-standards-external-alignment.md) companion.
 
 | Reference | Relevance |
 |-----------|-----------|
@@ -101,6 +115,8 @@ The following references are relevant to this standard and informed its design:
 | [OpenID Foundation: Identity Management for Agentic AI](https://openid.net/wp-content/uploads/2025/10/Identity-Management-for-Agentic-AI.pdf) | Agent identity, authorization, and interoperability white paper from the AIIM community |
 | [OIDF response to NIST on AI agent security](https://openid.net/wp-content/uploads/2026/03/Attachment1_NIST-2025-0035-0001.pdf) | Threat-model and identity-layer response to current U.S. agent security policy work |
 | [W3C Agent Identity Registry Protocol Community Group](https://www.w3.org/community/agent-identity/) | Active W3C venue for verifiable AI agent identity infrastructure and liaison positioning |
+| [W3C Agent Declaration and Assurance Community Group](https://www.w3.org/community/adacg/) | Active W3C work on agent manifests, ownership, operating boundaries, conformance profiles, and runtime assurance; the closest direct overlap with `AIDoc` |
+| [W3C Agent Trust Protocol Community Group](https://www.w3.org/community/atp/) | Active W3C work on agent trust, privacy, credentials, and conformance testing; complementary to contextual `GAID` assurance claims |
 | [CoSAI: Agentic Identity and Access Management](https://www.coalitionforsecureai.org/wp-content/uploads/2026/04/agentic-identity-and-access-control.pdf) | Practical enterprise model for representing and governing AI agent identities |
 | [Model Context Protocol specification](https://modelcontextprotocol.io/specification/2025-11-25/basic) | Tool and context interoperability |
 | [Model Context Protocol authorization specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization) | OAuth-based authorization profile for protected MCP deployments |
@@ -115,6 +131,11 @@ The following references are relevant to this standard and informed its design:
 | [RFC 9635 Grant Negotiation and Authorization Protocol (GNAP)](https://www.rfc-editor.org/rfc/rfc9635) | Negotiated delegated authorization model for dynamic agent rights |
 | [RFC 9767 GNAP Resource Server Connections](https://www.rfc-editor.org/rfc/rfc9767) | Resource-server-facing GNAP model for binding access rights to protected resources |
 | [RFC 9449 OAuth 2.0 Demonstrating Proof of Possession (DPoP)](https://www.rfc-editor.org/rfc/rfc9449) | Sender-constrained token and proof binding for high-assurance agent requests |
+| [IETF WIMSE working group](https://datatracker.ietf.org/group/wimse/) | Workload identity architecture, identifiers, credentials, and authentication mechanisms that may carry an agent's runtime identity |
+| [WIMSE Applicability for AI Agents](https://datatracker.ietf.org/doc/draft-ni-wimse-ai-agent-identity/) | Active IETF draft applying workload identity to AI agents |
+| [AI Agent Authentication and Authorization](https://datatracker.ietf.org/doc/draft-klrc-aiagent-auth/02/) | Active IETF draft for agent identifiers, credentials, authentication, authorization, delegation, and audit |
+| [Signed Authorization-Evidence Records](https://www.ietf.org/archive/id/draft-munoz-wimse-authorization-evidence-00.html) | Active IETF draft for cryptographically attributable authorization evidence aligned with `GAID` receipts |
+| [Cross-Organizational Delegation for Workload and Agent Identity](https://www.ietf.org/archive/id/draft-reece-wimse-cross-org-delegation-00.html) | Active IETF requirements work for authority lineage across organizational and agent boundaries |
 | [W3C Verifiable Credentials Data Model v2.0](https://www.w3.org/TR/vc-data-model/) | Credential format and issuer-verifier trust patterns |
 | [1EdTech Open Badges 3.0](https://standards.1edtech.org/open-badges/specifications/standards/v3p0/cert) | Claim, evidence, result, issuer, status, and expiry patterns for portable qualification records |
 | [Decentralized Identifiers (DIDs) v1.0](https://www.w3.org/TR/did-core/) | Optional decentralized public identity profile for portable verification |
@@ -136,7 +157,26 @@ The following references are relevant to this standard and informed its design:
 | [Regulation (EU) 2016/679 (GDPR)](https://eur-lex.europa.eu/legal-content/EN/ALL/?uri=celex%3A32016R0679) | Privacy-law baseline for personal data minimization, accountability, and records implications of receipts and identity documents |
 | [IMDA Model AI Governance Framework for Agentic AI](https://www.imda.gov.sg/resources/press-releases-factsheets-and-speeches/press-releases/2026/new-model-ai-governance-framework-for-agentic-ai) | National governance framework for agentic AI deployment |
 | [ISO/IEC 27701:2025](https://www.iso.org/standard/85819.html) | Privacy information management system reference for `AIDoc` and receipt minimization obligations |
-| [Job-Specific Intelligence (`TAK-JSI`)](job-specific-intelligence.md) | Job-qualification profile whose portable claims are carried by `GAID` |
+
+### 3.3 External Identity and Credential Boundary
+
+`GAID` defines agent identity, operating-state, assurance, qualification-claim, and receipt
+semantics. It does not require a new cryptographic identity stack.
+
+Accordingly:
+
+- WIMSE, SPIFFE, OAuth, OpenID Connect, GNAP, mTLS, DIDs, and Verifiable Credentials `MAY` carry
+  or prove the identifiers and claims used by `GAID`
+- W3C agent identity and declaration work `SHOULD` be profiled where it supplies interoperable
+  manifest, credential, trust-negotiation, or lifecycle mechanisms
+- `GAID` `MUST NOT` redefine an externally governed proof format, DID method, access token,
+  workload credential, or trust-negotiation protocol merely to give it an AI-specific name
+- `GAID` `MUST` preserve the distinction between the enduring agent subject and the materially
+  mutable operating profile, regardless of the selected carrier
+- a valid identity, manifest, credential, badge, or qualification claim `MUST NOT` be interpreted
+  as live authorization
+- W3C Community Group and IETF Internet-Draft work `MUST` be identified as work in progress until
+  it reaches the applicable consensus publication stage
 
 ## 4. Terms and Definitions
 

@@ -84,9 +84,23 @@ The intended lifecycle of `TAK` is open standards progression through multistake
 
 The preferred near-term disposition is publication as an open industry specification with liaison into `NIST`, the `Agentic AI Foundation`, `OASIS` / `CoSAI`, and relevant `IETF` OAuth and `GNAP` work, with later venue-specific profiles or submissions preserving the same core runtime semantics.
 
-## 3. Normative References
+## 3. References
 
-The following references are relevant to this standard and informed its design:
+### 3.1 Normative References
+
+The following companion standards are indispensable to applying this document:
+
+| Reference | Normative relationship |
+|---|---|
+| [GAID](GAID.md) | Defines the identified agent subject, operating-profile binding, assurance claims, and receipts consumed by `TAK` |
+| [Job-Specific Intelligence (`TAK-JSI`)](job-specific-intelligence.md) | Defines the job qualification and evidence-supported autonomy ceiling enforced by `TAK` |
+
+### 3.2 Informative External References
+
+The following references are relevant to this standard and informed its design. Publication in
+this table does not imply that every reference is normatively incorporated in full. The exact
+relationship—adoption, profiling, augmentation, mapping, or adjacency—is maintained in the
+informative [External Standards Alignment](agent-standards-external-alignment.md) companion.
 
 | Reference | Relevance |
 |-----------|-----------|
@@ -94,10 +108,16 @@ The following references are relevant to this standard and informed its design:
 | [ISO/IEC 17024:2026](https://www.iso.org/standard/17024) | Competence-scheme, assessment, surveillance, and reassessment prior art profiled by `TAK-JSI` |
 | [ISO/IEC 25059:2023](https://www.iso.org/standard/80655.html) | AI-system quality characteristics for specification and evaluation |
 | [ISO/IEC 5259-5:2025](https://www.iso.org/standard/84150.html) | Data-quality governance and stewardship relevant to qualified agent work |
+| [ISO/IEC TS 42119-2:2025](https://www.iso.org/standard/84127.html) | Risk-based AI-system testing practices that `TAK` runtime and qualification evaluation can exercise |
+| [ISO/IEC 42119-3](https://www.iso.org/standard/85072.html) | Verification and validation analysis across the AI-system lifecycle; active work augmented by operating-profile and revalidation semantics |
+| [ISO/IEC FDIS 42105](https://www.iso.org/standard/86902.html) | Human oversight guidance under development, complemented by enforceable oversight floors, proactivity clamping, and autonomy regression |
+| [ISO/IEC JTC 1/SC 42](https://www.iso.org/committee/6794475.html) | Horizontal AI standards program, including trustworthiness, data, systems engineering, and AI conformity-assessment work |
 | [NIST AI RMF 1.0](https://doi.org/10.6028/NIST.AI.100-1) | Risk management framing for AI systems |
 | [NIST AI Agent Standards Initiative](https://www.nist.gov/artificial-intelligence/ai-agent-standards-initiative) | Current U.S. public-sector standards activity for agent security, identity, interoperability, and evaluation |
 | [NCCoE concept paper: software and AI agent identity and authorization](https://csrc.nist.gov/pubs/other/2026/02/05/accelerating-the-adoption-of-software-and-ai-agent/ipd) | Identity, authorization, auditing, and non-repudiation concerns for agents |
 | [NIST AI 800-2 benchmark evaluation draft](https://www.nist.gov/news-events/news/2026/01/towards-best-practices-automated-benchmark-evaluations) | Evaluation transparency and benchmark discipline |
+| [IEEE P3709](https://standards.ieee.org/ieee/3709/12159) | Active agentic-AI framework project to which `TAK` runtime-control and conformance requirements can contribute |
+| [IEEE P3833](https://standards.ieee.org/ieee/3833/11922/) | Active proactive-agent project complemented by `TAK` separation of proactivity, authority, qualification, and autonomy |
 | [Model Context Protocol specification](https://modelcontextprotocol.io/specification/2025-11-25/basic) | Tool and context interoperability |
 | [Model Context Protocol authorization specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization) | HTTP transport authorization profile for MCP servers and clients |
 | [Anthropic: Introducing the Model Context Protocol](https://www.anthropic.com/news/model-context-protocol) | Background on MCP as an open protocol |
@@ -107,6 +127,9 @@ The following references are relevant to this standard and informed its design:
 | [RFC 9635 Grant Negotiation and Authorization Protocol (GNAP)](https://www.rfc-editor.org/rfc/rfc9635) | Negotiated delegated authorization model for dynamic access decisions |
 | [RFC 9767 GNAP Resource Server Connections](https://www.rfc-editor.org/rfc/rfc9767) | Resource-server-side GNAP discovery and access-right connection model |
 | [RFC 9449 OAuth 2.0 Demonstrating Proof of Possession (DPoP)](https://www.rfc-editor.org/rfc/rfc9449) | Sender-constrained token binding for high-assurance agent calls |
+| [IETF WIMSE working group](https://datatracker.ietf.org/group/wimse/) | Workload identity, credentials, and authentication substrate for multi-system and agent deployments |
+| [AI Agent Authentication and Authorization](https://datatracker.ietf.org/doc/draft-klrc-aiagent-auth/02/) | Active IETF draft for agent identity and delegated authorization; protocol substrate rather than a substitute for `TAK` runtime policy |
+| [Signed Authorization-Evidence Records for AI Agent Actions](https://www.ietf.org/archive/id/draft-munoz-wimse-authorization-evidence-00.html) | Active IETF draft aligned with attributable authorization and action evidence |
 | [OpenAI Preparedness Framework](https://openai.com/index/updating-our-preparedness-framework/) | Frontier-model safety governance prior art, useful for scoping what `TAK` does and does not standardize |
 | [Anthropic Responsible Scaling Policy](https://www.anthropic.com/responsible-scaling-policy) | Frontier-model safety and deployment governance prior art, complementary rather than substitutive to runtime kernel controls |
 | [Google DeepMind Frontier Safety Framework](https://deepmind.google/discover/blog/strengthening-our-frontier-safety-framework/) | Model-level severe-risk framework used to distinguish model governance from runtime governance |
@@ -121,9 +144,8 @@ The following references are relevant to this standard and informed its design:
 | [IMDA Model AI Governance Framework for Agentic AI](https://www.imda.gov.sg/resources/press-releases-factsheets-and-speeches/press-releases/2026/new-model-ai-governance-framework-for-agentic-ai) | National governance framework for agentic AI deployment |
 | [ISO/IEC 12792:2025](https://www.iso.org/standard/84111.html) | Transparency taxonomy for AI systems |
 | [ISO/IEC DIS 42102](https://www.iso.org/standard/86898.html) | Framework for characterizing AI system methods and capabilities |
-| [Job-Specific Intelligence (`TAK-JSI`)](job-specific-intelligence.md) | Qualification profile for job, activity, data, risk, and operating-profile fitness |
 
-### 3.1 Reuse and Profiling Rule
+### 3.3 Reuse and Profiling Rule
 
 `TAK` is intended to compose adjacent standards, not replace them.
 
@@ -142,6 +164,26 @@ In practice this means:
 - `RFC 9421` is the preferred message-signing basis where `TAK` evidence crosses HTTP trust boundaries
 - declarative instruction artifacts such as `AGENTS.md` may complement runtime governance, but they do not replace kernel-governed control metadata
 - `LDAP`, `SCIM`, `VC`, and other adjacent standards remain companion carriers or claim envelopes rather than being redefined by `TAK`
+
+### 3.4 External Augmentation Boundary
+
+`TAK` augments adjacent work specifically where a conforming runtime must connect broad policy,
+identity, qualification, and protocol authorization to the action being attempted.
+
+In particular:
+
+- ISO/IEC 42001, ISO/IEC 23894, ISO/IEC 42005, and the NIST AI RMF remain the authorities for
+  organization-level management, risk, and impact processes; `TAK` converts applicable outcomes
+  into enforceable runtime constraints
+- IEEE P3709 remains the broader agentic-AI framework project; `TAK` contributes concrete harness,
+  authority, evidence, proactivity, and autonomy requirements
+- ISO/IEC 42105 remains the human-oversight guidance layer; `TAK` adds runtime tiers, ceilings,
+  escalation, and regression behavior
+- IETF WIMSE, OAuth, GNAP, and SPIFFE remain identity, credential, and authorization transports;
+  `TAK` independently decides whether an authenticated and authorized protocol request is allowed
+  under current qualification, data, workflow, and oversight constraints
+- `TAK` does not infer job competence from successful authentication, protocol authorization, a
+  model benchmark, or a declared capability
 
 ## 4. Terms and Definitions
 
