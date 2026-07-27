@@ -12,8 +12,8 @@ import type { ProviderReviewPacket } from "@/lib/routing/provider-suitability/pr
 // and pass a server-composed prompt.
 
 type Props = {
-  /** The autoMessage the coworker receives — include the facts, not just "help". */
-  prompt: string;
+  /** Optional autoMessage for explicit diagnostic handoffs. Omit to open the panel without sending. */
+  prompt?: string;
   /** Route whose coworker should answer (e.g. "/admin", "/platform"). Omit to use the current route's coworker. */
   routeContext?: string;
   /** Validated, minimized provider review context for the deterministic COO consultation path. */
@@ -43,7 +43,7 @@ export function AskCoworkerButton({
         document.dispatchEvent(
           new CustomEvent("open-agent-panel", {
             detail: {
-              autoMessage: prompt,
+              ...(prompt ? { autoMessage: prompt } : {}),
               ...(routeContext ? { routeContext } : {}),
               ...(providerReviewPacket ? { providerReviewPacket } : {}),
             },

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveAgentForRoute, generateCannedResponse } from "./agent-routing";
+import { generateCannedResponse, resolveAgentForRoute } from "./agent-routing";
 
 // High-risk route/agent/tool/QA-ID summary coverage lives in
 // apps/web/lib/testing/route-contracts.test.ts. Keep the role-conditional
@@ -36,6 +36,27 @@ describe("resolveAgentForRoute", () => {
     const result = resolveAgentForRoute("/unknown/path", superuser);
     expect(result.agentId).toBe("coo");
     expect(result.canAssist).toBe(true);
+  });
+
+  it("uses the selected coworker on a coworker record route", () => {
+    const result = resolveAgentForRoute(
+      "/platform/ai/agent/customer-advisor",
+      superuser,
+    );
+
+    expect(result.agentId).toBe("customer-advisor");
+    expect(result.agentName).toBe("Customer Advisor");
+    expect(result.canAssist).toBe(true);
+  });
+
+  it("does not bypass platform access for a selected coworker", () => {
+    const result = resolveAgentForRoute(
+      "/platform/ai/agent/customer-advisor",
+      noRole,
+    );
+
+    expect(result.agentId).toBe("customer-advisor");
+    expect(result.canAssist).toBe(false);
   });
 
   it("returns canAssist=false when user lacks capability", () => {

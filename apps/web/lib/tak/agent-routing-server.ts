@@ -4,14 +4,20 @@
 // Import this in server components / server actions — NOT in "use client" components.
 
 import "server-only";
+import { prisma } from "@dpf/db";
 import { resolveAgentForRoute } from "./agent-routing";
+import { coworkerIdFromRecordRoute } from "./selected-coworker-route";
 import { loadPrompt } from "./prompt-loader";
 import { getSkillsForAgentLegacy } from "@/lib/actions/agent-skills";
 import type { AgentInfo, AgentSkill } from "@/lib/agent-coworker-types";
 import { ensureAgentPrincipalIdentity } from "@/lib/identity/principal-linking";
-import { resolveCoworkerIdentity } from "@/lib/coworker-identity";
-import type { UserContext } from "@/lib/permissions";
+import { can, type UserContext } from "@/lib/permissions";
+import { evaluateLifecycleGate } from "@/lib/coworker-lifecycle/lifecycle-gate";
 import { withCoworkerInteractionContract } from "./coworker-interaction-contract";
+import {
+  SELECTABLE_COWORKER_STATE,
+  selectableCoworkerIdentityRefs,
+} from "@/lib/coworker-record/selectable-coworker";
 
 async function loadPromptBackplane(agentId: string, fallbackPrompt: string): Promise<string> {
   const dbPrompt = await loadPrompt("route-persona", agentId, fallbackPrompt);
@@ -32,6 +38,11 @@ export async function resolveAgentForRouteWithPrompts(
   userContext: UserContext,
   useUnified?: boolean,
 ): Promise<AgentInfo> {
+  const selectedCoworkerId = coworkerIdFromRecordRoute(pathname);
+  if (selectedCoworkerId) {
+    return resolveAgentByIdWithPrompts(selectedCoworkerId, userContext);
+  }
+
   // Get the base agent info with hardcoded prompts and inline skills
   const agent = resolveAgentForRoute(pathname, userContext, useUnified);
 
@@ -57,24 +68,107 @@ export async function resolveAgentForRouteWithPrompts(
 
 export async function resolveAgentByIdWithPrompts(
   agentId: string,
-  _userContext: UserContext,
+  userContext: UserContext,
 ): Promise<AgentInfo> {
-  const identity = resolveCoworkerIdentity(agentId);
-  const agentName = identity?.displayName ?? identity?.agentName ?? agentId;
+  if (!can(userContext, "view_platform")) {
+    return unavailableAgent(agentId);
+  }
+
+  const { canonicalAgentId, runtimeAgentId } =
+    selectableCoworkerIdentityRefs(agentId);
+  const selected = await prisma.agent.findFirst({
+    where: {
+      agentId: canonicalAgentId,
+      ...SELECTABLE_COWORKER_STATE,
+    },
+    select: {
+      agentId: true,
+      slugId: true,
+      displayName: true,
+      name: true,
+      description: true,
+      sensitivity: true,
+    },
+  });
+  if (!selected) {
+    return unavailableAgent(agentId);
+  }
+
+  const runtime = await prisma.agent.findFirst({
+    where: {
+      agentId: runtimeAgentId,
+      ...SELECTABLE_COWORKER_STATE,
+    },
+    select: {
+      agentId: true,
+      displayName: true,
+      name: true,
+      description: true,
+      sensitivity: true,
+    },
+  });
+  if (!runtime) {
+    return unavailableAgent(agentId);
+  }
+
+  const gate = await evaluateLifecycleGate(runtime.agentId, {
+    purpose: "chat",
+  });
+  if (!gate.allowed) {
+    return unavailableAgent(agentId);
+  }
+
+  const agentName =
+    selected.displayName ||
+    selected.name ||
+    runtime.displayName ||
+    runtime.name ||
+    runtimeAgentId;
   const fallbackPrompt = `You are ${agentName}. Complete the assigned scheduled work with your granted tools, prefer concrete action over narration, and finish with a concise operational summary.`;
 
-  await ensureAgentPrincipalIdentity(agentId);
+  await ensureAgentPrincipalIdentity(runtimeAgentId);
 
-  const dbSkills = await getSkillsForAgentLegacy(agentId);
+  const dbSkills = await getSkillsForAgentLegacy(runtimeAgentId);
   const skills: AgentSkill[] = dbSkills as AgentSkill[];
 
   return {
-    agentId,
+    agentId: runtimeAgentId,
     agentName,
-    agentDescription: `${agentName} scheduled specialist`,
+    agentDescription:
+      selected.description?.trim() ||
+      runtime.description?.trim() ||
+      `${agentName} scheduled specialist`,
     canAssist: true,
-    sensitivity: "internal",
+    sensitivity: normalizeSensitivity(
+      selected.sensitivity ?? runtime.sensitivity,
+    ),
     skills,
-    systemPrompt: await loadPromptBackplane(agentId, fallbackPrompt),
+    systemPrompt: await loadPromptBackplane(runtimeAgentId, fallbackPrompt),
   };
+}
+
+function unavailableAgent(agentId: string): AgentInfo {
+  return {
+    agentId,
+    agentName: "Coworker unavailable",
+    agentDescription:
+      "This coworker is unavailable or you do not have permission to use it.",
+    canAssist: false,
+    sensitivity: "internal",
+    skills: [],
+    systemPrompt: "",
+  };
+}
+
+function normalizeSensitivity(
+  value: string | null | undefined,
+): AgentInfo["sensitivity"] {
+  if (
+    value === "public" ||
+    value === "confidential" ||
+    value === "restricted"
+  ) {
+    return value;
+  }
+  return "internal";
 }

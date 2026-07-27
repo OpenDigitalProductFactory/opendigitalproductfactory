@@ -8,6 +8,7 @@
 import { prisma } from "@dpf/db";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { MessageSquare, Settings2 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { AgentModelRoutingCard } from "@/components/platform/AgentModelRoutingCard";
@@ -16,7 +17,10 @@ import { RecordActionsMenu } from "@/components/platform/coworker-record/RecordA
 import { CoworkerPriorityControl } from "@/components/golden-triangle/CoworkerPriorityControl";
 import { CoworkerProactivitySetting } from "@/components/platform/coworker-record/CoworkerProactivitySetting";
 import { getCoworkerPostureInheritance } from "@/lib/actions/golden-triangle";
-import { loadCoworkerRecord } from "@/lib/coworker-record/load-record";
+import {
+  loadCoworkerRecord,
+} from "@/lib/coworker-record/load-record";
+import { safeRosterReturnTo } from "@/lib/coworker-record/roster-filter";
 import { loadFamilyCorpusSignals } from "@/lib/coworker-record/corpus-signals";
 import {
   getCoworkerCapabilityNeedReview,
@@ -42,6 +46,20 @@ import {
 import { NeedsAndPlaybooksPanel } from "@/components/platform/coworker-record/NeedsAndPlaybooksPanel";
 import { CooConversationalNameCard } from "@/components/platform/coworker-record/CooConversationalNameCard";
 import { isStandingCooAgentId } from "@/lib/coworker-presentation/coo-name";
+import { AskCoworkerButton } from "@/components/agent/AskCoworkerButton";
+import {
+  activeRosterServices,
+  projectCoworkerDiscovery,
+  projectCoworkerServiceAuthority,
+} from "@/lib/coworker-record/roster-presentation";
+import {
+  AdvancedDetail,
+  AvailabilityPanel,
+  HeaderChip,
+  OwnerStatus,
+  WorkHighlights,
+  WorkOfferedPanel,
+} from "@/components/platform/coworker-record/OwnerCoworkerPanels";
 
 const BUDGET_CLASS_LABELS: Record<string, string> = {
   quality_first: "Quality first",
@@ -92,10 +110,14 @@ function emptyWorkPatternReadModel(now = new Date()): WorkPatternReadModel {
 
 export default async function AgentDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ agentId: string }>;
+  searchParams?: Promise<{ returnTo?: string | string[] }>;
 }) {
   const { agentId } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const returnTo = safeRosterReturnTo(resolvedSearchParams.returnTo);
   const record = await loadCoworkerRecord(agentId);
   if (!record) return notFound();
   const { agent, gaid, profession, decisions } = record;
@@ -209,6 +231,39 @@ export default async function AgentDetailPage({
     hitlTier: agent.hitlTierDefault,
     providerHealthy,
   };
+  const discovery = projectCoworkerDiscovery({
+    agentDescription: agent.description,
+    services: record.services,
+    install: record.installAvailability,
+  });
+  const {
+    area,
+    interaction,
+    availability,
+    canStartConversation,
+    plainJob,
+  } = discovery;
+  const interactionLabel = interaction.labels.join(", ");
+  const coverageSetupHref = availability.reason
+    .toLowerCase()
+    .includes("business type")
+    ? "/storefront/settings/business"
+    : "/platform/ai/readiness";
+  const authority = projectCoworkerServiceAuthority({
+    agent: {
+      agentId: agent.agentId,
+      hitlTierDefault: agent.hitlTierDefault,
+    },
+    governance: agent.governanceProfile
+      ? {
+          state: "evaluated",
+          profileId: agent.governanceProfile.id,
+          hitlPolicy: agent.governanceProfile.hitlPolicy,
+        }
+      : { state: "not-configured" },
+    services: record.services,
+  });
+  const detailRoute = `/platform/ai/agent/${encodeURIComponent(agent.agentId)}`;
 
   const capabilitiesEditor = (
     <CapabilitiesEditor
@@ -252,11 +307,6 @@ export default async function AgentDetailPage({
     <CoworkerPriorityControl agentId={agent.agentId} inheritance={postureInheritance} canWrite={canWrite} />
   );
 
-  const coveragePct =
-    profession.coverage && profession.coverage.checklist.length > 0
-      ? Math.min(100, Math.round((profession.coverage.pageCount / profession.coverage.checklist.length) * 100))
-      : null;
-
   // WS4: a one-word badge on the Priority tab so an override is visible without
   // opening it ("set" = this coworker has its own override; otherwise inherited).
   const priorityBadge = postureInheritance.hasOwnOverride ? "set" : null;
@@ -265,60 +315,150 @@ export default async function AgentDetailPage({
 
   const tabs: CoworkerTab[] = [
     { id: "overview", label: "Overview" },
-    { id: "profession", label: "Profession & Knowledge", badge: coveragePct !== null ? `${coveragePct}%` : profession.family ? null : "unmapped" },
-    { id: "capabilities", label: "Capabilities", badge: String(agent.toolGrants.length) },
-    { id: "priority", label: "Priority & Autonomy", badge: priorityBadge },
-    { id: "governance", label: "Governance" },
-    { id: "performance", label: "Performance" },
-    { id: "needs-playbooks", label: "Needs & Playbooks", badge: needsAndPlaybooksCount > 0 ? String(needsAndPlaybooksCount) : null },
-    { id: "decisions", label: "Decisions & Activity", badge: decisions.total > 0 ? String(decisions.total) : null },
+    {
+      id: "work-offered",
+      label: "Work Offered",
+      badge: activeRosterServices(record.services).length
+        ? String(activeRosterServices(record.services).length)
+        : null,
+    },
+    { id: "availability", label: "Availability" },
+    {
+      id: "capabilities",
+      label: "Capabilities",
+      badge: String(agent.toolGrants.length),
+    },
+    {
+      id: "autonomy",
+      label: "Autonomy & Governance",
+      badge: priorityBadge,
+    },
+    {
+      id: "activity",
+      label: "Activity",
+      badge:
+        decisions.total + needsAndPlaybooksCount > 0
+          ? String(decisions.total + needsAndPlaybooksCount)
+          : null,
+    },
   ];
 
   return (
     <div>
-      {/* Breadcrumb */}
-      <div style={{ marginBottom: 16 }}>
-        {/* BI-54A93A3C: target the directory itself, not the /platform/ai alias
-            that only redirects there — a breadcrumb should land in one hop. */}
-        <Link href="/platform/ai/overview" style={{ fontSize: 11, color: "var(--dpf-muted)", textDecoration: "none" }}>
+      <div className="mb-4 text-xs">
+        <Link
+          href={returnTo}
+          className="text-[var(--dpf-muted)] no-underline hover:text-[var(--dpf-text)]"
+        >
           AI Workforce
         </Link>
-        <span style={{ fontSize: 11, color: "var(--dpf-muted)", margin: "0 6px" }}>/</span>
-        <span style={{ fontSize: 11, color: "var(--dpf-text)" }}>{agent.displayName}</span>
+        <span className="mx-2 text-[var(--dpf-muted)]">/</span>
+        <span className="text-[var(--dpf-text)]">{agent.displayName}</span>
       </div>
 
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
-        <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--dpf-text)", margin: 0 }}>{agent.displayName}</h1>
-        <HeaderChip tone="muted">{agent.kind.charAt(0).toUpperCase() + agent.kind.slice(1)}</HeaderChip>
-        <HeaderChip tone="accent">{TIER_LABELS[agent.tier] ?? `Tier ${agent.tier}`}</HeaderChip>
-        {profession.family && <HeaderChip tone="accent">{profession.family.label}</HeaderChip>}
-        {agent.valueStream && <HeaderChip tone="success">{agent.valueStream}</HeaderChip>}
-        <HeaderChip tone="muted">{agent.lifecycleStage}</HeaderChip>
-        {/* WS2 Related Actions ("…") — the data-model edges as navigation. Pure
-            read-only links; per-coworker editing lives in the tabs. */}
-        <RecordActionsMenu
-          actions={[
-            { label: "Edit persona prompt", href: "/platform/ai/prompts" },
-            { label: "Skills catalog", href: "/platform/ai/skills" },
-            { label: "Model & priority grid", href: "/platform/ai/assignments" },
-            { label: "Authority & audit", href: "/platform/audit" },
-            ...(profession.profileId
-              ? [{ label: "Open Needs you", href: "/workspace/inbox" }]
-              : []),
-          ]}
-        />
-      </div>
+      <header className="mb-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-bold text-[var(--dpf-text)]">
+                {agent.displayName}
+              </h1>
+              <HeaderChip tone="accent">{area.label}</HeaderChip>
+              <HeaderChip tone="muted">
+                {agent.kind.charAt(0).toUpperCase() + agent.kind.slice(1)}
+              </HeaderChip>
+            </div>
+            <p className="mt-2 max-w-3xl text-sm leading-5 text-[var(--dpf-text-secondary)]">
+              {plainJob}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {canStartConversation && (
+              <AskCoworkerButton
+                routeContext={detailRoute}
+                label="Ask this coworker"
+                className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--dpf-accent)] px-3 text-sm font-semibold text-[var(--dpf-accent)] hover:bg-[var(--dpf-surface-2)]"
+              >
+                <MessageSquare aria-hidden className="h-4 w-4" />
+                <span>Ask this coworker</span>
+              </AskCoworkerButton>
+            )}
+            {availability.state === "setup-needed" && (
+              <Link
+                href="/setup"
+                className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--dpf-border)] px-3 text-sm font-semibold text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
+              >
+                <Settings2 aria-hidden className="h-4 w-4" />
+                Finish setup
+              </Link>
+            )}
+            {availability.state === "coverage-not-defined" && (
+              <Link
+                href={coverageSetupHref}
+                className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--dpf-border)] px-3 text-sm font-semibold text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
+              >
+                <Settings2 aria-hidden className="h-4 w-4" />
+                Review availability
+              </Link>
+            )}
+            <RecordActionsMenu
+              actions={[
+                { label: "Edit persona prompt", href: "/platform/ai/prompts" },
+                { label: "Skills catalog", href: "/platform/ai/skills" },
+                {
+                  label: "Model & priority grid",
+                  href: "/platform/ai/assignments",
+                },
+                { label: "Authority & audit", href: "/platform/audit" },
+                ...(profession.profileId
+                  ? [{ label: "Open Needs you", href: "/workspace/inbox" }]
+                  : []),
+              ]}
+            />
+          </div>
+        </div>
 
-      {agent.description && (
-        <p style={{ fontSize: 12, color: "var(--dpf-muted)", marginBottom: 10, maxWidth: 720 }}>{agent.description}</p>
-      )}
+        <dl className="mt-5 grid border-y border-[var(--dpf-border)] sm:grid-cols-3 sm:divide-x sm:divide-[var(--dpf-border)]">
+          <OwnerStatus
+            label="Work includes"
+            value={interactionLabel}
+            detail="Interaction across this coworker's declared services."
+          />
+          <OwnerStatus
+            label="Availability"
+            value={availability.label}
+            detail={availability.reason}
+          />
+          <OwnerStatus
+            label="Approval and autonomy"
+            value={authority.label}
+            detail={authority.summary}
+          />
+        </dl>
 
-      <div style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 20 }}>
-        <span>ID: <code style={{ fontSize: 10 }}>{agent.agentId}</code></span>
-        {gaid && <span style={{ marginLeft: 12 }}>GAID: <code style={{ fontSize: 10 }}>{gaid}</code></span>}
-        {agent.slugId && <span style={{ marginLeft: 12 }}>Slug: <code style={{ fontSize: 10 }}>{agent.slugId}</code></span>}
-      </div>
+        <details className="mt-2 border-b border-[var(--dpf-border)] pb-2">
+          <summary className="min-h-11 cursor-pointer py-2 text-xs font-medium text-[var(--dpf-muted)]">
+            Technical identity
+          </summary>
+          <div className="flex flex-wrap gap-x-4 gap-y-2 pb-2 text-xs text-[var(--dpf-muted)]">
+            <span>
+              ID: <code>{agent.agentId}</code>
+            </span>
+            {gaid && (
+              <span>
+                GAID: <code>{gaid}</code>
+              </span>
+            )}
+            {agent.slugId && (
+              <span>
+                Slug: <code>{agent.slugId}</code>
+              </span>
+            )}
+            <span>{TIER_LABELS[agent.tier] ?? `Tier ${agent.tier}`}</span>
+            <span>{agent.lifecycleStage}</span>
+          </div>
+        </details>
+      </header>
 
       {isStandingCooAgentId(agent.agentId) && (
         <CooConversationalNameCard
@@ -328,31 +468,60 @@ export default async function AgentDetailPage({
       )}
 
       <CoworkerRecordTabs tabs={tabs}>
-        <OverviewPanel record={record} summary={summary} />
-        <ProfessionPanel record={record} corpusSignals={corpusSignals} installArchetype={installVariant.archetype ?? null} />
-        <CapabilitiesPanel record={record} routingCard={routingCard} capabilitiesEditor={capabilitiesEditor} />
-        <PriorityPanel
-          priorityControl={priorityControl}
-          proactivitySection={<CoworkerProactivitySetting agentId={agent.agentId} />}
+        <div className="space-y-5">
+          <section>
+            <h2 className="text-base font-semibold text-[var(--dpf-text)]">
+              Work offered now
+            </h2>
+            <div className="mt-2">
+              <WorkHighlights services={record.services} />
+            </div>
+          </section>
+          <AdvancedDetail summary="Operational profile">
+            <OverviewPanel record={record} summary={summary} />
+          </AdvancedDetail>
+        </div>
+        <WorkOfferedPanel services={record.services} />
+        <AvailabilityPanel
+          availability={availability}
+          authority={authority}
+          interactionLabel={interactionLabel}
+          canStartConversation={canStartConversation}
+          installArchetypeId={
+            record.installAvailability.install?.archetypeId ?? null
+          }
         />
-        <GovernancePanel record={record} />
-        <PerformancePanel record={record} />
-        <NeedsAndPlaybooksPanel
-          needs={capabilityNeedReview}
-          workPatterns={workPatternReadModel}
-          canWrite={canWrite}
-        />
-        <DecisionsPanel record={record} />
+        <div className="space-y-6">
+          <ProfessionPanel
+            record={record}
+            corpusSignals={corpusSignals}
+            installArchetype={installVariant.archetype ?? null}
+          />
+          <CapabilitiesPanel
+            record={record}
+            routingCard={routingCard}
+            capabilitiesEditor={capabilitiesEditor}
+          />
+          <NeedsAndPlaybooksPanel
+            needs={capabilityNeedReview}
+            workPatterns={workPatternReadModel}
+            canWrite={canWrite}
+          />
+        </div>
+        <div className="space-y-6">
+          <PriorityPanel
+            priorityControl={priorityControl}
+            proactivitySection={
+              <CoworkerProactivitySetting agentId={agent.agentId} />
+            }
+          />
+          <GovernancePanel record={record} />
+        </div>
+        <div className="space-y-6">
+          <PerformancePanel record={record} />
+          <DecisionsPanel record={record} />
+        </div>
       </CoworkerRecordTabs>
     </div>
-  );
-}
-
-function HeaderChip({ children, tone }: { children: React.ReactNode; tone: "accent" | "success" | "muted" }) {
-  const toneVar = { accent: "var(--dpf-accent)", success: "var(--dpf-success)", muted: "var(--dpf-muted)" }[tone];
-  return (
-    <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, border: `1px solid ${toneVar}`, color: toneVar }}>
-      {children}
-    </span>
   );
 }

@@ -49,6 +49,29 @@ describe("coworker service catalog seed data", () => {
     }
   });
 
+  it("classifies seeded services by explicit owner-facing work area", () => {
+    const byId = new Map(
+      COWORKER_SERVICE_CATALOG_SERVICE_SEEDS.map((service) => [
+        service.serviceId,
+        service.ownerAreaSlug,
+      ]),
+    );
+
+    expect(byId.get("svc-customer-sales-intake")).toBe(
+      "products_and_services_sold",
+    );
+    expect(byId.get("svc-marketing-partner-intake")).toBe(
+      "products_and_services_sold",
+    );
+    expect(byId.get("svc-marketing-campaign-execution")).toBe(
+      "products_and_services_sold",
+    );
+    expect(byId.get("svc-build-sensitive-requirements")).toBe("foundational");
+    expect(byId.get("svc-compliance-pci-requirements")).toBe("foundational");
+    expect(byId.get("svc-legal-counsel-packet")).toBe("foundational");
+    expect(byId.get("svc-finance-provider-cost-intake")).toBe("foundational");
+  });
+
   it("uses only governed archetype category or leaf identifiers", () => {
     const governedIdentifiers = new Set(
       ALL_ARCHETYPES.flatMap((archetype) => [archetype.archetypeId, archetype.category]),
@@ -93,6 +116,12 @@ describe("coworker service catalog seed data", () => {
     const offerUpserts: Array<Record<string, unknown>> = [];
     const offerUpdates: Array<Record<string, unknown>> = [];
     const prisma = {
+      portfolio: {
+        findMany: async () => [
+          { id: "portfolio-customer", slug: "products_and_services_sold" },
+          { id: "portfolio-foundational", slug: "foundational" },
+        ],
+      },
       coworkerService: {
         upsert: async (args: Record<string, unknown>) => {
           serviceUpserts.push(args);
@@ -122,6 +151,10 @@ describe("coworker service catalog seed data", () => {
     for (const args of serviceUpserts) {
       expect(args["create"]).not.toHaveProperty("digitalProductId");
       expect(args["update"]).not.toHaveProperty("digitalProductId");
+      expect(args["create"]).not.toHaveProperty("ownerAreaSlug");
+      expect(args["update"]).not.toHaveProperty("ownerAreaSlug");
+      expect(args["create"]).toHaveProperty("portfolioId");
+      expect(args["update"]).toHaveProperty("portfolioId");
       expect(args["create"]).toHaveProperty("archetypes", []);
       expect(args["update"]).not.toHaveProperty("archetypes");
     }
@@ -161,5 +194,19 @@ describe("coworker service catalog seed data", () => {
         data: { digitalProductId: "dpf-ai-workforce" },
       }),
     ]);
+  });
+
+  it("fails closed when a declared owner-facing portfolio is missing", async () => {
+    const prisma = {
+      portfolio: {
+        findMany: async () => [
+          { id: "portfolio-customer", slug: "products_and_services_sold" },
+        ],
+      },
+    };
+
+    await expect(seedCoworkerServiceCatalog(prisma as never)).rejects.toThrow(
+      "Coworker service owner areas are missing: foundational",
+    );
   });
 });

@@ -34,6 +34,7 @@ function offer(overrides: Partial<CoworkerOfferCatalogItem> = {}): CoworkerOffer
     contractTerms: {},
     dataBoundary: {},
     metadata: {},
+    portfolio: null,
     provider,
     backing: { skillIds: ["supplier-support"], toolNames: [], grantKeys: ["registry_read"] },
     digitalProduct: null,

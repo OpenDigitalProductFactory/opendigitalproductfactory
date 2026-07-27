@@ -5,35 +5,9 @@
 // the same order as `tabs`, so all data fetching/rendering stays server-side
 // (no prop serialization). This component owns only the active-tab state.
 
-import { useState, Children } from "react";
+import { Children, useEffect, useState } from "react";
 
 export type CoworkerTab = { id: string; label: string; badge?: string | null };
-
-const tabBtn = (active: boolean): React.CSSProperties => ({
-  appearance: "none",
-  background: active ? "var(--dpf-surface-2)" : "transparent",
-  border: "1px solid",
-  borderColor: active ? "var(--dpf-border-strong)" : "transparent",
-  borderBottomColor: active ? "var(--dpf-accent)" : "transparent",
-  color: active ? "var(--dpf-text)" : "var(--dpf-text-secondary)",
-  fontSize: 12,
-  fontWeight: active ? 600 : 500,
-  padding: "7px 14px",
-  borderRadius: "6px 6px 0 0",
-  cursor: "pointer",
-  display: "inline-flex",
-  alignItems: "center",
-  gap: 6,
-});
-
-const badgeStyle: React.CSSProperties = {
-  fontSize: 10,
-  fontWeight: 600,
-  padding: "0 6px",
-  borderRadius: 999,
-  background: "var(--dpf-accent-soft)",
-  color: "var(--dpf-accent)",
-};
 
 export function CoworkerRecordTabs({
   tabs,
@@ -45,18 +19,59 @@ export function CoworkerRecordTabs({
   const [active, setActive] = useState(0);
   const panels = Children.toArray(children);
 
+  useEffect(() => {
+    function restoreSection() {
+      const requested = window.location.hash.slice(1);
+      const index = tabs.findIndex((tab) => tab.id === requested);
+      setActive(index >= 0 ? index : 0);
+    }
+
+    restoreSection();
+    window.addEventListener("hashchange", restoreSection);
+    return () => window.removeEventListener("hashchange", restoreSection);
+  }, [tabs]);
+
+  function activateTab(index: number) {
+    const next = Math.max(0, Math.min(tabs.length - 1, index));
+    setActive(next);
+    const tab = tabs[next];
+    if (!tab) return;
+    const url = new URL(window.location.href);
+    url.hash = next === 0 ? "" : tab.id;
+    window.history.replaceState(window.history.state, "", url);
+  }
+
+  function focusTab(index: number) {
+    const next = Math.max(0, Math.min(tabs.length - 1, index));
+    activateTab(next);
+    window.requestAnimationFrame(() => {
+      document.getElementById(`tab-${tabs[next]?.id}`)?.focus();
+    });
+  }
+
   return (
     <div>
+      <label className="mb-4 block sm:hidden">
+        <span className="mb-1 block text-xs font-medium text-[var(--dpf-muted)]">
+          Coworker section
+        </span>
+        <select
+          value={active}
+          onChange={(event) => activateTab(Number(event.target.value))}
+          className="h-11 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 text-sm text-[var(--dpf-text)]"
+        >
+          {tabs.map((tab, index) => (
+            <option key={tab.id} value={index}>
+              {tab.label}
+              {tab.badge ? ` (${tab.badge})` : ""}
+            </option>
+          ))}
+        </select>
+      </label>
       <div
         role="tablist"
         aria-label="Coworker record"
-        style={{
-          display: "flex",
-          gap: 4,
-          flexWrap: "wrap",
-          borderBottom: "1px solid var(--dpf-border)",
-          marginBottom: 18,
-        }}
+        className="mb-5 hidden gap-1 overflow-x-auto border-b border-[var(--dpf-border)] sm:flex"
       >
         {tabs.map((tab, i) => (
           <button
@@ -66,11 +81,36 @@ export function CoworkerRecordTabs({
             aria-selected={active === i}
             aria-controls={`panel-${tab.id}`}
             type="button"
-            onClick={() => setActive(i)}
-            style={tabBtn(active === i)}
+            onClick={() => activateTab(i)}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowRight") {
+                event.preventDefault();
+                focusTab((i + 1) % tabs.length);
+              } else if (event.key === "ArrowLeft") {
+                event.preventDefault();
+                focusTab((i - 1 + tabs.length) % tabs.length);
+              } else if (event.key === "Home") {
+                event.preventDefault();
+                focusTab(0);
+              } else if (event.key === "End") {
+                event.preventDefault();
+                focusTab(tabs.length - 1);
+              }
+            }}
+            tabIndex={active === i ? 0 : -1}
+            className={[
+              "inline-flex min-h-11 shrink-0 items-center gap-2 rounded-t-md border border-b-2 px-3 text-xs font-medium",
+              active === i
+                ? "border-[var(--dpf-border-strong)] border-b-[var(--dpf-accent)] bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
+                : "border-transparent text-[var(--dpf-text-secondary)] hover:text-[var(--dpf-text)]",
+            ].join(" ")}
           >
             {tab.label}
-            {tab.badge ? <span style={badgeStyle}>{tab.badge}</span> : null}
+            {tab.badge ? (
+              <span className="rounded bg-[var(--dpf-accent-soft)] px-1.5 text-xs font-semibold text-[var(--dpf-accent)]">
+                {tab.badge}
+              </span>
+            ) : null}
           </button>
         ))}
       </div>

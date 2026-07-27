@@ -21,6 +21,14 @@ PORTS="3010"
 GIT_BIN="${DPF_GATE_GIT_BIN:-git}"
 CURL_BIN="${DPF_GATE_CURL_BIN:-curl}"
 STATE_FILE=""
+gate_pid=""
+heartbeat_pid=""
+lease_id=""
+lease_released=0
+lease_events_file=""
+lease_fence_file=""
+local_fence_file=""
+local_fence_token=""
 
 usage() {
   cat <<'EOF'
@@ -101,6 +109,43 @@ if (value !== undefined && value !== null) process.stdout.write(String(value));
 ' "$1"
 }
 
+terminate_process_tree() {
+  target_pid="${1:-}"
+  [ -n "$target_pid" ] || return 0
+  if command -v pgrep >/dev/null 2>&1; then
+    for child_pid in $(pgrep -P "$target_pid" 2>/dev/null || true); do
+      terminate_process_tree "$child_pid"
+    done
+  fi
+  kill -TERM "$target_pid" 2>/dev/null || true
+}
+
+stop_heartbeat() {
+  if [ -n "$heartbeat_pid" ]; then
+    kill "$heartbeat_pid" 2>/dev/null || true
+    wait "$heartbeat_pid" 2>/dev/null || true
+    heartbeat_pid=""
+  fi
+}
+
+cleanup_gate() {
+  stop_heartbeat
+  if [ -n "$gate_pid" ]; then
+    terminate_process_tree "$gate_pid"
+    gate_pid=""
+  fi
+  if [ -n "$lease_id" ] && [ "$lease_released" != "1" ]; then
+    mcp_call release_nonprod_environment_lease "{\"leaseId\":$(json_escape "$lease_id")}" >/dev/null 2>&1 || true
+    lease_released=1
+  fi
+  if [ -n "$local_fence_token" ]; then
+    node "$SCRIPT_DIR/lib/local-sandbox-fence.mjs" release "$local_fence_file" "$local_fence_token" >/dev/null 2>&1 || true
+    local_fence_token=""
+  fi
+  [ -z "$lease_events_file" ] || rm -f "$lease_events_file"
+  [ -z "$lease_fence_file" ] || rm -f "$lease_fence_file"
+}
+
 write_state() {
   gate_passed="$1"
   lease_id="$2"
@@ -108,10 +153,12 @@ write_state() {
   status="$4"
   expires_at_value="$5"
   resilience_json="${6:-null}"
+  lease_events_json="${7:-[]}"
   mkdir -p "$(dirname "$STATE_FILE")"
   node -e '
 const fs = require("node:fs");
 const resilience = JSON.parse(process.argv[9]);
+const leaseEvents = JSON.parse(process.argv[10]);
 const out = process.argv[1];
 const payload = {
   branch: process.argv[2],
@@ -121,11 +168,12 @@ const payload = {
   evidenceRecordId: process.argv[6],
   status: process.argv[7],
   expiresAt: process.argv[8],
+  leaseEvents,
   recordedAt: new Date().toISOString()
 };
 if (resilience) payload.resilience = resilience;
 fs.writeFileSync(out, JSON.stringify(payload, null, 2) + "\n");
-' "$STATE_FILE" "$BRANCH" "$SHA" "$gate_passed" "$lease_id" "$evidence_id" "$status" "$expires_at_value" "$resilience_json"
+' "$STATE_FILE" "$BRANCH" "$SHA" "$gate_passed" "$lease_id" "$evidence_id" "$status" "$expires_at_value" "$resilience_json" "$lease_events_json"
 }
 
 while [ "$#" -gt 0 ]; do
@@ -156,6 +204,8 @@ done
 [ -n "$OWNER_SESSION_ID" ] || OWNER_SESSION_ID="gate-$$"
 STATE_FILE="$("$GIT_BIN" rev-parse --git-path dpf-local-ci-gate.json)"
 METADATA_FILE="$("$GIT_BIN" rev-parse --git-path dpf-local-ci-metadata.json)"
+git_common_dir="$("$GIT_BIN" rev-parse --git-common-dir)"
+local_fence_file="${DPF_LOCAL_SANDBOX_FENCE_PATH:-$(node -e 'const p=require("node:path"); process.stdout.write(p.resolve(process.argv[1], process.argv[2], "dpf-local-ci-owner.json"))' "$WORKTREE_PATH" "$git_common_dir")}"
 
 # Checked-in default (BI-157DC9B2): when no DPF_LOCAL_CI_COMMAND is supplied and
 # the stub is not explicitly allowed, run the non-mutating merge-workspace
@@ -194,11 +244,25 @@ if [ "$PUSH_BRANCH" = "1" ]; then
   DPF_PREPUSH_GATE_INFLIGHT=1 "$GIT_BIN" push "$REMOTE" "$BRANCH"
 fi
 
-expires_at="$(node -e 'process.stdout.write(new Date(Date.now() + Number(process.argv[1]) * 60000).toISOString())' "$EXPIRES_MINUTES")"
+lease_ttl_ms="$(node -e 'process.stdout.write(String(Math.min(Number(process.argv[1]) * 60000, 20 * 60000)))' "$EXPIRES_MINUTES")"
+expires_at=""
 deadline="$(node -e 'process.stdout.write(String(Date.now() + Number(process.argv[1]) * 1000))' "$LEASE_WAIT_SECONDS")"
 lease_id=""
 
 while :; do
+  # The helper records its native parent PID. On Git-for-Windows, `$$` is an
+  # MSYS identity and is not guaranteed to be a native PID that Node can probe.
+  local_fence_response="$(node "$SCRIPT_DIR/lib/local-sandbox-fence.mjs" acquire "$local_fence_file" "$OWNER_SESSION_ID" "$BRANCH")"
+  local_fence_status="$(printf '%s' "$local_fence_response" | field status)"
+  if [ "$local_fence_status" = "conflict" ]; then
+    now_ms="$(node -e 'process.stdout.write(String(Date.now()))')"
+    [ "$now_ms" -lt "$deadline" ] || die "local-CI sandbox owner process is still live; timed out waiting"
+    printf '%s\n' "local-CI sandbox process fence is held; retrying in ${POLL_SECONDS}s..."
+    sleep "$POLL_SECONDS"
+    continue
+  fi
+  local_fence_token="$(printf '%s' "$local_fence_response" | field record.token)"
+  expires_at="$(node -e 'process.stdout.write(new Date(Date.now() + Number(process.argv[1])).toISOString())' "$lease_ttl_ms")"
   claim_args="$(node -e '
 const args = {
   environmentKey: "local-integration-ci",
@@ -222,6 +286,8 @@ process.stdout.write(JSON.stringify(args));
     [ -n "$lease_id" ] || lease_id="$(printf '%s' "$claim_response" | field data.lease.leaseId)"
     break
   fi
+  node "$SCRIPT_DIR/lib/local-sandbox-fence.mjs" release "$local_fence_file" "$local_fence_token" >/dev/null
+  local_fence_token=""
   if [ "$claim_error" = "lease_conflict" ]; then
     now_ms="$(node -e 'process.stdout.write(String(Date.now()))')"
     [ "$now_ms" -lt "$deadline" ] || die "local-CI sandbox lease is busy; timed out waiting"
@@ -237,15 +303,50 @@ evidence_id=""
 status="failed"
 gate_command_label=""
 gate_output_file="$(mktemp)"
+lease_events_file="$(mktemp)"
+lease_fence_file="$(mktemp)"
 gate_output=""
+heartbeat_interval="$(node -e 'process.stdout.write(String(Math.max(1, Math.floor(Number(process.argv[1]) / 3000))))' "$lease_ttl_ms")"
+printf '{"type":"claimed","at":%s,"expiresAt":%s}\n' "$(json_escape "$(node -e 'process.stdout.write(new Date().toISOString())')")" "$(json_escape "$expires_at")" >>"$lease_events_file"
+trap cleanup_gate EXIT
+trap 'terminate_process_tree "$gate_pid"' INT TERM
 
 set +e
 printf '%s\n' "local-CI sandbox lease claimed: $lease_id"
 if [ -n "$LOCAL_CI_COMMAND" ]; then
   gate_command_label="$LOCAL_CI_COMMAND"
   printf '%s\n' "running local-CI command: $LOCAL_CI_COMMAND"
-  DPF_LOCAL_CI_METADATA_FILE="$METADATA_FILE" sh -c "$LOCAL_CI_COMMAND" >"$gate_output_file" 2>&1
+  DPF_LOCAL_CI_METADATA_FILE="$METADATA_FILE" DPF_NONPROD_LEASE_ID="$lease_id" DPF_NONPROD_OWNER_SESSION_ID="$OWNER_SESSION_ID" sh -c "$LOCAL_CI_COMMAND" >"$gate_output_file" 2>&1 &
+  gate_pid=$!
+  (
+    while sleep "$heartbeat_interval"; do
+      local_heartbeat="$(node "$SCRIPT_DIR/lib/local-sandbox-fence.mjs" heartbeat "$local_fence_file" "$local_fence_token" 2>/dev/null || true)"
+      if [ "$(printf '%s' "$local_heartbeat" | field status 2>/dev/null || true)" != "renewed" ]; then
+        printf '%s\n' "local-process-fence-lost" >"$lease_fence_file"
+        printf '{"type":"heartbeat-lost","at":%s,"reason":"local-process-fence-lost"}\n' "$(json_escape "$(node -e 'process.stdout.write(new Date().toISOString())')")" >>"$lease_events_file"
+        terminate_process_tree "$gate_pid"
+        exit 1
+      fi
+      renew_args="{\"leaseId\":$(json_escape "$lease_id"),\"ownerSessionId\":$(json_escape "$OWNER_SESSION_ID")}"
+      renew_response="$(mcp_call renew_nonprod_environment_lease "$renew_args" | extract_tool_result 2>/dev/null || true)"
+      if [ "$(printf '%s' "$renew_response" | field success 2>/dev/null || true)" != "true" ]; then
+        printf '%s\n' "lease-renewal-failed" >"$lease_fence_file"
+        printf '{"type":"heartbeat-lost","at":%s}\n' "$(json_escape "$(node -e 'process.stdout.write(new Date().toISOString())')")" >>"$lease_events_file"
+        terminate_process_tree "$gate_pid"
+        exit 1
+      fi
+      printf '{"type":"heartbeat-renewed","at":%s}\n' "$(json_escape "$(node -e 'process.stdout.write(new Date().toISOString())')")" >>"$lease_events_file"
+    done
+  ) &
+  heartbeat_pid=$!
+  wait "$gate_pid"
   gate_status=$?
+  gate_pid=""
+  stop_heartbeat
+  if [ -s "$lease_fence_file" ]; then
+    gate_status=75
+    printf '%s\n' "gate-worktree: lease fenced; child process tree terminated" >>"$gate_output_file"
+  fi
 else
   gate_command_label="sandbox checkout/build stub"
   printf '%s\n' "sandbox checkout/build stub: gate passed (explicit test-only mode)"
@@ -253,6 +354,28 @@ else
   gate_status=0
 fi
 set -e
+
+# Release as soon as the mutation window ends — parity with gate-worktree.mjs
+# superviseLeaseRun finally (claim -> release -> record). Holding the lease only
+# for the sandbox command is intentional (BI-52500C0D); evidence recording does
+# not need the shared lease.
+if [ -n "$lease_id" ] && [ "$lease_released" != "1" ]; then
+  release_response="$(mcp_call release_nonprod_environment_lease "{\"leaseId\":$(json_escape "$lease_id")}" | extract_tool_result)"
+  release_success="$(printf '%s' "$release_response" | field success)"
+  [ "$release_success" = "true" ] || die "failed to release local-CI lease: $release_response"
+  lease_released=1
+  printf '{"type":"released","at":%s}\n' "$(json_escape "$(node -e 'process.stdout.write(new Date().toISOString())')")" >>"$lease_events_file"
+fi
+if [ -n "$local_fence_token" ]; then
+  node "$SCRIPT_DIR/lib/local-sandbox-fence.mjs" release "$local_fence_file" "$local_fence_token" >/dev/null
+  local_fence_token=""
+fi
+
+lease_events_json="$(node -e '
+const fs = require("node:fs");
+const rows = fs.readFileSync(process.argv[1], "utf8").split(/\r?\n/).filter(Boolean).map(JSON.parse);
+process.stdout.write(JSON.stringify(rows));
+' "$lease_events_file")"
 
 cat "$gate_output_file"
 gate_output="$(tail -c 12000 "$gate_output_file" 2>/dev/null || cat "$gate_output_file")"
@@ -309,6 +432,7 @@ evidence_args="$(node -e '
 const fs = require("node:fs");
 const outcome = JSON.parse(process.argv[11]);
 const resilience = JSON.parse(process.argv[16]);
+const leaseEvents = JSON.parse(process.argv[17]);
 let contentMetadata = null;
 try { contentMetadata = JSON.parse(fs.readFileSync(process.argv[14], "utf8")); } catch {}
 const evidence = {
@@ -317,6 +441,8 @@ const evidence = {
   freshnessBi: "BI-ECDF9520",
   phase: 1,
   leaseId: process.argv[3],
+  leaseEvents,
+  leaseSupervisionStatus: Number(process.argv[12]) === 75 ? "fenced" : "completed",
   branch: process.argv[4],
   sha: process.argv[5],
   expiresAt: process.argv[15],
@@ -341,7 +467,7 @@ process.stdout.write(JSON.stringify({
   summary: outcome.summary,
   evidence
 }));
-' "$status" "$gate_passed" "$lease_id" "$BRANCH" "$SHA" "$URL" "$gate_command_label" "$gate_output" "$OWNER_PROVIDER" "$OWNER_SESSION_ID" "$outcome_json" "$gate_status" "$PUSH_BRANCH" "$METADATA_FILE" "$expires_at" "$resilience_json")"
+' "$status" "$gate_passed" "$lease_id" "$BRANCH" "$SHA" "$URL" "$gate_command_label" "$gate_output" "$OWNER_PROVIDER" "$OWNER_SESSION_ID" "$outcome_json" "$gate_status" "$PUSH_BRANCH" "$METADATA_FILE" "$expires_at" "$resilience_json" "$lease_events_json")"
 evidence_response="$(mcp_call record_local_integration_result "$evidence_args" | extract_tool_result)"
 evidence_success="$(printf '%s' "$evidence_response" | field success)"
 if [ "$evidence_success" != "true" ] && [ "$status" = "blocked_sandbox_drift" ]; then
@@ -365,16 +491,11 @@ fi
 if [ "$evidence_success" = "true" ]; then
   evidence_id="$(printf '%s' "$evidence_response" | field entityId)"
 else
-  write_state false "$lease_id" "" "failed" "$expires_at" "$resilience_json"
-  mcp_call release_nonprod_environment_lease "{\"leaseId\":$(json_escape "$lease_id")}" >/dev/null || true
+  write_state false "$lease_id" "" "failed" "$expires_at" "$resilience_json" "$lease_events_json"
   die "failed to record local integration evidence: $evidence_response"
 fi
 
-release_response="$(mcp_call release_nonprod_environment_lease "{\"leaseId\":$(json_escape "$lease_id")}" | extract_tool_result)"
-release_success="$(printf '%s' "$release_response" | field success)"
-[ "$release_success" = "true" ] || die "failed to release local-CI lease: $release_response"
-
-write_state "$gate_passed" "$lease_id" "$evidence_id" "$status" "$expires_at" "$resilience_json"
+write_state "$gate_passed" "$lease_id" "$evidence_id" "$status" "$expires_at" "$resilience_json" "$lease_events_json"
 
 if [ "$gate_passed" = "true" ]; then
   printf '%s\n' "gate passed"

@@ -30,6 +30,38 @@ function row(over: Partial<RosterRow> = {}): RosterRow {
     tier: 2,
     valueStream: "operate",
     lifecycleStage: "production",
+    plainJob: "Supports the employee lifecycle.",
+    workSearchText: "Employee lifecycle support",
+    canStartConversation: true,
+    area: { key: "for_employees", label: "Your team", order: 2 },
+    areas: [{ key: "for_employees", label: "Your team", order: 2 }],
+    interaction: { scopes: ["internal-only"], labels: ["Internal only"] },
+    availability: {
+      state: "available",
+      label: "Available for your business type",
+      reason: "Explicit support",
+      matchLevel: "leaf",
+      evidence: [],
+    },
+    authority: {
+      state: "resolved",
+      scope: { kind: "default-posture" },
+      level: "review-required",
+      label: "Acts with review",
+      summary: "This coworker acts within limits and a person reviews results.",
+      ownerReason: "Review is required.",
+      ownerAction: "Review the result after the action runs.",
+      winner: {
+        source: "agent",
+        ref: "hr-specialist",
+        field: "hitlTierDefault",
+        role: "selected-base",
+        observedValue: "2",
+        normalizedLevel: "review-required",
+        detail: "Agent has HITL tier 2",
+      },
+      evidence: [],
+    },
     familyKey: "hr-people-ops",
     familyLabel: "HR & People Ops",
     coveragePct: 60,
@@ -62,7 +94,21 @@ describe("PlatformAiOverviewPage", () => {
     const html = renderToStaticMarkup(await PlatformAiOverviewPage());
 
     expect(html).toContain("HR Specialist");
-    expect(html).toContain("HR &amp; People Ops");
+    expect(html).toContain("Your team");
+    expect(html).toContain("Supports the employee lifecycle.");
+    expect(html).toContain("Acts with review");
     expect(html).toContain("/platform/ai/agent/hr-specialist");
+  });
+
+  it("describes an empty selectable roster honestly and offers a recovery path", async () => {
+    vi.mocked(loadRoster).mockResolvedValue({ rows: [], facets });
+
+    const { default: PlatformAiOverviewPage } = await import("./page");
+    const html = renderToStaticMarkup(await PlatformAiOverviewPage());
+
+    expect(html).toContain("No selectable coworkers");
+    expect(html).toContain("inactive, not in production, or missing matching identity records");
+    expect(html).toContain('href="/platform/ai/readiness"');
+    expect(html).not.toContain("No coworkers registered yet");
   });
 });

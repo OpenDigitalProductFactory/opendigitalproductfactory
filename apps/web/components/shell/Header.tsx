@@ -50,22 +50,26 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
 
   return (
     <header className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
-      <div className="flex w-full items-center justify-between gap-4 px-4 py-2.5 lg:px-6">
-        <Link href="/workspace" className="flex min-w-0 items-center gap-3">
+      <div className="flex w-full items-center justify-between gap-2 px-3 py-2 sm:gap-4 sm:px-4 sm:py-2.5 lg:px-6">
+        <Link
+          href="/workspace"
+          aria-label={`${companyName} home`}
+          className="flex min-w-0 items-center gap-2 sm:gap-3"
+        >
           {hasLogo && !logoFailed ? (
-            <div className="h-14 flex items-center">
+            <div className="flex h-10 items-center sm:h-14">
               {hasLightLogo ? (
                 <>
                   <img
                     src={logoLight}
                     alt={`${companyName} logo`}
-                    className="logo-light block h-full w-auto max-w-[220px] object-contain"
+                    className="logo-light block h-full w-auto max-w-[120px] object-contain sm:max-w-[220px]"
                     onError={() => { setLogoFailed(true); }}
                   />
                   <img
                     src={logoSource}
                     alt={`${companyName} logo`}
-                    className="logo-dark block h-full w-auto max-w-[220px] object-contain"
+                    className="logo-dark block h-full w-auto max-w-[120px] object-contain sm:max-w-[220px]"
                     onError={() => { setLogoFailed(true); }}
                   />
                 </>
@@ -73,7 +77,7 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
                 <img
                   src={logoSource}
                   alt={`${companyName} logo`}
-                  className="block h-full w-auto max-w-[220px] object-contain"
+                  className="block h-full w-auto max-w-[120px] object-contain sm:max-w-[220px]"
                   onError={() => {
                     console.warn(`[Header] Logo failed to load: ${logoSource}`);
                     setLogoFailed(true);
@@ -82,11 +86,11 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
               )}
             </div>
           ) : (
-            <div className="w-14 h-14 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] overflow-hidden grid place-items-center">
+            <div className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] sm:h-14 sm:w-14">
               <span className="text-[10px] font-bold text-[var(--dpf-muted)]">{initials()}</span>
             </div>
           )}
-          <div className="min-w-0">
+          <div className="hidden min-w-0 sm:block">
             <div className="flex items-center gap-2">
               {(!hasLogo || logoFailed) && (
                 <span className="font-extrabold tracking-tight text-sm text-[var(--dpf-accent)]">
@@ -94,13 +98,13 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
                 </span>
               )}
               {!simpleMode && (
-                <span className="rounded-full border border-[var(--dpf-border)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--dpf-muted)]">
+                <span className="hidden rounded-full border border-[var(--dpf-border)] px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-[var(--dpf-muted)] lg:inline">
                   Internal cockpit
                 </span>
               )}
             </div>
             {!simpleMode && (
-              <p className="mt-0.5 truncate text-xs text-[var(--dpf-muted)]">
+              <p className="mt-0.5 hidden truncate text-xs text-[var(--dpf-muted)] lg:block">
                 Small human team, AI coworkers filling in specialist expertise
               </p>
             )}
@@ -122,4 +126,3 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
     </header>
   );
 }
-

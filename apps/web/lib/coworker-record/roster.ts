@@ -9,13 +9,34 @@
 // RosterView without serialization hazards.
 
 import { prisma } from "@dpf/db";
-import { COWORKER_SLUG_TO_CANONICAL_AGENT_ID, resolveAgentIdentity } from "@dpf/db/agent-identity";
+import {
+  COWORKER_SLUG_TO_CANONICAL_AGENT_ID,
+  resolveAgentIdentity,
+  resolveCanonicalAgentId,
+} from "@dpf/db/agent-identity";
 import {
   PROFESSION_REGISTRY,
   findProfessionFamilyForAgentIdentity,
   professionProfileId,
 } from "@/lib/decision-perspective/resolve-profession-profile";
+import {
+  type CoworkerAuthorityProjection,
+} from "@/lib/coworker-service-catalog/authority-projection";
+import {
+  type CoworkerAvailabilityProjection,
+} from "@/lib/coworker-service-catalog/availability-projection";
+import { loadCoworkerDiscoveryServices } from "@/lib/coworker-service-catalog/catalog";
 import { normalizeVariantAxes } from "./variant-axes";
+import { loadInstallAvailabilityContext } from "./availability-context";
+import type { OwnerFacingArea } from "./owner-areas";
+import {
+  COWORKER_BLOCKING_CAPABILITY_NEED_STATUSES,
+  projectCoworkerDiscovery,
+  projectCoworkerServiceAuthority,
+  type CoworkerInteractionProjection,
+  type RosterServiceEvidence,
+} from "./roster-presentation";
+import { SELECTABLE_COWORKER_STATE } from "./selectable-coworker";
 
 // BI-74FD6420: roster collapses dual-seed slug + AGT-* pairs for display only.
 // Seed still creates slug agentId rows for FK consumers (service catalog, etc.).
@@ -29,6 +50,14 @@ export type RosterRow = {
   tier: number;
   valueStream: string | null;
   lifecycleStage: string;
+  plainJob: string;
+  workSearchText: string;
+  canStartConversation: boolean;
+  area: OwnerFacingArea;
+  areas: OwnerFacingArea[];
+  interaction: CoworkerInteractionProjection;
+  availability: CoworkerAvailabilityProjection;
+  authority: CoworkerAuthorityProjection;
   familyKey: string | null;
   familyLabel: string | null;
   /** Corpus pages / coverage-checklist size, capped at 100; null when unmapped. */
@@ -65,19 +94,27 @@ type FamilyCoverage = {
 const DECISION_WINDOW_DAYS = 30;
 
 /**
- * Drop legacy dual-seed alias rows when their canonical AGT-* twin is present
- * (BI-74FD6420). Pure + exported for unit tests — seed retires the alias rows
- * long-term; this is the belt-and-suspenders roster filter for installs that
- * have not re-seeded yet.
+ * Keep one display row only when the full canonical + executable identity pair
+ * is selectable (BI-74FD6420). Known slug rows never render independently:
+ * their detail route canonicalizes to AGT-* and execution still uses the slug,
+ * so an orphan on either side cannot complete the roster's primary job.
  */
 export function dropDualSeedAliasAgents<T extends { agentId: string }>(
   agents: T[],
   slugToCanonical: Readonly<Record<string, string>> = COWORKER_SLUG_TO_CANONICAL_AGENT_ID,
 ): T[] {
   const present = new Set(agents.map((a) => a.agentId));
+  const canonicalToSlug = new Map(
+    Object.entries(slugToCanonical).map(([slug, canonical]) => [
+      canonical,
+      slug,
+    ]),
+  );
   return agents.filter((a) => {
     const canonical = slugToCanonical[a.agentId];
-    if (canonical && canonical !== a.agentId && present.has(canonical)) return false;
+    if (canonical && canonical !== a.agentId) return false;
+    const runtimeSlug = canonicalToSlug.get(a.agentId);
+    if (runtimeSlug && !present.has(runtimeSlug)) return false;
     return true;
   });
 }
@@ -158,21 +195,51 @@ async function loadLastActivity(): Promise<Map<string, Date>> {
   return latest;
 }
 
+function addByCanonicalAgentId<T>(
+  target: Map<string, T[]>,
+  agentId: string,
+  value: T,
+) {
+  const canonicalId = resolveCanonicalAgentId(agentId);
+  const values = target.get(canonicalId) ?? [];
+  values.push(value);
+  target.set(canonicalId, values);
+}
+
+function setByCanonicalAgentId<T>(
+  target: Map<string, T>,
+  agentId: string,
+  value: T,
+) {
+  target.set(resolveCanonicalAgentId(agentId), value);
+}
+
 export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterFacets }> {
-  const [agentsRaw, coverage, modelConfigs, providers, blockerRows, lastActivity] = await Promise.all([
+  const [
+    agentsRaw,
+    coverage,
+    modelConfigs,
+    providers,
+    blockerRows,
+    lastActivity,
+    services,
+    installAvailability,
+  ] = await Promise.all([
     prisma.agent.findMany({
-      // Exclude archived / retired dual-seed alias rows (BI-74FD6420).
-      where: { archived: false, lifecycleStage: { not: "retirement" } },
+      where: SELECTABLE_COWORKER_STATE,
       orderBy: [{ tier: "asc" }, { displayName: "asc" }],
       select: {
         agentId: true,
         slugId: true,
         name: true,
         displayName: true,
+        description: true,
         kind: true,
         tier: true,
         valueStream: true,
         lifecycleStage: true,
+        hitlTierDefault: true,
+        governanceProfile: { select: { id: true, hitlPolicy: true } },
       },
     }),
     loadAllCoverage(),
@@ -181,19 +248,53 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
     prisma.coworkerCapabilityNeed
       .groupBy({
         by: ["agentId"],
-        where: { status: { in: ["submitted", "blocked"] } },
+        where: {
+          status: { in: [...COWORKER_BLOCKING_CAPABILITY_NEED_STATUSES] },
+        },
         _count: { _all: true },
       })
       .catch(() => [] as Array<{ agentId: string; _count: { _all: number } }>),
     loadLastActivity(),
+    loadCoworkerDiscoveryServices(),
+    loadInstallAvailabilityContext(),
   ]);
 
   // Belt-and-suspenders: drop any residual dual-seed alias twin still active.
   const agents = dropDualSeedAliasAgents(agentsRaw);
 
   const providerStatus = new Map(providers.map((p) => [p.providerId, p.status]));
-  const pinnedByAgent = new Map(modelConfigs.map((c) => [c.agentId, c.pinnedProviderId]));
-  const blockersByAgent = new Map(blockerRows.map((b) => [b.agentId, b._count._all]));
+  const pinnedByAgent = new Map<string, string | null>();
+  for (const config of modelConfigs) {
+    setByCanonicalAgentId(
+      pinnedByAgent,
+      config.agentId,
+      config.pinnedProviderId,
+    );
+  }
+  const blockersByAgent = new Map<string, number>();
+  for (const blocker of blockerRows) {
+    const canonicalId = resolveCanonicalAgentId(blocker.agentId);
+    blockersByAgent.set(
+      canonicalId,
+      (blockersByAgent.get(canonicalId) ?? 0) + blocker._count._all,
+    );
+  }
+  const servicesByAgent = new Map<string, RosterServiceEvidence[]>();
+  for (const service of services) {
+    addByCanonicalAgentId(
+      servicesByAgent,
+      service.providerAgentId,
+      service,
+    );
+  }
+  const activityByAgent = new Map<string, Date>();
+  for (const [agentId, timestamp] of lastActivity) {
+    const canonicalId = resolveCanonicalAgentId(agentId);
+    const existing = activityByAgent.get(canonicalId);
+    if (!existing || timestamp > existing) {
+      activityByAgent.set(canonicalId, timestamp);
+    }
+  }
 
   // Distinct families present across the roster → their profile ids for defer rates.
   const presentFamilies = new Set<string>();
@@ -213,9 +314,17 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
         : fam
           ? 0
           : null;
-    const pinned = pinnedByAgent.get(agent.slugId ?? agent.agentId) ?? pinnedByAgent.get(agent.agentId) ?? null;
+    const canonicalId = resolveCanonicalAgentId(agent.agentId);
+    const pinned = pinnedByAgent.get(canonicalId) ?? null;
     const providerHealthy = !pinned || providerStatus.get(pinned) === "active";
     const profileId = fam ? professionProfileId(fam.professionKey) : null;
+    const openBlockers = blockersByAgent.get(canonicalId) ?? 0;
+    const agentServices = servicesByAgent.get(canonicalId) ?? [];
+    const discovery = projectCoworkerDiscovery({
+      agentDescription: agent.description,
+      services: agentServices,
+      install: installAvailability,
+    });
 
     return {
       agentId: agent.agentId,
@@ -240,6 +349,27 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
       tier: agent.tier,
       valueStream: agent.valueStream,
       lifecycleStage: agent.lifecycleStage,
+      plainJob: discovery.plainJob,
+      workSearchText: discovery.workSearchText,
+      canStartConversation: discovery.canStartConversation,
+      area: discovery.area,
+      areas: discovery.areas,
+      interaction: discovery.interaction,
+      availability: discovery.availability,
+      authority: projectCoworkerServiceAuthority({
+        agent: {
+          agentId: agent.agentId,
+          hitlTierDefault: agent.hitlTierDefault,
+        },
+        governance: agent.governanceProfile
+          ? {
+              state: "evaluated",
+              profileId: agent.governanceProfile.id,
+              hitlPolicy: agent.governanceProfile.hitlPolicy,
+            }
+          : { state: "not-configured" },
+        services: agentServices,
+      }),
       familyKey: fam?.professionKey ?? null,
       familyLabel: fam?.label ?? null,
       coveragePct,
@@ -248,13 +378,12 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
       profileBound: !!fam, // a registered family => a seeded WSID profile id exists by convention
       emptyCorpus: !cov || cov.pageCount === 0,
       providerHealthy,
-      openBlockers: blockersByAgent.get(agent.agentId) ?? 0,
+      openBlockers,
       deferRate: profileId ? (deferRates.get(profileId) ?? 0) : 0,
       unmapped: !fam,
       lastActiveAt:
         (
-          lastActivity.get(agent.agentId) ??
-          (agent.slugId ? lastActivity.get(agent.slugId) : undefined)
+          activityByAgent.get(canonicalId)
         )?.toISOString() ?? null,
     };
   });

@@ -181,6 +181,11 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   cpSync(gateScript, join(temp, "scripts", "gate-worktree.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "mcp-client.mjs"), join(temp, "scripts", "lib", "mcp-client.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "sandbox-freshness.mjs"), join(temp, "scripts", "lib", "sandbox-freshness.mjs"));
+  // gate-worktree.mjs static-imports these lease-safety modules at load time
+  // (BI-52500C0D). Copy them into the temp tree so the refusal path can run
+  // instead of dying on ERR_MODULE_NOT_FOUND before the stub guard.
+  cpSync(join(repoRoot, "scripts", "lib", "lease-supervisor.mjs"), join(temp, "scripts", "lib", "lease-supervisor.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "local-sandbox-fence.mjs"), join(temp, "scripts", "lib", "local-sandbox-fence.mjs"));
 
   const { dir } = makeTempRepo();
   const env = { ...process.env, DPF_MCP_BEARER_TOKEN: "dpfmcp_test" };
@@ -209,7 +214,14 @@ test("gate-worktree.mjs claims, records, and releases in order, and carries evid
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
 
     const toolSequence = mcp.calls.map((c) => c.params.name);
-    assert.deepEqual(toolSequence, ["claim_nonprod_environment_lease", "record_local_integration_result", "release_nonprod_environment_lease"]);
+    // superviseLeaseRun releases in finally as soon as the child exits, then
+    // the gate records evidence (claim → release → record). Holding the lease
+    // only for the mutation window is intentional (BI-52500C0D).
+    assert.deepEqual(toolSequence, [
+      "claim_nonprod_environment_lease",
+      "release_nonprod_environment_lease",
+      "record_local_integration_result",
+    ]);
 
     const evidenceCall = mcp.calls.find((c) => c.params.name === "record_local_integration_result");
     assert.equal(evidenceCall.params.arguments.evidence.leaseId, "NPEL-TEST");

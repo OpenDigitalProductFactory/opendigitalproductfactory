@@ -16,10 +16,10 @@ order: 2
 
 ## Workflow
 
-1. Start with the current operating picture: health, recent activity, operations-map posture, and assignment posture. The planned unified map will align **Designed**, **Observed**, and **Compare** views; until that delivery lands, treat the existing Operations Map panels as the operational surfaces rather than assuming the preview canvas is complete.
+1. Start at **AI Workforce** (`/platform/ai/overview`) when the job is to find, compare, configure, or work with a coworker. The directory leads with work, interaction, business-type availability, and approval posture.
 2. Review Capacity Continuity when paid AI capacity is idle, blocked, or expected to keep working during holidays, vacations, business events, after-hours windows, or owner inactivity.
-3. Review Capability Needs when coworkers surface missing tools, prompts, permissions, or product gaps that need governed follow-up.
-4. Review history when a result looks wrong, slow, or inconsistent.
+3. Use the coworker record's **Capabilities**, **Autonomy & Governance**, and **Activity** sections before opening fleet-wide technical pages.
+4. Review history or systems health when a result looks wrong, slow, or inconsistent.
 5. Adjust **Priority & Models** only after you understand whether the problem is role design, model selection, tool access, standing orders, or calendar state. Set the everyday Cost / Quality / Time priority at the top of that surface (or per coworker from the triangle at its composer). Use tier and capability floors for hard limits. A provider/model pin is an exceptional preference among already-eligible routes, not a way to cross policy, sensitivity, residency, or capability boundaries.
 
 ## Architecture and evidence

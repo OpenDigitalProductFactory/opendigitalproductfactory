@@ -90,6 +90,7 @@ vi.mock("./agent-panel-layout", () => ({
   getDockedPanelFrame: () => null,
   getReservedPanelWidth: () => 0,
   isDockedPanelViewport: () => false,
+  isMobilePanelViewport: () => false,
 }));
 
 // Stateful panel-open persistence so we can prove the panel is only pinned once
