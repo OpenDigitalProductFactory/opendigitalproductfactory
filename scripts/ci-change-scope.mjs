@@ -1,14 +1,12 @@
 #!/usr/bin/env node
 import { appendFileSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import {
+  createEvidencePlan,
+  loadEvidencePolicy,
+} from "./lib/ci-evidence-plan.mjs";
 
-const DOC_PATTERN = /(^docs\/|\.mdx?$)/;
-const MOBILE_APP_PATTERN = /^apps\/mobile\//;
-const MOBILE_SHARED_PATTERNS = [
-  /^packages\/api-client\//,
-  /^packages\/types\//,
-  /^packages\/validators\//,
-];
+const policy = loadEvidencePolicy();
 
 export function classifyChangedFiles(files) {
   const changedFiles = files.map((file) => file.trim()).filter(Boolean);
@@ -16,22 +14,25 @@ export function classifyChangedFiles(files) {
   if (changedFiles.length === 0) {
     return { heavy: true, mobile: true, docsOnly: false, mobileOnly: false };
   }
-
-  const docsOnly = changedFiles.every((file) => DOC_PATTERN.test(file));
-  if (docsOnly) {
-    return { heavy: false, mobile: false, docsOnly: true, mobileOnly: false };
-  }
-
-  const mobileOnly = changedFiles.every((file) => DOC_PATTERN.test(file) || MOBILE_APP_PATTERN.test(file));
-  const mobile = changedFiles.some(
-    (file) => MOBILE_APP_PATTERN.test(file) || MOBILE_SHARED_PATTERNS.some((pattern) => pattern.test(file)),
-  );
-
+  const plan = createEvidencePlan({
+    eventName: "pull_request",
+    baseSha: "scope-adapter-base",
+    headSha: "scope-adapter-head",
+    baseTreeSha: "scope-adapter-base-tree",
+    headTreeSha: "scope-adapter-head-tree",
+    changedFiles,
+    knownTests: [],
+    relatedTestsBySource: {},
+    routeAdviceBySource: {},
+    codeGraphAdvice: null,
+    totalTestCount: 0,
+    policy,
+  });
   return {
-    heavy: !mobileOnly,
-    mobile,
-    docsOnly: false,
-    mobileOnly,
+    heavy: plan.scope.heavy,
+    mobile: plan.scope.mobile,
+    docsOnly: plan.scope.docsOnly,
+    mobileOnly: plan.scope.mobileOnly,
   };
 }
 

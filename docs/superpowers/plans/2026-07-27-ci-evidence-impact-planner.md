@@ -44,7 +44,7 @@ Architecture review: **aligned with guardrails**.
 
 1. Code-graph advice is a versioned planner input, not a hidden runtime
    dependency. It is trusted only when the graph is `ready`, clean,
-   structurally healthy, and indexed at the exact head SHA. GitHub may omit
+   structurally healthy, and indexed at the exact head SHA and tree. GitHub may omit
    the advice input; runtime-source changes then expand to exhaustive evidence.
 2. The digest covers semantic inputs and output only. Timestamps, host paths,
    logs, and other volatile diagnostics live outside the digested plan.
@@ -98,7 +98,7 @@ Red tests define:
 - docs-only, mobile-only, web leaf, route, test-only, package, and DB inputs;
 - package ownership, colocated tests, supplied Vitest-related tests, supplied
   graph `TESTED_BY` recommendations, and route families;
-- exact-head/clean/ready graph trust;
+- exact-head-and-tree/clean/ready graph trust;
 - exhaustive expansion for missing/stale/dirty/incompatible graph on runtime
   source, workflow/security/migration/lockfile/test-config/auth/routing-shell/
   shared-setup/install/seed/generated-contract changes, unmapped production
@@ -200,7 +200,6 @@ jobs, or CodeQL here; those remain `BI-4DB73C5E`.
 | Planner silently narrows on bad input | exhaustive result is the error value; table-driven tests | switch the `changes` job back to the adapter's previous full behavior |
 | Local/GitHub drift | one pure core, canonical serializer, parity fixtures | remove both thin consumers together |
 | Volatile digest | semantic/diagnostic split and ordering tests | bump schema and invalidate observations |
-| Graph advice from wrong tree | exact head SHA + clean/ready/relationship checks | omit graph advice and run exhaustive |
+| Graph advice from wrong tree | exact head SHA and tree + clean/ready/relationship checks | omit graph advice and run exhaustive |
 | Docs-only regression | compatibility fixture preserves current exemption | restore the prior adapter while planner remains shadow-only |
 | Missing test ownership is hidden | explicit per-file dispositions and unmapped list | exhaustive evidence plus a visible observation |
-

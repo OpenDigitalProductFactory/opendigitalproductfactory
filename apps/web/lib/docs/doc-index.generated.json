@@ -7217,6 +7217,7 @@
         "standards-grounding",
         "scheduled-calibration",
         "activation-gate-later-waves",
+        "impact-planner-shadow-mode",
         "ux-route-sweep-stability",
         "baseline-snapshot"
       ]

@@ -139,11 +139,26 @@ export function createLocalIntegrationPlan(input) {
     // `env VAR=… cmd` keeps the plan a plain argv (no shell) — host-next is
     // POSIX-only by construction (Windows defaults to docker-build above).
     : ["env", HOST_BUILD_NODE_OPTIONS, "pnpm", "--filter", "web", "exec", "next", "build"];
+  const evidencePlanCommand = [
+    "node",
+    "scripts/ci-evidence-plan.mjs",
+    "--event",
+    "local-ci",
+    "--base",
+    baseRef,
+    "--head",
+    "HEAD",
+    ...(input.evidencePlanOutput ? ["--output", input.evidencePlanOutput] : []),
+  ];
   const commands = [
     ...(input.fetchBase ? [["git", "fetch", "origin", "main"]] : []),
     ["git", "checkout", "-B", branch, baseRef],
     ["git", "merge", "--no-ff", "--no-edit", input.candidateBranch],
     ...input.siblingBranches.map((sibling) => ["git", "merge", "--no-ff", "--no-edit", sibling]),
+    // Generate the same versioned, digest-bound evidence recommendation used
+    // by GitHub after the exact integration tree exists. Shadow mode records
+    // advice only; the exhaustive gate below remains the execution authority.
+    evidencePlanCommand,
     // Step-zero sandbox freshness gate (BI-ECDF9520): after the merge changes
     // pnpm-lock.yaml, node_modules must be proven to match it before any
     // test/build result counts as product evidence. Exits 3/4 (sandbox drift /

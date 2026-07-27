@@ -106,6 +106,51 @@ Before any PR suite-skipping activates (BI-4527C1DA and dependents):
 
 Until then, exhaustive PR and merge-group execution remains the default.
 
+## Impact planner (shadow mode)
+
+`scripts/ci-evidence-plan.mjs` is the shared planner for GitHub CI and the
+governed local-integration runner. It emits a canonical schema-versioned JSON
+document and SHA-256 digest for the base/head commits and trees, changed files,
+policy, and supplied advice. GitHub uploads the document as
+`ci-evidence-plan-<run>-<attempt>`; local-CI writes
+`dpf-ci-evidence-plan.json` beside its run metadata and records the digest in
+that metadata.
+
+The planner recommends:
+
+- affected workspace packages, including transitive reverse dependencies;
+- changed, colocated, supplied Vitest-related, and trusted graph-recommended
+  tests;
+- Next.js routes, route families, UX mode, and global repository guards;
+- an explicit disposition for every changed file and visible missing-test
+  observations.
+
+The digest covers semantic data only. Generation time, runner path, logs, and
+other host-specific diagnostics are intentionally excluded so the same
+immutable inputs produce the same digest on GitHub and local-CI.
+
+Code-graph advice is optional and is never a hidden live dependency. Advice is
+trusted only when its schema matches policy, the index is `ready`, the
+workspace is clean, both the indexed commit and tree match the candidate, and
+the required `DEFINES`, `IMPORTS`, `IMPLEMENTS_ROUTE`, `EXPOSES_TOOL`, and
+`TESTED_BY` relationships are populated. Missing, stale, dirty, structurally
+incomplete, or malformed advice expands runtime-source evidence to exhaustive.
+Supplied Vitest static relationships and co-located tests remain independent
+recommendation inputs.
+
+Other exhaustive reasons include workflow, lockfile, migration, test-config,
+authentication, routing-shell, install/seed, generated-contract, or shared
+setup changes; unmapped source; planner input errors; empty diffs; selections
+above the policy threshold; and every `merge_group`, `push`,
+`workflow_dispatch`, or scheduled event. The docs-only compatibility exemption
+remains unchanged because it does not narrow runtime evidence.
+
+This is observation only. The planner continues to emit the existing `heavy`
+and `mobile` compatibility outputs, but it does not skip any test, typecheck,
+build, migration, guard, or merge-queue proof. Activation is owned by
+`BI-4527C1DA` and still requires the calibration and 100% observed-failure
+recall conditions above.
+
 ## UX route-sweep stability
 
 Workflow: `.github/workflows/ux-route-sweep.yml` (`UX Route Budget Sweep`)
