@@ -3,7 +3,7 @@
  * See: docs/superpowers/specs/2026-03-18-ai-routing-and-profiling-design.md
  */
 
-import type { PrincipalSensitivity } from "@dpf/db";
+import type { PrincipalSensitivity } from "@dpf/db/principal-sensitivity";
 
 import type { QualityTier } from "./quality-tiers";
 

@@ -1,7 +1,7 @@
 import {
   normalizePrincipalSensitivities,
   type PrincipalSensitivity,
-} from "@dpf/db";
+} from "@dpf/db/principal-sensitivity";
 
 import type { DpfSession } from "@/lib/govern/auth";
 
