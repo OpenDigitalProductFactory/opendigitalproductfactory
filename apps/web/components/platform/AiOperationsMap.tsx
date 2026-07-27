@@ -15,6 +15,8 @@ import type {
   OperationsMapTemplate,
   StationedOperationsMapAgent,
 } from "@/lib/ai-operations-map/types";
+import type { RoutingEvidenceConformanceProjection } from "@/lib/ai-operations-map/routing-evidence-conformance";
+import type { RoutingArchitectureMode } from "@/lib/ai-operations-map/routing-comparison-view-model";
 import {
   buildStationProjectionTiles,
   filterOperationsMapProjections,
@@ -36,6 +38,7 @@ import { A2aInteractionsPanel } from "./A2aInteractionsPanel";
 import { DeliberationLensPanel } from "./DeliberationLensPanel";
 import { OperationsTopologyCanvas } from "./OperationsTopologyCanvas";
 import { ActivityRoutingWorkbench } from "./ActivityRoutingWorkbench";
+import { RoutingArchitectureOverview } from "./RoutingArchitectureOverview";
 import {
   applyRoutingControlFilters,
   applyA2aControlFilters,
@@ -62,7 +65,10 @@ type Props = {
   agents: StationedOperationsMapAgent[];
   projections: OperationsMapProjection[];
   routingTopology: OperationsMapRoutingTopology;
+  routingEvidence: RoutingEvidenceConformanceProjection;
   recentWindowLabel: string;
+  initialArchitectureMode?: RoutingArchitectureMode;
+  initialFocusStageId?: string | null;
   /**
    * Global evidence bounds (window-independent). When provided, the replay
    * timeline anchors its base range to these instead of only the loaded
@@ -227,7 +233,18 @@ const PROVIDER_LOGO_MATCHERS: Array<{ match: RegExp; logo: ProviderLogoDefinitio
   { match: /portkey/, logo: { key: "portkey", mark: "P", wordmark: "Portkey" } },
 ];
 
-export function AiOperationsMap({ template, agents, projections, routingTopology, recentWindowLabel, evidenceRange, onReplayWindowChange }: Props) {
+export function AiOperationsMap({
+  template,
+  agents,
+  projections,
+  routingTopology,
+  routingEvidence,
+  recentWindowLabel,
+  initialArchitectureMode = "compare",
+  initialFocusStageId = null,
+  evidenceRange,
+  onReplayWindowChange,
+}: Props) {
   const [selected, setSelected] = useState<SelectedItem>({ kind: "station", id: template.stations[0]?.id ?? "" });
   const [activeQuickViewId, setActiveQuickViewId] = useState<OperationsMapStoredQuickViewId>(
     DEFAULT_QUICK_VIEW_ID,
@@ -289,18 +306,6 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
     [onReplayWindowChange],
   );
 
-  // Stage D temporary preview switch: render the unified OperationsTopologyCanvas
-  // ABOVE the legacy panels so operators can verify parity side-by-side against
-  // the canonical runtime before Stage E cutover. Default OFF; the legacy panels
-  // remain the authoritative surface and the replay source. This toggle is
-  // explicitly temporary and is removed at cutover (spec §7 Stage D/E).
-  const [canvasPreview, setCanvasPreview] = useState(false);
-
-  // Stage D1: the legacy panels own the filter UI and publish their resolved
-  // control criteria up (mirroring onReplayChange) so the preview canvas honours
-  // exactly what the operator selects. Defaults are permissive; each panel
-  // publishes its real criteria on mount, so the canvas converges within a tick.
-  // These same pure helpers back the unified control rail at Stage E.
   const [routingControl, setRoutingControl] = useState<RoutingControlCriteria>({
     routeFilter: "all",
     providerTypeFilter: "llm",
@@ -322,8 +327,6 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
     [],
   );
 
-  // Topology fed to the preview canvas: control-filtered routes/providers/markers
-  // and A2A edges. The canvas layers the shared replay window on top.
   const canvasTopology = useMemo(() => {
     const { routes, providers, markers } = applyRoutingControlFilters(routingTopology, routingControl);
     const a2aEdges = applyA2aControlFilters(routingTopology.a2aEdges, a2aControl);
@@ -362,6 +365,12 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
 
   return (
     <div className="space-y-4">
+      <RoutingArchitectureOverview
+        evidence={routingEvidence}
+        initialMode={initialArchitectureMode}
+        initialFocusStageId={initialFocusStageId}
+      />
+
       <section aria-label="Routing map workspace" className="space-y-3">
         <header className="sr-only">
           <p>AI workforce</p>
@@ -371,70 +380,58 @@ export function AiOperationsMap({ template, agents, projections, routingTopology
           </p>
         </header>
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2">
+          <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Technical topology</h2>
           <DimensionToggle dimension={dimension} onChange={setDimension} />
-          <button
-            type="button"
-            data-canvas-preview-toggle
-            aria-pressed={canvasPreview}
-            onClick={() => setCanvasPreview((value) => !value)}
-            className={`inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)] ${
-              canvasPreview
-                ? "border-[var(--dpf-accent)] bg-[var(--dpf-accent)]/10 text-[var(--dpf-text)]"
-                : "border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
-            }`}
-          >
-            <span
-              aria-hidden
-              className={`h-1.5 w-1.5 rounded-full ${canvasPreview ? "bg-[var(--dpf-accent)]" : "bg-[var(--dpf-muted)]"}`}
-            />
-            {canvasPreview ? "Unified canvas: on" : "Unified canvas (preview)"}
-          </button>
         </div>
 
-        <ActivityRoutingWorkbench activityRouting={routingTopology.activityRouting} />
-
-        {canvasPreview ? (
-          <section
-            data-canvas-preview
-            aria-label="Unified operations topology (preview)"
-            className="space-y-2 rounded-lg border border-[var(--dpf-accent)] bg-[var(--dpf-surface-1)] p-3"
-          >
-            <p className="text-[11px] uppercase tracking-[0.14em] text-[var(--dpf-muted)]">
-              Unified canvas · preview — verifying parity against the panels below
-            </p>
-            <OperationsTopologyCanvas
-              topology={canvasTopology}
-              dimension={dimension}
-              replayTime={sharedReplay?.time ?? null}
-              replayRange={sharedReplay?.range ?? null}
-            />
-          </section>
-        ) : null}
-
-        {showProvider ? (
-          <RoutingTopologyPanel
-            routingTopology={routingTopology}
-            evidenceRange={evidenceRange ?? null}
-            onReplayChange={handleReplayChange}
-            onControlFilterChange={handleRoutingControlChange}
+        <section
+          data-authoritative-operations-canvas
+          aria-label="Unified operations topology"
+          className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3"
+        >
+          <OperationsTopologyCanvas
+            topology={canvasTopology}
+            dimension={dimension}
+            replayTime={sharedReplay?.time ?? null}
+            replayRange={sharedReplay?.range ?? null}
           />
-        ) : null}
+        </section>
 
-        {showA2a ? (
-          <>
-            <A2aInteractionsPanel
-              coworkers={routingTopology.coworkers}
-              a2aEdges={routingTopology.a2aEdges}
-              a2aLegend={routingTopology.a2aLegend}
-              replayTime={showProvider ? sharedReplay?.time ?? null : null}
-              replayRange={showProvider ? sharedReplay?.range ?? null : null}
-              onFilterChange={handleA2aControlChange}
-            />
-
-            <DeliberationLensPanel deliberations={routingTopology.deliberations} />
-          </>
-        ) : null}
+        <details
+          aria-label="Technical routing diagnostics"
+          className="group rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
+        >
+          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)]">
+            <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Technical diagnostics</h2>
+            <span className="rounded border border-[var(--dpf-border)] px-2 py-1 text-dpf-caption uppercase tracking-[0.14em] text-[var(--dpf-muted)] group-open:hidden">Open</span>
+            <span className="hidden rounded border border-[var(--dpf-border)] px-2 py-1 text-dpf-caption uppercase tracking-[0.14em] text-[var(--dpf-muted)] group-open:inline-flex">Close</span>
+          </summary>
+          <div className="space-y-3 border-t border-[var(--dpf-border)] p-3">
+            <ActivityRoutingWorkbench activityRouting={routingTopology.activityRouting} />
+            {showProvider ? (
+              <RoutingTopologyPanel
+                routingTopology={routingTopology}
+                evidenceRange={evidenceRange ?? null}
+                onReplayChange={handleReplayChange}
+                onControlFilterChange={handleRoutingControlChange}
+              />
+            ) : null}
+            {showA2a ? (
+              <>
+                <A2aInteractionsPanel
+                  coworkers={routingTopology.coworkers}
+                  a2aEdges={routingTopology.a2aEdges}
+                  a2aLegend={routingTopology.a2aLegend}
+                  replayTime={showProvider ? sharedReplay?.time ?? null : null}
+                  replayRange={showProvider ? sharedReplay?.range ?? null : null}
+                  onFilterChange={handleA2aControlChange}
+                />
+                <DeliberationLensPanel deliberations={routingTopology.deliberations} />
+              </>
+            ) : null}
+          </div>
+        </details>
       </section>
 
       <details

@@ -1,0 +1,104 @@
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { RoutingEvidenceConformanceProjection } from "@/lib/ai-operations-map/routing-evidence-conformance";
+import { RoutingArchitectureOverview } from "./RoutingArchitectureOverview";
+
+afterEach(() => cleanup());
+
+const EVIDENCE: RoutingEvidenceConformanceProjection = {
+  schemaVersion: "ai-routing-evidence/v1",
+  designRevision: "ai-routing/v4",
+  window: { start: "2026-07-26T12:00:00.000Z", end: "2026-07-26T13:00:00.000Z" },
+  coverage: {
+    totalDecisions: 4,
+    attributedDecisions: 4,
+    tracedDecisions: 4,
+    correlatedDecisions: 3,
+    uncorrelatedDecisions: 1,
+    unevidencedDecisions: 1,
+    screenCoveredDecisions: 3,
+    designBoundDecisions: 3,
+    unprovenDesignDecisions: 1,
+    staleDesignDecisions: 0,
+    attributionRate: 1,
+    traceRate: 1,
+    correlationRate: 0.75,
+    screenCoverageRate: 0.75,
+    designBindingRate: 0.75,
+  },
+  metrics: {
+    decisionVolume: 4,
+    adapterAttempts: 5,
+    successfulAttempts: 4,
+    errorAttempts: 1,
+    fallbackAttempts: 1,
+    excludedCandidates: 2,
+    inputTokens: 100,
+    outputTokens: 50,
+    costUsd: 0.42,
+    latencyP50Ms: 300,
+    latencyP95Ms: 900,
+    capacityLimitedProviders: 0,
+    latestEvidenceAt: "2026-07-26T12:59:00.000Z",
+    evidenceAgeSeconds: 60,
+  },
+  providerMetrics: [],
+  findings: [
+    {
+      issueKey: "design-unproven",
+      issueType: "ai-routing-design-unproven",
+      severity: "warn",
+      message: "One decision was not bound to a design revision.",
+      count: 1,
+      architectureStageId: "record-safe-receipt",
+    },
+  ],
+};
+
+describe("RoutingArchitectureOverview", () => {
+  it("shows the five owner stations and switches between Designed, Observed, and Compare", () => {
+    render(<RoutingArchitectureOverview evidence={EVIDENCE} initialMode="compare" />);
+
+    expect(screen.getAllByTestId("owner-routing-station")).toHaveLength(5);
+    expect(screen.getByRole("button", { name: "Designed" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByRole("button", { name: "Compare" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText("Design and evidence together")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Observed" }));
+    expect(screen.getByText("What the evidence shows")).toBeTruthy();
+  });
+
+  it("opens an evidence-safe station inspector with design sources and closes on Escape", () => {
+    render(
+      <RoutingArchitectureOverview
+        evidence={EVIDENCE}
+        initialMode="compare"
+        initialFocusStageId="data-policy-gateway"
+      />,
+    );
+
+    const inspector = screen.getByRole("dialog", { name: "Data safety details" });
+    expect(inspector.textContent).toContain("Safe inputs only");
+    expect(inspector.textContent).toContain("ai-routing/v4");
+    expect(inspector.textContent).toContain("evaluateInferenceDispatchPolicy");
+    expect(
+      screen.getByRole("link", { name: "Open in Enterprise Architecture" }).getAttribute("href"),
+    ).toBe("/ea?focus=data-policy-gateway");
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Data safety details" })).toBeNull();
+  });
+
+  it("opens an inspector from a 44px station control and renders accessible stage rows", () => {
+    render(<RoutingArchitectureOverview evidence={EVIDENCE} initialMode="designed" />);
+
+    const station = screen.getByRole("button", { name: /Eligible & available routes/i });
+    expect(station.className).toContain("min-h-11");
+    fireEvent.click(station);
+
+    expect(screen.getByRole("dialog", { name: "Eligible & available routes details" })).toBeTruthy();
+    expect(screen.getByRole("table")).toBeTruthy();
+    expect(screen.getByText("RequestContract compilation")).toBeTruthy();
+  });
+});

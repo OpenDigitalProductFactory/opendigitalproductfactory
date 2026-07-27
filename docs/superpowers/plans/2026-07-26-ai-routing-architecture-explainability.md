@@ -98,21 +98,21 @@ Add a deterministic AI-routing process domain to the Parity Engine.
 
 ### Work
 
-- [ ] Define a versioned routing-stage registry or extractor input from existing
+- [x] Define a versioned routing-stage registry or extractor input from existing
       exported routing/governance contracts.
-- [ ] Write failing pure tests for the complete process from payload assembly through
+- [x] Write failing pure tests for the complete process from payload assembly through
       authorized response handling.
-- [ ] Project stages to BPMN process, tasks, gateways, conditional/default flows and
+- [x] Project stages to BPMN process, tasks, gateways, conditional/default flows and
       lanes.
-- [ ] Include sensitive screen, PDP/PEP, transformation, RequestContract compilation,
+- [x] Include sensitive screen, PDP/PEP, transformation, RequestContract compilation,
       eligibility, availability/limits, ranking, fallback, dispatch, receipt and
       rehydration.
-- [ ] Map requirements/constraints/verification cases to existing SysML element types.
-- [ ] Materialize existing cross-notation relationships to realizing ArchiMate
+- [x] Map requirements/constraints/verification cases to existing SysML element types.
+- [x] Materialize existing cross-notation relationships to realizing ArchiMate
       components/capabilities.
-- [ ] Reuse `applySysmlModel`/shared projection and conformance reconciliation.
-- [ ] Register the domain in the existing projection orchestrator and steward.
-- [ ] Verify idempotency, soft removal, source-key stability and domain-isolated
+- [x] Reuse `applySysmlModel`/shared projection and conformance reconciliation.
+- [x] Register the domain in the existing projection orchestrator and steward.
+- [x] Verify idempotency, soft removal, source-key stability and domain-isolated
       failure behavior.
 
 ### Likely files
@@ -147,22 +147,22 @@ metrics and design/runtime conformance.
 
 ### Work
 
-- [ ] Inventory existing correlation fields and write a no-new-ledger decision.
-- [ ] Adopt or extend one existing identifier envelope across screen decision, route
+- [x] Inventory existing correlation fields and write a no-new-ledger decision.
+- [x] Adopt or extend one existing identifier envelope across screen decision, route
       decision, fallback attempts, adapter outcome, usage and rehydration.
-- [ ] Bind every Compare calculation to the applicable EA/projection snapshot and
+- [x] Bind every Compare calculation to the applicable EA/projection snapshot and
       implementation source revision; do not compare historic traffic silently
       against only the latest design.
-- [ ] Define a strict safe-field allowlist and forbidden-field canary fixtures.
-- [ ] Build a pure aggregation model keyed by stable architecture identity and time
+- [x] Define a strict safe-field allowlist and forbidden-field canary fixtures.
+- [x] Build a pure aggregation model keyed by stable architecture identity and time
       window.
-- [ ] Compute volume, exclusions, fallback depth, errors, latency, tokens/cost,
+- [x] Compute volume, exclusions, fallback depth, errors, latency, tokens/cost,
       capacity, freshness, attribution and correlation coverage.
-- [ ] Compute designed-only, observed-only, missing-evidence and stale-design states.
-- [ ] Reconcile aggregated architecture conformance issues without per-transaction
+- [x] Compute designed-only, observed-only, missing-evidence and stale-design states.
+- [x] Reconcile aggregated architecture conformance issues without per-transaction
       issue rows.
-- [ ] Use OpenTelemetry-compatible GenAI names when they match existing DPF contracts.
-- [ ] Document retention and historical-coverage limitations.
+- [x] Use OpenTelemetry-compatible GenAI names when they match existing DPF contracts.
+- [x] Document retention and historical-coverage limitations.
 
 ### Execution decision — 2026-07-27
 
@@ -285,27 +285,64 @@ operational picture.
 
 ### Work
 
-- [ ] Coordinate or resolve `BI-7E2A1DD0` before relying on the current client canvas.
-- [ ] Freeze provider, A2A, replay, filter, saved-view, inspector and empty-state
+- [x] Coordinate or resolve `BI-7E2A1DD0` before relying on the current client canvas.
+- [x] Freeze provider, A2A, replay, filter, saved-view, inspector and empty-state
       parity fixtures.
-- [ ] Keep `/platform/ai/operations-map` as the one canonical route and use local
+- [x] Keep `/platform/ai/operations-map` as the one canonical route and use local
       mode/time-window controls; do not add global or section navigation.
-- [ ] Make the first viewport answer “How should work route?”, “Is anything unsafe
+- [x] Make the first viewport answer “How should work route?”, “Is anything unsafe
       or blocked?”, and “Is observed behavior different?” before dense diagnostics.
-- [ ] Use the projected routing graph as the stable canvas geometry.
-- [ ] Add Designed, Observed and Compare mode controls with a visible time window.
-- [ ] Render privacy-safe volume/status evidence on the designed edges.
-- [ ] Add owner-language stations and progressive technical inspection.
-- [ ] Add coverage/freshness/unattributed/uncorrelated indicators.
-- [ ] Preserve A2A, provider, replay and source-record honesty.
-- [ ] Compose report-kit filters/status/table primitives, `statusColors`, `LocalTime`
+- [x] Use the projected routing graph as the stable canvas geometry.
+- [x] Add Designed, Observed and Compare mode controls with a visible time window.
+- [x] Render privacy-safe volume/status evidence at the station that can honestly explain it.
+- [x] Add owner-language stations and progressive technical inspection.
+- [x] Add coverage/freshness/unattributed/uncorrelated indicators.
+- [x] Preserve A2A, provider, replay and source-record honesty.
+- [x] Compose report-kit filters/status/table primitives, `statusColors`, `LocalTime`
       and existing EA/Operations Map components rather than a new visual dialect.
-- [ ] Treat view/filter/inspect as read-only. Any future route simulation or coworker
+- [x] Treat view/filter/inspect as read-only. Any future route simulation or coworker
       action requires context preview, expected next step and explicit confirmation.
 - [ ] Verify list/table equivalence, keyboard navigation, mobile vertical layout and
       no-overlap behavior.
 - [ ] Cut over only after parity; delete legacy panels, preview toggles and duplicated
       projection helpers.
+
+### Design grounding
+
+- Existing specs/plans reviewed:
+  `2026-07-26-ai-routing-architecture-explainability-design.md`,
+  `2026-07-26-pre-dispatch-sensitive-llm-routing.md`,
+  `2026-05-26-portal-ux-simplification-spine.md`, and
+  `platform-usability-standards.md`.
+- Current code substrate reviewed: `AI_ROUTING_STAGES`,
+  `RoutingEvidenceConformanceProjection`, `AiOperationsMap`,
+  `OperationsTopologyCanvas`, and report-kit.
+- Source of truth: the versioned routing-stage registry for design and the
+  sanitized conformance projection for observed evidence.
+- Decision: extend the existing Platform route with one stable owner map and
+  progressive technical detail; do not create another dashboard, route, or
+  evidence ledger.
+
+### Phase 5 implementation advisory — 2026-07-27
+
+- The owner map is a pure projection of the existing versioned
+  `AI_ROUTING_STAGES` registry plus the existing privacy-safe
+  `RoutingEvidenceConformanceProjection`; it does not add a second architecture
+  definition or a new evidence ledger.
+- Twenty-one technical stages are grouped into five owner stations with stable
+  geometry across Designed, Observed, and Compare. Evidence remains at the
+  station whose contract can honestly explain it; no per-edge metric is
+  inferred when the ledgers do not carry edge attribution.
+- `?mode=compare&focus=<stage-id>` is the shareable cross-view contract used by
+  Enterprise Architecture drill-through.
+- The unified `OperationsTopologyCanvas` is now the always-on technical canvas.
+  The temporary preview switch is removed. Mature replay/filter controls and
+  the prior diagnostic panels remain under progressive disclosure until their
+  controls are extracted; deleting those duplicated panel diagrams is the last
+  cutover/refactor item and must not remove replay or saved-filter parity.
+- Request content remains intentionally absent. The owner map accepts only the
+  safe conformance DTO and presents counts, rates, timings, identifiers,
+  versions, source paths, and bounded findings.
 
 ### Likely files
 

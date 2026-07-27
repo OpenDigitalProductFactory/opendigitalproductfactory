@@ -22,6 +22,46 @@ order: 2
 4. Review history or systems health when a result looks wrong, slow, or inconsistent.
 5. Adjust **Priority & Models** only after you understand whether the problem is role design, model selection, tool access, standing orders, or calendar state. Set the everyday Cost / Quality / Time priority at the top of that surface (or per coworker from the triangle at its composer). Use tier and capability floors for hard limits. A provider/model pin is an exceptional preference among already-eligible routes, not a way to cross policy, sensitivity, residency, or capability boundaries.
 
+## Read the routing picture
+
+Open **AI Operations Map** (`/platform/ai/operations-map`) when you need one
+at-a-glance answer for how AI work is supposed to move and what the system
+actually recorded.
+
+The first map has five stable stations:
+
+1. **Ask & context** — a coworker asks for AI help and assembles the minimum
+   work context.
+2. **Data safety** — the platform classifies the work and data, applies policy,
+   protects values, keeps work local, requests review, or stops.
+3. **Eligible & available routes** — only routes that satisfy capability,
+   boundary, availability, limit, and fallback obligations remain.
+4. **Select & dispatch** — the router balances quality, time, and cost, then
+   calls the selected local or external adapter.
+5. **Evidence & return** — the platform records privacy-safe evidence and
+   returns only the response the receiving actor may see.
+
+Switch the same map between:
+
+- **Designed** for the governed architecture and its implementation status.
+- **Observed** for privacy-safe counts, timings, coverage, and findings in the
+  selected evidence window.
+- **Compare** to keep the station geometry fixed while seeing design and
+  evidence together. This is the best starting point when something appears
+  unsafe, unavailable, unexpectedly expensive, or inconsistent with design.
+
+Select a station to open its owner steps, technical names, source files,
+architecture version, safe evidence metrics, and conformance findings. Use
+**Open in Enterprise Architecture** for the governed design context. The map
+never projects prompts, credentials, detected sensitive values, customer or
+employee content, or token maps.
+
+The unified coworker/provider/A2A canvas below the owner map is the
+authoritative technical topology. **Replay, filters & technical diagnostics**
+contains the denser time scrubber, provider/A2A controls, activity routing, and
+deliberation detail. Those controls are progressive detail; they are not a
+second owner-level routing architecture.
+
 ## Architecture and evidence
 
 - [Model Routing & Lifecycle](../ai-workforce/model-routing-lifecycle.md) — current
@@ -36,6 +76,9 @@ order: 2
   inspect the governed decision vocabulary and source version, or open the same
   station in the Operations Map Compare lens. The inspector shows bounded labels and
   evidence freshness; it never shows prompt or protected-data content.
+- Architecture links can open the Operations Map directly in **Compare** mode
+  with the related design stage focused. Mode and focus remain in the URL so
+  the exact explanatory view can be shared or revisited.
 
 ## What To Watch
 

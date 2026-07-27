@@ -19,6 +19,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { AiOperationsMap } from "./AiOperationsMap";
 import type { OperationsMapData } from "@/lib/ai-operations-map/load-map-data";
+import type { RoutingArchitectureMode } from "@/lib/ai-operations-map/routing-comparison-view-model";
 
 const REFRESH_INTERVAL_MS = 45_000;
 const SCRUB_SETTLE_MS = 600;
@@ -58,7 +59,15 @@ export function formatRefreshAge(ageMs: number): string {
   return `${Math.round(ageMs / (60 * 60_000))}h ago`;
 }
 
-export function OperationsMapLiveShell({ initialData }: { initialData: OperationsMapData }) {
+export function OperationsMapLiveShell({
+  initialData,
+  initialArchitectureMode = "compare",
+  initialFocusStageId = null,
+}: {
+  initialData: OperationsMapData;
+  initialArchitectureMode?: RoutingArchitectureMode;
+  initialFocusStageId?: string | null;
+}) {
   const [data, setData] = useState(initialData);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -175,7 +184,10 @@ export function OperationsMapLiveShell({ initialData }: { initialData: Operation
         agents={data.agents}
         projections={data.projections}
         routingTopology={data.routingTopology}
+        routingEvidence={data.routingEvidence}
         recentWindowLabel={data.recentWindowLabel}
+        initialArchitectureMode={initialArchitectureMode}
+        initialFocusStageId={initialFocusStageId}
         evidenceRange={data.evidenceRange}
         onReplayWindowChange={handleReplayWindowChange}
       />
