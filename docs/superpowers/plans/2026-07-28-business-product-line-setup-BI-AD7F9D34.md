@@ -12,6 +12,14 @@
 **WWMD substrate decision:** `DI-67A941CAF7EE`
 **Backlog coverage receipt:** `cms4ou53k0or301runx7ybazo`
 
+## Backlog coverage
+
+- Decision: atomic
+- Parent: `BI-AD7F9D34`
+- Receipt: `cms4ou53k0or301runx7ybazo`
+- Rationale: This child plan implements one independently deliverable Phase 1 backlog item; every later operating-loop phase remains mapped to its own live backlog item.
+- Dependencies: none
+
 ## Goal
 
 Give a business a durable, organization-scoped ProductLine -> Product hierarchy and
