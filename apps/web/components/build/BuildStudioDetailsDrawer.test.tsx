@@ -14,7 +14,7 @@
 import "../build-studio/test-setup";
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BuildStudio } from "./BuildStudio";
 import { BUILD_STUDIO_TEST_IDS } from "./build-studio-layout";
@@ -24,6 +24,10 @@ import {
 } from "@/lib/feature-build-types";
 
 afterEach(cleanup);
+
+beforeEach(() => {
+  window.localStorage.setItem("dpf:build-studio-engineer-view", "true");
+});
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: vi.fn(), replace: vi.fn() }),

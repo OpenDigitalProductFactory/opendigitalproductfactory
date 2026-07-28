@@ -8,9 +8,21 @@ relatedCode:
 
 ## Overview
 
-Build Studio is the platform's feature development environment. It guides a new capability from initial idea through to a shipped, tested, documented, and deployed feature using a five-phase pipeline. AI agents assist at each phase, handling research, planning, code generation, documentation impact, verification, and deployment while keeping a human in control of decisions.
+Build Studio is the platform's guided way to turn a plain-language outcome into a tested, documented, and deployable platform change. You do not need to manage its internal delivery process. The main workspace stays focused on four questions: what you asked for, what is happening now, whether Build Studio needs a decision, and what evidence has accumulated.
 
 Build Studio is not a separate code universe. It works from the install's shared development workspace. In customizable installs, that means Build Studio and VS Code operate on the same source tree while the portal continues to own review, evidence, and governed promotion.
+
+## The operator workspace
+
+Open **Build Studio** under **Delivery**, then:
+
+1. Choose **Start a new outcome** and describe what should be different, who it helps, and any constraint that matters.
+2. Choose **Continue**, review the captured outcome, and explicitly start the governed build.
+3. Follow the plain-language status. Build Studio continues routine research, planning, implementation, and checking without asking you to operate each internal stage.
+4. Respond when the workspace says **Needs you**. Human attention is reserved for consequence, unresolved product judgment, elevated risk, or a blocked prerequisite.
+5. Open **Technical details** when you need the process graph, source branch, work warrant, canonical documents, review evidence, queue diagnostics, or build-runtime information.
+
+The compact activity story is evidence, not a wizard. It shows what Build Studio has understood, shaped, built, and checked; it does not turn each internal phase into another button the operator must click.
 
 ## Current Maturity
 
@@ -30,7 +42,8 @@ escalations.
 
 ## Key Concepts
 
-- **Phases** — The five stages every feature moves through: Ideate (define the problem), Plan (design the solution), Build (generate and test code), Review (quality gates), Ship (deploy to production).
+- **Activity story** — The operator-facing evidence trail: outcome understood, approach shaped, solution built, quality checked, and ready to use. It compresses routine internal work into a readable history.
+- **Technical phases** — Ideate, Plan, Build, Review, and Ship remain the canonical governed states. They appear in technical details and audit evidence rather than dominating the operator workspace.
 - **Feature Brief** — The structured output of the Ideate phase. It captures the problem, desired outcome, constraints, and acceptance criteria. Everything downstream is built from this.
 - **AI Coworker** — The Software Engineer agent that works with you through each phase. It searches the codebase, writes code, runs tests, and deploys features. You guide it with plain language.
 - **Change Reviewer** — An independent, read-only coworker for governed Work Capsules. It inspects committed source, tests, architecture, and evidence, but cannot edit the change, advance the build, waive findings, or publish a release. The Software Engineer remains the authoring coworker on the main Build Studio surface.
@@ -49,27 +62,26 @@ does not certify or activate a coworker.
 
 ## What You Can Do
 
-- Start a new feature by describing the idea in the conversation panel
-- Review and refine the feature brief before moving to planning
-- Approve the plan and watch the AI Coworker build and test the feature
-- See the live preview of your feature as it is being built
-- Review test results and acceptance criteria before shipping
-- Prepare the feature for governed promotion with recorded evidence, health checks, and rollback planning
-- Track active builds and their current phase from the Build Studio dashboard
+- Start a new outcome in plain language
+- See one current status and the next meaningful action
+- Respond to product, risk, or consequence decisions when Build Studio needs you
+- Follow a compact story of completed and current work
+- Open technical details for the full design, source, test, review, runtime, and promotion evidence
+- Prepare the outcome for governed promotion with recorded evidence, health checks, and rollback planning
 
-## The Five Phases
+## What happens behind the activity story
 
 ### Ideate
 
-Describe what you want in plain language. The AI Coworker searches the existing codebase for relevant patterns, then creates a design document covering the problem, approach, and acceptance criteria. You review and approve before moving on.
+Build Studio turns the requested outcome into an evidence-backed problem statement and acceptance criteria. It searches the existing codebase and platform guidance before proposing change.
 
 ### Plan
 
-The AI Coworker creates an implementation plan listing the files to create or modify, tasks to complete, tests to write, and documentation impact to handle. You see a plain-language summary. Approve the plan to start building.
+The AI Coworker creates or refines the implementation plan, including affected files, tests, documentation impact, dependencies, and risk controls. Routine plan progression can remain under coworker custody; unresolved product judgment or elevated consequence returns to you as a clear decision.
 
 ### Build
 
-The AI Coworker generates code inside the isolated Build runtime. You can see the live preview update in real time. It runs tests and typecheck after generating code. If tests fail, it attempts to fix them automatically. You can ask for changes at any time.
+The AI Coworker generates code inside the isolated Build runtime. It runs tests and typecheck, gathers concrete evidence, and can use bounded disposable spikes to answer uncertain UX or implementation questions. A spike is evidence, not production code: the normal design, review, and release gates still decide what may ship.
 
 If a task stops before it finishes, Build Studio distinguishes *why*. When the coding session died on infrastructure — a timeout, a provider outage, a rate limit, the process being killed — that is not a verdict on your feature, so the same task is re-run once automatically and you see a "retrying" note in the activity feed. When the session instead stopped because it needs something only you can supply — an unresolved product question, a contradiction in the spec — it is **not** retried, because re-running will not answer the question. That one surfaces as a blocked task for you to resolve.
 
