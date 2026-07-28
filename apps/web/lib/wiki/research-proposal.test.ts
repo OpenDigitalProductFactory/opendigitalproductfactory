@@ -13,6 +13,10 @@ function makeFakeDb(seed: Row[] = []) {
   const rows: Row[] = [...seed];
   let seq = 0;
   const db = {
+    organization: { findFirst: vi.fn(async () => ({ id: ORG })) },
+    productLine: { findFirst: vi.fn(async (args: any) => ({ id: args.where.id })) },
+    product: { findFirst: vi.fn(async (args: any) => ({ id: args.where.id })) },
+    digitalProduct: { findFirst: vi.fn(async (args: any) => ({ id: args.where.id })) },
     researchProposal: {
       findFirst: vi.fn(async (args: any) => {
         const w = args.where ?? {};
@@ -22,6 +26,8 @@ function makeFakeDb(seed: Row[] = []) {
               (w.proposalId === undefined || r.proposalId === w.proposalId) &&
               (w.organizationId === undefined || r.organizationId === w.organizationId) &&
               (w.digitalProductId === undefined || r.digitalProductId === w.digitalProductId) &&
+              (w.productLineId === undefined || r.productLineId === w.productLineId) &&
+              (w.businessProductId === undefined || r.businessProductId === w.businessProductId) &&
               (w.topic === undefined || r.topic === w.topic) &&
               (w.status === undefined || r.status === w.status),
           ) ?? null
@@ -31,6 +37,8 @@ function makeFakeDb(seed: Row[] = []) {
         const row = {
           proposalId: `rp_${++seq}`,
           digitalProductId: null,
+          productLineId: null,
+          businessProductId: null,
           status: "pending",
           ...args.data,
         };
@@ -105,6 +113,65 @@ describe("proposeResearch", () => {
       digitalProductId: "digital-product-1",
     });
   });
+
+  it("deduplicates within the exact business-product scope", async () => {
+    const fake = makeFakeDb([
+      {
+        proposalId: "rp_product",
+        organizationId: ORG,
+        productLineId: null,
+        businessProductId: "product-1",
+        digitalProductId: null,
+        topic: "competitive-landscape",
+        status: "pending",
+      },
+    ]);
+
+    const res = await proposeResearch(
+      {
+        organizationId: ORG,
+        businessProductId: "product-1",
+        topic: "competitive-landscape",
+        query: "salon-service competitors",
+      },
+      { db: fake.db },
+    );
+
+    expect(res).toEqual({ proposalId: "rp_product", created: false });
+  });
+
+  it("rejects conflicting business and digital targets before writing", async () => {
+    const fake = makeFakeDb();
+    await expect(
+      proposeResearch(
+        {
+          organizationId: ORG,
+          businessProductId: "product-1",
+          digitalProductId: "digital-product-1",
+          topic: "competitive-landscape",
+          query: "ambiguous",
+        },
+        { db: fake.db },
+      ),
+    ).rejects.toMatchObject({ code: "conflicting-scope" });
+    expect(fake.db.researchProposal.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects an empty research question before writing", async () => {
+    const fake = makeFakeDb();
+
+    await expect(
+      proposeResearch(
+        {
+          organizationId: ORG,
+          topic: "competitive-landscape",
+          query: " ",
+        },
+        { db: fake.db },
+      ),
+    ).rejects.toThrow("Research proposal query is required.");
+    expect(fake.db.researchProposal.create).not.toHaveBeenCalled();
+  });
 });
 
 describe("approveResearch", () => {
@@ -114,6 +181,8 @@ describe("approveResearch", () => {
         proposalId: "rp_1",
         organizationId: ORG,
         digitalProductId: "digital-product-1",
+        productLineId: null,
+        businessProductId: null,
         topic: "t",
         query: "q",
         status: "pending",
@@ -129,6 +198,8 @@ describe("approveResearch", () => {
     expect((onApproved as any).mock.calls[0][0]).toMatchObject({
       proposalId: "rp_1",
       digitalProductId: "digital-product-1",
+      productLineId: null,
+      businessProductId: null,
       query: "q",
     });
   });
@@ -155,6 +226,35 @@ describe("approveResearch", () => {
     const fake = makeFakeDb();
     const res = await approveResearch({ proposalId: "missing", decidedByUserId: "u1" }, { db: fake.db });
     expect(res.approved).toBe(false);
+  });
+
+  it("does not approve a proposal outside the authenticated organization", async () => {
+    const fake = makeFakeDb([
+      {
+        proposalId: "rp_other",
+        organizationId: "org_other",
+        digitalProductId: null,
+        productLineId: null,
+        businessProductId: null,
+        topic: "t",
+        query: "q",
+        status: "pending",
+      },
+    ]);
+    const onApproved: OnApproved = vi.fn(async () => {});
+
+    const res = await approveResearch(
+      {
+        proposalId: "rp_other",
+        organizationId: ORG,
+        decidedByUserId: "u1",
+      },
+      { db: fake.db, onApproved },
+    );
+
+    expect(res.approved).toBe(false);
+    expect(onApproved).not.toHaveBeenCalled();
+    expect(fake.rows[0].status).toBe("pending");
   });
 });
 
@@ -188,5 +288,27 @@ describe("declineResearch", () => {
     ]);
     const res = await declineResearch({ proposalId: "rp_1", decidedByUserId: "u1" }, { db: fake.db });
     expect(res.declined).toBe(false);
+  });
+
+  it("does not decline a proposal outside the authenticated organization", async () => {
+    const fake = makeFakeDb([
+      {
+        proposalId: "rp_other",
+        organizationId: "org_other",
+        digitalProductId: null,
+        topic: "t",
+        query: "q",
+        status: "pending",
+      },
+    ]);
+
+    const res = await declineResearch({
+      proposalId: "rp_other",
+      organizationId: ORG,
+      decidedByUserId: "u1",
+    }, { db: fake.db });
+
+    expect(res.declined).toBe(false);
+    expect(fake.rows[0].status).toBe("pending");
   });
 });

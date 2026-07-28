@@ -310,9 +310,16 @@ subscriber, entitlement, or consumer.
 - query `product-operating-context-query.ts` for product-management context
   instead of reconstructing organization, product-line, commercial,
   intelligence, demand, delivery, and architecture joins in prompts or routes;
-- keep organization-wide research and battlecards distinct from records with
-  an explicit `digitalProductId`; never infer product scope from topic, prompt,
-  route, title, or similar names;
+- keep organization-wide research and battlecards distinct from explicit
+  ProductLine, business Product, and DigitalProduct records; allow at most one
+  narrower scope and never infer it from topic, prompt, route, title, or similar
+  names;
+- use `propose_product_research` when a competitive claim needs external
+  evidence; it creates a pending proposal only, and the coworker must not imply
+  that research ran or knowledge was published;
+- treat reviewed `RawSource → WikiPageSource → WikiPage` provenance as the
+  baseline for changed-since research; never compare against an unreviewed
+  draft as authority;
 - treat an `unavailable` context slice as a missing typed association, not as
   zero activity or permission to fabricate a placeholder;
 - treat names and emails on transaction evidence as evidence-only unless a

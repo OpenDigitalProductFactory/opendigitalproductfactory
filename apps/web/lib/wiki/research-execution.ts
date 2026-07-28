@@ -14,19 +14,35 @@ import { runMarketResearch } from "./market-research";
 import { enrichOrgCorpus } from "./enrich-org-corpus";
 import { createProductionInference } from "./inference-adapter";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import {
+  loadLatestReviewedResearchBaseline,
+  type ReviewedResearchBaseline,
+} from "./research-baseline";
 
 export type RunResearchExecutionInput = {
   proposalId: string;
   organizationId: string;
   digitalProductId: string | null;
+  productLineId: string | null;
+  businessProductId: string | null;
   topic: string;
   query: string;
 };
 
 type ResearchOutcome = {
   text: string;
-  sources: { title: string; url: string }[];
+  sources: { title: string; url: string; retrievedAt: Date }[];
   empty: boolean;
+  emptyReason:
+    | "no-results"
+    | "provider-unavailable"
+    | "synthesis-empty"
+    | null;
+  confidence: "low" | "medium" | "high";
+  comparison: {
+    kind: "first-run" | "changed-since";
+    baselineReviewedAt: Date | null;
+  };
 };
 
 type EnrichInput = {
@@ -42,7 +58,14 @@ export type ResearchExecutionDeps = {
     researchProposal: { update: (args: unknown) => Promise<unknown> };
   };
   /** Defaults to runMarketResearch (slice A). */
-  research?: (input: { organizationId: string; query: string }) => Promise<ResearchOutcome>;
+  research?: (input: {
+    organizationId: string;
+    query: string;
+    reviewedBaseline?: { text: string; reviewedAt: Date } | null;
+  }) => Promise<ResearchOutcome>;
+  baseline?: (
+    input: RunResearchExecutionInput,
+  ) => Promise<ReviewedResearchBaseline | null>;
   /** Defaults to enrichOrgCorpus with a production inference adapter. */
   enrich?: (input: EnrichInput) => Promise<{ committed: Array<{ pageId: string; slug: string }> }>;
 };
@@ -59,6 +82,10 @@ export async function runResearchExecution(
 ): Promise<RunResearchExecutionResult> {
   const db = deps.db ?? (prisma as unknown as NonNullable<ResearchExecutionDeps["db"]>);
   const research = deps.research ?? ((i) => runMarketResearch(i));
+  const baseline =
+    deps.baseline ??
+    ((i: RunResearchExecutionInput) =>
+      loadLatestReviewedResearchBaseline(i, prisma));
   const enrich =
     deps.enrich ??
     ((i: EnrichInput) =>
@@ -68,13 +95,45 @@ export async function runResearchExecution(
       }) as Promise<{ committed: Array<{ pageId: string; slug: string }> }>);
 
   try {
-    const result = await research({ organizationId: input.organizationId, query: input.query });
+    const reviewedBaseline = await baseline(input);
+    const result = await research({
+      organizationId: input.organizationId,
+      query: input.query,
+      reviewedBaseline: reviewedBaseline
+        ? {
+            text: reviewedBaseline.text,
+            reviewedAt: reviewedBaseline.reviewedAt,
+          }
+        : null,
+    });
 
     if (result.empty) {
-      const summary = "No findings — web search returned nothing to add.";
+      const summary =
+        result.emptyReason === "provider-unavailable"
+          ? "Research provider unavailable — no findings were produced. Retry after the provider recovers."
+          : result.emptyReason === "synthesis-empty"
+            ? "No findings — sources were retrieved but no grounded synthesis was produced."
+            : "No findings — public search returned nothing to add.";
       await db.researchProposal.update({
         where: { proposalId: input.proposalId },
-        data: { status: "executed", executedAt: new Date(), resultSummary: summary },
+        data: {
+          status: "executed",
+          executedAt: new Date(),
+          resultSummary: summary,
+          metadata: {
+            evidence: {
+              sourceUrls: [],
+              retrievedAt: null,
+              confidence: result.confidence,
+              emptyReason: result.emptyReason,
+              comparisonKind: result.comparison.kind,
+              baselineProposalId: reviewedBaseline?.proposalId ?? null,
+              baselineReviewedAt:
+                result.comparison.baselineReviewedAt?.toISOString() ?? null,
+              committedPageIds: [],
+            },
+          },
+        },
       });
       return { status: "executed", pagesCommitted: 0, summary };
     }
@@ -88,18 +147,45 @@ export async function runResearchExecution(
         sourceRef: {
           proposalId: input.proposalId,
           digitalProductId: input.digitalProductId,
+          productLineId: input.productLineId,
+          businessProductId: input.businessProductId,
           topic: input.topic,
           urls: result.sources.map((s) => s.url),
+          retrievedAt: result.sources[0]?.retrievedAt.toISOString() ?? null,
+          confidence: result.confidence,
+          comparisonKind: result.comparison.kind,
+          baselineProposalId: reviewedBaseline?.proposalId ?? null,
+          baselineReviewedAt: result.comparison.baselineReviewedAt?.toISOString() ?? null,
         },
       },
       trust: "researched",
     });
 
     const pagesCommitted = enriched?.committed?.length ?? 0;
-    const summary = `Added ${pagesCommitted} draft page(s) from ${result.sources.length} source(s) — awaiting review.`;
+    const comparisonLabel =
+      result.comparison.kind === "changed-since"
+        ? "Changed-since draft"
+        : "First-baseline draft";
+    const summary = `${comparisonLabel}: added ${pagesCommitted} page(s) from ${result.sources.length} source(s) at ${result.confidence} confidence — awaiting review.`;
     await db.researchProposal.update({
       where: { proposalId: input.proposalId },
-      data: { status: "executed", executedAt: new Date(), resultSummary: summary },
+      data: {
+        status: "executed",
+        executedAt: new Date(),
+        resultSummary: summary,
+        metadata: {
+          evidence: {
+            sourceUrls: result.sources.map((source) => source.url),
+            retrievedAt: result.sources[0]?.retrievedAt.toISOString() ?? null,
+            confidence: result.confidence,
+            comparisonKind: result.comparison.kind,
+            baselineProposalId: reviewedBaseline?.proposalId ?? null,
+            baselineReviewedAt:
+              result.comparison.baselineReviewedAt?.toISOString() ?? null,
+            committedPageIds: enriched.committed.map((page) => page.pageId),
+          },
+        },
+      },
     });
     return { status: "executed", pagesCommitted, summary };
   } catch (err) {

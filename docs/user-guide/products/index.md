@@ -72,6 +72,41 @@ product or offering; an ambiguous identifier fails closed.
 approval boundary, and schedule effect before leaving the page. The Direction
 brief itself does not send a prompt, approve funding, or mutate backlog data.
 
+## Build Continuous Product Intelligence
+
+From a business Product, open **Direction → Intelligence**. The page keeps four
+things visibly separate:
+
+- research proposals waiting for a person to approve or skip;
+- completed research drafts waiting for Knowledge review;
+- published Wiki knowledge that has been reviewed;
+- competitive battlecards, which retain positioning without becoming a second
+  citation store.
+
+Choose **Propose research** to write one focused question. The preview shows the
+business Product scope and the proposed write before anything is saved. Saving
+creates a pending proposal only. A web and inference run begins only after a
+person approves it, and its result remains a draft until someone reviews and
+publishes it in Knowledge.
+
+Choose **Schedule a recurring scan** when the question should be revisited
+weekly or monthly. Each run creates another reviewable proposal; it does not
+search, spend inference capacity, or publish automatically. You can pause,
+resume, or request the next proposal run from the same page.
+
+Evidence labels distinguish **This product**, **Product line**, **Whole
+business**, and **Enabling digital architecture**. ProductLine/Product evidence
+does not become DigitalProduct architecture, and a DigitalProduct link is never
+used to infer a business Product. Reviewed research exposes its source URLs,
+retrieval time, confidence, and whether it is the first baseline or a change
+since the last reviewed baseline. A stale warning means the evidence is older
+than 30 days; it is not a claim that the finding is false.
+
+If no source returns a useful result, the completed proposal says so instead of
+creating a fabricated report. Failed runs remain visible with their failure
+summary. A first-run page offers one useful research action rather than
+displaying a zero-filled dashboard.
+
 ## From Product To Something A Customer Can Select
 
 The commercial path is:
@@ -172,6 +207,10 @@ one-off quote or order snapshot unless an operator explicitly promotes it.
 - Review catalog-linked purchases and fulfillment with honest customer evidence
 - Review product context with organization-wide and product-specific evidence
   kept visibly distinct
+- Propose, approve, review, and repeat product research while retaining source
+  provenance and human publication control
+- Schedule proposal-only competitive scans without unattended research or
+  publication
 - Compare product-line sales evidence and drill into a business Product's
   Direction brief
 - Switch between guided and professional density without forking product truth

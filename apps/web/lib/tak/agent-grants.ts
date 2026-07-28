@@ -572,6 +572,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   create_asset_variant:         ["marketing_write"],
   record_variant_result:        ["marketing_write"],
   get_battlecards:              ["marketing_read"],
+  propose_product_research:     ["marketing_write"],
   create_battlecard:            ["marketing_write"],
   get_work_engagement_instances:   ["work_engagement_read"],
   create_recurring_work_engagement: ["work_engagement_write"],
