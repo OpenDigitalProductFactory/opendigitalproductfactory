@@ -442,6 +442,39 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).toMatch(/data-testid="build-studio-details-drawer"[^>]*data-open="false"/);
   });
 
+  it("presents one outcome, one status, one next action, and one activity story before technical details", () => {
+    const html = renderToStaticMarkup(
+      <BuildStudio
+        builds={[makeBuild({ phase: "review" })]}
+        portfolios={[]}
+        governedBacklogEnabled
+        canManageGovernedWork
+        projectBranch="main"
+        submissionBranchShortId="fb8783b9"
+        customerStatuses={{
+          "build-row-1": {
+            whatIsBeingBuilt: "Fix Build Studio header/content overlap in workflow view",
+            lifecyclePosition: "Checking the work",
+            worker: "Build Studio",
+            evidence: "Implementation finished and verification evidence is arriving.",
+            nextAction: "No action needed while checks run.",
+            owner: "Build Studio",
+            needsYou: false,
+          },
+        }}
+      />,
+    );
+
+    expect(html).toContain('data-testid="build-studio-operator-outcome"');
+    expect(html).toContain('data-testid="build-studio-operator-status"');
+    expect(html).toContain('data-testid="build-studio-operator-next-action"');
+    expect(html).toContain('data-testid="build-studio-activity-story"');
+    expect(html).toContain(">Technical details<");
+    expect(html).not.toContain(">Engineer view<");
+    expect(html).not.toContain(">Work Control<");
+    expect(html).not.toContain('data-testid="process-graph"');
+  });
+
   it("renders the build assurance gate next to code intelligence (engineer view)", () => {
     // These engineer-grade surfaces live behind the "Engineer view" toggle after
     // the reframe (BI-90670010); render with it enabled to verify them.

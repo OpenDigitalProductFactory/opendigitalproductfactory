@@ -8967,10 +8967,11 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "the-operator-workspace",
         "current-maturity",
         "key-concepts",
         "what-you-can-do",
-        "the-five-phases",
+        "what-happens-behind-the-activity-story",
         "ideate",
         "plan",
         "build",
