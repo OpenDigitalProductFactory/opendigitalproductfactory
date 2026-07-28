@@ -9457,9 +9457,19 @@
       "publishedPublic": true,
       "publishedPortal": true,
       "anchors": [
-        "overview",
-        "key-concepts",
-        "what-you-can-do"
+        "what-the-people-area-owns",
+        "workforce-operating-loop",
+        "start-with-the-daily-attention-view",
+        "create-an-employee-record",
+        "check-organization-placement",
+        "set-compensation-inputs",
+        "record-and-approve-time",
+        "employee-workflow",
+        "manager-workflow",
+        "complete-personal-policy-work",
+        "manage-roles-and-account-access",
+        "what-is-not-yet-a-people-page-workflow",
+        "evidence-and-recovery-checklist"
       ]
     },
     "docs/user-guide/index.md": {
