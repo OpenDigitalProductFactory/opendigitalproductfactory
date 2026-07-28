@@ -25,6 +25,10 @@ import {
   type ProductHierarchyClient,
 } from "@/lib/products/persist-product-hierarchy";
 import {
+  reconcileStorefrontCommercialCatalog,
+  type ReconcileStorefrontCommercialCatalogClient,
+} from "@/lib/products/commercial-catalog";
+import {
   seedCompositionArtifacts,
   type CompositionArtifactClient,
 } from "@/lib/storefront/seed-composition-artifacts";
@@ -136,6 +140,7 @@ export async function POST(req: NextRequest) {
 
   // Config, composition artifacts, and business hierarchy form one authority
   // boundary. A failure rolls all of them back instead of leaving partial setup.
+  let commercialReconciliation = { linked: 0, unresolved: 0 };
   const config = await prisma.$transaction(async (tx) => {
     const orgUpdates: { name?: string; slug?: string } = {};
     if (orgName && orgName !== org.name) orgUpdates.name = orgName;
@@ -202,6 +207,11 @@ export async function POST(req: NextRequest) {
       storefrontId: created.id,
       lines: confirmedProductLines,
       db: tx as unknown as ProductHierarchyClient,
+    });
+    commercialReconciliation = await reconcileStorefrontCommercialCatalog({
+      organizationId: org.id,
+      storefrontId: created.id,
+      db: tx as unknown as ReconcileStorefrontCommercialCatalogClient,
     });
     return created;
   });
@@ -301,5 +311,9 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  return NextResponse.json({ success: true, storefrontId: config.id });
+  return NextResponse.json({
+    success: true,
+    storefrontId: config.id,
+    commercialReconciliation,
+  });
 }

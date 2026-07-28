@@ -123,6 +123,10 @@ describe("seeded registry", () => {
     for (const [assetId, prismaModel] of [
       ["data:business-product-line", "ProductLine"],
       ["data:business-product", "Product"],
+      ["data:business-product-offering", "ProductOffering"],
+      ["data:business-catalog-item", "CatalogItem"],
+      ["data:business-product-configuration", "ProductConfiguration"],
+      ["data:business-catalog-sku", "CatalogSku"],
     ] as const) {
       expect(lookupAsset(DATA_ASSET_REGISTRY, assetId)).toMatchObject({
         physical: { prismaModel },

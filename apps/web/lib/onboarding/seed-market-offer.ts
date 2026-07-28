@@ -16,7 +16,11 @@ import {
 import {
   persistProductHierarchy,
   type ProductHierarchyClient,
-} from "@/lib/products/persist-product-hierarchy";
+} from "../products/persist-product-hierarchy";
+import {
+  reconcileStorefrontCommercialCatalog,
+  type ReconcileStorefrontCommercialCatalogClient,
+} from "../products/commercial-catalog";
 
 export type SeedMarketOfferClient = ProductHierarchyClient & {
   storefrontConfig: { findFirst: (args: unknown) => Promise<unknown> };
@@ -37,6 +41,10 @@ export type SeedMarketOfferResult = {
   productId: null;
   /** Count of business Product rows confirmed by the reconciliation. */
   offeringCount: number;
+  /** Storefront projections linked to canonical CatalogItems in this run. */
+  linkedCatalogItemCount: number;
+  /** Storefront projections that still lack real product-line evidence. */
+  unresolvedCatalogItemCount: number;
 };
 
 type CompositionEvidence = {
@@ -66,15 +74,6 @@ export async function seedMarketOffer(
     },
     select: { id: true },
   })) as { id: string } | null;
-  if (existing) {
-    return {
-      seeded: false,
-      alreadyPresent: true,
-      productId: null,
-      offeringCount: 0,
-    };
-  }
-
   const storefront = (await db.storefrontConfig.findFirst({
     where: { organizationId: input.organizationId },
     select: {
@@ -114,9 +113,27 @@ export async function seedMarketOffer(
   if (!storefront) {
     return {
       seeded: false,
-      alreadyPresent: false,
+      alreadyPresent: Boolean(existing),
       productId: null,
       offeringCount: 0,
+      linkedCatalogItemCount: 0,
+      unresolvedCatalogItemCount: 0,
+    };
+  }
+
+  if (existing) {
+    const reconciled = await reconcileStorefrontCommercialCatalog({
+      db: db as unknown as ReconcileStorefrontCommercialCatalogClient,
+      storefrontId: storefront.id,
+      organizationId: input.organizationId,
+    });
+    return {
+      seeded: false,
+      alreadyPresent: true,
+      productId: null,
+      offeringCount: reconciled.linked,
+      linkedCatalogItemCount: reconciled.linked,
+      unresolvedCatalogItemCount: reconciled.unresolved,
     };
   }
 
@@ -147,10 +164,17 @@ export async function seedMarketOffer(
     lines,
     db,
   });
+  const reconciled = await reconcileStorefrontCommercialCatalog({
+    db: db as unknown as ReconcileStorefrontCommercialCatalogClient,
+    storefrontId: storefront.id,
+    organizationId: input.organizationId,
+  });
   return {
     seeded: true,
     alreadyPresent: false,
     productId: null,
     offeringCount: result.productCount,
+    linkedCatalogItemCount: reconciled.linked,
+    unresolvedCatalogItemCount: reconciled.unresolved,
   };
 }

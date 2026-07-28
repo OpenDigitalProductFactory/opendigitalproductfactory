@@ -66,6 +66,34 @@ describe("crm-sales-pipeline pack", () => {
     expect(res.error).toBe("missing_fields");
   });
 
+  it("mirrors the catalog-first quote seam while retaining the legacy DigitalProduct field", () => {
+    const definition = crmSalesPipelinePack.definitions.find(
+      (candidate) => candidate.name === "create_quote",
+    )!;
+    const inputSchema = definition.inputSchema as {
+      properties: {
+        lineItems: {
+          items?: {
+            properties?: Record<string, {
+              type?: string;
+              description?: string;
+            }>;
+          };
+        };
+      };
+    };
+    const lineItem = inputSchema.properties.lineItems.items;
+
+    expect(lineItem?.properties).toMatchObject({
+      catalogItemId: { type: "string" },
+      configurationSnapshot: { type: "object" },
+      productId: {
+        type: "string",
+        description: expect.stringMatching(/Legacy.*DigitalProduct/i),
+      },
+    });
+  });
+
   it("get_opportunity requires an opportunityId", async () => {
     const res = await crmSalesPipelinePack.handlers.get_opportunity({}, "user-1");
     expect(res.success).toBe(false);

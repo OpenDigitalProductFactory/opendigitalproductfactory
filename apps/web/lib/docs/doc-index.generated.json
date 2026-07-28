@@ -820,6 +820,19 @@
         "recommended-follow-up-operator-decision"
       ]
     },
+    "docs/architecture/business-commercial-catalog.md": {
+      "publicHref": "/architecture/business-commercial-catalog/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "business-commercial-catalog",
+        "authority-boundary",
+        "canonical-and-projected-fields",
+        "configurations-and-quotes",
+        "fleet-safe-evolution"
+      ]
+    },
     "docs/architecture/capability-driven-runtime-profiles.md": {
       "publicHref": "/architecture/capability-driven-runtime-profiles/",
       "portalHref": null,
@@ -9918,6 +9931,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "from-product-to-something-a-customer-can-select",
         "key-concepts",
         "what-you-can-do",
         "reading-product-health"

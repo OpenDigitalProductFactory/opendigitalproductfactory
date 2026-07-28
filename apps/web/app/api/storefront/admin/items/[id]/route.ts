@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
+import {
+  updateCollapsedCommercialChain,
+  type CollapsedCommercialUpdateClient,
+} from "@/lib/products/commercial-catalog";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -45,7 +49,29 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
   const { id } = await params;
   const body = (await req.json()) as UpdateItemBody;
 
-  const existing = await prisma.storefrontItem.findUnique({ where: { id }, select: { id: true, ctaType: true, storefrontId: true } });
+  const existing = await prisma.storefrontItem.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      ctaType: true,
+      storefrontId: true,
+      catalogItemId: true,
+      name: true,
+      description: true,
+      priceType: true,
+      priceAmount: true,
+      priceCurrency: true,
+      catalogItem: {
+        select: {
+          name: true,
+          description: true,
+          priceType: true,
+          priceAmount: true,
+          priceCurrency: true,
+        },
+      },
+    },
+  });
   if (!existing) {
     return NextResponse.json({ error: "Item not found" }, { status: 404 });
   }
@@ -88,9 +114,37 @@ export async function PUT(req: NextRequest, { params }: RouteParams) {
     updateData.bookingConfig = bookingConfigUpdate;
   }
 
-  const item = await prisma.storefrontItem.update({
-    where: { id },
-    data: updateData,
+  const item = await prisma.$transaction(async (tx) => {
+    if (existing.catalogItemId) {
+      await updateCollapsedCommercialChain({
+        db: tx as unknown as CollapsedCommercialUpdateClient,
+        catalogItemId: existing.catalogItemId,
+        name: body.name ?? existing.catalogItem?.name ?? existing.name,
+        description:
+          body.description !== undefined
+            ? body.description
+            : existing.catalogItem?.description ?? existing.description,
+        priceType:
+          body.priceType !== undefined
+            ? body.priceType
+            : existing.catalogItem?.priceType ?? existing.priceType,
+        priceAmount:
+          body.priceAmount !== undefined
+            ? body.priceAmount
+            : existing.catalogItem?.priceAmount?.toString() ??
+              existing.priceAmount?.toString() ??
+              null,
+        priceCurrency:
+          body.priceCurrency ??
+          existing.catalogItem?.priceCurrency ??
+          existing.priceCurrency,
+      });
+    }
+
+    return tx.storefrontItem.update({
+      where: { id },
+      data: updateData,
+    });
   });
 
   // Handle CTA type change: booking <-> non-booking provider service links

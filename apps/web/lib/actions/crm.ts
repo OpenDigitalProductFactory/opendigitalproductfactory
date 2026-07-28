@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@dpf/db";
+import { Prisma, prisma } from "@dpf/db";
 import { registerCustomerAccountSource } from "@/lib/mdm/crosswalk";
 import crypto from "crypto";
 import { STAGE_DEFAULT_PROBABILITY } from "@dpf/validators";
@@ -824,6 +824,8 @@ export async function createQuote(input: {
   validUntil: string;
   lineItems: {
     productId?: string;
+    catalogItemId?: string;
+    configurationSnapshot?: Prisma.InputJsonObject;
     description: string;
     quantity: number;
     unitPrice: number;
@@ -893,6 +895,8 @@ export async function createQuote(input: {
         lineItems: {
           create: lines.map((l) => ({
             productId: l.productId || null,
+            catalogItemId: l.catalogItemId || null,
+            configurationSnapshot: l.configurationSnapshot ?? undefined,
             description: l.description,
             quantity: l.quantity,
             unitPrice: l.unitPrice,
@@ -962,6 +966,8 @@ export async function reviseQuote(quoteId: string, userId?: string) {
         lineItems: {
           create: current.lineItems.map((li) => ({
             productId: li.productId,
+            catalogItemId: li.catalogItemId,
+            configurationSnapshot: li.configurationSnapshot ?? undefined,
             description: li.description,
             quantity: li.quantity,
             unitPrice: li.unitPrice,
