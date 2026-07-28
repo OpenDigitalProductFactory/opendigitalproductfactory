@@ -1,0 +1,91 @@
+{
+  "version": "1",
+  "accountableOwner": "developer-platform",
+  "affectedCopies": [
+    "Nonproduction lease MCP list/claim/renew/release responses",
+    "QueueTelemetryEvent operational admission evidence",
+    "Prisma-to-EA current-state data-model mirror"
+  ],
+  "migration": {
+    "name": "20260728210000_add_nonprod_lease_fifo_admission",
+    "backfill": "Existing active leases retain ownership as slot-0, receive queued/admitted/heartbeat timestamps from existing lifecycle timestamps, and receive an environment-plus-slot active key; terminal rows remain inactive. New claim identity is nullable, so no historical identity is fabricated."
+  },
+  "tests": [
+    "apps/web/lib/nonprod/environment-lease.test.ts",
+    "apps/web/lib/nonprod/environment-lease.pg.test.ts",
+    "apps/web/lib/mcp/packs/nonprod-lease-pack.test.ts",
+    "apps/web/lib/mcp-tools-nonprod-environments.test.ts",
+    "scripts/nonprod-environment-admission.test.mjs",
+    "scripts/gate-worktree-lease.test.mjs",
+    "tests/release/pregate-node-gate-contract.test.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:nonproduction-environment-lease#fifo-admission",
+      "prismaModel": "NonProductionEnvironmentLease",
+      "lifecycleDisposition": "Queued claims are promoted oldest-first, cancelled on owner release, or expired by heartbeat deadline; admitted claims retain the existing release/expiry lifecycle and terminal audit rows.",
+      "fields": [
+        {
+          "fieldId": "data:nonproduction-environment-lease#claimKey",
+          "resolution": "governed",
+          "reason": "Provides idempotent identity for one gate attempt across retries and transport resets.",
+          "provenance": "Gate-owned provider, session, branch, and exact candidate SHA",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": "Operational identity only; never use as authorization, expose outside governed lease tooling, or store secrets."
+        },
+        {
+          "fieldId": "data:nonproduction-environment-lease#slotKey",
+          "resolution": "governed",
+          "reason": "Records the capacity slot assigned by the durable admission service.",
+          "provenance": "Server-side FIFO reconciliation under the environment advisory lock",
+          "flags": []
+        },
+        {
+          "fieldId": "data:nonproduction-environment-lease#requestedTtlMs",
+          "resolution": "governed",
+          "reason": "Preserves the bounded owner-requested hold window when a queued claim is admitted.",
+          "provenance": "Server-clamped lease request",
+          "flags": []
+        },
+        {
+          "fieldId": "data:nonproduction-environment-lease#queuedAt",
+          "resolution": "governed",
+          "reason": "Defines deterministic FIFO order with row id as the stable tie-breaker.",
+          "provenance": "Server timestamp at durable claim creation",
+          "flags": []
+        },
+        {
+          "fieldId": "data:nonproduction-environment-lease#admittedAt",
+          "resolution": "governed",
+          "reason": "Records when the claim acquired capacity for wait and processing telemetry.",
+          "provenance": "Server timestamp at slot assignment",
+          "flags": []
+        },
+        {
+          "fieldId": "data:nonproduction-environment-lease#cancelledAt",
+          "resolution": "governed",
+          "reason": "Records terminal cancellation of a queued claim before admission.",
+          "provenance": "Server timestamp at owner release",
+          "flags": []
+        },
+        {
+          "fieldId": "data:nonproduction-environment-lease#heartbeatAt",
+          "resolution": "governed",
+          "reason": "Separates live owners from abandoned queued or admitted claims.",
+          "provenance": "Server timestamp on claim observation and renewal",
+          "flags": []
+        },
+        {
+          "fieldId": "data:nonproduction-environment-lease#phase",
+          "resolution": "governed",
+          "reason": "Carries bounded operational lifecycle context for queue diagnosis.",
+          "provenance": "Server-owned lease transition",
+          "flags": []
+        }
+      ]
+    }
+  ]
+}
