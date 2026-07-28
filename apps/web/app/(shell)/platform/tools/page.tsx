@@ -1,4 +1,4 @@
-import { prisma } from "@dpf/db";
+import { INVENTORY_ENTITY_CANONICAL_WHERE, prisma } from "@dpf/db";
 import { PlatformSummaryCard } from "@/components/platform/PlatformSummaryCard";
 
 export default async function ToolsHubPage() {
@@ -51,7 +51,12 @@ export default async function ToolsHubPage() {
       },
     }),
     prisma.discoveryConnection.count({ where: { status: { in: ["active", "ok"] } } }),
-    prisma.inventoryEntity.count({ where: { attributionStatus: "needs_review" } }),
+    prisma.inventoryEntity.count({
+      where: {
+        ...INVENTORY_ENTITY_CANONICAL_WHERE,
+        attributionStatus: "needs_review",
+      },
+    }),
   ]);
 
   return (

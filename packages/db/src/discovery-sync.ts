@@ -6,6 +6,7 @@ import {
   syncInventoryEntityAsInfraCI,
   syncInventoryRelationship,
 } from "./graph-sync";
+import { INVENTORY_ENTITY_CANONICAL_WHERE } from "./inventory-entity-lifecycle";
 
 export type DiscoveryPersistenceSummary = {
   runId?: string;
@@ -283,7 +284,11 @@ export async function persistBootstrapDiscoveryRun(
     const sourceFilter = { lastConfirmedRun: { sourceSlug: runMeta.sourceSlug } };
     const existingEntityKeys = new Set(
       (await tx.inventoryEntity.findMany({
-        where: { ...scopeWhere, ...sourceFilter },
+        where: {
+          ...INVENTORY_ENTITY_CANONICAL_WHERE,
+          ...scopeWhere,
+          ...sourceFilter,
+        },
         select: { entityKey: true },
       })).map((entity) => entity.entityKey),
     );

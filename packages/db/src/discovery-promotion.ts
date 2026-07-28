@@ -22,6 +22,7 @@ import {
   type QualityIssueDb,
   type QualityIssueType,
 } from "./portfolio-quality-issue-writer";
+import { INVENTORY_ENTITY_CANONICAL_WHERE } from "./inventory-entity-lifecycle";
 
 export const AUTO_PROMOTE_THRESHOLD = 0.90;
 
@@ -120,6 +121,7 @@ export async function promoteInventoryEntities(db: PromotionDb): Promise<Promoti
 
   const entities = await db.inventoryEntity.findMany({
     where: {
+      ...INVENTORY_ENTITY_CANONICAL_WHERE,
       attributionStatus: "attributed",
       attributionConfidence: { gte: AUTO_PROMOTE_THRESHOLD },
       digitalProductId: null,

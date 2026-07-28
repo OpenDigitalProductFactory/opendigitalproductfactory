@@ -22,6 +22,7 @@ import { flattenEnrichmentForScoring } from "./discovery-attribution";
 import { runConnectionCollectors, type DecryptFn } from "./discovery-runners/connection-collectors";
 import { prisma } from "./client";
 import type { CollectorOutput, DiscoveryCollector } from "./discovery-types";
+import { INVENTORY_ENTITY_CANONICAL_WHERE } from "./inventory-entity-lifecycle";
 
 type BootstrapDiscoveryDb = Parameters<typeof persistBootstrapDiscoveryRun>[0];
 
@@ -304,7 +305,11 @@ async function flagUnconfiguredGateways(db: GatewayFlagDb): Promise<void> {
   let gateways: Awaited<ReturnType<GatewayFlagDb["inventoryEntity"]["findMany"]>>;
   try {
     gateways = await db.inventoryEntity.findMany({
-      where: { entityType: { in: ["gateway", "router"] }, status: "active" },
+      where: {
+        ...INVENTORY_ENTITY_CANONICAL_WHERE,
+        entityType: { in: ["gateway", "router"] },
+        status: "active",
+      },
       select: { id: true, entityKey: true, name: true, properties: true },
     });
   } catch {

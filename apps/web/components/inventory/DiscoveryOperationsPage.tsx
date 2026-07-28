@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { prisma } from "@dpf/db";
+import { INVENTORY_ENTITY_CANONICAL_WHERE, prisma } from "@dpf/db";
 
 import { PORTFOLIO_COLOURS } from "@/lib/portfolio";
 import {
@@ -59,6 +59,7 @@ export async function DiscoveryOperationsPage({
     getFullGraphData(),
     prisma.inventoryEntity.findMany({
       where: {
+        ...INVENTORY_ENTITY_CANONICAL_WHERE,
         entityType: "gateway",
         NOT: { name: { contains: "Docker" } },
       },

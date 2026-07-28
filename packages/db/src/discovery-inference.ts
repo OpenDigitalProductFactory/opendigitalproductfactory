@@ -10,6 +10,7 @@
 
 import type { CollectorOutput } from "./discovery-types";
 import { syncDependsOn } from "./graph-sync";
+import { INVENTORY_ENTITY_CANONICAL_WHERE } from "./inventory-entity-lifecycle";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -175,6 +176,7 @@ export async function inferProductDependencies(
   // DigitalProduct → InfraCI DEPENDS_ON edge in Neo4j.
   const linkedEntities = await db.inventoryEntity.findMany({
     where: {
+      ...INVENTORY_ENTITY_CANONICAL_WHERE,
       digitalProductId: { not: null },
     },
     select: {
@@ -217,6 +219,7 @@ export async function inferProductDependencies(
 
   const linkableEntities = await db.inventoryEntity.findMany({
     where: {
+      ...INVENTORY_ENTITY_CANONICAL_WHERE,
       entityType: {
         in: ["container", "database", "application", "ai_service", "monitoring_service", "runtime"],
       },

@@ -10,6 +10,7 @@
 
 import { prisma } from "./client";
 import { buildEnrichmentUpdate, deriveInventoryEnrichment } from "./inventory-enrichment";
+import { INVENTORY_ENTITY_CANONICAL_WHERE } from "./inventory-entity-lifecycle";
 
 export type BackfillReport = {
   scanned: number;
@@ -27,6 +28,7 @@ export type BackfillReport = {
 
 export async function backfillInventoryEnrichment(): Promise<BackfillReport> {
   const entities = await prisma.inventoryEntity.findMany({
+    where: INVENTORY_ENTITY_CANONICAL_WHERE,
     select: {
       id: true,
       entityType: true,
@@ -109,6 +111,7 @@ async function mergeMacSiblings(): Promise<number> {
   };
 
   const rows = await prisma.inventoryEntity.findMany({
+    where: INVENTORY_ENTITY_CANONICAL_WHERE,
     select: {
       id: true,
       name: true,

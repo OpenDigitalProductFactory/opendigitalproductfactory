@@ -8,6 +8,7 @@
  *
  * Pure function over an injected db handle — no I/O beyond the db, no logging.
  */
+import { INVENTORY_ENTITY_CANONICAL_WHERE } from "@dpf/db";
 
 export type PromotionSkipReason =
   | "type_not_promotable"
@@ -118,12 +119,20 @@ const SAMPLE_LIMIT = 10;
 export async function getPromotionAudit(db: PromotionAuditDb): Promise<PromotionAudit> {
   // Inventory counts run sequentially so the test can assert call order.
   // (Order is part of the test contract: discovered, attributed, promoted.)
-  const discovered = await db.inventoryEntity.count();
+  const discovered = await db.inventoryEntity.count({
+    where: INVENTORY_ENTITY_CANONICAL_WHERE,
+  });
   const attributed = await db.inventoryEntity.count({
-    where: { attributionStatus: "attributed" },
+    where: {
+      ...INVENTORY_ENTITY_CANONICAL_WHERE,
+      attributionStatus: "attributed",
+    },
   });
   const promoted = await db.inventoryEntity.count({
-    where: { digitalProductId: { not: null } },
+    where: {
+      ...INVENTORY_ENTITY_CANONICAL_WHERE,
+      digitalProductId: { not: null },
+    },
   });
 
   const blocked = await db.portfolioQualityIssue.count({

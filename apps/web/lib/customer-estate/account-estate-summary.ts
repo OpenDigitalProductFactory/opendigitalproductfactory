@@ -1,4 +1,4 @@
-import { prisma } from "@dpf/db";
+import { INVENTORY_ENTITY_CANONICAL_WHERE, prisma } from "@dpf/db";
 import type { Prisma } from "@dpf/db";
 import { correlateDiscoveryToEstate } from "@dpf/db";
 
@@ -143,7 +143,11 @@ export async function loadCustomerEstateSummary(
     }),
     // HAM D2 (BI-828998DC): the account's discovered devices, for read-model correlation.
     prisma.inventoryEntity.findMany({
-      where: { customerAccountId: accountId, status: { not: "stale" } },
+      where: {
+        ...INVENTORY_ENTITY_CANONICAL_WHERE,
+        customerAccountId: accountId,
+        status: { not: "stale" },
+      },
       select: {
         id: true,
         manufacturer: true,

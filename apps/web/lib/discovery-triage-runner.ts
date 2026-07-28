@@ -13,6 +13,7 @@ import {
 import {
   buildDeviceFingerprintObservation,
   DISCOVERY_TRIAGE_AGENT_ID,
+  INVENTORY_ENTITY_CANONICAL_WHERE,
   investigateUnidentifiedDevice,
   prisma,
   recordInvestigationOutcome,
@@ -261,6 +262,7 @@ async function loadTaxonomyNodeLookup(
   const candidates = [...candidateIds];
   const nodes = await db.taxonomyNode.findMany({
     where: {
+      ...INVENTORY_ENTITY_CANONICAL_WHERE,
       OR: [
         { id: { in: candidates } },
         { nodeId: { in: candidates } },
@@ -633,6 +635,7 @@ export async function maybeTriggerDiscoveryTriageForVolume(
   const threshold = options.threshold ?? DEFAULT_DISCOVERY_TRIAGE_VOLUME_THRESHOLD;
   const pendingCount = await db.inventoryEntity.count({
     where: {
+      ...INVENTORY_ENTITY_CANONICAL_WHERE,
       attributionStatus: "needs_review",
     },
   });

@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@dpf/db";
+import { prisma, resolveCanonicalInventoryEntityId } from "@dpf/db";
 import { revalidatePath } from "next/cache";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
@@ -18,12 +18,16 @@ export async function confirmSupportStatus(
   const valid = ["supported", "approaching_end", "expired", "coverage_gap"] as const;
   if (!valid.includes(status)) return { ok: false, error: "invalid status" };
 
+  const canonicalEntityId = await resolveCanonicalInventoryEntityId(prisma, entityId);
+  if (!canonicalEntityId) return { ok: false, error: "inventory entity not found" };
+
   await prisma.inventoryEntity.update({
-    where: { id: entityId },
+    where: { id: canonicalEntityId },
     data: { supportStatus: status },
   });
 
   revalidatePath(`/inventory/entity/${entityId}`);
+  revalidatePath(`/inventory/entity/${canonicalEntityId}`);
   revalidatePath("/inventory");
   return { ok: true };
 }
@@ -39,12 +43,16 @@ export async function setObservedVersion(
   const trimmed = version.trim();
   if (!trimmed) return { ok: false, error: "version cannot be empty" };
 
+  const canonicalEntityId = await resolveCanonicalInventoryEntityId(prisma, entityId);
+  if (!canonicalEntityId) return { ok: false, error: "inventory entity not found" };
+
   await prisma.inventoryEntity.update({
-    where: { id: entityId },
+    where: { id: canonicalEntityId },
     data: { observedVersion: trimmed, normalizedVersion: trimmed },
   });
 
   revalidatePath(`/inventory/entity/${entityId}`);
+  revalidatePath(`/inventory/entity/${canonicalEntityId}`);
   revalidatePath("/inventory");
   return { ok: true };
 }

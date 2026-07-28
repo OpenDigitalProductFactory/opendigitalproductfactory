@@ -2,7 +2,7 @@
 // Injects page-specific data context into agent system prompts.
 // Each route can have a context provider that summarizes what the user sees.
 
-import { prisma } from "@dpf/db";
+import { INVENTORY_ENTITY_CANONICAL_WHERE, prisma } from "@dpf/db";
 import { createEstateItem } from "@/lib/estate/estate-item";
 import { getPlaybook } from "@/lib/tak/marketing-playbooks";
 import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
@@ -848,7 +848,12 @@ async function getDiscoveryOperationsContext(): Promise<string> {
       },
     }),
     prisma.discoveryConnection.count(),
-    prisma.inventoryEntity.count({ where: { attributionStatus: "needs_review" } }),
+    prisma.inventoryEntity.count({
+      where: {
+        ...INVENTORY_ENTITY_CANONICAL_WHERE,
+        attributionStatus: "needs_review",
+      },
+    }),
     prisma.portfolioQualityIssue.groupBy({
       by: ["issueType"],
       where: { status: "open" },

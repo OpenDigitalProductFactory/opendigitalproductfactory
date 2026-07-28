@@ -1,4 +1,4 @@
-import { prisma } from "@dpf/db";
+import { INVENTORY_ENTITY_CANONICAL_WHERE, prisma } from "@dpf/db";
 
 export type DiscoveryHealthSummary = {
   totalEntities: number;
@@ -41,6 +41,7 @@ export async function countStaleEntitiesSince(latestRunStartedAt: Date | null): 
   if (!latestRunStartedAt) return 0;
   return prisma.inventoryEntity.count({
     where: {
+      ...INVENTORY_ENTITY_CANONICAL_WHERE,
       status: "active",
       lastSeenAt: { lt: latestRunStartedAt },
     },
@@ -49,6 +50,7 @@ export async function countStaleEntitiesSince(latestRunStartedAt: Date | null): 
 
 export async function getInventoryEntitiesForPage() {
   return prisma.inventoryEntity.findMany({
+    where: INVENTORY_ENTITY_CANONICAL_WHERE,
     orderBy: [{ providerView: "asc" }, { name: "asc" }],
     include: {
       portfolio: { select: { slug: true, name: true } },
@@ -60,7 +62,10 @@ export async function getInventoryEntitiesForPage() {
 
 export async function getNeedsReviewEntities() {
   const entities = await prisma.inventoryEntity.findMany({
-    where: { attributionStatus: "needs_review" },
+    where: {
+      ...INVENTORY_ENTITY_CANONICAL_WHERE,
+      attributionStatus: "needs_review",
+    },
     orderBy: [{ lastSeenAt: "desc" }],
     select: {
       id: true,
@@ -284,7 +289,7 @@ export type GroupedInventory = {
 export async function getInventoryEntitiesGroupedBySubnet(): Promise<GroupedInventory> {
   const [entities, memberOfRels] = await Promise.all([
     prisma.inventoryEntity.findMany({
-      where: { status: "active" },
+      where: { ...INVENTORY_ENTITY_CANONICAL_WHERE, status: "active" },
       orderBy: [{ entityType: "asc" }, { name: "asc" }],
       include: {
         portfolio: { select: { slug: true, name: true } },
