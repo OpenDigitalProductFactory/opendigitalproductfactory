@@ -56,6 +56,34 @@ detail. **Full** uses a denser professional presentation. This changes only the
 projection; it does not create a different role, product model, provider, or
 consumer.
 
+### Activate product demand with evidence
+
+Product Direction projects the same demand records owned by **Operations >
+Delivery Flow**. Choose **Review demand decisions** to open that canonical flow
+already filtered to the current organization, product line, or Product.
+
+Historical backlog rows with no demand stage appear as **Needs
+classification**. They are not silently called raw. For an active request:
+
+1. classify it as product demand;
+2. state the customer or business problem;
+3. link at least one reviewed source such as published Knowledge, customer
+   feedback, a booking, order, subscription, fulfillment record, or research;
+4. record value, confidence, and an attributed effort estimate;
+5. reconcile AI and human effort when they differ;
+6. move the request through screened and shaped;
+7. request the organization-governed funding decision.
+
+**Why this score?** shows the exact inputs, confidence, evidence count, effort
+source, missing fields, and whether the result is provisional. Scoring does not
+move an item through the lifecycle. Each transition is a separate audited act,
+and only the funding decision can move shaped demand to ready.
+
+Evidence links retain the source system's stable reference; they do not copy or
+replace the source fact. Product Direction shows the latest rationale and
+decision history as a read-only projection, so it cannot diverge from Delivery
+Flow.
+
 An unavailable card means the owning contract is not active or no safe typed
 association exists. For example, Objectives and Outcomes remain unavailable
 until their owning product-management phase is installed. An empty card means

@@ -10,6 +10,10 @@ export type BacklogItemInput = {
   body?: string;
   taxonomyNodeId?: string;
   digitalProductId?: string;
+  organizationId?: string;
+  productLineId?: string;
+  businessProductId?: string;
+  demandStage?: DemandStage | null;
   epicId?: string;
   scopeKind?: BacklogScopeKind;
   archetypeCategories?: string[];
@@ -40,6 +44,10 @@ export type BacklogItemWithRelations = {
   lifecycleTags?: string[];
   activeBuild: { buildId: string; phase: string | null } | null;
   digitalProduct: { id: string; productId: string; name: string } | null;
+  organizationId?: string | null;
+  productLineId?: string | null;
+  businessProductId?: string | null;
+  demandStage?: string | null;
   taxonomyNode: { id: string; nodeId: string; name: string } | null;
   submittedBy: { email: string } | null;
   completedAt: Date | null;
@@ -117,13 +125,59 @@ export type EpicWithRelations = {
 /** Returns null if valid, or an error message if invalid. */
 export function validateBacklogInput(input: BacklogItemInput): string | null {
   if (!input.title.trim()) return "Title is required";
-  if (input.type === "product" && !input.digitalProductId) {
-    return "A digital product is required for product-type items";
+  if (
+    input.type === "product" &&
+    !input.digitalProductId &&
+    !input.businessProductId
+  ) {
+    return "A business product or digital product is required for product-type items";
+  }
+  const narrowTargets = [
+    input.productLineId,
+    input.businessProductId,
+    input.digitalProductId,
+  ].filter((value) => Boolean(value?.trim()));
+  if (narrowTargets.length > 1) {
+    return "Choose one product-management target: product line, business product, or digital product";
+  }
+  if (
+    (input.productLineId || input.businessProductId) &&
+    !input.organizationId
+  ) {
+    return "An organization is required for business product demand";
+  }
+  if (
+    input.demandStage !== undefined &&
+    input.demandStage !== null &&
+    !(DEMAND_STAGE_VALUES as readonly string[]).includes(input.demandStage)
+  ) {
+    return "Invalid demand stage";
+  }
+  if (
+    narrowTargets.length > 0 &&
+    input.demandStage !== undefined &&
+    input.demandStage !== null &&
+    input.demandStage !== "raw"
+  ) {
+    return "New scoped product demand must enter at raw";
   }
   if (input.scopeKind && !BACKLOG_SCOPE_KIND_VALUES.includes(input.scopeKind)) {
     return "Invalid scope kind";
   }
   return null;
+}
+
+/** New scoped product demand enters intake explicitly; legacy rows stay null. */
+export function initialDemandStageForInput(
+  input: Pick<
+    BacklogItemInput,
+    "productLineId" | "businessProductId" | "digitalProductId" | "demandStage"
+  >,
+): DemandStage | null {
+  if (input.demandStage !== undefined) return input.demandStage;
+  return input.productLineId || input.businessProductId || input.digitalProductId
+    ? "raw"
+    : null;
 }
 
 export const EPIC_STATUSES = ["open", "in-progress", "done"] as const;

@@ -3,6 +3,7 @@ import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { createStorefrontInquiryBacklogDraft } from "@/lib/governed-backlog-workflow";
+import { ingestBacklogItem } from "@/lib/operate/backlog-ingest";
 
 export async function POST(
   req: NextRequest,
@@ -41,6 +42,9 @@ export async function POST(
         customerName: true,
         customerEmail: true,
         message: true,
+        storefront: {
+          select: { organizationId: true },
+        },
       },
     }),
     prisma.digitalProduct.findUnique({
@@ -80,33 +84,32 @@ export async function POST(
     });
   }
 
-  const backlogItem = await prisma.backlogItem.create({
-    data: {
-      itemId: draft.itemId,
-      title: draft.title,
-      type: draft.type,
-      // Storefront inquiries are engaged product feature work, not a bug or
-      // chore. workType is nullable with no schema default, so it must be set
-      // explicitly or the item lands without an allocation basis (BI-4F4252DB).
-      workType: draft.workType,
-      status: draft.status,
-      source: draft.source,
-      priority: draft.priority,
-      body: draft.body,
-      digitalProductId: digitalProduct.id,
-      submittedById: user.id,
-    },
-    select: {
-      id: true,
-      itemId: true,
-      title: true,
-      status: true,
-    },
+  const ingested = await ingestBacklogItem({
+    itemId: draft.itemId,
+    title: draft.title,
+    type: draft.type,
+    // Storefront inquiries are engaged product feature work, not a bug or
+    // chore. Keep the governed draft's explicit allocation basis.
+    workType: draft.workType,
+    status: draft.status,
+    source: draft.source,
+    priority: draft.priority,
+    body: draft.body,
+    organizationId: inquiry.storefront.organizationId,
+    digitalProductId: digitalProduct.id,
+    submittedById: user.id,
+    origin: { kind: "storefront-inquiry", id: inquiry.inquiryRef },
   });
+  const backlogItem = {
+    id: ingested.id,
+    itemId: ingested.itemId,
+    title: draft.title,
+    status: draft.status,
+  };
 
   return NextResponse.json({
     success: true,
-    created: true,
+    created: ingested.created,
     backlogItem,
     signal: draft.signalLabel,
     recommendedTriageOutcome: draft.recommendedTriageOutcome,

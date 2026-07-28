@@ -32,17 +32,17 @@ function item(partial: Partial<DemandItemView> & { itemId: string }): DemandItem
 }
 
 describe("groupByFunnelStage", () => {
-  it("places null-stage items in raw and orders each column by score desc", () => {
+  it("keeps null-stage items explicitly unclassified and orders each column by score desc", () => {
     const cols = groupByFunnelStage([
       item({ itemId: "A", demandStage: "screened", demandScore: 5 }),
       item({ itemId: "B", demandStage: "screened", demandScore: 50 }),
-      item({ itemId: "C" }), // null stage -> raw
+      item({ itemId: "C" }), // null stage -> unclassified
       item({ itemId: "D", demandStage: "ready", demandScore: 1 }),
     ]);
-    expect(cols.map((c) => c.stage)).toEqual(["raw", "screened", "shaped", "ready"]);
+    expect(cols.map((c) => c.stage)).toEqual(["unclassified", "raw", "screened", "shaped", "ready"]);
     expect(cols[0].items.map((i) => i.itemId)).toEqual(["C"]);
-    expect(cols[1].items.map((i) => i.itemId)).toEqual(["B", "A"]); // 50 before 5
-    expect(cols[3].items.map((i) => i.itemId)).toEqual(["D"]);
+    expect(cols[2].items.map((i) => i.itemId)).toEqual(["B", "A"]); // 50 before 5
+    expect(cols[4].items.map((i) => i.itemId)).toEqual(["D"]);
   });
 });
 

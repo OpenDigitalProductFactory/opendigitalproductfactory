@@ -28,7 +28,7 @@ function item(partial: Partial<DemandItemView> & { itemId: string }): DemandItem
 
 describe("placeInFlow", () => {
   it("places by demandStage in the funnel when not yet executing", () => {
-    expect(placeInFlow(item({ itemId: "A" }))).toBe("funnel_raw"); // null stage -> raw
+    expect(placeInFlow(item({ itemId: "A" }))).toBe("unclassified");
     expect(placeInFlow(item({ itemId: "B", demandStage: "raw" }))).toBe("funnel_raw");
     expect(placeInFlow(item({ itemId: "C", demandStage: "screened" }))).toBe("funnel_screened");
     expect(placeInFlow(item({ itemId: "D", demandStage: "shaped" }))).toBe("funnel_shaped");
@@ -42,6 +42,22 @@ describe("placeInFlow", () => {
     // Being built = downstream, regardless of how far it got in the funnel.
     expect(placeInFlow(item({ itemId: "F", status: "in-progress", demandStage: "ready" }))).toBe("in_progress");
     expect(placeInFlow(item({ itemId: "G", status: "in-progress", demandStage: "screened" }))).toBe("in_progress");
+  });
+
+  it("keeps legacy execution with no demand stage visible for classification", () => {
+    expect(placeInFlow(item({ itemId: "H", status: "in-progress" }))).toBe("unclassified");
+  });
+
+  it("does not coerce an unknown stored stage into raw demand", () => {
+    expect(
+      placeInFlow(
+        item({
+          itemId: "I",
+          status: "in-progress",
+          demandStage: "legacy-stage",
+        }),
+      ),
+    ).toBe("unclassified");
   });
 });
 
@@ -61,7 +77,7 @@ describe("groupByFlowLane", () => {
       item({ itemId: "rawItem" }),
     ]);
     const byLane = Object.fromEntries(cols.map((c) => [c.lane, c.items.map((i) => i.itemId)])) as Record<FlowLane, string[]>;
-    expect(byLane.funnel_raw).toEqual(["rawItem"]);
+    expect(byLane.unclassified).toEqual(["rawItem"]);
     expect(byLane.funnel_screened).toEqual(["high", "low"]); // 50 before 5
     expect(byLane.bet).toEqual(["bet1"]);
     expect(byLane.in_progress).toEqual(["exec"]); // status wins over demandStage=ready
@@ -73,6 +89,7 @@ describe("groupByFlowLane", () => {
     const cols = groupByFlowLane([]);
     const halfByLane = Object.fromEntries(cols.map((c) => [c.lane, c.half]));
     expect(halfByLane.funnel_raw).toBe("funnel");
+    expect(halfByLane.unclassified).toBe("classification");
     expect(halfByLane.bet).toBe("bet");
     expect(halfByLane.in_progress).toBe("board");
   });

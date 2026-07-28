@@ -11,6 +11,7 @@ import {
   BACKLOG_WORK_TYPE_VALUES,
   BACKLOG_SOURCE_VALUES,
   BACKLOG_SCOPE_KIND_VALUES,
+  initialDemandStageForInput,
   type BacklogItemInput,
   type BacklogStatus,
   type BacklogWorkType,
@@ -51,6 +52,10 @@ export async function createBacklogItem(input: BacklogItemInput): Promise<void> 
     priority:         input.priority ?? null,
     taxonomyNodeId:   input.taxonomyNodeId ?? null,
     digitalProductId: input.digitalProductId ?? null,
+    organizationId:   input.organizationId ?? null,
+    productLineId:     input.productLineId ?? null,
+    businessProductId: input.businessProductId ?? null,
+    demandStage:       initialDemandStageForInput(input),
     epicId:           input.epicId ?? null,
     submittedById:    await getSessionUserId(),
     scopeKind:         input.scopeKind ?? null,
@@ -60,7 +65,24 @@ export async function createBacklogItem(input: BacklogItemInput): Promise<void> 
     lifecycleTags:       cleanStringArray(input.lifecycleTags),
     ...(input.body !== undefined && { body: input.body.trim() || null }),
   };
-  const created = await prisma.backlogItem.create({ data: createData, select: { id: true } });
+  const created = await prisma.$transaction(async (tx) => {
+    const item = await tx.backlogItem.create({
+      data: createData,
+      select: { id: true, demandStage: true },
+    });
+    if (item.demandStage === "raw") {
+      await tx.backlogItemActivity.create({
+        data: {
+          backlogItemId: item.id,
+          kind: "demand_classified",
+          summary: "New scoped product demand entered intake",
+          payload: { from: "unclassified", to: "raw", deterministic: true },
+          recordedById: createData.submittedById,
+        },
+      });
+    }
+    return item;
+  });
   // BI-PORTPRIO-1: attribute the new item to its portfolio (product → taxonomy
   // node → epic precedence) so it groups/budgets/ranks per portfolio immediately.
   await attributeBacklogPortfolio(created.id);
@@ -80,6 +102,9 @@ export async function updateBacklogItem(id: string, input: BacklogItemInput): Pr
       archetypeIds: true,
       scopeRationale: true,
       lifecycleTags: true,
+      organizationId: true,
+      productLineId: true,
+      businessProductId: true,
     },
   });
   const isNowDone = input.status === "done" || input.status === "deferred";
@@ -94,6 +119,9 @@ export async function updateBacklogItem(id: string, input: BacklogItemInput): Pr
     priority:         input.priority ?? null,
     taxonomyNodeId:   input.taxonomyNodeId ?? null,
     digitalProductId: input.digitalProductId ?? null,
+    organizationId:   input.organizationId ?? existing?.organizationId ?? null,
+    productLineId:     input.productLineId ?? existing?.productLineId ?? null,
+    businessProductId: input.businessProductId ?? existing?.businessProductId ?? null,
     epicId:           input.epicId ?? null,
     scopeKind:         input.scopeKind ?? existing?.scopeKind ?? null,
     archetypeCategories: input.archetypeCategories !== undefined
