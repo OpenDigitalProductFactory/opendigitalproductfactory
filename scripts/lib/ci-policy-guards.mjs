@@ -21,7 +21,11 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
     guard("docs-link-integrity", "Docs Link Integrity", [
       node("scripts/gen-doc-index.mjs", "--check"),
-      node("--test", "scripts/check-doc-links.test.mjs"),
+      node(
+        "--test",
+        "scripts/check-doc-links.test.mjs",
+        "scripts/public-docs-rendering.test.mjs",
+      ),
       node("scripts/check-doc-links.mjs"),
       node("scripts/render-doc-diagrams.mjs", "--check"),
     ]),

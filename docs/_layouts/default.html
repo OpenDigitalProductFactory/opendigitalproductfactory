@@ -39,31 +39,15 @@
 </main>
 
 <!--
-  Mermaid rendering (EP-DOCS-SYSTEM Phase 2, WWMD DI-5C7B16CA4472).
-  Kramdown+Rouge emit ```mermaid fences as <div class="language-mermaid …"> raw
-  code. Diagrams are pre-rendered at build time to committed static SVGs
-  (scripts/render-doc-diagrams.mjs), so this shim just swaps each fence for its
-  committed asset by ORDINAL — the Nth diagram on the page → assets/diagrams/
-  <page-slug>/<N>.svg. No external CDN and no Mermaid runtime download (the
-  reason build-time won the kernel decision over the old cdn.jsdelivr.net shim).
+  User-guide Mermaid fences are replaced with committed build-time SVGs. The
+  source path is the stable key: public pretty URLs cannot distinguish
+  index.md from a sibling Markdown page. No Mermaid runtime or CDN is needed.
 -->
-<script>
-  (function () {
-    var blocks = document.querySelectorAll("div.language-mermaid");
-    if (!blocks.length) return;
-    var m = location.pathname.match(/^\/user-guide\/(.*?)\/?$/);
-    if (!m) return;
-    var slug = m[1];
-    for (var i = 0; i < blocks.length; i++) {
-      var img = document.createElement("img");
-      img.src = "/user-guide/assets/diagrams/" + slug + "/" + i + ".svg";
-      img.alt = "Diagram";
-      img.className = "doc-diagram";
-      img.loading = "lazy";
-      blocks[i].replaceWith(img);
-    }
-  })();
-</script>
+<script
+  src="{{ '/assets/js/doc-diagrams.js' | relative_url }}"
+  data-source-path="{{ page.path | escape }}"
+  defer
+></script>
 
 <footer class="site-footer">
   <div class="wrap">
