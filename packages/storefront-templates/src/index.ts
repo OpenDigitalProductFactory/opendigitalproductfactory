@@ -15,4 +15,5 @@ export * from "./demo-business-load";
 export * from "./demo-flavor";
 export * from "./processing-activity-templates";
 export * from "./product-mix";
+export * from "./archetype-readiness";
 export * from "./sections/schemas";

@@ -89,9 +89,10 @@ Recommended order:
 - Do not create a new umbrella epic unless live epic overlap is rechecked and the kernel decision is superseded.
 - Do not treat this document as the source of truth for execution state. Query the live backlog before acting.
 - Do not mark an archetype sole-platform-ready from seed/template presence alone.
+- Use `packages/storefront-templates/src/archetype-readiness.ts` as the executable source for readiness tiers and claim checks.
 - Do not bypass `EP-DATA-GOVERNANCE` for export or portability work.
 - Do not bypass Work Case, Attention Surface, or action-receipt substrate for AI business-record mutations.
-- If public-site, docs, or sales language changes before `BI-C1C706F1` ships, use a manual claim review against the matrix definitions in that BI body.
+- If public-site, docs, or sales language changes before a surface consumes the claim helper directly, use a manual claim review against `evaluateArchetypeReadinessClaim`.
 
 ## Recovery Notes
 
