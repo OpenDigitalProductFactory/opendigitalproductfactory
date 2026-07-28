@@ -2,6 +2,7 @@ name: UX Route Budget Sweep
 
 # CodeQL actions/missing-workflow-permissions: least-privilege default.
 permissions:
+  actions: read
   contents: read
 
 on:
@@ -129,7 +130,56 @@ jobs:
           git -C "$fixture_root" commit --allow-empty -m "fixture"
           echo "DPF_WORK_CONTROL_REPO_ROOT=$fixture_root" >> "$GITHUB_ENV"
 
+      # BI-959F4F38. The CI workflow publishes the exact tree's successful
+      # production output. Discovery is bounded: any unavailable, late,
+      # mismatched, expired, or corrupt evidence falls through to the local
+      # build below. Push and manual calibration deliberately remain standalone
+      # so this change does not activate cross-lifecycle evidence reuse.
+      - name: Find exact-tree CI production build
+        id: find-build
+        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          # Actions indexes pull_request workflow runs by the PR head SHA,
+          # while GITHUB_SHA identifies the synthetic merge checkout.
+          DPF_CI_RUN_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        # The producer's cold setup + cache restore + build + package path has
+        # exceeded four minutes in observed GitHub-hosted runs. Ten minutes
+        # remains bounded while avoiding a delayed duplicate build.
+        run: >-
+          node scripts/ci-build-artifact.mjs locate
+          --workflow ci.yml
+          --artifact-prefix web-production-build
+          --wait-seconds 600
+
+      - name: Start production-build transfer timer
+        if: steps.find-build.outputs.found == 'true'
+        run: echo "DPF_BUILD_ARTIFACT_TRANSFER_STARTED_MS=$(date +%s%3N)" >> "$GITHUB_ENV"
+
+      - name: Download exact-tree production build
+        id: download-build
+        if: steps.find-build.outputs.found == 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ steps.find-build.outputs.artifact_name }}
+          path: ${{ runner.temp }}/web-production-build
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.find-build.outputs.source_run_id }}
+
+      - name: Verify and materialize exact-tree production build
+        id: materialize-build
+        if: >-
+          steps.find-build.outputs.found == 'true' &&
+          steps.download-build.outcome == 'success'
+        run: >-
+          node scripts/ci-build-artifact.mjs consume
+          --input-dir "$RUNNER_TEMP/web-production-build"
+          --source-run-id "${{ steps.find-build.outputs.source_run_id }}"
+
       - name: Build the portal
+        if: steps.materialize-build.outputs.reused != 'true'
         run: pnpm --filter web build
 
       - name: Install Playwright Chromium
@@ -138,8 +188,14 @@ jobs:
       # Poll with curl rather than adding a wait-on dependency just for this job
       # (the New Dependency Gate exists to stop exactly that kind of drive-by).
       - name: Start the portal
+        env:
+          DPF_REUSED_BUILD: ${{ steps.materialize-build.outputs.reused }}
         run: |
-          pnpm --filter web start &
+          if [ "$DPF_REUSED_BUILD" = "true" ]; then
+            (cd apps/web/.next/standalone && PORT=3000 HOSTNAME=127.0.0.1 node apps/web/server.js) &
+          else
+            pnpm --filter web start &
+          fi
           for i in $(seq 1 60); do
             if curl -sf http://localhost:3000/login > /dev/null; then
               echo "portal up after ${i}s"; exit 0

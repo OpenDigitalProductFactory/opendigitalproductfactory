@@ -154,6 +154,50 @@ build, migration, guard, or merge-queue proof. Activation is owned by
 `BI-4527C1DA` and still requires the calibration and 100% observed-failure
 recall conditions above.
 
+## Exact-tree production-build reuse
+
+For pull-request and merge-group events, the `Production Build` job packages
+the deploy-equivalent standalone runtime plus static assets after a successful
+`pnpm --filter web build` and publishes it for the matching
+`UX Route Budget Sweep`. The one-day artifact contains a
+versioned receipt and a compressed payload. The receipt binds the payload to:
+
+- repository, commit SHA, and immutable Git tree SHA;
+- GitHub event, source run/attempt, and CI evidence-planner digest;
+- Node, pnpm, Next.js, operating-system, architecture, lockfile identity, and
+  a non-secret fingerprint of build-relevant fixture environment values;
+- payload byte count and SHA-256 checksum; and
+- the successful production-build command plus creation/expiry times.
+
+The UX workflow finds only a `CI` run with the same event and Actions run-head
+identity (the PR head SHA for pull requests; `GITHUB_SHA` otherwise). The
+receipt separately binds the synthetic merge checkout and its immutable tree.
+After download, `scripts/ci-build-artifact.mjs consume` independently recomputes
+the current tree, toolchain, payload checksum, byte count, archive inventory,
+and expiry before replacing `apps/web/.next`. The archive must contain only the
+`.next` root and must include the standalone runtime's `BUILD_ID` and canonical
+`version.json`. The consumer adds the checked-out `public` directory and static
+assets to the standalone layout, then starts the same `apps/web/server.js`
+entry point used by the production container. Development-only server output
+and source maps are not transported.
+
+This follows GitHub's cross-run artifact contract: a consumer supplies both a
+token and source run identifier, and the token has only `actions: read` plus
+`contents: read`. See [Store and share data with workflow artifacts](https://docs.github.com/en/actions/tutorials/store-and-share-data)
+and [REST API endpoints for GitHub Actions artifacts](https://docs.github.com/en/rest/actions/artifacts).
+
+Reuse is an optimization, never an exemption. Discovery is bounded to ten
+minutes. Missing, late, expired, incomplete, corrupt, or identity-mismatched
+evidence removes any partial `.next` output and runs the normal local production
+build. Packaging or upload failure is also non-authoritative: `Production Build`
+retains its successful result and UX rebuilds locally. Main-branch pushes and
+manual baseline calibration always build locally;
+cross-lifecycle merge-group-to-push reuse remains owned by `BI-9585E580`.
+
+The CI and UX job summaries report payload bytes and packaging or
+download/validation/extraction duration. Compare those transfer measurements
+with the avoided UX build duration before retaining or tuning the artifact.
+
 ## UX route-sweep stability
 
 Workflow: `.github/workflows/ux-route-sweep.yml` (`UX Route Budget Sweep`)
@@ -171,9 +215,10 @@ There is no percentage-based capability threshold. A missing, duplicate,
 unexpected, or failed eligible route makes the check red after the remaining
 inventory finishes. The always-uploaded
 `route-sweep-execution.json` records the source SHA, worker count, duration,
-full eligibility accounting, and route outcomes in deterministic inventory
-order. Up to 12 failure screenshots are uploaded only when eligible routes
-fail; the execution record still reports every failure.
+full eligibility accounting, route outcomes, and navigation/visible-DOM/
+semantic-structure/accessibility/budget phase timings in deterministic
+inventory order. Up to 12 failure screenshots are uploaded only when eligible
+routes fail; the execution record still reports every failure.
 
 Hierarchy capture reads the browser-resolved semantic DOM and projects it
 directly to implicit/explicit role, nesting, heading level, and structural
@@ -197,13 +242,23 @@ continues to resolve the real host clone from `DPF_REPO_ROOT`; the narrow
 override exists only for the route-sweep fixture.
 
 Manual workflow dispatch accepts a bounded worker count of `1`, `2`, or `4`;
-the measured default is **2**. On candidate `37e848084f`, all three settings
-completed 201/201 routes with zero failures: worker 1 took 865,504 ms, worker 2
-took 696,589 ms, and worker 4 took 765,651 ms. Four workers added load without
-improving the critical path because `/admin/reference-data` alone consumed
-roughly 11-13 minutes; that product defect is tracked as `BI-CC7CA516`.
+the measured default is **2**. Before `BI-CC7CA516`, all three settings
+completed 201/201 routes with zero failures, but `/admin/reference-data`
+dominated every run at roughly 11-13 minutes. PR #3690 bounded that route:
+worker 2 then completed the full inventory in 193,207 ms and worker 4 in
+182,988 ms, both with zero failures. Four workers saved only about ten seconds
+while doubling browser concurrency and slowing the corrected route from
+2,188 ms to 4,266 ms, so two remains the lower-load reliable default.
 Each worker owns an authenticated browser context and each route owns a fresh
 page, so route teardown cannot interrupt the next navigation.
+
+The accessibility phase evaluates the same WCAG-tagged axe rules against the
+same complete served DOM, but requests only the `violations` result group that
+the gate consumes. Per the
+[axe-core performance guidance](https://github.com/dequelabs/axe-core/blob/develop/doc/API.md#use-resulttypes),
+the other result groups add selector/detail processing, not rule coverage;
+limiting their detail avoids work for thousands of passing/inapplicable nodes
+on large pages while preserving the serious/critical violation count.
 
 The checked-in route-budget ratchet may move from `bootstrapped:false` to
 `bootstrapped:true` only after:

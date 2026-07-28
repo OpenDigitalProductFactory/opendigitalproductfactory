@@ -4,6 +4,8 @@ import {
   BROWSER_EVALUATION_RUNTIME,
   DOM_SETTLE_EXPRESSION,
   captureAccessibilityStructure,
+  executionOutcome,
+  uxSweepAxeOptions,
   waitForRouteDomToSettle,
   withIsolatedSweepPage,
 } from "./ux-route-sweep";
@@ -13,6 +15,47 @@ import {
   runBoundedRouteWork,
   serialiseSemanticStructure,
 } from "./ux-route-sweep-runner";
+
+describe("axe result collection", () => {
+  it("preserves WCAG rule coverage while returning only the consumed result group", () => {
+    expect(uxSweepAxeOptions()).toEqual({
+      runOnly: {
+        type: "tag",
+        values: ["wcag2a", "wcag2aa", "wcag22aa"],
+      },
+      resultTypes: ["violations"],
+    });
+  });
+});
+
+describe("route phase evidence", () => {
+  it("keeps phase timings in the execution artifact without changing the budget measurement", () => {
+    const phases = {
+      navigationAndSettleMs: 10,
+      visibleDomMs: 20,
+      semanticStructureMs: 30,
+      accessibilityScanMs: 40,
+      budgetMeasurementMs: 50,
+    };
+
+    expect(
+      executionOutcome({
+        routePath: "/large",
+        status: "measured",
+        durationMs: 151,
+        value: {
+          phases,
+          measurement: {} as never,
+        },
+      }),
+    ).toEqual({
+      routePath: "/large",
+      status: "measured",
+      durationMs: 151,
+      phases,
+    });
+  });
+});
 
 describe("serialiseSemanticStructure", () => {
   it("keeps role hierarchy and structural state while dropping names", () => {

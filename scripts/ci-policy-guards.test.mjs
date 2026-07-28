@@ -44,6 +44,13 @@ const EXPECTED_LEGACY_JOBS = [
   "ux-fit-gate",
 ];
 
+function workflowJobBlock(workflow, jobId) {
+  const start = workflow.indexOf(`  ${jobId}:\n`);
+  assert.notEqual(start, -1, `${jobId} must exist`);
+  const next = workflow.slice(start + 1).search(/^  [a-z0-9-]+:\s*$/m);
+  return next < 0 ? workflow.slice(start) : workflow.slice(start, start + 1 + next);
+}
+
 describe("CI policy guard registry", () => {
   it("accounts for every migrated legacy job exactly once", () => {
     const entries = Object.values(POLICY_GUARD_PROFILES).flat();
@@ -105,8 +112,12 @@ describe("CI policy guard registry", () => {
     assert.match(workflow, /node scripts\/ci-policy-guards\.mjs --profile source/);
     assert.match(workflow, /^  policy-guards-pr:$/m);
     assert.match(workflow, /node scripts\/ci-policy-guards\.mjs --profile pull-request/);
+    const policyJobs = [
+      workflowJobBlock(workflow, "policy-guards-source"),
+      workflowJobBlock(workflow, "policy-guards-pr"),
+    ].join("\n");
     assert.equal(
-      (workflow.match(/continue-on-error:\s*true/g) ?? []).length,
+      (policyJobs.match(/continue-on-error:\s*true/g) ?? []).length,
       0,
     );
   });
