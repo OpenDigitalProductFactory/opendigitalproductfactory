@@ -11,6 +11,12 @@ import {
   type BuildStudioCapsuleDb,
 } from "@/lib/work-capsules/build-studio-attachment";
 import { admitRuntimeGuardedWork } from "@/lib/platform-runtime/work-admission";
+import {
+  resolveAutonomousTeeUpStart,
+  shouldAutoApproveGovernedDraft,
+  type AutonomousTeeUpStart,
+} from "@/lib/build/autonomous-tee-up";
+export { shouldAutoApproveGovernedDraft } from "@/lib/build/autonomous-tee-up";
 
 const ELIGIBLE_EFFORT_SIZES = new Set(["small", "medium", "large"]);
 const ACTIVE_EPIC_STATUSES = new Set(["open", "in-progress"]);
@@ -113,6 +119,7 @@ export type GovernedBacklogTeeUpCandidate = {
   status: string;
   triageOutcome: string | null;
   effortSize: string | null;
+  workType?: string | null;
   activeBuildId: string | null;
   /**
    * Set to the decomposition Epic when a prior build for this item was
@@ -190,6 +197,7 @@ type PromoteBacklogItemToBuildDraftInput = {
   itemId: string;
   userId: string;
   governedBacklogEnabled: boolean;
+  autonomousStart?: AutonomousTeeUpStart;
   activity?:
     | {
       tool: string;
@@ -261,7 +269,14 @@ export function selectGovernedBacklogTeeUpCandidates(
 export async function promoteBacklogItemToBuildDraft(
   input: PromoteBacklogItemToBuildDraftInput,
 ): Promise<PromoteBacklogItemToBuildDraftResult> {
-  const { tx, itemId, userId, governedBacklogEnabled, activity } = input;
+  const {
+    tx,
+    itemId,
+    userId,
+    governedBacklogEnabled,
+    autonomousStart,
+    activity,
+  } = input;
   if ("$executeRaw" in tx && "platformCapability" in tx && "runtimeCapabilityTransition" in tx) {
     await admitRuntimeGuardedWork(tx as never, "build-studio-active");
   }
@@ -519,7 +534,12 @@ export async function promoteBacklogItemToBuildDraft(
   // the transaction (the dynamic import + DB writes don't compose with the
   // outer prisma.$transaction safely). Wired through the same approveBuildStart
   // path so the BuildActivity audit trail stays consistent.
-  if (governedBacklogEnabled && (item.body ?? "").trim().length > 0) {
+  const autoApproveAllowed = shouldAutoApproveGovernedDraft({
+    governedBacklogEnabled,
+    hasBody: (item.body ?? "").trim().length > 0,
+    autonomousStart,
+  });
+  if (autoApproveAllowed) {
     const approvedAt = new Date();
     await tx.featureBuild.update({
       where: { id: created.id },
@@ -529,7 +549,21 @@ export async function promoteBacklogItemToBuildDraft(
       data: {
         buildId: created.buildId,
         tool: "approve_start",
-        summary: `Auto-approved by governed backlog flow at ${approvedAt.toISOString()} (BI body present — operator confirmation captured at triage+promote).`,
+        summary: autonomousStart?.mode === "enforce"
+          ? `Auto-approved by governed playbook at ${approvedAt.toISOString()} (active pattern v${autonomousStart.eligibility?.activePatternVersion ?? "?"}; evidence-cleared low-risk lane).`
+          : `Auto-approved by governed backlog flow at ${approvedAt.toISOString()} (BI body present — operator confirmation captured at triage+promote).`,
+      },
+    });
+  }
+  if (autonomousStart?.mode === "shadow" && autonomousStart.eligibility) {
+    await tx.buildActivity.create({
+      data: {
+        buildId: created.buildId,
+        tool: "autonomous_playbook_shadow",
+        summary:
+          `Shadow decision: ${autonomousStart.eligibility.eligible ? "would auto-start" : "would not auto-start"}; `
+          + `next=${autonomousStart.eligibility.nextGovernedAction}; `
+          + `blockers=${autonomousStart.eligibility.blockers.join(",") || "none"}.`,
       },
     });
   }
@@ -539,8 +573,7 @@ export async function promoteBacklogItemToBuildDraft(
     build: created,
     backlogItemId: itemId,
     capsuleId: capsule.capsuleId,
-    autoApprovedDispatchEligible:
-      governedBacklogEnabled && (item.body ?? "").trim().length > 0,
+    autoApprovedDispatchEligible: autoApproveAllowed,
   };
 }
 
@@ -618,6 +651,7 @@ export async function runGovernedBacklogTeeUp(input: {
       status: true,
       triageOutcome: true,
       effortSize: true,
+      workType: true,
       activeBuildId: true,
       activeEpicId: true,
       digitalProductId: true,
@@ -641,12 +675,17 @@ export async function runGovernedBacklogTeeUp(input: {
         ? `Created by the daily backlog tee-up from ${item.itemId}.`
         : `Created by manual backlog processing from ${item.itemId}.`;
 
+    const autonomousStart = await resolveAutonomousTeeUpStart({
+      item,
+      db: prisma,
+    });
     const result = await prisma.$transaction((tx) =>
       promoteBacklogItemToBuildDraft({
         tx,
         itemId: item.itemId,
         userId,
         governedBacklogEnabled: config.governedBacklogEnabled === true,
+        autonomousStart,
         activity: {
           tool: "governed_backlog_tee_up",
           summary: activitySummary,

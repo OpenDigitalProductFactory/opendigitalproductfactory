@@ -38,6 +38,8 @@ import {
   FEATURE_BUILD_DEPENDENCY_GATE_SELECT,
 } from "@/lib/build/feature-build-dependencies";
 import { logBuildActivity } from "@/lib/mcp/build-tool-helpers";
+import type { DecisionOutcomeType } from "@/lib/decision-perspective/types";
+import type { AutonomousBuildExecutionProfileRefV1 } from "@/lib/build/autonomous-build-eligibility-reader";
 
 /**
  * How many consecutive failed plan→build transition attempts before a build
@@ -316,11 +318,26 @@ export async function performPlanToBuildTransition(params: {
 
   // WWMD kernel gate. Structural gates above are necessary but not sufficient:
   // principle_decide is the authority on whether plan→build honors platform
-  // principles. Fail OPEN on evaluator error (a kernel hiccup must not wedge the
-  // flow); a genuine principle conflict blocks and surfaces a DecisionInteraction.
+  // principles. The legacy/off path retains its fail-open behavior; an
+  // enforce-mode autonomous lane fails closed because it has no operator at
+  // the seam to interpret a missing decision oracle.
+  let decisionOutcome: DecisionOutcomeType = "recommend";
+  let executionProfileRef: AutonomousBuildExecutionProfileRefV1 | null = null;
+  const { getAutonomousPlaybookMode } = await import(
+    "@/lib/integrate/build-studio-config"
+  );
+  const autonomousMode = getAutonomousPlaybookMode();
   try {
     const { evaluateBuildStudioPlanAdvancementGate } = await import(
       "@/lib/decision-perspective/build-studio-gate"
+    );
+    const sensitivity =
+      planRec.deliverableSensitivity === "elevated"
+      || planRec.deliverableSensitivity === "high"
+        ? planRec.deliverableSensitivity
+        : "low";
+    const { deriveTransitionRiskTier } = await import(
+      "@/lib/decision-perspective/graduated-autonomy"
     );
     const decisionGate = await evaluateBuildStudioPlanAdvancementGate({
       db: prisma,
@@ -336,8 +353,16 @@ export async function performPlanToBuildTransition(params: {
         >[0]["build"]["deliberationSummary"],
       },
       triggeredByUserId: userId,
+      ...(autonomousMode !== "off"
+        ? {
+            riskTier: deriveTransitionRiskTier({
+              sensitivity,
+              transition: "plan-advance",
+            }),
+          }
+        : {}),
     });
-    if (!decisionGate.allowed) {
+    if (!decisionGate.allowed && autonomousMode !== "shadow") {
       logBuildActivity(
         buildId,
         "wwmd:gate-blocked",
@@ -348,8 +373,62 @@ export async function performPlanToBuildTransition(params: {
         reason: decisionGate.operatorMessage ?? "decision kernel withheld advancement",
       };
     }
+    decisionOutcome =
+      decisionGate.evaluation?.outcomeType
+      ?? (decisionGate.allowed ? "recommend" : "defer");
+    if (!decisionGate.allowed) {
+      logBuildActivity(
+        buildId,
+        "autonomous_playbook_shadow",
+        `Shadow plan gate would withhold advancement: ${decisionGate.operatorMessage}.`,
+      );
+    }
   } catch (wwmdErr) {
     console.error("[plan-to-build-transition] WWMD gate errored (failing open):", wwmdErr);
+    if (autonomousMode === "enforce") {
+      logBuildActivity(
+        buildId,
+        "autonomous:needs-decision",
+        "Autonomous plan advancement parked because the decision oracle was unavailable.",
+      );
+      return {
+        kind: "wwmd-withheld",
+        reason: "autonomous decision oracle unavailable",
+      };
+    }
+  }
+
+  if (autonomousMode !== "off") {
+    try {
+      const { resolveAutonomousBuildPhaseEligibility } = await import(
+        "@/lib/build/autonomous-build-phase-runtime"
+      );
+      const autonomy = await resolveAutonomousBuildPhaseEligibility({
+        buildId,
+        checkpoint: "plan",
+        gateOutcome: decisionOutcome,
+      });
+      executionProfileRef = autonomy.executionProfileRef;
+      if (autonomousMode === "enforce" && !autonomy.mayAct) {
+        const reason =
+          autonomy.eligibility.blockers.join(", ")
+          || "autonomous plan advancement is not evidence-cleared";
+        logBuildActivity(
+          buildId,
+          "autonomous:needs-decision",
+          `Plan advancement parked: ${reason}.`,
+        );
+        return { kind: "wwmd-withheld", reason };
+      }
+    } catch (error) {
+      if (autonomousMode === "enforce") {
+        const reason = `autonomous eligibility unavailable: ${String(
+          error instanceof Error ? error.message : error,
+        ).slice(0, 180)}`;
+        logBuildActivity(buildId, "autonomous:needs-decision", reason);
+        return { kind: "wwmd-withheld", reason };
+      }
+    }
   }
 
   // Initialize the build branch BEFORE flipping the phase so `buildBranch` is
@@ -383,7 +462,9 @@ export async function performPlanToBuildTransition(params: {
   );
   void completeBuildPhaseRun(buildId, "plan");
   // swallow QuiescingError thrown during a self-upgrade drain (BI-QUIESCE-005)
-  void startBuildPhaseRun(buildId, "build").catch(() => {});
+  void startBuildPhaseRun(buildId, "build", {
+    ...(executionProfileRef ? { executionProfileRef } : {}),
+  }).catch(() => {});
   if (context?.threadId) {
     const { persistPhaseHandoffSummary } = await import("@/lib/integrate/phase-compaction-wire");
     void persistPhaseHandoffSummary(context.threadId, "plan");

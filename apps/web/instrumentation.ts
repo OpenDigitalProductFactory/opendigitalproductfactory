@@ -479,16 +479,15 @@ export async function reconcileDeployedShipBuilds(
       where: { phase: "ship" },
       select: { id: true, buildId: true },
     });
+    const { mayCompleteAutonomousBuild } =
+      await import("@/lib/build/autonomous-build-completion-gate");
     let completed = 0;
     for (const build of shipBuilds) {
       try {
         if (!(await isFeatureBuildDeployed(build.buildId))) {
-          // Not deployed: a fully-local (private/fork_only) build still completes
-          // here — its local ProductVersion registration IS the delivery (there
-          // is no upstream PR or remote deploy to wait on). completeLocalDeliveryBuild
-          // no-ops for a build that has a real upstream deploy path (those wait
-          // for their merged code to go live). This is the backstop for builds
-          // that parked at ship because the promote fork was still `approved`.
+          // A fully-local install treats ProductVersion registration as delivery.
+          // Upstream builds no-op here and keep waiting for deployed evidence.
+          if (!(await mayCompleteAutonomousBuild({ buildId: build.buildId, logger }))) continue;
           if (await completeLocalDeliveryBuild(build.buildId)) {
             completed++;
             logger.log(
@@ -497,6 +496,7 @@ export async function reconcileDeployedShipBuilds(
           }
           continue;
         }
+        if (!(await mayCompleteAutonomousBuild({ buildId: build.buildId, logger }))) continue;
         // Merged code is live via self-upgrade → mark the build's still-open
         // promotion(s) deployed so the promote fork is terminal. The platform
         // self-upgrade IS the deploy here (the per-build promoter is not used).

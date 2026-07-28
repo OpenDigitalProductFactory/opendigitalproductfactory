@@ -88,7 +88,6 @@ vi.mock("@/lib/build/scoped-verification", () => ({
 vi.mock("@/lib/build-review-verification-trigger", () => ({
   queueBuildReviewVerification: (...args: unknown[]) => queueBuildReviewVerificationMock(...args),
 }));
-
 beforeEach(() => {
   getDeployedShaMock.mockReset();
   completeRunMock.mockReset();
@@ -117,6 +116,7 @@ beforeEach(() => {
   reconcileBuildCompletionMock.mockResolvedValue(false);
   completeLocalDeliveryBuildMock.mockResolvedValue(false);
   delete process.env.DPF_AUTO_COMPLETE_VERIFIED_BUILDS;
+  delete process.env.DPF_BUILD_AUTONOMOUS_PLAYBOOK_MODE;
 });
 
 describe("reconcileDeployedShipBuilds — autonomous ship→complete (flag-gated)", () => {

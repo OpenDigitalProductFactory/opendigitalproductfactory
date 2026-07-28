@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 565,
+  "pageCount": 566,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -4042,13 +4042,15 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "autonomous-build-completion-operator-runbook",
-        "what-it-does",
-        "the-switch",
-        "how-to-turn-it-on",
-        "safety",
-        "notes-limitations",
-        "related"
+        "autonomous-build-studio-operator-runbook",
+        "control-switches",
+        "eligibility-contract",
+        "autonomous-path",
+        "bounded-recovery",
+        "what-the-operator-sees",
+        "rollout-and-rollback",
+        "verification-checklist",
+        "related-contracts"
       ]
     },
     "docs/operations/build-cost-flags-activation-runbook.md": {
@@ -8924,6 +8926,18 @@
         "key-concepts",
         "what-you-can-do",
         "following-a-concern-across-views"
+      ]
+    },
+    "docs/user-guide/build-studio/autonomous-builds.md": {
+      "publicHref": "/user-guide/build-studio/autonomous-builds/",
+      "portalHref": "/docs/build-studio/autonomous-builds",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "autonomous-build-studio-lanes",
+        "what-qualifies",
+        "reading-the-status",
+        "recovery-and-control"
       ]
     },
     "docs/user-guide/build-studio/deployment.md": {

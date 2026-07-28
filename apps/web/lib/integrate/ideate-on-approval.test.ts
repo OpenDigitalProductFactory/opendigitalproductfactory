@@ -22,6 +22,7 @@ vi.mock("./ideate-dispatch", () => ({
 
 vi.mock("@/lib/integrate/build-studio-config", () => ({
   getBuildStudioConfig: mockGetBuildStudioConfig,
+  getAutonomousPlaybookMode: () => "off",
   isModelTierRoutingEnabled: async () => false,
 }));
 

@@ -127,6 +127,13 @@ their scope or mutate their lifecycle outside that governed transaction. Rejecte
 identities also remain effective negative knowledge until the corpus, model, oracle, or promotion
 policy materially changes.
 
+The Build Studio autonomous consumer enforces that boundary mechanically. It requires an active
+binding whose installation, activity, task corpus, and model profile match the current execution,
+and it rechecks the match before every phase, PR, and release transition. A
+`dpf_dogfood`-scoped win therefore cannot silently become customer or fleet authority. The actual
+method version and selected provider/model are stamped on the existing `BuildPhaseRun` and
+`TaskRun` evidence instead of being inferred later.
+
 ## The gap: no equivalent separation for learned decision weights
 
 The same discipline does **not** exist on the JSI weight-inference path.

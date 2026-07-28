@@ -44,6 +44,7 @@ import { BuildSolutionSummaryBand } from "./BuildSolutionSummaryBand";
 import { BuildCustomerStatusBand } from "./BuildCustomerStatusBand";
 import { BuildWorkWarrantBand } from "./BuildWorkWarrantBand";
 import type { BuildStudioCustomerStatus } from "@/lib/build/customer-status-projection";
+import { projectAutonomousBuildCustody } from "@/lib/build/autonomous-build-custody";
 import { BuildOperatorHeaderDetails, BuildWorkRequestStrip, formatOperatorPhaseLabel } from "./BuildOperatorContext";
 import { resolveBuildStudioBranchBadge } from "./build-studio-branch-badge";
 import { deleteFeatureBuild } from "@/lib/actions/build";
@@ -291,6 +292,12 @@ export function BuildStudio({
   const [assuranceFindings, setAssuranceFindings] = useState<ActiveAssuranceFindingRow[]>([]);
   const [decisionLedger, setDecisionLedger] = useState<BuildDecisionLedgerEntry[]>([]);
   const [changeNarrative, setChangeNarrative] = useState<BuildChangeNarrative | null>(null);
+  const autonomousCustody = activeBuild
+    ? projectAutonomousBuildCustody({
+      phase: activeBuild.phase,
+      buildExecState: activeBuild.buildExecState,
+    })
+    : null;
   const workflowAction = activeBuild
     ? deriveBuildStudioWorkflowAction({
       build: activeBuild,
@@ -928,12 +935,13 @@ export function BuildStudio({
                     )}
                   </div>
                 )}
-                {(activeBuild.designDoc?.problemStatement || activeBuild.designDoc?.proposedApproach || activeBuild.description) && (
+                {(activeBuild.designDoc?.problemStatement || activeBuild.designDoc?.proposedApproach || activeBuild.description || autonomousCustody) && (
                   <div className="border-b border-[var(--dpf-border)] px-4 py-3">
                     <BuildSolutionSummaryBand
                       problemStatement={activeBuild.designDoc?.problemStatement ?? null}
                       proposedApproach={activeBuild.designDoc?.proposedApproach ?? null}
                       fallbackIntent={activeBuild.description}
+                      custody={autonomousCustody}
                     />
                   </div>
                 )}

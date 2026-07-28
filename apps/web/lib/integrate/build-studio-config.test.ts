@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { getBuildStudioConfig } from "./build-studio-config";
+import {
+  getAutonomousPlaybookMode,
+  getBuildStudioConfig,
+} from "./build-studio-config";
 
 const resolveSelection = vi.hoisted(() => vi.fn());
 vi.mock("./build-engine-selection-runtime", () => ({
@@ -270,5 +273,20 @@ describe("getBuildStudioConfig", () => {
     const config = await getBuildStudioConfig();
 
     expect(config.provider).toBe("opencode");
+  });
+});
+
+describe("getAutonomousPlaybookMode", () => {
+  it.each([
+    [undefined, "off"],
+    ["", "off"],
+    ["off", "off"],
+    ["shadow", "shadow"],
+    ["enforce", "enforce"],
+    ["unexpected", "off"],
+  ] as const)("maps %s to %s fail-closed", (configured, expected) => {
+    expect(getAutonomousPlaybookMode({
+      DPF_BUILD_AUTONOMOUS_PLAYBOOK_MODE: configured,
+    })).toBe(expected);
   });
 });
