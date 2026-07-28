@@ -6,7 +6,7 @@
 <title>Open Digital Product Factory &mdash; Run the business with governed AI coworkers</title>
 <meta
   name="description"
-  content="A clear tour of Open Digital Product Factory: who it is for, how the local-first platform works, what is available now, how AI actions are governed, and where to install or read the detailed guides."
+  content="Open Digital Product Factory combines local-first operations, governed AI coworkers, job-specific qualification, explicit authority, and inspectable evidence."
 />
 <style>
   :root {
@@ -651,6 +651,99 @@
     font-size: 0.84rem;
   }
 
+  .standards-family {
+    margin-top: 24px;
+    padding: clamp(24px, 4vw, 36px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background:
+      linear-gradient(135deg, color-mix(in srgb, var(--blue) 8%, transparent), transparent 48%),
+      var(--surface);
+  }
+
+  .standards-family-header {
+    display: grid;
+    grid-template-columns: minmax(0, 0.75fr) minmax(320px, 1.25fr);
+    gap: 28px;
+    align-items: end;
+  }
+
+  .standards-family-header h3,
+  .standards-family-header p {
+    margin-bottom: 0;
+  }
+
+  .standards-family-header p {
+    color: var(--muted);
+  }
+
+  .standards-grid {
+    margin-top: 26px;
+  }
+
+  .standard-card {
+    display: flex;
+    min-height: 220px;
+    flex-direction: column;
+    border-top: 4px solid var(--blue);
+    background: var(--surface-raised);
+    color: var(--text);
+    text-decoration: none;
+  }
+
+  .standard-card:nth-child(2) {
+    border-top-color: var(--mint);
+  }
+
+  .standard-card:nth-child(3) {
+    border-top-color: var(--gold);
+  }
+
+  .standard-card:hover {
+    border-color: var(--blue);
+    text-decoration: none;
+    transform: translateY(-2px);
+  }
+
+  .standard-card .standard-code {
+    margin-bottom: 28px;
+    color: var(--muted);
+    font-size: 0.72rem;
+    font-weight: 850;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .standard-card strong {
+    font-size: 1.12rem;
+  }
+
+  .standard-card .standard-question {
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: 0.88rem;
+  }
+
+  .standard-card .standard-link {
+    margin-top: auto;
+    padding-top: 24px;
+    color: var(--blue);
+    font-size: 0.8rem;
+    font-weight: 800;
+  }
+
+  .standards-posture {
+    margin: 20px 0 0;
+    padding-left: 14px;
+    border-left: 3px solid var(--gold);
+    color: var(--muted);
+    font-size: 0.84rem;
+  }
+
+  .standards-posture strong {
+    color: var(--text);
+  }
+
   .deep-links {
     display: flex;
     flex-wrap: wrap;
@@ -945,6 +1038,11 @@
 
     .trust-layout {
       grid-template-columns: 1fr;
+    }
+
+    .standards-family-header {
+      grid-template-columns: 1fr;
+      gap: 12px;
     }
 
     .install-grid {
@@ -1355,9 +1453,59 @@
       </div>
     </div>
 
+    <div class="standards-family" aria-labelledby="standards-family-title">
+      <div class="standards-family-header">
+        <div>
+          <p class="eyebrow">Standards for accountable autonomy</p>
+          <h3 id="standards-family-title">Three different questions. Three verifiable answers.</h3>
+        </div>
+        <p>
+          DPF separates identity, job fitness, and permission to act. A strong model score can be
+          useful evidence, but it does not show that a particular AI coworker is qualified for a
+          real job with its data, tools, risks, and oversight requirements.
+        </p>
+      </div>
+
+      <div class="card-grid standards-grid">
+        <a class="card standard-card" href="/architecture/GAID">
+          <span class="standard-code">GAID &middot; Who is it?</span>
+          <strong>Identify the coworker.</strong>
+          <span class="standard-question">
+            Bind a durable identity to the active operating profile, advertised claims, status,
+            and evidence.
+          </span>
+          <span class="standard-link">Read the identity standard &rarr;</span>
+        </a>
+        <a class="card standard-card" href="/architecture/job-specific-intelligence">
+          <span class="standard-code">TAK-JSI &middot; Is it fit for this job?</span>
+          <strong>Qualify the whole working system.</strong>
+          <span class="standard-question">
+            Assess the coworker for a versioned job, activity, data scope, and risk context&mdash;then
+            revalidate when a material part changes.
+          </span>
+          <span class="standard-link">Read Job-Specific Intelligence &rarr;</span>
+        </a>
+        <a class="card standard-card" href="/architecture/trusted-ai-kernel">
+          <span class="standard-code">TAK &middot; May it act now?</span>
+          <strong>Enforce runtime authority.</strong>
+          <span class="standard-question">
+            Intersect the user&rsquo;s authority, coworker grants, qualification, policy, data
+            constraints, risk, and required oversight for each action.
+          </span>
+          <span class="standard-link">Read the runtime standard &rarr;</span>
+        </a>
+      </div>
+
+      <p class="standards-posture">
+        <strong>Current posture:</strong> TAK, GAID, and TAK-JSI are open working drafts, with DPF
+        as their initial implementation prototype. They define proposed conformance evidence and
+        a path toward candidate specifications and independent assessment; they do not claim that
+        DPF or its coworkers are presently accredited or certified.
+      </p>
+    </div>
+
     <div class="deep-links" aria-label="Trust and architecture deep dives">
-      <a href="/architecture/trusted-ai-kernel">Trusted AI Kernel</a>
-      <a href="/architecture/GAID">Agent identity and governance</a>
+      <a href="/architecture/agent-standards-family">Standards family map</a>
       <a href="/architecture/agent-standards-contribution-roadmap">Standards contribution roadmap</a>
       <a href="/architecture/agent-standards-dpf-conformance">Standards conformance</a>
       <a href="/user-guide/platform/identity-and-access">Identity and access guide</a>
@@ -1400,6 +1548,7 @@
           <li>Native Linux and cloud single-VM installers remain early access pending broader real-host evidence.</li>
           <li>Build Studio continues to improve reliability, right-sized workflow, and autonomous phase handoff.</li>
           <li>Public and federated agent identity profiles remain a standards and interoperability journey.</li>
+          <li>TAK-JSI defines the job-qualification direction; DPF does not yet operate the full assessment, credential, surveillance, and revalidation lifecycle.</li>
           <li>Individual integrations advertise capability support; unsupported operations must remain explicit.</li>
         </ul>
         <p class="status-more">
