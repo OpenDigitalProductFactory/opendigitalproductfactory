@@ -8,11 +8,15 @@
     var normalized = String(sourcePath || "").replace(/\\/g, "/");
     normalized = normalized.replace(/^docs\//, "");
     if (
-      !/^user-guide\/[A-Za-z0-9][A-Za-z0-9_/-]*\.md$/.test(normalized) ||
+      !/^(?:user-guide|architecture)\/[A-Za-z0-9][A-Za-z0-9_/-]*\.md$/.test(
+        normalized,
+      ) ||
       normalized.indexOf("//") !== -1
     ) {
       return null;
     }
+    // User-guide slugs are user-guide-relative (historical asset layout);
+    // architecture slugs keep their root prefix. Mirrors diagram-assets.mjs.
     return normalized
       .replace(/^user-guide\//, "")
       .replace(/\.md$/, "");

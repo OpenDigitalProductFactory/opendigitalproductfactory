@@ -21,7 +21,6 @@ exclude:
   - architecture/ea-diagrams
   - architecture/gaid-diagrams
   - architecture/tak-diagrams
-  - architecture/monitoring-diagrams
   - architecture/generate-tak-docx.mjs
   - architecture/generate-gaid-docx.mjs
   - architecture/generate-docx-from-markdown.mjs
@@ -52,6 +51,13 @@ plugins:
 relative_links:
   enabled: true
   collections: false
+
+# Pages without front matter get their title from the first heading
+# (jekyll-titles-from-headings, on by default on GitHub Pages). The layout
+# already renders page.title as an H1, so strip the source heading to avoid
+# a doubled H1 on every Markdown page.
+titles_from_headings:
+  strip_title: true
 
 # Apply the layout to .md files that don't have YAML frontmatter
 # (e.g. architecture/platform-overview.md, README.md)
