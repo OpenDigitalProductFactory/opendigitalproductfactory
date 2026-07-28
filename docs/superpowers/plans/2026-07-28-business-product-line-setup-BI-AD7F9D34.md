@@ -127,6 +127,9 @@ Kernel result `DI-67A941CAF7EE`: option 1, composite `7.808`, margin `3.867`,
 confidence `high`. The distinct identities and cardinalities justify the measured
 two-model increase. A speculative `ProductDigitalProduct` join was removed:
 Phase 1 has no real endpoint evidence or consuming workflow for that trace.
+The governed substrate measurement therefore ratchets `prismaModelCount` from
+`530` to `532`, with provenance at commit `b8f1d244cd`; all other
+non-increasing substrate metrics remain unchanged.
 
 ## UX-fit review
 
