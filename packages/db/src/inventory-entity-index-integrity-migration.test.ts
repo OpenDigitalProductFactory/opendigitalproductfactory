@@ -365,6 +365,7 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
     const migration = await readFile(migrationUrl, "utf8");
 
     await expect(client.query(migration)).rejects.toThrow(/scope|ownership/i);
+    await client.query("ROLLBACK");
 
     expect(await scalar(`
       SELECT count(*)::text value
