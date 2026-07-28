@@ -22,6 +22,35 @@ augment it, once a real relationship and consuming workflow exist. Setup does
 not invent that trace, and it does not turn a salon service, hotel room, meal,
 or retail good into a digital product.
 
+## From Product To Something A Customer Can Select
+
+The commercial path is:
+
+`Product line → Product → Offering → Catalog item → Storefront item`
+
+- A **Product** is the durable good, service, experience, or access the
+  organization manages.
+- An **Offering** is the provider's commercial promise for that Product.
+- A **Catalog item** is the exact selectable or requestable thing shared by
+  storefront, sales-desk, quote, partner, and future mobile channels.
+- A **Storefront item** is the public presentation of that catalog item. Its
+  name, description, price, and quote requirement come from the catalog while
+  storefront-only presentation such as image, category, call to action, and
+  display order remains on the Storefront item.
+
+For the common one-product case, DPF creates and updates the Product, default
+Offering, and Catalog item together. Owners keep using **Storefront → Items**;
+the underlying record layers are not exposed unless the commercial definition
+actually diverges. A one-line business sees no product-line control. When the
+confirmed business mix has multiple lines, the add-item form asks which real
+line owns the new item. An item labeled **Needs setup link** is an older projection
+that lacks real product-line evidence. Finish or reconcile setup rather than
+guessing a relationship.
+
+A reusable standard configuration may later receive a SKU. A one-off
+configuration selected for a specific quote is captured immutably on that
+quote line and does not create permanent catalog or SKU clutter.
+
 ## Key Concepts
 
 - **Lifecycle Stage** — Where the product is in its development and operational life: Plan, Design, Build, Production, or Retirement.
@@ -39,6 +68,8 @@ or retail good into a digital product.
 
 - Confirm the initial business product mix during Storefront setup
 - Use the Goods and Services for Sale hierarchy for business-product reporting
+- Edit the common Product, default Offering, and Catalog item through one
+  collapsed Storefront item workflow
 - Browse all products with filtering by lifecycle stage, status, portfolio, and taxonomy
 - View a product's full profile including its health metrics, linked backlog items, and architecture models
 - Inspect available software identity and support-lifecycle facts without leaving the inventory entity detail page

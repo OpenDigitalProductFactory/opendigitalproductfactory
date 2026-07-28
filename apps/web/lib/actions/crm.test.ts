@@ -4,6 +4,7 @@ vi.mock("@dpf/db", () => ({
   prisma: {
     $transaction: vi.fn(),
     $queryRaw: vi.fn(),
+    $queryRawUnsafe: vi.fn(),
     country: {
       findFirst: vi.fn(),
     },
@@ -79,12 +80,70 @@ import {
   updateCustomerConfigurationItem,
   routeAcquisitionSignalToEngagement,
   createEngagementFromSignalForm,
+  createQuote,
 } from "./crm";
 
 beforeEach(() => {
   vi.clearAllMocks();
   // Dedup gate candidate fetch: default to "no similar rows".
   vi.mocked(prisma.$queryRaw).mockResolvedValue([]);
+});
+
+describe("createQuote commercial lineage", () => {
+  it("persists an exact catalog item and immutable one-off configuration snapshot", async () => {
+    vi.mocked(prisma.opportunity.findUnique).mockResolvedValue({
+      id: "opportunity-row",
+      accountId: "account-row",
+    } as never);
+    vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue([
+      { nextval: 1n },
+    ] as never);
+
+    const quoteCreate = vi.fn().mockResolvedValue({
+      quoteId: "QUO-1",
+      quoteNumber: "QUO-2026-0001",
+      currency: "USD",
+      totalAmount: 125,
+      accountId: "account-row",
+      opportunityId: "opportunity-row",
+    });
+    vi.mocked(prisma.$transaction).mockImplementation(async (callback) =>
+      callback({ quote: { create: quoteCreate } } as never),
+    );
+    vi.mocked(prisma.activity.create).mockResolvedValue({} as never);
+
+    const snapshot = {
+      capturedAt: "2026-07-28T12:00:00.000Z",
+      selections: { room: "ballroom", layout: "banquet" },
+    };
+    await createQuote({
+      opportunityId: "opportunity-row",
+      validUntil: "2026-08-31",
+      lineItems: [{
+        catalogItemId: "catalog-row",
+        configurationSnapshot: snapshot,
+        description: "Private event",
+        quantity: 1,
+        unitPrice: 125,
+      }],
+    });
+
+    expect(quoteCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          lineItems: {
+            create: [
+              expect.objectContaining({
+                productId: null,
+                catalogItemId: "catalog-row",
+                configurationSnapshot: snapshot,
+              }),
+            ],
+          },
+        }),
+      }),
+    );
+  });
 });
 
 describe("searchCustomerSiteAddresses", () => {

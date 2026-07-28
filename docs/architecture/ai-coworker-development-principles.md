@@ -280,6 +280,12 @@ Services for Sale**. `DigitalProduct` remains the architecture record for
 software, data, and digital platforms. Storefront archetypes and taxonomy nodes
 are reference definitions; neither is the organization's mutable product truth.
 
+For selectable commercial objects, continue through
+`ProductOffering → CatalogItem`. `StorefrontItem` is a channel projection and
+must not become a second price/name authority. `ServiceOffering` continues to
+own DigitalProduct operational commitments; follow its optional
+`commercialOffering` trace only when that link was explicitly recorded.
+
 The organization is the default provider for a simple business. Consumer claims
 must be derived from real customer, booking, order, subscription, or fulfilment
 evidence. Product-line capture alone never proves a product team, business unit,
@@ -289,6 +295,10 @@ subscriber, entitlement, or consumer.
 
 - filter product lines and products by `organizationId` and `effectiveTo: null`;
 - follow `ProductLine.parentId` for rollups while preserving organization scope;
+- use `CatalogItem` as the exact selectable/requestable object for storefront,
+  quote, sales-desk, partner, and mobile-channel reasoning;
+- read a quote line's immutable `configurationSnapshot` for one-off choices and
+  do not promote it to a reusable SKU unless the operator deliberately does so;
 - use `StorefrontArchetypeComposition.productLineId` only as channel provenance;
 - defer any business-product-to-digital-product trace until a later governed
   phase has real endpoint evidence and a consuming workflow;

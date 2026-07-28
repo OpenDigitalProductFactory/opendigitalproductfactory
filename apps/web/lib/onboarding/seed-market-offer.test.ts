@@ -9,6 +9,7 @@ const archetype = ALL_ARCHETYPES.find((item) => item.archetypeId === "restaurant
 function makeDb(options: {
   existingLine?: { id: string } | null;
   storefront?: unknown;
+  storefrontItems?: unknown[];
 } = {}) {
   const lineUpsert = vi
     .fn()
@@ -52,6 +53,16 @@ function makeDb(options: {
       upsert: productUpsert,
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
+    productOffering: {
+      upsert: vi.fn(),
+    },
+    catalogItem: {
+      upsert: vi.fn(),
+    },
+    storefrontItem: {
+      findMany: vi.fn().mockResolvedValue(options.storefrontItems ?? []),
+      update: vi.fn(),
+    },
     storefrontArchetypeComposition: {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
@@ -71,6 +82,8 @@ describe("seedMarketOffer", () => {
     expect(result.seeded).toBe(true);
     expect(result.productId).toBeNull();
     expect(result.offeringCount).toBe(archetype.productMix!.primary.products.length);
+    expect(result.linkedCatalogItemCount).toBe(0);
+    expect(result.unresolvedCatalogItemCount).toBe(0);
     expect(lineUpsert).toHaveBeenCalledWith(
       expect.objectContaining({
         create: expect.objectContaining({
@@ -85,8 +98,20 @@ describe("seedMarketOffer", () => {
     );
   });
 
-  it("is a true no-op when the setup-owned hierarchy already exists", async () => {
-    const { db, lineUpsert } = makeDb({ existingLine: { id: "line-1" } });
+  it("reconciles catalog links and reports unresolved evidence when the hierarchy already exists", async () => {
+    const { db, lineUpsert } = makeDb({
+      existingLine: { id: "line-1" },
+      storefrontItems: [{
+        id: "legacy-row",
+        itemId: "ITEM-LEGACY",
+        name: "Legacy",
+        description: null,
+        priceType: "quote",
+        priceAmount: null,
+        priceCurrency: "USD",
+        sourceComposition: null,
+      }],
+    });
 
     expect(
       await seedMarketOffer({ organizationId: ORG, db: db as never }),
@@ -95,6 +120,8 @@ describe("seedMarketOffer", () => {
       alreadyPresent: true,
       productId: null,
       offeringCount: 0,
+      linkedCatalogItemCount: 0,
+      unresolvedCatalogItemCount: 1,
     });
     expect(lineUpsert).not.toHaveBeenCalled();
   });
@@ -109,6 +136,8 @@ describe("seedMarketOffer", () => {
       alreadyPresent: false,
       productId: null,
       offeringCount: 0,
+      linkedCatalogItemCount: 0,
+      unresolvedCatalogItemCount: 0,
     });
     expect(lineUpsert).not.toHaveBeenCalled();
   });
