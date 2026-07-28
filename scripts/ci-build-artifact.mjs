@@ -46,11 +46,16 @@ function git(...args) {
 
 function collectToolchain() {
   const rootPackage = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
-  const nextPackage = JSON.parse(readFileSync(join(ROOT, "apps/web/node_modules/next/package.json"), "utf8"));
+  const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+  const nextVersion = execFileSync(
+    pnpm,
+    ["--filter", "web", "exec", "node", "-p", "require('next/package.json').version"],
+    { cwd: ROOT, encoding: "utf8" },
+  ).trim();
   return {
     arch: process.arch,
     lockfileSha256: sha256File(join(ROOT, "pnpm-lock.yaml")),
-    next: nextPackage.version,
+    next: nextVersion,
     node: process.version,
     os: process.platform,
     packageManager: rootPackage.packageManager,

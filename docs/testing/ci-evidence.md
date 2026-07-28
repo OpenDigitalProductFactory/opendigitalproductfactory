@@ -182,7 +182,9 @@ and [REST API endpoints for GitHub Actions artifacts](https://docs.github.com/en
 Reuse is an optimization, never an exemption. Discovery is bounded to four
 minutes. Missing, late, expired, incomplete, corrupt, or identity-mismatched
 evidence removes any partial `.next` output and runs the normal local production
-build. Main-branch pushes and manual baseline calibration always build locally;
+build. Packaging or upload failure is also non-authoritative: `Production Build`
+retains its successful result and UX rebuilds locally. Main-branch pushes and
+manual baseline calibration always build locally;
 cross-lifecycle merge-group-to-push reuse remains owned by `BI-9585E580`.
 
 The CI and UX job summaries report payload bytes and packaging or

@@ -10,6 +10,8 @@ describe("production-build artifact workflow wiring", () => {
     assert.match(ci, /node scripts\/ci-build-artifact\.mjs create/);
     assert.match(ci, /name: web-production-build-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/);
     assert.match(ci, /retention-days: 1/);
+    assert.match(ci, /id: package-build[\s\S]*?continue-on-error: true/);
+    assert.match(ci, /steps\.package-build\.outcome == 'success'/);
   });
 
   it("reuses only PR and merge-group artifacts and retains a fail-safe build", () => {
