@@ -24,7 +24,7 @@
 
 import { prisma } from "@dpf/db";
 
-import { getMarketingWorkspaceSnapshot } from "../marketing";
+import { getMarketingWorkspaceSnapshot, type MarketingWorkspaceSnapshot } from "../marketing";
 import { resolveMarketingArchetypeContext, type MarketingArchetype } from "./archetype-context";
 import {
   summarizeCampaignExecution,
@@ -582,10 +582,20 @@ type CampaignRow = {
  * Returns null when the install has no organization workspace yet.
  */
 export async function getMarketingOperatingSnapshot(options?: {
+  /**
+   * An already-loaded workspace snapshot. Pass this when the caller has one:
+   * getMarketingWorkspaceSnapshot() UPSERTS the MarketingStrategy row, so
+   * loading it twice concurrently (e.g. both halves of a Promise.all) races two
+   * inserts on the organizationId unique key and one of them fails. Callers that
+   * already hold the workspace snapshot must hand it over rather than letting
+   * this function load a second one.
+   */
+  workspace?: MarketingWorkspaceSnapshot | null;
   now?: Date;
   metricsWindowHours?: number;
 }): Promise<MarketingOperatingSnapshot | null> {
-  const workspace = await getMarketingWorkspaceSnapshot();
+  const workspace =
+    options && "workspace" in options ? options.workspace : await getMarketingWorkspaceSnapshot();
   if (!workspace) return null;
 
   const organizationId = workspace.organization.id;

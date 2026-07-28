@@ -23,10 +23,13 @@ export default async function CustomerMarketingPage() {
   // The owner-first decision and the coworker's tool output must report the same
   // state for the same organization, so both read the canonical operating
   // snapshot. The workspace snapshot still drives the strategy/queue panels.
-  const [snapshot, operating] = await Promise.all([
-    getMarketingWorkspaceSnapshot(),
-    getMarketingOperatingSnapshot(),
-  ]);
+  //
+  // These load SEQUENTIALLY, and the workspace snapshot is handed over rather
+  // than reloaded: getMarketingWorkspaceSnapshot() upserts the MarketingStrategy
+  // row, so racing two of them concurrently collides on the organizationId
+  // unique key and renders a 500.
+  const snapshot = await getMarketingWorkspaceSnapshot();
+  const operating = await getMarketingOperatingSnapshot({ workspace: snapshot });
 
   if (!snapshot) {
     return (
