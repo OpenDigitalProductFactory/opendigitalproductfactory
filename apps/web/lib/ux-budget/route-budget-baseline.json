@@ -212,15 +212,15 @@
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - heading [level=1]\n  - paragraph\n    - text\n  - link\n  - text\n  - link\n  - paragraph\n    - text"
     },
     "/build": {
-      "defaultVisibleWords": 239,
+      "defaultVisibleWords": 165,
       "leadBandWords": 0,
       "primaryActions": 1,
-      "visibleFields": 2,
-      "maxChoicesPerControl": 4,
+      "visibleFields": 1,
+      "maxChoicesPerControl": 0,
       "subLegibleControls": 0,
       "buriedPrimaryAction": 0,
       "axeViolations": 2,
-      "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - link\n    - text\n  - paragraph\n    - text\n  - textbox\n  - text\n  - combobox\n    - option [selected]\n    - option\n  - text\n  - button [disabled]\n  - text\n  - paragraph\n    - text\n  - text\n  - link\n  - button\n  - text\n  - heading [level=2]\n  - paragraph\n    - text\n  - text\n  - link [disabled]"
+      "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - button [expanded]\n    - text\n  - text\n  - textbox\n  - group\n    - button\n    - text\n    - combobox\n      - option [selected]\n      - option\n  - text\n  - button [disabled]\n  - text\n  - paragraph\n    - text\n  - text\n  - link\n  - button\n  - heading [level=2]\n  - paragraph\n    - text\n  - text\n  - link [disabled]"
     },
     "/build/work": {
       "defaultVisibleWords": 176,
