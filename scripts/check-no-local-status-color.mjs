@@ -37,9 +37,7 @@ export const ALLOWLIST = new Set([
   "apps/web/components/portal/PortalWorkCases.tsx",
   "apps/web/components/portal/PortalWorkCaseDetail.tsx",
   "apps/web/components/platform/development/change-lanes/ChangeLaneStatusBadge.tsx",
-  "apps/web/components/workspace/WorkCaseAttentionLens.tsx",
   "apps/web/components/platform/coworker-record/ProfessionCorpusPanel.tsx",
-  "apps/web/components/workspace/WorkCaseDetailView.tsx",
   "apps/web/components/customer/crmToneIntent.ts",
 ]);
 

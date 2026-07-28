@@ -4,7 +4,6 @@ import { LocalTime } from "@/components/ui/LocalTime";
 import { EmptyState, StatCard, StatusBadge } from "@/components/ui/report-kit";
 import {
   roomLabel,
-  WORK_STATE_INTENT,
 } from "@/components/workspace/work-room/presentation";
 import type {
   WorkspaceWorkCaseLensView,
@@ -24,7 +23,7 @@ function CaseRow({ item, compact = false }: { item: WorkspaceWorkCaseListItem; c
       <span className="sr-only">Open room: {item.title}</span>
       <div className="min-w-0">
         <div className="mb-2 flex flex-wrap items-center gap-2">
-          <StatusBadge intent={WORK_STATE_INTENT[item.state]} label={roomLabel(item.state)} variant="soft" />
+          <StatusBadge domain="workCaseState" status={item.state} label={roomLabel(item.state)} variant="soft" />
           <StatusBadge intent={item.attentionRequired ? "warning" : "neutral"} label={item.urgencyLabel} variant="outline" />
           <span className="text-xs text-[var(--dpf-muted)]">{item.sourceLabel}</span>
         </div>

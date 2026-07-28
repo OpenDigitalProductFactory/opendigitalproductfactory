@@ -6,9 +6,7 @@ import type { WorkspaceWorkCaseListItem } from "@/lib/work-management/workspace-
 import type { WorkRoomView } from "@/lib/work-management/room-types";
 
 import {
-  OUTCOME_HEALTH_INTENT,
   roomLabel,
-  WORK_STATE_INTENT,
 } from "./presentation";
 
 type Props = {
@@ -63,7 +61,8 @@ export function WorkRoomHeader({ room, summary }: Props) {
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <StatusBadge
-                intent={WORK_STATE_INTENT[room.state]}
+                domain="workCaseState"
+                status={room.state}
                 label={roomLabel(room.state)}
                 variant="soft"
               />
@@ -104,7 +103,7 @@ export function WorkRoomHeader({ room, summary }: Props) {
               Outcome
             </h2>
             {health ? (
-              <StatusBadge intent={OUTCOME_HEALTH_INTENT[health]} label={roomLabel(health)} variant="soft" />
+              <StatusBadge domain="workRoomOutcomeHealth" status={health} label={roomLabel(health)} variant="soft" />
             ) : null}
           </div>
           <p className="mt-2 text-base font-semibold leading-6 text-[var(--dpf-text)]">

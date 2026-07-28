@@ -18,7 +18,6 @@ import type {
 
 import {
   ACTIVITY_KIND_LABEL,
-  activityIntent,
   roomLabel,
 } from "./presentation";
 
@@ -54,7 +53,7 @@ function ActivityEvent({ event }: { event: WorkRoomActivityView }) {
       </span>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <StatusBadge intent={activityIntent(event.kind)} label={label} variant="soft" />
+          <StatusBadge domain="workRoomActivity" status={event.kind} label={label} variant="soft" />
           {event.occurredAt ? (
             <LocalTime value={event.occurredAt} mode="datetime" className="text-xs text-[var(--dpf-muted)]" />
           ) : null}
