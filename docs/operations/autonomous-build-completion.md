@@ -45,6 +45,15 @@ regulatory human-control requirement. For `build.implement`, every qualifying pa
 passing production build; inference-only replay evidence remains useful shadow evidence but cannot
 authorize an autonomous build lane.
 
+An approved low-risk `build.implement` experiment continues itself one replicate at a time until
+the eight-pair evidence floor is reached. Each cell receives a detached worktree at the same source
+commit, may generate only the fixture's declared source file, runs only the fixture's declared
+scoped tests, and must pass the canonical production build. Continuation is idempotent: retries
+request the explicit next replicate rather than allocating an unbounded new run. It stops at eight,
+on any invalid pair or hard regression, and before workspace creation for irreversible/outbound
+risk. Experiment worktrees are removed after success or failure. They never advance a Feature
+Build, create a pull request, enter the merge queue, release, or mutate the live portal.
+
 The first qualifying same-install promotion creates a rollback-safe baseline binding and then
 activates the candidate binding in the same serialized transaction. The candidate is scoped to the
 exact install, corpus, activity, risk, and model profile proved by the experiment. A note that
