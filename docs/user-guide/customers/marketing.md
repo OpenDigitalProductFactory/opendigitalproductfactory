@@ -33,6 +33,36 @@ Avoid opening every advanced panel before making that first decision. The page
 uses progressive disclosure so strategy machinery does not obscure the
 operator's immediate choice.
 
+### The recommendation reflects real campaign state
+
+The recommended next step is derived from one shared reading of the workspace —
+the same reading the **Marketing Strategist** uses when you ask it a question.
+That reading covers your live campaigns and how far each has been executed,
+which drafts are waiting on your approval, which channels are actually
+connected, whether published work has current measurements, and what is
+currently blocked.
+
+Because both the page and the coworker read the same thing, they cannot tell you
+two different stories about where marketing stands. The recommendation moves as
+the workspace moves:
+
+| What the workspace looks like | What you are asked to do next |
+| --- | --- |
+| Drafts are waiting on you | Review them before anything reaches customers |
+| Copy is approved and a channel is connected | Publish it, one explicit action at a time |
+| Copy is approved but no channel is connected | Connect the channel first |
+| No strategy review has run, or it is overdue | Run a strategy review |
+| There is a strategy but no campaign | Establish one bounded campaign |
+| A campaign still has undrafted asset work | Draft the outstanding assets for that campaign |
+| Work is published but its results are stale | Pull current channel results before judging it |
+| Results are current | Decide whether to continue, stop, or change the campaign |
+
+If something is blocking progress, the workspace names it and gives one recovery
+action rather than showing a wall of zeros. A channel that cannot report
+engagement (some can publish but not measure) is stated plainly, so results from
+that channel are attributed with tracked links instead of being silently
+counted as zero.
+
 ## Review Strategy, Assumptions, and Proof
 
 Open **Strategy, assumptions & proof** when the recommendation needs scrutiny.
@@ -154,6 +184,22 @@ record.
 - Inspect the weakest funnel handoff.
 - Keep, revise, or stop the campaign explicitly.
 - Turn repeatable gaps into backlog work instead of leaving them in analysis.
+
+## Asking the Marketing Strategist About a Campaign
+
+Ask for the overall picture first — "how is marketing doing?" or "what should we
+do next?" The strategist reads the whole workspace in one step, including each
+campaign's name, its execution state, and its measured results. That is usually
+enough to answer.
+
+Ask about a specific campaign by name when you want its full plan or its
+detailed performance. The strategist already holds the campaign identities from
+the overall reading, so it does not need you to look anything up. If it ever
+asks about a campaign that is not in your workspace, it is told which campaigns
+do exist and corrects itself rather than reporting an unexplained failure.
+
+Campaign detail is scoped to your organization. A campaign belonging to another
+organization is not readable, even by its exact identifier.
 
 ## What To Watch
 

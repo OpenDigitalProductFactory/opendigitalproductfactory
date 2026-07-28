@@ -10,6 +10,7 @@
 
 import type { MarketingPlaybook } from "@/lib/tak/marketing-playbooks";
 import type { MarketingWorkspaceSnapshot } from "@/lib/marketing";
+import type { MarketingOperatingSnapshot } from "@/lib/marketing/operating-snapshot";
 
 export type MarketingOwnerDecision = {
   id:
@@ -18,7 +19,11 @@ export type MarketingOwnerDecision = {
     | "run-first-review"
     | "create-first-campaign"
     | "choose-proof"
-    | "plan-seasonal";
+    | "plan-seasonal"
+    | "connect-channel"
+    | "produce-assets"
+    | "measure-evidence"
+    | "decide-outcome";
   /** Short, archetype-flavoured decision headline. */
   headline: string;
   /** One line of supporting context. */
@@ -42,15 +47,61 @@ function proofNoun(playbook: MarketingPlaybook): string {
 }
 
 /**
+ * Owner-language phrasing for each canonical next step.
+ *
+ * The canonical next step is decided ONCE, in the operating snapshot, and is
+ * shared with the coworker tools; this table only re-voices it for the owner's
+ * first viewport so the page and the MCP surface can never disagree about what
+ * should happen next. The `href` always comes from the canonical step.
+ */
+const OWNER_DECISION_BY_NEXT_STEP: Record<
+  MarketingOperatingSnapshot["nextStep"]["id"],
+  { id: MarketingOwnerDecision["id"]; ctaLabel: string }
+> = {
+  "review-drafts": { id: "review-drafts", ctaLabel: "Review drafts" },
+  "publish-approved": { id: "publish-approved", ctaLabel: "Go to publish queue" },
+  "connect-channel": { id: "connect-channel", ctaLabel: "Connect a channel" },
+  "run-strategy-review": { id: "run-first-review", ctaLabel: "Start marketing review" },
+  "establish-campaign": { id: "create-first-campaign", ctaLabel: "Plan a campaign" },
+  "produce-assets": { id: "produce-assets", ctaLabel: "See campaign work" },
+  "measure-evidence": { id: "measure-evidence", ctaLabel: "Check results" },
+  "decide-outcome": { id: "decide-outcome", ctaLabel: "Review results" },
+};
+
+/**
  * Compute the single next decision to surface in the first viewport.
- * Priority runs from the most time-sensitive owner action (drafts waiting on
- * them) down to steady-state planning.
+ *
+ * With an operating snapshot the decision is a re-voicing of the canonical next
+ * step. Without one (callers that only hold the workspace snapshot) it falls
+ * back to the original saved-state priority, which runs from the most
+ * time-sensitive owner action (drafts waiting on them) down to steady-state
+ * planning.
  */
 export function buildMarketingOwnerDecision(
   snapshot: MarketingWorkspaceSnapshot,
   playbook: MarketingPlaybook,
+  operating?: MarketingOperatingSnapshot,
 ): MarketingOwnerDecision {
   const metricFocus = playbook.keyMetrics[0] ?? "Customer acquisition";
+
+  if (operating) {
+    const step = operating.nextStep;
+    const voiced = OWNER_DECISION_BY_NEXT_STEP[step.id];
+    // Drafts waiting on the owner keep their archetype-specific phrasing.
+    const headline =
+      step.id === "review-drafts"
+        ? `Review ${count(operating.approvals.pendingDrafts, "draft")} before ${audienceWord(playbook)} see them`
+        : step.headline;
+    return {
+      id: voiced.id,
+      headline,
+      detail: step.detail,
+      ctaLabel: voiced.ctaLabel,
+      ctaHref: step.href,
+      metricFocus,
+    };
+  }
+
   const firstCampaign = playbook.campaignTypes[0] ?? "your first campaign";
   const pending = snapshot.pendingDrafts.length;
   const approved = snapshot.approvedDrafts.length;

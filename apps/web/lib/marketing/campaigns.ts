@@ -12,6 +12,7 @@
 
 import { prisma } from "@dpf/db";
 import { getMarketingWorkspaceSnapshot } from "../marketing";
+import { resolveMarketingOrganizationId } from "./org-scope";
 
 export const CAMPAIGN_STATUSES = ["draft", "active", "paused", "complete"] as const;
 export type CampaignStatus = (typeof CAMPAIGN_STATUSES)[number];
@@ -63,6 +64,169 @@ export function summarizeCampaignExecution(input: CampaignExecutionInput): Campa
   }
 
   return { briefCount, taskCount, draftedCount, approvedCount, undraftedCount, nextStep };
+}
+
+// ─── Drill-in scope + recovery ──────────────────────────────────────────────
+//
+// Two production defects are answered here. First, campaign drill-ins resolved
+// their campaign with a bare findUnique on campaignId, so a campaign belonging
+// to another organization was readable by id. Second, an omitted campaignId
+// produced "Campaign  does not exist." — the exact opaque failure the Marketing
+// Strategist hit over and over, with nothing in the response that let it
+// self-correct. A drill-in that cannot answer now returns the campaign IDs it
+// COULD answer for, plus one instruction.
+
+export type CampaignCandidate = {
+  campaignId: string;
+  name: string;
+  status: string;
+  /** The single most useful next step for this campaign, in plain language. */
+  nextStep: string;
+};
+
+export type CampaignDrillInFailure = {
+  error: "campaign-id-required" | "campaign-not-found" | "no-workspace";
+  message: string;
+  data: { candidates: CampaignCandidate[]; recovery: string };
+};
+
+function describeCandidates(candidates: CampaignCandidate[]): string {
+  return candidates.map((c) => `${c.campaignId} (${c.name} — ${c.status})`).join(", ");
+}
+
+/**
+ * Pure: turn a failed drill-in into an actionable result.
+ * A blank/whitespace campaignId is classified as "you did not pass one", never
+ * as a lookup miss — those need different recovery instructions.
+ */
+export function buildCampaignDrillInRecovery(input: {
+  requestedCampaignId: string;
+  candidates: CampaignCandidate[];
+  toolName: string;
+}): CampaignDrillInFailure {
+  const requested = input.requestedCampaignId.trim();
+  const { candidates, toolName } = input;
+
+  if (candidates.length === 0) {
+    return {
+      error: requested ? "campaign-not-found" : "campaign-id-required",
+      message: requested
+        ? `Campaign ${requested} does not exist in this workspace, and no campaigns exist yet.`
+        : `${toolName} needs a campaignId, and no campaign exists yet.`,
+      data: {
+        candidates: [],
+        recovery:
+          "Establish a campaign first with create_marketing_campaign, then drill into it by its campaignId.",
+      },
+    };
+  }
+
+  const recovery = `Re-call ${toolName} with campaignId set to one of the listed ids; get_marketing_summary returns the same ids with their current state.`;
+
+  if (!requested) {
+    return {
+      error: "campaign-id-required",
+      message: `${toolName} needs a campaignId. Campaigns in this workspace: ${describeCandidates(candidates)}.`,
+      data: { candidates, recovery },
+    };
+  }
+
+  return {
+    error: "campaign-not-found",
+    message: `Campaign ${requested} does not exist in this workspace. Campaigns in this workspace: ${describeCandidates(candidates)}.`,
+    data: { candidates, recovery },
+  };
+}
+
+/** The campaigns this organization can be asked about, newest first. */
+export async function listCampaignCandidates(organizationId: string): Promise<CampaignCandidate[]> {
+  const rows = await prisma.marketingCampaign.findMany({
+    where: { organizationId },
+    orderBy: { createdAt: "desc" },
+    take: 10,
+    select: {
+      campaignId: true,
+      name: true,
+      status: true,
+      _count: { select: { briefs: true, assetTasks: true } },
+    },
+  });
+  return rows.map((row: { campaignId: string; name: string; status: string; _count?: { briefs: number; assetTasks: number } }) => ({
+    campaignId: row.campaignId,
+    name: row.name,
+    status: row.status,
+    nextStep: summarizeCampaignExecution({
+      briefs: new Array(row._count?.briefs ?? 0).fill({ status: "draft" }),
+      tasks: new Array(row._count?.assetTasks ?? 0)
+        .fill(null)
+        .map((_, i) => ({ status: "draft", taskId: `${row.campaignId}:${i}` })),
+    }).nextStep,
+  }));
+}
+
+export type CampaignScopeResult =
+  | {
+      ok: true;
+      organizationId: string;
+      campaignId: string;
+      listCandidates: () => Promise<CampaignCandidate[]>;
+    }
+  | { ok: false; failure: CampaignDrillInFailure };
+
+/**
+ * Resolve a campaign drill-in against the configured organization.
+ * Every campaign read/write goes through here so organization isolation is
+ * expressed once, in the query predicate, rather than re-derived per caller.
+ */
+export async function requireCampaignInScope(
+  campaignId: string,
+  toolName: string,
+): Promise<CampaignScopeResult> {
+  const organizationId = await resolveMarketingOrganizationId();
+  if (!organizationId) {
+    return {
+      ok: false,
+      failure: {
+        error: "no-workspace",
+        message: "No organization workspace is configured, so there are no campaigns to read.",
+        data: { candidates: [], recovery: "Complete organization setup before reading marketing campaigns." },
+      },
+    };
+  }
+
+  const requested = campaignId.trim();
+  if (!requested) {
+    return {
+      ok: false,
+      failure: buildCampaignDrillInRecovery({
+        requestedCampaignId: "",
+        candidates: await listCampaignCandidates(organizationId),
+        toolName,
+      }),
+    };
+  }
+
+  const campaign = await prisma.marketingCampaign.findFirst({
+    where: { campaignId: requested, organizationId },
+    select: { campaignId: true },
+  });
+  if (!campaign) {
+    return {
+      ok: false,
+      failure: buildCampaignDrillInRecovery({
+        requestedCampaignId: requested,
+        candidates: await listCampaignCandidates(organizationId),
+        toolName,
+      }),
+    };
+  }
+
+  return {
+    ok: true,
+    organizationId,
+    campaignId: requested,
+    listCandidates: () => listCampaignCandidates(organizationId),
+  };
 }
 
 export type CreateCampaignInput = {
@@ -132,12 +296,15 @@ export async function updateMarketingCampaign(input: {
       message: `status must be one of: ${CAMPAIGN_STATUSES.join(", ")}.`,
     };
   }
-  const existing = await prisma.marketingCampaign.findUnique({
-    where: { campaignId: input.campaignId },
-    select: { campaignId: true },
-  });
+  const organizationId = await resolveMarketingOrganizationId();
+  const existing = organizationId
+    ? await prisma.marketingCampaign.findFirst({
+        where: { campaignId: input.campaignId, organizationId },
+        select: { campaignId: true },
+      })
+    : null;
   if (!existing) {
-    return { error: "not-found", message: `Campaign ${input.campaignId} does not exist.` };
+    return { error: "not-found", message: `Campaign ${input.campaignId} does not exist in this workspace.` };
   }
 
   await prisma.marketingCampaign.update({
@@ -165,18 +332,22 @@ export async function attachToCampaign(input: {
   if (!briefId && !taskId) {
     return { error: "no-target", message: "Provide a briefId or taskId to attach to the campaign." };
   }
-  const campaign = await prisma.marketingCampaign.findUnique({
-    where: { campaignId },
+  const organizationId = await resolveMarketingOrganizationId();
+  if (!organizationId) {
+    return { error: "no-workspace", message: "No organization workspace is configured." };
+  }
+  const campaign = await prisma.marketingCampaign.findFirst({
+    where: { campaignId, organizationId },
     select: { campaignId: true },
   });
   if (!campaign) {
     const [briefWithThatId, taskWithThatId] = await Promise.all([
-      prisma.marketingCampaignBrief.findUnique({
-        where: { briefId: campaignId },
+      prisma.marketingCampaignBrief.findFirst({
+        where: { briefId: campaignId, organizationId },
         select: { briefId: true },
       }),
-      prisma.marketingAssetTask.findUnique({
-        where: { taskId: campaignId },
+      prisma.marketingAssetTask.findFirst({
+        where: { taskId: campaignId, organizationId },
         select: { taskId: true },
       }),
     ]);
@@ -192,12 +363,12 @@ export async function attachToCampaign(input: {
         message: `The value passed as campaignId looks like a taskId (${campaignId}). Use the MarketingCampaign.campaignId returned by create_marketing_campaign or get_campaign_plan, and pass ${campaignId} as taskId if that is the task to attach.`,
       };
     }
-    return { error: "not-found", message: `Campaign ${campaignId} does not exist.` };
+    return { error: "not-found", message: `Campaign ${campaignId} does not exist in this workspace.` };
   }
 
   if (briefId) {
-    const brief = await prisma.marketingCampaignBrief.findUnique({
-      where: { briefId },
+    const brief = await prisma.marketingCampaignBrief.findFirst({
+      where: { briefId, organizationId },
       select: { briefId: true },
     });
     if (!brief) {
@@ -205,8 +376,8 @@ export async function attachToCampaign(input: {
     }
   }
   if (taskId) {
-    const task = await prisma.marketingAssetTask.findUnique({
-      where: { taskId },
+    const task = await prisma.marketingAssetTask.findFirst({
+      where: { taskId, organizationId },
       select: { taskId: true },
     });
     if (!task) {
@@ -232,18 +403,30 @@ export async function attachToCampaign(input: {
   return { message: `Attached ${attached.join(" and ")} to campaign ${campaignId}.` };
 }
 
+/**
+ * Read a campaign's plan plus its live execution rollup, scoped to the
+ * configured organization. A missing or unknown campaignId returns candidate
+ * IDs and one recovery instruction instead of an opaque miss.
+ */
 export async function getCampaignPlan(
   campaignId: string,
-): Promise<{ message: string; data: Record<string, unknown> } | { error: string; message: string }> {
-  const campaign = await prisma.marketingCampaign.findUnique({
-    where: { campaignId },
+): Promise<{ message: string; data: Record<string, unknown> } | CampaignDrillInFailure> {
+  const scope = await requireCampaignInScope(campaignId, "get_campaign_plan");
+  if (!scope.ok) return scope.failure;
+
+  const campaign = await prisma.marketingCampaign.findFirst({
+    where: { campaignId: scope.campaignId, organizationId: scope.organizationId },
     include: {
       briefs: { select: { briefId: true, title: true, status: true } },
       assetTasks: { select: { taskId: true, title: true, assetType: true, channel: true, status: true } },
     },
   });
   if (!campaign) {
-    return { error: "not-found", message: `Campaign ${campaignId} does not exist.` };
+    return buildCampaignDrillInRecovery({
+      requestedCampaignId: scope.campaignId,
+      candidates: await scope.listCandidates(),
+      toolName: "get_campaign_plan",
+    });
   }
 
   const draftedTaskIds = new Set<string>();
