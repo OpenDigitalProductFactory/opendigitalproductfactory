@@ -156,7 +156,6 @@ export function CityPanel({ cities, selectedRegion, query, window }: Props) {
       {open && (
         <div id="city-panel-content" className="mt-3 space-y-3">
           <ReferenceDataParentPicker
-            inputId="city-region-filter"
             label="Region"
             value={
               selectedRegion
@@ -178,7 +177,6 @@ export function CityPanel({ cities, selectedRegion, query, window }: Props) {
           />
           {selectedRegion && (
             <ReferenceDataSearch
-              inputId="city-search"
               label={`Find cities in ${selectedRegion.name}`}
               query={query}
               queryParam="cityQ"

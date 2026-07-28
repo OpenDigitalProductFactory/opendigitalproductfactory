@@ -22,6 +22,7 @@ type RefItem = { id: string; label: string };
 
 type ReferenceTypeaheadProps = {
   inputId?: string;
+  inputName?: string;
   placeholder?: string;
   onSearch: (query: string) => Promise<RefItem[]>;
   onSelect: (item: RefItem) => void;
@@ -34,6 +35,7 @@ type ReferenceTypeaheadProps = {
 
 export function ReferenceTypeahead({
   inputId,
+  inputName,
   placeholder = "Search...",
   onSearch,
   onSelect,
@@ -186,6 +188,7 @@ export function ReferenceTypeahead({
       <input
         ref={refs.setReference}
         id={inputId}
+        name={inputName}
         type="text"
         role="combobox"
         autoFocus={autoFocus}

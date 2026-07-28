@@ -206,7 +206,6 @@ export function WorkLocationPanel({ workLocations, query, window }: Props) {
       {open && (
         <div id="work-location-panel-content" className="mt-3 space-y-3">
           <ReferenceDataSearch
-            inputId="work-location-search"
             label="Find work locations"
             query={query}
             queryParam="workLocationQ"

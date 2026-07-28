@@ -5,6 +5,11 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ReferenceTypeahead } from "@/components/ui/ReferenceTypeahead";
 import {
+  FormField,
+  SubmitButton,
+  fieldControlClass,
+} from "@/components/ui/form";
+import {
   buildReferenceDataHref,
   type PageWindow,
   type ReferenceDataSearchParams,
@@ -19,14 +24,12 @@ function currentParams(
 }
 
 export function ReferenceDataSearch({
-  inputId,
   label,
   query,
   queryParam,
   pageParam,
   placeholder,
 }: {
-  inputId: string;
   label: string;
   query: string;
   queryParam: string;
@@ -51,28 +54,24 @@ export function ReferenceDataSearch({
 
   return (
     <form onSubmit={submit} className="space-y-1.5">
-      <label
-        htmlFor={inputId}
-        className="block text-xs font-medium text-[var(--dpf-muted)]"
-      >
-        {label}
-      </label>
       <div className="flex flex-col gap-2 sm:flex-row">
-        <input
-          id={inputId}
-          type="search"
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-          placeholder={placeholder}
-          className="min-w-0 flex-1 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-sm text-[var(--dpf-foreground)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--dpf-accent)]"
-        />
-        <div className="flex gap-2">
-          <button
-            type="submit"
-            className="rounded bg-[var(--dpf-accent)] px-3 py-2 text-xs font-medium text-white"
-          >
+        <FormField name={queryParam} label={label} className="min-w-0 flex-1">
+          {(control) => (
+            <input
+              {...control}
+              type="search"
+              value={value}
+              onChange={(event) => setValue(event.target.value)}
+              placeholder={placeholder}
+              autoComplete="off"
+              className={fieldControlClass}
+            />
+          )}
+        </FormField>
+        <div className="flex items-end gap-2">
+          <SubmitButton>
             Search
-          </button>
+          </SubmitButton>
           {query && (
             <button
               type="button"
@@ -97,7 +96,6 @@ export function ReferenceDataSearch({
 }
 
 export function ReferenceDataParentPicker({
-  inputId,
   label,
   value,
   placeholder,
@@ -105,7 +103,6 @@ export function ReferenceDataParentPicker({
   resetParams,
   onSearch,
 }: {
-  inputId: string;
   label: string;
   value: RefItem | null;
   placeholder: string;
@@ -125,34 +122,31 @@ export function ReferenceDataParentPicker({
   }
 
   return (
-    <div className="space-y-1.5">
-      <label
-        htmlFor={inputId}
-        className="block text-xs font-medium text-[var(--dpf-muted)]"
-      >
-        {label}
-      </label>
-      <div className="flex items-start gap-2">
-        <div className="min-w-0 flex-1">
-          <ReferenceTypeahead
-            inputId={inputId}
-            value={value}
-            placeholder={placeholder}
-            onSearch={onSearch}
-            onSelect={navigate}
-          />
+    <FormField name={paramName} label={label}>
+      {(control) => (
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <ReferenceTypeahead
+              inputId={control.id}
+              inputName={control.name}
+              value={value}
+              placeholder={placeholder}
+              onSearch={onSearch}
+              onSelect={navigate}
+            />
+          </div>
+          {value && (
+            <button
+              type="button"
+              onClick={() => navigate(null)}
+              className="rounded border border-[var(--dpf-border)] px-3 py-2 text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-foreground)]"
+            >
+              Clear
+            </button>
+          )}
         </div>
-        {value && (
-          <button
-            type="button"
-            onClick={() => navigate(null)}
-            className="rounded border border-[var(--dpf-border)] px-3 py-2 text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-foreground)]"
-          >
-            Clear
-          </button>
-        )}
-      </div>
-    </div>
+      )}
+    </FormField>
   );
 }
 

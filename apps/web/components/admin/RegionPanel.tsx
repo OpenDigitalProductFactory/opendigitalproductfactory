@@ -178,7 +178,6 @@ export function RegionPanel({
       {open && (
         <div id="region-panel-content" className="mt-3 space-y-3">
           <ReferenceDataParentPicker
-            inputId="region-country-filter"
             label="Country"
             value={
               selectedCountry
@@ -200,7 +199,6 @@ export function RegionPanel({
           />
           {selectedCountry && (
             <ReferenceDataSearch
-              inputId="region-search"
               label={`Find regions in ${selectedCountry.name}`}
               query={query}
               queryParam="regionQ"

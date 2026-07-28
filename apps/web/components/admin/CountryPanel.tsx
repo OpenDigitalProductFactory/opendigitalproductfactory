@@ -57,7 +57,6 @@ export function CountryPanel({ countries, query, window }: Props) {
       {open && (
         <div id="country-panel-content" className="mt-3 space-y-3">
           <ReferenceDataSearch
-            inputId="country-search"
             label="Find countries"
             query={query}
             queryParam="countryQ"

@@ -77,6 +77,11 @@ The kernel recommended option 1 with high confidence (8.504 composite, 2.554 mar
 
 **Responsive/accessibility contract:** filters stack on narrow viewports; pagination uses semantic `<nav>` with a descriptive label, current-page state, and previous/next links; form controls retain visible labels; merge search follows the WAI-ARIA combobox pattern and keyboard contract already implemented by `ReferenceTypeahead`.
 
+The new URL-backed search and parent-picker fields compose the shared
+`FormField`/`SubmitButton` contract. `ReferenceTypeahead` accepts the field name
+alongside its generated label-bound id, so these controls do not reintroduce
+the unnamed, hand-wired form debt this refactor is meant to remove.
+
 **Verification viewports:** desktop and narrow mobile viewport, including keyboard-only merge-target selection.
 
 This is a local workflow correction, not a new product capability. It fits the existing route and removes cognitive and performance overload without adding navigation.
