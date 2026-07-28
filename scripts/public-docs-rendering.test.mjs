@@ -17,11 +17,6 @@ const scriptSource = fs.readFileSync(
 function executeDiagramScript(sourcePath, blocks) {
   const created = [];
   const document = {
-    currentScript: {
-      getAttribute(name) {
-        return name === "data-source-path" ? sourcePath : null;
-      },
-    },
     querySelectorAll(selector) {
       assert.equal(
         selector,
@@ -39,6 +34,7 @@ function executeDiagramScript(sourcePath, blocks) {
   const context = { document };
   context.globalThis = context;
   vm.runInNewContext(scriptSource, context);
+  context.DPFDocDiagrams.renderDocDiagrams(document, sourcePath);
   return { api: context.DPFDocDiagrams, created };
 }
 
@@ -76,7 +72,20 @@ test("nested index pages retain index in the committed diagram slug", () => {
   );
 });
 
-test("Jekyll layout passes the source path to the shared diagram renderer", () => {
+test("diagram paths reject traversal and markup-bearing source paths", () => {
+  const { api } = executeDiagramScript("architecture/platform-overview.md", []);
+
+  assert.equal(
+    api.diagramSlugFromSourcePath("user-guide/../../index.md"),
+    null,
+  );
+  assert.equal(
+    api.diagramSlugFromSourcePath("user-guide/<img>/index.md"),
+    null,
+  );
+});
+
+test("Jekyll passes its build-time source path without reading DOM text", () => {
   const layout = fs.readFileSync(
     path.join(repoRoot, "docs", "_layouts", "default.html"),
     "utf8",
@@ -85,8 +94,10 @@ test("Jekyll layout passes the source path to the shared diagram renderer", () =
   assert.match(layout, /assets\/js\/doc-diagrams\.js/);
   assert.match(
     layout,
-    /data-source-path="\{\{\s*page\.path\s*\|\s*escape\s*\}\}"/,
+    /renderDocDiagrams\(document,\s*\{\{\s*page\.path\s*\|\s*jsonify\s*\}\}\)/,
   );
+  assert.doesNotMatch(layout, /data-source-path/);
+  assert.doesNotMatch(scriptSource, /currentScript|getAttribute/);
   assert.doesNotMatch(layout, /querySelectorAll\("div\.language-mermaid"\)/);
 });
 

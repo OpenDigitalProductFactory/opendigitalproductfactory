@@ -43,11 +43,10 @@
   source path is the stable key: public pretty URLs cannot distinguish
   index.md from a sibling Markdown page. No Mermaid runtime or CDN is needed.
 -->
-<script
-  src="{{ '/assets/js/doc-diagrams.js' | relative_url }}"
-  data-source-path="{{ page.path | escape }}"
-  defer
-></script>
+<script src="{{ '/assets/js/doc-diagrams.js' | relative_url }}"></script>
+<script>
+  DPFDocDiagrams.renderDocDiagrams(document, {{ page.path | jsonify }});
+</script>
 
 <footer class="site-footer">
   <div class="wrap">

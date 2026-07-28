@@ -7,14 +7,25 @@
   function diagramSlugFromSourcePath(sourcePath) {
     var normalized = String(sourcePath || "").replace(/\\/g, "/");
     normalized = normalized.replace(/^docs\//, "");
-    if (normalized.indexOf("user-guide/") !== 0) return null;
+    if (
+      !/^user-guide\/[A-Za-z0-9][A-Za-z0-9_/-]*\.md$/.test(normalized) ||
+      normalized.indexOf("//") !== -1
+    ) {
+      return null;
+    }
     return normalized
       .replace(/^user-guide\//, "")
       .replace(/\.md$/, "");
   }
 
   function diagramPublicHref(slug, index) {
-    return "/user-guide/assets/diagrams/" + slug + "/" + index + ".svg";
+    var encodedSlug = String(slug)
+      .split("/")
+      .map(function (segment) {
+        return encodeURIComponent(segment);
+      })
+      .join("/");
+    return "/user-guide/assets/diagrams/" + encodedSlug + "/" + index + ".svg";
   }
 
   function replacementTarget(block) {
@@ -51,10 +62,4 @@
     replacementTarget: replacementTarget,
     renderDocDiagrams: renderDocDiagrams,
   });
-
-  if (typeof document !== "undefined") {
-    var script = document.currentScript;
-    var sourcePath = script && script.getAttribute("data-source-path");
-    renderDocDiagrams(document, sourcePath);
-  }
 })(typeof globalThis !== "undefined" ? globalThis : this);
