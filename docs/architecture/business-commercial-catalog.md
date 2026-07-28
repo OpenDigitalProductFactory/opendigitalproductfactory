@@ -13,7 +13,9 @@ ProductLine → Product → ProductOffering → CatalogItem
                                       ├→ CatalogPromotionItem → CatalogPromotion
                                       ├→ CatalogChannelEligibility
                                       ├→ StorefrontItem
-                                      └→ QuoteLineItem → CatalogSku?
+                                      ├→ QuoteLineItem → CatalogSku?
+                                      └→ ProductSold → typed evidence / party /
+                                                       entitlement / fulfillment
 ```
 
 `ProductLine`, `Product`, `ProductOffering`, `CatalogItem`,
@@ -95,6 +97,42 @@ must total 100. The canonical signal projection derives component attach rate,
 quote conversion, margin, and option demand only from supplied transaction
 evidence. It deduplicates selection identifiers and withholds margin whenever
 cost evidence is incomplete.
+
+## Product Sold Ledger
+
+`ProductSold` is DPF's immutable, organization-scoped commercial sale fact.
+It snapshots the selected provider, Product, Offering, Catalog item, optional
+SKU/configuration, and pricing at materialization. Existing `QuoteLineItem`,
+`SalesOrder`, `StorefrontOrderLineItem`, `StorefrontBooking`,
+`RentalAgreement`, and support `Subscription` models remain their own
+transaction or fulfillment authorities; typed `ProductSoldEvidence` rows link
+them without creating a parallel order system.
+
+The ledger follows these invariants:
+
+- revenue is additive only at the `ProductSold` root;
+- package component allocations are non-additive;
+- names, pricing, configuration, and provider history come from immutable
+  snapshots rather than the current catalog;
+- a party link requires a canonical `CustomerAccount` or `CustomerContact`;
+- an entitlement requires a real beneficiary and evidence;
+- a fulfillment instance requires a real booking, rental agreement/unit, or
+  EdgeNode target;
+- ordinary purchases do not create support subscriptions;
+- new Storefront orders dual-write normalized lines and retain the legacy JSON
+  payload, while unlinked legacy rows remain unmaterialized.
+
+The canonical organization-scoped trace query is
+`apps/web/lib/products/product-sold-query.ts`. Contextual product UI and future
+reports/coworkers consume that boundary rather than reproducing joins or
+guessing identities.
+
+Current ServiceNow CRM/CSM documentation includes Sold Product, installed
+product/install-base, party, and entitlement concepts. DPF's `ProductSold` is
+therefore described as a DPF commercial-ledger extension informed by those
+adjacent concepts—not as a claim that ServiceNow lacks Sold Product, nor as an
+exact CSDM entity. IT4IT and DPF `DigitalProduct` remain focused on digital
+product architecture and lifecycle.
 
 ## Fleet-Safe Evolution
 

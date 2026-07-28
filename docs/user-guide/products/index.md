@@ -75,6 +75,25 @@ with equal revenue attribution; use **Set exact revenue attribution** when the
 business has a defensible percentage split. The percentages must total 100,
 and the package is still counted as one sale.
 
+## Review Customer Purchases And Use
+
+From a catalog-linked item, choose **Customer purchases and use** to review
+what customers actually selected. Each purchase keeps the historical Product,
+Offering, Catalog item, provider, configuration, and charged amount that
+applied at the time. Later catalog edits do not rewrite that record.
+
+The ordinary view shows the purchase, amount, status, available customer
+evidence, and fulfillment. Open **More traceability** only when you need the
+underlying commercial and transaction references. A package is shown as one
+charged purchase; included-item allocations are labelled as analysis, not
+additional revenue.
+
+DPF distinguishes captured customer details from a canonical customer record.
+For example, a booking email remains useful transaction evidence, but DPF says
+that the customer/account link is not established until a real Customer
+Account or Customer Contact is linked. A purchase by itself never fabricates a
+consumer, subscriber, entitlement, or installed instance.
+
 For configured goods such as cars or homes, an off-the-lot selection can point
 to an exact reusable SKU. A build-to-order selection stays as an immutable
 one-off quote or order snapshot unless an operator explicitly promotes it.
@@ -100,6 +119,7 @@ one-off quote or order snapshot unless an operator explicitly promotes it.
   collapsed Storefront item workflow
 - Manage optional packages, dated prices, promotions, reusable SKUs, channel
   eligibility, and fulfillment routes without creating parallel products
+- Review catalog-linked purchases and fulfillment with honest customer evidence
 - Browse all products with filtering by lifecycle stage, status, portfolio, and taxonomy
 - View a product's full profile including its health metrics, linked backlog items, and architecture models
 - Inspect available software identity and support-lifecycle facts without leaving the inventory entity detail page

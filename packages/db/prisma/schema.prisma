@@ -4311,6 +4311,15 @@ model Organization {
   catalogPromotions             CatalogPromotion[]
   catalogPromotionItems         CatalogPromotionItem[]
   catalogChannelEligibility     CatalogChannelEligibility[]
+  storefrontOrders             StorefrontOrder[]                  @relation("StorefrontOrderOrganization")
+  storefrontOrderLineItems     StorefrontOrderLineItem[]
+  productSolds                 ProductSold[]                      @relation("ProductSoldOrganization")
+  providedProductSolds         ProductSold[]                      @relation("ProductSoldProviderOrganization")
+  productSoldEvidence          ProductSoldEvidence[]
+  productSoldParties           ProductSoldParty[]
+  productSoldEntitlements      ProductSoldEntitlement[]
+  productFulfillmentInstances  ProductFulfillmentInstance[]
+  productSoldComponentAllocations ProductSoldComponentAllocation[]
   careVisitTypes                CareVisitType[]
   careLocations                 CareLocation[]
   careResources                 CareResource[]

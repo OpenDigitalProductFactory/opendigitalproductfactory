@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
+import { transitionProductSoldByEvidence } from "@/lib/products/product-sold";
 
 export async function POST(
   req: NextRequest,
@@ -23,13 +24,23 @@ export async function POST(
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
 
-  await prisma.storefrontBooking.update({
-    where: { id },
-    data: {
-      status: "cancelled",
-      cancellationReason: reason ?? null,
-      cancelledAt: new Date(),
-    },
+  const cancelledAt = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.storefrontBooking.update({
+      where: { id },
+      data: {
+        status: "cancelled",
+        cancellationReason: reason ?? null,
+        cancelledAt,
+      },
+    });
+    await transitionProductSoldByEvidence({
+      db: tx as never,
+      kind: "storefront-booking",
+      sourceId: id,
+      to: "cancelled",
+      occurredAt: cancelledAt,
+    });
   });
 
   return NextResponse.json({ success: true });

@@ -101,10 +101,11 @@ describe("Catalog Builder schema", () => {
     expect(sku).toMatch(/\bquoteLineItems\s+QuoteLineItem\[\]/);
   });
 
-  it("does not add a duplicate inventory or sale authority", () => {
+  it("does not add a duplicate inventory or catalog-owned sale authority", () => {
     expect(schema).not.toMatch(/model CatalogInventoryUnit \{/);
     expect(schema).not.toMatch(/model CatalogSale \{/);
-    expect(schema).not.toMatch(/model ProductSold \{/);
+    expect(schema.match(/model ProductSold \{/g)).toHaveLength(1);
+    expect(model("ProductSold")).not.toMatch(/\bdigitalProductId\b/);
   });
 
   it("classifies every new catalog packaging table as internal business data", () => {

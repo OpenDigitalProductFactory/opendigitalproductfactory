@@ -3,6 +3,15 @@
 import crypto from "crypto";
 import { prisma } from "@dpf/db";
 import { revalidatePath } from "next/cache";
+import {
+  appendProductSoldEvidence,
+  createProductSoldEntitlement,
+  createProductSoldPartyLinks,
+  createTypedFulfillmentInstance,
+  persistProductFulfillmentInstance,
+  persistProductSoldEntitlement,
+  persistProductSoldPartyLinks,
+} from "@/lib/products/product-sold";
 
 // Post-order lifecycle: turning a won deal into an ACTIVE CUSTOMER under a
 // SUPPORT CONTRACT for their own instance of DPF. These wrap the two transitions
@@ -17,6 +26,125 @@ function nextSubscriptionRef(): string {
   // subscriptionRef unique index is the backstop.
   const suffix = crypto.randomBytes(3).toString("hex").toUpperCase();
   return `SUB-${year}-${suffix}`;
+}
+
+async function attachSupportSubscriptionTrace(input: {
+  salesOrderId: string;
+  orderRef: string;
+  account: { id: string; accountId?: string; name: string };
+  subscription: {
+    id: string;
+    subscriptionRef?: string;
+    planName?: string;
+    billingCadence?: string;
+    startDate?: Date;
+    renewalDate?: Date;
+    autoRenew?: boolean;
+  };
+  edgeNodeId?: string;
+}) {
+  const saleEvidence = await prisma.productSoldEvidence.findMany({
+    where: { salesOrderId: input.salesOrderId },
+    select: {
+      productSold: {
+        select: { id: true, organizationId: true },
+      },
+    },
+  });
+  if (saleEvidence.length === 0) return;
+
+  const observedAt = input.subscription.startDate ?? new Date();
+  for (const { productSold } of saleEvidence) {
+    const evidence = await appendProductSoldEvidence({
+      db: prisma,
+      organizationId: productSold.organizationId,
+      productSoldId: productSold.id,
+      kind: "support-subscription",
+      sourceId: input.subscription.id,
+      sourceRef: input.subscription.subscriptionRef ?? input.subscription.id,
+      observedAt,
+      snapshot: {
+        subscriptionRef:
+          input.subscription.subscriptionRef ?? input.subscription.id,
+        salesOrderId: input.salesOrderId,
+        orderRef: input.orderRef,
+        planName: input.subscription.planName ?? null,
+        billingCadence: input.subscription.billingCadence ?? null,
+        autoRenew: input.subscription.autoRenew ?? null,
+        renewalDate: input.subscription.renewalDate?.toISOString() ?? null,
+      },
+    });
+    const partyLinks = createProductSoldPartyLinks({
+      evidenceId: evidence.id,
+      observedAt,
+      account: {
+        id: input.account.id,
+        accountId: input.account.accountId ?? input.account.id,
+        name: input.account.name,
+      },
+      contact: null,
+      subscriber: {
+        kind: "account",
+        account: {
+          id: input.account.id,
+          accountId: input.account.accountId ?? input.account.id,
+          name: input.account.name,
+        },
+      },
+      evidenceSnapshot: {},
+    });
+    await persistProductSoldPartyLinks({
+      db: prisma,
+      organizationId: productSold.organizationId,
+      productSoldId: productSold.id,
+      links: partyLinks.filter((link) => link.role === "subscriber"),
+    });
+    await persistProductSoldEntitlement({
+      db: prisma,
+      organizationId: productSold.organizationId,
+      productSoldId: productSold.id,
+      entitlement: createProductSoldEntitlement({
+        evidenceId: evidence.id,
+        entitlement: {
+          kind: "support-contract",
+          accountId: input.account.id,
+          contactId: null,
+          subscriptionId: input.subscription.id,
+          quantity: 1,
+          rights: {
+            planName: input.subscription.planName ?? null,
+            billingCadence: input.subscription.billingCadence ?? null,
+            autoRenew: input.subscription.autoRenew ?? null,
+          },
+          validFrom: observedAt,
+          validTo: input.subscription.renewalDate ?? null,
+        },
+      }),
+    });
+    if (input.edgeNodeId) {
+      await persistProductFulfillmentInstance({
+        db: prisma,
+        organizationId: productSold.organizationId,
+        productSoldId: productSold.id,
+        instance: createTypedFulfillmentInstance({
+          evidenceId: evidence.id,
+          kind: "supported-instance",
+          status: "active",
+          targets: {
+            storefrontBookingId: null,
+            rentalAgreementId: null,
+            rentableUnitId: null,
+            edgeNodeId: input.edgeNodeId,
+          },
+          snapshot: {
+            edgeNodeId: input.edgeNodeId,
+            subscriptionRef:
+              input.subscription.subscriptionRef ?? input.subscription.id,
+          },
+        }),
+      });
+    }
+  }
 }
 
 /**
@@ -70,10 +198,22 @@ export async function convertOrderToSubscription(
 ) {
   const order = await prisma.salesOrder.findUnique({
     where: { id: salesOrderId },
-    include: { account: { select: { id: true, name: true } }, subscription: true },
+    include: {
+      account: { select: { id: true, accountId: true, name: true } },
+      subscription: true,
+    },
   });
   if (!order) throw new Error("Sales order not found");
-  if (order.subscription) return order.subscription;
+  if (order.subscription) {
+    await attachSupportSubscriptionTrace({
+      salesOrderId: order.id,
+      orderRef: order.orderRef,
+      account: order.account,
+      subscription: order.subscription,
+      edgeNodeId: opts.edgeNodeId,
+    });
+    return order.subscription;
+  }
 
   const cadence = opts.billingCadence ?? "annual";
   const months = CADENCE_MONTHS[cadence] ?? 12;
@@ -104,6 +244,14 @@ export async function convertOrderToSubscription(
       .update({ where: { id: opts.edgeNodeId }, data: { subscriptionId: subscription.id } })
       .catch(() => {});
   }
+
+  await attachSupportSubscriptionTrace({
+    salesOrderId: order.id,
+    orderRef: order.orderRef,
+    account: order.account,
+    subscription,
+    edgeNodeId: opts.edgeNodeId,
+  });
 
   // Auto-renewing contracts get a paired RecurringSchedule so the existing
   // daily recurring-invoice cron (generateDueInvoices) mints each renewal
