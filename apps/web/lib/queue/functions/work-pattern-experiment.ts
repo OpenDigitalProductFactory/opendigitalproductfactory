@@ -13,6 +13,9 @@ export type RunWorkPatternExperimentDeps = {
     parentTaskRunId: string,
     cells: ExperimentQueueCell[],
   ) => Promise<unknown> | unknown;
+  promote: (
+    parentTaskRunId: string,
+  ) => Promise<unknown> | unknown;
   transition: (
     parentTaskRunId: string,
     lifecycle: "running" | "analyzing" | "completed",
@@ -35,6 +38,7 @@ export async function runWorkPatternExperiment(
   }
   await deps.transition(input.parentTaskRunId, "analyzing");
   await deps.analyze(input.parentTaskRunId, await deps.loadCells(input.parentTaskRunId));
+  await deps.promote(input.parentTaskRunId);
   await deps.transition(input.parentTaskRunId, "completed");
   return { executed };
 }
@@ -189,6 +193,12 @@ export const workPatternExperimentRun = inngest.createFunction(
                 } as never,
               },
             });
+          },
+          promote: async (taskRunId) => {
+            const {
+              promoteCompletedWorkPatternExperiment,
+            } = await import("@/lib/tak/work-pattern-experiment-promotion");
+            return promoteCompletedWorkPatternExperiment(taskRunId);
           },
           transition: (taskRunId, lifecycle) =>
             transitionWorkPatternExperiment(taskRunId, lifecycle, { persistence }),

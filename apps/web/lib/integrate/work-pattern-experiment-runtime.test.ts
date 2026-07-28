@@ -99,6 +99,13 @@ describe("executePersistedWorkPatternExperimentCell", () => {
       }),
     );
     expect(runtime.recordEvidence).toHaveBeenCalledTimes(2);
+    expect(runtime.recordEvidence).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        observationKind: "assignment",
+        proposedDecision: request(),
+      }),
+    );
     expect(runtime.markWorking).toHaveBeenCalledWith({
       taskRunId: "TR-CELL-1",
       a2aMetadata: { workPatternExperimentCell: { attempt: 1 } },

@@ -15,6 +15,7 @@ describe("runWorkPatternExperiment", () => {
       .mockRejectedValueOnce(new Error("interrupted"));
     const transition = vi.fn();
     const analyze = vi.fn();
+    const promote = vi.fn();
 
     await expect(
       runWorkPatternExperiment(
@@ -23,6 +24,7 @@ describe("runWorkPatternExperiment", () => {
           loadCells: vi.fn().mockResolvedValue(cells),
           executeCell,
           analyze,
+          promote,
           transition,
         },
       ),
@@ -37,6 +39,7 @@ describe("runWorkPatternExperiment", () => {
         loadCells: vi.fn().mockResolvedValue(cells),
         executeCell,
         analyze,
+        promote,
         transition,
       },
     );
@@ -45,11 +48,19 @@ describe("runWorkPatternExperiment", () => {
     expect(executeCell).toHaveBeenCalledWith(cells[2]);
     expect(analyze).toHaveBeenCalledTimes(1);
     expect(analyze).toHaveBeenCalledWith("TR-PARENT", cells);
+    expect(promote).toHaveBeenCalledTimes(1);
+    expect(promote).toHaveBeenCalledWith("TR-PARENT");
     expect(transition.mock.calls.map((call) => call[1])).toEqual([
       "running",
       "running",
       "analyzing",
       "completed",
     ]);
+    expect(analyze.mock.invocationCallOrder[0]).toBeLessThan(
+      promote.mock.invocationCallOrder[0]!,
+    );
+    expect(promote.mock.invocationCallOrder[0]).toBeLessThan(
+      transition.mock.invocationCallOrder.at(-1)!,
+    );
   });
 });

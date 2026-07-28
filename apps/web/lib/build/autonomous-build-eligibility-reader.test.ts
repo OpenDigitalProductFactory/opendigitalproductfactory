@@ -72,6 +72,60 @@ describe("selectActiveWorkPatternAttribution", () => {
       scopeMatches: false,
     });
   });
+
+  it("keeps same-install authority usable when the only blocker describes broader promotion", () => {
+    expect(selectActiveWorkPatternAttribution([
+      binding({
+        authorityScope: {
+          ...binding().authorityScope,
+          blockers: [
+            "broader_scope_requires_portable_corpus_or_customer_corroboration",
+          ],
+        },
+      }),
+    ], {
+      activityKey: "build-studio.delivery",
+      installScope: "dpf_dogfood",
+      taskCorpusKey: "build-studio-low-risk",
+      modelProfileId: "quality-first",
+      now: new Date("2026-07-27T13:00:00.000Z"),
+      freshnessWindowMs: 3_600_000,
+    })).toMatchObject({
+      bindingStatus: "active",
+      patternVersion: 2,
+      scopeMatches: true,
+    });
+  });
+
+  it("selects the in-scope active binding when another model lane is also active", () => {
+    const frontier = binding({
+      bindingId: "AB-frontier",
+      authorityScope: {
+        ...binding().authorityScope,
+        modelProfileIds: ["frontier-coding"],
+      },
+    });
+    const local = binding({
+      bindingId: "AB-local",
+      authorityScope: {
+        ...binding().authorityScope,
+        modelProfileIds: ["local-coding"],
+      },
+    });
+
+    expect(selectActiveWorkPatternAttribution([frontier, local], {
+      activityKey: "build-studio.delivery",
+      installScope: "dpf_dogfood",
+      taskCorpusKey: "build-studio-low-risk",
+      modelProfileId: "local-coding",
+      now: new Date("2026-07-27T13:00:00.000Z"),
+      freshnessWindowMs: 3_600_000,
+    })).toMatchObject({
+      bindingStatus: "active",
+      patternVersion: 2,
+      scopeMatches: true,
+    });
+  });
 });
 
 describe("readAutonomousBuildEligibility", () => {

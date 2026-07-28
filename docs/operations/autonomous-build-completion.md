@@ -35,6 +35,23 @@ Build, merge-queue, and self-upgrade records remain the owners of authority and 
 `BuildPhaseRun.executionProfileRef` and TaskRun metadata record the method version, model profile,
 provider, and model actually used.
 
+## Experiment promotion
+
+When a governed work-pattern experiment finishes, Build Studio analyzes and promotes its evidence
+before completing the parent run. Promotion is automatic only when the versioned policy clears it:
+each model lane needs at least eight comparable baseline/candidate pairs, a complete factorial
+matrix, fresh evidence, no reproduced blocking finding or commandment regression, and no
+regulatory human-control requirement. For `build.implement`, every qualifying pair must include a
+passing production build; inference-only replay evidence remains useful shadow evidence but cannot
+authorize an autonomous build lane.
+
+The first qualifying same-install promotion creates a rollback-safe baseline binding and then
+activates the candidate binding in the same serialized transaction. The candidate is scoped to the
+exact install, corpus, activity, risk, and model profile proved by the experiment. A note that
+portable or customer corroboration is required for broader scope does not block that local binding;
+it continues to block fleet or customer promotion. Separate model profiles receive separate
+activation lanes, and regulatory or authority ceilings still escalate instead of activating.
+
 ## Autonomous path
 
 ```text
@@ -122,6 +139,25 @@ rollback is required.
 - Confirm merged work waits for governed self-upgrade and exact deployed-SHA evidence.
 - Confirm the operator band in light/dark and narrow/wide viewports, including collapsed engineer
   details and stale-heartbeat attention.
+
+## Design grounding
+
+- Existing specs/plans reviewed:
+  [governed playbook experimentation and autonomous Build Studio design](../superpowers/specs/2026-07-25-governed-playbook-experimentation-autonomous-build-studio-design.md)
+  and its
+  [implementation plan](../superpowers/plans/2026-07-25-governed-playbook-experimentation-autonomous-build-studio-plan.md).
+- Current code substrate reviewed:
+  `work-pattern-activation`, `work-pattern-activation-persistence`,
+  `work-pattern-effective-ledger`, `work-pattern-binding-reader`,
+  `work-pattern-promotion-policy`, `work-pattern-experiment-store`,
+  `work-pattern-experiment-runtime`, the experiment queue function, and
+  `autonomous-build-eligibility-reader`.
+- Source of truth: effective, non-superseded `DecisionShadowLedger` assignment and outcome
+  evidence governs promotion; `AuthorityBinding` governs the active scope/model lane; `TaskRun`
+  supplies lifecycle and parent/child status only.
+- Decision: extend those substrates with fail-closed automatic same-install activation. Require
+  complete, fresh, comparable evidence and `productionBuild=pass` for `build.implement`; preserve
+  scoped rollback and authority-ceiling escalation; never synthesize qualifying build evidence.
 
 ## Related contracts
 

@@ -4056,11 +4056,13 @@
         "autonomous-build-studio-operator-runbook",
         "control-switches",
         "eligibility-contract",
+        "experiment-promotion",
         "autonomous-path",
         "bounded-recovery",
         "what-the-operator-sees",
         "rollout-and-rollback",
         "verification-checklist",
+        "design-grounding",
         "related-contracts"
       ]
     },

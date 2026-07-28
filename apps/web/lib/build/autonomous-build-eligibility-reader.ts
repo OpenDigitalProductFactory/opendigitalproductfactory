@@ -49,6 +49,29 @@ function containsOrUnscoped(
   return requested != null && declared.includes(requested);
 }
 
+const NON_BLOCKING_SCOPE_NOTES = new Set([
+  "broader_scope_requires_portable_corpus_or_customer_corroboration",
+]);
+
+function hasAuthorityBlocker(blockers: readonly string[]): boolean {
+  return blockers.some((blocker) => !NON_BLOCKING_SCOPE_NOTES.has(blocker));
+}
+
+function bindingMatchesScope(
+  binding: WorkPatternBindingRecord,
+  scope: AutonomousBuildBindingScope,
+): boolean {
+  const authority = binding.authorityScope;
+  return (
+    authority.activityKey === scope.activityKey
+    && authority.installScopes.includes(scope.installScope)
+    && containsOrUnscoped(authority.organizationIds, scope.organizationId)
+    && authority.taskCorpusKeys.includes(scope.taskCorpusKey)
+    && authority.modelProfileIds.includes(scope.modelProfileId)
+    && !hasAuthorityBlocker(authority.blockers)
+  );
+}
+
 export function selectActiveWorkPatternAttribution(
   bindings: readonly WorkPatternBindingRecord[],
   scope: AutonomousBuildBindingScope,
@@ -63,17 +86,14 @@ export function selectActiveWorkPatternBinding(
   binding: WorkPatternBindingRecord;
   attribution: AutonomousBuildAttribution;
 } | null {
-  const active = bindings.find((binding) => binding.status === "active");
+  const activeBindings = bindings.filter((binding) => binding.status === "active");
+  const active =
+    activeBindings.find((binding) => bindingMatchesScope(binding, scope))
+    ?? activeBindings[0];
   if (!active) return null;
 
   const authority = active.authorityScope;
-  const scopeMatches =
-    authority.activityKey === scope.activityKey
-    && authority.installScopes.includes(scope.installScope)
-    && containsOrUnscoped(authority.organizationIds, scope.organizationId)
-    && authority.taskCorpusKeys.includes(scope.taskCorpusKey)
-    && authority.modelProfileIds.includes(scope.modelProfileId)
-    && authority.blockers.length === 0;
+  const scopeMatches = bindingMatchesScope(active, scope);
   const nowMs = (scope.now ?? new Date()).getTime();
   const evidenceMs = Date.parse(authority.evidenceFreshnessAt);
   const evidenceFresh =
