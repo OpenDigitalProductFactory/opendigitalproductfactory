@@ -99,7 +99,10 @@ export function WorkspaceCalendar({
     anchorRect: { top: number; left: number; width: number; height: number };
   } | null>(null);
   const [liveEvents, setLiveEvents] = useState<CalendarEventView[]>(initialEvents);
-  const [fetching, setFetching] = useState(false);
+  // FullCalendar always resolves its visible range after mount and asks for a
+  // range-density refresh. Treat that first request as initial-load work so
+  // automated UX measurement cannot race the server events and refreshed set.
+  const [fetching, setFetching] = useState(true);
 
   function toggleCategory(cat: string) {
     const next = new Set(hiddenCategories);
@@ -218,7 +221,10 @@ export function WorkspaceCalendar({
   );
 
   return (
-    <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+    <div
+      className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
+      data-dpf-ux-settle={fetching ? "pending" : undefined}
+    >
       {/* Filter toolbar */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
         <span className="text-[10px] text-[var(--dpf-muted)] uppercase tracking-widest mr-2">Filter:</span>

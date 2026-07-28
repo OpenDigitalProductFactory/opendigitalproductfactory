@@ -99,6 +99,30 @@ describe("getSpeechToTextReadiness", () => {
     expect(result.reason).toMatch(/http:\/\/dpf-stt:8000/);
   });
 
+  it("does not expose runner-specific network errors in operator readiness copy", async () => {
+    mocks.fetch.mockRejectedValueOnce(new Error("getaddrinfo ENOTFOUND dpf-stt"));
+    mocks.findFirstPerf.mockResolvedValueOnce({
+      endpointId: "profile-cuid",
+      blocked: false,
+    });
+    mocks.findProfile.mockResolvedValueOnce({
+      providerId: "speaches",
+      modelId: "base",
+      modelStatus: "active",
+      provider: {
+        name: "Local STT (whisper-server)",
+        baseUrl: "http://dpf-stt:8000",
+        authMethod: "none",
+        status: "active",
+      },
+    });
+
+    const result = await getSpeechToTextReadiness();
+
+    expect(result.reason).toContain("health probe failed: endpoint unavailable");
+    expect(result.reason).not.toContain("ENOTFOUND");
+  });
+
   it("returns 'unhealthy' when the local sidecar does not advertise the selected model", async () => {
     mocks.fetch.mockResolvedValueOnce(
       new Response(JSON.stringify({ data: [{ id: "tiny.en" }] }), { status: 200 }),

@@ -10,7 +10,6 @@
  */
 
 import { prisma } from "@dpf/db";
-import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 /**
  * Readiness status surfaced in the admin Communications hub card.
@@ -62,9 +61,12 @@ async function probeLocalTranscriptionEndpoint(
           .filter((id): id is string => id !== null)
       : [];
     return { ok: true, modelIds };
-  } catch (err) {
-    const message = getErrorMessage(err);
-    return { ok: false, reason: `health probe failed: ${message}` };
+  } catch {
+    // Node/undici surfaces DNS, connection, and timeout failures with
+    // platform-specific strings. Those internals are not useful operator copy
+    // and made identical UX sweeps vary by runner networking. Keep the
+    // actionable category stable; the provider URL is added by the caller.
+    return { ok: false, reason: "health probe failed: endpoint unavailable" };
   }
 }
 

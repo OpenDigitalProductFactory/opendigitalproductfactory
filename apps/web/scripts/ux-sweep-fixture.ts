@@ -20,23 +20,19 @@
  */
 import { prisma } from "@dpf/db";
 
+import { convergeUxSweepFixture } from "./ux-sweep-fixture-core.mjs";
+
 void (async () => {
   try {
-    const alreadyComplete = await prisma.platformSetupProgress.findFirst({
-      where: { completedAt: { not: null } },
-      select: { id: true },
-    });
-
-    if (alreadyComplete) {
-      console.error("[ux-sweep-fixture] platform setup already complete — nothing to do");
-      return;
-    }
-
-    const row = await prisma.platformSetupProgress.create({
-      data: { currentStep: "complete", completedAt: new Date() },
-      select: { id: true },
-    });
-    console.error(`[ux-sweep-fixture] marked platform setup complete (${row.id})`);
+    const result = await convergeUxSweepFixture(prisma);
+    console.error(
+      result.setupChanged
+        ? `[ux-sweep-fixture] marked platform setup complete (${result.setupProgressId})`
+        : `[ux-sweep-fixture] platform setup already complete (${result.setupProgressId})`,
+    );
+    console.error(
+      `[ux-sweep-fixture] refreshed ${result.refreshedRuntimeTargets} running root-portal heartbeat(s)`,
+    );
   } catch (err) {
     console.error("[ux-sweep-fixture] failed:", err);
     process.exit(1);
