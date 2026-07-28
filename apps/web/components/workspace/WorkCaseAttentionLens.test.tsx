@@ -61,13 +61,14 @@ const fixture: WorkspaceWorkCaseLensView = {
 };
 
 describe("WorkCaseAttentionLens", () => {
-  it("renders attention cases before the full queue and links to case detail", () => {
+  it("renders attention rooms before the full queue and preserves the case detail URL", () => {
     const html = renderToStaticMarkup(<WorkCaseAttentionLens view={fixture} />);
 
-    expect(html).toContain("Work Cases");
-    expect(html.indexOf("Needs attention")).toBeLessThan(html.indexOf("All active cases"));
+    expect(html).toContain("My Work");
+    expect(html.indexOf("Needs attention")).toBeLessThan(html.indexOf("All active rooms"));
     expect(html).toContain("Confirm condenser appointment");
     expect(html).toContain('href="/workspace/cases/booking%3ABK-1"');
+    expect(html).toContain("Open room");
   });
 
   it("renders a mobile-first today strip for urgent attention cases", () => {
@@ -92,7 +93,7 @@ describe("WorkCaseAttentionLens", () => {
       <WorkCaseAttentionLens view={{ ...fixture, cases: [], stats: { total: 0, needsAttention: 0, active: 0, unassigned: 0, dueSoon: 0 } }} />,
     );
 
-    expect(html).toContain("No active Work Cases");
-    expect(html).toContain("New work will appear here after it is assigned or made available for claiming.");
+    expect(html).toContain("No active Work Rooms");
+    expect(html).toContain("New rooms will appear here when work is assigned or made available for claiming.");
   });
 });

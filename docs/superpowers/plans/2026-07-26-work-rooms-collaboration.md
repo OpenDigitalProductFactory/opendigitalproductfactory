@@ -201,6 +201,20 @@ The existing Work Case detail route becomes a Work Room experience that is under
 - Compose report-kit for generic status/data display.
 - Keep touch targets at least 44px where practical and preserve visible focus.
 
+### UX fit review
+
+- Decision: `fits-with-guardrails`.
+- Primary persona: founder, operator, or employee coordinating a bounded company outcome with people and AI coworkers.
+- Navigation layer: local page navigation and contextual actions only; the canonical detail URL remains `/workspace/cases/[caseKey]`.
+- Reuse and convergence: retain the Workspace Work Case loader and route, compose report-kit status and notice primitives, and extract focused room components from the existing monolithic detail view.
+- Source truth: `WorkspaceWorkCaseDetailView.room` is the visible collaboration contract. The legacy summary remains compatibility data, not a second room model.
+- First viewport: name the outcome, attention reason, accountable participant, participant group, and next action before activity or diagnostics.
+- Empty/failure behavior: distinguish an incomplete boundary from an unavailable source. Each state explains what is known and gives one safe next action; permission denial remains a non-disclosing route-level not-found response.
+- AI boundary: informational disclosure controls do not send prompts. This slice adds no coworker-starting action; any future launcher must preview context and require explicit confirmation.
+- Mental model: use **My Work**, **Work Room**, **Activity**, **Outcome**, and **Room details** in user-facing copy. Preserve **Work Case** only in implementation and technical documentation where the underlying governed record matters.
+- Evidence before merge: focused component tests, source-unavailable and incomplete-boundary fixtures, permission non-disclosure regression, theme scan, production build, and desktop/narrow keyboard-accessible browser exercise.
+- Captured in: this implementation plan, BI-32E26F62.
+
 ### Verification
 
 - focused route/component Vitest;
