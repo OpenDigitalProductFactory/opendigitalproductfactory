@@ -25,6 +25,7 @@ export type ProposedBy = "schedule" | "gap-detection" | "user";
 export type ApprovedProposal = {
   proposalId: string;
   organizationId: string;
+  digitalProductId: string | null;
   topic: string;
   query: string;
 };
@@ -50,6 +51,8 @@ function db(deps: { db?: ResearchProposalClient }): ResearchProposalClient {
 
 export type ProposeResearchInput = {
   organizationId: string;
+  /** Null/omitted means organization-wide research. Never infer this link. */
+  digitalProductId?: string | null;
   topic: string;
   query: string;
   proposedBy?: ProposedBy;
@@ -67,7 +70,12 @@ export async function proposeResearch(
   const client = db(deps);
 
   const existing = (await client.researchProposal.findFirst({
-    where: { organizationId: input.organizationId, topic: input.topic, status: "pending" },
+    where: {
+      organizationId: input.organizationId,
+      digitalProductId: input.digitalProductId ?? null,
+      topic: input.topic,
+      status: "pending",
+    },
     select: { proposalId: true },
   })) as { proposalId: string } | null;
   if (existing) return { proposalId: existing.proposalId, created: false };
@@ -75,6 +83,7 @@ export async function proposeResearch(
   const created = (await client.researchProposal.create({
     data: {
       organizationId: input.organizationId,
+      digitalProductId: input.digitalProductId ?? null,
       topic: input.topic,
       query: input.query,
       status: "pending",
@@ -100,7 +109,14 @@ export async function approveResearch(
 
   const row = (await client.researchProposal.findFirst({
     where: { proposalId: input.proposalId },
-    select: { proposalId: true, organizationId: true, topic: true, query: true, status: true },
+    select: {
+      proposalId: true,
+      organizationId: true,
+      digitalProductId: true,
+      topic: true,
+      query: true,
+      status: true,
+    },
   })) as (ApprovedProposal & { status: string }) | null;
 
   if (!row || row.status !== "pending") return { approved: false, proposal: null };
@@ -113,6 +129,7 @@ export async function approveResearch(
   const proposal: ApprovedProposal = {
     proposalId: row.proposalId,
     organizationId: row.organizationId,
+    digitalProductId: row.digitalProductId,
     topic: row.topic,
     query: row.query,
   };
@@ -148,6 +165,7 @@ export async function declineResearch(
 
 export type PendingResearchProposal = {
   proposalId: string;
+  digitalProductId: string | null;
   topic: string;
   query: string;
   proposedBy: string;
@@ -163,6 +181,13 @@ export async function listPendingResearchProposals(
   return (await client.researchProposal.findMany({
     where: { organizationId, status: "pending" },
     orderBy: { proposedAt: "desc" },
-    select: { proposalId: true, topic: true, query: true, proposedBy: true, proposedAt: true },
+    select: {
+      proposalId: true,
+      digitalProductId: true,
+      topic: true,
+      query: true,
+      proposedBy: true,
+      proposedAt: true,
+    },
   })) as PendingResearchProposal[];
 }

@@ -8,7 +8,13 @@ export const inngest = new Inngest({ id: "dpf-platform" });
  *  approval seam; handled by research-execute.ts). */
 export interface ResearchExecuteRunEvent {
   name: "research/execute.run";
-  data: { proposalId: string; organizationId: string; topic: string; query: string };
+  data: {
+    proposalId: string;
+    organizationId: string;
+    digitalProductId: string | null;
+    topic: string;
+    query: string;
+  };
 }
 
 /** EP-INTAKE-UNIFY Phase 4 / BI-EDFBE081: project a freshly-created OPEN

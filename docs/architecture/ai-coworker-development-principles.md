@@ -307,6 +307,14 @@ subscriber, entitlement, or consumer.
   attributes and must not be summed into a second revenue total;
 - query `product-sold-query.ts` for historical purchase/use context rather
   than rebuilding joins across orders, bookings, rentals, and subscriptions;
+- query `product-operating-context-query.ts` for product-management context
+  instead of reconstructing organization, product-line, commercial,
+  intelligence, demand, delivery, and architecture joins in prompts or routes;
+- keep organization-wide research and battlecards distinct from records with
+  an explicit `digitalProductId`; never infer product scope from topic, prompt,
+  route, title, or similar names;
+- treat an `unavailable` context slice as a missing typed association, not as
+  zero activity or permission to fabricate a placeholder;
 - treat names and emails on transaction evidence as evidence-only unless a
   canonical account/contact party link exists;
 - describe entitlements and fulfillment instances only when their typed,

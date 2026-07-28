@@ -31,7 +31,13 @@ function makeDeps(over: Partial<ResearchExecutionDeps> = {}): {
   return { deps, updates };
 }
 
-const INPUT = { proposalId: "rp_1", organizationId: "org_1", topic: "competitive-landscape", query: "HVAC competitors" };
+const INPUT = {
+  proposalId: "rp_1",
+  organizationId: "org_1",
+  digitalProductId: "digital-product-1",
+  topic: "competitive-landscape",
+  query: "HVAC competitors",
+};
 
 describe("runResearchExecution", () => {
   it("runs research, enriches the corpus, and marks the proposal executed", async () => {
@@ -48,7 +54,11 @@ describe("runResearchExecution", () => {
       trust: "researched",
       provenance: { sourceType: "research" },
     });
-    expect(enrichArg.provenance.sourceRef).toMatchObject({ proposalId: "rp_1", topic: "competitive-landscape" });
+    expect(enrichArg.provenance.sourceRef).toMatchObject({
+      proposalId: "rp_1",
+      digitalProductId: "digital-product-1",
+      topic: "competitive-landscape",
+    });
 
     // proposal updated to executed with a summary + executedAt
     expect(updates).toHaveLength(1);

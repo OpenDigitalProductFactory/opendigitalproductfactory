@@ -21,13 +21,19 @@ function makeFakeDb(seed: Row[] = []) {
             (r) =>
               (w.proposalId === undefined || r.proposalId === w.proposalId) &&
               (w.organizationId === undefined || r.organizationId === w.organizationId) &&
+              (w.digitalProductId === undefined || r.digitalProductId === w.digitalProductId) &&
               (w.topic === undefined || r.topic === w.topic) &&
               (w.status === undefined || r.status === w.status),
           ) ?? null
         );
       }),
       create: vi.fn(async (args: any) => {
-        const row = { proposalId: `rp_${++seq}`, status: "pending", ...args.data };
+        const row = {
+          proposalId: `rp_${++seq}`,
+          digitalProductId: null,
+          status: "pending",
+          ...args.data,
+        };
         rows.push(row);
         return row;
       }),
@@ -57,7 +63,13 @@ describe("proposeResearch", () => {
 
   it("dedups to the existing pending proposal for the same org+topic", async () => {
     const fake = makeFakeDb([
-      { proposalId: "rp_existing", organizationId: ORG, topic: "competitive-landscape", status: "pending" },
+      {
+        proposalId: "rp_existing",
+        organizationId: ORG,
+        digitalProductId: null,
+        topic: "competitive-landscape",
+        status: "pending",
+      },
     ]);
     const res = await proposeResearch(
       { organizationId: ORG, topic: "competitive-landscape", query: "again" },
@@ -67,12 +79,45 @@ describe("proposeResearch", () => {
     expect(res.proposalId).toBe("rp_existing");
     expect(fake.rows).toHaveLength(1);
   });
+
+  it("keeps organization-wide and product-specific proposals distinct", async () => {
+    const fake = makeFakeDb([
+      {
+        proposalId: "rp_org",
+        organizationId: ORG,
+        digitalProductId: null,
+        topic: "competitive-landscape",
+        status: "pending",
+      },
+    ]);
+    const res = await proposeResearch(
+      {
+        organizationId: ORG,
+        digitalProductId: "digital-product-1",
+        topic: "competitive-landscape",
+        query: "booking competitors",
+      },
+      { db: fake.db },
+    );
+
+    expect(res.created).toBe(true);
+    expect(fake.rows[1]).toMatchObject({
+      digitalProductId: "digital-product-1",
+    });
+  });
 });
 
 describe("approveResearch", () => {
   it("transitions pending → approved and fires the onApproved seam once", async () => {
     const fake = makeFakeDb([
-      { proposalId: "rp_1", organizationId: ORG, topic: "t", query: "q", status: "pending" },
+      {
+        proposalId: "rp_1",
+        organizationId: ORG,
+        digitalProductId: "digital-product-1",
+        topic: "t",
+        query: "q",
+        status: "pending",
+      },
     ]);
     const onApproved: OnApproved = vi.fn(async () => {});
     const res = await approveResearch({ proposalId: "rp_1", decidedByUserId: "u1" }, { db: fake.db, onApproved });
@@ -81,12 +126,23 @@ describe("approveResearch", () => {
     expect(fake.rows[0]).toMatchObject({ status: "approved", decidedByUserId: "u1" });
     expect(fake.rows[0].decidedAt).toBeTruthy();
     expect(onApproved).toHaveBeenCalledTimes(1);
-    expect((onApproved as any).mock.calls[0][0]).toMatchObject({ proposalId: "rp_1", query: "q" });
+    expect((onApproved as any).mock.calls[0][0]).toMatchObject({
+      proposalId: "rp_1",
+      digitalProductId: "digital-product-1",
+      query: "q",
+    });
   });
 
   it("is idempotent — approving a non-pending proposal does not re-fire execution", async () => {
     const fake = makeFakeDb([
-      { proposalId: "rp_1", organizationId: ORG, topic: "t", query: "q", status: "approved" },
+      {
+        proposalId: "rp_1",
+        organizationId: ORG,
+        digitalProductId: null,
+        topic: "t",
+        query: "q",
+        status: "approved",
+      },
     ]);
     const onApproved: OnApproved = vi.fn(async () => {});
     const res = await approveResearch({ proposalId: "rp_1", decidedByUserId: "u1" }, { db: fake.db, onApproved });
@@ -105,7 +161,14 @@ describe("approveResearch", () => {
 describe("declineResearch", () => {
   it("transitions pending → declined and never fires execution", async () => {
     const fake = makeFakeDb([
-      { proposalId: "rp_1", organizationId: ORG, topic: "t", query: "q", status: "pending" },
+      {
+        proposalId: "rp_1",
+        organizationId: ORG,
+        digitalProductId: null,
+        topic: "t",
+        query: "q",
+        status: "pending",
+      },
     ]);
     const res = await declineResearch({ proposalId: "rp_1", decidedByUserId: "u1" }, { db: fake.db });
     expect(res.declined).toBe(true);
@@ -114,7 +177,14 @@ describe("declineResearch", () => {
 
   it("guards against declining a non-pending proposal", async () => {
     const fake = makeFakeDb([
-      { proposalId: "rp_1", organizationId: ORG, topic: "t", query: "q", status: "executed" },
+      {
+        proposalId: "rp_1",
+        organizationId: ORG,
+        digitalProductId: null,
+        topic: "t",
+        query: "q",
+        status: "executed",
+      },
     ]);
     const res = await declineResearch({ proposalId: "rp_1", decidedByUserId: "u1" }, { db: fake.db });
     expect(res.declined).toBe(false);

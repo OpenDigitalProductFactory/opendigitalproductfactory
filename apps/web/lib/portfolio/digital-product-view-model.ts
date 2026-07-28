@@ -1,3 +1,5 @@
+import { sortNewestFirst } from "./evidence-view-adapters";
+
 /**
  * Digital product view model
  *
@@ -214,10 +216,11 @@ function projectLinkedEntities(
 function projectOpenQualityIssues(
   issues: ToDigitalProductViewModelInput["qualityIssues"],
 ): DigitalProductView["openQualityIssues"] {
-  return issues
-    .filter((i) => i.status === "open")
-    .slice() // copy before sort
-    .sort((a, b) => b.lastDetectedAt.getTime() - a.lastDetectedAt.getTime())
+  return sortNewestFirst(
+    issues.filter((issue) => issue.status === "open"),
+    (issue) => issue.lastDetectedAt,
+    (issue) => issue.id,
+  )
     .slice(0, 10)
     .map((i) => ({
       id: i.id,

@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { buildCompetitiveMatrix, type BattlecardRow } from "./battlecards";
+import {
+  battlecardScopeWhere,
+  buildCompetitiveMatrix,
+  type BattlecardRow,
+} from "./battlecards";
 
 function card(overrides: Partial<BattlecardRow> & { competitorName: string }): BattlecardRow {
   return {
     battlecardId: `bc_${overrides.competitorName}`,
+    digitalProductId: null,
     positioning: null,
     theirStrengths: [],
     theirWeaknesses: [],
@@ -62,5 +67,31 @@ describe("buildCompetitiveMatrix", () => {
       card({ competitorName: "Acme", ourDifferentiators: ["", "  ", "real"] }),
     ]);
     expect(m.coverage["Acme"]).toEqual(["real"]);
+  });
+});
+
+describe("battlecardScopeWhere", () => {
+  it("distinguishes all, organization-wide, and product-specific views", () => {
+    expect(battlecardScopeWhere({ organizationId: "org-1" })).toEqual({
+      organizationId: "org-1",
+    });
+    expect(
+      battlecardScopeWhere({
+        organizationId: "org-1",
+        digitalProductId: null,
+      }),
+    ).toEqual({
+      organizationId: "org-1",
+      digitalProductId: null,
+    });
+    expect(
+      battlecardScopeWhere({
+        organizationId: "org-1",
+        digitalProductId: "digital-1",
+      }),
+    ).toEqual({
+      organizationId: "org-1",
+      digitalProductId: "digital-1",
+    });
   });
 });
