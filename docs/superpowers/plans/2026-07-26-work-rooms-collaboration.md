@@ -240,6 +240,17 @@ Target 20-25 percent:
 
 The route continues to use the same loader. Revert the component composition to the prior `WorkCaseDetailView`; no data migration or route redirect rollback is required.
 
+### Implementation record (2026-07-28)
+
+- Preserved `/workspace/cases/[caseKey]` and composed the existing room projection into an outcome-first `WorkRoomHeader` and `WorkRoomBody`.
+- Put outcome, attention, accountability, participant summary, and next action ahead of activity; moved A2A/source diagnostics under **Room details**.
+- Integrated the existing update composer into Activity and kept informational disclosure controls prompt-free.
+- Added honest incomplete-boundary, unavailable-source, missing-projection, permission non-disclosure, customer-portal segregation, and unavailable-AI-coworker states. A coworker availability issue opens the participant disclosure and gives one safe continuation path.
+- Refactoring accounted for at least 25 percent of the slice: the monolithic detail component was split by responsibility, repeated room status intent moved into report-kit, and comment/activity presentation converged.
+- Current source evidence: 6 affected test files / 31 tests pass; scoped route generation and web typecheck pass; secret scan and DCO hooks pass.
+- Exact merged-tree production build evidence exists for the outcome-first composition before the final unavailable-coworker hardening. Re-run the merged-tree production build after the final mainline rebase.
+- Governed desktop/narrow/keyboard browser evidence remains pending behind `BI-CF4ADDAC`; do not mark this BI done or open its PR until that evidence is captured.
+
 ## 7. BI-BA868848 — Standing cycles and Outcome Packets
 
 ### Deliverable
