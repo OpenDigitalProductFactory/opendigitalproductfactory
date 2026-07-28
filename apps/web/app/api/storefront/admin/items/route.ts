@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
+import { apiErrorResponse } from "@/lib/api/error";
 import {
   ensureStorefrontCommercialChain,
   projectStorefrontCatalogRow,
@@ -136,9 +137,10 @@ export async function POST(req: NextRequest) {
     requestedProductLineId,
   );
   if (productLineSelection.error) {
-    return NextResponse.json(
-      { error: productLineSelection.error },
-      { status: 400 },
+    return apiErrorResponse(
+      "INVALID_ARGUMENT",
+      productLineSelection.error,
+      400,
     );
   }
 

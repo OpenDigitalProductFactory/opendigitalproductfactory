@@ -255,7 +255,7 @@ export function ItemFormDialog({
                     <option key={line.id} value={line.id}>{line.name}</option>
                   ))}
                 </select>
-                <span className="mt-1 block text-[10px] text-[var(--dpf-muted)]">
+                <span className="mt-1 block text-dpf-caption text-[var(--dpf-muted)]">
                   Shown because this business sells through more than one product line.
                 </span>
               </Field>
