@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@dpf/db", () => ({
+  INVENTORY_ENTITY_CANONICAL_WHERE: {
+    mergedIntoInventoryEntityId: null,
+  },
   prisma: {
     inventoryEntity: {
       findMany: vi.fn(),
@@ -53,7 +56,11 @@ describe("countStaleEntitiesSince", () => {
 
     expect(result).toBe(4);
     expect(mockPrisma.inventoryEntity.count).toHaveBeenCalledWith({
-      where: { status: "active", lastSeenAt: { lt: runStartedAt } },
+      where: {
+        mergedIntoInventoryEntityId: null,
+        status: "active",
+        lastSeenAt: { lt: runStartedAt },
+      },
     });
   });
 });

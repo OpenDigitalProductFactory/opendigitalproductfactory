@@ -10,6 +10,9 @@ vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }));
 vi.mock("@dpf/db", () => ({
+  resolveCanonicalInventoryEntityId: vi.fn(
+    async (_prisma: unknown, inventoryEntityId: string) => inventoryEntityId,
+  ),
   prisma: {
     inventoryEntity: {
       update: vi.fn(),

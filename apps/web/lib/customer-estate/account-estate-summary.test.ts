@@ -17,7 +17,13 @@ const { mockPrisma, mockCorrelate } = vi.hoisted(() => ({
   mockCorrelate: vi.fn(),
 }));
 
-vi.mock("@dpf/db", () => ({ prisma: mockPrisma, correlateDiscoveryToEstate: mockCorrelate }));
+vi.mock("@dpf/db", () => ({
+  INVENTORY_ENTITY_CANONICAL_WHERE: {
+    mergedIntoInventoryEntityId: null,
+  },
+  prisma: mockPrisma,
+  correlateDiscoveryToEstate: mockCorrelate,
+}));
 
 import { loadCustomerEstateSummary } from "./account-estate-summary";
 

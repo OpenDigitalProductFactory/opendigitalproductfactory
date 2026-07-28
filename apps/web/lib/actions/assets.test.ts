@@ -15,6 +15,9 @@ vi.mock("@/lib/shared/new-id", () => ({
 const { mockCorrelateAssets } = vi.hoisted(() => ({ mockCorrelateAssets: vi.fn() }));
 
 vi.mock("@dpf/db", () => ({
+  INVENTORY_ENTITY_CANONICAL_WHERE: {
+    mergedIntoInventoryEntityId: null,
+  },
   prisma: {
     fixedAsset: {
       create: vi.fn(),
