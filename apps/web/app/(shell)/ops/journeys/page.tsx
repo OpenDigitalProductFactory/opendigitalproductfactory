@@ -77,11 +77,10 @@ export default async function BusinessJourneysPage({ searchParams }: Props) {
         <p className="mt-1 text-xs text-[var(--dpf-muted)]">
           {health.lastRunAt ? (
             <>
-              Last checked <LocalTime value={health.lastRunAt} />. Checks run
-              Monday, Wednesday and Friday.
+              Last checked <LocalTime value={health.lastRunAt} />. Runs Mon, Wed, Fri.
             </>
           ) : (
-            <>Checks run Monday, Wednesday and Friday.</>
+            <>Runs Mon, Wed, Fri.</>
           )}
         </p>
       </div>
@@ -110,9 +109,8 @@ export default async function BusinessJourneysPage({ searchParams }: Props) {
       )}
 
       <p className="mt-6 text-xs text-[var(--dpf-muted)]">
-        These checks never change your business records. Every check that creates
-        something does it inside a rehearsal that is undone immediately, so nothing a
-        check writes is ever kept.
+        These checks never change your business records. Anything a check creates is
+        undone straight away.
       </p>
     </div>
   );

@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 583,
+  "routeCount": 584,
   "routes": [
     {
       "routePath": "/",
@@ -5014,6 +5014,16 @@
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/ops/improvements/page.tsx",
       "redirectTo": "/ops"
+    },
+    {
+      "routePath": "/ops/journeys",
+      "kind": "page",
+      "segments": [
+        "ops",
+        "journeys"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/ops/journeys/page.tsx"
     },
     {
       "routePath": "/ops/patches",
