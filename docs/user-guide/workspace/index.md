@@ -54,6 +54,7 @@ business action until the durable operations provider confirms it.
 - **Calendar** — Upcoming dates pulled from your backlog items, leave requests, deadlines, and any scheduled events in the areas you have access to.
 - **Managed Documents** — Maintained documents with lifecycle state, versions, references, and publication status.
 - **"Needs you" inbox** — The one place for business decisions that need you now. Routine technical recovery stays with your digital team, while money leaving the business and public actions always come to you.
+- **Work Rooms** — Active, access-controlled places where people and AI coworkers coordinate toward a named outcome. A Work Room is the friendly Workspace view over a governed Work Case.
 
 ## What You Can Do
 
@@ -62,5 +63,6 @@ business action until the durable operations provider confirms it.
 - Review recent activity from colleagues and digital coworkers without leaving your workspace
 - Access your calendar for today's events and upcoming deadlines
 - Open [Managed Documents](documents.md) to review document state, versions, and references
+- Open [My Work and Work Rooms](work-rooms.md) to see the outcome, accountable participants, current attention, activity, and next action for active company work
 - Use your digital coworker to get a personalized briefing on what needs your attention
 - Open the ["Needs you" inbox](attention-inbox.md) to review plain-language decision cards, weekly batches, and the full technical record when needed

@@ -137,4 +137,32 @@ describe("workspace Work Case loader", () => {
       emphasis: "quiet",
     }));
   });
+
+  it("returns no room metadata when the scoped work item is not visible to the user", async () => {
+    let query: unknown;
+    const prismaClient: WorkspaceCasePrismaClient = {
+      workItem: {
+        findMany: async () => [],
+        findFirst: async (args) => {
+          query = args;
+          return null;
+        },
+      },
+      workItemMessage: {
+        findMany: async () => {
+          throw new Error("Messages must not load for an inaccessible room.");
+        },
+      },
+    };
+
+    const detail = await loadWorkspaceWorkCaseDetail({
+      prismaClient,
+      caseKey: "booking%3ABK-PRIVATE",
+      userId: "user-without-access",
+    });
+
+    expect(detail).toBeNull();
+    expect(JSON.stringify(query)).toContain('"assignedToUserId":"user-without-access"');
+    expect(JSON.stringify(query)).toContain('"assignedToUserId":null');
+  });
 });

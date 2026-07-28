@@ -40,26 +40,30 @@ export function WorkItemCommentBox({
   return (
     <section className="space-y-2">
       <label htmlFor="work-item-comment" className="block text-sm font-semibold text-[var(--dpf-text)]">
-        Add a comment
+        Share an update
       </label>
+      <p id="work-item-comment-help" className="text-xs leading-5 text-[var(--dpf-muted)]">
+        Add context, ask a question, or @mention a participant.
+      </p>
       <textarea
         id="work-item-comment"
+        aria-describedby="work-item-comment-help"
         value={body}
         onChange={(event) => setBody(event.target.value)}
         rows={3}
-        placeholder="Comment… use @name to notify a teammate or coworker"
-        className="w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface)] p-2 text-sm text-[var(--dpf-text)]"
+        placeholder="Write an update…"
+        className="w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface)] p-3 text-sm text-[var(--dpf-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
       />
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={submit}
           disabled={pending || body.trim().length === 0}
-          className="rounded-md bg-[var(--dpf-accent)] px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
+          className="min-h-11 rounded-md bg-[var(--dpf-accent)] px-4 text-sm font-semibold text-[var(--dpf-bg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)] disabled:opacity-50"
         >
-          {pending ? "Posting…" : "Post"}
+          {pending ? "Posting…" : "Post update"}
         </button>
-        {status && <span className="text-xs text-[var(--dpf-muted)]">{status}</span>}
+        <span aria-live="polite" className="text-xs text-[var(--dpf-muted)]">{status}</span>
       </div>
     </section>
   );

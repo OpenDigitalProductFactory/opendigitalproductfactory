@@ -10361,6 +10361,19 @@
         "key-concepts",
         "what-you-can-do"
       ]
+    },
+    "docs/user-guide/workspace/work-rooms.md": {
+      "publicHref": "/user-guide/workspace/work-rooms/",
+      "portalHref": "/docs/workspace/work-rooms",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "overview",
+        "what-you-see-first",
+        "activity-and-participants",
+        "finite-and-standing-rooms",
+        "incomplete-or-unavailable-rooms"
+      ]
     }
   }
 }

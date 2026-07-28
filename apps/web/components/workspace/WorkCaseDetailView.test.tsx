@@ -83,7 +83,7 @@ const room: WorkRoomView = {
       actorRef: { actorKind: "person", actorId: "dispatcher-1" },
       summary: "Reserved the afternoon window.",
       emphasis: "salient",
-      sourceRef: { kind: "decision", id: "DEC-1" },
+      sourceRef: { kind: "decision-interaction", id: "DEC-1" },
     },
   ],
   work: {
