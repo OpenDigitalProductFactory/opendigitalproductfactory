@@ -1,10 +1,15 @@
 # Build Studio outcome-first simplification
 
-**Backlog:** BI-IMP-78D1A439  
-**Epic:** EP-BUILD-STUDIO-UX  
-**Work Capsule:** WC-BF66038E  
-**Branch:** `feat/build-studio-simplify`  
-**Decision evidence:** DI-88CBB559FE19  
+**Backlog:** BI-IMP-78D1A439
+
+**Epic:** EP-BUILD-STUDIO-UX
+
+**Work Capsule:** WC-BF66038E
+
+**Branch:** `feat/build-studio-simplify`
+
+**Decision evidence:** DI-88CBB559FE19
+
 **Atomic coverage receipt:** cms4s3q220t6l01ruw42p5co6
 
 ## Outcome
