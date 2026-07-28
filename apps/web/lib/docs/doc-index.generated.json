@@ -830,6 +830,7 @@
         "authority-boundary",
         "canonical-and-projected-fields",
         "configurations-and-quotes",
+        "packaging-prices-promotions-and-routes",
         "fleet-safe-evolution"
       ]
     },
@@ -9934,6 +9935,7 @@
       "anchors": [
         "overview",
         "from-product-to-something-a-customer-can-select",
+        "package-and-price-a-catalog-item",
         "key-concepts",
         "what-you-can-do",
         "reading-product-health"
