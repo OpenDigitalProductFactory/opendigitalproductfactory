@@ -2,6 +2,7 @@ import { prisma } from "@dpf/db";
 import { NextRequest, NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
+import { apiErrorResponse } from "@/lib/api/error";
 import {
   executeCatalogBuilderCommand,
   type CatalogBuilderCommand,
@@ -13,7 +14,7 @@ export async function PATCH(
 ) {
   const session = await auth();
   if (!session?.user || (session.user as { type?: string }).type !== "admin") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return apiErrorResponse("UNAUTHORIZED", "Unauthorized", 401);
   }
 
   const { catalogItemId } = await params;
@@ -21,9 +22,10 @@ export async function PATCH(
     select: { organizationId: true },
   });
   if (!config) {
-    return NextResponse.json(
-      { error: "No storefront configured" },
-      { status: 404 },
+    return apiErrorResponse(
+      "NOT_FOUND",
+      "No storefront configured",
+      404,
     );
   }
 
@@ -39,9 +41,10 @@ export async function PATCH(
     },
   });
   if (!catalogItem) {
-    return NextResponse.json(
-      { error: "Catalog item is not available to this organization" },
-      { status: 404 },
+    return apiErrorResponse(
+      "NOT_FOUND",
+      "Catalog item is not available to this organization",
+      404,
     );
   }
 
@@ -54,11 +57,10 @@ export async function PATCH(
     });
     return NextResponse.json({ success: true, message });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Could not save",
-      },
-      { status: 400 },
+    return apiErrorResponse(
+      "INVALID_ARGUMENT",
+      error instanceof Error ? error.message : "Could not save",
+      400,
     );
   }
 }
