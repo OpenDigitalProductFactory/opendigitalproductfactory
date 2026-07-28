@@ -7,6 +7,7 @@ order: 3
 ## Use This Doc For
 
 - `/storefront/items`
+- `/storefront/items/[id]/purchases`
 - `/storefront/sections`
 - `/admin/storefront/items`
 - `/admin/storefront/sections`
@@ -51,3 +52,17 @@ deleted, so you never lose customer history.
 - editing internal management data without verifying customer-facing output
 - removing generated content: check the affected-artifact list in the review
   banner before confirming, since removal affects your public page
+
+## Purchase Traceability
+
+New catalog-linked direct orders write normalized order lines while retaining
+the existing Storefront order payload for compatibility. Catalog-linked
+bookings and fixed-price rentals similarly record the exact Product, Offering,
+Catalog item, provider, price, and real booking or agreement. Older unlinked
+transactions remain visible in their owning screens but are not guessed into a
+product history.
+
+Open an item's **Customer purchases and use** view to inspect these records.
+Customer names and emails captured by a booking or order remain evidence; they
+are not silently converted into customer accounts or consumers. Usage-based
+rentals appear only after an actual charge provides an amount.

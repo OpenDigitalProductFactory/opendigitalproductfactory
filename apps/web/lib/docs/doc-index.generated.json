@@ -831,6 +831,7 @@
         "canonical-and-projected-fields",
         "configurations-and-quotes",
         "packaging-prices-promotions-and-routes",
+        "product-sold-ledger",
         "fleet-safe-evolution"
       ]
     },
@@ -9934,6 +9935,7 @@
         "overview",
         "from-product-to-something-a-customer-can-select",
         "package-and-price-a-catalog-item",
+        "review-customer-purchases-and-use",
         "key-concepts",
         "what-you-can-do",
         "reading-product-health"
@@ -9992,7 +9994,8 @@
         "workflow",
         "managing-a-row",
         "fixing-generated-content-that-doesnt-fit",
-        "what-to-watch"
+        "what-to-watch",
+        "purchase-traceability"
       ]
     },
     "docs/user-guide/storefront/inbox-and-enquiries.md": {
