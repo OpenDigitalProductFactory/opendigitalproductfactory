@@ -12,7 +12,7 @@ vi.mock("@/lib/permissions", () => ({
 
 vi.mock("@dpf/db", () => ({
   prisma: {
-    country: { findUnique: vi.fn(), update: vi.fn() },
+    country: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn() },
     region: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn() },
     city: { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn(), findMany: vi.fn() },
     address: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn(), count: vi.fn() },
@@ -39,6 +39,9 @@ import {
   mergeCity,
   previewRegionMerge,
   mergeRegion,
+  searchAdminRegions,
+  searchRegionMergeCandidates,
+  searchCityMergeCandidates,
 } from "./reference-data-admin";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -99,6 +102,88 @@ describe("authorization", () => {
       postalCode: "12345",
     })).toEqual({ ok: false, message: "Unauthorized" });
     expect(await unlinkWorkLocationAddress("loc1")).toEqual({ ok: false, message: "Unauthorized" });
+  });
+});
+
+// ─── Bounded admin reference search ──────────────────────────────────────────
+
+describe("bounded admin reference search", () => {
+  it("searches regions across countries with an explicit result bound", async () => {
+    mockAdmin();
+    vi.mocked(prisma.region.findMany).mockResolvedValue([] as never);
+
+    await searchAdminRegions("new");
+
+    expect(prisma.region.findMany).toHaveBeenCalledWith({
+      where: {
+        status: "active",
+        OR: [
+          { name: { contains: "new", mode: "insensitive" } },
+          { code: { contains: "new", mode: "insensitive" } },
+          { country: { name: { contains: "new", mode: "insensitive" } } },
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        country: { select: { id: true, name: true, iso2: true } },
+      },
+      orderBy: [{ name: "asc" }, { country: { name: "asc" } }],
+      take: 20,
+    });
+  });
+
+  it("scopes region merge candidates and excludes the loser", async () => {
+    mockAdmin();
+    vi.mocked(prisma.region.findMany).mockResolvedValue([] as never);
+
+    await searchRegionMergeCandidates("country-1", "loser-1", "south");
+
+    expect(prisma.region.findMany).toHaveBeenCalledWith({
+      where: {
+        countryId: "country-1",
+        id: { not: "loser-1" },
+        status: "active",
+        OR: [
+          { name: { contains: "south", mode: "insensitive" } },
+          { code: { contains: "south", mode: "insensitive" } },
+        ],
+      },
+      select: { id: true, name: true, code: true },
+      orderBy: { name: "asc" },
+      take: 20,
+    });
+  });
+
+  it("scopes city merge candidates and excludes the loser", async () => {
+    mockAdmin();
+    vi.mocked(prisma.city.findMany).mockResolvedValue([] as never);
+
+    await searchCityMergeCandidates("region-1", "loser-1", "spring");
+
+    expect(prisma.city.findMany).toHaveBeenCalledWith({
+      where: {
+        regionId: "region-1",
+        id: { not: "loser-1" },
+        status: "active",
+        name: { contains: "spring", mode: "insensitive" },
+      },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+      take: 20,
+    });
+  });
+
+  it("does not query for empty or unauthorized searches", async () => {
+    mockAdmin();
+    expect(await searchAdminRegions("  ")).toEqual([]);
+    expect(prisma.region.findMany).not.toHaveBeenCalled();
+
+    vi.clearAllMocks();
+    mockNonAdmin();
+    expect(await searchAdminRegions("new")).toEqual([]);
+    expect(prisma.region.findMany).not.toHaveBeenCalled();
   });
 });
 

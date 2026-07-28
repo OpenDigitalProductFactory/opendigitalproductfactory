@@ -17,6 +17,11 @@ import {
   linkWorkLocationAddress,
   unlinkWorkLocationAddress,
 } from "@/lib/actions/reference-data-admin";
+import {
+  ReferenceDataPagination,
+  ReferenceDataSearch,
+} from "@/components/admin/ReferenceDataControls";
+import type { PageWindow } from "@/lib/admin/reference-data-read-model";
 
 type Address = {
   id: string;
@@ -45,6 +50,8 @@ type WorkLocation = {
 
 type Props = {
   workLocations: WorkLocation[];
+  query: string;
+  window: PageWindow;
 };
 
 const LABEL_OPTIONS = [
@@ -92,7 +99,7 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-export function WorkLocationPanel({ workLocations }: Props) {
+export function WorkLocationPanel({ workLocations, query, window }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(true);
@@ -184,18 +191,27 @@ export function WorkLocationPanel({ workLocations }: Props) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls="work-location-panel-content"
         className="flex w-full items-center justify-between text-left"
       >
         <h3 className="text-sm font-semibold text-[var(--dpf-text)]">
-          Work Locations ({workLocations.length})
+          Work Locations ({window.total.toLocaleString()} matching)
         </h3>
-        <span className="text-[var(--dpf-muted)] text-sm">
+        <span aria-hidden="true" className="text-sm text-[var(--dpf-muted)]">
           {open ? "▾" : "▸"}
         </span>
       </button>
 
       {open && (
-        <div className="mt-3 space-y-3">
+        <div id="work-location-panel-content" className="mt-3 space-y-3">
+          <ReferenceDataSearch
+            label="Find work locations"
+            query={query}
+            queryParam="workLocationQ"
+            pageParam="workLocationPage"
+            placeholder="Filter by work location name..."
+          />
           {workLocations.map((loc) => (
             <div
               key={loc.id}
@@ -343,9 +359,14 @@ export function WorkLocationPanel({ workLocations }: Props) {
 
           {workLocations.length === 0 && (
             <p className="px-3 py-2 text-xs text-[var(--dpf-muted)]">
-              No work locations defined.
+              No work locations match your filter.
             </p>
           )}
+          <ReferenceDataPagination
+            label="Work location results"
+            window={window}
+            pageParam="workLocationPage"
+          />
         </div>
       )}
     </div>

@@ -221,7 +221,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 4
+    "textMass": 44
   },
   "apps/web/app/(shell)/admin/research/page.tsx": {
     "vocabulary": 0,
@@ -3091,7 +3091,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 11
+    "textMass": 15
   },
   "apps/web/components/admin/DataStewardPanel.tsx": {
     "vocabulary": 0,
@@ -3219,12 +3219,19 @@
     "longSentences": 0,
     "textMass": 54
   },
+  "apps/web/components/admin/ReferenceDataControls.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
   "apps/web/components/admin/RegionPanel.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 1,
-    "textMass": 90
+    "textMass": 95
   },
   "apps/web/components/admin/ResearchProposalsPanel.tsx": {
     "vocabulary": 0,
@@ -3308,7 +3315,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 68
+    "textMass": 81
   },
   "apps/web/components/admin/admin-nav.ts": {
     "vocabulary": 0,

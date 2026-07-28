@@ -7,9 +7,18 @@ import {
   toggleCityStatus,
   previewCityMerge,
   mergeCity,
+  searchAdminRegions,
+  searchCityMergeCandidates,
   type MergePreview,
 } from "@/lib/actions/reference-data-admin";
 import { forceCreateCity } from "@/lib/actions/reference-data";
+import { ReferenceTypeahead } from "@/components/ui/ReferenceTypeahead";
+import {
+  ReferenceDataPagination,
+  ReferenceDataParentPicker,
+  ReferenceDataSearch,
+} from "@/components/admin/ReferenceDataControls";
+import type { PageWindow } from "@/lib/admin/reference-data-read-model";
 
 type City = {
   id: string;
@@ -24,24 +33,24 @@ type City = {
   };
 };
 
-type CountryOption = { id: string; name: string; iso2: string };
-type RegionOption = { id: string; name: string; countryId: string };
+type SelectedRegion = {
+  id: string;
+  name: string;
+  code: string | null;
+  country: { id: string; name: string; iso2: string };
+};
 
 type Props = {
   cities: City[];
-  countries: CountryOption[];
-  regions: RegionOption[];
+  selectedRegion: SelectedRegion | null;
+  query: string;
+  window: PageWindow;
 };
 
-const inputCls =
-  "w-full rounded border px-3 py-2 text-sm bg-[var(--dpf-surface-2)] border-[var(--dpf-border)] text-[var(--dpf-foreground)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--dpf-accent)]";
-
-export function CityPanel({ cities, countries, regions }: Props) {
+export function CityPanel({ cities, selectedRegion, query, window }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [open, setOpen] = useState(true);
-  const [countryFilter, setCountryFilter] = useState<string>("");
-  const [regionFilter, setRegionFilter] = useState<string>("");
 
   // Inline edit state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -50,32 +59,18 @@ export function CityPanel({ cities, countries, regions }: Props) {
   // Add form state
   const [showAddForm, setShowAddForm] = useState(false);
   const [addName, setAddName] = useState("");
-  const [addCountryId, setAddCountryId] = useState(countries[0]?.id ?? "");
-  const [addRegionId, setAddRegionId] = useState("");
+  const [addRegion, setAddRegion] = useState<{
+    id: string;
+    label: string;
+  } | null>(null);
 
   // Merge state
   const [mergingId, setMergingId] = useState<string | null>(null);
-  const [survivorId, setSurvivorId] = useState("");
+  const [survivor, setSurvivor] = useState<{
+    id: string;
+    label: string;
+  } | null>(null);
   const [preview, setPreview] = useState<MergePreview | null>(null);
-
-  const activeCount = cities.filter((c) => c.status === "active").length;
-
-  // Cascading filter
-  const filteredByCountry = countryFilter
-    ? cities.filter((c) => c.region.countryId === countryFilter)
-    : cities;
-
-  const filtered = regionFilter
-    ? filteredByCountry.filter((c) => c.region.id === regionFilter)
-    : filteredByCountry;
-
-  // Regions scoped to selected country filter
-  const filteredRegions = countryFilter
-    ? regions.filter((r) => r.countryId === countryFilter)
-    : regions;
-
-  // Regions scoped to add form country
-  const addFormRegions = regions.filter((r) => r.countryId === addCountryId);
 
   function startEdit(c: City) {
     setEditingId(c.id);
@@ -104,38 +99,38 @@ export function CityPanel({ cities, countries, regions }: Props) {
 
   function startMerge(c: City) {
     setMergingId(c.id);
-    setSurvivorId("");
+    setSurvivor(null);
     setPreview(null);
   }
 
   function cancelMerge() {
     setMergingId(null);
-    setSurvivorId("");
+    setSurvivor(null);
     setPreview(null);
   }
 
   function runPreview(loserId: string) {
-    if (!survivorId) return;
+    if (!survivor) return;
     startTransition(async () => {
-      setPreview(await previewCityMerge(loserId, survivorId));
+      setPreview(await previewCityMerge(loserId, survivor.id));
     });
   }
 
   function confirmMerge(loserId: string) {
-    if (!survivorId) return;
+    if (!survivor) return;
     startTransition(async () => {
-      await mergeCity(loserId, survivorId);
+      await mergeCity(loserId, survivor.id);
       cancelMerge();
       router.refresh();
     });
   }
 
   function handleAdd() {
-    if (!addName.trim() || !addRegionId) return;
+    if (!addName.trim() || !addRegion) return;
     startTransition(async () => {
-      await forceCreateCity(addRegionId, addName.trim());
+      await forceCreateCity(addRegion.id, addName.trim());
       setAddName("");
-      setAddRegionId("");
+      setAddRegion(null);
       setShowAddForm(false);
       router.refresh();
     });
@@ -146,54 +141,54 @@ export function CityPanel({ cities, countries, regions }: Props) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls="city-panel-content"
         className="flex w-full items-center justify-between text-left"
       >
         <h3 className="text-sm font-semibold text-[var(--dpf-text)]">
-          Cities ({activeCount} active)
+          Cities ({window.total.toLocaleString()} matching)
         </h3>
-        <span className="text-[var(--dpf-muted)] text-sm">
+        <span aria-hidden="true" className="text-sm text-[var(--dpf-muted)]">
           {open ? "\u25BE" : "\u25B8"}
         </span>
       </button>
 
       {open && (
-        <div className="mt-3 space-y-3">
-          {/* Cascading filters */}
-          <div className="flex gap-2">
-            <select
-              value={countryFilter}
-              onChange={(e) => {
-                setCountryFilter(e.target.value);
-                setRegionFilter("");
-              }}
-              className={inputCls}
-            >
-              <option value="">All countries</option>
-              {countries.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} ({c.iso2})
-                </option>
-              ))}
-            </select>
-            <select
-              value={regionFilter}
-              onChange={(e) => setRegionFilter(e.target.value)}
-              className={inputCls}
-              disabled={!countryFilter}
-            >
-              <option value="">All regions</option>
-              {filteredRegions.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.name}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div id="city-panel-content" className="mt-3 space-y-3">
+          <ReferenceDataParentPicker
+            label="Region"
+            value={
+              selectedRegion
+                ? {
+                    id: selectedRegion.id,
+                    label: `${selectedRegion.name} · ${selectedRegion.country.name} (${selectedRegion.country.iso2})`,
+                  }
+                : null
+            }
+            placeholder="Search for a region or country..."
+            paramName="cityRegion"
+            resetParams={["cityQ", "cityPage"]}
+            onSearch={async (searchQuery) =>
+              (await searchAdminRegions(searchQuery)).map((region) => ({
+                id: region.id,
+                label: `${region.name}${region.code ? ` (${region.code})` : ""} · ${region.country.name}`,
+              }))
+            }
+          />
+          {selectedRegion && (
+            <ReferenceDataSearch
+              label={`Find cities in ${selectedRegion.name}`}
+              query={query}
+              queryParam="cityQ"
+              pageParam="cityPage"
+              placeholder="Filter by city name..."
+            />
+          )}
 
           <div className="space-y-1">
-            {filtered.map((c) => (
+            {cities.map((c) => (
               <div key={c.id}>
-                <div className="flex items-center justify-between rounded px-3 py-2 text-sm hover:bg-[var(--dpf-surface-2)]">
+                <div className="flex flex-col gap-2 rounded px-3 py-2 text-sm hover:bg-[var(--dpf-surface-2)] sm:flex-row sm:items-center sm:justify-between">
                 {editingId === c.id ? (
                   <div className="flex flex-1 items-center gap-2">
                     <input
@@ -281,32 +276,33 @@ export function CityPanel({ cities, countries, regions }: Props) {
                     <span className="text-[var(--dpf-muted)]">
                       Merge &ldquo;{c.name}&rdquo; into:
                     </span>
-                    <select
-                      value={survivorId}
-                      onChange={(e) => {
-                        setSurvivorId(e.target.value);
-                        setPreview(null);
-                      }}
-                      className="rounded border px-2 py-1 text-sm bg-[var(--dpf-surface-2)] border-[var(--dpf-border)] text-[var(--dpf-foreground)] focus:outline-none focus:ring-1 focus:ring-[var(--dpf-accent)]"
-                    >
-                      <option value="">Select survivor city&hellip;</option>
-                      {cities
-                        .filter(
-                          (o) =>
-                            o.id !== c.id &&
-                            o.region.id === c.region.id &&
-                            o.status === "active",
-                        )
-                        .map((o) => (
-                          <option key={o.id} value={o.id}>
-                            {o.name}
-                          </option>
-                        ))}
-                    </select>
+                    <div className="min-w-64 flex-1">
+                      <ReferenceTypeahead
+                        inputId={`city-survivor-${c.id}`}
+                        value={survivor}
+                        placeholder="Search survivor city..."
+                        onSearch={async (searchQuery) =>
+                          (
+                            await searchCityMergeCandidates(
+                              c.region.id,
+                              c.id,
+                              searchQuery,
+                            )
+                          ).map((candidate) => ({
+                            id: candidate.id,
+                            label: candidate.name,
+                          }))
+                        }
+                        onSelect={(candidate) => {
+                          setSurvivor(candidate);
+                          setPreview(null);
+                        }}
+                      />
+                    </div>
                     <button
                       type="button"
                       onClick={() => runPreview(c.id)}
-                      disabled={isPending || !survivorId}
+                      disabled={isPending || !survivor}
                       className="rounded border border-[var(--dpf-border)] px-2 py-1 text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-foreground)] disabled:opacity-50"
                     >
                       Preview impact
@@ -341,12 +337,24 @@ export function CityPanel({ cities, countries, regions }: Props) {
                 )}
               </div>
             ))}
-            {filtered.length === 0 && (
+            {!selectedRegion && (
               <p className="px-3 py-2 text-xs text-[var(--dpf-muted)]">
-                No cities to display.
+                Choose a region to list its cities.
+              </p>
+            )}
+            {selectedRegion && cities.length === 0 && (
+              <p className="px-3 py-2 text-xs text-[var(--dpf-muted)]">
+                No cities match this region and filter.
               </p>
             )}
           </div>
+          {selectedRegion && (
+            <ReferenceDataPagination
+              label="City results"
+              window={window}
+              pageParam="cityPage"
+            />
+          )}
 
           {/* Add city form */}
           {!showAddForm ? (
@@ -358,7 +366,7 @@ export function CityPanel({ cities, countries, regions }: Props) {
               + Add city
             </button>
           ) : (
-            <div className="flex items-center gap-2 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
+            <div className="flex flex-col gap-2 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 sm:flex-row sm:items-center">
               <input
                 type="text"
                 value={addName}
@@ -367,36 +375,24 @@ export function CityPanel({ cities, countries, regions }: Props) {
                 className="rounded border px-2 py-1 text-sm bg-[var(--dpf-surface-2)] border-[var(--dpf-border)] text-[var(--dpf-foreground)] placeholder:text-[var(--dpf-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--dpf-accent)]"
                 autoFocus
               />
-              <select
-                value={addCountryId}
-                onChange={(e) => {
-                  setAddCountryId(e.target.value);
-                  setAddRegionId("");
-                }}
-                className="rounded border px-2 py-1 text-sm bg-[var(--dpf-surface-2)] border-[var(--dpf-border)] text-[var(--dpf-foreground)] focus:outline-none focus:ring-1 focus:ring-[var(--dpf-accent)]"
-              >
-                {countries.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} ({c.iso2})
-                  </option>
-                ))}
-              </select>
-              <select
-                value={addRegionId}
-                onChange={(e) => setAddRegionId(e.target.value)}
-                className="rounded border px-2 py-1 text-sm bg-[var(--dpf-surface-2)] border-[var(--dpf-border)] text-[var(--dpf-foreground)] focus:outline-none focus:ring-1 focus:ring-[var(--dpf-accent)]"
-              >
-                <option value="">Select region</option>
-                {addFormRegions.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
-                ))}
-              </select>
+              <div className="min-w-64 flex-1">
+                <ReferenceTypeahead
+                  inputId="add-city-region"
+                  value={addRegion}
+                  placeholder="Search for the city’s region..."
+                  onSearch={async (searchQuery) =>
+                    (await searchAdminRegions(searchQuery)).map((region) => ({
+                      id: region.id,
+                      label: `${region.name}${region.code ? ` (${region.code})` : ""} · ${region.country.name}`,
+                    }))
+                  }
+                  onSelect={setAddRegion}
+                />
+              </div>
               <button
                 type="button"
                 onClick={handleAdd}
-                disabled={isPending || !addName.trim() || !addRegionId}
+                disabled={isPending || !addName.trim() || !addRegion}
                 className="rounded bg-[var(--dpf-accent)] px-3 py-1 text-xs font-medium text-white disabled:opacity-50"
               >
                 {isPending ? "..." : "Add"}
@@ -406,7 +402,7 @@ export function CityPanel({ cities, countries, regions }: Props) {
                 onClick={() => {
                   setShowAddForm(false);
                   setAddName("");
-                  setAddRegionId("");
+                  setAddRegion(null);
                 }}
                 className="text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-foreground)]"
               >
