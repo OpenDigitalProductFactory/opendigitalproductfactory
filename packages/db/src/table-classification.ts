@@ -5,7 +5,7 @@
 export type TableSensitivity = "public" | "internal" | "confidential" | "restricted";
 
 /**
- * Classification of all 195 Prisma models by data sensitivity.
+ * Classification of all 197 Prisma models by data sensitivity.
  *
  * - public:       Reference / lookup data safe for any environment.
  * - internal:     Operational data with no PII — copy as-is to dev.
@@ -33,9 +33,11 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   // integration categories, verdicts. Reference data, no PII (BI-ECO-001).
   AbsorptionPosture: "public",
 
-  // -- internal (87) --
+  // -- internal (89) --
   Portfolio: "internal",
   DigitalProduct: "internal",
+  ProductLine: "internal",
+  Product: "internal",
   ProductVersion: "internal",
   ChangePromotion: "internal",
   ChangeRequest: "internal",
