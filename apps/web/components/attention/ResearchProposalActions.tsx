@@ -16,7 +16,7 @@ export function ResearchProposalActions({ proposalId }: { proposalId: string }) 
     return (
       <p className="text-xs font-semibold text-[var(--dpf-text)]" role="status">
         {result === "approved"
-          ? "Research approved. Your digital team will run it in the background."
+          ? "Research approved. It will run in the background and return as a draft."
           : "Research skipped."}
       </p>
     );

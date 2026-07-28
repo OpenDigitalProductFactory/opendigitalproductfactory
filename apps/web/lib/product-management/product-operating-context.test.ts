@@ -234,6 +234,53 @@ describe("ProductOperatingContext", () => {
     ]);
   });
 
+  it("prioritizes business product, product-line, digital, then organization evidence", () => {
+    const intelligence = createContextSlice({
+      requestedAt: now,
+      sourceKind: "research-proposal",
+      items: [
+        {
+          ...item("org", "research-proposal"),
+          title: "Whole business",
+          scope: "organization" as const,
+          digitalProductId: null,
+          status: "executed",
+        },
+        {
+          ...item("digital", "research-proposal"),
+          title: "Booking architecture",
+          scope: "digital-product" as const,
+          digitalProductId: "digital-1",
+          status: "executed",
+        },
+        {
+          ...item("line", "research-proposal"),
+          title: "Salon services",
+          scope: "product-line" as const,
+          productLineId: "line-services",
+          digitalProductId: null,
+          status: "executed",
+        },
+        {
+          ...item("product", "research-proposal"),
+          title: "Hair appointments",
+          scope: "business-product" as const,
+          businessProductId: "product-salon-services",
+          digitalProductId: null,
+          status: "executed",
+        },
+      ],
+    });
+
+    const context = assembleProductOperatingContext(baseInput({ intelligence }));
+    expect(context.intelligence.items.map((entry) => entry.id)).toEqual([
+      "product",
+      "line",
+      "digital",
+      "org",
+    ]);
+  });
+
   it("reports direct revenue once and package allocation as non-additive attribution", () => {
     const context = assembleProductOperatingContext(
       baseInput({

@@ -6,6 +6,8 @@ import {
   scheduleAgentTaskFor,
   getScheduledAgentTasksFor,
   cancelAgentTaskFor,
+  setAgentTaskActiveFor,
+  rerunAgentTaskFor,
   type ScheduleAgentTaskInput,
   type ScheduleAgentTaskResult,
   type ScheduledAgentTaskView,
@@ -34,6 +36,10 @@ import {
   isCoworkerSelfTaskId,
   coworkerSelfTaskRequiredTool,
 } from "@/lib/operate/scheduled-jobs/coworker-self-tasks";
+import {
+  PRODUCT_INTELLIGENCE_WATCH_TASK_KIND,
+} from "@/lib/product-management/product-intelligence-watch-contract";
+import { proposeProductIntelligenceWatch } from "@/lib/product-management/product-intelligence-watch";
 
 // ─── Cron helpers ───────────────────────────────────────────────────────────
 
@@ -94,6 +100,23 @@ export async function cancelAgentTask(taskId: string): Promise<{ success: boolea
   return cancelAgentTaskFor(session.user.id, taskId);
 }
 
+export async function setAgentTaskActive(
+  taskId: string,
+  isActive: boolean,
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth();
+  if (!session?.user?.id) return { success: false, error: "Unauthorized" };
+  return setAgentTaskActiveFor(session.user.id, taskId, isActive);
+}
+
+export async function rerunAgentTask(
+  taskId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const session = await auth();
+  if (!session?.user?.id) return { success: false, error: "Unauthorized" };
+  return rerunAgentTaskFor(session.user.id, taskId);
+}
+
 export async function getScheduledAgentTasks(): Promise<ScheduledAgentTaskView[]> {
   const session = await auth();
   if (!session?.user?.id) return [];
@@ -138,6 +161,66 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
         data: oneShot ? { nextRunAt: null } : { nextRunAt: claimedNextRunAt },
       })
       .catch(() => {});
+  }
+
+  // Phase 7 product-intelligence watches are deterministic proposal producers.
+  // A cadence tick creates (or deduplicates to) a PENDING ResearchProposal and
+  // stops. Web search, inference, and publication remain behind the proposal
+  // approval + draft-review gates; prompt text is never parsed as scope/config.
+  if (task.taskKind === PRODUCT_INTELLIGENCE_WATCH_TASK_KIND) {
+    const startedAt = new Date();
+    const oneShot = isOneShotCron(task.schedule);
+    const nextRunAt = oneShot ? null : computeNextCronRun(task.schedule, startedAt);
+    try {
+      await proposeProductIntelligenceWatch(task);
+      await prisma.scheduledAgentTask.update({
+        where: { taskId },
+        data: {
+          lastRunAt: startedAt,
+          lastStatus: "ok",
+          lastError: null,
+          nextRunAt,
+          ...(oneShot ? { isActive: false } : {}),
+        },
+      });
+      await prisma.scheduledJob
+        .update({
+          where: { jobId: taskId },
+          data: {
+            lastRunAt: startedAt,
+            lastStatus: "ok",
+            lastError: null,
+            nextRunAt,
+            ...(oneShot ? { schedule: "disabled" } : {}),
+          },
+        })
+        .catch(() => {});
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "unknown error";
+      await prisma.scheduledAgentTask.update({
+        where: { taskId },
+        data: {
+          lastRunAt: startedAt,
+          lastStatus: "error",
+          lastError: message,
+          nextRunAt,
+          ...(oneShot ? { isActive: false } : {}),
+        },
+      });
+      await prisma.scheduledJob
+        .update({
+          where: { jobId: taskId },
+          data: {
+            lastRunAt: startedAt,
+            lastStatus: "error",
+            lastError: message,
+            nextRunAt,
+            ...(oneShot ? { schedule: "disabled" } : {}),
+          },
+        })
+        .catch(() => {});
+    }
+    return;
   }
 
   // EP-DATA-ARCH Phase 6: the data-model mirror is deterministic — run it

@@ -52,6 +52,7 @@ const mocks = vi.hoisted(() => ({
   runArchitectureParitySteward: vi.fn(),
   runConsolidationParitySteward: vi.fn(),
   runSelfOptimizationSweep: vi.fn(),
+  proposeProductIntelligenceWatch: vi.fn(),
 }));
 vi.mock("@/lib/platform-runtime/work-admission", () => ({ admitRuntimeGuardedWork: vi.fn() }));
 
@@ -89,6 +90,10 @@ vi.mock("@/lib/ea/consolidation-parity-steward", () => ({
 }));
 vi.mock("@/lib/optimization/self-optimization-sweep", () => ({
   runSelfOptimizationSweep: mocks.runSelfOptimizationSweep,
+}));
+vi.mock("@/lib/product-management/product-intelligence-watch", () => ({
+  PRODUCT_INTELLIGENCE_WATCH_TASK_KIND: "product-intelligence-watch",
+  proposeProductIntelligenceWatch: mocks.proposeProductIntelligenceWatch,
 }));
 
 import { executeScheduledAgentTask, scheduleAgentTask } from "./agent-task-scheduler";
@@ -934,6 +939,52 @@ describe("executeScheduledAgentTask TaskRun lifecycle", () => {
       "external-catalog-scout",
       expect.objectContaining({
         userId: "user-1",
+      }),
+    );
+  });
+});
+
+describe("executeScheduledAgentTask — product intelligence watch", () => {
+  it("creates a pending proposal without entering the autonomous LLM loop", async () => {
+    const task = {
+      taskId: "agent-task-product-watch",
+      agentId: "marketing-specialist",
+      title: "Watch salon competitors",
+      prompt: "Human-readable description only",
+      routeContext: "/portfolio/product/product-1/direction/intelligence",
+      schedule: "0 9 * * 1",
+      timezone: "UTC",
+      isActive: true,
+      ownerUserId: "user-1",
+      taskKind: "product-intelligence-watch",
+      taskConfig: {
+        topic: "competitive-landscape",
+        query: "Changes in local salon competitors",
+      },
+      organizationId: "org-1",
+      productLineId: null,
+      businessProductId: "product-1",
+      nextRunAt: new Date("2026-07-28T09:00:00.000Z"),
+    };
+    mocks.prisma.scheduledAgentTask.findUnique.mockResolvedValue(task);
+    mocks.proposeProductIntelligenceWatch.mockResolvedValue({
+      proposalId: "rp-1",
+      created: true,
+    });
+    mocks.prisma.scheduledAgentTask.update.mockResolvedValue({});
+    mocks.prisma.scheduledJob.update.mockResolvedValue({});
+
+    await executeScheduledAgentTask(task.taskId);
+
+    expect(mocks.proposeProductIntelligenceWatch).toHaveBeenCalledWith(task);
+    expect(mocks.runAgenticLoop).not.toHaveBeenCalled();
+    expect(mocks.prisma.scheduledAgentTask.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { taskId: task.taskId },
+        data: expect.objectContaining({
+          lastStatus: "ok",
+          lastError: null,
+        }),
       }),
     );
   });
