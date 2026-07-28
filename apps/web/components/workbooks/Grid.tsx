@@ -1572,7 +1572,8 @@ export function WorkbookGrid({
           return openRow ? (
             <RecordDetailModal
               row={openRow}
-              columns={columns}
+              columns={visibleCols}
+              hiddenColumns={orderedColumns.filter((c) => hiddenColumns.includes(c.columnId))}
               canEdit={capabilities.canEditCell}
               onClose={() => setOpenRowId(null)}
               onSave={onModalSave}
