@@ -1,5 +1,6 @@
 "use client";
 import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { ItemFormDialog, type ItemFormData } from "./ItemFormDialog";
 import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
 import type { ArchetypeVocabulary } from "@/lib/storefront/archetype-vocabulary";
@@ -47,9 +48,9 @@ type Props = {
 const CTA_BADGES: Record<string, { color: string; label: string }> = {
   booking: { color: "var(--dpf-accent)", label: "Booking" },
   purchase: { color: "var(--dpf-success)", label: "Purchase" },
-  inquiry: { color: "#fb923c", label: "Inquiry" },
-  donation: { color: "#f472b6", label: "Donation" },
-  rental: { color: "#a78bfa", label: "Rental" },
+  inquiry: { color: "var(--dpf-warning)", label: "Inquiry" },
+  donation: { color: "var(--dpf-info)", label: "Donation" },
+  rental: { color: "var(--dpf-info)", label: "Rental" },
 };
 
 export function ItemsManager({
@@ -63,6 +64,7 @@ export function ItemsManager({
   residueGroups,
   productLines = [],
 }: Props) {
+  const router = useRouter();
   const [items, setItems] = useState(initial);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
@@ -287,6 +289,15 @@ export function ItemsManager({
 
           const actions: RowAction[] = [
             { label: `Edit ${item.name}`, onSelect: () => openEdit(item) },
+            ...(item.catalogItemId
+              ? [
+                  {
+                    label: `Manage packaging and sales options for ${item.name}`,
+                    onSelect: () =>
+                      router.push(`/storefront/items/${item.id}/catalog`),
+                  },
+                ]
+              : []),
             {
               label: item.isActive
                 ? `Hide ${item.name} from ${publicWhere}`

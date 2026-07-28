@@ -8,8 +8,12 @@ It is separate from WWMD and DigitalProduct architecture:
 ```text
 ProductLine → Product → ProductOffering → CatalogItem
                                       ├→ ProductConfiguration → CatalogSku
+                                      ├→ CatalogBundleComponent → CatalogItem
+                                      ├→ CatalogPriceListEntry → CatalogPriceList
+                                      ├→ CatalogPromotionItem → CatalogPromotion
+                                      ├→ CatalogChannelEligibility
                                       ├→ StorefrontItem
-                                      └→ QuoteLineItem
+                                      └→ QuoteLineItem → CatalogSku?
 ```
 
 `ProductLine`, `Product`, `ProductOffering`, `CatalogItem`,
@@ -28,7 +32,8 @@ evidence.
 ## Canonical And Projected Fields
 
 `CatalogItem` owns the commercial name, description, price type, amount,
-currency, availability policy, quote requirement, and lifecycle status.
+currency, availability policy, quote requirement, fulfillment route, and
+lifecycle status.
 `StorefrontItem` links to a Catalog item and owns channel presentation:
 category, image, call-to-action, booking configuration, visibility, and sort
 order.
@@ -51,14 +56,56 @@ identity. A one-off configured sale is instead stored as an immutable JSON
 snapshot on `QuoteLineItem` alongside the exact `catalogItemId`. The legacy
 `DigitalProduct` quote reference remains nullable during migration.
 
+An operator may deliberately promote a successful one-off quote configuration
+to a reusable `ProductConfiguration` and `CatalogSku`. The command records the
+source quote line, immutable promotion snapshot, and promotion time. Quoting
+alone never creates reusable catalog rows.
+
+When a quote selects an existing SKU, `QuoteLineItem.catalogSkuId` records the
+exact selection. The quote service verifies that the SKU belongs to the same
+catalog item before writing the line. Quote revisions copy both the SKU
+identity and configuration snapshot so commercial history does not drift.
+
+## Packaging, Prices, Promotions, And Routes
+
+Catalog Builder extends a `CatalogItem`; it does not create another Product or
+change ProductLine parentage:
+
+- `CatalogBundleComponent` packages existing organization-owned catalog items,
+  retaining quantity, standalone eligibility, ordering, and effective dates.
+- `CatalogPriceList` and `CatalogPriceListEntry` provide effective-dated prices
+  for an item or exact SKU. A SKU-specific price wins over the item default.
+- `CatalogPromotion` and `CatalogPromotionItem` apply effective-dated
+  percentage, fixed-amount, or fixed-price changes without creating seasonal
+  Products.
+- `CatalogChannelEligibility` says whether a catalog item may be sold through a
+  named channel. It does not publish a `StorefrontItem`.
+- `CatalogItem.fulfillmentRoute` selects direct purchase, booking, configured
+  purchase, quote, subscription, reservation, or another verified route.
+
+Until `fulfillmentRoute` is written, the compatibility reader derives only
+deterministic mappings: quote-required items use `quote`; booking, purchase,
+and rental storefront calls to action map to booking, direct purchase, and
+reservation. An inquiry without quote evidence stays unresolved.
+
+Bundle revenue remains one commercial sale. Percentage or equal component
+allocations are non-additive analysis attributes; they never create a second
+revenue ledger. Explicit percentages are bounded from zero through 100 and
+must total 100. The canonical signal projection derives component attach rate,
+quote conversion, margin, and option demand only from supplied transaction
+evidence. It deduplicates selection identifiers and withholds margin whenever
+cost evidence is incomplete.
+
 ## Fleet-Safe Evolution
 
-The initial migration is expand-only:
+The Phase 2 and Catalog Builder migrations are expand-only:
 
-- four new tables;
-- nullable Storefront and quote links;
+- additive commercial and packaging tables;
+- nullable Storefront, quote, fulfillment-route, and promotion-provenance
+  links;
 - no destructive backfill or tightened legacy columns;
 - organization-preserving composite foreign keys;
+- partial unique indexes for nullable default SKU and price-list scopes;
 - idempotent application reconciliation through the existing setup seed
   authority.
 

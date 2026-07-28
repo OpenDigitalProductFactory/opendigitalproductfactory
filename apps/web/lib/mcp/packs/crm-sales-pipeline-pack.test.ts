@@ -86,6 +86,7 @@ describe("crm-sales-pipeline pack", () => {
 
     expect(lineItem?.properties).toMatchObject({
       catalogItemId: { type: "string" },
+      catalogSkuId: { type: "string" },
       configurationSnapshot: { type: "object" },
       productId: {
         type: "string",

@@ -44,6 +44,9 @@ vi.mock("@dpf/db", () => ({
       findUnique: vi.fn(),
       update: vi.fn(),
     },
+    catalogSku: {
+      findMany: vi.fn(),
+    },
     activity: {
       create: vi.fn(),
     },
@@ -98,6 +101,9 @@ describe("createQuote commercial lineage", () => {
     vi.mocked(prisma.$queryRawUnsafe).mockResolvedValue([
       { nextval: 1n },
     ] as never);
+    vi.mocked(prisma.catalogSku.findMany).mockResolvedValue([
+      { id: "sku-row", catalogItemId: "catalog-row" },
+    ] as never);
 
     const quoteCreate = vi.fn().mockResolvedValue({
       quoteId: "QUO-1",
@@ -121,6 +127,7 @@ describe("createQuote commercial lineage", () => {
       validUntil: "2026-08-31",
       lineItems: [{
         catalogItemId: "catalog-row",
+        catalogSkuId: "sku-row",
         configurationSnapshot: snapshot,
         description: "Private event",
         quantity: 1,
@@ -128,6 +135,18 @@ describe("createQuote commercial lineage", () => {
       }],
     });
 
+    expect(prisma.catalogSku.findMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ["sku-row"] },
+        status: "active",
+        effectiveFrom: { lte: expect.any(Date) },
+        OR: [
+          { effectiveTo: null },
+          { effectiveTo: { gt: expect.any(Date) } },
+        ],
+      },
+      select: { id: true, catalogItemId: true },
+    });
     expect(quoteCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -136,6 +155,7 @@ describe("createQuote commercial lineage", () => {
               expect.objectContaining({
                 productId: null,
                 catalogItemId: "catalog-row",
+                catalogSkuId: "sku-row",
                 configurationSnapshot: snapshot,
               }),
             ],
@@ -143,6 +163,33 @@ describe("createQuote commercial lineage", () => {
         }),
       }),
     );
+  });
+
+  it("rejects an exact SKU that does not belong to the selected catalog item", async () => {
+    vi.mocked(prisma.opportunity.findUnique).mockResolvedValue({
+      id: "opportunity-row",
+      accountId: "account-row",
+    } as never);
+    vi.mocked(prisma.catalogSku.findMany).mockResolvedValue([
+      { id: "sku-row", catalogItemId: "different-catalog-row" },
+    ] as never);
+
+    await expect(
+      createQuote({
+        opportunityId: "opportunity-row",
+        validUntil: "2026-08-31",
+        lineItems: [{
+          catalogItemId: "catalog-row",
+          catalogSkuId: "sku-row",
+          description: "Configured item",
+          quantity: 1,
+          unitPrice: 125,
+        }],
+      }),
+    ).rejects.toThrow(
+      "Every selected SKU must belong to its quote-line catalog item",
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });
 

@@ -297,8 +297,17 @@ subscriber, entitlement, or consumer.
 - follow `ProductLine.parentId` for rollups while preserving organization scope;
 - use `CatalogItem` as the exact selectable/requestable object for storefront,
   quote, sales-desk, partner, and mobile-channel reasoning;
+- query bundle, price-list, promotion, and channel-eligibility rows through the
+  organization-scoped CatalogItem boundary; never treat Storefront projection
+  fields as a second packaging authority;
+- resolve price and promotion windows against an explicit `asOf` time, prefer
+  an exact SKU price over the catalog-item default, and preserve the selected
+  identifiers in the commercial snapshot;
+- count a package sale once; component allocations are non-additive analysis
+  attributes and must not be summed into a second revenue total;
 - read a quote line's immutable `configurationSnapshot` for one-off choices and
-  do not promote it to a reusable SKU unless the operator deliberately does so;
+  its `catalogSkuId` for an exact reusable choice; do not promote a one-off
+  snapshot to a reusable SKU unless the operator deliberately does so;
 - use `StorefrontArchetypeComposition.productLineId` only as channel provenance;
 - defer any business-product-to-digital-product trace until a later governed
   phase has real endpoint evidence and a consuming workflow;

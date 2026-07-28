@@ -51,6 +51,34 @@ A reusable standard configuration may later receive a SKU. A one-off
 configuration selected for a specific quote is captured immutably on that
 quote line and does not create permanent catalog or SKU clutter.
 
+## Package And Price A Catalog Item
+
+After an item has a catalog link, open **Storefront → Items** and choose
+**Manage packaging and sales options** from that item's actions. The first
+control is intentionally simple: confirm how customers complete the purchase.
+Ordinary fixed-price purchases and bookings continue directly; a quote is
+required only when the selected route says so.
+
+Open **Advanced packaging and sales options** only when the business actually
+needs one of these:
+
+- combine existing things you sell into a package;
+- divide one package sale across components for non-additive analysis;
+- add an effective-dated price or seasonal offer;
+- publish a deliberately reusable standard option and SKU;
+- promote a successful one-off quoted option into that reusable catalog;
+- allow or disallow the catalog item in a sales channel.
+
+Adding a package does not move its components to another product line. A
+seasonal offer does not create another Product. New package components begin
+with equal revenue attribution; use **Set exact revenue attribution** when the
+business has a defensible percentage split. The percentages must total 100,
+and the package is still counted as one sale.
+
+For configured goods such as cars or homes, an off-the-lot selection can point
+to an exact reusable SKU. A build-to-order selection stays as an immutable
+one-off quote or order snapshot unless an operator explicitly promotes it.
+
 ## Key Concepts
 
 - **Lifecycle Stage** — Where the product is in its development and operational life: Plan, Design, Build, Production, or Retirement.
@@ -70,6 +98,8 @@ quote line and does not create permanent catalog or SKU clutter.
 - Use the Goods and Services for Sale hierarchy for business-product reporting
 - Edit the common Product, default Offering, and Catalog item through one
   collapsed Storefront item workflow
+- Manage optional packages, dated prices, promotions, reusable SKUs, channel
+  eligibility, and fulfillment routes without creating parallel products
 - Browse all products with filtering by lifecycle stage, status, portfolio, and taxonomy
 - View a product's full profile including its health metrics, linked backlog items, and architecture models
 - Inspect available software identity and support-lifecycle facts without leaving the inventory entity detail page
