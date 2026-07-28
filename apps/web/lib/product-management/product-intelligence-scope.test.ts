@@ -209,4 +209,27 @@ describe("assertProductIntelligenceScopeExists", () => {
       select: { id: true },
     });
   });
+
+  it("keeps DigitalProduct validation on the digital architecture authority", async () => {
+    const db = {
+      organization: { findFirst: vi.fn(async () => ({ id: "org-1" })) },
+      productLine: { findFirst: vi.fn() },
+      product: { findFirst: vi.fn() },
+      digitalProduct: { findFirst: vi.fn(async () => ({ id: "digital-1" })) },
+    };
+
+    await expect(
+      assertProductIntelligenceScopeExists(
+        normalizeProductIntelligenceScope({
+          organizationId: "org-1",
+          digitalProductId: "digital-1",
+        }),
+        db,
+      ),
+    ).resolves.toBeUndefined();
+    expect(db.digitalProduct.findFirst).toHaveBeenCalledWith({
+      where: { id: "digital-1" },
+      select: { id: true },
+    });
+  });
 });

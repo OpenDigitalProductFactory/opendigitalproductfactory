@@ -64,6 +64,11 @@ export function BacklogPanel({
       if (item.priority !== null && item.priority !== undefined) next.priority = item.priority;
       if (item.taxonomyNode?.id) next.taxonomyNodeId = item.taxonomyNode.id;
       if (item.digitalProduct?.id) next.digitalProductId = item.digitalProduct.id;
+      if (item.organizationId) next.organizationId = item.organizationId;
+      if (item.productLineId) next.productLineId = item.productLineId;
+      if (item.businessProductId) {
+        next.businessProductId = item.businessProductId;
+      }
       if (item.epicId) next.epicId = item.epicId;
       setForm(next);
     } else {

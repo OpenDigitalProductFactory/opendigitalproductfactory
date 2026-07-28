@@ -15,6 +15,8 @@ import {
   buildScheduledProductIntelligenceVisibilityWhere,
 } from "./product-intelligence-scope";
 import { SCHEDULED_AGENT_TASK_KINDS } from "@/lib/operate/scheduled-jobs/agent-task-kind";
+import { mapDemandRows } from "@/lib/demand/demand-data";
+import { buildProductManagementProjectionWhere } from "./product-management-scope";
 import {
   ProductOperatingContextNotFoundError,
   numberOf,
@@ -268,7 +270,10 @@ export async function loadProductOperatingContext(input: {
     input.scope.kind === "organization"
       ? identity.productLines.map((line) => line.id)
       : input.scope.kind === "product-line"
-        ? collectProductLineSubtreeIds(identity.productLines, input.scope.id)
+        ? collectProductLineSubtreeIds(
+            identity.productLines,
+            identity.selectedProductLine?.id ?? input.scope.id,
+          )
         : identity.selectedProductLine
           ? [identity.selectedProductLine.id]
           : [];
@@ -284,6 +289,12 @@ export async function loadProductOperatingContext(input: {
       productLineIds,
       businessProductIds: productIds,
     });
+  const demandWhere = buildProductManagementProjectionWhere({
+    organizationId: input.organizationId,
+    productLineIds,
+    businessProductIds: productIds,
+    digitalProductIds,
+  });
 
   const [
     research,
@@ -417,17 +428,74 @@ export async function loadProductOperatingContext(input: {
           },
         })
       : Promise.resolve([]),
-    fullProfile && digitalProductIds.length > 0
+    fullProfile
       ? db.backlogItem.findMany({
-          where: { digitalProductId: { in: digitalProductIds } },
+          where: demandWhere,
           orderBy: [{ updatedAt: "desc" }, { itemId: "asc" }],
           take: 100,
           select: {
             itemId: true,
             title: true,
+            body: true,
             status: true,
+            workType: true,
+            organizationId: true,
+            productLineId: true,
+            businessProductId: true,
+            digitalProductId: true,
             demandStage: true,
             demandScore: true,
+            demandScoreFramework: true,
+            effortSize: true,
+            jobSize: true,
+            reach: true,
+            occurrenceCount: true,
+            impact: true,
+            confidence: true,
+            businessValue: true,
+            timeCriticality: true,
+            riskOpportunity: true,
+            investmentBucket: true,
+            estimateAiJobSize: true,
+            estimateHumanJobSize: true,
+            estimateSource: true,
+            estimateAgreed: true,
+            claimStatus: true,
+            claimedByAgentId: true,
+            demandEvidenceLinks: {
+              where: { status: "active" },
+              orderBy: { createdAt: "desc" },
+              select: {
+                evidenceLinkId: true,
+                sourceKind: true,
+                sourceRef: true,
+                title: true,
+                summary: true,
+                confidence: true,
+                reviewedAt: true,
+              },
+            },
+            activities: {
+              where: {
+                kind: {
+                  in: [
+                    "demand_stage_transition",
+                    "demand_scored",
+                    "demand_funding_decision",
+                    "demand_evidence_linked",
+                    "demand_evidence_superseded",
+                  ],
+                },
+              },
+              orderBy: { recordedAt: "desc" },
+              take: 20,
+              select: {
+                kind: true,
+                summary: true,
+                recordedAt: true,
+                payload: true,
+              },
+            },
             updatedAt: true,
             epic: {
               select: {
@@ -619,6 +687,9 @@ export async function loadProductOperatingContext(input: {
     }
   }
 
+  const demandViews = new Map(
+    mapDemandRows(demand).map((view) => [view.itemId, view]),
+  );
   const architectureItems = [
     ...elements.map((row) => ({
       id: row.id,
@@ -731,6 +802,27 @@ export async function loadProductOperatingContext(input: {
       requestedAt,
       sourceKind: "backlog-item",
       items: demand.map((row) => ({
+        ...(demandViews.get(row.itemId)?.activation
+          ? {
+              evidenceCount:
+                demandViews.get(row.itemId)!.activation!.score.evidenceCount,
+              readiness:
+                demandViews.get(row.itemId)!.activation!.readiness,
+              blockers:
+                demandViews.get(row.itemId)!.activation!.blockers,
+              latestDecision: demandViews.get(row.itemId)!.decisionHistory?.[0]
+                ? {
+                    summary:
+                      demandViews.get(row.itemId)!.decisionHistory![0]!.summary,
+                    recordedAt: new Date(
+                      demandViews.get(row.itemId)!.decisionHistory![0]!.recordedAt,
+                    ),
+                    payload:
+                      demandViews.get(row.itemId)!.decisionHistory![0]!.payload,
+                  }
+                : null,
+            }
+          : {}),
         id: row.itemId,
         sourceKind: "backlog-item",
         asOf: row.updatedAt,

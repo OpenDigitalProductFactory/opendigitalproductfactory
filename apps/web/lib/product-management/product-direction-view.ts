@@ -69,17 +69,25 @@ function availabilityFor(
 function demandItem(
   item: ProductOperatingContext["demand"]["items"][number],
 ): ProductDirectionItem {
+  const stage = item.demandStage ?? "needs classification";
+  const readiness = item.readiness
+    ? [
+        item.readiness.evidenceReady ? "evidence linked" : "evidence needed",
+        item.readiness.scoreReady ? "score ready" : "score incomplete",
+      ].join(" · ")
+    : item.score == null
+      ? "not scored"
+      : `score ${item.score}`;
+  const decision = item.latestDecision
+    ? ` · ${item.latestDecision.summary}`
+    : "";
   return {
     id: item.id,
     label: item.title,
     status: item.status,
     sourceKind: item.sourceKind,
     asOf: item.asOf,
-    detail: item.demandStage
-      ? `${item.demandStage}${item.score == null ? " · not scored" : ` · score ${item.score}`}`
-      : item.score == null
-        ? "Not yet shaped or scored"
-        : `Score ${item.score}`,
+    detail: `${stage} · ${readiness}${decision}`,
   };
 }
 
@@ -229,7 +237,13 @@ export function buildProductDirectionView(
         decisionItems.length > 0
           ? "Review demand decisions"
           : "Open product delivery flow",
-      href: "/delivery?view=flow",
+      href: `/ops/demand?organizationId=${encodeURIComponent(context.provider.id)}${
+        context.scope.kind === "product-line"
+          ? `&productLineId=${encodeURIComponent(context.productLine?.id ?? context.scope.id)}`
+          : context.scope.kind === "product"
+            ? `&productLineId=${encodeURIComponent(context.productLine?.id ?? "")}&businessProductId=${encodeURIComponent(context.products[0]?.id ?? context.scope.id)}`
+            : ""
+      }`,
     },
     sections: [
       {

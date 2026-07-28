@@ -6,6 +6,7 @@ import {
   EPIC_STATUS_COLOURS,
   EPIC_STATUSES,
   LIFECYCLE_STAGE_LABELS,
+  initialDemandStageForInput,
   type BacklogItemInput,
   type EpicInput,
 } from "./backlog";
@@ -16,9 +17,34 @@ describe("validateBacklogInput()", () => {
     expect(validateBacklogInput(input)).toBeNull();
   });
 
-  it("returns an error string for a product-type item missing digitalProductId", () => {
+  it("returns an error string for a product-type item missing a product target", () => {
     const input: BacklogItemInput = { title: "My item", type: "product", workType: "feature", status: "open" };
-    expect(validateBacklogInput(input)).toMatch(/digital product/i);
+    expect(validateBacklogInput(input)).toMatch(/business product or digital product/i);
+  });
+
+  it("accepts a business Product without fabricating a DigitalProduct", () => {
+    const input: BacklogItemInput = {
+      title: "Improve private events",
+      type: "product",
+      workType: "feature",
+      status: "open",
+      organizationId: "org-1",
+      businessProductId: "product-events",
+    };
+    expect(validateBacklogInput(input)).toBeNull();
+  });
+
+  it("rejects conflicting business and digital targets", () => {
+    const input: BacklogItemInput = {
+      title: "Ambiguous demand",
+      type: "product",
+      workType: "feature",
+      status: "open",
+      organizationId: "org-1",
+      businessProductId: "product-events",
+      digitalProductId: "digital-booking",
+    };
+    expect(validateBacklogInput(input)).toMatch(/choose one/i);
   });
 
   it("returns null for a valid product-type item with digitalProductId", () => {
@@ -35,6 +61,41 @@ describe("validateBacklogInput()", () => {
   it("returns an error for a blank title", () => {
     const input: BacklogItemInput = { title: "   ", type: "portfolio", workType: "feature", status: "open" };
     expect(validateBacklogInput(input)).toMatch(/title/i);
+  });
+});
+
+describe("initialDemandStageForInput()", () => {
+  it("enters newly scoped product demand into raw intake explicitly", () => {
+    expect(initialDemandStageForInput({ businessProductId: "product-1" })).toBe(
+      "raw",
+    );
+    expect(initialDemandStageForInput({ digitalProductId: "digital-1" })).toBe(
+      "raw",
+    );
+  });
+
+  it("does not classify unscoped or explicitly legacy demand", () => {
+    expect(initialDemandStageForInput({})).toBeNull();
+    expect(
+      initialDemandStageForInput({
+        digitalProductId: "digital-1",
+        demandStage: null,
+      }),
+    ).toBeNull();
+  });
+
+  it("does not let a creation caller skip the activation lifecycle", () => {
+    const input: BacklogItemInput = {
+      title: "Pre-funded request",
+      type: "product",
+      workType: "feature",
+      status: "open",
+      organizationId: "org-1",
+      businessProductId: "product-1",
+      demandStage: "ready",
+    };
+
+    expect(validateBacklogInput(input)).toMatch(/must enter at raw/i);
   });
 });
 

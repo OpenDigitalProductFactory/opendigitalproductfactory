@@ -6,8 +6,9 @@ import {
   groupByFunnelStage,
   itemEffort,
   itemValue,
+  ACTIVATION_STAGE_LABELS,
+  demandStageLabel,
   QUADRANT_LABELS,
-  STAGE_LABELS,
   valueBand,
   type DemandItemView,
 } from "@/lib/demand/board";
@@ -16,6 +17,13 @@ import { bucketBalance, BUCKET_LABELS, computeBucketMix } from "@/lib/demand/buc
 import { groupByFlowLane, FLOW_LANE_LABELS, type FlowColumn } from "@/lib/demand/flow";
 import { resolveEstimateProvenance } from "@/lib/demand/estimate-provenance";
 import { recordEstimate } from "@/lib/actions/demand-estimate";
+import {
+  linkEvidenceToDemand,
+  requestDemandFunding,
+  transitionDemand,
+} from "@/lib/actions/demand-activation";
+import { DEMAND_EVIDENCE_KINDS } from "@/lib/demand/evidence";
+import { computeDemandActivationTelemetry } from "@/lib/demand/activation-telemetry";
 
 const VALUE_BAND_LABEL: Record<ReturnType<typeof valueBand>, string> = {
   high: "High value",
@@ -215,6 +223,179 @@ export function EstimateControls({ item }: { item: DemandItemView }) {
   );
 }
 
+export function DemandActivationControls({ item }: { item: DemandItemView }) {
+  const activation = item.activation;
+  const [pending, startTransition] = useTransition();
+  const [showEvidence, setShowEvidence] = useState(false);
+  const [sourceKind, setSourceKind] = useState("reviewed-knowledge");
+  const [sourceRef, setSourceRef] = useState("");
+  const [title, setTitle] = useState("");
+  const [summary, setSummary] = useState("");
+  const [message, setMessage] = useState<string | null>(null);
+
+  if (!activation) return null;
+
+  const run = (
+    work: () => Promise<{ ok: true; message: string } | { ok: false; error: string }>,
+  ) =>
+    startTransition(async () => {
+      setMessage(null);
+      const result = await work();
+      if (result.ok) {
+        setMessage(result.message);
+        setShowEvidence(false);
+        setSourceRef("");
+        setTitle("");
+        setSummary("");
+      } else {
+        setMessage(result.error);
+      }
+    });
+
+  const next =
+    activation.nextStage && activation.nextStage !== "ready"
+      ? activation.nextStage
+      : null;
+  const fundingReady =
+    activation.stage === "shaped" && activation.readiness.fundingReady;
+
+  return (
+    <div className="mt-2 space-y-2 border-t border-[var(--dpf-border)] pt-2">
+      <div className="flex flex-wrap items-center gap-1">
+        {next && (
+          <MiniButton
+            onClick={() =>
+              run(() =>
+                transitionDemand({
+                  itemId: item.itemId,
+                  to: next,
+                }),
+              )
+            }
+            disabled={pending}
+            tone={next === "raw" ? "muted" : "accent"}
+            title={`Move to ${ACTIVATION_STAGE_LABELS[next]}`}
+          >
+            {next === "raw"
+              ? "Classify as demand"
+              : `Move to ${ACTIVATION_STAGE_LABELS[next]}`}
+          </MiniButton>
+        )}
+        {fundingReady && (
+          <MiniButton
+            onClick={() =>
+              run(() => requestDemandFunding({ itemId: item.itemId }))
+            }
+            disabled={pending}
+            tone="success"
+            title="Request the organization-governed funding decision"
+          >
+            Request funding
+          </MiniButton>
+        )}
+        <MiniButton
+          onClick={() => setShowEvidence((value) => !value)}
+          disabled={pending}
+          tone="muted"
+          title="Link reviewed evidence without copying the source fact"
+        >
+          {showEvidence ? "Cancel evidence" : "Link evidence"}
+        </MiniButton>
+        <span className="text-[10px] text-[var(--dpf-muted)]">
+          {item.evidenceLinks?.length ?? 0} evidence source
+          {(item.evidenceLinks?.length ?? 0) === 1 ? "" : "s"}
+        </span>
+      </div>
+      {showEvidence && (
+        <div className="grid gap-2 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2 sm:grid-cols-2">
+          <label className="text-[10px] text-[var(--dpf-muted)]">
+            Evidence kind
+            <select
+              value={sourceKind}
+              onChange={(event) => setSourceKind(event.target.value)}
+              className="mt-1 w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-xs text-[var(--dpf-text)]"
+            >
+              {DEMAND_EVIDENCE_KINDS.map((kind) => (
+                <option key={kind} value={kind}>
+                  {kind.replaceAll("-", " ")}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-[10px] text-[var(--dpf-muted)]">
+            Stable reference
+            <input
+              value={sourceRef}
+              onChange={(event) => setSourceRef(event.target.value)}
+              placeholder="Page slug, booking, order, or research ID"
+              className="mt-1 w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-xs text-[var(--dpf-text)]"
+            />
+          </label>
+          {sourceKind !== "reviewed-knowledge" ? (
+            <label className="text-[10px] text-[var(--dpf-muted)]">
+              Evidence title
+              <input
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder="What this evidence establishes"
+                className="mt-1 w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-xs text-[var(--dpf-text)]"
+              />
+            </label>
+          ) : (
+            <p className="self-end text-[10px] text-[var(--dpf-muted)]">
+              The reviewed page supplies its canonical title and summary.
+            </p>
+          )}
+          <label className="text-[10px] text-[var(--dpf-muted)]">
+            Summary (optional)
+            <input
+              value={summary}
+              onChange={(event) => setSummary(event.target.value)}
+              placeholder="Reviewed finding"
+              className="mt-1 w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-xs text-[var(--dpf-text)]"
+            />
+          </label>
+          <div className="sm:col-span-2">
+            <MiniButton
+              onClick={() =>
+                run(() =>
+                  linkEvidenceToDemand({
+                    itemId: item.itemId,
+                    sourceKind,
+                    sourceRef,
+                    title,
+                    summary,
+                  }),
+                )
+              }
+              disabled={
+                pending ||
+                !sourceRef.trim() ||
+                (sourceKind !== "reviewed-knowledge" && !title.trim())
+              }
+            >
+              Save evidence link
+            </MiniButton>
+          </div>
+        </div>
+      )}
+      {message && (
+        <p
+          role="status"
+          className="text-[10px] text-[var(--dpf-muted)]"
+        >
+          {message}
+        </p>
+      )}
+      {activation.blockers.length > 0 && (
+        <p className="text-[10px] text-[var(--dpf-muted)]">
+          Next: {activation.blockers[0]}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function DemandCard({ item }: { item: DemandItemView }) {
   const [open, setOpen] = useState(false);
   const band = valueBand(item);
@@ -245,6 +426,7 @@ function DemandCard({ item }: { item: DemandItemView }) {
         )}
         <span className="ml-auto font-mono text-[var(--dpf-muted-foreground)]">{item.itemId}</span>
       </div>
+      <DemandActivationControls item={item} />
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -263,7 +445,66 @@ function DemandCard({ item }: { item: DemandItemView }) {
           <dt>Effort</dt>
           <dd className="text-[var(--dpf-text)]">{effort ?? "—"}</dd>
           <dt>Stage</dt>
-          <dd className="text-[var(--dpf-text)]">{item.demandStage ?? "raw"}</dd>
+          <dd className="text-[var(--dpf-text)]">
+            {demandStageLabel(item.demandStage)}
+          </dd>
+          <dt>Evidence</dt>
+          <dd className="text-[var(--dpf-text)]">
+            {item.activation?.score.evidenceCount ?? 0} reviewed link
+            {(item.activation?.score.evidenceCount ?? 0) === 1 ? "" : "s"}
+          </dd>
+          {(item.evidenceLinks?.length ?? 0) > 0 && (
+            <>
+              <dt>Evidence sources</dt>
+              <dd className="space-y-0.5 text-[var(--dpf-text)]">
+                {item.evidenceLinks?.map((evidence) => (
+                  <span key={evidence.evidenceLinkId} className="block">
+                    {evidence.title} · {evidence.sourceKind.replaceAll("-", " ")}
+                    {evidence.confidence === null
+                      ? ""
+                      : ` · confidence ${evidence.confidence}`}
+                  </span>
+                ))}
+              </dd>
+            </>
+          )}
+          <dt>Confidence</dt>
+          <dd className="text-[var(--dpf-text)]">
+            {item.activation?.score.confidence ?? "—"}
+          </dd>
+          <dt>Score inputs</dt>
+          <dd className="text-[var(--dpf-text)]">
+            {Object.entries(item.activation?.score.contributions ?? {})
+              .map(([key, value]) => `${key} ${value}`)
+              .join(" · ") || "Complete the required inputs"}
+          </dd>
+          <dt>Estimate</dt>
+          <dd className="text-[var(--dpf-text)]">
+            {item.activation?.score.effectiveJobSize ?? "—"}
+            {item.activation?.score.estimateSource
+              ? ` (${item.activation.score.estimateSource})`
+              : ""}
+            {item.activation?.score.provisional ? " · provisional" : ""}
+          </dd>
+          <dt>Missing</dt>
+          <dd className="text-[var(--dpf-text)]">
+            {item.activation?.score.missing.join(", ") || "Nothing"}
+          </dd>
+          {(item.decisionHistory?.length ?? 0) > 0 && (
+            <>
+              <dt>Recent history</dt>
+              <dd className="space-y-0.5 text-[var(--dpf-text)]">
+                {item.decisionHistory?.slice(0, 3).map((activity) => (
+                  <span
+                    key={`${activity.kind}-${activity.recordedAt}`}
+                    className="block"
+                  >
+                    {activity.summary}
+                  </span>
+                ))}
+              </dd>
+            </>
+          )}
         </dl>
       )}
     </div>
@@ -273,11 +514,13 @@ function DemandCard({ item }: { item: DemandItemView }) {
 function FunnelView({ items }: { items: DemandItemView[] }) {
   const columns = useMemo(() => groupByFunnelStage(items), [items]);
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-3 xl:grid-cols-5">
       {columns.map((col) => (
         <div key={col.stage} className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2">
           <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-[var(--dpf-text)]">{STAGE_LABELS[col.stage]}</h3>
+            <h3 className="text-sm font-semibold text-[var(--dpf-text)]">
+              {ACTIVATION_STAGE_LABELS[col.stage]}
+            </h3>
             <span className="text-xs text-[var(--dpf-muted)]">{col.items.length}</span>
           </div>
           <div className="space-y-2">
@@ -299,9 +542,16 @@ function FunnelView({ items }: { items: DemandItemView[] }) {
 // the funnel lanes are score-tinted and narrowing (invest); the board lane reads
 // as execution; the amber bet seam is the funded crossing between them.
 function FlowLaneColumn({ col }: { col: FlowColumn }) {
+  const isClassification = col.half === "classification";
   const isBet = col.half === "bet";
   const isBoard = col.half === "board";
-  const accent = isBet ? "var(--dpf-warning)" : isBoard ? "var(--dpf-success)" : "var(--dpf-border)";
+  const accent = isClassification
+    ? "var(--dpf-muted)"
+    : isBet
+      ? "var(--dpf-warning)"
+      : isBoard
+        ? "var(--dpf-success)"
+        : "var(--dpf-border)";
   return (
     <div
       className="min-w-0 rounded-lg border bg-[var(--dpf-surface-2)] p-2"
@@ -319,6 +569,11 @@ function FlowLaneColumn({ col }: { col: FlowColumn }) {
           Funded — a coworker volunteers to build it.
         </p>
       )}
+      {isClassification && (
+        <p className="mb-2 text-[10px] leading-snug text-[var(--dpf-muted)]">
+          Review scope before treating this as active product demand.
+        </p>
+      )}
       <div className="space-y-2">
         {col.items.length === 0 ? (
           <p className="text-xs text-[var(--dpf-muted)]">{isBet ? "No bets on the table." : "Nothing here yet."}</p>
@@ -332,6 +587,7 @@ function FlowLaneColumn({ col }: { col: FlowColumn }) {
 
 function FlowView({ items }: { items: DemandItemView[] }) {
   const columns = useMemo(() => groupByFlowLane(items), [items]);
+  const classification = columns.filter((c) => c.half === "classification");
   const funnel = columns.filter((c) => c.half === "funnel");
   const bet = columns.find((c) => c.half === "bet");
   const board = columns.filter((c) => c.half === "board");
@@ -341,7 +597,10 @@ function FlowView({ items }: { items: DemandItemView[] }) {
         <span>← Invest · value ÷ effort</span>
         <span>Execute · owner + burn-down →</span>
       </div>
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3 lg:grid-cols-6">
+        {classification.map((col) => (
+          <FlowLaneColumn key={col.lane} col={col} />
+        ))}
         {funnel.map((col) => (
           <FlowLaneColumn key={col.lane} col={col} />
         ))}
@@ -398,7 +657,7 @@ function MatrixView({ items }: { items: DemandItemView[] }) {
       </div>
       <p className="mt-2 text-xs text-[var(--dpf-muted)]">
         Split at value median {matrix.valueMid} · effort median {matrix.effortMid}. Higher value + lower effort ={" "}
-        quick wins. {matrix.unplotted.length > 0 && `${matrix.unplotted.length} item(s) not yet scored — sized/scored them to plot.`}
+        quick wins. {matrix.unplotted.length > 0 && `${matrix.unplotted.length} item(s) not yet scored — size and score them to plot.`}
       </p>
     </div>
   );
@@ -492,13 +751,32 @@ export function DemandBoard({
 }) {
   const [tab, setTab] = useState<Tab>("flow");
   const scored = items.filter((i) => i.demandScore !== null).length;
+  const telemetry = useMemo(
+    () =>
+      computeDemandActivationTelemetry(
+        items.map((item) => ({
+          demandStage: item.demandStage,
+          evidenceCount: item.activation?.score.evidenceCount ?? 0,
+          demandScore: item.demandScore,
+          scoreExplanationComplete:
+            item.activation?.readiness.scoreReady ?? false,
+          fundingDecisionCount:
+            item.fundingDecisionCount ??
+            item.decisionHistory?.filter(
+              (activity) => activity.kind === "demand_funding_decision",
+            ).length ??
+            0,
+        })),
+      ),
+    [items],
+  );
 
   if (items.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-[var(--dpf-border)] p-6 text-center">
         <p className="text-sm text-[var(--dpf-text)]">No demand in the funnel yet.</p>
         <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-          Score backlog items (value + effort) to see them ranked here.
+          Classify product demand, link evidence, then score value and effort to rank it here.
         </p>
       </div>
     );
@@ -528,6 +806,12 @@ export function DemandBoard({
           {activeFramework ? ` · ${activeFramework} policy` : ""}
         </span>
       </div>
+      <p className="text-xs text-[var(--dpf-muted)]">
+        Activation completeness: {telemetry.classifiedPct}% classified ·{" "}
+        {telemetry.evidenceLinkedPct}% evidence-linked ·{" "}
+        {telemetry.explainablyScoredPct}% explainably scored ·{" "}
+        {telemetry.fundingDecidedPct}% funding-decided.
+      </p>
       {tab === "flow" ? (
         <FlowView items={items} />
       ) : tab === "funnel" ? (

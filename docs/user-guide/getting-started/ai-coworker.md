@@ -60,6 +60,13 @@ The Phase 6 preview performs no write; it takes you to the existing Delivery
 workflow, where any later funding or backlog mutation keeps its own governed
 confirmation.
 
+In Delivery Flow, a coworker may propose classification, evidence links,
+scoring inputs, or an effort estimate. Those proposals do not fabricate
+evidence or advance the lifecycle automatically. Scoring records an explanation
+snapshot but leaves the stage unchanged. Moving to **ready** always uses the
+organization's WWWD funding gate, records its rationale and decision
+interaction, and then offers—not silently assigns—eligible work to a coworker.
+
 ## WWMD And Autonomy
 
 When a coworker hits an ambiguous decision, it should not guess from chat context alone. WWMD is the decision gate that lets the coworker consult the founder-kernel wiki and score options against platform principles.

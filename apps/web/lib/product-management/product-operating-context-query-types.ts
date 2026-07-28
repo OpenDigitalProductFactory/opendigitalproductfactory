@@ -133,9 +133,47 @@ export type ReviewedResearchSourceRow = {
 export type BacklogRow = {
   itemId: string;
   title: string;
+  body: string | null;
   status: string;
+  workType: string | null;
+  organizationId: string | null;
+  productLineId: string | null;
+  businessProductId: string | null;
+  digitalProductId: string | null;
   demandStage: string | null;
   demandScore: number | null;
+  demandScoreFramework: string | null;
+  effortSize: string | null;
+  jobSize: number | null;
+  reach: number | null;
+  occurrenceCount: number | null;
+  impact: number | null;
+  confidence: number | null;
+  businessValue: number | null;
+  timeCriticality: number | null;
+  riskOpportunity: number | null;
+  investmentBucket: string | null;
+  estimateAiJobSize: number | null;
+  estimateHumanJobSize: number | null;
+  estimateSource: string | null;
+  estimateAgreed: boolean | null;
+  claimStatus: string | null;
+  claimedByAgentId: string | null;
+  demandEvidenceLinks: Array<{
+    evidenceLinkId: string;
+    sourceKind: string;
+    sourceRef: string;
+    title: string;
+    summary: string | null;
+    confidence: number | null;
+    reviewedAt: Date | null;
+  }>;
+  activities: Array<{
+    kind: string;
+    summary: string;
+    recordedAt: Date;
+    payload: unknown;
+  }>;
   updatedAt: Date;
   epic: { epicId: string; title: string; status: string; updatedAt: Date } | null;
 };

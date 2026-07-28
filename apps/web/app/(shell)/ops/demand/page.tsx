@@ -10,9 +10,19 @@ import { getFounderSharedPortfolio } from "@/lib/federation/founder-portfolio";
 
 export const dynamic = "force-dynamic";
 
-export default async function DemandPage() {
+export default async function DemandPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{
+    organizationId?: string;
+    productLineId?: string;
+    businessProductId?: string;
+    digitalProductId?: string;
+  }>;
+}) {
+  const scope = (await searchParams) ?? {};
   const [items, networkItems, shareContext, founderPortfolio, policyConfig] = await Promise.all([
-    getDemandItems(),
+    getDemandItems(scope),
     getNetworkDemandItems(),
     getDemandShareContext(),
     getFounderSharedPortfolio(),
@@ -33,6 +43,12 @@ export default async function DemandPage() {
         </p>
       </div>
       <OpsTabNav />
+      {Object.values(scope).some(Boolean) ? (
+        <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 text-sm text-[var(--dpf-muted)]">
+          Showing demand for the selected product context. This remains the
+          canonical Delivery Flow; clear the URL filters to review all demand.
+        </div>
+      ) : null}
       {founderPortfolio.enabled ? (
         <FounderSharedPortfolioPanel
           inbox={JSON.parse(JSON.stringify(founderPortfolio.inbox))}
