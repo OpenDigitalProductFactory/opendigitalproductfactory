@@ -66,7 +66,7 @@
     "docs:impact:test": "node --test scripts/check-docs-impact.test.mjs scripts/gen-doc-impact.test.mjs",
     "docs:impact:graph": "node scripts/gen-doc-impact.mjs",
     "docs:impact:graph:check": "node scripts/gen-doc-impact.mjs --check",
-    "check:doc-links": "node scripts/gen-doc-index.mjs --check && node scripts/check-doc-links.mjs && node --test scripts/check-doc-links.test.mjs && node scripts/render-doc-diagrams.mjs --check",
+    "check:doc-links": "node scripts/gen-doc-index.mjs --check && node scripts/check-doc-links.mjs && node --test scripts/check-doc-links.test.mjs scripts/public-docs-rendering.test.mjs && node scripts/render-doc-diagrams.mjs --check",
     "security:secrets": "node scripts/security/run-gitleaks-local.mjs --tree",
     "security:secrets:staged": "node scripts/security/run-gitleaks-local.mjs --staged",
     "docs:tak": "node docs/architecture/generate-tak-docx.mjs",

@@ -29,6 +29,8 @@
     --radius: 18px;
     --radius-lg: 28px;
     --page: 1180px;
+    --type-display: clamp(2.25rem, 3.2vw, 3rem);
+    --type-section: clamp(1.6rem, 2vw, 2rem);
   }
 
   @media (prefers-color-scheme: light) {
@@ -133,13 +135,13 @@
   h1 {
     max-width: 920px;
     margin: 0;
-    font-size: clamp(2.55rem, 7vw, 5.6rem);
+    font-size: var(--type-display);
   }
 
   h2 {
     max-width: 780px;
     margin: 0 0 18px;
-    font-size: clamp(2rem, 4.5vw, 3.6rem);
+    font-size: var(--type-section);
   }
 
   h3 {
