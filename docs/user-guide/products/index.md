@@ -22,6 +22,14 @@ augment it, once a real relationship and consuming workflow exist. Setup does
 not invent that trace, and it does not turn a salon service, hotel room, meal,
 or retail good into a digital product.
 
+DPF assembles product-management summaries from a read-only operating context.
+That context follows the business hierarchy first, then includes a digital
+product only when a real operational Offering link establishes it. Research and
+competitive evidence can be organization-wide or explicitly scoped to one
+enabling digital product. An empty section means no matching evidence exists;
+an unavailable section means the platform does not yet have a safe typed link.
+Neither state is silently presented as healthy, complete, or zero.
+
 ## From Product To Something A Customer Can Select
 
 The commercial path is:
@@ -120,6 +128,8 @@ one-off quote or order snapshot unless an operator explicitly promotes it.
 - Manage optional packages, dated prices, promotions, reusable SKUs, channel
   eligibility, and fulfillment routes without creating parallel products
 - Review catalog-linked purchases and fulfillment with honest customer evidence
+- Review product context with organization-wide and product-specific evidence
+  kept visibly distinct
 - Browse all products with filtering by lifecycle stage, status, portfolio, and taxonomy
 - View a product's full profile including its health metrics, linked backlog items, and architecture models
 - Inspect available software identity and support-lifecycle facts without leaving the inventory entity detail page

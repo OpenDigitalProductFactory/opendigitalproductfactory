@@ -804,6 +804,8 @@ model DigitalProduct {
   businessModels                ProductBusinessModel[]
   businessModelRoleAssignments  BusinessModelRoleAssignment[]
   knowledgeArticles             KnowledgeArticleProduct[]
+  researchProposals             ResearchProposal[]
+  marketingBattlecards          MarketingBattlecard[]
   workQueues                    WorkQueue[]
   businessCapabilityLinks       BusinessCapabilityTraceLink[]  @relation("BusinessCapabilityProductLinks")
   dependencyEdgesFrom           ProductDependency[]            @relation("ProductDependencyFrom")
@@ -9910,6 +9912,7 @@ model MarketingAssetVariant {
 model MarketingBattlecard {
   battlecardId       String   @id @default(cuid())
   organizationId     String
+  digitalProductId   String?
   competitorName     String
   positioning        String?
   theirStrengths     String[] @default([])
@@ -9923,9 +9926,11 @@ model MarketingBattlecard {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  digitalProduct DigitalProduct? @relation(fields: [digitalProductId], references: [id], onDelete: Restrict)
 
   @@index([organizationId, createdAt])
+  @@index([digitalProductId])
   @@index([status])
 }
 
@@ -14643,24 +14648,27 @@ model GearInterface {
 // execution slice runs runMarketResearch() → enrichOrgCorpus(research→draft).
 // Nothing executes or publishes without human approval + draft review (BI-1378).
 model ResearchProposal {
-  id              String       @id @default(cuid())
-  proposalId      String       @unique @default(cuid())
-  organizationId  String
-  organization    Organization @relation(fields: [organizationId], references: [id])
-  topic           String // short topic key, e.g. "competitive-landscape"
-  query           String       @db.Text // the research query/prompt
-  status          String       @default("pending") // pending | approved | declined | executed | failed
-  proposedBy      String       @default("schedule") // schedule | gap-detection | user
-  proposedAt      DateTime     @default(now())
-  decidedByUserId String?
-  decidedAt       DateTime?
-  executedAt      DateTime?
-  resultSummary   String?      @db.Text
-  metadata        Json?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  id               String          @id @default(cuid())
+  proposalId       String          @unique @default(cuid())
+  organizationId   String
+  digitalProductId String?
+  topic            String // short topic key, e.g. "competitive-landscape"
+  query            String          @db.Text // the research query/prompt
+  status           String          @default("pending") // pending | approved | declined | executed | failed
+  proposedBy       String          @default("schedule") // schedule | gap-detection | user
+  proposedAt       DateTime        @default(now())
+  decidedByUserId  String?
+  decidedAt        DateTime?
+  executedAt       DateTime?
+  resultSummary    String?         @db.Text
+  metadata         Json?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  organization     Organization    @relation(fields: [organizationId], references: [id])
+  digitalProduct   DigitalProduct? @relation(fields: [digitalProductId], references: [id], onDelete: Restrict)
 
   @@index([organizationId, status])
+  @@index([digitalProductId])
   @@index([status])
 }
 

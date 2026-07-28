@@ -18,6 +18,7 @@ import { getErrorMessage } from "@/lib/shared/get-error-message";
 export type RunResearchExecutionInput = {
   proposalId: string;
   organizationId: string;
+  digitalProductId: string | null;
   topic: string;
   query: string;
 };
@@ -86,6 +87,7 @@ export async function runResearchExecution(
         sourceType: "research",
         sourceRef: {
           proposalId: input.proposalId,
+          digitalProductId: input.digitalProductId,
           topic: input.topic,
           urls: result.sources.map((s) => s.url),
         },
