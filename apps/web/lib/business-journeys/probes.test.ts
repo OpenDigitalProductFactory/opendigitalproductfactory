@@ -71,6 +71,22 @@ describe("reachabilityProbe", () => {
     expect(secondUrl).toContain("127.0.0.1");
   });
 
+  it("bounds every request so a hung route cannot hang the sweep", async () => {
+    const fetchImpl = vi.fn(
+      async () => new Response("", { status: 200 }),
+    ) as unknown as typeof fetch;
+    const probe = reachabilityProbe(() => "/s/acme");
+
+    await probe(ctx({ fetchImpl }));
+
+    const init = (fetchImpl as unknown as { mock: { calls: [string, RequestInit][] } }).mock
+      .calls[0][1];
+    // A watchdog that can hang is worse than none — it stays silent through the
+    // outage it exists to report.
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+    expect(init.redirect).toBe("follow");
+  });
+
   it("reports a missing base URL as a configuration gap, not a journey failure cause", async () => {
     const probe = reachabilityProbe(() => "/s/acme");
     const result = await probe(ctx({ baseUrl: "" }));

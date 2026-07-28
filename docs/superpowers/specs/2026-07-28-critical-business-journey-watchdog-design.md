@@ -111,6 +111,13 @@ Both are real failures worth raising. Collapsing them would send the operator hu
 wrong problem. An HTTP error status needs no such treatment — a 500 is a 500 wherever it
 is observed.
 
+Every reachability request is also bounded by a 15s `AbortSignal.timeout`. A watchdog that
+can hang is worse than no watchdog: it stays silent through the very outage it exists to
+report, and silence is indistinguishable from health. A customer would have given up long
+before 15s anyway, so a slower response is a failure by the journey's own standard rather
+than merely a slow check. (Found by live verification, not by review — the first live run
+against a real install hit a route that accepted the connection and never answered.)
+
 ## 5. Applicability — install-defined, not hardcoded
 
 A journey declares `appliesWhen(context)` against a resolved `InstallJourneyContext`

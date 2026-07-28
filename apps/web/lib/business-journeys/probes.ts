@@ -70,6 +70,25 @@ function loopbackOrigin(): string {
 }
 
 /**
+ * Per-request ceiling for a reachability probe.
+ *
+ * Found by live verification: without this, a route that accepts the connection
+ * and then never answers hangs the sweep forever — the watchdog would sit
+ * silent rather than report the outage, which is the worst possible failure for
+ * a thing whose entire job is to notice. A customer would have given up long
+ * before 15s, so a slower response is a failure by the journey's own standard,
+ * not merely a slow check.
+ */
+const PROBE_TIMEOUT_MS = 15_000;
+
+async function fetchWithTimeout(
+  fetchImpl: typeof fetch,
+  url: string,
+): Promise<Response> {
+  return fetchImpl(url, { redirect: "follow", signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
+}
+
+/**
  * The entry surface responds. Proves the door opens — nothing more, which is
  * exactly why this returns depth `reachability` and can never lift a journey's
  * achieved depth above it.
@@ -96,7 +115,7 @@ export function reachabilityProbe(pathFor: (ctx: JourneyProbeContext) => string 
     }
     const url = `${ctx.baseUrl}${path}`;
     try {
-      const res = await ctx.fetchImpl(url, { redirect: "follow" });
+      const res = await fetchWithTimeout(ctx.fetchImpl, url);
       if (res.status >= 400) {
         return {
           passed: false,
@@ -112,7 +131,7 @@ export function reachabilityProbe(pathFor: (ctx: JourneyProbeContext) => string 
       // this an outage — see `loopbackOrigin`.
       const internalUrl = `${loopbackOrigin()}${path}`;
       try {
-        const internal = await ctx.fetchImpl(internalUrl, { redirect: "follow" });
+        const internal = await fetchWithTimeout(ctx.fetchImpl, internalUrl);
         if (internal.status < 400) {
           return {
             passed: false,
