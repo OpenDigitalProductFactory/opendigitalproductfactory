@@ -261,7 +261,7 @@ describe("BuildStudio active-build header layout", () => {
       />,
     );
 
-    fireEvent.change(screen.getByPlaceholderText(/Describe what should be different/i), {
+    fireEvent.change(screen.getByPlaceholderText(/Say what should change/i), {
       target: { value: "Improve customer onboarding" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
