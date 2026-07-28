@@ -367,22 +367,50 @@ export async function resolveProfileMaterialForProfession(input: {
     roleSlug?: string | null;
     slugId?: string | null;
   };
+  /**
+   * Declared borrow (BI-52839DEA). When set, the profession is named by the
+   * caller instead of derived from an agent identity — the path an external
+   * development surface (Claude Code / Codex / Grok) takes, since it holds no
+   * coworker identity to resolve from.
+   *
+   * FAIL-CLOSED BY CONTRACT: an unrecognised key THROWS rather than falling
+   * through to identity resolution or to platform doctrine. A borrow that
+   * silently degraded to generic doctrine would return platform defaults
+   * wearing a profession's name, which is exactly the silent-success failure
+   * mode the UX-quality program exists to outlaw.
+   *
+   * The caller decides whether a borrow is permitted; this function only
+   * honours it. The gate is what refuses a borrow from a caller that already
+   * carries an agent identity.
+   */
+  declaredProfessionKey?: string | null;
   domainClass: DecisionDomainClass;
   fallbackProfileId?: string;
   maxDepth?: number;
 }): Promise<
   ResolvedProfileMaterial & { professionProfileSelected: boolean; professionKey: string | null }
 > {
-  const { findProfessionFamilyForAgentIdentity, professionProfileId } = await import(
-    "./resolve-profession-profile"
-  );
+  const { findProfessionFamilyForAgentIdentity, findProfessionFamilyByKey, professionProfileId } =
+    await import("./resolve-profession-profile");
 
-  const family = findProfessionFamilyForAgentIdentity({
-    agentId: input.agentIdentity.agentId ?? null,
-    name: input.agentIdentity.agentName ?? null,
-    roleSlug: input.agentIdentity.roleSlug ?? null,
-    slugId: input.agentIdentity.slugId ?? null,
-  });
+  const declaredKey = input.declaredProfessionKey?.trim() || null;
+  let family: ReturnType<typeof findProfessionFamilyForAgentIdentity>;
+  if (declaredKey) {
+    family = findProfessionFamilyByKey(declaredKey);
+    if (!family) {
+      throw new Error(
+        `Unknown professionKey "${declaredKey}". A declared borrow must name a profession family ` +
+          `registered in docs/professions/registry.json; it does not fall back to platform doctrine.`,
+      );
+    }
+  } else {
+    family = findProfessionFamilyForAgentIdentity({
+      agentId: input.agentIdentity.agentId ?? null,
+      name: input.agentIdentity.agentName ?? null,
+      roleSlug: input.agentIdentity.roleSlug ?? null,
+      slugId: input.agentIdentity.slugId ?? null,
+    });
+  }
 
   const professionKey = family?.professionKey ?? null;
   const entryProfileId = professionKey
