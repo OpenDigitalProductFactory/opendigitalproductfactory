@@ -7,12 +7,19 @@
 
 import { prisma } from "@dpf/db";
 import { getMarketingWorkspaceSnapshot } from "../marketing";
+import {
+  assertProductIntelligenceScopeExists,
+  buildExactProductIntelligenceScopeWhere,
+  normalizeProductIntelligenceScope,
+} from "@/lib/product-management/product-intelligence-scope";
 
 export type ObjectionHandlingEntry = { objection: string; response: string };
 
 export type BattlecardRow = {
   battlecardId: string;
   digitalProductId: string | null;
+  productLineId: string | null;
+  businessProductId: string | null;
   competitorName: string;
   positioning: string | null;
   theirStrengths: string[];
@@ -79,6 +86,8 @@ export function buildCompetitiveMatrix(cards: BattlecardRow[]): CompetitiveMatri
 export type CreateBattlecardInput = {
   /** Null/omitted means organization-wide positioning. */
   digitalProductId?: string | null;
+  productLineId?: string | null;
+  businessProductId?: string | null;
   competitorName: string;
   positioning?: string;
   theirStrengths?: string[];
@@ -93,13 +102,16 @@ export type CreateBattlecardInput = {
 export function battlecardScopeWhere(input: {
   organizationId: string;
   digitalProductId?: string | null;
+  productLineId?: string | null;
+  businessProductId?: string | null;
 }) {
-  return {
-    organizationId: input.organizationId,
-    ...(input.digitalProductId !== undefined
-      ? { digitalProductId: input.digitalProductId }
-      : {}),
-  };
+  const hasExplicitScope =
+    input.digitalProductId !== undefined ||
+    input.productLineId !== undefined ||
+    input.businessProductId !== undefined;
+  return hasExplicitScope
+    ? buildExactProductIntelligenceScopeWhere(input)
+    : { organizationId: input.organizationId };
 }
 
 /** Create a competitive battlecard in the org's marketing workspace. */
@@ -110,14 +122,20 @@ export async function createBattlecard(
   if (!snapshot) {
     return { error: "no-workspace", message: "No configured marketing workspace; cannot create a battlecard." };
   }
+  const scope = normalizeProductIntelligenceScope({
+    organizationId: snapshot.organization.id,
+    digitalProductId: input.digitalProductId,
+    productLineId: input.productLineId,
+    businessProductId: input.businessProductId,
+  });
+  await assertProductIntelligenceScopeExists(scope, prisma);
   const competitorName = input.competitorName.trim();
   if (!competitorName) {
     return { error: "invalid-input", message: "A battlecard needs a competitor name." };
   }
   const record = await prisma.marketingBattlecard.create({
     data: {
-      organizationId: snapshot.organization.id,
-      digitalProductId: input.digitalProductId ?? null,
+      ...buildExactProductIntelligenceScopeWhere(scope),
       competitorName,
       positioning: input.positioning?.trim() || null,
       theirStrengths: normalizeList(input.theirStrengths ?? []),
@@ -140,6 +158,8 @@ export async function createBattlecard(
 export async function getBattlecards(input: {
   /** Undefined returns all; null returns organization-wide cards only. */
   digitalProductId?: string | null;
+  productLineId?: string | null;
+  businessProductId?: string | null;
 } = {}): Promise<
   | { message: string; data: { battlecards: BattlecardRow[]; matrix: CompetitiveMatrix } }
   | { error: string; message: string }
@@ -152,11 +172,15 @@ export async function getBattlecards(input: {
     where: battlecardScopeWhere({
       organizationId: snapshot.organization.id,
       digitalProductId: input.digitalProductId,
+      productLineId: input.productLineId,
+      businessProductId: input.businessProductId,
     }),
     orderBy: { createdAt: "asc" },
     select: {
       battlecardId: true,
       digitalProductId: true,
+      productLineId: true,
+      businessProductId: true,
       competitorName: true,
       positioning: true,
       theirStrengths: true,

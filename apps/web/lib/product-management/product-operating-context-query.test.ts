@@ -87,25 +87,44 @@ function fakeDb(
         {
           proposalId: "research-org",
           digitalProductId: null,
+          productLineId: null,
+          businessProductId: null,
           topic: "market",
+          query: "What changed in the market?",
           status: "executed",
+          resultSummary: "First-baseline draft: added one page.",
+          metadata: {
+            evidence: {
+              confidence: "medium",
+              comparisonKind: "first-run",
+              retrievedAt: "2026-07-28T19:00:00.000Z",
+              sourceUrls: ["https://example.com/market"],
+            },
+          },
           updatedAt: now,
         },
         {
           proposalId: "research-product",
           digitalProductId: "digital-1",
+          productLineId: null,
+          businessProductId: null,
           topic: "conversion",
+          query: "What changed in conversion?",
           status: "executed",
+          resultSummary: null,
+          metadata: null,
           updatedAt: now,
         },
       ]),
     },
     marketingBattlecard: { findMany: empty },
     knowledgeArticle: { findMany: empty },
+    rawSource: { findMany: empty },
     backlogItem: { findMany: empty },
     changeItem: { findMany: empty },
     eaElement: { findMany: empty },
     productDependency: { findMany: empty },
+    scheduledAgentTask: { findMany: empty },
     ...overrides,
   };
 }
@@ -189,10 +208,12 @@ describe("loadProductOperatingContext", () => {
     expect(db.researchProposal.findMany).not.toHaveBeenCalled();
     expect(db.marketingBattlecard.findMany).not.toHaveBeenCalled();
     expect(db.knowledgeArticle.findMany).not.toHaveBeenCalled();
+    expect(db.rawSource.findMany).not.toHaveBeenCalled();
     expect(db.backlogItem.findMany).not.toHaveBeenCalled();
     expect(db.changeItem.findMany).not.toHaveBeenCalled();
     expect(db.eaElement.findMany).not.toHaveBeenCalled();
     expect(db.productDependency.findMany).not.toHaveBeenCalled();
+    expect(db.scheduledAgentTask.findMany).not.toHaveBeenCalled();
     expect(context.intelligence).toMatchObject({
       availability: "unavailable",
       items: [],
@@ -292,7 +313,7 @@ describe("loadProductOperatingContext", () => {
     ]);
   });
 
-  it("does not infer consumers, decisions, objectives, or schedules when no typed evidence exists", async () => {
+  it("does not infer consumers, decisions, or objectives when no typed evidence exists", async () => {
     const context = await loadProductOperatingContext({
       db: fakeDb(),
       organizationId: "org-1",
@@ -304,7 +325,127 @@ describe("loadProductOperatingContext", () => {
     expect(context.consumers.items).toEqual([]);
     expect(context.decisions.availability).toBe("unavailable");
     expect(context.objectives.availability).toBe("unavailable");
-    expect(context.scheduledPlaybooks.availability).toBe("unavailable");
+    expect(context.scheduledPlaybooks).toMatchObject({
+      availability: "available",
+      items: [],
+    });
+  });
+
+  it("projects only typed product intelligence watches without parsing prompt or route text", async () => {
+    const scheduledAgentTask = vi.fn(async () => [
+      {
+        taskId: "agent-task-watch",
+        title: "Watch salon competitors",
+        productLineId: null,
+        businessProductId: "product-1",
+        schedule: "0 9 * * 1",
+        isActive: false,
+        nextRunAt: null,
+        lastRunAt: new Date("2026-07-28T09:00:00.000Z"),
+        lastStatus: "ok",
+        updatedAt: now,
+      },
+    ]);
+    const context = await loadProductOperatingContext({
+      db: fakeDb({ scheduledAgentTask: { findMany: scheduledAgentTask } }),
+      organizationId: "org-1",
+      scope: { kind: "product", id: "product-1" },
+      authorize: vi.fn(async () => undefined),
+      requestedAt: now,
+    });
+
+    expect(scheduledAgentTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          taskKind: "product-intelligence-watch",
+          organizationId: "org-1",
+        }),
+      }),
+    );
+    expect(context.scheduledPlaybooks.items).toEqual([
+      expect.objectContaining({
+        taskId: "agent-task-watch",
+        status: "paused",
+        scope: "business-product",
+      }),
+    ]);
+  });
+
+  it("projects reviewed Wiki research at its exact business-product scope", async () => {
+    const rawSource = vi.fn(async () => [
+      {
+        sourceKey: "research:proposal-1",
+        retrievedAt: new Date("2026-07-27T15:00:00.000Z"),
+        locator: {
+          sourceType: "research",
+          proposalId: "proposal-1",
+          topic: "customer-choice",
+          productLineId: null,
+          businessProductId: "product-1",
+          digitalProductId: null,
+          urls: ["https://example.com/customer-choice"],
+          confidence: "high",
+          comparisonKind: "changed-since",
+        },
+        pageSources: [
+          {
+            page: {
+              id: "wiki-1",
+              title: "Market research: customer choice",
+              abstract: "Customers increasingly value bundled consultations.",
+              status: "published",
+              lastReviewedAt: new Date("2026-07-28T12:00:00.000Z"),
+              updatedAt: now,
+            },
+          },
+        ],
+      },
+      {
+        sourceKey: "research:other-product",
+        retrievedAt: now,
+        locator: {
+          sourceType: "research",
+          businessProductId: "product-other",
+        },
+        pageSources: [
+          {
+            page: {
+              id: "wiki-other",
+              title: "Other product research",
+              abstract: null,
+              status: "published",
+              lastReviewedAt: now,
+              updatedAt: now,
+            },
+          },
+        ],
+      },
+    ]);
+
+    const context = await loadProductOperatingContext({
+      db: fakeDb({ rawSource: { findMany: rawSource } }),
+      organizationId: "org-1",
+      scope: { kind: "product", id: "product-1" },
+      authorize: vi.fn(async () => undefined),
+      requestedAt: now,
+    });
+
+    expect(context.intelligence.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "wiki-1",
+          sourceKind: "wiki-page",
+          scope: "business-product",
+          businessProductId: "product-1",
+          confidence: "high",
+          comparisonKind: "changed-since",
+          sourceUrls: ["https://example.com/customer-choice"],
+        }),
+      ]),
+    );
+    expect(context.intelligence.items.some((item) => item.id === "wiki-other")).toBe(
+      false,
+    );
   });
 
   it("keeps package component allocation non-additive and preserves unallocated components", async () => {

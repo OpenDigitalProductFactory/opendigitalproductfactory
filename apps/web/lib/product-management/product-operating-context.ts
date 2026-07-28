@@ -83,9 +83,27 @@ export type ProductSoldContextItem = ContextItem & {
 
 export type IntelligenceContextItem = ContextItem & {
   title: string;
-  scope: "organization" | "digital-product";
+  /** Human-readable evidence or proposal detail; never interpreted as scope. */
+  detail?: string | null;
+  relatedProposalId?: string | null;
+  scope:
+    | "organization"
+    | "product-line"
+    | "business-product"
+    | "digital-product";
+  productLineId?: string | null;
+  businessProductId?: string | null;
   digitalProductId: string | null;
   status: string;
+  confidence?: "low" | "medium" | "high" | null;
+  comparisonKind?: "first-run" | "changed-since" | null;
+  emptyReason?:
+    | "no-results"
+    | "provider-unavailable"
+    | "synthesis-empty"
+    | null;
+  retrievedAt?: Date | null;
+  sourceUrls?: string[];
 };
 
 export type DemandContextItem = ContextItem & {
@@ -98,6 +116,18 @@ export type DemandContextItem = ContextItem & {
 export type NamedStatusContextItem = ContextItem & {
   title: string;
   status: string;
+};
+
+export type ScheduledPlaybookContextItem = NamedStatusContextItem & {
+  taskId: string;
+  scope: "organization" | "product-line" | "business-product";
+  productLineId: string | null;
+  businessProductId: string | null;
+  schedule: string;
+  isActive: boolean;
+  nextRunAt: Date | null;
+  lastRunAt: Date | null;
+  lastStatus: string | null;
 };
 
 export interface ProductOperatingContextInput {
@@ -118,7 +148,7 @@ export interface ProductOperatingContextInput {
   roadmapInputs: ContextSlice<NamedStatusContextItem>;
   deliveryChanges: ContextSlice<NamedStatusContextItem>;
   architecture: ContextSlice<NamedStatusContextItem>;
-  scheduledPlaybooks: ContextSlice<NamedStatusContextItem>;
+  scheduledPlaybooks: ContextSlice<ScheduledPlaybookContextItem>;
 }
 
 export interface ProductOperatingContext {
@@ -161,7 +191,7 @@ export interface ProductOperatingContext {
   roadmapInputs: ContextSlice<NamedStatusContextItem>;
   deliveryChanges: ContextSlice<NamedStatusContextItem>;
   architecture: ContextSlice<NamedStatusContextItem>;
-  scheduledPlaybooks: ContextSlice<NamedStatusContextItem>;
+  scheduledPlaybooks: ContextSlice<ScheduledPlaybookContextItem>;
 }
 
 export function classifyContextFreshness(
@@ -343,12 +373,17 @@ function projectCommercialPerformanceByProduct(
 function prioritizeScopedIntelligence(
   slice: ContextSlice<IntelligenceContextItem>,
 ): ContextSlice<IntelligenceContextItem> {
+  const scopePriority: Record<IntelligenceContextItem["scope"], number> = {
+    "business-product": 4,
+    "product-line": 3,
+    "digital-product": 2,
+    organization: 1,
+  };
   return {
     ...slice,
     items: [...slice.items].sort(
       (left, right) =>
-        Number(right.scope === "digital-product") -
-          Number(left.scope === "digital-product") ||
+        scopePriority[right.scope] - scopePriority[left.scope] ||
         right.asOf.getTime() - left.asOf.getTime() ||
         left.id.localeCompare(right.id),
     ),

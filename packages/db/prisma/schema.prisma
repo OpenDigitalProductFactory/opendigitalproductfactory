@@ -834,6 +834,9 @@ model ProductLine {
   parent                ProductLine?                    @relation("ProductLineHierarchy", fields: [parentId, organizationId], references: [id, organizationId], onDelete: Restrict)
   children              ProductLine[]                   @relation("ProductLineHierarchy")
   products              Product[]
+  researchProposals     ResearchProposal[]              @relation("ResearchProposalProductLine")
+  marketingBattlecards  MarketingBattlecard[]           @relation("MarketingBattlecardProductLine")
+  scheduledAgentTasks   ScheduledAgentTask[]             @relation("ScheduledAgentTaskProductLine")
   storefrontComposition StorefrontArchetypeComposition?
 
   @@unique([organizationId, key])
@@ -862,6 +865,9 @@ model Product {
   productLine    ProductLine       @relation(fields: [productLineId, organizationId], references: [id, organizationId], onDelete: Cascade)
   offerings      ProductOffering[]
   productSolds   ProductSold[]
+  researchProposals    ResearchProposal[]    @relation("ResearchProposalBusinessProduct")
+  marketingBattlecards MarketingBattlecard[] @relation("MarketingBattlecardBusinessProduct")
+  scheduledAgentTasks  ScheduledAgentTask[]  @relation("ScheduledAgentTaskBusinessProduct")
 
   @@unique([productLineId, key])
   @@unique([id, organizationId])
@@ -4543,6 +4549,7 @@ model Organization {
   documents                       Document[]
   decisionPerspectiveProfiles     DecisionPerspectiveProfile[]
   researchProposals               ResearchProposal[]
+  scheduledProductIntelligenceTasks ScheduledAgentTask[]            @relation("ScheduledAgentTaskOrganization")
   integrationCoverageProviders    IntegrationCoverageProvider[]      @relation("OrgToCoverageProviders")
   integrationRoleCoverages        IntegrationRoleCoverage[]          @relation("OrgToCoverageCells")
   capabilityActivations           OrganizationCapabilityActivation[]
@@ -8786,6 +8793,14 @@ model ScheduledAgentTask {
   timezone     String    @default("UTC")
   isActive     Boolean   @default(true)
   ownerUserId  String
+  // Optional business scope for product-management watches. Null means the
+  // generic user-owned task remains outside product-management projection.
+  // ProductLine and Product are mutually exclusive and organization-consistent.
+  organizationId   String?
+  productLineId    String?
+  businessProductId String?
+  taskKind      String?
+  taskConfig    Json?
   lastRunAt    DateTime?
   nextRunAt    DateTime?
   lastStatus   String? // ok | error
@@ -8801,10 +8816,17 @@ model ScheduledAgentTask {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  owner User @relation("ScheduledAgentTaskOwner", fields: [ownerUserId], references: [id])
+  owner           User          @relation("ScheduledAgentTaskOwner", fields: [ownerUserId], references: [id])
+  organization    Organization? @relation("ScheduledAgentTaskOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
+  productLine     ProductLine?  @relation("ScheduledAgentTaskProductLine", fields: [productLineId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  businessProduct Product?      @relation("ScheduledAgentTaskBusinessProduct", fields: [businessProductId, organizationId], references: [id, organizationId], onDelete: Restrict)
 
   @@index([agentId])
   @@index([ownerUserId])
+  @@index([organizationId])
+  @@index([productLineId])
+  @@index([businessProductId])
+  @@index([taskKind, isActive, nextRunAt])
   @@index([isActive, nextRunAt])
   @@index([taskRunId])
 }
@@ -9913,6 +9935,8 @@ model MarketingBattlecard {
   battlecardId       String   @id @default(cuid())
   organizationId     String
   digitalProductId   String?
+  productLineId      String?
+  businessProductId  String?
   competitorName     String
   positioning        String?
   theirStrengths     String[] @default([])
@@ -9926,11 +9950,15 @@ model MarketingBattlecard {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  digitalProduct DigitalProduct? @relation(fields: [digitalProductId], references: [id], onDelete: Restrict)
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  digitalProduct  DigitalProduct? @relation(fields: [digitalProductId], references: [id], onDelete: Restrict)
+  productLine     ProductLine?    @relation("MarketingBattlecardProductLine", fields: [productLineId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  businessProduct Product?        @relation("MarketingBattlecardBusinessProduct", fields: [businessProductId, organizationId], references: [id, organizationId], onDelete: Restrict)
 
   @@index([organizationId, createdAt])
   @@index([digitalProductId])
+  @@index([productLineId])
+  @@index([businessProductId])
   @@index([status])
 }
 
@@ -14652,6 +14680,8 @@ model ResearchProposal {
   proposalId       String          @unique @default(cuid())
   organizationId   String
   digitalProductId String?
+  productLineId    String?
+  businessProductId String?
   topic            String // short topic key, e.g. "competitive-landscape"
   query            String          @db.Text // the research query/prompt
   status           String          @default("pending") // pending | approved | declined | executed | failed
@@ -14666,9 +14696,13 @@ model ResearchProposal {
   updatedAt        DateTime        @updatedAt
   organization     Organization    @relation(fields: [organizationId], references: [id])
   digitalProduct   DigitalProduct? @relation(fields: [digitalProductId], references: [id], onDelete: Restrict)
+  productLine      ProductLine?    @relation("ResearchProposalProductLine", fields: [productLineId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  businessProduct  Product?        @relation("ResearchProposalBusinessProduct", fields: [businessProductId, organizationId], references: [id, organizationId], onDelete: Restrict)
 
   @@index([organizationId, status])
   @@index([digitalProductId])
+  @@index([productLineId])
+  @@index([businessProductId])
   @@index([status])
 }
 
