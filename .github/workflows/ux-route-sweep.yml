@@ -146,6 +146,10 @@ jobs:
         # The producer's cold setup + cache restore + build + package path has
         # exceeded four minutes in observed GitHub-hosted runs. Ten minutes
         # remains bounded while avoiding a delayed duplicate build.
+        # BI-149370BD: this deadline now only bounds a producer that is still
+        # running. Once every exact-tree producer is terminal without an
+        # artifact — as on heavy=false PRs, where CI never builds — discovery
+        # returns immediately instead of waiting out the remaining deadline.
         run: >-
           node scripts/ci-build-artifact.mjs locate
           --workflow ci.yml

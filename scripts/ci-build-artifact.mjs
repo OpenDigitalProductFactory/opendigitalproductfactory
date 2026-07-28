@@ -16,8 +16,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  buildArtifactDiscoveryVerdict,
   createBuildArtifactReceipt,
-  selectBuildArtifact,
   sha256Bytes,
   sha256File,
   validateArchiveEntries,
@@ -149,7 +149,10 @@ function createArtifact(options) {
 }
 
 async function githubJson(path) {
-  const response = await fetch(`https://api.github.com${path}`, {
+  // Overridable so the discovery loop's termination behaviour is testable
+  // against a local stub; unset in CI, where the real API is used.
+  const base = process.env.DPF_GITHUB_API_BASE_URL || "https://api.github.com";
+  const response = await fetch(`${base}${path}`, {
     headers: {
       Accept: "application/vnd.github+json",
       Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
@@ -172,7 +175,8 @@ async function locateArtifact(options) {
   // still binds the built checkout's real commit and immutable tree below.
   const headSha = process.env.DPF_CI_RUN_HEAD_SHA || process.env.GITHUB_SHA;
   const eventName = process.env.GITHUB_EVENT_NAME;
-  const deadline = Date.now() + waitSeconds * 1000;
+  const discoveryStartedAt = Date.now();
+  const deadline = discoveryStartedAt + waitSeconds * 1000;
   try {
     while (Date.now() <= deadline) {
       const query = new URLSearchParams({
@@ -188,21 +192,35 @@ async function locateArtifact(options) {
         const artifacts = await githubJson(`/repos/${repository}/actions/runs/${run.id}/artifacts?per_page=100`);
         artifactsByRun.set(run.id, artifacts.artifacts ?? []);
       }
-      const selected = selectBuildArtifact({
+      const verdict = buildArtifactDiscoveryVerdict({
         runs: exactRuns,
         artifactsByRun,
         headSha,
         eventName,
         artifactPrefix,
       });
-      if (selected) {
+      if (verdict.decision === "found") {
+        const { selected } = verdict;
         appendOutput({
           found: "true",
           artifact_name: selected.artifactName,
           source_run_id: selected.runId,
           source_run_attempt: selected.runAttempt,
+          discovery_ms: Date.now() - discoveryStartedAt,
         });
-        console.log(`[ci-build-artifact] found ${selected.artifactName} in run ${selected.runId}`);
+        console.log(
+          `[ci-build-artifact] ${verdict.reason} after ${Date.now() - discoveryStartedAt}ms`,
+        );
+        return;
+      }
+      // BI-149370BD: no later poll can produce evidence a terminal producer
+      // never published, so stop here instead of burning the rest of the
+      // deadline ahead of the same fallback build.
+      if (verdict.decision === "abandon") {
+        appendOutput({ found: "false", discovery_ms: Date.now() - discoveryStartedAt });
+        console.warn(
+          `[ci-build-artifact] ${verdict.reason} after ${Date.now() - discoveryStartedAt}ms; rebuilding`,
+        );
         return;
       }
       await new Promise((resolvePromise) => setTimeout(resolvePromise, 5_000));
@@ -211,7 +229,7 @@ async function locateArtifact(options) {
   } catch (error) {
     console.warn(`[ci-build-artifact] discovery unavailable (${error.message}); rebuilding`);
   }
-  appendOutput({ found: "false" });
+  appendOutput({ found: "false", discovery_ms: Date.now() - discoveryStartedAt });
 }
 
 function materializeFallback(reason, startedAt) {

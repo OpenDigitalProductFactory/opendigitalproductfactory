@@ -187,7 +187,15 @@ token and source run identifier, and the token has only `actions: read` plus
 and [REST API endpoints for GitHub Actions artifacts](https://docs.github.com/en/rest/actions/artifacts).
 
 Reuse is an optimization, never an exemption. Discovery is bounded to ten
-minutes. Missing, late, expired, incomplete, corrupt, or identity-mismatched
+minutes, but that deadline only bounds a producer that is still queued or
+running. Once at least one matching producer exists and every one of them is
+terminal without a usable artifact, discovery stops immediately and the local
+build starts: no later poll can surface evidence that a finished run never
+published. This matters most on `heavy=false` pull requests, where `Production
+Build` is skipped by design and no artifact can ever appear. A run status the
+locator does not recognise counts as still active, so uncertainty preserves
+bounded polling rather than abandoning reuse early. Missing, late, expired,
+incomplete, corrupt, or identity-mismatched
 evidence removes any partial `.next` output and runs the normal local production
 build. Packaging or upload failure is also non-authoritative: `Production Build`
 retains its successful result and UX rebuilds locally. Main-branch pushes and
@@ -195,7 +203,8 @@ manual baseline calibration always build locally;
 cross-lifecycle merge-group-to-push reuse remains owned by `BI-9585E580`.
 
 The CI and UX job summaries report payload bytes and packaging or
-download/validation/extraction duration. Compare those transfer measurements
+download/validation/extraction duration, and the locate step emits a
+`discovery_ms` output on every outcome. Compare those transfer measurements
 with the avoided UX build duration before retaining or tuning the artifact.
 
 ## UX route-sweep stability

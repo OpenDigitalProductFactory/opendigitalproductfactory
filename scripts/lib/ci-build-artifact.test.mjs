@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import {
+  buildArtifactDiscoveryVerdict,
   createBuildArtifactReceipt,
   selectBuildArtifact,
   validateArchiveEntries,
@@ -151,6 +152,102 @@ describe("artifact discovery", () => {
       eventName: "merge_group",
       artifactPrefix: "web-production-build",
     }), null);
+  });
+});
+
+describe("discovery termination", () => {
+  const verdict = (runs, artifactsByRun = new Map()) =>
+    buildArtifactDiscoveryVerdict({
+      runs,
+      artifactsByRun,
+      headSha: SHA,
+      eventName: "pull_request",
+      artifactPrefix: "web-production-build",
+    });
+
+  const producer = (overrides) => ({
+    id: 2,
+    head_sha: SHA,
+    event: "pull_request",
+    run_number: 11,
+    run_attempt: 1,
+    status: "completed",
+    ...overrides,
+  });
+
+  it("consumes an available artifact rather than waiting", () => {
+    const result = verdict(
+      [producer({})],
+      new Map([[2, [{ id: 20, name: "web-production-build-2-1", expired: false }]]]),
+    );
+    assert.equal(result.decision, "found");
+    assert.equal(result.selected.artifactName, "web-production-build-2-1");
+  });
+
+  // BI-149370BD: the reported defect — heavy=false CI completes without ever
+  // publishing a build, and discovery burned the remaining ~609s regardless.
+  it("abandons once every exact-tree producer is terminal without an artifact", () => {
+    const result = verdict([producer({ status: "completed" })]);
+    assert.equal(result.decision, "abandon");
+    assert.match(result.reason, /terminal with no usable artifact/);
+  });
+
+  // Terminality is what settles this, not the conclusion: a failed or cancelled
+  // producer will publish no artifact either, so waiting on one is dead time.
+  it("abandons on terminal failed and cancelled producers", () => {
+    for (const conclusion of ["failure", "cancelled", "timed_out", "success"]) {
+      assert.equal(
+        verdict([producer({ status: "completed", conclusion })]).decision,
+        "abandon",
+        `expected abandon for conclusion ${conclusion}`,
+      );
+    }
+  });
+
+  it("keeps waiting while an eligible producer is queued or in progress", () => {
+    for (const status of ["queued", "waiting", "requested", "pending", "in_progress"]) {
+      const result = verdict([producer({ status })]);
+      assert.equal(result.decision, "wait", `expected wait for status ${status}`);
+      assert.match(result.reason, /still active/);
+    }
+  });
+
+  it("keeps waiting when no matching producer has appeared yet", () => {
+    const result = verdict([
+      producer({ id: 3, event: "push" }),
+      producer({ id: 4, head_sha: "f".repeat(40) }),
+    ]);
+    assert.equal(result.decision, "wait");
+    assert.match(result.reason, /has appeared yet/);
+  });
+
+  // A newer attempt still running must not be pre-empted by an older terminal
+  // attempt that published nothing.
+  it("keeps waiting for a later attempt even when an earlier one is terminal", () => {
+    const result = verdict([
+      producer({ id: 2, run_attempt: 1, status: "completed" }),
+      producer({ id: 3, run_attempt: 2, status: "in_progress" }),
+    ]);
+    assert.equal(result.decision, "wait");
+  });
+
+  it("prefers a later attempt's artifact over an older terminal no-artifact attempt", () => {
+    const result = verdict(
+      [
+        producer({ id: 2, run_number: 11, status: "completed" }),
+        producer({ id: 3, run_number: 12, status: "completed" }),
+      ],
+      new Map([[3, [{ id: 30, name: "web-production-build-3-1", expired: false }]]]),
+    );
+    assert.equal(result.decision, "found");
+    assert.equal(result.selected.runId, 3);
+  });
+
+  // Fail safe: an unrecognised/missing status must preserve bounded polling
+  // rather than abandon reuse on a shape this code does not understand.
+  it("treats an unknown or missing run status as still active", () => {
+    assert.equal(verdict([producer({ status: undefined })]).decision, "wait");
+    assert.equal(verdict([producer({ status: "some_future_status" })]).decision, "wait");
   });
 });
 
