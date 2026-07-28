@@ -59,12 +59,11 @@ apps/web/lib/tak/agent-routing.ts	996
 apps/web/lib/tak/agentic-loop.test.ts	2311
 apps/web/lib/tak/agentic-loop.ts	2683
 apps/web/lib/tak/route-context-map.ts	1274
-apps/web/lib/tak/route-context.ts	1239
+apps/web/lib/tak/route-context.ts	1198
 apps/web/lib/work-capsules/mcp-handlers.ts	884
 apps/web/lib/work-capsules/work-capsule-store.test.ts	1103
 apps/web/lib/work-capsules/work-capsule-store.ts	1056
 apps/web/lib/workbooks/platform-tables.ts	938
 apps/web/lib/workforce/calendar-data.ts	1134
 apps/web/lib/workspace/command-center.ts	1118
-packages/db/src/discovery-sync.ts	924
 packages/db/src/wiki-store.test.ts	824

@@ -64,8 +64,16 @@ export function shouldSkipTable(tableName: string): boolean {
 
 import { PrismaClient } from "../generated/client/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-// @ts-expect-error -- importable runtime guard is plain .mjs by design
-import { checkIndexIntegrity } from "../scripts/index-integrity-core.mjs";
+import {
+  runSourceCheckedClone,
+  runWithDestinationCleanup,
+} from "./sanitized-clone-cleanup";
+import { assertSourceInventoryIntegrity } from "./sanitized-clone-source-integrity";
+
+export {
+  runSourceCheckedClone,
+  runWithDestinationCleanup,
+} from "./sanitized-clone-cleanup";
 
 type RawDatabaseClient = Pick<
   PrismaClient,
@@ -121,42 +129,6 @@ export function buildDestinationResetSql(tableNames: readonly string[]): string 
   const applicationTables = tableNames.filter((name) => name !== "_prisma_migrations");
   if (applicationTables.length === 0) return null;
   return `TRUNCATE TABLE ${applicationTables.map(quoteIdentifier).join(", ")} RESTART IDENTITY CASCADE`;
-}
-
-/**
- * A clone cannot share one transaction with pg_dump/psql child processes.
- * Make publication fail-safe by clearing the disposable destination first and
- * clearing it again before propagating any clone failure.
- */
-export async function runWithDestinationCleanup<T>(
-  resetDestination: () => Promise<void>,
-  clone: () => Promise<T>,
-): Promise<T> {
-  await resetDestination();
-  try {
-    return await clone();
-  } catch (cloneError) {
-    try {
-      await resetDestination();
-    } catch (cleanupError) {
-      throw new AggregateError(
-        [cloneError, cleanupError],
-        "Sanitized clone failed and destination cleanup also failed",
-      );
-    }
-    throw cloneError;
-  }
-}
-
-export async function runSourceCheckedClone<T>(
-  resetDestination: () => Promise<void>,
-  checkSource: () => Promise<void>,
-  clone: () => Promise<T>,
-): Promise<T> {
-  return runWithDestinationCleanup(resetDestination, async () => {
-    await checkSource();
-    return clone();
-  });
 }
 
 export function resolveCompatibleCopyColumns(
@@ -438,34 +410,6 @@ export async function runSanitizedClone(): Promise<void> {
     await prod.$disconnect();
     await dev.$disconnect();
   }
-}
-
-async function assertSourceInventoryIntegrity(
-  source: RawDatabaseClient,
-): Promise<void> {
-  const queryClient = {
-    query: async (sql: string, params: unknown[] = []) => ({
-      rows: await source.$queryRawUnsafe<unknown[]>(
-        sql,
-        ...(params as never[]),
-      ),
-    }),
-  };
-  const report = await checkIndexIntegrity(queryClient, {
-    amcheckMode: "require",
-    schema: "public",
-    table: "InventoryEntity",
-    uniqueOnly: false,
-    requiredIndexes: [{ name: "InventoryEntity_entityKey_key", unique: true }],
-  });
-  if (!report.failed) return;
-
-  const details = report.corrupted
-    .map((row: { index: string; error: string }) => `${row.index}: ${row.error}`)
-    .join("; ");
-  throw new Error(
-    `Production InventoryEntity source failed index/heap integrity; preview was not published. ${details}`,
-  );
 }
 
 async function readDatabaseIdentity(client: RawDatabaseClient): Promise<DatabaseIdentity> {
