@@ -89,7 +89,7 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     inngestId: "govern/data-control-operation-recovery-scheduled",
     name: "Data control operation recovery",
     purpose:
-      "Resumes consequential cross-store data mutations from durable target checkpoints, verifies effects independently, and escalates non-compensable partial outcomes. If it stops, authorized operations can remain incomplete after a worker crash.",
+      "Resumes durable data-control operations after worker crashes and escalates partial outcomes.",
     cron: "4,9,14,19,24,29,34,39,44,49,54,59 * * * *",
     cadence: "Every 5 minutes, offset by 4 minutes",
     category: "core",
