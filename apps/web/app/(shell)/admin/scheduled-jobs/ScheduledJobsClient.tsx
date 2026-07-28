@@ -201,13 +201,14 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledJob
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] mt-0.5" style={{ color: "var(--dpf-muted)" }}>
-                      {job.purpose}
-                    </div>
-                    <div className="text-[10px] mt-0.5 font-mono" style={{ color: "var(--dpf-muted)" }}>
-                      {job.jobId}
-                      {job.inngestId ? ` · ${job.inngestId}` : ""}
-                    </div>
+                    <details className="mt-1 text-[11px]" style={{ color: "var(--dpf-muted)" }}>
+                      <summary className="cursor-pointer select-none">Details</summary>
+                      <div className="mt-1">{job.purpose}</div>
+                      <div className="mt-1 font-mono text-[10px]">
+                        {job.jobId}
+                        {job.inngestId ? ` · ${job.inngestId}` : ""}
+                      </div>
+                    </details>
                   </Td>
                   <Td>
                     <CategoryBadge category={job.category} />
