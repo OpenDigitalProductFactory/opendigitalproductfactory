@@ -81,6 +81,11 @@
             "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/hooks/run-hook.mjs\" hooks/worktree-freshness",
             "async": false
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/hooks/run-hook.mjs\" hooks/janitor-throttle",
+            "async": false
           }
         ]
       }
