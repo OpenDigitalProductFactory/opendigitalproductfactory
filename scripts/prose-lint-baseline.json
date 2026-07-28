@@ -7356,6 +7356,12 @@
     "longSentences": 0,
     "textMass": 7
   },
+  "apps/web/components/ui/form-kit/RecordForm.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "longSentences": 0,
+    "textMass": 32
+  },
   "apps/web/components/ui/form/FormField.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
