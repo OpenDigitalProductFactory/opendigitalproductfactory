@@ -858,6 +858,47 @@ if ((Test-StepDone "wsl2_partial") -and -not (Test-StepDone "wsl2")) {
     Save-Progress "wsl2"
 }
 
+# Cap WSL2's built-in crash-dump collector (Microsoft Learn: "Advanced settings
+# configuration in WSL", maxCrashDumpCount under [wsl2]). Left uncapped, every
+# ephemeral process that aborts inside a WSL-backed Docker container writes a
+# dump to %LOCALAPPDATA%\Temp\wsl-crashes with no automatic cleanup -- observed
+# reaching 60GB+ and filling the system drive on a dev box running many
+# parallel containerized builds. Runs on every install/reinstall pass (not
+# gated behind Test-StepDone) so it backfills existing installs whose
+# .wslconfig predates this fix, but never overwrites an operator's own
+# explicit choice for this key.
+$wslConfigPath = Join-Path $env:USERPROFILE ".wslconfig"
+$crashDumpCap = 2
+$wslConfigChanged = $false
+if (Test-Path $wslConfigPath) {
+    $wslConfigLines = @(Get-Content -LiteralPath $wslConfigPath)
+    # NOTE: "-notmatch" against an array filters to non-matching elements (almost
+    # always truthy) rather than testing "no element matches" -- use a positive
+    # -match filter and check its Count instead.
+    if (@($wslConfigLines -match "^\s*maxCrashDumpCount\s*=").Count -eq 0) {
+        if (@($wslConfigLines -match "^\s*\[wsl2\]\s*$").Count -gt 0) {
+            # Insert right after the [wsl2] section header.
+            $newLines = New-Object System.Collections.Generic.List[string]
+            foreach ($line in $wslConfigLines) {
+                $newLines.Add($line)
+                if ($line -match "^\s*\[wsl2\]\s*$") {
+                    $newLines.Add("maxCrashDumpCount=$crashDumpCap")
+                }
+            }
+            Set-Content -LiteralPath $wslConfigPath -Value $newLines
+        } else {
+            Add-Content -LiteralPath $wslConfigPath -Value @("", "[wsl2]", "maxCrashDumpCount=$crashDumpCap")
+        }
+        $wslConfigChanged = $true
+    }
+} else {
+    Set-Content -LiteralPath $wslConfigPath -Value @("[wsl2]", "maxCrashDumpCount=$crashDumpCap")
+    $wslConfigChanged = $true
+}
+if ($wslConfigChanged) {
+    Write-OK "Capped WSL crash-dump retention (maxCrashDumpCount=$crashDumpCap) in .wslconfig"
+}
+
 # --- Step 3: Docker Desktop ---------------------------------------------------
 
 Write-Step 3 10 "Installing Docker Desktop..."
