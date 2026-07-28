@@ -14,4 +14,5 @@ export * from "./demo-business";
 export * from "./demo-business-load";
 export * from "./demo-flavor";
 export * from "./processing-activity-templates";
+export * from "./product-mix";
 export * from "./sections/schemas";

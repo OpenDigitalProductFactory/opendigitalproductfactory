@@ -8,6 +8,12 @@ import { seedOnboardingBrandOffer } from "@/lib/actions/seed-onboarding-brand-of
 import { financeProfileSlugFromCategory } from "@/lib/finance/setup-profile";
 import { INDUSTRY_OPTIONS } from "@/lib/storefront/industries";
 import type { WorkspaceHomeSetupActivationSummary } from "@/lib/workspace-home";
+import type { ProductMixDefinition } from "@dpf/storefront-templates";
+import type { ProductLineSelection } from "@/lib/products/setup-product-mix";
+import {
+  ProductMixSetupFieldset,
+  defaultProductLineSelections,
+} from "./ProductMixSetupFieldset";
 
 type Archetype = {
   archetypeId: string;
@@ -18,6 +24,7 @@ type Archetype = {
   itemTemplates: unknown;
   sectionTemplates: unknown;
   activationProfile?: unknown;
+  productMix: ProductMixDefinition;
   workspaceHomeActivation?: WorkspaceHomeSetupActivationSummary;
   isBuiltIn?: boolean;
 };
@@ -72,6 +79,9 @@ export function SetupWizard({
   const [error, setError] = useState<string | null>(null);
   // EP-PARTNER-CHANNEL Phase 1b: per-capability setup answers (capabilityKey → enabled).
   const [capabilityChoices, setCapabilityChoices] = useState<Record<string, boolean>>({});
+  const [productLineSelections, setProductLineSelections] = useState<
+    ProductLineSelection[]
+  >([]);
 
   const displayPortalLabel = portalLabel ?? "Portal";
 
@@ -97,6 +107,12 @@ export function SetupWizard({
     !search || a.name.toLowerCase().includes(search.toLowerCase()) || a.category.includes(search.toLowerCase())
   );
 
+  function chooseArchetype(archetype: Archetype) {
+    setSelected(archetype);
+    setProductLineSelections(defaultProductLineSelections(archetype.productMix));
+    setStep(2);
+  }
+
   async function handleComplete() {
     setError(null);
     setSubmitting(true);
@@ -115,11 +131,13 @@ export function SetupWizard({
             capabilityKey: q.capabilityKey,
             choice: capabilityChoices[q.capabilityKey] ? "enabled" : "disabled",
           })),
+          productLines: productLineSelections,
         }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error((data as { error?: string }).error ?? "Setup failed");
+        const errorBody = data as { error?: string; message?: string };
+        throw new Error(errorBody.message ?? errorBody.error ?? "Setup failed");
       }
       // Move to financial setup step
       setStep(3);
@@ -194,6 +212,7 @@ export function SetupWizard({
         itemTemplates: created.itemTemplates,
         sectionTemplates: created.sectionTemplates,
         activationProfile: created.activationProfile,
+        productMix: created.productMix,
         workspaceHomeActivation: {
           archetypeId: created.archetypeId,
           archetypeName: created.name,
@@ -213,6 +232,9 @@ export function SetupWizard({
         },
         isBuiltIn: false,
       });
+      setProductLineSelections(
+        defaultProductLineSelections(created.productMix as ProductMixDefinition),
+      );
       setStep(2);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to create archetype");
@@ -270,7 +292,7 @@ export function SetupWizard({
                 {items.map((a) => {
                   const isSuggested = a.archetypeId === suggestedArchetypeId;
                   return (
-                    <button key={a.archetypeId} onClick={() => { setSelected(a); setStep(2); }}
+                    <button key={a.archetypeId} onClick={() => chooseArchetype(a)}
                       className={`text-[var(--dpf-text)] ${isSuggested ? "border-2 border-[var(--dpf-accent)]" : "border border-[var(--dpf-border)]"}`}
                       style={{
                         padding: "12px 16px",
@@ -300,7 +322,7 @@ export function SetupWizard({
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 8 }}>
               {custom.map((a) => (
-                <button key={a.archetypeId} onClick={() => { setSelected(a); setStep(2); }}
+                <button key={a.archetypeId} onClick={() => chooseArchetype(a)}
                   className="border border-dashed border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)]"
                   style={{
                     padding: "12px 16px", textAlign: "left", borderRadius: 8,
@@ -437,6 +459,13 @@ export function SetupWizard({
           activationProfile={selected?.activationProfile}
           workspaceHomeActivation={selected?.workspaceHomeActivation}
         />
+        {selected?.productMix && (
+          <ProductMixSetupFieldset
+            productMix={selected.productMix}
+            value={productLineSelections}
+            onChange={setProductLineSelections}
+          />
+        )}
         {(() => {
           const questions = setupQuestionsFor(selected?.activationProfile);
           if (questions.length === 0) return null;
@@ -501,7 +530,7 @@ export function SetupWizard({
         {error && <p className="text-[var(--dpf-error)]" style={{ fontSize: 13 }}>{error}</p>}
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={() => setStep(1)} className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)]" style={{ padding: "8px 16px", borderRadius: 6, cursor: "pointer", fontSize: 13 }}>Back</button>
-          <button onClick={handleComplete} disabled={submitting || !orgSlug}
+          <button onClick={handleComplete} disabled={submitting || !orgSlug || productLineSelections.some((line) => !line.label.trim())}
             className="bg-[var(--dpf-accent)] text-white" style={{ padding: "8px 20px", borderRadius: 6, border: "none", cursor: submitting ? "wait" : "pointer", fontSize: 13, fontWeight: 600, opacity: submitting || !orgSlug ? 0.7 : 1 }}>
             {submitting ? "Creating..." : `Create ${displayPortalLabel}`}
           </button>

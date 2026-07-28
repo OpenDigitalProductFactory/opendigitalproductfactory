@@ -5,6 +5,10 @@ import { getSetupContext } from "@/lib/actions/setup-progress";
 import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
 import { resolveVocabularyKey } from "@/lib/storefront/resolve-vocabulary";
 import { buildWorkspaceHomeActivationSummaries } from "@/lib/workspace-home";
+import {
+  resolveProductMix,
+  type ItemTemplate,
+} from "@dpf/storefront-templates";
 
 export default async function StorefrontSetupPage() {
   const existing = await prisma.storefrontConfig.findFirst({ select: { id: true } });
@@ -22,6 +26,7 @@ export default async function StorefrontSetupPage() {
         itemTemplates: true,
         sectionTemplates: true,
         activationProfile: true,
+        productMix: true,
         isBuiltIn: true,
       },
       orderBy: { category: "asc" },
@@ -38,6 +43,12 @@ export default async function StorefrontSetupPage() {
   const workspaceHomeActivationSummaries = buildWorkspaceHomeActivationSummaries(archetypes);
   const archetypesWithWorkspaceHomeActivation = archetypes.map((archetype) => ({
     ...archetype,
+    productMix: resolveProductMix({
+      archetypeId: archetype.archetypeId,
+      name: archetype.name,
+      itemTemplates: archetype.itemTemplates as unknown as ItemTemplate[],
+      productMix: archetype.productMix,
+    }),
     workspaceHomeActivation: workspaceHomeActivationSummaries[archetype.archetypeId],
   }));
 

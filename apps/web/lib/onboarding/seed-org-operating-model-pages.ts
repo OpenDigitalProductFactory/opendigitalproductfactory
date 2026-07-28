@@ -2,8 +2,9 @@
 //
 // The archetype starter seed (seed-org-wwwd-corpus.ts) gives a fresh install
 // an honest but GENERIC stance corpus. Onboarding also persists the company's
-// actual operating-model map — its market offer as DigitalProducts in the
-// Goods and Services for Sale portfolio (seed-market-offer.ts), its portfolio
+// actual operating-model map — its market offer as organization-owned
+// ProductLines and Products in Goods and Services for Sale
+// (seed-market-offer.ts), its portfolio
 // decomposition on BusinessContext (seed-portfolio-decomposition.ts), and its
 // supply/tooling as DigitalProducts in Manufacturing & Delivery / For
 // Employees (projectArchetypeSupply) — but until now none of that map was
@@ -55,6 +56,7 @@ export type SeedOperatingModelPagesClient = {
   portfolio: { findUnique: (args: unknown) => Promise<unknown> };
   digitalProduct: { findMany: (args: unknown) => Promise<unknown> };
   serviceOffering: { findMany: (args: unknown) => Promise<unknown> };
+  productLine?: { findMany: (args: unknown) => Promise<unknown> };
   decisionPerspectiveProfile: { findUnique: (args: unknown) => Promise<unknown> };
   perspectiveMaterial: { upsert: (args: unknown) => Promise<unknown> };
   wikiPage: {
@@ -133,7 +135,7 @@ function buildWhatWeSellPage(input: {
     OPERATING_MODEL_SEED_MARKER,
     "# What we sell",
     "",
-    `This is ${input.orgLabel}'s recorded market offer — each line lives as a product or service offering in the \`Goods and Services for Sale\` portfolio, so decisions about the catalog can point at the real thing rather than a description of it:`,
+    `This is ${input.orgLabel}'s recorded market offer — each line lives in the business product hierarchy owned by \`Goods and Services for Sale\`, so decisions can point at the real thing rather than a description of it:`,
     "",
     listNames(names),
     "",
@@ -261,7 +263,7 @@ export async function seedOrgOperatingModelPages(
   const embed = input.embed ?? storeWikiPage;
   const organizationId = input.organizationId;
 
-  const [org, bc, soldProducts, supplyProducts, forEmployeeProducts] = await Promise.all([
+  const [org, bc, soldProducts, supplyProducts, forEmployeeProducts, businessLines] = await Promise.all([
     db.organization.findUnique({
       where: { id: organizationId },
       select: { name: true },
@@ -273,12 +275,26 @@ export async function seedOrgOperatingModelPages(
     productNamesInPortfolio(db, PORTFOLIO_SLUGS.sold),
     productNamesInPortfolio(db, PORTFOLIO_SLUGS.supply),
     productNamesInPortfolio(db, PORTFOLIO_SLUGS.forEmployees),
+    db.productLine
+      ? (db.productLine.findMany({
+          where: { organizationId, effectiveTo: null },
+          orderBy: { sortOrder: "asc" },
+          select: {
+            name: true,
+            products: {
+              where: { effectiveTo: null },
+              orderBy: { sortOrder: "asc" },
+              select: { name: true },
+            },
+          },
+        }) as Promise<Array<{ name: string; products: Array<{ name: string }> }>>)
+      : Promise.resolve([]),
   ]);
 
   const orgLabel = (org?.name ?? "").trim() || "this organization";
 
-  // The market-offer product's ServiceOfferings are the actual catalog lines
-  // (e.g. "New Patient Examination"), more concrete than the product name.
+  // Business Products are canonical. The legacy DigitalProduct/ServiceOffering
+  // read remains a compatibility fallback for installs not yet reconciled.
   const marketOffer = soldProducts.find(
     (p) => p.productId === `DP-MARKET-OFFER-${organizationId}`,
   );
@@ -289,6 +305,9 @@ export async function seedOrgOperatingModelPages(
         orderBy: { name: "asc" },
       })) as Array<{ name: string }>)
     : [];
+  const businessOfferNames = businessLines.flatMap((line) =>
+    line.products.length > 0 ? line.products.map((product) => product.name) : [line.name],
+  );
 
   const decomposition =
     bc && typeof bc.portfolioDecomposition === "object" && bc.portfolioDecomposition !== null && !Array.isArray(bc.portfolioDecomposition)
@@ -299,7 +318,10 @@ export async function seedOrgOperatingModelPages(
     buildWhatWeSellPage({
       orgLabel,
       targetMarket: bc?.targetMarket ?? null,
-      offeringNames: offerings.map((o) => o.name),
+      offeringNames:
+        businessOfferNames.length > 0
+          ? businessOfferNames
+          : offerings.map((o) => o.name),
       productNames: soldProducts.map((p) => p.name),
     }),
     buildHowWeAreOrganizedPage({ orgLabel, decomposition }),

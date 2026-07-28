@@ -678,7 +678,11 @@
         "rule-8",
         "implementation-7",
         "rationale-7",
-        "application"
+        "application",
+        "principle-10-query-the-canonical-business-product-boundary",
+        "rule-9",
+        "implementation-8",
+        "rationale-8"
       ]
     },
     "docs/architecture/ai-routing-document-map.md": {

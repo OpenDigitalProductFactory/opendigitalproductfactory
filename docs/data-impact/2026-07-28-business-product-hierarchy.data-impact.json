@@ -1,0 +1,161 @@
+{
+  "version": "1",
+  "accountableOwner": "product-management",
+  "affectedCopies": [
+    "Storefront setup product-mix confirmation",
+    "Organization-owned Goods and Services for Sale hierarchy",
+    "Storefront archetype composition provenance",
+    "WWWD operating-model projection",
+    "DigitalProduct remains unchanged; no speculative compatibility trace is created"
+  ],
+  "migration": {
+    "name": "20260728120000_add_business_product_hierarchy",
+    "backfill": "No SQL backfill. The migration is additive and existing rows receive nullable fields only. The idempotent setup-completion reconciler creates organization product lines only from an existing active StorefrontArchetypeComposition and its live archetype definition; ambiguous legacy items remain untouched."
+  },
+  "tests": [
+    "packages/storefront-templates/src/product-mix.test.ts",
+    "apps/web/lib/products/product-hierarchy.test.ts",
+    "apps/web/lib/products/setup-product-mix.test.ts",
+    "apps/web/lib/products/persist-product-hierarchy.test.ts",
+    "apps/web/lib/onboarding/seed-market-offer.test.ts",
+    "apps/web/components/storefront-admin/ProductMixSetupFieldset.test.tsx"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:business-product-line",
+      "prismaModel": "ProductLine",
+      "lifecycleDisposition": "Organization-owned business definition. Setup-owned rows are effective-dated when no longer confirmed; operator-owned history is retained. Organization deletion cascades under the existing organization lifecycle.",
+      "fields": [
+        {
+          "fieldId": "data:business-product-line#lineId",
+          "resolution": "governed",
+          "reason": "Stable semantic identity for rename-safe hierarchy references and reporting rollups.",
+          "provenance": "BI-AD7F9D34; Product Management Operating Loop design section 5.1",
+          "flags": [],
+          "fieldPolicy": "Deterministic from organization identity and product-line key; never derived from a display label after first capture."
+        },
+        {
+          "fieldId": "data:business-product-line#organizationId",
+          "resolution": "governed",
+          "reason": "Defines the reporting and provider boundary at every organizational scale.",
+          "provenance": "BI-AD7F9D34 provider-consumer invariant",
+          "flags": ["organization"],
+          "fieldPolicy": "Required organization scope; cross-organization parent and product links are blocked by composite foreign keys."
+        },
+        {
+          "fieldId": "data:business-product-line#parentId",
+          "resolution": "governed",
+          "reason": "Supports nested product-line rollups without changing the canonical model by business scale.",
+          "provenance": "BI-AD7F9D34 acceptance criteria",
+          "flags": [],
+          "fieldPolicy": "Nullable for a root line; same-organization only; application validation blocks self-parenting and cycles."
+        },
+        {
+          "fieldId": "data:business-product-line#key",
+          "resolution": "governed",
+          "reason": "Stable organization-local key for idempotent setup replay.",
+          "provenance": "Archetype ProductMixDefinition or validated custom setup label",
+          "flags": [],
+          "fieldPolicy": "Lowercase hyphenated key, unique within an organization."
+        },
+        {
+          "fieldId": "data:business-product-line#name",
+          "resolution": "governed",
+          "reason": "Operator-facing business-language label that can change without changing identity.",
+          "provenance": "Confirmed storefront setup selection",
+          "flags": [],
+          "fieldPolicy": "Required, trimmed, maximum 80 characters at setup."
+        },
+        {
+          "fieldId": "data:business-product-line#sourceKind-sourceRef",
+          "resolution": "governed",
+          "reason": "Records whether setup owns the row and which storefront supplied the evidence.",
+          "provenance": "Canonical hierarchy writer",
+          "flags": [],
+          "fieldPolicy": "Phase 1 writes sourceKind storefront-setup and the StorefrontConfig id as sourceRef."
+        },
+        {
+          "fieldId": "data:business-product-line#effectiveFrom-effectiveTo",
+          "resolution": "governed",
+          "reason": "Preserves future-effective dating and non-destructive removal.",
+          "provenance": "Product Management Operating Loop design",
+          "flags": [],
+          "fieldPolicy": "Active while effectiveTo is null; removal retires setup-owned rows instead of deleting them."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:business-product",
+      "prismaModel": "Product",
+      "lifecycleDisposition": "Organization-owned product definition retained with its product line and effective-dated when a setup-owned default is no longer confirmed.",
+      "fields": [
+        {
+          "fieldId": "data:business-product#productId",
+          "resolution": "governed",
+          "reason": "Stable product identity independent of operator rename.",
+          "provenance": "BI-AD7F9D34 canonical hierarchy writer",
+          "flags": [],
+          "fieldPolicy": "Deterministic from organization, line key, and product key."
+        },
+        {
+          "fieldId": "data:business-product#organizationId-productLineId",
+          "resolution": "governed",
+          "reason": "Makes one product line the product owner and enforces the organization reporting boundary.",
+          "provenance": "BI-AD7F9D34 hierarchy contract",
+          "flags": ["organization"],
+          "fieldPolicy": "Required compound foreign key; the product and product line must share an organization."
+        },
+        {
+          "fieldId": "data:business-product#key-name-description",
+          "resolution": "governed",
+          "reason": "Provides an idempotent key and plain-language business definition.",
+          "provenance": "Confirmed ProductMixDefinition",
+          "flags": [],
+          "fieldPolicy": "Key is unique within its line; name is required; description is optional."
+        },
+        {
+          "fieldId": "data:business-product#sourceKind-sourceRef-effectiveFrom-effectiveTo",
+          "resolution": "governed",
+          "reason": "Preserves setup provenance and non-destructive lifecycle history.",
+          "provenance": "Canonical hierarchy writer",
+          "flags": [],
+          "fieldPolicy": "Only setup-owned rows are retired automatically; no customer or consumer identity is stored."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:storefront-archetype#productMix",
+      "prismaModel": "StorefrontArchetype",
+      "lifecycleDisposition": "Built-in metadata is refreshed from checked-in archetype seeds; custom archetype metadata follows the custom archetype lifecycle.",
+      "fields": [
+        {
+          "fieldId": "data:storefront-archetype#productMix",
+          "resolution": "governed",
+          "reason": "Provides the one seeded/live authority for primary and adjacent setup suggestions.",
+          "provenance": "WWMD decision DI-30325B6759C2",
+          "flags": [],
+          "fieldPolicy": "Validated by the shared ProductMix parser. Suggestions never create consumers, teams, subscribers, or entitlements."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:storefront-archetype-composition#productLineId",
+      "prismaModel": "StorefrontArchetypeComposition",
+      "lifecycleDisposition": "Nullable trace retained with the composition and cleared if its product line is deleted.",
+      "fields": [
+        {
+          "fieldId": "data:storefront-archetype-composition#productLineId",
+          "resolution": "governed",
+          "reason": "Connects channel-template provenance to the organization-owned business product line without making composition the hierarchy authority.",
+          "provenance": "BI-AD7F9D34 architecture review",
+          "flags": [],
+          "fieldPolicy": "One active or retained composition may trace to one product line; custom lines may have no composition."
+        }
+      ]
+    }
+  ]
+}

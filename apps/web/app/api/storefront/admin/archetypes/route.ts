@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import { isIndustrySlug } from "@/lib/storefront/industries";
 import { slugify } from "@/lib/shared/slugify";
+import { toProductMixKey } from "@dpf/storefront-templates";
 
 type CreateCustomArchetypeBody = {
   name: string;
@@ -82,6 +83,19 @@ export async function POST(req: NextRequest) {
       isActive: true,
       isBuiltIn: false,
       ...(body.customVocabulary && { customVocabulary: body.customVocabulary }),
+      productMix: {
+        primary: {
+          key: toProductMixKey(body.name) || "primary",
+          label: body.name.trim(),
+          archetypeId,
+          products: body.itemTemplates.map((item, index) => ({
+            key: toProductMixKey(item.name) || `product-${index + 1}`,
+            label: item.name.trim(),
+            description: item.description.trim(),
+          })),
+        },
+        adjacent: [],
+      },
     },
   });
 

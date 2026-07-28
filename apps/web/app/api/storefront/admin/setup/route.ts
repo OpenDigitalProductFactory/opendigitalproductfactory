@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { apiErrorResponse } from "@/lib/api/error";
 import { prisma } from "@dpf/db";
 import { applyBusinessCapabilityPerspective } from "@dpf/db/business-capability-perspectives";
-import { newId } from "@/lib/shared/new-id";
 import { generateDesignSystem } from "@/lib/design-intelligence";
 import { seedBookingScheduleDefaults } from "@/lib/storefront/seed-booking-defaults";
 import {
@@ -11,15 +11,38 @@ import {
 } from "@/lib/storefront/archetype-activation";
 import { setCapabilityChoice } from "@/lib/storefront/capability-activation";
 import { projectOperationalValueStreamForArchetype } from "@/lib/storefront/project-operational-value-stream";
+import {
+  resolveProductMix,
+  type ItemTemplate,
+  type ProductLineTemplate,
+} from "@dpf/storefront-templates";
+import {
+  resolveSetupProductLines,
+  type ProductLineSelection,
+} from "@/lib/products/setup-product-mix";
+import {
+  persistProductHierarchy,
+  type ProductHierarchyClient,
+} from "@/lib/products/persist-product-hierarchy";
+import {
+  seedCompositionArtifacts,
+  type CompositionArtifactClient,
+} from "@/lib/storefront/seed-composition-artifacts";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user || (session.user as { type?: string }).type !== "admin") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return apiErrorResponse("UNAUTHORIZED", "Unauthorized", 401);
   }
 
   const {
-    archetypeId, tagline, heroImageUrl, orgName, orgSlug, capabilityChoices,
+    archetypeId,
+    tagline,
+    heroImageUrl,
+    orgName,
+    orgSlug,
+    capabilityChoices,
+    productLines,
   } = (await req.json()) as {
     archetypeId: string;
     tagline?: string;
@@ -27,93 +50,160 @@ export async function POST(req: NextRequest) {
     orgName?: string;
     orgSlug: string;
     capabilityChoices?: Array<{ capabilityKey: string; choice: "enabled" | "disabled" }>;
+    productLines?: ProductLineSelection[];
   };
 
   if (!orgSlug) {
-    return NextResponse.json({ error: "orgSlug is required" }, { status: 400 });
+    return apiErrorResponse("INVALID_ARGUMENT", "orgSlug is required", 400);
   }
 
   const org = await prisma.organization.findFirst({ select: { id: true, name: true, slug: true } });
   if (!org) {
-    return NextResponse.json(
-      { error: "Organization not found. Complete account setup first." },
-      { status: 400 }
+    return apiErrorResponse(
+      "ORGANIZATION_NOT_FOUND",
+      "Organization not found. Complete account setup first.",
+      400,
     );
   }
 
-  // Update org name and/or slug if the user edited them in the storefront wizard
-  const orgUpdates: { name?: string; slug?: string } = {};
-  if (orgName && orgName !== org.name) orgUpdates.name = orgName;
-  if (orgSlug !== org.slug) orgUpdates.slug = orgSlug;
-  if (Object.keys(orgUpdates).length > 0) {
-    await prisma.organization.update({ where: { id: org.id }, data: orgUpdates });
-  }
-
   const existing = await prisma.storefrontConfig.findUnique({ where: { organizationId: org.id } });
-  if (existing) return NextResponse.json({ error: "Storefront already exists" }, { status: 409 });
+  if (existing) return apiErrorResponse("ALREADY_EXISTS", "Storefront already exists", 409);
 
   const archetype = await prisma.storefrontArchetype.findUnique({ where: { archetypeId } });
-  if (!archetype) return NextResponse.json({ error: "Archetype not found" }, { status: 400 });
+  if (!archetype) return apiErrorResponse("ARCHETYPE_NOT_FOUND", "Archetype not found", 400);
 
   const orgSettingsRow = await prisma.orgSettings.findFirst({ select: { baseCurrency: true } });
   const seedCurrency = orgSettingsRow?.baseCurrency ?? "USD";
 
-  const config = await prisma.storefrontConfig.create({
-    data: {
-      organizationId: org.id,
-      archetypeId: archetype.id,
-      tagline: tagline ?? null,
-      heroImageUrl: heroImageUrl ?? null,
-      isPublished: false,
-      sections: {
-        create: (
-          archetype.sectionTemplates as Array<{ type: string; title: string; sortOrder: number }>
-        ).map((s) => ({
-          type: s.type,
-          title: s.title,
-          sortOrder: s.sortOrder,
-          content: {},
-          // Content-dependent sections start hidden until operator adds content (R10-SECT-001).
-          isVisible: !["team", "gallery", "testimonials"].includes(s.type),
-        })),
-      },
-      items: {
-        create: (
-          archetype.itemTemplates as Array<{
-            name: string;
-            description?: string;
-            priceType: string;
-            ctaType?: string;
-            ctaLabel?: string;
-            priceAmount?: number | null;
-          }>
-        ).map((t, i) => ({
-          itemId: `itm-${newId(8)}`,
-          name: t.name,
-          description: t.description ?? null,
-          priceType: t.priceType,
-          ctaType: t.ctaType ?? archetype.ctaType,
-          ctaLabel: t.ctaLabel ?? null,
-          // Seed the template's price so purchase items are chargeable out of the
-          // box; null leaves the item price-less (CtaButton renders "Enquire").
-          priceAmount: t.priceAmount ?? null,
-          sortOrder: i,
-          isActive: true,
-          priceCurrency: seedCurrency,
-        })),
-      },
-    },
-    select: { id: true },
+  const productMix = resolveProductMix({
+    archetypeId: archetype.archetypeId,
+    name: archetype.name,
+    itemTemplates: archetype.itemTemplates as unknown as ItemTemplate[],
+    productMix: archetype.productMix,
   });
+  let confirmedProductLines: ProductLineTemplate[];
+  try {
+    confirmedProductLines = resolveSetupProductLines({
+      productMix,
+      selections:
+        productLines ??
+        [{
+          suggestionKey: productMix.primary.key,
+          label: productMix.primary.label,
+        }],
+    });
+  } catch (error) {
+    return apiErrorResponse(
+      "INVALID_PRODUCT_LINES",
+      error instanceof Error ? error.message : "Invalid product lines",
+      400,
+    );
+  }
 
-  // Seed the primary composition slot so getCompositeActivationProfile can resolve this storefront.
-  await prisma.storefrontArchetypeComposition.create({
-    data: {
-      storefrontId: config.id,
-      archetypeId: archetype.id,
-      role: "primary",
-      sortOrder: 0,
-    },
+  const secondaryArchetypeIds = Array.from(
+    new Set(
+      confirmedProductLines
+        .map((line) => line.archetypeId)
+        .filter(
+          (id): id is string =>
+            Boolean(id) && id !== archetype.archetypeId,
+        ),
+    ),
+  );
+  if (secondaryArchetypeIds.length > 2) {
+    return apiErrorResponse(
+      "TOO_MANY_ADJACENT_LINES",
+      "Setup supports at most two adjacent storefront lines.",
+      400,
+    );
+  }
+  const secondaryArchetypes =
+    secondaryArchetypeIds.length === 0
+      ? []
+      : await prisma.storefrontArchetype.findMany({
+          where: {
+            archetypeId: { in: secondaryArchetypeIds },
+            isActive: true,
+          },
+        });
+  if (secondaryArchetypes.length !== secondaryArchetypeIds.length) {
+    return apiErrorResponse(
+      "ADJACENT_LINE_UNAVAILABLE",
+      "A selected adjacent product line is no longer available.",
+      400,
+    );
+  }
+
+  // Config, composition artifacts, and business hierarchy form one authority
+  // boundary. A failure rolls all of them back instead of leaving partial setup.
+  const config = await prisma.$transaction(async (tx) => {
+    const orgUpdates: { name?: string; slug?: string } = {};
+    if (orgName && orgName !== org.name) orgUpdates.name = orgName;
+    if (orgSlug !== org.slug) orgUpdates.slug = orgSlug;
+    if (Object.keys(orgUpdates).length > 0) {
+      await tx.organization.update({ where: { id: org.id }, data: orgUpdates });
+    }
+
+    const created = await tx.storefrontConfig.create({
+      data: {
+        organizationId: org.id,
+        archetypeId: archetype.id,
+        tagline: tagline ?? null,
+        heroImageUrl: heroImageUrl ?? null,
+        isPublished: false,
+      },
+      select: { id: true },
+    });
+
+    const primaryComposition =
+      await tx.storefrontArchetypeComposition.create({
+        data: {
+          storefrontId: created.id,
+          archetypeId: archetype.id,
+          role: "primary",
+          sortOrder: 0,
+        },
+      });
+    await seedCompositionArtifacts({
+      db: tx as unknown as CompositionArtifactClient,
+      storefrontId: created.id,
+      compositionId: primaryComposition.id,
+      compositionSortOrder: 0,
+      seedCurrency,
+      revealContentSections: true,
+      archetype,
+    });
+
+    for (let index = 0; index < secondaryArchetypes.length; index++) {
+      const secondary = secondaryArchetypes[index];
+      const sortOrder = index + 1;
+      const composition =
+        await tx.storefrontArchetypeComposition.create({
+          data: {
+            storefrontId: created.id,
+            archetypeId: secondary.id,
+            role: "secondary",
+            sortOrder,
+          },
+        });
+      await seedCompositionArtifacts({
+        db: tx as unknown as CompositionArtifactClient,
+        storefrontId: created.id,
+        compositionId: composition.id,
+        compositionSortOrder: sortOrder,
+        seedCurrency,
+        revealContentSections: false,
+        archetype: secondary,
+      });
+    }
+
+    await persistProductHierarchy({
+      organizationId: org.id,
+      storefrontId: created.id,
+      lines: confirmedProductLines,
+      db: tx as unknown as ProductHierarchyClient,
+    });
+    return created;
   });
 
   // Generate design system recommendation from archetype metadata (pure TypeScript, no LLM call)

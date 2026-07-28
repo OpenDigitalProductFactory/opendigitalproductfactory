@@ -32,14 +32,15 @@ correct. Setup can be run once. After a storefront exists,
 
 ```mermaid
 flowchart LR
-    A["Choose a business template"] --> B["Preview sections, items, and capabilities"]
-    B --> C["Set the public slug and presentation"]
-    C --> D["Complete financial setup"]
-    D --> E["Review content, business settings, and hours"]
-    E --> F{"Ready for customers?"}
-    F -- "Not yet" --> E
-    F -- "Yes" --> G["Publish from Storefront"]
-    G --> H["Verify /s/your-slug as a customer"]
+    A["Choose a business template"] --> B["Confirm what the business sells"]
+    B --> C["Preview sections, items, and capabilities"]
+    C --> D["Set the public slug and presentation"]
+    D --> E["Complete financial setup"]
+    E --> F["Review content, business settings, and hours"]
+    F --> G{"Ready for customers?"}
+    G -- "Not yet" --> F
+    G -- "Yes" --> H["Publish from Storefront"]
+    H --> I["Verify /s/your-slug as a customer"]
 ```
 
 ## Complete The Guided Setup
@@ -47,19 +48,31 @@ flowchart LR
 1. Open **Storefront → Setup** and search for the business template that best
    matches how customers interact with you. Review any suggested template;
    suggestions are a starting point, not an automatic selection.
-2. Review the template preview. It names the sections and items that will be
+2. Under **What does your business sell?**, confirm the main product line. The
+   suggested line is selected by default and can be renamed without changing
+   its identity. Select an adjacent line only when customers genuinely buy that
+   different kind of good or service. Use **Add product line** for a line that
+   is not suggested. A salon might confirm **Salon services** and optionally
+   **Hair-care products**; a restaurant might confirm **Dining** and optionally
+   **Private events**.
+3. Review the template preview. It names the sections and items that will be
    created and shows which platform modules and workspace experience the
    archetype activates. Answer any capability questions shown for that
    template.
-3. Set the **URL slug**. The public path shown below the field is
+4. Set the **URL slug**. The public path shown below the field is
    `/s/{your-slug}`. Choose a short, durable value that represents the
    organization. Also add the tagline and an externally reachable hero-image
    URL if they are ready.
-4. Select **Create Portal**. The platform creates the storefront, its starting
-   sections and items, the primary archetype composition, and the corresponding
-   business and operational architecture. Booking-oriented templates also
-   receive starter provider availability and booking configuration.
-5. Complete the financial setup step. Confirm the currency and the
+5. Select **Create Portal**. The platform creates the storefront, its starting
+   sections and items, the confirmed product-line and product hierarchy, the
+   matching archetype compositions, and the corresponding business and
+   operational architecture. The organization is the provider. Setup does not
+   invent product teams, business units, subscribers, entitlements, or
+   customers; consumer context appears only after real customer, booking,
+   order, subscription, or fulfilment evidence exists. Booking-oriented
+   templates also receive starter provider availability and booking
+   configuration.
+6. Complete the financial setup step. Confirm the currency and the
    archetype-matched financial choices. Regulated financial-services setups
    continue to the licensing workspace; other setups return to Storefront.
 
@@ -76,6 +89,7 @@ open each relevant workspace:
 | --- | --- | --- |
 | Public identity | **Settings → Portal** | slug, tagline, description, contact details, and hero image |
 | Business truth | **Settings → Your Business** | mission, market, address, jurisdictions, payment handling, and risk posture |
+| Product mix | **Products / Portfolio** | the main and adjacent product lines match what the organization actually sells |
 | Customer content | **Sections** and **Items** | only intended sections are visible; names, descriptions, prices, calls to action, and images are accurate |
 | Fulfilment | **Team**, **Tables & Capacity**, or **Units** when shown | the people or resources that receive work exist and have the right capacity |
 | Time and availability | **Settings → Operating Hours** | timezone and every open/closed day are correct |
@@ -106,6 +120,8 @@ and publish again.
 - partial setup being treated as launch-ready
 - choosing an archetype for its appearance when its customer interaction and
   operating model do not match the business
+- selecting suggested adjacent product lines that the business does not
+  actually sell
 - treating an unpublished portal's 404 as a broken route
 - publishing starter sections, prices, or availability without reviewing them
 - using a temporary URL slug and then distributing or bookmarking it
