@@ -237,6 +237,12 @@ services:
       # (which recreates from this file, not docker-compose.override.yml). See
       # docs/operations/autonomous-build-completion.md. Flip per-install via host .env.
       DPF_AUTO_COMPLETE_VERIFIED_BUILDS: ${DPF_AUTO_COMPLETE_VERIFIED_BUILDS:-0}
+      # Governed Living Playbook autonomy remains fail-closed unless an operator
+      # enables shadow or enforce mode for this install.
+      DPF_BUILD_AUTONOMOUS_PLAYBOOK_MODE: ${DPF_BUILD_AUTONOMOUS_PLAYBOOK_MODE:-off}
+      # PR observation and compare-and-swap delivery actions have an independent
+      # kill switch so rollout can stop without changing build evidence.
+      DPF_BUILD_PR_DELIVERY_RECONCILER_MODE: ${DPF_BUILD_PR_DELIVERY_RECONCILER_MODE:-off}
       # Tell Inngest's serve() the externally-reachable URL for this app so
       # sync registrations announce the Docker-DNS hostname (not the Host
       # header of the /api/inngest PUT, which would be "localhost:3000"

@@ -31,6 +31,25 @@ test("example compose env documents background job override flags", () => {
   assert.match(envExample, /DPF_OPTIONAL_STARTUP_TASKS_ENABLED=/);
 });
 
+test("installed runtime passes through every autonomous Build Studio rollout control", () => {
+  assert.match(
+    compose,
+    /DPF_BUILD_AUTONOMOUS_PLAYBOOK_MODE:\s*\$\{DPF_BUILD_AUTONOMOUS_PLAYBOOK_MODE:-off\}/,
+  );
+  assert.match(
+    compose,
+    /DPF_BUILD_PR_DELIVERY_RECONCILER_MODE:\s*\$\{DPF_BUILD_PR_DELIVERY_RECONCILER_MODE:-off\}/,
+  );
+  assert.match(
+    compose,
+    /DPF_AUTO_COMPLETE_VERIFIED_BUILDS:\s*\$\{DPF_AUTO_COMPLETE_VERIFIED_BUILDS:-0\}/,
+  );
+
+  assert.match(envExample, /DPF_BUILD_AUTONOMOUS_PLAYBOOK_MODE=/);
+  assert.match(envExample, /DPF_BUILD_PR_DELIVERY_RECONCILER_MODE=/);
+  assert.match(envExample, /DPF_AUTO_COMPLETE_VERIFIED_BUILDS=/);
+});
+
 test("portal runtime exposes the host source mount as the git repo root for live-readiness ancestry checks", () => {
   assert.match(
     compose,
