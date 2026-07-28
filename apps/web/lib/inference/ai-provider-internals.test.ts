@@ -10,11 +10,11 @@ const credState = vi.hoisted(() => ({
 const discoveredModelMock = vi.hoisted(() => ({
   findMany: vi.fn(),
   update: vi.fn(),
-  updateMany: vi.fn(),
+  updateMany: vi.fn<(args: Record<string, any>) => Promise<{ count: number }>>(),
   createMany: vi.fn(),
 }));
 const modelProfileMock = vi.hoisted(() => ({
-  updateMany: vi.fn(async () => ({ count: 0 })),
+  updateMany: vi.fn<(args: Record<string, any>) => Promise<{ count: number }>>(async () => ({ count: 0 })),
 }));
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -330,7 +330,7 @@ describe("reconcileDiscoveredModelPresence (retire-forever trap — BI-B6B8C1F9)
     await reconcileDiscoveredModelPresence("zai-coding", new Set(["glm-5.2"]));
 
     expect(modelProfileMock.updateMany).toHaveBeenCalledTimes(1);
-    const args = modelProfileMock.updateMany.mock.calls[0][0];
+    const args = modelProfileMock.updateMany.mock.calls[0]![0];
     expect(args.where.providerId).toBe("zai-coding");
     expect(args.where.modelId).toEqual({ in: ["glm-5.2"] });
     expect(args.where.modelStatus).toBe("retired");
@@ -344,7 +344,7 @@ describe("reconcileDiscoveredModelPresence (retire-forever trap — BI-B6B8C1F9)
 
     await reconcileDiscoveredModelPresence("gemini", new Set(["gemini-1.0-pro"]));
 
-    const args = modelProfileMock.updateMany.mock.calls[0][0];
+    const args = modelProfileMock.updateMany.mock.calls[0]![0];
     expect(args.where.retiredReason).toEqual({ notIn: PERMANENT_RETIRE_REASONS });
   });
 
@@ -356,7 +356,7 @@ describe("reconcileDiscoveredModelPresence (retire-forever trap — BI-B6B8C1F9)
     await reconcileDiscoveredModelPresence("local", new Set(["docker.io/ai/qwen3-coder:latest"]));
 
     expect(modelProfileMock.updateMany).toHaveBeenCalledTimes(1);
-    const args = modelProfileMock.updateMany.mock.calls[0][0];
+    const args = modelProfileMock.updateMany.mock.calls[0]![0];
     // No retiredReason filter for local: the serving engine's list is ground truth.
     expect(args.where.retiredReason).toBeUndefined();
     expect(args.where.modelId).toEqual({ in: ["docker.io/ai/qwen3-coder:latest"] });
@@ -371,7 +371,7 @@ describe("reconcileDiscoveredModelPresence (retire-forever trap — BI-B6B8C1F9)
     await reconcileDiscoveredModelPresence("anthropic-sub", new Set(["m1", "m2"]));
 
     expect(discoveredModelMock.updateMany).toHaveBeenCalledTimes(1);
-    const args = discoveredModelMock.updateMany.mock.calls[0][0];
+    const args = discoveredModelMock.updateMany.mock.calls[0]![0];
     expect(args.where.id).toEqual({ in: ["dm1"] });
     expect(args.data).toEqual({ missedDiscoveryCount: 0 });
   });
@@ -388,7 +388,7 @@ describe("reconcileDiscoveredModelPresence (retire-forever trap — BI-B6B8C1F9)
       data: { missedDiscoveryCount: 2 },
     });
     const retireCall = modelProfileMock.updateMany.mock.calls.find(
-      (c: Array<{ data?: { modelStatus?: string } }>) => c[0]?.data?.modelStatus === "retired",
+      (c) => c[0]?.data?.modelStatus === "retired",
     );
     expect(retireCall).toBeDefined();
   });
