@@ -140,6 +140,25 @@ rollback is required.
 - Confirm the operator band in light/dark and narrow/wide viewports, including collapsed engineer
   details and stale-heartbeat attention.
 
+## Design grounding
+
+- Existing specs/plans reviewed:
+  [governed playbook experimentation and autonomous Build Studio design](../superpowers/specs/2026-07-25-governed-playbook-experimentation-autonomous-build-studio-design.md)
+  and its
+  [implementation plan](../superpowers/plans/2026-07-25-governed-playbook-experimentation-autonomous-build-studio-plan.md).
+- Current code substrate reviewed:
+  `work-pattern-activation`, `work-pattern-activation-persistence`,
+  `work-pattern-effective-ledger`, `work-pattern-binding-reader`,
+  `work-pattern-promotion-policy`, `work-pattern-experiment-store`,
+  `work-pattern-experiment-runtime`, the experiment queue function, and
+  `autonomous-build-eligibility-reader`.
+- Source of truth: effective, non-superseded `DecisionShadowLedger` assignment and outcome
+  evidence governs promotion; `AuthorityBinding` governs the active scope/model lane; `TaskRun`
+  supplies lifecycle and parent/child status only.
+- Decision: extend those substrates with fail-closed automatic same-install activation. Require
+  complete, fresh, comparable evidence and `productionBuild=pass` for `build.implement`; preserve
+  scoped rollback and authority-ceiling escalation; never synthesize qualifying build evidence.
+
 ## Related contracts
 
 - [Build Studio autonomous lanes](../user-guide/build-studio/autonomous-builds.md)
