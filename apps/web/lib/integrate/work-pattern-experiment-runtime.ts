@@ -316,6 +316,7 @@ export async function executePersistedWorkPatternExperimentCell(
   let inferenceContent = "";
   let inputTokens = 0;
   let outputTokens = 0;
+  const startedAtMs = Date.now();
   const result = await executeWorkPatternExperimentCell(request, {
     prepareWorkspace: async () => ({
       workspaceId: `${request.childTaskRunId}:${request.executionProfile.sourceCommitSha}`,
@@ -357,6 +358,36 @@ export async function executePersistedWorkPatternExperimentCell(
     inputTokens,
     outputTokens,
     buildGate: result.buildGate,
+    outcomeEvidence: {
+      completed: true,
+      buildGate: result.buildGate,
+      review: {
+        decision: result.success ? "pass" : "fail",
+        reproducedBlockingFindings: result.success ? 0 : 1,
+        nonBlockingFindings: 0,
+        reviewRounds: 1,
+      },
+      execution: {
+        toolCalls: result.toolCalls,
+        toolFailures: result.toolFailures,
+        retryCount: 0,
+        recoveryActions: [],
+        manualTouches: 0,
+        inputTokens,
+        outputTokens,
+        durationMs: Math.max(0, Date.now() - startedAtMs),
+      },
+      delivery: {
+        prCreated: false,
+        mergeQueued: false,
+        merged: false,
+        deployed: false,
+        rolledBack: false,
+      },
+      ...(!result.success
+        ? { failureClass: result.failureClass ?? "verification_failed" }
+        : {}),
+    },
   };
   await deps.recordEvidence({
     experimentRunId: request.experimentRunId,

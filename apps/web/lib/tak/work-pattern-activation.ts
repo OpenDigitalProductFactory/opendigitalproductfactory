@@ -46,6 +46,7 @@ export type WorkPatternActivationBinding = {
 export type WorkPatternActivationSnapshot = {
   agentId: string;
   patternKey: string;
+  baselinePatternVersion: number;
   patternVersion: number;
   sourceExperimentTaskRunId: string;
   source: WorkPatternActivationEvidenceScope;
@@ -135,6 +136,7 @@ export function workPatternActivationLaneKey(
     snapshot.patternKey,
     snapshot.promotionEvidence.activityKey,
     snapshot.promotionEvidence.riskClass,
+    snapshot.source.modelProfileId,
   ])}`;
 }
 
@@ -161,14 +163,28 @@ function sameAuthorizedScope(
 function bindingScopeKey(
   snapshot: WorkPatternActivationSnapshot,
   requestedScope: WorkPatternActivationRequest["requestedScope"],
+  patternVersion = snapshot.patternVersion,
 ): string {
   return `WP-SCOPE-${digest([
     snapshot.patternKey,
-    snapshot.patternVersion,
+    patternVersion,
     [...requestedScope.installScopes].sort(),
     [...requestedScope.organizationIds].sort(),
     [...requestedScope.taskCorpusKeys].sort(),
     [...requestedScope.modelProfileIds].sort(),
+  ])}`;
+}
+
+function bindingIdForVersion(
+  snapshot: WorkPatternActivationSnapshot,
+  requestedScope: WorkPatternActivationRequest["requestedScope"],
+  patternVersion: number,
+): string {
+  return `AB-WP-${digest([
+    snapshot.agentId,
+    bindingScopeKey(snapshot, requestedScope, patternVersion),
+    snapshot.patternKey,
+    patternVersion,
   ])}`;
 }
 
@@ -272,13 +288,31 @@ export async function activateWorkPattern(
       requested: request.grants,
     });
 
-    const policyVerdict = evaluateWorkPatternPromotion({
-      policy: DEFAULT_WORK_PATTERN_PROMOTION_POLICY,
-      evidence: snapshot.promotionEvidence,
-      now: request.now,
-    });
     const bindings = await session.listBindingsForLane(activationLaneKey);
     const active = bindings.find((binding) => binding.status === "active") ?? null;
+    const mayBootstrapBaseline =
+      Number.isInteger(snapshot.baselinePatternVersion)
+      && snapshot.baselinePatternVersion > 0
+      && snapshot.baselinePatternVersion < snapshot.patternVersion;
+    const baselineBindingId = mayBootstrapBaseline
+      ? bindingIdForVersion(
+          snapshot,
+          request.requestedScope,
+          snapshot.baselinePatternVersion,
+        )
+      : null;
+    const effectiveRollbackBindingId =
+      active?.bindingId
+      ?? snapshot.promotionEvidence.rollbackBindingId
+      ?? baselineBindingId;
+    const policyVerdict = evaluateWorkPatternPromotion({
+      policy: DEFAULT_WORK_PATTERN_PROMOTION_POLICY,
+      evidence: {
+        ...snapshot.promotionEvidence,
+        rollbackBindingId: effectiveRollbackBindingId,
+      },
+      now: request.now,
+    });
 
     if (policyVerdict.decision === "rollback") {
       const rollbackId = snapshot.promotionEvidence.rollbackBindingId;
@@ -353,12 +387,11 @@ export async function activateWorkPattern(
     }
 
     const scopeKey = bindingScopeKey(snapshot, request.requestedScope);
-    const bindingId = `AB-WP-${digest([
-      snapshot.agentId,
-      scopeKey,
-      snapshot.patternKey,
+    const bindingId = bindingIdForVersion(
+      snapshot,
+      request.requestedScope,
       snapshot.patternVersion,
-    ])}`;
+    );
     const existing = await session.findBinding(bindingId);
     if (existing?.status === "active") {
       return observe(
@@ -369,11 +402,52 @@ export async function activateWorkPattern(
       );
     }
 
-    const requestedPriorSafeBindingId =
-      active?.bindingId ?? snapshot.promotionEvidence.rollbackBindingId;
-    const priorSafeBinding = requestedPriorSafeBindingId
+    const requestedPriorSafeBindingId = effectiveRollbackBindingId;
+    let priorSafeBinding = requestedPriorSafeBindingId
       ? await session.findBinding(requestedPriorSafeBindingId)
       : null;
+    if (
+      !priorSafeBinding
+      && baselineBindingId
+      && requestedPriorSafeBindingId === baselineBindingId
+    ) {
+      const baselineScopeKey = bindingScopeKey(
+        snapshot,
+        request.requestedScope,
+        snapshot.baselinePatternVersion,
+      );
+      const baselineAuthorityScope: WorkPatternAuthorityScopeV1 = {
+        schemaVersion: 1,
+        activationLaneKey,
+        bindingScopeKey: baselineScopeKey,
+        patternKey: snapshot.patternKey,
+        patternVersion: snapshot.baselinePatternVersion,
+        activityKey: snapshot.promotionEvidence.activityKey,
+        riskClass: snapshot.promotionEvidence.riskClass,
+        installScopes: [...request.requestedScope.installScopes],
+        organizationIds: [...request.requestedScope.organizationIds],
+        taskCorpusKeys: [...request.requestedScope.taskCorpusKeys],
+        modelProfileIds: [...request.requestedScope.modelProfileIds],
+        promotionPolicyKey: DEFAULT_WORK_PATTERN_PROMOTION_POLICY.policyKey,
+        promotionPolicyVersion: DEFAULT_WORK_PATTERN_PROMOTION_POLICY.version,
+        sourceExperimentTaskRunId: snapshot.sourceExperimentTaskRunId,
+        corroborationTaskRunIds: [...maximumScope.corroborationTaskRunIds],
+        priorSafeBindingId: null,
+        evidenceFreshnessAt: snapshot.promotionEvidence.freshnessAt.toISOString(),
+        evidenceOrigin: evidenceOrigin(maximumScope.ceiling),
+        scopeCeiling: maximumScope.ceiling,
+        blockers: [...maximumScope.blockers],
+      };
+      priorSafeBinding = await session.saveBinding({
+        bindingId: baselineBindingId,
+        name: `${patternLabel(snapshot.patternKey)} v${snapshot.baselinePatternVersion}`,
+        status: "active",
+        resourceRef: `${snapshot.patternKey}@${snapshot.baselinePatternVersion}`,
+        appliedAgentId: snapshot.agentId,
+        grants: request.grants,
+        authorityScope: baselineAuthorityScope,
+      });
+    }
     if (
       !priorSafeBinding
       || priorSafeBinding.authorityScope.activationLaneKey !== activationLaneKey
@@ -386,8 +460,8 @@ export async function activateWorkPattern(
       );
     }
     const priorSafeBindingId = priorSafeBinding.bindingId;
-    if (active && active.bindingId !== bindingId) {
-      await session.updateBindingStatus(active.bindingId, "superseded");
+    if (priorSafeBinding.status === "active" && priorSafeBinding.bindingId !== bindingId) {
+      await session.updateBindingStatus(priorSafeBinding.bindingId, "superseded");
     }
 
     const authorityScope: WorkPatternAuthorityScopeV1 = {

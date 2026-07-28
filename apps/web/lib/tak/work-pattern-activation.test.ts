@@ -17,6 +17,7 @@ function snapshot(
   return {
     agentId: "build-specialist",
     patternKey: "build-review",
+    baselinePatternVersion: 1,
     patternVersion: 2,
     sourceExperimentTaskRunId: "TR-WPX-source",
     source: {
@@ -174,6 +175,37 @@ function request(overrides: Record<string, unknown> = {}) {
 }
 
 describe("activateWorkPattern", () => {
+  it("bootstraps the proven baseline as the first rollback target before activation", async () => {
+    const store = new MemoryActivationStore(snapshot({
+      promotionEvidence: {
+        ...snapshot().promotionEvidence,
+        rollbackBindingId: null,
+      },
+    }));
+    store.bindings.clear();
+
+    const result = await activateWorkPattern(request(), { persistence: store });
+
+    expect(result.decision).toBe("activate");
+    const bindings = [...store.bindings.values()];
+    expect(bindings).toContainEqual(expect.objectContaining({
+      status: "superseded",
+      resourceRef: "build-review@1",
+      authorityScope: expect.objectContaining({
+        patternVersion: 1,
+        priorSafeBindingId: null,
+      }),
+    }));
+    expect(bindings).toContainEqual(expect.objectContaining({
+      status: "active",
+      resourceRef: "build-review@2",
+      authorityScope: expect.objectContaining({
+        patternVersion: 2,
+        priorSafeBindingId: expect.stringMatching(/^AB-WP-/),
+      }),
+    }));
+  });
+
   it("activates exactly one evidence-bounded binding and preserves the prior safe version", async () => {
     const store = new MemoryActivationStore();
 
