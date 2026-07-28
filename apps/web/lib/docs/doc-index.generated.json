@@ -833,6 +833,7 @@
         "packaging-prices-promotions-and-routes",
         "product-sold-ledger",
         "product-operating-context-query-boundary",
+        "direction-route-and-projection-boundary",
         "fleet-safe-evolution"
       ]
     },
@@ -9934,6 +9935,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "use-product-direction",
         "from-product-to-something-a-customer-can-select",
         "package-and-price-a-catalog-item",
         "review-customer-purchases-and-use",

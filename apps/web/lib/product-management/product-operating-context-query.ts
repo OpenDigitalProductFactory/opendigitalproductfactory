@@ -158,6 +158,10 @@ export class ProductOperatingContextNotFoundError extends Error {
   }
 }
 
+export type ProductOperatingContextQueryProfile =
+  | "full"
+  | "commercial-summary";
+
 function numberOf(value: NumberLike | null): number {
   if (value == null) return 0;
   return typeof value === "number" ? value : value.toNumber();
@@ -340,11 +344,13 @@ export async function loadProductOperatingContext(input: {
   scope: ProductOperatingScope;
   authorize: (scope: { organizationId: string }) => Promise<void>;
   requestedAt?: Date;
+  profile?: ProductOperatingContextQueryProfile;
 }): Promise<ProductOperatingContext> {
   const db =
     input.db ??
     (prisma as unknown as ProductOperatingContextQueryClient);
   const requestedAt = input.requestedAt ?? new Date();
+  const fullProfile = (input.profile ?? "full") === "full";
 
   // Authorization is deliberately resolved once at the boundary. Every query
   // still carries the organization predicate as defense in depth.
@@ -357,44 +363,46 @@ export async function loadProductOperatingContext(input: {
   const productIds = identity.products.map((product) => product.id);
 
   const [offerings, soldRows] = await Promise.all([
-    db.productOffering.findMany({
-      where: {
-        organizationId: input.organizationId,
-        productId: { in: productIds },
-      },
-      orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
-      take: 100,
-      select: {
-        id: true,
-        productId: true,
-        providerOrganizationId: true,
-        name: true,
-        status: true,
-        updatedAt: true,
-        catalogItems: {
+    fullProfile
+      ? db.productOffering.findMany({
+          where: {
+            organizationId: input.organizationId,
+            productId: { in: productIds },
+          },
           orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
           take: 100,
           select: {
             id: true,
+            productId: true,
+            providerOrganizationId: true,
             name: true,
             status: true,
             updatedAt: true,
-          },
-        },
-        operationalServiceOffering: {
-          select: {
-            digitalProduct: {
+            catalogItems: {
+              orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
+              take: 100,
               select: {
                 id: true,
-                productId: true,
                 name: true,
+                status: true,
                 updatedAt: true,
               },
             },
+            operationalServiceOffering: {
+              select: {
+                digitalProduct: {
+                  select: {
+                    id: true,
+                    productId: true,
+                    name: true,
+                    updatedAt: true,
+                  },
+                },
+              },
+            },
           },
-        },
-      },
-    }),
+        })
+      : Promise.resolve([]),
     db.productSold.findMany({
       where: {
         organizationId: input.organizationId,
@@ -458,47 +466,51 @@ export async function loadProductOperatingContext(input: {
     elements,
     dependencies,
   ] = await Promise.all([
-    db.researchProposal.findMany({
-      where: {
-        organizationId: input.organizationId,
-        OR: [
-          { digitalProductId: null },
-          ...(digitalProductIds.length > 0
-            ? [{ digitalProductId: { in: digitalProductIds } }]
-            : []),
-        ],
-      },
-      orderBy: [{ updatedAt: "desc" }, { proposalId: "asc" }],
-      take: 50,
-      select: {
-        proposalId: true,
-        digitalProductId: true,
-        topic: true,
-        status: true,
-        updatedAt: true,
-      },
-    }),
-    db.marketingBattlecard.findMany({
-      where: {
-        organizationId: input.organizationId,
-        OR: [
-          { digitalProductId: null },
-          ...(digitalProductIds.length > 0
-            ? [{ digitalProductId: { in: digitalProductIds } }]
-            : []),
-        ],
-      },
-      orderBy: [{ updatedAt: "desc" }, { battlecardId: "asc" }],
-      take: 50,
-      select: {
-        battlecardId: true,
-        digitalProductId: true,
-        competitorName: true,
-        status: true,
-        updatedAt: true,
-      },
-    }),
-    digitalProductIds.length > 0
+    fullProfile
+      ? db.researchProposal.findMany({
+          where: {
+            organizationId: input.organizationId,
+            OR: [
+              { digitalProductId: null },
+              ...(digitalProductIds.length > 0
+                ? [{ digitalProductId: { in: digitalProductIds } }]
+                : []),
+            ],
+          },
+          orderBy: [{ updatedAt: "desc" }, { proposalId: "asc" }],
+          take: 50,
+          select: {
+            proposalId: true,
+            digitalProductId: true,
+            topic: true,
+            status: true,
+            updatedAt: true,
+          },
+        })
+      : Promise.resolve([]),
+    fullProfile
+      ? db.marketingBattlecard.findMany({
+          where: {
+            organizationId: input.organizationId,
+            OR: [
+              { digitalProductId: null },
+              ...(digitalProductIds.length > 0
+                ? [{ digitalProductId: { in: digitalProductIds } }]
+                : []),
+            ],
+          },
+          orderBy: [{ updatedAt: "desc" }, { battlecardId: "asc" }],
+          take: 50,
+          select: {
+            battlecardId: true,
+            digitalProductId: true,
+            competitorName: true,
+            status: true,
+            updatedAt: true,
+          },
+        })
+      : Promise.resolve([]),
+    fullProfile && digitalProductIds.length > 0
       ? db.knowledgeArticle.findMany({
           where: {
             products: {
@@ -519,7 +531,7 @@ export async function loadProductOperatingContext(input: {
           },
         })
       : Promise.resolve([]),
-    digitalProductIds.length > 0
+    fullProfile && digitalProductIds.length > 0
       ? db.backlogItem.findMany({
           where: { digitalProductId: { in: digitalProductIds } },
           orderBy: [{ updatedAt: "desc" }, { itemId: "asc" }],
@@ -542,7 +554,7 @@ export async function loadProductOperatingContext(input: {
           },
         })
       : Promise.resolve([]),
-    digitalProductIds.length > 0
+    fullProfile && digitalProductIds.length > 0
       ? db.changeItem.findMany({
           where: { digitalProductId: { in: digitalProductIds } },
           orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
@@ -555,7 +567,7 @@ export async function loadProductOperatingContext(input: {
           },
         })
       : Promise.resolve([]),
-    digitalProductIds.length > 0
+    fullProfile && digitalProductIds.length > 0
       ? db.eaElement.findMany({
           where: { digitalProductId: { in: digitalProductIds } },
           orderBy: [{ updatedAt: "desc" }, { id: "asc" }],
@@ -568,7 +580,7 @@ export async function loadProductOperatingContext(input: {
           },
         })
       : Promise.resolve([]),
-    digitalProductIds.length > 0
+    fullProfile && digitalProductIds.length > 0
       ? db.productDependency.findMany({
           where: {
             OR: [
@@ -719,7 +731,9 @@ export async function loadProductOperatingContext(input: {
         }),
       ),
       unavailableReason:
-        productIds.length > 0 && enablingDigitalProducts.length === 0
+        !fullProfile
+          ? "Enabling digital products are outside the commercial-summary query profile."
+          : productIds.length > 0 && enablingDigitalProducts.length === 0
           ? "No explicit operational offering links this business product scope to a DigitalProduct."
           : undefined,
     }),
@@ -735,6 +749,9 @@ export async function loadProductOperatingContext(input: {
         name: offering.name,
         status: offering.status,
       })),
+      unavailableReason: !fullProfile
+        ? "Offerings are outside the commercial-summary query profile."
+        : undefined,
     }),
     catalogItems: createContextSlice({
       requestedAt,
@@ -749,6 +766,9 @@ export async function loadProductOperatingContext(input: {
           status: catalogItem.status,
         })),
       ),
+      unavailableReason: !fullProfile
+        ? "Catalog items are outside the commercial-summary query profile."
+        : undefined,
     }),
     productSold: createContextSlice({
       requestedAt,
@@ -759,6 +779,9 @@ export async function loadProductOperatingContext(input: {
       requestedAt,
       sourceKind: "research-battlecard-knowledge",
       items: intelligenceItems,
+      unavailableReason: !fullProfile
+        ? "Intelligence is outside the commercial-summary query profile."
+        : undefined,
     }),
     demand: createContextSlice({
       requestedAt,
@@ -772,6 +795,9 @@ export async function loadProductOperatingContext(input: {
         demandStage: row.demandStage,
         score: row.demandScore,
       })),
+      unavailableReason: !fullProfile
+        ? "Demand is outside the commercial-summary query profile."
+        : undefined,
     }),
     decisions: createContextSlice({
       requestedAt,
@@ -791,6 +817,9 @@ export async function loadProductOperatingContext(input: {
       requestedAt,
       sourceKind: "epic",
       items: [...roadmapById.values()],
+      unavailableReason: !fullProfile
+        ? "Roadmap inputs are outside the commercial-summary query profile."
+        : undefined,
     }),
     deliveryChanges: createContextSlice({
       requestedAt,
@@ -802,11 +831,17 @@ export async function loadProductOperatingContext(input: {
         title: row.title,
         status: row.status,
       })),
+      unavailableReason: !fullProfile
+        ? "Delivery changes are outside the commercial-summary query profile."
+        : undefined,
     }),
     architecture: createContextSlice({
       requestedAt,
       sourceKind: "ea-element-and-product-dependency",
       items: architectureItems,
+      unavailableReason: !fullProfile
+        ? "Architecture is outside the commercial-summary query profile."
+        : undefined,
     }),
     scheduledPlaybooks: createContextSlice({
       requestedAt,

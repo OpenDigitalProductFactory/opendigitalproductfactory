@@ -30,6 +30,48 @@ enabling digital product. An empty section means no matching evidence exists;
 an unavailable section means the platform does not yet have a safe typed link.
 Neither state is silently presented as healthy, complete, or zero.
 
+## Use Product Direction
+
+Open **Products** and start in **Goods and Services for Sale**. This is the
+business-product hierarchy created from the product mix confirmed during
+Storefront setup. Select a product line to compare its managed products, or
+select a product to open its **Direction** brief.
+
+A product-line comparison currently uses only recorded Product Sold sales and
+additive revenue. Package allocations remain non-additive attribution. Mixed
+currencies are labelled instead of being presented as one valid currency
+total. Margin, adoption, forecasts, and outcomes are not inferred when their
+typed evidence does not exist.
+
+The product brief is ordered around work:
+
+1. demand that needs a decision;
+2. changed research and delivery evidence;
+3. funded or in-progress bets;
+4. outcome posture;
+5. scheduled coworker runs.
+
+The **Simple** navigation preference uses guided language and collapses source
+detail. **Full** uses a denser professional presentation. This changes only the
+projection; it does not create a different role, product model, provider, or
+consumer.
+
+An unavailable card means the owning contract is not active or no safe typed
+association exists. For example, Objectives and Outcomes remain unavailable
+until their owning product-management phase is installed. An empty card means
+the source is available but has no matching evidence. Neither condition is
+rendered as a healthy zero.
+
+The stable product URL is shared through a compatibility boundary. A business
+Product receives the business header and Direction navigation. A
+`DigitalProduct` keeps its existing lifecycle, architecture, delivery, and
+operations navigation. DPF never guesses a business Product from a digital
+product or offering; an ambiguous identifier fails closed.
+
+**Preview a demand review** explains the read scope, sources, proposed writes,
+approval boundary, and schedule effect before leaving the page. The Direction
+brief itself does not send a prompt, approve funding, or mutate backlog data.
+
 ## From Product To Something A Customer Can Select
 
 The commercial path is:
@@ -130,6 +172,9 @@ one-off quote or order snapshot unless an operator explicitly promotes it.
 - Review catalog-linked purchases and fulfillment with honest customer evidence
 - Review product context with organization-wide and product-specific evidence
   kept visibly distinct
+- Compare product-line sales evidence and drill into a business Product's
+  Direction brief
+- Switch between guided and professional density without forking product truth
 - Browse all products with filtering by lifecycle stage, status, portfolio, and taxonomy
 - View a product's full profile including its health metrics, linked backlog items, and architecture models
 - Inspect available software identity and support-lifecycle facts without leaving the inventory entity detail page

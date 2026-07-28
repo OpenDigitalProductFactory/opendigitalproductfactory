@@ -14,6 +14,7 @@ import {
   type PortfolioCompletenessDb,
 } from "@/lib/portfolio/completeness";
 import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
+import { BusinessProductPortfolioSection } from "@/components/product/BusinessProductPortfolioSection";
 
 type Props = {
   params: Promise<{ slug?: string[] }>;
@@ -38,6 +39,16 @@ export default async function PortfolioPage({ params, searchParams }: Props) {
   if (slugs.length === 0) {
     return (
       <>
+        <div data-dpf-lead className="mb-dpf-xl">
+          <h1 className="text-dpf-heading font-dpf-semibold text-[var(--dpf-text)]">
+            Products
+          </h1>
+          <p className="mt-dpf-2xs max-w-prose text-dpf-body text-[var(--dpf-muted)]">
+            Manage what the business sells, then inspect the digital
+            architecture that enables it.
+          </p>
+        </div>
+        <BusinessProductPortfolioSection />
         <PlatformGridSection entityType="digital_product" view={view} />
         {!view && (
           <PortfolioOverview roots={roots} agentCounts={agentCounts} budgets={budgets} summary={summary} />
