@@ -3,7 +3,7 @@
 **Backlog item:** `BI-CF4ADDAC`
 **Work capsule:** `WC-A454B00D`
 **Branch:** `fix/inventory-preview-integrity`
-**Plan status:** implementation-ready; two independent reviews completed and their P1 findings are incorporated below
+**Plan status:** implementation-ready; three independent review rounds completed and their P1 findings are incorporated below
 
 > **For agentic workers:** execute this plan one independently reviewable backlog item at a time - one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff.
 
@@ -47,6 +47,7 @@ For every heap-visible duplicate `entityKey` group:
 - keep the row with the earliest `firstSeenAt`, then lexical `id`, as the stable canonical identity;
 - retain the minimum `firstSeenAt`, maximum `lastSeenAt`, and the `lastConfirmedRunId` from the latest observation;
 - snapshot each row's `name`, `status`, `providerView`, and `discoveredViaConnectionId` before convergence, then restore the newest coherent observation tuple onto the canonical row;
+- keep that snapshot current with a temporary insert/update trigger if the repair migration fails and the old runtime resumes writes before an upgrade retry; the trigger ignores the repair's `superseded` tombstone transition;
 - preserve explicit/human-confirmed identity and support fields on the canonical row;
 - fill null or `unknown` canonical fields from the latest non-null, non-`unknown` observation;
 - merge JSON properties with the latest observation winning only for discovery-owned keys, remove the temporary observation snapshot from the canonical row, and retain each tombstone's original snapshot;
@@ -126,7 +127,7 @@ Build a disposable schema fixture with:
 - conflicting scope/customer/site ownership that must abort the migration rather than silently cross an ownership boundary;
 - a healthy unrelated entity and relationship.
 
-The red fixture must require deterministic survivorship, complete hard/soft-reference convergence, inactive retained tombstones with `mergedIntoId`, merged freshness, no row loss, index validity/readiness/liveness, forced heap/index agreement, direct duplicate-insert rejection with SQLSTATE `23505`, and idempotence on a second migration run. An injected unresolved collision must prove transaction rollback leaves every table and index unchanged. A schema-completeness test must fail when a new hard relation or declared soft reference is not covered by the migration registry.
+The red fixture must require deterministic survivorship, complete hard/soft-reference convergence, inactive retained tombstones with `mergedIntoId`, merged freshness, no row loss, index validity/readiness/liveness, forced heap/index agreement, direct duplicate-insert rejection with SQLSTATE `23505`, and idempotence on a second migration run. An injected unresolved collision must prove transaction rollback leaves every table and index unchanged. A retry fixture must prove snapshot success, repair failure, intervening observation updates, and a later successful repair retain the intervening tuple. A schema-completeness test must fail when a new hard relation or declared soft reference is not covered by the migration registry.
 
 **Verification**
 
@@ -137,14 +138,16 @@ The red fixture must require deterministic survivorship, complete hard/soft-refe
 **Files**
 
 - `packages/db/prisma/migrations/20260728115900_snapshot_inventory_observation_facts/migration.sql`
+- `packages/db/prisma/migrations/20260728115930_keep_inventory_observation_snapshot_current/migration.sql`
 - `packages/db/prisma/migrations/20260728120000_repair_inventory_entity_index_integrity/migration.sql`
 - `packages/db/prisma/migrations/20260728154500_preserve_inventory_identity_tuple/migration.sql`
 - `packages/db/prisma/migrations/20260728170000_restore_inventory_observation_facts/migration.sql`
+- `packages/db/prisma/migrations/20260728170500_remove_inventory_observation_snapshot_trigger/migration.sql`
 - `packages/db/prisma/schema.prisma`
 - `packages/db/src/inventory-entity-lifecycle.ts`
 - canonical inventory read/projection callers discovered by the completeness test
 
-Implement the repair using ordered forward migrations and materialized, transaction-local merge maps over repository-owned identifiers. The pre-repair migration snapshots mutable observation facts; the immutable repair migration performs identity and relationship convergence; forward corrections restore a coherent mastered-identity tuple and the latest mutable observation tuple. Include fixed lock order, bounded `lock_timeout`, fail-closed assertions, and forward-only recovery notes. Never edit a committed migration.
+Implement the repair using ordered forward migrations and materialized, transaction-local merge maps over repository-owned identifiers. The pre-repair migrations snapshot mutable observation facts and install a temporary trigger that refreshes them if a failed repair returns control to the old runtime. The immutable repair migration performs identity and relationship convergence. Forward corrections restore a coherent mastered-identity tuple and the latest mutable observation tuple, then remove the trigger and canonical snapshots. Include fixed lock order, bounded `lock_timeout`, fail-closed assertions, and forward-only recovery notes. Never edit a committed migration.
 
 No row or primary key is deleted. Clean installs and a second execution change no data.
 
@@ -248,6 +251,7 @@ No phase is independently shippable. A guard without the migration blocks affect
 ## Risks and rollback
 
 - **Lock duration:** the migration updates hundreds of child rows and rebuilds one small B-tree. It runs under the self-upgrade quiescence window. The fixture and exact-SHA gate must measure it; no concurrent live discovery write is permitted during migration.
+- **Interrupted upgrade:** the snapshot migration can commit before a later ownership conflict stops the repair. A temporary trigger keeps the snapshot coherent while the old runtime remains active; the retry fixture proves an intervening update survives, and the final cleanup removes the trigger only after convergence.
 - **Relationship collision:** direct bulk endpoint updates can violate the compound unique. The relationship merge map and survivor-first ordering are mandatory.
 - **Human-confirmed data:** latest-row overwrite can erase operator decisions. Hard conflict gates reject incompatible mastered identity/product/taxonomy state; merge rules only fill absent/default values after those gates pass.
 - **UI ghosts:** status filters are inconsistent across inventory consumers. `mergedIntoId` is the canonical lifecycle marker, a shared predicate owns default exclusion, and a completeness test covers list/count/projection reads.

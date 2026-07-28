@@ -7,6 +7,7 @@ const databaseUrl = process.env.DATABASE_URL;
 const describeDatabase = databaseUrl ? describe : describe.skip;
 const schema = `inventory_entity_repair_${randomUUID().replaceAll("-", "")}`;
 const conflictSchema = `inventory_entity_conflict_${randomUUID().replaceAll("-", "")}`;
+const retrySchema = `inventory_entity_retry_${randomUUID().replaceAll("-", "")}`;
 let client: Client;
 
 const migrationUrl = new URL(
@@ -17,12 +18,20 @@ const observationSnapshotMigrationUrl = new URL(
   "../prisma/migrations/20260728115900_snapshot_inventory_observation_facts/migration.sql",
   import.meta.url,
 );
+const observationSnapshotTriggerMigrationUrl = new URL(
+  "../prisma/migrations/20260728115930_keep_inventory_observation_snapshot_current/migration.sql",
+  import.meta.url,
+);
 const identityTupleMigrationUrl = new URL(
   "../prisma/migrations/20260728154500_preserve_inventory_identity_tuple/migration.sql",
   import.meta.url,
 );
 const observationRestoreMigrationUrl = new URL(
   "../prisma/migrations/20260728170000_restore_inventory_observation_facts/migration.sql",
+  import.meta.url,
+);
+const observationSnapshotCleanupMigrationUrl = new URL(
+  "../prisma/migrations/20260728170500_remove_inventory_observation_snapshot_trigger/migration.sql",
   import.meta.url,
 );
 
@@ -263,6 +272,7 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
     if (!client) return;
     await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
     await client.query(`DROP SCHEMA IF EXISTS "${conflictSchema}" CASCADE`);
+    await client.query(`DROP SCHEMA IF EXISTS "${retrySchema}" CASCADE`);
     await client.end();
   });
 
@@ -271,16 +281,26 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
       observationSnapshotMigrationUrl,
       "utf8",
     );
+    const observationSnapshotTriggerMigration = await readFile(
+      observationSnapshotTriggerMigrationUrl,
+      "utf8",
+    );
     const migration = await readFile(migrationUrl, "utf8");
     const identityTupleMigration = await readFile(identityTupleMigrationUrl, "utf8");
     const observationRestoreMigration = await readFile(
       observationRestoreMigrationUrl,
       "utf8",
     );
+    const observationSnapshotCleanupMigration = await readFile(
+      observationSnapshotCleanupMigrationUrl,
+      "utf8",
+    );
     await client.query(observationSnapshotMigration);
+    await client.query(observationSnapshotTriggerMigration);
     await client.query(migration);
     await client.query(identityTupleMigration);
     await client.query(observationRestoreMigration);
+    await client.query(observationSnapshotCleanupMigration);
 
     expect(await scalar(`SELECT count(*)::text value FROM "InventoryEntity"`)).toBe(7);
     expect(await scalar(`SELECT count(*)::text value FROM "InventoryRelationship"`)).toBe(9);
@@ -417,9 +437,11 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
       JSON.stringify((await client.query(`SELECT * FROM "InventoryEntity" ORDER BY id`)).rows)
       + JSON.stringify((await client.query(`SELECT * FROM "InventoryRelationship" ORDER BY id`)).rows);
     await client.query(observationSnapshotMigration);
+    await client.query(observationSnapshotTriggerMigration);
     await client.query(migration);
     await client.query(identityTupleMigration);
     await client.query(observationRestoreMigration);
+    await client.query(observationSnapshotCleanupMigration);
     const afterSecondPass =
       JSON.stringify((await client.query(`SELECT * FROM "InventoryEntity" ORDER BY id`)).rows)
       + JSON.stringify((await client.query(`SELECT * FROM "InventoryRelationship" ORDER BY id`)).rows);
@@ -432,9 +454,14 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
       observationSnapshotMigrationUrl,
       "utf8",
     );
+    const observationSnapshotTriggerMigration = await readFile(
+      observationSnapshotTriggerMigrationUrl,
+      "utf8",
+    );
     const migration = await readFile(migrationUrl, "utf8");
 
     await client.query(observationSnapshotMigration);
+    await client.query(observationSnapshotTriggerMigration);
     await expect(client.query(migration)).rejects.toThrow(/scope|ownership/i);
     await client.query("ROLLBACK");
 
@@ -452,5 +479,63 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
     expect((await client.query(
       `SELECT "inventoryEntityId" value FROM "RemoteAction" WHERE id = 'remote-a'`,
     )).rows[0]?.value).toBe("entity-a-new");
+  });
+
+  it("refreshes observation snapshots across a failed repair and later retry", async () => {
+    await createFixture(retrySchema, true);
+    const observationSnapshotMigration = await readFile(
+      observationSnapshotMigrationUrl,
+      "utf8",
+    );
+    const observationSnapshotTriggerMigration = await readFile(
+      observationSnapshotTriggerMigrationUrl,
+      "utf8",
+    );
+    const migration = await readFile(migrationUrl, "utf8");
+    const identityTupleMigration = await readFile(identityTupleMigrationUrl, "utf8");
+    const observationRestoreMigration = await readFile(
+      observationRestoreMigrationUrl,
+      "utf8",
+    );
+    const observationSnapshotCleanupMigration = await readFile(
+      observationSnapshotCleanupMigrationUrl,
+      "utf8",
+    );
+
+    await client.query(observationSnapshotMigration);
+    await client.query(observationSnapshotTriggerMigration);
+    await expect(client.query(migration)).rejects.toThrow(/scope|ownership/i);
+    await client.query("ROLLBACK");
+
+    await client.query(`
+      UPDATE "InventoryEntity"
+      SET
+        name = 'Retry Interface A',
+        status = 'active',
+        "providerView" = 'productsAndServicesSold',
+        "discoveredViaConnectionId" = 'connection-retry',
+        "scopeKey" = 'customer:account-1',
+        "customerAccountId" = 'account-1',
+        "lastSeenAt" = '2026-05-02'
+      WHERE id = 'entity-a-new'
+    `);
+
+    await client.query(migration);
+    await client.query(identityTupleMigration);
+    await client.query(observationRestoreMigration);
+    await client.query(observationSnapshotCleanupMigration);
+
+    const canonical = (await client.query(`
+      SELECT name, status, "providerView", "discoveredViaConnectionId", properties
+      FROM "InventoryEntity"
+      WHERE "entityKey" = 'network:duplicate-a'
+    `)).rows[0];
+    expect(canonical).toMatchObject({
+      name: "Retry Interface A",
+      status: "active",
+      providerView: "productsAndServicesSold",
+      discoveredViaConnectionId: "connection-retry",
+    });
+    expect(canonical.properties).not.toHaveProperty("_dpfObservationSnapshot");
   });
 });
