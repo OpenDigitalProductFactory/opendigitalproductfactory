@@ -662,7 +662,7 @@ export function BuildStudio({
                   <label className="block text-dpf-caption font-medium text-[var(--dpf-muted)]">
                     What outcome do you want?
                     <textarea
-                      placeholder="Describe what should be different, who it helps, and any constraint that matters."
+                      placeholder="Say what should change, who it helps, and what must stay the same."
                       value={newTitle}
                       onChange={(e) => setNewTitle(e.target.value)}
                       onKeyDown={(e) => {
@@ -698,7 +698,7 @@ export function BuildStudio({
                   ) : null}
                   <div className="mt-2 flex items-center justify-between gap-2">
                     <span className="text-dpf-caption text-[var(--dpf-muted)]">
-                      {newTitle.length > 0 ? `${newTitle.length} characters` : "Plain language is enough"}
+                      {newTitle.length > 0 ? `${newTitle.length} characters` : "Plain words are enough"}
                     </span>
                     <button
                       type="button"
@@ -1012,13 +1012,13 @@ export function BuildStudio({
                   What should be different?
                 </h2>
                 <p className="m-0 text-sm leading-6 text-[var(--dpf-muted)]">
-                  Start a new outcome in plain language. Build Studio will shape the approach,
-                  build the change, collect evidence, and return when a meaningful decision needs you.
+                  Tell Build Studio what should change. It will plan the work, build it,
+                  check it, and ask you only when it needs a choice.
                 </p>
                 <div className="mt-6 grid gap-2 text-left sm:grid-cols-3">
-                  <Step n={1} text="Describe the outcome" />
-                  <Step n={2} text="Follow one clear status" />
-                  <Step n={3} text="Decide only when needed" />
+                  <Step n={1} text="Say what should change" />
+                  <Step n={2} text="See one clear status" />
+                  <Step n={3} text="Choose only when asked" />
                 </div>
               </div>
             </div>
