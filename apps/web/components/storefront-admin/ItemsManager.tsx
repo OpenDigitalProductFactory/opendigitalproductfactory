@@ -98,7 +98,11 @@ export function ItemsManager({
         body: JSON.stringify(body),
       });
       const updated = await res.json();
-      if (!res.ok) throw new Error(updated.error ?? `HTTP ${res.status}`);
+      if (!res.ok) {
+        throw new Error(
+          updated.message ?? updated.error ?? `HTTP ${res.status}`,
+        );
+      }
       setItems((prev) => prev.map((i) => (i.id === editingItem.id ? { ...i, ...updated } : i)));
     } else {
       const res = await fetch("/api/storefront/admin/items", {
@@ -107,7 +111,11 @@ export function ItemsManager({
         body: JSON.stringify(body),
       });
       const created = await res.json();
-      if (!res.ok) throw new Error(created.error ?? `HTTP ${res.status}`);
+      if (!res.ok) {
+        throw new Error(
+          created.message ?? created.error ?? `HTTP ${res.status}`,
+        );
+      }
       setItems((prev) => [...prev, created]);
     }
   }, [editingItem]);
@@ -325,7 +333,7 @@ export function ItemsManager({
                   )}
                   {item.compatibilitySource === "storefront" && (
                     <span
-                      className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] text-[var(--dpf-warning)]"
+                      className="shrink-0 rounded-full px-1.5 py-0.5 text-dpf-caption text-[var(--dpf-warning)]"
                       style={{
                         background:
                           "color-mix(in srgb, var(--dpf-warning) 13%, transparent)",
