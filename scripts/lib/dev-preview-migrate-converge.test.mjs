@@ -276,6 +276,15 @@ test("compose dev-init uses the converge wrapper instead of bare migrate deploy"
   assert.match(compose, /node \.\/scripts\/dev-preview-migrate-deploy\.mjs/);
 });
 
+test("preview refresh stops the existing portal before rebuilding its source clone", () => {
+  const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  for (const scriptName of ["dev:portal", "contributor:preview"]) {
+    const command = packageJson.scripts[scriptName];
+    assert.match(command, /^docker compose stop dev-portal && /);
+    assert.match(command, /docker compose --profile dev up -d dev-portal$/);
+  }
+});
+
 test("blocked exit code is reserved and distinct from generic failure", () => {
   assert.equal(BLOCKED_SANDBOX_DRIFT_EXIT, 3);
 });

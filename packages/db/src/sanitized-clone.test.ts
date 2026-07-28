@@ -16,6 +16,7 @@ import {
   shouldObfuscateTable,
   shouldSkipTable,
   prepareInsertParameter,
+  runSourceCheckedClone,
   runWithDestinationCleanup,
   insertRowsWithReplicationDisabled,
   resolveCompatibleCopyColumns,
@@ -189,6 +190,33 @@ describe("destination cleanup", () => {
     )).rejects.toMatchObject({
       errors: [expect.objectContaining({ message: "clone failed" }), expect.objectContaining({ message: "cleanup failed" })],
     });
+  });
+
+  it("checks source integrity after reset and before the first source copy", async () => {
+    const events: string[] = [];
+
+    await runSourceCheckedClone(
+      async () => { events.push("reset"); },
+      async () => { events.push("guard"); },
+      async () => { events.push("clone"); },
+    );
+
+    expect(events).toEqual(["reset", "guard", "clone"]);
+  });
+
+  it("leaves the destination empty when the source integrity check fails", async () => {
+    const events: string[] = [];
+
+    await expect(runSourceCheckedClone(
+      async () => { events.push("reset"); },
+      async () => {
+        events.push("guard");
+        throw new Error("InventoryEntity source index disagrees with its heap");
+      },
+      async () => { events.push("clone"); },
+    )).rejects.toThrow("source index disagrees with its heap");
+
+    expect(events).toEqual(["reset", "guard", "reset"]);
   });
 });
 
