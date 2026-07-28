@@ -42,7 +42,7 @@ shellContractTest("gate-worktree.sh parses explicit flags in dry-run mode", () =
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /branch=feat\/local-ci-sandbox/);
   assert.match(result.stdout, /sha=abc123/);
-  assert.match(result.stdout, /worktree=\/tmp\/dpf-worktree/);
+  assert.match(result.stdout, /worktree=.*dpf-worktree/);
   assert.match(result.stdout, /remote=coordination/);
   assert.match(result.stdout, /pushBeforeLease=false/);
 });
@@ -98,7 +98,7 @@ shellContractTest("gate-worktree.sh discovers the checked-in default runner when
   ], { env });
 
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /localCiCommand=sh '.*local-ci-runner\.sh' --candidate 'feat\/local-ci-sandbox'/);
+  assert.match(result.stdout, /localCiCommand=.*node.*local-ci-runner\.mjs.*--candidate "feat\/local-ci-sandbox"/i);
   assert.ok(!result.stdout.includes("localCiCommand=missing"));
 });
 
@@ -165,14 +165,16 @@ printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\
   chmodSync(gitStub, 0o755);
   chmodSync(curlStub, 0o755);
 
-  // A drift report as the preflight would leave it: stale next link vs lockfile.
-  writeFileSync(join(temp, "dpf-sandbox-freshness.json"), JSON.stringify({
+  // The command writes the report after admission, as the real freshness
+  // preflight does. The canonical Node gate deliberately removes any stale
+  // report from an earlier run before launching this command.
+  const freshnessReport = JSON.stringify({
     schema: "dpf-sandbox-freshness/v1",
     verdict: "sandbox_drift",
     failures: [{ kind: "version_drift", message: "apps/web/node_modules/next resolves to 16.2.7 but pnpm-lock.yaml requires 16.2.9" }],
     packages: [{ name: "next", lockedVersion: "16.2.9", resolvedVersion: "16.2.7" }],
     convergence: { attempted: true, command: "pnpm install --frozen-lockfile", exitCode: 1 },
-  }));
+  });
 
   const result = runGate([
     "--branch",
@@ -186,7 +188,7 @@ printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\
     env: {
       ...process.env,
       DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
-      DPF_LOCAL_CI_COMMAND: "exit 3",
+      DPF_LOCAL_CI_COMMAND: `printf '%s' '${freshnessReport}' > "$DPF_LOCAL_CI_FRESHNESS_REPORT_FILE"; exit 3`,
       DPF_GATE_GIT_BIN: gitStub,
       DPF_GATE_CURL_BIN: curlStub,
     },

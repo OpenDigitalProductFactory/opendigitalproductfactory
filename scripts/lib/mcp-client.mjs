@@ -17,6 +17,7 @@
 
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
+import { spawn } from "node:child_process";
 
 let callId = 0;
 
@@ -44,7 +45,15 @@ export async function mcpCall(toolName, args, { mcpUrl, bearerToken } = {}) {
   const url = new URL(mcpUrl);
   const requestFn = url.protocol === "https:" ? httpsRequest : httpRequest;
 
-  const payload = await new Promise((resolve, reject) => {
+  const injectedTransport = process.env.DPF_GATE_CURL_BIN;
+  const payload = injectedTransport
+    ? await callInjectedCurlTransport({
+      command: injectedTransport,
+      mcpUrl,
+      bearerToken,
+      body,
+    })
+    : await new Promise((resolve, reject) => {
     const req = requestFn(url, {
       method: "POST",
       agent: false,
@@ -69,9 +78,52 @@ export async function mcpCall(toolName, args, { mcpUrl, bearerToken } = {}) {
     req.on("error", reject);
     req.write(body);
     req.end();
-  });
+    });
 
   return extractToolResult(payload);
+}
+
+// Contract-test seam retained while the POSIX gate converges on this canonical
+// Node client. Production has no curl dependency; an explicitly injected
+// executable receives the former curl-compatible argv without a command shell.
+async function callInjectedCurlTransport({ command, mcpUrl, bearerToken, body }) {
+  const args = [
+    "-sS",
+    "-X",
+    "POST",
+    mcpUrl,
+    "-H",
+    `Authorization: Bearer ${bearerToken}`,
+    "-H",
+    "Content-Type: application/json",
+    "--data",
+    body,
+  ];
+  const executable = process.platform === "win32" ? "sh" : command;
+  const executableArgs = process.platform === "win32" ? [command, ...args] : args;
+  const output = await new Promise((resolve, reject) => {
+    const child = spawn(executable, executableArgs, {
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => { stdout += chunk; });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.once("error", reject);
+    child.once("close", (code) => {
+      if (code !== 0) {
+        reject(new Error(`mcpCall: injected transport exited ${code}: ${stderr.trim()}`));
+        return;
+      }
+      try {
+        resolve(JSON.parse(stdout));
+      } catch (error) {
+        reject(new Error(`mcpCall: injected transport returned invalid JSON: ${error.message}`));
+      }
+    });
+  });
+  return output;
 }
 
 export function extractToolResult(payload) {

@@ -2,8 +2,8 @@
 //
 // Drains the self-contained "nonproduction environment lease" domain out of the
 // mcp-tools.ts executeTool switch: the four tools agents use to coordinate the
-// single governed shared localhost environments instead of spinning up
-// unmanaged servers (list active leases, claim a lease, release a lease,
+// governed shared localhost environments instead of spinning up unmanaged
+// servers (list admitted/queued leases, request admission, release/cancel,
 // heartbeat/renew a held lease). Each handler lazy-imports the lease service and
 // reproduces the former switch case verbatim, so behaviour is identical when the
 // tool is invoked over MCP.
@@ -24,7 +24,7 @@ function stringValueFor(params: Record<string, unknown>) {
 const definitions: ToolDefinition[] = [
   {
     name: "list_nonprod_environment_leases",
-    description: "List active, unexpired nonproduction environment leases so agents can reuse governed shared localhost environments instead of starting unmanaged servers.",
+    description: "List admitted and queued nonproduction environment leases so agents can reuse governed shared localhost environments instead of starting unmanaged servers.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -38,7 +38,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "claim_nonprod_environment_lease",
-    description: "Claim a governed shared nonproduction environment lease for preview, UX verification, or local integration. Returns a conflict instead of allowing another unmanaged server.",
+    description: "Request admission to a governed shared nonproduction environment for preview, UX verification, or local integration. Reusing claimKey returns the same durable queue entry.",
     inputSchema: {
       type: "object",
       properties: {
@@ -48,6 +48,7 @@ const definitions: ToolDefinition[] = [
           enum: ["build-studio", "claude", "codex", "grok", "antigravity", "coworker"],
         },
         ownerSessionId: { type: "string" },
+        claimKey: { type: "string", description: "Stable idempotency key reused while waiting for admission." },
         purpose: { type: "string" },
         url: { type: "string" },
         ports: { type: "array", items: { type: "number" } },
@@ -100,12 +101,18 @@ const definitions: ToolDefinition[] = [
 ];
 
 async function listNonprodEnvironmentLeases(): Promise<ToolResult> {
-  const { listActiveNonprodEnvironmentLeases } = await import("@/lib/nonprod/environment-lease");
-  const leases = await listActiveNonprodEnvironmentLeases({});
+  const {
+    listActiveNonprodEnvironmentLeases,
+    listQueuedNonprodEnvironmentLeases,
+  } = await import("@/lib/nonprod/environment-lease");
+  const [leases, queued] = await Promise.all([
+    listActiveNonprodEnvironmentLeases({}),
+    listQueuedNonprodEnvironmentLeases({}),
+  ]);
   return {
     success: true,
-    message: `Found ${leases.length} active nonproduction environment lease(s).`,
-    data: { leases },
+    message: `Found ${leases.length} admitted and ${queued.length} queued nonproduction environment lease(s).`,
+    data: { leases, queued },
   };
 }
 
@@ -155,6 +162,7 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
     environmentKey: environmentKey as "active-candidate" | "local-integration-ci",
     ownerProvider: ownerProvider as (typeof NONPROD_OWNER_PROVIDERS)[number],
     ownerSessionId,
+    claimKey: stringValue("claimKey") || undefined,
     purpose,
     url,
     ports,
@@ -165,19 +173,42 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
     taskRunId: stringValue("taskRunId") || undefined,
     cleanupCommand: stringValue("cleanupCommand") || undefined,
   });
-  if (result.status === "conflict") {
+  if (result.status === "terminal") {
     return {
       success: false,
-      error: "lease_conflict",
-      message: "Shared nonproduction environment is already leased.",
-      data: { active: result.active as unknown as Record<string, unknown> },
+      entityId: result.lease.leaseId,
+      error: "lease_terminal",
+      message: `Nonproduction lease request is already ${result.reason}; create a new claimKey to request admission again.`,
+      data: { lease: result.lease, reason: result.reason },
+    };
+  }
+  if (result.status === "queued") {
+    return {
+      success: true,
+      entityId: result.lease.leaseId,
+      message: `Queued nonproduction environment lease ${result.lease.leaseId} at position ${result.queuePosition}.`,
+      data: {
+        lease: result.lease,
+        admission: {
+          status: "queued",
+          queuePosition: result.queuePosition,
+          waitAgeMs: result.waitAgeMs,
+        },
+      },
     };
   }
   return {
     success: true,
     entityId: result.lease.leaseId,
-    message: `Claimed nonproduction environment lease ${result.lease.leaseId}.`,
-    data: { lease: result.lease },
+    message: `Admitted nonproduction environment lease ${result.lease.leaseId} to ${result.slotKey}.`,
+    data: {
+      lease: result.lease,
+      admission: {
+        status: "admitted",
+        slotKey: result.slotKey,
+        waitAgeMs: result.waitAgeMs,
+      },
+    },
   };
 }
 
@@ -195,7 +226,9 @@ async function releaseNonprodEnvironmentLeaseHandler(params: Record<string, unkn
   return {
     success: true,
     entityId: lease.leaseId,
-    message: `Released nonproduction environment lease ${lease.leaseId}.`,
+    message: lease.status === "cancelled"
+      ? `Cancelled queued nonproduction environment lease ${lease.leaseId}.`
+      : `Released nonproduction environment lease ${lease.leaseId}.`,
     data: { lease },
   };
 }

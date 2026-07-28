@@ -6227,13 +6227,18 @@ model ExternalEvidenceRecord {
 model NonProductionEnvironmentLease {
   id               String    @id @default(cuid())
   leaseId          String    @unique
+  // Stable identity for one gate attempt. Repeated claims with the same key
+  // observe the same queued/admitted row instead of creating polling races.
+  claimKey         String?   @unique
   environmentKey   String
-  // Mirrors environmentKey while the lease is active; NULL once released/expired.
+  // Mirrors "<environmentKey>:<slotKey>" only while admitted. slotKey retains
+  // the assigned slot for terminal audit/telemetry; activeKey becomes NULL.
   // The @@unique below makes "at most one active lease per environmentKey" a DB
-  // invariant (Postgres allows many NULLs), closing the claim TOCTOU race where
-  // two sessions could otherwise both win the single shared nonprod slot.
+  // invariant at capacity one (Postgres allows many NULLs). Phase 2 expands the
+  // same invariant to independently isolated slot keys.
   activeKey        String?
-  status           String    @default("active")
+  slotKey          String?
+  status           String    @default("queued")
   ownerProvider    String
   ownerSessionId   String
   purpose          String
@@ -6245,13 +6250,20 @@ model NonProductionEnvironmentLease {
   ports            Int[]     @default([])
   cleanupCommand   String?
   evidenceRecordId String?
+  requestedTtlMs   Int       @default(900000)
   expiresAt        DateTime
   releasedAt       DateTime?
+  queuedAt         DateTime?
+  admittedAt       DateTime?
+  cancelledAt      DateTime?
+  heartbeatAt      DateTime?
+  phase            String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 
   @@unique([activeKey])
   @@index([environmentKey, status])
+  @@index([environmentKey, status, queuedAt])
   @@index([ownerProvider, ownerSessionId])
   @@index([buildId, createdAt])
   @@index([taskRunId, createdAt])

@@ -75,7 +75,7 @@ test("canonical gate heartbeats during a long command and releases once", async 
   }
 });
 
-test("queue wait does not consume the lease TTL granted at claim time", async () => {
+test("durable queue observation reuses claimKey and grants a fresh admitted TTL", async () => {
   const claims = [];
   const server = createServer((request, response) => {
     let body = "";
@@ -87,9 +87,23 @@ test("queue wait does not consume the lease TTL granted at claim time", async ()
         claims.push({ receivedAt: Date.now(), args: payload.params.arguments });
       }
       const result = tool === "claim_nonprod_environment_lease" && claims.length === 1
-        ? { success: false, error: "lease_conflict" }
+        ? {
+          success: true,
+          entityId: "NPEL-QUEUE-TEST",
+          data: {
+            lease: { leaseId: "NPEL-QUEUE-TEST" },
+            admission: { status: "queued", queuePosition: 2, waitAgeMs: 20 },
+          },
+        }
         : tool === "claim_nonprod_environment_lease"
-          ? { success: true, entityId: "NPEL-QUEUE-TEST" }
+          ? {
+            success: true,
+            entityId: "NPEL-QUEUE-TEST",
+            data: {
+              lease: { leaseId: "NPEL-QUEUE-TEST" },
+              admission: { status: "admitted", slotKey: "slot-0", waitAgeMs: 80 },
+            },
+          }
           : tool === "record_local_integration_result"
             ? { success: true, entityId: "EVIDENCE-QUEUE-TEST" }
             : { success: true };
@@ -119,18 +133,231 @@ test("queue wait does not consume the lease TTL granted at claim time", async ()
         ...process.env,
         DPF_MCP_BEARER_TOKEN: "test-token",
         DPF_ALLOW_LOCAL_CI_STUB: "1",
+        DPF_GATE_RETRY_JITTER: "0",
         DPF_LOCAL_SANDBOX_FENCE_PATH: isolatedFencePath(),
       },
     });
 
     assert.ok([0, 3].includes(result.code), result.output);
     assert.equal(claims.length, 2);
+    assert.equal(claims[0].args.claimKey, claims[1].args.claimKey);
+    assert.match(claims[0].args.claimKey, /^local-ci:gate-\d+:/);
     const grantedMs = Date.parse(claims[1].args.expiresAt) - claims[1].receivedAt;
     assert.ok(grantedMs >= 2_800, `expected a fresh ~3s TTL, got ${grantedMs}ms`);
+    assert.match(result.output, /queued at position 2/);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test("rolling upgrade observes the legacy conflict contract without failing", async () => {
+  const claims = [];
+  const server = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      const payload = JSON.parse(body);
+      const tool = payload.params.name;
+      if (tool === "claim_nonprod_environment_lease") {
+        claims.push(payload.params.arguments);
+      }
+      const result = tool === "claim_nonprod_environment_lease" && claims.length === 1
+        ? { success: false, error: "lease_conflict" }
+        : tool === "claim_nonprod_environment_lease"
+          ? { success: true, entityId: "NPEL-LEGACY-BRIDGE" }
+          : tool === "record_local_integration_result"
+            ? { success: true, entityId: "EVIDENCE-LEGACY-BRIDGE" }
+            : { success: true };
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({
+        jsonrpc: "2.0",
+        id: payload.id,
+        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+
+  try {
+    const result = await run(process.execPath, [
+      "scripts/gate-worktree.mjs",
+      "--branch", "fix/sandbox-lease-fencing",
+      "--worktree", process.cwd(),
+      "--expires-minutes", "0.05",
+      "--poll-seconds", "0.01",
+      "--lease-wait-seconds", "2",
+      "--mcp-url", `http://127.0.0.1:${address.port}`,
+      "--no-push",
+    ], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        DPF_MCP_BEARER_TOKEN: "test-token",
+        DPF_ALLOW_LOCAL_CI_STUB: "1",
+        DPF_GATE_RETRY_JITTER: "0",
+        DPF_LOCAL_SANDBOX_FENCE_PATH: isolatedFencePath(),
+      },
+    });
+
+    assert.ok([0, 3].includes(result.code), result.output);
+    assert.equal(claims.length, 2);
+    assert.equal(claims[0].claimKey, claims[1].claimKey);
+    assert.match(result.output, /legacy conflict contract/);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("transient admission transport reset retries the same durable claim", async () => {
+  const claims = [];
+  let resetOnce = false;
+  const server = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      const payload = JSON.parse(body);
+      const tool = payload.params.name;
+      if (tool === "claim_nonprod_environment_lease") {
+        claims.push(payload.params.arguments);
+        if (!resetOnce) {
+          resetOnce = true;
+          request.socket.destroy();
+          return;
+        }
+      }
+      const result = tool === "claim_nonprod_environment_lease"
+        ? {
+          success: true,
+          entityId: "NPEL-RESET-TEST",
+          data: {
+            lease: { leaseId: "NPEL-RESET-TEST" },
+            admission: { status: "admitted", slotKey: "slot-0", waitAgeMs: 50 },
+          },
+        }
+        : tool === "record_local_integration_result"
+          ? { success: true, entityId: "EVIDENCE-RESET-TEST" }
+          : { success: true };
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({
+        jsonrpc: "2.0",
+        id: payload.id,
+        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+
+  try {
+    const result = await run(process.execPath, [
+      "scripts/gate-worktree.mjs",
+      "--branch", "fix/sandbox-lease-fencing",
+      "--worktree", process.cwd(),
+      "--expires-minutes", "0.05",
+      "--poll-seconds", "0.01",
+      "--lease-wait-seconds", "2",
+      "--mcp-url", `http://127.0.0.1:${address.port}`,
+      "--no-push",
+    ], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        DPF_MCP_BEARER_TOKEN: "test-token",
+        DPF_ALLOW_LOCAL_CI_STUB: "1",
+        DPF_GATE_RETRY_JITTER: "0",
+        DPF_LOCAL_SANDBOX_FENCE_PATH: isolatedFencePath(),
+      },
+    });
+
+    assert.ok([0, 3].includes(result.code), result.output);
+    assert.equal(claims.length, 2);
+    assert.equal(claims[0].claimKey, claims[1].claimKey);
+    assert.match(result.output, /admission transport unavailable/);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test(
+  "signal while queued cancels the durable claim exactly once",
+  { skip: process.platform === "win32" ? "Windows child.kill terminates without delivering POSIX signal handlers" : false },
+  async () => {
+  const calls = [];
+  let gateChild;
+  let signalled = false;
+  const server = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      const payload = JSON.parse(body);
+      const tool = payload.params.name;
+      calls.push(tool);
+      const result = tool === "claim_nonprod_environment_lease"
+        ? {
+          success: true,
+          entityId: "NPEL-SIGNAL-TEST",
+          data: {
+            lease: { leaseId: "NPEL-SIGNAL-TEST" },
+            admission: { status: "queued", queuePosition: 1, waitAgeMs: 25 },
+          },
+        }
+        : { success: true };
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({
+        jsonrpc: "2.0",
+        id: payload.id,
+        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+      }));
+      if (tool === "claim_nonprod_environment_lease" && !signalled) {
+        signalled = true;
+        setTimeout(() => gateChild?.kill("SIGTERM"), 25);
+      }
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+
+  try {
+    const result = await new Promise((resolve, reject) => {
+      gateChild = spawn(process.execPath, [
+        "scripts/gate-worktree.mjs",
+        "--branch", "fix/sandbox-lease-fencing",
+        "--worktree", process.cwd(),
+        "--expires-minutes", "0.05",
+        "--poll-seconds", "0.05",
+        "--lease-wait-seconds", "2",
+        "--mcp-url", `http://127.0.0.1:${address.port}`,
+        "--no-push",
+      ], {
+        cwd: process.cwd(),
+        env: {
+          ...process.env,
+          DPF_MCP_BEARER_TOKEN: "test-token",
+          DPF_ALLOW_LOCAL_CI_STUB: "1",
+          DPF_GATE_RETRY_JITTER: "0",
+          DPF_LOCAL_SANDBOX_FENCE_PATH: isolatedFencePath(),
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let output = "";
+      gateChild.stdout.on("data", (chunk) => { output += chunk; });
+      gateChild.stderr.on("data", (chunk) => { output += chunk; });
+      gateChild.once("error", reject);
+      gateChild.once("close", (code) => resolve({ code, output }));
+    });
+
+    assert.equal(result.code, 130, result.output);
+    assert.equal(
+      calls.filter((tool) => tool === "release_nonprod_environment_lease").length,
+      1,
+    );
+    assert.equal(calls.includes("record_local_integration_result"), false);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+  },
+);
 
 test("renewal loss kills the real child process tree before later mutation", async () => {
   const temp = mkdtempSync(join(tmpdir(), "dpf-lease-fence-"));
@@ -205,11 +432,10 @@ test("renewal loss kills the real child process tree before later mutation", asy
   }
 });
 
-test("POSIX entry point renews, fences the process tree, and traps cleanup", async () => {
+test("POSIX entry point delegates every lease policy to the canonical Node gate", async () => {
   const source = await readFile("scripts/gate-worktree.sh", "utf8");
-  assert.match(source, /renew_nonprod_environment_lease/);
-  assert.match(source, /terminate_process_tree/);
-  assert.match(source, /trap cleanup_gate EXIT/);
+  assert.match(source, /exec "\$NODE_BIN" "\$SCRIPT_DIR\/gate-worktree\.mjs" "\$@"/);
+  assert.doesNotMatch(source, /claim_nonprod_environment_lease/);
 });
 
 test("POSIX gate heartbeats and releases through its injectable transport", async (context) => {
@@ -258,7 +484,7 @@ test("POSIX gate heartbeats and releases through its injectable transport", asyn
       env: {
         ...process.env,
         DPF_MCP_BEARER_TOKEN: "test-token",
-        DPF_LOCAL_CI_COMMAND: "node -e 'setTimeout(() => {}, 2500)'",
+        DPF_LOCAL_CI_COMMAND: `"${process.execPath}" -e "setTimeout(function () {}, 2500)"`,
         DPF_LOCAL_SANDBOX_FENCE_PATH: isolatedFencePath(),
       },
     });

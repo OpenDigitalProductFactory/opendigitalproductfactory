@@ -20,7 +20,7 @@ function runLease(args, options = {}) {
 // A curl stub that records every MCP request to callsFile and replies with the
 // canned JSON-RPC response for the named tool. `mode` controls the claim reply:
 //   "claimed"  -> success with a lease id
-//   "conflict" -> lease_conflict with an active holder
+//   "queued"   -> durable FIFO admission while another holder is active
 function makeStubs(temp, mode) {
   const callsFile = join(temp, "calls.ndjson");
   const gitStub = join(temp, "git");
@@ -36,8 +36,8 @@ exit 1
 `);
 
   const claimReply =
-    mode === "conflict"
-      ? `'{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":false,\\"error\\":\\"lease_conflict\\",\\"data\\":{\\"active\\":{\\"leaseId\\":\\"NPEL-OTHER\\",\\"environmentKey\\":\\"local-integration-ci\\",\\"ownerProvider\\":\\"codex\\",\\"ownerSessionId\\":\\"other-session\\",\\"branchName\\":\\"feat/other\\",\\"worktreePath\\":\\"/tmp/other\\"}}}"}]}}'`
+    mode === "queued"
+      ? `'{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-WAIT\\",\\"data\\":{\\"lease\\":{\\"leaseId\\":\\"NPEL-WAIT\\"},\\"admission\\":{\\"status\\":\\"queued\\",\\"queuePosition\\":2,\\"waitAgeMs\\":25}}}"}]}}'`
       : `'{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-MINE\\"}"}]}}'`;
 
   writeFileSync(curlStub, `#!/bin/sh
@@ -117,21 +117,20 @@ test("dev-portal-lease.sh claim claims the local-integration-ci lease for :3001"
   assert.equal(args.environmentKey, "local-integration-ci");
   assert.deepEqual(args.ports, [3001]);
   assert.equal(args.url, "http://localhost:3001");
+  assert.match(args.claimKey, /^dev-portal:/);
   // The exact prefix may be rewritten by the shell's path conversion on
   // Windows (MSYS); assert the worktree marker is carried through.
   assert.match(args.worktreePath, /dpf-worktree$/);
 });
 
-test("dev-portal-lease.sh claim refuses to silently re-bind when another holder is active", () => {
+test("dev-portal-lease.sh does not treat a queued admission as ownership", () => {
   const temp = mkdtempSync(join(tmpdir(), "dpf-dev-portal-lease-"));
-  const stubs = makeStubs(temp, "conflict");
+  const stubs = makeStubs(temp, "queued");
   const result = runLease(["claim"], { env: baseEnv(stubs) });
 
   assert.equal(result.status, 3, `${result.stdout}\n${result.stderr}`);
-  assert.match(result.stderr, /REFUSING to silently re-bind/);
-  // The holder is surfaced so the operator can coordinate explicitly.
-  assert.match(result.stderr, /NPEL-OTHER/);
-  assert.match(result.stderr, /codex/);
+  assert.match(result.stderr, /WAITING lease NPEL-WAIT/);
+  assert.match(result.stderr, /position 2/);
 });
 
 test("dev-portal-lease.sh status reports the current holder", () => {

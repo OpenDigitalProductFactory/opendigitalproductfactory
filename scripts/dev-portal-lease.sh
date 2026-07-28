@@ -212,6 +212,7 @@ const args = {
   environmentKey: process.argv[1],
   ownerProvider: process.argv[2],
   ownerSessionId: process.argv[3],
+  claimKey: `dev-portal:${process.argv[3]}:${process.argv[5]}`,
   purpose: `Contributor preview (:3001) bound to ${process.argv[4]} @ ${process.argv[5]}`,
   url: process.argv[6],
   ports: JSON.parse(process.argv[7]),
@@ -228,8 +229,15 @@ process.stdout.write(JSON.stringify(args));
     if [ "$claim_success" = "true" ]; then
       lease_id="$(printf '%s' "$claim_response" | field entityId)"
       [ -n "$lease_id" ] || lease_id="$(printf '%s' "$claim_response" | field data.lease.leaseId)"
+      admission_status="$(printf '%s' "$claim_response" | field data.admission.status)"
+      if [ "$admission_status" = "queued" ]; then
+        queue_position="$(printf '%s' "$claim_response" | field data.admission.queuePosition)"
+        printf '%s\n' "WAITING lease ${lease_id} is queued at position ${queue_position:-unknown}; :3001 is not owned yet." >&2
+        printf '%s\n' "Retry this same claim after the admitted holder releases; the stable claim key preserves FIFO position." >&2
+        exit 3
+      fi
       printf 'LEASE_ID=%s\n' "$lease_id"
-      printf 'claimed %s for :3001 → %s (%s)\n' "$ENVIRONMENT_KEY" "$WORKTREE_PATH" "$BRANCH"
+      printf 'admitted %s for :3001 → %s (%s)\n' "$ENVIRONMENT_KEY" "$WORKTREE_PATH" "$BRANCH"
       exit 0
     fi
     if [ "$claim_error" = "lease_conflict" ]; then

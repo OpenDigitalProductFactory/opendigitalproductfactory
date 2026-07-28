@@ -237,6 +237,8 @@ test("gate-worktree.mjs claims, records, and releases in order, and carries evid
     ]);
 
     const evidenceCall = mcp.calls.find((c) => c.params.name === "record_local_integration_result");
+    const claimCall = mcp.calls.find((c) => c.params.name === "claim_nonprod_environment_lease");
+    assert.match(claimCall.params.arguments.claimKey, /^local-ci:gate-\d+:candidate-sha$/);
     assert.equal(evidenceCall.params.arguments.evidence.leaseId, "NPEL-TEST");
     assert.equal(evidenceCall.params.arguments.evidence.branch, "feat/local-ci-sandbox");
     assert.equal(evidenceCall.params.arguments.evidence.sha, "candidate-sha");
@@ -272,35 +274,57 @@ test("gate-worktree.mjs claims, records, and releases in order, and carries evid
   }
 });
 
-test("gate-worktree.mjs blocks active quiescence before claiming a lease or running expensive work", async () => {
+test("gate-worktree.mjs retries transient quiescence before durable admission", async () => {
   const { dir } = makeTempRepo();
+  let quiescenceReads = 0;
   const mcp = await startMockMcp({
-    get_quiescence_status: () => ({
-      success: true,
-      data: {
-        level: "draining",
-        runId: "QR-TEST",
-        writesRefused: true,
-        retryAfterSeconds: 45,
-        drainBlockers: [{ surface: "build-phase", count: 1 }],
-      },
-    }),
+    get_quiescence_status: () => {
+      quiescenceReads += 1;
+      return quiescenceReads === 1
+        ? {
+          success: true,
+          data: {
+            level: "draining",
+            runId: "QR-TEST",
+            writesRefused: true,
+            retryAfterSeconds: 0.01,
+            drainBlockers: [{ surface: "build-phase", count: 1 }],
+          },
+        }
+        : { success: true, data: { level: "normal", writesRefused: false } };
+    },
+    claim_nonprod_environment_lease: () => ({ success: true, entityId: "NPEL-Q" }),
+    release_nonprod_environment_lease: () => ({ success: true }),
+    record_local_integration_result: () => ({ success: true, entityId: "EXT-Q" }),
   });
   try {
     const result = await runGateAsync(
-      ["--branch", "feat/quiescence-block", "--sha", "candidate-sha", "--worktree", dir, "--no-push", "--mcp-url", mcp.url],
-      { ...process.env, DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_ALLOW_LOCAL_CI_STUB: "1" },
+      [
+        "--branch", "feat/quiescence-block",
+        "--sha", "candidate-sha",
+        "--worktree", dir,
+        "--no-push",
+        "--mcp-url", mcp.url,
+        "--poll-seconds", "0.01",
+        "--lease-wait-seconds", "2",
+      ],
+      {
+        ...process.env,
+        DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+        DPF_ALLOW_LOCAL_CI_STUB: "1",
+        DPF_GATE_RETRY_JITTER: "0",
+      },
     );
-    assert.equal(result.status, 4, `${result.stdout}\n${result.stderr}`);
-    assert.match(result.stderr, /portal is draining/i);
-    assert.match(result.stderr, /no expensive local-CI command was run/i);
-    assert.deepEqual(mcp.calls.map((call) => call.params.name), ["get_quiescence_status"]);
-
-    const state = JSON.parse(readFileSync(join(dir, ".git", "dpf-local-ci-gate.json"), "utf8"));
-    assert.equal(state.gatePassed, false);
-    assert.equal(state.status, "blocked_quiescence");
-    assert.equal(state.quiescence.runId, "QR-TEST");
-    assert.equal(state.quiescence.retryAfterSeconds, 45);
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    assert.match(result.stdout, /portal is draining; retrying governed admission/i);
+    assert.deepEqual(mcp.calls.map((call) => call.params.name), [
+      "get_quiescence_status",
+      "get_quiescence_status",
+      "list_nonprod_environment_leases",
+      "claim_nonprod_environment_lease",
+      "release_nonprod_environment_lease",
+      "record_local_integration_result",
+    ]);
   } finally {
     await mcp.close();
   }
@@ -499,24 +523,37 @@ test("gate-worktree.mjs does not clear freshness evidence until it owns the loca
     })}\n`,
   );
 
-  const result = await runGateAsync(
-    [
-      "--branch", "feat/queued-waiter",
-      "--sha", "candidate-sha",
-      "--worktree", dir,
-      "--no-push",
-      "--lease-wait-seconds", "0",
-    ],
-    {
-      ...process.env,
-      DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
-      DPF_ALLOW_LOCAL_CI_STUB: "1",
-    },
-  );
+  const mcp = await startMockMcp({
+    claim_nonprod_environment_lease: () => ({ success: true, entityId: "NPEL-WAITER" }),
+    release_nonprod_environment_lease: () => ({ success: true }),
+  });
+  try {
+    const result = await runGateAsync(
+      [
+        "--branch", "feat/queued-waiter",
+        "--sha", "candidate-sha",
+        "--worktree", dir,
+        "--no-push",
+        "--lease-wait-seconds", "0",
+        "--mcp-url", mcp.url,
+      ],
+      {
+        ...process.env,
+        DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+        DPF_ALLOW_LOCAL_CI_STUB: "1",
+      },
+    );
 
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /sandbox owner process is still live/);
-  assert.deepEqual(JSON.parse(readFileSync(reportPath, "utf8")), activeReport);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /sandbox owner process is still live/);
+    assert.deepEqual(JSON.parse(readFileSync(reportPath, "utf8")), activeReport);
+    assert.equal(
+      mcp.calls.filter((call) => call.params.name === "release_nonprod_environment_lease").length,
+      1,
+    );
+  } finally {
+    await mcp.close();
+  }
 });
 
 test("gate-worktree.mjs records blocked_sandbox_drift (exit 3), not a product failure, when the freshness report is red", async () => {
