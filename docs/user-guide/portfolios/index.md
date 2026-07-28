@@ -31,6 +31,9 @@ product health, budget allocation, market offer, and strategic balance.
 
 - View the four root portfolios and drill down into their product groupings
 - Review the organization-owned product-line rollup for Goods and Services for Sale
+- Open a product line's **Direction** workspace to compare its real products,
+  recorded sales, evidence gaps, and pending decisions. Product detail remains
+  separate from the enabling digital-product architecture views.
 - Check portfolio health scores and understand which products are contributing to issues
 - Review a product's current discovered estate without duplicate repair
   tombstones inflating its inventory count
@@ -38,3 +41,9 @@ product health, budget allocation, market offer, and strategic balance.
 - Separate platform, common, and archetype-specific backlog demand before making roadmap or budget tradeoffs
 - Identify risk concentration and rebalance product groupings
 - Use the AI coworker to request a health summary or register a new product
+
+The Products home adapts its default detail to the selected navigation mode.
+Guided mode keeps child lines and evidence sources collapsed; professional mode
+opens denser comparisons. Both views use the same product-line hierarchy and
+commercial evidence, so changing disclosure does not change the underlying
+reporting boundary.
