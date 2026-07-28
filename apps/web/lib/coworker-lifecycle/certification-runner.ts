@@ -36,6 +36,7 @@ import {
 import { COWORKER_CERT_ADAPTER_KEY } from "./certification-status";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { isAdmissionTimeout } from "@/lib/inference/inference-admission";
+import { classifyInferenceFailure } from "@/lib/build/inference-failure";
 
 export { COWORKER_CERT_ADAPTER_KEY };
 export const COWORKER_CERT_ADAPTER_VERSION = "1.0.0";
@@ -140,6 +141,23 @@ function defaultDeps(): CertificationDeps {
   };
 }
 
+function capacityInconclusiveJourney(
+  journey: GoldenJourney,
+  startedAt: number,
+  deps: CertificationDeps,
+): JourneyResult {
+  return {
+    journeyId: journey.journeyId,
+    mode: journey.mode,
+    passed: false,
+    capacityInconclusive: true,
+    verdicts: [],
+    executedToolNames: [],
+    downgraded: false,
+    durationMs: deps.now().getTime() - startedAt,
+  };
+}
+
 async function executeJourney(
   journey: GoldenJourney,
   userContext: AutonomousWorkUserContext & { userId: string },
@@ -183,6 +201,14 @@ async function executeJourney(
       modelRequirements,
     });
 
+    // runAgenticLoop intentionally converts routing failures into operator-safe
+    // content instead of throwing. Preserve that UX contract while recognizing
+    // its canonical capacity signal here: a pool/rate-limit exhaustion means the
+    // coworker was not actually exercised and must be requeued, not failed.
+    if (classifyInferenceFailure(loop.content) === "rate-limit") {
+      return capacityInconclusiveJourney(journey, startedAt, deps);
+    }
+
     const verdicts = evaluateJourneyOracles({
       content: loop.content,
       executedTools: loop.executedTools.map((t) => ({
@@ -209,16 +235,7 @@ async function executeJourney(
     // the journey inconclusive with NO failure verdicts, so the run is requeued
     // and the coworker is never wrongly failed for a busy box.
     if (isAdmissionTimeout(error)) {
-      return {
-        journeyId: journey.journeyId,
-        mode: journey.mode,
-        passed: false,
-        capacityInconclusive: true,
-        verdicts: [],
-        executedToolNames: [],
-        downgraded: false,
-        durationMs: deps.now().getTime() - startedAt,
-      };
+      return capacityInconclusiveJourney(journey, startedAt, deps);
     }
     const message = getErrorMessage(error);
     const verdicts = evaluateJourneyOracles({
@@ -387,4 +404,3 @@ export async function runCoworkerCertificationSweep(options?: {
     inconclusive: results.filter((r) => r.status === "inconclusive").length,
   };
 }
-
