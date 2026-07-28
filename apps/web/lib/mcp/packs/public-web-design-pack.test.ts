@@ -47,6 +47,19 @@ describe("public-web-design pack — registration", () => {
     }
   });
 
+  it("exposes source-cited operational precedents as a design-intelligence domain", () => {
+    const definition = publicWebDesignPack.definitions.find(
+      (candidate) => candidate.name === "search_design_intelligence",
+    );
+    const properties = definition?.inputSchema["properties"] as
+      | Record<string, { enum?: string[]; description?: string }>
+      | undefined;
+    const domain = properties?.["domain"];
+
+    expect(domain?.enum).toContain("precedent");
+    expect(domain?.description).toContain("physical operational workspace");
+  });
+
   it("grants mirror agent-grants: read tools need read grants, mutating tools need write grants", () => {
     // Read-only design/reference tools gate on file_read.
     for (const t of ["evaluate_page", "search_design_intelligence", "generate_design_system", "analyze_brand_document"]) {

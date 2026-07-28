@@ -72,3 +72,30 @@ test("passes when design-sensitive files changed with design-grounding evidence"
   assert.equal(v.ok, true);
   assert.equal(v.reason, "design-grounding-evidence");
 });
+
+test("physical-twin changes require a current operational precedent or explicit no-precedent rationale", () => {
+  const changedFiles = ["apps/web/components/twin/OperationalScene.tsx"];
+  const grounding = `## Design grounding
+
+- Existing specs/plans reviewed:
+  - docs/superpowers/specs/operational-twin.md
+- Current code substrate reviewed:
+  - apps/web/components/twin/OperationalScene.tsx`;
+
+  const missing = decide({ changedFiles, evidenceText: grounding });
+  assert.equal(missing.ok, false);
+  assert.equal(missing.reason, "missing-operational-precedent");
+
+  const sourced = decide({
+    changedFiles,
+    evidenceText: `${grounding}\nOperational-Precedent: restaurant-floor`,
+  });
+  assert.equal(sourced.ok, true);
+  assert.equal(sourced.reason, "design-grounding-and-operational-precedent");
+
+  const explicitAbsence = decide({
+    changedFiles,
+    evidenceText: `${grounding}\nOperational-Precedent: no-precedent (no incumbent spatial workflow exists; task-list fallback reviewed)`,
+  });
+  assert.equal(explicitAbsence.ok, true);
+});

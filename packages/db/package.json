@@ -60,6 +60,7 @@
     "./healthcare-care-intake": "./src/healthcare-care-intake.ts",
     "./seed-skills": "./src/seed-skills.ts",
     "./portfolio-sources/types": "./src/portfolio-sources/types.ts",
+    "./portfolio-sources/vertical-incumbents-manifest": "./src/portfolio-sources/vertical-incumbents-manifest.ts",
     "./patch": "./src/patch/index.ts"
   },
   "scripts": {
