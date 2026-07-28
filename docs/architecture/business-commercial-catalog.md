@@ -167,6 +167,45 @@ adjacent concepts—not as a claim that ServiceNow lacks Sold Product, nor as an
 exact CSDM entity. IT4IT and DPF `DigitalProduct` remain focused on digital
 product architecture and lifecycle.
 
+## Direction Route And Projection Boundary
+
+The historic `/portfolio/product/[id]` URL is retained through
+`apps/web/lib/product-management/product-route-authority.ts`. It queries
+business `Product` and `DigitalProduct` independently:
+
+- a business-only match renders the business header, business Direction
+  navigation, and `ProductOperatingContext`;
+- a digital-only match preserves the existing digital-product lifecycle
+  header, tabs, and pages;
+- no match returns the normal not-found boundary;
+- a dual match is ambiguous and fails closed.
+
+The resolver never maps through similar names, prompt text, a storefront item,
+or an operational offering. The latter remains an explicit enabling trace
+inside `ProductOperatingContext`, not route identity.
+
+Business-product Direction lives at
+`/portfolio/product/[id]/direction`. Product-line comparison lives at
+`/portfolio/product-line/[id]/direction` and is linked from the existing
+`/portfolio` Products home. The home preserves the internal portfolio slug
+`products_and_services_sold`; no second global dashboard or portfolio
+authority is introduced.
+
+`apps/web/lib/product-management/product-direction-view.ts` derives the
+decision-first presentation. `product-line-direction-view.ts` derives the
+hierarchy and per-product comparison from the same context. The comparison
+uses only canonical Product Sold sale count and additive root revenue. It
+withholds a currency total when records contain mixed currencies and labels
+unallocated package components as a reporting blind spot.
+
+The shell's existing navigation-mode preference controls disclosure density:
+worker/Simple is guided and operator/Full is professional. This is a
+presentation preference, not a new employee role or authorization authority.
+Facts, deterministic calculations, missing contracts, and future AI-assisted
+work remain visibly distinct. Direction links are read-only; the preview
+component discloses scope and consequences before any transition to a governed
+mutation workflow.
+
 ## Fleet-Safe Evolution
 
 The Phase 2 and Catalog Builder migrations are expand-only:

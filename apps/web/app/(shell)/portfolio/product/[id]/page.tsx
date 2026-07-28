@@ -3,8 +3,9 @@
 // Overview tab — product metadata summary, stats, and quick links to other tabs.
 
 import { INVENTORY_ENTITY_CANONICAL_WHERE, prisma } from "@dpf/db";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { resolveCurrentProductRouteAuthority } from "@/lib/product-management/current-product-operating-context.server";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -12,6 +13,11 @@ type Props = {
 
 export default async function ProductOverviewPage({ params }: Props) {
   const { id } = await params;
+  const authority = await resolveCurrentProductRouteAuthority(id);
+  if (!authority) notFound();
+  if (authority.kind === "business-product") {
+    redirect(`/portfolio/product/${id}/direction`);
+  }
 
   const product = await prisma.digitalProduct.findUnique({
     where: { id },

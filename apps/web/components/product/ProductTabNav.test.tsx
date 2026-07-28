@@ -28,6 +28,7 @@ describe("ProductTabNav", () => {
     expect(html).toContain(">Architecture<");
     expect(html).toContain(">Commercial<");
     expect(html).toContain(">Team<");
+    expect(html).not.toContain(">Direction<");
     expect(html).not.toContain(">Backlog<");
     expect(html).not.toContain(">Health<");
   });

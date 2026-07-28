@@ -31,7 +31,9 @@ export function PortfolioOverview({ roots, agentCounts, budgets, summary }: Prop
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Portfolio</h1>
+        <h2 className="text-xl font-bold text-[var(--dpf-text)]">
+          Digital product architecture
+        </h2>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
           {roots.length} portfolios · {totalProducts} digital products
         </p>

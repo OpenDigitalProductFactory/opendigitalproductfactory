@@ -62,5 +62,7 @@ describe("PortfolioOverview", () => {
     expect(html).toContain("$2.5M");
     expect(html).toContain("Planning placeholder");
     expect(html).toContain('data-source-kind="demo-placeholder"');
+    expect(html).toContain(">Digital product architecture<");
+    expect(html).not.toContain("<h1");
   });
 });

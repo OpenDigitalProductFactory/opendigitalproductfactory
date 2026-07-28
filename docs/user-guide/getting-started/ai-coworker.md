@@ -53,6 +53,13 @@ The coworker operates within a two-layer authorization model:
 - **Side-effect actions require approval** — when the coworker wants to create, update, or delete something, it proposes the action and waits for your approval before executing
 - **Every action is recorded** — all tool calls (not just proposals) are logged with your identity and the agent's identity for audit purposes. View the log at `/platform/ai/authority`
 
+On a business Product's **Direction** page, informational cards and links do
+not send a coworker prompt. **Preview a demand review** first shows the product
+scope, source kinds, proposed writes, approval boundary, and schedule effect.
+The Phase 6 preview performs no write; it takes you to the existing Delivery
+workflow, where any later funding or backlog mutation keeps its own governed
+confirmation.
+
 ## WWMD And Autonomy
 
 When a coworker hits an ambiguous decision, it should not guess from chat context alone. WWMD is the decision gate that lets the coworker consult the founder-kernel wiki and score options against platform principles.

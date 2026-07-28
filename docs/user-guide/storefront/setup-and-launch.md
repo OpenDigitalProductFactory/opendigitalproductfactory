@@ -123,6 +123,14 @@ a source unavailable until real offerings, purchases, research, delivery work,
 or architecture links exist. Adding another product line changes what is
 disclosed, not the underlying provider/consumer model.
 
+After setup, open **Products → Goods and Services for Sale**. The hierarchy is
+shown above the digital-product inventory. A simple one-line business sees one
+line and can go directly to its managed product. A mixed salon, hotel, or
+restaurant can open each confirmed line and compare only the sales evidence
+actually recorded for its products. The Products view does not manufacture
+teams, consumers, subscriptions, outcome scores, or cross-line currency totals
+to make the page look complete.
+
 ## Verify The Customer Experience
 
 Use **View Live** to open the public URL in a new tab. Verify it as a customer,

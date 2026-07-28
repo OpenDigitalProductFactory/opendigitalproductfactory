@@ -147,6 +147,13 @@ export interface ProductOperatingContext {
     }>;
     unallocatedComponentCount: number;
   };
+  commercialPerformanceByProduct: Array<{
+    productId: string;
+    saleCount: number;
+    additiveRevenue: number;
+    currency: string | null;
+    unallocatedComponentCount: number;
+  }>;
   intelligence: ContextSlice<IntelligenceContextItem>;
   demand: ContextSlice<DemandContextItem>;
   decisions: ContextSlice<NamedStatusContextItem>;
@@ -302,6 +309,37 @@ function projectCommercialPerformance(
   };
 }
 
+function projectCommercialPerformanceByProduct(
+  products: readonly BusinessProductContextItem[],
+  sold: ContextSlice<ProductSoldContextItem>,
+): ProductOperatingContext["commercialPerformanceByProduct"] {
+  return products.map((product) => {
+    const rows = sold.items.filter((row) => row.productId === product.id);
+    const summary = summarizeProductSoldRevenue(
+      rows.map((row) => ({
+        productSoldId: row.id,
+        totalAmount: row.totalAmount,
+        componentAllocations: [],
+      })),
+    );
+    const currencies = new Set(rows.map((row) => row.currency));
+    return {
+      productId: product.id,
+      saleCount: summary.saleCount,
+      additiveRevenue: summary.additiveRevenue,
+      currency: currencies.size === 1 ? [...currencies][0]! : null,
+      unallocatedComponentCount: rows.reduce(
+        (count, row) =>
+          count +
+          row.componentAllocations.filter(
+            (allocation) => allocation.allocatedAmount === null,
+          ).length,
+        0,
+      ),
+    };
+  });
+}
+
 function prioritizeScopedIntelligence(
   slice: ContextSlice<IntelligenceContextItem>,
 ): ContextSlice<IntelligenceContextItem> {
@@ -339,6 +377,10 @@ export function assembleProductOperatingContext(
     catalogItems: input.catalogItems,
     productSold: input.productSold,
     commercialPerformance: projectCommercialPerformance(input.productSold),
+    commercialPerformanceByProduct: projectCommercialPerformanceByProduct(
+      sortContextItems(input.products),
+      input.productSold,
+    ),
     intelligence: prioritizeScopedIntelligence(input.intelligence),
     demand: input.demand,
     decisions: input.decisions,

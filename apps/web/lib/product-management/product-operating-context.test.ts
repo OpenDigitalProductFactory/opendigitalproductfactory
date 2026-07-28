@@ -420,4 +420,77 @@ describe("ProductOperatingContext", () => {
       unallocatedComponentCount: 1,
     });
   });
+
+  it("projects stable per-product commercial comparisons from the same Product Sold evidence", () => {
+    const retailProduct = {
+      ...item("product-retail", "product"),
+      productId: "PROD-RETAIL",
+      productLineId: "line-retail",
+      name: "Salon retail",
+    };
+    const context = assembleProductOperatingContext(
+      baseInput({
+        products: [...baseInput().products, retailProduct],
+        productSold: createContextSlice({
+          requestedAt: now,
+          sourceKind: "product-sold",
+          items: [
+            {
+              ...item("sold-service", "product-sold"),
+              productId: "product-salon-services",
+              status: "fulfilled",
+              quantity: 1,
+              totalAmount: 80,
+              currency: "USD",
+              consumerEvidence: [],
+              componentAllocations: [],
+            },
+            {
+              ...item("sold-retail-2", "product-sold"),
+              productId: "product-retail",
+              status: "fulfilled",
+              quantity: 1,
+              totalAmount: 30,
+              currency: "USD",
+              consumerEvidence: [],
+              componentAllocations: [],
+            },
+            {
+              ...item("sold-retail-1", "product-sold"),
+              productId: "product-retail",
+              status: "fulfilled",
+              quantity: 2,
+              totalAmount: 45,
+              currency: "CAD",
+              consumerEvidence: [],
+              componentAllocations: [
+                {
+                  catalogItemId: "catalog-shampoo",
+                  allocatedAmount: null,
+                  allocationMode: "unallocated",
+                },
+              ],
+            },
+          ],
+        }),
+      }),
+    );
+
+    expect(context.commercialPerformanceByProduct).toEqual([
+      {
+        productId: "product-retail",
+        saleCount: 2,
+        additiveRevenue: 75,
+        currency: null,
+        unallocatedComponentCount: 1,
+      },
+      {
+        productId: "product-salon-services",
+        saleCount: 1,
+        additiveRevenue: 80,
+        currency: "USD",
+        unallocatedComponentCount: 0,
+      },
+    ]);
+  });
 });
