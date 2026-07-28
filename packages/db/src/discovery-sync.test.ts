@@ -5,12 +5,27 @@ import {
   summarizeDiscoveryPersistence,
 } from "./discovery-sync";
 
-function heapIntegrityRaw() {
+function heapIntegrityRaw(events: string[] = []) {
   return {
-    $executeRawUnsafe: async () => 0,
-    $queryRawUnsafe: async <T>(_query: string, keys: string[]): Promise<T> => (
-      keys.map((entityKey) => ({ entityKey, heapCount: 1 })) as T
-    ),
+    $executeRawUnsafe: async (query: string) => {
+      events.push(query);
+      return 0;
+    },
+    $queryRawUnsafe: async <T>(query: string, keys: string[] = []): Promise<T> => {
+      if (query.includes("pg_advisory_xact_lock")) {
+        events.push("lock");
+        return [] as T;
+      }
+      if (query.includes("current_setting")) {
+        return [{
+          enableIndexscan: "on",
+          enableIndexonlyscan: "on",
+          enableBitmapscan: "on",
+        }] as T;
+      }
+      events.push("heap");
+      return keys.map((entityKey) => ({ entityKey, heapCount: 1 })) as T;
+    },
   };
 }
 
@@ -35,16 +50,19 @@ describe("persistBootstrapDiscoveryRun", () => {
     const upsertedEntityPayloads: Array<Record<string, unknown>> = [];
     const createdSoftwareEvidence: Array<Record<string, unknown>> = [];
     const qualityIssues: Array<Record<string, unknown>> = [];
+    const persistenceEvents: string[] = [];
+    const relationshipFindMany = vi.fn().mockResolvedValue([]);
 
     const db = {
       $transaction: async <T>(fn: (tx: any) => Promise<T>): Promise<T> => fn({
-        ...heapIntegrityRaw(),
+        ...heapIntegrityRaw(persistenceEvents),
         discoveryRun: {
           create: async () => ({ id: "run-1" }),
         },
         inventoryEntity: {
           findMany: async () => [],
           upsert: async ({ where, create, update }: { where: { entityKey: string }; create: Record<string, unknown>; update: Record<string, unknown> }) => {
+            persistenceEvents.push("upsert");
             upsertedEntityPayloads.push({ where, create, update });
             return ({
             id: `entity:${where.entityKey}`,
@@ -65,7 +83,7 @@ describe("persistBootstrapDiscoveryRun", () => {
           },
         },
         inventoryRelationship: {
-          findMany: async () => [],
+          findMany: relationshipFindMany,
           upsert: async ({ where, create }: {
             where: { fromEntityId_toEntityId_relationshipType: { fromEntityId: string; toEntityId: string; relationshipType: string } };
             create: { relationshipKey: string };
@@ -205,6 +223,16 @@ describe("persistBootstrapDiscoveryRun", () => {
 
     expect(projectInventoryEntity).toHaveBeenCalledTimes(3);
     expect(projectInventoryRelationship).toHaveBeenCalledTimes(1);
+    expect(persistenceEvents.indexOf("lock")).toBeGreaterThanOrEqual(0);
+    expect(persistenceEvents.indexOf("lock")).toBeLessThan(
+      persistenceEvents.indexOf("upsert"),
+    );
+    expect(relationshipFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        mergedIntoId: null,
+        status: { not: "superseded" },
+      }),
+    }));
     expect(upsertedEntityPayloads[0]?.create).toMatchObject({
       taxonomyNode: { connect: { nodeId: "foundational/compute/servers" } },
       attributionMethod: "rule",
@@ -343,7 +371,17 @@ describe("persistBootstrapDiscoveryRun", () => {
     const db = {
       $transaction: async <T>(fn: (tx: any) => Promise<T>): Promise<T> => fn({
         $executeRawUnsafe: async () => 0,
-        $queryRawUnsafe: async () => [{ entityKey: "router:main", heapCount: 2 }],
+        $queryRawUnsafe: async (query: string) => {
+          if (query.includes("pg_advisory_xact_lock")) return [];
+          if (query.includes("current_setting")) {
+            return [{
+              enableIndexscan: "on",
+              enableIndexonlyscan: "on",
+              enableBitmapscan: "on",
+            }];
+          }
+          return [{ entityKey: "router:main", heapCount: 2 }];
+        },
         discoveryRun: { create: async () => ({ id: "run-integrity" }) },
         inventoryEntity: {
           findMany: async () => [],
@@ -410,6 +448,71 @@ describe("persistBootstrapDiscoveryRun", () => {
     expect(discoveredItemCreate).not.toHaveBeenCalled();
     expect(relationshipUpsert).not.toHaveBeenCalled();
     expect(projectInventoryEntity).not.toHaveBeenCalled();
+  });
+
+  it("cannot sweep a superseded relationship tombstone back into canonical state", async () => {
+    const relationshipUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const db = {
+      $transaction: async <T>(fn: (tx: any) => Promise<T>): Promise<T> => fn({
+        ...heapIntegrityRaw(),
+        discoveryRun: { create: async () => ({ id: "run-tombstone-sweep" }) },
+        inventoryEntity: {
+          findMany: async () => [],
+          upsert: vi.fn(),
+          updateMany: async () => ({ count: 0 }),
+        },
+        inventoryRelationship: {
+          findMany: async () => [{
+            id: "relationship-canonical",
+            relationshipKey: "relationship:canonical",
+            fromEntityId: "entity-a",
+            toEntityId: "entity-b",
+            relationshipType: "CONNECTS",
+          }],
+          upsert: vi.fn(),
+          updateMany: relationshipUpdateMany,
+        },
+        portfolioQualityIssue: {
+          findMany: async () => [],
+          upsert: async () => ({}),
+          updateMany: async () => ({ count: 0 }),
+        },
+        identityResolutionLog: {
+          findFirst: async () => null,
+          create: async () => ({}),
+        },
+        discoveredItem: { create: vi.fn() },
+        discoveredSoftwareEvidence: { upsert: vi.fn() },
+        discoveredRelationship: { create: vi.fn() },
+      }),
+    };
+
+    await persistBootstrapDiscoveryRun(
+      db,
+      {
+        discoveredItems: [],
+        inventoryEntities: [],
+        inventoryRelationships: [],
+        softwareEvidence: [],
+      },
+      { runKey: "run-tombstone-sweep", sourceSlug: "integration_test" },
+      {
+        projectInventoryEntity: async () => undefined,
+        projectInventoryRelationship: async () => undefined,
+      },
+    );
+
+    expect(relationshipUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: { in: ["relationship-canonical"] },
+        mergedIntoId: null,
+        status: { not: "superseded" },
+      },
+      data: {
+        status: "stale",
+        lastSeenAt: expect.any(Date),
+      },
+    });
   });
 
   it("upserts one InventoryRelationship per resolved tuple when distinct keys collapse (BI-PIR-7d69a445)", async () => {

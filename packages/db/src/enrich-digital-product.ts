@@ -15,6 +15,7 @@ import {
   upsertLifecycleForIdentity,
   type LifecycleUpsertClient,
 } from "./endoflife-lifecycle";
+import { INVENTORY_ENTITY_CANONICAL_WHERE } from "./inventory-entity-lifecycle";
 
 /** One CatalogIdentity row the per-identity enrichment needs. */
 export type EnrichIdentityRow = {
@@ -103,6 +104,7 @@ export type EnrichDigitalProductClient = CpeUpsertClient &
         select: {
           id: true;
           inventoryEntities: {
+            where: typeof INVENTORY_ENTITY_CANONICAL_WHERE;
             select: { catalogIdentity: { select: EnrichIdentitySelect } };
           };
         };
@@ -161,7 +163,10 @@ export async function enrichDigitalProduct(
     where: { id: digitalProductId },
     select: {
       id: true,
-      inventoryEntities: { select: { catalogIdentity: { select: identitySelect } } },
+      inventoryEntities: {
+        where: INVENTORY_ENTITY_CANONICAL_WHERE,
+        select: { catalogIdentity: { select: identitySelect } },
+      },
     },
   });
 

@@ -146,6 +146,12 @@ future dedupe retires losers in one pass — tracked in BI-8EEEF8CB.
   describe how the cluster was built, cannot be cleared by any repair, and failing on them would
   hold CI red permanently. A recorded-vs-actual collation version mismatch **does** fail — that one
   is a real regression and means indexes are stale.
+- Contributor preview reuses the same integrity core in read-only mode. After clearing the
+  disposable destination, it requires the migration-provisioned `amcheck` extension and checks
+  every `InventoryEntity` B-tree with heap agreement enabled before copying source data. A failed
+  check leaves the destination empty. The canonical preview commands stop the prior `dev-portal`
+  before refresh, so a failed clone also leaves port `3001` closed instead of serving stale
+  acceptance evidence.
 
 ## Related
 

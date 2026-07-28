@@ -64,6 +64,8 @@ export function shouldSkipTable(tableName: string): boolean {
 
 import { PrismaClient } from "../generated/client/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+// @ts-expect-error -- importable runtime guard is plain .mjs by design
+import { checkIndexIntegrity } from "../scripts/index-integrity-core.mjs";
 
 type RawDatabaseClient = Pick<
   PrismaClient,
@@ -144,6 +146,17 @@ export async function runWithDestinationCleanup<T>(
     }
     throw cloneError;
   }
+}
+
+export async function runSourceCheckedClone<T>(
+  resetDestination: () => Promise<void>,
+  checkSource: () => Promise<void>,
+  clone: () => Promise<T>,
+): Promise<T> {
+  return runWithDestinationCleanup(resetDestination, async () => {
+    await checkSource();
+    return clone();
+  });
 }
 
 export function resolveCompatibleCopyColumns(
@@ -359,8 +372,9 @@ export async function runSanitizedClone(): Promise<void> {
     const destinationTables = await listPublicTables(dev, true);
     const destinationTableNames = new Set(destinationTables.map(({ tablename }) => tablename));
 
-    await runWithDestinationCleanup(
+    await runSourceCheckedClone(
       () => resetDestinationData(dev, destinationTables.map(({ tablename }) => tablename)),
+      () => assertSourceInventoryIntegrity(prod),
       async () => {
         const tables = await listPublicTables(prod, false);
         console.log(`[sanitized-clone] Found ${tables.length} tables to process`);
@@ -424,6 +438,33 @@ export async function runSanitizedClone(): Promise<void> {
     await prod.$disconnect();
     await dev.$disconnect();
   }
+}
+
+async function assertSourceInventoryIntegrity(
+  source: RawDatabaseClient,
+): Promise<void> {
+  const queryClient = {
+    query: async (sql: string, params: unknown[] = []) => ({
+      rows: await source.$queryRawUnsafe<unknown[]>(
+        sql,
+        ...(params as never[]),
+      ),
+    }),
+  };
+  const report = await checkIndexIntegrity(queryClient, {
+    amcheckMode: "require",
+    schema: "public",
+    table: "InventoryEntity",
+    uniqueOnly: false,
+  });
+  if (!report.failed) return;
+
+  const details = report.corrupted
+    .map((row: { index: string; error: string }) => `${row.index}: ${row.error}`)
+    .join("; ");
+  throw new Error(
+    `Production InventoryEntity source failed index/heap integrity; preview was not published. ${details}`,
+  );
 }
 
 async function readDatabaseIdentity(client: RawDatabaseClient): Promise<DatabaseIdentity> {

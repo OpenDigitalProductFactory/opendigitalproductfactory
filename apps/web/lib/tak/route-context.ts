@@ -895,6 +895,7 @@ async function getProductEstateContext(_userId: string, routeContext: string): P
       portfolio: { select: { name: true } },
       taxonomyNode: { select: { nodeId: true } },
       inventoryEntities: {
+        where: INVENTORY_ENTITY_CANONICAL_WHERE,
         orderBy: [{ lastSeenAt: "desc" }, { name: "asc" }],
         take: 10,
         select: {

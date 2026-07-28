@@ -199,6 +199,7 @@ export async function summarizeProductEstate(routeContext?: string | null) {
       id: true,
       name: true,
       inventoryEntities: {
+        where: INVENTORY_ENTITY_CANONICAL_WHERE,
         select: ESTATE_ENTITY_SELECT,
       },
     },

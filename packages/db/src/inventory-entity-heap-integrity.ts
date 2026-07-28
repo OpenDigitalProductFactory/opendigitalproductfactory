@@ -12,34 +12,109 @@ export class InventoryEntityIntegrityError extends Error {
   }
 }
 
+export async function lockInventoryEntityKeys(
+  tx: InventoryEntityHeapIntegrityTx,
+  entityKeys: readonly string[],
+): Promise<void> {
+  const distinctKeys = [...new Set(entityKeys)].sort();
+  if (distinctKeys.length === 0) return;
+
+  await tx.$queryRawUnsafe(
+    `
+      SELECT pg_advisory_xact_lock(hashtextextended(locked."entityKey", 0))
+      FROM (
+        SELECT unnest($1::text[]) AS "entityKey"
+        ORDER BY 1
+      ) locked
+    `,
+    distinctKeys,
+  );
+}
+
 export async function assertInventoryEntityHeapIntegrity(
   tx: InventoryEntityHeapIntegrityTx,
   entityKeys: readonly string[],
 ): Promise<void> {
-  const distinctKeys = [...new Set(entityKeys)];
+  const distinctKeys = [...new Set(entityKeys)].sort();
   if (distinctKeys.length === 0) return;
 
-  await tx.$executeRawUnsafe("SET LOCAL enable_indexscan = off");
-  await tx.$executeRawUnsafe("SET LOCAL enable_indexonlyscan = off");
-  await tx.$executeRawUnsafe("SET LOCAL enable_bitmapscan = off");
-
-  const rows = await tx.$queryRawUnsafe<Array<{
-    entityKey: string;
-    heapCount: number;
+  const settings = (await tx.$queryRawUnsafe<Array<{
+    enableIndexscan: string;
+    enableIndexonlyscan: string;
+    enableBitmapscan: string;
   }>>(
     `
       SELECT
-        requested."entityKey",
-        (
-          SELECT count(*)::int
-          FROM "InventoryEntity" heap_row
-          WHERE heap_row."entityKey" = requested."entityKey"
-        ) AS "heapCount"
-      FROM unnest($1::text[]) AS requested("entityKey")
-      ORDER BY requested."entityKey"
+        current_setting('enable_indexscan') AS "enableIndexscan",
+        current_setting('enable_indexonlyscan') AS "enableIndexonlyscan",
+        current_setting('enable_bitmapscan') AS "enableBitmapscan"
     `,
-    distinctKeys,
-  );
+  ))[0];
+  if (!settings) {
+    throw new InventoryEntityIntegrityError(
+      "Inventory entity heap integrity could not read PostgreSQL planner settings",
+    );
+  }
+  const plannerValue = (value: string): "on" | "off" => {
+    if (value === "on" || value === "off") return value;
+    throw new InventoryEntityIntegrityError(
+      `Unexpected PostgreSQL planner setting value: ${value}`,
+    );
+  };
+
+  let rows: Array<{
+    entityKey: string;
+    heapCount: number;
+  }> = [];
+  let integrityQueryError: unknown;
+  try {
+    await tx.$executeRawUnsafe("SET LOCAL enable_indexscan = off");
+    await tx.$executeRawUnsafe("SET LOCAL enable_indexonlyscan = off");
+    await tx.$executeRawUnsafe("SET LOCAL enable_bitmapscan = off");
+    rows = await tx.$queryRawUnsafe(
+      `
+        WITH requested AS (
+          SELECT unnest($1::text[]) AS "entityKey"
+        ),
+        heap_rows AS MATERIALIZED (
+          SELECT id, "entityKey"
+          FROM "InventoryEntity"
+        )
+        SELECT
+          requested."entityKey",
+          count(heap_rows.id)::int AS "heapCount"
+        FROM requested
+        LEFT JOIN heap_rows
+          ON heap_rows."entityKey" = requested."entityKey"
+        GROUP BY requested."entityKey"
+        ORDER BY requested."entityKey"
+      `,
+      distinctKeys,
+    );
+  } catch (error) {
+    integrityQueryError = error;
+  }
+
+  try {
+    await tx.$executeRawUnsafe(
+      `SET LOCAL enable_indexscan = ${plannerValue(settings.enableIndexscan)}`,
+    );
+    await tx.$executeRawUnsafe(
+      `SET LOCAL enable_indexonlyscan = ${plannerValue(settings.enableIndexonlyscan)}`,
+    );
+    await tx.$executeRawUnsafe(
+      `SET LOCAL enable_bitmapscan = ${plannerValue(settings.enableBitmapscan)}`,
+    );
+  } catch (restoreError) {
+    if (integrityQueryError) {
+      throw new AggregateError(
+        [integrityQueryError, restoreError],
+        "Inventory heap check failed and PostgreSQL planner settings could not be restored",
+      );
+    }
+    throw restoreError;
+  }
+  if (integrityQueryError) throw integrityQueryError;
 
   const countByKey = new Map(rows.map((row) => [row.entityKey, Number(row.heapCount)]));
   for (const entityKey of distinctKeys) {

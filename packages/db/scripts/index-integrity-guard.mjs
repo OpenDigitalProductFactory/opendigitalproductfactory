@@ -57,6 +57,12 @@
 //   - packages/db/scripts/index-integrity-guard.test.ts (vitest)
 
 import pg from "pg";
+import {
+  checkCollationStability,
+  checkIndexIntegrity,
+} from "./index-integrity-core.mjs";
+
+export { checkCollationStability } from "./index-integrity-core.mjs";
 
 const args = process.argv.slice(2);
 const has = (flag) => args.includes(flag);
@@ -70,126 +76,9 @@ const AS_JSON = has("--json");
 const QUIET = has("--quiet");
 const ONLY_TABLE = valueOf("--table");
 
-/** A glibc initdb registers several hundred libc collations; musl registers 3. */
-const MUSL_LIBC_COLLATION_CEILING = 8;
-
 function fail(message) {
   process.stderr.write(`index-integrity-guard: ${message}\n`);
   process.exit(2);
-}
-
-/**
- * Postgres cannot warn about the drift that matters here: on a musl-initdb
- * cluster datcollversion is NULL, so the recorded-vs-actual comparison it would
- * normally make has nothing to compare against. Reconstruct the signal from the
- * collation census instead.
- */
-export async function checkCollationStability(client) {
-  const { rows: db } = await client.query(`
-    SELECT datcollate, datctype, datcollversion,
-           pg_database_collation_actual_version(oid) AS actual_version
-    FROM pg_database
-    WHERE datname = current_database()
-  `);
-  const { rows: census } = await client.query(`
-    SELECT collprovider, count(*)::int AS count
-    FROM pg_collation
-    GROUP BY collprovider
-  `);
-
-  const libcCount = census.find((r) => r.collprovider === "c")?.count ?? 0;
-  const { datcollate, datcollversion, actual_version: actualVersion } = db[0];
-  const findings = [];
-
-  // A cluster labelled with a real locale but carrying no libc locale data was
-  // initialised somewhere that ignored the label. Serve it from glibc and every
-  // pre-existing text btree is ordered by a comparator that no longer applies.
-  const labelClaimsLocale = !/^(C|POSIX)(\.|$)/.test(datcollate ?? "");
-  if (labelClaimsLocale && libcCount <= MUSL_LIBC_COLLATION_CEILING) {
-    findings.push({
-      kind: "collation-provider-mismatch",
-      // Advisory: this is a permanent property of how the cluster was
-      // initialised and cannot be cleared by any repair short of a re-initdb.
-      // Failing on it would hold CI red forever after the indexes are healthy.
-      severity: "warn",
-      detail:
-        `database collation is labelled "${datcollate}" but only ${libcCount} libc ` +
-        `collation(s) exist (a glibc initdb registers several hundred). This cluster ` +
-        `was initialised without libc locale data — text sorted as C — and any text ` +
-        `btree built then is mis-ordered under a glibc image.`,
-    });
-  }
-
-  if (datcollversion === null) {
-    findings.push({
-      kind: "collation-version-unrecorded",
-      // Advisory for the same reason: NULL here is a fact about the cluster, not
-      // a regression. It is reported because it explains why Postgres itself
-      // stays silent about drift, not because it is separately actionable.
-      severity: "warn",
-      detail:
-        `pg_database.datcollversion is NULL (actual: ${actualVersion ?? "unknown"}), ` +
-        `so Postgres cannot raise its own collation-version-mismatch warning for ` +
-        `this database. Collation drift here is silent by construction.`,
-    });
-  } else if (actualVersion && datcollversion !== actualVersion) {
-    findings.push({
-      kind: "collation-version-drift",
-      // Genuinely actionable and genuinely a regression: the comparator moved
-      // under indexes that are still built for the old one. Fail on it.
-      severity: "error",
-      detail:
-        `collation version recorded as ${datcollversion} but the running library ` +
-        `reports ${actualVersion}. Indexes built before the change are mis-ordered; ` +
-        `REINDEX them, then ALTER DATABASE ... REFRESH COLLATION VERSION.`,
-    });
-  }
-
-  return { datcollate, datcollversion, actualVersion, libcCount, findings };
-}
-
-async function ensureAmcheck(client) {
-  try {
-    await client.query("CREATE EXTENSION IF NOT EXISTS amcheck");
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function listIndexes(client) {
-  const { rows } = await client.query(
-    `
-    SELECT t.relname AS table_name, c.relname AS index_name, i.indisunique AS is_unique
-    FROM pg_index i
-    JOIN pg_class c ON c.oid = i.indexrelid
-    JOIN pg_class t ON t.oid = i.indrelid
-    JOIN pg_namespace n ON n.oid = t.relnamespace
-    WHERE n.nspname = 'public'
-      AND c.relam = (SELECT oid FROM pg_am WHERE amname = 'btree')
-      AND ($1::boolean IS NOT TRUE OR i.indisunique)
-      AND ($2::text IS NULL OR t.relname = $2)
-    ORDER BY t.relname, c.relname
-  `,
-    [UNIQUE_ONLY, ONLY_TABLE ?? null],
-  );
-  return rows;
-}
-
-/**
- * heapallindexed => true is the load-bearing argument. A comparator flip leaves
- * the btree structurally walkable, so a structure-only check passes; only
- * verifying that every heap tuple is reachable through the index exposes it.
- */
-async function checkIndex(client, indexName) {
-  try {
-    await client.query("SELECT bt_index_parent_check($1::regclass, true, true)", [
-      `"public"."${indexName}"`,
-    ]);
-    return null;
-  } catch (error) {
-    return String(error.message ?? error).replace(/\s+/g, " ").trim();
-  }
 }
 
 async function main() {
@@ -206,19 +95,13 @@ async function main() {
   try {
     const collation = await checkCollationStability(client);
 
-    if (!(await ensureAmcheck(client))) {
-      fail(
-        "the amcheck extension is unavailable and could not be created; " +
-          "this guard needs it to verify index/heap agreement",
-      );
-    }
-
-    const indexes = await listIndexes(client);
-    const corrupted = [];
-    for (const { table_name: table, index_name: index, is_unique: isUnique } of indexes) {
-      const error = await checkIndex(client, index);
-      if (error) corrupted.push({ table, index, isUnique, error });
-    }
+    const integrity = await checkIndexIntegrity(client, {
+      amcheckMode: "provision",
+      schema: "public",
+      table: ONLY_TABLE ?? null,
+      uniqueOnly: UNIQUE_ONLY,
+    });
+    const corrupted = integrity.corrupted;
 
     // Advisory findings describe how the cluster was built, not a regression, so
     // they never fail the run on their own — otherwise this guard goes red
@@ -229,7 +112,7 @@ async function main() {
     const report = {
       database: { collation: collation.datcollate, libcCollations: collation.libcCount },
       collationFindings: collation.findings,
-      indexesChecked: indexes.length,
+      indexesChecked: integrity.indexesChecked,
       corrupted,
       failed: corrupted.length > 0 || blockingFindings.length > 0,
     };
@@ -247,7 +130,7 @@ async function main() {
         );
       }
       process.stdout.write(
-        `\nchecked ${indexes.length} btree index(es): ` +
+        `\nchecked ${integrity.indexesChecked} btree index(es): ` +
           `${corrupted.length} corrupted, ${blockingFindings.length} blocking + ` +
           `${collation.findings.length - blockingFindings.length} advisory collation finding(s)\n`,
       );

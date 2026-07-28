@@ -16,6 +16,11 @@ type UnguardedRead = {
   method: string;
 };
 
+function propertyName(node: ts.PropertyName): string | null {
+  if (ts.isIdentifier(node) || ts.isStringLiteral(node)) return node.text;
+  return null;
+}
+
 function inventoryEntityReadsWithoutCanonicalPredicate(): UnguardedRead[] {
   const files = sourceRoots.flatMap((root) =>
     ts.sys.readDirectory(root, [".ts", ".tsx"], undefined, undefined),
@@ -63,6 +68,27 @@ function inventoryEntityReadsWithoutCanonicalPredicate(): UnguardedRead[] {
           });
         }
       }
+      if (
+        ts.isPropertyAssignment(node)
+        && propertyName(node.name) === "inventoryEntities"
+        && (
+          node.initializer.kind === ts.SyntaxKind.TrueKeyword
+          || ts.isObjectLiteralExpression(node.initializer)
+        )
+      ) {
+        const relationText = node.getText(source);
+        if (
+          !relationText.includes("INVENTORY_ENTITY_CANONICAL_WHERE")
+          && !relationText.includes("mergedIntoId")
+        ) {
+          const position = source.getLineAndCharacterOfPosition(node.getStart(source));
+          findings.push({
+            file: relative(repoRoot, file).replaceAll("\\", "/"),
+            line: position.line + 1,
+            method: "nested inventoryEntities",
+          });
+        }
+      }
       ts.forEachChild(node, visit);
     };
     visit(source);
@@ -80,5 +106,16 @@ describe("InventoryEntity canonical-read completeness", () => {
         .map(({ file, line, method }) => `${file}:${line} inventoryEntity.${method}`)
         .join("\n"),
     ).toEqual([]);
+  });
+
+  it("canonicalizes inventory action IDs before reads, writes, and triage decisions", () => {
+    const actionSource = readFileSync(
+      resolve(repoRoot, "apps", "web", "lib", "actions", "inventory.ts"),
+      "utf8",
+    );
+
+    expect(actionSource).toContain("resolveCanonicalInventoryEntityId");
+    expect(actionSource).not.toMatch(/where:\s*\{\s*id:\s*entityId\s*\}/);
+    expect(actionSource).not.toContain("loadLatestTriageDecision(entityId)");
   });
 });

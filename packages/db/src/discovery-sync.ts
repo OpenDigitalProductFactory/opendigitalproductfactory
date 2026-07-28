@@ -6,9 +6,13 @@ import {
   syncInventoryEntityAsInfraCI,
   syncInventoryRelationship,
 } from "./graph-sync";
-import { INVENTORY_ENTITY_CANONICAL_WHERE } from "./inventory-entity-lifecycle";
+import {
+  INVENTORY_ENTITY_CANONICAL_WHERE,
+  INVENTORY_RELATIONSHIP_CANONICAL_WHERE,
+} from "./inventory-entity-lifecycle";
 import {
   assertInventoryEntityHeapIntegrity,
+  lockInventoryEntityKeys,
   type InventoryEntityHeapIntegrityTx,
 } from "./inventory-entity-heap-integrity";
 
@@ -67,6 +71,8 @@ type DiscoverySyncTx = InventoryEntityHeapIntegrityTx & {
       where?: {
         scopeKey?: string;
         lastConfirmedRun?: { sourceSlug?: string };
+        mergedIntoId?: null;
+        status?: { not: string };
       };
       select: { entityKey: true };
     }): Promise<Array<{ entityKey: string }>>;
@@ -148,7 +154,11 @@ type DiscoverySyncTx = InventoryEntityHeapIntegrityTx & {
       select: { id: true; relationshipKey: true };
     }): Promise<{ id: string; relationshipKey: string }>;
     updateMany(args: {
-      where: { id: { in: string[] } };
+      where: {
+        id: { in: string[] };
+        mergedIntoId?: null;
+        status?: { not: string };
+      };
       data: { status: string; lastSeenAt: Date };
     }): Promise<{ count: number }>;
   };
@@ -280,6 +290,10 @@ export async function persistBootstrapDiscoveryRun(
     }
     const runScope = scopeFieldsFromRunMeta(runMeta);
     const scopeWhere = { scopeKey: runScope.scopeKey };
+    await lockInventoryEntityKeys(
+      tx,
+      normalized.inventoryEntities.map((entity) => entity.entityKey),
+    );
     // Source attribution via lastConfirmedRun.sourceSlug: a sweep from one
     // source only sees the entities/relationships it has previously
     // confirmed. A unifi sweep with no dpf_bootstrap-attributed rows in
@@ -305,7 +319,11 @@ export async function persistBootstrapDiscoveryRun(
     // is retained per row so the stale-relationship quality issue can still name it.
     const existingRelationshipByTuple = new Map<string, { id: string; relationshipKey: string }>();
     for (const existing of await tx.inventoryRelationship.findMany({
-      where: { ...scopeWhere, ...sourceFilter },
+      where: {
+        ...INVENTORY_RELATIONSHIP_CANONICAL_WHERE,
+        ...scopeWhere,
+        ...sourceFilter,
+      },
       select: {
         id: true,
         relationshipKey: true,
@@ -743,7 +761,10 @@ export async function persistBootstrapDiscoveryRun(
     const staleRelationships = staleExistingRelationships.length === 0
       ? 0
       : (await tx.inventoryRelationship.updateMany({
-          where: { id: { in: staleExistingRelationships.map((value) => value.id) } },
+          where: {
+            id: { in: staleExistingRelationships.map((value) => value.id) },
+            ...INVENTORY_RELATIONSHIP_CANONICAL_WHERE,
+          },
           data: { status: "stale", lastSeenAt: now },
         })).count;
 

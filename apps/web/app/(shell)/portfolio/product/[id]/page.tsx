@@ -2,7 +2,7 @@
 //
 // Overview tab — product metadata summary, stats, and quick links to other tabs.
 
-import { prisma } from "@dpf/db";
+import { INVENTORY_ENTITY_CANONICAL_WHERE, prisma } from "@dpf/db";
 import { notFound } from "next/navigation";
 import { LocalTime } from "@/components/ui/LocalTime";
 
@@ -29,7 +29,7 @@ export default async function ProductOverviewPage({ params }: Props) {
       _count: {
         select: {
           backlogItems: true,
-          inventoryEntities: true,
+          inventoryEntities: { where: INVENTORY_ENTITY_CANONICAL_WHERE },
           eaElements: true,
           versions: true,
           serviceOfferings: true,

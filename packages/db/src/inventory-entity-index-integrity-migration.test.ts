@@ -13,6 +13,10 @@ const migrationUrl = new URL(
   "../prisma/migrations/20260728120000_repair_inventory_entity_index_integrity/migration.sql",
   import.meta.url,
 );
+const identityTupleMigrationUrl = new URL(
+  "../prisma/migrations/20260728154500_preserve_inventory_identity_tuple/migration.sql",
+  import.meta.url,
+);
 
 async function scalar(sql: string): Promise<number> {
   const result = await client.query<{ value: string }>(sql);
@@ -199,6 +203,20 @@ async function createFixture(targetSchema: string, crossScope = false): Promise<
       ('issue-relationship', 'issue:relationship', NULL, 'rel-a-new-out');
     INSERT INTO "DiscoveredRelationship" VALUES ('discovered-rel-a', 'rel-a-mid-out');
     INSERT INTO "RemoteAction" VALUES ('remote-a', 'entity-a-new');
+
+    UPDATE "InventoryEntity"
+    SET
+      "catalogIdentityId" = 'identity-human',
+      "identityStatus" = 'human_confirmed',
+      "identityConfidence" = 0.99
+    WHERE id = 'entity-a-mid';
+
+    UPDATE "InventoryEntity"
+    SET
+      "catalogIdentityId" = 'identity-ai-newer',
+      "identityStatus" = 'ai_resolved',
+      "identityConfidence" = 0.74
+    WHERE id = 'entity-a-new';
   `);
 
   if (crossScope) {
@@ -226,14 +244,17 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
 
   it("converges canonical entities and relationships without losing evidence", async () => {
     const migration = await readFile(migrationUrl, "utf8");
+    const identityTupleMigration = await readFile(identityTupleMigrationUrl, "utf8");
     await client.query(migration);
+    await client.query(identityTupleMigration);
 
     expect(await scalar(`SELECT count(*)::text value FROM "InventoryEntity"`)).toBe(7);
     expect(await scalar(`SELECT count(*)::text value FROM "InventoryRelationship"`)).toBe(9);
 
     const canonicalA = (await client.query(`
       SELECT id, manufacturer, "supportStatus", properties, "firstSeenAt", "lastSeenAt",
-             "lastConfirmedRunId", "mergedIntoId"
+             "lastConfirmedRunId", "mergedIntoId", "catalogIdentityId",
+             "identityStatus", "identityConfidence"
       FROM "InventoryEntity" WHERE "entityKey" = 'network:duplicate-a'
     `)).rows[0];
     expect(canonicalA).toMatchObject({
@@ -242,6 +263,9 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
       supportStatus: "confirmed-current",
       lastConfirmedRunId: "run-a-new",
       mergedIntoId: null,
+      catalogIdentityId: "identity-human",
+      identityStatus: "human_confirmed",
+      identityConfidence: 0.99,
     });
     expect(canonicalA.properties).toMatchObject({ old: true, new: true, shared: "new" });
     expect(new Date(canonicalA.firstSeenAt).toISOString()).toBe("2026-01-01T00:00:00.000Z");
@@ -354,6 +378,7 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
       JSON.stringify((await client.query(`SELECT * FROM "InventoryEntity" ORDER BY id`)).rows)
       + JSON.stringify((await client.query(`SELECT * FROM "InventoryRelationship" ORDER BY id`)).rows);
     await client.query(migration);
+    await client.query(identityTupleMigration);
     const afterSecondPass =
       JSON.stringify((await client.query(`SELECT * FROM "InventoryEntity" ORDER BY id`)).rows)
       + JSON.stringify((await client.query(`SELECT * FROM "InventoryRelationship" ORDER BY id`)).rows);
