@@ -151,6 +151,62 @@ describe("loadProductOperatingContext", () => {
     ]);
   });
 
+  it("keeps the commercial-summary profile on the sales query boundary", async () => {
+    const productSold = vi.fn(async () => [
+      {
+        id: "sold-1",
+        productId: "product-1",
+        status: "fulfilled",
+        quantity: { toNumber: () => 2 },
+        totalAmount: { toNumber: () => 150 },
+        currency: "USD",
+        purchasedAt: now,
+        parties: [],
+        evidence: [],
+        componentAllocations: [],
+      },
+    ]);
+    const db = fakeDb({
+      productSold: { findMany: productSold },
+    });
+
+    const context = await loadProductOperatingContext({
+      db,
+      organizationId: "org-1",
+      scope: { kind: "organization", id: "org-1" },
+      profile: "commercial-summary",
+      authorize: vi.fn(async () => undefined),
+      requestedAt: now,
+    });
+
+    expect(productSold).toHaveBeenCalledTimes(1);
+    expect(context.commercialPerformance).toMatchObject({
+      saleCount: 1,
+      additiveRevenue: 150,
+      currency: "USD",
+    });
+    expect(db.productOffering.findMany).not.toHaveBeenCalled();
+    expect(db.researchProposal.findMany).not.toHaveBeenCalled();
+    expect(db.marketingBattlecard.findMany).not.toHaveBeenCalled();
+    expect(db.knowledgeArticle.findMany).not.toHaveBeenCalled();
+    expect(db.backlogItem.findMany).not.toHaveBeenCalled();
+    expect(db.changeItem.findMany).not.toHaveBeenCalled();
+    expect(db.eaElement.findMany).not.toHaveBeenCalled();
+    expect(db.productDependency.findMany).not.toHaveBeenCalled();
+    expect(context.intelligence).toMatchObject({
+      availability: "unavailable",
+      items: [],
+      unavailableReason:
+        "Intelligence is outside the commercial-summary query profile.",
+    });
+    expect(context.architecture).toMatchObject({
+      availability: "unavailable",
+      items: [],
+      unavailableReason:
+        "Architecture is outside the commercial-summary query profile.",
+    });
+  });
+
   it("fails closed when a requested product is not in the authorized organization", async () => {
     const db = fakeDb({
       product: {
