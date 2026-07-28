@@ -35,6 +35,23 @@ Build, merge-queue, and self-upgrade records remain the owners of authority and 
 `BuildPhaseRun.executionProfileRef` and TaskRun metadata record the method version, model profile,
 provider, and model actually used.
 
+## Experiment promotion
+
+When a governed work-pattern experiment finishes, Build Studio analyzes and promotes its evidence
+before completing the parent run. Promotion is automatic only when the versioned policy clears it:
+each model lane needs at least eight comparable baseline/candidate pairs, a complete factorial
+matrix, fresh evidence, no reproduced blocking finding or commandment regression, and no
+regulatory human-control requirement. For `build.implement`, every qualifying pair must include a
+passing production build; inference-only replay evidence remains useful shadow evidence but cannot
+authorize an autonomous build lane.
+
+The first qualifying same-install promotion creates a rollback-safe baseline binding and then
+activates the candidate binding in the same serialized transaction. The candidate is scoped to the
+exact install, corpus, activity, risk, and model profile proved by the experiment. A note that
+portable or customer corroboration is required for broader scope does not block that local binding;
+it continues to block fleet or customer promotion. Separate model profiles receive separate
+activation lanes, and regulatory or authority ceilings still escalate instead of activating.
+
 ## Autonomous path
 
 ```text
