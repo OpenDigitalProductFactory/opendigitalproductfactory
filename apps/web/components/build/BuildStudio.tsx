@@ -895,6 +895,11 @@ export function BuildStudio({
                         </Link>
                       ) : null}
                     </div>
+                    {customerStatuses[activeBuild.id]?.technicalEvidence ? (
+                      <div className="border-b border-[var(--dpf-border)] px-4 py-2 font-mono text-[11px] leading-5 text-[var(--dpf-muted)]">
+                        {customerStatuses[activeBuild.id].technicalEvidence}
+                      </div>
+                    ) : null}
                     {activeWorkWarrant !== null && activeWorkWarrant !== undefined ? (
                       <div className="border-b border-[var(--dpf-border)] px-4 py-3">
                         <BuildWorkWarrantBand warrant={activeWorkWarrant} />
