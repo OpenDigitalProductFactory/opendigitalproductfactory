@@ -63,7 +63,7 @@ Two rules make this honest rather than decorative:
 1. **A journey's achieved depth is the weakest depth among its passing steps.** One
    `reachability`-only step caps the whole journey at `reachability`.
 2. **The surface always states what was *not* checked.** A journey verified to
-   `data-path` renders "Not checked: a customer completing this in a browser." The
+   `data-path` renders "Not checked: a customer doing this in a browser." The
    watchdog never renders an unqualified "healthy".
 
 `interaction` depth is deliberately named and deliberately absent, so the gap is visible

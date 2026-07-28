@@ -12,9 +12,9 @@ function row(overrides: Partial<JourneyHealthRow> = {}): JourneyHealthRow {
     revenueBearing: true,
     status: "passed",
     achievedDepth: "reachability",
-    checkedSentence: "Checked: the page loads.",
+    checkedSentence: "Checked: the page opens.",
     notCheckedSentence:
-      "Not checked: the setup behind it is complete; a real record can be created and the database accepts it; a customer completing this in a browser.",
+      "Not checked: the setup is complete; a real record can be saved; a customer doing this in a browser.",
     steps: [
       {
         stepId: "booking-page-loads",

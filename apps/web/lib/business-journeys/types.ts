@@ -45,12 +45,14 @@ export const SUPPORTED_DEPTHS: readonly VerificationDepth[] = [
   "data-path",
 ] as const;
 
-/** Owner-facing sentence for each depth — what it does and does not prove. */
+/** Owner-facing sentence for each depth — what it does and does not prove.
+ *  Kept short on purpose: these are repeated on every card, so a long phrase
+ *  here becomes a wall of text on the page. */
 export const DEPTH_MEANING: Record<VerificationDepth, string> = {
-  reachability: "the page loads",
-  contract: "the setup behind it is complete",
-  "data-path": "a real record can be created and the database accepts it",
-  interaction: "a customer completing this in a browser",
+  reachability: "the page opens",
+  contract: "the setup is complete",
+  "data-path": "a real record can be saved",
+  interaction: "a customer doing this in a browser",
 };
 
 export type StepOutcome = "passed" | "failed" | "skipped";

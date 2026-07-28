@@ -74,16 +74,16 @@ describe("owner-facing sentences", () => {
     const checked = checkedSentence(achieved);
     const unchecked = uncheckedSentence(achieved);
 
-    expect(checked).toBe("Checked: the page loads.");
-    expect(unchecked).toContain("a real record can be created");
-    expect(unchecked).toContain("a customer completing this in a browser");
+    expect(checked).toBe("Checked: the page opens.");
+    expect(unchecked).toContain("a real record can be saved");
+    expect(unchecked).toContain("a customer doing this in a browser");
     // The word "healthy" must never stand alone for a shallow verdict.
     expect(checked).not.toMatch(/healthy|verified|working/i);
   });
 
   it("still names the browser gap for the deepest supported journey", () => {
     expect(uncheckedSentence("data-path")).toBe(
-      "Not checked: a customer completing this in a browser.",
+      "Not checked: a customer doing this in a browser.",
     );
   });
 

@@ -27,7 +27,7 @@ describe("journeyWhyNow", () => {
   it("always states what was not checked, so the card cannot imply full coverage", () => {
     expect(journeyWhyNow(DETAILS)).toContain("Not checked:");
     expect(journeyWhyNow({ ...DETAILS, achievedDepth: "data-path" })).toContain(
-      "a customer completing this in a browser",
+      "a customer doing this in a browser",
     );
   });
 

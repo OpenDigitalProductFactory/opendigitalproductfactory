@@ -60,19 +60,24 @@ export default async function BusinessJourneysPage({ searchParams }: Props) {
     ? sp.journey
     : null;
 
+  // Rows are already ordered failing-first, so the first failure is the one the
+  // operator should look at before anything else.
+  const firstFailing = rows.find((r) => r.status === "failed") ?? null;
+
   return (
     <div>
       <div className="mb-6">
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Operations</h1>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
-          Business journeys — whether your customers can actually do the things your
-          business depends on.
+          Can your customers still do what your business depends on?
         </p>
       </div>
 
       <OpsTabNav />
 
-      <div className="my-6">
+      {/* The lead band: the one thing to read first, and the one thing to do
+          next. Budgeted separately from the rest of the page. */}
+      <div data-dpf-lead className="my-6">
         <p className="text-sm text-[var(--dpf-text)]">{journeyHealthHeadline(health)}</p>
         <p className="mt-1 text-xs text-[var(--dpf-muted)]">
           {health.lastRunAt ? (
@@ -83,6 +88,15 @@ export default async function BusinessJourneysPage({ searchParams }: Props) {
             <>Runs Mon, Wed, Fri.</>
           )}
         </p>
+        {firstFailing ? (
+          <a
+            data-owner-first-next-action
+            href={`#${firstFailing.journeyId}`}
+            className="mt-3 inline-block rounded-md border border-[var(--dpf-accent)] px-3 py-1.5 text-xs font-medium text-[var(--dpf-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
+          >
+            Start here: {firstFailing.outcome}
+          </a>
+        ) : null}
       </div>
 
       <div className="my-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -108,10 +122,24 @@ export default async function BusinessJourneysPage({ searchParams }: Props) {
         </div>
       )}
 
-      <p className="mt-6 text-xs text-[var(--dpf-muted)]">
-        These checks never change your business records. Anything a check creates is
-        undone straight away.
-      </p>
+      {/* Deferred detail. True and worth stating, but not what the operator came
+          for — so it defers rather than adding to the arrival wall of text. */}
+      <details className="group mt-6">
+        <summary className="cursor-pointer list-none text-xs font-medium text-[var(--dpf-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]">
+          <span className="group-open:hidden">How these checks work</span>
+          <span className="hidden group-open:inline">Hide how these checks work</span>
+        </summary>
+        <div className="mt-2 space-y-2 text-xs text-[var(--dpf-muted)]">
+          <p>
+            Each check says how far it got. Some only open the page. Some go further and
+            write a real record to prove it can be saved.
+          </p>
+          <p>
+            Nothing here changes your business records. Anything a check creates is undone
+            straight away.
+          </p>
+        </div>
+      </details>
     </div>
   );
 }

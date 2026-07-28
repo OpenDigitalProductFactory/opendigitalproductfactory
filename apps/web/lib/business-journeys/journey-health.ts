@@ -22,6 +22,9 @@ import {
 
 type Db = typeof prisma;
 
+/** What a journey that has never run says about itself. */
+export const NEVER_RUN_SENTENCE = "Not checked yet.";
+
 export type JourneyHealthRow = {
   journeyId: string;
   /** Owner-language outcome — what the business can or cannot do. */
@@ -90,7 +93,10 @@ export async function loadJourneyHealth(db: Db): Promise<JourneyHealth> {
         status: "never-run" as const,
         achievedDepth: null,
         checkedSentence: null,
-        notCheckedSentence: uncheckedSentence(null),
+        // Nothing ran, so listing all four depths is noise rather than honesty —
+        // "we checked none of these four things" and "we have not looked yet"
+        // are the same fact, and the short form is the one an owner can read.
+        notCheckedSentence: NEVER_RUN_SENTENCE,
         steps: [],
         durationMs: 0,
       };

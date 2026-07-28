@@ -66,7 +66,11 @@ describe("loadJourneyHealth", () => {
     expect(health.neverRun).toBe(BUSINESS_JOURNEYS.length);
     for (const row of health.rows) {
       expect(row.status).toBe("never-run");
-      expect(row.notCheckedSentence).toContain("Not checked:");
+      // A run that never happened says so plainly. Enumerating all four depths
+      // here would be technically true and useless — the short form is the
+      // honest one, and it keeps five repeated cards off the word budget.
+      expect(row.notCheckedSentence).toBe("Not checked yet.");
+      expect(row.checkedSentence).toBeNull();
     }
   });
 
@@ -86,9 +90,9 @@ describe("loadJourneyHealth", () => {
     );
 
     const row = health.rows.find((r) => r.journeyId === "storefront-front-door");
-    expect(row?.checkedSentence).toBe("Checked: the page loads.");
-    expect(row?.notCheckedSentence).toContain("a real record can be created");
-    expect(row?.notCheckedSentence).toContain("a customer completing this in a browser");
+    expect(row?.checkedSentence).toBe("Checked: the page opens.");
+    expect(row?.notCheckedSentence).toContain("a real record can be saved");
+    expect(row?.notCheckedSentence).toContain("a customer doing this in a browser");
   });
 
   it("leaves nothing unchecked for a journey that does not apply", async () => {

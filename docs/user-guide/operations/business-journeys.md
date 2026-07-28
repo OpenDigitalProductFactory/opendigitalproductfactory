@@ -38,11 +38,11 @@ This is the important part, and the page always tells you.
 A check can prove different amounts, and more is more expensive. Each journey shows what
 was checked **and what was not**:
 
-- **the page loads** — the door opens
-- **the setup behind it is complete** — the room behind the door is furnished
-- **a real record can be created and the database accepts it** — a genuine booking or
+- **the page opens** — the door opens
+- **the setup is complete** — the room behind the door is furnished
+- **a real record can be saved** — a genuine booking or
   enquiry record can be written, and the rules that stop double-bookings still work
-- **a customer completing this in a browser** — *not currently checked*
+- **a customer doing this in a browser** — *not currently checked*
 
 A journey is only reported at the level actually reached. If only the page load was
 checked, the page says so and does not tell you the journey is fine. This is deliberate:
