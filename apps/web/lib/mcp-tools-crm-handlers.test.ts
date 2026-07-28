@@ -94,6 +94,7 @@ describe("CRM tool handlers", () => {
           unitPrice: 1000,
           taxPercent: 10,
           catalogItemId: "catalog-row",
+          catalogSkuId: "sku-row",
           configurationSnapshot: {
             capturedAt: "2026-07-28T12:00:00.000Z",
             selections: { finish: "walnut" },
@@ -116,6 +117,7 @@ describe("CRM tool handlers", () => {
           unitPrice: 1000,
           taxPercent: 10,
           catalogItemId: "catalog-row",
+          catalogSkuId: "sku-row",
           configurationSnapshot: {
             capturedAt: "2026-07-28T12:00:00.000Z",
             selections: { finish: "walnut" },

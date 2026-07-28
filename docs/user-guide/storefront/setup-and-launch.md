@@ -107,6 +107,15 @@ usable through the compatibility path, but it is not silently attached to a
 guessed product. Confirm the business's product mix before treating that item
 as catalog-backed.
 
+Setup also derives the ordinary customer route from real storefront evidence:
+booking items book a time, purchase items buy directly, rental items reserve,
+and quote-required items request a quote. Setup does not guess a route for an
+ambiguous inquiry. After launch, use an item's contextual **Manage packaging
+and sales options** action only when it needs packages, seasonal prices,
+reusable configurations, or another verified route. Those controls are
+collapsed by default so a simple one-line business keeps the ordinary
+one-item/one-price workflow.
+
 ## Verify The Customer Experience
 
 Use **View Live** to open the public URL in a new tab. Verify it as a customer,

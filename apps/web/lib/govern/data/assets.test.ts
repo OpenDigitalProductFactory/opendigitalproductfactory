@@ -127,6 +127,12 @@ describe("seeded registry", () => {
       ["data:business-catalog-item", "CatalogItem"],
       ["data:business-product-configuration", "ProductConfiguration"],
       ["data:business-catalog-sku", "CatalogSku"],
+      ["data:business-catalog-bundle-component", "CatalogBundleComponent"],
+      ["data:business-catalog-price-list", "CatalogPriceList"],
+      ["data:business-catalog-price-list-entry", "CatalogPriceListEntry"],
+      ["data:business-catalog-promotion", "CatalogPromotion"],
+      ["data:business-catalog-promotion-item", "CatalogPromotionItem"],
+      ["data:business-catalog-channel-eligibility", "CatalogChannelEligibility"],
     ] as const) {
       expect(lookupAsset(DATA_ASSET_REGISTRY, assetId)).toMatchObject({
         physical: { prismaModel },

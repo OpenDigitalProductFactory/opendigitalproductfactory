@@ -3,6 +3,10 @@ import { useState, useEffect, useRef } from "react";
 import type { ArchetypeVocabulary } from "@/lib/storefront/archetype-vocabulary";
 import { DEFAULT_CTA_LABELS } from "@/lib/storefront/cta-labels";
 import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
+import {
+  STOREFRONT_CTA_OPTIONS,
+  storefrontPriceOptions,
+} from "@/lib/products/storefront-commercial-options";
 import { MediaUploader } from "./MediaUploader";
 
 export type ItemFormData = {
@@ -50,43 +54,6 @@ const EMPTY_FORM: ItemFormData = {
   suggestedAmount: "",
 };
 
-const CTA_TYPES = [
-  { value: "booking", label: "Booking" },
-  { value: "purchase", label: "Purchase" },
-  { value: "rental", label: "Rental" },
-  { value: "inquiry", label: "Inquiry" },
-  { value: "donation", label: "Donation" },
-];
-
-const PRICE_TYPES_BY_CTA: Record<string, Array<{ value: string; label: string }>> = {
-  booking: [
-    { value: "per-hour", label: "Per hour" },
-    { value: "per-session", label: "Per session" },
-    { value: "fixed", label: "Fixed price" },
-    { value: "free", label: "Free" },
-  ],
-  purchase: [
-    { value: "fixed", label: "Fixed price" },
-    { value: "from", label: "From (minimum)" },
-  ],
-  rental: [
-    { value: "per-session", label: "Per rental period" },
-    { value: "per-hour", label: "Per hour" },
-    { value: "fixed", label: "Fixed price" },
-    { value: "from", label: "From (minimum)" },
-    { value: "free", label: "Free" },
-  ],
-  inquiry: [
-    { value: "quote", label: "Request a quote" },
-    { value: "from", label: "From (starting at)" },
-    { value: "per-hour", label: "Per hour" },
-    { value: "fixed", label: "Fixed price" },
-  ],
-  donation: [
-    { value: "donation", label: "Any amount" },
-  ],
-};
-
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -122,7 +89,7 @@ export function ItemFormDialog({
       productLines.length === 1 ? productLines[0]!.id : "",
     priceCurrency: defaultPriceCurrency,
     ctaType: defaultCtaType,
-    priceType: PRICE_TYPES_BY_CTA[defaultCtaType]?.[0]?.value ?? "",
+    priceType: storefrontPriceOptions(defaultCtaType)[0]?.value ?? "",
     ...initial,
   }));
   const [saving, setSaving] = useState(false);
@@ -146,7 +113,7 @@ export function ItemFormDialog({
             ? productLinesRef.current[0]!.id
             : "",
         ctaType: ct,
-        priceType: PRICE_TYPES_BY_CTA[ct]?.[0]?.value ?? "",
+        priceType: storefrontPriceOptions(ct)[0]?.value ?? "",
         ...initialRef.current,
       });
     }
@@ -160,7 +127,7 @@ export function ItemFormDialog({
       const next = { ...prev, [field]: value };
       // When CTA type changes, reset price type to first option for new type
       if (field === "ctaType") {
-        next.priceType = PRICE_TYPES_BY_CTA[value]?.[0]?.value ?? "";
+        next.priceType = storefrontPriceOptions(value)[0]?.value ?? "";
       }
       return next;
     });
@@ -177,7 +144,7 @@ export function ItemFormDialog({
     }
   }
 
-  const priceOptions = PRICE_TYPES_BY_CTA[form.ctaType] ?? [];
+  const priceOptions = storefrontPriceOptions(form.ctaType);
   const showPrice = form.ctaType !== "donation" && form.priceType !== "free" && form.priceType !== "quote";
   const showBookingConfig = form.ctaType === "booking";
   const showDonationConfig = form.ctaType === "donation";
@@ -267,7 +234,7 @@ export function ItemFormDialog({
                 onChange={(e) => set("ctaType", e.target.value)}
                 className="w-full px-3 py-1.5 text-sm rounded-md bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
               >
-                {CTA_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                {STOREFRONT_CTA_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </Field>
           </div>

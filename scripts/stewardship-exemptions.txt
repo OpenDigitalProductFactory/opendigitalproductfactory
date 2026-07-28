@@ -66,3 +66,9 @@ ProductOffering  domain-lifecycle-managed  # Organization-owned commercial packa
 CatalogItem  domain-lifecycle-managed  # Canonical ways-to-buy follow explicit catalog status/effective-date actions and offering cascade, never an age-based sweep.
 ProductConfiguration  domain-lifecycle-managed  # Reusable configurations follow explicit publish/retire actions and catalog-item cascade, never an age-based sweep.
 CatalogSku  domain-lifecycle-managed  # Reusable selling identities follow explicit publish/retire actions and catalog-item cascade, never an age-based sweep.
+CatalogBundleComponent  domain-lifecycle-managed  # Package membership changes through explicit Catalog Builder effective-dated actions and catalog-item cascade, never an age-based sweep.
+CatalogPriceList  domain-lifecycle-managed  # Business price lists have explicit status/effective dates and organization lifecycle; a generic age sweep could delete a still-referenced commercial definition.
+CatalogPriceListEntry  domain-lifecycle-managed  # Item/SKU prices follow their price-list and catalog lifecycles with explicit effective dates, not record age.
+CatalogPromotion  domain-lifecycle-managed  # Promotions retire through explicit status/effective dates and organization lifecycle; age alone is not a safe deletion signal.
+CatalogPromotionItem  domain-lifecycle-managed  # Promotion targeting follows its promotion/catalog parents and is cascade-managed rather than independently aged.
+CatalogChannelEligibility  domain-lifecycle-managed  # Channel eligibility is effective-dated commercial policy changed by explicit Catalog Builder actions, not a time-based retention sweep.

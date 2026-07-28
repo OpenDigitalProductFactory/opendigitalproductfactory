@@ -825,6 +825,7 @@ export async function createQuote(input: {
   lineItems: {
     productId?: string;
     catalogItemId?: string;
+    catalogSkuId?: string;
     configurationSnapshot?: Prisma.InputJsonObject;
     description: string;
     quantity: number;
@@ -845,6 +846,50 @@ export async function createQuote(input: {
     select: { id: true, accountId: true },
   });
   if (!opp) throw new Error("Opportunity not found");
+
+  const skuSelections = input.lineItems.filter(
+    (
+      line,
+    ): line is typeof line & { catalogSkuId: string; catalogItemId: string } =>
+      Boolean(line.catalogSkuId && line.catalogItemId),
+  );
+  if (
+    input.lineItems.some(
+      (line) => line.catalogSkuId && !line.catalogItemId,
+    )
+  ) {
+    throw new Error("An exact SKU selection requires its catalog item");
+  }
+  if (skuSelections.length > 0) {
+    const selectionAsOf = new Date();
+    const selectedSkus = await prisma.catalogSku.findMany({
+      where: {
+        id: {
+          in: [...new Set(skuSelections.map((line) => line.catalogSkuId))],
+        },
+        status: "active",
+        effectiveFrom: { lte: selectionAsOf },
+        OR: [
+          { effectiveTo: null },
+          { effectiveTo: { gt: selectionAsOf } },
+        ],
+      },
+      select: { id: true, catalogItemId: true },
+    });
+    const skuCatalogItems = new Map(
+      selectedSkus.map((sku) => [sku.id, sku.catalogItemId]),
+    );
+    if (
+      skuSelections.some(
+        (line) =>
+          skuCatalogItems.get(line.catalogSkuId) !== line.catalogItemId,
+      )
+    ) {
+      throw new Error(
+        "Every selected SKU must belong to its quote-line catalog item",
+      );
+    }
+  }
 
   const quoteNumber = await nextQuoteNumber();
   const discountType = input.discountType || "percentage";
@@ -896,6 +941,7 @@ export async function createQuote(input: {
           create: lines.map((l) => ({
             productId: l.productId || null,
             catalogItemId: l.catalogItemId || null,
+            catalogSkuId: l.catalogSkuId || null,
             configurationSnapshot: l.configurationSnapshot ?? undefined,
             description: l.description,
             quantity: l.quantity,
@@ -967,6 +1013,7 @@ export async function reviseQuote(quoteId: string, userId?: string) {
           create: current.lineItems.map((li) => ({
             productId: li.productId,
             catalogItemId: li.catalogItemId,
+            catalogSkuId: li.catalogSkuId,
             configurationSnapshot: li.configurationSnapshot ?? undefined,
             description: li.description,
             quantity: li.quantity,

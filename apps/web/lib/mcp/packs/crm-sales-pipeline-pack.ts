@@ -135,6 +135,10 @@ const definitions: ToolDefinition[] = [
                 type: "string",
                 description: "Preferred exact CatalogItem.id for the sellable configuration.",
               },
+              catalogSkuId: {
+                type: "string",
+                description: "Optional exact reusable CatalogSku.id selected for this quote line.",
+              },
               configurationSnapshot: {
                 type: "object",
                 description: "Optional immutable one-off configuration captured on this quote line. Reusable standard configurations should use a published SKU instead.",
@@ -343,6 +347,7 @@ async function createQuoteTool(params: Record<string, unknown>, userId: string):
       discountPercent: typeof o["discountPercent"] === "number" ? o["discountPercent"] : undefined,
       taxPercent: typeof o["taxPercent"] === "number" ? o["taxPercent"] : undefined,
       catalogItemId: typeof o["catalogItemId"] === "string" ? o["catalogItemId"] : undefined,
+      catalogSkuId: typeof o["catalogSkuId"] === "string" ? o["catalogSkuId"] : undefined,
       configurationSnapshot:
         o["configurationSnapshot"] !== null &&
         typeof o["configurationSnapshot"] === "object" &&
