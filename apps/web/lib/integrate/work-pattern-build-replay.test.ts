@@ -29,7 +29,7 @@ const request = {
     taskCorpusKey: "bounded-build-corpus",
     taskCorpusVersion: "1",
     environmentKey: "shadow",
-    sourceCommitSha: "abc123",
+    sourceCommitSha: "abc1234",
   },
   fixtureKey: "fixture-1",
   oracleKey: "fixture-tests",
