@@ -87,6 +87,10 @@ import {
   coworkerCertificationNightly,
   coworkerCertificationRunNow,
 } from "./coworker-certification";
+import {
+  businessJourneyWatchdogScheduled,
+  businessJourneyWatchdogRunNow,
+} from "./business-journey-watchdog";
 import { memoryConsolidationNightly } from "./memory-consolidation-nightly";
 import {
   semanticMemoryReconcileScheduled,
@@ -150,6 +154,7 @@ export const scheduledFunctions = [
   identityInferenceFallbackScheduled, // EP-ASSET-INTELLIGENCE: weekly cheap-model AI resolution of the unresolved-identity tail (batched, budget-capped), Tue 04:43
   remoteActionClaimTimeout,   // EP-REMOTE-ACTION P2: time out stale claimed RemoteActions so the pull queue can't wedge, every 10m (flag-gated)
   coworkerCertificationNightly, // EP-COWORKER-LIFECYCLE P2 (BI-DE9CC88B): nightly golden-journey certification of every roster coworker, 04:40
+  businessJourneyWatchdogScheduled, // BI-E105303D / EP-PROACTIVE-OPS: exercises the install's critical business journeys against the running system, Mon/Wed/Fri 06:00
   canonicalImprovementDigest, // BI-8996BBBB: weekly [reference-doc] proposal digest -> canonical-source chore BI
   memoryConsolidationNightly, // BI-907C4327: EP-8C706944 P2 autoDream — nightly batch-dedupe + expire coworker notes / user facts, 04:20
   semanticMemoryReconcileScheduled, // BI-DG-001: EP-DATA-GOVERNANCE — nightly orphan reconciliation of the semantic-memory derived copy, 05:10 (after retention sweep)
@@ -190,6 +195,7 @@ export const eventFunctions = [
   catalogEnrichmentSweepRequested, // EP-ASSET-INTELLIGENCE: catalog enrichment "run now" (poll-on-request)
   identityInferenceFallbackRequested, // EP-ASSET-INTELLIGENCE: AI identity-resolution fallback "run now" (poll-on-request)
   coworkerCertificationRunNow, // EP-COWORKER-LIFECYCLE P2 (BI-DE9CC88B): operator "run now" certification sweep
+  businessJourneyWatchdogRunNow, // BI-E105303D: operator "run now" business-journey watchdog sweep
   semanticMemoryReconcileRequested, // BI-DG-001: operator "run now" semantic-memory orphan reconciliation
   postmarkCallbackDispatchRequested,
   workPatternExperimentRun,

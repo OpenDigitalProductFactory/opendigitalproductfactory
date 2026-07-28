@@ -10,8 +10,19 @@
 // owns the discovery->portfolio quality family — a CLOSED QualityIssueType set
 // (none of them health_alert) keyed by a REQUIRED inventory/taxonomy/portfolio
 // FK scope (it throws without one). Health alerts have no such FK; they are
-// keyed by alertname+service. Same table, deliberately different family — so
-// this is a focused sibling writer, not a duplicate.
+// keyed by alertname+service. Same table, deliberately different family.
+//
+// The generic open/resolve mechanics now live in `monitor-issue-writer.ts`,
+// shared with the business-journey watchdog (BI-E105303D). What stays here is
+// what is genuinely health-alert-specific: the key grammar, the severity
+// mapping, and the details payload the reconciler reads.
+
+import {
+  openMonitorIssue,
+  resolveMonitorIssue as resolveMonitorIssueRow,
+  type MonitorIssueDb,
+  type MonitorIssueScope,
+} from "./monitor-issue-writer";
 
 export type HealthAlertSeverity = "info" | "warn" | "error";
 
@@ -25,12 +36,7 @@ export type HealthAlertSeverity = "info" | "warn" | "error";
  * pass scope so the operator inbox routes them to the right customer queue and
  * two customers with the same alert never collide on one row.
  */
-export interface HealthAlertScope {
-  customerAccountId?: string | null;
-  customerSiteId?: string | null;
-  /** e.g. `customer:acc_1:site:s_1` or `organization:internal`. */
-  scopeKey?: string | null;
-}
+export type HealthAlertScope = MonitorIssueScope;
 
 function isCustomerScopedAlert(scope?: HealthAlertScope): boolean {
   return Boolean(scope?.customerAccountId);
@@ -48,19 +54,7 @@ export interface IncomingHealthAlert {
 }
 
 /** Narrow Prisma surface so tests inject a mock without the full client type. */
-export interface HealthAlertDb {
-  portfolioQualityIssue: {
-    upsert(args: {
-      where: { issueKey: string };
-      create: Record<string, unknown>;
-      update: Record<string, unknown>;
-    }): Promise<unknown>;
-    updateMany(args: {
-      where: Record<string, unknown>;
-      data: Record<string, unknown>;
-    }): Promise<{ count: number }>;
-  };
-}
+export type HealthAlertDb = MonitorIssueDb;
 
 /**
  * Deterministic issueKey for a health alert. Scoped by the most specific
@@ -85,21 +79,6 @@ export function healthAlertIssueKey(
     return `${prefix}|${base}`;
   }
   return base;
-}
-
-/** Persisted routing columns. Prefer a caller-resolved `scopeKey` (from the
- *  estate-scope resolver); fall back to the minimal grammar only defensively. */
-function scopeColumns(scope?: HealthAlertScope) {
-  const customerAccountId = scope?.customerAccountId ?? null;
-  const customerSiteId = scope?.customerSiteId ?? null;
-  const scopeKey =
-    scope?.scopeKey ??
-    (customerAccountId
-      ? customerSiteId
-        ? `customer:${customerAccountId}:site:${customerSiteId}`
-        : `customer:${customerAccountId}`
-      : "organization:internal");
-  return { customerAccountId, customerSiteId, scopeKey };
 }
 
 function detailsFor(alert: IncomingHealthAlert) {
@@ -134,29 +113,15 @@ export async function upsertHealthAlertIssue(
       ? new Date(alert.activeAt)
       : new Date();
 
-  await db.portfolioQualityIssue.upsert({
-    where: { issueKey },
-    create: {
-      issueKey,
-      issueType: "health_alert",
-      severity,
-      summary,
-      details,
-      status: "open",
-      firstDetectedAt,
-      lastDetectedAt: new Date(),
-      ...scopeColumns(scope),
-    },
-    update: {
-      severity,
-      summary,
-      details,
-      status: "open",
-      lastDetectedAt: new Date(),
-      resolvedAt: null,
-    },
+  return openMonitorIssue(db, {
+    issueKey,
+    issueType: "health_alert",
+    severity,
+    summary,
+    details,
+    firstDetectedAt,
+    scope,
   });
-  return issueKey;
 }
 
 /** Flip an open health-alert issue to resolved (alert stopped firing). */
@@ -164,8 +129,5 @@ export async function resolveHealthAlertIssue(
   db: HealthAlertDb,
   issueKey: string,
 ): Promise<void> {
-  await db.portfolioQualityIssue.updateMany({
-    where: { issueKey, status: "open" },
-    data: { status: "resolved", resolvedAt: new Date(), lastDetectedAt: new Date() },
-  });
+  await resolveMonitorIssueRow(db, issueKey);
 }

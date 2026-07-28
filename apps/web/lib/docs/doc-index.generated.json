@@ -9550,6 +9550,20 @@
         "documentation-rule"
       ]
     },
+    "docs/user-guide/operations/business-journeys.md": {
+      "publicHref": "/user-guide/operations/business-journeys/",
+      "portalHref": "/docs/operations/business-journeys",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "overview",
+        "what-gets-checked",
+        "how-much-each-check-proves",
+        "nothing-you-see-is-a-real-record",
+        "when-something-breaks",
+        "related"
+      ]
+    },
     "docs/user-guide/operations/index.md": {
       "publicHref": "/user-guide/operations/",
       "portalHref": "/docs/operations/index",
@@ -9563,6 +9577,7 @@
         "shared-demand",
         "founder-shared-portfolio",
         "promotions",
+        "business-journeys",
         "promoter-timeout"
       ]
     },
