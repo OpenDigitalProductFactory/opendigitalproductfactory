@@ -1,6 +1,6 @@
 # Local-CI sandbox pool pilot implementation plan
 
-**Parent backlog item:** BI-CCA0437C  
+**Backlog item:** BI-CCA0437C
 **Planning branch:** `doc/local-ci-sandbox-pool-plan`
 
 > **For agentic workers:** execute this plan one independently reviewable backlog
@@ -145,7 +145,7 @@ cleanup. Do not duplicate port arithmetic or path construction across scripts.
 
 ## Phase 1 — durable FIFO admission at capacity one
 
-**Backlog item:** BI-69728276
+**Delivery backlog item:** BI-69728276
 
 ### Behavior
 
@@ -194,7 +194,7 @@ cleanup. Do not duplicate port arithmetic or path construction across scripts.
 
 ## Phase 2 — slot-scope every mutable resource
 
-**Backlog item:** BI-4BE30454  
+**Delivery backlog item:** BI-4BE30454
 **Depends on:** BI-69728276
 
 ### Behavior
@@ -239,7 +239,7 @@ cleanup. Do not duplicate port arithmetic or path construction across scripts.
 
 ## Phase 3 — reversible two-slot capacity pilot
 
-**Backlog item:** BI-A4427AB8  
+**Delivery backlog item:** BI-A4427AB8
 **Depends on:** BI-69728276 and BI-4BE30454
 
 ### Behavior
@@ -393,8 +393,12 @@ existing observability; it must not block the latency experiment.
 - Decision: decomposed
 - Parent: BI-CCA0437C
 - Receipt: `cms4z2ba4098501np4i2pxfr3`
+- Dependencies: none for `fair-admission`; `slot-isolation` depends on `fair-admission`; `two-slot-pilot` depends on both earlier deliverables.
+- Mapping: `fair-admission` -> `BI-69728276`
+- Mapping: `slot-isolation` -> `BI-4BE30454`
+- Mapping: `two-slot-pilot` -> `BI-A4427AB8`
 
-| Deliverable key | Backlog item | Depends on |
+| Deliverable | Backlog item | Depends on |
 | --- | --- | --- |
 | `fair-admission` | BI-69728276 — Replace local-CI polling races with durable FIFO lease admission | None |
 | `slot-isolation` | BI-4BE30454 — Make local-CI runner state and resources slot-scoped | `fair-admission` |
