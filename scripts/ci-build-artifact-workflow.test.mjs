@@ -10,6 +10,7 @@ describe("production-build artifact workflow wiring", () => {
   it("publishes one checksummed exact-tree build after Production Build", () => {
     assert.match(ci, /node scripts\/ci-build-artifact\.mjs create/);
     assert.match(artifactScript, /"\.next\/standalone",\s*"\.next\/static"/);
+    assert.match(artifactScript, /apps\/web\/\.next\/standalone\/version\.json/);
     assert.match(ci, /name: web-production-build-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/);
     assert.match(ci, /retention-days: 1/);
     assert.match(ci, /id: package-build[\s\S]*?continue-on-error: true/);

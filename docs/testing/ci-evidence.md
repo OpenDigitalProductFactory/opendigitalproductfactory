@@ -175,11 +175,11 @@ receipt separately binds the synthetic merge checkout and its immutable tree.
 After download, `scripts/ci-build-artifact.mjs consume` independently recomputes
 the current tree, toolchain, payload checksum, byte count, archive inventory,
 and expiry before replacing `apps/web/.next`. The archive must contain only the
-`.next` root and must include the standalone runtime's `BUILD_ID`. The consumer
-adds the checked-out `public` directory and static assets to the standalone
-layout, then starts the same `apps/web/server.js` entry point used by the
-production container. Development-only server output and source maps are not
-transported.
+`.next` root and must include the standalone runtime's `BUILD_ID` and canonical
+`version.json`. The consumer adds the checked-out `public` directory and static
+assets to the standalone layout, then starts the same `apps/web/server.js`
+entry point used by the production container. Development-only server output
+and source maps are not transported.
 
 This follows GitHub's cross-run artifact contract: a consumer supplies both a
 token and source run identifier, and the token has only `actions: read` plus

@@ -142,6 +142,9 @@ export function validateArchiveEntries(entries) {
   if (!normalized.includes(".next/standalone/apps/web/.next/BUILD_ID")) {
     reasons.push("archive is missing the standalone BUILD_ID");
   }
+  if (!normalized.includes(".next/standalone/version.json")) {
+    reasons.push("archive is missing standalone version.json");
+  }
   return { ok: reasons.length === 0, reasons: [...new Set(reasons)] };
 }
 

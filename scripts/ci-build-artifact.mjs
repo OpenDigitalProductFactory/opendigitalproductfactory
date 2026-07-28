@@ -106,6 +106,12 @@ function createArtifact(options) {
   mkdirSync(outputDir, { recursive: true });
   const payloadPath = join(outputDir, "web-production-build.tar.gz");
   const receiptPath = join(outputDir, "ci-build-receipt.json");
+  // `next start` reads this from the repository root, while the reused
+  // standalone server runs with `.next/standalone` as its working directory.
+  // The production Docker image also copies the same file to its runtime root.
+  // Keep the reused runtime equivalent and make the inventory validator reject
+  // any payload that omits the platform-version source of truth.
+  cpSync(join(ROOT, "version.json"), join(ROOT, "apps/web/.next/standalone/version.json"));
   runTar([
     "-czf",
     payloadPath,
