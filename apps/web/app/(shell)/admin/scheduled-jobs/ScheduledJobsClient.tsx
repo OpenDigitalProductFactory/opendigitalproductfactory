@@ -201,12 +201,9 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledJob
                         </span>
                       )}
                     </div>
-                    <div className="text-[11px] mt-0.5" style={{ color: "var(--dpf-muted)" }}>
-                      {job.purpose}
-                    </div>
-                    <div className="text-[10px] mt-0.5 font-mono" style={{ color: "var(--dpf-muted)" }}>
-                      {job.jobId}
-                      {job.inngestId ? ` · ${job.inngestId}` : ""}
+                    <div hidden>
+                      {job.purpose} {job.jobId}
+                      {job.inngestId ? ` ${job.inngestId}` : ""}
                     </div>
                   </Td>
                   <Td>

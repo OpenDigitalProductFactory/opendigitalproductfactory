@@ -96,6 +96,10 @@ import { envFlagEnabled } from "@/lib/runtime/env-flags";
 import { demandReconciliationScheduled } from "./demand-reconciliation";
 import { workPatternExperimentRun } from "./work-pattern-experiment";
 import { buildPrDeliveryReconcile } from "./build-pr-delivery-reconcile";
+import {
+  dataControlOperationRecoveryRequested,
+  dataControlOperationRecoveryScheduled,
+} from "./data-control-operation";
 
 export const scheduledFunctions = [
   prometheusPoll,
@@ -151,6 +155,7 @@ export const scheduledFunctions = [
   semanticMemoryReconcileScheduled, // BI-DG-001: EP-DATA-GOVERNANCE — nightly orphan reconciliation of the semantic-memory derived copy, 05:10 (after retention sweep)
   demandReconciliationScheduled, // BI-44AA45BF: trusted-link demand projection, retry, and reconciliation every five minutes
   buildPrDeliveryReconcile, // BI-7C4FDBF5: exact-SHA Build Studio PR readiness, queue enrollment, and restart recovery
+  dataControlOperationRecoveryScheduled, // BI-DG-014: durable cross-store data mutation recovery and reconciliation
   postmarkCallbackDispatchSweep,
 ];
 
@@ -188,6 +193,7 @@ export const eventFunctions = [
   semanticMemoryReconcileRequested, // BI-DG-001: operator "run now" semantic-memory orphan reconciliation
   postmarkCallbackDispatchRequested,
   workPatternExperimentRun,
+  dataControlOperationRecoveryRequested,
 ];
 
 export const allFunctions = [...scheduledFunctions, ...eventFunctions];

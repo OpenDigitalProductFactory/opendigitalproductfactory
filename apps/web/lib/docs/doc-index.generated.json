@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 564,
+  "pageCount": 565,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -859,6 +859,19 @@
         "the-gap-no-equivalent-separation-for-learned-decision-weights",
         "what-to-claim-and-when",
         "see-also"
+      ]
+    },
+    "docs/architecture/data-control-operation-journal.md": {
+      "publicHref": "/architecture/data-control-operation-journal/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "data-control-operation-journal",
+        "protocol",
+        "adapter-contract",
+        "substrate-budget",
+        "adoption-checklist"
       ]
     },
     "docs/architecture/delivery-ia.md": {
