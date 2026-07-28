@@ -108,6 +108,13 @@ function ParticipantPanel({ room }: { room: WorkRoomView }) {
                     {participant.roles.map(roomLabel).join(", ")}
                     {participant.currentWorkSummary ? ` · ${participant.currentWorkSummary}` : ""}
                   </p>
+                  {participant.kind === "agent" && participant.presence === "unknown" ? (
+                    <div className="mt-2">
+                      <Notice variant="warn" title="Coworker status unavailable">
+                        Continue with the room’s next action: {room.work.nextAction}.
+                      </Notice>
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>

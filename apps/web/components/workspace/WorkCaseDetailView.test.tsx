@@ -232,6 +232,32 @@ describe("WorkCaseDetailView", () => {
     expect(html).toContain("Return to My Work and try opening the room again");
   });
 
+  it("shows one safe next action when an AI coworker status is unavailable", () => {
+    const unavailableCoworkerDetail = {
+      ...detail,
+      room: {
+        ...room,
+        participants: room.participants.map((participant) =>
+          participant.kind === "agent"
+            ? {
+                ...participant,
+                presence: "unknown" as const,
+                workState: "unknown" as const,
+                currentWorkSummary: null,
+              }
+            : participant,
+        ),
+      },
+    };
+    const html = renderToStaticMarkup(
+      <WorkCaseDetailView detail={unavailableCoworkerDetail} />,
+    );
+
+    expect(html).toContain("Coworker status unavailable");
+    expect(html.match(/Continue with the room’s next action:/g)).toHaveLength(1);
+    expect(html).toContain("Collect the customer confirmation");
+  });
+
   it("handles the transitional missing projection honestly", () => {
     const html = renderToStaticMarkup(<WorkCaseDetailView detail={{ ...detail, room: undefined }} />);
 
