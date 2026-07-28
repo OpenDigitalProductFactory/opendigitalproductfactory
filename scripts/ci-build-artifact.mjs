@@ -71,7 +71,17 @@ function collectBuildEnvironmentFingerprint() {
 }
 
 function runTar(args) {
-  const result = spawnSync("tar", args, { cwd: ROOT, encoding: "utf8" });
+  // A production .next tree currently contains more than 80k entries and its
+  // inventory is about 5.5 MB. Node's 1 MiB spawnSync default truncates that
+  // valid listing with ENOBUFS, so keep a bounded but realistic ceiling.
+  const result = spawnSync("tar", args, {
+    cwd: ROOT,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  });
+  if (result.error) {
+    throw new Error(`tar failed: ${result.error.message}`);
+  }
   if (result.status !== 0) {
     throw new Error(`tar failed (${result.status}): ${(result.stderr || result.stdout).trim()}`);
   }

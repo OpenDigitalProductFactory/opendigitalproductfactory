@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 
 const ci = readFileSync(".github/workflows/ci.yml", "utf8");
 const ux = readFileSync(".github/workflows/ux-route-sweep.yml", "utf8");
+const artifactScript = readFileSync("scripts/ci-build-artifact.mjs", "utf8");
 
 describe("production-build artifact workflow wiring", () => {
   it("publishes one checksummed exact-tree build after Production Build", () => {
@@ -28,5 +29,10 @@ describe("production-build artifact workflow wiring", () => {
   it("grants only read access to workflow artifacts", () => {
     assert.match(ux, /permissions:[\s\S]*?actions: read[\s\S]*?contents: read/);
     assert.doesNotMatch(ux, /actions: write/);
+  });
+
+  it("allows a bounded inventory larger than Node's spawnSync default", () => {
+    assert.match(artifactScript, /maxBuffer: 64 \* 1024 \* 1024/);
+    assert.match(artifactScript, /if \(result\.error\)/);
   });
 });
