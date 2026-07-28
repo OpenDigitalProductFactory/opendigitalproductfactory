@@ -80,6 +80,8 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   Policy: "internal",
   PolicyRequirement: "internal",
   DataProcessingActivity: "confidential",
+  DataControlOperation: "restricted",
+  DataControlOperationStep: "restricted",
   PolicyObligationLink: "internal",
   TrainingRequirement: "internal",
   PolicyRule: "internal",

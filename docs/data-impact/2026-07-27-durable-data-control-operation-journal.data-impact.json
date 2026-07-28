@@ -1,0 +1,54 @@
+{
+  "version": "1",
+  "accountableOwner": "data-governance",
+  "affectedCopies": [
+    "Prisma-to-EA current-state data-model mirror",
+    "Work Case projection for non-compensable partial operations",
+    "Retention-policy registry"
+  ],
+  "migration": {
+    "name": "20260727235000_add_data_control_operation",
+    "backfill": "none; historical intent, authorization bindings, target effects, and verification cannot be reconstructed truthfully"
+  },
+  "tests": [
+    "packages/db/src/data-control-operation-schema.test.ts",
+    "apps/web/lib/govern/data/control-operation-domain.test.ts",
+    "apps/web/lib/govern/data/control-operation.test.ts",
+    "apps/web/lib/queue/functions/data-control-operation.test.ts",
+    "apps/web/lib/work-management/source-registry.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:control-operation",
+      "prismaModel": "DataControlOperation",
+      "lifecycleDisposition": "restricted legal and security evidence retained for at least seven years and never auto-purged",
+      "fields": [
+        {
+          "fieldId": "data:control-operation#intent-and-authority",
+          "resolution": "governed",
+          "reason": "records the exact actor authority, action, scope, input fingerprint, policy and hold versions, approvals, risk, and authorization binding for a consequential mutation",
+          "provenance": "caller-supplied immutable intent plus canonical authorization decision",
+          "flags": ["sensitive", "subject"],
+          "fieldPolicy": "encrypt and mask; expose only through governed data-operation and audit views"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:control-operation-step",
+      "prismaModel": "DataControlOperationStep",
+      "lifecycleDisposition": "restricted legal and security evidence retained for at least seven years and never auto-purged",
+      "fields": [
+        {
+          "fieldId": "data:control-operation-step#checkpoint-evidence",
+          "resolution": "governed",
+          "reason": "target receipts, verifier evidence, cursors, errors, and compensation receipts reveal controlled effects and recovery posture",
+          "provenance": "idempotent target adapter, independent verifier, and recovery worker",
+          "flags": ["sensitive"],
+          "fieldPolicy": "encrypt and mask; provider acknowledgement alone never constitutes verified target truth"
+        }
+      ]
+    }
+  ]
+}

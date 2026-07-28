@@ -389,6 +389,8 @@ export const RETAINED_DATASETS: readonly RetainedDataset[] = [
   { model: "complianceEvidence", label: "Compliance evidence", regulatoryBasis: "GRC evidence (per-record retentionUntil)", minRetentionYears: 7 },
   { model: "dataProcessingActivity", label: "Data processing activities", regulatoryBasis: "Processing authority and accountability evidence", minRetentionYears: 7 },
   { model: "dataPolicyException", label: "Data policy exceptions", regulatoryBasis: "Policy exception approval and compensating-control evidence", minRetentionYears: 7 },
+  { model: "dataControlOperation", label: "Data control operations", regulatoryBasis: "Consequential mutation intent, authorization, and reconciliation evidence", minRetentionYears: 7 },
+  { model: "dataControlOperationStep", label: "Data control operation checkpoints", regulatoryBasis: "Target effect, verification, and compensation evidence", minRetentionYears: 7 },
   // Security incident records (EP-SOVEREIGN-SOC) — a SecurityCase is the SOC's
   // regulated incident record; breach-notification, forensic, and legal-hold
   // obligations forbid auto-purge. Raw SecurityEvent/Detection telemetry purges

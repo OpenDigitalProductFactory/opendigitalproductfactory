@@ -38,6 +38,11 @@ export interface CwqItemCancelledEvent {
   data: { workItemId: string; reason: string };
 }
 
+export interface DataControlOperationRecoveryRequestedEvent {
+  name: "govern/data-control-operation.recover";
+  data: { requestedByUserId?: string };
+}
+
 export interface CwqApprovalRequestedEvent {
   name: "cwq/approval.requested";
   data: {

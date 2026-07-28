@@ -3016,6 +3016,7 @@ model AuthorizationDecisionLog {
   patientAuthority          PatientAuthority?        @relation(fields: [patientAuthorityId], references: [id], onDelete: SetNull)
   patientConsentDirective   PatientConsentDirective? @relation(fields: [patientConsentDirectiveId], references: [id], onDelete: SetNull)
   actionEnvelopes           CoworkerActionEnvelope[]
+  dataControlOperations     DataControlOperation[]
 
   @@index([decision])
   @@index([createdAt])
@@ -3952,6 +3953,7 @@ model Organization {
   founderDemandClusters         FounderDemandCluster[]
   dataProcessingActivities      DataProcessingActivity[]
   dataPolicyExceptions          DataPolicyException[]
+  dataControlOperations         DataControlOperation[]
 }
 
 // Founder Hub's shared-portfolio curation layer. FederatedRecordMirror remains
@@ -12091,6 +12093,7 @@ model WorkItem {
   a2aTaskId         String?
   messages          WorkItemMessage[]
   presence          WorkItemPresence[]
+  governedDataControlOperations DataControlOperation[] @relation("DataControlOperationGovernedCase")
   routingDecision   Json?
   completedAt       DateTime?
   createdAt         DateTime           @default(now())
@@ -12104,6 +12107,89 @@ model WorkItem {
   @@index([sourceType, sourceId])
   @@index([urgency, status])
   @@index([dueAt])
+}
+
+/// Durable intent and reconciliation journal for consequential data mutations
+/// that cross Postgres and one or more external or derived stores.
+model DataControlOperation {
+  id                       String                    @id @default(cuid())
+  operationId              String                    @unique @default(cuid())
+  organizationId           String
+  actorType                String
+  actorRef                 String
+  actorAuthority           Json
+  actionKey                String
+  purposeOfUse             String
+  inputHash                String
+  envelopeHash             String
+  assetRefs                String[]                  @default([])
+  fieldRefs                String[]                  @default([])
+  classificationRefs       String[]                  @default([])
+  policyVersions           Json
+  holdRevisions            Json
+  approvals                Json                      @default("[]")
+  risk                     Json                      @default("{}")
+  idempotencyKey           String
+  status                   String                    @default("planned")
+  authorizationDecisionId  String?
+  authorizationBindingHash String?
+  authorizationConsumedAt  DateTime?
+  governedCaseWorkItemId   String?
+  terminalEvidence         Json?
+  authorizedAt             DateTime?
+  startedAt                DateTime?
+  reconciledAt             DateTime?
+  failedAt                 DateTime?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  organization             Organization              @relation(fields: [organizationId], references: [id])
+  authorizationDecision    AuthorizationDecisionLog? @relation(fields: [authorizationDecisionId], references: [decisionId], onDelete: SetNull)
+  governedCaseWorkItem     WorkItem?                  @relation("DataControlOperationGovernedCase", fields: [governedCaseWorkItemId], references: [id], onDelete: SetNull)
+  steps                    DataControlOperationStep[]
+
+  @@unique([organizationId, idempotencyKey])
+  @@index([organizationId, actionKey, createdAt])
+  @@index([status, updatedAt])
+  @@index([authorizationDecisionId])
+  @@index([governedCaseWorkItemId])
+}
+
+/// A target-specific durable outbox/checkpoint row. Provider acknowledgement
+/// is intentionally separate from verified target truth.
+model DataControlOperationStep {
+  id                  String               @id @default(cuid())
+  stepId              String               @unique @default(cuid())
+  operationId         String
+  targetKey           String
+  targetType          String
+  pepKey              String
+  sequence            Int
+  status              String               @default("pending")
+  idempotencyKey      String               @unique
+  attempt             Int                  @default(0)
+  cursor              Json?
+  targetReceipt       Json?
+  verificationReceipt Json?
+  errorClass          String?
+  errorDetail         Json?
+  nextRetryAt         DateTime?
+  compensable         Boolean              @default(false)
+  compensationKey     String?
+  compensationReceipt Json?
+  leaseOwner          String?
+  leaseExpiresAt      DateTime?
+  claimedAt           DateTime?
+  appliedAt           DateTime?
+  verifiedAt          DateTime?
+  compensatedAt       DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  operation           DataControlOperation @relation(fields: [operationId], references: [operationId], onDelete: Cascade)
+
+  @@unique([operationId, targetKey])
+  @@index([operationId, sequence])
+  @@index([status, nextRetryAt])
+  @@index([leaseExpiresAt])
 }
 
 model WorkItemMessage {

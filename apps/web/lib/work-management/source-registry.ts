@@ -14,6 +14,7 @@ export const WORK_CASE_WORK_ITEM_SOURCE_TYPES = [
   "manual-task",
   "scheduled",
   "field-service-job",
+  "data-control-operation",
 ] as const;
 
 export type WorkCaseWorkItemSourceType =
@@ -150,6 +151,19 @@ export const WORK_CASE_SOURCE_REGISTRY = [
     titleProjection: "Use the approval question.",
     summaryProjection: "Use the requested action, options, and evidence bundle.",
     supportedTransitions: APPROVAL_TRANSITIONS,
+    receiptPolicy: GOVERNED_RECEIPT_POLICY,
+    roomProjection: APPROVAL_ROOM_PROJECTION,
+  },
+  {
+    sourceKey: "data-control-operation",
+    displayLabel: "Data control operation",
+    owningArea: "data-governance",
+    domainCategory: "data-control",
+    defaultDecisionScope: "wwmd",
+    accountResolverKey: null,
+    titleProjection: "Use the data-control action and affected asset scope.",
+    summaryProjection: "Use reconciliation state, failed targets, and verification evidence.",
+    supportedTransitions: STANDARD_TRANSITIONS,
     receiptPolicy: GOVERNED_RECEIPT_POLICY,
     roomProjection: APPROVAL_ROOM_PROJECTION,
   },
