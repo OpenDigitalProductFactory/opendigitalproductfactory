@@ -48,6 +48,6 @@ Completion produces an Outcome Packet from governed decisions, artifacts, action
 
 ## Incomplete or Unavailable Rooms
 
-If a room boundary is incomplete, the page identifies the missing elements instead of inventing them. If the source is unavailable, the last available projection is marked clearly and the page gives one recovery direction.
+If a room boundary is incomplete, the page identifies the missing elements instead of inventing them. If the source is unavailable, the last available projection is marked clearly and the page gives one recovery direction. If an AI coworker's current status is unavailable, the participant panel says so and directs you back to the room's next action instead of implying that the coworker is still working.
 
 If you do not have access, the internal room title, participants, source references, and sensitivity details are not shown. External customer case pages remain customer-safe case summaries; they do not expose internal Work Room controls or participants.
