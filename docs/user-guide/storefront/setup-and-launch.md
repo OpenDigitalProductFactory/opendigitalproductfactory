@@ -116,6 +116,13 @@ reusable configurations, or another verified route. Those controls are
 collapsed by default so a simple one-line business keeps the ordinary
 one-item/one-price workflow.
 
+The same confirmed hierarchy becomes the boundary for later product-management
+summaries. Setup does not need extra product-management fields: the
+organization is the provider, and the operating context remains empty or marks
+a source unavailable until real offerings, purchases, research, delivery work,
+or architecture links exist. Adding another product line changes what is
+disclosed, not the underlying provider/consumer model.
+
 ## Verify The Customer Experience
 
 Use **View Live** to open the public URL in a new tab. Verify it as a customer,

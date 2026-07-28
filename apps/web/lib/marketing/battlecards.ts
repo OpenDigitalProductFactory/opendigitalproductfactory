@@ -12,6 +12,7 @@ export type ObjectionHandlingEntry = { objection: string; response: string };
 
 export type BattlecardRow = {
   battlecardId: string;
+  digitalProductId: string | null;
   competitorName: string;
   positioning: string | null;
   theirStrengths: string[];
@@ -76,6 +77,8 @@ export function buildCompetitiveMatrix(cards: BattlecardRow[]): CompetitiveMatri
 }
 
 export type CreateBattlecardInput = {
+  /** Null/omitted means organization-wide positioning. */
+  digitalProductId?: string | null;
   competitorName: string;
   positioning?: string;
   theirStrengths?: string[];
@@ -86,6 +89,18 @@ export type CreateBattlecardInput = {
   notes?: string;
   createdByAgentId?: string | null;
 };
+
+export function battlecardScopeWhere(input: {
+  organizationId: string;
+  digitalProductId?: string | null;
+}) {
+  return {
+    organizationId: input.organizationId,
+    ...(input.digitalProductId !== undefined
+      ? { digitalProductId: input.digitalProductId }
+      : {}),
+  };
+}
 
 /** Create a competitive battlecard in the org's marketing workspace. */
 export async function createBattlecard(
@@ -102,6 +117,7 @@ export async function createBattlecard(
   const record = await prisma.marketingBattlecard.create({
     data: {
       organizationId: snapshot.organization.id,
+      digitalProductId: input.digitalProductId ?? null,
       competitorName,
       positioning: input.positioning?.trim() || null,
       theirStrengths: normalizeList(input.theirStrengths ?? []),
@@ -121,7 +137,10 @@ export async function createBattlecard(
 }
 
 /** List the org's battlecards plus the projected competitive matrix. */
-export async function getBattlecards(): Promise<
+export async function getBattlecards(input: {
+  /** Undefined returns all; null returns organization-wide cards only. */
+  digitalProductId?: string | null;
+} = {}): Promise<
   | { message: string; data: { battlecards: BattlecardRow[]; matrix: CompetitiveMatrix } }
   | { error: string; message: string }
 > {
@@ -130,10 +149,14 @@ export async function getBattlecards(): Promise<
     return { error: "no-workspace", message: "No configured marketing workspace; there are no battlecards yet." };
   }
   const rows = await prisma.marketingBattlecard.findMany({
-    where: { organizationId: snapshot.organization.id },
+    where: battlecardScopeWhere({
+      organizationId: snapshot.organization.id,
+      digitalProductId: input.digitalProductId,
+    }),
     orderBy: { createdAt: "asc" },
     select: {
       battlecardId: true,
+      digitalProductId: true,
       competitorName: true,
       positioning: true,
       theirStrengths: true,

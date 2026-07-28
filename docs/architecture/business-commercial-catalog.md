@@ -127,6 +127,39 @@ The canonical organization-scoped trace query is
 reports/coworkers consume that boundary rather than reproducing joins or
 guessing identities.
 
+## Product Operating Context Query Boundary
+
+`apps/web/lib/product-management/product-operating-context-query.ts` is the
+canonical read boundary for organization, product-line, and business-product
+management context. It authorizes the organization once, keeps organization
+predicates on every business query, applies bounded stable ordering, and feeds a
+pure assembler. Every projected item retains a canonical identifier,
+`sourceKind`, and `asOf`; every slice reports whether its data is available,
+partial, or unavailable.
+
+The query connects a business Product to an enabling `DigitalProduct` only
+through the existing explicit path:
+
+```text
+Product
+  → ProductOffering.operationalServiceOfferingId
+  → ServiceOffering.digitalProductId
+  → DigitalProduct
+```
+
+It does not add or infer a general Product-to-DigitalProduct association.
+Research proposals and marketing battlecards may carry a nullable
+`digitalProductId`; null remains the truthful organization-wide scope.
+Product-scoped research execution preserves that identifier in the canonical
+`WikiPage`/`WikiPageSource` provenance. It does not dual-write a legacy
+`KnowledgeArticle`; an article remains an explicit retained snapshot.
+
+Demand, knowledge, change, architecture, and dependency evidence is included
+only through the resolved enabling digital products. Product decisions,
+objectives, outcomes, and scheduled playbooks remain explicitly unavailable
+until their owning phases provide typed associations. Prompt strings, route
+text, similar names, and empty result sets are never used to invent scope.
+
 Current ServiceNow CRM/CSM documentation includes Sold Product, installed
 product/install-base, party, and entitlement concepts. DPF's `ProductSold` is
 therefore described as a DPF commercial-ledger extension informed by those

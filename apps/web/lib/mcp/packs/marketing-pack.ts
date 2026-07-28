@@ -209,6 +209,11 @@ const definitions: ToolDefinition[] = [
       type: "object",
       properties: {
         competitorName: { type: "string", description: "The competitor this card is about" },
+        digitalProductId: {
+          type: "string",
+          description:
+            "Optional DigitalProduct database id when this positioning is product-specific. Omit for organization-wide positioning; never infer it.",
+        },
         positioning: { type: "string", description: "How we position against them in one or two sentences" },
         theirStrengths: { type: "array", items: { type: "string" }, description: "What they do well (be honest)" },
         theirWeaknesses: { type: "array", items: { type: "string" }, description: "Where they are weak / where we win" },
@@ -238,7 +243,17 @@ const definitions: ToolDefinition[] = [
     name: "get_battlecards",
     description:
       "Read the org's competitive battlecards plus a projected competitive matrix: the sorted set of active competitors, the de-duplicated union of differentiators we claim, and per-competitor coverage. Use to see competitive positioning at a glance and spot competitors with thin differentiation.",
-    inputSchema: { type: "object", properties: {}, required: [] },
+    inputSchema: {
+      type: "object",
+      properties: {
+        digitalProductId: {
+          type: "string",
+          description:
+            "Optional DigitalProduct database id to return only product-specific cards. Omit to return all organization cards.",
+        },
+      },
+      required: [],
+    },
     requiredCapability: "view_marketing",
     sideEffect: false,
   },
@@ -421,6 +436,10 @@ async function createBattlecardHandler(
       )
     : undefined;
   const result = await createBattlecard({
+    digitalProductId:
+      typeof params["digitalProductId"] === "string"
+        ? params["digitalProductId"]
+        : null,
     competitorName: String(params["competitorName"] ?? ""),
     positioning: typeof params["positioning"] === "string" ? params["positioning"] : undefined,
     theirStrengths: asStrings(params["theirStrengths"]),
@@ -437,9 +456,16 @@ async function createBattlecardHandler(
   return { success: true, entityId: result.battlecardId, message: result.message };
 }
 
-async function getBattlecardsHandler(): Promise<ToolResult> {
+async function getBattlecardsHandler(
+  params: Record<string, unknown>,
+): Promise<ToolResult> {
   const { getBattlecards } = await import("@/lib/marketing/battlecards");
-  const result = await getBattlecards();
+  const result = await getBattlecards({
+    digitalProductId:
+      typeof params["digitalProductId"] === "string"
+        ? params["digitalProductId"]
+        : undefined,
+  });
   if ("error" in result) {
     return { success: false, error: result.error, message: result.message };
   }
@@ -461,7 +487,7 @@ export const marketingPack: ToolPack = {
     record_variant_result: (params) => recordVariantResultHandler(params),
     get_asset_variants: (params) => getAssetVariantsHandler(params),
     create_battlecard: (params, userId, context) => createBattlecardHandler(params, userId, context),
-    get_battlecards: () => getBattlecardsHandler(),
+    get_battlecards: (params) => getBattlecardsHandler(params),
   },
   grants: {
     build_tracked_links: ["marketing_read"],
