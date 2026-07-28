@@ -20,6 +20,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { performance } from "node:perf_hooks";
 import {
   chromium,
   type Browser,
@@ -70,6 +71,16 @@ const MAX_FAILURE_SCREENSHOTS = 12;
 const GENERATOR = "apps/web/scripts/ux-route-sweep.ts";
 let failureScreenshotCount = 0;
 
+export function uxSweepAxeOptions() {
+  return {
+    runOnly: {
+      type: "tag" as const,
+      values: ["wcag2a", "wcag2aa", "wcag22aa"],
+    },
+    resultTypes: ["violations" as const],
+  };
+}
+
 type ShellRow = {
   routePath: string;
   shell: UxShell;
@@ -77,6 +88,19 @@ type ShellRow = {
   exemptChecks: ExemptCheck[];
   sweepEligible: boolean;
   sweepExclusionReason?: RouteSweepExclusionReason;
+};
+
+export type RoutePhaseTimings = {
+  navigationAndSettleMs: number;
+  visibleDomMs: number;
+  semanticStructureMs: number;
+  accessibilityScanMs: number;
+  budgetMeasurementMs: number;
+};
+
+type MeasuredRoute = {
+  measurement: RouteMeasurement;
+  phases: RoutePhaseTimings;
 };
 
 function arg(name: string, fallback: string): string {
@@ -353,7 +377,10 @@ async function measureRoute(
   page: Page,
   row: ShellRow,
   baseUrl: string,
-): Promise<RouteMeasurement> {
+): Promise<MeasuredRoute> {
+  const phases = {} as RoutePhaseTimings;
+  let phaseStartedAt = performance.now();
+
   // NOT networkidle: this portal holds long-lived connections (activity streams,
   // polling), so networkidle never settles and every route would time out.
   const response = await page.goto(`${baseUrl}${row.routePath}`, {
@@ -377,18 +404,24 @@ async function measureRoute(
   if (landed !== wanted) {
     throw new Error(`redirected to ${landed}`);
   }
+  phases.navigationAndSettleMs = Math.round(performance.now() - phaseStartedAt);
 
+  phaseStartedAt = performance.now();
   const html = await page.evaluate(pruneInvisible);
   if (typeof html !== "string" || html.length === 0) {
     // Never hand an empty/undefined document to the measurer: it would score as a
     // perfectly compliant zero-word surface and freeze that as the route's baseline.
     throw new Error("empty document after pruning");
   }
+  phases.visibleDomMs = Math.round(performance.now() - phaseStartedAt);
+
   // Project the browser-resolved semantic DOM to role/nesting/state only. The
   // ratchet deliberately ignores accessible names, so asking Playwright or CDP to
   // serialise the full named AX tree first is both wasted work and unbounded on
   // large data-owner pages such as /admin/reference-data.
+  phaseStartedAt = performance.now();
   const ariaSnapshot = await captureAccessibilityStructure(page);
+  phases.semanticStructureMs = Math.round(performance.now() - phaseStartedAt);
 
   // Necessary, never sufficient — axe green is not "accessible" (spec §5.4).
   // A failing SCAN must not cost us the whole route's budget measurement: axe threw
@@ -396,14 +429,25 @@ async function measureRoute(
   // the axe count as unavailable (-1) rather than a fake 0, so the ratchet cannot read
   // a broken scan as an improvement.
   let axeViolations = -1;
+  phaseStartedAt = performance.now();
   try {
-    const axe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag22aa"]).analyze();
+    const axe = await new AxeBuilder({ page })
+      // axe still evaluates the same rules against the same document. Restricting
+      // returned result groups avoids generating selectors and payloads for passes,
+      // incomplete, and inapplicable nodes that this gate never consumes.
+      // Keep rule tags in the same options object: AxeBuilder.options replaces
+      // prior withTags configuration rather than merging it.
+      .options(uxSweepAxeOptions())
+      .analyze();
     axeViolations = axe.violations.filter((v) => v.impact === "serious" || v.impact === "critical").length;
   } catch (err) {
     console.error(`[ux-sweep] axe scan failed on ${row.routePath}: ${(err as Error).message.split(/\r?\n/)[0]}`);
+  } finally {
+    phases.accessibilityScanMs = Math.round(performance.now() - phaseStartedAt);
   }
 
-  return {
+  phaseStartedAt = performance.now();
+  const measurement = {
     routePath: row.routePath,
     shell: row.shell,
     // Collapse wall-clock text first: seeded records render "updated <now>", so a
@@ -413,6 +457,9 @@ async function measureRoute(
     axeViolations,
     exemptChecks: row.exemptChecks,
   };
+  phases.budgetMeasurementMs = Math.round(performance.now() - phaseStartedAt);
+
+  return { measurement, phases };
 }
 
 function loadBaseline(path: string): BaselineFile {
@@ -444,12 +491,13 @@ async function captureFailureScreenshot(page: Page, routePath: string): Promise<
     .catch(() => {});
 }
 
-function executionOutcome<T>(
-  outcome: RouteWorkResult<T>["outcomes"][number],
+export function executionOutcome(
+  outcome: RouteWorkResult<MeasuredRoute>["outcomes"][number],
 ): {
   routePath: string;
   status: "measured" | "failed";
   durationMs: number;
+  phases?: RoutePhaseTimings;
   reason?: string;
 } {
   return outcome.status === "measured"
@@ -457,6 +505,7 @@ function executionOutcome<T>(
         routePath: outcome.routePath,
         status: outcome.status,
         durationMs: outcome.durationMs,
+        phases: outcome.value.phases,
       }
     : {
         routePath: outcome.routePath,
@@ -488,7 +537,7 @@ async function main(): Promise<void> {
   const statePath = join(ROOT, storageState);
   let browser: Browser | undefined;
   let contexts: BrowserContext[] = [];
-  let routeRun: RouteWorkResult<RouteMeasurement> | undefined;
+  let routeRun: RouteWorkResult<MeasuredRoute> | undefined;
   if (!existsSync(statePath)) {
     console.error(
       `[ux-sweep] WARNING: no storage state at ${storageState} — authenticated route measurement will fail.`,
@@ -526,10 +575,10 @@ async function main(): Promise<void> {
 
   if (!routeRun) throw new Error("route worker orchestration did not produce a result");
   const measurements = routeRun.outcomes.flatMap((outcome) =>
-    outcome.status === "measured" ? [outcome.value] : [],
+    outcome.status === "measured" ? [outcome.value.measurement] : [],
   );
   const executionReport = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     sourceSha: process.env.GITHUB_SHA ?? process.env.UX_SWEEP_SOURCE_SHA ?? "unknown",
     workerCount,
     durationMs: routeRun.durationMs,

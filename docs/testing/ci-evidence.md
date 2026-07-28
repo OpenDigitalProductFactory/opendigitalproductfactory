@@ -215,9 +215,10 @@ There is no percentage-based capability threshold. A missing, duplicate,
 unexpected, or failed eligible route makes the check red after the remaining
 inventory finishes. The always-uploaded
 `route-sweep-execution.json` records the source SHA, worker count, duration,
-full eligibility accounting, and route outcomes in deterministic inventory
-order. Up to 12 failure screenshots are uploaded only when eligible routes
-fail; the execution record still reports every failure.
+full eligibility accounting, route outcomes, and navigation/visible-DOM/
+semantic-structure/accessibility/budget phase timings in deterministic
+inventory order. Up to 12 failure screenshots are uploaded only when eligible
+routes fail; the execution record still reports every failure.
 
 Hierarchy capture reads the browser-resolved semantic DOM and projects it
 directly to implicit/explicit role, nesting, heading level, and structural
@@ -248,6 +249,14 @@ improving the critical path because `/admin/reference-data` alone consumed
 roughly 11-13 minutes; that product defect is tracked as `BI-CC7CA516`.
 Each worker owns an authenticated browser context and each route owns a fresh
 page, so route teardown cannot interrupt the next navigation.
+
+The accessibility phase evaluates the same WCAG-tagged axe rules against the
+same complete served DOM, but requests only the `violations` result group that
+the gate consumes. Per the
+[axe-core performance guidance](https://github.com/dequelabs/axe-core/blob/develop/doc/API.md#use-resulttypes),
+the other result groups add selector/detail processing, not rule coverage;
+limiting their detail avoids work for thousands of passing/inapplicable nodes
+on large pages while preserving the serious/critical violation count.
 
 The checked-in route-budget ratchet may move from `bootstrapped:false` to
 `bootstrapped:true` only after:
