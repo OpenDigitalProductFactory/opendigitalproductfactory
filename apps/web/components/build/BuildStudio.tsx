@@ -7,7 +7,6 @@ import { confirmDialog } from "@/components/ui/Dialog";
 import { Spinner } from "@/components/ui/Spinner";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { GitBranch } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { FeatureBriefPanel } from "./FeatureBriefPanel";
 import { ReviewPanel } from "./ReviewPanel";
@@ -28,11 +27,8 @@ import { BuildAssuranceGateCard } from "./BuildAssuranceGateCard";
 import { BuildListItem } from "./BuildListItem";
 import { EpicRollupListItem } from "./EpicRollupListItem";
 import {
-  deriveCoworkerActivityCount,
-  deriveFleetCounts,
   deriveNeedsAttention,
   deriveQueueState,
-  formatOperatorFocusHeader,
   isOperatorFocusEntry,
 } from "./fleet-derivation";
 import { PortalContextStrip } from "@/components/portal-context/PortalContextStrip";
@@ -41,11 +37,12 @@ import { deriveBuildStudioCustodianPrompt, type BuildStudioCustodianPrompt } fro
 import { BuildDecisionLedgerBand } from "./BuildDecisionLedgerBand";
 import { BuildChangeSummaryBand } from "./BuildChangeSummaryBand";
 import { BuildSolutionSummaryBand } from "./BuildSolutionSummaryBand";
-import { BuildCustomerStatusBand } from "./BuildCustomerStatusBand";
 import { BuildWorkWarrantBand } from "./BuildWorkWarrantBand";
 import type { BuildStudioCustomerStatus } from "@/lib/build/customer-status-projection";
 import { projectAutonomousBuildCustody } from "@/lib/build/autonomous-build-custody";
-import { BuildOperatorHeaderDetails, BuildWorkRequestStrip, formatOperatorPhaseLabel } from "./BuildOperatorContext";
+import { BuildOperatorHeaderDetails, formatOperatorPhaseLabel } from "./BuildOperatorContext";
+import { BuildOperatorOverview } from "./BuildOperatorOverview";
+import { groupOperatorBuilds } from "./build-studio-operator-view";
 import { resolveBuildStudioBranchBadge } from "./build-studio-branch-badge";
 import { deleteFeatureBuild } from "@/lib/actions/build";
 import { createBuildStudioBacklogIntake, startBacklogBuild } from "@/lib/actions/backlog-build";
@@ -198,32 +195,17 @@ export function BuildStudio({
   const [newPortfolioId, setNewPortfolioId] = useState(() => portfolioRows[0]?.id ?? "");
   const [pendingIntake, setPendingIntake] = useState<BuildStudioPendingIntake | null>(null);
   const [promotingItemId, setPromotingItemId] = useState<string | null>(null);
-  // Tab selector removed per spec §1 + §9 #11 — the workflow graph is the
-  // always-visible primary surface of the active-build pane. Progress /
-  // Brief / Review / Sandbox / BS-Queue evidence migrates into the
-  // DetailsDrawer accordion (PR #912's DetailsDrawer + this slice).
+  const [intakeOpen, setIntakeOpen] = useState(() => buildRows.length === 0);
+  // One evidence drawer remains authoritative for progress, brief, review,
+  // runtime, and queue diagnostics. The operator overview stays primary;
+  // the graph and drawer mount only inside Technical details.
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerInitialSectionId, setDrawerInitialSectionId] = useState<string | null>(null);
-  // BI-63EAD801: keep internal IDs / git branch chip behind Engineer view so
-  // end-users (Dale) don't see FB-*, WC-*, and raw branch names in the header.
-  const BUILD_DETAILS_KEY = "dpf:build-studio-header-details-expanded";
-  const [headerDetailsExpanded, setHeaderDetailsExpanded] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.localStorage.getItem(BUILD_DETAILS_KEY) === "true";
-  });
-  const toggleHeaderDetails = useCallback(() => {
-    setHeaderDetailsExpanded((prev) => {
-      const next = !prev;
-      try { window.localStorage.setItem(BUILD_DETAILS_KEY, String(next)); } catch { /* ignore */ }
-      return next;
-    });
-  }, []);
   // Assurance + code-intel cards collapse so the workflow graph stays the
   // primary surface (spec §1 + §9 #11). Operators can re-expand on demand.
   const [assuranceRowExpanded, setAssuranceRowExpanded] = useState(false);
-  // Overseer altitude flip (BI-90670010): the plain "Solution & Oversight" bands
-  // are the default first-viewport; the engineer-grade ProcessGraph + evidence
-  // demote behind this single toggle. Persisted so an engineer's choice sticks.
+  // Operator-first altitude: process mechanics and evidence remain available
+  // behind one technical-details boundary. Persist the technical user's choice.
   const BUILD_ENGINEER_VIEW_KEY = "dpf:build-studio-engineer-view";
   const [engineerView, setEngineerView] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -644,28 +626,6 @@ export function BuildStudio({
 
         {/* Left: Build List */}
         <div className={getBuildStudioSidebarClassName(sidebarOpen)}>
-          {/* BI-E167A8A6: door 2 (Work Control / governed engineering work) is
-              only surfaced to operators who can actually create it
-              (manage_backlog). Non-technical operators see just the
-              plain-English "Start a new build" door below — no second intake to
-              guess between. Where both are shown, the subtitle states the
-              relationship so it is clear which door does what. */}
-          {canManageGovernedWork && (
-            <div className="border-b border-[var(--dpf-border)] p-3">
-              <Link
-                href="/build/work"
-                className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-sm font-medium text-[var(--dpf-text)] transition-colors hover:border-[var(--dpf-accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
-              >
-                <GitBranch className="h-4 w-4" aria-hidden="true" />
-                <span>Work Control</span>
-              </Link>
-              <p className="mt-1.5 text-[10px] leading-snug text-[var(--dpf-muted)]">
-                Governed engineering work — git branches &amp; worktrees. To
-                describe a feature in plain English instead, use{" "}
-                <span className="font-medium text-[var(--dpf-text)]">Start a new build</span> below.
-              </p>
-            </div>
-          )}
           {isDevEnvironment ? (
             <div className="p-3 border-b border-[var(--dpf-border)]">
               <div className="px-3 py-2 text-sm bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded-md text-[var(--dpf-muted)]">
@@ -673,102 +633,111 @@ export function BuildStudio({
               </div>
             </div>
           ) : (
-            // D12 (2026-05-23): multiline textarea instead of single-line input.
-            // The prior <input> truncated longer descriptions to a tail-only
-            // view (e.g. "...driving back to the warehouse" with no way to see
-            // the start) — looked like the platform had eaten half the text.
-            // Now: auto-resizing textarea with visible char count; Enter inserts
-            // a newline (multiline field), Cmd/Ctrl+Enter submits to preserve
-            // keyboard flow without losing the multiline capability.
-            <div className="p-3 border-b border-[var(--dpf-border)]">
-              {/* BI-E167A8A6: name door 1 and state its purpose so it reads as
-                  the primary, plain-English intake — distinct from governed
-                  Work Control above. */}
-              <div className="mb-2">
-                <p className="text-xs font-semibold text-[var(--dpf-text)]">Start a new build</p>
-                <p className="mt-0.5 text-[10px] leading-snug text-[var(--dpf-muted)]">
-                  Describe a feature in plain English — your AI Coworker designs, builds, and ships it for you.
-                </p>
-              </div>
-              <textarea
-                placeholder="Describe a new feature in plain English — say what you want to do, who it's for, and any details that matter."
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                    e.preventDefault();
-                    handleCreate();
-                  }
-                }}
-                rows={3}
-                className="w-full px-3 py-2 text-sm bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] rounded-md text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)] resize-y min-h-[72px] max-h-[200px] leading-snug"
-              />
-              <label className="mt-2 block text-[10px] font-medium uppercase tracking-wide text-[var(--dpf-muted)]">
-                Portfolio
-                <select
-                  value={newPortfolioId}
-                  onChange={(e) => setNewPortfolioId(e.target.value)}
-                  className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
-                >
-                  {portfolioRows.length === 0 ? (
-                    <option value="">No portfolios available</option>
+            <div className="border-b border-[var(--dpf-border)]">
+              <button
+                type="button"
+                onClick={() => setIntakeOpen((open) => !open)}
+                aria-expanded={intakeOpen}
+                className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left transition-colors hover:bg-[var(--dpf-surface-2)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
+              >
+                <span>
+                  <span className="block text-sm font-semibold text-[var(--dpf-text)]">
+                    Start a new outcome
+                  </span>
+                  {!intakeOpen ? (
+                    <span className="mt-0.5 block text-[11px] text-[var(--dpf-muted)]">
+                      Describe what should be different.
+                    </span>
                   ) : null}
-                  {portfolioRows.map((portfolio) => (
-                    <option key={portfolio.id} value={portfolio.id}>
-                      {portfolio.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {/* BI-950FE085 (D??): the prior "New" label gave Dale no signal
-                  about what he was creating. "Start a new build" is explicit —
-                  it names the action, the artifact, and the intent. */}
-              <div className="flex items-center justify-between mt-2 gap-2">
-                <div className="text-[10px] text-[var(--dpf-muted)] leading-tight">
-                  Press Cmd/Ctrl+Enter to file.
-                  {newTitle.length > 0 ? ` ${newTitle.length} characters.` : ""}
-                </div>
-                <button
-                  onClick={handleCreate}
-                  disabled={creating || !newTitle.trim() || !newPortfolioId}
-                  className="px-4 py-2 text-sm font-semibold bg-[var(--dpf-accent)] text-white border-none rounded-md cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none hover:opacity-90 transition-opacity flex items-center gap-1.5"
-                >
-                  {creating && <Spinner size="xs" tone="current" presentational />}
-                  {creating ? "Filing..." : "File backlog item"}
-                </button>
-              </div>
-              {pendingIntake && (
-                <div className="mt-3 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">
-                    Ready to promote
+                </span>
+                <span aria-hidden="true" className="text-[var(--dpf-muted)]">
+                  {intakeOpen ? "−" : "+"}
+                </span>
+              </button>
+              {intakeOpen ? (
+                <div className="px-3 pb-3">
+                  <label className="block text-[11px] font-medium text-[var(--dpf-muted)]">
+                    What outcome do you want?
+                    <textarea
+                      placeholder="Describe what should be different, who it helps, and any constraint that matters."
+                      value={newTitle}
+                      onChange={(e) => setNewTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                          e.preventDefault();
+                          handleCreate();
+                        }
+                      }}
+                      rows={4}
+                      className="mt-1 w-full min-h-[92px] max-h-[220px] resize-y rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-sm leading-5 text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
+                    />
+                  </label>
+                  {portfolioRows.length > 1 ? (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-[11px] font-medium text-[var(--dpf-muted)]">
+                        Choose business area
+                      </summary>
+                      <label className="mt-2 block text-[10px] font-medium uppercase tracking-wide text-[var(--dpf-muted)]">
+                        Business area
+                        <select
+                          value={newPortfolioId}
+                          onChange={(e) => setNewPortfolioId(e.target.value)}
+                          className="mt-1 w-full rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-sm normal-case tracking-normal text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
+                        >
+                          {portfolioRows.map((portfolio) => (
+                            <option key={portfolio.id} value={portfolio.id}>
+                              {portfolio.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </details>
+                  ) : null}
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <span className="text-[10px] leading-tight text-[var(--dpf-muted)]">
+                      {newTitle.length > 0 ? `${newTitle.length} characters` : "Plain language is enough"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={handleCreate}
+                      disabled={creating || !newTitle.trim() || !newPortfolioId}
+                      className="inline-flex items-center gap-1.5 rounded-md border-none bg-[var(--dpf-accent)] px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {creating && <Spinner size="xs" tone="current" presentational />}
+                      {creating ? "Saving..." : "Continue"}
+                    </button>
                   </div>
-                  <div className="mt-1 text-sm font-medium text-[var(--dpf-text)]">
-                    {pendingIntake.itemId}
-                  </div>
-                  <p className="mt-1 text-xs leading-snug text-[var(--dpf-muted)]">
-                    {pendingIntake.title} · {pendingIntake.portfolioName}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handlePromotePendingIntake}
-                    disabled={promotingItemId === pendingIntake.itemId}
-                    className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-[var(--dpf-accent)] px-3 py-2 text-sm font-semibold text-[var(--dpf-accent)] transition-colors hover:bg-[var(--dpf-accent)] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {promotingItemId === pendingIntake.itemId && (
-                      <Spinner size="xs" tone="current" presentational />
-                    )}
-                    {promotingItemId === pendingIntake.itemId ? "Promoting..." : "Promote to Feature Build"}
-                  </button>
+                  {pendingIntake ? (
+                    <div className="mt-3 rounded-lg border border-[var(--dpf-accent)] bg-[var(--dpf-state-info)] p-3">
+                      <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[var(--dpf-accent)]">
+                        Outcome captured
+                      </p>
+                      <p className="m-0 mt-1 text-sm font-medium text-[var(--dpf-text)]">
+                        {pendingIntake.title}
+                      </p>
+                      <p className="m-0 mt-1 text-xs text-[var(--dpf-muted)]">
+                        {pendingIntake.portfolioName}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handlePromotePendingIntake}
+                        disabled={promotingItemId === pendingIntake.itemId}
+                        className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-md border border-[var(--dpf-accent)] bg-[var(--dpf-surface-1)] px-3 py-2 text-sm font-semibold text-[var(--dpf-accent)] transition-colors hover:bg-[var(--dpf-accent)] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {promotingItemId === pendingIntake.itemId && (
+                          <Spinner size="xs" tone="current" presentational />
+                        )}
+                        {promotingItemId === pendingIntake.itemId ? "Starting..." : "Start governed build"}
+                      </button>
+                    </div>
+                  ) : null}
+                  {createError ? (
+                    <div role="alert" className="mt-2 text-[11px] leading-snug text-[var(--dpf-danger)]">
+                      {createError}
+                    </div>
+                  ) : null}
                 </div>
-              )}
-              {createError && (
-                <div
-                  role="alert"
-                  className="mt-2 text-[11px] text-[var(--dpf-danger)] leading-snug"
-                >
-                  {createError}
-                </div>
-              )}
+              ) : null}
             </div>
           )}
 
@@ -804,6 +773,7 @@ export function BuildStudio({
               });
             }}
             onOpenQueueDrawer={() => {
+              setEngineerView(true);
               setDrawerInitialSectionId("bs-queue");
               setDrawerOpen(true);
             }}
@@ -811,7 +781,7 @@ export function BuildStudio({
         </div>
 
         {/* Right: Preview or Brief */}
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--dpf-surface-1)]">
+        <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto bg-[var(--dpf-surface-1)]">
           <PortalContextStrip
             envelope={portalContext ?? null}
             contextLabel="Build context"
@@ -819,57 +789,16 @@ export function BuildStudio({
           />
           {activeBuild ? (
             <>
-              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--dpf-border)] px-4 py-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2
-                      title={activeBuild.title}
-                      className="m-0 max-h-[3rem] min-w-0 overflow-hidden break-words text-base font-bold leading-6 text-[var(--dpf-text)] line-clamp-2"
-                    >
-                      {activeBuild.title}
-                    </h2>
-                    <ClaimBadge agentId={activeBuild.claimedByAgentId ?? null} claimStatus={activeBuild.claimStatus ?? null} claimedAt={activeBuild.claimedAt ?? null} />
-                  </div>
-                  {/* BI-63EAD801 (D13): Internal IDs and git branch chip are
-                      hidden from the operator view — end-users (Dale) have no
-                      use for FB-*, WC-*, or raw branch names. Engineer view is
-                      the explicit opt-in for those details. */}
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--dpf-muted)]">
-                    <button
-                      type="button"
-                      aria-expanded={headerDetailsExpanded}
-                      aria-controls="build-studio-header-details"
-                      onClick={toggleHeaderDetails}
-                      className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-[var(--dpf-muted)] transition-colors hover:bg-[var(--dpf-surface-2)] hover:text-[var(--dpf-text)]"
-                    >
-                      <span aria-hidden="true">{headerDetailsExpanded ? "▾" : "▸"}</span>
-                      Details
-                    </button>
-                    {headerDetailsExpanded && (
-                      <span
-                        id="build-studio-header-details"
-                        className="flex flex-wrap items-center gap-2"
-                        data-testid="build-studio-header-details"
-                      >
-                        <BuildOperatorHeaderDetails
-                          build={activeBuild}
-                          branchBadge={branchBadge}
-                          engineerView={engineerView}
-                        />
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* BI-BB13B599: plain customer-mode status band — the first-viewport
-                  "wife-test" line. Reads the capsule projection so external
-                  Claude/Codex/Grok work is reflected in one plain lifecycle
-                  status, never a raw phase or executor name. Always visible
-                  (not behind engineer view). */}
-              {customerStatuses[activeBuild.id] && (
-                <BuildCustomerStatusBand status={customerStatuses[activeBuild.id]} />
-              )}
+              <BuildOperatorOverview
+                title={activeBuild.title}
+                outcome={
+                  activeBuild.designDoc?.problemStatement
+                  ?? activeBuild.description
+                  ?? activeBuild.originator?.resolution
+                }
+                phase={activeBuild.phase}
+                status={customerStatuses[activeBuild.id]}
+              />
 
               {/* Error banner for failed builds */}
               {activeBuild.phase === "failed" && (
@@ -877,18 +806,6 @@ export function BuildStudio({
               )}
 
               <div className="flex min-h-0 flex-1 flex-col">
-                <BuildWorkRequestStrip
-                  build={activeBuild}
-                  onOpenWorkRequest={() => {
-                    setDrawerInitialSectionId("canonical-doc");
-                    setDrawerOpen(true);
-                  }}
-                />
-                {activeWorkWarrant !== null && activeWorkWarrant !== undefined && (
-                  <div className="border-b border-[var(--dpf-border)] px-4 py-3">
-                    <BuildWorkWarrantBand warrant={activeWorkWarrant} />
-                  </div>
-                )}
                 {activeBuild && activeBuild.phase === "ship" && (
                   <div className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-4 py-3">
                     <ReleaseDecisionPanel
@@ -935,139 +852,165 @@ export function BuildStudio({
                     )}
                   </div>
                 )}
-                {(activeBuild.designDoc?.problemStatement || activeBuild.designDoc?.proposedApproach || activeBuild.description || autonomousCustody) && (
-                  <div className="border-b border-[var(--dpf-border)] px-4 py-3">
-                    <BuildSolutionSummaryBand
-                      problemStatement={activeBuild.designDoc?.problemStatement ?? null}
-                      proposedApproach={activeBuild.designDoc?.proposedApproach ?? null}
-                      fallbackIntent={activeBuild.description}
-                      custody={autonomousCustody}
-                    />
-                  </div>
-                )}
-                {changeNarrative && (
-                  <div className="border-b border-[var(--dpf-border)] px-4 py-3">
-                    <BuildChangeSummaryBand narrative={changeNarrative} />
-                  </div>
-                )}
-                {decisionLedger.length > 0 && (
-                  <div className="border-b border-[var(--dpf-border)] px-4 py-3">
-                    <BuildDecisionLedgerBand entries={decisionLedger} engineerView={engineerView} />
-                  </div>
-                )}
-                {/* Workflow graph — always-visible primary surface of the
-                    active-build pane. The tab selector (Progress/Workflow/
-                    Details/Preview) is gone; evidence migrates into the
-                    DetailsDrawer below. See spec §1 + §9 #11. */}
-                <div
-                  className={`${getBuildStudioGraphPanelClassName()} relative`}
-                  data-testid={BUILD_STUDIO_TEST_IDS.graphPanel}
-                >
-                  {/* Overseer altitude flip (BI-90670010): the plain bands above
-                      are the default; the engineer-grade graph + evidence demote
-                      behind this toggle. The phase rail keeps liveness visible
-                      even when the graph is hidden; the Details drawer (below)
-                      stays as the bands' dive-in either way. */}
-                  <div className="flex items-center justify-between gap-3 border-b border-[var(--dpf-border)] px-4 py-2">
-                    <PhaseMiniRail currentPhase={toRailPhase(activeBuild.phase)} />
-                    <button
-                      type="button"
-                      onClick={toggleEngineerView}
-                      aria-pressed={engineerView}
-                      data-testid="build-studio-engineer-view-toggle"
-                      className="inline-flex items-center gap-1.5 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-xs font-medium text-[var(--dpf-muted)] transition-colors hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                        <path d="m16 18 6-6-6-6M8 6l-6 6 6 6" />
-                      </svg>
-                      {engineerView ? "Hide engineer view" : "Engineer view"}
-                    </button>
-                  </div>
-                  {engineerView && (
-                    <>
-                  <AssuranceRow
-                    expanded={assuranceRowExpanded}
-                    onToggle={() => setAssuranceRowExpanded((p) => !p)}
-                    freshness={codeGraphFreshness}
-                    buildId={activeBuild.buildId}
-                    bomSummary={bomSummary}
-                    findings={assuranceFindings}
-                  />
-                  <AgentActivityStrip build={activeBuild} />
-                  <div className="border-b border-[var(--dpf-border)] px-4 py-2 text-xs text-[var(--dpf-muted)]">
-                    Select any stage or task to inspect — or open Details on the right for progress, brief, review, sandbox, and BS Queue evidence.
-                  </div>
-                  <ProcessGraph
-                    build={activeBuild}
-                    workflowLabel={activeLifecycleLabel}
-                    governedBacklogEnabled={governedBacklogEnabled}
-                    progressVisibility={progressVisibility}
-                    onNodeClick={(info) => {
-                      setSelectedNodeClick((prev) =>
-                        prev?.nodeId === info.nodeId ? null : info,
-                      );
-                    }}
-                  />
-                  {selectedNodeClick && (
-                    <NodeInspector
-                      nodeId={selectedNodeClick.nodeId}
-                      title={resolveInspectorTitle(selectedNodeClick)}
-                      anchorRect={selectedNodeClick.anchorRect}
-                      containerRect={selectedNodeClick.containerRect}
-                      containerScrollTop={selectedNodeClick.containerScrollTop}
-                      onClose={() => setSelectedNodeClick(null)}
-                      onAskCoworker={() => {
-                        const prefill = buildCoworkerPrefill(selectedNodeClick, activeBuild.buildId);
-                        document.dispatchEvent(
-                          new CustomEvent("open-agent-panel", {
-                            detail: { autoMessage: prefill, targetBuildId: activeBuild.buildId },
-                          }),
-                        );
-                      }}
-                    >
-                      <NodeInspectorBody info={selectedNodeClick} />
-                    </NodeInspector>
-                  )}
-                    </>
-                  )}
-                  <DetailsDrawerPill
-                    isOpen={drawerOpen}
-                    onClick={() => {
-                      setDrawerOpen((p) => !p);
-                      setDrawerInitialSectionId(null);
-                    }}
-                  />
-                  <DetailsDrawer
-                    isOpen={drawerOpen}
-                    onClose={() => setDrawerOpen(false)}
-                    sections={buildDetailsDrawerSections(
-                      activeBuild,
-                      progressVisibility,
-                      drawerInitialSectionId,
-                      supervisedBuildRows,
-                      changeNarrative,
-                      engineerView,
-                    )}
-                  />
+                <div className="border-t border-[var(--dpf-border)] px-4 py-3">
+                  <button
+                    type="button"
+                    onClick={toggleEngineerView}
+                    aria-expanded={engineerView}
+                    aria-controls="build-studio-technical-details"
+                    data-testid="build-studio-engineer-view-toggle"
+                    className="inline-flex items-center gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-sm font-medium text-[var(--dpf-muted)] transition-colors hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                      <path d="m16 18 6-6-6-6M8 6l-6 6 6 6" />
+                    </svg>
+                    {engineerView ? "Hide technical details" : "Technical details"}
+                  </button>
                 </div>
+                {engineerView ? (
+                  <section
+                    id="build-studio-technical-details"
+                    className="border-t border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+                    data-testid="build-studio-technical-details"
+                  >
+                    <div className="flex flex-wrap items-center gap-2 border-b border-[var(--dpf-border)] px-4 py-3">
+                      <ClaimBadge
+                        agentId={activeBuild.claimedByAgentId ?? null}
+                        claimStatus={activeBuild.claimStatus ?? null}
+                        claimedAt={activeBuild.claimedAt ?? null}
+                      />
+                      <span data-testid="build-studio-header-details" className="flex flex-wrap items-center gap-2">
+                        <BuildOperatorHeaderDetails
+                          build={activeBuild}
+                          branchBadge={branchBadge}
+                          engineerView
+                        />
+                      </span>
+                      {canManageGovernedWork ? (
+                        <Link
+                          href="/build/work"
+                          className="ml-auto text-xs font-medium text-[var(--dpf-accent)] hover:underline"
+                        >
+                          Open Work Control
+                        </Link>
+                      ) : null}
+                    </div>
+                    {activeWorkWarrant !== null && activeWorkWarrant !== undefined ? (
+                      <div className="border-b border-[var(--dpf-border)] px-4 py-3">
+                        <BuildWorkWarrantBand warrant={activeWorkWarrant} />
+                      </div>
+                    ) : null}
+                    {(activeBuild.designDoc?.proposedApproach || activeBuild.description || autonomousCustody) ? (
+                      <div className="border-b border-[var(--dpf-border)] px-4 py-3">
+                        <BuildSolutionSummaryBand
+                          problemStatement={activeBuild.designDoc?.problemStatement ?? null}
+                          proposedApproach={activeBuild.designDoc?.proposedApproach ?? null}
+                          fallbackIntent={activeBuild.description}
+                          custody={autonomousCustody}
+                        />
+                      </div>
+                    ) : null}
+                    {changeNarrative ? (
+                      <div className="border-b border-[var(--dpf-border)] px-4 py-3">
+                        <BuildChangeSummaryBand narrative={changeNarrative} />
+                      </div>
+                    ) : null}
+                    {decisionLedger.length > 0 ? (
+                      <div className="border-b border-[var(--dpf-border)] px-4 py-3">
+                        <BuildDecisionLedgerBand entries={decisionLedger} engineerView />
+                      </div>
+                    ) : null}
+                    <div
+                      className={`${getBuildStudioGraphPanelClassName()} relative`}
+                      data-testid={BUILD_STUDIO_TEST_IDS.graphPanel}
+                    >
+                      <div className="border-b border-[var(--dpf-border)] px-4 py-2">
+                        <PhaseMiniRail currentPhase={toRailPhase(activeBuild.phase)} />
+                      </div>
+                      <AssuranceRow
+                        expanded={assuranceRowExpanded}
+                        onToggle={() => setAssuranceRowExpanded((p) => !p)}
+                        freshness={codeGraphFreshness}
+                        buildId={activeBuild.buildId}
+                        bomSummary={bomSummary}
+                        findings={assuranceFindings}
+                      />
+                      <AgentActivityStrip build={activeBuild} />
+                      <div className="border-b border-[var(--dpf-border)] px-4 py-2 text-xs text-[var(--dpf-muted)]">
+                        Select a stage or task to inspect it. Open evidence for canonical documents, review, runtime, and queue diagnostics.
+                      </div>
+                      <ProcessGraph
+                        build={activeBuild}
+                        workflowLabel={activeLifecycleLabel}
+                        governedBacklogEnabled={governedBacklogEnabled}
+                        progressVisibility={progressVisibility}
+                        onNodeClick={(info) => {
+                          setSelectedNodeClick((prev) =>
+                            prev?.nodeId === info.nodeId ? null : info,
+                          );
+                        }}
+                      />
+                      {selectedNodeClick ? (
+                        <NodeInspector
+                          nodeId={selectedNodeClick.nodeId}
+                          title={resolveInspectorTitle(selectedNodeClick)}
+                          anchorRect={selectedNodeClick.anchorRect}
+                          containerRect={selectedNodeClick.containerRect}
+                          containerScrollTop={selectedNodeClick.containerScrollTop}
+                          onClose={() => setSelectedNodeClick(null)}
+                          onAskCoworker={() => {
+                            const prefill = buildCoworkerPrefill(selectedNodeClick, activeBuild.buildId);
+                            document.dispatchEvent(
+                              new CustomEvent("open-agent-panel", {
+                                detail: { autoMessage: prefill, targetBuildId: activeBuild.buildId },
+                              }),
+                            );
+                          }}
+                        >
+                          <NodeInspectorBody info={selectedNodeClick} />
+                        </NodeInspector>
+                      ) : null}
+                      <DetailsDrawerPill
+                        isOpen={drawerOpen}
+                        onClick={() => {
+                          setDrawerOpen((open) => !open);
+                          setDrawerInitialSectionId(null);
+                        }}
+                      />
+                      <DetailsDrawer
+                        isOpen={drawerOpen}
+                        onClose={() => setDrawerOpen(false)}
+                        sections={buildDetailsDrawerSections(
+                          activeBuild,
+                          progressVisibility,
+                          drawerInitialSectionId,
+                          supervisedBuildRows,
+                          changeNarrative,
+                          true,
+                        )}
+                      />
+                    </div>
+                  </section>
+                ) : null}
               </div>
             </>
           ) : (
             <div className="grid flex-1 place-items-center">
-              <div className="text-center max-w-md px-8">
-                <div className="text-5xl mb-4 opacity-20">&#128736;</div>
-                <h2 className="text-lg font-bold text-[var(--dpf-text)] mb-3">Product Development Studio</h2>
-                <p className="text-sm text-[var(--dpf-muted)] leading-relaxed mb-6">
-                  Build features without writing code. Describe what you want, and your AI Coworker will design, build, and deploy it.
+              <div className="max-w-lg px-8 text-center">
+                <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-[var(--dpf-state-info)] text-2xl text-[var(--dpf-accent)]" aria-hidden="true">
+                  ✦
+                </div>
+                <h2 className="mb-2 mt-4 text-xl font-semibold text-[var(--dpf-text)]">
+                  What should be different?
+                </h2>
+                <p className="m-0 text-sm leading-6 text-[var(--dpf-muted)]">
+                  Start a new outcome in plain language. Build Studio will shape the approach,
+                  build the change, collect evidence, and return when a meaningful decision needs you.
                 </p>
-                <div className="text-left bg-[var(--dpf-surface-2)] rounded-lg border border-[var(--dpf-border)] p-4 shadow-dpf-md">
-                  <p className="text-xs font-semibold text-[var(--dpf-text)] mb-3 uppercase tracking-wider">How it works</p>
-                  <div className="flex flex-col gap-2.5">
-                    <Step n={1} text={'Type a feature name in the sidebar and click “Start a new build”'} />
-                    <Step n={2} text="Your AI Coworker will open and guide you through the process" />
-                    <Step n={3} text="Review the live preview as it builds" />
-                    <Step n={4} text="Approve and deploy when you're happy" />
-                  </div>
+                <div className="mt-6 grid gap-2 text-left sm:grid-cols-3">
+                  <Step n={1} text="Describe the outcome" />
+                  <Step n={2} text="Follow one clear status" />
+                  <Step n={3} text="Decide only when needed" />
                 </div>
               </div>
             </div>
@@ -1539,6 +1482,16 @@ function FleetRailZone({
       governedBacklogEnabled,
     }),
   }));
+  const operatorGroups = groupOperatorBuilds(
+    entries.map((entry) => ({
+      id: entry.build.id,
+      buildId: entry.build.buildId,
+      title: entry.build.title,
+      phase: entry.build.phase,
+      updatedAt: entry.build.updatedAt,
+      needsYou: entry.needsAttention,
+    })),
+  );
 
   // Sort: running → blocked → queued (by position) → idle. Stable tie-break
   // by buildId so render order doesn't flicker across re-renders.
@@ -1556,14 +1509,15 @@ function FleetRailZone({
   // Split entries into focus work, parked coworker-custody work, and completed
   // history. Quiet ideation/planning probes stay out of the operator's default
   // list until they run, block, ask for a decision, or are selected.
-  const nonCompletedEntries = sorted.filter((e) => e.build.phase !== "complete");
+  const nonCompletedEntries = sorted.filter(
+    (entry) => entry.build.phase !== "complete" && entry.build.phase !== "abandoned",
+  );
   const focusEntries = nonCompletedEntries.filter((entry) =>
     isOperatorFocusEntry(entry, activeBuildId),
   );
-  const parkedEntries = nonCompletedEntries.filter((entry) =>
-    !isOperatorFocusEntry(entry, activeBuildId),
+  const completedEntries = sorted.filter(
+    (entry) => entry.build.phase === "complete" || entry.build.phase === "abandoned",
   );
-  const completedEntries = sorted.filter((e) => e.build.phase === "complete");
   const isFocusRollup = (rollup: EpicRollupView) => {
     if (rollup.status === "complete") return false;
     if (rollup.status === "needs-attention" || rollup.status === "blocked") return true;
@@ -1571,45 +1525,20 @@ function FleetRailZone({
     return rollup.children.some((child) => child.phase === "build" || child.phase === "review");
   };
   const focusEpicRollups = epicRollups.filter(isFocusRollup);
-  const parkedEpicRollups = epicRollups.filter((rollup) =>
-    rollup.status !== "complete" && !isFocusRollup(rollup),
-  );
   const completedEpicRollups = epicRollups.filter((rollup) => rollup.status === "complete");
-  const completedItemCount = completedEntries.length + completedEpicRollups.length;
+  const completedItemCount =
+    (operatorGroups.find((group) => group.key === "recent")?.builds.length ?? 0)
+    + completedEpicRollups.length;
   const [showCompleted, setShowCompleted] = useState(false);
   const [showAllFocus, setShowAllFocus] = useState(false);
 
-  // BI-5939B62F: a build can be BOTH needs-attention and running (e.g. a plan
-  // build with a failed review — its phase now derives to "running"). Such a
-  // build belongs in the "Needs you" bucket only; deriving working/waiting over
-  // the non-attention entries keeps it from being double-counted as "Working"
-  // (blockedCount below already applies the same !needsAttention guard).
-  const counts = deriveFleetCounts(
-    focusEntries.filter((e) => !e.needsAttention).map((e) => e.queueState),
-  );
-  const parkedItemCount = parkedEntries.length + parkedEpicRollups.length;
   const needsYouCount =
-    focusEntries.filter((entry) => entry.needsAttention).length
+    (operatorGroups.find((group) => group.key === "needs-you")?.builds.length ?? 0)
     + focusEpicRollups.filter((rollup) => rollup.status === "needs-attention").length;
-  const blockedCount =
-    focusEntries.filter((entry) => !entry.needsAttention && entry.queueState.kind === "blocked").length
-    + focusEpicRollups.filter((rollup) => rollup.status === "blocked").length;
-  const workingEpicCount = focusEpicRollups.filter((rollup) =>
-    rollup.status === "in-progress"
-    && rollup.children.some((child) => child.phase === "build" || child.phase === "review"),
-  ).length;
-  // Coworker-custody work (ideate/plan) is off the operator focus rail by design,
-  // so it never shows in "Working". Surface it as a distinct "Coworker" count so
-  // the header reflects that the coworker is active, not that nothing is happening.
-  const coworkerCount = deriveCoworkerActivityCount(buildRows);
-  const focusHeaderLabel = formatOperatorFocusHeader({
-    needsYouCount,
-    workingCount: counts.runningCount + workingEpicCount,
-    blockedCount,
-    queuedCount: counts.queuedCount,
-    coworkerCount,
-    parkedCount: parkedItemCount,
-  });
+  const activeCount =
+    (operatorGroups.find((group) => group.key === "in-progress")?.builds.length ?? 0)
+    + needsYouCount
+    + epicRollups.filter((rollup) => rollup.status !== "complete").length;
   const totalFocusItemCount = focusEpicRollups.length + focusEntries.length;
   const shouldCollapseFocus = totalFocusItemCount > MAX_OPERATOR_FLEET_ITEMS && !showAllFocus;
 
@@ -1689,14 +1618,21 @@ function FleetRailZone({
         onClick={onOpenQueueDrawer}
         role="status"
         aria-live="polite"
-        aria-label={`Open build details drawer - queue section. ${focusHeaderLabel}`}
+        aria-label="Open technical build queue details"
         data-testid="build-studio-fleet-header"
         className="flex w-full shrink-0 cursor-pointer items-center justify-between border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1.5 text-left text-[11px] font-semibold text-[var(--dpf-text)] transition-colors hover:bg-[var(--dpf-surface-3)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
       >
-        <span data-testid="fleet-header-label" className="inline-flex min-w-0 items-center gap-1">
-          <span className="truncate">
-            {focusHeaderLabel}
-          </span>
+        <span data-testid="fleet-header-label" className="inline-flex min-w-0 items-center gap-2">
+          <span>Builds</span>
+          {needsYouCount > 0 ? (
+            <span className="rounded-full bg-[var(--dpf-state-warning)] px-1.5 py-0.5 text-[10px] text-[var(--dpf-warning)]">
+              {needsYouCount} need{needsYouCount === 1 ? "s" : ""} you
+            </span>
+          ) : activeCount > 0 ? (
+            <span className="text-[10px] font-normal text-[var(--dpf-muted)]">
+              {activeCount} active
+            </span>
+          ) : null}
         </span>
         <span aria-hidden="true" className="text-[var(--dpf-muted)]">›</span>
       </button>
@@ -1731,18 +1667,7 @@ function FleetRailZone({
         ))}
         {visibleFocusEpicRollups.length === 0 && visibleFocusEntries.length === 0 && (
           <li className="px-3 py-6 text-center text-[11px] text-[var(--dpf-muted)]">
-            Nothing needs you right now. AI Coworker is watching the build queue.
-          </li>
-        )}
-        {parkedItemCount > 0 && (
-          <li>
-            <button
-              type="button"
-              onClick={onOpenQueueDrawer}
-              className="mt-1 w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-left text-[11px] leading-snug text-[var(--dpf-muted)] transition-colors hover:bg-[var(--dpf-surface-3)] hover:text-[var(--dpf-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
-            >
-              AI Coworker is watching {parkedItemCount} parked build{parkedItemCount === 1 ? "" : "s"}. Open details for the full queue.
-            </button>
+            Nothing needs you right now.
           </li>
         )}
         {totalFocusItemCount > MAX_OPERATOR_FLEET_ITEMS && (

@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { BuildStudio } from "@/components/build/BuildStudio";
+import { BuildStudio } from "./BuildStudio";
 import {
   normalizeHappyPathState,
   type FeatureBuildRow,
@@ -225,9 +225,7 @@ describe("BuildStudio active-build header layout", () => {
     vi.clearAllMocks();
   });
 
-  it("intake CTA is labelled 'Start a new build' not just 'New' (BI-950FE085)", () => {
-    // Regression guard: Dale had no idea what "New" created. The CTA must
-    // name the action + artifact so it's discoverable without training.
+  it("names the intake around the operator's outcome", () => {
     const html = renderToStaticMarkup(
       <BuildStudio
         builds={[]}
@@ -237,7 +235,8 @@ describe("BuildStudio active-build header layout", () => {
         submissionBranchShortId="fb8783b9"
       />,
     );
-    expect(html).toContain("Start a new build");
+    expect(html).toContain("Start a new outcome");
+    expect(html).toContain("What outcome do you want?");
     expect(html).not.toContain(">New<");
   });
 
@@ -262,13 +261,10 @@ describe("BuildStudio active-build header layout", () => {
       />,
     );
 
-    fireEvent.change(screen.getByPlaceholderText(/Describe a new feature/i), {
+    fireEvent.change(screen.getByPlaceholderText(/Describe what should be different/i), {
       target: { value: "Improve customer onboarding" },
     });
-    fireEvent.change(screen.getByLabelText("Portfolio"), {
-      target: { value: "portfolio-foundational" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "File backlog item" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     await waitFor(() => {
       expect(backlogBuildMocks.createBuildStudioBacklogIntake).toHaveBeenCalledWith({
@@ -276,8 +272,9 @@ describe("BuildStudio active-build header layout", () => {
         portfolioId: "portfolio-foundational",
       });
     });
-    expect(await screen.findByText("BI-NEW1234")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Promote to Feature Build" })).toBeTruthy();
+    expect(await screen.findByText("Improve customer onboarding")).toBeTruthy();
+    expect(screen.queryByText("BI-NEW1234")).toBeNull();
+    expect(screen.getByRole("button", { name: "Start governed build" })).toBeTruthy();
     expect(backlogBuildMocks.startBacklogBuild).not.toHaveBeenCalled();
   });
 
@@ -292,7 +289,7 @@ describe("BuildStudio active-build header layout", () => {
       />,
     );
 
-    expect(html).toContain("Product Development Studio");
+    expect(html).toContain("What should be different?");
     expect(html).toContain("No builds yet");
   });
 
@@ -315,7 +312,7 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).not.toContain("Low-stock surfacing");
   });
 
-  it("keeps the active-build title and metadata lane shrinkable for long submission branches", () => {
+  it("keeps the active outcome in a bounded readable lane", () => {
     const html = renderToStaticMarkup(
       <BuildStudio
         builds={[makeBuild()]}
@@ -326,8 +323,9 @@ describe("BuildStudio active-build header layout", () => {
       />,
     );
 
-    expect(html).toMatch(/<div class=\"min-w-0 flex-1\">/);
-    expect(html).toMatch(/class=\"mt-1 flex flex-wrap items-center gap-2 text-xs text-\[var\(--dpf-muted\)\]\"/);
+    expect(html).toContain('data-testid="build-studio-operator-outcome"');
+    expect(html).toContain("max-w-4xl");
+    expect(html).not.toMatch(/dpf\/fb8783b9\//);
   });
 
   it("opens the build requested by the buildId deep link", () => {
@@ -346,7 +344,7 @@ describe("BuildStudio active-build header layout", () => {
     );
 
     expect(html).toContain("Backlog launched build");
-    expect(html).not.toContain("First build</h2>");
+    expect(html).not.toContain(">First build</h2>");
   });
 
   it("URL-backs the selected default build when /build has no buildId", async () => {
@@ -379,16 +377,12 @@ describe("BuildStudio active-build header layout", () => {
       />,
     );
 
-    expect(html).toContain(`title="${longTitle}"`);
-    expect(html).toMatch(/class=\"m-0 max-h-\[3rem\] min-w-0 overflow-hidden break-words text-base font-bold leading-6 text-\[var\(--dpf-text\)\] line-clamp-2\"/);
+    expect(html).toContain(longTitle);
+    expect(html).toContain("text-balance");
+    expect(html).toContain("max-w-4xl");
   });
 
-  it("hides submission branch badge by default (BI-63EAD801); Details toggle is rendered instead", () => {
-    // BI-63EAD801: git branch names are internal plumbing — hidden by default.
-    // The branch chip is only visible when the operator expands Details.
-    // This replaces the old "truncating wrapper" assertion which tested that
-    // the chip rendered at all; the chip now only renders after Details is
-    // expanded, which requires an interactive test (see the BI-63EAD801 suite).
+  it("hides submission branch plumbing behind Technical details", () => {
     const html = renderToStaticMarkup(
       <BuildStudio
         builds={[makeBuild()]}
@@ -399,19 +393,12 @@ describe("BuildStudio active-build header layout", () => {
       />,
     );
 
-    // Details toggle button is present
     expect(html).toContain("aria-expanded=\"false\"");
-    expect(html).toContain(">Details<");
-    // Branch chip is NOT in the static HTML (hidden by default)
+    expect(html).toContain(">Technical details<");
     expect(html).not.toMatch(/dpf\/fb8783b9\//);
   });
 
-  it("defaults to the plain overseer bands; the engineer graph is behind the Engineer view toggle (BI-90670010)", () => {
-    // Overseer altitude flip: the plain "Solution & Oversight" bands are the
-    // default first-viewport; the global tab selector is gone (spec §1/§9 #11);
-    // and the engineer-grade ProcessGraph + assurance cards demote behind a
-    // single "Engineer view" toggle (default off). The DetailsDrawer accordion
-    // stays mounted as the bands' dive-in.
+  it("does not mount engineering or evidence surfaces before Technical details opens", () => {
     const html = renderToStaticMarkup(
       <BuildStudio
         builds={[makeBuild()]}
@@ -422,24 +409,14 @@ describe("BuildStudio active-build header layout", () => {
       />,
     );
 
-    // No global tab list / tab buttons.
     expect(html).not.toMatch(/role="tablist"[^>]*aria-label="Workflow view tabs"/);
-    expect(html).not.toMatch(/<button[^>]*role="tab"[^>]*>Progress<\/button>/);
-    expect(html).not.toMatch(/<button[^>]*role="tab"[^>]*>Workflow<\/button>/);
-    expect(html).not.toMatch(/<button[^>]*role="tab"[^>]*>Details<\/button>/);
-
-    // The graph-panel container + the Engineer view toggle are mounted, but the
-    // engineer-grade ProcessGraph + assurance cards are NOT rendered by default
-    // (they appear only after toggling Engineer view on).
-    expect(html).toContain('data-testid="build-studio-graph-panel"');
     expect(html).toContain('data-testid="build-studio-engineer-view-toggle"');
+    expect(html).not.toContain('data-testid="build-studio-technical-details"');
+    expect(html).not.toContain('data-testid="build-studio-graph-panel"');
     expect(html).not.toContain('data-testid="code-intelligence-status-card"');
     expect(html).not.toContain('data-testid="process-graph"');
-
-    // DetailsDrawer + Pill are mounted; drawer starts closed.
-    expect(html).toContain('data-testid="build-studio-details-drawer-pill"');
-    expect(html).toContain('data-testid="build-studio-details-drawer"');
-    expect(html).toMatch(/data-testid="build-studio-details-drawer"[^>]*data-open="false"/);
+    expect(html).not.toContain('data-testid="build-studio-details-drawer-pill"');
+    expect(html).not.toContain('data-testid="build-studio-details-drawer"');
   });
 
   it("presents one outcome, one status, one next action, and one activity story before technical details", () => {
@@ -537,7 +514,7 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).not.toContain(">Review with coworker<");
   });
 
-  it("presents backlog context as a short work request, not an internal canonical record", () => {
+  it("presents the requested outcome without canonical-record terminology", () => {
     const html = renderToStaticMarkup(
       <BuildStudio
         builds={[makeBuild()]}
@@ -548,8 +525,8 @@ describe("BuildStudio active-build header layout", () => {
       />,
     );
 
-    expect(html).toContain("Work request");
-    expect(html).toContain("Why it matters:");
+    expect(html).toContain(">Outcome<");
+    expect(html).toContain("A real keeper bugfix for the governed Build Studio flow.");
     expect(html).not.toContain("Canonical backlog item");
     expect(html).not.toContain("Triage:");
     expect(html).not.toContain("Decision:");
@@ -607,14 +584,17 @@ describe("BuildStudio active-build header layout", () => {
       />,
     );
 
-    expect(html).toContain("Needs you: 1 · Working: 2 · Coworker: 6 · Parked: 5");
+    expect(html).toContain(">Builds<");
+    expect(html).toContain("1 needs you");
+    expect(html).not.toContain("Coworker:");
+    expect(html).not.toContain("Parked:");
     expect(html).not.toContain("WIP slots");
     expect(html).toContain("Review customer entry gate");
     expect(html).toContain("Ship provider readiness check");
     expect(html).toContain("Choose recovery path for failed review");
     expect(html).not.toContain("Parked research build 1");
     expect(html).not.toContain("Parked research build 5");
-    expect(html).toContain("AI Coworker is watching 5 parked builds");
+    expect(html).not.toContain("AI Coworker is watching 5 parked builds");
     expect(html).not.toContain("Show 5 more builds");
   });
 
@@ -783,12 +763,12 @@ describe("BuildStudio active-build header layout", () => {
   });
 });
 
-describe("BuildStudio header — hide internal IDs by default (BI-63EAD801)", () => {
+describe("BuildStudio progressive technical disclosure", () => {
   beforeEach(() => {
     localStorage.clear();
   });
 
-  it("AC1: default view shows feature title but hides the build ID chip", () => {
+  it("shows the outcome while hiding technical identifiers by default", () => {
     const { getAllByText, queryByTestId, getByRole } = render(
       <BuildStudio
         builds={[makeBuild({ buildId: "FB-DALE01" })]}
@@ -800,18 +780,15 @@ describe("BuildStudio header — hide internal IDs by default (BI-63EAD801)", ()
         submissionBranchShortId="aabbccdd"
       />,
     );
-    // Feature title always visible (may appear multiple times — in header + fleet rail)
     const titleElements = getAllByText("Fix Build Studio header/content overlap in workflow view");
     expect(titleElements.length).toBeGreaterThan(0);
-    // Details toggle shown, details panel hidden by default
-    const btn = getByRole("button", { name: /Details/ });
+    const btn = getByRole("button", { name: "Technical details" });
     expect(btn.getAttribute("aria-expanded")).toBe("false");
-    // Build ID hidden by default
     expect(queryByTestId("build-studio-build-id")).toBeNull();
     expect(queryByTestId("build-studio-header-details")).toBeNull();
   });
 
-  it("clicking Details keeps internal IDs hidden in operator mode", async () => {
+  it("reveals IDs, branch, and evidence only after Technical details opens", async () => {
     const { getByRole, findByTestId, queryByTestId } = render(
       <BuildStudio
         builds={[makeBuild({ buildId: "FB-DALE02" })]}
@@ -823,21 +800,20 @@ describe("BuildStudio header — hide internal IDs by default (BI-63EAD801)", ()
         submissionBranchShortId="aabbccdd"
       />,
     );
-    const detailsBtn = getByRole("button", { name: /Details/ });
+    const detailsBtn = getByRole("button", { name: "Technical details" });
     expect(detailsBtn.getAttribute("aria-expanded")).toBe("false");
 
     detailsBtn.click();
 
     const details = await findByTestId("build-studio-header-details");
     expect(details).toBeDefined();
-    expect(details.textContent).toContain("AI Coworker is handling");
-    expect(details.textContent).not.toContain("FB-DALE02");
-    expect(details.textContent).not.toContain("BI-5B839D74");
-    expect(details.textContent).not.toContain("dpf/");
-    expect(queryByTestId("build-studio-build-id")).toBeNull();
+    expect(details.textContent).toContain("FB-DALE02");
+    expect(details.textContent).toContain("BI-5B839D74");
+    expect(details.textContent).toContain("dpf/aabbccdd/");
+    expect(queryByTestId("build-studio-build-id")).not.toBeNull();
   });
 
-  it("clicking Details again collapses the panel", async () => {
+  it("collapses the complete technical region with the same control", async () => {
     const { getByRole, queryByTestId } = render(
       <BuildStudio
         builds={[makeBuild({ buildId: "FB-DALE03" })]}
@@ -849,14 +825,15 @@ describe("BuildStudio header — hide internal IDs by default (BI-63EAD801)", ()
         submissionBranchShortId="aabbccdd"
       />,
     );
-    const btn = getByRole("button", { name: /Details/ });
+    const btn = getByRole("button", { name: "Technical details" });
     btn.click();
-    await waitFor(() => expect(queryByTestId("build-studio-header-details")).not.toBeNull());
-    btn.click();
-    await waitFor(() => expect(queryByTestId("build-studio-header-details")).toBeNull());
+    await waitFor(() => expect(queryByTestId("build-studio-technical-details")).not.toBeNull());
+    const closeButton = getByRole("button", { name: "Hide technical details" });
+    closeButton.click();
+    await waitFor(() => expect(queryByTestId("build-studio-technical-details")).toBeNull());
   });
 
-  it("persists expanded state to localStorage", async () => {
+  it("persists the technical user's disclosure preference", async () => {
     const { getByRole } = render(
       <BuildStudio
         builds={[makeBuild()]}
@@ -868,14 +845,14 @@ describe("BuildStudio header — hide internal IDs by default (BI-63EAD801)", ()
         submissionBranchShortId="aabbccdd"
       />,
     );
-    getByRole("button", { name: /Details/ }).click();
+    getByRole("button", { name: "Technical details" }).click();
     await waitFor(() =>
-      expect(localStorage.getItem("dpf:build-studio-header-details-expanded")).toBe("true"),
+      expect(localStorage.getItem("dpf:build-studio-engineer-view")).toBe("true"),
     );
   });
 
-  it("restores expanded state from localStorage on mount", async () => {
-    localStorage.setItem("dpf:build-studio-header-details-expanded", "true");
+  it("restores Technical details when a technical user opted in previously", async () => {
+    localStorage.setItem("dpf:build-studio-engineer-view", "true");
     const { findByTestId } = render(
       <BuildStudio
         builds={[makeBuild({ buildId: "FB-RESTORED" })]}
@@ -888,32 +865,11 @@ describe("BuildStudio header — hide internal IDs by default (BI-63EAD801)", ()
       />,
     );
     const details = await findByTestId("build-studio-header-details");
-    expect(details.textContent).toContain("AI Coworker is handling");
-    expect(details.textContent).not.toContain("FB-RESTORED");
+    expect(details.textContent).toContain("FB-RESTORED");
   });
 
-  it("reveals IDs and branch only when Engineer view is enabled", async () => {
+  it("keeps WorkWarrant governance in Technical details", () => {
     localStorage.setItem("dpf:build-studio-engineer-view", "true");
-    const { getByRole, findByTestId } = render(
-      <BuildStudio
-        builds={[makeBuild({ buildId: "FB-ENGINEER" })]}
-        epicRollups={[]}
-        portfolios={[]}
-        governedBacklogEnabled
-        portalContext={makePortalContextEnvelope()}
-        projectBranch="main"
-        submissionBranchShortId="aabbccdd"
-      />,
-    );
-
-    getByRole("button", { name: /Details/ }).click();
-    const details = await findByTestId("build-studio-header-details");
-    expect(details.textContent).toContain("FB-ENGINEER");
-    expect(details.textContent).toContain("BI-5B839D74");
-    expect(details.textContent).toContain("dpf/aabbccdd/");
-  });
-
-  it("surfaces the active build WorkWarrant in plain language", () => {
     const html = renderToStaticMarkup(
       <BuildStudio
         builds={[
