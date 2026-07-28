@@ -32,7 +32,7 @@ export function WorkControlPanel({
       </div>
 
       {/* BI-E167A8A6: state what this surface is and how it relates to the other
-          Build Studio intake ("Start a new build"). Work Control is the governed
+          Build Studio intake ("Start a new outcome"). Work Control is the governed
           engineering substrate; describing a feature in plain English lives in
           Build Studio. Making the relationship explicit is the fix for the
           dual-intake IA confusion. */}
@@ -46,7 +46,7 @@ export function WorkControlPanel({
           href="/build"
           className="font-medium text-[var(--dpf-accent)] hover:underline"
         >
-          Start a new build
+          Start a new outcome
         </Link>{" "}
         in Build Studio.
       </p>
@@ -80,7 +80,7 @@ export function WorkControlPanel({
             href="/build"
             className="font-medium text-[var(--dpf-accent)] hover:underline"
           >
-            Start a new build
+            Start a new outcome
           </Link>{" "}
           in Build Studio — your AI Coworker sets up the capsule and branch for
           you.

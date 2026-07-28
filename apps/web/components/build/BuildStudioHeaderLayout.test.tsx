@@ -291,6 +291,8 @@ describe("BuildStudio active-build header layout", () => {
 
     expect(html).toContain("What should be different?");
     expect(html).toContain("No builds yet");
+    expect(html).toContain("Describe the outcome above");
+    expect(html).not.toContain("Start a new build");
   });
 
   it("renders execution epics as fleet rows even when their child builds are no longer flat rows", () => {
@@ -452,11 +454,11 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).not.toContain('data-testid="process-graph"');
   });
 
-  it("renders the build assurance gate next to code intelligence (engineer view)", () => {
+  it("renders the build assurance gate next to code intelligence (engineer view)", async () => {
     // These engineer-grade surfaces live behind the "Engineer view" toggle after
     // the reframe (BI-90670010); render with it enabled to verify them.
     window.localStorage.setItem("dpf:build-studio-engineer-view", "true");
-    const html = renderToStaticMarkup(
+    const { findByTestId } = render(
       <BuildStudio
         builds={[makeBuild()]}
         portfolios={[]}
@@ -465,11 +467,10 @@ describe("BuildStudio active-build header layout", () => {
         submissionBranchShortId="fb8783b9"
       />,
     );
-    window.localStorage.removeItem("dpf:build-studio-engineer-view");
 
-    expect(html).toContain('data-testid="build-assurance-gate-card"');
-    expect(html).toContain("Assurance Gate");
-    expect(html).toContain("No BOM generated");
+    const assuranceGate = await findByTestId("build-assurance-gate-card");
+    expect(assuranceGate.textContent).toContain("Assurance Gate");
+    expect(assuranceGate.textContent).toContain("No BOM generated");
   });
 
   it("renders the portal context strip when a server envelope is provided", () => {
@@ -868,9 +869,9 @@ describe("BuildStudio progressive technical disclosure", () => {
     expect(details.textContent).toContain("FB-RESTORED");
   });
 
-  it("keeps WorkWarrant governance in Technical details", () => {
+  it("keeps WorkWarrant governance in Technical details", async () => {
     localStorage.setItem("dpf:build-studio-engineer-view", "true");
-    const html = renderToStaticMarkup(
+    const { findByTestId } = render(
       <BuildStudio
         builds={[
           makeBuild({
@@ -908,11 +909,11 @@ describe("BuildStudio progressive technical disclosure", () => {
       />,
     );
 
-    expect(html).toContain('data-testid="build-work-warrant-band"');
-    expect(html).toContain("Architecture-level work");
-    expect(html).toContain("governed review");
-    expect(html).toContain("strong model");
-    expect(html).toContain("ledger evidence");
+    const warrant = await findByTestId("build-work-warrant-band");
+    expect(warrant.textContent).toContain("Architecture-level work");
+    expect(warrant.textContent).toContain("governed review");
+    expect(warrant.textContent).toContain("strong model");
+    expect(warrant.textContent).toContain("ledger evidence");
   });
 });
 

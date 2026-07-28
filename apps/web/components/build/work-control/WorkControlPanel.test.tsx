@@ -79,12 +79,12 @@ describe("WorkControlPanel", () => {
     expect(html).toContain('href="/build"');
   });
 
-  it("states the relationship to the plain-English Start a new build door", () => {
+  it("states the relationship to the plain-English Start a new outcome door", () => {
     const html = renderToStaticMarkup(
       <WorkControlPanel capsules={[]} adoptable={[]} createAction={vi.fn()} canCreateGovernedWork />,
     );
 
-    expect(html).toContain("Start a new build");
+    expect(html).toContain("Start a new outcome");
     expect(html).toContain('href="/build"');
   });
 

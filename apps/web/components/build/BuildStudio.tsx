@@ -84,7 +84,7 @@ type Props = {
   /**
    * BI-E167A8A6: whether the operator holds manage_backlog. Gates door 2 —
    * the "Work Control / Plan governed work" intake — so a non-technical
-   * operator only ever sees the plain-English "Start a new build" door.
+   * operator only ever sees the plain-English "Start a new outcome" door.
    */
   canManageGovernedWork?: boolean;
   dpfEnvironment?: string;
@@ -207,10 +207,10 @@ export function BuildStudio({
   // Operator-first altitude: process mechanics and evidence remain available
   // behind one technical-details boundary. Persist the technical user's choice.
   const BUILD_ENGINEER_VIEW_KEY = "dpf:build-studio-engineer-view";
-  const [engineerView, setEngineerView] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return window.localStorage.getItem(BUILD_ENGINEER_VIEW_KEY) === "true";
-  });
+  // Keep the server and first client render deterministic. Reading viewport or
+  // localStorage during initial render makes a mobile or returning technical
+  // user hydrate different markup from the server response.
+  const [engineerView, setEngineerView] = useState(false);
   const [snoozedCustodianKeys, setSnoozedCustodianKeys] = useState(readCustodianSnoozes);
   const toggleEngineerView = useCallback(() => {
     setEngineerView((prev) => {
@@ -219,11 +219,14 @@ export function BuildStudio({
       return next;
     });
   }, []);
-  const [sidebarOpen, setSidebarOpen] = useState(() =>
-    shouldOpenBuildStudioSidebarByDefault(
-      typeof window === "undefined" ? undefined : window.innerWidth,
-    ),
-  );
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  useEffect(() => {
+    try {
+      setEngineerView(window.localStorage.getItem(BUILD_ENGINEER_VIEW_KEY) === "true");
+    } catch {
+      // Storage can be unavailable in hardened/private browser contexts.
+    }
+  }, []);
   useEffect(() => {
     if (!newPortfolioId && portfolioRows[0]?.id) {
       setNewPortfolioId(portfolioRows[0].id);
@@ -1614,7 +1617,7 @@ function FleetRailZone({
           <div className="text-3xl mb-3 opacity-20">&#128161;</div>
           <p className="text-sm text-[var(--dpf-muted)] mb-2">No builds yet</p>
           <p className="text-xs text-[var(--dpf-muted)] opacity-70">
-            Type a feature name above and click "Start a new build" to start.
+            Describe the outcome above and choose Continue when it is clear.
           </p>
         </div>
       </div>
