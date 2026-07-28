@@ -35,8 +35,10 @@ opening paragraph.
 
 ### Quick paths by responsibility
 
-- **Owner or operator:** start with [Getting Started](getting-started/index.md), then use [Storefront](storefront/index.md), [Customers](customers/index.md), [Operations](operations/index.md), and [Finance](finance/index.md).
-- **Team, product, or architecture lead:** begin in [My Workspace](workspace/index.md), then move to [Product Inventory](products/index.md), [Portfolios](portfolios/index.md), [Enterprise Architecture](architecture/index.md), or the domain guide for the work you own.
+- **Owner or operator:** start with [Getting Started](getting-started/index.md),
+  then use [Business Operations](workspace/index.md), [Storefront](storefront/index.md),
+  [Customers](customers/index.md), and [Finance](finance/index.md).
+- **Team, product, or architecture lead:** begin in [Business Operations](workspace/index.md), then move to [Product Inventory](products/index.md), [Portfolios](portfolios/index.md), [Enterprise Architecture](architecture/index.md), or the domain guide for the work you own.
 - **Administrator or AI supervisor:** use [AI Workforce](ai-workforce/index.md), [Platform](platform/index.md), [Security Operations](security/index.md), and [Admin](admin/index.md).
 - **Builder or contributor:** choose [Build Studio](build-studio/index.md) for the governed intake-to-ship workflow, or [Contributing & Dev Setup](contributing/index.md) when working directly with source control and an external development environment.
 
@@ -54,9 +56,11 @@ Changing DPF's own source code is a separate job with a separate setup. Use [Con
 
 Use these guides when the work begins with a customer need and ends with a delivered product, service, or operating outcome.
 
-- [My Workspace](workspace/index.md) — manage personal work, documents, and activity that crosses business domains.
+- [Business Operations](workspace/index.md) — manage current work, documents,
+  and activity, then use Performance for authorized owner/manager trends.
 - [Customers](customers/index.md) — work with customer accounts, the sales pipeline, and marketing.
-- [Operations](operations/index.md) — manage the delivery backlog, infrastructure discovery, and value-stream operations.
+- [Platform Operations](operations/index.md) — manage the delivery backlog,
+  infrastructure discovery, and value-stream operations.
 - [Storefront](storefront/index.md) — configure the public-facing storefront, catalog, inbox, fulfilment, and operating settings.
 
 ## Run the company

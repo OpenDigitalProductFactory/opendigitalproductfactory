@@ -72,6 +72,15 @@ describe("resolveAgentForRoute", () => {
     expect(result.canAssist).toBe(true);
   });
 
+  it("routes authorized Performance questions to a metric-safe COO context", () => {
+    const result = resolveAgentForRoute("/performance", opsUser);
+
+    expect(result.agentId).toBe("coo");
+    expect(result.canAssist).toBe(true);
+    expect(result.systemPrompt).toContain("historical business performance");
+    expect(result.systemPrompt).toContain("Never invent");
+  });
+
   it("keeps the Software Engineer on /build and routes governed work to the Change Reviewer", () => {
     const build = resolveAgentForRoute("/build", superuser);
     const work = resolveAgentForRoute("/build/work/WC-123", superuser);

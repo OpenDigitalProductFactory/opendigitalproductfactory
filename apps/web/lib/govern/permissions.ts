@@ -5,6 +5,7 @@ import { canAccessEmployeeScope } from "./manager-scope";
 import {
   getShellNavEntries,
   getSectionNavEntries,
+  PORTAL_SHELL_SECTIONS,
   type PortalAudienceMode,
   type PortalShellSectionKey,
 } from "../navigation/portal-navigation-model";
@@ -28,6 +29,7 @@ export type CapabilityKey =
   | "view_customer"
   | "operate_customer"
   | "view_operations"
+  | "view_business_performance"
   | "view_platform"
   | "view_admin"
   | "view_storefront"
@@ -69,6 +71,7 @@ export const PERMISSIONS: Record<CapabilityKey, Permission> = {
   // reversible records (status=draft), never external sends.
   operate_customer:            { roles: ["HR-000", "HR-200"] },
   view_operations:             { roles: ["HR-000", "HR-500"] },
+  view_business_performance:   { roles: ["HR-000", "HR-500"] },
   view_platform:               { roles: ["HR-000", "HR-200", "HR-300"] },
   view_admin:                  { roles: ["HR-000"] },
   view_storefront:             { roles: ["HR-000", "HR-200", "HR-300"] },
@@ -203,39 +206,6 @@ const ALL_TILES: WorkspaceTile[] = [
   { key: "storefront", label: "Storefront", route: "/storefront", capabilityKey: "view_storefront",  accentColor: "var(--dpf-warning)" },
 ];
 
-const SHELL_SECTIONS: Array<Pick<ShellNavSection, "key" | "label" | "description">> = [
-  {
-    key: "workspace",
-    label: "Workspace",
-    description: "Your queue, recents, and AI-guided next steps.",
-  },
-  {
-    key: "business",
-    label: "Business",
-    description: "Run customer, people, finance, compliance, and portal operations.",
-  },
-  {
-    key: "products",
-    label: "Products",
-    description: "Guide product lifecycle work from portfolio through delivery.",
-  },
-  {
-    key: "delivery",
-    label: "Delivery",
-    description: "Build, ship, and track delivery work from one operator home.",
-  },
-  {
-    key: "platform",
-    label: "Platform",
-    description: "Direct AI coworkers and operate the platform itself.",
-  },
-  {
-    key: "knowledge",
-    label: "Knowledge",
-    description: "Shared knowledge, reference, and documentation.",
-  },
-];
-
 const SHELL_ITEMS: ShellNavItem[] = getShellNavEntries().map((entry) => ({
   key: entry.key,
   label: entry.label,
@@ -320,7 +290,7 @@ export function getShellNavSections(
     const keys = typeof gate === "string" ? [gate] : gate;
     return keys.some((key) => activeOrgCapabilities.has(key));
   };
-  return SHELL_SECTIONS.map((section) => ({
+  return PORTAL_SHELL_SECTIONS.map((section) => ({
     ...section,
     items: SHELL_ITEMS.filter(
       (item) =>

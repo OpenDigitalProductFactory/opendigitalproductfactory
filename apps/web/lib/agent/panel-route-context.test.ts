@@ -3,7 +3,7 @@ import { resolvePanelRouteContextLabel } from "./panel-route-context";
 
 describe("resolvePanelRouteContextLabel (BI-3238AAF0)", () => {
   it("names top-level business areas from the canonical nav model", () => {
-    expect(resolvePanelRouteContextLabel("/workspace")).toBe("Workspace");
+    expect(resolvePanelRouteContextLabel("/workspace")).toBe("Operations");
     expect(resolvePanelRouteContextLabel("/finance")).toBe("Finance");
     expect(resolvePanelRouteContextLabel("/customer")).toBe("Customer");
   });

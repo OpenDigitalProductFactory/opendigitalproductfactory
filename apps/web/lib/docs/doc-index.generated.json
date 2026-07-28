@@ -9949,6 +9949,7 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "operations-and-performance",
         "key-concepts",
         "what-you-can-do"
       ]

@@ -1,9 +1,9 @@
 {
   "generator": "apps/web/scripts/build-route-shells.ts",
-  "pageRouteCount": 309,
+  "pageRouteCount": 310,
   "migratedCount": 0,
   "summary": {
-    "cockpit": 15,
+    "cockpit": 16,
     "list": 6,
     "detail": 237,
     "settings": 12,
@@ -1839,6 +1839,17 @@
     {
       "routePath": "/ops/self-upgrade",
       "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": true,
+      "confidence": "high"
+    },
+    {
+      "routePath": "/performance",
+      "shell": "cockpit",
       "migrated": false,
       "exemptChecks": [
         "next-action-marker",

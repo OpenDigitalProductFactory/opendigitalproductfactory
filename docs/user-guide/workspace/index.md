@@ -1,12 +1,31 @@
 ---
-title: "My Workspace"
+title: "Business Operations"
 area: workspace
 order: 1
 ---
 
 ## Overview
 
-My Workspace is your personal home base inside the platform. It gives you a cross-cutting view of what's happening across all areas without having to navigate into each one individually. It also hosts managed documents when an operator needs the maintained copy of a guide, note, policy, or imported source.
+**Operations** is the day-to-day business home inside the platform. Its stable
+address remains `/workspace`, so existing bookmarks continue to work. It gives
+you a cross-cutting view of what is happening now without requiring you to open
+every business area. It also hosts managed documents when an operator needs the
+maintained copy of a guide, note, policy, or imported source.
+
+## Operations and Performance
+
+The main rail separates two different decisions:
+
+- **Operations** answers “what is happening now, what conflicts exist, and what
+  should happen next?” It contains current work, queues, and immediate actions.
+- **Performance** answers “how is the business doing over time, and what is
+  driving the result?” It is available only to authorized owners and operations
+  managers. If historical sources are not configured, it says so instead of
+  displaying placeholder zeroes.
+
+Performance is a separate main destination, not a tab inside Operations. Simple
+navigation keeps the day-to-day Operations surface and hides the manager view;
+Full navigation exposes both when the signed-in role is permitted.
 
 ## Key Concepts
 
@@ -18,7 +37,7 @@ My Workspace is your personal home base inside the platform. It gives you a cros
 
 ## What You Can Do
 
-- See a consolidated health snapshot across portfolios, compliance, HR, and operations from one screen
+- See a consolidated current-state snapshot across the business from one screen
 - Click a tile to jump directly into the relevant area
 - Review recent activity from colleagues and digital coworkers without leaving your workspace
 - Access your calendar for today's events and upcoming deadlines

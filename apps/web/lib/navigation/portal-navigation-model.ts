@@ -2,6 +2,15 @@ import type { CapabilityKey } from "@/lib/govern/permissions";
 
 export type PortalAudienceMode = "worker" | "operator" | "customer" | "diagnostic";
 
+import type { PortalShellSectionKey } from "./portal-shell-sections";
+import { BUSINESS_VIEW_ROUTES } from "./business-view-routes";
+
+export {
+  PORTAL_SHELL_SECTIONS,
+  type PortalShellSectionDefinition,
+  type PortalShellSectionKey,
+} from "./portal-shell-sections";
+
 export type PortalDestinationKind =
   | "domain-home"
   | "section-page"
@@ -13,14 +22,13 @@ export type PortalDestinationKind =
 
 export type PortalDomain =
   | "workspace"
+  | "performance"
   | "business"
   | "delivery"
   | "platform"
   | "admin"
   | "knowledge"
   | "customer";
-
-export type PortalShellSectionKey = "workspace" | "business" | "products" | "delivery" | "platform" | "knowledge";
 
 export type PortalNavRecord = {
   key: string;
@@ -84,22 +92,7 @@ function platformAiRoute(
 }
 
 export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
-  {
-    key: "workspace",
-    label: "Workspace",
-    path: "/workspace",
-    parentPath: "/workspace",
-    domain: "workspace",
-    audienceModes: ["worker", "operator"],
-    destinationKind: "domain-home",
-    capabilityKey: null,
-    primaryOrder: 10,
-    shellNav: {
-      sectionKey: "workspace",
-      description: "See what needs attention next.",
-    },
-    sectionSiblings: ["/workspace", "/workspace/inbox", "/workspace/my-queue", "/workspace/documents"],
-  },
+  ...BUSINESS_VIEW_ROUTES,
   {
     // EP-ATTENTION-SURFACE keystone (BI-D39484E7): the "Needs you" attention inbox.
     // A workspace-section SIBLING, not a new rail destination (kernel-ratified
