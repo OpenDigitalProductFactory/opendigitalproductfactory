@@ -17,9 +17,10 @@ DPF keeps two related product concepts separate:
   digital products. Every digital product has a lifecycle stage, operational
   status, portfolio and taxonomy links, and associated backlog.
 
-A business product may later be traced to one or more digital products that
-constitute or augment it. That trace does not turn a salon service, hotel room,
-meal, or retail good into a digital product.
+A business product may later be traced to digital products that constitute or
+augment it, once a real relationship and consuming workflow exist. Setup does
+not invent that trace, and it does not turn a salon service, hotel room, meal,
+or retail good into a digital product.
 
 ## Key Concepts
 

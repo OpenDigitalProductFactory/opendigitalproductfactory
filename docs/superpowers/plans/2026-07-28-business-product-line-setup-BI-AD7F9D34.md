@@ -9,6 +9,7 @@
 **Branch:** `feat/product-line-setup`
 **Worktree:** `D:/DPF-worktrees/product-line-setup`
 **WWMD decision:** `DI-30325B6759C2`
+**WWMD substrate decision:** `DI-67A941CAF7EE`
 **Backlog coverage receipt:** `cms4ou53k0or301runx7ybazo`
 
 ## Goal
@@ -116,6 +117,17 @@ Kernel result `DI-30325B6759C2`: option 1, composite `6.208`, margin `2.397`,
 confidence `high`. Strongest positive contributors were Never Assume — Verify and
 Research and Use Standards. No commandment conflict or weak-coverage flag fired.
 
+Question: what is the minimum canonical business-product substrate for Phase 1?
+
+1. two relational models — organization-owned `ProductLine` and `Product`;
+2. `ProductLine` with products embedded as JSON;
+3. reuse storefront compositions and item templates as business facts.
+
+Kernel result `DI-67A941CAF7EE`: option 1, composite `7.808`, margin `3.867`,
+confidence `high`. The distinct identities and cardinalities justify the measured
+two-model increase. A speculative `ProductDigitalProduct` join was removed:
+Phase 1 has no real endpoint evidence or consuming workflow for that trace.
+
 ## UX-fit review
 
 **UX-Fit-Decision: fits-with-guardrails**
@@ -203,8 +215,8 @@ No general SetupWizard rewrite or later-phase product-area redesign is allowed.
 Use an expand-first additive migration:
 
 - create nullable/additive archetype product-mix metadata;
-- create `ProductLine`, `Product`, and only the minimum compatibility relation
-  required by the approved design;
+- create only `ProductLine` and `Product`; defer any compatibility relation until
+  a later governed phase has real endpoint evidence and a consuming workflow;
 - add indexes and uniqueness constraints that new empty tables cannot violate;
 - add nullable composition linkage if needed for traceability;
 - do not drop, rename, repurpose, or make an existing column non-null;

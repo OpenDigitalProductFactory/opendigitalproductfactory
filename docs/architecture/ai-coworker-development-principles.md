@@ -290,7 +290,8 @@ subscriber, entitlement, or consumer.
 - filter product lines and products by `organizationId` and `effectiveTo: null`;
 - follow `ProductLine.parentId` for rollups while preserving organization scope;
 - use `StorefrontArchetypeComposition.productLineId` only as channel provenance;
-- use `ProductDigitalProduct` only as a trace between distinct authorities;
+- defer any business-product-to-digital-product trace until a later governed
+  phase has real endpoint evidence and a consuming workflow;
 - prefer business Products when generating "what we sell" WWWD context, with
   legacy DigitalProduct/ServiceOffering reads only as a migration fallback.
 

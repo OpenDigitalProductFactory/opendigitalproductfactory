@@ -6,7 +6,7 @@
     "Organization-owned Goods and Services for Sale hierarchy",
     "Storefront archetype composition provenance",
     "WWWD operating-model projection",
-    "DigitalProduct compatibility trace"
+    "DigitalProduct remains unchanged; no speculative compatibility trace is created"
   ],
   "migration": {
     "name": "20260728120000_add_business_product_hierarchy",
@@ -122,22 +122,6 @@
           "provenance": "Canonical hierarchy writer",
           "flags": [],
           "fieldPolicy": "Only setup-owned rows are retired automatically; no customer or consumer identity is stored."
-        }
-      ]
-    },
-    {
-      "kind": "model",
-      "assetId": "data:product-digital-product-trace",
-      "prismaModel": "ProductDigitalProduct",
-      "lifecycleDisposition": "Compatibility trace retained while both the business Product and DigitalProduct exist; cascades with either endpoint.",
-      "fields": [
-        {
-          "fieldId": "data:product-digital-product-trace#productId-digitalProductId",
-          "resolution": "governed",
-          "reason": "Allows a business product to be constituted or augmented by digital architecture without merging the two authorities.",
-          "provenance": "Product Management Operating Loop design architecture boundary",
-          "flags": [],
-          "fieldPolicy": "Unique endpoint pair; Phase 1 introduces the trace substrate but does not fabricate links."
         }
       ]
     },

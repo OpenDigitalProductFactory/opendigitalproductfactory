@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { apiErrorResponse } from "@/lib/api/error";
 import { prisma } from "@dpf/db";
 import { applyBusinessCapabilityPerspective } from "@dpf/db/business-capability-perspectives";
 import { generateDesignSystem } from "@/lib/design-intelligence";
@@ -31,7 +32,7 @@ import {
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user || (session.user as { type?: string }).type !== "admin") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return apiErrorResponse("UNAUTHORIZED", "Unauthorized", 401);
   }
 
   const {
@@ -53,22 +54,23 @@ export async function POST(req: NextRequest) {
   };
 
   if (!orgSlug) {
-    return NextResponse.json({ error: "orgSlug is required" }, { status: 400 });
+    return apiErrorResponse("INVALID_ARGUMENT", "orgSlug is required", 400);
   }
 
   const org = await prisma.organization.findFirst({ select: { id: true, name: true, slug: true } });
   if (!org) {
-    return NextResponse.json(
-      { error: "Organization not found. Complete account setup first." },
-      { status: 400 }
+    return apiErrorResponse(
+      "ORGANIZATION_NOT_FOUND",
+      "Organization not found. Complete account setup first.",
+      400,
     );
   }
 
   const existing = await prisma.storefrontConfig.findUnique({ where: { organizationId: org.id } });
-  if (existing) return NextResponse.json({ error: "Storefront already exists" }, { status: 409 });
+  if (existing) return apiErrorResponse("ALREADY_EXISTS", "Storefront already exists", 409);
 
   const archetype = await prisma.storefrontArchetype.findUnique({ where: { archetypeId } });
-  if (!archetype) return NextResponse.json({ error: "Archetype not found" }, { status: 400 });
+  if (!archetype) return apiErrorResponse("ARCHETYPE_NOT_FOUND", "Archetype not found", 400);
 
   const orgSettingsRow = await prisma.orgSettings.findFirst({ select: { baseCurrency: true } });
   const seedCurrency = orgSettingsRow?.baseCurrency ?? "USD";
@@ -91,9 +93,10 @@ export async function POST(req: NextRequest) {
         }],
     });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Invalid product lines" },
-      { status: 400 },
+    return apiErrorResponse(
+      "INVALID_PRODUCT_LINES",
+      error instanceof Error ? error.message : "Invalid product lines",
+      400,
     );
   }
 
@@ -108,9 +111,10 @@ export async function POST(req: NextRequest) {
     ),
   );
   if (secondaryArchetypeIds.length > 2) {
-    return NextResponse.json(
-      { error: "Setup supports at most two adjacent storefront lines." },
-      { status: 400 },
+    return apiErrorResponse(
+      "TOO_MANY_ADJACENT_LINES",
+      "Setup supports at most two adjacent storefront lines.",
+      400,
     );
   }
   const secondaryArchetypes =
@@ -123,9 +127,10 @@ export async function POST(req: NextRequest) {
           },
         });
   if (secondaryArchetypes.length !== secondaryArchetypeIds.length) {
-    return NextResponse.json(
-      { error: "A selected adjacent product line is no longer available." },
-      { status: 400 },
+    return apiErrorResponse(
+      "ADJACENT_LINE_UNAVAILABLE",
+      "A selected adjacent product line is no longer available.",
+      400,
     );
   }
 

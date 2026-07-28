@@ -136,7 +136,8 @@ export function SetupWizard({
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error((data as { error?: string }).error ?? "Setup failed");
+        const errorBody = data as { error?: string; message?: string };
+        throw new Error(errorBody.message ?? errorBody.error ?? "Setup failed");
       }
       // Move to financial setup step
       setStep(3);

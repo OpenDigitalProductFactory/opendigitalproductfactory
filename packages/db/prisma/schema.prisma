@@ -806,7 +806,6 @@ model DigitalProduct {
   businessCapabilityLinks       BusinessCapabilityTraceLink[]  @relation("BusinessCapabilityProductLinks")
   dependencyEdgesFrom           ProductDependency[]            @relation("ProductDependencyFrom")
   dependencyEdgesTo             ProductDependency[]            @relation("ProductDependencyTo")
-  businessProductLinks          ProductDigitalProduct[]
 }
 
 // Organization-owned business product hierarchy (EP-ED496EB0 Phase 1).
@@ -857,26 +856,11 @@ model Product {
   updatedAt           DateTime                @updatedAt
   organization        Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   productLine         ProductLine             @relation(fields: [productLineId, organizationId], references: [id, organizationId], onDelete: Cascade)
-  digitalProductLinks ProductDigitalProduct[]
 
   @@unique([productLineId, key])
   @@index([organizationId, sortOrder])
   @@index([productLineId, sortOrder])
   @@index([effectiveTo])
-}
-
-// Compatibility trace from a business Product to any DigitalProduct that
-// constitutes or augments it. Neither side becomes the other's authority.
-model ProductDigitalProduct {
-  id               String         @id @default(cuid())
-  productId        String
-  digitalProductId String
-  createdAt        DateTime       @default(now())
-  product          Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
-  digitalProduct   DigitalProduct @relation(fields: [digitalProductId], references: [id], onDelete: Cascade)
-
-  @@unique([productId, digitalProductId])
-  @@index([digitalProductId])
 }
 
 /// Product-to-product dependency graph (BI-PORTPRIO-2) — the rail for the DPPM
