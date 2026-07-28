@@ -63,3 +63,7 @@ EdgeNodeCertificate  domain-lifecycle-managed  # Certificate records follow the 
 ProductLine  domain-lifecycle-managed  # Organization-owned hierarchy changes through explicit business-product lifecycle actions and organization cascade, never an age-based sweep.
 Product      domain-lifecycle-managed  # Organization-owned product definitions change through explicit business-product lifecycle actions and product-line cascade, never an age-based sweep.
 OperationalSceneLayout  domain-lifecycle-managed  # Operator-authored geometry follows the owning organization's explicit layout lifecycle and cascades with the organization; an age-based sweep could delete an active floor plan.
+ProductOffering  domain-lifecycle-managed  # Organization-owned commercial packaging follows explicit offering status/effective-date actions and product cascade, never an age-based sweep.
+CatalogItem  domain-lifecycle-managed  # Canonical ways-to-buy follow explicit catalog status/effective-date actions and offering cascade, never an age-based sweep.
+ProductConfiguration  domain-lifecycle-managed  # Reusable configurations follow explicit publish/retire actions and catalog-item cascade, never an age-based sweep.
+CatalogSku  domain-lifecycle-managed  # Reusable selling identities follow explicit publish/retire actions and catalog-item cascade, never an age-based sweep.
