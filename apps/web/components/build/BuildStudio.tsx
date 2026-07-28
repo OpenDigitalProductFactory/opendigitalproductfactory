@@ -1224,7 +1224,15 @@ function BsQueueSection({ builds }: { builds: readonly FeatureBuildRow[] }) {
     }
     return a.build.buildId.localeCompare(b.build.buildId);
   });
-  const counts = deriveFleetCounts(entries.map((e) => e.queueState));
+  const counts = entries.reduce(
+    (acc, entry) => {
+      if (entry.queueState.kind === "running") acc.runningCount += 1;
+      if (entry.queueState.kind === "blocked") acc.blockedCount += 1;
+      if (entry.queueState.kind === "queued") acc.queuedCount += 1;
+      return acc;
+    },
+    { runningCount: 0, blockedCount: 0, queuedCount: 0 },
+  );
   const labelForQueueState = (entry: (typeof entries)[number]) => {
     if (entry.needsAttention) return "Needs you";
     if (entry.queueState.kind === "running") return "Working";
