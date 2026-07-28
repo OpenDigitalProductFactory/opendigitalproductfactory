@@ -759,7 +759,7 @@ describe("BuildStudio active-build header layout", () => {
     );
 
     expect(html).toContain("release-decision-panel");
-    expect(html).toContain(">Release<");
+    expect(html).toContain("Preparing for release");
   });
 });
 
