@@ -58,6 +58,14 @@ describe("hermetic build replay", () => {
       ...fixture,
       testFiles: ["apps/web/x.test.ts; touch /tmp/owned"],
     })).toBeNull();
+    expect(parseHermeticBuildReplayFixture({
+      ...fixture,
+      targetFile: "apps/web/app/build/page.tsx",
+    })).toBeNull();
+    expect(parseHermeticBuildReplayFixture({
+      ...fixture,
+      targetFile: "apps/web/package.json",
+    })).toBeNull();
   });
 
   it("escalates a high-risk fixture before creating a workspace", async () => {

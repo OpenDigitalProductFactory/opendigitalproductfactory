@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { isRecord } from "@/lib/shared/coerce";
 import type { WorkPatternExecutionProfile } from "@/lib/tak/work-pattern-experiment-types";
+import { DEFAULT_WORK_PATTERN_PROMOTION_POLICY } from "@/lib/tak/work-pattern-promotion-policy";
 
 import {
   buildSandboxWorktreeAddCommand,
@@ -66,7 +67,10 @@ export type HermeticBuildReplayExecution = {
   outputTokens: number;
 };
 
-const SAFE_REPO_PATH = /^(?:apps|packages)\/[a-zA-Z0-9._/-]+\.[a-zA-Z0-9]+$/;
+const SAFE_LIBRARY_TARGET =
+  /^(?:apps\/web\/lib|packages\/[a-zA-Z0-9._-]+\/src)\/[a-zA-Z0-9._/-]+\.ts$/;
+const SAFE_TEST_PATH =
+  /^(?:apps\/web\/lib|packages\/[a-zA-Z0-9._-]+\/src)\/[a-zA-Z0-9._/-]+\.(?:test|spec)\.ts$/;
 const SAFE_TASK_ID = /^[a-zA-Z0-9-]+$/;
 const SAFE_COMMIT = /^[a-fA-F0-9]{7,64}$/;
 
@@ -74,9 +78,9 @@ function nonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
-function safeRepoPath(value: unknown): value is string {
+function safeRepoPath(value: unknown, pattern: RegExp): value is string {
   return nonEmptyString(value)
-    && SAFE_REPO_PATH.test(value)
+    && pattern.test(value)
     && !value.includes("..")
     && !value.includes("//");
 }
@@ -89,11 +93,12 @@ export function parseHermeticBuildReplayFixture(
     || value.schemaVersion !== 1
     || value.kind !== "build-replay-v1"
     || !nonEmptyString(value.objective)
-    || !safeRepoPath(value.targetFile)
+    || !safeRepoPath(value.targetFile, SAFE_LIBRARY_TARGET)
+    || /\.(?:test|spec)\.ts$/.test(value.targetFile)
     || !Array.isArray(value.testFiles)
     || value.testFiles.length === 0
     || value.testFiles.length > 4
-    || value.testFiles.some((path) => !safeRepoPath(path))
+    || value.testFiles.some((path) => !safeRepoPath(path, SAFE_TEST_PATH))
     || !isRecord(value.methodInstructions)
   ) {
     return null;
@@ -170,9 +175,11 @@ export async function executeHermeticBuildReplay(input: {
     throw new Error(`work_pattern_experiment_fixture_unavailable:${input.request.fixtureKey}`);
   }
   if (
-    input.request.executionProfile.activityKey !== "build.implement"
+    !DEFAULT_WORK_PATTERN_PROMOTION_POLICY.supportedActivityKeys.includes(
+      input.request.executionProfile.activityKey,
+    )
     || input.request.executionProfile.environmentKey !== "shadow"
-    || !["read-only", "internal-reversible"].includes(
+    || !DEFAULT_WORK_PATTERN_PROMOTION_POLICY.supportedRiskClasses.includes(
       input.request.executionProfile.riskClass,
     )
   ) {

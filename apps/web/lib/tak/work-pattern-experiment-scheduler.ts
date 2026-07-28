@@ -15,8 +15,10 @@ import {
 import type { WorkPatternExperimentDefinitionIdentity } from "./work-pattern-experiment-identity";
 import { WORK_PATTERN_EXPERIMENT_RISK_CLASSES } from "./work-pattern-experiment-types";
 import { parseWorkPatternExperimentMetadata } from "./work-pattern-experiment-types";
+import { DEFAULT_WORK_PATTERN_PROMOTION_POLICY } from "./work-pattern-promotion-policy";
 
-export const MAX_AUTONOMOUS_WORK_PATTERN_REPLICATES = 8;
+export const MAX_AUTONOMOUS_WORK_PATTERN_REPLICATES =
+  DEFAULT_WORK_PATTERN_PROMOTION_POLICY.minimumValidPairCount;
 
 type ReviewedExperimentCandidate = {
   definition: WorkPatternExperimentDefinitionIdentity;
