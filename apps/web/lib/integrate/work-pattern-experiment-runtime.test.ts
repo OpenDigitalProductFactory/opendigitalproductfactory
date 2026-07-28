@@ -69,6 +69,7 @@ function deps(): PersistedWorkPatternRuntimeDeps {
     markWorking: vi.fn().mockResolvedValue(undefined),
     updateTaskRun: vi.fn().mockResolvedValue(undefined),
     recordEvidence: vi.fn().mockImplementation(async (input) => input),
+    executeBuildReplay: vi.fn(),
   };
 }
 
@@ -156,5 +157,83 @@ describe("executePersistedWorkPatternExperimentCell", () => {
       executePersistedWorkPatternExperimentCell("TR-CELL-1", request(), runtime),
     ).rejects.toThrow("work_pattern_experiment_fixture_unavailable");
     expect(runtime.infer).not.toHaveBeenCalled();
+  });
+
+  it("runs a hermetic code fixture through the build adapter and records a production-build pass", async () => {
+    const runtime = deps();
+    vi.mocked(runtime.loadContext).mockResolvedValueOnce({
+      taskRun: {
+        taskRunId: "TR-CELL-1",
+        currentAgentId: "agent-orchestrator",
+        initiatingAgentId: null,
+        a2aMetadata: { workPatternExperimentCell: { attempt: 1 } },
+      },
+      fixtureParts: {
+        schemaVersion: 1,
+        kind: "build-replay-v1",
+        objective: "Implement the bounded fixture.",
+        targetFile: "apps/web/lib/fixtures/bounded.ts",
+        testFiles: ["apps/web/lib/fixtures/bounded.test.ts"],
+        methodInstructions: {
+          "method-digest": "Use the baseline method.",
+        },
+      },
+    });
+    vi.mocked(runtime.executeBuildReplay).mockResolvedValueOnce({
+      result: {
+        experimentRunId: "WPR-1",
+        childTaskRunId: "TR-CELL-1",
+        cellKey: "baseline:model-a",
+        pairKey: "pair",
+        methodVariantKey: "baseline",
+        modelVariantKey: "model-a",
+        fixtureKey: "fixture-1",
+        oracleKey: "oracle",
+        oracleVersion: "1",
+        resourcePolicyKey: "bounded",
+        executionProfile: request().executionProfile,
+        workspaceId: "TR-CELL-1:abc123",
+        actualProviderId: "fallback-provider",
+        actualModelId: "fallback-model",
+        success: true,
+        filesChanged: ["apps/web/lib/fixtures/bounded.ts"],
+        toolCalls: 2,
+        toolFailures: 0,
+        buildGate: {
+          unitTests: "pass",
+          productionBuild: "pass",
+          uxVerification: "not-applicable",
+          migration: "not-applicable",
+        },
+      },
+      outputDigest: "a".repeat(64),
+      inputTokens: 25,
+      outputTokens: 10,
+    });
+
+    const result = await executePersistedWorkPatternExperimentCell(
+      "TR-CELL-1",
+      request(),
+      runtime,
+    );
+
+    expect(runtime.executeBuildReplay).toHaveBeenCalledWith({
+      request: request(),
+      fixtureParts: expect.objectContaining({ kind: "build-replay-v1" }),
+      agentId: "agent-orchestrator",
+    });
+    expect(runtime.infer).not.toHaveBeenCalled();
+    expect(result.buildGate.productionBuild).toBe("pass");
+    expect(runtime.updateTaskRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "completed",
+        a2aMetadata: expect.objectContaining({
+          workPatternExperimentResult: expect.objectContaining({
+            outputDigest: "a".repeat(64),
+            buildGate: expect.objectContaining({ productionBuild: "pass" }),
+          }),
+        }),
+      }),
+    );
   });
 });

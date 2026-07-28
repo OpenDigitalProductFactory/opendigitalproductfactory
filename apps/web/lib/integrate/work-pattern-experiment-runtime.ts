@@ -9,6 +9,7 @@ import {
 import {
   executeWorkPatternExperimentCell,
   type WorkPatternExperimentCellRequest,
+  type WorkPatternExperimentCellResult,
 } from "./work-pattern-experiment-adapter";
 
 type ReplayMessage = {
@@ -77,6 +78,16 @@ export type PersistedWorkPatternRuntimeDeps = {
     outcome?: unknown;
     metadata?: Record<string, unknown>;
   }) => Promise<Record<string, unknown>>;
+  executeBuildReplay: (input: {
+    request: WorkPatternExperimentCellRequest;
+    fixtureParts: unknown;
+    agentId: string;
+  }) => Promise<{
+    result: WorkPatternExperimentCellResult;
+    outputDigest: string;
+    inputTokens: number;
+    outputTokens: number;
+  }>;
 };
 
 function nonEmptyString(value: unknown): value is string {
@@ -251,13 +262,19 @@ async function defaultDeps(): Promise<PersistedWorkPatternRuntimeDeps> {
     },
     recordEvidence: (input) =>
       recordWorkPatternExperimentEvidence(input, { persistence }),
+    executeBuildReplay: async (input) => {
+      const { executeHermeticBuildReplay } = await import(
+        "./work-pattern-build-replay"
+      );
+      return executeHermeticBuildReplay(input);
+    },
   };
 }
 
 /**
- * Executes the first evidence-cleared autonomous lane: immutable inference
- * replay fixtures. Mutable code workspaces and live/customer side effects are
- * outside this executor and therefore fail closed at fixture parsing.
+ * Executes immutable inference fixtures or bounded build fixtures. Build
+ * fixtures run in detached sandbox worktrees and expose no delivery/live-state
+ * operations; every other fixture kind fails closed.
  */
 export async function executePersistedWorkPatternExperimentCell(
   taskRunId: string,
@@ -274,15 +291,21 @@ export async function executePersistedWorkPatternExperimentCell(
 
   const deps = injected ?? await defaultDeps();
   const context = await deps.loadContext(taskRunId, request.fixtureKey);
-  const fixture = context ? parseFixture(context.fixtureParts) : null;
-  if (!context || !fixture) {
+  if (!context) {
+    throw new Error(`work_pattern_experiment_fixture_unavailable:${request.fixtureKey}`);
+  }
+  const inferenceFixture = parseFixture(context.fixtureParts);
+  const buildFixture =
+    isRecord(context.fixtureParts)
+    && context.fixtureParts.kind === "build-replay-v1";
+  if (!inferenceFixture && !buildFixture) {
     throw new Error(`work_pattern_experiment_fixture_unavailable:${request.fixtureKey}`);
   }
   const agentId = context.taskRun.currentAgentId ?? context.taskRun.initiatingAgentId;
   if (!agentId) throw new Error(`work_pattern_experiment_orchestrator_unavailable:${taskRunId}`);
-  const instruction =
-    fixture.methodInstructions[request.executionProfile.promptOrSkillDigest];
-  if (!instruction) {
+  const instruction = inferenceFixture
+    ?.methodInstructions[request.executionProfile.promptOrSkillDigest];
+  if (inferenceFixture && !instruction) {
     throw new Error(
       `work_pattern_experiment_method_unavailable:${request.executionProfile.promptOrSkillDigest}`,
     );
@@ -306,48 +329,64 @@ export async function executePersistedWorkPatternExperimentCell(
     proposedDecision: request,
   });
 
-  let inferenceContent = "";
+  let outputDigest = "";
   let inputTokens = 0;
   let outputTokens = 0;
   const startedAtMs = Date.now();
-  const result = await executeWorkPatternExperimentCell(request, {
-    prepareWorkspace: async () => ({
-      workspaceId: `${request.childTaskRunId}:${request.executionProfile.sourceCommitSha}`,
-      workdir: `artifact://${request.fixtureKey}`,
-    }),
-    dispatch: async () => {
-      const inference = await deps.infer({
-        messages: fixture.messages,
-        systemPrompt: `${fixture.systemPrompt}\n\n${instruction}`,
-        profile: request.executionProfile,
-        agentId,
-      });
-      inferenceContent = inference.content;
-      inputTokens = inference.inputTokens;
-      outputTokens = inference.outputTokens;
-      return {
-        success: true,
-        providerId: inference.providerId,
-        modelId: inference.modelId,
-        filesChanged: [],
-        toolCalls: 1,
-        toolFailures: 0,
-      };
-    },
-    verify: async () => ({
-      unitTests: oraclePasses(fixture, inferenceContent) ? "pass" : "fail",
-      productionBuild: "not-run",
-      uxVerification: "not-applicable",
-      migration: "not-applicable",
-    }),
-  });
+  let result: WorkPatternExperimentCellResult;
+  if (buildFixture) {
+    const build = await deps.executeBuildReplay({
+      request,
+      fixtureParts: context.fixtureParts,
+      agentId,
+    });
+    result = build.result;
+    outputDigest = build.outputDigest;
+    inputTokens = build.inputTokens;
+    outputTokens = build.outputTokens;
+  } else {
+    const fixture = inferenceFixture!;
+    let inferenceContent = "";
+    result = await executeWorkPatternExperimentCell(request, {
+      prepareWorkspace: async () => ({
+        workspaceId: `${request.childTaskRunId}:${request.executionProfile.sourceCommitSha}`,
+        workdir: `artifact://${request.fixtureKey}`,
+      }),
+      dispatch: async () => {
+        const inference = await deps.infer({
+          messages: fixture.messages,
+          systemPrompt: `${fixture.systemPrompt}\n\n${instruction}`,
+          profile: request.executionProfile,
+          agentId,
+        });
+        inferenceContent = inference.content;
+        inputTokens = inference.inputTokens;
+        outputTokens = inference.outputTokens;
+        return {
+          success: true,
+          providerId: inference.providerId,
+          modelId: inference.modelId,
+          filesChanged: [],
+          toolCalls: 1,
+          toolFailures: 0,
+        };
+      },
+      verify: async () => ({
+        unitTests: oraclePasses(fixture, inferenceContent) ? "pass" : "fail",
+        productionBuild: "not-run",
+        uxVerification: "not-applicable",
+        migration: "not-applicable",
+      }),
+    });
+    outputDigest = digest(inferenceContent);
+  }
 
   const compactResult = {
     success: result.success,
     actualProviderId: result.actualProviderId,
     actualModelId: result.actualModelId,
     workspaceId: result.workspaceId,
-    outputDigest: digest(inferenceContent),
+    outputDigest,
     inputTokens,
     outputTokens,
     buildGate: result.buildGate,

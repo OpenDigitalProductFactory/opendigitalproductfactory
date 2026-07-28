@@ -63,4 +63,39 @@ describe("runWorkPatternExperiment", () => {
       transition.mock.invocationCallOrder.at(-1)!,
     );
   });
+
+  it("completes before scheduling the next bounded replicate", async () => {
+    const order: string[] = [];
+    const transition = vi.fn(async (_taskRunId, lifecycle) => {
+      order.push(lifecycle);
+    });
+    const continueReplicates = vi.fn(async () => {
+      order.push("continue");
+    });
+
+    await runWorkPatternExperiment(
+      { parentTaskRunId: "TR-PARENT" },
+      {
+        loadCells: vi.fn().mockResolvedValue([
+          { taskRunId: "TR-1", status: "completed" },
+        ]),
+        executeCell: vi.fn(),
+        analyze: vi.fn(),
+        promote: vi.fn().mockResolvedValue({
+          decisions: [{
+            decision: "continue",
+            reasons: ["minimum_valid_pairs_not_met"],
+          }],
+        }),
+        transition,
+        continueReplicates,
+      },
+    );
+
+    expect(continueReplicates).toHaveBeenCalledWith(
+      "TR-PARENT",
+      expect.objectContaining({ decisions: expect.any(Array) }),
+    );
+    expect(order).toEqual(["running", "analyzing", "completed", "continue"]);
+  });
 });

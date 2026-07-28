@@ -16,6 +16,10 @@ export type RunWorkPatternExperimentDeps = {
   promote: (
     parentTaskRunId: string,
   ) => Promise<unknown> | unknown;
+  continueReplicates?: (
+    parentTaskRunId: string,
+    promotionResult: unknown,
+  ) => Promise<unknown> | unknown;
   transition: (
     parentTaskRunId: string,
     lifecycle: "running" | "analyzing" | "completed",
@@ -38,8 +42,9 @@ export async function runWorkPatternExperiment(
   }
   await deps.transition(input.parentTaskRunId, "analyzing");
   await deps.analyze(input.parentTaskRunId, await deps.loadCells(input.parentTaskRunId));
-  await deps.promote(input.parentTaskRunId);
+  const promotionResult = await deps.promote(input.parentTaskRunId);
   await deps.transition(input.parentTaskRunId, "completed");
+  await deps.continueReplicates?.(input.parentTaskRunId, promotionResult);
   return { executed };
 }
 
@@ -199,6 +204,15 @@ export const workPatternExperimentRun = inngest.createFunction(
               promoteCompletedWorkPatternExperiment,
             } = await import("@/lib/tak/work-pattern-experiment-promotion");
             return promoteCompletedWorkPatternExperiment(taskRunId);
+          },
+          continueReplicates: async (taskRunId, promotionResult) => {
+            const {
+              scheduleNextWorkPatternExperimentReplicate,
+            } = await import("@/lib/tak/work-pattern-experiment-scheduler");
+            return scheduleNextWorkPatternExperimentReplicate({
+              parentTaskRunId: taskRunId,
+              promotionResult,
+            });
           },
           transition: (taskRunId, lifecycle) =>
             transitionWorkPatternExperiment(taskRunId, lifecycle, { persistence }),
