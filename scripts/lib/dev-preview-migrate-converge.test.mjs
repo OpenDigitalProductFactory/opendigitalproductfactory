@@ -280,8 +280,8 @@ test("preview refresh stops the existing portal before rebuilding its source clo
   const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
   for (const scriptName of ["dev:portal", "contributor:preview"]) {
     const command = packageJson.scripts[scriptName];
-    assert.match(command, /^docker compose stop dev-portal && /);
-    assert.match(command, /docker compose --profile dev up -d dev-portal$/);
+    assert.match(command, /^docker compose -p dpf --profile dev stop dev-portal && /);
+    assert.match(command, /docker compose -p dpf --profile dev up -d dev-portal$/);
   }
 });
 
