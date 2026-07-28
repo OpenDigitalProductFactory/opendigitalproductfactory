@@ -120,6 +120,26 @@ describe("classifyInferencePayload", () => {
     expect(result.receipt.inputHash).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  it("does not mistake instruction vocabulary or ordinary prose for live governed data", () => {
+    const result = classifyInferencePayload({
+      messages: [
+        {
+          role: "user",
+          content:
+            "Certification probe. Use a read-only tool, then let me know what evidence you found.",
+        },
+      ],
+      systemPrompt:
+        "You help an employee understand the platform. " +
+        "Let me know when the review is complete and explain which class is responsible.",
+      taskType: "conversation",
+    });
+
+    expect(result.overallSensitivity).toBe("internal");
+    expect(result.dataClasses).toEqual([]);
+    expect(result.matches).toEqual([]);
+  });
+
   it("hashes tool declarations without treating their schema vocabulary as live data", () => {
     const withSensitiveSchemaNames = classifyInferencePayload({
       messages: [{ role: "user", content: "Check whether the workspace is ready." }],

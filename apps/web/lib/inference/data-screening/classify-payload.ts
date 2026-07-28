@@ -23,6 +23,14 @@ type ClassRule = {
   textPattern?: RegExp;
 };
 
+// Text probes must contain value-shaped evidence, not merely governance or
+// instructional vocabulary that happens to name a protected data class.
+const EMPLOYEE_RECORD_VALUE_PATTERN =
+  /\b(?:salary|compensation|benefits?|performance review|disciplinary|manager-only|payroll)\b/i;
+
+const SOURCE_CODE_VALUE_PATTERN =
+  /(?:\b(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*(?:[:=;,])|\bfunction\s+[A-Za-z_$][\w$]*\s*\(|\bclass\s+[A-Za-z_$][\w$]*(?:\s+extends\s+[A-Za-z_$][\w$]*)?\s*\{|\bimport\s+[\w*{},\s]+\s+from\s+["']|\bexport\s+(?:default\s+)?(?:const|let|var|function|class)\b|=>|```(?:ts|tsx|js|jsx|py|sql|sh|ps1)\b)/;
+
 const CLASS_RULES: readonly ClassRule[] = [
   {
     dataClass: "secrets-credentials",
@@ -60,7 +68,7 @@ const CLASS_RULES: readonly ClassRule[] = [
     dataClass: "employee-records",
     reason: "employee-record-text",
     confidence: "inferred",
-    textPattern: /\b(?:employee|salary|compensation|benefits?|performance review|disciplinary|manager-only|payroll)\b/i,
+    textPattern: EMPLOYEE_RECORD_VALUE_PATTERN,
   },
   {
     dataClass: "payments-finance",
@@ -143,8 +151,7 @@ const CLASS_RULES: readonly ClassRule[] = [
     dataClass: "source-code",
     reason: "source-code-text",
     confidence: "inferred",
-    textPattern:
-      /(?:\b(?:const|let|var|function|class|import|export)\s+[A-Za-z_$][\w$]*|=>|```(?:ts|tsx|js|jsx|py|sql|sh|ps1)?)/,
+    textPattern: SOURCE_CODE_VALUE_PATTERN,
   },
   {
     dataClass: "source-code",
