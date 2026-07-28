@@ -119,8 +119,13 @@ This design keeps one source of truth, follows existing model relationships, and
 
 These are internally sequenced but not independently shippable: a read-model-only change breaks the current panel contract; a panel-only change has no bounded data source; omitting bounded merge search removes valid survivor choices; and shipping without the invariant/evidence would leave the regression unguarded.
 
-**Backlog coverage receipt:** `cms3gjd9p08mz01p5bufyeddd`
-**Decision:** atomic; no separately mapped BI IDs. The dependency graph above is recorded against BI-CC7CA516.
+## Backlog coverage
+
+- Decision: atomic
+- Parent: `BI-CC7CA516`
+- Receipt: `cms3gjd9p08mz01p5bufyeddd`
+- Rationale: The four phases share one server/read-model contract and cannot ship independently without breaking the existing panel contract, removing valid merge choices, or leaving the performance regression unguarded.
+- Dependencies: none
 
 ## Implementation sequence
 
