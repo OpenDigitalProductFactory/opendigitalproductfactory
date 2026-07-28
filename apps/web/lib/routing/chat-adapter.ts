@@ -33,6 +33,7 @@ import { extractToolCalls as extractTextualToolUse } from "./extract-tool-calls"
 import { withLocalInferenceLock } from "@/lib/queue/resource-lane";
 import { buildAnthropicSystem } from "./anthropic-cache";
 import { parseOpenRouterRoutingEvidence } from "./provider-suitability/openrouter-policy";
+import { resolveOpenAiCompatibleApiBase } from "./openai-base";
 
 // ─── Inference HTTP timeouts ──────────────────────────────────────────────────
 // A hung local Docker Model Runner endpoint must fail fast so callWithFallbackChain
@@ -314,7 +315,7 @@ export const chatAdapter: ExecutionAdapterHandler = {
       const selectedBaseUrl = providerId === "openrouter" && plan.openRouterPolicy?.requiredBaseUrl
         ? plan.openRouterPolicy.requiredBaseUrl
         : baseUrl;
-      const apiBase = selectedBaseUrl.endsWith("/v1") ? selectedBaseUrl : `${selectedBaseUrl}/v1`;
+      const apiBase = resolveOpenAiCompatibleApiBase(selectedBaseUrl);
       chatUrl = `${apiBase}/chat/completions`;
 
       const allMessages = [

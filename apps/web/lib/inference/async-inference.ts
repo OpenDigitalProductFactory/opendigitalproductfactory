@@ -22,6 +22,7 @@ import {
   getProviderBearerToken,
 } from "@/lib/ai-provider-internals";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { resolveOpenAiCompatibleApiBase } from "@/lib/routing/openai-base";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -312,7 +313,7 @@ async function pollGeneric(
   operationId: string,
   headers: Record<string, string>,
 ): Promise<PollResult> {
-  const apiBase = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
+  const apiBase = resolveOpenAiCompatibleApiBase(baseUrl);
   const url = `${apiBase}/operations/${operationId}`;
 
   const res = await fetch(url, {

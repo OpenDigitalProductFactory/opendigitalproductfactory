@@ -10,7 +10,11 @@ const credState = vi.hoisted(() => ({
 const discoveredModelMock = vi.hoisted(() => ({
   findMany: vi.fn(),
   update: vi.fn(),
+  updateMany: vi.fn(),
   createMany: vi.fn(),
+}));
+const modelProfileMock = vi.hoisted(() => ({
+  updateMany: vi.fn(async () => ({ count: 0 })),
 }));
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -22,6 +26,7 @@ vi.mock("@dpf/db", () => ({
       }),
     },
     discoveredModel: discoveredModelMock,
+    modelProfile: modelProfileMock,
   },
 }));
 
@@ -32,6 +37,8 @@ import {
   getDecryptedCredential,
   resolveSyncedToolUse,
   upsertDiscoveredModels,
+  reconcileDiscoveredModelPresence,
+  PERMANENT_RETIRE_REASONS,
 } from "./ai-provider-internals";
 
 describe("extractTokenUsage", () => {
@@ -303,5 +310,97 @@ describe("upsertDiscoveredModels (model-discovery N+1 batching — BI-OPT-DB-HOT
     expect(discoveredModelMock.findMany).not.toHaveBeenCalled();
     expect(discoveredModelMock.createMany).not.toHaveBeenCalled();
     expect(discoveredModelMock.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("reconcileDiscoveredModelPresence (retire-forever trap — BI-B6B8C1F9)", () => {
+  beforeEach(() => {
+    discoveredModelMock.findMany.mockReset();
+    discoveredModelMock.update.mockReset();
+    discoveredModelMock.updateMany.mockReset();
+    modelProfileMock.updateMany.mockReset();
+    modelProfileMock.updateMany.mockResolvedValue({ count: 0 });
+  });
+
+  it("reactivates a retired profile when the model is present even with missedDiscoveryCount 0 (the count-gate bug)", async () => {
+    discoveredModelMock.findMany.mockResolvedValue([
+      { id: "dm1", modelId: "glm-5.2", missedDiscoveryCount: 0 },
+    ]);
+
+    await reconcileDiscoveredModelPresence("zai-coding", new Set(["glm-5.2"]));
+
+    expect(modelProfileMock.updateMany).toHaveBeenCalledTimes(1);
+    const args = modelProfileMock.updateMany.mock.calls[0][0];
+    expect(args.where.providerId).toBe("zai-coding");
+    expect(args.where.modelId).toEqual({ in: ["glm-5.2"] });
+    expect(args.where.modelStatus).toBe("retired");
+    expect(args.data).toEqual({ modelStatus: "active", retiredAt: null, retiredReason: null });
+  });
+
+  it("cloud providers keep the permanent-reason blocklist (Google sunset aliases stay dead)", async () => {
+    discoveredModelMock.findMany.mockResolvedValue([
+      { id: "dm1", modelId: "gemini-1.0-pro", missedDiscoveryCount: 0 },
+    ]);
+
+    await reconcileDiscoveredModelPresence("gemini", new Set(["gemini-1.0-pro"]));
+
+    const args = modelProfileMock.updateMany.mock.calls[0][0];
+    expect(args.where.retiredReason).toEqual({ notIn: PERMANENT_RETIRE_REASONS });
+  });
+
+  it("local provider is exempt from the blocklist — a DMR-listed model heals a stale model_not_found (the qwen3-coder outage)", async () => {
+    discoveredModelMock.findMany.mockResolvedValue([
+      { id: "dm1", modelId: "docker.io/ai/qwen3-coder:latest", missedDiscoveryCount: 0 },
+    ]);
+
+    await reconcileDiscoveredModelPresence("local", new Set(["docker.io/ai/qwen3-coder:latest"]));
+
+    expect(modelProfileMock.updateMany).toHaveBeenCalledTimes(1);
+    const args = modelProfileMock.updateMany.mock.calls[0][0];
+    // No retiredReason filter for local: the serving engine's list is ground truth.
+    expect(args.where.retiredReason).toBeUndefined();
+    expect(args.where.modelId).toEqual({ in: ["docker.io/ai/qwen3-coder:latest"] });
+  });
+
+  it("resets missedDiscoveryCount in one batched updateMany for recovered models", async () => {
+    discoveredModelMock.findMany.mockResolvedValue([
+      { id: "dm1", modelId: "m1", missedDiscoveryCount: 1 },
+      { id: "dm2", modelId: "m2", missedDiscoveryCount: 0 },
+    ]);
+
+    await reconcileDiscoveredModelPresence("anthropic-sub", new Set(["m1", "m2"]));
+
+    expect(discoveredModelMock.updateMany).toHaveBeenCalledTimes(1);
+    const args = discoveredModelMock.updateMany.mock.calls[0][0];
+    expect(args.where.id).toEqual({ in: ["dm1"] });
+    expect(args.data).toEqual({ missedDiscoveryCount: 0 });
+  });
+
+  it("cloud: absent model increments the missed counter and retires after 2 misses", async () => {
+    discoveredModelMock.findMany.mockResolvedValue([
+      { id: "dm1", modelId: "gone-model", missedDiscoveryCount: 1 },
+    ]);
+
+    await reconcileDiscoveredModelPresence("anthropic-sub", new Set(["other-model"]));
+
+    expect(discoveredModelMock.update).toHaveBeenCalledWith({
+      where: { id: "dm1" },
+      data: { missedDiscoveryCount: 2 },
+    });
+    const retireCall = modelProfileMock.updateMany.mock.calls.find(
+      (c: Array<{ data?: { modelStatus?: string } }>) => c[0]?.data?.modelStatus === "retired",
+    );
+    expect(retireCall).toBeDefined();
+  });
+
+  it("local: absent model is NOT counted or retired (an engine hiccup must not strand the bundled fallback)", async () => {
+    discoveredModelMock.findMany.mockResolvedValue([
+      { id: "dm1", modelId: "docker.io/ai/qwen3-coder:latest", missedDiscoveryCount: 0 },
+    ]);
+
+    await reconcileDiscoveredModelPresence("local", new Set<string>());
+
+    expect(discoveredModelMock.update).not.toHaveBeenCalled();
+    expect(modelProfileMock.updateMany).not.toHaveBeenCalled();
   });
 });

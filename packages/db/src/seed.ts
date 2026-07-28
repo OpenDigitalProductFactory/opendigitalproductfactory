@@ -1664,6 +1664,18 @@ async function seedLocalModels(): Promise<void> {
     const existing = await prisma.modelProfile.findUnique({
       where: { providerId_modelId: { providerId: "local", modelId: m.id } },
     });
+    if (existing && existing.modelStatus === "retired") {
+      // DMR lists this model right now, so it is loadable — a retired profile
+      // here is a stale tombstone from an outage-time 404 or a dedupe
+      // migration (BI-84792669 deferred exactly this reactivation decision).
+      // Healing at boot keeps the bundled local fallback routable without
+      // waiting for the next discovery cycle (BI-B6B8C1F9).
+      await prisma.modelProfile.update({
+        where: { id: existing.id },
+        data: { modelStatus: "active", retiredAt: null, retiredReason: null },
+      });
+      console.log(`  ↻ Reactivated retired local model profile ${m.id} (currently listed by DMR)`);
+    }
     if (!existing) {
       // Capability-aware bootstrap prior, keyed on model family. These are only
       // priors (profileSource="seed", confidence "low") — the activation-time
