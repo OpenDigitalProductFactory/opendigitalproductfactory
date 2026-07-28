@@ -27,10 +27,10 @@ export type WorkPatternPromotionExperimentCell = {
   taskRunId: string;
   status: string;
   completedAt: Date | null;
-  a2aMetadata: unknown;
   evidenceRows: Array<
     WorkPatternLedgerRow & {
       taskRunId: string | null;
+      proposedDecision: unknown;
       outcome: unknown;
       observedAt: Date;
     }
@@ -78,24 +78,26 @@ const REQUIRED_FACTORIAL_CELLS = [
 ] as const;
 
 function parseCell(cell: WorkPatternPromotionExperimentCell): ParsedCell | null {
-  if (!isRecord(cell.a2aMetadata)) return null;
-  const cellMetadata = isRecord(cell.a2aMetadata.workPatternExperimentCell)
-    ? cell.a2aMetadata.workPatternExperimentCell
-    : null;
-  const effectiveOutcomes = resolveEffectiveWorkPatternLedger(
-    cell.evidenceRows,
-  ).filter((row) =>
+  const effectiveRows = resolveEffectiveWorkPatternLedger(cell.evidenceRows);
+  const assignments = effectiveRows.filter((row) =>
+    row.taskRunId === cell.taskRunId
+    && isRecord(row.metadata)
+    && row.metadata.observationKind === "assignment"
+    && isRecord(row.proposedDecision)
+  );
+  const outcomes = effectiveRows.filter((row) =>
     row.taskRunId === cell.taskRunId
     && isRecord(row.metadata)
     && row.metadata.observationKind === "outcome"
     && isRecord(row.outcome)
   );
-  if (effectiveOutcomes.length !== 1) return null;
-  const effectiveOutcome = effectiveOutcomes[0];
+  if (assignments.length !== 1 || outcomes.length !== 1) return null;
+  const effectiveAssignment = assignments[0];
+  const effectiveOutcome = outcomes[0];
   const result = effectiveOutcome?.outcome;
   if (!isRecord(result)) return null;
   const request = parsePersistedWorkPatternExperimentExecution(
-    cellMetadata?.executionRequest,
+    effectiveAssignment?.proposedDecision,
   );
   const outcome = parseWorkPatternOutcomeEvidence(result?.outcomeEvidence);
   if (
@@ -441,7 +443,6 @@ async function loadPromotionCandidates(
         taskRunId: true,
         status: true,
         completedAt: true,
-        a2aMetadata: true,
       },
       orderBy: { createdAt: "asc" },
     });
@@ -459,6 +460,7 @@ async function loadPromotionCandidates(
           select: {
             ledgerId: true,
             taskRunId: true,
+            proposedDecision: true,
             outcome: true,
             metadata: true,
             observedAt: true,
@@ -477,6 +479,7 @@ async function loadPromotionCandidates(
         ? [{
             ledgerId: evidence.ledgerId,
             taskRunId: evidence.taskRunId,
+            proposedDecision: evidence.proposedDecision,
             outcome: evidence.outcome,
             metadata: evidence.metadata,
             observedAt: evidence.observedAt,
@@ -495,7 +498,6 @@ async function loadPromotionCandidates(
               status: child.status,
               completedAt:
                 child.completedAt instanceof Date ? child.completedAt : null,
-              a2aMetadata: child.a2aMetadata,
               evidenceRows: evidenceRows.filter(
                 (evidence) => evidence.taskRunId === child.taskRunId,
               ),

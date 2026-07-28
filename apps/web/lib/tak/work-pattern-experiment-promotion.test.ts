@@ -52,6 +52,37 @@ function run(
       const candidate = method.methodVariantKey === "candidate";
       const childTaskRunId =
         `${experimentRunId}-${method.methodVariantKey}-${model.modelVariantKey}`;
+      const executionRequest = {
+        experimentRunId,
+        childTaskRunId,
+        cellKey: childTaskRunId,
+        pairKey: `pair-${replicate}`,
+        methodVariantKey: method.methodVariantKey,
+        modelVariantKey: model.modelVariantKey,
+        fixtureKey: `fixture-${replicate}`,
+        oracleKey: manifest.oracleKey,
+        oracleVersion: manifest.oracleVersion,
+        resourcePolicyKey: "bounded-build-v1",
+        executionProfile: {
+          patternKey: manifest.patternKey,
+          patternVersion: method.patternVersion,
+          variantKey: method.methodVariantKey,
+          activityKey: manifest.activityKey,
+          riskClass: manifest.riskClass,
+          providerId: "provider",
+          modelId: model.modelVariantKey,
+          modelProfileId: model.modelProfileId,
+          toolPackDigest: "tools",
+          promptOrSkillDigest: method.methodVariantKey,
+          contextPolicyKey: "bounded",
+          recoveryPolicyKey: "bounded",
+          installScope: manifest.installScope,
+          taskCorpusKey: manifest.taskCorpusKey,
+          taskCorpusVersion: manifest.taskCorpusVersion,
+          environmentKey: "shadow",
+          sourceCommitSha: "source-sha",
+        },
+      };
       const outcome = {
         success: true,
         actualProviderId: "provider",
@@ -100,53 +131,32 @@ function run(
           ? options.candidateStatus ?? "completed"
           : "completed",
         completedAt: new Date(`2026-07-${String(10 + replicate).padStart(2, "0")}T12:00:00.000Z`),
-        a2aMetadata: {
-          workPatternExperimentCell: {
-            executionRequest: {
+        evidenceRows: [
+          {
+            ledgerId: `DSL-${childTaskRunId}-assignment`,
+            taskRunId: childTaskRunId,
+            proposedDecision: executionRequest,
+            outcome: null,
+            observedAt: new Date(`2026-07-${String(10 + replicate).padStart(2, "0")}T11:59:00.000Z`),
+            metadata: {
               experimentRunId,
-              childTaskRunId,
-              cellKey: childTaskRunId,
-              pairKey: `pair-${replicate}`,
-              methodVariantKey: method.methodVariantKey,
-              modelVariantKey: model.modelVariantKey,
-              fixtureKey: `fixture-${replicate}`,
-              oracleKey: manifest.oracleKey,
-              oracleVersion: manifest.oracleVersion,
-              resourcePolicyKey: "bounded-build-v1",
-              executionProfile: {
-                patternKey: manifest.patternKey,
-                patternVersion: method.patternVersion,
-                variantKey: method.methodVariantKey,
-                activityKey: manifest.activityKey,
-                riskClass: manifest.riskClass,
-                providerId: "provider",
-                modelId: model.modelVariantKey,
-                modelProfileId: model.modelProfileId,
-                toolPackDigest: "tools",
-                promptOrSkillDigest: method.methodVariantKey,
-                contextPolicyKey: "bounded",
-                recoveryPolicyKey: "bounded",
-                installScope: manifest.installScope,
-                taskCorpusKey: manifest.taskCorpusKey,
-                taskCorpusVersion: manifest.taskCorpusVersion,
-                environmentKey: "shadow",
-                sourceCommitSha: "source-sha",
-              },
+              observationKind: "assignment",
+              sequence: 0,
             },
           },
-          workPatternExperimentResult: { success: false },
-        },
-        evidenceRows: [{
-          ledgerId: `DSL-${childTaskRunId}-outcome`,
-          taskRunId: childTaskRunId,
-          outcome,
-          observedAt: new Date(`2026-07-${String(10 + replicate).padStart(2, "0")}T12:00:00.000Z`),
-          metadata: {
-            experimentRunId,
-            observationKind: "outcome",
-            sequence: 1,
+          {
+            ledgerId: `DSL-${childTaskRunId}-outcome`,
+            taskRunId: childTaskRunId,
+            proposedDecision: { cellKey: childTaskRunId },
+            outcome,
+            observedAt: new Date(`2026-07-${String(10 + replicate).padStart(2, "0")}T12:00:00.000Z`),
+            metadata: {
+              experimentRunId,
+              observationKind: "outcome",
+              sequence: 1,
+            },
           },
-        }],
+        ],
       };
     }),
   );
@@ -194,7 +204,15 @@ describe("deriveWorkPatternPromotionCandidates", () => {
     for (const experiment of runs) {
       const localCandidate = experiment.cells.find((cell) =>
         cell.taskRunId.endsWith("-candidate-local"));
-      if (localCandidate) localCandidate.evidenceRows = [];
+      if (localCandidate) {
+        localCandidate.evidenceRows = localCandidate.evidenceRows.filter(
+          (row) =>
+            typeof row.metadata !== "object"
+            || row.metadata === null
+            || !("observationKind" in row.metadata)
+            || row.metadata.observationKind !== "outcome",
+        );
+      }
     }
 
     const candidates = deriveWorkPatternPromotionCandidates({

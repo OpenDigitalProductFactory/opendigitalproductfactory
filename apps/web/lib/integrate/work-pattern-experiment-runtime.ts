@@ -303,14 +303,7 @@ export async function executePersistedWorkPatternExperimentCell(
     orchestratingAgentId: agentId,
     activityType: request.executionProfile.activityKey,
     riskClass: request.executionProfile.riskClass,
-    proposedDecision: {
-      cellKey: request.cellKey,
-      executionProfile: request.executionProfile,
-      fixtureKey: request.fixtureKey,
-      oracleKey: request.oracleKey,
-      oracleVersion: request.oracleVersion,
-      resourcePolicyKey: request.resourcePolicyKey,
-    },
+    proposedDecision: request,
   });
 
   let inferenceContent = "";
