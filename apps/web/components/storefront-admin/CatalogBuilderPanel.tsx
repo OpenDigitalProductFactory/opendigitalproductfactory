@@ -125,7 +125,9 @@ export function CatalogBuilderPanel({ initial }: { initial: CatalogBuilderView }
         message?: string;
       };
       if (!response.ok) {
-        throw new Error(result.error ?? `HTTP ${response.status}`);
+        throw new Error(
+          result.message ?? result.error ?? `HTTP ${response.status}`,
+        );
       }
       setNotice({
         tone: "success",
@@ -531,7 +533,9 @@ function CompactRows(props: {
       {props.rows.map((row) => (
         <li key={row.key} className="rounded-md bg-[var(--dpf-surface-2)] px-3 py-2">
           <p className="text-xs font-medium text-[var(--dpf-text)]">{row.primary}</p>
-          <p className="text-[11px] text-[var(--dpf-muted)]">{row.secondary}</p>
+          <p className="text-dpf-caption text-[var(--dpf-muted)]">
+            {row.secondary}
+          </p>
         </li>
       ))}
     </ul>
