@@ -568,6 +568,35 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
     classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-07-17" },
     fields: [],
   },
+  ...[
+    ["data:business-product-line", "ProductLine"],
+    ["data:business-product", "Product"],
+  ].map(([id, prismaModel]) => ({
+    id: id as DataAssetId,
+    physical: { prismaModel },
+    domain: "business-product-portfolio",
+    ownerRole: "founder-business-owner",
+    stewardRole: "data-steward",
+    categories: ["configuration", "operational"] as DataCategory[],
+    sensitivity: "internal" as DataSensitivity,
+    criticality: "high" as DataCriticality,
+    subjectLocators: [
+      { role: "organization" as const, fieldPath: "organization" },
+    ],
+    lifecycleClass: "business-record" as LifecycleClassKey,
+    purposeCapabilities: [
+      "service-delivery",
+      "product-analytics",
+    ] as ProcessingPurposeKey[],
+    residencyClass: "local-only" as ResidencyClassKey,
+    projectionClass: "metadata" as ProjectionClass,
+    classification: {
+      state: "confirmed" as const,
+      source: "manual" as const,
+      effectiveFrom: "2026-07-28",
+    },
+    fields: [],
+  })),
   ...PROCESSING_GOVERNANCE_ASSETS,
    {
     id: "data:agent-conversation",

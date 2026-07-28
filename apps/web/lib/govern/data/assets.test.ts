@@ -119,6 +119,29 @@ describe("seeded registry", () => {
     expect(member?.physical.prismaModel).toBe("FounderDemandClusterMember");
   });
 
+  it("governs the business product hierarchy without changing DigitalProduct authority", () => {
+    for (const [assetId, prismaModel] of [
+      ["data:business-product-line", "ProductLine"],
+      ["data:business-product", "Product"],
+    ] as const) {
+      expect(lookupAsset(DATA_ASSET_REGISTRY, assetId)).toMatchObject({
+        physical: { prismaModel },
+        domain: "business-product-portfolio",
+        ownerRole: "founder-business-owner",
+        categories: ["configuration", "operational"],
+        sensitivity: "internal",
+        criticality: "high",
+        lifecycleClass: "business-record",
+        purposeCapabilities: ["service-delivery", "product-analytics"],
+        residencyClass: "local-only",
+        projectionClass: "metadata",
+      });
+    }
+
+    expect(lookupAssetByPrismaModel(DATA_ASSET_REGISTRY, "DigitalProduct")?.id)
+      .not.toBe("data:business-product");
+  });
+
   it("governs nearby pairing as restricted local-only setup authority", () => {
     const pairing = lookupAsset(DATA_ASSET_REGISTRY, "data:federation-pairing-session");
     expect(pairing).toMatchObject({
