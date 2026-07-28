@@ -254,6 +254,11 @@ describe("WorkCaseDetailView", () => {
     );
 
     expect(html).toContain("Coworker status unavailable");
+    const participantPanel = html.slice(
+      html.indexOf('aria-labelledby="work-room-participants-title"'),
+      html.indexOf('aria-label="Work"'),
+    );
+    expect(participantPanel).toContain("<details open=\"\"");
     expect(html.match(/Continue with the room’s next action:/g)).toHaveLength(1);
     expect(html).toContain("Collect the customer confirmation");
   });

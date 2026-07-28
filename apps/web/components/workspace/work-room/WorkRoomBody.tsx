@@ -85,9 +85,13 @@ function BoundaryNotice({ room }: { room: WorkRoomView }) {
 }
 
 function ParticipantPanel({ room }: { room: WorkRoomView }) {
+  const hasUnavailableCoworker = room.participants.some(
+    (participant) => participant.kind === "agent" && participant.presence === "unknown",
+  );
+
   return (
     <section aria-labelledby="work-room-participants-title" className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
-      <details>
+      <details open={hasUnavailableCoworker}>
         <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]">
           <span id="work-room-participants-title" className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--dpf-text)]">
             <Users className="size-4" aria-hidden="true" />
