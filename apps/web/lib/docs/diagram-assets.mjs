@@ -9,15 +9,25 @@
 // is required for the surfaces to agree. Zero dependencies.
 
 // Repo-relative directory holding committed diagram SVGs. NOT underscore-prefixed
-// so the Jekyll site (which ignores _-prefixed paths) publishes it.
+// so the Jekyll site (which ignores _-prefixed paths) publishes it. This is the
+// single published diagram-asset root for ALL doc roots: architecture-page
+// diagrams live under an `architecture/` subdirectory here so the Jekyll static
+// publishing and the portal's /api/docs-asset route need no second root.
 export const DIAGRAMS_DIR = "docs/user-guide/assets/diagrams";
 
-/** Page slug from a repo-relative user-guide source path. */
+/**
+ * Page slug from a repo-relative doc source path. User-guide pages keep their
+ * historical user-guide-relative slug (committed asset paths and manifest keys
+ * predate multi-root support); other doc roots (docs/architecture) keep their
+ * root prefix, e.g. `architecture/platform-overview`. Slugs cannot collide:
+ * there is no docs/user-guide/architecture/ subtree.
+ */
 export function diagramSlug(sourcePath) {
-  return String(sourcePath)
-    .replace(/\\/g, "/")
-    .replace(/^docs\/user-guide\//, "")
-    .replace(/\.md$/, "");
+  const normalized = String(sourcePath).replace(/\\/g, "/");
+  if (normalized.startsWith("docs/user-guide/")) {
+    return normalized.replace(/^docs\/user-guide\//, "").replace(/\.md$/, "");
+  }
+  return normalized.replace(/^docs\//, "").replace(/\.md$/, "");
 }
 
 /** Public Jekyll URL for a diagram (docs/ stripped, served as a static file). */

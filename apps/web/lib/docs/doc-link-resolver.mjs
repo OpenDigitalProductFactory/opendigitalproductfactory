@@ -27,7 +27,6 @@ export const PUBLIC_UNPUBLISHED_PREFIXES = [
   "docs/architecture/ea-diagrams",
   "docs/architecture/gaid-diagrams",
   "docs/architecture/tak-diagrams",
-  "docs/architecture/monitoring-diagrams",
 ];
 
 const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".avif"]);

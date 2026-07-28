@@ -59,6 +59,33 @@ test("public user-guide root swaps Kramdown code output for the index SVG", () =
   assert.equal(replacement.loading, "lazy");
 });
 
+test("architecture pages swap fences for SVGs under the shared asset root", () => {
+  let replacement;
+  const pre = {
+    tagName: "PRE",
+    replaceWith(value) {
+      replacement = value;
+    },
+  };
+  const code = { tagName: "CODE", parentElement: pre };
+
+  const { api, created } = executeDiagramScript(
+    "architecture/platform-overview.md",
+    [code],
+  );
+
+  assert.equal(created.length, 1);
+  assert.equal(
+    replacement.src,
+    "/user-guide/assets/diagrams/architecture/platform-overview/0.svg",
+  );
+  assert.equal(
+    api.diagramSlugFromSourcePath("docs/architecture/platform-overview.md"),
+    "architecture/platform-overview",
+  );
+  assert.equal(api.diagramSlugFromSourcePath("superpowers/specs/x.md"), null);
+});
+
 test("nested index pages retain index in the committed diagram slug", () => {
   const { api } = executeDiagramScript("architecture/platform-overview.md", []);
 

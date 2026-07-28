@@ -32,7 +32,12 @@ import {
 } from "./lib/doc-diagram-svg.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const USER_GUIDE_DIR = path.join(REPO_ROOT, "docs", "user-guide");
+// Doc roots whose ```mermaid fences are rendered to committed SVGs. The public
+// Jekyll site publishes both docs/user-guide and docs/architecture pages.
+const SOURCE_DIRS = [
+  path.join(REPO_ROOT, "docs", "user-guide"),
+  path.join(REPO_ROOT, "docs", "architecture"),
+];
 const DIAGRAMS_ABS = path.join(REPO_ROOT, DIAGRAMS_DIR);
 const MANIFEST = path.join(DIAGRAMS_ABS, "manifest.json");
 const PORTAL_VERSIONS = path.join(REPO_ROOT, "apps", "web", "lib", "docs", "diagram-versions.generated.mjs");
@@ -64,7 +69,7 @@ function collectFences() {
       }
     }
   };
-  walk(USER_GUIDE_DIR);
+  for (const dir of SOURCE_DIRS) walk(dir);
   return fences;
 }
 
@@ -82,7 +87,14 @@ function renderOne(content, outAbs, tmpDir, puppeteerCfg) {
   const tmp = path.join(tmpDir, `d-${sha(content)}.mmd`);
   fs.writeFileSync(tmp, `${content}\n`);
   fs.mkdirSync(path.dirname(outAbs), { recursive: true });
-  execFileSync(MMDC, ["-i", tmp, "-o", outAbs, "-b", "transparent", "--puppeteerConfigFile", puppeteerCfg], {
+  const mmdcArgs = ["-i", tmp, "-o", outAbs, "-b", "transparent", "--puppeteerConfigFile", puppeteerCfg];
+  // MMDC may point at mermaid-cli's JS entry (e.g. .../mermaid-cli/src/cli.js):
+  // on Windows the .bin shim is a .cmd, which Node refuses to spawn without a
+  // shell, so running the JS entry through the current Node is the portable path.
+  const [cmd, args] = /\.[cm]?js$/i.test(MMDC)
+    ? [process.execPath, [MMDC, ...mmdcArgs]]
+    : [MMDC, mmdcArgs];
+  execFileSync(cmd, args, {
     stdio: ["ignore", "ignore", "inherit"],
   });
   fs.writeFileSync(outAbs, normalizeDocDiagramSvg(fs.readFileSync(outAbs, "utf-8")));

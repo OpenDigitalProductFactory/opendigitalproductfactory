@@ -1,6 +1,6 @@
 # Platform Overview
 
-> **Scope:** this document describes the **current GA runtime** — the Single VM substrate served via Docker Desktop on Windows. Multi-platform (macOS Apple Silicon, native Linux), customer-cloud (AWS / GCP / Azure), Managed Kubernetes, and TAPPaaS deployment shapes are documented under the deployment doctrine at [`docs/superpowers/specs/2026-05-09-deployment-contracts.md`](../superpowers/specs/2026-05-09-deployment-contracts.md). Implementation status for each is tracked in the [umbrella branch plan](../superpowers/plans/2026-05-09-deployment-architecture-and-rollout.md).
+> **Scope:** this document describes the **current GA runtime** — the Single VM substrate served via Docker Desktop on Windows. Multi-platform (macOS Apple Silicon, native Linux), customer-cloud (AWS / GCP / Azure), Managed Kubernetes, and TAPPaaS deployment shapes are documented under the deployment doctrine at [`docs/superpowers/specs/2026-05-09-deployment-contracts.md`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-05-09-deployment-contracts.md). Implementation status for each is tracked in the [umbrella branch plan](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/plans/2026-05-09-deployment-architecture-and-rollout.md).
 
 This document explains the main runtime pieces of Open Digital Product Factory, the two supported deployment models, the sandbox-based iterative workflow, and the practical hardware tiers for running the platform well.
 
@@ -253,9 +253,64 @@ Prometheus scrapes metrics from running services every 10-15 seconds and stores 
 
 ### How the Three Layers Work Together
 
-![Three-Layer Data Architecture](monitoring-diagrams/svg/01-three-layer-data-architecture.svg)
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e293b', 'primaryTextColor': '#f8fafc', 'primaryBorderColor': '#334155', 'lineColor': '#64748b', 'secondaryColor': '#0f172a', 'tertiaryColor': '#1e293b', 'fontSize': '14px' }}}%%
+flowchart TB
+    subgraph WRITES["ALL WRITES (Single Source of Truth)"]
+        direction TB
+        postgres[("PostgreSQL\n─────────────────\nSystem of Record\n\nDigital Products\nPortfolios & Taxonomy\nInventory Entities\nAI Providers & Agents\nChange Requests\nCredentials & Governance\nHealth Snapshots")]
+    end
 
-*[High-resolution PNG](monitoring-diagrams/png/01-three-layer-data-architecture.png) | [Mermaid source](monitoring-diagrams/01-three-layer-data-architecture.mmd)*
+    subgraph PROJECTIONS["READ-ONLY PROJECTIONS"]
+        direction LR
+        neo4j[("Neo4j Graph\n─────────────────\nTopology & Impact\n\nDigitalProduct nodes\nInfraCI nodes\nEaElement nodes\nDEPENDS_ON edges\nMONITORS edges\nBELONGS_TO edges\nCHILD_OF edges")]
+        prometheus[("Prometheus\n─────────────────\nTime-Series Metrics\n\nContainer CPU/Memory\nHost Resources\nInference Latency\nToken Consumption\nError Rates\nCredential Expiry\nRate Limit Utilization")]
+    end
+
+    subgraph QUESTIONS["WHAT EACH LAYER ANSWERS"]
+        direction TB
+        q_pg["PostgreSQL answers:\n'What is the current state\nof this entity?'\n'What changed and when?'"]
+        q_neo["Neo4j answers:\n'What breaks if this\ngoes down?'\n'What depends on what?'"]
+        q_prom["Prometheus answers:\n'How is this performing\nright now?'\n'What was the p95 latency\nover the last hour?'"]
+    end
+
+    subgraph CONVERGENCE["PLATFORM UI (The Convergence Point)"]
+        direction TB
+        health["System Health Dashboard\nGauges · Charts · Alerts"]
+        graph_view["Dependency Graph\nTopology + Health Overlay"]
+        impact["Impact Analysis\nWhat breaks if X fails?"]
+        product["Product Lifecycle View\nHealth · Backlog · Architecture"]
+    end
+
+    grafana["Grafana\n(Power-User Escape Hatch)\n─────────────────\nAd-hoc PromQL queries\nCustom dashboards\nRaw metric exploration\n\nPrometheus only\nNo graph · No business context"]
+
+    postgres -->|"sync functions\n(fire-and-forget)"| neo4j
+    postgres -->|"HealthSnapshot\nrecords"| health
+
+    prometheus -->|"real-time metrics\n(scraped every 15s)"| health
+    prometheus -->|"health overlay\nvia bridge"| graph_view
+
+    neo4j -->|"topology\ntraversal"| graph_view
+    neo4j -->|"downstream\nimpact"| impact
+
+    postgres -->|"entity data\nattribution"| graph_view
+    postgres -->|"business\ncontext"| product
+
+    health --> product
+    graph_view --> product
+    impact --> product
+
+    prometheus -.->|"same metrics\ndifferent audience"| grafana
+
+    style WRITES fill:#1e3a5f,stroke:#3b82f6,stroke-width:2px
+    style PROJECTIONS fill:#1e293b,stroke:#64748b,stroke-width:1px
+    style CONVERGENCE fill:#14532d,stroke:#22c55e,stroke-width:2px
+    style QUESTIONS fill:#0f172a,stroke:#334155,stroke-width:1px
+    style grafana fill:#44403c,stroke:#a8a29e,stroke-width:1px,stroke-dasharray: 5 5
+    style postgres fill:#1e3a5f,stroke:#3b82f6,stroke-width:2px
+    style neo4j fill:#312e81,stroke:#6366f1,stroke-width:2px
+    style prometheus fill:#7c2d12,stroke:#f97316,stroke-width:2px
+```
 
 **The convergence point** is the platform's native UI. Only the platform can combine:
 - Topology from Neo4j ("Prometheus monitors PostgreSQL")
@@ -278,9 +333,52 @@ Grafana ships as an **opt-in** power-user tool — it is not started by `docker 
 | **Business context** | Yes — portfolios, products, taxonomy, governance | No — infrastructure metrics only |
 | **Alerting** | Fires into PortfolioQualityIssue (platform-native, visible in product lifecycle) | Fires into Grafana UI (separate tool) |
 
-![Platform UI vs Grafana](monitoring-diagrams/svg/04-grafana-vs-platform-ui.svg)
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e293b', 'primaryTextColor': '#f8fafc', 'primaryBorderColor': '#334155', 'lineColor': '#64748b', 'secondaryColor': '#0f172a', 'tertiaryColor': '#1e293b', 'fontSize': '14px' }}}%%
+flowchart TB
+    subgraph DATASOURCES["DATA SOURCES"]
+        direction LR
+        pg[("PostgreSQL\n─────\nEntities\nRelationships\nGovernance\nBusiness Context")]
+        neo[("Neo4j\n─────\nGraph Topology\nImpact Paths\nDependencies\nEA Models")]
+        prom[("Prometheus\n─────\nTime-Series\nMetrics\nCounters\nHistograms")]
+    end
 
-*[High-resolution PNG](monitoring-diagrams/png/04-grafana-vs-platform-ui.png) | [Mermaid source](monitoring-diagrams/04-grafana-vs-platform-ui.mmd)*
+    subgraph PLATFORM["PLATFORM UI (Primary Experience)"]
+        direction TB
+        p_header["Every User Sees This"]
+        p_health["System Health\n─────\nService status grid\nHost resource gauges\nAI provider table\nAgent quality scores\nAlert history"]
+        p_graph["Dependency Graph\n─────\nTopology from Neo4j\n+ Health from Prometheus\n+ Attribution from PostgreSQL\n= Full operational picture"]
+        p_impact["Impact Analysis\n─────\n'If Postgres goes down,\nwhich products are affected?'\nGraph traversal + business context"]
+        p_product["Product Lifecycle\n─────\nHealth tab per product\nFeature degradation warnings\nCapability tier availability"]
+        p_coworker["AI Coworker\n─────\nContextual health warnings\n'Memory offline'\n'Inference degraded'"]
+    end
+
+    subgraph GRAFANA["GRAFANA (Power-User Tool)"]
+        direction TB
+        g_header["Platform Engineers Only"]
+        g_custom["Custom Dashboards\n─────\nAd-hoc PromQL\nArbitrary time ranges\nMetric correlation"]
+        g_debug["Debugging\n─────\nZoom to 5-min window\nCross-metric analysis\nRaw histogram buckets"]
+        g_explore["Exploration\n─────\nDiscover new metrics\nBuild prototype panels\nTest alert expressions"]
+    end
+
+    pg -->|"entities +\nbusiness context"| PLATFORM
+    neo -->|"topology +\nimpact paths"| PLATFORM
+    prom -->|"real-time\nmetrics"| PLATFORM
+
+    prom -->|"same metrics\ndifferent context"| GRAFANA
+
+    pg -.-x|"NOT available"| GRAFANA
+    neo -.-x|"NOT available"| GRAFANA
+
+    style DATASOURCES fill:#0f172a,stroke:#334155,stroke-width:1px
+    style PLATFORM fill:#14532d,stroke:#22c55e,stroke-width:2px
+    style GRAFANA fill:#44403c,stroke:#a8a29e,stroke-width:1px,stroke-dasharray: 5 5
+    style pg fill:#1e3a5f,stroke:#3b82f6,stroke-width:2px
+    style neo fill:#312e81,stroke:#6366f1,stroke-width:2px
+    style prom fill:#7c2d12,stroke:#f97316,stroke-width:2px
+    style p_header fill:#166534,stroke:#22c55e
+    style g_header fill:#57534e,stroke:#a8a29e
+```
 
 **When to use Grafana:** Something is wrong and you need to dig deeper — correlate metrics across arbitrary dimensions, zoom into a 5-minute window, write custom PromQL queries, explore metrics that the platform UI doesn't surface yet.
 
@@ -290,9 +388,82 @@ Grafana ships as an **opt-in** power-user tool — it is not started by `docker 
 
 The **headless** monitoring stack (Prometheus, Loki, Alloy, and the metric exporters) runs as part of the default Docker Compose stack — these feed the platform's native UI and alert pipeline. The Grafana **UI** is opt-in (`--profile observability-ui`), since the platform renders its own context-aware dashboards and delivers alerts via the Inngest poll-bridge rather than through Grafana.
 
-![Monitoring Stack Topology](monitoring-diagrams/svg/02-monitoring-stack-topology.svg)
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e293b', 'primaryTextColor': '#f8fafc', 'primaryBorderColor': '#334155', 'lineColor': '#64748b', 'secondaryColor': '#0f172a', 'tertiaryColor': '#1e293b', 'fontSize': '14px' }}}%%
+flowchart LR
+    subgraph APP["Application Services"]
+        direction TB
+        portal["Portal\n:3000\n─────\n/api/metrics\nprom-client"]
+        sandbox1["Sandbox 1\n:3035"]
+        sandbox2["Sandbox 2\n:3037"]
+        sandbox3["Sandbox 3\n:3038"]
+    end
 
-*[High-resolution PNG](monitoring-diagrams/png/02-monitoring-stack-topology.png) | [Mermaid source](monitoring-diagrams/02-monitoring-stack-topology.mmd)*
+    subgraph DATA["Data Services"]
+        direction TB
+        pg[("PostgreSQL\n:5432")]
+        neo[("Neo4j\n:7474")]
+        qdrant[("Qdrant\n:6333\n─────\n/metrics native")]
+    end
+
+    subgraph AI["AI Inference"]
+        modelrunner["Docker Model\nRunner\n─────\n/metrics native"]
+        external["External\nProviders\n(Anthropic,\nOpenAI, etc.)"]
+    end
+
+    subgraph MON["Monitoring Stack"]
+        direction TB
+        prom["Prometheus\n:9090\n─────\n15s scrape interval\n15-day retention\n13 alert rules"]
+        grafana_svc["Grafana\n:3002\n─────\nAuto-provisioned\ndashboards"]
+        cadvisor["cAdvisor\n:8080\n─────\nContainer\nCPU/Mem/Net/Disk"]
+        nodeexp["node-exporter\n:9100\n─────\nHost OS\nCPU/Mem/Disk"]
+        pgexp["postgres-exporter\n:9187\n─────\nConnections\nQuery perf"]
+    end
+
+    subgraph PLATFORM_UI["Platform-Native UI"]
+        direction TB
+        sys_health["System Health\nDashboard"]
+        nav_dot["Nav Bar\nHealth Dot"]
+        coworker["AI Coworker\nHealth Warnings"]
+        alerts_wh["Alert Webhook\n/api/platform/alerts"]
+    end
+
+    prom -->|"scrape\n/api/metrics"| portal
+    prom -->|"scrape"| sandbox1
+    prom -->|"scrape"| sandbox2
+    prom -->|"scrape"| sandbox3
+    prom -->|"scrape"| cadvisor
+    prom -->|"scrape"| nodeexp
+    prom -->|"scrape"| pgexp
+    prom -->|"scrape\nnative /metrics"| qdrant
+    prom -->|"scrape\nnative /metrics"| modelrunner
+
+    cadvisor -.->|"Docker socket\n(read-only)"| portal
+    cadvisor -.->|"monitors all\ncontainers"| pg
+    cadvisor -.->|"monitors"| neo
+    cadvisor -.->|"monitors"| qdrant
+
+    pgexp -->|"SQL stats"| pg
+
+    grafana_svc -->|"datasource"| prom
+
+    portal -->|"proxy\n/api/platform/metrics"| prom
+    portal --> sys_health
+    portal --> nav_dot
+    portal --> coworker
+
+    grafana_svc -.->|"webhook"| alerts_wh
+    alerts_wh -->|"creates\nQualityIssue"| pg
+
+    portal -.->|"inference\ncalls"| modelrunner
+    portal -.->|"inference\ncalls"| external
+
+    style APP fill:#1e3a5f,stroke:#3b82f6,stroke-width:2px
+    style DATA fill:#312e81,stroke:#6366f1,stroke-width:2px
+    style AI fill:#581c87,stroke:#a855f7,stroke-width:2px
+    style MON fill:#7c2d12,stroke:#f97316,stroke-width:2px
+    style PLATFORM_UI fill:#14532d,stroke:#22c55e,stroke-width:2px
+```
 
 ### Layer 3b: Loki + Alloy — Container Logs (the unbounded signal)
 
@@ -349,9 +520,83 @@ user reports       ┘    (deduped by key)                                    or
 
 When an AI provider fails (credential expiry, rate limit exhaustion, network outage), the platform detects, adapts, and surfaces the issue through a governed cascade:
 
-![Provider Failure Cascade](monitoring-diagrams/svg/03-provider-failure-cascade.svg)
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e293b', 'primaryTextColor': '#f8fafc', 'primaryBorderColor': '#334155', 'lineColor': '#64748b', 'secondaryColor': '#0f172a', 'tertiaryColor': '#1e293b', 'fontSize': '14px' }}}%%
+flowchart TD
+    subgraph DETECT["DETECT (Proactive)"]
+        direction TB
+        expiry_check["Credential Expiry Check\n(every 1 hour)\n─────\nScans tokenExpiresAt\nAttempts refresh 24h early"]
+        health_probe["Provider Health Probe\n(every 5 minutes)\n─────\nGET /v1/models\nTests reachability + auth"]
+        failure_track["Failure Rate Tracker\n(every inference call)\n─────\nSliding window (last 20)\nUpdates recentFailureRate"]
+    end
 
-*[High-resolution PNG](monitoring-diagrams/png/03-provider-failure-cascade.png) | [Mermaid source](monitoring-diagrams/03-provider-failure-cascade.mmd)*
+    subgraph ALERT["ALERT (Prometheus Rules)"]
+        direction TB
+        cred_warn["CredentialExpiringSoon\n< 24 hours remaining"]
+        cred_expired["CredentialExpired\nalready past expiry"]
+        auth_fail["ProviderAuthFailing\nauth errors sustained > 2m"]
+        high_fail["ProviderHighFailureRate\n> 50% failure rate"]
+        provider_down["ProviderDown\nhealth probe failing > 5m"]
+        rate_limit["RateLimitApproaching\nutilization > 80%"]
+    end
+
+    subgraph ADAPT["ADAPT (Automatic)"]
+        direction TB
+        degrade["Status: active --> degraded\n─────\nRouting applies 0.7x multiplier\nProvider deprioritized"]
+        failover["Fallback Chain Activates\n─────\nNext provider in priority\nUser experience uninterrupted"]
+        disable["Status: degraded --> inactive\n─────\nProvider removed from routing\nScheduled re-enable (1 hour)"]
+    end
+
+    subgraph SURFACE["SURFACE (Platform UI)"]
+        direction TB
+        quality_issue["PortfolioQualityIssue\ncreated automatically"]
+        health_dash["System Health Dashboard\nProvider status table"]
+        feature_warn["Feature Degradation Banner\n'Build Studio limited --\nadvanced AI models unavailable'"]
+        coworker_warn["AI Coworker Warning\n'Memory offline' or\n'Responses may be slower'"]
+    end
+
+    subgraph RESOLVE["RESOLVE (Human or Auto)"]
+        direction TB
+        auto_refresh["Auto: Token Refresh\n(proactive, 24h before)"]
+        auto_recover["Auto: Re-enable\n(scheduled after 1 hour)"]
+        human_reauth["Human: Re-authenticate\nvia Provider detail page"]
+        human_config["Human: Reconfigure\nor add backup provider"]
+    end
+
+    expiry_check -->|"token < 24h"| cred_warn
+    expiry_check -->|"token expired"| cred_expired
+    health_probe -->|"unreachable"| provider_down
+    health_probe -->|"401/403"| auth_fail
+    failure_track -->|"> 50%"| high_fail
+    failure_track -->|"rate limit"| rate_limit
+
+    cred_warn --> quality_issue
+    cred_expired --> degrade
+    auth_fail --> degrade
+    high_fail --> degrade
+    provider_down --> disable
+    rate_limit --> quality_issue
+
+    degrade --> failover
+    degrade --> health_dash
+    disable --> health_dash
+
+    failover --> feature_warn
+    failover --> coworker_warn
+
+    quality_issue --> health_dash
+
+    auto_refresh -.->|"success"| cred_warn
+    auto_recover -.->|"re-enable"| disable
+    human_reauth -.->|"new token"| degrade
+    human_config -.->|"add provider"| failover
+
+    style DETECT fill:#1e3a5f,stroke:#3b82f6,stroke-width:2px
+    style ALERT fill:#7c2d12,stroke:#f97316,stroke-width:2px
+    style ADAPT fill:#713f12,stroke:#eab308,stroke-width:2px
+    style SURFACE fill:#14532d,stroke:#22c55e,stroke-width:2px
+    style RESOLVE fill:#1e293b,stroke:#64748b,stroke-width:2px
+```
 
 Key design: degradation is **feature-specific, not platform-wide**. A missing deep-thinker provider degrades Build Studio (code generation) but has no impact on portfolio management or backlog tracking. The platform surfaces contextual warnings on the affected feature, not a global error banner.
 
