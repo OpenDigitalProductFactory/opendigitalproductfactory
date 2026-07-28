@@ -1,11 +1,19 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+
+import {
+  collectDescendantPids,
+  createProcessTreeTracker,
+  defaultDescendantPollMs,
+  defaultProcessScanMs,
+  findLiveLocalCiMutatorPids,
+} from "./gate-worktree.mjs";
 
 function run(command, args, options) {
   return new Promise((resolve, reject) => {
@@ -33,6 +41,23 @@ function run(command, args, options) {
 
 function isolatedFencePath() {
   return join(mkdtempSync(join(tmpdir(), "dpf-gate-fence-")), "owner.json");
+}
+
+function makeTempWorktree() {
+  const dir = mkdtempSync(join(tmpdir(), "dpf-gate-worktree-"));
+  const git = (args) => {
+    const result = spawnSync("git", args, { cwd: dir, encoding: "utf8" });
+    if (result.status !== 0) {
+      throw new Error(`git ${args.join(" ")} failed: ${result.stderr || result.stdout}`);
+    }
+  };
+  git(["init", "-q"]);
+  git(["config", "user.name", "DPF Test"]);
+  git(["config", "user.email", "dpf-test@example.invalid"]);
+  writeFileSync(join(dir, "README.md"), "gate test\n");
+  git(["add", "README.md"]);
+  git(["commit", "-q", "-m", "init"]);
+  return dir;
 }
 
 test("canonical gate heartbeats during a long command and releases once", async () => {
@@ -65,7 +90,7 @@ test("canonical gate heartbeats during a long command and releases once", async 
     const result = await run(process.execPath, [
       "scripts/gate-worktree.mjs",
       "--branch", "fix/sandbox-lease-fencing",
-      "--worktree", process.cwd(),
+      "--worktree", makeTempWorktree(),
       "--expires-minutes", "0.05",
       "--mcp-url", `http://127.0.0.1:${address.port}`,
       "--no-push",
@@ -135,7 +160,7 @@ test("durable queue observation reuses claimKey and grants a fresh admitted TTL"
     const result = await run(process.execPath, [
       "scripts/gate-worktree.mjs",
       "--branch", "fix/sandbox-lease-fencing",
-      "--worktree", process.cwd(),
+      "--worktree", makeTempWorktree(),
       "--expires-minutes", "0.05",
       "--poll-seconds", "0.05",
       "--mcp-url", `http://127.0.0.1:${address.port}`,
@@ -389,7 +414,7 @@ test("a same-host dead queued observer is cancelled before the live waiter claim
     const result = await run(process.execPath, [
       "scripts/gate-worktree.mjs",
       "--branch", "fix/dead-waiter-reconciliation",
-      "--worktree", process.cwd(),
+      "--worktree", makeTempWorktree(),
       "--owner-session-id", "integration-test-live-owner",
       "--expires-minutes", "0.05",
       "--mcp-url", `http://127.0.0.1:${address.port}`,
@@ -416,6 +441,80 @@ test("a same-host dead queued observer is cancelled before the live waiter claim
     assert.match(result.output, /cancelled dead same-host queue observer NPEL-DEAD-OBSERVER/);
   } finally {
     server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("admitted gate writes running state before starting the expensive command", async () => {
+  const temp = mkdtempSync(join(tmpdir(), "dpf-gate-running-state-"));
+  const observedState = join(temp, "observed-state.json");
+  const childScript = join(temp, "observe-state.mjs");
+  writeFileSync(
+    childScript,
+    [
+      "import { readFileSync, writeFileSync } from \"node:fs\";",
+      "writeFileSync(process.env.DPF_OBSERVED_GATE_STATE_FILE, readFileSync(process.env.DPF_LOCAL_CI_GATE_STATE_FILE, \"utf8\"));",
+      "",
+    ].join("\n"),
+  );
+  const calls = [];
+  const server = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      const payload = JSON.parse(body);
+      const tool = payload.params.name;
+      calls.push(tool);
+      const result = tool === "claim_nonprod_environment_lease"
+        ? {
+          success: true,
+          entityId: "NPEL-RUNNING-STATE",
+          data: {
+            lease: { leaseId: "NPEL-RUNNING-STATE" },
+            admission: { status: "admitted", slotKey: "slot-0", waitAgeMs: 1 },
+          },
+        }
+        : tool === "record_local_integration_result"
+          ? { success: true, entityId: "EVIDENCE-RUNNING-STATE" }
+          : { success: true };
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({
+        jsonrpc: "2.0",
+        id: payload.id,
+        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+
+  try {
+    const result = await run(process.execPath, [
+      "scripts/gate-worktree.mjs",
+      "--branch", "fix/local-ci-descendant-fence",
+      "--worktree", makeTempWorktree(),
+      "--expires-minutes", "0.05",
+      "--mcp-url", `http://127.0.0.1:${address.port}`,
+      "--no-push",
+    ], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        DPF_MCP_BEARER_TOKEN: "test-token",
+        DPF_LOCAL_CI_COMMAND: `${JSON.stringify(process.execPath)} ${JSON.stringify(childScript)}`,
+        DPF_OBSERVED_GATE_STATE_FILE: observedState,
+        DPF_LOCAL_SANDBOX_FENCE_PATH: isolatedFencePath(),
+      },
+    });
+
+    assert.ok([0, 3].includes(result.code), result.output);
+    const state = JSON.parse(await readFile(observedState, "utf8"));
+    assert.equal(state.branch, "fix/local-ci-descendant-fence");
+    assert.equal(state.leaseId, "NPEL-RUNNING-STATE");
+    assert.equal(state.status, "running");
+    assert.equal(state.gatePassed, false);
+    assert.ok(calls.includes("release_nonprod_environment_lease"));
+  } finally {
     await new Promise((resolve) => server.close(resolve));
   }
 });
@@ -453,7 +552,7 @@ test("rolling upgrade observes the legacy conflict contract without failing", as
     const result = await run(process.execPath, [
       "scripts/gate-worktree.mjs",
       "--branch", "fix/sandbox-lease-fencing",
-      "--worktree", process.cwd(),
+      "--worktree", makeTempWorktree(),
       "--expires-minutes", "0.05",
       "--poll-seconds", "0.01",
       "--lease-wait-seconds", "2",
@@ -523,7 +622,7 @@ test("transient admission transport reset retries the same durable claim", async
     const result = await run(process.execPath, [
       "scripts/gate-worktree.mjs",
       "--branch", "fix/sandbox-lease-fencing",
-      "--worktree", process.cwd(),
+      "--worktree", makeTempWorktree(),
       "--expires-minutes", "0.05",
       "--poll-seconds", "0.01",
       "--lease-wait-seconds", "2",
@@ -593,7 +692,7 @@ test(
       gateChild = spawn(process.execPath, [
         "scripts/gate-worktree.mjs",
         "--branch", "fix/sandbox-lease-fencing",
-        "--worktree", process.cwd(),
+        "--worktree", makeTempWorktree(),
         "--expires-minutes", "0.05",
         "--poll-seconds", "0.05",
         "--lease-wait-seconds", "2",
@@ -677,7 +776,7 @@ test("renewal loss kills the real child process tree before later mutation", asy
     const result = await run(process.execPath, [
       "scripts/gate-worktree.mjs",
       "--branch", "fix/sandbox-lease-fencing",
-      "--worktree", process.cwd(),
+      "--worktree", makeTempWorktree(),
       "--expires-minutes", "0.05",
       "--mcp-url", `http://127.0.0.1:${address.port}`,
       "--no-push",
@@ -700,6 +799,103 @@ test("renewal loss kills the real child process tree before later mutation", asy
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+test("process tree tracker remembers descendants before they reparent", async () => {
+  const snapshots = [
+    [
+      { pid: 100, parentPid: 1 },
+      { pid: 101, parentPid: 100 },
+      { pid: 102, parentPid: 101 },
+    ],
+    [
+      { pid: 102, parentPid: 1 },
+    ],
+  ];
+  const alive = new Set([102]);
+  const terminated = [];
+  let now = 1000;
+  const tracker = createProcessTreeTracker({
+    rootPid: 100,
+    listProcessRows: () => snapshots.shift() || [],
+    processAlive: (pid) => alive.has(pid),
+    terminate: (pid) => {
+      terminated.push(pid);
+      alive.delete(pid);
+    },
+    wait: async (ms) => { now += ms; },
+    now: () => now,
+  });
+
+  assert.deepEqual(collectDescendantPids(100, [
+    { pid: 100, parentPid: 1 },
+    { pid: 101, parentPid: 100 },
+    { pid: 102, parentPid: 101 },
+    { pid: 200, parentPid: 1 },
+  ]), [101, 102]);
+
+  tracker.sample();
+  const leaked = await tracker.waitForQuiescence({ graceMs: 0, pollMs: 1 });
+
+  assert.deepEqual(leaked, [102]);
+  assert.deepEqual(terminated, [102]);
+});
+
+test("local-CI admission detects legacy shared mutators and their descendants only", () => {
+  const processRows = [
+    {
+      pid: 100,
+      parentPid: 1,
+      commandLine: "node D:/DPF/scripts/local-ci-runner.mjs --candidate feat/previous",
+    },
+    {
+      pid: 101,
+      parentPid: 100,
+      commandLine: "node D:/DPF/scripts/local-integration-ci.mjs",
+    },
+    {
+      pid: 102,
+      parentPid: 101,
+      commandLine: "docker build --file Dockerfile .",
+    },
+    {
+      pid: 103,
+      parentPid: 1,
+      commandLine: "docker build D:/DPF-worktrees/.local-ci-runner",
+    },
+    {
+      pid: 200,
+      parentPid: 1,
+      commandLine: "docker build --file unrelated.Dockerfile .",
+    },
+    {
+      pid: 300,
+      parentPid: 1,
+      commandLine: "node D:/DPF/scripts/gate-worktree.mjs --branch feat/queued",
+    },
+    {
+      pid: 400,
+      parentPid: 1,
+      commandLine: "node D:/DPF/scripts/local-ci-runner.mjs --candidate feat/current",
+    },
+    {
+      pid: 401,
+      parentPid: 400,
+      commandLine: "docker build --file Dockerfile .",
+    },
+  ];
+
+  assert.deepEqual(
+    findLiveLocalCiMutatorPids(processRows, { excludePids: [400] }),
+    [100, 101, 102, 103],
+  );
+});
+
+test("process tree tracker uses a slower default scan cadence on Windows", () => {
+  assert.equal(defaultProcessScanMs("win32"), 5000);
+  assert.equal(defaultDescendantPollMs("win32"), 1000);
+  assert.equal(defaultProcessScanMs("linux"), 250);
+  assert.equal(defaultDescendantPollMs("linux"), 250);
 });
 
 test("POSIX entry point delegates every lease policy to the canonical Node gate", async () => {
@@ -742,10 +938,16 @@ test("POSIX gate heartbeats and releases through its injectable transport", asyn
   const address = server.address();
 
   try {
+    const temp = mkdtempSync(join(tmpdir(), "dpf-posix-gate-command-"));
+    const childScript = join(temp, "delay.mjs");
+    writeFileSync(
+      childScript,
+      "await new Promise((resolve) => setTimeout(resolve, 2500));\n",
+    );
     const result = await run(shell, [
       "scripts/gate-worktree.sh",
       "--branch", "fix/sandbox-lease-fencing",
-      "--worktree", process.cwd(),
+      "--worktree", makeTempWorktree(),
       "--expires-minutes", "0.05",
       "--mcp-url", `http://127.0.0.1:${address.port}`,
       "--no-push",
@@ -754,7 +956,7 @@ test("POSIX gate heartbeats and releases through its injectable transport", asyn
       env: {
         ...process.env,
         DPF_MCP_BEARER_TOKEN: "test-token",
-        DPF_LOCAL_CI_COMMAND: `"${process.execPath}" -e "setTimeout(function () {}, 2500)"`,
+        DPF_LOCAL_CI_COMMAND: `${JSON.stringify(process.execPath)} ${JSON.stringify(childScript)}`,
         DPF_LOCAL_SANDBOX_FENCE_PATH: isolatedFencePath(),
       },
     });

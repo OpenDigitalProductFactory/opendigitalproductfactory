@@ -182,30 +182,22 @@ still enforces every guard. Routing probes (`--dry-run`) and evidence replays
 (`--finalize-evidence`) skip the preflight automatically.
 
 **Host-native/Node-first entry point (BI-2272D840, BI-52500C0D, BI-4BE30454).** `pregate.mjs`
-detects whether native `sh` actually works against *this* worktree — not just
-"sh is on PATH", but that it can resolve the worktree's own git state
-(`sh -c 'git rev-parse --show-toplevel'`) — and routes accordingly:
-
-- Working native `sh` (Git-for-Windows shell, Linux/macOS): delegates to
-  `scripts/gate-worktree.sh`, which is a compatibility adapter into the
-  canonical Node gate.
-- No working native `sh` (e.g. a Windows worktree with no Git Bash and a WSL
-  install that cannot cleanly read the worktree's `.git` indirection — the
-  exact failure BI-C22152E7 hit): routes to `scripts/gate-worktree.mjs`, a
-  canonical lease-claim / heartbeat / fenced-run / evidence-record /
-  lease-release flow. `scripts/local-ci-runner.sh` is likewise a compatibility
-  adapter into `scripts/local-ci-runner.mjs`; both host surfaces therefore call
-  the same `scripts/local-integration-ci.mjs` plan and slot manifest. Missing native `sh` is therefore
-  classified as **sandbox-routable, never a build blocker** — the agent no
-  longer needs to recognize that doctrine and hand-drive the lease steps.
+routes to `scripts/gate-worktree.mjs` by default on every host. The Node-native
+gate owns the lease-claim / heartbeat / fenced-run / descendant-quiescence /
+evidence-record / lease-release flow, so lease/fence safety has one canonical
+implementation. `scripts/gate-worktree.sh` remains a compatibility entry point
+and delegates to the Node gate; set `DPF_PREGATE_FORCE_SH=1` only for focused
+shell-adapter debugging. Missing native `sh` is therefore classified as
+**sandbox-routable, never a build blocker**.
 
 Either path produces the same evidence shape (manifest version and slot,
 branch/SHA, integration tree, database and Compose identity, production
 artifact, lease id, freshness verdict, toolchain fingerprint, expiry) and
 writes the same
 `.git/dpf-local-ci-gate.json` state file, so the pre-push gate below accepts
-either without caring which one ran. Force a specific path for
-testing/debugging with `DPF_PREGATE_FORCE_SH=1` or `DPF_PREGATE_FORCE_NODE=1`.
+either without caring which one ran. `DPF_PREGATE_FORCE_NODE=1` preserves the
+default. `DPF_PREGATE_FORCE_SH=1` is explicit legacy-shell debugging and still
+requires a working shell.
 
 The gate claims a `local-integration-ci` lease (waiting if the sandbox is
 already leased). A canonical waiter refreshes its idempotent claim well inside
@@ -215,7 +207,12 @@ bounds recovery when the supervisor disappears without shortening the maximum
 queue wait. The gate runs the command, releases the runtime slot, records a
 local-integration evidence record with the lease id and `gatePassed`, and
 writes the latest gate result to Git-local state
-(`.git/dpf-local-ci-gate.json`). Renewal loss is
+(`.git/dpf-local-ci-gate.json`, with a slot suffix for non-default slots). It
+overwrites stale state with `admitted` and then `running` as soon as it owns the
+sandbox, before the expensive command mutates the runtime. If the child wrapper
+exits before a terminal record is written, `pregate` reads that running state,
+best-effort releases the recorded lease, and rewrites the local gate record as
+failed so pre-push cannot trust a stale pass. Renewal loss is
 fail-closed: before further sandbox mutation the gate terminates its complete
 child process tree, records a fenced outcome, and releases idempotently.
 Transport failure is uncertainty rather than proof of ownership loss: the gate
@@ -230,9 +227,19 @@ admitted waiter renews its database authority while it waits for that host
 fence and refuses to acquire the fence near its last known expiry. The database
 lease remains the governed cross-process record, while this local
 fence closes the host process-liveness gap the database cannot observe.
-The requested expiry is calculated afresh for every claim observation, and the
-service grants a fresh admitted-owner window at promotion, so time spent
-waiting never consumes the acquired owner's TTL.
+The requested expiry is calculated for each claim observation after queue
+admission, and the service grants a fresh admitted-owner window at promotion,
+so time spent waiting never consumes the acquired owner's TTL.
+The canonical gate samples the local-CI command process tree while the command
+runs, remembers observed descendants, and before releasing the lease/fence waits
+briefly for remembered descendants to exit or terminates them. This keeps a
+later claimant from entering the sandbox while an earlier gate still has live
+child, grandchild, or tool-spawned build/test processes. The shell adapter
+execs the Node gate immediately, so POSIX hosts use the same long-lived
+fence-owner process as every other host. Windows process-tree snapshots are
+intentionally sampled more slowly because each WMI/CIM process-table read is
+itself a heavyweight host operation; `DPF_GATE_PROCESS_SCAN_MS` and
+`DPF_GATE_DESCENDANT_POLL_MS` remain explicit debugging overrides.
 Claim, heartbeat, signal/fence, and release timestamps are included in the
 evidence and Git-local state. An expired TTL is never permission for the old
 owner to continue working. The gate does

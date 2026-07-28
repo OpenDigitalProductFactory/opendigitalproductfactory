@@ -35,6 +35,7 @@ import {
   createLocalCiSlotManifest,
   localCiSlotEnvironment,
 } from "./lib/local-ci-slot-manifest.mjs";
+import { writeLocalCiGateState } from "./lib/local-ci-gate-state.mjs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
@@ -63,6 +64,19 @@ function retryDelayMs({ attempt, pollSeconds, retryAfterSeconds = 0 }) {
 function isTransientMcpError(error) {
   const text = error instanceof Error ? error.message : String(error);
   return /ECONNRESET|ECONNREFUSED|EPIPE|ETIMEDOUT|socket hang up|invalid JSON response|fetch failed/i.test(text);
+}
+
+function numberOrDefault(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+export function defaultProcessScanMs(platform = process.platform) {
+  return platform === "win32" ? 5000 : 250;
+}
+
+export function defaultDescendantPollMs(platform = process.platform) {
+  return platform === "win32" ? 1000 : 250;
 }
 
 function git(gitBin, args, cwd) {
@@ -180,6 +194,170 @@ function resolveGateCommand({ branch, allowStub, gitBin }) {
   return null;
 }
 
+export function collectDescendantPids(rootPid, processRows) {
+  const root = Number(rootPid);
+  if (!Number.isInteger(root) || root <= 0) return [];
+  const childrenByParent = new Map();
+  for (const row of processRows || []) {
+    const pid = Number(row?.pid);
+    const parentPid = Number(row?.parentPid);
+    if (!Number.isInteger(pid) || !Number.isInteger(parentPid) || pid <= 0) continue;
+    const children = childrenByParent.get(parentPid) || [];
+    children.push(pid);
+    childrenByParent.set(parentPid, children);
+  }
+  const descendants = [];
+  const queue = [...(childrenByParent.get(root) || [])];
+  const seen = new Set([root]);
+  while (queue.length > 0) {
+    const pid = queue.shift();
+    if (seen.has(pid)) continue;
+    seen.add(pid);
+    descendants.push(pid);
+    queue.push(...(childrenByParent.get(pid) || []));
+  }
+  return descendants;
+}
+
+const LOCAL_CI_MUTATOR_COMMANDS = [
+  /(?:^|[\\/])local-ci-runner\.mjs(?:\s|$)/i,
+  /(?:^|[\\/])local-integration-ci\.mjs(?:\s|$)/i,
+  /(?:^|[\\/])\.local-ci-runner(?:-[^\\/\s"]+)?(?:[\\/\s"]|$)/i,
+];
+
+export function findLiveLocalCiMutatorPids(processRows, { excludePids = [] } = {}) {
+  const rows = Array.isArray(processRows) ? processRows : [];
+  const excluded = new Set(
+    excludePids
+      .map(Number)
+      .filter((pid) => Number.isInteger(pid) && pid > 0),
+  );
+  const mutatorPids = new Set();
+
+  for (const row of rows) {
+    const pid = Number(row?.pid);
+    const commandLine = typeof row?.commandLine === "string" ? row.commandLine : "";
+    if (
+      !Number.isInteger(pid)
+      || pid <= 0
+      || excluded.has(pid)
+      || !LOCAL_CI_MUTATOR_COMMANDS.some((pattern) => pattern.test(commandLine))
+    ) {
+      continue;
+    }
+    mutatorPids.add(pid);
+    for (const descendantPid of collectDescendantPids(pid, rows)) {
+      if (!excluded.has(descendantPid)) mutatorPids.add(descendantPid);
+    }
+  }
+
+  return [...mutatorPids].sort((left, right) => left - right);
+}
+
+function readProcessRows({ platform = process.platform, spawnSyncImpl = spawnSync } = {}) {
+  if (platform === "win32") {
+    const result = spawnSyncImpl("powershell.exe", [
+      "-NoProfile",
+      "-Command",
+      "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,CommandLine | ConvertTo-Json -Compress",
+    ], { encoding: "utf8", windowsHide: true });
+    if (result.status !== 0 || !result.stdout) return [];
+    try {
+      const parsed = JSON.parse(result.stdout);
+      const rows = Array.isArray(parsed) ? parsed : [parsed];
+      return rows.map((row) => ({
+        pid: Number(row.ProcessId),
+        parentPid: Number(row.ParentProcessId),
+        commandLine: typeof row.CommandLine === "string" ? row.CommandLine : "",
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  const result = spawnSyncImpl("ps", ["-eo", "pid=,ppid=,args="], { encoding: "utf8" });
+  if (result.status !== 0 || !result.stdout) return [];
+  return result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.match(/^\s*(\d+)\s+(\d+)\s*(.*)$/))
+    .filter(Boolean)
+    .map((match) => ({
+      pid: Number(match[1]),
+      parentPid: Number(match[2]),
+      commandLine: match[3] || "",
+    }));
+}
+
+function isProcessAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function terminatePid(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return;
+  if (process.platform === "win32") {
+    spawnSync("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore" });
+    return;
+  }
+  try {
+    process.kill(pid, "SIGTERM");
+  } catch {
+    // Process already exited.
+  }
+}
+
+export function createProcessTreeTracker({
+  rootPid,
+  listProcessRows = readProcessRows,
+  processAlive = isProcessAlive,
+  terminate = terminatePid,
+  wait = sleep,
+  now = () => Date.now(),
+  onEvent = () => {},
+} = {}) {
+  const root = Number(rootPid);
+  const remembered = new Set();
+
+  const sample = () => {
+    const descendants = collectDescendantPids(root, listProcessRows());
+    for (const pid of descendants) remembered.add(pid);
+    return descendants;
+  };
+
+  const liveRememberedDescendants = () =>
+    [...remembered].filter((pid) => pid !== root && processAlive(pid));
+
+  const waitForQuiescence = async ({ graceMs = 5000, pollMs = 250 } = {}) => {
+    const deadline = now() + graceMs;
+    sample();
+    while (liveRememberedDescendants().length > 0 && now() < deadline) {
+      await wait(pollMs);
+      sample();
+    }
+    const live = liveRememberedDescendants();
+    if (live.length === 0) return [];
+    onEvent({ type: "descendants-terminating", pids: live });
+    for (const pid of live) terminate(pid);
+    const terminatedDeadline = now() + Math.max(1000, pollMs * 4);
+    while (liveRememberedDescendants().length > 0 && now() < terminatedDeadline) {
+      await wait(pollMs);
+    }
+    return live;
+  };
+
+  return {
+    sample,
+    waitForQuiescence,
+    liveRememberedDescendants,
+    rememberedPids: () => [...remembered],
+  };
+}
+
 function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFile }) {
   if (!commandSpec) {
     if (!allowStub) throw new Error("runGateCommand called with no command and no stub allowed");
@@ -195,6 +373,8 @@ function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFile }) {
     };
   }
   let child = null;
+  let tracker = null;
+  let trackerTimer = null;
   let output = "";
   writeFileSync(fullLogFile, "");
   const append = (chunk, stream) => {
@@ -217,25 +397,60 @@ function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFile }) {
       } else {
         child = spawn(commandSpec.value, { ...common, shell: true });
       }
+      tracker = createProcessTreeTracker({ rootPid: child.pid });
+      tracker.sample();
+      trackerTimer = setInterval(
+        () => tracker.sample(),
+        Math.max(50, numberOrDefault(process.env.DPF_GATE_PROCESS_SCAN_MS, defaultProcessScanMs())),
+      );
       child.stdout.on("data", (chunk) => append(chunk, process.stdout));
       child.stderr.on("data", (chunk) => append(chunk, process.stderr));
       child.once("error", reject);
-      child.once("close", (code, signal) => resolve({
-        label: commandSpec.label,
-        status: code ?? (signal ? 143 : 1),
-        output,
-      }));
+      child.once("close", async (code, signal) => {
+        if (trackerTimer) {
+          clearInterval(trackerTimer);
+          trackerTimer = null;
+        }
+        const terminated = tracker
+          ? await tracker.waitForQuiescence({
+            graceMs: numberOrDefault(process.env.DPF_GATE_DESCENDANT_GRACE_MS, 5000),
+            pollMs: Math.max(50, numberOrDefault(
+              process.env.DPF_GATE_DESCENDANT_POLL_MS,
+              defaultDescendantPollMs(),
+            )),
+          })
+          : [];
+        if (terminated.length > 0) {
+          append(
+            `gate-worktree: terminated ${terminated.length} descendant process(es) before lease release: ${terminated.join(", ")}\n`,
+            process.stderr,
+          );
+        }
+        resolve({
+          label: commandSpec.label,
+          status: code ?? (signal ? 143 : 1),
+          output,
+        });
+      });
     }),
     terminate: async () => {
-      if (!child || child.exitCode !== null) return;
-      if (process.platform === "win32") {
-        spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
-      } else {
-        try {
-          process.kill(-child.pid, "SIGTERM");
-        } catch {
-          child.kill("SIGTERM");
+      if (trackerTimer) {
+        clearInterval(trackerTimer);
+        trackerTimer = null;
+      }
+      if (child && child.exitCode === null) {
+        if (process.platform === "win32") {
+          spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+        } else {
+          try {
+            process.kill(-child.pid, "SIGTERM");
+          } catch {
+            child.kill("SIGTERM");
+          }
         }
+      }
+      if (tracker) {
+        await tracker.waitForQuiescence({ graceMs: 0, pollMs: 50 });
       }
     },
   };
@@ -417,7 +632,8 @@ async function main() {
   let pendingEvidenceFile = slotManifest.evidence.pending;
   let fullLogFile;
   let freshnessReportFile;
-  let localFencePath = slotManifest.fence.path;
+  let localFencePath = process.env.DPF_LOCAL_SANDBOX_FENCE_PATH
+    || slotManifest.fence.path;
 
   let quiescenceAttempt = 0;
   for (;;) {
@@ -604,7 +820,8 @@ async function main() {
       pendingEvidenceFile = slotManifest.evidence.pending;
       fullLogFile = process.env.DPF_LOCAL_CI_OUTPUT_FILE || slotManifest.output.log;
       freshnessReportFile = slotManifest.evidence.freshness;
-      localFencePath = slotManifest.fence.path;
+      localFencePath = process.env.DPF_LOCAL_SANDBOX_FENCE_PATH
+        || slotManifest.fence.path;
       url = slotManifest.portal.url;
       leaseEvents.push({
         type: "admitted",
@@ -612,6 +829,18 @@ async function main() {
         slotKey: slotManifest.slotKey,
         waitAgeMs: admission?.waitAgeMs ?? null,
         expiresAt,
+      });
+      writeState(stateFile, {
+        branch,
+        sha,
+        gatePassed: false,
+        leaseId,
+        evidenceId: "",
+        status: "admitted",
+        expiresAt,
+        resilience: null,
+        leaseEvents,
+        evidencePending: false,
       });
       break;
     }
@@ -701,8 +930,24 @@ async function main() {
       branch,
     });
     if (localFence.status !== "conflict") {
-      localFenceToken = localFence.record.token;
-      break;
+      // The checked-in runner is the shared-sandbox mutator whose mixed-version
+      // predecessors must drain before a successor starts. Explicit commands
+      // remain fenced by their host record, but may be source-local contract
+      // harnesses that neither use nor mutate the convergence sandbox.
+      const liveMutatorPids = commandSpec?.kind === "argv"
+        ? findLiveLocalCiMutatorPids(readProcessRows(), {
+          excludePids: [process.pid],
+        })
+        : [];
+      if (liveMutatorPids.length === 0) {
+        localFenceToken = localFence.record.token;
+        break;
+      }
+      releaseLocalSandboxFence({
+        path: localFencePath,
+        token: localFence.record.token,
+      });
+      localFence.liveMutatorPids = liveMutatorPids;
     }
     if (Date.now() >= deadline) {
       await releaseLeaseOnce();
@@ -733,7 +978,13 @@ async function main() {
       at: new Date().toISOString(),
       expiresAt,
     });
-    process.stdout.write(`local-CI sandbox process fence held by ${localFence.active?.ownerSessionId || "unknown"}; retrying after admission...\n`);
+    if (localFence.liveMutatorPids?.length > 0) {
+      process.stdout.write(
+        `local-CI sandbox still has live mutator processes (${localFence.liveMutatorPids.join(", ")}); retrying after admission...\n`,
+      );
+    } else {
+      process.stdout.write(`local-CI sandbox process fence held by ${localFence.active?.ownerSessionId || "unknown"}; retrying after admission...\n`);
+    }
     await sleep(Math.min(options.pollSeconds * 1000, Math.max(10, deadline - Date.now())));
   }
   try {
@@ -753,6 +1004,22 @@ async function main() {
   if (commandSpec) process.stdout.write(`running local-CI command: ${commandSpec.label}\n`);
   else process.stdout.write("sandbox checkout/build stub: gate passed (explicit test-only mode)\n");
 
+  writeState(stateFile, {
+    branch,
+    sha,
+    gatePassed: false,
+    leaseId,
+    evidenceId: "",
+    status: "running",
+    expiresAt,
+    resilience: null,
+    leaseEvents: [
+      ...leaseEvents,
+      { type: "started", at: new Date().toISOString() },
+    ],
+    evidencePending: false,
+  });
+
   // The preflight executes in the shared scratch integration worktree, whose
   // gitdir differs from this candidate worktree's gitdir. Give the descendant
   // process one explicit handoff path so the wrapper reads evidence from the
@@ -764,6 +1031,7 @@ async function main() {
       ...localCiSlotEnvironment(slotManifest),
       DPF_LOCAL_CI_METADATA_FILE: metadataFile,
       DPF_LOCAL_CI_FRESHNESS_REPORT_FILE: freshnessReportFile,
+      DPF_LOCAL_CI_GATE_STATE_FILE: stateFile,
       DPF_NONPROD_LEASE_ID: leaseId,
       DPF_NONPROD_OWNER_SESSION_ID: ownerSessionId,
     },
@@ -1020,23 +1288,20 @@ function writeState(stateFile, {
   evidencePendingReason = "",
   quiescence = null,
 }) {
-  mkdirSync(dirname(stateFile), { recursive: true });
-  const payload = {
+  writeLocalCiGateState(stateFile, {
     branch,
     sha,
     gatePassed,
     leaseId,
-    evidenceRecordId: evidenceId,
+    evidenceId,
     status,
     expiresAt,
+    resilience,
     leaseEvents,
     evidencePending,
-    recordedAt: new Date().toISOString(),
-  };
-  if (resilience) payload.resilience = resilience;
-  if (evidencePending) payload.evidencePendingReason = evidencePendingReason || "unknown";
-  if (quiescence) payload.quiescence = quiescence;
-  writeFileSync(stateFile, `${JSON.stringify(payload, null, 2)}\n`);
+    evidencePendingReason,
+    quiescence,
+  });
 }
 
 if (process.argv[1] === THIS_FILE) {
