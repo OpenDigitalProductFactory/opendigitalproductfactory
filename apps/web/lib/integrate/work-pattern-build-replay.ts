@@ -206,7 +206,8 @@ export async function executeHermeticBuildReplay(input: {
   const deps = input.deps ?? await productionDeps();
   const workdir = buildWorktreePath(input.request.childTaskRunId);
   let generatedSource = "";
-  let inference: InferenceResult | null = null;
+  let inputTokens = 0;
+  let outputTokens = 0;
 
   await deps.exec(
     deps.containerId,
@@ -223,7 +224,7 @@ export async function executeHermeticBuildReplay(input: {
         workdir,
       }),
       dispatch: async () => {
-        inference = await deps.infer({
+        const inference = await deps.infer({
           messages: [{
             role: "user",
             content: [
@@ -240,6 +241,8 @@ export async function executeHermeticBuildReplay(input: {
           profile: input.request.executionProfile,
           agentId: input.agentId,
         });
+        inputTokens = inference.inputTokens;
+        outputTokens = inference.outputTokens;
         const source = sourceFromResponse(inference.content);
         if (!source) {
           return {
@@ -284,8 +287,8 @@ export async function executeHermeticBuildReplay(input: {
     return {
       result,
       outputDigest: sha256(generatedSource),
-      inputTokens: inference?.inputTokens ?? 0,
-      outputTokens: inference?.outputTokens ?? 0,
+      inputTokens,
+      outputTokens,
     };
   } finally {
     await deps.exec(

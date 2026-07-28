@@ -4,8 +4,11 @@ import {
   executePersistedWorkPatternExperimentCell,
   type PersistedWorkPatternRuntimeDeps,
 } from "./work-pattern-experiment-runtime";
+import type { WorkPatternExperimentCellRequest } from "./work-pattern-experiment-adapter";
 
-function request(environmentKey = "shadow") {
+function request(
+  environmentKey: WorkPatternExperimentCellRequest["executionProfile"]["environmentKey"] = "shadow",
+): WorkPatternExperimentCellRequest {
   return {
     experimentRunId: "WPR-1",
     childTaskRunId: "TR-CELL-1",
