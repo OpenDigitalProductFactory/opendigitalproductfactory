@@ -262,7 +262,6 @@ async function loadTaxonomyNodeLookup(
   const candidates = [...candidateIds];
   const nodes = await db.taxonomyNode.findMany({
     where: {
-      ...INVENTORY_ENTITY_CANONICAL_WHERE,
       OR: [
         { id: { in: candidates } },
         { nodeId: { in: candidates } },
@@ -401,6 +400,7 @@ export async function runDiscoveryTriagePass(
   ));
   const entities = await db.inventoryEntity.findMany({
     where: {
+      ...INVENTORY_ENTITY_CANONICAL_WHERE,
       OR: [
         { attributionStatus: "needs_review" },
         { attributionConfidence: { lt: thresholds.coworkerAutoApply } },

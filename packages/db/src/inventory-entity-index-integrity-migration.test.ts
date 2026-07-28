@@ -343,7 +343,7 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
     `)).rejects.toMatchObject({ code: "23505" });
 
     await expect(client.query(
-      `SELECT bt_index_parent_check(
+      `SELECT public.bt_index_parent_check(
         format('%I.%I', current_schema(), 'InventoryEntity_entityKey_key')::regclass,
         true,
         true
