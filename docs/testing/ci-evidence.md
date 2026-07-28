@@ -242,11 +242,13 @@ continues to resolve the real host clone from `DPF_REPO_ROOT`; the narrow
 override exists only for the route-sweep fixture.
 
 Manual workflow dispatch accepts a bounded worker count of `1`, `2`, or `4`;
-the measured default is **2**. On candidate `37e848084f`, all three settings
-completed 201/201 routes with zero failures: worker 1 took 865,504 ms, worker 2
-took 696,589 ms, and worker 4 took 765,651 ms. Four workers added load without
-improving the critical path because `/admin/reference-data` alone consumed
-roughly 11-13 minutes; that product defect is tracked as `BI-CC7CA516`.
+the measured default is **2**. Before `BI-CC7CA516`, all three settings
+completed 201/201 routes with zero failures, but `/admin/reference-data`
+dominated every run at roughly 11-13 minutes. PR #3690 bounded that route:
+worker 2 then completed the full inventory in 193,207 ms and worker 4 in
+182,988 ms, both with zero failures. Four workers saved only about ten seconds
+while doubling browser concurrency and slowing the corrected route from
+2,188 ms to 4,266 ms, so two remains the lower-load reliable default.
 Each worker owns an authenticated browser context and each route owns a fresh
 page, so route teardown cannot interrupt the next navigation.
 
