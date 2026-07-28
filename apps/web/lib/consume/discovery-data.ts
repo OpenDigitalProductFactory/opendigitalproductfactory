@@ -1,4 +1,8 @@
-import { INVENTORY_ENTITY_CANONICAL_WHERE, prisma } from "@dpf/db";
+import {
+  INVENTORY_ENTITY_CANONICAL_WHERE,
+  INVENTORY_RELATIONSHIP_CANONICAL_WHERE,
+  prisma,
+} from "@dpf/db";
 
 export type DiscoveryHealthSummary = {
   totalEntities: number;
@@ -298,7 +302,11 @@ export async function getInventoryEntitiesGroupedBySubnet(): Promise<GroupedInve
       },
     }),
     prisma.inventoryRelationship.findMany({
-      where: { relationshipType: "MEMBER_OF", status: "active" },
+      where: {
+        ...INVENTORY_RELATIONSHIP_CANONICAL_WHERE,
+        relationshipType: "MEMBER_OF",
+        status: "active",
+      },
       select: { fromEntityId: true, toEntityId: true },
     }),
   ]);

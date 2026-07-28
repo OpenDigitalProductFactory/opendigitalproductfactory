@@ -456,6 +456,7 @@ async function assertSourceInventoryIntegrity(
     schema: "public",
     table: "InventoryEntity",
     uniqueOnly: false,
+    requiredIndexes: [{ name: "InventoryEntity_entityKey_key", unique: true }],
   });
   if (!report.failed) return;
 

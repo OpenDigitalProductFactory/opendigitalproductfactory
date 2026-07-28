@@ -30,7 +30,10 @@ import {
   isKnownQualityIssueType,
   type QualityIssueType,
 } from "./quality-issue-registry";
-import { INVENTORY_ENTITY_CANONICAL_WHERE } from "./inventory-entity-lifecycle";
+import {
+  INVENTORY_ENTITY_CANONICAL_WHERE,
+  INVENTORY_RELATIONSHIP_CANONICAL_WHERE,
+} from "./inventory-entity-lifecycle";
 
 // Types whose auto-resolve is "observed active again" — the ones the recovery
 // backstop can safely close when the scoped row is now active.
@@ -149,7 +152,10 @@ async function autoResolveRecovered(
       : Promise.resolve([]),
     relationshipIds.length
       ? db.inventoryRelationship.findMany({
-          where: { id: { in: relationshipIds } },
+          where: {
+            ...INVENTORY_RELATIONSHIP_CANONICAL_WHERE,
+            id: { in: relationshipIds },
+          },
           select: { id: true, status: true },
         })
       : Promise.resolve([]),

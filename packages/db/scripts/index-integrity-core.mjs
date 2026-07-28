@@ -84,7 +84,13 @@ async function requireAmcheck(client, mode) {
 async function listIndexes(client, { schema, table, uniqueOnly }) {
   const { rows } = await client.query(
     `
-    SELECT t.relname AS table_name, c.relname AS index_name, i.indisunique AS is_unique
+    SELECT
+      t.relname AS table_name,
+      c.relname AS index_name,
+      i.indisunique AS is_unique,
+      i.indisvalid AS is_valid,
+      i.indisready AS is_ready,
+      i.indislive AS is_live
     FROM pg_index i
     JOIN pg_class c ON c.oid = i.indexrelid
     JOIN pg_class t ON t.oid = i.indrelid
@@ -124,6 +130,7 @@ export async function checkIndexIntegrity(client, options = {}) {
   const schema = options.schema ?? "public";
   const table = options.table ?? null;
   const uniqueOnly = options.uniqueOnly ?? false;
+  const requiredIndexes = options.requiredIndexes ?? [];
   const amcheckMode = options.amcheckMode ?? "require";
   if (!["provision", "require"].includes(amcheckMode)) {
     throw new Error(`Unsupported amcheck mode: ${amcheckMode}`);
@@ -132,6 +139,35 @@ export async function checkIndexIntegrity(client, options = {}) {
   await requireAmcheck(client, amcheckMode);
   const indexes = await listIndexes(client, { schema, table, uniqueOnly });
   const corrupted = [];
+  for (const required of requiredIndexes) {
+    const found = indexes.find(({ index_name: index }) => index === required.name);
+    if (!found) {
+      corrupted.push({
+        table: table ?? "unknown",
+        index: required.name,
+        isUnique: false,
+        error: "required index is missing",
+      });
+      continue;
+    }
+
+    const structurallyHealthy =
+      (required.unique !== true || found.is_unique === true)
+      && found.is_valid === true
+      && found.is_ready === true
+      && found.is_live === true;
+    if (!structurallyHealthy) {
+      corrupted.push({
+        table: found.table_name,
+        index: found.index_name,
+        isUnique: found.is_unique,
+        error:
+          `required index structure is unhealthy: unique=${found.is_unique}, ` +
+          `valid=${found.is_valid}, ready=${found.is_ready}, live=${found.is_live}`,
+      });
+    }
+  }
+
   for (const {
     table_name: indexTable,
     index_name: index,

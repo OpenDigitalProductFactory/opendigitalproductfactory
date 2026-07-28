@@ -13,8 +13,16 @@ const migrationUrl = new URL(
   "../prisma/migrations/20260728120000_repair_inventory_entity_index_integrity/migration.sql",
   import.meta.url,
 );
+const observationSnapshotMigrationUrl = new URL(
+  "../prisma/migrations/20260728115900_snapshot_inventory_observation_facts/migration.sql",
+  import.meta.url,
+);
 const identityTupleMigrationUrl = new URL(
   "../prisma/migrations/20260728154500_preserve_inventory_identity_tuple/migration.sql",
+  import.meta.url,
+);
+const observationRestoreMigrationUrl = new URL(
+  "../prisma/migrations/20260728170000_restore_inventory_observation_facts/migration.sql",
   import.meta.url,
 );
 
@@ -217,6 +225,22 @@ async function createFixture(targetSchema: string, crossScope = false): Promise<
       "identityStatus" = 'ai_resolved',
       "identityConfidence" = 0.74
     WHERE id = 'entity-a-new';
+
+    UPDATE "InventoryEntity"
+    SET
+      name = 'Legacy Interface A',
+      status = 'stale',
+      "providerView" = 'foundational',
+      "discoveredViaConnectionId" = 'connection-old'
+    WHERE id = 'entity-a-old';
+
+    UPDATE "InventoryEntity"
+    SET
+      name = 'Current Interface A',
+      status = 'active',
+      "providerView" = 'manufactureAndDeliver',
+      "discoveredViaConnectionId" = 'connection-new'
+    WHERE id = 'entity-a-new';
   `);
 
   if (crossScope) {
@@ -243,22 +267,37 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
   });
 
   it("converges canonical entities and relationships without losing evidence", async () => {
+    const observationSnapshotMigration = await readFile(
+      observationSnapshotMigrationUrl,
+      "utf8",
+    );
     const migration = await readFile(migrationUrl, "utf8");
     const identityTupleMigration = await readFile(identityTupleMigrationUrl, "utf8");
+    const observationRestoreMigration = await readFile(
+      observationRestoreMigrationUrl,
+      "utf8",
+    );
+    await client.query(observationSnapshotMigration);
     await client.query(migration);
     await client.query(identityTupleMigration);
+    await client.query(observationRestoreMigration);
 
     expect(await scalar(`SELECT count(*)::text value FROM "InventoryEntity"`)).toBe(7);
     expect(await scalar(`SELECT count(*)::text value FROM "InventoryRelationship"`)).toBe(9);
 
     const canonicalA = (await client.query(`
-      SELECT id, manufacturer, "supportStatus", properties, "firstSeenAt", "lastSeenAt",
+      SELECT id, name, status, "providerView", "discoveredViaConnectionId",
+             manufacturer, "supportStatus", properties, "firstSeenAt", "lastSeenAt",
              "lastConfirmedRunId", "mergedIntoId", "catalogIdentityId",
              "identityStatus", "identityConfidence"
       FROM "InventoryEntity" WHERE "entityKey" = 'network:duplicate-a'
     `)).rows[0];
     expect(canonicalA).toMatchObject({
       id: "entity-a-old",
+      name: "Current Interface A",
+      status: "active",
+      providerView: "manufactureAndDeliver",
+      discoveredViaConnectionId: "connection-new",
       manufacturer: "Acme",
       supportStatus: "confirmed-current",
       lastConfirmedRunId: "run-a-new",
@@ -377,8 +416,10 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
     const beforeSecondPass =
       JSON.stringify((await client.query(`SELECT * FROM "InventoryEntity" ORDER BY id`)).rows)
       + JSON.stringify((await client.query(`SELECT * FROM "InventoryRelationship" ORDER BY id`)).rows);
+    await client.query(observationSnapshotMigration);
     await client.query(migration);
     await client.query(identityTupleMigration);
+    await client.query(observationRestoreMigration);
     const afterSecondPass =
       JSON.stringify((await client.query(`SELECT * FROM "InventoryEntity" ORDER BY id`)).rows)
       + JSON.stringify((await client.query(`SELECT * FROM "InventoryRelationship" ORDER BY id`)).rows);
@@ -387,8 +428,13 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
 
   it("rolls back the entire migration when duplicate keys cross ownership scopes", async () => {
     await createFixture(conflictSchema, true);
+    const observationSnapshotMigration = await readFile(
+      observationSnapshotMigrationUrl,
+      "utf8",
+    );
     const migration = await readFile(migrationUrl, "utf8");
 
+    await client.query(observationSnapshotMigration);
     await expect(client.query(migration)).rejects.toThrow(/scope|ownership/i);
     await client.query("ROLLBACK");
 

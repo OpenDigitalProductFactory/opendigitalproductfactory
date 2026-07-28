@@ -100,6 +100,10 @@ async function main() {
       schema: "public",
       table: ONLY_TABLE ?? null,
       uniqueOnly: UNIQUE_ONLY,
+      requiredIndexes:
+        ONLY_TABLE === "InventoryEntity"
+          ? [{ name: "InventoryEntity_entityKey_key", unique: true }]
+          : [],
     });
     const corrupted = integrity.corrupted;
 

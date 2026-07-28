@@ -148,10 +148,12 @@ future dedupe retires losers in one pass — tracked in BI-8EEEF8CB.
   is a real regression and means indexes are stale.
 - Contributor preview reuses the same integrity core in read-only mode. After clearing the
   disposable destination, it requires the migration-provisioned `amcheck` extension and checks
-  every `InventoryEntity` B-tree with heap agreement enabled before copying source data. A failed
-  check leaves the destination empty. The canonical preview commands stop the prior `dev-portal`
-  before refresh, so a failed clone also leaves port `3001` closed instead of serving stale
-  acceptance evidence.
+  every `InventoryEntity` B-tree with heap agreement enabled before copying source data. It also
+  requires `InventoryEntity_entityKey_key` to exist as a unique, valid, ready, live B-tree; an
+  empty index list is not success. A failed check leaves the destination empty. The canonical
+  preview command claims the shared nonproduction lease before touching Docker, stops the prior
+  `dev-portal` before refresh, and releases the claim on startup failure. A failed clone therefore
+  leaves port `3001` closed instead of serving stale acceptance evidence.
 
 ## Related
 

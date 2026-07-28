@@ -7,7 +7,11 @@
 // Re-derives every run, so it cannot drift. Skips cleanly when no discovery data
 // exists. db is injectable for tests.
 
-import { INVENTORY_ENTITY_CANONICAL_WHERE, prisma } from "@dpf/db";
+import {
+  INVENTORY_ENTITY_CANONICAL_WHERE,
+  INVENTORY_RELATIONSHIP_CANONICAL_WHERE,
+  prisma,
+} from "@dpf/db";
 import {
   buildNetworkTopologyModel,
   type EdgeNodeFact,
@@ -47,7 +51,17 @@ export async function reconcileNetworkTopology(opts: { db?: typeof prisma } = {}
 
   const idToKey = new Map(entityRows.map((e) => [e.id, e.entityKey]));
   const relRows = entityRows.length
-    ? await db.inventoryRelationship.findMany({ where: { scopeKey: INTERNAL_SCOPE_KEY }, select: { fromEntityId: true, toEntityId: true, relationshipType: true } })
+    ? await db.inventoryRelationship.findMany({
+        where: {
+          ...INVENTORY_RELATIONSHIP_CANONICAL_WHERE,
+          scopeKey: INTERNAL_SCOPE_KEY,
+        },
+        select: {
+          fromEntityId: true,
+          toEntityId: true,
+          relationshipType: true,
+        },
+      })
     : [];
 
   const edgeNodes: EdgeNodeFact[] = edgeRows.map((r) => ({

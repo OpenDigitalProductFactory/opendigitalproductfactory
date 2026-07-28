@@ -46,9 +46,10 @@ For every heap-visible duplicate `entityKey` group:
 
 - keep the row with the earliest `firstSeenAt`, then lexical `id`, as the stable canonical identity;
 - retain the minimum `firstSeenAt`, maximum `lastSeenAt`, and the `lastConfirmedRunId` from the latest observation;
+- snapshot each row's `name`, `status`, `providerView`, and `discoveredViaConnectionId` before convergence, then restore the newest coherent observation tuple onto the canonical row;
 - preserve explicit/human-confirmed identity and support fields on the canonical row;
 - fill null or `unknown` canonical fields from the latest non-null, non-`unknown` observation;
-- merge JSON properties with the latest observation winning only for discovery-owned keys;
+- merge JSON properties with the latest observation winning only for discovery-owned keys, remove the temporary observation snapshot from the canonical row, and retain each tombstone's original snapshot;
 - never move or change a primary key.
 
 Every loser remains as an explicit inactive tombstone:
@@ -59,7 +60,7 @@ Every loser remains as an explicit inactive tombstone:
 
 `InventoryEntity` gains an indexed, self-referential `mergedIntoId` relation, following the existing MDM tombstone pattern used by `CustomerAccount`, `CustomerSite`, `CustomerContact`, `Region`, and `City`. `InventoryRelationship` gains the same lineage so collision losers have an unambiguous survivor.
 
-Add one shared canonical-record predicate in `@dpf/db` (`mergedIntoId: null`) and use it in default inventory, triage, promotion, enrichment, customer-estate, security-enrichment, and EA projection reads. Direct by-id owner routes resolve a tombstone to its canonical record instead of rendering a ghost. A static completeness test inventories every `InventoryEntity` list/count/projection read so a future consumer cannot silently omit the predicate.
+Add shared canonical-record predicates in `@dpf/db` and use them in default entity and relationship reads across inventory, triage, promotion, enrichment, customer-estate, security-enrichment, and EA projections. Direct by-id owner routes resolve an entity tombstone to its canonical record instead of rendering a ghost. A static completeness test inventories both `InventoryEntity` and `InventoryRelationship` list/count/projection reads so a future consumer cannot silently omit the predicate.
 
 ### Dependent evidence convergence
 
@@ -98,9 +99,9 @@ This ordering preserves all rows and provenance while avoiding compound-unique c
 - Assert forced-heap duplicate counts are zero before index creation and again after repair.
 - Assert every entity merge map row has one canonical survivor, every remapped child resolves, and active relationship tuples are unique.
 - Add a discovery-transaction invariant in `packages/db/src/discovery-sync.ts`: after entity upserts and before dependent writes, disable all index-scan classes locally and count the incoming `entityKey` values from the heap. Any count other than one aborts the transaction, preventing a damaged index from compounding duplicates.
-- Refactor the existing guard into one importable integrity core plus its CLI wrapper. The core supports a require-only mode that never creates an extension or changes source state and fails when the governed migration has not provisioned `amcheck`.
+- Refactor the existing guard into one importable integrity core plus its CLI wrapper. The core supports a require-only mode that never creates an extension or changes source state, fails when the governed migration has not provisioned `amcheck`, and requires `InventoryEntity_entityKey_key` to exist as a unique, valid, ready, live B-tree before heap agreement is accepted.
 - Invoke the read-only source check from inside `runWithDestinationCleanup`, after the initial destination reset and before the first source read/copy. This guarantees guard failure also clears the disposable destination.
-- Stop any existing `dev-portal` before a preview refresh. A failed source guard or clone must leave port `3001` closed so stale data cannot masquerade as current acceptance evidence.
+- Route the canonical preview aliases through `dev-portal-lease.sh refresh`. The wrapper claims `local-integration-ci` before touching Docker, refuses an active holder, stops the shared `dpf` preview before rebuilding its source clone, retains the lease on success, and releases it automatically when startup fails. A failed source guard or clone must leave port `3001` closed so stale data cannot masquerade as current acceptance evidence.
 - Keep the pinned Postgres image and existing fleet-wide collation guard as the root-cause prevention layer; do not add a parallel integrity tool.
 
 ## Implementation phases
@@ -135,12 +136,15 @@ The red fixture must require deterministic survivorship, complete hard/soft-refe
 
 **Files**
 
+- `packages/db/prisma/migrations/20260728115900_snapshot_inventory_observation_facts/migration.sql`
 - `packages/db/prisma/migrations/20260728120000_repair_inventory_entity_index_integrity/migration.sql`
+- `packages/db/prisma/migrations/20260728154500_preserve_inventory_identity_tuple/migration.sql`
+- `packages/db/prisma/migrations/20260728170000_restore_inventory_observation_facts/migration.sql`
 - `packages/db/prisma/schema.prisma`
 - `packages/db/src/inventory-entity-lifecycle.ts`
 - canonical inventory read/projection callers discovered by the completeness test
 
-Implement the design in one transaction using materialized, transaction-local merge maps and parameter-free SQL over repository-owned identifiers. Include the migration-safety attestation, fixed lock order, bounded `lock_timeout`, fail-closed assertions, and forward-only recovery notes.
+Implement the repair using ordered forward migrations and materialized, transaction-local merge maps over repository-owned identifiers. The pre-repair migration snapshots mutable observation facts; the immutable repair migration performs identity and relationship convergence; forward corrections restore a coherent mastered-identity tuple and the latest mutable observation tuple. Include fixed lock order, bounded `lock_timeout`, fail-closed assertions, and forward-only recovery notes. Never edit a committed migration.
 
 No row or primary key is deleted. Clean installs and a second execution change no data.
 
@@ -189,14 +193,16 @@ Add one PostgreSQL-backed ingestion test that applies the repair, runs `persistB
 - `packages/db/src/sanitized-clone.ts`
 - `packages/db/src/sanitized-clone.test.ts`
 - `scripts/lib/dev-preview-migrate-converge.test.mjs`
+- `tests/release/dev-portal-lease-contract.test.mjs`
 - `docs/runbooks/2026-07-20-collation-drift-index-corruption.md`
 
-Refactor the existing index-integrity logic into an importable core and call its read-only, require-existing-`amcheck` path from `sanitized-clone.ts` against `PRODUCTION_DATABASE_URL`, limited to `InventoryEntity`. The call runs inside the destination-cleanup boundary after the initial reset and before source copy. Stop any already-running `dev-portal` before refresh. Update the compose/package-script contract tests and the existing runbook; do not add a new user-facing page or duplicate runbook.
+Refactor the existing index-integrity logic into an importable core and call its read-only, require-existing-`amcheck` path from `sanitized-clone.ts` against `PRODUCTION_DATABASE_URL`, limited to `InventoryEntity` and explicitly requiring its canonical unique index. The call runs inside the destination-cleanup boundary after the initial reset and before source copy. Route preview aliases through the lease-owned refresh subcommand so another holder cannot be interrupted and failed startup releases its claim. Update the package, lease, and existing runbook contracts; do not add a new user-facing page or duplicate runbook.
 
 **Verification**
 
 - clone contract test proves the destination reset precedes the production-source guard and the guard precedes copy;
-- guard tests cover table filtering, `heapallindexed`, corruption exit `1`, and missing-extension exit `2` without mutation;
+- guard tests cover table filtering, `heapallindexed`, required-index absence or invalidity, corruption exit `1`, and missing-extension exit `2` without mutation;
+- lease tests prove the claim precedes both Docker actions, a conflicting holder prevents any Docker action, and startup failure releases the acquired lease;
 - a PostgreSQL-backed negative clone run proves unique failure empties the destination;
 - guard or clone failure prevents clone publication, leaves `dev-portal` stopped, and leaves port `3001` closed;
 - healthy guard permits clone.
@@ -247,12 +253,12 @@ No phase is independently shippable. A guard without the migration blocks affect
 - **UI ghosts:** status filters are inconsistent across inventory consumers. `mergedIntoId` is the canonical lifecycle marker, a shared predicate owns default exclusion, and a completeness test covers list/count/projection reads.
 - **Guard cost:** `amcheck` is intentionally limited to `InventoryEntity` on every contributor preview; the fleet-wide sweep remains a CI/operations action.
 - **Verification authority:** preview checks use a source role with read-only transaction authority after the migration provisions `amcheck`; the guard never mutates the live source.
-- **Stale publication:** dependency failure alone does not stop an already-running preview. The canonical preview refresh command stops `dev-portal` first and tests port closure on every failed refresh.
+- **Stale publication:** dependency failure alone does not stop an already-running preview. The canonical preview refresh command first acquires the shared lease, then stops `dev-portal`, and releases the lease on every failed refresh.
 - **Forward-only rollback:** the transaction is fully reversible before commit. After commit, this one-time fleet repair is explicitly **non-compensable** because it does not persist every moved child id required for a truthful unmerge. Tombstones preserve source evidence and lineage but are not an undo receipt. Any future reversal requires a separately governed forward migration based on retained evidence; the committed migration is never edited.
 
 ## Documentation impact
 
-No operator workflow or public positioning changes. Update the existing collation-drift runbook because contributor preview gains a new fail-closed source check. The implementation plan and PR evidence carry the architecture and contributor-workflow impact.
+No customer or public-positioning workflow changes. Update the existing collation-drift runbook and contributor-runtime guide because Contributor preview gains a lease-owned refresh command and a new fail-closed source check. The implementation plan and PR evidence carry the architecture impact.
 
 ## Completion checklist
 
