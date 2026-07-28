@@ -106,11 +106,14 @@ test("ignores comments, strings, and test fixtures", () => {
   assert.deepEqual(kinds("prisma.integrationCredential.upsert({})", "apps/web/lib/acme.generated.ts"), []);
 });
 
-test("Repo Guard Loop provisions the pinned isolated AST runtime", () => {
+test("Policy Guards source profile provisions the pinned isolated AST runtime", () => {
   const runtimePackage = JSON.parse(readFileSync("packages/repo-guard-runtime/package.json", "utf8"));
   assert.equal(runtimePackage.devDependencies?.typescript, "6.0.3");
   const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
-  const job = workflow.slice(workflow.indexOf("  repo-guard-loop:"), workflow.indexOf("  docs-link-integrity:"));
+  const job = workflow.slice(
+    workflow.indexOf("  policy-guards-source:"),
+    workflow.indexOf("  policy-guards-pr:"),
+  );
   assert.match(job, /corepack prepare pnpm@10\.33\.2 --activate/);
   assert.match(job, /pnpm install --frozen-lockfile --ignore-scripts --filter @dpf\/repo-guard-runtime/);
 

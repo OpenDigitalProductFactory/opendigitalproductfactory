@@ -99,15 +99,33 @@ describe("CI policy guard registry", () => {
     );
   });
 
-  it("wires source and pull-request shadow profiles in CI", () => {
+  it("wires blocking source and pull-request profiles in CI", () => {
     const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
-    assert.match(workflow, /^  policy-guards-source-shadow:$/m);
+    assert.match(workflow, /^  policy-guards-source:$/m);
     assert.match(workflow, /node scripts\/ci-policy-guards\.mjs --profile source/);
-    assert.match(workflow, /^  policy-guards-pr-shadow:$/m);
+    assert.match(workflow, /^  policy-guards-pr:$/m);
     assert.match(workflow, /node scripts\/ci-policy-guards\.mjs --profile pull-request/);
     assert.equal(
       (workflow.match(/continue-on-error:\s*true/g) ?? []).length,
-      2,
+      0,
     );
+  });
+
+  it("does not retain migrated legacy job definitions or aggregate dependencies", () => {
+    const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
+
+    for (const legacyJobId of EXPECTED_LEGACY_JOBS) {
+      const escapedJobId = legacyJobId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      assert.doesNotMatch(
+        workflow,
+        new RegExp(`^  ${escapedJobId}:$`, "m"),
+        `${legacyJobId} must not allocate a standalone runner`,
+      );
+      assert.doesNotMatch(
+        workflow,
+        new RegExp(`^      - ${escapedJobId}$`, "m"),
+        `${legacyJobId} must not remain in Merge Readiness dependencies`,
+      );
+    }
   });
 });

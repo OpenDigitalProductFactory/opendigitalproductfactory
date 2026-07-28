@@ -100,9 +100,10 @@ Coverage receipt: `cms3quvuy0lb301p5ilijw2qz`.
 1. **CodeQL parity (`BI-A6642373`).** Complete as a no-consolidation decision:
    retain Advanced security scanning and GitHub Code Quality because their
    outputs are not substitutable.
-2. **Policy guards (`BI-0580AFD3`).** Introduce a versioned guard registry and
-   a small profile matrix. Emit named results and make the merge aggregate
-   reject missing registry entries.
+2. **Policy guards (`BI-0580AFD3`).** Exact-tree parity was 34/34 on PR #3675
+   run `30309641352` (31.7 seconds source, 3.3 seconds pull-request). The
+   versioned profiles passed blocking proof on PR #3678 run `30313483522`;
+   the 34 standalone legacy definitions and aggregate dependencies are removed.
 3. **TypeScript proof (`BI-FE4C70DD`).** Add parity fixtures, split non-web
    typecheck from web proof, and make stable `Typecheck` consume the exact-tree
    production-build result.
