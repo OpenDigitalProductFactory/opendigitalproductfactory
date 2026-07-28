@@ -30,7 +30,8 @@ import type { ToolPack, ToolPackHandler } from "../tool-pack";
 const definitions: ToolDefinition[] = [
   {
     name: "get_marketing_summary",
-    description: "Get archetype-aware marketing metrics: storefront inbox counts, CRM pipeline summary, and the marketing playbook for this business type",
+    description:
+      "Start here for the whole marketing picture: campaigns with ids, next step, channel readiness, evidence freshness, blockers, inbox, pipeline, playbook.",
     inputSchema: {
       type: "object",
       properties: {
@@ -268,57 +269,67 @@ const definitions: ToolDefinition[] = [
 ];
 
 async function getMarketingSummaryHandler(params: Record<string, unknown>): Promise<ToolResult> {
-  const { getPlaybook } = await import("@/lib/tak/marketing-playbooks");
+  const { resolveMarketingArchetypeContext, MARKETING_NO_STOREFRONT_MESSAGE } = await import(
+    "@/lib/marketing/archetype-context"
+  );
   const days = typeof params["days"] === "number" ? params["days"] : 30;
-  const since = new Date();
-  since.setDate(since.getDate() - days);
 
-  const config = await prisma.storefrontConfig.findFirst({
-    include: { archetype: { select: { archetypeId: true, name: true, category: true, ctaType: true } } },
-  });
-
-  if (!config) {
-    return { success: true, message: "No storefront configured. Set up your storefront first at /storefront/setup." };
+  const context = await resolveMarketingArchetypeContext();
+  if (!context) {
+    return { success: true, message: MARKETING_NO_STOREFRONT_MESSAGE };
   }
+  const { archetype, playbook, storefrontId } = context;
 
-  const playbook = getPlaybook(config.archetype.category, config.archetype.ctaType);
+  // The operating snapshot is the canonical decision context — campaign
+  // identities, channel readiness, evidence freshness, blockers, and one next
+  // executable step. Without it this summary reported inbox counts and no way
+  // to name a campaign, which is what drove empty get_campaign_plan calls.
+  const { getMarketingOperatingSnapshot, projectOperatingSnapshotForTools } = await import(
+    "@/lib/marketing/operating-snapshot"
+  );
+  const { loadAcquisitionSignals } = await import("@/lib/marketing/acquisition-signals");
 
-  const [bookings, inquiries, orders, donations, engagements, opportunities] = await Promise.all([
-    prisma.storefrontBooking.count({ where: { storefrontId: config.id, createdAt: { gte: since } } }),
-    prisma.storefrontInquiry.count({ where: { storefrontId: config.id, createdAt: { gte: since } } }),
-    prisma.storefrontOrder.count({ where: { storefrontId: config.id, createdAt: { gte: since } } }),
-    prisma.storefrontDonation.count({ where: { storefrontId: config.id, createdAt: { gte: since } } }),
-    prisma.engagement.groupBy({ by: ["status"], _count: true }),
-    prisma.opportunity.groupBy({ by: ["stage"], _count: true }),
+  const [operating, signals] = await Promise.all([
+    getMarketingOperatingSnapshot(),
+    loadAcquisitionSignals({ storefrontId, days }),
   ]);
 
+  const projection = operating ? projectOperatingSnapshotForTools(operating) : null;
+  const nextStep = projection?.["nextStep"] as { headline?: string } | undefined;
   return {
     success: true,
-    message: `Marketing summary for ${config.archetype.name} (${config.archetype.ctaType})`,
+    message: nextStep?.headline
+      ? `Marketing summary for ${archetype.name} (${archetype.ctaType}) — next: ${nextStep.headline}`
+      : `Marketing summary for ${archetype.name} (${archetype.ctaType})`,
     data: {
-      archetype: { id: config.archetype.archetypeId, name: config.archetype.name, category: config.archetype.category, ctaType: config.archetype.ctaType },
+      archetype: { id: archetype.archetypeId, name: archetype.name, category: archetype.category, ctaType: archetype.ctaType },
       playbook,
-      inbox: { days, bookings, inquiries, orders, donations, total: bookings + inquiries + orders + donations },
-      pipeline: {
-        engagements: Object.fromEntries(engagements.map((e) => [e.status, e._count])),
-        opportunities: Object.fromEntries(opportunities.map((o) => [o.stage, o._count])),
-      },
+      inbox: signals.inbox,
+      pipeline: signals.pipeline,
+      // Campaign identities and the one next step come from the canonical
+      // snapshot; an install with no workspace yet reports empty, never absent.
+      campaigns: projection?.["campaigns"] ?? [],
+      channels: projection?.["channels"] ?? [],
+      evidence: projection?.["evidence"] ?? null,
+      blockers: projection?.["blockers"] ?? [],
+      nextStep: projection?.["nextStep"] ?? null,
+      strategy: projection?.["strategy"] ?? null,
+      approvals: projection?.["approvals"] ?? null,
     },
   };
 }
 
 async function suggestCampaignIdeasHandler(): Promise<ToolResult> {
-  const { getPlaybook } = await import("@/lib/tak/marketing-playbooks");
+  const { resolveMarketingArchetypeContext, MARKETING_NO_STOREFRONT_MESSAGE } = await import(
+    "@/lib/marketing/archetype-context"
+  );
 
-  const config = await prisma.storefrontConfig.findFirst({
-    include: { archetype: { select: { archetypeId: true, name: true, category: true, ctaType: true } } },
-  });
-
-  if (!config) {
-    return { success: true, message: "No storefront configured. Set up your storefront first at /storefront/setup." };
+  const context = await resolveMarketingArchetypeContext({ includeItems: true, itemLimit: 10 });
+  if (!context) {
+    return { success: true, message: MARKETING_NO_STOREFRONT_MESSAGE };
   }
-
-  const playbook = getPlaybook(config.archetype.category, config.archetype.ctaType);
+  const config = { id: context.storefrontId, archetype: context.archetype };
+  const playbook = context.playbook;
 
   // Current season for seasonal relevance
   const month = new Date().getMonth();
@@ -661,30 +672,26 @@ async function createMarketingAutomationCandidateHandler(
 }
 
 async function analyzeSeoOpportunityHandler(): Promise<ToolResult> {
-  const { getPlaybook } = await import("@/lib/tak/marketing-playbooks");
+  const { resolveMarketingArchetypeContext, MARKETING_NO_STOREFRONT_MESSAGE } = await import(
+    "@/lib/marketing/archetype-context"
+  );
 
-  const config = await prisma.storefrontConfig.findFirst({
-    include: {
-      archetype: { select: { archetypeId: true, name: true, category: true, ctaType: true } },
-      items: {
-        where: { isActive: true },
-        select: { name: true, description: true, ctaType: true },
-        orderBy: { sortOrder: "asc" },
-        take: 20,
-      },
-      sections: {
-        where: { isVisible: true },
-        select: { type: true, title: true },
-        orderBy: { sortOrder: "asc" },
-      },
-    },
+  const context = await resolveMarketingArchetypeContext({
+    includeItems: true,
+    includeSections: true,
+    itemLimit: 20,
   });
-
-  if (!config) {
-    return { success: true, message: "No storefront configured. Set up your storefront first at /storefront/setup." };
+  if (!context) {
+    return { success: true, message: MARKETING_NO_STOREFRONT_MESSAGE };
   }
 
-  const playbook = getPlaybook(config.archetype.category, config.archetype.ctaType);
+  const config = {
+    id: context.storefrontId,
+    archetype: context.archetype,
+    items: context.items,
+    sections: context.sections,
+  };
+  const playbook = context.playbook;
 
   // Get organization location if available
   const org = await prisma.organization.findFirst({

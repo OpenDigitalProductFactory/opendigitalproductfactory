@@ -107,7 +107,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "get_campaign_plan",
     description:
-      "Read a campaign's full plan (objective, audience, channels, budget, timeline, KPI targets) plus a live execution rollup (brief/task/draft counts and the single most useful next step). Use to report status or decide what to do next on a campaign.",
+      "Drill into ONE campaign: plan (objective, audience, channels, budget, timeline, KPI targets) plus a live execution rollup and next step. Needs a campaignId from get_marketing_summary; without one, returns the candidate ids.",
     inputSchema: {
       type: "object",
       properties: {
@@ -121,7 +121,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "get_campaign_performance",
     description:
-      "Read a campaign's measured cross-channel performance: per-channel and total impressions, clicks, spend, conversions, plus derived CTR / CPC / CPA / conversion rate, spend paced against budget, and attainment against the campaign's KPI targets. Use to report how a running campaign is actually performing and which channel is most efficient. Requires published assets whose channel KPIs have been pulled (refresh_channel_kpis).",
+      "Drill into ONE campaign's measured performance: per-channel and total impressions, clicks, spend, conversions, derived CTR / CPC / CPA / conversion rate, spend against budget, and KPI-target attainment. Needs a campaignId from get_marketing_summary, which also says whether a campaign has measurable evidence yet; without one, returns the candidate ids. Numbers exist only after refresh_channel_kpis has pulled published assets.",
     inputSchema: {
       type: "object",
       properties: {
@@ -327,8 +327,11 @@ async function attachToCampaignHandler(params: Record<string, unknown>): Promise
 async function getCampaignPlanHandler(params: Record<string, unknown>): Promise<ToolResult> {
   const { getCampaignPlan } = await import("@/lib/marketing/campaigns");
   const result = await getCampaignPlan(String(params["campaignId"] ?? ""));
+  // A failed drill-in carries candidate campaign IDs and one recovery
+  // instruction — forward the payload so the caller can self-correct instead of
+  // retrying the same empty call.
   if ("error" in result) {
-    return { success: false, error: result.error, message: result.message };
+    return { success: false, error: result.error, message: result.message, data: result.data };
   }
   return { success: true, message: result.message, data: result.data };
 }
@@ -337,7 +340,7 @@ async function getCampaignPerformanceHandler(params: Record<string, unknown>): P
   const { getCampaignPerformance } = await import("@/lib/marketing/campaign-performance");
   const result = await getCampaignPerformance(String(params["campaignId"] ?? ""));
   if ("error" in result) {
-    return { success: false, error: result.error, message: result.message };
+    return { success: false, error: result.error, message: result.message, data: result.data };
   }
   return { success: true, message: result.message, data: result.data };
 }

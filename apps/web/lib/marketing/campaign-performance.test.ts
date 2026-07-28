@@ -106,17 +106,37 @@ describe("metricRowFromSnapshot", () => {
       costInUsdCents: 500,
       conversions: 2,
     });
-    expect(row).toEqual({ channel: "linkedin", impressions: 100, clicks: 10, costInUsdCents: 500, conversions: 2 });
+    expect(row).toMatchObject({ channel: "linkedin", impressions: 100, clicks: 10, costInUsdCents: 500, conversions: 2 });
+  });
+
+  it("carries publication timing and tracked-link provenance when supplied", () => {
+    const publishedAt = new Date("2026-07-27T09:00:00.000Z");
+    const metricsPolledAt = new Date("2026-07-28T09:00:00.000Z");
+    const row = metricRowFromSnapshot("linkedin", { impressions: 1 }, {
+      publishedAt,
+      metricsPolledAt,
+      trackedLink: true,
+    });
+    expect(row.publishedAt).toEqual(publishedAt);
+    expect(row.metricsPolledAt).toEqual(metricsPolledAt);
+    expect(row.trackedLink).toBe(true);
+  });
+
+  it("defaults timing and tracked-link provenance to absent, never invented", () => {
+    const row = metricRowFromSnapshot("linkedin", { impressions: 1 });
+    expect(row.publishedAt).toBeNull();
+    expect(row.metricsPolledAt).toBeNull();
+    expect(row.trackedLink).toBe(false);
   });
 
   it("defaults missing / non-numeric / non-object snapshots to zero", () => {
-    expect(metricRowFromSnapshot("x", null)).toEqual({ channel: "x", impressions: 0, clicks: 0, costInUsdCents: 0, conversions: 0 });
-    expect(metricRowFromSnapshot("x", "not-an-object")).toEqual({ channel: "x", impressions: 0, clicks: 0, costInUsdCents: 0, conversions: 0 });
-    expect(metricRowFromSnapshot("x", { impressions: "50", clicks: NaN })).toEqual({ channel: "x", impressions: 0, clicks: 0, costInUsdCents: 0, conversions: 0 });
+    expect(metricRowFromSnapshot("x", null)).toMatchObject({ channel: "x", impressions: 0, clicks: 0, costInUsdCents: 0, conversions: 0 });
+    expect(metricRowFromSnapshot("x", "not-an-object")).toMatchObject({ channel: "x", impressions: 0, clicks: 0, costInUsdCents: 0, conversions: 0 });
+    expect(metricRowFromSnapshot("x", { impressions: "50", clicks: NaN })).toMatchObject({ channel: "x", impressions: 0, clicks: 0, costInUsdCents: 0, conversions: 0 });
   });
 
   it("clamps negative counts to zero so the rollup can't show a negative CTR", () => {
     const row = metricRowFromSnapshot("x", { impressions: 100, clicks: -100, conversions: -5, costInUsdCents: -1 });
-    expect(row).toEqual({ channel: "x", impressions: 100, clicks: 0, costInUsdCents: 0, conversions: 0 });
+    expect(row).toMatchObject({ channel: "x", impressions: 100, clicks: 0, costInUsdCents: 0, conversions: 0 });
   });
 });

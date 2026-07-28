@@ -13,13 +13,23 @@ import {
 } from "@/lib/marketing/agentic-operations";
 import { getPlaybook } from "@/lib/tak/marketing-playbooks";
 import { buildMarketingOwnerDecision } from "@/lib/marketing/next-decision";
+import { getMarketingOperatingSnapshot } from "@/lib/marketing/operating-snapshot";
 import {
   buildMarketingDisclosure,
   buildMarketingOwnerQuestion,
 } from "@/lib/marketing/disclosure";
 
 export default async function CustomerMarketingPage() {
+  // The owner-first decision and the coworker's tool output must report the same
+  // state for the same organization, so both read the canonical operating
+  // snapshot. The workspace snapshot still drives the strategy/queue panels.
+  //
+  // These load SEQUENTIALLY, and the workspace snapshot is handed over rather
+  // than reloaded: getMarketingWorkspaceSnapshot() upserts the MarketingStrategy
+  // row, so racing two of them concurrently collides on the organizationId
+  // unique key and renders a 500.
   const snapshot = await getMarketingWorkspaceSnapshot();
+  const operating = await getMarketingOperatingSnapshot({ workspace: snapshot });
 
   if (!snapshot) {
     return (
@@ -78,7 +88,7 @@ export default async function CustomerMarketingPage() {
     suggestions,
   });
   const playbook = getPlaybook(snapshot.storefront.category, snapshot.storefront.ctaType);
-  const ownerDecision = buildMarketingOwnerDecision(snapshot, playbook);
+  const ownerDecision = buildMarketingOwnerDecision(snapshot, playbook, operating ?? undefined);
   const ownerQuestion = buildMarketingOwnerQuestion(snapshot.storefront.category, playbook);
   const disclosure = buildMarketingDisclosure(snapshot);
   const archetypeName = snapshot.storefront.archetypeName ?? "your business";
