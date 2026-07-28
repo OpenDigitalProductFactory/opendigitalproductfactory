@@ -157,8 +157,9 @@ recall conditions above.
 ## Exact-tree production-build reuse
 
 For pull-request and merge-group events, the `Production Build` job packages
-`apps/web/.next` after a successful `pnpm --filter web build` and publishes it
-for the matching `UX Route Budget Sweep`. The one-day artifact contains a
+the deploy-equivalent standalone runtime plus static assets after a successful
+`pnpm --filter web build` and publishes it for the matching
+`UX Route Budget Sweep`. The one-day artifact contains a
 versioned receipt and a compressed payload. The receipt binds the payload to:
 
 - repository, commit SHA, and immutable Git tree SHA;
@@ -168,18 +169,24 @@ versioned receipt and a compressed payload. The receipt binds the payload to:
 - payload byte count and SHA-256 checksum; and
 - the successful production-build command plus creation/expiry times.
 
-The UX workflow finds only a `CI` run with the same event and `GITHUB_SHA`.
+The UX workflow finds only a `CI` run with the same event and Actions run-head
+identity (the PR head SHA for pull requests; `GITHUB_SHA` otherwise). The
+receipt separately binds the synthetic merge checkout and its immutable tree.
 After download, `scripts/ci-build-artifact.mjs consume` independently recomputes
 the current tree, toolchain, payload checksum, byte count, archive inventory,
 and expiry before replacing `apps/web/.next`. The archive must contain only the
-`.next` root and must include `.next/BUILD_ID`.
+`.next` root and must include the standalone runtime's `BUILD_ID`. The consumer
+adds the checked-out `public` directory and static assets to the standalone
+layout, then starts the same `apps/web/server.js` entry point used by the
+production container. Development-only server output and source maps are not
+transported.
 
 This follows GitHub's cross-run artifact contract: a consumer supplies both a
 token and source run identifier, and the token has only `actions: read` plus
 `contents: read`. See [Store and share data with workflow artifacts](https://docs.github.com/en/actions/tutorials/store-and-share-data)
 and [REST API endpoints for GitHub Actions artifacts](https://docs.github.com/en/rest/actions/artifacts).
 
-Reuse is an optimization, never an exemption. Discovery is bounded to four
+Reuse is an optimization, never an exemption. Discovery is bounded to ten
 minutes. Missing, late, expired, incomplete, corrupt, or identity-mismatched
 evidence removes any partial `.next` output and runs the normal local production
 build. Packaging or upload failure is also non-authoritative: `Production Build`

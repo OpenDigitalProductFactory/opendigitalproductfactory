@@ -2,6 +2,7 @@
 
 import { execFileSync, spawnSync } from "node:child_process";
 import {
+  cpSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -108,10 +109,10 @@ function createArtifact(options) {
   runTar([
     "-czf",
     payloadPath,
-    "--exclude=.next/cache",
     "-C",
     join(ROOT, "apps/web"),
-    ".next",
+    ".next/standalone",
+    ".next/static",
   ]);
   const now = Date.now();
   const receipt = createBuildArtifactReceipt({
@@ -252,7 +253,10 @@ function consumeArtifact(options) {
     }
     tempDir = mkdtempSync(join(tmpdir(), "dpf-web-build-"));
     runTar(["-xzf", payloadPath, "-C", tempDir]);
-    statSync(join(tempDir, ".next/BUILD_ID"));
+    const standaloneWeb = join(tempDir, ".next/standalone/apps/web");
+    statSync(join(standaloneWeb, ".next/BUILD_ID"));
+    cpSync(join(ROOT, "apps/web/public"), join(standaloneWeb, "public"), { recursive: true });
+    cpSync(join(tempDir, ".next/static"), join(standaloneWeb, ".next/static"), { recursive: true });
     const target = join(ROOT, "apps/web/.next");
     rmSync(target, { recursive: true, force: true });
     renameSync(join(tempDir, ".next"), target);

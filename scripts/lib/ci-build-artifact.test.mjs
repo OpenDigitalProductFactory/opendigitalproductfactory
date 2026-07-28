@@ -158,8 +158,9 @@ describe("archive inventory", () => {
   it("accepts only a rooted Next.js build with BUILD_ID", () => {
     assert.deepEqual(validateArchiveEntries([
       ".next/",
-      ".next/BUILD_ID",
-      ".next/server/app/index.html",
+      ".next/standalone/apps/web/.next/BUILD_ID",
+      ".next/standalone/apps/web/server.js",
+      ".next/static/chunks/app.js",
     ]), { ok: true, reasons: [] });
   });
 
@@ -168,7 +169,7 @@ describe("archive inventory", () => {
       "../escape",
       "/absolute",
       "public/index.html",
-      ".next/server/app/index.html",
+      ".next/standalone/apps/web/server.js",
     ]);
     assert.equal(result.ok, false);
     assert.match(result.reasons.join("\n"), /unsafe archive path/);

@@ -188,8 +188,14 @@ jobs:
       # Poll with curl rather than adding a wait-on dependency just for this job
       # (the New Dependency Gate exists to stop exactly that kind of drive-by).
       - name: Start the portal
+        env:
+          DPF_REUSED_BUILD: ${{ steps.materialize-build.outputs.reused }}
         run: |
-          pnpm --filter web start &
+          if [ "$DPF_REUSED_BUILD" = "true" ]; then
+            (cd apps/web/.next/standalone && PORT=3000 HOSTNAME=127.0.0.1 node apps/web/server.js) &
+          else
+            pnpm --filter web start &
+          fi
           for i in $(seq 1 60); do
             if curl -sf http://localhost:3000/login > /dev/null; then
               echo "portal up after ${i}s"; exit 0

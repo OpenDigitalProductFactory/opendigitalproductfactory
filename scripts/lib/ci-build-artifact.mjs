@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 
 export const BUILD_ARTIFACT_SCHEMA_VERSION = 1;
 export const BUILD_ARTIFACT_KIND = "dpf-web-production-build";
-export const BUILD_ARTIFACT_ROOT = "apps/web/.next";
+export const BUILD_ARTIFACT_ROOT = "apps/web/.next runtime subset";
 
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
@@ -139,7 +139,9 @@ export function validateArchiveEntries(entries) {
       reasons.push(`archive entry outside .next: ${entry}`);
     }
   }
-  if (!normalized.includes(".next/BUILD_ID")) reasons.push("archive is missing .next/BUILD_ID");
+  if (!normalized.includes(".next/standalone/apps/web/.next/BUILD_ID")) {
+    reasons.push("archive is missing the standalone BUILD_ID");
+  }
   return { ok: reasons.length === 0, reasons: [...new Set(reasons)] };
 }
 

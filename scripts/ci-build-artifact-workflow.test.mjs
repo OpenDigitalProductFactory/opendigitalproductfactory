@@ -9,6 +9,7 @@ const artifactScript = readFileSync("scripts/ci-build-artifact.mjs", "utf8");
 describe("production-build artifact workflow wiring", () => {
   it("publishes one checksummed exact-tree build after Production Build", () => {
     assert.match(ci, /node scripts\/ci-build-artifact\.mjs create/);
+    assert.match(artifactScript, /"\.next\/standalone",\s*"\.next\/static"/);
     assert.match(ci, /name: web-production-build-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/);
     assert.match(ci, /retention-days: 1/);
     assert.match(ci, /id: package-build[\s\S]*?continue-on-error: true/);
@@ -24,6 +25,8 @@ describe("production-build artifact workflow wiring", () => {
     assert.match(ux, /node scripts\/ci-build-artifact\.mjs consume/);
     assert.match(ux, /if: steps\.materialize-build\.outputs\.reused != 'true'/);
     assert.match(ux, /run: pnpm --filter web build/);
+    assert.match(ux, /DPF_REUSED_BUILD: \$\{\{ steps\.materialize-build\.outputs\.reused \}\}/);
+    assert.match(ux, /cd apps\/web\/\.next\/standalone[\s\S]*?node apps\/web\/server\.js/);
   });
 
   it("grants only read access to workflow artifacts", () => {
