@@ -17,6 +17,7 @@ describe("production-build artifact workflow wiring", () => {
   it("reuses only PR and merge-group artifacts and retains a fail-safe build", () => {
     assert.match(ux, /github\.event_name == 'pull_request' \|\| github\.event_name == 'merge_group'/);
     assert.match(ux, /node scripts\/ci-build-artifact\.mjs locate/);
+    assert.match(ux, /--wait-seconds 600/);
     assert.match(ux, /uses: actions\/download-artifact@v8/);
     assert.match(ux, /node scripts\/ci-build-artifact\.mjs consume/);
     assert.match(ux, /if: steps\.materialize-build\.outputs\.reused != 'true'/);

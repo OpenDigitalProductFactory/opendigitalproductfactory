@@ -140,11 +140,14 @@ jobs:
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         env:
           GITHUB_TOKEN: ${{ github.token }}
+        # The producer's cold setup + cache restore + build + package path has
+        # exceeded four minutes in observed GitHub-hosted runs. Ten minutes
+        # remains bounded while avoiding a delayed duplicate build.
         run: >-
           node scripts/ci-build-artifact.mjs locate
           --workflow ci.yml
           --artifact-prefix web-production-build
-          --wait-seconds 240
+          --wait-seconds 600
 
       - name: Start production-build transfer timer
         if: steps.find-build.outputs.found == 'true'
