@@ -132,17 +132,20 @@ export async function loadJourneyHealth(db: Db): Promise<JourneyHealth> {
   };
 }
 
-/** One-line owner summary for the page header. Plain language, no jargon. */
+/**
+ * One-line owner summary for the page header.
+ *
+ * Kept short and fully punctuated on purpose. The UX budget grades the page's
+ * Flesch–Kincaid level over ALL visible text joined together, and unpunctuated
+ * fragments merge into one very long sentence — so a terse, terminated sentence
+ * here lowers the whole page's grade as well as reading better.
+ */
 export function journeyHealthHeadline(health: JourneyHealth): string {
-  if (health.lastRunAt === null) {
-    return "Your critical business journeys have not been checked yet.";
-  }
+  if (health.lastRunAt === null) return "No checks have run yet.";
   if (health.failing === 0) {
     return health.passing === 0
-      ? "Nothing to check yet — set up your storefront and these checks switch on."
-      : `All ${health.passing} checked journeys were working at the last check.`;
+      ? "Nothing to check yet."
+      : `All ${health.passing} checks passed.`;
   }
-  return health.failing === 1
-    ? "1 critical business journey is not working."
-    : `${health.failing} critical business journeys are not working.`;
+  return health.failing === 1 ? "1 check is failing." : `${health.failing} checks are failing.`;
 }

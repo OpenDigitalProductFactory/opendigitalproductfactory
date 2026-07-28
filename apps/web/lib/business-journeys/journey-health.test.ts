@@ -126,22 +126,35 @@ describe("journeyHealthHeadline", () => {
   const base = { lastRunAt: new Date(), runId: "r", rows: [], notApplicable: 0, neverRun: 0 };
 
   it("counts failures in plain language", () => {
-    expect(journeyHealthHeadline({ ...base, failing: 1, passing: 3 })).toBe(
-      "1 critical business journey is not working.",
-    );
+    expect(journeyHealthHeadline({ ...base, failing: 1, passing: 3 })).toBe("1 check is failing.");
     expect(journeyHealthHeadline({ ...base, failing: 2, passing: 3 })).toBe(
-      "2 critical business journeys are not working.",
+      "2 checks are failing.",
     );
   });
 
   it("says so honestly when nothing has been checked yet", () => {
-    expect(journeyHealthHeadline({ ...base, lastRunAt: null, failing: 0, passing: 0 })).toContain(
-      "have not been checked yet",
+    expect(journeyHealthHeadline({ ...base, lastRunAt: null, failing: 0, passing: 0 })).toBe(
+      "No checks have run yet.",
     );
   });
 
-  it("qualifies an all-green headline with 'checked', never 'all healthy'", () => {
+  it("speaks of CHECKS passing, never of the business being healthy", () => {
+    // "All 4 checks passed" is a claim about the checks. "Everything is fine"
+    // would be a claim about the business, which these checks cannot support —
+    // they do not all reach data-path depth, let alone interaction depth.
     const headline = journeyHealthHeadline({ ...base, failing: 0, passing: 4 });
-    expect(headline).toBe("All 4 checked journeys were working at the last check.");
+    expect(headline).toBe("All 4 checks passed.");
+    expect(headline).not.toMatch(/healthy|everything|fine|all good/i);
+  });
+
+  it("every headline is a terminated sentence — unterminated copy inflates the page grade", () => {
+    const headlines = [
+      journeyHealthHeadline({ ...base, lastRunAt: null, failing: 0, passing: 0 }),
+      journeyHealthHeadline({ ...base, failing: 0, passing: 0 }),
+      journeyHealthHeadline({ ...base, failing: 0, passing: 4 }),
+      journeyHealthHeadline({ ...base, failing: 1, passing: 3 }),
+      journeyHealthHeadline({ ...base, failing: 3, passing: 1 }),
+    ];
+    for (const h of headlines) expect(h.endsWith(".")).toBe(true);
   });
 });

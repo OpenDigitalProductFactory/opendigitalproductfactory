@@ -26,6 +26,9 @@ export const dynamic = "force-dynamic";
 
 type Props = { searchParams: Promise<{ journey?: string }> };
 
+/** Anchor target for the lead band's next action when nothing is failing. */
+const HOW_IT_WORKS_ID = "how-these-checks-work";
+
 function SummaryTile({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
@@ -88,15 +91,16 @@ export default async function BusinessJourneysPage({ searchParams }: Props) {
             <>Runs Mon, Wed, Fri.</>
           )}
         </p>
-        {firstFailing ? (
-          <a
-            data-owner-first-next-action
-            href={`#${firstFailing.journeyId}`}
-            className="mt-3 inline-block rounded-md border border-[var(--dpf-accent)] px-3 py-1.5 text-xs font-medium text-[var(--dpf-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
-          >
-            Start here: {firstFailing.outcome}
-          </a>
-        ) : null}
+        {/* The one thing to do next, in every state — a surface that only marks
+            an action when something is broken leaves the owner with no way in
+            on the day everything is fine, which is most days. */}
+        <a
+          data-owner-first-next-action
+          href={firstFailing ? `#${firstFailing.journeyId}` : `#${HOW_IT_WORKS_ID}`}
+          className="mt-3 inline-block rounded-md border border-[var(--dpf-accent)] px-3 py-1.5 text-xs font-medium text-[var(--dpf-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
+        >
+          {firstFailing ? `Start here: ${firstFailing.outcome}` : "See what these checks cover"}
+        </a>
       </div>
 
       <div className="my-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -124,7 +128,7 @@ export default async function BusinessJourneysPage({ searchParams }: Props) {
 
       {/* Deferred detail. True and worth stating, but not what the operator came
           for — so it defers rather than adding to the arrival wall of text. */}
-      <details className="group mt-6">
+      <details id={HOW_IT_WORKS_ID} className="group mt-6">
         <summary className="cursor-pointer list-none text-xs font-medium text-[var(--dpf-accent)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]">
           <span className="group-open:hidden">How these checks work</span>
           <span className="hidden group-open:inline">Hide how these checks work</span>

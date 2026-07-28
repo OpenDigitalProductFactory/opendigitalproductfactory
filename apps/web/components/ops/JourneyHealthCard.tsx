@@ -74,9 +74,14 @@ export function JourneyHealthCard({
     >
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-base font-semibold text-[var(--dpf-text)]">{row.outcome}</h3>
+          {/* The outcome is a full sentence, so it is punctuated as one. That is
+              not cosmetic: the UX budget joins all visible text before grading
+              it, and an unterminated fragment merges with its neighbours into
+              one very long sentence, inflating the reading grade for the whole
+              page. Five cards of unpunctuated headings dominated it. */}
+          <h3 className="text-base font-semibold text-[var(--dpf-text)]">{row.outcome}.</h3>
           {row.revenueBearing ? (
-            <p className="mt-0.5 text-xs text-[var(--dpf-muted)]">Affects money coming in</p>
+            <p className="mt-0.5 text-xs text-[var(--dpf-muted)]">Affects money coming in.</p>
           ) : null}
         </div>
         <StatusBadge intent={presentation.intent} label={presentation.label} size="md" />
