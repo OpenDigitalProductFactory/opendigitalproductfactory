@@ -107,7 +107,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "get_campaign_plan",
     description:
-      "Read ONE campaign's full plan (objective, audience, channels, budget, timeline, KPI targets) plus a live execution rollup (brief/task/draft counts and the single most useful next step). Requires a campaignId — call get_marketing_summary first for the workspace-level picture and the campaign ids; drill in here only when you need one campaign's detail. Calling without a campaignId returns the candidate ids instead of the plan.",
+      "Drill into ONE campaign: plan (objective, audience, channels, budget, timeline, KPI targets) plus a live execution rollup and next step. Needs a campaignId from get_marketing_summary; without one, returns the candidate ids.",
     inputSchema: {
       type: "object",
       properties: {
@@ -121,7 +121,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "get_campaign_performance",
     description:
-      "Read ONE campaign's measured cross-channel performance: per-channel and total impressions, clicks, spend, conversions, plus derived CTR / CPC / CPA / conversion rate, spend paced against budget, and attainment against the campaign's KPI targets. Requires a campaignId — get_marketing_summary returns the ids and whether each campaign has measurable evidence yet; calling without a campaignId returns the candidate ids instead of performance. Numbers exist only for published assets whose channel KPIs have been pulled (refresh_channel_kpis).",
+      "Drill into ONE campaign's measured performance: per-channel and total impressions, clicks, spend, conversions, derived CTR / CPC / CPA / conversion rate, spend against budget, and KPI-target attainment. Needs a campaignId from get_marketing_summary, which also says whether a campaign has measurable evidence yet; without one, returns the candidate ids. Numbers exist only after refresh_channel_kpis has pulled published assets.",
     inputSchema: {
       type: "object",
       properties: {

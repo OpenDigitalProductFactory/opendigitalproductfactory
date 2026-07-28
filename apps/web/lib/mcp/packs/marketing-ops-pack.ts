@@ -31,7 +31,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "get_marketing_summary",
     description:
-      "Read the whole marketing operating picture in one call: active campaigns with their ids, execution state and measured results; connected-channel readiness and any operation a channel cannot support; evidence freshness; what is blocked and how to recover; and the single next executable step — alongside storefront inbox counts, CRM pipeline, and the playbook for this business type. Start here: this is usually enough on its own, and it returns the campaign ids that get_campaign_plan and get_campaign_performance require.",
+      "Start here for the whole marketing picture: campaigns with ids, next step, channel readiness, evidence freshness, blockers, inbox, pipeline, playbook.",
     inputSchema: {
       type: "object",
       properties: {
