@@ -65,8 +65,11 @@ flowchart LR
    URL if they are ready.
 5. Select **Create Portal**. The platform creates the storefront, its starting
    sections and items, the confirmed product-line and product hierarchy, the
-   matching archetype compositions, and the corresponding business and
-   operational architecture. The organization is the provider. Setup does not
+   matching default commercial offerings and catalog items, the matching
+   archetype compositions, and the corresponding business and operational
+   architecture. Storefront items are channel presentations of those shared
+   catalog items, not a second commercial source of truth. The organization is
+   the provider. Setup does not
    invent product teams, business units, subscribers, entitlements, or
    customers; consumer context appears only after real customer, booking,
    order, subscription, or fulfilment evidence exists. Booking-oriented
@@ -97,6 +100,12 @@ open each relevant workspace:
 
 Select **Publish now** on the Storefront dashboard only after these checks.
 Publishing makes the portal available immediately at `/s/{your-slug}`.
+
+If an older item shows **Needs setup link**, DPF could not find real
+product-line evidence for it during upgrade reconciliation. The item remains
+usable through the compatibility path, but it is not silently attached to a
+guessed product. Confirm the business's product mix before treating that item
+as catalog-backed.
 
 ## Verify The Customer Experience
 

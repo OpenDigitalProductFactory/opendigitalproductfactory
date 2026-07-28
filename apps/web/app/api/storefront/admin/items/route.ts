@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
+import {
+  ensureStorefrontCommercialChain,
+  projectStorefrontCatalogRow,
+  resolveCatalogProductLineSelection,
+  type StorefrontCommercialCatalogClient,
+} from "@/lib/products/commercial-catalog";
 
 export async function GET() {
   const session = await auth();
@@ -16,13 +22,24 @@ export async function GET() {
   const items = await prisma.storefrontItem.findMany({
     where: { storefrontId: config.id },
     orderBy: { sortOrder: "asc" },
+    include: {
+      catalogItem: {
+        select: {
+          catalogItemId: true,
+          name: true,
+          description: true,
+          priceType: true,
+          priceAmount: true,
+          priceCurrency: true,
+          quoteRequired: true,
+          status: true,
+        },
+      },
+    },
   });
 
   return NextResponse.json(
-    items.map((item) => ({
-      ...item,
-      priceAmount: item.priceAmount?.toString() ?? null,
-    })),
+    items.map(projectStorefrontCatalogRow),
   );
 }
 
@@ -46,6 +63,7 @@ type CreateItemBody = {
   };
   goalAmount?: number;
   suggestedAmount?: number;
+  productLineId?: string | null;
 };
 
 export async function POST(req: NextRequest) {
@@ -54,7 +72,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const config = await prisma.storefrontConfig.findFirst({ select: { id: true } });
+  const config = await prisma.storefrontConfig.findFirst({
+    select: {
+      id: true,
+      organizationId: true,
+    },
+  });
   if (!config) {
     return NextResponse.json({ error: "No storefront configured" }, { status: 404 });
   }
@@ -97,23 +120,60 @@ export async function POST(req: NextRequest) {
 
   const orgSettingsRow = await prisma.orgSettings.findFirst({ select: { baseCurrency: true } });
 
-  const item = await prisma.storefrontItem.create({
-    data: {
-      itemId,
-      storefrontId: config.id,
+  const priceCurrency =
+    body.priceCurrency ?? orgSettingsRow?.baseCurrency ?? "USD";
+  const productLines = await prisma.productLine.findMany({
+    where: {
+      organizationId: config.organizationId,
+      effectiveTo: null,
+    },
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    select: { id: true },
+  });
+  const requestedProductLineId = body.productLineId?.trim() || null;
+  const productLineSelection = resolveCatalogProductLineSelection(
+    productLines,
+    requestedProductLineId,
+  );
+  if (productLineSelection.error) {
+    return NextResponse.json(
+      { error: productLineSelection.error },
+      { status: 400 },
+    );
+  }
+
+  const item = await prisma.$transaction(async (tx) => {
+    const commercial = await ensureStorefrontCommercialChain({
+      db: tx as unknown as StorefrontCommercialCatalogClient,
+      organizationId: config.organizationId,
+      productLineId: productLineSelection.productLineId,
       name: body.name,
       description: body.description ?? null,
-      category: body.category ?? null,
-      ctaType: body.ctaType,
       priceType: body.priceType ?? null,
-      priceAmount: body.priceAmount != null ? body.priceAmount : null,
-      priceCurrency: body.priceCurrency ?? orgSettingsRow?.baseCurrency ?? "USD",
-      imageUrl: body.imageUrl ?? null,
-      ctaLabel: body.ctaLabel ?? null,
-      ...(bookingConfig && { bookingConfig }),
-      isActive: true,
-      sortOrder,
-    },
+      priceAmount: body.priceAmount ?? null,
+      priceCurrency,
+      sourceRef: itemId,
+    });
+
+    return tx.storefrontItem.create({
+      data: {
+        itemId,
+        storefrontId: config.id,
+        catalogItemId: commercial.catalogItemId,
+        name: body.name,
+        description: body.description ?? null,
+        category: body.category ?? null,
+        ctaType: body.ctaType,
+        priceType: body.priceType ?? null,
+        priceAmount: body.priceAmount != null ? body.priceAmount : null,
+        priceCurrency,
+        imageUrl: body.imageUrl ?? null,
+        ctaLabel: body.ctaLabel ?? null,
+        ...(bookingConfig && { bookingConfig }),
+        isActive: true,
+        sortOrder,
+      },
+    });
   });
 
   // For booking items, link to all active providers

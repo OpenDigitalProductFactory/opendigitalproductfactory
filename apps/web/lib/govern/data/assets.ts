@@ -651,6 +651,10 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
   ...[
     ["data:business-product-line", "ProductLine"],
     ["data:business-product", "Product"],
+    ["data:business-product-offering", "ProductOffering"],
+    ["data:business-catalog-item", "CatalogItem"],
+    ["data:business-product-configuration", "ProductConfiguration"],
+    ["data:business-catalog-sku", "CatalogSku"],
   ].map(([id, prismaModel]) => ({
     id: id as DataAssetId,
     physical: { prismaModel },

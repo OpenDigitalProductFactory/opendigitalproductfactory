@@ -8,6 +8,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { ItemsManager } from "./ItemsManager";
+import { ItemFormDialog } from "./ItemFormDialog";
 import { SectionsManager } from "./SectionsManager";
 import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
 import type { ResidueGroup } from "@/lib/storefront/content-fit";
@@ -34,11 +35,19 @@ const items = [
   { id: "i3", itemId: "itm-3", name: "Sunday Roast", description: null, category: null, priceAmount: "20", priceCurrency: "USD", priceType: "fixed", ctaType: "purchase", ctaLabel: null, imageUrl: null, isActive: false, sortOrder: 2, bookingConfig: null },
 ];
 
-function renderItems(residueGroups: ResidueGroup[] = []) {
+function renderItems(
+  residueGroups: ResidueGroup[] = [],
+  renderedItems: Array<
+    (typeof items)[number] & {
+      catalogItemId?: string | null;
+      compatibilitySource?: "catalog" | "storefront";
+    }
+  > = items,
+) {
   return renderToStaticMarkup(
     <ItemsManager
       storefrontId="sf1"
-      items={items}
+      items={renderedItems}
       vocabulary={vocab}
       categorySuggestions={[]}
       defaultCtaType="purchase"
@@ -100,6 +109,61 @@ describe("menu editor mobile UX", () => {
     ]);
     expect(withResidue).toContain('data-testid="residue-recovery"');
     expect(withResidue).toContain("doesn’t fit your storefront");
+  });
+
+  it("keeps the common catalog-backed workflow collapsed and flags only real legacy divergence", () => {
+    const linked = renderItems([], [{
+      ...items[0]!,
+      catalogItemId: "CAT-DINNER",
+      compatibilitySource: "catalog" as const,
+    }]);
+    expect(linked).not.toContain("Needs setup link");
+    expect(linked).not.toContain("ProductOffering");
+    expect(linked).not.toContain("CatalogItem");
+
+    const legacy = renderItems([], [{
+      ...items[0]!,
+      catalogItemId: null,
+      compatibilitySource: "storefront" as const,
+    }]);
+    expect(legacy).toContain("Needs setup link");
+  });
+});
+
+describe("item product-line disclosure", () => {
+  const baseProps = {
+    open: true,
+    onClose: vi.fn(),
+    onSave: vi.fn(async () => undefined),
+    vocabulary: vocab,
+    categorySuggestions: [],
+    defaultCtaType: "purchase",
+    isEditing: false,
+  };
+
+  it("hides product-line modeling for a simple one-line business", () => {
+    const html = renderToStaticMarkup(
+      <ItemFormDialog
+        {...baseProps}
+        productLines={[{ id: "line-services", name: "Services" }]}
+      />,
+    );
+    expect(html).not.toContain("Product line");
+  });
+
+  it("asks for the real product line only when the business has multiple lines", () => {
+    const html = renderToStaticMarkup(
+      <ItemFormDialog
+        {...baseProps}
+        productLines={[
+          { id: "line-services", name: "Salon services" },
+          { id: "line-retail", name: "Hair-care products" },
+        ]}
+      />,
+    );
+    expect(html).toContain("Product line");
+    expect(html).toContain("Salon services");
+    expect(html).toContain("Hair-care products");
   });
 });
 

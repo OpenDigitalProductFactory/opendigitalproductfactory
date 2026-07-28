@@ -856,10 +856,142 @@ model Product {
   updatedAt           DateTime                @updatedAt
   organization        Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   productLine         ProductLine             @relation(fields: [productLineId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  offerings           ProductOffering[]
 
   @@unique([productLineId, key])
+  @@unique([id, organizationId])
   @@index([organizationId, sortOrder])
   @@index([productLineId, sortOrder])
+  @@index([effectiveTo])
+}
+
+// Organization-owned commercial promise for a business Product
+// (EP-ED496EB0 Phase 2). ServiceOffering remains the digital operational-
+// commitment model; the nullable trace below exists only when that real
+// operational commitment realizes this commercial promise.
+model ProductOffering {
+  id                           String           @id @default(cuid())
+  offeringId                   String           @unique
+  organizationId               String
+  productId                    String
+  providerOrganizationId       String
+  operationalServiceOfferingId String?          @unique
+  key                          String
+  name                         String
+  description                  String?
+  status                       String           @default("draft")
+  isDefault                    Boolean          @default(false)
+  terms                        Json?
+  sourceKind                   String?
+  sourceRef                    String?
+  effectiveFrom                DateTime         @default(now())
+  effectiveTo                  DateTime?
+  createdAt                    DateTime         @default(now())
+  updatedAt                    DateTime         @updatedAt
+  organization                 Organization     @relation("ProductOfferingOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
+  providerOrganization         Organization     @relation("ProductOfferingProviderOrganization", fields: [providerOrganizationId], references: [id], onDelete: Restrict)
+  product                      Product          @relation(fields: [productId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  operationalServiceOffering   ServiceOffering? @relation(fields: [operationalServiceOfferingId], references: [id], onDelete: SetNull)
+  catalogItems                 CatalogItem[]
+
+  @@unique([productId, key])
+  @@unique([id, organizationId])
+  @@index([organizationId, status])
+  @@index([providerOrganizationId])
+  @@index([effectiveTo])
+}
+
+// Canonical selectable/requestable commercial object. Channel-specific rows
+// such as StorefrontItem project this definition instead of owning a copy.
+model CatalogItem {
+  id                 String                 @id @default(cuid())
+  catalogItemId      String                 @unique
+  organizationId     String
+  offeringId         String
+  key                String
+  name               String
+  description        String?
+  status             String                 @default("draft")
+  priceType          String?
+  priceAmount        Decimal?
+  priceCurrency      String                 @default("USD")
+  quoteRequired      Boolean                @default(false)
+  availabilityPolicy Json?
+  sourceKind         String?
+  sourceRef          String?
+  effectiveFrom      DateTime               @default(now())
+  effectiveTo        DateTime?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  organization       Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  offering           ProductOffering        @relation(fields: [offeringId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  configurations     ProductConfiguration[]
+  skus               CatalogSku[]
+  storefrontItems    StorefrontItem[]
+  quoteLineItems     QuoteLineItem[]
+
+  @@unique([offeringId, key])
+  @@unique([id, organizationId])
+  @@index([organizationId, status])
+  @@index([effectiveTo])
+}
+
+// Deliberately reusable product configuration. One-off sale configurations
+// stay as immutable QuoteLineItem.configurationSnapshot JSON and do not create
+// permanent catalog rows.
+model ProductConfiguration {
+  id             String       @id @default(cuid())
+  configurationId String       @unique
+  organizationId String
+  catalogItemId  String
+  key            String
+  name           String
+  description    String?
+  kind           String       @default("reusable")
+  status         String       @default("draft")
+  specification  Json
+  sourceKind     String?
+  sourceRef      String?
+  effectiveFrom  DateTime     @default(now())
+  effectiveTo    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  catalogItem    CatalogItem  @relation(fields: [catalogItemId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  skus           CatalogSku[]
+
+  @@unique([catalogItemId, key])
+  @@unique([id, organizationId])
+  @@index([organizationId, status])
+  @@index([effectiveTo])
+}
+
+// Optional reusable stock-keeping identity. A CatalogItem does not need a SKU;
+// one is created only when the operator deliberately publishes a reusable
+// configuration or inventory identity.
+model CatalogSku {
+  id              String                @id @default(cuid())
+  skuId           String                @unique
+  organizationId  String
+  catalogItemId   String
+  configurationId String?
+  code            String
+  name            String?
+  status          String                @default("draft")
+  sourceKind      String?
+  sourceRef       String?
+  effectiveFrom   DateTime              @default(now())
+  effectiveTo     DateTime?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  catalogItem     CatalogItem           @relation(fields: [catalogItemId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  configuration   ProductConfiguration? @relation(fields: [configurationId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  rentableUnits   RentableUnit[]
+
+  @@unique([organizationId, code])
+  @@index([catalogItemId, status])
+  @@index([configurationId])
   @@index([effectiveTo])
 }
 
@@ -1176,6 +1308,7 @@ model ServiceOffering {
   effectiveFrom       DateTime?
   effectiveTo         DateTime?
   digitalProduct      DigitalProduct       @relation(fields: [digitalProductId], references: [id])
+  commercialOffering ProductOffering?
   coworkerServices    CoworkerService[]
   partnerEntitlements PartnerEntitlement[]
 
@@ -3834,6 +3967,8 @@ model QuoteLineItem {
   id              String   @id @default(cuid())
   quoteId         String
   productId       String? // FK to DigitalProduct (optional — ad-hoc lines)
+  catalogItemId   String?
+  configurationSnapshot Json?
   description     String
   quantity        Int      @default(1)
   unitPrice       Decimal
@@ -3845,8 +3980,10 @@ model QuoteLineItem {
 
   quote   Quote           @relation(fields: [quoteId], references: [id], onDelete: Cascade)
   product DigitalProduct? @relation(fields: [productId], references: [id])
+  catalogItem CatalogItem? @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
 
   @@index([quoteId])
+  @@index([catalogItemId])
 }
 
 model SalesOrder {
@@ -4000,6 +4137,11 @@ model Organization {
   storefrontBookings            StorefrontBooking[]                @relation("StorefrontBookingOrganization")
   productLines                  ProductLine[]
   businessProducts              Product[]
+  productOfferings              ProductOffering[]                @relation("ProductOfferingOrganization")
+  providedProductOfferings      ProductOffering[]                @relation("ProductOfferingProviderOrganization")
+  catalogItems                  CatalogItem[]
+  productConfigurations         ProductConfiguration[]
+  catalogSkus                   CatalogSku[]
   careVisitTypes                CareVisitType[]
   careLocations                 CareLocation[]
   careResources                 CareResource[]
@@ -9654,10 +9796,12 @@ model StorefrontItem {
   /// Provenance: set when this item was seeded by a secondary add-line action.
   /// Used by removeStorefrontServiceLine to scope cleanup to the right items.
   sourceCompositionId String?
+  catalogItemId       String?
   createdAt           DateTime                        @default(now())
   updatedAt           DateTime                        @updatedAt
   storefront          StorefrontConfig                @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
   sourceComposition   StorefrontArchetypeComposition? @relation(fields: [sourceCompositionId], references: [id], onDelete: SetNull)
+  catalogItem         CatalogItem?                     @relation(fields: [catalogItemId], references: [id], onDelete: SetNull)
   providerServices    ProviderService[]
   bookingHolds        BookingHold[]
   rentableUnits       RentableUnit[]
@@ -9665,6 +9809,7 @@ model StorefrontItem {
 
   @@index([storefrontId, isActive, sortOrder])
   @@index([sourceCompositionId])
+  @@index([catalogItemId])
 }
 
 model StorefrontBooking {
@@ -10317,6 +10462,7 @@ model RentableUnit {
   unitId           String    @unique
   storefrontId     String
   storefrontItemId String
+  catalogSkuId     String?
   unitRef          String? // plate / VIN / serial
   label            String
   status           String    @default("available") // available|reserved|out|returned|maintenance|retired
@@ -10328,10 +10474,12 @@ model RentableUnit {
 
   storefront StorefrontConfig  @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
   item       StorefrontItem    @relation(fields: [storefrontItemId], references: [id], onDelete: Cascade)
+  catalogSku CatalogSku?       @relation(fields: [catalogSkuId], references: [id], onDelete: SetNull)
   agreements RentalAgreement[]
 
   @@index([storefrontId, status])
   @@index([storefrontItemId, status])
+  @@index([catalogSkuId])
 }
 
 model RentalAgreement {
