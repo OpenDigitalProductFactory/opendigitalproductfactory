@@ -1,8 +1,8 @@
 # InventoryEntity heap/index integrity repair
 
-**Backlog item:** `BI-CF4ADDAC`  
-**Work capsule:** `WC-A454B00D`  
-**Branch:** `fix/inventory-preview-integrity`  
+**Backlog item:** `BI-CF4ADDAC`
+**Work capsule:** `WC-A454B00D`
+**Branch:** `fix/inventory-preview-integrity`
 **Plan status:** implementation-ready; two independent reviews completed and their P1 findings are incorporated below
 
 > **For agentic workers:** execute this plan one independently reviewable backlog item at a time - one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff.
@@ -229,7 +229,7 @@ After the ready PR merges:
 
 ## Backlog coverage
 
-Decision: **atomic**  
+Decision: **atomic**
 Receipt: `cms4ro0mj0sfv01ruffnhwga6`
 
 - `repair-migration` -> `BI-CF4ADDAC`
