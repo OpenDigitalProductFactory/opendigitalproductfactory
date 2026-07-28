@@ -106,15 +106,15 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "search_design_intelligence",
-    description: "Search the design intelligence database for UI/UX recommendations. Returns style guides, color palettes, typography pairings, UX best practices, landing page patterns, chart types, or product-type recommendations based on keyword matching.",
+    description: "Search design intelligence for source-cited UI/UX guidance and operational precedents, including styles, colors, typography, UX practices, landing patterns, charts, product recommendations, and physical-workspace patterns.",
     inputSchema: {
       type: "object",
       properties: {
         query: { type: "string", description: "Search keywords (e.g., 'SaaS dashboard', 'glassmorphism dark mode', 'elegant luxury serif')" },
         domain: {
           type: "string",
-          enum: ["style", "color", "typography", "ux", "landing", "chart", "product", "reasoning"],
-          description: "Which design domain to search: style (67 UI styles), color (palettes by industry), typography (57 font pairings), ux (99 guidelines), landing (page patterns), chart (25 chart types), product (industry recommendations), reasoning (161 design rules)",
+          enum: ["style", "color", "typography", "ux", "landing", "chart", "product", "reasoning", "precedent"],
+          description: "Which design domain to search: style, color, typography, ux, landing, chart, product, reasoning, or precedent (source-cited physical operational workspace patterns)",
         },
         max_results: { type: "number", description: "Maximum results to return (default 5)" },
       },

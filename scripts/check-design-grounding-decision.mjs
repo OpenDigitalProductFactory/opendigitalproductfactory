@@ -13,6 +13,8 @@ import { fetchOriginMainSharedSafe } from "./lib/git-fetch-shared-safe.mjs";
 
 export const DESIGN_GROUNDING_RE = /(?:^|\n)\s*(?:#{1,6}\s*)?Design[ -]Grounding(?:-Decision)?:/i;
 export const DESIGN_GROUNDING_HEADING_RE = /(?:^|\n)\s*#{1,6}\s+Design grounding\b/i;
+export const OPERATIONAL_PRECEDENT_RE =
+  /(?:^|\n)\s*Operational-Precedent:\s*(?:[a-z0-9][a-z0-9-]*|no-precedent\s*\([^)\n]{20,}\))\s*(?:\n|$)/i;
 export const SPEC_EVIDENCE_RE =
   /existing specs?\/plans? reviewed|specs?\/plans? reviewed|search_specs_and_plans|docs\/superpowers\/(?:specs|plans)\//i;
 export const CODE_EVIDENCE_RE =
@@ -33,7 +35,10 @@ const ATTESTATION_HELP = `## Design grounding
 // likely to need design grounding. Keep this narrower than "all source" so the
 // gate is a targeted process-spine guard, not a generic paperwork tax.
 export const DESIGN_SENSITIVE_FILE_RE =
-  /^(apps\/web\/app\/.*\/page\.tsx|apps\/web\/components\/.*\.(tsx|ts)|apps\/web\/lib\/(?:attention|work-management|founder-review|navigation|wiki|mcp\/packs|tak)\/.*\.(ts|tsx)|scripts\/check-(?:spec-plan-doc|ux-fit|design-grounding).*\.mjs|packages\/dpf-skill-pack\/hooks\/.*\.(mjs|json))$/;
+  /^(apps\/web\/app\/.*\/page\.tsx|apps\/web\/components\/.*\.(tsx|ts)|apps\/web\/lib\/(?:attention|work-management|founder-review|navigation|wiki|mcp\/packs|tak)\/.*\.(ts|tsx)|scripts\/check-(?:spec-plan-doc|ux-fit|design-grounding).*\.mjs|packages\/dpf-skill-pack\/hooks\/.*\.(mjs|json)|packages\/storefront-templates\/src\/(?:twin-profile|business-view-profile)\.ts)$/;
+
+const PHYSICAL_TWIN_FILE_RE =
+  /^(apps\/web\/components\/twin\/.*\.(ts|tsx)|apps\/web\/.*OperationalScene.*\.(ts|tsx)|packages\/storefront-templates\/src\/(?:twin-profile|business-view-profile)\.ts)$/;
 
 const DOC_EVIDENCE_FILE_RE =
   /^(docs\/.*\.(md|html)|AGENTS\.md|.*\/AGENTS\.md|docs\/founder-kernel\/wiki\/principles\/.*\.md|packages\/dpf-skill-pack\/skills\/.*\/SKILL\.md|skills\/.*\.skill\.md)$/;
@@ -70,6 +75,10 @@ export function hasDesignGroundingEvidence(text) {
   return marker && SPEC_EVIDENCE_RE.test(t) && CODE_EVIDENCE_RE.test(t);
 }
 
+export function hasOperationalPrecedentEvidence(text) {
+  return OPERATIONAL_PRECEDENT_RE.test(String(text ?? ""));
+}
+
 export function classifyChangedFiles(files) {
   const normalized = files
     .map((f) => String(f ?? "").trim().replace(/\\/g, "/"))
@@ -77,19 +86,30 @@ export function classifyChangedFiles(files) {
     .filter((f) => !EXCLUDE_RE.test(f));
   return {
     designSensitive: normalized.filter((f) => DESIGN_SENSITIVE_FILE_RE.test(f)),
+    physicalTwin: normalized.filter((f) => PHYSICAL_TWIN_FILE_RE.test(f)),
     evidenceFiles: normalized.filter((f) => DOC_EVIDENCE_FILE_RE.test(f)),
   };
 }
 
 export function decide({ changedFiles = [], evidenceText = "" } = {}) {
-  const { designSensitive } = classifyChangedFiles(changedFiles);
+  const { designSensitive, physicalTwin } = classifyChangedFiles(changedFiles);
   if (designSensitive.length === 0) {
-    return { ok: true, reason: "no-design-sensitive-files", designSensitive };
+    return { ok: true, reason: "no-design-sensitive-files", designSensitive, physicalTwin };
   }
-  if (hasDesignGroundingEvidence(evidenceText)) {
-    return { ok: true, reason: "design-grounding-evidence", designSensitive };
+  if (!hasDesignGroundingEvidence(evidenceText)) {
+    return { ok: false, reason: "missing-design-grounding", designSensitive, physicalTwin };
   }
-  return { ok: false, reason: "missing-design-grounding", designSensitive };
+  if (physicalTwin.length > 0 && !hasOperationalPrecedentEvidence(evidenceText)) {
+    return { ok: false, reason: "missing-operational-precedent", designSensitive, physicalTwin };
+  }
+  return {
+    ok: true,
+    reason: physicalTwin.length > 0
+      ? "design-grounding-and-operational-precedent"
+      : "design-grounding-evidence",
+    designSensitive,
+    physicalTwin,
+  };
 }
 
 function readEvidenceFromChangedDocs(files) {
@@ -134,6 +154,17 @@ function main() {
   }
 
   console.error("");
+  if (verdict.reason === "missing-operational-precedent") {
+    console.error("[design-grounding-gate] FAILED — physical-twin change without operational precedent evidence.");
+    console.error("");
+    console.error("Add an evidence pack from design intelligence:");
+    console.error("  Operational-Precedent: restaurant-floor");
+    console.error("");
+    console.error("If no incumbent spatial workflow exists, record the researched absence and fallback:");
+    console.error("  Operational-Precedent: no-precedent (reason of at least 20 characters)");
+    console.error("");
+    process.exit(1);
+  }
   console.error("[design-grounding-gate] FAILED — design-sensitive change without design-grounding evidence.");
   console.error("");
   console.error("These files affect UX, workflow, queues, navigation, attention, or the process spine:");

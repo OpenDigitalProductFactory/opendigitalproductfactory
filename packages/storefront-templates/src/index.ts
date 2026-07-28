@@ -9,6 +9,8 @@ export * from "./archetypes/index";
 export * from "./media-profile";
 export * from "./operational-value-stream";
 export * from "./twin-profile";
+export * from "./business-view-profile";
+export * from "./performance-metric-catalog";
 export * from "./twin-value-stream";
 export * from "./demo-business";
 export * from "./demo-business-load";

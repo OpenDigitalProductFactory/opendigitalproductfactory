@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   designIntelligenceHealth,
   generateDesignSystem,
+  getOperationalPrecedents,
   searchDesignDomain,
 } from "./design-intelligence";
 
@@ -32,5 +33,45 @@ describe("design-intelligence data plane (BI-018AE129)", () => {
     // With empty domains the generator still emits the title + static
     // checklist — the data-dependent sections are the discriminator.
     expect(system, "recommendation carries no data-backed style section").toContain("## Recommended Style");
+  });
+
+  it("loads source-cited operational precedents for every priority physical-space pack", () => {
+    const precedents = getOperationalPrecedents();
+    const packIds = new Set(precedents.map((precedent) => precedent.packId));
+
+    expect(packIds).toEqual(new Set([
+      "restaurant-floor",
+      "salon-chair-book",
+      "hotel-room-occupancy",
+      "equipment-rental-yard",
+      "hoa-property-priorities",
+      "hvac-dispatch-territory",
+    ]));
+
+    for (const precedent of precedents) {
+      expect(precedent.officialSourceUrl).toMatch(/^https:\/\//);
+      expect(precedent.accessedOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(precedent.recheckOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(["adopt", "adapt", "reject"]).toContain(precedent.dpfDecision);
+      expect(precedent.accessibilityAlternative).toBeTruthy();
+    }
+    expect(
+      precedents
+        .filter((precedent) => precedent.incumbentProviderName)
+        .map((precedent) => precedent.incumbentProviderName)
+        .sort(),
+    ).toEqual(["AppFolio", "OpenTable", "Toast"]);
+  });
+
+  it("queries precedents by archetype, space kind, and operator job", () => {
+    expect(getOperationalPrecedents({
+      archetypeId: "restaurant",
+      spaceKind: "floor",
+      operatorJob: "seat-party",
+    }).length).toBeGreaterThanOrEqual(2);
+
+    const search = searchDesignDomain("restaurant floor seat party waitlist", "precedent", 5);
+    expect(search.length).toBeGreaterThanOrEqual(2);
+    expect(search[0]?.data["Official Source URL"]).toMatch(/^https:\/\//);
   });
 });

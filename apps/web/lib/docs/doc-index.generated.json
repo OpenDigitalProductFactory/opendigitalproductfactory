@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 566,
+  "pageCount": 567,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1084,6 +1084,17 @@
         "fifth-pack-first-inline-extraction",
         "next-packs",
         "enforcement-the-inline-case-ratchet-bi-opt-ratchets"
+      ]
+    },
+    "docs/architecture/operational-precedent-corpus.md": {
+      "publicHref": "/architecture/operational-precedent-corpus/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "operational-precedent-corpus",
+        "cross-view-archetype-contracts",
+        "design-grounding"
       ]
     },
     "docs/architecture/package-boundaries.md": {

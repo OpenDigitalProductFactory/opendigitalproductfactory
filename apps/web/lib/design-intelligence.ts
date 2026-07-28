@@ -5,6 +5,10 @@
 
 import { lazyFs, lazyPath, getCwd } from "@/lib/shared/lazy-node";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import {
+  VERTICAL_INCUMBENTS,
+  archetypeIdsForVertical,
+} from "@dpf/db/portfolio-sources/vertical-incumbents-manifest";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -16,7 +20,8 @@ export type DesignDomain =
   | "landing"
   | "chart"
   | "product"
-  | "reasoning";
+  | "reasoning"
+  | "precedent";
 
 type CsvRow = Record<string, string>;
 
@@ -35,6 +40,27 @@ export type DesignSystemResult = {
   landingPattern: CsvRow | null;
   antiPatterns: string[];
 };
+
+export type OperationalPrecedentDecision = "adopt" | "adapt" | "reject";
+
+export interface OperationalPrecedent {
+  packId: string;
+  archetypeId: string;
+  spaceKind: string;
+  operatorJob: string;
+  providerName: string;
+  incumbentProviderName: string | null;
+  officialSourceUrl: string;
+  accessedOn: string;
+  recheckOn: string;
+  informationHierarchy: string;
+  spatialGrammar: string;
+  stateVocabulary: string;
+  conflictBehavior: string;
+  accessibilityAlternative: string;
+  dpfDecision: OperationalPrecedentDecision;
+  dpfRationale: string;
+}
 
 // ─── CSV Parsing ────────────────────────────────────────────────────────────
 
@@ -130,6 +156,7 @@ function loadDomain(domain: DesignDomain): CsvRow[] {
     chart: "charts.csv",
     product: "products.csv",
     reasoning: "ui-reasoning.csv",
+    precedent: "operational-precedents.csv",
   };
 
   const filename = fileMap[domain];
@@ -162,8 +189,64 @@ function loadDomain(domain: DesignDomain): CsvRow[] {
  * this must surface as a signal, never as silently-empty tool results).
  */
 export function designIntelligenceHealth(): Record<DesignDomain, number> {
-  const domains: DesignDomain[] = ["style", "color", "typography", "ux", "landing", "chart", "product", "reasoning"];
+  const domains: DesignDomain[] = ["style", "color", "typography", "ux", "landing", "chart", "product", "reasoning", "precedent"];
   return Object.fromEntries(domains.map((d) => [d, loadDomain(d).length])) as Record<DesignDomain, number>;
+}
+
+function toOperationalPrecedent(row: CsvRow): OperationalPrecedent {
+  const decision = row["DPF Decision"];
+  if (decision !== "adopt" && decision !== "adapt" && decision !== "reject") {
+    throw new Error(`[design-intelligence] invalid operational precedent decision: ${decision || "<empty>"}`);
+  }
+  const archetypeId = row["Archetype ID"] ?? "";
+  const incumbentProviderName = row["Incumbent Provider Name"] || null;
+  if (
+    incumbentProviderName
+    && !VERTICAL_INCUMBENTS.some(
+      (incumbent) =>
+        incumbent.providerName === incumbentProviderName
+        && archetypeIdsForVertical(incumbent.verticalKey).includes(archetypeId),
+    )
+  ) {
+    throw new Error(
+      `[design-intelligence] operational precedent "${row["Pack ID"]}" links unknown incumbent "${incumbentProviderName}" for archetype "${archetypeId}"`,
+    );
+  }
+  return {
+    packId: row["Pack ID"] ?? "",
+    archetypeId,
+    spaceKind: row["Space Kind"] ?? "",
+    operatorJob: row["Operator Job"] ?? "",
+    providerName: row["Provider Name"] ?? "",
+    incumbentProviderName,
+    officialSourceUrl: row["Official Source URL"] ?? "",
+    accessedOn: row["Accessed On"] ?? "",
+    recheckOn: row["Recheck On"] ?? "",
+    informationHierarchy: row["Information Hierarchy"] ?? "",
+    spatialGrammar: row["Spatial Grammar"] ?? "",
+    stateVocabulary: row["State Vocabulary"] ?? "",
+    conflictBehavior: row["Conflict Behavior"] ?? "",
+    accessibilityAlternative: row["Accessibility Alternative"] ?? "",
+    dpfDecision: decision,
+    dpfRationale: row["DPF Rationale"] ?? "",
+  };
+}
+
+/**
+ * Queryable, source-cited incumbent patterns for physical operational twins.
+ * This is the typed access path for planners; generic UI-design lookup remains
+ * available through searchDesignDomain("...", "precedent").
+ */
+export function getOperationalPrecedents(filters: {
+  archetypeId?: string;
+  spaceKind?: string;
+  operatorJob?: string;
+} = {}): OperationalPrecedent[] {
+  return loadDomain("precedent")
+    .map(toOperationalPrecedent)
+    .filter((precedent) => !filters.archetypeId || precedent.archetypeId === filters.archetypeId)
+    .filter((precedent) => !filters.spaceKind || precedent.spaceKind === filters.spaceKind)
+    .filter((precedent) => !filters.operatorJob || precedent.operatorJob === filters.operatorJob);
 }
 
 // ─── Search Engine ──────────────────────────────────────────────────────────
@@ -306,6 +389,18 @@ function formatRow(domain: DesignDomain, row: CsvRow): string {
         `  Typography Mood: ${row["Typography_Mood"] ?? ""}`,
         `  Key Effects: ${row["Key_Effects"] ?? ""}`,
         `  Anti-Patterns: ${row["Anti_Patterns"] ?? ""}`,
+      ].join("\n");
+    case "precedent":
+      return [
+        `**Operational precedent:** ${row["Provider Name"] ?? "Unknown"} — ${row["Pack ID"] ?? ""}`,
+        `  Archetype / space / job: ${row["Archetype ID"] ?? ""} / ${row["Space Kind"] ?? ""} / ${row["Operator Job"] ?? ""}`,
+        `  Source: ${row["Official Source URL"] ?? ""} (accessed ${row["Accessed On"] ?? ""}; recheck ${row["Recheck On"] ?? ""})`,
+        `  Hierarchy: ${row["Information Hierarchy"] ?? ""}`,
+        `  Spatial grammar: ${row["Spatial Grammar"] ?? ""}`,
+        `  States: ${row["State Vocabulary"] ?? ""}`,
+        `  Conflicts: ${row["Conflict Behavior"] ?? ""}`,
+        `  Accessibility alternative: ${row["Accessibility Alternative"] ?? ""}`,
+        `  DPF: ${row["DPF Decision"] ?? ""} — ${row["DPF Rationale"] ?? ""}`,
       ].join("\n");
     default:
       return Object.entries(row)
