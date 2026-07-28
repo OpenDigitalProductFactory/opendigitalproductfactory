@@ -1576,8 +1576,7 @@ export function WorkbookGrid({
               hiddenColumns={orderedColumns.filter((c) => hiddenColumns.includes(c.columnId))}
               canEdit={capabilities.canEditCell}
               onClose={() => setOpenRowId(null)}
-              onSave={onModalSave}
-            />
+              onSave={onModalSave} />
           ) : null;
         })()}
     </div>
