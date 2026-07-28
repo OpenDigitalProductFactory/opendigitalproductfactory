@@ -35,7 +35,30 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function retryDelayMs({ attempt, pollSeconds, retryAfterSeconds = 0 }) {
+  const floorMs = Math.max(10, pollSeconds * 1000);
+  const requestedMs = Math.max(0, Number(retryAfterSeconds) * 1000);
+  const exponentialMs = Math.min(15_000, floorMs * (2 ** Math.min(attempt, 6)));
+  const baseMs = Math.max(requestedMs, exponentialMs);
+  const jitterRatio = process.env.DPF_GATE_RETRY_JITTER === "0"
+    ? 0
+    : (Math.random() * 0.4) - 0.2;
+  return Math.max(10, Math.round(baseMs * (1 + jitterRatio)));
+}
+
+function isTransientMcpError(error) {
+  const text = error instanceof Error ? error.message : String(error);
+  return /ECONNRESET|ECONNREFUSED|EPIPE|ETIMEDOUT|socket hang up|invalid JSON response|fetch failed/i.test(text);
+}
+
 function git(gitBin, args, cwd) {
+  if (
+    process.platform === "win32"
+    && process.env.DPF_GATE_GIT_BIN
+    && !/\.(?:exe|cmd|bat)$/i.test(gitBin)
+  ) {
+    return spawnSync("sh", [gitBin, ...args], { cwd, encoding: "utf8" });
+  }
   return spawnSync(gitBin, args, { cwd, encoding: "utf8" });
 }
 
@@ -66,8 +89,8 @@ Options:
   --owner-provider NAME       build-studio|claude|codex|coworker (default: codex)
   --owner-session-id ID       External session id (default: gate-<pid>)
   --mcp-url URL                MCP endpoint (default: DPF_MCP_URL or local portal)
-  --lease-wait-seconds N       Max time to wait when the lease is busy (default: 300)
-  --poll-seconds N             Busy-lease poll interval (default: 10)
+  --lease-wait-seconds N       Max time to wait for admission (default: 7200)
+  --poll-seconds N             Initial queue-observation backoff (default: 10)
   --expires-minutes N          Lease expiry window (default: 60)
   --push                       Push before claiming the lease (legacy/explicit publication mode)
   --no-push                    Do not push before claiming the lease (default)
@@ -91,7 +114,7 @@ function parseArgs(argv) {
     ownerProvider: process.env.DPF_GATE_OWNER_PROVIDER || "codex",
     ownerSessionId: process.env.DPF_GATE_OWNER_SESSION_ID || "",
     mcpUrl: process.env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1",
-    leaseWaitSeconds: Number(process.env.DPF_GATE_LEASE_WAIT_SECONDS || 300),
+    leaseWaitSeconds: Number(process.env.DPF_GATE_LEASE_WAIT_SECONDS || 7200),
     pollSeconds: Number(process.env.DPF_GATE_POLL_SECONDS || 10),
     expiresMinutes: Number(process.env.DPF_GATE_EXPIRES_MINUTES || 60),
     pushBranch: false,
@@ -273,32 +296,13 @@ async function main() {
   const sha = options.sha || gitOrEmpty(gitBin, ["rev-parse", "HEAD"]);
   const worktreePath = options.worktree || gitOrEmpty(gitBin, ["rev-parse", "--show-toplevel"]);
   const ownerSessionId = options.ownerSessionId || `gate-${process.pid}`;
-
-  const stateFile = gitPath(gitBin, worktreePath, "dpf-local-ci-gate.json");
-  const metadataFile = gitPath(gitBin, worktreePath, "dpf-local-ci-metadata.json");
-  const pendingEvidenceFile = gitPath(gitBin, worktreePath, "dpf-local-ci-pending-evidence.json");
-  const fullLogFile = gitPath(gitBin, worktreePath, "dpf-local-ci-output.log");
-  const freshnessReportFile = gitPath(
-    gitBin,
-    worktreePath,
-    "dpf-sandbox-freshness.json",
-  );
-  const gitCommonDir = resolvePath(
-    worktreePath,
-    gitOrEmpty(gitBin, ["rev-parse", "--git-common-dir"], worktreePath),
-  );
-  const localFencePath = process.env.DPF_LOCAL_SANDBOX_FENCE_PATH
-    || join(gitCommonDir, "dpf-local-ci-owner.json");
-
+  const claimKey = `local-ci:${ownerSessionId}:${sha}`;
+  const deadline = Date.now() + options.leaseWaitSeconds * 1000;
   const commandSpec = resolveGateCommand({ branch, allowStub, gitBin });
 
   if (options.dryRun) {
     process.stdout.write("gate-worktree dry-run\n");
     process.stdout.write(`branch=${branch}\nsha=${sha}\nworktree=${worktreePath}\nremote=${options.remote}\nmcpUrl=${options.mcpUrl}\n`);
-    process.stdout.write(`metadataFile=${metadataFile}\n`);
-    process.stdout.write(`freshnessReportFile=${freshnessReportFile}\n`);
-    process.stdout.write(`pendingEvidenceFile=${pendingEvidenceFile}\n`);
-    process.stdout.write(`fullLogFile=${fullLogFile}\n`);
     process.stdout.write(`pushBeforeLease=${options.pushBranch}\n`);
     if (commandSpec) {
       process.stdout.write(`localCiCommand=${commandSpec.label}\n`);
@@ -318,26 +322,55 @@ async function main() {
   const bearerToken = process.env.DPF_MCP_BEARER_TOKEN;
   if (!bearerToken) die("DPF_MCP_BEARER_TOKEN is required to claim the local-CI lease");
 
-  const quiescence = await readQuiescenceStatus({
-    mcpUrl: options.mcpUrl,
-    bearerToken,
-  });
-  if (quiescenceBlocksWrites(quiescence)) {
-    writeState(stateFile, {
-      branch,
-      sha,
-      gatePassed: false,
-      leaseId: "",
-      evidenceId: "",
-      status: "blocked_quiescence",
-      expiresAt: new Date(Date.now() + Number(quiescence.retryAfterSeconds || 30) * 1000).toISOString(),
-      resilience: null,
-      leaseEvents: [],
-      quiescence,
+  const stateFile = gitPath(gitBin, worktreePath, "dpf-local-ci-gate.json");
+  const metadataFile = gitPath(gitBin, worktreePath, "dpf-local-ci-metadata.json");
+  const pendingEvidenceFile = gitPath(gitBin, worktreePath, "dpf-local-ci-pending-evidence.json");
+  const fullLogFile = gitPath(gitBin, worktreePath, "dpf-local-ci-output.log");
+  const freshnessReportFile = gitPath(
+    gitBin,
+    worktreePath,
+    "dpf-sandbox-freshness.json",
+  );
+  const gitCommonDir = resolvePath(
+    worktreePath,
+    gitOrEmpty(gitBin, ["rev-parse", "--git-common-dir"], worktreePath),
+  );
+  const localFencePath = process.env.DPF_LOCAL_SANDBOX_FENCE_PATH
+    || join(gitCommonDir, "dpf-local-ci-owner.json");
+
+  let quiescenceAttempt = 0;
+  for (;;) {
+    const quiescence = await readQuiescenceStatus({
+      mcpUrl: options.mcpUrl,
+      bearerToken,
     });
-    process.stderr.write(`gate-worktree: portal is ${quiescence.level || "quiescing"}; local-CI evidence writes are refused. Retry after ${quiescence.retryAfterSeconds || 30}s.\n`);
-    process.stderr.write("gate-worktree: no expensive local-CI command was run; use get_quiescence_status for drain blockers.\n");
-    process.exit(4);
+    if (!quiescenceBlocksWrites(quiescence)) break;
+    const retryAfterSeconds = Number(quiescence.retryAfterSeconds || 30);
+    if (Date.now() >= deadline) {
+      writeState(stateFile, {
+        branch,
+        sha,
+        gatePassed: false,
+        leaseId: "",
+        evidenceId: "",
+        status: "blocked_quiescence",
+        expiresAt: new Date(Date.now() + retryAfterSeconds * 1000).toISOString(),
+        resilience: null,
+        leaseEvents: [],
+        quiescence,
+      });
+      process.stderr.write(`gate-worktree: portal remained ${quiescence.level || "quiescing"} through the admission deadline.\n`);
+      process.stderr.write("gate-worktree: no expensive local-CI command was run; use get_quiescence_status for drain blockers.\n");
+      process.exit(4);
+    }
+    const delayMs = retryDelayMs({
+      attempt: quiescenceAttempt,
+      pollSeconds: options.pollSeconds,
+      retryAfterSeconds,
+    });
+    quiescenceAttempt += 1;
+    process.stdout.write(`portal is ${quiescence.level || "quiescing"}; retrying governed admission in ${(delayMs / 1000).toFixed(1)}s...\n`);
+    await sleep(Math.min(delayMs, Math.max(10, deadline - Date.now())));
   }
 
   if (options.finalizeEvidence) {
@@ -384,65 +417,161 @@ async function main() {
 
   const leaseTtlMs = Math.min(options.expiresMinutes * 60000, 20 * 60_000);
   let expiresAt = "";
-  const deadline = Date.now() + options.leaseWaitSeconds * 1000;
   const url = process.env.DPF_LOCAL_CI_URL || "http://localhost:3010";
 
   let leaseId = "";
   let localFenceToken = "";
-  for (;;) {
-    const localFence = acquireLocalSandboxFence({
-      path: localFencePath,
-      ownerSessionId,
-      branch,
-    });
-    if (localFence.status === "conflict") {
-      if (Date.now() >= deadline) die("local-CI sandbox owner process is still live; timed out waiting");
-      process.stdout.write(`local-CI sandbox process fence held by ${localFence.active?.ownerSessionId || "unknown"}; retrying in ${options.pollSeconds}s...\n`);
-      await sleep(options.pollSeconds * 1000);
-      continue;
+  let leaseReleased = false;
+  let receivedSignal = "";
+  const leaseEvents = [];
+  const signalHandlers = Object.fromEntries(["SIGINT", "SIGTERM"].map((signal) => [
+    signal,
+    () => {
+      receivedSignal = signal;
+      leaseEvents.push({ type: "signal", signal, at: new Date().toISOString() });
+    },
+  ]));
+  for (const [signal, handler] of Object.entries(signalHandlers)) process.once(signal, handler);
+
+  const releaseLeaseOnce = async () => {
+    if (!leaseId || leaseReleased) return;
+    leaseReleased = true;
+    const response = await mcpCall("release_nonprod_environment_lease", {
+      leaseId,
+    }, { mcpUrl: options.mcpUrl, bearerToken });
+    if (response?.success !== true) {
+      throw new Error(`failed to release local-CI lease: ${JSON.stringify(response)}`);
     }
-    localFenceToken = localFence.record.token;
-    // Only the local fence owner may mutate shared-run evidence. Clearing
-    // earlier lets a queued waiter delete the active owner's fresh report.
-    // Do this before the remote lease claim so a filesystem error cannot
-    // strand a governed lease.
-    try {
-      rmSync(freshnessReportFile, { force: true });
-    } catch (error) {
-      releaseLocalSandboxFence({ path: localFencePath, token: localFenceToken });
-      localFenceToken = "";
-      throw error;
+  };
+
+  let claimAttempt = 0;
+  for (;;) {
+    if (receivedSignal) {
+      await releaseLeaseOnce();
+      process.exit(130);
     }
     expiresAt = new Date(Date.now() + leaseTtlMs).toISOString();
-    const claimResponse = await mcpCall("claim_nonprod_environment_lease", {
-      environmentKey: "local-integration-ci",
-      ownerProvider: options.ownerProvider,
-      ownerSessionId,
-      purpose: `Pre-PR local-CI gate for ${branch} @ ${sha}`,
-      url,
-      ports: [3010],
-      expiresAt,
-      worktreePath,
-      branchName: branch,
-      cleanupCommand: "docker compose -f docker-compose.local-ci.yml --profile local-ci down",
-    }, { mcpUrl: options.mcpUrl, bearerToken });
+    let claimResponse;
+    try {
+      claimResponse = await mcpCall("claim_nonprod_environment_lease", {
+        environmentKey: "local-integration-ci",
+        ownerProvider: options.ownerProvider,
+        ownerSessionId,
+        claimKey,
+        purpose: `Pre-PR local-CI gate for ${branch} @ ${sha}`,
+        url,
+        ports: [3010],
+        expiresAt,
+        worktreePath,
+        branchName: branch,
+        cleanupCommand: "docker compose -f docker-compose.local-ci.yml --profile local-ci down",
+      }, { mcpUrl: options.mcpUrl, bearerToken });
+    } catch (error) {
+      if (!isTransientMcpError(error) || Date.now() >= deadline) throw error;
+      const delayMs = retryDelayMs({ attempt: claimAttempt, pollSeconds: options.pollSeconds });
+      claimAttempt += 1;
+      process.stdout.write(`local-CI admission transport unavailable (${error.message}); retrying in ${(delayMs / 1000).toFixed(1)}s...\n`);
+      await sleep(Math.min(delayMs, Math.max(10, deadline - Date.now())));
+      continue;
+    }
 
-    if (claimResponse?.success === true) {
-      leaseId = claimResponse.entityId || claimResponse?.data?.lease?.leaseId || "";
+    leaseId = claimResponse?.entityId || claimResponse?.data?.lease?.leaseId || leaseId;
+    const admission = claimResponse?.data?.admission;
+    if (claimResponse?.success === true && admission?.status !== "queued") {
+      leaseEvents.push({
+        type: "admitted",
+        at: new Date().toISOString(),
+        slotKey: admission?.slotKey || "slot-0",
+        waitAgeMs: admission?.waitAgeMs ?? null,
+        expiresAt,
+      });
       break;
     }
-    releaseLocalSandboxFence({ path: localFencePath, token: localFenceToken });
-    localFenceToken = "";
+    if (claimResponse?.success === true && admission?.status === "queued") {
+      if (Date.now() >= deadline) {
+        await releaseLeaseOnce();
+        die("local-CI admission queue wait timed out");
+      }
+      const delayMs = retryDelayMs({ attempt: claimAttempt, pollSeconds: options.pollSeconds });
+      claimAttempt += 1;
+      process.stdout.write(`local-CI admission queued at position ${admission.queuePosition}; observing again in ${(delayMs / 1000).toFixed(1)}s...\n`);
+      await sleep(Math.min(delayMs, Math.max(10, deadline - Date.now())));
+      continue;
+    }
+    // Rolling-upgrade bridge: the currently deployed portal may still expose
+    // the pre-FIFO conflict contract while this exact candidate is waiting to
+    // deploy the durable queue. Observe it with the same bounded backoff; once
+    // Phase 1 is live, responses use the queued branch above.
     if (claimResponse?.error === "lease_conflict") {
-      if (Date.now() >= deadline) die("local-CI sandbox lease is busy; timed out waiting");
-      process.stdout.write(`local-CI sandbox busy; queued behind active lease. Retrying in ${options.pollSeconds}s...\n`);
-      await sleep(options.pollSeconds * 1000);
+      if (Date.now() >= deadline) {
+        die("local-CI admission wait timed out against the legacy conflict API");
+      }
+      const delayMs = retryDelayMs({
+        attempt: claimAttempt,
+        pollSeconds: options.pollSeconds,
+      });
+      claimAttempt += 1;
+      process.stdout.write(`local-CI portal is on the legacy conflict contract; observing admission again in ${(delayMs / 1000).toFixed(1)}s...\n`);
+      await sleep(Math.min(delayMs, Math.max(10, deadline - Date.now())));
+      continue;
+    }
+    if (claimResponse?.error === "portal_quiescing") {
+      if (Date.now() >= deadline) die("portal remained quiescing through the local-CI admission deadline");
+      const retryAfterSeconds = Number(
+        claimResponse?.data?.retryAfterSeconds
+          ?? claimResponse?.retryAfterSeconds
+          ?? 30,
+      );
+      const delayMs = retryDelayMs({
+        attempt: claimAttempt,
+        pollSeconds: options.pollSeconds,
+        retryAfterSeconds,
+      });
+      claimAttempt += 1;
+      process.stdout.write(`portal is quiescing; preserving queue intent and retrying in ${(delayMs / 1000).toFixed(1)}s...\n`);
+      await sleep(Math.min(delayMs, Math.max(10, deadline - Date.now())));
       continue;
     }
     die(`failed to claim local-CI lease: ${JSON.stringify(claimResponse)}`);
   }
 
-  process.stdout.write(`local-CI sandbox lease claimed: ${leaseId}\n`);
+  // Durable remote admission is authoritative. The host-process fence is a
+  // second, local safety belt acquired only after this waiter owns slot-0.
+  for (;;) {
+    if (receivedSignal) {
+      await releaseLeaseOnce();
+      process.exit(130);
+    }
+    const localFence = acquireLocalSandboxFence({
+      path: localFencePath,
+      ownerSessionId,
+      branch,
+    });
+    if (localFence.status !== "conflict") {
+      localFenceToken = localFence.record.token;
+      break;
+    }
+    if (Date.now() >= deadline) {
+      await releaseLeaseOnce();
+      die("local-CI sandbox owner process is still live; timed out waiting");
+    }
+    process.stdout.write(`local-CI sandbox process fence held by ${localFence.active?.ownerSessionId || "unknown"}; retrying after admission...\n`);
+    await sleep(Math.min(options.pollSeconds * 1000, Math.max(10, deadline - Date.now())));
+  }
+  try {
+    rmSync(freshnessReportFile, { force: true });
+  } catch (error) {
+    releaseLocalSandboxFence({ path: localFencePath, token: localFenceToken });
+    await releaseLeaseOnce();
+    throw error;
+  }
+  if (receivedSignal) {
+    releaseLocalSandboxFence({ path: localFencePath, token: localFenceToken });
+    await releaseLeaseOnce();
+    process.exit(130);
+  }
+
+  process.stdout.write(`local-CI sandbox admitted: ${leaseId}\n`);
   if (commandSpec) process.stdout.write(`running local-CI command: ${commandSpec.label}\n`);
   else process.stdout.write("sandbox checkout/build stub: gate passed (explicit test-only mode)\n");
 
@@ -462,9 +591,10 @@ async function main() {
     allowStub,
     fullLogFile,
   });
-  const leaseEvents = [{ type: "claimed", at: new Date().toISOString(), expiresAt }];
-  let receivedSignal = "";
-  const signalHandlers = Object.fromEntries(["SIGINT", "SIGTERM"].map((signal) => [
+  // Replace the queue-stage handlers so a signal also terminates the running
+  // descendant tree. The shared receivedSignal state preserves one cleanup.
+  for (const [signal, handler] of Object.entries(signalHandlers)) process.removeListener(signal, handler);
+  const runSignalHandlers = Object.fromEntries(["SIGINT", "SIGTERM"].map((signal) => [
     signal,
     () => {
       receivedSignal = signal;
@@ -472,7 +602,7 @@ async function main() {
       void gateCommand.terminate();
     },
   ]));
-  for (const [signal, handler] of Object.entries(signalHandlers)) process.once(signal, handler);
+  for (const [signal, handler] of Object.entries(runSignalHandlers)) process.once(signal, handler);
   let supervised;
   try {
     supervised = await superviseLeaseRun({
@@ -494,12 +624,7 @@ async function main() {
       },
       release: async () => {
         try {
-          const response = await mcpCall("release_nonprod_environment_lease", {
-            leaseId,
-          }, { mcpUrl: options.mcpUrl, bearerToken });
-          if (response?.success !== true) {
-            throw new Error(`failed to release local-CI lease: ${JSON.stringify(response)}`);
-          }
+          await releaseLeaseOnce();
         } finally {
           releaseLocalSandboxFence({ path: localFencePath, token: localFenceToken });
         }
@@ -507,7 +632,7 @@ async function main() {
       onEvent: (event) => leaseEvents.push(event),
     });
   } finally {
-    for (const [signal, handler] of Object.entries(signalHandlers)) process.removeListener(signal, handler);
+    for (const [signal, handler] of Object.entries(runSignalHandlers)) process.removeListener(signal, handler);
   }
   const runResult = supervised.result;
   if (supervised.status === "fenced") {

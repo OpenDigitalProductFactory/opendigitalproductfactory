@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const lease = vi.hoisted(() => ({
+  NONPROD_OWNER_PROVIDERS: ["build-studio", "claude", "codex", "grok", "antigravity", "coworker"],
   listActiveNonprodEnvironmentLeases: vi.fn(),
+  listQueuedNonprodEnvironmentLeases: vi.fn(),
   claimNonprodEnvironmentLease: vi.fn(),
   releaseNonprodEnvironmentLease: vi.fn(),
   renewNonprodEnvironmentLease: vi.fn(),
@@ -45,11 +47,87 @@ describe("nonprod-lease pack — registration", () => {
 });
 
 describe("nonprod-lease pack — handler behavior (delegation preserved)", () => {
-  it("list returns the active leases from the service", async () => {
+  it("list returns admitted and queued leases from the service", async () => {
     lease.listActiveNonprodEnvironmentLeases.mockResolvedValue([{ id: "L1" }]);
+    lease.listQueuedNonprodEnvironmentLeases.mockResolvedValue([{ id: "L2" }]);
     const res = await nonprodLeasePack.handlers.list_nonprod_environment_leases({}, "u1");
     expect(res.success).toBe(true);
+    expect(res.data).toEqual({
+      leases: [{ id: "L1" }],
+      queued: [{ id: "L2" }],
+    });
     expect(lease.listActiveNonprodEnvironmentLeases).toHaveBeenCalledOnce();
+    expect(lease.listQueuedNonprodEnvironmentLeases).toHaveBeenCalledOnce();
+  });
+
+  it("returns a durable queued admission without reporting a conflict", async () => {
+    lease.claimNonprodEnvironmentLease.mockResolvedValue({
+      status: "queued",
+      lease: { leaseId: "NPEL-Q1" },
+      queuePosition: 2,
+      waitAgeMs: 1200,
+    });
+    const res = await nonprodLeasePack.handlers.claim_nonprod_environment_lease(
+      {
+        environmentKey: "local-integration-ci",
+        ownerProvider: "codex",
+        ownerSessionId: "s1",
+        claimKey: "local-ci:s1:abc",
+        purpose: "test",
+        url: "http://localhost:3010",
+        ports: [3010],
+        expiresAt: new Date("2026-07-28T22:00:00Z").toISOString(),
+      },
+      "u1",
+    );
+
+    expect(res).toMatchObject({
+      success: true,
+      entityId: "NPEL-Q1",
+      data: {
+        admission: {
+          status: "queued",
+          queuePosition: 2,
+          waitAgeMs: 1200,
+        },
+      },
+    });
+    expect(lease.claimNonprodEnvironmentLease).toHaveBeenCalledWith(
+      expect.objectContaining({ claimKey: "local-ci:s1:abc" }),
+    );
+  });
+
+  it("returns admitted slot metadata", async () => {
+    lease.claimNonprodEnvironmentLease.mockResolvedValue({
+      status: "admitted",
+      lease: { leaseId: "NPEL-A1" },
+      slotKey: "slot-0",
+      waitAgeMs: 2500,
+    });
+    const res = await nonprodLeasePack.handlers.claim_nonprod_environment_lease(
+      {
+        environmentKey: "local-integration-ci",
+        ownerProvider: "codex",
+        ownerSessionId: "s1",
+        claimKey: "local-ci:s1:abc",
+        purpose: "test",
+        url: "http://localhost:3010",
+        ports: [3010],
+        expiresAt: new Date("2026-07-28T22:00:00Z").toISOString(),
+      },
+      "u1",
+    );
+
+    expect(res).toMatchObject({
+      success: true,
+      data: {
+        admission: {
+          status: "admitted",
+          slotKey: "slot-0",
+          waitAgeMs: 2500,
+        },
+      },
+    });
   });
 
   it("claim rejects an unsupported environmentKey without calling the service", async () => {

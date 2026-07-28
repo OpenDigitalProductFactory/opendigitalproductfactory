@@ -42,7 +42,7 @@ shellContractTest("gate-worktree.sh parses explicit flags in dry-run mode", () =
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /branch=feat\/local-ci-sandbox/);
   assert.match(result.stdout, /sha=abc123/);
-  assert.match(result.stdout, /worktree=\/tmp\/dpf-worktree/);
+  assert.match(result.stdout, /worktree=.*dpf-worktree/);
   assert.match(result.stdout, /remote=coordination/);
   assert.match(result.stdout, /pushBeforeLease=false/);
 });
@@ -98,7 +98,7 @@ shellContractTest("gate-worktree.sh discovers the checked-in default runner when
   ], { env });
 
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /localCiCommand=sh '.*local-ci-runner\.sh' --candidate 'feat\/local-ci-sandbox'/);
+  assert.match(result.stdout, /localCiCommand=.*node.*local-ci-runner\.mjs.*--candidate "feat\/local-ci-sandbox"/i);
   assert.ok(!result.stdout.includes("localCiCommand=missing"));
 });
 

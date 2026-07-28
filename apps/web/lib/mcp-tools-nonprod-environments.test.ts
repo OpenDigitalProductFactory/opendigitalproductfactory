@@ -2,12 +2,14 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 const {
   mockListActiveNonprodEnvironmentLeases,
+  mockListQueuedNonprodEnvironmentLeases,
   mockClaimNonprodEnvironmentLease,
   mockReleaseNonprodEnvironmentLease,
   mockRenewNonprodEnvironmentLease,
   mockRecordLocalIntegrationResult,
 } = vi.hoisted(() => ({
   mockListActiveNonprodEnvironmentLeases: vi.fn(),
+  mockListQueuedNonprodEnvironmentLeases: vi.fn(),
   mockClaimNonprodEnvironmentLease: vi.fn(),
   mockReleaseNonprodEnvironmentLease: vi.fn(),
   mockRenewNonprodEnvironmentLease: vi.fn(),
@@ -24,6 +26,7 @@ vi.mock("@/lib/nonprod/environment-lease", async (importOriginal) => ({
   // only the DB-touching functions with mocks.
   ...(await importOriginal<typeof import("@/lib/nonprod/environment-lease")>()),
   listActiveNonprodEnvironmentLeases: mockListActiveNonprodEnvironmentLeases,
+  listQueuedNonprodEnvironmentLeases: mockListQueuedNonprodEnvironmentLeases,
   claimNonprodEnvironmentLease: mockClaimNonprodEnvironmentLease,
   releaseNonprodEnvironmentLease: mockReleaseNonprodEnvironmentLease,
   renewNonprodEnvironmentLease: mockRenewNonprodEnvironmentLease,
@@ -44,6 +47,7 @@ describe("nonproduction environment MCP tools", () => {
     mockListActiveNonprodEnvironmentLeases.mockResolvedValue([
       { leaseId: "NPEL-1", environmentKey: "active-candidate", status: "active" },
     ]);
+    mockListQueuedNonprodEnvironmentLeases.mockResolvedValue([]);
 
     const result = await executeTool("list_nonprod_environment_leases", {}, "user-1", { routeContext: "/build" });
 
@@ -55,8 +59,10 @@ describe("nonproduction environment MCP tools", () => {
 
   it("claims a shared nonproduction environment lease", async () => {
     mockClaimNonprodEnvironmentLease.mockResolvedValue({
-      status: "claimed",
+      status: "admitted",
       lease: { leaseId: "NPEL-1", url: "http://localhost:53601" },
+      slotKey: "slot-0",
+      waitAgeMs: 0,
     });
 
     const result = await executeTool("claim_nonprod_environment_lease", {
@@ -86,10 +92,12 @@ describe("nonproduction environment MCP tools", () => {
     }));
   });
 
-  it("reports conflict when a shared nonproduction environment is already leased", async () => {
+  it("returns a stable queue position when the shared environment is occupied", async () => {
     mockClaimNonprodEnvironmentLease.mockResolvedValue({
-      status: "conflict",
-      active: { leaseId: "NPEL-ACTIVE", ownerProvider: "claude" },
+      status: "queued",
+      lease: { leaseId: "NPEL-WAIT", ownerProvider: "codex" },
+      queuePosition: 1,
+      waitAgeMs: 125,
     });
 
     const result = await executeTool("claim_nonprod_environment_lease", {
@@ -102,9 +110,13 @@ describe("nonproduction environment MCP tools", () => {
       expiresAt: "2026-05-26T18:00:00.000Z",
     }, "user-1", { routeContext: "/build" });
 
-    expect(result.success).toBe(false);
-    expect(result.error).toBe("lease_conflict");
-    expect(result.data?.active).toEqual({ leaseId: "NPEL-ACTIVE", ownerProvider: "claude" });
+    expect(result.success).toBe(true);
+    expect(result.entityId).toBe("NPEL-WAIT");
+    expect(result.data?.admission).toEqual({
+      status: "queued",
+      queuePosition: 1,
+      waitAgeMs: 125,
+    });
   });
 
   it("releases a nonproduction environment lease", async () => {

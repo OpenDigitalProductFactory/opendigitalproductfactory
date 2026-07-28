@@ -44,19 +44,26 @@ If no shared environment is available and the canonical local install is the rig
 ## Steps
 
 1. List current nonproduction environment leases.
-2. Choose an available shared environment that matches the task's verification need.
-3. Claim the lease with branch, worktree, task, and expected release context.
-4. Verify against the provided localhost URL.
-5. Release the lease when the verification slice is complete or blocked.
-6. If no environment is available, return a clear blocked state instead of starting a new unmanaged server.
+2. Choose a shared environment that matches the task's verification need.
+3. Request admission with branch, worktree, task, expected release context, and
+   a stable `claimKey` for this exact attempt.
+4. If the result is `queued`, do not touch the runtime. Re-observe the same
+   claim with bounded backoff; reusing `claimKey` preserves FIFO position.
+5. Only an `admitted` result authorizes verification against the provided URL.
+6. Release an admitted lease when verification is complete or blocked. Release
+   a queued lease to cancel the request when the task stops waiting.
 
 ## Guardrails
 
 - Do not start a thread-owned preview server when a shared environment is available.
+- A successful queued response is not runtime ownership; only `admitted` is.
 - Do not hold a lease after the thread is complete, blocked, or handed off.
 - Do not show lease IDs or raw tool names in the default UI. Show "Shared environment ready", "in use", or "blocked."
 - Don't treat this skill as optional when runtime-bound verification is needed in a thread worktree — it IS the runtime path; the worktree is not.
 
 ## Worked example
 
-A Build Studio UX check needs `localhost`. This skill claims the available shared environment, returns an "Open environment" link, and records the lease in audit details. The operator sees readiness and one action, not the MCP lease payload.
+A Build Studio UX check needs `localhost`. This skill requests durable FIFO
+admission and quietly waits on the same claim identity. Once admitted it
+returns an "Open environment" link and records the lease in audit details. The
+operator sees readiness and one action, not the MCP lease payload.

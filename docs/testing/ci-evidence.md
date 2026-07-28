@@ -106,6 +106,38 @@ Before any PR suite-skipping activates (BI-4527C1DA and dependents):
 
 Until then, exhaustive PR and merge-group execution remains the default.
 
+## Local-CI admission and fairness
+
+`pnpm pregate` requests one durable admission row before touching the shared
+local-integration sandbox. The request identity is the owner session plus exact
+candidate SHA, so retries observe the same row rather than creating another
+waiter. The MCP claim result is explicit:
+
+- `queued` includes stable FIFO position and accumulated wait age;
+- `admitted` includes the assigned slot and wait age; and
+- a terminal result requires a new claim identity.
+
+Phase 1 retains one slot (`slot-0`) and therefore does not claim parallel
+capacity. It removes the polling race that let later one-second waiters overtake
+earlier work, and it prevents queue time from consuming the TTL granted to the
+actual run. The gate observes its durable row with bounded exponential backoff
+and jitter. Transient portal quiescence and connection resets retry within the
+admission deadline instead of turning into failed full-run attempts. The
+default deadline is two hours because a complete gate can legitimately exceed
+the old five-minute queue deadline; callers may set a smaller explicit bound.
+
+Only an admitted owner acquires the host process fence, clears shared freshness
+evidence, and starts the expensive command. Releasing an admitted row promotes
+the oldest live waiter; releasing a queued row cancels it. Interrupt and
+termination handling release or cancel the same lease exactly once. Queue
+arrival, start, cancellation/expiry, completion, depth, wait, and service
+timings use the shared queue-telemetry substrate under the stable
+`compute:nonprod-<environment>` key.
+
+The POSIX script is intentionally only a launcher for the Node gate. Admission,
+heartbeat, process fencing, evidence, and cancellation therefore have one
+cross-platform implementation.
+
 ## Impact planner (shadow mode)
 
 `scripts/ci-evidence-plan.mjs` is the shared planner for GitHub CI and the
