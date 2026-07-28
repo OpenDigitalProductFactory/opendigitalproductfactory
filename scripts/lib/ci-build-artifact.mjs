@@ -148,6 +148,58 @@ export function validateArchiveEntries(entries) {
   return { ok: reasons.length === 0, reasons: [...new Set(reasons)] };
 }
 
+// GitHub reports `queued`, `waiting`, `requested`, `pending`, and `in_progress`
+// before a run reaches `completed`. Only `completed` is terminal; anything else
+// (including a status this code does not recognise) still owes us an artifact.
+const TERMINAL_RUN_STATUS = "completed";
+
+function exactTreeProducers(runs, headSha, eventName) {
+  return runs.filter((run) => run.head_sha === headSha && run.event === eventName);
+}
+
+/**
+ * Decide whether discovery should keep polling, consume an artifact, or stop.
+ *
+ * BI-149370BD. `heavy=false` PRs skip the production build entirely, so no
+ * `web-production-build-*` can ever appear and polling to the deadline is pure
+ * dead wait ahead of an unchanged fallback build. Once every exact-tree
+ * producer is terminal without a usable artifact, no further poll can change
+ * the answer.
+ *
+ * Fail-safe by construction: an unknown/missing run status counts as active, so
+ * uncertainty keeps the old bounded-polling behaviour instead of abandoning
+ * reuse early.
+ */
+export function buildArtifactDiscoveryVerdict({
+  runs,
+  artifactsByRun,
+  headSha,
+  eventName,
+  artifactPrefix,
+}) {
+  const selected = selectBuildArtifact({ runs, artifactsByRun, headSha, eventName, artifactPrefix });
+  if (selected) {
+    return { decision: "found", selected, reason: `found ${selected.artifactName} in run ${selected.runId}` };
+  }
+  const producers = exactTreeProducers(runs, headSha, eventName);
+  if (producers.length === 0) {
+    return { decision: "wait", selected: null, reason: "no exact-tree producer run has appeared yet" };
+  }
+  const active = producers.filter((run) => run.status !== TERMINAL_RUN_STATUS);
+  if (active.length > 0) {
+    return {
+      decision: "wait",
+      selected: null,
+      reason: `${active.length} exact-tree producer run(s) still active`,
+    };
+  }
+  return {
+    decision: "abandon",
+    selected: null,
+    reason: `all ${producers.length} exact-tree producer run(s) are terminal with no usable artifact`,
+  };
+}
+
 export function selectBuildArtifact({
   runs,
   artifactsByRun,
