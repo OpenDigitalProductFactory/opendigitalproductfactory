@@ -6,7 +6,20 @@ order: 1
 
 ## Overview
 
-The Product Inventory is a structured catalogue of all digital products in your organization. Every product has a lifecycle stage, an operational status, and links to its portfolio, taxonomy classification, and associated backlog.
+DPF keeps two related product concepts separate:
+
+- **Business products** are the goods, services, experiences, or access the
+  organization sells. They belong to an organization-owned product line under
+  **Goods and Services for Sale**. Storefront setup creates the initial
+  hierarchy from lines the operator confirms.
+- **Digital products** are software, data, platforms, or other digital
+  architecture. The Product Inventory is the structured catalogue for these
+  digital products. Every digital product has a lifecycle stage, operational
+  status, portfolio and taxonomy links, and associated backlog.
+
+A business product may later be traced to one or more digital products that
+constitute or augment it. That trace does not turn a salon service, hotel room,
+meal, or retail good into a digital product.
 
 ## Key Concepts
 
@@ -18,6 +31,8 @@ The Product Inventory is a structured catalogue of all digital products in your 
 
 ## What You Can Do
 
+- Confirm the initial business product mix during Storefront setup
+- Use the Goods and Services for Sale hierarchy for business-product reporting
 - Browse all products with filtering by lifecycle stage, status, portfolio, and taxonomy
 - View a product's full profile including its health metrics, linked backlog items, and architecture models
 - Inspect available software identity and support-lifecycle facts without leaving the inventory entity detail page

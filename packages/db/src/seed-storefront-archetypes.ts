@@ -97,6 +97,7 @@ export async function seedStorefrontArchetypes(prisma: PrismaClient): Promise<vo
         formSchema: json(archetype.formSchema),
         tags: archetype.tags,
         activationProfile: json(archetype.activationProfile ?? null),
+        productMix: json(archetype.productMix ?? null),
         customVocabulary: json(archetype.vocabulary ?? null),
         marketingSkillRules: json(MARKETING_SKILL_RULES[archetype.category] ?? {}),
         isActive: true,
@@ -112,6 +113,7 @@ export async function seedStorefrontArchetypes(prisma: PrismaClient): Promise<vo
         formSchema: json(archetype.formSchema),
         tags: archetype.tags,
         activationProfile: json(archetype.activationProfile ?? null),
+        productMix: json(archetype.productMix ?? null),
         // Leaf-level vocabulary override (e.g. credit-union "Members",
         // municipal-utility "Ratepayers") — merged over the category vocabulary
         // by applyCustomVocabulary at render time. Conditional on the update

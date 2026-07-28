@@ -23,6 +23,28 @@ export const foodHospitalityArchetypes: ArchetypeDefinition[] = [
     category: "food-hospitality",
     ctaType: "booking",
     tags: ["restaurant", "dining", "food", "reservation"],
+    productMix: {
+      primary: {
+        key: "dining",
+        label: "Dining",
+        archetypeId: "restaurant",
+        products: [
+          { key: "table-dining", label: "Table dining" },
+          { key: "group-dining", label: "Group dining" },
+        ],
+      },
+      adjacent: [
+        {
+          key: "private-events",
+          label: "Private events",
+          archetypeId: "catering",
+          products: [
+            { key: "private-dining", label: "Private dining" },
+            { key: "event-catering", label: "Event catering" },
+          ],
+        },
+      ],
+    },
     itemTemplates: [
       { name: "Table for 2", description: "Reserve a table for two guests", priceType: "free", bookingDurationMinutes: 90 },
       { name: "Table for 4", description: "Reserve a table for four guests", priceType: "free", bookingDurationMinutes: 90 },

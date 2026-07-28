@@ -84,6 +84,29 @@ export const beautyPersonalCareArchetypes: ArchetypeDefinition[] = [
     category: "beauty-personal-care",
     ctaType: "booking",
     tags: ["hair", "beauty", "salon", "appointment"],
+    productMix: {
+      primary: {
+        key: "salon-services",
+        label: "Salon services",
+        archetypeId: "hair-salon",
+        products: [
+          { key: "haircuts", label: "Haircuts" },
+          { key: "colour", label: "Colour" },
+          { key: "treatments", label: "Treatments" },
+        ],
+      },
+      adjacent: [
+        {
+          key: "retail-goods",
+          label: "Hair-care products",
+          archetypeId: "retail-goods",
+          products: [
+            { key: "hair-care", label: "Hair-care products" },
+            { key: "styling-products", label: "Styling products" },
+          ],
+        },
+      ],
+    },
     itemTemplates: [
       { name: "Haircut", description: "Precision cut styled to your preference", priceType: "from", bookingDurationMinutes: 45 },
       { name: "Colour", description: "Full head colour treatment", priceType: "from", bookingDurationMinutes: 90 },

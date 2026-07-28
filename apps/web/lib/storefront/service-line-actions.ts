@@ -3,8 +3,11 @@
 import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
-import { newId } from "@/lib/shared/new-id";
 import { readActivationProfile, mergeActivationProfiles } from "@dpf/storefront-templates";
+import {
+  seedCompositionArtifacts,
+  type CompositionArtifactClient,
+} from "./seed-composition-artifacts";
 
 const MAX_SECONDARY_LINES = 2;
 
@@ -127,62 +130,15 @@ export async function addStorefrontServiceLine(
   const orgSettingsRow = await prisma.orgSettings.findFirst({ select: { baseCurrency: true } });
   const seedCurrency = orgSettingsRow?.baseCurrency ?? "USD";
 
-  // Seed item templates from the secondary archetype
-  const itemTemplates = secondaryArchetype.itemTemplates as Array<{
-    name: string;
-    description?: string;
-    priceType: string;
-    ctaType?: string;
-    ctaLabel?: string;
-    priceAmount?: number | null;
-  }>;
-
-  if (itemTemplates.length > 0) {
-    await prisma.storefrontItem.createMany({
-      data: itemTemplates.map((t, i) => ({
-        itemId: `itm-${newId(8)}`,
-        storefrontId,
-        name: t.name,
-        description: t.description ?? null,
-        priceType: t.priceType,
-        ctaType: t.ctaType ?? secondaryArchetype.ctaType,
-        ctaLabel: t.ctaLabel ?? null,
-        priceAmount: t.priceAmount ?? null,
-        sortOrder: 1000 + i,
-        isActive: true,
-        priceCurrency: seedCurrency,
-        sourceCompositionId: composition.id,
-      })),
-    });
-  }
-
-  // Seed section templates from the secondary — hidden by default so operator reveals them
-  const sectionTemplates = secondaryArchetype.sectionTemplates as Array<{
-    type: string;
-    title: string;
-    sortOrder: number;
-  }>;
-
-  const lastSection = await prisma.storefrontSection.findFirst({
-    where: { storefrontId },
-    orderBy: { sortOrder: "desc" },
-    select: { sortOrder: true },
+  await seedCompositionArtifacts({
+    db: prisma as unknown as CompositionArtifactClient,
+    storefrontId,
+    compositionId: composition.id,
+    compositionSortOrder: nextSortOrder,
+    seedCurrency,
+    revealContentSections: false,
+    archetype: secondaryArchetype,
   });
-  const sectionBase = (lastSection?.sortOrder ?? 0) + 1;
-
-  if (sectionTemplates.length > 0) {
-    await prisma.storefrontSection.createMany({
-      data: sectionTemplates.map((s, i) => ({
-        storefrontId,
-        type: s.type,
-        title: s.title,
-        sortOrder: sectionBase + i,
-        content: {},
-        isVisible: false,
-        sourceCompositionId: composition.id,
-      })),
-    });
-  }
 
   revalidatePath("/storefront");
   return { success: true };

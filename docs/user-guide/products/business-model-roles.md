@@ -8,6 +8,12 @@ order: 2
 
 Business Model Roles (BMR) define the operating structure for a digital product based on how it goes to market. While platform governance roles (HR-000 through HR-500) govern the platform itself, business model roles are product-scoped — different products may have different role holders even for equivalent authority domains.
 
+These roles apply to the digital-product architecture record. They are not
+created automatically for business ProductLines or Products captured during
+Storefront setup. A simple business remains the provider organization; DPF does
+not infer a product team, business unit, subscriber, entitlement, or role holder
+from a product-line name.
+
 For example, a SaaS product might have a **Subscription Revenue Analyst** responsible for pricing decisions, while a Marketplace product has a **Vendor Relations Manager** responsible for supplier governance. Both roles escalate to the ITFM Director (HR-400) for financial decisions that exceed their authority.
 
 ## Built-in Business Model Templates

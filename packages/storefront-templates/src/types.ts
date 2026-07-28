@@ -580,6 +580,35 @@ export interface ArchetypeVocabularyOverride {
   agentName?: string;
 }
 
+/**
+ * A business-facing product seed. This describes what the organization sells;
+ * it is deliberately separate from DigitalProduct architecture and storefront
+ * pricing/offer contracts.
+ */
+export interface BusinessProductTemplate {
+  key: string;
+  label: string;
+  description?: string;
+}
+
+/**
+ * One organization-owned product line suggested during setup. `archetypeId`
+ * links an optional adjacent line to the existing storefront composition
+ * substrate; custom lines may omit it.
+ */
+export interface ProductLineTemplate {
+  key: string;
+  label: string;
+  description?: string;
+  archetypeId?: string;
+  products: BusinessProductTemplate[];
+}
+
+export interface ProductMixDefinition {
+  primary: ProductLineTemplate;
+  adjacent?: ProductLineTemplate[];
+}
+
 export interface ArchetypeDefinition {
   archetypeId: string;
   name: string;
@@ -591,6 +620,12 @@ export interface ArchetypeDefinition {
   tags: string[];
   schedulingDefaults?: SchedulingDefaults;
   activationProfile?: ActivationProfile;
+  /**
+   * Optional business product-line defaults. Checked-in definitions seed the
+   * live StorefrontArchetype record, which remains the setup-time read
+   * authority. Absence resolves to one primary line from this archetype.
+   */
+  productMix?: ProductMixDefinition;
   /**
    * Per-leaf vocabulary overrides, seeded into
    * `StorefrontArchetype.customVocabulary` and read by `getVocabulary()` —

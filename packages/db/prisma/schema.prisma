@@ -806,6 +806,77 @@ model DigitalProduct {
   businessCapabilityLinks       BusinessCapabilityTraceLink[]  @relation("BusinessCapabilityProductLinks")
   dependencyEdgesFrom           ProductDependency[]            @relation("ProductDependencyFrom")
   dependencyEdgesTo             ProductDependency[]            @relation("ProductDependencyTo")
+  businessProductLinks          ProductDigitalProduct[]
+}
+
+// Organization-owned business product hierarchy (EP-ED496EB0 Phase 1).
+// This is intentionally separate from DigitalProduct, which remains the
+// digital-architecture product model.
+model ProductLine {
+  id                    String                           @id @default(cuid())
+  lineId                String                           @unique
+  organizationId        String
+  parentId              String?
+  key                   String
+  name                  String
+  description           String?
+  sortOrder             Int                              @default(0)
+  sourceKind            String?
+  sourceRef             String?
+  effectiveFrom         DateTime                         @default(now())
+  effectiveTo           DateTime?
+  createdAt             DateTime                         @default(now())
+  updatedAt             DateTime                         @updatedAt
+  organization          Organization                     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  parent                ProductLine?                     @relation("ProductLineHierarchy", fields: [parentId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  children              ProductLine[]                    @relation("ProductLineHierarchy")
+  products              Product[]
+  storefrontComposition StorefrontArchetypeComposition?
+
+  @@unique([organizationId, key])
+  @@unique([id, organizationId])
+  @@index([organizationId, sortOrder])
+  @@index([parentId])
+  @@index([effectiveTo])
+}
+
+model Product {
+  id                  String                  @id @default(cuid())
+  productId           String                  @unique
+  organizationId      String
+  productLineId       String
+  key                 String
+  name                String
+  description         String?
+  sortOrder           Int                     @default(0)
+  sourceKind          String?
+  sourceRef           String?
+  effectiveFrom       DateTime                @default(now())
+  effectiveTo         DateTime?
+  createdAt           DateTime                @default(now())
+  updatedAt           DateTime                @updatedAt
+  organization        Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  productLine         ProductLine             @relation(fields: [productLineId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  digitalProductLinks ProductDigitalProduct[]
+
+  @@unique([productLineId, key])
+  @@index([organizationId, sortOrder])
+  @@index([productLineId, sortOrder])
+  @@index([effectiveTo])
+}
+
+// Compatibility trace from a business Product to any DigitalProduct that
+// constitutes or augments it. Neither side becomes the other's authority.
+model ProductDigitalProduct {
+  id               String         @id @default(cuid())
+  productId        String
+  digitalProductId String
+  createdAt        DateTime       @default(now())
+  product          Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  digitalProduct   DigitalProduct @relation(fields: [digitalProductId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, digitalProductId])
+  @@index([digitalProductId])
 }
 
 /// Product-to-product dependency graph (BI-PORTPRIO-2) — the rail for the DPPM
@@ -3942,6 +4013,8 @@ model Organization {
   patientProfiles               PatientProfile[]
   patientAuthorizationDecisions AuthorizationDecisionLog[]
   storefrontBookings            StorefrontBooking[]                @relation("StorefrontBookingOrganization")
+  productLines                  ProductLine[]
+  businessProducts              Product[]
   careVisitTypes                CareVisitType[]
   careLocations                 CareLocation[]
   careResources                 CareResource[]
@@ -8987,6 +9060,7 @@ model StorefrontArchetype {
   isActive            Boolean                          @default(true)
   isBuiltIn           Boolean                          @default(true)
   activationProfile   Json?
+  productMix          Json?
   customVocabulary    Json?
   marketingSkillRules Json?
   createdAt           DateTime                         @default(now())
@@ -9042,6 +9116,7 @@ model StorefrontArchetypeComposition {
   id           String    @id @default(cuid())
   storefrontId String
   archetypeId  String
+  productLineId String?  @unique
   /// "primary" | "secondary"
   role         String
   sortOrder    Int       @default(0)
@@ -9055,6 +9130,7 @@ model StorefrontArchetypeComposition {
 
   storefront     StorefrontConfig    @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
   archetype      StorefrontArchetype @relation(fields: [archetypeId], references: [id])
+  productLine    ProductLine?        @relation(fields: [productLineId], references: [id], onDelete: SetNull)
   seededItems    StorefrontItem[]
   seededSections StorefrontSection[]
 

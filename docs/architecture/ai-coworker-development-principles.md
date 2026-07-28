@@ -264,3 +264,39 @@ These principles apply to:
 - External coding agents working on DPF, including Codex and Claude, through the canonical project rulebook
 
 When these principles conflict with expediency, the principles win. A well-structured agent that works reliably is worth more than a quick hack that fails unpredictably.
+
+---
+
+## Principle 10: Query The Canonical Business Product Boundary
+
+**Do not turn business products into digital architecture or invent the people
+who consume them.**
+
+### Rule
+
+When an AI coworker needs to reason about what an organization sells, it queries
+the organization-scoped `ProductLine` and `Product` hierarchy under **Goods and
+Services for Sale**. `DigitalProduct` remains the architecture record for
+software, data, and digital platforms. Storefront archetypes and taxonomy nodes
+are reference definitions; neither is the organization's mutable product truth.
+
+The organization is the default provider for a simple business. Consumer claims
+must be derived from real customer, booking, order, subscription, or fulfilment
+evidence. Product-line capture alone never proves a product team, business unit,
+subscriber, entitlement, or consumer.
+
+### Implementation
+
+- filter product lines and products by `organizationId` and `effectiveTo: null`;
+- follow `ProductLine.parentId` for rollups while preserving organization scope;
+- use `StorefrontArchetypeComposition.productLineId` only as channel provenance;
+- use `ProductDigitalProduct` only as a trace between distinct authorities;
+- prefer business Products when generating "what we sell" WWWD context, with
+  legacy DigitalProduct/ServiceOffering reads only as a migration fallback.
+
+### Rationale
+
+The provider-consumer boundary is stable from a one-person business to a large
+enterprise. Scale changes disclosure and reporting detail, not the canonical
+model. Keeping the query boundary explicit prevents plausible-sounding but
+fabricated organization structure from entering plans, prompts, or reports.

@@ -17,6 +17,10 @@ order: 3
 5. At **Meet Your COO**, optionally choose how your standing AI COO is addressed. Suggestions such as **Number Two**, **General**, or **Alex** are starting points; **Keep COO** leaves the role-only default. DPF always displays a chosen name with **AI COO** and the choice never changes permissions, authority, audit identity, or owner accountability. You can change or clear it later from the COO's AI Workforce record.
 6. Confirm the first internal user can authenticate and reach the internal shell.
 7. Move into the relevant operational area only after setup and first-login checks succeed.
+8. When creating the Storefront, confirm the main product line and select only
+   adjacent lines the business genuinely sells. The organization is the
+   provider by default; setup does not create placeholder customers, teams,
+   subscribers, or entitlements.
 
 ## Help Visibility Policy
 
