@@ -13,6 +13,7 @@ import {
 const hr000 = { platformRole: "HR-000", isSuperuser: false };
 const hr300 = { platformRole: "HR-300", isSuperuser: false };
 const hr500 = { platformRole: "HR-500", isSuperuser: false };
+const hr600 = { platformRole: "HR-600", isSuperuser: false };
 const noRole = { platformRole: null, isSuperuser: false };
 const superuser = { platformRole: null, isSuperuser: true };
 
@@ -30,6 +31,13 @@ describe("can()", () => {
   it("HR-500 can view operations but not portfolio", () => {
     expect(can(hr500, "view_operations")).toBe(true);
     expect(can(hr500, "view_portfolio")).toBe(false);
+  });
+
+  it("grants business Performance only to owners and operations managers", () => {
+    expect(can(hr000, "view_business_performance")).toBe(true);
+    expect(can(hr500, "view_business_performance")).toBe(true);
+    expect(can(hr300, "view_business_performance")).toBe(false);
+    expect(can(hr600, "view_business_performance")).toBe(false);
   });
 
   it("HR-500 can manage_backlog", () => {
@@ -110,6 +118,31 @@ describe("getShellNavSections()", () => {
     expect(keys(worker)).not.toContain("admin");
     expect(keys(worker)).not.toContain("ai_workforce");
     expect(keys(worker)).toEqual(expect.arrayContaining(["workspace", "customer", "finance"]));
+    expect(keys(operator)).toContain("performance");
+    expect(keys(worker)).not.toContain("performance");
+  });
+
+  it("shows Operations to workforce members while server-gating Performance", () => {
+    const keys = getShellNavSections(hr600, { mode: "operator" })
+      .flatMap((section) => section.items.map((item) => item.key));
+
+    expect(keys).toContain("workspace");
+    expect(keys).not.toContain("performance");
+  });
+
+  it("presents Operations and Performance as owner/manager rail siblings", () => {
+    for (const user of [hr000, hr500]) {
+      const workspaceItems = getShellNavSections(user, { mode: "operator" })
+        .find((section) => section.key === "workspace")
+        ?.items ?? [];
+
+      expect(workspaceItems.map((item) => [item.key, item.label, item.href])).toEqual(
+        expect.arrayContaining([
+          ["workspace", "Operations", "/workspace"],
+          ["performance", "Performance", "/performance"],
+        ]),
+      );
+    }
   });
 
   it("treats no mode as the full operator rail (backward compatible)", () => {
@@ -363,6 +396,7 @@ describe("HR-600 Workforce Member base floor", () => {
       "manage_user_lifecycle",
       "manage_backlog",
       "view_operations",
+      "view_business_performance",
       "view_platform",
       "manage_platform",
       "manage_users",

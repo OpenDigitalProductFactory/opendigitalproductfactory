@@ -4,6 +4,7 @@ import { getRouteSensitivity } from "@/lib/agent-sensitivity";
 import { resolveRouteContext, UNIVERSAL_SKILLS } from "@/lib/route-context-map";
 import { resolveSelectedCoworkerForRoute } from "./selected-coworker-route";
 import { CHANGE_REVIEWER_ROUTE_AGENT } from "./change-reviewer-route";
+import { PERFORMANCE_ROUTE_AGENT } from "./performance-route";
 // prompt-loader is imported server-side only via agent-routing-server.ts.
 // This file stays free of @dpf/db for client component compatibility.
 
@@ -616,6 +617,7 @@ ON THIS PAGE: The user is managing the internal storefront workspace. Focus on p
       defaultBudgetClass: "balanced",
     },
   },
+  "/performance": PERFORMANCE_ROUTE_AGENT,
   "/workspace": {
     agentId: "coo",
     agentName: "COO",

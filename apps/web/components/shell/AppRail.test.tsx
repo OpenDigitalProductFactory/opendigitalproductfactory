@@ -31,17 +31,27 @@ const sections: ShellNavSection[] = [
   {
     key: "workspace",
     label: "Workspace",
-    description: "Your queue, recents, and AI-guided next steps.",
+    description: "Current business work and authorized owner/manager performance.",
     items: [
       {
         key: "workspace",
-        label: "Workspace",
+        label: "Operations",
         href: "/workspace",
-        description: "See what needs attention next.",
+        description: "See the current business state and next action.",
         sectionKey: "workspace",
         capabilityKey: null,
         orgCapabilityKey: null,
         audienceModes: ["worker", "operator"],
+      },
+      {
+        key: "performance",
+        label: "Performance",
+        href: "/performance",
+        description: "Understand business results and trends.",
+        sectionKey: "workspace",
+        capabilityKey: "view_business_performance",
+        orgCapabilityKey: null,
+        audienceModes: ["operator"],
       },
     ],
   },
@@ -80,6 +90,8 @@ describe("AppRail", () => {
     const html = renderToStaticMarkup(<AppRail sections={sections} />);
 
     expect(html).toContain(">Workspace<");
+    expect(html).toContain(">Operations<");
+    expect(html).toContain(">Performance<");
     expect(html).toContain(">Business<");
     expect(html).toContain(">Finance<");
     expect(html).toContain(">Compliance<");
@@ -90,7 +102,7 @@ describe("AppRail", () => {
     pathname = "/finance";
     const html = renderToStaticMarkup(<AppRail sections={sections} />);
 
-    expect(html).not.toContain("See what needs attention next.");
+    expect(html).not.toContain("See the current business state and next action.");
     expect(html).not.toContain("Cashflow, receivables, payables, and close.");
     expect(html).not.toContain("Controls, risk, obligations, and posture.");
   });
@@ -107,6 +119,17 @@ describe("AppRail", () => {
     expect(html).not.toContain("overflow-x-auto");
     expect(html).not.toContain("min-w-max");
     expect(html).toContain("grid min-w-0 gap-3");
+    expect(html).toContain('href="/workspace"');
+    expect(html).toContain('href="/performance"');
+  });
+
+  it("marks Performance active without losing the Operations sibling", () => {
+    pathname = "/performance";
+    const html = renderToStaticMarkup(<AppRail sections={sections} />);
+
+    expect(html).toContain('href="/workspace"');
+    expect(html).toContain('href="/performance"');
+    expect(html).toContain(">Here<");
   });
 
   it("renders the worker/operator mode toggle reflecting the active mode", () => {

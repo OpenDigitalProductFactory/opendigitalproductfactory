@@ -50,6 +50,33 @@ describe("portal navigation model", () => {
     expect(getRouteNavRecord("/workspace/cases/[caseKey]")?.destinationKind).toBe("detail");
   });
 
+  it("models Operations and Performance as distinct main-rail domain homes", () => {
+    const operations = getRouteNavRecord("/workspace");
+    const performance = getRouteNavRecord("/performance");
+
+    expect(operations).toMatchObject({
+      label: "Operations",
+      domain: "workspace",
+      destinationKind: "domain-home",
+    });
+    expect(performance).toMatchObject({
+      label: "Performance",
+      domain: "performance",
+      destinationKind: "domain-home",
+      capabilityKey: "view_business_performance",
+    });
+    expect(operations?.shellNav?.sectionKey).toBe("workspace");
+    expect(performance?.shellNav?.sectionKey).toBe("workspace");
+  });
+
+  it("keeps Performance out of the Operations section-level queue navigation", () => {
+    const operationsSections = getSectionNavEntries("/workspace").map((entry) => entry.path);
+
+    expect(operationsSections).toContain("/workspace/inbox");
+    expect(operationsSections).toContain("/workspace/my-queue");
+    expect(operationsSections).not.toContain("/performance");
+  });
+
   it("classifies legacy redirect destinations as redirects, not primary nav", () => {
     expect(getRouteNavRecord("/admin/storefront")?.destinationKind).toBe(
       "legacy-redirect",

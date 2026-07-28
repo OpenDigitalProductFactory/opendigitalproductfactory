@@ -24,6 +24,11 @@ describe("classifyRoute — audience", () => {
     expect(classifyRoute(route("/finance")).audience).toBe("owner");
     expect(classifyRoute(route("/compliance")).audience).toBe("owner");
     expect(classifyRoute(route("/customer")).audience).toBe("owner");
+    expect(classifyRoute(route("/performance"))).toMatchObject({
+      audience: "owner",
+      destinationKind: "section-home",
+      confidence: "high",
+    });
   });
 
   it("maps customer + public first segments", () => {

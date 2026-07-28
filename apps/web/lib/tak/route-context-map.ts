@@ -1,24 +1,11 @@
 // apps/web/lib/route-context-map.ts
 // Factual domain context definitions per route — replaces persona-based agent routing.
 
-import type { SensitivityLevel } from "./agent-router-types";
 import { resolveDocsPath } from "@/lib/docs-route-map";
 import { CHANGE_REVIEWER_ROUTE_CONTEXT } from "./change-reviewer-route";
-export type RouteContextDef = {
-  routePrefix: string;
-  domain: string;
-  sensitivity: SensitivityLevel;
-  domainContext: string;
-  domainTools: string[];
-  docsPath?: string;
-  skills: Array<{
-    label: string;
-    description: string;
-    capability: string | null;
-    prompt: string;
-    taskType?: "conversation" | "code_generation" | "analysis";
-  }>;
-};
+import { PERFORMANCE_ROUTE_CONTEXT } from "./performance-route";
+import type { RouteContextDef } from "./route-context-types";
+export type { RouteContextDef } from "./route-context-types";
 
 // Universal baseline page-interaction skills added to every route.
 export const UNIVERSAL_SKILLS: RouteContextDef["skills"] = [
@@ -1133,6 +1120,8 @@ When generating or reviewing UI code, enforce these rules:
       },
     ],
   },
+
+  "/performance": PERFORMANCE_ROUTE_CONTEXT,
 
   "/workspace": {
     routePrefix: "/workspace",

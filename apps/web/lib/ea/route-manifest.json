@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 584,
+  "routeCount": 585,
   "routes": [
     {
       "routePath": "/",
@@ -5064,6 +5064,15 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/ops/self-upgrade/page.tsx"
+    },
+    {
+      "routePath": "/performance",
+      "kind": "page",
+      "segments": [
+        "performance"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/performance/page.tsx"
     },
     {
       "routePath": "/platform",

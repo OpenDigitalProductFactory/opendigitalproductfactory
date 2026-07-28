@@ -64,7 +64,7 @@ Down the left side is a rail, grouped by the kind of work rather than by screen.
 
 | Group | What lives there | Who uses it most |
 |---|---|---|
-| **Workspace** | Your queue, recent items, and AI-suggested next steps | Everyone, every day |
+| **Workspace** | Operations for current work; Performance for authorized owners and managers | Everyone daily; managers for trends |
 | **Business** | Customers, people, money, compliance, and your public portal | Owners and managers |
 | **Knowledge** | Shared reference, documents, and this guide | Everyone |
 | **Products** | Portfolio, backlog, and architecture | Businesses that build a product |
@@ -75,7 +75,10 @@ Down the left side is a rail, grouped by the kind of work rather than by screen.
 
 You only ever see what your role allows and what your business type actually turned on. An empty group is not a fault — it means that part does not apply to you.
 
-The three groups most owners live in are **Workspace**, **Business**, and **Knowledge**. If you run a business rather than build software, you may never need Products or Delivery at all.
+The three groups most owners live in are **Workspace**, **Business**, and
+**Knowledge**. In Workspace, choose **Operations** for what needs attention now
+and **Performance** for results and trends. If you run a business rather than
+build software, you may never need Products or Delivery at all.
 
 ## Your AI Coworker
 
@@ -103,4 +106,5 @@ If you are a developer working on the platform's source code, that is a differen
 - [Roles & Access](roles-and-access.md) — who on your team can see and do what.
 - [Storefront](../storefront/index.md) — your public front door: sections, items, booking, and enquiries.
 - [Customers](../customers/index.md) — accounts, enquiries, pipeline, and marketing.
-- [Workspace](../workspace/index.md) — your daily board and personal queue.
+- [Operations and Performance](../workspace/index.md) — current business work
+  versus owner/manager results and trends.

@@ -107,6 +107,7 @@ const FIRST_SEGMENT_AUDIENCE: Record<string, RouteAudience> = {
   // Owner / operator business domains
   finance: "owner",
   workspace: "owner",
+  performance: "owner",
   compliance: "owner",
   customer: "owner", // owner-facing CRM (managing customers)
   storefront: "owner", // internal storefront management (AGENTS §2: /storefront is internal)
@@ -139,6 +140,7 @@ export const ROUTE_AUDIENCE_OVERRIDES: Record<
 > = {
   "/": { audience: "auth-setup", destinationKind: "legacy-internal" }, // redirect → /welcome
   "/workspace": { audience: "owner", destinationKind: "section-home" },
+  "/performance": { audience: "owner", destinationKind: "section-home" },
   "/workspace/my-queue": { audience: "worker", destinationKind: "detail" },
   "/workspace/inbox": { audience: "worker", destinationKind: "detail" },
   "/knowledge": { audience: "public", destinationKind: "section-home" },

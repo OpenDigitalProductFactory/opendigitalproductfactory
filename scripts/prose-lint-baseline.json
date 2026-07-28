@@ -1252,6 +1252,20 @@
     "longSentences": 0,
     "textMass": 29
   },
+  "apps/web/app/(shell)/performance/loading.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
+  "apps/web/app/(shell)/performance/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 48
+  },
   "apps/web/app/(shell)/platform/ai/agent/[agentId]/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,

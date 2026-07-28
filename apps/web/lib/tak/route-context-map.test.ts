@@ -93,6 +93,17 @@ describe("resolveRouteContext", () => {
     expect(ctx.sensitivity).toBe("internal");
   });
 
+  it("keeps Performance owner-focused and refuses to imply connected metrics", () => {
+    const ctx = resolveRouteContext("/performance");
+
+    expect(ctx.domain).toBe("Business Performance");
+    expect(ctx.routePrefix).toBe("/performance");
+    expect(ctx.sensitivity).toBe("confidential");
+    expect(ctx.domainContext).toContain("historical");
+    expect(ctx.domainContext).toContain("must not invent");
+    expect(ctx.domainTools).toEqual([]);
+  });
+
   it("returns correct sensitivity for /customer (confidential)", () => {
     const ctx = resolveRouteContext("/customer");
     expect(ctx.sensitivity).toBe("confidential");
