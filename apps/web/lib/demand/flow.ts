@@ -24,11 +24,22 @@ import { type DemandItemView } from "./board";
  *   funding gate but hasn't been picked up for execution yet. The amber crossing.
  * - `in_progress` — the execution half (downstream): owner + burn-down.
  */
-export const FLOW_LANES = ["funnel_raw", "funnel_screened", "funnel_shaped", "bet", "in_progress"] as const;
+export const FLOW_LANES = [
+  "unclassified",
+  "funnel_raw",
+  "funnel_screened",
+  "funnel_shaped",
+  "bet",
+  "in_progress",
+] as const;
 export type FlowLane = (typeof FLOW_LANES)[number];
 
 /** Which half of the river a lane belongs to — drives the two visual languages. */
-export const FLOW_LANE_HALF: Record<FlowLane, "funnel" | "bet" | "board"> = {
+export const FLOW_LANE_HALF: Record<
+  FlowLane,
+  "classification" | "funnel" | "bet" | "board"
+> = {
+  unclassified: "classification",
   funnel_raw: "funnel",
   funnel_screened: "funnel",
   funnel_shaped: "funnel",
@@ -37,6 +48,7 @@ export const FLOW_LANE_HALF: Record<FlowLane, "funnel" | "bet" | "board"> = {
 };
 
 export const FLOW_LANE_LABELS: Record<FlowLane, string> = {
+  unclassified: "Needs classification",
   funnel_raw: "Raw",
   funnel_screened: "Screened",
   funnel_shaped: "Shaped",
@@ -46,11 +58,14 @@ export const FLOW_LANE_LABELS: Record<FlowLane, string> = {
 
 /**
  * Place an item into a single flow lane by its lifecycle position. Execution
- * status wins over funnel stage (an item being built is downstream regardless of
- * how it was scored); a `ready`-but-unstarted item sits on the bet; otherwise it
- * falls in the funnel by `demandStage` (missing stage = raw, per the funnel).
+ * A missing or unknown stage stays unclassified rather than being guessed from
+ * delivery status. Once classified, execution status wins over funnel stage; a
+ * `ready`-but-unstarted item sits on the bet and the other stages stay upstream.
  */
 export function placeInFlow(item: Pick<DemandItemView, "status" | "demandStage">): FlowLane {
+  if (!["raw", "screened", "shaped", "ready"].includes(item.demandStage ?? "")) {
+    return "unclassified";
+  }
   if (item.status === "in-progress") return "in_progress";
   if (item.demandStage === "ready") return "bet";
   if (item.demandStage === "shaped") return "funnel_shaped";
@@ -60,7 +75,7 @@ export function placeInFlow(item: Pick<DemandItemView, "status" | "demandStage">
 
 export type FlowColumn = {
   lane: FlowLane;
-  half: "funnel" | "bet" | "board";
+  half: "classification" | "funnel" | "bet" | "board";
   items: DemandItemView[];
 };
 
@@ -71,6 +86,7 @@ export type FlowColumn = {
  */
 export function groupByFlowLane(items: DemandItemView[]): FlowColumn[] {
   const lanes: Record<FlowLane, DemandItemView[]> = {
+    unclassified: [],
     funnel_raw: [],
     funnel_screened: [],
     funnel_shaped: [],

@@ -7,16 +7,21 @@ const {
   mockStorefrontInquiry,
   mockDigitalProduct,
   mockBacklogItem,
+  mockIngestBacklogItem,
 } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
   mockCan: vi.fn(),
   mockStorefrontInquiry: { findUnique: vi.fn() },
   mockDigitalProduct: { findUnique: vi.fn() },
-  mockBacklogItem: { findUnique: vi.fn(), create: vi.fn() },
+  mockBacklogItem: { findUnique: vi.fn() },
+  mockIngestBacklogItem: vi.fn(),
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
 vi.mock("@/lib/permissions", () => ({ can: mockCan }));
+vi.mock("@/lib/operate/backlog-ingest", () => ({
+  ingestBacklogItem: mockIngestBacklogItem,
+}));
 vi.mock("@dpf/db", () => ({
   prisma: {
     storefrontInquiry: mockStorefrontInquiry,
@@ -41,7 +46,7 @@ beforeEach(() => {
   mockStorefrontInquiry.findUnique.mockReset();
   mockDigitalProduct.findUnique.mockReset();
   mockBacklogItem.findUnique.mockReset();
-  mockBacklogItem.create.mockReset();
+  mockIngestBacklogItem.mockReset();
 
   mockAuth.mockResolvedValue({
     user: { id: "user_1", platformRole: "HR-000", isSuperuser: true },
@@ -54,8 +59,7 @@ beforeEach(() => {
     customerEmail: "jane@example.com",
     message: "I want to use DPF to run product operations.",
     storefront: {
-      businessName: "Open Digital Product Factory",
-      publicSlug: "open-digital-product-factory",
+      organizationId: "org_1",
     },
   });
   mockDigitalProduct.findUnique.mockResolvedValue({
@@ -63,11 +67,10 @@ beforeEach(() => {
     name: "Open Digital Product Factory",
   });
   mockBacklogItem.findUnique.mockResolvedValue(null);
-  mockBacklogItem.create.mockResolvedValue({
+  mockIngestBacklogItem.mockResolvedValue({
     id: "backlog_1",
     itemId: "BI-SFI-INQ0001",
-    title: "Inquiry from Jane Prospect (INQ-0001)",
-    status: "triaging",
+    created: true,
   });
 });
 
@@ -99,16 +102,19 @@ describe("POST /api/storefront/admin/inquiries/[id]/product-backlog", () => {
     const body = await res.json();
     expect(body.created).toBe(true);
     expect(body.backlogItem.itemId).toBe("BI-SFI-INQ0001");
-    expect(mockBacklogItem.create).toHaveBeenCalledWith(
+    expect(mockIngestBacklogItem).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({
-          workType: "feature",
-          type: "product",
-          source: "user-request",
-          status: "triaging",
-          priority: 2,
-          digitalProductId: "dp_1",
-        }),
+        workType: "feature",
+        type: "product",
+        source: "user-request",
+        status: "triaging",
+        priority: 2,
+        organizationId: "org_1",
+        digitalProductId: "dp_1",
+        origin: {
+          kind: "storefront-inquiry",
+          id: "INQ-0001",
+        },
       }),
     );
   });
@@ -128,6 +134,6 @@ describe("POST /api/storefront/admin/inquiries/[id]/product-backlog", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.created).toBe(false);
-    expect(mockBacklogItem.create).not.toHaveBeenCalled();
+    expect(mockIngestBacklogItem).not.toHaveBeenCalled();
   });
 });

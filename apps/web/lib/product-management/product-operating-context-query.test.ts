@@ -170,6 +170,96 @@ describe("loadProductOperatingContext", () => {
     ]);
   });
 
+  it("projects business-product demand directly without requiring a DigitalProduct", async () => {
+    const backlogItem = vi.fn(async () => [
+      {
+        itemId: "BI-PRODUCT",
+        title: "Reduce booking abandonment",
+        body: "Customers abandon appointment booking.",
+        status: "open",
+        workType: "feature",
+        organizationId: "org-1",
+        productLineId: null,
+        businessProductId: "product-1",
+        digitalProductId: null,
+        demandStage: "screened",
+        demandScore: 8,
+        demandScoreFramework: "rice",
+        effortSize: "medium",
+        jobSize: 4,
+        reach: 20,
+        occurrenceCount: 20,
+        impact: 2,
+        confidence: 0.8,
+        businessValue: null,
+        timeCriticality: null,
+        riskOpportunity: null,
+        investmentBucket: "grow",
+        estimateAiJobSize: 4,
+        estimateHumanJobSize: 4,
+        estimateSource: "agreed",
+        estimateAgreed: true,
+        claimStatus: null,
+        claimedByAgentId: null,
+        demandEvidenceLinks: [
+          {
+            evidenceLinkId: "DME-1",
+            sourceKind: "booking",
+            sourceRef: "booking-1",
+            title: "Abandoned booking",
+            summary: null,
+            confidence: 0.8,
+            reviewedAt: now,
+          },
+        ],
+        activities: [
+          {
+            kind: "demand_funding_decision",
+            summary: "Funding deferred",
+            recordedAt: now,
+            payload: { funded: false, rationale: "Needs stronger evidence" },
+          },
+        ],
+        updatedAt: now,
+        epic: null,
+      },
+    ]);
+    const db = fakeDb({
+      productOffering: { findMany: vi.fn(async () => []) },
+      backlogItem: { findMany: backlogItem },
+    });
+
+    const context = await loadProductOperatingContext({
+      db,
+      organizationId: "org-1",
+      scope: { kind: "product", id: "product-1" },
+      authorize: vi.fn(async () => undefined),
+      requestedAt: now,
+    });
+
+    expect(backlogItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          organizationId: "org-1",
+          OR: expect.arrayContaining([
+            expect.objectContaining({ businessProductId: "product-1" }),
+          ]),
+        }),
+      }),
+    );
+    expect(context.demand.items[0]).toMatchObject({
+      id: "BI-PRODUCT",
+      evidenceCount: 1,
+      readiness: expect.objectContaining({
+        evidenceReady: true,
+        scoreReady: true,
+      }),
+      latestDecision: expect.objectContaining({
+        summary: "Funding deferred",
+      }),
+    });
+  });
+
   it("keeps the commercial-summary profile on the sales query boundary", async () => {
     const productSold = vi.fn(async () => [
       {

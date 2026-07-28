@@ -57,6 +57,33 @@ export const backlogScopeFilterProperties: Record<string, ToolProperty> = {
   lifecycleTag: { type: "string", description: "Filter to work tagged with one product/service lifecycle tag." },
 };
 
+/** Product-management scope is separate from archetype/planning scope. */
+export const backlogProductScopeCreateProperties: Record<string, ToolProperty> = {
+  organizationId: {
+    type: "string",
+    description:
+      "Organization orgId, slug, or internal id. Required with business product-line/product scope.",
+  },
+  productLineId: {
+    type: "string",
+    description:
+      "Business ProductLine lineId, key, or internal id. Do not use for a DigitalProduct.",
+  },
+  businessProductId: {
+    type: "string",
+    description:
+      "Goods and Services Product productId, key, or internal id. Do not fabricate or substitute a DigitalProduct.",
+  },
+  digitalProductId: {
+    type: "string",
+    description:
+      "DigitalProduct productId or internal id for digital-architecture work. Mutually exclusive with business product-line/product scope.",
+  },
+};
+
+export const backlogProductScopeUpdateProperties =
+  backlogProductScopeCreateProperties;
+
 export const backlogScopeSelect = {
   scopeKind: true,
   archetypeCategories: true,

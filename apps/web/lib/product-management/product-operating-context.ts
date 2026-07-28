@@ -111,6 +111,19 @@ export type DemandContextItem = ContextItem & {
   status: string;
   demandStage?: string | null;
   score?: number | null;
+  evidenceCount?: number;
+  readiness?: {
+    classified: boolean;
+    evidenceReady: boolean;
+    scoreReady: boolean;
+    fundingReady: boolean;
+  };
+  blockers?: string[];
+  latestDecision?: {
+    summary: string;
+    recordedAt: Date;
+    payload: Record<string, unknown>;
+  } | null;
 };
 
 export type NamedStatusContextItem = ContextItem & {

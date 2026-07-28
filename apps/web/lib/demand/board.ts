@@ -6,11 +6,13 @@
 
 import { DEMAND_STAGE_VALUES, type DemandStage } from "../explore/backlog";
 import { classifyValueEffort, EFFORT_SIZE_TO_JOB_SIZE, type ValueEffortQuadrant } from "./scoring";
+import type { DemandActivationState } from "./activation";
 
 /** The subset of a backlog item the Demand board needs. */
 export type DemandItemView = {
   itemId: string;
   title: string;
+  problemStatement?: string | null;
   status: string;
   workType: string | null;
   epicId: string | null;
@@ -33,35 +35,60 @@ export type DemandItemView = {
   // claimedByAgentId names the volunteer — the bet card shows "🙋 volunteered".
   claimStatus: string | null;
   claimedByAgentId: string | null;
+  organizationId?: string | null;
+  productLineId?: string | null;
+  businessProductId?: string | null;
+  digitalProductId?: string | null;
+  evidenceLinks?: Array<{
+    evidenceLinkId: string;
+    sourceKind: string;
+    sourceRef: string;
+    title: string;
+    summary: string | null;
+    confidence: number | null;
+    reviewedAt: string | null;
+  }>;
+  decisionHistory?: Array<{
+    kind: string;
+    summary: string;
+    recordedAt: string;
+    payload: Record<string, unknown>;
+  }>;
+  activation?: DemandActivationState;
+  fundingDecisionCount?: number;
 };
 
 export type FunnelColumn = {
-  stage: DemandStage;
+  stage: "unclassified" | DemandStage;
   items: DemandItemView[];
 };
 
 /**
- * Group items into the four funnel columns in order. An item with no
- * `demandStage` yet (not entered the demand funnel) lands in `raw`.
+ * Group items into the explicit classification queue plus the four funnel
+ * columns. A null stage is historical ambiguity, not permission to call it raw.
  */
 export function groupByFunnelStage(items: DemandItemView[]): FunnelColumn[] {
-  const columns: Record<DemandStage, DemandItemView[]> = {
+  const columns: Record<"unclassified" | DemandStage, DemandItemView[]> = {
+    unclassified: [],
     raw: [],
     screened: [],
     shaped: [],
     ready: [],
   };
   for (const item of items) {
-    const stage: DemandStage = (DEMAND_STAGE_VALUES as readonly string[]).includes(item.demandStage ?? "")
+    const stage: "unclassified" | DemandStage = (DEMAND_STAGE_VALUES as readonly string[]).includes(item.demandStage ?? "")
       ? (item.demandStage as DemandStage)
-      : "raw";
+      : "unclassified";
     columns[stage].push(item);
   }
   // Within a column, highest demandScore first (unscored last).
-  for (const stage of DEMAND_STAGE_VALUES) {
+  for (const stage of ["unclassified", ...DEMAND_STAGE_VALUES] as const) {
     columns[stage].sort((a, b) => (b.demandScore ?? -Infinity) - (a.demandScore ?? -Infinity));
   }
-  return DEMAND_STAGE_VALUES.map((stage) => ({ stage, items: columns[stage] }));
+  return (["unclassified", ...DEMAND_STAGE_VALUES] as const).map((stage) => ({
+    stage,
+    items: columns[stage],
+  }));
 }
 
 /** Effort as a number: explicit jobSize, else the t-shirt projection. */
@@ -136,6 +163,17 @@ export const STAGE_LABELS: Record<DemandStage, string> = {
   shaped: "Shaped",
   ready: "Ready",
 };
+
+export const ACTIVATION_STAGE_LABELS: Record<"unclassified" | DemandStage, string> = {
+  unclassified: "Needs classification",
+  ...STAGE_LABELS,
+};
+
+export function demandStageLabel(value: string | null): string {
+  return (DEMAND_STAGE_VALUES as readonly string[]).includes(value ?? "")
+    ? STAGE_LABELS[value as DemandStage]
+    : ACTIVATION_STAGE_LABELS.unclassified;
+}
 
 /** Plain-language "how valuable" band for a card front (layman-first). */
 export function valueBand(item: DemandItemView): "high" | "medium" | "low" | "unscored" {

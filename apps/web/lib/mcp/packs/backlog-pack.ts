@@ -23,6 +23,8 @@ import {
   backlogScopeCreateProperties,
   backlogScopeFilterProperties,
   backlogScopeUpdateProperties,
+  backlogProductScopeCreateProperties,
+  backlogProductScopeUpdateProperties,
   optionalStringParam,
   stringArrayParam,
   validScopeKind,
@@ -57,6 +59,7 @@ const definitions: ToolDefinition[] = [
         priority: { type: "integer", description: "Optional ranked priority within the open pool (lower = higher priority)." },
         effortSize: { type: "string", enum: ["small", "medium", "large", "xlarge"], description: "Required when triageOutcome=build (skipping triage). Otherwise applied if provided." },
         ...backlogScopeCreateProperties,
+        ...backlogProductScopeCreateProperties,
         body: { type: "string", description: "Detailed description" },
         epicId: { type: "string", description: "Epic ID to link to (optional)" },
         itemId: { type: "string", description: "Optional custom item ID (e.g. BI-PORT-005). Auto-generated if omitted." },
@@ -143,7 +146,7 @@ const definitions: ToolDefinition[] = [
         source: { type: "string", enum: [...BACKLOG_SOURCE_VALUES], description: "Reclassify the intake origin." },
         proposedOutcome: { type: "string", enum: ["build", "runbook", "coworker-task", "defer", "duplicate", "discard"], description: "Advisory recommendation; non-binding on triage" },
         ...backlogScopeUpdateProperties,
-        digitalProductId: { type: "string", description: "Associate this item with a DigitalProduct by its productId (e.g. 'coworker-AGT-X'). The item's portfolio is then re-derived from the product (product first, then taxonomy node, then epic)." },
+        ...backlogProductScopeUpdateProperties,
         taxonomyNodeId: { type: "string", description: "Associate this item with a portfolio taxonomy node by its nodeId (e.g. 'for_employees/financial_management'). Used to derive the portfolio when no product link exists." },
         portfolioSlug: { type: "string", description: "Directly pin the item's portfolio by root slug (e.g. 'for_employees'). Prefer digitalProductId/taxonomyNodeId so the link is structural; use this only for a deliberate override." },
       },
@@ -255,7 +258,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "get_backlog_item",
-    description: "Fetch one backlog item by semantic id with linked epic, digital product, active build, and the most recent activity entries. Read-only.",
+    description: "Fetch one backlog item by semantic id with business/digital product scope, demand activation readiness, active reviewed evidence links, linked epic, active build, and recent activity. Read-only.",
     inputSchema: {
       type: "object",
       properties: {
@@ -312,6 +315,53 @@ async function createBacklogItem(
   // one validation + create + semantic-index + epic-resolve path, shared
   // with every detector/queue. This MCP boundary preserves its structured
   // {success:false} contract by catching the front door's validation throws.
+  let productScope:
+    | {
+        organizationId: string;
+        productLineId: string | null;
+        businessProductId: string | null;
+        digitalProductId: string | null;
+      }
+    | undefined;
+  const organizationRef = optionalStringParam(params, "organizationId");
+  const productLineRef = optionalStringParam(params, "productLineId");
+  const businessProductRef = optionalStringParam(params, "businessProductId");
+  const digitalProductRef = optionalStringParam(params, "digitalProductId");
+  if (
+    organizationRef ||
+    productLineRef ||
+    businessProductRef ||
+    digitalProductRef
+  ) {
+    if (!organizationRef) {
+      return {
+        success: false,
+        error: "organization_required",
+        message:
+          "organizationId is required when assigning product-management scope.",
+      };
+    }
+    try {
+      const { prisma } = await import("@dpf/db");
+      const { resolveProductManagementScopeRefs } = await import(
+        "@/lib/product-management/product-management-scope"
+      );
+      productScope = await resolveProductManagementScopeRefs(
+        {
+          organizationRef,
+          productLineRef,
+          businessProductRef,
+          digitalProductRef,
+        },
+        prisma,
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Invalid product-management scope.";
+      return { success: false, error: "invalid_product_scope", message };
+    }
+  }
+
   const ingestInput = {
     title: String(params["title"] ?? "Untitled"),
     // Historical default for the MCP tool is product (ownership axis).
@@ -330,6 +380,10 @@ async function createBacklogItem(
     archetypeIds: stringArrayParam(params, "archetypeIds"),
     scopeRationale: optionalStringParam(params, "scopeRationale"),
     lifecycleTags: stringArrayParam(params, "lifecycleTags"),
+    organizationId: productScope?.organizationId,
+    productLineId: productScope?.productLineId,
+    businessProductId: productScope?.businessProductId,
+    digitalProductId: productScope?.digitalProductId,
     itemId:
       typeof params["itemId"] === "string" && params["itemId"].trim()
         ? params["itemId"].trim()
@@ -1036,7 +1090,8 @@ const handlers: Record<string, ToolPackHandler> = {
   retire_backlog_item: (params, userId, context) => retireBacklogItem(params, userId, context),
   size_backlog_item: (params) => sizeBacklogItem(params),
   process_backlog_for_build_studio: (params, userId, context) => processBacklogForBuildStudio(params, userId, context),
-  update_backlog_item: (params) => handleUpdateBacklogItem(params),
+  update_backlog_item: (params, userId, context) =>
+    handleUpdateBacklogItem(params, userId, context),
   query_backlog: (params) => queryBacklog(params),
   create_epic: (params, userId, context) => createEpic(params, userId, context),
   update_epic: (params) => updateEpic(params),

@@ -4,8 +4,13 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { act } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { EstimateControls } from "./DemandBoard";
+import {
+  DemandActivationControls,
+  DemandBoard,
+  EstimateControls,
+} from "./DemandBoard";
 import type { DemandItemView } from "@/lib/demand/board";
+import { buildDemandActivationState } from "@/lib/demand/activation";
 
 // Opt this file into React's act() environment so state updates from the
 // useTransition flush cleanly (silences the "not configured to support act" warning).
@@ -17,6 +22,22 @@ import type { DemandItemView } from "@/lib/demand/board";
 const recordEstimate = vi.fn(async (_input: unknown) => ({ ok: true as const, message: "ok", data: {} }));
 vi.mock("@/lib/actions/demand-estimate", () => ({
   recordEstimate: (input: unknown) => recordEstimate(input),
+}));
+const transitionDemand = vi.fn(async (_input: unknown) => ({
+  ok: true as const,
+  message: "classified",
+}));
+const linkEvidenceToDemand = vi.fn(async (_input: unknown) => ({
+  ok: true as const,
+  message: "linked",
+}));
+vi.mock("@/lib/actions/demand-activation", () => ({
+  transitionDemand: (input: unknown) => transitionDemand(input),
+  linkEvidenceToDemand: (input: unknown) => linkEvidenceToDemand(input),
+  requestDemandFunding: vi.fn(async () => ({
+    ok: true as const,
+    message: "funded",
+  })),
 }));
 
 /** Click and flush the useTransition async so the mocked action settles. */
@@ -97,5 +118,139 @@ describe("EstimateControls", () => {
     fireEvent.change(screen.getByLabelText(/Effort points/i), { target: { value: "5" } });
     await click(/^Set$/i);
     expect(recordEstimate).toHaveBeenCalledWith({ itemId: "D", by: "human", jobSize: 5, agree: undefined });
+  });
+});
+
+describe("DemandActivationControls", () => {
+  beforeEach(() => {
+    transitionDemand.mockClear();
+    linkEvidenceToDemand.mockClear();
+  });
+
+  it("offers explicit classification for a legacy null-stage item", async () => {
+    const demand = item({
+      itemId: "BI-LEGACY",
+      demandStage: null,
+      activation: buildDemandActivationState({
+        demandStage: null,
+        status: "open",
+        problemStatement: null,
+        evidenceCount: 0,
+        framework: "rice",
+        scoreInputs: {},
+        investmentBucket: null,
+        estimateSource: null,
+        estimateAgreed: null,
+        estimateDiverged: false,
+        fundingDecisionAllowed: false,
+      }),
+    });
+
+    render(<DemandActivationControls item={demand} />);
+    await click(/Classify as demand/i);
+
+    expect(transitionDemand).toHaveBeenCalledWith({
+      itemId: "BI-LEGACY",
+      to: "raw",
+    });
+  });
+
+  it("captures reviewed knowledge by stable reference without duplicate title entry", async () => {
+    render(
+      <DemandActivationControls
+        item={item({
+          itemId: "BI-EVIDENCE",
+          activation: buildDemandActivationState({
+            demandStage: "raw",
+            status: "open",
+            problemStatement: "Booking friction",
+            evidenceCount: 0,
+            framework: "rice",
+            scoreInputs: {},
+            investmentBucket: null,
+            estimateSource: null,
+            estimateAgreed: null,
+            estimateDiverged: false,
+            fundingDecisionAllowed: false,
+          }),
+        })}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Link evidence/i }));
+    fireEvent.change(screen.getByLabelText(/Stable reference/i), {
+      target: { value: "booking-42" },
+    });
+    await click(/Save evidence link/i);
+
+    expect(linkEvidenceToDemand).toHaveBeenCalledWith(
+      expect.objectContaining({
+        itemId: "BI-EVIDENCE",
+        sourceRef: "booking-42",
+        title: "",
+      }),
+    );
+  });
+});
+
+describe("DemandBoard score explanation", () => {
+  it("shows exact score inputs, reviewed evidence, and recent history", () => {
+    const activation = buildDemandActivationState({
+      demandStage: "shaped",
+      status: "open",
+      problemStatement: "Guests abandon conference enquiries.",
+      evidenceCount: 1,
+      framework: "rice",
+      scoreInputs: {
+        reach: 20,
+        impact: 2,
+        confidence: 0.8,
+        jobSize: 4,
+      },
+      investmentBucket: "grow",
+      estimateSource: "human",
+      estimateAgreed: true,
+      estimateDiverged: false,
+      fundingDecisionAllowed: false,
+    });
+    render(
+      <DemandBoard
+        items={[
+          item({
+            itemId: "BI-EXPLAIN",
+            demandStage: "shaped",
+            demandScore: 8,
+            estimateHumanJobSize: 4,
+            estimateSource: "human",
+            estimateAgreed: true,
+            activation,
+            evidenceLinks: [
+              {
+                evidenceLinkId: "DME-1",
+                sourceKind: "booking",
+                sourceRef: "booking-42",
+                title: "Abandoned conference booking",
+                summary: "Guest did not complete the booking.",
+                confidence: 0.8,
+                reviewedAt: "2026-07-28T00:00:00.000Z",
+              },
+            ],
+            decisionHistory: [
+              {
+                kind: "demand_scored",
+                summary: "Computed rice score 8",
+                recordedAt: "2026-07-28T00:00:00.000Z",
+                payload: {},
+              },
+            ],
+          }),
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Why this score/i }));
+
+    expect(screen.getByText(/reach 20 · impact 2 · confidence 0.8 · jobSize 4/)).toBeInTheDocument();
+    expect(screen.getByText(/Abandoned conference booking · booking/)).toBeInTheDocument();
+    expect(screen.getByText("Computed rice score 8")).toBeInTheDocument();
   });
 });

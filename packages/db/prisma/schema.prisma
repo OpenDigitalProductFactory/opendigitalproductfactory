@@ -837,6 +837,7 @@ model ProductLine {
   researchProposals     ResearchProposal[]              @relation("ResearchProposalProductLine")
   marketingBattlecards  MarketingBattlecard[]           @relation("MarketingBattlecardProductLine")
   scheduledAgentTasks   ScheduledAgentTask[]             @relation("ScheduledAgentTaskProductLine")
+  backlogItems          BacklogItem[]                    @relation("BacklogItemProductLine")
   storefrontComposition StorefrontArchetypeComposition?
 
   @@unique([organizationId, key])
@@ -868,6 +869,7 @@ model Product {
   researchProposals    ResearchProposal[]    @relation("ResearchProposalBusinessProduct")
   marketingBattlecards MarketingBattlecard[] @relation("MarketingBattlecardBusinessProduct")
   scheduledAgentTasks  ScheduledAgentTask[]  @relation("ScheduledAgentTaskBusinessProduct")
+  backlogItems         BacklogItem[]         @relation("BacklogItemBusinessProduct")
 
   @@unique([productLineId, key])
   @@unique([id, organizationId])
@@ -2007,6 +2009,13 @@ model BacklogItem {
   updatedAt               DateTime                      @updatedAt
   priority                Int?
   digitalProductId        String?
+  // Product-management demand scope (EP-ED496EB0 Phase 8). Business Product
+  // and EEMD DigitalProduct remain separate targets; application invariants
+  // require organization context and at most one narrower target. Nullable
+  // expand-first columns preserve historical rows as explicitly unclassified.
+  organizationId          String?
+  productLineId           String?
+  businessProductId       String?
   taxonomyNodeId          String?
   epicId                  String?
   portfolioId             String?
@@ -2087,6 +2096,9 @@ model BacklogItem {
   activeEpic              Epic?                         @relation("BacklogItemActiveEpic", fields: [activeEpicId], references: [id])
   originatingEpic         Epic?                         @relation("EpicOriginatingItem")
   digitalProduct          DigitalProduct?               @relation(fields: [digitalProductId], references: [id])
+  organization            Organization?                 @relation("BacklogItemOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  productLine             ProductLine?                  @relation("BacklogItemProductLine", fields: [productLineId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  businessProduct         Product?                      @relation("BacklogItemBusinessProduct", fields: [businessProductId, organizationId], references: [id, organizationId], onDelete: Restrict)
   duplicateOf             BacklogItem?                  @relation("BacklogItemDuplicates", fields: [duplicateOfId], references: [id])
   duplicates              BacklogItem[]                 @relation("BacklogItemDuplicates")
   epic                    Epic?                         @relation(fields: [epicId], references: [id])
@@ -2094,16 +2106,49 @@ model BacklogItem {
   submittedBy             User?                         @relation("BacklogSubmissions", fields: [submittedById], references: [id])
   taxonomyNode            TaxonomyNode?                 @relation(fields: [taxonomyNodeId], references: [id])
   activities              BacklogItemActivity[]
+  demandEvidenceLinks     DemandEvidenceLink[]
   coworkerNeeds           CoworkerCapabilityNeed[]      @relation("BacklogItemCoworkerCapabilityNeeds")
   businessCapabilityLinks BusinessCapabilityTraceLink[] @relation("BusinessCapabilityBacklogLinks")
   founderDemandClusters   FounderDemandCluster[]
 
   @@index([portfolioId])
+  @@index([organizationId])
+  @@index([productLineId])
+  @@index([businessProductId])
   @@index([status])
   @@index([status, updatedAt])
   @@index([portfolioId, demandScore])
   @@index([demandStage])
   @@index([scopeKind])
+}
+
+// Direct, queryable evidence linked to the canonical BacklogItem demand record.
+// The source remains authoritative in its own domain. This child owns only the
+// reviewed link, evidence-at-link snapshot, and provenance used to explain an
+// investment score without hiding current references in activity JSON.
+model DemandEvidenceLink {
+  id                  String      @id @default(cuid())
+  evidenceLinkId      String      @unique
+  backlogItemId       String
+  sourceKind          String
+  sourceRef           String
+  wikiPageId          String?
+  title               String
+  summary             String?     @db.Text
+  confidence          Float?
+  reviewedAt          DateTime?
+  status              String      @default("active")
+  provenance          Json?
+  linkedByPrincipalId String?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  backlogItem         BacklogItem @relation(fields: [backlogItemId], references: [id], onDelete: Cascade)
+  wikiPage            WikiPage?   @relation(fields: [wikiPageId], references: [id], onDelete: SetNull)
+
+  @@unique([backlogItemId, sourceKind, sourceRef])
+  @@index([backlogItemId, status])
+  @@index([sourceKind, sourceRef])
+  @@index([wikiPageId])
 }
 
 // Per-item timeline. Cross-cutting tool audit lives in ToolExecution; this is
@@ -4549,6 +4594,7 @@ model Organization {
   documents                       Document[]
   decisionPerspectiveProfiles     DecisionPerspectiveProfile[]
   researchProposals               ResearchProposal[]
+  backlogItems                    BacklogItem[]                     @relation("BacklogItemOrganization")
   scheduledProductIntelligenceTasks ScheduledAgentTask[]            @relation("ScheduledAgentTaskOrganization")
   integrationCoverageProviders    IntegrationCoverageProvider[]      @relation("OrgToCoverageProviders")
   integrationRoleCoverages        IntegrationRoleCoverage[]          @relation("OrgToCoverageCells")
@@ -12500,6 +12546,7 @@ model WikiPage {
   outLinks                 WikiPageLink[]     @relation("WikiOutLinks")
   inLinks                  WikiPageLink[]     @relation("WikiInLinks")
   sources                  WikiPageSource[]
+  demandEvidenceLinks      DemandEvidenceLink[]
 
   // ─── Principle-only fields ──────────────────────────────────────────────
   // Nullable or defaulted; only populated when pageKind = "principle". See

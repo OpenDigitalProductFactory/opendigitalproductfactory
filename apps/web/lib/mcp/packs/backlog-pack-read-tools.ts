@@ -224,6 +224,13 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
     include: {
       epic: { select: { epicId: true, title: true, status: true } },
       digitalProduct: { select: { productId: true, name: true } },
+      organization: { select: { orgId: true, slug: true, name: true } },
+      productLine: { select: { lineId: true, key: true, name: true } },
+      businessProduct: { select: { productId: true, key: true, name: true } },
+      demandEvidenceLinks: {
+        where: { status: "active" },
+        orderBy: { createdAt: "desc" },
+      },
       activeBuild: {
         select: {
           buildId: true,
@@ -248,6 +255,8 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
     itemId: itemIdRaw,
     matches: 10,
   });
+  const { mapDemandRows } = await import("@/lib/demand/demand-data");
+  const demandView = mapDemandRows([item])[0]!;
   return {
     success: true,
     message: `Loaded ${item.itemId}`,
@@ -283,6 +292,14 @@ export async function getBacklogItem(params: Record<string, unknown>): Promise<T
       digitalProduct: item.digitalProduct
         ? { productId: item.digitalProduct.productId, name: item.digitalProduct.name }
         : null,
+      productManagementScope: {
+        organization: item.organization,
+        productLine: item.productLine,
+        businessProduct: item.businessProduct,
+        digitalProduct: item.digitalProduct,
+      },
+      demandActivation: demandView.activation,
+      demandEvidence: demandView.evidenceLinks,
       activeBuild: item.activeBuild
         ? {
             buildId: item.activeBuild.buildId,

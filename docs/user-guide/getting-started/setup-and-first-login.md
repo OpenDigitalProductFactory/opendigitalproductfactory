@@ -21,6 +21,10 @@ order: 3
    adjacent lines the business genuinely sells. The organization is the
    provider by default; setup does not create placeholder customers, teams,
    subscribers, or entitlements.
+9. New backlog demand explicitly linked to one of those confirmed product
+   lines, business Products, or a real `DigitalProduct` enters Delivery Flow as
+   **Raw**. Existing unscoped backlog records remain **Needs classification**;
+   setup never guesses their intent or backfills a score.
 
 ## Help Visibility Policy
 

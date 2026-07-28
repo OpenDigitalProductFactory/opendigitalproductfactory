@@ -1202,6 +1202,19 @@
         "what-success-means"
       ]
     },
+    "docs/architecture/product-demand-activation.md": {
+      "publicHref": "/architecture/product-demand-activation/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "product-demand-activation",
+        "scope-boundary",
+        "state-and-evidence",
+        "governed-transitions",
+        "fleet-safe-evolution"
+      ]
+    },
     "docs/architecture/section-navigation.md": {
       "publicHref": "/architecture/section-navigation/",
       "portalHref": null,
@@ -9742,6 +9755,7 @@
         "what-you-can-do",
         "reading-epic-progress",
         "shared-demand",
+        "activate-local-demand",
         "founder-shared-portfolio",
         "promotions",
         "business-journeys",
@@ -9936,6 +9950,7 @@
       "anchors": [
         "overview",
         "use-product-direction",
+        "activate-product-demand-with-evidence",
         "build-continuous-product-intelligence",
         "from-product-to-something-a-customer-can-select",
         "package-and-price-a-catalog-item",
