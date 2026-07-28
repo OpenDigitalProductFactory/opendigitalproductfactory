@@ -369,8 +369,34 @@ jobs:
         # Experimental Turbopack build FS cache, scoped to this verification
         # gate only — the Docker release build does not set this env.
         env:
+          ADMIN_PASSWORD: ci_admin_changeme
+          DATABASE_URL: postgresql://dpf:ci_test_password@localhost:5432/dpf
           DPF_TURBOPACK_BUILD_CACHE: "1"
+          NEXTAUTH_SECRET: ci_sweep_secret
+          NEXTAUTH_URL: http://localhost:3000
         run: pnpm --filter web build
+
+      # BI-959F4F38. PR and merge-group UX runs consume this exact-tree output
+      # instead of compiling the same portal a second time. The receipt binds
+      # the payload checksum to the immutable Git tree, planner, and toolchain.
+      - name: Package exact-tree production build
+        if: >-
+          needs.changes.outputs.heavy == 'true' &&
+          (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+        env:
+          DPF_CI_PLANNER_DIGEST: ${{ needs.changes.outputs.evidence_plan_digest }}
+        run: node scripts/ci-build-artifact.mjs create --output-dir "$RUNNER_TEMP/web-production-build"
+
+      - name: Upload exact-tree production build
+        if: >-
+          needs.changes.outputs.heavy == 'true' &&
+          (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-production-build-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/web-production-build
+          if-no-files-found: error
+          retention-days: 1
 
   dockerfile-node-version:
     name: Dockerfile Node Version

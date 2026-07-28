@@ -154,6 +154,41 @@ build, migration, guard, or merge-queue proof. Activation is owned by
 `BI-4527C1DA` and still requires the calibration and 100% observed-failure
 recall conditions above.
 
+## Exact-tree production-build reuse
+
+For pull-request and merge-group events, the `Production Build` job packages
+`apps/web/.next` after a successful `pnpm --filter web build` and publishes it
+for the matching `UX Route Budget Sweep`. The one-day artifact contains a
+versioned receipt and a compressed payload. The receipt binds the payload to:
+
+- repository, commit SHA, and immutable Git tree SHA;
+- GitHub event, source run/attempt, and CI evidence-planner digest;
+- Node, pnpm, Next.js, operating-system, architecture, lockfile identity, and
+  a non-secret fingerprint of build-relevant fixture environment values;
+- payload byte count and SHA-256 checksum; and
+- the successful production-build command plus creation/expiry times.
+
+The UX workflow finds only a `CI` run with the same event and `GITHUB_SHA`.
+After download, `scripts/ci-build-artifact.mjs consume` independently recomputes
+the current tree, toolchain, payload checksum, byte count, archive inventory,
+and expiry before replacing `apps/web/.next`. The archive must contain only the
+`.next` root and must include `.next/BUILD_ID`.
+
+This follows GitHub's cross-run artifact contract: a consumer supplies both a
+token and source run identifier, and the token has only `actions: read` plus
+`contents: read`. See [Store and share data with workflow artifacts](https://docs.github.com/en/actions/tutorials/store-and-share-data)
+and [REST API endpoints for GitHub Actions artifacts](https://docs.github.com/en/rest/actions/artifacts).
+
+Reuse is an optimization, never an exemption. Discovery is bounded to four
+minutes. Missing, late, expired, incomplete, corrupt, or identity-mismatched
+evidence removes any partial `.next` output and runs the normal local production
+build. Main-branch pushes and manual baseline calibration always build locally;
+cross-lifecycle merge-group-to-push reuse remains owned by `BI-9585E580`.
+
+The CI and UX job summaries report payload bytes and packaging or
+download/validation/extraction duration. Compare those transfer measurements
+with the avoided UX build duration before retaining or tuning the artifact.
+
 ## UX route-sweep stability
 
 Workflow: `.github/workflows/ux-route-sweep.yml` (`UX Route Budget Sweep`)

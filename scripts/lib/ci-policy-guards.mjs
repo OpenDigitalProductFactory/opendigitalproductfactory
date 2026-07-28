@@ -47,6 +47,8 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/ci-change-scope.test.mjs",
         "scripts/ci-evidence-plan.test.mjs",
         "scripts/ci-evidence-workflow.test.mjs",
+        "scripts/ci-build-artifact-workflow.test.mjs",
+        "scripts/lib/ci-build-artifact.test.mjs",
         "scripts/lib/ci-evidence-plan.test.mjs",
         "scripts/ci-policy-guards.test.mjs",
       ),
