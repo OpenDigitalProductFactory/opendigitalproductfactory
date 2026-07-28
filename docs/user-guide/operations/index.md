@@ -117,6 +117,10 @@ When you click "Deploy Now", the platform starts the promoter service for the go
 
 To upgrade the platform itself — building a fresh application image and swapping the running install — see [Self-Upgrade](./self-upgrade.md).
 
+## Business Journeys
+
+Promotions and self-upgrade tell you what the platform did. **Business Journeys** tells you whether your customers can still do what your business depends on — find you, enquire, book, sign in, and pay. A scheduled check exercises those paths against the live install on Monday, Wednesday and Friday, states honestly how much each check proved, and raises anything broken into your "Needs you" inbox. See [Business Journeys](./business-journeys.md).
+
 ### Promoter timeout
 
 The portal first prepares the candidate promoter image, then the promoter builds a fresh application image and swaps the running container. Both builds use Docker BuildKit and the same bounded wall-clock budget (default **25 minutes**). Candidate preparation happens before quiescence, so a preparation failure leaves the current portal available. If either build stalls — for example on a slow or degraded network fetch — it is killed and the deployment is marked failed with a retryable `promoter-timeout` diagnosis instead of hanging. A normal deployment completes in a few minutes; the timeout only trips on a genuine stall. Operators on unusually slow hosts can raise the shared budget by setting `DPF_PROMOTER_TIMEOUT_MS` (milliseconds) in the environment. A periodic watchdog additionally force-removes any promoter container orphaned by a mid-deployment restart, so a stalled build can never linger and cause an unexpected later swap.

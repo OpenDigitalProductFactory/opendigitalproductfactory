@@ -69,6 +69,7 @@ const SOURCE_PORTFOLIO: Record<AttentionSource, AttentionPortfolio> = {
   "approval-outbound": "products-and-services-sold", // marketing/sales drafts to customers
   "reservation-exception": "products-and-services-sold", // a guest awaiting an owner reservation decision
   "storefront-inquiry": "products-and-services-sold", // a customer enquiry awaiting the owner's first reply
+  "business-journey": "products-and-services-sold", // a customer-facing journey (find/enquire/book/pay) failed its watchdog run
   // The workforce — people + AI coworkers needing a human.
   "ai-decision": "for-employees", // a coworker's decision the kernel couldn't make
   "paused-ai": "for-employees", // a coworker paused, needs input/credential

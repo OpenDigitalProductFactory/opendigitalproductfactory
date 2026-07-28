@@ -27,6 +27,14 @@
 
 import { CODE_GRAPH_JOB_ID } from "@/lib/integrate/code-graph/constants";
 import {
+  BUSINESS_JOURNEY_WATCHDOG_CADENCE,
+  BUSINESS_JOURNEY_WATCHDOG_CRON,
+  BUSINESS_JOURNEY_WATCHDOG_INNGEST_ID,
+  BUSINESS_JOURNEY_WATCHDOG_JOB_ID,
+  BUSINESS_JOURNEY_WATCHDOG_JOB_NAME,
+  BUSINESS_JOURNEY_WATCHDOG_REQUESTED_EVENT,
+} from "@/lib/business-journeys/watchdog-constants";
+import {
   CATALOG_SWEEP_JOB_ID,
   CATALOG_SWEEP_JOB_NAME,
   CATALOG_SWEEP_SCHEDULED_INNGEST_ID,
@@ -687,6 +695,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     category: "editable",
     tracksRunData: false,
     runNowEvent: "ops/coworker-certification.requested",
+  },
+  {
+    jobId: BUSINESS_JOURNEY_WATCHDOG_JOB_ID,
+    inngestId: BUSINESS_JOURNEY_WATCHDOG_INNGEST_ID,
+    name: BUSINESS_JOURNEY_WATCHDOG_JOB_NAME,
+    purpose:
+      "BI-E105303D / EP-PROACTIVE-OPS: exercises the install's critical business journeys (front door, enquiry, booking, sign-in, checkout) against the running system, records evidence, and raises a journey_failure issue the Needs-you inbox surfaces. If it stops, a broken signup or booking path goes unnoticed until a customer complains.",
+    cron: BUSINESS_JOURNEY_WATCHDOG_CRON,
+    cadence: BUSINESS_JOURNEY_WATCHDOG_CADENCE,
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: BUSINESS_JOURNEY_WATCHDOG_REQUESTED_EVENT,
   },
   {
     jobId: "memory-consolidation-nightly",

@@ -19,6 +19,7 @@ import {
 import { loadProviderCredentialItems, loadProviderSuitabilityDriftItems } from "./sources/provider-credential";
 import { loadReservationExceptionItems } from "./sources/reservation-exception";
 import { loadStorefrontInquiryItems } from "./sources/storefront-inquiry";
+import { loadBusinessJourneyItems } from "./sources/business-journey";
 import {
   loadOutboundItems,
   loadBillItems,
@@ -97,6 +98,7 @@ export async function loadAttentionItems(
     { source: "research-proposal", load: () => loadResearchItems(db) },
     { source: "coworker-memory", load: () => loadCoworkerMemoryItems(db as unknown as CoworkerMemoryAttentionDb) },
     { source: "platform-health", load: () => loadPlatformHealthItems(db) },
+    { source: "business-journey", load: () => loadBusinessJourneyItems(db) },
     { source: "reservation-exception", load: () => loadReservationExceptionItems(db) },
     { source: "storefront-inquiry", load: () => loadStorefrontInquiryItems(db) },
     {

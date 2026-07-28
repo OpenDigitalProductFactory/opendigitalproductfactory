@@ -1,11 +1,11 @@
 {
   "generator": "apps/web/scripts/build-route-shells.ts",
-  "pageRouteCount": 308,
+  "pageRouteCount": 309,
   "migratedCount": 0,
   "summary": {
     "cockpit": 15,
     "list": 6,
-    "detail": 236,
+    "detail": 237,
     "settings": 12,
     "form": 18,
     "public": 21,
@@ -1790,6 +1790,17 @@
       ],
       "sweepEligible": false,
       "sweepExclusionReason": "redirects-to-dynamic-resource",
+      "confidence": "high"
+    },
+    {
+      "routePath": "/ops/journeys",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": true,
       "confidence": "high"
     },
     {

@@ -206,6 +206,15 @@ const REGISTRY = {
     owner: "operator",
     summary: "Correlated incident detected across edge telemetry.",
   },
+  journey_failure: {
+    resolvedBy: "monitor-clears",
+    autoResolveWhen:
+      "the next watchdog run of the SAME journey passes — the run that raised it is the run that clears it, so a fixed journey closes its own row without operator bookkeeping",
+    operatorActionable: true,
+    expectedSteadyState: 0,
+    owner: "operator",
+    summary: "A critical business journey failed its scheduled watchdog run.",
+  },
 } satisfies Record<string, QualityIssueContract>;
 
 /**
