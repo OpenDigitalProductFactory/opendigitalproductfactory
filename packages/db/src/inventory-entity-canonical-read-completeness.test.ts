@@ -33,6 +33,7 @@ function inventoryEntityReadsWithoutCanonicalPredicate(): UnguardedRead[] {
     }
 
     const text = readFileSync(file, "utf8");
+    if (!text.includes("inventoryEntity.")) continue;
     const source = ts.createSourceFile(
       file,
       text,

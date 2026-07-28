@@ -7,6 +7,10 @@ import {
   syncInventoryRelationship,
 } from "./graph-sync";
 import { INVENTORY_ENTITY_CANONICAL_WHERE } from "./inventory-entity-lifecycle";
+import {
+  assertInventoryEntityHeapIntegrity,
+  type InventoryEntityHeapIntegrityTx,
+} from "./inventory-entity-heap-integrity";
 
 export type DiscoveryPersistenceSummary = {
   runId?: string;
@@ -40,7 +44,7 @@ export type DiscoveryProjectionOptions = {
   projectInventoryRelationship?: typeof syncInventoryRelationship;
 };
 
-type DiscoverySyncTx = {
+type DiscoverySyncTx = InventoryEntityHeapIntegrityTx & {
   discoveryRun: {
     create(args: {
       data: {
@@ -505,6 +509,11 @@ export async function persistBootstrapDiscoveryRun(
         createdEntities += 1;
       }
     }
+
+    await assertInventoryEntityHeapIntegrity(
+      tx,
+      normalized.inventoryEntities.map((entity) => entity.entityKey),
+    );
 
     for (const discoveredItem of dedupedDiscoveredItems) {
       const persistedDiscoveredItem = await tx.discoveredItem.create({

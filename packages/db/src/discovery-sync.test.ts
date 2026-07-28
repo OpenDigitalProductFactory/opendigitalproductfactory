@@ -5,6 +5,15 @@ import {
   summarizeDiscoveryPersistence,
 } from "./discovery-sync";
 
+function heapIntegrityRaw() {
+  return {
+    $executeRawUnsafe: async () => 0,
+    $queryRawUnsafe: async <T>(_query: string, keys: string[]): Promise<T> => (
+      keys.map((entityKey) => ({ entityKey, heapCount: 1 })) as T
+    ),
+  };
+}
+
 describe("summarizeDiscoveryPersistence", () => {
   it("reports created, updated, and stale counts", () => {
     expect(summarizeDiscoveryPersistence({
@@ -29,6 +38,7 @@ describe("persistBootstrapDiscoveryRun", () => {
 
     const db = {
       $transaction: async <T>(fn: (tx: any) => Promise<T>): Promise<T> => fn({
+        ...heapIntegrityRaw(),
         discoveryRun: {
           create: async () => ({ id: "run-1" }),
         },
@@ -230,6 +240,7 @@ describe("persistBootstrapDiscoveryRun", () => {
 
     const db = {
       $transaction: async <T>(fn: (tx: any) => Promise<T>): Promise<T> => fn({
+        ...heapIntegrityRaw(),
         discoveryRun: {
           create: async () => ({ id: "run-2" }),
         },
@@ -324,6 +335,83 @@ describe("persistBootstrapDiscoveryRun", () => {
     expect(createdObservedKeys).toEqual(["duplicate:item"]);
   });
 
+  it("aborts before dependent discovery evidence when a heap duplicate is visible", async () => {
+    const discoveredItemCreate = vi.fn();
+    const relationshipUpsert = vi.fn();
+    const projectInventoryEntity = vi.fn();
+
+    const db = {
+      $transaction: async <T>(fn: (tx: any) => Promise<T>): Promise<T> => fn({
+        $executeRawUnsafe: async () => 0,
+        $queryRawUnsafe: async () => [{ entityKey: "router:main", heapCount: 2 }],
+        discoveryRun: { create: async () => ({ id: "run-integrity" }) },
+        inventoryEntity: {
+          findMany: async () => [],
+          upsert: async () => ({ id: "entity:router:main", entityKey: "router:main" }),
+          updateMany: async () => ({ count: 0 }),
+        },
+        inventoryRelationship: {
+          findMany: async () => [],
+          upsert: relationshipUpsert,
+          updateMany: async () => ({ count: 0 }),
+        },
+        portfolioQualityIssue: {
+          findMany: async () => [],
+          upsert: async () => ({}),
+          updateMany: async () => ({ count: 0 }),
+        },
+        identityResolutionLog: {
+          findFirst: async () => null,
+          create: async () => ({}),
+        },
+        discoveredItem: { create: discoveredItemCreate },
+        discoveredSoftwareEvidence: { upsert: async () => ({}) },
+        discoveredRelationship: { create: async () => ({}) },
+      }),
+    };
+
+    await expect(persistBootstrapDiscoveryRun(
+      db,
+      {
+        discoveredItems: [{
+          discoveredKey: "duplicate:item",
+          sourceKind: "dpf_bootstrap",
+          itemType: "router",
+          name: "Main Gateway",
+          externalRef: "gateway:main",
+          attributes: {},
+        }],
+        inventoryEntities: [{
+          entityKey: "router:main",
+          entityType: "router",
+          name: "Main Gateway",
+          discoveredKey: "duplicate:item",
+          portfolioSlug: "foundational",
+          taxonomyNodeId: "foundational/network_management/network_connectivity",
+          attributionStatus: "attributed",
+          attributionMethod: "rule",
+          attributionConfidence: 0.98,
+          providerView: "foundational",
+          properties: {},
+        }],
+        inventoryRelationships: [],
+        softwareEvidence: [],
+      },
+      { runKey: "run-integrity", sourceSlug: "dpf_bootstrap" },
+      {
+        projectInventoryEntity,
+        projectInventoryRelationship: async () => undefined,
+      },
+    )).rejects.toMatchObject({
+      name: "InventoryEntityIntegrityError",
+      code: "INVENTORY_ENTITY_HEAP_INTEGRITY",
+    });
+
+    expect(discoveredItemCreate).not.toHaveBeenCalled();
+    expect(relationshipUpsert).not.toHaveBeenCalled();
+    expect(projectInventoryEntity).not.toHaveBeenCalled();
+  });
+
   it("upserts one InventoryRelationship per resolved tuple when distinct keys collapse (BI-PIR-7d69a445)", async () => {
     // Two inventory entities share the SAME entityKey ("host:shared") but arrive
     // under DIFFERENT discovered keys ("dk:a" / "dk:b"), so entity resolution
@@ -339,6 +427,7 @@ describe("persistBootstrapDiscoveryRun", () => {
 
     const db = {
       $transaction: async <T>(fn: (tx: any) => Promise<T>): Promise<T> => fn({
+        ...heapIntegrityRaw(),
         discoveryRun: { create: async () => ({ id: "run-3" }) },
         inventoryEntity: {
           findMany: async () => [],
@@ -476,6 +565,7 @@ describe("persistBootstrapDiscoveryRun", () => {
 
     const db = {
       $transaction: async <T>(fn: (tx: any) => Promise<T>): Promise<T> => fn({
+        ...heapIntegrityRaw(),
         discoveryRun: { create: async () => ({ id: "run-cross" }) },
         inventoryEntity: {
           findMany: async () => [],
@@ -636,6 +726,7 @@ describe("persistBootstrapDiscoveryRun", () => {
     ) {
       return {
         $transaction: async <T>(fn: (tx: any) => Promise<T>): Promise<T> => fn({
+          ...heapIntegrityRaw(),
           discoveryRun: { create: async () => ({ id: "run-res" }) },
           inventoryEntity: {
             findMany: async () => [],
