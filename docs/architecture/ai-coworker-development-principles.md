@@ -305,6 +305,12 @@ subscriber, entitlement, or consumer.
   identifiers in the commercial snapshot;
 - count a package sale once; component allocations are non-additive analysis
   attributes and must not be summed into a second revenue total;
+- query `product-sold-query.ts` for historical purchase/use context rather
+  than rebuilding joins across orders, bookings, rentals, and subscriptions;
+- treat names and emails on transaction evidence as evidence-only unless a
+  canonical account/contact party link exists;
+- describe entitlements and fulfillment instances only when their typed,
+  evidence-backed rows exist;
 - read a quote line's immutable `configurationSnapshot` for one-off choices and
   its `catalogSkuId` for an exact reusable choice; do not promote a one-off
   snapshot to a reusable SKU unless the operator deliberately does so;

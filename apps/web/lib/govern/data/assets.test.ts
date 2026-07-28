@@ -181,6 +181,32 @@ describe("seeded registry", () => {
       .not.toBe("data:business-product");
   });
 
+  it("governs Product Sold facts separately from customer-bearing trace evidence", () => {
+    for (const assetId of [
+      "data:business-product-sold",
+      "data:business-product-sold-component-allocation",
+    ]) {
+      expect(lookupAsset(DATA_ASSET_REGISTRY, assetId)).toMatchObject({
+        domain: "business-product-portfolio",
+        sensitivity: "internal",
+        projectionClass: "metadata",
+      });
+    }
+    for (const assetId of [
+      "data:business-storefront-order-line",
+      "data:business-product-sold-evidence",
+      "data:business-product-sold-party",
+      "data:business-product-sold-entitlement",
+      "data:business-product-fulfillment-instance",
+    ]) {
+      expect(lookupAsset(DATA_ASSET_REGISTRY, assetId)).toMatchObject({
+        domain: "business-product-portfolio",
+        sensitivity: "confidential",
+        projectionClass: "masked-content",
+      });
+    }
+  });
+
   it("governs nearby pairing as restricted local-only setup authority", () => {
     const pairing = lookupAsset(DATA_ASSET_REGISTRY, "data:federation-pairing-session");
     expect(pairing).toMatchObject({

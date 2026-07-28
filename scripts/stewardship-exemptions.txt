@@ -73,3 +73,10 @@ CatalogPriceListEntry  domain-lifecycle-managed  # Item/SKU prices follow their 
 CatalogPromotion  domain-lifecycle-managed  # Promotions retire through explicit status/effective dates and organization lifecycle; age alone is not a safe deletion signal.
 CatalogPromotionItem  domain-lifecycle-managed  # Promotion targeting follows its promotion/catalog parents and is cascade-managed rather than independently aged.
 CatalogChannelEligibility  domain-lifecycle-managed  # Channel eligibility is effective-dated commercial policy changed by explicit Catalog Builder actions, not a time-based retention sweep.
+ProductSold  domain-lifecycle-managed  # Immutable commercial sale facts follow explicit cancellation/refund and organization lifecycles; age alone cannot determine their legal or reporting usefulness.
+ProductSoldEvidence  domain-lifecycle-managed  # Typed transaction evidence follows its ProductSold and source-authority lifecycle; an independent age sweep would break commercial traceability.
+ProductSoldParty  domain-lifecycle-managed  # Evidence-backed customer roles follow ProductSold and canonical party lifecycles rather than record age.
+ProductSoldEntitlement  domain-lifecycle-managed  # Rights end through their explicit validity/status lifecycle and ProductSold cascade, not a generic age threshold.
+ProductFulfillmentInstance  domain-lifecycle-managed  # Fulfillment records close through booking, rental, or supported-instance lifecycle transitions and ProductSold cascade.
+ProductSoldComponentAllocation  domain-lifecycle-managed  # Non-additive package attribution follows its immutable ProductSold fact and is never independently aged out.
+StorefrontOrderLineItem  domain-lifecycle-managed  # Normalized commercial lines follow the owning StorefrontOrder lifecycle; independent purging would corrupt order and sale evidence.

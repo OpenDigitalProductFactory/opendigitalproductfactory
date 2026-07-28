@@ -172,12 +172,20 @@ export function CatalogBuilderPanel({ initial }: { initial: CatalogBuilderView }
             or a different way to complete the purchase.
           </p>
         </div>
-        <a
-          href="/storefront/items"
-          className="inline-flex min-h-[44px] items-center rounded-md border border-[var(--dpf-border)] px-3 text-xs text-[var(--dpf-text)]"
-        >
-          Back to what you sell
-        </a>
+        <div className="flex flex-wrap gap-2">
+          <a
+            href={`/storefront/items/${initial.storefrontItemId}/purchases`}
+            className="inline-flex min-h-[44px] items-center rounded-md border border-[var(--dpf-border)] px-3 text-xs text-[var(--dpf-text)]"
+          >
+            Customer purchases and use
+          </a>
+          <a
+            href="/storefront/items"
+            className="inline-flex min-h-[44px] items-center rounded-md border border-[var(--dpf-border)] px-3 text-xs text-[var(--dpf-text)]"
+          >
+            Back to what you sell
+          </a>
+        </div>
       </div>
 
       {notice && (
