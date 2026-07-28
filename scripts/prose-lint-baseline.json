@@ -3693,7 +3693,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 14
+    "textMass": 20
   },
   "apps/web/components/build/BuildStudio.tsx": {
     "vocabulary": 0,

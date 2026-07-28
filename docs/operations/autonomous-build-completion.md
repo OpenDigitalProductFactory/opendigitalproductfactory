@@ -127,5 +127,5 @@ rollback is required.
 
 - [Build Studio autonomous lanes](../user-guide/build-studio/autonomous-builds.md)
 - [Governed playbook experimentation and autonomous Build Studio design](../superpowers/specs/2026-07-25-governed-playbook-experimentation-autonomous-build-studio-design.md)
-- [PR delivery recovery design](../superpowers/specs/2026-07-25-build-studio-pr-delivery-recovery-design.md)
+- [PR delivery recovery plan](../superpowers/plans/2026-07-27-build-studio-pr-readiness-merge-recovery.md)
 - [Self-upgrade user guide](../user-guide/operations/self-upgrade.md)
