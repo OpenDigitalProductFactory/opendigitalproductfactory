@@ -82,7 +82,7 @@ export default async function ProductOfferingsPage({ params }: Props) {
 
             {o.commercialTrace && (
               <details className="mt-3 border-t border-[var(--dpf-border)] pt-2">
-                <summary className="cursor-pointer text-[10px] font-medium text-[var(--dpf-muted)]">
+                <summary className="cursor-pointer text-dpf-caption font-medium text-[var(--dpf-muted)]">
                   Commercial trace · {o.commercialTrace.catalogItems.length} catalog item
                   {o.commercialTrace.catalogItems.length === 1 ? "" : "s"}
                 </summary>
@@ -90,7 +90,7 @@ export default async function ProductOfferingsPage({ params }: Props) {
                   {o.commercialTrace.catalogItems.map((item) => (
                     <div
                       key={item.catalogItemId}
-                      className="flex items-center justify-between gap-3 text-[10px]"
+                      className="flex items-center justify-between gap-3 text-dpf-caption"
                     >
                       <span className="truncate text-[var(--dpf-text)]">{item.name}</span>
                       <span className="shrink-0 text-[var(--dpf-muted)]">{item.status}</span>
