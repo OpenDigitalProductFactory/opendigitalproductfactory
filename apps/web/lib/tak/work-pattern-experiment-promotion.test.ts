@@ -52,6 +52,48 @@ function run(
       const candidate = method.methodVariantKey === "candidate";
       const childTaskRunId =
         `${experimentRunId}-${method.methodVariantKey}-${model.modelVariantKey}`;
+      const outcome = {
+        success: true,
+        actualProviderId: "provider",
+        actualModelId: model.modelVariantKey,
+        outcomeEvidence: {
+          completed: true,
+          buildGate: {
+            unitTests: "pass",
+            productionBuild,
+            uxVerification: "not-applicable",
+            migration: "not-applicable",
+          },
+          review: {
+            decision: "pass",
+            reproducedBlockingFindings: candidate
+              ? options.candidateBlockingFindings ?? 0
+              : 0,
+            nonBlockingFindings: 0,
+            reviewRounds: 1,
+          },
+          execution: {
+            toolCalls: candidate ? 8 : 10,
+            toolFailures: 0,
+            retryCount: 0,
+            recoveryActions: [],
+            manualTouches: 0,
+            inputTokens: candidate ? 800 : 1_000,
+            outputTokens: candidate ? 400 : 500,
+            durationMs: candidate ? 80_000 : 100_000,
+          },
+          delivery: {
+            prCreated: false,
+            mergeQueued: false,
+            merged: false,
+            deployed: false,
+            rolledBack: false,
+          },
+          ...(candidate && options.candidateFailureClass
+            ? { failureClass: options.candidateFailureClass }
+            : {}),
+        },
+      };
       return {
         taskRunId: childTaskRunId,
         status: candidate
@@ -92,49 +134,19 @@ function run(
               },
             },
           },
-          workPatternExperimentResult: {
-            success: true,
-            actualProviderId: "provider",
-            actualModelId: model.modelVariantKey,
-            outcomeEvidence: {
-              completed: true,
-              buildGate: {
-                unitTests: "pass",
-                productionBuild,
-                uxVerification: "not-applicable",
-                migration: "not-applicable",
-              },
-              review: {
-                decision: "pass",
-                reproducedBlockingFindings: candidate
-                  ? options.candidateBlockingFindings ?? 0
-                  : 0,
-                nonBlockingFindings: 0,
-                reviewRounds: 1,
-              },
-              execution: {
-                toolCalls: candidate ? 8 : 10,
-                toolFailures: 0,
-                retryCount: 0,
-                recoveryActions: [],
-                manualTouches: 0,
-                inputTokens: candidate ? 800 : 1_000,
-                outputTokens: candidate ? 400 : 500,
-                durationMs: candidate ? 80_000 : 100_000,
-              },
-              delivery: {
-                prCreated: false,
-                mergeQueued: false,
-                merged: false,
-                deployed: false,
-                rolledBack: false,
-              },
-              ...(candidate && options.candidateFailureClass
-                ? { failureClass: options.candidateFailureClass }
-                : {}),
-            },
-          },
+          workPatternExperimentResult: { success: false },
         },
+        evidenceRows: [{
+          ledgerId: `DSL-${childTaskRunId}-outcome`,
+          taskRunId: childTaskRunId,
+          outcome,
+          observedAt: new Date(`2026-07-${String(10 + replicate).padStart(2, "0")}T12:00:00.000Z`),
+          metadata: {
+            experimentRunId,
+            observationKind: "outcome",
+            sequence: 1,
+          },
+        }],
       };
     }),
   );
@@ -146,7 +158,7 @@ function run(
 }
 
 describe("deriveWorkPatternPromotionCandidates", () => {
-  it("aggregates eight comparable replicates into one candidate per model scope", () => {
+  it("aggregates effective-ledger evidence into one candidate per model scope", () => {
     const candidates = deriveWorkPatternPromotionCandidates({
       sourceExperimentTaskRunId: "TR-WPR-8",
       orchestratingAgentId: "build-specialist",
@@ -175,6 +187,25 @@ describe("deriveWorkPatternPromotionCandidates", () => {
         },
       },
     });
+  });
+
+  it("fails closed when a model lane has no authoritative outcome ledger", () => {
+    const runs = Array.from({ length: 8 }, (_, index) => run(index + 1));
+    for (const experiment of runs) {
+      const localCandidate = experiment.cells.find((cell) =>
+        cell.taskRunId.endsWith("-candidate-local"));
+      if (localCandidate) localCandidate.evidenceRows = [];
+    }
+
+    const candidates = deriveWorkPatternPromotionCandidates({
+      sourceExperimentTaskRunId: "TR-WPR-8",
+      orchestratingAgentId: "build-specialist",
+      runs,
+      regulatoryHumanControlRequired: false,
+    });
+
+    expect(candidates.map((candidate) => candidate.snapshot.source.modelProfileId))
+      .toEqual(["frontier-coding"]);
   });
 
   it("does not count inference-only evidence as a qualifying build pair", () => {

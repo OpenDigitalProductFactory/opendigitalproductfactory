@@ -11,6 +11,10 @@ import {
   type WorkPatternActivationSnapshot,
 } from "./work-pattern-activation";
 import {
+  resolveEffectiveWorkPatternLedger,
+  type WorkPatternLedgerRow,
+} from "./work-pattern-effective-ledger";
+import {
   parseWorkPatternExperimentMetadata,
   type WorkPatternExperimentMetadataV1,
 } from "./work-pattern-experiment-types";
@@ -24,6 +28,13 @@ export type WorkPatternPromotionExperimentCell = {
   status: string;
   completedAt: Date | null;
   a2aMetadata: unknown;
+  evidenceRows: Array<
+    WorkPatternLedgerRow & {
+      taskRunId: string | null;
+      outcome: unknown;
+      observedAt: Date;
+    }
+  >;
 };
 
 export type WorkPatternPromotionExperimentRun = {
@@ -54,6 +65,9 @@ type PromotionDb = {
     findUnique(args: object): Promise<unknown>;
     findMany(args: object): Promise<unknown[]>;
   };
+  decisionShadowLedger: {
+    findMany(args: object): Promise<unknown[]>;
+  };
 };
 
 const REQUIRED_FACTORIAL_CELLS = [
@@ -68,9 +82,18 @@ function parseCell(cell: WorkPatternPromotionExperimentCell): ParsedCell | null 
   const cellMetadata = isRecord(cell.a2aMetadata.workPatternExperimentCell)
     ? cell.a2aMetadata.workPatternExperimentCell
     : null;
-  const result = isRecord(cell.a2aMetadata.workPatternExperimentResult)
-    ? cell.a2aMetadata.workPatternExperimentResult
-    : null;
+  const effectiveOutcomes = resolveEffectiveWorkPatternLedger(
+    cell.evidenceRows,
+  ).filter((row) =>
+    row.taskRunId === cell.taskRunId
+    && isRecord(row.metadata)
+    && row.metadata.observationKind === "outcome"
+    && isRecord(row.outcome)
+  );
+  if (effectiveOutcomes.length !== 1) return null;
+  const effectiveOutcome = effectiveOutcomes[0];
+  const result = effectiveOutcome?.outcome;
+  if (!isRecord(result)) return null;
   const request = parsePersistedWorkPatternExperimentExecution(
     cellMetadata?.executionRequest,
   );
@@ -87,7 +110,7 @@ function parseCell(cell: WorkPatternPromotionExperimentCell): ParsedCell | null 
   }
   return {
     status: cell.status,
-    completedAt: cell.completedAt,
+    completedAt: effectiveOutcome.observedAt,
     request,
     success: result.success,
     actualProviderId: result.actualProviderId,
@@ -422,6 +445,44 @@ async function loadPromotionCandidates(
       },
       orderBy: { createdAt: "asc" },
     });
+    const childTaskRunIds = childRows.flatMap((child) =>
+      isRecord(child) && typeof child.taskRunId === "string"
+        ? [child.taskRunId]
+        : []
+    );
+    const rawEvidenceRows = childTaskRunIds.length > 0
+      ? await db.decisionShadowLedger.findMany({
+          where: {
+            sourceKind: "work-pattern-experiment",
+            taskRunId: { in: childTaskRunIds },
+          },
+          select: {
+            ledgerId: true,
+            taskRunId: true,
+            outcome: true,
+            metadata: true,
+            observedAt: true,
+          },
+          orderBy: { observedAt: "asc" },
+        })
+      : [];
+    const evidenceRows = rawEvidenceRows.flatMap((evidence) =>
+      isRecord(evidence)
+      && typeof evidence.ledgerId === "string"
+      && (
+        typeof evidence.taskRunId === "string"
+        || evidence.taskRunId === null
+      )
+      && evidence.observedAt instanceof Date
+        ? [{
+            ledgerId: evidence.ledgerId,
+            taskRunId: evidence.taskRunId,
+            outcome: evidence.outcome,
+            metadata: evidence.metadata,
+            observedAt: evidence.observedAt,
+          }]
+        : []
+    );
     runs.push({
       parentTaskRunId: row.taskRunId,
       manifest,
@@ -435,6 +496,9 @@ async function loadPromotionCandidates(
               completedAt:
                 child.completedAt instanceof Date ? child.completedAt : null,
               a2aMetadata: child.a2aMetadata,
+              evidenceRows: evidenceRows.filter(
+                (evidence) => evidence.taskRunId === child.taskRunId,
+              ),
             }]
           : []),
     });
