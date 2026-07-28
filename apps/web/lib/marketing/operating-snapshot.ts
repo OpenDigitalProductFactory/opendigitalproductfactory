@@ -33,7 +33,6 @@ import {
 import { loadPublicationMetricsForTasks, type PublicationMetricRow } from "./campaign-performance";
 import type { ChannelCapability } from "./channels/contracts";
 import { listAdapters } from "./channels/registry";
-import { resolveMarketingOrganizationId } from "./org-scope";
 
 // ─── Channel readiness ──────────────────────────────────────────────────────
 
