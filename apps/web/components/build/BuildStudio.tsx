@@ -648,7 +648,7 @@ export function BuildStudio({
                     Start a new outcome
                   </span>
                   {!intakeOpen ? (
-                    <span className="mt-0.5 block text-[11px] text-[var(--dpf-muted)]">
+                    <span className="mt-0.5 block text-dpf-caption text-[var(--dpf-muted)]">
                       Describe what should be different.
                     </span>
                   ) : null}
@@ -659,7 +659,7 @@ export function BuildStudio({
               </button>
               {intakeOpen ? (
                 <div className="px-3 pb-3">
-                  <label className="block text-[11px] font-medium text-[var(--dpf-muted)]">
+                  <label className="block text-dpf-caption font-medium text-[var(--dpf-muted)]">
                     What outcome do you want?
                     <textarea
                       placeholder="Describe what should be different, who it helps, and any constraint that matters."
@@ -677,10 +677,10 @@ export function BuildStudio({
                   </label>
                   {portfolioRows.length > 1 ? (
                     <details className="mt-2">
-                      <summary className="cursor-pointer text-[11px] font-medium text-[var(--dpf-muted)]">
+                      <summary className="cursor-pointer text-dpf-caption font-medium text-[var(--dpf-muted)]">
                         Choose business area
                       </summary>
-                      <label className="mt-2 block text-[10px] font-medium uppercase tracking-wide text-[var(--dpf-muted)]">
+                      <label className="mt-2 block text-dpf-caption font-medium uppercase tracking-wide text-[var(--dpf-muted)]">
                         Business area
                         <select
                           value={newPortfolioId}
@@ -697,7 +697,7 @@ export function BuildStudio({
                     </details>
                   ) : null}
                   <div className="mt-2 flex items-center justify-between gap-2">
-                    <span className="text-[10px] leading-tight text-[var(--dpf-muted)]">
+                    <span className="text-dpf-caption text-[var(--dpf-muted)]">
                       {newTitle.length > 0 ? `${newTitle.length} characters` : "Plain language is enough"}
                     </span>
                     <button
@@ -712,7 +712,7 @@ export function BuildStudio({
                   </div>
                   {pendingIntake ? (
                     <div className="mt-3 rounded-lg border border-[var(--dpf-accent)] bg-[var(--dpf-state-info)] p-3">
-                      <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[var(--dpf-accent)]">
+                      <p className="m-0 text-dpf-caption font-semibold uppercase tracking-wide text-[var(--dpf-accent)]">
                         Outcome captured
                       </p>
                       <p className="m-0 mt-1 text-sm font-medium text-[var(--dpf-text)]">
@@ -735,7 +735,7 @@ export function BuildStudio({
                     </div>
                   ) : null}
                   {createError ? (
-                    <div role="alert" className="mt-2 text-[11px] leading-snug text-[var(--dpf-danger)]">
+                    <div role="alert" className="mt-2 text-dpf-caption text-[var(--dpf-danger)]">
                       {createError}
                     </div>
                   ) : null}
@@ -899,7 +899,7 @@ export function BuildStudio({
                       ) : null}
                     </div>
                     {customerStatuses[activeBuild.id]?.technicalEvidence ? (
-                      <div className="border-b border-[var(--dpf-border)] px-4 py-2 font-mono text-[11px] leading-5 text-[var(--dpf-muted)]">
+                      <div className="border-b border-[var(--dpf-border)] px-4 py-2 font-mono text-dpf-caption text-[var(--dpf-muted)]">
                         {customerStatuses[activeBuild.id].technicalEvidence}
                       </div>
                     ) : null}
@@ -1641,11 +1641,11 @@ function FleetRailZone({
         <span data-testid="fleet-header-label" className="inline-flex min-w-0 items-center gap-2">
           <span>Builds</span>
           {needsYouCount > 0 ? (
-            <span className="rounded-full bg-[var(--dpf-state-warning)] px-1.5 py-0.5 text-[10px] text-[var(--dpf-warning)]">
+            <span className="rounded-full bg-[var(--dpf-state-warning)] px-1.5 py-0.5 text-dpf-caption text-[var(--dpf-warning)]">
               {needsYouCount} need{needsYouCount === 1 ? "s" : ""} you
             </span>
           ) : activeCount > 0 ? (
-            <span className="text-[10px] font-normal text-[var(--dpf-muted)]">
+            <span className="text-dpf-caption font-normal text-[var(--dpf-muted)]">
               {activeCount} active
             </span>
           ) : null}

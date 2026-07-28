@@ -27,7 +27,7 @@ export function BuildOperatorOverview({
   return (
     <div className="space-y-5 px-5 py-5 sm:px-7 sm:py-6">
       <section data-testid="build-studio-operator-outcome" aria-labelledby="build-outcome-heading">
-        <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--dpf-muted)]">
+        <p className="m-0 text-dpf-caption font-semibold uppercase tracking-[0.14em] text-[var(--dpf-muted)]">
           Outcome
         </p>
         <h2
@@ -52,12 +52,12 @@ export function BuildOperatorOverview({
           <div className="flex items-center justify-between gap-3">
             <p
               id="build-status-heading"
-              className="m-0 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--dpf-muted)]"
+              className="m-0 text-dpf-caption font-semibold uppercase tracking-[0.14em] text-[var(--dpf-muted)]"
             >
               Now
             </p>
             {status?.needsYou ? (
-              <span className="rounded-full border border-[var(--dpf-warning)] bg-[var(--dpf-state-warning)] px-2 py-1 text-[11px] font-semibold text-[var(--dpf-warning)]">
+              <span className="rounded-full border border-[var(--dpf-warning)] bg-[var(--dpf-state-warning)] px-2 py-1 text-dpf-caption font-semibold text-[var(--dpf-warning)]">
                 Needs you
               </span>
             ) : null}
@@ -79,7 +79,7 @@ export function BuildOperatorOverview({
         >
           <p
             id="build-next-heading"
-            className="m-0 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--dpf-muted)]"
+            className="m-0 text-dpf-caption font-semibold uppercase tracking-[0.14em] text-[var(--dpf-muted)]"
           >
             Next
           </p>
@@ -94,7 +94,7 @@ export function BuildOperatorOverview({
           <div>
             <p
               id="build-activity-heading"
-              className="m-0 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--dpf-muted)]"
+              className="m-0 text-dpf-caption font-semibold uppercase tracking-[0.14em] text-[var(--dpf-muted)]"
             >
               Activity
             </p>
@@ -112,7 +112,7 @@ export function BuildOperatorOverview({
             >
               <div className="flex items-center gap-2">
                 <span
-                  className="grid h-5 w-5 shrink-0 place-items-center rounded-full border border-current text-[10px] font-bold"
+                  className="grid h-5 w-5 shrink-0 place-items-center rounded-full border border-current text-dpf-caption font-bold"
                   aria-hidden="true"
                 >
                   {step.state === "complete" ? "✓" : step.state === "attention" ? "!" : "·"}
@@ -120,7 +120,7 @@ export function BuildOperatorOverview({
                 <span className="text-xs font-semibold leading-4">{step.label}</span>
               </div>
               {(step.state === "current" || step.state === "attention") ? (
-                <p className="m-0 mt-2 text-[11px] leading-4 text-[var(--dpf-muted)]">
+                <p className="m-0 mt-2 text-dpf-caption text-[var(--dpf-muted)]">
                   {step.detail}
                 </p>
               ) : null}
