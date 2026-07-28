@@ -21,11 +21,20 @@ export async function lockInventoryEntityKeys(
 
   await tx.$queryRawUnsafe(
     `
-      SELECT pg_advisory_xact_lock(hashtextextended(locked."entityKey", 0))
-      FROM (
-        SELECT unnest($1::text[]) AS "entityKey"
-        ORDER BY 1
-      ) locked
+      WITH acquired AS MATERIALIZED (
+        SELECT
+          locked."entityKey",
+          pg_advisory_xact_lock(
+            hashtextextended(locked."entityKey", 0)
+          ) AS advisory_lock
+        FROM (
+          SELECT unnest($1::text[]) AS "entityKey"
+          ORDER BY 1
+        ) locked
+      )
+      SELECT acquired."entityKey"
+      FROM acquired
+      ORDER BY acquired."entityKey"
     `,
     distinctKeys,
   );

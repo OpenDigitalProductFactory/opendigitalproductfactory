@@ -8,6 +8,10 @@ const describeDatabase = databaseUrl ? describe : describe.skip;
 const schema = `inventory_entity_repair_${randomUUID().replaceAll("-", "")}`;
 const conflictSchema = `inventory_entity_conflict_${randomUUID().replaceAll("-", "")}`;
 const retrySchema = `inventory_entity_retry_${randomUUID().replaceAll("-", "")}`;
+const identityRecoverySchema =
+  `inventory_entity_identity_recovery_${randomUUID().replaceAll("-", "")}`;
+const legacyIdentitySchema =
+  `inventory_entity_legacy_identity_${randomUUID().replaceAll("-", "")}`;
 let client: Client;
 
 const migrationUrl = new URL(
@@ -32,6 +36,10 @@ const observationRestoreMigrationUrl = new URL(
 );
 const observationSnapshotCleanupMigrationUrl = new URL(
   "../prisma/migrations/20260728170500_remove_inventory_observation_snapshot_trigger/migration.sql",
+  import.meta.url,
+);
+const humanIdentityProvenanceMigrationUrl = new URL(
+  "../prisma/migrations/20260728181500_restore_human_identity_tuple_provenance/migration.sql",
   import.meta.url,
 );
 
@@ -118,7 +126,14 @@ async function createFixture(targetSchema: string, crossScope = false): Promise<
     CREATE TABLE "DiscoveryConnection" (id TEXT PRIMARY KEY, "gatewayEntityId" TEXT);
     CREATE TABLE "DiscoveryFingerprintObservation" (id TEXT PRIMARY KEY, "inventoryEntityId" TEXT);
     CREATE TABLE "DiscoveryTriageDecision" (id TEXT PRIMARY KEY, "inventoryEntityId" TEXT);
-    CREATE TABLE "IdentityResolutionLog" (id TEXT PRIMARY KEY, "inventoryEntityId" TEXT);
+    CREATE TABLE "IdentityResolutionLog" (
+      id TEXT PRIMARY KEY,
+      "inventoryEntityId" TEXT,
+      "catalogIdentityId" TEXT,
+      "resolutionType" TEXT NOT NULL,
+      confidence DOUBLE PRECISION,
+      "createdAt" TIMESTAMPTZ NOT NULL
+    );
     CREATE TABLE "PortfolioQualityIssue" (
       id TEXT PRIMARY KEY,
       "issueKey" TEXT NOT NULL UNIQUE,
@@ -214,7 +229,19 @@ async function createFixture(targetSchema: string, crossScope = false): Promise<
     INSERT INTO "DiscoveryConnection" VALUES ('connection-a', 'entity-a-new');
     INSERT INTO "DiscoveryFingerprintObservation" VALUES ('fingerprint-a', 'entity-a-mid');
     INSERT INTO "DiscoveryTriageDecision" VALUES ('triage-a', 'entity-a-new');
-    INSERT INTO "IdentityResolutionLog" VALUES ('identity-a', 'entity-a-mid');
+    INSERT INTO "IdentityResolutionLog" VALUES
+      (
+        'identity-a', 'entity-a-mid', 'identity-human',
+        'human_confirmed', 0.99, '2026-02-03'
+      ),
+      (
+        'identity-a-ai', 'entity-a-new', 'identity-ai-newer',
+        'ai_resolved', 0.74, '2026-03-03'
+      ),
+      (
+        'identity-target-stale', 'entity-target', 'identity-target-stale',
+        'human_confirmed', 0.70, '2025-01-02'
+      );
     INSERT INTO "PortfolioQualityIssue" VALUES
       ('issue-entity', 'issue:entity', 'entity-a-new', NULL),
       ('issue-relationship', 'issue:relationship', NULL, 'rel-a-new-out');
@@ -250,6 +277,13 @@ async function createFixture(targetSchema: string, crossScope = false): Promise<
       "providerView" = 'manufactureAndDeliver',
       "discoveredViaConnectionId" = 'connection-new'
     WHERE id = 'entity-a-new';
+
+    UPDATE "InventoryEntity"
+    SET
+      "catalogIdentityId" = 'identity-target-current',
+      "identityStatus" = 'human_corrected',
+      "identityConfidence" = 1.0
+    WHERE id = 'entity-target';
   `);
 
   if (crossScope) {
@@ -273,6 +307,8 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
     await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
     await client.query(`DROP SCHEMA IF EXISTS "${conflictSchema}" CASCADE`);
     await client.query(`DROP SCHEMA IF EXISTS "${retrySchema}" CASCADE`);
+    await client.query(`DROP SCHEMA IF EXISTS "${identityRecoverySchema}" CASCADE`);
+    await client.query(`DROP SCHEMA IF EXISTS "${legacyIdentitySchema}" CASCADE`);
     await client.end();
   });
 
@@ -295,12 +331,17 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
       observationSnapshotCleanupMigrationUrl,
       "utf8",
     );
+    const humanIdentityProvenanceMigration = await readFile(
+      humanIdentityProvenanceMigrationUrl,
+      "utf8",
+    );
     await client.query(observationSnapshotMigration);
     await client.query(observationSnapshotTriggerMigration);
     await client.query(migration);
     await client.query(identityTupleMigration);
     await client.query(observationRestoreMigration);
     await client.query(observationSnapshotCleanupMigration);
+    await client.query(humanIdentityProvenanceMigration);
 
     expect(await scalar(`SELECT count(*)::text value FROM "InventoryEntity"`)).toBe(7);
     expect(await scalar(`SELECT count(*)::text value FROM "InventoryRelationship"`)).toBe(9);
@@ -329,6 +370,17 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
     expect(canonicalA.properties).toMatchObject({ old: true, new: true, shared: "new" });
     expect(new Date(canonicalA.firstSeenAt).toISOString()).toBe("2026-01-01T00:00:00.000Z");
     expect(new Date(canonicalA.lastSeenAt).toISOString()).toBe("2026-03-02T00:00:00.000Z");
+
+    const unrelatedIdentity = (await client.query(`
+      SELECT "catalogIdentityId", "identityStatus", "identityConfidence"
+      FROM "InventoryEntity"
+      WHERE id = 'entity-target'
+    `)).rows[0];
+    expect(unrelatedIdentity).toMatchObject({
+      catalogIdentityId: "identity-target-current",
+      identityStatus: "human_corrected",
+      identityConfidence: 1,
+    });
 
     const entityTombstones = await client.query(`
       SELECT id, status, "mergedIntoId", "entityKey", properties
@@ -442,6 +494,7 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
     await client.query(identityTupleMigration);
     await client.query(observationRestoreMigration);
     await client.query(observationSnapshotCleanupMigration);
+    await client.query(humanIdentityProvenanceMigration);
     const afterSecondPass =
       JSON.stringify((await client.query(`SELECT * FROM "InventoryEntity" ORDER BY id`)).rows)
       + JSON.stringify((await client.query(`SELECT * FROM "InventoryRelationship" ORDER BY id`)).rows);
@@ -501,6 +554,10 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
       observationSnapshotCleanupMigrationUrl,
       "utf8",
     );
+    const humanIdentityProvenanceMigration = await readFile(
+      humanIdentityProvenanceMigrationUrl,
+      "utf8",
+    );
 
     await client.query(observationSnapshotMigration);
     await client.query(observationSnapshotTriggerMigration);
@@ -524,6 +581,7 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
     await client.query(identityTupleMigration);
     await client.query(observationRestoreMigration);
     await client.query(observationSnapshotCleanupMigration);
+    await client.query(humanIdentityProvenanceMigration);
 
     const canonical = (await client.query(`
       SELECT name, status, "providerView", "discoveredViaConnectionId", properties
@@ -537,5 +595,106 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
       discoveredViaConnectionId: "connection-retry",
     });
     expect(canonical.properties).not.toHaveProperty("_dpfObservationSnapshot");
+  });
+
+  it("preserves a later human correction across forward recovery", async () => {
+    await createFixture(identityRecoverySchema);
+    const observationSnapshotMigration = await readFile(
+      observationSnapshotMigrationUrl,
+      "utf8",
+    );
+    const observationSnapshotTriggerMigration = await readFile(
+      observationSnapshotTriggerMigrationUrl,
+      "utf8",
+    );
+    const migration = await readFile(migrationUrl, "utf8");
+    const identityTupleMigration = await readFile(identityTupleMigrationUrl, "utf8");
+    const observationRestoreMigration = await readFile(
+      observationRestoreMigrationUrl,
+      "utf8",
+    );
+    const observationSnapshotCleanupMigration = await readFile(
+      observationSnapshotCleanupMigrationUrl,
+      "utf8",
+    );
+    const humanIdentityProvenanceMigration = await readFile(
+      humanIdentityProvenanceMigrationUrl,
+      "utf8",
+    );
+
+    await client.query(observationSnapshotMigration);
+    await client.query(observationSnapshotTriggerMigration);
+    await client.query(migration);
+    await client.query(identityTupleMigration);
+    await client.query(observationRestoreMigration);
+    await client.query(observationSnapshotCleanupMigration);
+
+    await client.query(`
+      UPDATE "InventoryEntity"
+      SET
+        "catalogIdentityId" = 'identity-human-corrected',
+        "identityStatus" = 'human_corrected',
+        "identityConfidence" = 1.0
+      WHERE "entityKey" = 'network:duplicate-a';
+
+      INSERT INTO "IdentityResolutionLog" (
+        id, "inventoryEntityId", "catalogIdentityId",
+        "resolutionType", confidence, "createdAt"
+      )
+      SELECT
+        'identity-after-partial-upgrade',
+        id,
+        'identity-human-corrected',
+        'human_corrected',
+        1.0,
+        '2026-06-01'
+      FROM "InventoryEntity"
+      WHERE "entityKey" = 'network:duplicate-a';
+    `);
+
+    await client.query(humanIdentityProvenanceMigration);
+
+    const corrected = (await client.query(`
+      SELECT "catalogIdentityId", "identityStatus", "identityConfidence"
+      FROM "InventoryEntity"
+      WHERE "entityKey" = 'network:duplicate-a'
+    `)).rows[0];
+    expect(corrected).toMatchObject({
+      catalogIdentityId: "identity-human-corrected",
+      identityStatus: "human_corrected",
+      identityConfidence: 1,
+    });
+  });
+
+  it("falls back to retained human tombstone provenance without a ledger row", async () => {
+    await createFixture(legacyIdentitySchema);
+    await client.query(`
+      DELETE FROM "IdentityResolutionLog"
+      WHERE "resolutionType" IN ('human_confirmed', 'human_corrected')
+    `);
+    const migrations = await Promise.all([
+      observationSnapshotMigrationUrl,
+      observationSnapshotTriggerMigrationUrl,
+      migrationUrl,
+      identityTupleMigrationUrl,
+      observationRestoreMigrationUrl,
+      observationSnapshotCleanupMigrationUrl,
+      humanIdentityProvenanceMigrationUrl,
+    ].map((url) => readFile(url, "utf8")));
+
+    for (const sql of migrations) {
+      await client.query(sql);
+    }
+
+    const fallback = (await client.query(`
+      SELECT "catalogIdentityId", "identityStatus", "identityConfidence"
+      FROM "InventoryEntity"
+      WHERE "entityKey" = 'network:duplicate-a'
+    `)).rows[0];
+    expect(fallback).toMatchObject({
+      catalogIdentityId: "identity-human",
+      identityStatus: "human_confirmed",
+      identityConfidence: 0.99,
+    });
   });
 });

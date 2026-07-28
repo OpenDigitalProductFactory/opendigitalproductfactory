@@ -42,6 +42,9 @@ describe("assertInventoryEntityHeapIntegrity", () => {
       expect.stringContaining("pg_advisory_xact_lock"),
       ["host:a", "host:b"],
     );
+    const lockQuery = tx.$queryRawUnsafe.mock.calls[0]?.[0] as string;
+    expect(lockQuery).toContain("WITH acquired AS MATERIALIZED");
+    expect(lockQuery).toContain('SELECT acquired."entityKey"');
   });
 
   it("forces heap-backed reads and accepts exactly one row per distinct key", async () => {

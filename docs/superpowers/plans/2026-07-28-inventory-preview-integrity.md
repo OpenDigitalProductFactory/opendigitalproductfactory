@@ -49,6 +49,11 @@ For every heap-visible duplicate `entityKey` group:
 - snapshot each row's `name`, `status`, `providerView`, and `discoveredViaConnectionId` before convergence, then restore the newest coherent observation tuple onto the canonical row;
 - keep that snapshot current with a temporary insert/update trigger if the repair migration fails and the old runtime resumes writes before an upgrade retry; the trigger ignores the repair's `superseded` tombstone transition;
 - preserve explicit/human-confirmed identity and support fields on the canonical row;
+- if the repair's field-wise rollup produces a mixed identity tuple, restore the
+  newest coherent human-confirmed tuple from `IdentityResolutionLog.createdAt`
+  in a later forward migration; retained merge tombstones are the documented
+  fallback only for legacy human tuples without a ledger row, and a correction
+  written after a partial upgrade must outrank both;
 - fill null or `unknown` canonical fields from the latest non-null, non-`unknown` observation;
 - merge JSON properties with the latest observation winning only for discovery-owned keys, remove the temporary observation snapshot from the canonical row, and retain each tombstone's original snapshot;
 - never move or change a primary key.
@@ -100,6 +105,10 @@ This ordering preserves all rows and provenance while avoiding compound-unique c
 - Assert forced-heap duplicate counts are zero before index creation and again after repair.
 - Assert every entity merge map row has one canonical survivor, every remapped child resolves, and active relationship tuples are unique.
 - Add a discovery-transaction invariant in `packages/db/src/discovery-sync.ts`: after entity upserts and before dependent writes, disable all index-scan classes locally and count the incoming `entityKey` values from the heap. Any count other than one aborts the transaction, preventing a damaged index from compounding duplicates.
+- Serialize incoming entity keys with transaction-scoped PostgreSQL advisory
+  locks before the upserts. Project only the supported text key from the
+  materialized lock query so Prisma never has to deserialize PostgreSQL's
+  `void` lock-function result.
 - Refactor the existing guard into one importable integrity core plus its CLI wrapper. The core supports a require-only mode that never creates an extension or changes source state, fails when the governed migration has not provisioned `amcheck`, and requires `InventoryEntity_entityKey_key` to exist as a unique, valid, ready, live B-tree before heap agreement is accepted.
 - Invoke the read-only source check from inside `runWithDestinationCleanup`, after the initial destination reset and before the first source read/copy. This guarantees guard failure also clears the disposable destination.
 - Route the canonical preview aliases through `dev-portal-lease.sh refresh`. The wrapper claims `local-integration-ci` before touching Docker, refuses an active holder, stops the shared `dpf` preview before rebuilding its source clone, retains the lease on success, and releases it automatically when startup fails. A failed source guard or clone must leave port `3001` closed so stale data cannot masquerade as current acceptance evidence.
@@ -143,11 +152,12 @@ The red fixture must require deterministic survivorship, complete hard/soft-refe
 - `packages/db/prisma/migrations/20260728154500_preserve_inventory_identity_tuple/migration.sql`
 - `packages/db/prisma/migrations/20260728170000_restore_inventory_observation_facts/migration.sql`
 - `packages/db/prisma/migrations/20260728170500_remove_inventory_observation_snapshot_trigger/migration.sql`
+- `packages/db/prisma/migrations/20260728181500_restore_human_identity_tuple_provenance/migration.sql`
 - `packages/db/prisma/schema.prisma`
 - `packages/db/src/inventory-entity-lifecycle.ts`
 - canonical inventory read/projection callers discovered by the completeness test
 
-Implement the repair using ordered forward migrations and materialized, transaction-local merge maps over repository-owned identifiers. The pre-repair migrations snapshot mutable observation facts and install a temporary trigger that refreshes them if a failed repair returns control to the old runtime. The immutable repair migration performs identity and relationship convergence. Forward corrections restore a coherent mastered-identity tuple and the latest mutable observation tuple, then remove the trigger and canonical snapshots. Include fixed lock order, bounded `lock_timeout`, fail-closed assertions, and forward-only recovery notes. Never edit a committed migration.
+Implement the repair using ordered forward migrations and materialized, transaction-local merge maps over repository-owned identifiers. The pre-repair migrations snapshot mutable observation facts and install a temporary trigger that refreshes them if a failed repair returns control to the old runtime. The immutable repair migration performs identity and relationship convergence. Forward corrections restore the latest mutable observation tuple, remove the trigger and canonical snapshots, and then restore any coherent human-confirmed identity tuple from the resolution ledger, with retained tombstones as a legacy fallback. Include fixed lock order, bounded `lock_timeout`, fail-closed assertions, and forward-only recovery notes. Never edit a committed migration.
 
 No row or primary key is deleted. Clean installs and a second execution change no data.
 

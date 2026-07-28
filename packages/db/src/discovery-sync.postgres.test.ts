@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaClient } from "../generated/client/client";
 import type { NormalizedDiscoveryOutput } from "./discovery-normalize";
 import { persistBootstrapDiscoveryRun } from "./discovery-sync";
+import { lockInventoryEntityKeys } from "./inventory-entity-heap-integrity";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describeDatabase = databaseUrl ? describe : describe.skip;
@@ -49,6 +50,24 @@ const noProjection = {
   projectInventoryEntity: async () => undefined,
   projectInventoryRelationship: async () => undefined,
 };
+
+async function within<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 describeDatabase("persistBootstrapDiscoveryRun with PostgreSQL", () => {
   beforeAll(async () => {
@@ -139,4 +158,45 @@ describeDatabase("persistBootstrapDiscoveryRun with PostgreSQL", () => {
     });
     expect(persisted.discoveredItems).toHaveLength(4);
   }, 30_000);
+
+  it("serializes reversed overlapping key sets without deadlock", async () => {
+    const keys = [
+      `inventory-lock-a:${suffix}`,
+      `inventory-lock-b:${suffix}`,
+    ];
+    let releaseFirst!: () => void;
+    let markFirstLocked!: () => void;
+    const holdFirst = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const firstLocked = new Promise<void>((resolve) => {
+      markFirstLocked = resolve;
+    });
+    let secondAcquired = false;
+
+    const first = db.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET LOCAL lock_timeout = '3s'");
+      await lockInventoryEntityKeys(tx, keys);
+      markFirstLocked();
+      await holdFirst;
+    }, { timeout: 5_000 });
+
+    await within(firstLocked, 3_000, "first advisory lock was not acquired");
+    const second = db.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe("SET LOCAL lock_timeout = '3s'");
+      await lockInventoryEntityKeys(tx, [...keys].reverse());
+      secondAcquired = true;
+    }, { timeout: 5_000 });
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(secondAcquired).toBe(false);
+    releaseFirst();
+
+    await expect(within(
+      Promise.all([first, second]),
+      5_000,
+      "advisory lock test timed out",
+    )).resolves.toBeDefined();
+    expect(secondAcquired).toBe(true);
+  }, 10_000);
 });
