@@ -1235,7 +1235,7 @@
       "ariaSnapshot": "- heading [level=1]\n- text\n- textbox\n- text\n- textbox\n- button\n- link"
     },
     "/ops": {
-      "defaultVisibleWords": 177,
+      "defaultVisibleWords": 180,
       "leadBandWords": 0,
       "primaryActions": 1,
       "visibleFields": 2,
