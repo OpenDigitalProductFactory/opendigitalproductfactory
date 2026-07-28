@@ -149,7 +149,11 @@ async function locateArtifact(options) {
   const workflow = encodeURIComponent(options.workflow ?? "ci.yml");
   const artifactPrefix = options["artifact-prefix"] ?? DEFAULT_ARTIFACT_PREFIX;
   const repository = process.env.GITHUB_REPOSITORY;
-  const headSha = process.env.GITHUB_SHA;
+  // pull_request runs are indexed by the PR head SHA in the Actions API even
+  // though GITHUB_SHA (and the checked-out tree) is the synthetic merge SHA.
+  // The workflow supplies that API lookup identity explicitly; the receipt
+  // still binds the built checkout's real commit and immutable tree below.
+  const headSha = process.env.DPF_CI_RUN_HEAD_SHA || process.env.GITHUB_SHA;
   const eventName = process.env.GITHUB_EVENT_NAME;
   const deadline = Date.now() + waitSeconds * 1000;
   try {

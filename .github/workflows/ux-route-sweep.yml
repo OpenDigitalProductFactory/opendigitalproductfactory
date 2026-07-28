@@ -140,6 +140,9 @@ jobs:
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          # Actions indexes pull_request workflow runs by the PR head SHA,
+          # while GITHUB_SHA identifies the synthetic merge checkout.
+          DPF_CI_RUN_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         # The producer's cold setup + cache restore + build + package path has
         # exceeded four minutes in observed GitHub-hosted runs. Ten minutes
         # remains bounded while avoiding a delayed duplicate build.
