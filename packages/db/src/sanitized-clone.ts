@@ -64,10 +64,7 @@ export function shouldSkipTable(tableName: string): boolean {
 
 import { PrismaClient } from "../generated/client/client";
 import { PrismaPg } from "@prisma/adapter-pg";
-import {
-  runSourceCheckedClone,
-  runWithDestinationCleanup,
-} from "./sanitized-clone-cleanup";
+import { runSourceCheckedClone } from "./sanitized-clone-cleanup";
 import { assertSourceInventoryIntegrity } from "./sanitized-clone-source-integrity";
 
 export {

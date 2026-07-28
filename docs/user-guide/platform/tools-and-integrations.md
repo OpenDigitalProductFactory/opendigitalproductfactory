@@ -30,7 +30,7 @@ claims. Choose the surface that owns the claim:
 | **MCP Services** | Registered service endpoints and the tools they expose | That a particular coworker has the required grant |
 | **Native Integrations** | Business-system connections on DPF's shared credential and governance substrate | That every provider operation is supported or write-enabled |
 | **Built-in Tools** | First-party utilities shipped with the platform | That a specific workflow has been granted access |
-| **Capability Inventory** | Runtime inventory of internal tools, MCP tools, and AI providers already registered for agents | That catalog setup or a provider account is healthy |
+| **Capability Inventory** | Runtime inventory of internal tools, MCP tools, and AI providers already registered for agents; inventory review counts use canonical discovered entities | That catalog setup or a provider account is healthy |
 | **Estate Discovery** | Network collectors and the evidence they produce | That a discovered item is already governed in Portfolio |
 
 ## Read Marketplace Readiness
@@ -104,6 +104,10 @@ proof of support.
 - **Capability inventory empty or stale** — use the governed sync/deploy path
   that populates platform capabilities. Do not treat an empty inventory as
   proof that the tools were removed from every runtime.
+- **Inventory review count looks lower after an integrity repair** — normal
+  tools and discovery surfaces exclude retained superseded records. Follow an
+  entity-detail link to its canonical record. Repair provenance is retained as
+  operational evidence; it is not another live item in the Tools view.
 - **Provider operation unsupported** — follow the explicit unsupported status
   and use a documented alternative. Do not infer write support from read
   coverage.

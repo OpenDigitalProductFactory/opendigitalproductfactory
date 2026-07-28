@@ -148,7 +148,7 @@ The red fixture must require deterministic survivorship, complete hard/soft-refe
 
 - `packages/db/prisma/migrations/20260728115900_snapshot_inventory_observation_facts/migration.sql`
 - `packages/db/prisma/migrations/20260728115930_keep_inventory_observation_snapshot_current/migration.sql`
-- `packages/db/prisma/migrations/20260728120000_repair_inventory_entity_index_integrity/migration.sql`
+- `packages/db/prisma/migrations/20260728130000_repair_inventory_entity_index_integrity/migration.sql`
 - `packages/db/prisma/migrations/20260728154500_preserve_inventory_identity_tuple/migration.sql`
 - `packages/db/prisma/migrations/20260728170000_restore_inventory_observation_facts/migration.sql`
 - `packages/db/prisma/migrations/20260728170500_remove_inventory_observation_snapshot_trigger/migration.sql`
@@ -248,8 +248,11 @@ After the ready PR merges:
 
 ## Backlog coverage
 
-Decision: **atomic**
-Receipt: `cms4ro0mj0sfv01ruffnhwga6`
+- Decision: atomic
+- Parent: `BI-CF4ADDAC`
+- Receipt: `cms56sgkf02bq01qw44gwy4il`
+- Dependencies: none outside `BI-CF4ADDAC`; phase dependencies are recorded below.
+- Rationale: The repair migration, recurrence invariant, contributor-preview source guard, and live acceptance form one fail-closed integrity change. Shipping any part alone either leaves corrupted state, permits recurrence, blocks previews permanently, or lacks proof that the fleet repair works.
 
 - `repair-migration` -> `BI-CF4ADDAC`
 - `ingestion-invariant` -> `BI-CF4ADDAC`, depends on `repair-migration`
@@ -272,7 +275,13 @@ No phase is independently shippable. A guard without the migration blocks affect
 
 ## Documentation impact
 
-No customer or public-positioning workflow changes. Update the existing collation-drift runbook and contributor-runtime guide because Contributor preview gains a lease-owned refresh command and a new fail-closed source check. The implementation plan and PR evidence carry the architecture impact.
+No public-positioning workflow changes. Update the Product Inventory, Portfolios,
+and Tools and Integrations user guides because canonical inventory records now
+exclude retained superseded tombstones from normal counts and lists, and stale
+entity-detail links redirect to their canonical record. Update the existing
+collation-drift runbook and contributor-runtime guide because Contributor preview
+gains a lease-owned refresh command and a new fail-closed source check. The
+implementation plan and PR evidence carry the architecture impact.
 
 ## Completion checklist
 

@@ -1,0 +1,95 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "InventoryEntity operational estate registry",
+    "InventoryRelationship topology registry",
+    "Discovery evidence, triage, identity, remote-action, and quality references",
+    "Portfolio and product inventory projections",
+    "Prisma-to-EA current-state data-model mirror",
+    "Contributor sanitized-clone source and destination"
+  ],
+  "migration": {
+    "name": "20260728115900_snapshot_inventory_observation_facts through 20260728181500_restore_human_identity_tuple_provenance",
+    "backfill": "forced-heap entity and relationship convergence: retain the earliest deterministic canonical identity, repoint hard and registered soft references, preserve the newest coherent observation and human-confirmed identity facts, retain entity and relationship collision losers as inactive superseded tombstones with mergedIntoId lineage, retain merge-created relationship self loops as inactive tombstones with an explicit repair reason and no fabricated survivor, rebuild the unique entityKey index, and provision read-only amcheck verification; no row or primary key is deleted"
+  },
+  "tests": [
+    "packages/db/src/inventory-entity-index-integrity-migration.test.ts",
+    "packages/db/src/inventory-entity-merge-references.test.ts",
+    "packages/db/src/inventory-entity-canonical-read-completeness.test.ts",
+    "packages/db/src/discovery-sync.integrity.test.ts",
+    "packages/db/src/discovery-sync.postgres.test.ts",
+    "packages/db/src/sanitized-clone.postgres.test.ts",
+    "packages/db/scripts/index-integrity-guard.test.ts",
+    "scripts/check-data-impact.test.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:inventory-entity#entity-key-integrity-repair",
+      "prismaModel": "InventoryEntity",
+      "lifecycleDisposition": "the earliest firstSeenAt then lexical-id row remains canonical; every loser remains durable with status superseded, a collision-safe quarantine key, mergedIntoId lineage, and its original observation payload",
+      "fields": [
+        {
+          "fieldId": "data:inventory-entity#entityKey",
+          "resolution": "governed",
+          "reason": "restore trustworthy operational identity uniqueness while preserving the original rows and discovery provenance",
+          "provenance": "BI-CF4ADDAC forced heap/index evidence, WWMD consultation DI-86820DA28C13, and the PostgreSQL migration fixture"
+        },
+        {
+          "fieldId": "data:inventory-entity#mergedIntoId",
+          "resolution": "governed",
+          "reason": "identify the canonical survivor for retained tombstones and give normal reads one explicit lifecycle predicate",
+          "provenance": "BI-CF4ADDAC merge-and-tombstone decision and the existing DPF MDM tombstone pattern"
+        },
+        {
+          "fieldId": "data:inventory-entity#observation-and-identity-facts",
+          "resolution": "governed",
+          "reason": "preserve the newest coherent discovery observation and any later human-confirmed identity correction across a failed or retried repair",
+          "provenance": "snapshot, retry, and identity-ledger migration fixtures under BI-CF4ADDAC"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:inventory-relationship#canonical-endpoint-integrity-repair",
+      "prismaModel": "InventoryRelationship",
+      "lifecycleDisposition": "relationships projected onto the same canonical endpoint tuple converge onto a deterministic survivor; losers remain superseded tombstones with mergedIntoId lineage, while merge-created self loops remain retained and inactive",
+      "fields": [
+        {
+          "fieldId": "data:inventory-relationship#fromEntityId-toEntityId-relationshipType",
+          "resolution": "governed",
+          "reason": "preserve a unique active topology after duplicate entity identities converge without fabricating active self-relations",
+          "provenance": "BI-CF4ADDAC relationship collision evidence and migration fixture"
+        },
+        {
+          "fieldId": "data:inventory-relationship#mergedIntoId",
+          "resolution": "governed",
+          "reason": "retain relationship provenance while identifying the surviving canonical relationship",
+          "provenance": "BI-CF4ADDAC merge-and-tombstone decision"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:inventory-evidence#canonical-reference-convergence",
+      "prismaModel": "ChangeItem,DiscoveredItem,DiscoveredSoftwareEvidence,DiscoveryConnection,DiscoveryFingerprintObservation,DiscoveryTriageDecision,IdentityResolutionLog,PortfolioQualityIssue,DiscoveredRelationship,RemoteAction",
+      "lifecycleDisposition": "existing evidence rows remain durable and are repointed to canonical entity or relationship survivors; no evidence row is deleted and soft-reference coverage is governed by the shared merge-reference registry",
+      "fields": [
+        {
+          "fieldId": "data:inventory-evidence#inventoryEntityId-inventoryRelationshipId",
+          "resolution": "governed",
+          "reason": "prevent retained history from remaining fragmented across superseded records or resolving to inactive topology",
+          "provenance": "BI-CF4ADDAC live reference counts, hard-plus-soft reference registry, and schema-completeness tests"
+        }
+      ]
+    },
+    {
+      "kind": "projection",
+      "store": "postgres:contributor-sanitized-clone",
+      "derivedContractId": "inventory-source-integrity-to-sanitized-contributor-preview",
+      "cleanupTest": "packages/db/src/sanitized-clone.test.ts",
+      "reconciliationTest": "packages/db/src/sanitized-clone.postgres.test.ts"
+    }
+  ]
+}

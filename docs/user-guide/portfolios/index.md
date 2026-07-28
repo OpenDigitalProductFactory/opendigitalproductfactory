@@ -22,6 +22,9 @@ product health, budget allocation, market offer, and strategic balance.
 - **DPPM Taxonomy** — A 481-node product classification tree used to categorize products by type, capability, and market segment. Products are tagged with taxonomy nodes to enable filtering and benchmarking.
 - **Backlog Archetype Scope** — Epics and backlog items can indicate whether work is platform-wide, common across archetypes, or specific to an archetype category or leaf archetype. This gives portfolio reviews a cleaner split between shared substrate investment and market-specific coverage gaps.
 - **Health Metrics** — Calculated scores for each portfolio based on product lifecycle distribution, investment balance, active issues, and operational performance.
+- **Inventory Counts** — Product profiles and inventory tabs count canonical
+  discovered entities only. Retained superseded records preserve repair
+  provenance without appearing as additional live estate.
 - **Risk Concentration** — A measure of how unevenly investment or strategic risk is distributed across a portfolio. Useful for identifying over-dependence on a single product or technology.
 
 ## What You Can Do
@@ -29,6 +32,8 @@ product health, budget allocation, market offer, and strategic balance.
 - View the four root portfolios and drill down into their product groupings
 - Review the organization-owned product-line rollup for Goods and Services for Sale
 - Check portfolio health scores and understand which products are contributing to issues
+- Review a product's current discovered estate without duplicate repair
+  tombstones inflating its inventory count
 - Review budget allocations and compare planned vs. actual investment
 - Separate platform, common, and archetype-specific backlog demand before making roadmap or budget tradeoffs
 - Identify risk concentration and rebalance product groupings

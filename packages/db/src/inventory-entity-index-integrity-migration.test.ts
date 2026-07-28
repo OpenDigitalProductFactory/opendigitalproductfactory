@@ -15,7 +15,7 @@ const legacyIdentitySchema =
 let client: Client;
 
 const migrationUrl = new URL(
-  "../prisma/migrations/20260728120000_repair_inventory_entity_index_integrity/migration.sql",
+  "../prisma/migrations/20260728130000_repair_inventory_entity_index_integrity/migration.sql",
   import.meta.url,
 );
 const observationSnapshotMigrationUrl = new URL(

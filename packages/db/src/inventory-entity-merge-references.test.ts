@@ -9,7 +9,7 @@ const migrationPath = join(
   "..",
   "prisma",
   "migrations",
-  "20260728120000_repair_inventory_entity_index_integrity",
+  "20260728130000_repair_inventory_entity_index_integrity",
   "migration.sql",
 );
 

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { persistBootstrapDiscoveryRun } from "../src/discovery-sync";
+import { heapIntegrityRaw } from "./discovery-sync-test-support";
 
 // Source attribution: a sweep from one source must not mark another
 // source's entities or relationships stale, even when they share the
@@ -16,6 +17,7 @@ import { persistBootstrapDiscoveryRun } from "../src/discovery-sync";
 
 type FindManyArgs = {
   where?: {
+    mergedIntoId?: null;
     scopeKey?: string;
     lastConfirmedRun?: { sourceSlug?: string };
   };
@@ -60,6 +62,7 @@ function buildStubDb(opts: {
   const db = {
     $transaction: async <T>(fn: (tx: any) => Promise<T>): Promise<T> =>
       fn({
+        ...heapIntegrityRaw(),
         discoveryRun: { create: async () => ({ id: "run-id" }) },
         inventoryEntity: {
           findMany: entityFindMany,
@@ -137,6 +140,7 @@ describe("persistBootstrapDiscoveryRun source attribution", () => {
     // never sees dpf_bootstrap-owned rows.
     expect(entityFindMany).toHaveBeenCalledWith({
       where: {
+        mergedIntoId: null,
         scopeKey: "organization:internal",
         lastConfirmedRun: { sourceSlug: "unifi" },
       },
@@ -194,6 +198,7 @@ describe("persistBootstrapDiscoveryRun source attribution", () => {
 
     expect(entityFindMany).toHaveBeenCalledWith({
       where: {
+        mergedIntoId: null,
         scopeKey,
         lastConfirmedRun: { sourceSlug: "edge-node:node-a" },
       },
@@ -243,6 +248,8 @@ describe("persistBootstrapDiscoveryRun source attribution", () => {
 
     expect(relationshipFindMany).toHaveBeenCalledWith({
       where: {
+        mergedIntoId: null,
+        status: { not: "superseded" },
         scopeKey,
         lastConfirmedRun: { sourceSlug: "unifi" },
       },

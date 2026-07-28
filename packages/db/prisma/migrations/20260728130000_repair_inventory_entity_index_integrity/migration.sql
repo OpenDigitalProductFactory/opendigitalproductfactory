@@ -1,4 +1,4 @@
--- BI-CF4ADDAC - repair InventoryEntity heap/index divergence caused by the
+-- BI-CF4ADDAC: repair InventoryEntity heap/index divergence caused by the
 -- measured musl-to-glibc collation transition. The damaged unique index could
 -- miss heap rows during upsert and also fail to reject a second copy.
 --

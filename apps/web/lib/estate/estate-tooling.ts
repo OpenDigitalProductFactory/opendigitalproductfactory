@@ -52,8 +52,8 @@ const ESTATE_ENTITY_SELECT: Prisma.InventoryEntitySelect = {
   },
   _count: {
     select: {
-      fromRelationships: true,
-      toRelationships: true,
+      fromRelationships: { where: INVENTORY_RELATIONSHIP_CANONICAL_WHERE },
+      toRelationships: { where: INVENTORY_RELATIONSHIP_CANONICAL_WHERE },
     },
   },
 };

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { persistBootstrapDiscoveryRun } from "../src/discovery-sync";
+import { heapIntegrityRaw } from "./discovery-sync-test-support";
 
 function buildStubDb() {
   const entityFindMany = vi.fn().mockResolvedValue([
@@ -15,6 +16,7 @@ function buildStubDb() {
   const db = {
     $transaction: async <T>(fn: (tx: any) => Promise<T>): Promise<T> =>
       fn({
+        ...heapIntegrityRaw(),
         discoveryRun: {
           create: async () => ({ id: "run-a" }),
         },
@@ -109,6 +111,7 @@ describe("persistBootstrapDiscoveryRun customer-scope isolation", () => {
 
     expect(entityFindMany).toHaveBeenCalledWith({
       where: {
+        mergedIntoId: null,
         scopeKey: "customer:cust_a:site:site_austin",
         lastConfirmedRun: { sourceSlug: "edge-node:node-a" },
       },
@@ -117,6 +120,8 @@ describe("persistBootstrapDiscoveryRun customer-scope isolation", () => {
 
     expect(relationshipFindMany).toHaveBeenCalledWith({
       where: {
+        mergedIntoId: null,
+        status: { not: "superseded" },
         scopeKey: "customer:cust_a:site:site_austin",
         lastConfirmedRun: { sourceSlug: "edge-node:node-a" },
       },
