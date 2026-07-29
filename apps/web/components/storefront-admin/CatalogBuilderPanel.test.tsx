@@ -27,6 +27,10 @@ describe("Catalog Builder progressive owner UX", () => {
     expect(html).toContain("Your ordinary price already works");
     expect(html).toContain("How customers get it");
     expect(html).toContain("Package contents");
+    expect(html).toContain("Customer purchases and use");
+    expect(html).toContain(
+      "/storefront/items/storefront-row/purchases",
+    );
     expect(html).not.toContain("ProductOffering");
     expect(html).not.toContain("CatalogItem");
     expect(html).not.toContain("DigitalProduct");

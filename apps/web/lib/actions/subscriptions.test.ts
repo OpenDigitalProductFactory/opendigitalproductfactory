@@ -7,6 +7,10 @@ vi.mock("@dpf/db", () => ({
     customerAccount: { findUnique: vi.fn(), update: vi.fn() },
     salesOrder: { findUnique: vi.fn() },
     subscription: { create: vi.fn() },
+    productSoldEvidence: { findMany: vi.fn(), upsert: vi.fn() },
+    productSoldParty: { upsert: vi.fn() },
+    productSoldEntitlement: { upsert: vi.fn() },
+    productFulfillmentInstance: { upsert: vi.fn() },
     recurringSchedule: { create: vi.fn().mockResolvedValue({}) },
     edgeNode: { update: vi.fn() },
     activity: { create: vi.fn().mockResolvedValue({}) },
@@ -20,11 +24,22 @@ const p = prisma as unknown as {
   customerAccount: { findUnique: ReturnType<typeof vi.fn>; update: ReturnType<typeof vi.fn> };
   salesOrder: { findUnique: ReturnType<typeof vi.fn> };
   subscription: { create: ReturnType<typeof vi.fn> };
+  productSoldEvidence: { findMany: ReturnType<typeof vi.fn>; upsert: ReturnType<typeof vi.fn> };
+  productSoldParty: { upsert: ReturnType<typeof vi.fn> };
+  productSoldEntitlement: { upsert: ReturnType<typeof vi.fn> };
+  productFulfillmentInstance: { upsert: ReturnType<typeof vi.fn> };
   recurringSchedule: { create: ReturnType<typeof vi.fn> };
   edgeNode: { update: ReturnType<typeof vi.fn> };
 };
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  p.productSoldEvidence.findMany.mockResolvedValue([]);
+  p.productSoldEvidence.upsert.mockResolvedValue({ id: "subscription-evidence" });
+  p.productSoldParty.upsert.mockResolvedValue({});
+  p.productSoldEntitlement.upsert.mockResolvedValue({});
+  p.productFulfillmentInstance.upsert.mockResolvedValue({});
+});
 
 describe("convertAccountToActiveCustomer", () => {
   it("flips a prospect to active", async () => {
@@ -89,6 +104,84 @@ describe("convertOrderToSubscription", () => {
     const sub = await convertOrderToSubscription("so1");
     expect(sub).toEqual({ id: "existing" });
     expect(p.subscription.create).not.toHaveBeenCalled();
+  });
+
+  it("attaches the real support contract to every sale evidenced by the order", async () => {
+    p.salesOrder.findUnique.mockResolvedValue(order);
+    p.subscription.create.mockImplementation(({ data }: { data: Record<string, unknown> }) => ({
+      id: "sub1",
+      subscriptionRef: "SUB-2026-ABC123",
+      autoRenew: false,
+      ...data,
+    }));
+    p.productSoldEvidence.findMany.mockResolvedValue([
+      {
+        productSold: {
+          id: "ps1",
+          organizationId: "org1",
+        },
+      },
+    ]);
+
+    await convertOrderToSubscription("so1", { autoRenew: false });
+
+    expect(p.productSoldEvidence.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          productSoldId: "ps1",
+          subscriptionId: "sub1",
+          evidenceKind: "support-subscription",
+        }),
+      }),
+    );
+    expect(p.productSoldParty.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          productSoldId: "ps1",
+          accountId: "a1",
+          role: "subscriber",
+        }),
+      }),
+    );
+    expect(p.productSoldEntitlement.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          productSoldId: "ps1",
+          subscriptionId: "sub1",
+          accountId: "a1",
+          entitlementKind: "support-contract",
+        }),
+      }),
+    );
+  });
+
+  it("records an EdgeNode fulfillment only when a real node is supplied", async () => {
+    p.salesOrder.findUnique.mockResolvedValue(order);
+    p.subscription.create.mockImplementation(({ data }: { data: Record<string, unknown> }) => ({
+      id: "sub1",
+      subscriptionRef: "SUB-2026-ABC123",
+      autoRenew: false,
+      ...data,
+    }));
+    p.edgeNode.update.mockResolvedValue({ id: "en1", subscriptionId: "sub1" });
+    p.productSoldEvidence.findMany.mockResolvedValue([
+      { productSold: { id: "ps1", organizationId: "org1" } },
+    ]);
+
+    await convertOrderToSubscription("so1", {
+      autoRenew: false,
+      edgeNodeId: "en1",
+    });
+
+    expect(p.productFulfillmentInstance.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          productSoldId: "ps1",
+          edgeNodeId: "en1",
+          instanceKind: "supported-instance",
+        }),
+      }),
+    );
   });
 });
 

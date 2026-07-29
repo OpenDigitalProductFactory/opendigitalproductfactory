@@ -7,6 +7,15 @@ import { STAGE_DEFAULT_PROBABILITY } from "@dpf/validators";
 import { revalidatePath } from "next/cache";
 import { generateInvoiceFromSalesOrder } from "@/lib/actions/finance";
 import {
+  appendProductSoldEvidence,
+  createProductSoldDraft,
+  createProductSoldPartyLinks,
+  materializeProductSold,
+  persistProductSoldComponentAllocations,
+  persistProductSoldPartyLinks,
+  snapshotProductSoldComponents,
+} from "@/lib/products/product-sold";
+import {
   checkCustomerAccountDuplicates,
   customerAccountNormalizedColumns,
   resolveDedupDecision,
@@ -1085,7 +1094,22 @@ export async function acceptQuote(quoteId: string, userId?: string) {
       where: { id: quoteId },
       data: { status: "accepted", acceptedAt: new Date() },
       include: {
-        lineItems: { orderBy: { sortOrder: "asc" } },
+        lineItems: {
+          orderBy: { sortOrder: "asc" },
+          include: {
+            catalogItem: {
+              include: {
+                offering: { include: { product: true } },
+                bundleComponents: {
+                  where: { effectiveTo: null },
+                  orderBy: { sortOrder: "asc" },
+                  include: { componentCatalogItem: true },
+                },
+              },
+            },
+            catalogSku: { include: { configuration: true } },
+          },
+        },
         account: { select: { id: true, accountId: true, name: true } },
       },
     });
@@ -1101,6 +1125,105 @@ export async function acceptQuote(quoteId: string, userId?: string) {
         currency: accepted.currency,
       },
     });
+
+    const observedAt = new Date();
+    for (const line of accepted.lineItems) {
+      const catalogItem = line.catalogItem;
+      if (!catalogItem) continue;
+      const unitPrice = line.unitPrice.toNumber();
+      const discountPercent = line.discountPercent.toNumber();
+      const taxPercent = line.taxPercent.toNumber();
+      const totalAmount = line.lineTotal.toNumber();
+      const configuration = line.catalogSku?.configuration ?? null;
+      const pricingSnapshot = {
+        version: 1,
+        source: "accepted-quote-line",
+        quoteNumber: accepted.quoteNumber,
+        unitPrice,
+        quantity: line.quantity,
+        discountPercent,
+        taxPercent,
+        totalAmount,
+        currency: accepted.currency,
+      };
+      const draft = createProductSoldDraft({
+        selection: {
+          organizationId: catalogItem.organizationId,
+          providerOrganizationId:
+            catalogItem.offering.providerOrganizationId,
+          product: catalogItem.offering.product,
+          offering: catalogItem.offering,
+          catalogItem,
+          catalogSku: line.catalogSku,
+          configuration,
+          priceListEntryId: null,
+          promotionId: null,
+          quantity: line.quantity,
+          unitPrice,
+          discountAmount:
+            unitPrice * line.quantity * (discountPercent / 100),
+          taxAmount: totalAmount * (taxPercent / 100),
+          totalAmount,
+          currency: accepted.currency,
+          purchasedAt: observedAt,
+          configurationSnapshot: line.configurationSnapshot,
+          pricingSnapshot,
+        },
+        evidence: {
+          kind: "quote-line",
+          sourceId: line.id,
+          sourceRef: `${accepted.quoteNumber}:${line.sortOrder + 1}`,
+          observedAt,
+          snapshot: {
+            quoteId: accepted.id,
+            quoteNumber: accepted.quoteNumber,
+            description: line.description,
+            configurationSnapshot: line.configurationSnapshot,
+          },
+        },
+      });
+      const materialized = await materializeProductSold({
+        db: tx as never,
+        draft,
+      });
+      await persistProductSoldComponentAllocations({
+        db: tx as never,
+        organizationId: catalogItem.organizationId,
+        productSoldId: materialized.id,
+        packageRevenue: totalAmount,
+        components: snapshotProductSoldComponents(
+          catalogItem.bundleComponents ?? [],
+        ),
+      });
+      await appendProductSoldEvidence({
+        db: tx as never,
+        organizationId: catalogItem.organizationId,
+        productSoldId: materialized.id,
+        kind: "sales-order",
+        sourceId: order.id,
+        sourceRef: order.orderRef,
+        observedAt,
+        snapshot: {
+          orderRef: order.orderRef,
+          status: order.status,
+          accountId: accepted.accountId,
+        },
+      });
+      const parties = createProductSoldPartyLinks({
+        evidenceId: materialized.evidenceId,
+        observedAt,
+        account: accepted.account,
+        contact: null,
+        subscriber: null,
+        evidenceSnapshot: {},
+      });
+      await persistProductSoldPartyLinks({
+        db: tx as never,
+        organizationId: catalogItem.organizationId,
+        productSoldId: materialized.id,
+        links: parties,
+      });
+    }
 
     // Close opportunity as won
     await tx.opportunity.update({
