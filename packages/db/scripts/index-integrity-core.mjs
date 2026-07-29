@@ -113,7 +113,7 @@ function quoteRegclassPart(value) {
 async function checkIndex(client, schema, indexName) {
   try {
     await client.query(
-      "SELECT public.bt_index_parent_check($1::regclass, true, true)",
+      "SELECT public.bt_index_parent_check($1::regclass, true, true)::text AS check_result",
       [`${quoteRegclassPart(schema)}.${quoteRegclassPart(indexName)}`],
     );
     return null;

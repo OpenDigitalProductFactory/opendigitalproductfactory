@@ -138,7 +138,7 @@ describe("checkIndexIntegrity", () => {
     expect(queries.some(({ sql }) => /\bCREATE\b/i.test(sql))).toBe(false);
     expect(queries[1]?.params).toEqual([false, "InventoryEntity", "public"]);
     expect(queries[2]?.sql).toContain(
-      "public.bt_index_parent_check($1::regclass, true, true)",
+      "public.bt_index_parent_check($1::regclass, true, true)::text AS check_result",
     );
     expect(queries[2]?.params).toEqual([
       '"public"."InventoryEntity_entityKey_key"',
