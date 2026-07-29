@@ -12,10 +12,16 @@ const identityRecoverySchema =
   `inventory_entity_identity_recovery_${randomUUID().replaceAll("-", "")}`;
 const legacyIdentitySchema =
   `inventory_entity_legacy_identity_${randomUUID().replaceAll("-", "")}`;
+const snapshotHazardSchema =
+  `inventory_entity_snapshot_hazard_${randomUUID().replaceAll("-", "")}`;
 let client: Client;
 
 const migrationUrl = new URL(
   "../prisma/migrations/20260728130000_repair_inventory_entity_index_integrity/migration.sql",
+  import.meta.url,
+);
+const indexQuarantineMigrationUrl = new URL(
+  "../prisma/migrations/20260728115800_quarantine_damaged_inventory_unique_index/migration.sql",
   import.meta.url,
 );
 const observationSnapshotMigrationUrl = new URL(
@@ -94,6 +100,12 @@ async function createFixture(targetSchema: string, crossScope = false): Promise<
       "customerSiteId" TEXT
     );
     CREATE INDEX "InventoryEntity_entityKey_key" ON "InventoryEntity" ("entityKey");
+    -- Indexing properties disqualifies HOT updates for the fixture's
+    -- single-page table, so every properties rewrite inserts a fresh
+    -- entityKey index entry and re-validates uniqueness — matching the
+    -- full-page non-HOT behavior of the production table.
+    CREATE INDEX "InventoryEntity_properties_hazard_idx"
+      ON "InventoryEntity" USING GIN (properties);
 
     CREATE TABLE "InventoryRelationship" (
       id TEXT PRIMARY KEY,
@@ -293,6 +305,18 @@ async function createFixture(targetSchema: string, crossScope = false): Promise<
       WHERE id = 'entity-a-new'
     `);
   }
+
+  // Reproduce the collation-damaged index faithfully: the production index is
+  // UNIQUE in the catalog yet already holds committed duplicates it failed to
+  // reject (BI-CF4ADDAC). Flipping indisunique — rather than creating a unique
+  // index, which would refuse the duplicate fixture rows — means every later
+  // non-HOT row rewrite re-validates uniqueness through _bt_check_unique,
+  // exactly as the damaged fleet index does during the self-upgrade window.
+  await client.query(`
+    UPDATE pg_index SET indisunique = true
+    WHERE indexrelid =
+      format('%I.%I', current_schema(), 'InventoryEntity_entityKey_key')::regclass
+  `);
 }
 
 describeDatabase("InventoryEntity unique-index integrity migration", () => {
@@ -309,10 +333,15 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
     await client.query(`DROP SCHEMA IF EXISTS "${retrySchema}" CASCADE`);
     await client.query(`DROP SCHEMA IF EXISTS "${identityRecoverySchema}" CASCADE`);
     await client.query(`DROP SCHEMA IF EXISTS "${legacyIdentitySchema}" CASCADE`);
+    await client.query(`DROP SCHEMA IF EXISTS "${snapshotHazardSchema}" CASCADE`);
     await client.end();
   });
 
   it("converges canonical entities and relationships without losing evidence", async () => {
+    const indexQuarantineMigration = await readFile(
+      indexQuarantineMigrationUrl,
+      "utf8",
+    );
     const observationSnapshotMigration = await readFile(
       observationSnapshotMigrationUrl,
       "utf8",
@@ -335,6 +364,7 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
       humanIdentityProvenanceMigrationUrl,
       "utf8",
     );
+    await client.query(indexQuarantineMigration);
     await client.query(observationSnapshotMigration);
     await client.query(observationSnapshotTriggerMigration);
     await client.query(migration);
@@ -488,6 +518,7 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
     const beforeSecondPass =
       JSON.stringify((await client.query(`SELECT * FROM "InventoryEntity" ORDER BY id`)).rows)
       + JSON.stringify((await client.query(`SELECT * FROM "InventoryRelationship" ORDER BY id`)).rows);
+    await client.query(indexQuarantineMigration);
     await client.query(observationSnapshotMigration);
     await client.query(observationSnapshotTriggerMigration);
     await client.query(migration);
@@ -501,8 +532,44 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
     expect(afterSecondPass).toBe(beforeSecondPass);
   });
 
+  it("applies the observation snapshot while the damaged unique index still holds duplicates", async () => {
+    await createFixture(snapshotHazardSchema);
+    const indexQuarantineMigration = await readFile(
+      indexQuarantineMigrationUrl,
+      "utf8",
+    );
+    const observationSnapshotMigration = await readFile(
+      observationSnapshotMigrationUrl,
+      "utf8",
+    );
+
+    // Regression (self-upgrade 2026-07-29): the bulk snapshot rewrite forces a
+    // non-HOT version of every row, re-inserting entries into the damaged
+    // unique index and re-validating duplicates it never rejected — which
+    // aborted `migrate deploy` with 23505 before the repair migration ran.
+    // The quarantine migration must clear the hazard first.
+    await client.query(indexQuarantineMigration);
+    await client.query(observationSnapshotMigration);
+
+    expect(await scalar(`
+      SELECT count(*)::text value
+      FROM "InventoryEntity"
+      WHERE properties ? '_dpfObservationSnapshot'
+    `)).toBe(7);
+    expect(await scalar(`
+      SELECT count(*)::text value
+      FROM pg_indexes
+      WHERE schemaname = current_schema()
+        AND indexname = 'InventoryEntity_entityKey_key'
+    `)).toBe(0);
+  });
+
   it("rolls back the entire migration when duplicate keys cross ownership scopes", async () => {
     await createFixture(conflictSchema, true);
+    const indexQuarantineMigration = await readFile(
+      indexQuarantineMigrationUrl,
+      "utf8",
+    );
     const observationSnapshotMigration = await readFile(
       observationSnapshotMigrationUrl,
       "utf8",
@@ -513,6 +580,7 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
     );
     const migration = await readFile(migrationUrl, "utf8");
 
+    await client.query(indexQuarantineMigration);
     await client.query(observationSnapshotMigration);
     await client.query(observationSnapshotTriggerMigration);
     await expect(client.query(migration)).rejects.toThrow(/scope|ownership/i);
@@ -536,6 +604,10 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
 
   it("refreshes observation snapshots across a failed repair and later retry", async () => {
     await createFixture(retrySchema, true);
+    const indexQuarantineMigration = await readFile(
+      indexQuarantineMigrationUrl,
+      "utf8",
+    );
     const observationSnapshotMigration = await readFile(
       observationSnapshotMigrationUrl,
       "utf8",
@@ -559,6 +631,7 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
       "utf8",
     );
 
+    await client.query(indexQuarantineMigration);
     await client.query(observationSnapshotMigration);
     await client.query(observationSnapshotTriggerMigration);
     await expect(client.query(migration)).rejects.toThrow(/scope|ownership/i);
@@ -599,6 +672,10 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
 
   it("preserves a later human correction across forward recovery", async () => {
     await createFixture(identityRecoverySchema);
+    const indexQuarantineMigration = await readFile(
+      indexQuarantineMigrationUrl,
+      "utf8",
+    );
     const observationSnapshotMigration = await readFile(
       observationSnapshotMigrationUrl,
       "utf8",
@@ -622,6 +699,7 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
       "utf8",
     );
 
+    await client.query(indexQuarantineMigration);
     await client.query(observationSnapshotMigration);
     await client.query(observationSnapshotTriggerMigration);
     await client.query(migration);
@@ -673,6 +751,7 @@ describeDatabase("InventoryEntity unique-index integrity migration", () => {
       WHERE "resolutionType" IN ('human_confirmed', 'human_corrected')
     `);
     const migrations = await Promise.all([
+      indexQuarantineMigrationUrl,
       observationSnapshotMigrationUrl,
       observationSnapshotTriggerMigrationUrl,
       migrationUrl,
