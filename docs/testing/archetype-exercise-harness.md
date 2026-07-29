@@ -52,6 +52,14 @@ A pack at `scripts/harness/scenarios/<name>.mjs` default-exports:
 
 Adding an archetype = adding one pack file; the runner is archetype-agnostic.
 
+## The persona layer
+
+This harness stands up the scenario and demand; validating what each JOB
+experiences under its own login — landing fitness, journey productivity vs a
+pre-DPF baseline, role safety, WWWD/WSID knowledge capture — is the
+[archetype job validation loop](archetype-job-validation.md) (harness
+automation tracked as BI-0AA828E3).
+
 ## Known limits
 
 - Booking-demand driving (slot pick + contact submit) is not yet in the runner;

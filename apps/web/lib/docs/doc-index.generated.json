@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 578,
+  "pageCount": 579,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -7364,7 +7364,22 @@
         "what-it-does",
         "usage",
         "scenario-pack-contract",
+        "the-persona-layer",
         "known-limits"
+      ]
+    },
+    "docs/testing/archetype-job-validation.md": {
+      "publicHref": "/testing/archetype-job-validation/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "archetype-job-validation-loop",
+        "organizing-principle-the-physical-space-mirrored-virtually",
+        "the-loop-per-job-per-iteration",
+        "restaurant-job-matrix-first-pack",
+        "iteration-protocol",
+        "scenario-pack-jobs-contract-extension"
       ]
     },
     "docs/testing/ci-evidence.md": {
