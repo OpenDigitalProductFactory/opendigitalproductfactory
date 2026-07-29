@@ -4,9 +4,13 @@
 // "Identity needs review" / "Support review needed" appeared everywhere
 // with no path to actually resolve them.
 
-import { prisma } from "@dpf/db";
+import {
+  INVENTORY_RELATIONSHIP_CANONICAL_WHERE,
+  prisma,
+  resolveCanonicalInventoryEntityId,
+} from "@dpf/db";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { ConfirmSupportButtons, SetVersionForm } from "./inline-actions";
 
@@ -16,9 +20,14 @@ type Props = {
 
 export default async function InventoryEntityDetailPage({ params }: Props) {
   const { entityId } = await params;
+  const canonicalEntityId = await resolveCanonicalInventoryEntityId(prisma, entityId);
+  if (!canonicalEntityId) notFound();
+  if (canonicalEntityId !== entityId) {
+    redirect(`/inventory/entity/${canonicalEntityId}`);
+  }
 
   const entity = await prisma.inventoryEntity.findUnique({
-    where: { id: entityId },
+    where: { id: canonicalEntityId },
     select: {
       id: true,
       entityKey: true,
@@ -64,6 +73,7 @@ export default async function InventoryEntityDetailPage({ params }: Props) {
         select: { id: true, issueType: true, severity: true, summary: true, lastDetectedAt: true },
       },
       fromRelationships: {
+        where: INVENTORY_RELATIONSHIP_CANONICAL_WHERE,
         take: 10,
         select: {
           id: true,
@@ -73,6 +83,7 @@ export default async function InventoryEntityDetailPage({ params }: Props) {
         },
       },
       toRelationships: {
+        where: INVENTORY_RELATIONSHIP_CANONICAL_WHERE,
         take: 10,
         select: {
           id: true,

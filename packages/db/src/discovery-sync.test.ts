@@ -4,6 +4,7 @@ import {
   persistBootstrapDiscoveryRun,
   summarizeDiscoveryPersistence,
 } from "./discovery-sync";
+import { heapIntegrityRaw } from "../test/discovery-sync-test-support";
 
 describe("summarizeDiscoveryPersistence", () => {
   it("reports created, updated, and stale counts", () => {
@@ -26,15 +27,19 @@ describe("persistBootstrapDiscoveryRun", () => {
     const upsertedEntityPayloads: Array<Record<string, unknown>> = [];
     const createdSoftwareEvidence: Array<Record<string, unknown>> = [];
     const qualityIssues: Array<Record<string, unknown>> = [];
+    const persistenceEvents: string[] = [];
+    const relationshipFindMany = vi.fn().mockResolvedValue([]);
 
     const db = {
       $transaction: async <T>(fn: (tx: any) => Promise<T>): Promise<T> => fn({
+        ...heapIntegrityRaw(persistenceEvents),
         discoveryRun: {
           create: async () => ({ id: "run-1" }),
         },
         inventoryEntity: {
           findMany: async () => [],
           upsert: async ({ where, create, update }: { where: { entityKey: string }; create: Record<string, unknown>; update: Record<string, unknown> }) => {
+            persistenceEvents.push("upsert");
             upsertedEntityPayloads.push({ where, create, update });
             return ({
             id: `entity:${where.entityKey}`,
@@ -55,7 +60,7 @@ describe("persistBootstrapDiscoveryRun", () => {
           },
         },
         inventoryRelationship: {
-          findMany: async () => [],
+          findMany: relationshipFindMany,
           upsert: async ({ where, create }: {
             where: { fromEntityId_toEntityId_relationshipType: { fromEntityId: string; toEntityId: string; relationshipType: string } };
             create: { relationshipKey: string };
@@ -195,6 +200,16 @@ describe("persistBootstrapDiscoveryRun", () => {
 
     expect(projectInventoryEntity).toHaveBeenCalledTimes(3);
     expect(projectInventoryRelationship).toHaveBeenCalledTimes(1);
+    expect(persistenceEvents.indexOf("lock")).toBeGreaterThanOrEqual(0);
+    expect(persistenceEvents.indexOf("lock")).toBeLessThan(
+      persistenceEvents.indexOf("upsert"),
+    );
+    expect(relationshipFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        mergedIntoId: null,
+        status: { not: "superseded" },
+      }),
+    }));
     expect(upsertedEntityPayloads[0]?.create).toMatchObject({
       taxonomyNode: { connect: { nodeId: "foundational/compute/servers" } },
       attributionMethod: "rule",
@@ -230,6 +245,7 @@ describe("persistBootstrapDiscoveryRun", () => {
 
     const db = {
       $transaction: async <T>(fn: (tx: any) => Promise<T>): Promise<T> => fn({
+        ...heapIntegrityRaw(),
         discoveryRun: {
           create: async () => ({ id: "run-2" }),
         },
@@ -339,6 +355,7 @@ describe("persistBootstrapDiscoveryRun", () => {
 
     const db = {
       $transaction: async <T>(fn: (tx: any) => Promise<T>): Promise<T> => fn({
+        ...heapIntegrityRaw(),
         discoveryRun: { create: async () => ({ id: "run-3" }) },
         inventoryEntity: {
           findMany: async () => [],
@@ -476,6 +493,7 @@ describe("persistBootstrapDiscoveryRun", () => {
 
     const db = {
       $transaction: async <T>(fn: (tx: any) => Promise<T>): Promise<T> => fn({
+        ...heapIntegrityRaw(),
         discoveryRun: { create: async () => ({ id: "run-cross" }) },
         inventoryEntity: {
           findMany: async () => [],
@@ -636,6 +654,7 @@ describe("persistBootstrapDiscoveryRun", () => {
     ) {
       return {
         $transaction: async <T>(fn: (tx: any) => Promise<T>): Promise<T> => fn({
+          ...heapIntegrityRaw(),
           discoveryRun: { create: async () => ({ id: "run-res" }) },
           inventoryEntity: {
             findMany: async () => [],

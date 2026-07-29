@@ -41,11 +41,12 @@ BRANCH=""
 LEASE_ID="${DPF_DEV_PORTAL_LEASE_ID:-}"
 GIT_BIN="${DPF_DEV_PORTAL_GIT_BIN:-git}"
 CURL_BIN="${DPF_DEV_PORTAL_CURL_BIN:-curl}"
+DOCKER_BIN="${DPF_DEV_PORTAL_DOCKER_BIN:-docker}"
 COMMAND=""
 
 usage() {
   cat <<'EOF'
-Usage: scripts/dev-portal-lease.sh <claim|status|release> [options]
+Usage: scripts/dev-portal-lease.sh <claim|refresh|status|release> [options]
 
 Lease-gate the :3001 Contributor preview against the governed shared
 local-integration-ci lease so it stops being an unleased shared singleton that
@@ -54,6 +55,8 @@ silently re-binds between worktrees and writes to the live DB.
 Subcommands:
   claim     Claim the shared lease for :3001 before binding the preview.
             Refuses (non-zero) when another holder is active and prints them.
+  refresh   Claim the lease, stop the shared preview, and restart it from this
+            worktree. Keeps the lease on success; releases it on startup failure.
   status    Print the current holder for the shared lease (if any).
   release   Release a lease previously claimed for the preview.
 
@@ -156,9 +159,9 @@ process.stdout.write(match ? JSON.stringify(match) : "");
 
 if [ "$#" -gt 0 ]; then
   case "$1" in
-    claim|status|release) COMMAND="$1"; shift ;;
+    claim|refresh|status|release) COMMAND="$1"; shift ;;
     --help|-h) usage; exit 0 ;;
-    *) die "unknown subcommand: $1 (expected claim|status|release)" ;;
+    *) die "unknown subcommand: $1 (expected claim|refresh|status|release)" ;;
   esac
 fi
 
@@ -183,31 +186,18 @@ if [ -z "$BRANCH" ]; then
   BRANCH="$("$GIT_BIN" rev-parse --abbrev-ref HEAD 2>/dev/null || printf 'unknown')"
 fi
 
-case "$COMMAND" in
-  status)
-    list_response="$(mcp_call list_nonprod_environment_leases '{}' | extract_tool_result)"
-    holder="$(printf '%s' "$list_response" | active_lease_for_env "$ENVIRONMENT_KEY")"
-    if [ -n "$holder" ]; then
-      printf 'HELD %s\n' "$(printf '%s' "$holder" | describe_holder)"
-    else
-      printf 'FREE no active lease on %s\n' "$ENVIRONMENT_KEY"
-    fi
-    exit 0
-    ;;
+release_lease() {
+  lease_id_to_release="$1"
+  release_response="$(mcp_call release_nonprod_environment_lease "{\"leaseId\":$(json_escape "$lease_id_to_release")}" | extract_tool_result)"
+  release_success="$(printf '%s' "$release_response" | field success)"
+  [ "$release_success" = "true" ] || return 1
+  printf 'released %s\n' "$lease_id_to_release"
+}
 
-  release)
-    [ -n "$LEASE_ID" ] || die "release requires --lease-id (or DPF_DEV_PORTAL_LEASE_ID)"
-    release_response="$(mcp_call release_nonprod_environment_lease "{\"leaseId\":$(json_escape "$LEASE_ID")}" | extract_tool_result)"
-    release_success="$(printf '%s' "$release_response" | field success)"
-    [ "$release_success" = "true" ] || die "failed to release lease $LEASE_ID: $release_response"
-    printf 'released %s\n' "$LEASE_ID"
-    exit 0
-    ;;
-
-  claim)
-    [ -n "$WORKTREE_PATH" ] || die "DPF_DEV_WORKTREE (or --worktree) must be set so the lease records which worktree :3001 is bound to"
-    expires_at="$(node -e 'process.stdout.write(new Date(Date.now() + Number(process.argv[1]) * 60000).toISOString())' "$EXPIRES_MINUTES")"
-    claim_args="$(node -e '
+claim_lease() {
+  [ -n "$WORKTREE_PATH" ] || die "DPF_DEV_WORKTREE (or --worktree) must be set so the lease records which worktree :3001 is bound to"
+  expires_at="$(node -e 'process.stdout.write(new Date(Date.now() + Number(process.argv[1]) * 60000).toISOString())' "$EXPIRES_MINUTES")"
+  claim_args="$(node -e '
 const args = {
   environmentKey: process.argv[1],
   ownerProvider: process.argv[2],
@@ -223,27 +213,30 @@ const args = {
 };
 process.stdout.write(JSON.stringify(args));
 ' "$ENVIRONMENT_KEY" "$OWNER_PROVIDER" "$OWNER_SESSION_ID" "$WORKTREE_PATH" "$BRANCH" "$URL" "$(json_array_numbers "$PORTS")" "$expires_at")"
-    claim_response="$(mcp_call claim_nonprod_environment_lease "$claim_args" | extract_tool_result)"
-    claim_success="$(printf '%s' "$claim_response" | field success)"
-    claim_error="$(printf '%s' "$claim_response" | field error)"
-    if [ "$claim_success" = "true" ]; then
-      lease_id="$(printf '%s' "$claim_response" | field entityId)"
-      [ -n "$lease_id" ] || lease_id="$(printf '%s' "$claim_response" | field data.lease.leaseId)"
-      admission_status="$(printf '%s' "$claim_response" | field data.admission.status)"
-      if [ "$admission_status" = "queued" ]; then
-        queue_position="$(printf '%s' "$claim_response" | field data.admission.queuePosition)"
-        printf '%s\n' "WAITING lease ${lease_id} is queued at position ${queue_position:-unknown}; :3001 is not owned yet." >&2
-        printf '%s\n' "Retry this same claim after the admitted holder releases; the stable claim key preserves FIFO position." >&2
-        exit 3
-      fi
-      printf 'LEASE_ID=%s\n' "$lease_id"
-      printf 'admitted %s for :3001 → %s (%s)\n' "$ENVIRONMENT_KEY" "$WORKTREE_PATH" "$BRANCH"
-      exit 0
+  claim_response="$(mcp_call claim_nonprod_environment_lease "$claim_args" | extract_tool_result)"
+  claim_success="$(printf '%s' "$claim_response" | field success)"
+  claim_error="$(printf '%s' "$claim_response" | field error)"
+  if [ "$claim_success" = "true" ]; then
+    CLAIMED_LEASE_ID="$(printf '%s' "$claim_response" | field entityId)"
+    [ -n "$CLAIMED_LEASE_ID" ] \
+      || CLAIMED_LEASE_ID="$(printf '%s' "$claim_response" | field data.lease.leaseId)"
+    [ -n "$CLAIMED_LEASE_ID" ] \
+      || die "lease claim succeeded without returning a lease id"
+    admission_status="$(printf '%s' "$claim_response" | field data.admission.status)"
+    if [ "$admission_status" = "queued" ]; then
+      queue_position="$(printf '%s' "$claim_response" | field data.admission.queuePosition)"
+      printf '%s\n' "WAITING lease ${CLAIMED_LEASE_ID} is queued at position ${queue_position:-unknown}; :3001 is not owned yet." >&2
+      printf '%s\n' "Retry this same claim after the admitted holder releases; the stable claim key preserves FIFO position." >&2
+      return 3
     fi
-    if [ "$claim_error" = "lease_conflict" ]; then
-      holder="$(printf '%s' "$claim_response" | field data.active)"
-      # data.active is an object; re-extract it as JSON for describe_holder.
-      holder_json="$(node -e '
+    printf 'LEASE_ID=%s\n' "$CLAIMED_LEASE_ID"
+    printf 'admitted %s for :3001 -> %s (%s)\n' "$ENVIRONMENT_KEY" "$WORKTREE_PATH" "$BRANCH"
+    return 0
+  fi
+  if [ "$claim_error" = "lease_conflict" ]; then
+    holder="$(printf '%s' "$claim_response" | field data.active)"
+    # data.active is an object; re-extract it as JSON for describe_holder.
+    holder_json="$(node -e '
 const fs = require("node:fs");
 const resp = JSON.parse(fs.readFileSync(0, "utf8") || "{}");
 const active = resp && resp.data && resp.data.active ? resp.data.active : null;
@@ -252,12 +245,59 @@ process.stdout.write(active ? JSON.stringify(active) : "");
 $claim_response
 EOF
 )"
-      holder_line="$(printf '%s' "$holder_json" | describe_holder)"
-      printf '%s\n' "REFUSING to silently re-bind :3001." >&2
-      printf '%s\n' "The shared ${ENVIRONMENT_KEY} lease is already held by: ${holder_line:-$holder}" >&2
-      printf '%s\n' "Coordinate explicitly: ask that holder to release, or take over only after they release their lease (scripts/dev-portal-lease.sh release --lease-id <id>)." >&2
-      exit 3
+    holder_line="$(printf '%s' "$holder_json" | describe_holder)"
+    printf '%s\n' "REFUSING to silently re-bind :3001." >&2
+    printf '%s\n' "The shared ${ENVIRONMENT_KEY} lease is already held by: ${holder_line:-$holder}" >&2
+    printf '%s\n' "Coordinate explicitly: ask that holder to release, or take over only after they release their lease (scripts/dev-portal-lease.sh release --lease-id <id>)." >&2
+    return 3
+  fi
+  die "failed to claim ${ENVIRONMENT_KEY} lease for :3001: $claim_response"
+}
+
+case "$COMMAND" in
+  status)
+    list_response="$(mcp_call list_nonprod_environment_leases '{}' | extract_tool_result)"
+    holder="$(printf '%s' "$list_response" | active_lease_for_env "$ENVIRONMENT_KEY")"
+    if [ -n "$holder" ]; then
+      printf 'HELD %s\n' "$(printf '%s' "$holder" | describe_holder)"
+    else
+      printf 'FREE no active lease on %s\n' "$ENVIRONMENT_KEY"
     fi
-    die "failed to claim ${ENVIRONMENT_KEY} lease for :3001: $claim_response"
+    exit 0
+    ;;
+
+  release)
+    [ -n "$LEASE_ID" ] || die "release requires --lease-id (or DPF_DEV_PORTAL_LEASE_ID)"
+    release_lease "$LEASE_ID" || die "failed to release lease $LEASE_ID"
+    exit 0
+    ;;
+
+  claim)
+    claim_lease
+    exit 0
+    ;;
+
+  refresh)
+    if [ -z "$WORKTREE_PATH" ]; then
+      WORKTREE_PATH="$("$GIT_BIN" rev-parse --show-toplevel 2>/dev/null)" \
+        || die "could not resolve the worktree to bind"
+    fi
+    claim_lease
+    cleanup_failed_refresh() {
+      refresh_status="$?"
+      trap - EXIT HUP INT TERM
+      [ "$refresh_status" -ne 0 ] || refresh_status=1
+      if [ -n "${CLAIMED_LEASE_ID:-}" ]; then
+        release_lease "$CLAIMED_LEASE_ID" >/dev/null 2>&1 || true
+      fi
+      exit "$refresh_status"
+    }
+    trap cleanup_failed_refresh EXIT HUP INT TERM
+    "$DOCKER_BIN" compose -p dpf --profile dev stop dev-portal
+    "$DOCKER_BIN" compose -p dpf --profile dev up -d dev-portal
+    trap - EXIT HUP INT TERM
+    printf '%s\n' "Contributor preview refreshed; lease remains held as $CLAIMED_LEASE_ID."
+    printf '%s\n' "Release when verification ends: scripts/dev-portal-lease.sh release --lease-id $CLAIMED_LEASE_ID"
+    exit 0
     ;;
 esac

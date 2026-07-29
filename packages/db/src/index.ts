@@ -491,6 +491,9 @@ export * from "./inventory-cci-bridge";
 // HAM Phase D2 (BI-1093AF1C, spec §7): read-model reconciliation of discovered InventoryEntity
 // against the FixedAsset register (serial-only) — no authority move, no persistence.
 export * from "./inventory-asset-bridge";
+export * from "./inventory-entity-lifecycle";
+export * from "./inventory-entity-heap-integrity";
+export * from "./inventory-entity-merge-references";
 export * from "./device-placement";
 export * from "./portfolio-sources";
 export * from "./backlog-portfolio";

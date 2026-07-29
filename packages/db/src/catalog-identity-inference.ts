@@ -26,6 +26,7 @@
 // 10k+-entity estate cannot blow the budget in one pass. Stalest-first + poll-on-
 // request, the same governed-loop shape as catalog-enrichment-sweep.ts.
 //
+import { INVENTORY_ENTITY_CANONICAL_WHERE } from "./inventory-entity-lifecycle";
 // Pure orchestration over an injectable inference fn + client (no prisma import), so
 // it stays unit-testable with mocks — the governed apps/web runner wires the real
 // prisma + a routeAndCall(minimize_cost) inference fn (dynamic model discovery, no
@@ -326,10 +327,12 @@ export async function runIdentityInferenceFallback(
     ],
   };
 
-  result.unresolvedTotal = await db.inventoryEntity.count({ where: unresolvedWhere });
+  result.unresolvedTotal = await db.inventoryEntity.count({
+    where: { ...INVENTORY_ENTITY_CANONICAL_WHERE, ...unresolvedWhere },
+  });
 
   const candidates = await db.inventoryEntity.findMany({
-    where: unresolvedWhere,
+    where: { ...INVENTORY_ENTITY_CANONICAL_WHERE, ...unresolvedWhere },
     // Stalest-first so repeated polls rotate through the whole tail. An auto-applied
     // entity leaves the pool (catalogIdentityId set); a shadow-settled one is skipped
     // below, so forward progress is guaranteed without a cursor.

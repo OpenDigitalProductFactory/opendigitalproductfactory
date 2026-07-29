@@ -20,7 +20,7 @@
  * `requiredFields` value is treated as if there were no required fields.
  */
 
-import type { Prisma } from "@dpf/db";
+import { INVENTORY_ENTITY_CANONICAL_WHERE, type Prisma } from "@dpf/db";
 
 export interface PortfolioCompletenessScores {
   /** % (0–100) of products in the portfolio with all required fields populated. Null when no product has a non-empty required-fields list. */
@@ -74,6 +74,7 @@ export const DIGITAL_PRODUCT_COMPLETENESS_SELECT = {
   id: true,
   observationConfig: true,
   inventoryEntities: {
+    where: INVENTORY_ENTITY_CANONICAL_WHERE,
     select: {
       manufacturer: true,
       observedVersion: true,

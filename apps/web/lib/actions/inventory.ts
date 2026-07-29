@@ -1,6 +1,10 @@
 "use server";
 
-import { prisma, promoteInventoryEntities } from "@dpf/db";
+import {
+  prisma,
+  promoteInventoryEntities,
+  resolveCanonicalInventoryEntityId,
+} from "@dpf/db";
 import {
   buildDiscoveryEvidencePacket,
   DEFAULT_DISCOVERY_TRIAGE_THRESHOLDS,
@@ -125,8 +129,14 @@ function buildActionEvidencePacket(entity: ActionTriageEntity): DiscoveryEvidenc
 }
 
 async function loadTriageEntity(entityId: string): Promise<ActionTriageEntity | null> {
+  const canonicalEntityId = await resolveCanonicalInventoryEntityId(
+    prisma as never,
+    entityId,
+  );
+  if (!canonicalEntityId) return null;
+
   const entity = await prisma.inventoryEntity.findUnique({
-    where: { id: entityId },
+    where: { id: canonicalEntityId },
     select: {
       id: true,
       entityKey: true,
@@ -266,9 +276,14 @@ export async function acceptAttribution(
 ): Promise<{ ok: boolean; error?: string }> {
   const authResult = await requireManageDiscovery();
   if (!authResult.ok) return authResult;
+  const canonicalEntityId = await resolveCanonicalInventoryEntityId(
+    prisma as never,
+    entityId,
+  );
+  if (!canonicalEntityId) return { ok: false, error: "Inventory entity not found" };
 
   await prisma.inventoryEntity.update({
-    where: { id: entityId },
+    where: { id: canonicalEntityId },
     data: { attributionStatus: "attributed" },
   });
 
@@ -285,6 +300,11 @@ export async function reassignTaxonomy(
 ): Promise<{ ok: boolean; error?: string }> {
   const authResult = await requireManageDiscovery();
   if (!authResult.ok) return authResult;
+  const canonicalEntityId = await resolveCanonicalInventoryEntityId(
+    prisma as never,
+    entityId,
+  );
+  if (!canonicalEntityId) return { ok: false, error: "Inventory entity not found" };
 
   // Look up taxonomy node to get portfolioId
   const node = await prisma.taxonomyNode.findFirst({
@@ -301,7 +321,7 @@ export async function reassignTaxonomy(
     : null;
 
   await prisma.inventoryEntity.update({
-    where: { id: entityId },
+    where: { id: canonicalEntityId },
     data: {
       taxonomyNodeId: node.id,
       attributionStatus: "attributed",
@@ -322,9 +342,14 @@ export async function dismissEntity(
 ): Promise<{ ok: boolean; error?: string }> {
   const authResult = await requireManageDiscovery();
   if (!authResult.ok) return authResult;
+  const canonicalEntityId = await resolveCanonicalInventoryEntityId(
+    prisma as never,
+    entityId,
+  );
+  if (!canonicalEntityId) return { ok: false, error: "Inventory entity not found" };
 
   await prisma.inventoryEntity.update({
-    where: { id: entityId },
+    where: { id: canonicalEntityId },
     data: { attributionStatus: "dismissed" },
   });
 
@@ -341,7 +366,7 @@ export async function requestDiscoveryEvidence(
   const entity = await loadTriageEntity(entityId);
   if (!entity) return { ok: false, error: "Inventory entity not found" };
 
-  const latestDecision = await loadLatestTriageDecision(entityId);
+  const latestDecision = await loadLatestTriageDecision(entity.id);
   await recordHumanTriageDecision(
     authResult.user.id,
     entity,
@@ -363,7 +388,7 @@ export async function markTaxonomyGapForReview(
   const entity = await loadTriageEntity(entityId);
   if (!entity) return { ok: false, error: "Inventory entity not found" };
 
-  const latestDecision = await loadLatestTriageDecision(entityId);
+  const latestDecision = await loadLatestTriageDecision(entity.id);
   await recordHumanTriageDecision(
     authResult.user.id,
     entity,

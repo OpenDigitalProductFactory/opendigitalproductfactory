@@ -2,7 +2,11 @@
 //
 // Inventory tab — discovered infrastructure and software entities for this product.
 
-import { prisma } from "@dpf/db";
+import {
+  INVENTORY_ENTITY_CANONICAL_WHERE,
+  INVENTORY_RELATIONSHIP_CANONICAL_WHERE,
+  prisma,
+} from "@dpf/db";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 
@@ -19,7 +23,7 @@ export default async function ProductInventoryPage({ params }: Props) {
   const [product, entities] = await Promise.all([
     prisma.digitalProduct.findUnique({ where: { id }, select: { id: true, name: true } }),
     prisma.inventoryEntity.findMany({
-      where: { digitalProductId: id },
+      where: { ...INVENTORY_ENTITY_CANONICAL_WHERE, digitalProductId: id },
       orderBy: [{ providerView: "asc" }, { name: "asc" }],
       select: {
         id: true,
@@ -65,8 +69,8 @@ export default async function ProductInventoryPage({ params }: Props) {
         },
         _count: {
           select: {
-            fromRelationships: true,
-            toRelationships: true,
+            fromRelationships: { where: INVENTORY_RELATIONSHIP_CANONICAL_WHERE },
+            toRelationships: { where: INVENTORY_RELATIONSHIP_CANONICAL_WHERE },
           },
         },
       },

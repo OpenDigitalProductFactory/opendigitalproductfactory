@@ -13,6 +13,7 @@ import {
 import {
   buildDeviceFingerprintObservation,
   DISCOVERY_TRIAGE_AGENT_ID,
+  INVENTORY_ENTITY_CANONICAL_WHERE,
   investigateUnidentifiedDevice,
   prisma,
   recordInvestigationOutcome,
@@ -399,6 +400,7 @@ export async function runDiscoveryTriagePass(
   ));
   const entities = await db.inventoryEntity.findMany({
     where: {
+      ...INVENTORY_ENTITY_CANONICAL_WHERE,
       OR: [
         { attributionStatus: "needs_review" },
         { attributionConfidence: { lt: thresholds.coworkerAutoApply } },
@@ -633,6 +635,7 @@ export async function maybeTriggerDiscoveryTriageForVolume(
   const threshold = options.threshold ?? DEFAULT_DISCOVERY_TRIAGE_VOLUME_THRESHOLD;
   const pendingCount = await db.inventoryEntity.count({
     where: {
+      ...INVENTORY_ENTITY_CANONICAL_WHERE,
       attributionStatus: "needs_review",
     },
   });

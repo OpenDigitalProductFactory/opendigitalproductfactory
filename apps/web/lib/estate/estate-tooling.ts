@@ -1,4 +1,9 @@
-import { prisma } from "@dpf/db";
+import {
+  INVENTORY_ENTITY_CANONICAL_WHERE,
+  INVENTORY_RELATIONSHIP_CANONICAL_WHERE,
+  prisma,
+  resolveCanonicalInventoryEntityId,
+} from "@dpf/db";
 import type { Prisma } from "@dpf/db";
 
 import { createEstateItem } from "@/lib/estate/estate-item";
@@ -47,8 +52,8 @@ const ESTATE_ENTITY_SELECT: Prisma.InventoryEntitySelect = {
   },
   _count: {
     select: {
-      fromRelationships: true,
-      toRelationships: true,
+      fromRelationships: { where: INVENTORY_RELATIONSHIP_CANONICAL_WHERE },
+      toRelationships: { where: INVENTORY_RELATIONSHIP_CANONICAL_WHERE },
     },
   },
 };
@@ -87,8 +92,12 @@ export async function resolveEstateEntity(
   const productId = getEstateProductIdFromRoute(routeContext);
 
   if (params.entityId) {
+    const canonicalEntityId = await resolveCanonicalInventoryEntityId(prisma, params.entityId);
+    if (!canonicalEntityId) {
+      return { kind: "missing", reason: `No estate item was found for id "${params.entityId}".` };
+    }
     const entity = await prisma.inventoryEntity.findUnique({
-      where: { id: params.entityId },
+      where: { id: canonicalEntityId },
       select: ESTATE_ENTITY_SELECT,
     });
     if (!entity) {
@@ -99,7 +108,7 @@ export async function resolveEstateEntity(
 
   if (params.entityKey) {
     const entity = await prisma.inventoryEntity.findFirst({
-      where: { entityKey: params.entityKey },
+      where: { ...INVENTORY_ENTITY_CANONICAL_WHERE, entityKey: params.entityKey },
       select: ESTATE_ENTITY_SELECT,
     });
     if (!entity) {
@@ -119,6 +128,7 @@ export async function resolveEstateEntity(
   const whereBase = productId ? { digitalProductId: productId } : {};
   const exactMatches = await prisma.inventoryEntity.findMany({
     where: {
+      ...INVENTORY_ENTITY_CANONICAL_WHERE,
       ...whereBase,
       name: { equals: trimmedName, mode: "insensitive" },
     },
@@ -148,6 +158,7 @@ export async function resolveEstateEntity(
 
   const containsMatches = await prisma.inventoryEntity.findMany({
     where: {
+      ...INVENTORY_ENTITY_CANONICAL_WHERE,
       ...whereBase,
       name: { contains: trimmedName, mode: "insensitive" },
     },
@@ -188,6 +199,7 @@ export async function summarizeProductEstate(routeContext?: string | null) {
       id: true,
       name: true,
       inventoryEntities: {
+        where: INVENTORY_ENTITY_CANONICAL_WHERE,
         select: ESTATE_ENTITY_SELECT,
       },
     },
@@ -244,7 +256,12 @@ export async function summarizeDiscoveryOperations() {
         relationshipCount: true,
       },
     }),
-    prisma.inventoryEntity.count({ where: { attributionStatus: "needs_review" } }),
+    prisma.inventoryEntity.count({
+      where: {
+        ...INVENTORY_ENTITY_CANONICAL_WHERE,
+        attributionStatus: "needs_review",
+      },
+    }),
     prisma.portfolioQualityIssue.groupBy({
       by: ["issueType"],
       where: { status: "open" },
@@ -265,13 +282,16 @@ export async function summarizeDiscoveryOperations() {
 }
 
 export async function loadEstateBlastRadius(entityId: string) {
+  const canonicalEntityId = await resolveCanonicalInventoryEntityId(prisma, entityId);
+  if (!canonicalEntityId) return null;
+
   const entity = await prisma.inventoryEntity.findUnique({
-    where: { id: entityId },
+    where: { id: canonicalEntityId },
     select: {
       id: true,
       name: true,
       fromRelationships: {
-        where: { status: "active" },
+        where: { ...INVENTORY_RELATIONSHIP_CANONICAL_WHERE, status: "active" },
         take: 12,
         select: {
           relationshipType: true,
@@ -287,7 +307,7 @@ export async function loadEstateBlastRadius(entityId: string) {
         },
       },
       toRelationships: {
-        where: { status: "active" },
+        where: { ...INVENTORY_RELATIONSHIP_CANONICAL_WHERE, status: "active" },
         take: 12,
         select: {
           relationshipType: true,

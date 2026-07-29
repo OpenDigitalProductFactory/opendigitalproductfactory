@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,9 +14,14 @@ import { test } from "node:test";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 const scriptPath = fileURLToPath(new URL("../../scripts/dev-portal-lease.sh", import.meta.url));
+const shellPath =
+  process.platform === "win32"
+  && existsSync("C:/Program Files/Git/bin/sh.exe")
+    ? "C:/Program Files/Git/bin/sh.exe"
+    : "sh";
 
 function runLease(args, options = {}) {
-  return spawnSync("sh", [scriptPath, ...args], {
+  return spawnSync(shellPath, [scriptPath, ...args], {
     cwd: repoRoot,
     encoding: "utf8",
     env: options.env ? { ...options.env } : process.env,
@@ -23,8 +34,10 @@ function runLease(args, options = {}) {
 //   "queued"   -> durable FIFO admission while another holder is active
 function makeStubs(temp, mode) {
   const callsFile = join(temp, "calls.ndjson");
+  const dockerCallsFile = join(temp, "docker-calls.txt");
   const gitStub = join(temp, "git");
   const curlStub = join(temp, "curl");
+  const dockerStub = join(temp, "docker");
 
   writeFileSync(gitStub, `#!/bin/sh
 if [ "$1" = "rev-parse" ] && [ "$2" = "--abbrev-ref" ]; then
@@ -68,9 +81,18 @@ case "$tool" in
     ;;
 esac
 `);
+  writeFileSync(dockerStub, `#!/bin/sh
+printf '%s\\n' "$*" >> "${dockerCallsFile}"
+if [ -n "\${DPF_DEV_PORTAL_DOCKER_FAIL_ON:-}" ] \
+  && printf '%s' "$*" | grep -q "\${DPF_DEV_PORTAL_DOCKER_FAIL_ON}"; then
+  exit 42
+fi
+exit 0
+`);
   chmodSync(gitStub, 0o755);
   chmodSync(curlStub, 0o755);
-  return { callsFile, gitStub, curlStub };
+  chmodSync(dockerStub, 0o755);
+  return { callsFile, dockerCallsFile, gitStub, curlStub, dockerStub };
 }
 
 function baseEnv(stubs, extra = {}) {
@@ -79,6 +101,7 @@ function baseEnv(stubs, extra = {}) {
     DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
     DPF_DEV_PORTAL_GIT_BIN: stubs.gitStub,
     DPF_DEV_PORTAL_CURL_BIN: stubs.curlStub,
+    DPF_DEV_PORTAL_DOCKER_BIN: stubs.dockerStub,
     DPF_DEV_WORKTREE: "/tmp/dpf-worktree",
     ...extra,
   };
@@ -152,4 +175,40 @@ test("dev-portal-lease.sh release releases the named lease", () => {
   const calls = readFileSync(stubs.callsFile, "utf8").trim().split("\n").map((line) => JSON.parse(line));
   assert.equal(calls[0].params.name, "release_nonprod_environment_lease");
   assert.equal(calls[0].params.arguments.leaseId, "NPEL-MINE");
+});
+
+test("dev-portal-lease.sh refresh claims before stopping and restarting the shared preview", () => {
+  const temp = mkdtempSync(join(tmpdir(), "dpf-dev-portal-lease-"));
+  const stubs = makeStubs(temp, "claimed");
+  const result = runLease(["refresh"], { env: baseEnv(stubs) });
+
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+  const calls = readFileSync(stubs.callsFile, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+  assert.equal(calls[0].params.name, "claim_nonprod_environment_lease");
+  assert.equal(calls.length, 1);
+  assert.deepEqual(
+    readFileSync(stubs.dockerCallsFile, "utf8").trim().split("\n"),
+    [
+      "compose -p dpf --profile dev stop dev-portal",
+      "compose -p dpf --profile dev up -d dev-portal",
+    ],
+  );
+  assert.match(result.stdout, /LEASE_ID=NPEL-MINE/);
+  assert.match(result.stdout, /lease remains held/i);
+});
+
+test("dev-portal-lease.sh refresh releases its lease when Docker refresh fails", () => {
+  const temp = mkdtempSync(join(tmpdir(), "dpf-dev-portal-lease-"));
+  const stubs = makeStubs(temp, "claimed");
+  const result = runLease(["refresh"], {
+    env: baseEnv(stubs, { DPF_DEV_PORTAL_DOCKER_FAIL_ON: "up -d" }),
+  });
+
+  assert.notEqual(result.status, 0);
+  const calls = readFileSync(stubs.callsFile, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+  assert.deepEqual(
+    calls.map((call) => call.params.name),
+    ["claim_nonprod_environment_lease", "release_nonprod_environment_lease"],
+  );
+  assert.equal(calls[1].params.arguments.leaseId, "NPEL-MINE");
 });

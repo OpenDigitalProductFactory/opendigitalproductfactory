@@ -20,7 +20,7 @@
 // and will light up once Chunk 4 lands without further changes here.
 
 import { notFound } from "next/navigation";
-import { prisma } from "@dpf/db";
+import { INVENTORY_ENTITY_CANONICAL_WHERE, prisma } from "@dpf/db";
 import { toDigitalProductViewModel } from "@/lib/portfolio/digital-product-view-model";
 import { DigitalProductDetail } from "@/components/portfolio/DigitalProductDetail";
 
@@ -46,6 +46,7 @@ export default async function DigitalProductPage({ params }: Props) {
       taxonomyNode: { select: { nodeId: true, name: true } },
       // TODO(Chunk 4 Task 4.1): add enrichmentStatus + lastEnrichedAt once schema lands.
       inventoryEntities: {
+        where: INVENTORY_ENTITY_CANONICAL_WHERE,
         select: {
           id: true,
           name: true,

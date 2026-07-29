@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-// @ts-expect-error — plain .mjs guard script, no type declarations by design
-import { checkCollationStability } from "./index-integrity-guard.mjs";
+// @ts-expect-error — plain .mjs runtime module, no type declarations by design
+import {
+  checkCollationStability,
+  checkIndexIntegrity,
+} from "./index-integrity-core.mjs";
 
 /**
  * Stub client returning canned rows for the two queries checkCollationStability
@@ -92,5 +95,170 @@ describe("checkCollationStability", () => {
     );
 
     expect(kinds(result.findings)).not.toContain("collation-provider-mismatch");
+  });
+});
+
+describe("checkIndexIntegrity", () => {
+  it("requires an existing amcheck extension without mutating the source database", async () => {
+    const queries: Array<{ sql: string; params: unknown[] }> = [];
+    const responses = [
+      { rows: [{ installed: true }] },
+      {
+        rows: [{
+          table_name: "InventoryEntity",
+          index_name: "InventoryEntity_entityKey_key",
+          is_unique: true,
+          is_valid: true,
+          is_ready: true,
+          is_live: true,
+        }],
+      },
+      { rows: [] },
+    ];
+    const client = {
+      query: async (sql: string, params: unknown[] = []) => {
+        queries.push({ sql, params });
+        return responses.shift() ?? { rows: [] };
+      },
+    };
+
+    const report = await checkIndexIntegrity(client, {
+      amcheckMode: "require",
+      schema: "public",
+      table: "InventoryEntity",
+      uniqueOnly: false,
+      requiredIndexes: [{ name: "InventoryEntity_entityKey_key", unique: true }],
+    });
+
+    expect(report).toMatchObject({
+      indexesChecked: 1,
+      corrupted: [],
+      failed: false,
+    });
+    expect(queries.some(({ sql }) => /\bCREATE\b/i.test(sql))).toBe(false);
+    expect(queries[1]?.params).toEqual([false, "InventoryEntity", "public"]);
+    expect(queries[2]?.sql).toContain(
+      "public.bt_index_parent_check($1::regclass, true, true)",
+    );
+    expect(queries[2]?.params).toEqual([
+      '"public"."InventoryEntity_entityKey_key"',
+    ]);
+  });
+
+  it("fails closed when amcheck is not already installed in read-only mode", async () => {
+    const client = {
+      query: async () => ({ rows: [{ installed: false }] }),
+    };
+
+    await expect(checkIndexIntegrity(client, {
+      amcheckMode: "require",
+      schema: "public",
+      table: "InventoryEntity",
+    })).rejects.toThrow(
+      "amcheck must already be installed before checking a production source",
+    );
+  });
+
+  it("reports a heap-divergent InventoryEntity index as blocking", async () => {
+    const responses = [
+      { rows: [{ installed: true }] },
+      {
+        rows: [{
+          table_name: "InventoryEntity",
+          index_name: "InventoryEntity_entityKey_key",
+          is_unique: true,
+          is_valid: true,
+          is_ready: true,
+          is_live: true,
+        }],
+      },
+    ];
+    const client = {
+      query: async () => {
+        const response = responses.shift();
+        if (response) return response;
+        throw new Error("heap tuple (0,42) from table is missing from index");
+      },
+    };
+
+    const report = await checkIndexIntegrity(client, {
+      amcheckMode: "require",
+      schema: "public",
+      table: "InventoryEntity",
+      requiredIndexes: [{ name: "InventoryEntity_entityKey_key", unique: true }],
+    });
+
+    expect(report.failed).toBe(true);
+    expect(report.corrupted).toEqual([
+      expect.objectContaining({
+        table: "InventoryEntity",
+        index: "InventoryEntity_entityKey_key",
+        isUnique: true,
+        error: expect.stringContaining("missing from index"),
+      }),
+    ]);
+  });
+
+  it("fails closed when the required InventoryEntity unique index is missing", async () => {
+    const responses = [
+      { rows: [{ installed: true }] },
+      { rows: [] },
+    ];
+    const client = {
+      query: async () => responses.shift() ?? { rows: [] },
+    };
+
+    const report = await checkIndexIntegrity(client, {
+      amcheckMode: "require",
+      schema: "public",
+      table: "InventoryEntity",
+      requiredIndexes: [{ name: "InventoryEntity_entityKey_key", unique: true }],
+    });
+
+    expect(report.failed).toBe(true);
+    expect(report.corrupted).toEqual([
+      expect.objectContaining({
+        table: "InventoryEntity",
+        index: "InventoryEntity_entityKey_key",
+        isUnique: false,
+        error: expect.stringContaining("required index is missing"),
+      }),
+    ]);
+  });
+
+  it("fails closed when the required unique index is not valid, ready, and live", async () => {
+    const responses = [
+      { rows: [{ installed: true }] },
+      {
+        rows: [{
+          table_name: "InventoryEntity",
+          index_name: "InventoryEntity_entityKey_key",
+          is_unique: true,
+          is_valid: false,
+          is_ready: true,
+          is_live: false,
+        }],
+      },
+      { rows: [] },
+    ];
+    const client = {
+      query: async () => responses.shift() ?? { rows: [] },
+    };
+
+    const report = await checkIndexIntegrity(client, {
+      amcheckMode: "require",
+      schema: "public",
+      table: "InventoryEntity",
+      requiredIndexes: [{ name: "InventoryEntity_entityKey_key", unique: true }],
+    });
+
+    expect(report.failed).toBe(true);
+    expect(report.corrupted).toEqual([
+      expect.objectContaining({
+        index: "InventoryEntity_entityKey_key",
+        isUnique: true,
+        error: expect.stringContaining("valid=false, ready=true, live=false"),
+      }),
+    ]);
   });
 });

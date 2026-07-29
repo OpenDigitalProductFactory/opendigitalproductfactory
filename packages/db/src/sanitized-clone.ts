@@ -64,6 +64,13 @@ export function shouldSkipTable(tableName: string): boolean {
 
 import { PrismaClient } from "../generated/client/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { runSourceCheckedClone } from "./sanitized-clone-cleanup";
+import { assertSourceInventoryIntegrity } from "./sanitized-clone-source-integrity";
+
+export {
+  runSourceCheckedClone,
+  runWithDestinationCleanup,
+} from "./sanitized-clone-cleanup";
 
 type RawDatabaseClient = Pick<
   PrismaClient,
@@ -119,31 +126,6 @@ export function buildDestinationResetSql(tableNames: readonly string[]): string 
   const applicationTables = tableNames.filter((name) => name !== "_prisma_migrations");
   if (applicationTables.length === 0) return null;
   return `TRUNCATE TABLE ${applicationTables.map(quoteIdentifier).join(", ")} RESTART IDENTITY CASCADE`;
-}
-
-/**
- * A clone cannot share one transaction with pg_dump/psql child processes.
- * Make publication fail-safe by clearing the disposable destination first and
- * clearing it again before propagating any clone failure.
- */
-export async function runWithDestinationCleanup<T>(
-  resetDestination: () => Promise<void>,
-  clone: () => Promise<T>,
-): Promise<T> {
-  await resetDestination();
-  try {
-    return await clone();
-  } catch (cloneError) {
-    try {
-      await resetDestination();
-    } catch (cleanupError) {
-      throw new AggregateError(
-        [cloneError, cleanupError],
-        "Sanitized clone failed and destination cleanup also failed",
-      );
-    }
-    throw cloneError;
-  }
 }
 
 export function resolveCompatibleCopyColumns(
@@ -359,8 +341,9 @@ export async function runSanitizedClone(): Promise<void> {
     const destinationTables = await listPublicTables(dev, true);
     const destinationTableNames = new Set(destinationTables.map(({ tablename }) => tablename));
 
-    await runWithDestinationCleanup(
+    await runSourceCheckedClone(
       () => resetDestinationData(dev, destinationTables.map(({ tablename }) => tablename)),
+      () => assertSourceInventoryIntegrity(prod),
       async () => {
         const tables = await listPublicTables(prod, false);
         console.log(`[sanitized-clone] Found ${tables.length} tables to process`);

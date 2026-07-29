@@ -5159,8 +5159,11 @@ model InventoryEntity {
   scopeKey                    String                            @default("organization:internal")
   customerAccountId           String?
   customerSiteId              String?
+  mergedIntoId                String?
   customerAccount             CustomerAccount?                  @relation("InventoryEntityCustomerAccount", fields: [customerAccountId], references: [id], onDelete: SetNull)
   customerSite                CustomerSite?                     @relation("InventoryEntityCustomerSite", fields: [customerSiteId], references: [id], onDelete: SetNull)
+  mergedInto                  InventoryEntity?                  @relation("InventoryEntityMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedEntities              InventoryEntity[]                 @relation("InventoryEntityMerge")
 
   @@index([entityType])
   @@index([attributionStatus])
@@ -5171,6 +5174,7 @@ model InventoryEntity {
   @@index([scopeKey])
   @@index([customerAccountId])
   @@index([customerSiteId])
+  @@index([mergedIntoId])
 }
 
 model InventoryRelationship {
@@ -5196,6 +5200,7 @@ model InventoryRelationship {
   scopeKey                String                   @default("organization:internal")
   customerAccountId       String?
   customerSiteId          String?
+  mergedIntoId            String?
   discoveredRelationships DiscoveredRelationship[]
   fromEntity              InventoryEntity          @relation("InventoryRelationshipFromEntity", fields: [fromEntityId], references: [id], onDelete: Cascade)
   lastConfirmedRun        DiscoveryRun?            @relation("InventoryRelationshipConfirmedRun", fields: [lastConfirmedRunId], references: [id])
@@ -5203,6 +5208,8 @@ model InventoryRelationship {
   qualityIssues           PortfolioQualityIssue[]
   customerAccount         CustomerAccount?         @relation("InventoryRelationshipCustomerAccount", fields: [customerAccountId], references: [id], onDelete: SetNull)
   customerSite            CustomerSite?            @relation("InventoryRelationshipCustomerSite", fields: [customerSiteId], references: [id], onDelete: SetNull)
+  mergedInto              InventoryRelationship?   @relation("InventoryRelationshipMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedRelationships     InventoryRelationship[]  @relation("InventoryRelationshipMerge")
 
   @@unique([fromEntityId, toEntityId, relationshipType])
   @@index([relationshipType])
@@ -5210,6 +5217,7 @@ model InventoryRelationship {
   @@index([scopeKey])
   @@index([customerAccountId])
   @@index([customerSiteId])
+  @@index([mergedIntoId])
 }
 
 model PortfolioQualityIssue {

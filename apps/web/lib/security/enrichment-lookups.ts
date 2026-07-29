@@ -18,7 +18,7 @@ import {
 /** Build prisma-backed enrichment lookups (asset + threat intel). The active
  *  ThreatIndicator set is preloaded into an index for O(1) observable matching. */
 export async function buildPrismaEnrichmentLookups(): Promise<EnrichmentLookups> {
-  const { prisma } = await import("@dpf/db");
+  const { INVENTORY_ENTITY_CANONICAL_WHERE, prisma } = await import("@dpf/db");
   const now = new Date();
   const indicators = await prisma.threatIndicator.findMany({
     where: { OR: [{ validUntil: null }, { validUntil: { gte: now } }] },
@@ -38,7 +38,7 @@ export async function buildPrismaEnrichmentLookups(): Promise<EnrichmentLookups>
   return {
     lookupAsset: async (deviceKey: string) => {
       const ent = await prisma.inventoryEntity.findFirst({
-        where: { name: deviceKey },
+        where: { ...INVENTORY_ENTITY_CANONICAL_WHERE, name: deviceKey },
         select: { id: true, name: true, supportStatus: true },
       });
       return ent

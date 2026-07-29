@@ -1,8 +1,11 @@
 "use server";
 
 import { newId } from "@/lib/shared/new-id";
-import { prisma } from "@dpf/db";
-import { correlateDiscoveryToAssets } from "@dpf/db";
+import {
+  correlateDiscoveryToAssets,
+  INVENTORY_ENTITY_CANONICAL_WHERE,
+  prisma,
+} from "@dpf/db";
 import { requireCapability } from "@/lib/actions/shared/guards";
 import type { CreateAssetInput, DisposeAssetInput } from "@/lib/asset-validation";
 import { periodKeyOf } from "@/lib/finance/ledger";
@@ -161,7 +164,11 @@ export async function getAssetRegisterReconciliation(): Promise<AssetRegisterRec
       select: { id: true, serialNumber: true },
     }),
     prisma.inventoryEntity.findMany({
-      where: { scopeKey: "organization:internal", status: { not: "stale" } },
+      where: {
+        ...INVENTORY_ENTITY_CANONICAL_WHERE,
+        scopeKey: "organization:internal",
+        status: { not: "stale" },
+      },
       select: { id: true, properties: true },
     }),
   ]);

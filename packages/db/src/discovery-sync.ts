@@ -6,172 +6,30 @@ import {
   syncInventoryEntityAsInfraCI,
   syncInventoryRelationship,
 } from "./graph-sync";
+import {
+  INVENTORY_ENTITY_CANONICAL_WHERE,
+  INVENTORY_RELATIONSHIP_CANONICAL_WHERE,
+} from "./inventory-entity-lifecycle";
+import {
+  assertInventoryEntityHeapIntegrity,
+  lockInventoryEntityKeys,
+} from "./inventory-entity-heap-integrity";
+import type {
+  DiscoveryPersistenceSummary,
+  DiscoveryProjectionOptions,
+  DiscoveryRunMeta,
+  DiscoverySyncClient,
+} from "./discovery-sync-contracts";
 
-export type DiscoveryPersistenceSummary = {
-  runId?: string;
-  createdEntities: number;
-  updatedEntities: number;
-  staleEntities: number;
-  createdRelationships: number;
-  updatedRelationships: number;
-  staleRelationships: number;
-  createdIssues: number;
-};
-
-type DiscoveryRunMeta = {
-  runKey: string;
-  sourceSlug: string;
-  trigger?: string;
-  status?: string;
-  // Edge Node attribution per spec § Edge Node registry. Optional —
-  // bootstrap-discovery runs have no edgeNodeId. When set, the
-  // DiscoveryRun row carries this through so consumers can attribute
-  // observations back to a specific agent.
-  edgeNodeId?: string | null;
-  // Customer-estate scope derived server-side from the authenticated
-  // EdgeNode, never from an edge request body.
-  customerAccountId?: string | null;
-  customerSiteId?: string | null;
-};
-
-export type DiscoveryProjectionOptions = {
-  projectInventoryEntity?: typeof syncInventoryEntityAsInfraCI;
-  projectInventoryRelationship?: typeof syncInventoryRelationship;
-};
-
-type DiscoverySyncTx = {
-  discoveryRun: {
-    create(args: {
-      data: {
-        runKey: string;
-        sourceSlug: string;
-        trigger: string;
-        status: string;
-        completedAt: Date;
-        itemCount: number;
-        relationshipCount: number;
-        edgeNodeId?: string | null;
-        customerAccountId?: string | null;
-        customerSiteId?: string | null;
-      };
-      select: { id: true };
-    }): Promise<{ id: string }>;
-  };
-  inventoryEntity: {
-    findMany(args: {
-      where?: {
-        scopeKey?: string;
-        lastConfirmedRun?: { sourceSlug?: string };
-      };
-      select: { entityKey: true };
-    }): Promise<Array<{ entityKey: string }>>;
-    upsert(args: {
-      where: { entityKey: string };
-      create: Record<string, unknown>;
-      update: Record<string, unknown>;
-      select: { id: true; entityKey: true };
-    }): Promise<{ id: string; entityKey: string }>;
-    updateMany(args: {
-      where: { scopeKey?: string; entityKey: { in: string[] } };
-      data: { status: string; lastSeenAt: Date };
-    }): Promise<{ count: number }>;
-  };
-  discoveredItem: {
-    create(args: {
-      data: Record<string, unknown>;
-      select: { id: true };
-    }): Promise<{ id: string }>;
-  };
-  discoveredSoftwareEvidence: {
-    upsert(args: {
-      where: { evidenceKey: string };
-      create: Record<string, unknown>;
-      update: Record<string, unknown>;
-    }): Promise<unknown>;
-  };
-  // Resolution-lineage audit (spec §4.1) — one row per NEW rule-resolved identity
-  // for an entity. findFirst is the idempotency guard so a repeated sweep that
-  // re-resolves the same entity→identity does not append a duplicate audit row;
-  // a resolution to a *different* CatalogIdentity does write a fresh lineage row.
-  identityResolutionLog: {
-    findFirst(args: {
-      where: {
-        inventoryEntityId: string;
-        catalogIdentityId: string;
-        resolutionType: string;
-      };
-      select: { id: true };
-    }): Promise<{ id: string } | null>;
-    create(args: { data: Record<string, unknown> }): Promise<unknown>;
-  };
-  inventoryRelationship: {
-    findMany(args: {
-      where?: {
-        scopeKey?: string;
-        lastConfirmedRun?: { sourceSlug?: string };
-      };
-      // BI-PIR-7d69a445 (part 2): the tuple is the canonical identity, so the
-      // existing-relationship read pulls the tuple columns (+ id for the stale
-      // sweep, + relationshipKey for the stale-relationship quality issue).
-      select: {
-        id: true;
-        relationshipKey: true;
-        fromEntityId: true;
-        toEntityId: true;
-        relationshipType: true;
-      };
-    }): Promise<Array<{
-      id: string;
-      relationshipKey: string;
-      fromEntityId: string;
-      toEntityId: string;
-      relationshipType: string;
-    }>>;
-    upsert(args: {
-      // Conflict target is the compound @@unique, NOT relationshipKey, so a tuple
-      // persisted by a prior run under a different relationshipKey UPDATES rather
-      // than crashing on the create path (P2002).
-      where: {
-        fromEntityId_toEntityId_relationshipType: {
-          fromEntityId: string;
-          toEntityId: string;
-          relationshipType: string;
-        };
-      };
-      create: Record<string, unknown>;
-      update: Record<string, unknown>;
-      select: { id: true; relationshipKey: true };
-    }): Promise<{ id: string; relationshipKey: string }>;
-    updateMany(args: {
-      where: { id: { in: string[] } };
-      data: { status: string; lastSeenAt: Date };
-    }): Promise<{ count: number }>;
-  };
-  discoveredRelationship: {
-    create(args: { data: Record<string, unknown> }): Promise<unknown>;
-  };
-  portfolioQualityIssue: {
-    findMany(args: { select: { issueKey: true } }): Promise<Array<{ issueKey: string }>>;
-    upsert(args: {
-      where: { issueKey: string };
-      create: Record<string, unknown>;
-      update: Record<string, unknown>;
-    }): Promise<unknown>;
-    updateMany(args: {
-      where: Record<string, unknown>;
-      data: Record<string, unknown>;
-    }): Promise<{ count: number }>;
-  };
-};
-
-export type DiscoverySyncClient = {
-  $transaction<T>(fn: (tx: DiscoverySyncTx) => Promise<T>): Promise<T>;
-};
+export type {
+  DiscoveryPersistenceSummary,
+  DiscoveryProjectionOptions,
+  DiscoverySyncClient,
+} from "./discovery-sync-contracts";
 
 function countObjectKeys(value: Record<string, unknown> | undefined): number {
   return value ? Object.keys(value).length : 0;
 }
-
 function scopeFieldsFromRunMeta(runMeta: DiscoveryRunMeta): {
   scopeKey: string;
   customerAccountId: string | null;
@@ -184,7 +42,6 @@ function scopeFieldsFromRunMeta(runMeta: DiscoveryRunMeta): {
       ? `customer:${customerAccountId}:site:${customerSiteId}`
       : `customer:${customerAccountId}`
     : "organization:internal";
-
   return { scopeKey, customerAccountId, customerSiteId };
 }
 
@@ -192,7 +49,6 @@ function dedupeDiscoveredItems(
   items: NormalizedDiscoveryOutput["discoveredItems"],
 ): NormalizedDiscoveryOutput["discoveredItems"] {
   const byKey = new Map<string, NormalizedDiscoveryOutput["discoveredItems"][number]>();
-
   for (const item of items) {
     const existing = byKey.get(item.discoveredKey);
     if (!existing) {
@@ -275,6 +131,10 @@ export async function persistBootstrapDiscoveryRun(
     }
     const runScope = scopeFieldsFromRunMeta(runMeta);
     const scopeWhere = { scopeKey: runScope.scopeKey };
+    await lockInventoryEntityKeys(
+      tx,
+      normalized.inventoryEntities.map((entity) => entity.entityKey),
+    );
     // Source attribution via lastConfirmedRun.sourceSlug: a sweep from one
     // source only sees the entities/relationships it has previously
     // confirmed. A unifi sweep with no dpf_bootstrap-attributed rows in
@@ -283,7 +143,11 @@ export async function persistBootstrapDiscoveryRun(
     const sourceFilter = { lastConfirmedRun: { sourceSlug: runMeta.sourceSlug } };
     const existingEntityKeys = new Set(
       (await tx.inventoryEntity.findMany({
-        where: { ...scopeWhere, ...sourceFilter },
+        where: {
+          ...INVENTORY_ENTITY_CANONICAL_WHERE,
+          ...scopeWhere,
+          ...sourceFilter,
+        },
         select: { entityKey: true },
       })).map((entity) => entity.entityKey),
     );
@@ -296,7 +160,11 @@ export async function persistBootstrapDiscoveryRun(
     // is retained per row so the stale-relationship quality issue can still name it.
     const existingRelationshipByTuple = new Map<string, { id: string; relationshipKey: string }>();
     for (const existing of await tx.inventoryRelationship.findMany({
-      where: { ...scopeWhere, ...sourceFilter },
+      where: {
+        ...INVENTORY_RELATIONSHIP_CANONICAL_WHERE,
+        ...scopeWhere,
+        ...sourceFilter,
+      },
       select: {
         id: true,
         relationshipKey: true,
@@ -500,6 +368,11 @@ export async function persistBootstrapDiscoveryRun(
         createdEntities += 1;
       }
     }
+
+    await assertInventoryEntityHeapIntegrity(
+      tx,
+      normalized.inventoryEntities.map((entity) => entity.entityKey),
+    );
 
     for (const discoveredItem of dedupedDiscoveredItems) {
       const persistedDiscoveredItem = await tx.discoveredItem.create({
@@ -729,7 +602,10 @@ export async function persistBootstrapDiscoveryRun(
     const staleRelationships = staleExistingRelationships.length === 0
       ? 0
       : (await tx.inventoryRelationship.updateMany({
-          where: { id: { in: staleExistingRelationships.map((value) => value.id) } },
+          where: {
+            id: { in: staleExistingRelationships.map((value) => value.id) },
+            ...INVENTORY_RELATIONSHIP_CANONICAL_WHERE,
+          },
           data: { status: "stale", lastSeenAt: now },
         })).count;
 

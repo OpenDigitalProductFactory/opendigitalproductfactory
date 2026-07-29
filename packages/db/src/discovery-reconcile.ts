@@ -21,6 +21,7 @@ import {
   classifyEstateProvenance,
   type EstateProvenance,
 } from "./discovery-promotion-policy";
+import { INVENTORY_ENTITY_CANONICAL_WHERE } from "./inventory-entity-lifecycle";
 
 export type ReconcileSummary = {
   /** DigitalProducts removed because they were infrastructure, not products. */
@@ -89,12 +90,17 @@ export async function reconcilePromotedProducts(
   // infrastructure. Seed/registered products with no linked entities are
   // never touched.
   const products = await db.digitalProduct.findMany({
-    where: { inventoryEntities: { some: {} } },
+    where: {
+      inventoryEntities: { some: INVENTORY_ENTITY_CANONICAL_WHERE },
+    },
     select: {
       id: true,
       productId: true,
       name: true,
-      inventoryEntities: { select: { id: true, entityType: true, name: true, properties: true } },
+      inventoryEntities: {
+        where: INVENTORY_ENTITY_CANONICAL_WHERE,
+        select: { id: true, entityType: true, name: true, properties: true },
+      },
     },
   });
 

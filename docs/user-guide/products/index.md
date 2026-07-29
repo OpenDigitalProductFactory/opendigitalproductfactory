@@ -29,6 +29,11 @@ or retail good into a digital product.
 - **Stage-Gate Readiness** — A checklist of criteria that must be met before a product can advance from one lifecycle stage to the next. Gates ensure quality and governance before promotion.
 - **Taxonomy Attribution** — Each product is tagged with nodes from the DPPM taxonomy tree, enabling comparison with similar products and portfolio-level filtering.
 - **Software Enrichment** — Inventory entity details can show the latest known version, update posture, canonical manufacturer/product identity and CPE, plus sourced support-lifecycle milestones when that enrichment is available.
+- **Canonical Inventory Record** — Normal inventory lists, product counts, and
+  product inventory tabs show the active canonical record for a discovered
+  entity. Superseded records remain retained as governed repair evidence but do
+  not appear in normal operational views or inflate their counts. An old direct
+  entity link redirects to the canonical record.
 
 ## What You Can Do
 
@@ -37,6 +42,8 @@ or retail good into a digital product.
 - Browse all products with filtering by lifecycle stage, status, portfolio, and taxonomy
 - View a product's full profile including its health metrics, linked backlog items, and architecture models
 - Inspect available software identity and support-lifecycle facts without leaving the inventory entity detail page
+- Follow an older inventory-entity link to the canonical record without editing
+  a retained superseded copy
 - Check stage-gate readiness and see which criteria are outstanding before the next stage
 - Advance a product through lifecycle stages once gate criteria are satisfied
 - Register a new product and assign it to a portfolio and taxonomy category
