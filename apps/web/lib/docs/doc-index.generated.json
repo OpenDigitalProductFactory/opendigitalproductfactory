@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 568,
+  "pageCount": 569,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -7242,6 +7242,19 @@
         "9-cross-cutting-test-matrix",
         "10-post-audit-actions",
         "appendix-a-full-open-epic-list-2026-06-10-snapshot"
+      ]
+    },
+    "docs/testing/archetype-exercise-harness.md": {
+      "publicHref": "/testing/archetype-exercise-harness/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "archetype-exercise-harness",
+        "what-it-does",
+        "usage",
+        "scenario-pack-contract",
+        "known-limits"
       ]
     },
     "docs/testing/ci-evidence.md": {
