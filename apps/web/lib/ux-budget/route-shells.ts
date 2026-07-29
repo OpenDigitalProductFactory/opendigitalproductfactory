@@ -69,6 +69,7 @@ export const ROUTE_SWEEP_EXCLUSION_REASONS = [
   "setup-phase-only",
   "fixture-capability-unavailable",
   "redirects-to-dynamic-resource",
+  "wall-clock-collection",
 ] as const;
 export type RouteSweepExclusionReason =
   (typeof ROUTE_SWEEP_EXCLUSION_REASONS)[number];
@@ -78,8 +79,8 @@ export type RouteSweepExclusionReason =
  *
  * This is policy layered on the canonical route inventory, not a second inventory:
  * the generated registry below includes every route and records either measurable or
- * one explicit reason. These 26 routes were confirmed across repeated same-SHA CI
- * runs. They need a different authenticated/fixture context, intentionally redirect,
+ * one explicit reason. The non-wall-clock routes here were confirmed across
+ * repeated same-SHA CI runs. They need a different authenticated/fixture context, intentionally redirect,
  * or depend on a capability the generic fixture does not provision.
  *
  * Keep this list shrink-only where possible. A route becomes eligible in the same PR
@@ -115,6 +116,18 @@ export const ROUTE_SWEEP_EXCLUSIONS = {
   "/setup": "setup-phase-only",
   "/welcome": "setup-phase-only",
   "/ops/health": "redirects-to-dynamic-resource",
+
+  // Wall-clock collections (BI-0C6C2153): these routes derive the SET of
+  // visible entities from `new Date()` — calendar windows materialize upcoming
+  // cron-run instances, change lanes bucket work by time window. The volatile-
+  // text normalizer stabilizes timestamp PHRASING but cannot stabilize a
+  // changing entity set, so an exact frozen word baseline flakes with the
+  // clock (measured: /platform/schedule 331→342 words between a 01:07 and an
+  // 03:26 run of untouched code). Exclude until the fixture can pin the
+  // app-visible clock.
+  "/platform/schedule": "wall-clock-collection",
+  "/workspace/calendar": "wall-clock-collection",
+  "/platform/development/change-lanes": "wall-clock-collection",
 } as const satisfies Record<string, RouteSweepExclusionReason>;
 
 export type RouteShellPolicy = {
