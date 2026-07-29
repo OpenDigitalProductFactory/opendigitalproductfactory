@@ -11,9 +11,8 @@ function attachExactPayloadBytes(
   snapshot: VersionedOperationsSnapshot,
 ): VersionedOperationsSnapshot {
   let payloadBytes = snapshot.telemetry.payloadBytes;
-  let measured = snapshot;
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    measured = {
+    const measured = {
       ...snapshot,
       telemetry: { ...snapshot.telemetry, payloadBytes },
     };
