@@ -47,6 +47,7 @@ The criteria apply to future changes automatically, not by memory:
 2. **CI guard (P5).** `tool-description-hygiene.test.ts` fails the build if any tool's model-facing `description` carries `Phase N` / `(BI-…)` provenance or a leaked source path. (Input-schema property descriptions may still carry format examples like `e.g. BI-E4A86393`.)
 3. **Shift-left precheck (P5/P6).** `packages/dpf-skill-pack/hooks/tool-economy-precheck.mjs` fires (Claude/Codex/Grok) when `mcp-tools.ts`, the MCP route, the agentic loop, or the budget module is edited, re-asserting these criteria before CI.
 4. **Review tie-in.** `docs/architecture/agent-standards-dpf-conformance.md` carries a Context Economy control area so spec/architecture reviews check P1–P13.
+5. **Attachment budget on every model path.** The per-turn tool-attachment budget (`apps/web/lib/actions/coworker-tool-budget.ts` — window-fit + local selection-cliff cap, `load_tools` deferral) applies to interactive chat AND to every autonomous run: scheduled tasks, dispatcher child threads, and remote MCP task submission all budget through `resolveAutonomousWorkTools` (BI-CAP-F2D39F8F). A coworker whose grants expand past the cap keeps full authority; the long tail loads on demand.
 
 ## How to apply (quick checklist when changing a model-facing surface)
 

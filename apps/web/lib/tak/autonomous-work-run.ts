@@ -191,22 +191,88 @@ export async function resolveAutonomousWorkTools(input: {
   mode?: "advise" | "act";
   externalAccessEnabled?: boolean;
   unifiedMode?: boolean;
+  /** Route the autonomous work runs under; its declared domain tools are
+   *  force-attached (tier 0), mirroring the interactive path (BI-B5C358B1). */
+  routeContext?: string;
+  /** The task objective/prompt. When present, tools are ranked by relevance to
+   *  it within each priority tier so the attachment cap keeps the tools this
+   *  run actually needs (BI-ACE1EBA4). */
+  intentQuery?: string;
 }): Promise<{
   tools: ToolDefinition[];
   toolsForProvider: Array<Record<string, unknown>>;
+  /** Authorized tools held back from the schema payload; still callable via the
+   *  load_tools meta-tool. Empty when no budget applied (fail-open). */
+  deferredTools: ToolDefinition[];
 }> {
   const { getAvailableTools, toolsToOpenAIFormat } = await import("@/lib/mcp-tools");
-  const tools = await getAvailableTools(input.userContext, {
+  const authorized = await getAvailableTools(input.userContext, {
     mode: input.mode,
     externalAccessEnabled: input.externalAccessEnabled,
     unifiedMode: input.unifiedMode,
     agentId: input.agentId,
   });
 
-  return {
-    tools,
-    toolsForProvider: toolsToOpenAIFormat(tools),
-  };
+  // BI-CAP-F2D39F8F: right-size the ATTACHMENT for autonomous runs with the
+  // SAME budget the interactive path uses (coworker-tool-budget). A scheduled
+  // coworker's grants expand to ~100+ tools (~30k+ tokens of schema), which can
+  // never fit a budget local model's served window — every scheduled tick then
+  // dies on admission/overflow (live repro: TR-SCHED-B7151A4C). Authority is
+  // untouched: deferred tools stay authorized and loadable via load_tools.
+  // Fail-open — any budget error falls back to the full authorized surface.
+  try {
+    const { selectCoworkerToolBudget, deriveCoworkerToolCap, LOAD_TOOLS_TOOL, LOAD_TOOLS_TOOL_NAME } =
+      await import("@/lib/actions/coworker-tool-budget");
+    const { getAgentToolGrantsAsync } = await import("@/lib/tak/agent-grants");
+    const { resolveLocalServedContextTokens } = await import(
+      "@/lib/inference/local-model-context-reconcile"
+    );
+    const { resolveLocalToolFidelityCeiling } = await import("@/lib/routing/local-tool-fidelity");
+
+    const [roleGrants, localServedContext, measuredToolFidelityCeiling] = await Promise.all([
+      getAgentToolGrantsAsync(input.agentId),
+      resolveLocalServedContextTokens(),
+      resolveLocalToolFidelityCeiling(),
+    ]);
+    const cap = deriveCoworkerToolCap(localServedContext, { measuredToolFidelityCeiling });
+
+    let routeDomainToolNames: string[] = [];
+    if (input.routeContext) {
+      const { resolveRouteContext } = await import("@/lib/tak/route-context-map");
+      routeDomainToolNames = resolveRouteContext(input.routeContext).domainTools ?? [];
+    }
+
+    const { attached, deferred } = selectCoworkerToolBudget({
+      tools: authorized,
+      roleGrants,
+      pageActionNames: new Set(routeDomainToolNames),
+      alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
+      cap,
+      intentQuery: input.intentQuery,
+    });
+    const tools = deferred.length > 0 ? [LOAD_TOOLS_TOOL, ...attached] : attached;
+    if (deferred.length > 0) {
+      console.log(
+        `[autonomous-tool-budget] agent=${JSON.stringify(input.agentId)} authorized=${authorized.length} ` +
+          `attached=${tools.length} deferred=${deferred.length} cap=${cap}`,
+      );
+    }
+    return {
+      tools,
+      toolsForProvider: toolsToOpenAIFormat(tools),
+      deferredTools: deferred,
+    };
+  } catch (err) {
+    console.warn(
+      "[autonomous-tool-budget] budget failed (fail-open to full surface):",
+      err instanceof Error ? err.message : err,
+    );
+    return {
+      tools: authorized,
+      toolsForProvider: toolsToOpenAIFormat(authorized),
+      deferredTools: [],
+    };
+  }
 }
 
 export async function executeAutonomousAgenticLoop(input: {

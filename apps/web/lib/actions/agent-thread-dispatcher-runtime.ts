@@ -247,10 +247,15 @@ export async function runChildThreadExecution(context: ChildRuntimeContext): Pro
         ? agentInfo.agentId
         : context.agentId;
 
-    const { tools, toolsForProvider } = await resolveAutonomousWorkTools({
+    const { tools, toolsForProvider, deferredTools } = await resolveAutonomousWorkTools({
       userContext,
       agentId: resolvedAgentId,
       mode: "act",
+      // BI-CAP-F2D39F8F: budget the attachment to the serving model; the child
+      // thread's latest user turn ranks which tools stay attached.
+      routeContext: context.routeContext,
+      intentQuery: [...chatHistory].reverse().find((m) => m.role === "user" && typeof m.content === "string")
+        ?.content as string | undefined,
     });
 
     // Grant preflight: if this agent holds no grant for a single tool it was
@@ -292,6 +297,7 @@ export async function runChildThreadExecution(context: ChildRuntimeContext): Pro
         sensitivity: agentInfo.sensitivity ?? "internal",
         tools,
         toolsForProvider,
+        deferredTools,
         userId: context.userId,
         routeContext: context.routeContext,
         agentId: resolvedAgentId,

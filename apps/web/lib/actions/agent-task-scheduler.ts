@@ -365,10 +365,14 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
     // Tools are resolved in "act" mode for propose so the model can still CALL
     // them; the loop's propose-interception captures the call as a proposal.
     const boundary = proactivity.actionBoundary;
-    const { tools, toolsForProvider } = await resolveAutonomousWorkTools({
+    const { tools, toolsForProvider, deferredTools } = await resolveAutonomousWorkTools({
       userContext,
       mode: boundary === "advise" ? "advise" : "act",
       agentId: task.agentId,
+      // BI-CAP-F2D39F8F: budget the attachment to the serving model; the task
+      // prompt ranks which tools stay attached, the rest load on demand.
+      routeContext: task.routeContext,
+      intentQuery: task.prompt,
     });
 
     // Mirror the interactive coworker path (agent-coworker.sendMessage): carry the
@@ -396,6 +400,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       sensitivity: agentInfo.sensitivity ?? "internal",
       tools,
       toolsForProvider,
+      deferredTools,
       userId: task.ownerUserId,
       routeContext: task.routeContext,
       agentId: task.agentId,

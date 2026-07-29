@@ -30,6 +30,93 @@ vi.mock("@/lib/tak/agent-routing-server", () => ({
   resolveAgentForRouteWithPrompts: vi.fn(),
   resolveAgentByIdWithPrompts: vi.fn(),
 }));
+// BI-CAP-F2D39F8F — the attachment budget's environment probes, mocked so the
+// budget path is deterministic in tests.
+vi.mock("@/lib/tak/agent-grants", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getAgentToolGrantsAsync: vi.fn(async () => []),
+}));
+vi.mock("@/lib/inference/local-model-context-reconcile", () => ({
+  resolveLocalServedContextTokens: vi.fn(async () => 24_576),
+}));
+vi.mock("@/lib/routing/local-tool-fidelity", () => ({
+  resolveLocalToolFidelityCeiling: vi.fn(async () => null),
+}));
+
+describe("resolveAutonomousWorkTools — attachment budget (BI-CAP-F2D39F8F)", () => {
+  const fakeTool = (name: string) => ({
+    name,
+    description: `${name} does ${name.replace(/_/g, " ")}`,
+    inputSchema: { type: "object", properties: {} },
+    requiredCapability: null,
+    sideEffect: false,
+    executionMode: "immediate",
+  });
+  const userContext = { userId: "user-1", platformRole: "admin", isSuperuser: true };
+
+  beforeEach(async () => {
+    const tools = await import("@/lib/mcp-tools");
+    vi.mocked(tools.getAvailableTools).mockReset();
+    vi.mocked(tools.toolsToOpenAIFormat).mockReset();
+    vi.mocked(tools.toolsToOpenAIFormat).mockImplementation((ts: unknown[]) => ts as never);
+  });
+
+  it("caps a 115-tool surface to the local selection cliff and defers the rest behind load_tools", async () => {
+    const tools = await import("@/lib/mcp-tools");
+    const surface = Array.from({ length: 115 }, (_, i) => fakeTool(`tool_${i}`));
+    vi.mocked(tools.getAvailableTools).mockResolvedValue(surface as never);
+
+    const { resolveAutonomousWorkTools } = await import("./autonomous-work-run");
+    const result = await resolveAutonomousWorkTools({
+      userContext,
+      agentId: "storefront-advisor",
+      mode: "act",
+      routeContext: "/storefront",
+      intentQuery: "Review today's storefront orders and propose restocking.",
+    });
+
+    // 24,576-token cliff-prone local window → 15-tool cap + load_tools rides on top.
+    expect(result.tools.length).toBeLessThanOrEqual(16);
+    expect(result.tools.some((t) => t.name === "load_tools")).toBe(true);
+    expect(result.deferredTools.length).toBe(115 - (result.tools.length - 1));
+    expect(result.toolsForProvider.length).toBe(result.tools.length);
+  });
+
+  it("attaches everything (no load_tools) when the surface already fits", async () => {
+    const tools = await import("@/lib/mcp-tools");
+    const surface = Array.from({ length: 8 }, (_, i) => fakeTool(`tool_${i}`));
+    vi.mocked(tools.getAvailableTools).mockResolvedValue(surface as never);
+
+    const { resolveAutonomousWorkTools } = await import("./autonomous-work-run");
+    const result = await resolveAutonomousWorkTools({
+      userContext,
+      agentId: "storefront-advisor",
+      mode: "act",
+    });
+
+    expect(result.tools.length).toBe(8);
+    expect(result.tools.some((t) => t.name === "load_tools")).toBe(false);
+    expect(result.deferredTools).toHaveLength(0);
+  });
+
+  it("fails open to the full surface when a budget probe throws", async () => {
+    const tools = await import("@/lib/mcp-tools");
+    const surface = Array.from({ length: 40 }, (_, i) => fakeTool(`tool_${i}`));
+    vi.mocked(tools.getAvailableTools).mockResolvedValue(surface as never);
+    const ctx = await import("@/lib/inference/local-model-context-reconcile");
+    vi.mocked(ctx.resolveLocalServedContextTokens).mockRejectedValueOnce(new Error("probe down"));
+
+    const { resolveAutonomousWorkTools } = await import("./autonomous-work-run");
+    const result = await resolveAutonomousWorkTools({
+      userContext,
+      agentId: "storefront-advisor",
+      mode: "act",
+    });
+
+    expect(result.tools).toHaveLength(40);
+    expect(result.deferredTools).toHaveLength(0);
+  });
+});
 
 describe("createAutonomousWorkRun", () => {
   beforeEach(async () => {
