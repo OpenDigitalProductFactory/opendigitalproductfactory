@@ -4,6 +4,8 @@ pageKind: principle
 status: published
 abstract: Every dependency carries a license with obligations. Identify each license by its SPDX identifier, record license and copyright metadata in an SBOM, check compatibility before combining, and preserve attribution.
 principleTier: commandment
+principleWeight: 0.2
+principleWeightRationale: Specialist profession rule — full-strength within its profession ring, weighted light in cross-domain aggregation so profession rules cannot collectively outvote engineering doctrine on decisions they have no bearing on (BI-68553F96 golden-decision drift; calibrated against the quick-vs-proper-normal margin floor).
 principleDirection: Identify every dependency's license (SPDX), check compatibility before combining, and preserve required attribution and notices.
 principleConsumerArchetype: specialist
 principleAppliesTo:
@@ -11,7 +13,7 @@ principleAppliesTo:
   - external_coding_agent
 principleRingScope:
   - ring-1-coworker
-principleDimensionVector: {"governance_compliance": 1.0, "blast_radius": 0.6}
+principleDimensionVector: {"governance_compliance": 1.0, "blast_radius": -0.6}
 professionJurisdiction:
   - global
 professionCompetencyLevel: foundational

@@ -23,12 +23,17 @@
 // both engines (this scorer + the canonical vitest test) run in CI against the same
 // corpus, so any behavioral divergence surfaces as one going red.
 
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PRINCIPLES_DIR = join(HERE, "..", "docs", "founder-kernel", "wiki", "principles");
+// Profession wikis seed commandment-tier pages too (BI-68553F96): live retrieval
+// consults them on every universal-ring decision, so the guard must score the
+// same corpus or a profession-page change can drift a canonical decision while
+// CI stays green.
+const PROFESSIONS_DIR = join(HERE, "..", "docs", "professions");
 const POPULATION = "in_platform_coworker"; // universal-ring caller; population filter only
 const TIER_DEFAULT_WEIGHT = { commandment: 1.0, core: 0.4, contextual: 0.1 };
 
@@ -93,10 +98,34 @@ function parsePrinciple(raw, slug) {
   };
 }
 
-export function loadCommandments(dir = PRINCIPLES_DIR) {
+function kernelPrincipleFiles(dir) {
   return readdirSync(dir)
     .filter((f) => f.endsWith(".md"))
-    .map((f) => parsePrinciple(readFileSync(join(dir, f), "utf8"), f.replace(/\.md$/, "")))
+    .map((f) => ({ path: join(dir, f), slug: f.replace(/\.md$/, "") }));
+}
+
+function professionPrincipleFiles(dir) {
+  if (!existsSync(dir)) return [];
+  const out = [];
+  for (const profession of readdirSync(dir, { withFileTypes: true })) {
+    if (!profession.isDirectory()) continue;
+    const wikiDir = join(dir, profession.name, "wiki");
+    if (!existsSync(wikiDir)) continue;
+    for (const f of readdirSync(wikiDir)) {
+      if (!f.endsWith(".md")) continue;
+      // Mirrors the seeded WikiPage slug: professions/<profession>/<page>.
+      out.push({
+        path: join(wikiDir, f),
+        slug: `professions/${profession.name}/${f.replace(/\.md$/, "")}`,
+      });
+    }
+  }
+  return out;
+}
+
+export function loadCommandments(dir = PRINCIPLES_DIR, professionsDir = PROFESSIONS_DIR) {
+  return [...kernelPrincipleFiles(dir), ...professionPrincipleFiles(professionsDir)]
+    .map(({ path, slug }) => parsePrinciple(readFileSync(path, "utf8"), slug))
     .filter((p) => p.pageKind === "principle" && (!p.status || p.status === "published"))
     .filter((p) => p.tier === "commandment")
     .filter((p) => !p.appliesTo?.length || p.appliesTo.includes(POPULATION))

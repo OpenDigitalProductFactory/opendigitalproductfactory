@@ -4,6 +4,8 @@ pageKind: principle
 status: published
 abstract: Documentation is written for the reader, not to impress. Be conversational, write for a global audience, use second person and active voice, and put conditions before instructions. Prioritize clarity and consistency even over any single guideline.
 principleTier: commandment
+principleWeight: 0.2
+principleWeightRationale: Specialist profession rule — full-strength within its profession ring, weighted light in cross-domain aggregation so profession rules cannot collectively outvote engineering doctrine on decisions they have no bearing on (BI-68553F96 golden-decision drift; calibrated against the quick-vs-proper-normal margin floor).
 principleDirection: Write clearly for the reader — second person, active voice, conditions before instructions, global audience — never to impress.
 principleConsumerArchetype: specialist
 principleAppliesTo:

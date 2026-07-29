@@ -4,6 +4,8 @@ pageKind: principle
 status: published
 abstract: Every external tool, MCP server, or package carries supply-chain risk and must be vetted before adoption. Guard against typosquatting, dependency confusion, and hijacking; reject vulnerable or end-of-life components. A "verified" badge is a signal, not a clearance.
 principleTier: commandment
+principleWeight: 0.2
+principleWeightRationale: Specialist profession rule — full-strength within its profession ring, weighted light in cross-domain aggregation so profession rules cannot collectively outvote engineering doctrine on decisions they have no bearing on (BI-68553F96 golden-decision drift; calibrated against the quick-vs-proper-normal margin floor).
 principleDirection: Vet every external tool/package for supply-chain risk before adoption; never treat a registry badge as a substitute for independent assessment.
 principleConsumerArchetype: specialist
 principleAppliesTo:
@@ -11,7 +13,7 @@ principleAppliesTo:
   - external_coding_agent
 principleRingScope:
   - ring-1-coworker
-principleDimensionVector: {"public_safety": 0.8, "blast_radius": 0.7, "governance_compliance": 0.6}
+principleDimensionVector: {"public_safety": 0.8, "blast_radius": -0.7, "governance_compliance": 0.6}
 professionCompetencyLevel: foundational
 sources:
   - owasp/component-analysis

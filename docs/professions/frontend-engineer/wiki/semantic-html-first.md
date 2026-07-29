@@ -4,6 +4,8 @@ pageKind: principle
 status: published
 abstract: Choose HTML elements for their meaning, not their appearance. Native semantic elements carry built-in behavior and accessibility that assistive technology understands for free — reach for them before generic divs and ARIA.
 principleTier: commandment
+principleWeight: 0.2
+principleWeightRationale: Specialist profession rule — full-strength within its profession ring, weighted light in cross-domain aggregation so profession rules cannot collectively outvote engineering doctrine on decisions they have no bearing on (BI-68553F96 golden-decision drift; calibrated against the quick-vs-proper-normal margin floor).
 principleDirection: Use the native semantic HTML element for the job before reaching for a div/span plus ARIA or CSS.
 principleConsumerArchetype: specialist
 principleAppliesTo:

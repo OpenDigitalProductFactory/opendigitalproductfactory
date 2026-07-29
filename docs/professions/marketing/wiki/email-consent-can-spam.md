@@ -4,6 +4,8 @@ pageKind: principle
 status: published
 abstract: US CAN-SPAM is an opt-out model — commercial email is permitted without prior consent if you use accurate headers, non-deceptive subject lines, identify the message as an ad, include a valid postal address, and honor opt-outs. The structural opposite of GDPR opt-in.
 principleTier: commandment
+principleWeight: 0.2
+principleWeightRationale: Specialist profession rule — full-strength within its profession ring, weighted light in cross-domain aggregation so profession rules cannot collectively outvote engineering doctrine on decisions they have no bearing on (BI-68553F96 golden-decision drift; calibrated against the quick-vs-proper-normal margin floor).
 principleDirection: For US commercial email, follow CAN-SPAM — accurate headers, ad identification, postal address, and a working, promptly-honored opt-out; never assume EU opt-in applies.
 principleConsumerArchetype: specialist
 principleAppliesTo:

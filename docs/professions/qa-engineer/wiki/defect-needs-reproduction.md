@@ -4,6 +4,8 @@ pageKind: principle
 status: published
 abstract: A defect that cannot be reproduced cannot be diagnosed, fixed, or confirmed resolved. Every defect record must capture reproduction steps, expected vs actual behavior, and severity and priority.
 principleTier: commandment
+principleWeight: 0.2
+principleWeightRationale: Specialist profession rule — full-strength within its profession ring, weighted light in cross-domain aggregation so profession rules cannot collectively outvote engineering doctrine on decisions they have no bearing on (BI-68553F96 golden-decision drift; calibrated against the quick-vs-proper-normal margin floor).
 principleDirection: File no defect without reliable reproduction steps and an explicit expected-vs-actual statement.
 principleConsumerArchetype: specialist
 principleAppliesTo:

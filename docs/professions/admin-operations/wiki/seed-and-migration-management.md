@@ -4,6 +4,8 @@ pageKind: principle
 status: published
 abstract: Platform administrators should fix repeatable install defects in seed or migration source, then use invariant tests to prevent recurrence.
 principleTier: commandment
+principleWeight: 0.2
+principleWeightRationale: Specialist profession rule — full-strength within its profession ring, weighted light in cross-domain aggregation so profession rules cannot collectively outvote engineering doctrine on decisions they have no bearing on (BI-68553F96 golden-decision drift; calibrated against the quick-vs-proper-normal margin floor).
 principleDirection: Fix install-state defects at their seed or migration source and add an invariant guard.
 principleConsumerArchetype: specialist
 principleAppliesTo:

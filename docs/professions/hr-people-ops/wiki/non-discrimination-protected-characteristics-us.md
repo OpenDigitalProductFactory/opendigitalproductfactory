@@ -4,6 +4,8 @@ pageKind: principle
 status: published
 abstract: US federal law prohibits employment decisions based on protected characteristics — race, color, religion, sex, national origin, age 40+, disability, genetic information — across the entire employment lifecycle. Harassment and retaliation are independently illegal.
 principleTier: commandment
+principleWeight: 0.2
+principleWeightRationale: Specialist profession rule — full-strength within its profession ring, weighted light in cross-domain aggregation so profession rules cannot collectively outvote engineering doctrine on decisions they have no bearing on (BI-68553F96 golden-decision drift; calibrated against the quick-vs-proper-normal margin floor).
 principleDirection: Never base any US employment decision on a protected characteristic; document the legitimate, job-related reason instead.
 principleConsumerArchetype: specialist
 principleAppliesTo:

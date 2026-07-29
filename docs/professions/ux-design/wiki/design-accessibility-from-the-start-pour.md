@@ -4,6 +4,8 @@ pageKind: principle
 status: published
 abstract: Accessibility is built in from project inception, not retrofitted. All UI must satisfy the four POUR principles — Perceivable, Operable, Understandable, Robust — and depends on multiple components working together.
 principleTier: commandment
+principleWeight: 0.2
+principleWeightRationale: Specialist profession rule — full-strength within its profession ring, weighted light in cross-domain aggregation so profession rules cannot collectively outvote engineering doctrine on decisions they have no bearing on (BI-68553F96 golden-decision drift; calibrated against the quick-vs-proper-normal margin floor).
 principleDirection: Design to POUR from the first wireframe; never defer accessibility to a late retrofit.
 principleConsumerArchetype: specialist
 principleAppliesTo:

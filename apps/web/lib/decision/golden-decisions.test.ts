@@ -28,16 +28,43 @@ import {
 const PRINCIPLES_DIR = fileURLToPath(
   new URL("../../../../docs/founder-kernel/wiki/principles", import.meta.url),
 );
+// Profession wikis seed commandment-tier pages too (BI-68553F96). Live
+// retrieval consults them on every universal-ring decision, so the baseline
+// must score the same corpus or a profession-page change can drift a canonical
+// decision while this suite stays green.
+const PROFESSIONS_DIR = fileURLToPath(
+  new URL("../../../../docs/professions", import.meta.url),
+);
 const BASELINE_PATH = fileURLToPath(
   new URL("./golden-decisions.baseline.json", import.meta.url),
 );
 
+function principleFiles(): Array<{ path: string; slug: string }> {
+  const kernel = readdirSync(PRINCIPLES_DIR)
+    .filter((f) => f.endsWith(".md"))
+    .map((f) => ({ path: `${PRINCIPLES_DIR}/${f}`, slug: f.replace(/\.md$/, "") }));
+  const professions: Array<{ path: string; slug: string }> = [];
+  for (const profession of readdirSync(PROFESSIONS_DIR, { withFileTypes: true })) {
+    if (!profession.isDirectory()) continue;
+    const wikiDir = `${PROFESSIONS_DIR}/${profession.name}/wiki`;
+    if (!existsSync(wikiDir)) continue;
+    for (const f of readdirSync(wikiDir)) {
+      if (!f.endsWith(".md")) continue;
+      // Mirrors the seeded WikiPage slug: professions/<profession>/<page>.
+      professions.push({
+        path: `${wikiDir}/${f}`,
+        slug: `professions/${profession.name}/${f.replace(/\.md$/, "")}`,
+      });
+    }
+  }
+  return [...kernel, ...professions];
+}
+
 function loadCorpus(): ParsedPrinciplePage[] {
-  const files = readdirSync(PRINCIPLES_DIR).filter((f) => f.endsWith(".md"));
   const pages: ParsedPrinciplePage[] = [];
-  for (const file of files) {
-    const raw = readFileSync(`${PRINCIPLES_DIR}/${file}`, "utf8");
-    const page = parsePrinciplePage(raw, file.replace(/\.md$/, ""));
+  for (const { path, slug } of principleFiles()) {
+    const raw = readFileSync(path, "utf8");
+    const page = parsePrinciplePage(raw, slug);
     if (page.pageKind !== "principle") continue;
     if (page.status && page.status !== "published") continue;
     pages.push(page);

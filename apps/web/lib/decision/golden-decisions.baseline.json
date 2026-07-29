@@ -2,12 +2,12 @@
   "quick-vs-proper-normal": {
     "id": "quick-vs-proper-normal",
     "winner": "proper-seed-fix",
-    "margin": 1.935404,
+    "margin": 0.47819,
     "confidence": "high",
-    "principlesConsidered": 20,
+    "principlesConsidered": 42,
     "composites": {
-      "proper-seed-fix": 10.116921,
-      "quick-runtime-patch": 8.181517
+      "quick-runtime-patch": 9.869565,
+      "proper-seed-fix": 10.347754
     },
     "topContributors": [
       {
@@ -19,28 +19,28 @@
         "contribution": 0.840909
       },
       {
-        "principle": "single-source-of-truth",
-        "contribution": 0.827273
-      },
-      {
         "principle": "no-assumptions",
         "contribution": 0.777778
       },
       {
         "principle": "architecture-over-shortcuts",
         "contribution": 0.707143
+      },
+      {
+        "principle": "ship-real-functionality",
+        "contribution": 0.635
       }
     ]
   },
   "cheap-sound-vs-rebuild-guard": {
     "id": "cheap-sound-vs-rebuild-guard",
     "winner": "cheap-sound-additive",
-    "margin": 0.941183,
+    "margin": 3.880393,
     "confidence": "high",
-    "principlesConsidered": 20,
+    "principlesConsidered": 42,
     "composites": {
-      "cheap-sound-additive": 11.137084,
-      "expensive-rebuild": 10.195901
+      "cheap-sound-additive": 12.766054,
+      "expensive-rebuild": 8.885662
     },
     "topContributors": [
       {
@@ -60,8 +60,8 @@
         "contribution": 0.754762
       },
       {
-        "principle": "single-source-of-truth",
-        "contribution": 0.686364
+        "principle": "no-assumptions",
+        "contribution": 0.647222
       }
     ]
   }
