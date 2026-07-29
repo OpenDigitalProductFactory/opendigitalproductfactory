@@ -1212,7 +1212,8 @@
         "scope-boundary",
         "state-and-evidence",
         "governed-transitions",
-        "fleet-safe-evolution"
+        "fleet-safe-evolution",
+        "derived-roadmap-boundary"
       ]
     },
     "docs/architecture/section-navigation.md": {
@@ -9952,6 +9953,7 @@
         "use-product-direction",
         "activate-product-demand-with-evidence",
         "learn-from-product-outcomes",
+        "read-the-evidence-derived-roadmap",
         "build-continuous-product-intelligence",
         "from-product-to-something-a-customer-can-select",
         "package-and-price-a-catalog-item",

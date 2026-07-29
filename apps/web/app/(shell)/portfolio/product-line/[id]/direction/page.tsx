@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { ProductDirectionBrief } from "@/components/product/direction/ProductDirectionBrief";
+import { ProductRoadmap } from "@/components/product/direction/ProductRoadmap";
 import { ProductLinePerformance } from "@/components/product/ProductLinePerformance";
 import {
   ProductManagementAccessError,
@@ -11,16 +12,26 @@ import { ProductOperatingContextNotFoundError } from "@/lib/product-management/p
 import { buildProductDirectionView } from "@/lib/product-management/product-direction-view";
 import { buildProductLinePerformance } from "@/lib/product-management/product-performance";
 import {
+  resolveProductRoadmapAudience,
+  resolveProductRoadmapView,
+} from "@/lib/product-management/product-roadmap";
+import { projectProductRoadmapFromOperatingContext } from "@/lib/product-management/product-roadmap-operating-context";
+import {
   NAV_MODE_COOKIE,
   resolveNavModeFromCookie,
 } from "@/lib/navigation/nav-mode";
 
 export default async function ProductLineDirectionPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{
+    view?: string | string[];
+    audience?: string | string[];
+  }>;
 }) {
-  const { id } = await params;
+  const [{ id }, query] = await Promise.all([params, searchParams]);
   let context;
   try {
     context = await loadCurrentProductOperatingContextByKey(
@@ -47,6 +58,12 @@ export default async function ProductLineDirectionPage({
     navMode === "worker" ? "guided" : "professional",
   );
   const performance = buildProductLinePerformance(context);
+  const one = (value: string | string[] | undefined) =>
+    Array.isArray(value) ? value[0] : value;
+  const roadmapAudience = resolveProductRoadmapAudience(
+    one(query.audience),
+    navMode === "worker" ? "owner-operator" : "product-manager",
+  );
 
   return (
     <div className="space-y-dpf-xl">
@@ -55,6 +72,13 @@ export default async function ProductLineDirectionPage({
         audience={
           navMode === "worker" ? "owner-operator" : "professional-pm"
         }
+      />
+      <ProductRoadmap
+        scopeId={id}
+        scopeHref={`/portfolio/product-line/${encodeURIComponent(id)}/direction`}
+        workspace={projectProductRoadmapFromOperatingContext(context)}
+        view={resolveProductRoadmapView(one(query.view))}
+        audience={roadmapAudience}
       />
       <ProductDirectionBrief context={context} view={view} showLead={false} />
     </div>

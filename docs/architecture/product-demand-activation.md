@@ -67,3 +67,29 @@ convergence evidence.
 `/ops/demand` is the canonical operator surface. Product Direction supplies a
 filtered contextual link and read-only readiness/history projection; it is not
 a second board or write authority.
+
+## Derived roadmap boundary
+
+The Product and ProductLine roadmap is a pure read model over the canonical
+product operating context. It does not introduce `Roadmap` or `RoadmapItem`
+tables. A committed bet requires:
+
+1. `BacklogItem.demandStage = "ready"`, established by the governed funding
+   decision; and
+2. an explicit contribution link to an active business `ProductObjective`.
+
+The projection combines active build and shipped-version evidence when the
+backlog relation is explicit. Change and architecture records associated
+through a real enabling `DigitalProduct` remain coordination evidence. A
+`ProductDependency` edge is not converted into a business-demand dependency
+because no canonical association currently supports that claim.
+
+Now / Next / Later, timeline, outcome, dependency, coworker-review, and export
+views all consume the same projection contract. Missing stages, objective
+links, evidence, dates, or dependency mappings remain explicit. A portable
+snapshot carries `asOf`, filters, confidence, and source identifiers and is
+marked `importable: false`.
+
+This is an expand-first Phase 11 change with no schema migration. The fleet's
+legacy unclassified backlog remains unchanged and cannot enter a committed
+roadmap lane by inference.

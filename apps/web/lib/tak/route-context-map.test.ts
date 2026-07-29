@@ -49,6 +49,11 @@ describe("resolveRouteContext", () => {
     expect(ctx.domainTools).toContain("explain_blast_radius");
     expect(ctx.domainTools).toContain("create_product_objective");
     expect(ctx.domainTools).toContain("record_product_outcome_observation");
+    expect(ctx.domainTools).toContain("evaluate_org_business_decision");
+    expect(
+      ctx.skills.some((skill) => skill.label === "Review this roadmap"),
+    ).toBe(true);
+    expect(ctx.domainContext).toContain("fabricate a roadmap date");
   });
 
   it("routes product-line advice through the business WWWD boundary", () => {
@@ -62,6 +67,9 @@ describe("resolveRouteContext", () => {
       ctx.skills.some(
         (skill) => skill.label === "Ask what this business would do",
       ),
+    ).toBe(true);
+    expect(
+      ctx.skills.some((skill) => skill.label === "Review the line roadmap"),
     ).toBe(true);
   });
 
