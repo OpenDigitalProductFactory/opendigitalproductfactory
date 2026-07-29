@@ -221,11 +221,22 @@ Business-product Direction lives at
 authority is introduced.
 
 `apps/web/lib/product-management/product-direction-view.ts` derives the
-decision-first presentation. `product-line-direction-view.ts` derives the
-hierarchy and per-product comparison from the same context. The comparison
-uses only canonical Product Sold sale count and additive root revenue. It
-withholds a currency total when records contain mixed currencies and labels
-unallocated package components as a reporting blind spot.
+decision-first Product presentation. `product-performance.ts` derives typed
+period, availability, freshness, confidence, trend, evidence, and rollup
+contracts for Product and ProductLine. `product-performance-advice.ts` derives
+bounded recommendation candidates from that same projection.
+
+The performance boundary counts each canonical Product Sold root once, excludes
+cancelled and fully refunded records from recognized sales/revenue, and keeps
+package component allocations non-additive. It withholds revenue when records
+contain mixed currencies, labels bounded query windows and unallocated package
+components, and carries Product attribution for demand and objective evidence.
+Nested line rollups reuse the cycle-safe ProductLine hierarchy walker.
+
+Finance, CRM conversion, stable repeat-purchase identity, capacity, stock,
+quality, shared-cost margin, and cannibalization remain explicit unavailable
+measure contracts until a verified adapter connects them to business Product.
+No summary row or generated prose is persisted.
 
 The shell's existing navigation-mode preference controls disclosure density:
 worker/Simple is guided and operator/Full is professional. This is a
@@ -234,6 +245,14 @@ Facts, deterministic calculations, missing contracts, and future AI-assisted
 work remain visibly distinct. Direction links are read-only; the preview
 component discloses scope and consequences before any transition to a governed
 mutation workflow.
+
+Product-line recommendations are pure, cited read-model output. The
+`/portfolio/product-line` coworker route may call the existing
+`evaluate_org_business_decision` tool only after the operator asks to consider
+a real choice. That action records the WWWD decision interaction; page render
+does not invoke inference. Corrections become a later governed decision and
+observed effects stay in ProductObjective outcome history, avoiding a parallel
+ProductAdvice ledger.
 
 Continuous intelligence lives at
 `/portfolio/product/[id]/direction/intelligence`. Its server-derived view keeps

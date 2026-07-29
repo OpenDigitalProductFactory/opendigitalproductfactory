@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { ProductDirectionBrief } from "@/components/product/direction/ProductDirectionBrief";
-import { ProductLineComparison } from "@/components/product/ProductLineComparison";
+import { ProductLinePerformance } from "@/components/product/ProductLinePerformance";
 import {
   ProductManagementAccessError,
   ProductManagementOrganizationNotFoundError,
@@ -9,7 +9,7 @@ import {
 } from "@/lib/product-management/current-product-operating-context.server";
 import { ProductOperatingContextNotFoundError } from "@/lib/product-management/product-operating-context-query";
 import { buildProductDirectionView } from "@/lib/product-management/product-direction-view";
-import { buildProductLineComparison } from "@/lib/product-management/product-line-direction-view";
+import { buildProductLinePerformance } from "@/lib/product-management/product-performance";
 import {
   NAV_MODE_COOKIE,
   resolveNavModeFromCookie,
@@ -46,11 +46,16 @@ export default async function ProductLineDirectionPage({
     context,
     navMode === "worker" ? "guided" : "professional",
   );
-  const rows = buildProductLineComparison(context);
+  const performance = buildProductLinePerformance(context);
 
   return (
     <div className="space-y-dpf-xl">
-      <ProductLineComparison rows={rows} />
+      <ProductLinePerformance
+        view={performance}
+        audience={
+          navMode === "worker" ? "owner-operator" : "professional-pm"
+        }
+      />
       <ProductDirectionBrief context={context} view={view} showLead={false} />
     </div>
   );

@@ -198,6 +198,7 @@ export type DependencyRow = {
 };
 export type ProductObjectiveRow = {
   objectiveId: string;
+  productId: string;
   title: string;
   problemStatement: string | null;
   outcomeHypothesis: string;
