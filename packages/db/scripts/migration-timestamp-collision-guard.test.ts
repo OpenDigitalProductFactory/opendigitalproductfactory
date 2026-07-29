@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 // @ts-expect-error — .mjs guard, no types
-import { findCollisions } from "./migration-timestamp-collision-guard.mjs";
+import {
+  findCollisions,
+  HISTORICAL_COLLISION_RESTORATIONS,
+} from "./migration-timestamp-collision-guard.mjs";
 
 const newSet = (...dirs: string[]) => new Set(dirs);
 
@@ -66,5 +69,31 @@ describe("migration-timestamp-collision-guard", () => {
   it("ignores dirs without a 14-digit timestamp prefix", () => {
     const all = ["migration_lock.toml_notadir", "20260707120000_add_alpha"];
     expect(findCollisions(all, newSet("20260707120000_add_alpha"))).toHaveLength(0);
+  });
+
+  it("allows the exact historical inventory repair restoration", () => {
+    const restored = "20260728120000_repair_inventory_entity_index_integrity";
+    const all = [
+      "20260728120000_add_business_product_hierarchy",
+      restored,
+    ];
+    const checksums = new Map([
+      [restored, HISTORICAL_COLLISION_RESTORATIONS[restored]],
+    ]);
+    expect(findCollisions(all, newSet(restored), checksums)).toHaveLength(0);
+  });
+
+  it("rejects any byte drift in the historical restoration", () => {
+    const restored = "20260728120000_repair_inventory_entity_index_integrity";
+    const all = [
+      "20260728120000_add_business_product_hierarchy",
+      restored,
+    ];
+    const findings = findCollisions(
+      all,
+      newSet(restored),
+      new Map([[restored, "0".repeat(64)]]),
+    );
+    expect(findings).toHaveLength(1);
   });
 });

@@ -19,6 +19,9 @@
 // timestamp prefix is shared by any other migration in the working tree —
 // whether that other migration is pre-existing or also new. Existing pairs are
 // never "new", so the 19 legacy collisions self-baseline and are never flagged.
+// One exact-checksum exception restores a migration identity already applied by
+// an earlier branch revision; changing either its name or bytes would create
+// fleet drift, so the exception is narrower than an ordinary baseline.
 //
 // The fix for a flagged collision is always to pick a fresh, later timestamp for
 // the NEW migration BEFORE it merges (it has never been applied anywhere, so
@@ -32,11 +35,21 @@
 //   - packages/db/scripts/migration-timestamp-collision-guard.test.ts (vitest)
 
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const MIGRATIONS_DIR = "packages/db/prisma/migrations";
 const TS_PREFIX = /^(\d{14})_/;
+
+// A former branch revision reached real databases under this exact identity
+// before the migration was renamed. Restoring those exact bytes is required to
+// preserve Prisma history; any checksum drift remains a collision failure.
+export const HISTORICAL_COLLISION_RESTORATIONS = Object.freeze({
+  "20260728120000_repair_inventory_entity_index_integrity":
+    "84704a50ad127a0a4823074956f8041cd99f647accbcb39ce17c856fa1f13d90",
+});
 
 /**
  * Given the full set of migration directory names and the subset that is NEW
@@ -45,9 +58,10 @@ const TS_PREFIX = /^(\d{14})_/;
  *
  * @param {string[]} allDirs   every migration dir name in the working tree
  * @param {Set<string>} newDirs the subset that is new since the base ref
+ * @param {Map<string, string>} migrationChecksums SHA-256 by migration dir
  * @returns {{ dir: string, timestamp: string, collidesWith: string[] }[]}
  */
-export function findCollisions(allDirs, newDirs) {
+export function findCollisions(allDirs, newDirs, migrationChecksums = new Map()) {
   const byTimestamp = new Map();
   for (const dir of allDirs) {
     const m = TS_PREFIX.exec(dir);
@@ -60,6 +74,13 @@ export function findCollisions(allDirs, newDirs) {
   const findings = [];
   for (const dir of allDirs) {
     if (!newDirs.has(dir)) continue;
+    const restorationChecksum = HISTORICAL_COLLISION_RESTORATIONS[dir];
+    if (
+      restorationChecksum
+      && migrationChecksums.get(dir) === restorationChecksum
+    ) {
+      continue;
+    }
     const m = TS_PREFIX.exec(dir);
     if (!m) continue;
     const siblings = byTimestamp.get(m[1]).filter((d) => d !== dir);
@@ -92,6 +113,14 @@ function main() {
   // Map each migration.sql path → its migration directory name.
   const dirOf = (f) => f.slice(`${MIGRATIONS_DIR}/`.length).split("/")[0];
   const allDirs = tracked.map(dirOf);
+  const migrationChecksums = new Map(
+    tracked.map((file) => [
+      dirOf(file),
+      createHash("sha256")
+        .update(readFileSync(resolve(repoRoot, file)))
+        .digest("hex"),
+    ]),
+  );
 
   const newDirs = new Set(
     tracked
@@ -106,7 +135,7 @@ function main() {
       .map(dirOf),
   );
 
-  const findings = findCollisions(allDirs, newDirs);
+  const findings = findCollisions(allDirs, newDirs, migrationChecksums);
 
   if (findings.length === 0) {
     console.log("✅ No new migration timestamp collisions.");
@@ -123,12 +152,17 @@ function main() {
   for (const f of findings) {
     console.error(`  ${f.dir}`);
     console.error(`    • timestamp ${f.timestamp} also used by: ${f.collidesWith.join(", ")}`);
+    if (HISTORICAL_COLLISION_RESTORATIONS[f.dir]) {
+      console.error(
+        `    • historical restoration must have checksum ${HISTORICAL_COLLISION_RESTORATIONS[f.dir]}`,
+      );
+      console.error(`    • observed checksum ${migrationChecksums.get(f.dir) ?? "<missing>"}`);
+    }
   }
   console.error("");
-  console.error("Fix: rename the NEW migration directory above to a fresh, later 14-digit timestamp");
-  console.error("(YYYYMMDDHHMMSS) that no other migration uses. Do NOT rename the migration it");
-  console.error("collides with — if that one has already been applied anywhere, renaming it wedges");
-  console.error("the forward-only chain.");
+  console.error("Fix an ordinary NEW migration by renaming it to a fresh timestamp before merge.");
+  console.error("Fix a listed historical restoration by restoring its exact recorded bytes.");
+  console.error("Never rename a migration identity that has already been applied anywhere.");
   console.error("");
   process.exit(1);
 }

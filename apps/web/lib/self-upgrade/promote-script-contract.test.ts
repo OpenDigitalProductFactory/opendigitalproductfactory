@@ -345,6 +345,31 @@ describe.skipIf(!BASH_AVAILABLE)("promote.sh --self-upgrade contract", () => {
       expect(dryRunResult.stdout).toContain("step=migrate");
     });
 
+    it("guards the known inventory snapshot failure before normal migration deploy", () => {
+      const scriptSource = readFileSync(join(REPO_ROOT, "scripts", "promote.sh"), "utf8");
+      const recoveryCommand =
+        "node packages/db/scripts/recover-inventory-snapshot-migration.mjs";
+      const resolveCommand =
+        "prisma migrate resolve --rolled-back 20260728115900_snapshot_inventory_observation_facts";
+      const verifyCommand =
+        "recover-inventory-snapshot-migration.mjs --verify-rolled-back";
+      const deployCommand =
+        "-c 'cd /app && pnpm --filter @dpf/db exec prisma migrate deploy'";
+
+      expect(scriptSource).toContain(recoveryCommand);
+      expect(scriptSource).toContain(resolveCommand);
+      expect(scriptSource.indexOf(recoveryCommand)).toBeLessThan(
+        scriptSource.indexOf(resolveCommand),
+      );
+      expect(scriptSource.indexOf(resolveCommand)).toBeLessThan(
+        scriptSource.indexOf(verifyCommand),
+      );
+      expect(scriptSource.indexOf(verifyCommand)).toBeLessThan(
+        scriptSource.indexOf(deployCommand),
+      );
+      expect(scriptSource).not.toContain(`${resolveCommand}' >/dev/null 2>&1 || true`);
+    });
+
     it("emits docker-up step", () => {
       expect(dryRunResult.stdout).toContain("step=docker-up");
     });

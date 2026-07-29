@@ -88,6 +88,15 @@ for arg in "$@"; do
 done
 [ -n "$DOCKER_LOG" ] && printf '%s\\n' "$*" >> "$DOCKER_LOG"
 case "$*" in
+  *"recover-inventory-snapshot-migration.mjs --verify-rolled-back"*) printf "verified" ;;
+  *"recover-inventory-snapshot-migration.mjs"*)
+    [ "\${DPF_TEST_RECOVERY_DECISION:-not-needed}" = "blocked" ] && exit 1
+    if [ "\${DPF_TEST_RECOVERY_DECISION:-not-needed}" = "recover" ]; then
+      printf "recover:11111111-1111-4111-8111-111111111111"
+    else
+      printf "not-needed"
+    fi
+    ;;
   *"up -d --no-deps --force-recreate portal"*|*"up -d --no-deps --force-recreate sandbox"*)
     service=
     for service in "$@"; do :; done
@@ -119,6 +128,7 @@ function runPromote(opts: {
   fakeBin: string;
   composeEnvFile?: string;
   dockerLog?: string;
+  recoveryDecision?: "recover" | "not-needed" | "blocked";
 }): { status: number | null; stdout: string; stderr: string } {
   const stateDir = join(opts.backup, "state");
   const secret = "s".repeat(32);
@@ -155,6 +165,9 @@ function runPromote(opts: {
     `export DPF_INSTALL_STATE_MIGRATION_SIGNATURE=${shellQuote(signature)}`,
     "export PROMOTE_HEALTH_URL='http://127.0.0.1:9/api/health'",
     "export PROMOTE_COMPOSE_PROJECT='dpf-functest'",
+    ...(opts.recoveryDecision
+      ? [`export DPF_TEST_RECOVERY_DECISION=${shellQuote(opts.recoveryDecision)}`]
+      : []),
     ...(opts.composeEnvFile
       ? [`export PROMOTE_COMPOSE_ENV_FILE=${shellQuote(toBashPath(opts.composeEnvFile))}`]
       : []),
@@ -290,7 +303,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       mkdirSync(emptyShaBin, { recursive: true });
       writeFileSync(
         join(emptyShaBin, "docker"),
-        '#!/bin/sh\ncase "$*" in\n  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;\nesac\nexit 0\n',
+        '#!/bin/sh\ncase "$*" in\n  *"recover-inventory-snapshot-migration.mjs"*) printf "not-needed" ;;\n  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;\nesac\nexit 0\n',
       );
       // /sha → empty (the bug); other probes → ok.
       writeFileSync(
@@ -350,6 +363,60 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
     }
   }, PROMOTE_TEST_TIMEOUT_MS);
 
+  it("resolves the allowlisted snapshot failure before normal migrate deploy", () => {
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    const dockerLog = join(root, "docker.log");
+    try {
+      const r = runPromote({
+        source,
+        backup,
+        targetSha: head,
+        fakeBin,
+        dockerLog,
+        recoveryDecision: "recover",
+      });
+
+      expect(r.status).toBe(0);
+      const calls = readFileSync(dockerLog, "utf8");
+      const check = calls.indexOf("recover-inventory-snapshot-migration.mjs");
+      const resolve = calls.indexOf(
+        "prisma migrate resolve --rolled-back 20260728115900_snapshot_inventory_observation_facts",
+      );
+      const deploy = calls.indexOf("prisma migrate deploy");
+      expect(check).toBeGreaterThanOrEqual(0);
+      expect(resolve).toBeGreaterThan(check);
+      expect(deploy).toBeGreaterThan(resolve);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
+  it("fails before migrate deploy when snapshot recovery cannot prove safety", () => {
+    const { root, source, backup, fakeBin, head } = makeScratch();
+    const dockerLog = join(root, "docker.log");
+    try {
+      const r = runPromote({
+        source,
+        backup,
+        targetSha: head,
+        fakeBin,
+        dockerLog,
+        recoveryDecision: "blocked",
+      });
+
+      expect(r.status).not.toBe(0);
+      expect(r.stderr).toContain(
+        "inventory snapshot migration recovery did not prove a safe state",
+      );
+      const calls = readFileSync(dockerLog, "utf8");
+      expect(calls).toContain("recover-inventory-snapshot-migration.mjs");
+      expect(calls).not.toContain("prisma migrate deploy");
+      expect(calls).not.toContain("up -d --no-deps --force-recreate portal");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, PROMOTE_TEST_TIMEOUT_MS);
+
   // BI-A8686CFC: a sandbox rebuild that fails AFTER the portal is verified must
   // NOT fail the whole promotion (the portal swap already happened and the
   // orchestrator died with it) — it emits a loud sandbox-refresh-failed marker
@@ -363,7 +430,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       mkdirSync(bin, { recursive: true });
       writeFileSync(
         join(bin, "docker"),
-        '#!/bin/sh\n[ -n "$DOCKER_LOG" ] && printf "%s\\n" "$*" >> "$DOCKER_LOG"\ncase "$*" in\n  *"build sandbox"*) exit 1 ;;\n  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;\nesac\nexit 0\n',
+        '#!/bin/sh\n[ -n "$DOCKER_LOG" ] && printf "%s\\n" "$*" >> "$DOCKER_LOG"\ncase "$*" in\n  *"recover-inventory-snapshot-migration.mjs"*) printf "not-needed" ;;\n  *"build sandbox"*) exit 1 ;;\n  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;\nesac\nexit 0\n',
       );
       writeFileSync(
         join(bin, "curl"),
@@ -399,7 +466,7 @@ describe.skipIf(!BASH_OK || !GIT_OK)("promote.sh — real-script functional run"
       // present ("1"); everything else behaves like the default fake.
       writeFileSync(
         join(bin, "docker"),
-        '#!/bin/sh\n[ -n "$DOCKER_LOG" ] && printf "%s\\n" "$*" >> "$DOCKER_LOG"\ncase "$*" in\n  *pg_available_extensions*) printf "1" ;;\n  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;\nesac\nexit 0\n',
+        '#!/bin/sh\n[ -n "$DOCKER_LOG" ] && printf "%s\\n" "$*" >> "$DOCKER_LOG"\ncase "$*" in\n  *"recover-inventory-snapshot-migration.mjs"*) printf "not-needed" ;;\n  *pg_available_extensions*) printf "1" ;;\n  *"/app/.dpf-source-content-hash"*) printf "deadbeefhash" ;;\nesac\nexit 0\n',
       );
       writeFileSync(
         join(bin, "curl"),
