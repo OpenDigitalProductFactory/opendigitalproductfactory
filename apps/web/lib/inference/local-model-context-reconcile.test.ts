@@ -47,12 +47,22 @@ describe("resolveServedContextTarget — resource-aware (BI-3E614946)", () => {
     expect(await resolveServedContextTarget()).toBe(122_880);
   });
 
-  it("clamps an over-ambitious operator override DOWN to the resource-aware ceiling (no over-commit)", async () => {
+  it("trusts an explicit operator pin ABOVE the estimated ceiling, clamped only to MAX (BI-F4D3B9E9)", async () => {
     mockPrisma.platformConfig.findUnique.mockImplementation(
       configByKey({ host_profile: HOST_4090, "local.servedContextTokens": 200_000 }),
     );
-    // 200k pinned, but a 24 GB card on the 30B can only serve ~24,576 — clamp down.
-    expect(await resolveServedContextTarget()).toBe(RECOMMENDED_BUILD_CONTEXT_TOKENS);
+    // The weights+KV estimate says a 24 GB card on the 30B caps at the floor, but
+    // the estimate measurably under-sizes MoE models (40k serves fine on this
+    // exact host). An explicit pin is the operator's documented mechanism for
+    // going higher — honor it, bounded only by the hard MAX.
+    expect(await resolveServedContextTarget()).toBe(MAX_LOCAL_CONTEXT_TOKENS);
+  });
+
+  it("honors a measured-realistic pin (40k on the 24 GB 4090 + 30B MoE) verbatim", async () => {
+    mockPrisma.platformConfig.findUnique.mockImplementation(
+      configByKey({ host_profile: HOST_4090, "local.servedContextTokens": 40_960 }),
+    );
+    expect(await resolveServedContextTarget()).toBe(40_960);
   });
 
   it("trusts an operator override up to MAX when the host is unknown", async () => {

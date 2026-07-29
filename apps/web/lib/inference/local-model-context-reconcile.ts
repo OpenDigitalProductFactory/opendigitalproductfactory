@@ -25,6 +25,7 @@ import {
   isEmbeddingModelId,
   RECOMMENDED_BUILD_CONTEXT_TOKENS,
   REASONING_PHASE_CONTEXT_ENVELOPE_TOKENS,
+  clampServedContextTokens,
   computeServedContextCeiling,
   isLocalServedContextEligibleForReasoning,
   parseHostMemory,
@@ -65,10 +66,17 @@ export async function resolveHostMemoryProfile(): Promise<
 export const LOCAL_SERVED_CONTEXT_CONFIG_KEY = "local.servedContextTokens";
 
 /**
- * The reconcile target, RESOURCE-AWARE (BI-3E614946):
- *   - operator override present → clamped to `[floor, resource-aware ceiling]`,
- *     so a pinned value can never over-commit a known GPU (the ceiling is what the
- *     host can actually serve; unknown host → MAX, trusting the operator);
+ * The reconcile target, RESOURCE-AWARE (BI-3E614946, revised BI-F4D3B9E9):
+ *   - operator override present → clamped to `[floor, MAX_LOCAL_CONTEXT_TOKENS]`.
+ *     An EXPLICIT pin is trusted above the estimated resource ceiling — the
+ *     ceiling is a weights+KV estimate, and it measurably under-sizes MoE
+ *     models (qwen3-coder 30B-A3B serves 40k on the 24 GB host the estimate
+ *     capped at the 24k floor, hard-excluding every restricted-sensitivity
+ *     coworker turn from its only eligible endpoint). The module contract has
+ *     always named the override as "the mechanism for going higher"; when the
+ *     pin exceeds the estimate we honor it and WARN loudly so the choice stays
+ *     legible. DMR/llama.cpp degrades by offloading rather than hard-failing,
+ *     and the reconcile's deferred/unreachable statuses catch a refused load.
  *   - no override → the resource-aware default sized to the host's VRAM/RAM budget
  *     minus model weights + headroom (`recommendServedContextTokens`), which itself
  *     returns the build floor when the host is unknown — a safe degrade.
@@ -92,9 +100,15 @@ export async function resolveServedContextTarget(): Promise<number> {
           ? Number(row.value)
           : null;
     if (raw != null && Number.isFinite(raw)) {
-      // Operator override, bounded by the resource-aware ceiling (never below the
-      // build floor, never above what the host can serve).
-      return Math.min(ceiling, Math.max(RECOMMENDED_BUILD_CONTEXT_TOKENS, Math.floor(raw)));
+      const pinned = clampServedContextTokens(Math.floor(raw));
+      if (pinned > ceiling) {
+        console.warn(
+          `[local-model-context] operator pin ${pinned} tokens exceeds the estimated resource ceiling ${ceiling} ` +
+            `for this host — honoring the pin (explicit operator choice; serving may offload layers). ` +
+            `Lower ${LOCAL_SERVED_CONTEXT_CONFIG_KEY} if local inference degrades.`,
+        );
+      }
+      return pinned;
     }
   } catch {
     // best-effort — fall through to the resource-aware default
