@@ -58,7 +58,7 @@ export function summarizeOrderItems(items: unknown): string | null {
     .filter((it): it is { qty?: unknown; name?: unknown } => typeof it === "object" && it !== null)
     .map((it) => {
       const name = typeof it.name === "string" && it.name.trim() ? it.name.trim() : null;
-      const qty = typeof it.qty === "number" && it.qty > 0 ? it.qty : null;
+      const qty = typeof it.qty === "number" && it.qty > 1 ? it.qty : null;
       if (!name) return null;
       return qty ? `${qty}× ${name}` : name;
     })
