@@ -244,6 +244,15 @@ The ratios are chosen so that one commandment at peak alignment outweighs ten co
 
 The principle dimension registry currently includes: long-term maintainability, blast radius, reusability, evidence density, human cognitive load, capacity utilization, governance compliance, public safety, speed to value, schema grounding, operational independence, data privacy, cost efficiency, and vendor lock-in.
 
+**Mathematical grounding.** None of this is ad-hoc; each piece sits on established decision mathematics, chosen so every term stays inspectable in the ledger:
+
+- The composite is **weighted vector algebra** — signed principle vectors, option feature vectors, dot products, weighted sums. Formally it is Simple Additive Weighting / the Weighted Sum Model from multi-criteria decision analysis (Churchman &amp; Ackoff 1954; Hwang &amp; Yoon 1981), the aggregation rule whose every contribution can be shown to a human.
+- The semantic path is the classical **vector space model** for information retrieval (Salton, Wong &amp; Yang 1975), with modern embeddings in place of term-frequency vectors.
+- **Eigenvector mathematics is live in retrieval**: the Personalized PageRank pass ranks wiki pages by the stationary distribution of a personalized random walk over the link graph — the principal eigenvector, belonging to the dominant eigenvalue, of the walk's transition matrix. Multi-hop relevance is an eigenvector computation, not a heuristic.
+- For deriving the weights themselves, the designated cold-start elicitation path is Saaty's **Analytic Hierarchy Process eigenvector method**: present an owner with simple pairwise comparisons, build the reciprocal comparison matrix, take its principal eigenvector as the weight vector, and check a consistency ratio to catch incoherent judgments. It would feed the same human-ruled proposal ladder described under JSI below — it is a planned technique for new installs with no decision history yet, not something running today. (Today's weights are hand-authored and versioned; the foundations doc is explicit about that distinction.)
+
+The full mathematical foundations — with citations and an honest per-method build status — are in [Vector Decisioning and JSI](vector-decisioning-and-jsi.md).
+
 ### A worked example
 
 A `build-specialist` coworker has built an "overdue jobs" widget for an HVAC dispatcher board and hits an open product question before shipping: *should this be generalized into the reusable workspace-home primitive library for the Hive Mind, or kept local to this install?* (`domainClass: architecture-tradeoff`, `riskTier: medium`). The numbers illustrate the real math — each cell is a contribution (`weight × alignment`); the composite is the column sum.
