@@ -294,6 +294,31 @@ test("--converge refuses a duplicate convergence while the lock is held", () => 
   rmSync(root, { recursive: true, force: true });
 });
 
+test("--converge honors the admitted slot's explicit convergence lock", () => {
+  const root = scaffold({
+    installedVersions: { next: "16.2.7" },
+    lockedVersions: { next: "16.2.9" },
+  });
+  const lockDir = join(root, ".slot-state", "slot-1-convergence.lock");
+  mkdirSync(lockDir, { recursive: true });
+  const binDir = join(root, "fake-bin");
+  writeFakePnpmThatRepairsOnlyWithFreshStore(binDir);
+
+  const { result, report } = runPreflight(root, ["--converge"], {
+    env: {
+      DPF_LOCAL_CI_FRESHNESS_LOCK: lockDir,
+      DPF_LOCAL_CI_FRESH_STORE: join(root, ".pnpm-fresh-store-slot-1"),
+      DPF_ALLOW_SANDBOX_NODE_MODULES_RESET: "1",
+      PATH: prependPathEnv(binDir),
+    },
+  });
+
+  assert.equal(result.status, 4, `${result.stdout}\n${result.stderr}`);
+  assert.equal(report.convergence.reason, "convergence_lock_held");
+  assert.equal(existsSync(join(root, "pnpm-invocations.log")), false);
+  rmSync(root, { recursive: true, force: true });
+});
+
 test("--converge falls back to a scratch-local pnpm store when the shared store keeps serving stale package content", () => {
   const root = scaffold({
     installedVersions: { vitest: "4.1.9" },

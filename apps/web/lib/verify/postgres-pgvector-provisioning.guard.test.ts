@@ -27,7 +27,7 @@ const REPO_ROOT = resolve(__dirname, "..", "..", "..", "..");
 // Add a site here when a new one is introduced — that is the point of the ratchet.
 const PROVISIONING_SITES = [
   "apps/web/lib/integrate/sandbox/sandbox-db.ts",
-  "scripts/local-ci-runner.sh",
+  "scripts/local-ci-runner.mjs",
   "docker-compose.yml",
 ];
 

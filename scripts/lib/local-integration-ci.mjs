@@ -2,8 +2,9 @@ import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
-export function integrationBranchName(candidateBranch) {
-  return `local-integration/${
+export function integrationBranchName(candidateBranch, slotKey = "") {
+  const prefix = slotKey ? `local-integration/${slotKey}` : "local-integration";
+  return `${prefix}/${
     candidateBranch
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
@@ -15,8 +16,8 @@ export function defaultBuildStrategy(hostPlatform = process.platform) {
   return hostPlatform === "win32" ? "docker-build" : "host-next";
 }
 
-export function dockerBuildTag(candidateBranch) {
-  return `dpf-${integrationBranchName(candidateBranch).replace(/\//g, "-")}-build`;
+export function dockerBuildTag(candidateBranch, slotKey = "") {
+  return `dpf-${integrationBranchName(candidateBranch, slotKey).replace(/\//g, "-")}-build`;
 }
 
 // V8 heap headroom for the host-next production build (BI-B5011ACE). With the
@@ -99,6 +100,23 @@ export function createToolchainFingerprint(input) {
   };
 }
 
+export function createProductionArtifactIdentity(input) {
+  if (input.buildStrategy === "docker-build") {
+    return {
+      kind: "docker-image",
+      integrationTreeSha: input.integrationTreeSha,
+      identity: input.dockerImageId || "unresolved",
+      locator: input.dockerImageTag || "unresolved",
+    };
+  }
+  return {
+    kind: "next-build",
+    integrationTreeSha: input.integrationTreeSha,
+    identity: input.nextBuildId || "unresolved",
+    locator: "apps/web/.next",
+  };
+}
+
 function commandOutput(command, args) {
   const result = spawnSync(command, args, {
     encoding: "utf8",
@@ -131,11 +149,11 @@ export function collectToolchainFingerprint({ buildStrategy, cwd = process.cwd()
 }
 
 export function createLocalIntegrationPlan(input) {
-  const branch = integrationBranchName(input.candidateBranch);
+  const branch = integrationBranchName(input.candidateBranch, input.slotKey);
   const baseRef = input.baseRef ?? "origin/main";
   const buildStrategy = input.buildStrategy ?? defaultBuildStrategy(input.hostPlatform);
   const productionBuildCommand = buildStrategy === "docker-build"
-    ? ["docker", "build", "--target", "build", "-t", dockerBuildTag(input.candidateBranch), "."]
+    ? ["docker", "build", "--target", "build", "-t", dockerBuildTag(input.candidateBranch, input.slotKey), "."]
     // `env VAR=… cmd` keeps the plan a plain argv (no shell) — host-next is
     // POSIX-only by construction (Windows defaults to docker-build above).
     : ["env", HOST_BUILD_NODE_OPTIONS, "pnpm", "--filter", "web", "exec", "next", "build"];
@@ -163,7 +181,14 @@ export function createLocalIntegrationPlan(input) {
     // pnpm-lock.yaml, node_modules must be proven to match it before any
     // test/build result counts as product evidence. Exits 3/4 (sandbox drift /
     // not ready) instead of letting a stale install masquerade as a red build.
-    ["node", "scripts/sandbox-freshness-preflight.mjs", "--converge", "--branch", branch],
+    [
+      "node",
+      "scripts/sandbox-freshness-preflight.mjs",
+      "--converge",
+      "--branch",
+      branch,
+      ...(input.slotKey ? ["--slot-key", input.slotKey] : []),
+    ],
     // CI parity: the workflow runs `prisma generate` explicitly before every
     // typecheck/build (ci.yml). The freshness preflight only converges when the
     // LOCKFILE drifts — a merge that changes schema.prisma without touching
@@ -195,6 +220,7 @@ export function createLocalIntegrationPlan(input) {
   return {
     mode: input.mode,
     integrationBranch: branch,
+    slotKey: input.slotKey ?? "",
     baseRef,
     buildStrategy,
     commands,

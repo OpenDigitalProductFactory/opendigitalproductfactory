@@ -27,6 +27,21 @@ A profile-gated Next.js dev hot-reload server on `http://localhost:3001`. Backed
 - Mutated by: a DPF contributor's IDE editing the worktree on the host.
 - Not shipped by default to customer installs. A plain `docker compose up -d` does not start it.
 
+## Contributor verification sandbox
+
+The `local-integration-ci` lane used by `pnpm run pregate`. It is a governed,
+leased convergence environment for exact merged-tree tests and production
+builds, not a per-worktree runtime and not a customer-facing portal. A typed
+slot manifest isolates its scratch checkout, process fence, Compose project,
+portal/PostgreSQL ports, database/volume, dependency state, and evidence.
+Automatic capacity is one; the second declared identity remains unavailable to
+automatic admission until its governed pilot.
+
+- Default slot-0 portal endpoint: `http://localhost:3010`
+- Admission authority: `NonProductionEnvironmentLease`
+- Resource identity: `scripts/lib/local-ci-slot-manifest.mjs`
+- Operations: [Local-CI sandbox slots](local-ci-sandbox-slots.md)
+
 ## Diagnostic surfaces (where technical names still appear)
 
 The following surfaces continue to use compose-service, container, and port names because they exist to expose the platform's real state:

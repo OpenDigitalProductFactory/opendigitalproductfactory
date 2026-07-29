@@ -1,4 +1,4 @@
-name: ${COMPOSE_PROJECT_NAME:-dpf-local-ci}
+name: ${COMPOSE_PROJECT_NAME:?COMPOSE_PROJECT_NAME must come from the admitted local-CI slot manifest}
 
 services:
   local-ci-portal:
@@ -11,15 +11,15 @@ services:
     restart: unless-stopped
     profiles: ["local-ci"]
     ports:
-      - "3010:3000"
+      - "${DPF_LOCAL_CI_PORT:?DPF_LOCAL_CI_PORT must come from the admitted local-CI slot manifest}:3000"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - dpf-local-ci-source-code:/workspace
     environment:
-      DATABASE_URL: ${LOCAL_CI_DATABASE_URL:-postgresql://dpf:dpf_dev@host.docker.internal:5433/dpf}
+      DATABASE_URL: ${DPF_LOCAL_CI_TEST_DATABASE_URL:?DPF_LOCAL_CI_TEST_DATABASE_URL must come from the admitted local-CI slot manifest}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET must be set - run scripts/setup.ps1 or scripts/setup.sh first}
       AUTH_TRUST_HOST: "true"
-      PUBLIC_URL: ${LOCAL_CI_PUBLIC_URL:-http://localhost:3010}
+      PUBLIC_URL: ${DPF_LOCAL_CI_URL:?DPF_LOCAL_CI_URL must come from the admitted local-CI slot manifest}
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY:?CREDENTIAL_ENCRYPTION_KEY must be set - run scripts/setup.ps1 or scripts/setup.sh first}
       NEO4J_URI: ${LOCAL_CI_NEO4J_URI:-bolt://host.docker.internal:7688}
       NEO4J_USER: neo4j
@@ -30,7 +30,7 @@ services:
       DPF_ENVIRONMENT: local-ci
       INSTANCE_TYPE: dev
       PROJECT_ROOT: /workspace
-      APP_URL: http://localhost:3010
+      APP_URL: ${DPF_LOCAL_CI_URL:?DPF_LOCAL_CI_URL must come from the admitted local-CI slot manifest}
       MCP_INSECURE_INTERNAL_HOSTS: ${MCP_INSECURE_INTERNAL_HOSTS:-portal,host.docker.internal,sandbox,local-ci-portal}
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -43,3 +43,4 @@ services:
 
 volumes:
   dpf-local-ci-source-code:
+    name: ${DPF_LOCAL_CI_SOURCE_VOLUME:?DPF_LOCAL_CI_SOURCE_VOLUME must come from the admitted local-CI slot manifest}

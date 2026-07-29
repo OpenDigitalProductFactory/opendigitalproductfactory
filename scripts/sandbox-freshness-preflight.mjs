@@ -48,6 +48,7 @@ const hasFlag = (flag) => process.argv.includes(flag);
 
 const requestedBranch = valueAfter("--branch");
 const requestedSha = valueAfter("--sha");
+const slotKey = valueAfter("--slot-key") || process.env.DPF_LOCAL_CI_SLOT_KEY || "";
 const converge = hasFlag("--converge");
 const quiet = hasFlag("--quiet");
 // Hermetic-test escape hatch: skip the host-wide ps scan so an unrelated
@@ -76,6 +77,18 @@ if (!reportPath) reportPath = process.env.DPF_LOCAL_CI_FRESHNESS_REPORT_FILE || 
 if (!reportPath) {
   const gitPath = git(rootDir, ["rev-parse", "--git-path", "dpf-sandbox-freshness.json"]);
   reportPath = gitPath ? path.resolve(rootDir, gitPath) : path.join(rootDir, ".dpf-sandbox-freshness.json");
+}
+
+function resolveSlotMutablePath(configuredPath, fallbackPath, label) {
+  const resolved = path.resolve(configuredPath || fallbackPath);
+  if (configuredPath) {
+    const displacement = path.relative(rootDir, resolved);
+    if (!displacement || displacement.startsWith("..") || path.isAbsolute(displacement)) {
+      console.error(`[sandbox-freshness] refusing unsafe ${label} path outside the admitted slot: ${resolved}`);
+      process.exit(EXIT_USAGE);
+    }
+  }
+  return resolved;
 }
 
 function readFileIfExists(filePath) {
@@ -189,6 +202,10 @@ function collectState() {
 function writeReport(state, evaluation, convergence) {
   const report = {
     schema: "dpf-sandbox-freshness/v1",
+    slotKey: slotKey || null,
+    manifestVersion: process.env.DPF_LOCAL_CI_SLOT_MANIFEST_VERSION
+      ? Number(process.env.DPF_LOCAL_CI_SLOT_MANIFEST_VERSION)
+      : null,
     generatedAt: new Date().toISOString(),
     dir: rootDir,
     requestedBranch: state.requestedBranch || null,
@@ -237,7 +254,14 @@ if (state.installProcesses.length > 0) {
 }
 
 const gitLockPath = git(rootDir, ["rev-parse", "--git-path", "dpf-freshness-converge.lock"]);
-const lockDir = gitLockPath ? path.resolve(rootDir, gitLockPath) : path.join(rootDir, ".dpf-freshness-converge.lock");
+const defaultLockDir = gitLockPath
+  ? path.resolve(rootDir, gitLockPath)
+  : path.join(rootDir, ".dpf-freshness-converge.lock");
+const lockDir = resolveSlotMutablePath(
+  process.env.DPF_LOCAL_CI_FRESHNESS_LOCK,
+  defaultLockDir,
+  "convergence lock",
+);
 try {
   fs.mkdirSync(lockDir, { recursive: false });
 } catch {
@@ -289,7 +313,8 @@ function clearStalePackageLinks(packageState) {
 }
 
 function canResetNodeModules() {
-  return path.basename(rootDir).toLowerCase() === ".local-ci-runner"
+  return /^\.local-ci-runner(?:-slot-\d+)?$/i.test(path.basename(rootDir))
+    || Boolean(slotKey)
     || process.env.DPF_ALLOW_SANDBOX_NODE_MODULES_RESET === "1";
 }
 
@@ -313,16 +338,17 @@ function resetSandboxNodeModules() {
 }
 
 function freshPnpmStoreDir() {
-  const target = path.join(rootDir, ".pnpm-fresh-store");
-  const resolved = path.resolve(target);
-  if (path.relative(rootDir, resolved) !== ".pnpm-fresh-store") return "";
-  return resolved;
+  return resolveSlotMutablePath(
+    process.env.DPF_LOCAL_CI_FRESH_STORE,
+    path.join(rootDir, ".pnpm-fresh-store"),
+    "fresh pnpm store",
+  );
 }
 
 function clearFreshPnpmStore(storeDir) {
   if (!storeDir) return;
   const resolved = path.resolve(storeDir);
-  if (path.relative(rootDir, resolved) !== ".pnpm-fresh-store") {
+  if (resolved !== freshPnpmStoreDir()) {
     console.error(`[sandbox-freshness] refusing to clear unsafe fresh pnpm store path ${resolved}`);
     return;
   }

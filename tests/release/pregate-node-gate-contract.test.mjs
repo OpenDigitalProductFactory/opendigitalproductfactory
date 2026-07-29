@@ -197,6 +197,7 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   // instead of dying on ERR_MODULE_NOT_FOUND before the stub guard.
   cpSync(join(repoRoot, "scripts", "lib", "lease-supervisor.mjs"), join(temp, "scripts", "lib", "lease-supervisor.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-sandbox-fence.mjs"), join(temp, "scripts", "lib", "local-sandbox-fence.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "local-ci-slot-manifest.mjs"), join(temp, "scripts", "lib", "local-ci-slot-manifest.mjs"));
 
   const { dir } = makeTempRepo();
   const env = { ...process.env, DPF_MCP_BEARER_TOKEN: "dpfmcp_test" };
@@ -511,7 +512,7 @@ test("gate-worktree.mjs does not clear freshness evidence until it owns the loca
   };
   writeFileSync(reportPath, `${JSON.stringify(activeReport)}\n`);
   writeFileSync(
-    join(dir, ".git", "dpf-local-ci-owner.json"),
+    join(dir, ".git", "dpf-local-ci-owner-slot-0.json"),
     `${JSON.stringify({
       schema: "dpf-local-sandbox-fence/v1",
       token: "active-owner-token",

@@ -5,6 +5,8 @@ import { dirname, join } from "node:path";
 import {
   collectToolchainFingerprint,
   createLocalIntegrationPlan,
+  createProductionArtifactIdentity,
+  dockerBuildTag,
   resolveCommandInvocation,
   resolveGitRevision,
 } from "./lib/local-integration-ci.mjs";
@@ -23,13 +25,14 @@ const evidencePlanOut = valueAfter("--evidence-plan-out")
   || (metadataOut ? join(dirname(metadataOut), "dpf-ci-evidence-plan.json") : "");
 const mode = valueAfter("--mode") || "single-branch";
 const buildStrategy = valueAfter("--build-strategy");
+const slotKey = valueAfter("--slot-key") || process.env.DPF_LOCAL_CI_SLOT_KEY || "";
 const fetchBase = process.argv.includes("--fetch-base");
 const siblingBranches = process.argv
   .filter((arg) => arg.startsWith("--sibling="))
   .map((arg) => arg.slice("--sibling=".length));
 
 if (!candidateBranch) {
-  console.error("Usage: node scripts/local-integration-ci.mjs --candidate BRANCH [--base-ref REF] [--candidate-sha SHA] [--base-sha SHA] [--metadata-out PATH] [--evidence-plan-out PATH] [--fetch-base] [--mode single-branch|sibling-set|post-merge-main] [--sibling=BRANCH] [--migrate-deploy]");
+  console.error("Usage: node scripts/local-integration-ci.mjs --candidate BRANCH [--base-ref REF] [--candidate-sha SHA] [--base-sha SHA] [--slot-key SLOT] [--metadata-out PATH] [--evidence-plan-out PATH] [--fetch-base] [--mode single-branch|sibling-set|post-merge-main] [--sibling=BRANCH] [--migrate-deploy]");
   process.exit(2);
 }
 
@@ -42,6 +45,7 @@ const plan = createLocalIntegrationPlan({
   fetchBase,
   evidencePlanOutput: evidencePlanOut || undefined,
   includeMigrateDeploy: process.argv.includes("--migrate-deploy"),
+  slotKey: slotKey || undefined,
 });
 const startedAt = new Date().toISOString();
 for (const command of plan.commands) {
@@ -58,6 +62,30 @@ if (metadataOut) {
   const evidencePlan = evidencePlanOut
     ? JSON.parse(readFileSync(evidencePlanOut, "utf8"))
     : null;
+  const integrationCommitSha = resolveGitRevision("HEAD");
+  const synthesizedTreeSha = resolveGitRevision("HEAD^{tree}");
+  const imageTag = plan.buildStrategy === "docker-build"
+    ? dockerBuildTag(candidateBranch, slotKey)
+    : "";
+  const imageInspect = imageTag
+    ? spawnSync("docker", ["image", "inspect", imageTag, "--format", "{{.Id}}"], {
+      encoding: "utf8",
+      shell: process.platform === "win32",
+    })
+    : null;
+  let nextBuildId = "";
+  try {
+    nextBuildId = readFileSync(join(process.cwd(), "apps", "web", ".next", "BUILD_ID"), "utf8").trim();
+  } catch {
+    // Docker builds do not materialize the build output in the host checkout.
+  }
+  const productionArtifact = createProductionArtifactIdentity({
+    buildStrategy: plan.buildStrategy,
+    integrationTreeSha: synthesizedTreeSha,
+    dockerImageTag: imageTag,
+    dockerImageId: imageInspect?.status === 0 ? imageInspect.stdout.trim() : "",
+    nextBuildId,
+  });
   const payload = {
     schemaVersion: 1,
     bi: "BI-76551B2D",
@@ -68,9 +96,11 @@ if (metadataOut) {
     fetchBase,
     baseSha: baseSha || resolveGitRevision(baseRef),
     integrationBranch: plan.integrationBranch,
-    integrationCommitSha: resolveGitRevision("HEAD"),
-    synthesizedTreeSha: resolveGitRevision("HEAD^{tree}"),
+    slotKey: slotKey || null,
+    integrationCommitSha,
+    synthesizedTreeSha,
     buildStrategy: plan.buildStrategy,
+    productionArtifact,
     evidencePlan: evidencePlan ? {
       path: evidencePlanOut,
       digest: evidencePlan.digest,
@@ -85,5 +115,9 @@ if (metadataOut) {
     completedAt: new Date().toISOString(),
   };
   writeFileSync(metadataOut, `${JSON.stringify(payload, null, 2)}\n`);
+  const artifactOut = process.env.DPF_LOCAL_CI_ARTIFACT_FILE;
+  if (artifactOut) {
+    writeFileSync(artifactOut, `${JSON.stringify(productionArtifact, null, 2)}\n`);
+  }
   console.log(`[local-integration-ci] metadata ${metadataOut}`);
 }

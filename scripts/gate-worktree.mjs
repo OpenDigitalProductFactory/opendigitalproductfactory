@@ -11,7 +11,7 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve as resolvePath } from "node:path";
+import { dirname, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
 import { summarizeLocalCiOutput } from "./lib/local-ci-failure-summary.mjs";
@@ -22,6 +22,10 @@ import {
   heartbeatLocalSandboxFence,
   releaseLocalSandboxFence,
 } from "./lib/local-sandbox-fence.mjs";
+import {
+  createLocalCiSlotManifest,
+  localCiSlotEnvironment,
+} from "./lib/local-ci-slot-manifest.mjs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
@@ -322,21 +326,24 @@ async function main() {
   const bearerToken = process.env.DPF_MCP_BEARER_TOKEN;
   if (!bearerToken) die("DPF_MCP_BEARER_TOKEN is required to claim the local-CI lease");
 
-  const stateFile = gitPath(gitBin, worktreePath, "dpf-local-ci-gate.json");
-  const metadataFile = gitPath(gitBin, worktreePath, "dpf-local-ci-metadata.json");
-  const pendingEvidenceFile = gitPath(gitBin, worktreePath, "dpf-local-ci-pending-evidence.json");
-  const fullLogFile = gitPath(gitBin, worktreePath, "dpf-local-ci-output.log");
-  const freshnessReportFile = gitPath(
-    gitBin,
-    worktreePath,
-    "dpf-sandbox-freshness.json",
-  );
+  const candidateGitDir = dirname(gitPath(gitBin, worktreePath, "dpf-local-ci-gate.json"));
   const gitCommonDir = resolvePath(
     worktreePath,
     gitOrEmpty(gitBin, ["rev-parse", "--git-common-dir"], worktreePath),
   );
-  const localFencePath = process.env.DPF_LOCAL_SANDBOX_FENCE_PATH
-    || join(gitCommonDir, "dpf-local-ci-owner.json");
+  const rootClone = dirname(gitCommonDir);
+  let slotManifest = createLocalCiSlotManifest({
+    slotKey: process.env.DPF_LOCAL_CI_SLOT_KEY || "slot-0",
+    rootClone,
+    gitCommonDir,
+    candidateGitDir,
+  });
+  let stateFile = slotManifest.evidence.state;
+  let metadataFile;
+  let pendingEvidenceFile = slotManifest.evidence.pending;
+  let fullLogFile;
+  let freshnessReportFile;
+  let localFencePath = slotManifest.fence.path;
 
   let quiescenceAttempt = 0;
   for (;;) {
@@ -417,7 +424,7 @@ async function main() {
 
   const leaseTtlMs = Math.min(options.expiresMinutes * 60000, 20 * 60_000);
   let expiresAt = "";
-  const url = process.env.DPF_LOCAL_CI_URL || "http://localhost:3010";
+  let url = slotManifest.portal.url;
 
   let leaseId = "";
   let localFenceToken = "";
@@ -460,11 +467,11 @@ async function main() {
         claimKey,
         purpose: `Pre-PR local-CI gate for ${branch} @ ${sha}`,
         url,
-        ports: [3010],
+        ports: [slotManifest.portal.port, slotManifest.postgres.hostPort],
         expiresAt,
         worktreePath,
         branchName: branch,
-        cleanupCommand: "docker compose -f docker-compose.local-ci.yml --profile local-ci down",
+        cleanupCommand: `node scripts/local-ci-slot-cleanup.mjs --slot-key ${slotManifest.slotKey}`,
       }, { mcpUrl: options.mcpUrl, bearerToken });
     } catch (error) {
       if (!isTransientMcpError(error) || Date.now() >= deadline) throw error;
@@ -478,10 +485,24 @@ async function main() {
     leaseId = claimResponse?.entityId || claimResponse?.data?.lease?.leaseId || leaseId;
     const admission = claimResponse?.data?.admission;
     if (claimResponse?.success === true && admission?.status !== "queued") {
+      const admittedSlotKey = admission?.slotKey || "slot-0";
+      slotManifest = createLocalCiSlotManifest({
+        slotKey: admittedSlotKey,
+        rootClone,
+        gitCommonDir,
+        candidateGitDir,
+      });
+      stateFile = slotManifest.evidence.state;
+      metadataFile = slotManifest.evidence.metadata;
+      pendingEvidenceFile = slotManifest.evidence.pending;
+      fullLogFile = process.env.DPF_LOCAL_CI_OUTPUT_FILE || slotManifest.output.log;
+      freshnessReportFile = slotManifest.evidence.freshness;
+      localFencePath = slotManifest.fence.path;
+      url = slotManifest.portal.url;
       leaseEvents.push({
         type: "admitted",
         at: new Date().toISOString(),
-        slotKey: admission?.slotKey || "slot-0",
+        slotKey: slotManifest.slotKey,
         waitAgeMs: admission?.waitAgeMs ?? null,
         expiresAt,
       });
@@ -583,6 +604,7 @@ async function main() {
     cwd: worktreePath,
     env: {
       ...process.env,
+      ...localCiSlotEnvironment(slotManifest),
       DPF_LOCAL_CI_METADATA_FILE: metadataFile,
       DPF_LOCAL_CI_FRESHNESS_REPORT_FILE: freshnessReportFile,
       DPF_NONPROD_LEASE_ID: leaseId,
@@ -696,7 +718,24 @@ async function main() {
       resilienceBi: "BI-76551B2D",
       freshnessBi: "BI-ECDF9520",
       impactedTestRecommendationBi: "BI-A4EC0EA6",
-      phase: 1,
+      phase: 2,
+      slotIsolationBi: "BI-4BE30454",
+      slotManifest: {
+        schemaVersion: slotManifest.schemaVersion,
+        slotKey: slotManifest.slotKey,
+        scratchWorkspace: slotManifest.scratch.workspace,
+        integrationBranchPrefix: slotManifest.scratch.integrationBranchPrefix,
+        fencePath: slotManifest.fence.path,
+        composeProject: slotManifest.compose.project,
+        portalUrl: slotManifest.portal.url,
+        portalPort: slotManifest.portal.port,
+        postgresContainer: slotManifest.postgres.container,
+        postgresPort: slotManifest.postgres.hostPort,
+        postgresDatabase: slotManifest.postgres.database,
+        postgresVolume: slotManifest.postgres.volume,
+        dependencyStore: slotManifest.dependencies.freshStore,
+        artifactPath: slotManifest.evidence.artifact,
+      },
       leaseId,
       leaseEvents,
       leaseSupervisionStatus: supervised.status,
