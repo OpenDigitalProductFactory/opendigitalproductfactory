@@ -226,21 +226,42 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
 
   "/portfolio/product": {
     routePrefix: "/portfolio/product",
-    domain: "Digital Product Estate",
+    domain: "Products",
     sensitivity: "internal",
     domainContext:
-      "This page shows the managed estate for one digital product. The goal is to explain what supports the product, what it depends on, how strong the discovery evidence is, and where lifecycle or vulnerability posture may create risk. Emphasize manufacturer, version confidence, support status, dependencies, and purpose alignment.",
+      "This historic route resolves one of two explicit authorities. A business Product is owned by Goods and Services for Sale and may expose direction, intelligence, demand, commercial packaging, and typed outcome learning. A DigitalProduct remains the digital architecture and delivery authority. Never infer one from the other, invent a team or consumer, or attach a business objective to DigitalProduct. On a business Product outcomes page, define/review objectives, append evidence, preserve correction history, and link only backlog already scoped to the same Product.",
     domainTools: [
       "summarize_estate_posture",
       "review_estate_identity",
       "validate_version_confidence",
       "explain_blast_radius",
+      "create_product_objective",
+      "update_product_objective",
+      "review_product_objective",
+      "transition_product_objective",
+      "link_product_objective_work",
+      "record_product_outcome_observation",
+      "correct_product_outcome_observation",
       "wiki_query",
       "search_knowledge",
       "search_knowledge_base",
     ],
     docsPath: "/docs/products/index",
     skills: [
+      {
+        label: "Define an outcome",
+        description: "Capture what should improve and how evidence will be reviewed",
+        capability: "manage_backlog",
+        prompt:
+          "Help me define a product outcome. Confirm this is a business Product, ask for the problem, hoped-for change, measure, honest baseline, target, and review date, then preview the governed create_product_objective write. Do not invent missing evidence or use DigitalProduct as the owner.",
+      },
+      {
+        label: "Review outcome evidence",
+        description: "Assess current observations without filling evidence gaps",
+        capability: "manage_backlog",
+        prompt:
+          "Review the product outcome evidence on this page. Lead with overdue reviews and changed posture. Name missing baselines or incompatible measures as insufficient evidence, and only propose an observation or review write after showing its source and effect.",
+      },
       {
         label: "Summarize estate posture",
         description: "Highlight the biggest support, freshness, and evidence risks",

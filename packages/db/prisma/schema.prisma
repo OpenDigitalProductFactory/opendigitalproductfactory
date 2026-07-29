@@ -382,6 +382,8 @@ model Principal {
   careIntakeExceptionsAssigned        CareIntakeException[]               @relation("CareIntakeExceptionAssignee")
   careIntakeExceptionsResolved        CareIntakeException[]               @relation("CareIntakeExceptionResolver")
   careIntakeStatusEvents              CareIntakeStatusEvent[]             @relation("CareIntakeStatusActor")
+  ownedProductObjectives              ProductObjective[]                  @relation("ProductObjectiveOwner")
+  recordedProductOutcomeObservations  ProductOutcomeObservation[]         @relation("ProductOutcomeObservationRecorder")
   createdAt                           DateTime                            @default(now())
   updatedAt                           DateTime                            @updatedAt
 
@@ -870,12 +872,98 @@ model Product {
   marketingBattlecards MarketingBattlecard[] @relation("MarketingBattlecardBusinessProduct")
   scheduledAgentTasks  ScheduledAgentTask[]  @relation("ScheduledAgentTaskBusinessProduct")
   backlogItems         BacklogItem[]         @relation("BacklogItemBusinessProduct")
+  objectives           ProductObjective[]
 
   @@unique([productLineId, key])
   @@unique([id, organizationId])
   @@index([organizationId, sortOrder])
   @@index([productLineId, sortOrder])
   @@index([effectiveTo])
+}
+
+// Minimum product objective and outcome-learning contract
+// (EP-ED496EB0 Phase 9 / BI-162FBDCC). Business Product owns the objective;
+// DigitalProduct remains an architecture/delivery authority. Product-line
+// posture is derived through Product rather than persisted as a second ledger.
+model ProductObjective {
+  id                    String                      @id @default(cuid())
+  objectiveId           String                      @unique
+  organizationId        String
+  productId             String
+  title                 String
+  problemStatement      String?                     @db.Text
+  outcomeHypothesis     String                      @db.Text
+  ownerPrincipalId      String?
+  measureKind           String
+  measureDefinition     String                      @db.Text
+  measureUnit           String?
+  baselineValue         Decimal?                    @db.Decimal(20, 6)
+  targetValue           Decimal?                    @db.Decimal(20, 6)
+  baselineNarrative     String?                     @db.Text
+  targetNarrative       String?                     @db.Text
+  status                String                      @default("draft")
+  reviewCadence         String?
+  reviewAt              DateTime?
+  reviewedAt            DateTime?
+  activatedAt           DateTime?
+  closedAt              DateTime?
+  archivedAt            DateTime?
+  createdAt             DateTime                    @default(now())
+  updatedAt             DateTime                    @updatedAt
+  organization          Organization                @relation("ProductObjectiveOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
+  product               Product                     @relation(fields: [productId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  ownerPrincipal        Principal?                  @relation("ProductObjectiveOwner", fields: [ownerPrincipalId], references: [id], onDelete: SetNull)
+  contributingWork      ProductObjectiveWork[]
+  observations          ProductOutcomeObservation[]
+
+  @@unique([id, organizationId])
+  @@index([organizationId, status, reviewAt])
+  @@index([productId, status])
+  @@index([ownerPrincipalId])
+}
+
+// Link only: canonical demand and delivery state remains on BacklogItem.
+model ProductObjectiveWork {
+  id               String           @id @default(cuid())
+  objectiveId      String
+  backlogItemId    String
+  contributionKind String
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  objective        ProductObjective @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  backlogItem      BacklogItem      @relation(fields: [backlogItemId], references: [id], onDelete: Cascade)
+
+  @@unique([objectiveId, backlogItemId])
+  @@index([backlogItemId])
+  @@index([contributionKind])
+}
+
+// Append-only learned evidence. Corrections create a new observation that
+// supersedes one current row; there is deliberately no mutable "current value".
+model ProductOutcomeObservation {
+  id                      String                     @id @default(cuid())
+  observationId           String                     @unique
+  objectiveId             String
+  observedAt              DateTime
+  numericValue            Decimal?                   @db.Decimal(20, 6)
+  narrative               String?                    @db.Text
+  measureKind             String
+  measureUnit             String?
+  sourceKind              String
+  sourceRef               String?
+  confidence              Float?
+  provenance              Json?
+  recordedByPrincipalId   String?
+  supersedesObservationId String?                    @unique
+  createdAt               DateTime                   @default(now())
+  objective               ProductObjective           @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  recordedByPrincipal     Principal?                 @relation("ProductOutcomeObservationRecorder", fields: [recordedByPrincipalId], references: [id], onDelete: SetNull)
+  supersedes              ProductOutcomeObservation? @relation("ProductOutcomeObservationCorrection", fields: [supersedesObservationId], references: [id], onDelete: Restrict)
+  supersededBy            ProductOutcomeObservation? @relation("ProductOutcomeObservationCorrection")
+
+  @@index([objectiveId, observedAt])
+  @@index([sourceKind, sourceRef])
+  @@index([recordedByPrincipalId])
 }
 
 // Organization-owned commercial promise for a business Product
@@ -2110,6 +2198,7 @@ model BacklogItem {
   coworkerNeeds           CoworkerCapabilityNeed[]      @relation("BacklogItemCoworkerCapabilityNeeds")
   businessCapabilityLinks BusinessCapabilityTraceLink[] @relation("BusinessCapabilityBacklogLinks")
   founderDemandClusters   FounderDemandCluster[]
+  productObjectiveWork    ProductObjectiveWork[]
 
   @@index([portfolioId])
   @@index([organizationId])
@@ -4611,6 +4700,7 @@ model Organization {
   storefrontBookings              StorefrontBooking[]                @relation("StorefrontBookingOrganization")
   productLines                    ProductLine[]
   businessProducts                Product[]
+  productObjectives               ProductObjective[]                @relation("ProductObjectiveOrganization")
   productOfferings                ProductOffering[]                  @relation("ProductOfferingOrganization")
   providedProductOfferings        ProductOffering[]                  @relation("ProductOfferingProviderOrganization")
   catalogItems                    CatalogItem[]

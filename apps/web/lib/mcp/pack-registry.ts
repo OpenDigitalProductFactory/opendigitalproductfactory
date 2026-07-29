@@ -82,6 +82,7 @@ import { decompositionPack } from "./packs/decomposition-pack";
 import { buildVisibilityPack } from "./packs/build-visibility-pack";
 import { buildEvidenceExtraPack } from "./packs/build-evidence-extra-pack";
 import { principleDecidePack } from "./packs/principle-decide-pack";
+import { productOutcomesPack } from "./packs/product-outcomes-pack";
 
 import { grokSigninPack } from "./packs/grok-signin-pack";
 import { releasePack } from "./packs/release-pack";
@@ -158,5 +159,6 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   buildVisibilityPack,
   buildEvidenceExtraPack,
   principleDecidePack,
+  productOutcomesPack,
   surfaceReadinessPack,
 ]);

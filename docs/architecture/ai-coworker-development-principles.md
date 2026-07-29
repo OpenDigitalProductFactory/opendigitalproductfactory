@@ -310,6 +310,17 @@ subscriber, entitlement, or consumer.
 - query `product-operating-context-query.ts` for product-management context
   instead of reconstructing organization, product-line, commercial,
   intelligence, demand, delivery, and architecture joins in prompts or routes;
+- create product outcomes only against an organization-scoped business
+  `Product`; never attach them to `DigitalProduct` or infer direct ProductLine
+  ownership;
+- use the product-outcome service/tools for lifecycle, same-product backlog
+  links, review dates, and observations; do not reconstruct these invariants in
+  a prompt or route;
+- preserve observation history by appending a correction with a supersession
+  link; never update or delete an earlier observation;
+- compare outcome posture only when measure kind and unit are compatible, and
+  describe missing baselines or qualitative evidence as requiring review
+  rather than converting them to zero;
 - keep organization-wide research and battlecards distinct from explicit
   ProductLine, business Product, and DigitalProduct records; allow at most one
   narrower scope and never infer it from topic, prompt, route, title, or similar

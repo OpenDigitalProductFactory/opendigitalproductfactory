@@ -43,10 +43,12 @@ describe("resolveRouteContext", () => {
 
   it("matches product estate routes ahead of the broader portfolio context", () => {
     const ctx = resolveRouteContext("/portfolio/product/prod-123/inventory");
-    expect(ctx.domain).toBe("Digital Product Estate");
+    expect(ctx.domain).toBe("Products");
     expect(ctx.routePrefix).toBe("/portfolio/product");
     expect(ctx.domainTools).toContain("review_estate_identity");
     expect(ctx.domainTools).toContain("explain_blast_radius");
+    expect(ctx.domainTools).toContain("create_product_objective");
+    expect(ctx.domainTools).toContain("record_product_outcome_observation");
   });
 
   it("falls back to workspace for unknown routes", () => {
