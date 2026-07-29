@@ -197,6 +197,7 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   // instead of dying on ERR_MODULE_NOT_FOUND before the stub guard.
   cpSync(join(repoRoot, "scripts", "lib", "lease-supervisor.mjs"), join(temp, "scripts", "lib", "lease-supervisor.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-sandbox-fence.mjs"), join(temp, "scripts", "lib", "local-sandbox-fence.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "local-queue-observer.mjs"), join(temp, "scripts", "lib", "local-queue-observer.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-slot-manifest.mjs"), join(temp, "scripts", "lib", "local-ci-slot-manifest.mjs"));
 
   const { dir } = makeTempRepo();
@@ -239,7 +240,10 @@ test("gate-worktree.mjs claims, records, and releases in order, and carries evid
 
     const evidenceCall = mcp.calls.find((c) => c.params.name === "record_local_integration_result");
     const claimCall = mcp.calls.find((c) => c.params.name === "claim_nonprod_environment_lease");
-    assert.match(claimCall.params.arguments.claimKey, /^local-ci:gate-\d+:candidate-sha$/);
+    assert.match(
+      claimCall.params.arguments.claimKey,
+      /^local-ci:gate-v2-[0-9a-f-]{36}-\d+:candidate-sha$/,
+    );
     assert.equal(evidenceCall.params.arguments.evidence.leaseId, "NPEL-TEST");
     assert.equal(evidenceCall.params.arguments.evidence.branch, "feat/local-ci-sandbox");
     assert.equal(evidenceCall.params.arguments.evidence.sha, "candidate-sha");
