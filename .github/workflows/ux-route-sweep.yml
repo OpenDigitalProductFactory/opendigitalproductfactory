@@ -6,12 +6,23 @@ permissions:
   contents: read
 
 on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
-  merge_group:
-    types: [checks_requested]
+  workflow_call:
+    inputs:
+      update_baseline:
+        description: "Measure and emit a fresh route-budget baseline"
+        required: false
+        type: boolean
+        default: false
+      reuse_current_run_build:
+        description: "Consume the canonical Production Build artifact from this caller run"
+        required: false
+        type: boolean
+        default: false
+      workers:
+        description: "Bounded route workers"
+        required: false
+        type: string
+        default: "2"
   workflow_dispatch:
     inputs:
       update_baseline:
@@ -60,7 +71,7 @@ concurrency:
 
 jobs:
   sweep:
-    name: UX Route Budget Sweep
+    name: UX Route Sweep Runtime
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -82,7 +93,7 @@ jobs:
       NEXTAUTH_SECRET: ci_sweep_secret
       NEXTAUTH_URL: http://localhost:3000
       UX_SWEEP_BASE_URL: http://localhost:3000
-      UX_SWEEP_WORKERS: ${{ github.event.inputs.workers || '2' }}
+      UX_SWEEP_WORKERS: ${{ inputs.workers || '2' }}
 
     steps:
       - uses: actions/checkout@v7
@@ -132,64 +143,51 @@ jobs:
           git -C "$fixture_root" commit --allow-empty -m "fixture"
           echo "DPF_WORK_CONTROL_REPO_ROOT=$fixture_root" >> "$GITHUB_ENV"
 
-      # BI-959F4F38. The CI workflow publishes the exact tree's successful
-      # production output. Discovery is bounded: any unavailable, late,
-      # mismatched, expired, or corrupt evidence falls through to the local
-      # build below. Push and manual calibration deliberately remain standalone
-      # so this change does not activate cross-lifecycle evidence reuse.
-      - name: Find exact-tree CI production build
-        id: find-build
-        if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+      # Browser installation is independent of the portal build. Keep it ahead
+      # of the artifact rendezvous so the build, fixture, and browser paths
+      # overlap instead of extending the critical path serially.
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      # BI-D9E8B8CB. Blocking CI and Production Build share one run identity.
+      # Fixture provisioning starts concurrently with the build; after setup,
+      # wait only for this run's exact named artifact. This removes workflow,
+      # SHA, and source-run discovery while preserving the useful overlap.
+      - name: Await current-run production build
+        id: await-build
+        if: inputs.reuse_current_run_build == true
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          # Actions indexes pull_request workflow runs by the PR head SHA,
-          # while GITHUB_SHA identifies the synthetic merge checkout.
-          DPF_CI_RUN_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        # The producer's cold setup + cache restore + build + package path has
-        # exceeded four minutes in observed GitHub-hosted runs. Ten minutes
-        # remains bounded while avoiding a delayed duplicate build.
-        # BI-149370BD: this deadline now only bounds a producer that is still
-        # running. Once every exact-tree producer is terminal without an
-        # artifact — as on heavy=false PRs, where CI never builds — discovery
-        # returns immediately instead of waiting out the remaining deadline.
         run: >-
-          node scripts/ci-build-artifact.mjs locate
-          --workflow ci.yml
-          --artifact-prefix web-production-build
+          node scripts/ci-build-artifact.mjs await-current-run
+          --artifact-name web-production-build-${{ github.run_id }}-${{ github.run_attempt }}
+          --producer-job-name "Production Build"
           --wait-seconds 600
 
       - name: Start production-build transfer timer
-        if: steps.find-build.outputs.found == 'true'
+        if: steps.await-build.outputs.found == 'true'
         run: echo "DPF_BUILD_ARTIFACT_TRANSFER_STARTED_MS=$(date +%s%3N)" >> "$GITHUB_ENV"
 
       - name: Download exact-tree production build
         id: download-build
-        if: steps.find-build.outputs.found == 'true'
+        if: steps.await-build.outputs.found == 'true'
         continue-on-error: true
         uses: actions/download-artifact@v8
         with:
-          name: ${{ steps.find-build.outputs.artifact_name }}
+          name: web-production-build-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/web-production-build
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          run-id: ${{ steps.find-build.outputs.source_run_id }}
 
       - name: Verify and materialize exact-tree production build
         id: materialize-build
-        if: >-
-          steps.find-build.outputs.found == 'true' &&
-          steps.download-build.outcome == 'success'
+        if: steps.await-build.outputs.found == 'true' && steps.download-build.outcome == 'success'
         run: >-
           node scripts/ci-build-artifact.mjs consume
           --input-dir "$RUNNER_TEMP/web-production-build"
-          --source-run-id "${{ steps.find-build.outputs.source_run_id }}"
+          --source-run-id "${{ github.run_id }}"
 
       - name: Build the portal
         if: steps.materialize-build.outputs.reused != 'true'
         run: pnpm --filter web build
-
-      - name: Install Playwright Chromium
-        run: pnpm exec playwright install --with-deps chromium
 
       # Poll with curl rather than adding a wait-on dependency just for this job
       # (the New Dependency Gate exists to stop exactly that kind of drive-by).
@@ -225,7 +223,7 @@ jobs:
         run: pnpm exec tsx e2e/auth-only.ts
 
       - name: Run the sweep
-        if: ${{ github.event.inputs.update_baseline != 'true' }}
+        if: ${{ inputs.update_baseline != true }}
         run: pnpm --filter web ux:sweep -- --workers "$UX_SWEEP_WORKERS"
 
       # Manual arming path: measure the running portal and emit the baseline as an
@@ -233,11 +231,11 @@ jobs:
       # the baseline is a reviewed engineering act, and this job has read-only
       # contents permission.
       - name: Measure and emit a fresh baseline
-        if: ${{ github.event.inputs.update_baseline == 'true' }}
+        if: ${{ inputs.update_baseline == true }}
         run: pnpm --filter web ux:sweep -- --workers "$UX_SWEEP_WORKERS" --update-baseline
 
       - name: Upload the fresh baseline
-        if: ${{ github.event.inputs.update_baseline == 'true' }}
+        if: ${{ inputs.update_baseline == true }}
         uses: actions/upload-artifact@v7
         with:
           name: ux-route-budget-baseline

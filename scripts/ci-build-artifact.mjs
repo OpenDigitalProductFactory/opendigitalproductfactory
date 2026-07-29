@@ -232,6 +232,73 @@ async function locateArtifact(options) {
   appendOutput({ found: "false", discovery_ms: Date.now() - discoveryStartedAt });
 }
 
+async function awaitCurrentRunArtifact(options) {
+  const waitSeconds = Number(options["wait-seconds"] ?? 240);
+  const terminalGraceMs = Number(options["terminal-grace-seconds"] ?? 5) * 1000;
+  const artifactName = options["artifact-name"];
+  const producerJobName = options["producer-job-name"] ?? "Production Build";
+  const repository = process.env.GITHUB_REPOSITORY;
+  const runId = process.env.GITHUB_RUN_ID;
+  if (!artifactName) throw new Error("await-current-run requires --artifact-name");
+  if (!repository || !runId) {
+    throw new Error("await-current-run requires GITHUB_REPOSITORY and GITHUB_RUN_ID");
+  }
+  const discoveryStartedAt = Date.now();
+  const deadline = discoveryStartedAt + waitSeconds * 1000;
+  let producerTerminalAt;
+  try {
+    while (Date.now() <= deadline) {
+      const artifacts = await githubJson(
+        `/repos/${repository}/actions/runs/${runId}/artifacts?per_page=100`,
+      );
+      const artifact = (artifacts.artifacts ?? []).find(
+        (candidate) => candidate.name === artifactName && candidate.expired !== true,
+      );
+      if (artifact) {
+        appendOutput({
+          found: "true",
+          artifact_name: artifact.name,
+          source_run_id: runId,
+          discovery_ms: Date.now() - discoveryStartedAt,
+        });
+        console.log(
+          `[ci-build-artifact] current-run artifact ${artifact.name} available after `
+          + `${Date.now() - discoveryStartedAt}ms`,
+        );
+        return;
+      }
+
+      const jobs = await githubJson(
+        `/repos/${repository}/actions/runs/${runId}/jobs?filter=all&per_page=100`,
+      );
+      const producer = (jobs.jobs ?? []).find((job) => job.name === producerJobName);
+      if (producer?.status === "completed") {
+        producerTerminalAt ??= Date.now();
+        // Artifact indexing can trail the upload step very briefly. Preserve a
+        // small grace period, then rebuild instead of waiting out the full
+        // deadline when the same-run producer is terminal without evidence.
+        if (Date.now() - producerTerminalAt >= terminalGraceMs) {
+          appendOutput({ found: "false", discovery_ms: Date.now() - discoveryStartedAt });
+          console.warn(
+            `[ci-build-artifact] same-run ${producerJobName} completed without ${artifactName}; rebuilding`,
+          );
+          return;
+        }
+      } else {
+        producerTerminalAt = undefined;
+      }
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 1_000));
+    }
+    console.warn(
+      `[ci-build-artifact] current-run artifact ${artifactName} did not appear within `
+      + `${waitSeconds}s; rebuilding`,
+    );
+  } catch (error) {
+    console.warn(`[ci-build-artifact] current-run rendezvous unavailable (${error.message}); rebuilding`);
+  }
+  appendOutput({ found: "false", discovery_ms: Date.now() - discoveryStartedAt });
+}
+
 function materializeFallback(reason, startedAt) {
   rmSync(join(ROOT, "apps/web/.next"), { recursive: true, force: true });
   appendOutput({ reused: "false", reason });
@@ -309,8 +376,13 @@ async function main() {
   const { mode, options } = parseArgs(process.argv.slice(2));
   if (mode === "create") createArtifact(options);
   else if (mode === "locate") await locateArtifact(options);
+  else if (mode === "await-current-run") await awaitCurrentRunArtifact(options);
   else if (mode === "consume") consumeArtifact(options);
-  else throw new Error("usage: ci-build-artifact.mjs <create|locate|consume> [options]");
+  else {
+    throw new Error(
+      "usage: ci-build-artifact.mjs <create|locate|await-current-run|consume> [options]",
+    );
+  }
 }
 
 main().catch((error) => {

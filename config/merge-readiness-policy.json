@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "branch": "main",
   "strict": false,
   "requiredContexts": [
@@ -13,6 +13,8 @@
   },
   "aggregateJobId": "merge-readiness",
   "aggregateJobName": "Merge Readiness",
-  "uxJobId": "sweep",
-  "uxJobName": "UX Route Budget Sweep"
+  "uxJobId": "ux-route-sweep",
+  "uxJobName": "UX Route Budget Sweep",
+  "uxRuntimeJobId": "sweep",
+  "uxRuntimeJobName": "UX Route Sweep Runtime"
 }
