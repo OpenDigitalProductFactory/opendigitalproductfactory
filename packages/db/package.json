@@ -48,6 +48,7 @@
     "./profession-local-axes": "./src/profession-local-axes.ts",
     "./wiki-store": "./src/wiki-store.ts",
     "./wiki-frontmatter": "./src/wiki-frontmatter.ts",
+    "./profession-material-promotion": "./src/profession-material-promotion.ts",
     "./capability-maturity": "./src/capability-maturity.ts",
     "./business-capability-perspectives": "./src/business-capability-perspectives.ts",
     "./workforce-portfolio": "./src/workforce-portfolio.ts",

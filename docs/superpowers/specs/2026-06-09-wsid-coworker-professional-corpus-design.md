@@ -521,3 +521,55 @@ decision classes (mapped `domainClass`, dimension vectors present) that the gate
 recommend or arbitrate on the family's routine consult shapes instead of deferring —
 verified against the family's own recent deferral questions, not hypotheticals. Depth
 beyond the pack is pulled by gap capture (§4.7), not pushed speculatively.
+
+## 12. Addendum (2026-07-29) — Phase 6 implementation record: craft pages become gate-live material (BI-3B02FF9C)
+
+**Why this phase is load-bearing.** Phase 6 is the decisive step of the weaning
+ladder (founder → WWMD → WWWD/WSID): until corpus pages produce
+`PerspectiveMaterial`, every profession decision borrows WWMD via the fallback
+chain and every wsid-* consult defers. The demand signal fired exactly as §4.11
+rule 2 designed — 64 unresolved `architecture-tradeoff` deferrals on
+`wsid-enterprise-architecture` put that family at the front of the rollout.
+
+**What shipped.** The profession sibling of the WWWD stance promotion
+(`stance-promotion.ts`), one shared write path used by both the runtime and the
+seed: `packages/db/src/profession-material-promotion.ts` (exported as
+`@dpf/db/profession-material-promotion`).
+
+1. **Publish hook** — `publishWikiOverlayPages` (the overlay draft review
+   surface's publish click) promotes any published `craft/<professionKey>/`
+   page to owner-confirmed material on `wsid-<professionKey>`, exactly as
+   `publishBusinessStance` promotes an org stance. Promotion failure never
+   rolls back the page publish; the seed backfill converges misses.
+2. **Backfill** — `backfillProfessionCraftMaterials`, run as the
+   `professionCraftMaterials` seed step after `seedProfessionCorpus`:
+   published `professions/<key>/` platform pages enter at the derived tier,
+   already-published `craft/<key>/` overrides at the confirmed tier.
+   Idempotent; loud on anomalies.
+3. **Tier ladder** (aligned with the §4.6 trust ladder and the stance ladder):
+   `derived` B/0.6 (platform distillation of a standard), `confirmed` A/0.9
+   (owner published a craft override), `ruled` A/1.0 (human ruled on a real
+   decision). Never downgrades — neither tier nor an approved review status.
+4. **Tier-aware domain-class mapping.** Only decision-bearing page kinds
+   promote (`principle`, `heuristic`, `stance`, `decision`; `entity`/`summary`/
+   `runbook` stay retrieval-only per §4.6). Derived material is context-grade
+   and enters `professional-practice` only; confirmed/ruled material carries
+   the family's decision classes — for `enterprise-architecture`,
+   `architecture-tradeoff` primary + `professional-practice`. Rationale: gate
+   confidence is the *mean* of applicable effective weights, so a derived row
+   (0.45 effective) sharing a class with confirmed rows (0.9) would dilute the
+   mean below the 0.7 recommend band — human confirmation is what promotes a
+   page's doctrine into tradeoff authority.
+5. **Risk tiering** (competence-flywheel §5.5, BI-BE9C95D9): families whose
+   registry contextSlugs touch `finance` or `compliance` (finance,
+   legal-compliance, hr-people-ops, security today) are high-stakes — their
+   derived-tier rows land `draft`/`candidate`, auditable but invisible to the
+   gate, until a human approves. Confirmed/ruled tiers are human actions and go
+   gate-live everywhere.
+
+**Acceptance trace.** With the backfill plus the two published EA craft
+overrides (`craft/enterprise-architecture/architecture-review-verdicts-…`,
+`…/verify-the-substrate-first-…`), an `architecture-tradeoff` consult on
+`wsid-enterprise-architecture` resolves 2 confirmed materials → confidence 0.9
+at low risk → `recommend` with `professionProfileSelected=true` instead of the
+coverage-gap defer (regression-locked in `profession-gate.test.ts`).

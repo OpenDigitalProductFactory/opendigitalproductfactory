@@ -56,6 +56,7 @@ import { seedSkills } from "./seed-skills.js";
 import { seedWikiKernel } from "./seed-wiki-kernel.js";
 import { seedDecisionPerspective, seedProfessionProfiles } from "./seed-decision-perspective.js";
 import { seedProfessionCorpus } from "./seed-profession-corpus.js";
+import { backfillProfessionCraftMaterials } from "./profession-material-promotion.js";
 import { seedPlatformVoice } from "./seed-platform-voice.js";
 import {
   SPEACHES_PROVIDER_ID,
@@ -2575,6 +2576,21 @@ async function main(): Promise<void> {
           `jurisdiction[${fmt(result.jurisdictionCoverage)}] ` +
           `competency[${fmt(result.competencyCoverage)}]`,
       );
+    }
+  });
+  // WSID Phase 6 (BI-3B02FF9C): the corpus pages above become decision-bearing
+  // PerspectiveMaterial on their wsid-* profiles, so the profession gate can
+  // confirm instead of deferring. Idempotent; never downgrades a tier.
+  await step("professionCraftMaterials", async () => {
+    const result = await backfillProfessionCraftMaterials(prisma);
+    console.log(
+      `  profession-craft-materials: scanned=${result.scanned} promoted=${result.promoted} ` +
+        `gate-live=${result.gateLive} held-for-review=${result.heldForReview} ` +
+        `kept-higher-tier=${result.keptHigherTier} context-only=${result.notDecisionBearing} ` +
+        `skipped=${result.skipped.length}`,
+    );
+    for (const skip of result.skipped) {
+      console.warn(`  [profession-craft-materials] SKIP ${skip.slug}: ${skip.reason}`);
     }
   });
   // BI-2535D6F4: ship the founder's recorded seed voice on the platform profile.
