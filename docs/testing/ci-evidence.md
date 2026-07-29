@@ -253,13 +253,14 @@ produce different "Adoptable work" structures for identical source. Production
 continues to resolve the real host clone from `DPF_REPO_ROOT`; the narrow
 override exists only for the route-sweep fixture.
 
-The authenticated database fixture converges only after the production portal
-is serving. It both clears first-run setup and refreshes the seeded running
-root-portal heartbeat at that real availability boundary. Artifact discovery
-and fallback builds can legitimately take longer than the change-lanes
-projection's ten-minute stale-heartbeat threshold; retaining the earlier seed
-timestamp would therefore make the same source alternate between a healthy
-lane and a five-word stale-heartbeat blocker.
+The authenticated database fixture converges setup state before the production
+portal starts, then runs an idempotent second pass after the portal is serving
+to refresh the seeded running root-portal heartbeat. The ordering is part of the
+fixture contract: startup must not observe an incomplete first-run install, and
+artifact discovery or a fallback build can legitimately take longer than the
+change-lanes projection's ten-minute stale-heartbeat threshold. Retaining only
+the earlier seed timestamp would make the same source alternate between a
+healthy lane and a five-word stale-heartbeat blocker.
 
 Fixture-facing health copy must also be semantically stable. The Communications
 speech-to-text card classifies transport failures as `endpoint unavailable`

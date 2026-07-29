@@ -111,6 +111,13 @@ jobs:
       - name: Seed the fixture organisation
         run: pnpm --filter @dpf/db seed
 
+      # Complete first-run setup before the portal starts. Starting the server
+      # against an incomplete install lets startup reconciliation observe and
+      # reshape transient fixture state, which makes DB-backed decision routes
+      # differ from the frozen authenticated baseline.
+      - name: Mark platform setup complete for the fixture org
+        run: pnpm --filter web ux:sweep-fixture
+
       # Work Control inventories the host clone's worktrees. GitHub checks out a
       # named branch for workflow_dispatch but a detached ref for pull_request,
       # so scanning the ambient checkout made /build/work change structure for
@@ -203,11 +210,12 @@ jobs:
           done
           echo "portal did not become ready within 120s"; exit 1
 
-      # Run this after the portal is live. Besides clearing first-run setup, the
-      # fixture timestamps the running root portal at the moment it is actually
-      # available. Doing this before artifact discovery/build made valid slower
-      # jobs cross the change-lanes route's ten-minute stale-heartbeat boundary.
-      - name: Converge the authenticated UX fixture
+      # Refresh the runtime heartbeat after the portal is live. The earlier
+      # convergence establishes setup state before startup; this idempotent
+      # second pass timestamps the running root portal at actual availability,
+      # after artifact discovery/build, so slower valid jobs cannot cross the
+      # change-lanes route's ten-minute stale-heartbeat boundary.
+      - name: Refresh the authenticated UX runtime heartbeat
         run: pnpm --filter web ux:sweep-fixture
 
       # Reuses the existing e2e login bootstrap verbatim so the sweep measures real
