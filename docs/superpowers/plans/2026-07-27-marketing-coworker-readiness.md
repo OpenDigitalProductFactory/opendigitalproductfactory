@@ -19,7 +19,7 @@ skill and tool do not exist.
 ## Backlog Coverage
 
 - Decision: `atomic`
-- Receipt: `cms3bszjf022w01p517qd84kj`
+- Receipt: `cms6c6ybe00k701l2gzg8u1zs`
 - Plan path:
   `docs/superpowers/plans/2026-07-27-marketing-coworker-readiness.md`
 
