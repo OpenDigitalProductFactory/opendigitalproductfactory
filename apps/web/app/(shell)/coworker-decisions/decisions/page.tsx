@@ -10,6 +10,7 @@ import { prisma } from "@dpf/db";
 import { StatCard } from "@/components/ui/report-kit";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { DecisionAuditTable } from "@/components/wiki/DecisionAuditTable";
+import { DecisionAwaitingHelp } from "@/components/wiki/DecisionAwaitingHelp";
 import {
   DECISION_AUDIT_TIERS,
   buildCallerStats,
@@ -157,6 +158,9 @@ export default async function DecisionLogPage({
           />
         ))}
       </div>
+
+      {/* What the awaiting-review load means and where to act on it (BI-404E9BEA). */}
+      <DecisionAwaitingHelp stats={tierStatRaw} />
 
       {/* Who consults — a client working outside this list never consulted
           the kernel at all, which is itself the finding. */}

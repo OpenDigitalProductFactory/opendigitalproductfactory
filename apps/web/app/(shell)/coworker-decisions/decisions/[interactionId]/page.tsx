@@ -10,6 +10,7 @@ import { prisma } from "@dpf/db";
 import { StatusBadge } from "@/components/ui/report-kit";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { TIER_LABELS, tierForRow } from "@/lib/wiki/decision-audit";
+import { buildDecisionHelp } from "@/lib/wiki/decision-help";
 
 export const dynamic = "force-dynamic";
 
@@ -238,18 +239,46 @@ export default async function DecisionRecordPage({ params }: { params: Params })
             Deferred — {row.deferralCapture.gapReason}. The perspective lacks material to answer;
             adding stance/principle coverage closes this gap.
           </p>
-        ) : row.outcomeType === "escalate" || row.outcomeType === "defer" ? (
-          <p className="text-sm text-[var(--dpf-muted)]">
-            Awaiting human review — see{" "}
-            <Link href="/coworker-decisions/review" className="text-[var(--dpf-accent)] hover:underline">
-              Review &amp; adjust
-            </Link>
-            .
-          </p>
         ) : (
-          <p className="text-sm text-[var(--dpf-muted)]">
-            None needed — the recommendation stood on its own.
-          </p>
+          // Plain-language "what do I do about this?" guidance (BI-404E9BEA) —
+          // deterministic, so it holds even when the model runtime is down.
+          (() => {
+            const help = buildDecisionHelp({
+              outcomeType: row.outcomeType,
+              tier,
+              riskTier: row.riskTier,
+              principleConflict: row.principleConflict,
+              insufficientSignal,
+              hasBuild: Boolean(row.buildId),
+              resolved: row.humanOutcome !== null,
+            });
+            const needsAction = help.steps.length > 0;
+            return (
+              <div
+                className={`rounded-lg border p-3 text-sm ${
+                  needsAction ? "border-[var(--dpf-accent)]" : "border-[var(--dpf-border)]"
+                }`}
+              >
+                <p className="text-[var(--dpf-text)]">{help.meaning}</p>
+                <p className="mt-2 text-[var(--dpf-muted)]">{help.urgency}</p>
+                {needsAction ? (
+                  <ol className="mt-3 space-y-1.5 list-decimal pl-5">
+                    {help.steps.map((step) => (
+                      <li key={step.label} className="text-[var(--dpf-text)]">
+                        {step.href ? (
+                          <Link href={step.href} className="text-[var(--dpf-accent)] hover:underline">
+                            {step.label}
+                          </Link>
+                        ) : (
+                          step.label
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                ) : null}
+              </div>
+            );
+          })()
         )}
       </section>
     </div>

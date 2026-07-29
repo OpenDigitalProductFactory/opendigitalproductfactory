@@ -314,6 +314,23 @@ const QUICK_HELP_MAP: QuickHelpEntry[] = [
         "A mis-entered requirement can be edited or removed; submitted filings are corrected with the receiving body. Full guidance is in Compliance below.",
     },
   },
+  // ── BI-404E9BEA: the decision-governance surface answers the stuck-reader
+  // questions too — an "awaiting review" ledger reads as homework without this.
+  {
+    routePrefix: "/coworker-decisions",
+    help: {
+      whatThisPageIs:
+        "How your AI decides — the questions it consulted your governance on, what it recommended, and the calls it put in front of a human (escalated or deferred).",
+      actionNow:
+        "Use Review & adjust: it rolls the waiting decisions into a few themes. Answer a theme once, or add a stance covering it, and your AI stops needing to ask.",
+      ifNothingDone:
+        "Work does not silently stall — only a build paused at a decision gate waits, and says so. But unanswered themes keep escalating, so the waiting count keeps growing.",
+      reversible:
+        "Reading changes nothing. Answers and stances you record can be edited or retired later; they steer future decisions rather than rewriting past ones.",
+      recovery:
+        "If an answer taught your AI the wrong thing, edit or retire that stance and the next decisions follow the correction. Full guidance is below.",
+    },
+  },
   {
     routePrefix: "/compliance/licensing",
     help: {
