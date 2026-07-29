@@ -73,6 +73,10 @@ const MATCHERS: Matcher[] = [
   // agent-coworker NoProvidersAvailableError system copy / generic config gap.
   { kind: "config", test: /No AI providers are configured/i },
   { kind: "config", test: /No eligible AI endpoints/i },
+  // describeToolRouteFailure generic no-endpoint copy. This is emitted after
+  // routing rejects every candidate for a mixed set of reasons (for example
+  // sensitivity clearance + model tier), so no model response occurred.
+  { kind: "config", test: /^No AI model can handle this request right now\./i },
   // "The AI provider is temporarily unavailable. Please try again…" (fallback)
   { kind: "provider-unavailable", test: /AI provider is temporarily unavailable/i },
   { kind: "provider-unavailable", test: /AI (?:co-?workers?|providers?) are temporarily offline/i },
