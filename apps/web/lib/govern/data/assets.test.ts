@@ -98,6 +98,35 @@ describe("field resolution", () => {
 });
 
 describe("seeded registry", () => {
+  it("governs operational scene geometry as confidential local operator configuration", () => {
+    expect(lookupAsset(DATA_ASSET_REGISTRY, "data:operational-scene-layout")).toMatchObject({
+      physical: { prismaModel: "OperationalSceneLayout" },
+      domain: "business-operations",
+      ownerRole: "business-operator",
+      categories: ["configuration", "operational", "content"],
+      sensitivity: "confidential",
+      criticality: "high",
+      lifecycleClass: "operational",
+      purposeCapabilities: ["service-delivery", "platform-operations"],
+      residencyClass: "local-only",
+      projectionClass: "structure",
+    });
+    expect(
+      resolveField(DATA_ASSET_REGISTRY, "data:operational-scene-layout#layoutState"),
+    ).toMatchObject({
+      resolution: "governed",
+      collectionRule: "minimize",
+      protection: "mask-on-read",
+      projectionOverride: "structure",
+    });
+    expect(
+      resolveField(DATA_ASSET_REGISTRY, "data:operational-scene-layout#underlayRef"),
+    ).toMatchObject({
+      resolution: "governed",
+      protection: "mask-on-read",
+    });
+  });
+
   it("builds without invariant violations and carries the BI-DG-001 worked asset", () => {
     expect(DATA_ASSET_REGISTRY.assets.length).toBeGreaterThan(0);
     const conv = lookupAsset(DATA_ASSET_REGISTRY, "data:agent-conversation");

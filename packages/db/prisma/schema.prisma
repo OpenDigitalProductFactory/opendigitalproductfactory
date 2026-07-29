@@ -3962,6 +3962,7 @@ model Organization {
   updatedAt                     DateTime                           @updatedAt
   brandingConfig                BrandingConfig?
   storefrontConfig              StorefrontConfig?
+  operationalSceneLayouts       OperationalSceneLayout[]
   businessContext               BusinessContext?
   marketingStrategy             MarketingStrategy?
   marketingReviews              MarketingReview[]
@@ -9108,6 +9109,26 @@ model StorefrontConfig {
   rentalAgreements      RentalAgreement[]
   adoptableAnimals      AdoptableAnimal[]
   archetypeCompositions StorefrontArchetypeComposition[]
+}
+
+/// Operator-authored geometry for one operational-twin scene. Live business
+/// state remains in its owning domain models and is joined through layoutState
+/// placement entity references at read time.
+model OperationalSceneLayout {
+  id           String       @id @default(cuid())
+  orgId        String
+  twinTemplate String
+  spaceKind    String
+  locationId   String?
+  label        String
+  layoutState  Json
+  underlayRef  String?
+  version      Int          @default(1)
+  updatedAt    DateTime     @updatedAt
+  createdAt    DateTime     @default(now())
+  organization Organization @relation(fields: [orgId], references: [orgId], onDelete: Cascade)
+
+  @@index([orgId, twinTemplate])
 }
 
 // ── Multi-archetype composition (EP-ARCH-8D4F2A) ─────────────────────────────
