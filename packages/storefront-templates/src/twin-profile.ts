@@ -1,6 +1,7 @@
 import type { ArchetypeCategory, ArchetypeDefinition } from "./types";
 import { readActivationProfile, type NormalizedOperatingModelAxes } from "./activation-profile";
 import { deriveFieldDispatchProfile } from "./field-dispatch";
+import type { SpaceKind } from "./scene-layout";
 
 /**
  * Operational Twin Framework — the derived per-archetype twin configuration.
@@ -39,6 +40,9 @@ export type TwinTemplate =
   | "TENANTS" // accounts/tenants x health/usage/seats (board — SaaS/banking)
   | "PIPELINE" // matters/engagements/productions x stage (board — prof-svcs/media)
   | "PROGRAMS"; // programs/funds/donors/campaigns (board — nonprofit)
+
+export type BoardTwinTemplate = "TENANTS" | "PIPELINE" | "PROGRAMS";
+export type PhysicalTwinTemplate = Exclude<TwinTemplate, BoardTwinTemplate>;
 
 export type TwinVariant =
   | "fleet"
@@ -112,6 +116,8 @@ export interface TwinProfile {
   variant?: TwinVariant;
   /** True for spatial twins; false for the board family (TENANTS/PIPELINE/PROGRAMS). */
   physical: boolean;
+  /** Renderer coordinate system, derived from the final physical template. */
+  spaceKind?: SpaceKind;
   /** Named regions of the operation. */
   zones: TwinZoneSpec[];
   /** Which zone actually holds the countable resource units — a restaurant's
@@ -155,18 +161,28 @@ export interface TwinProfileOverride {
   hybridBoard?: TwinTemplate;
 }
 
-const PHYSICAL_TEMPLATES: ReadonlySet<TwinTemplate> = new Set<TwinTemplate>([
-  "FLOOR",
-  "TERRITORY",
-  "YARD",
-  "BAYS",
-  "BOOK",
-  "ROOMS",
-  "STORE",
-  "VENUE",
-  "COUNTER",
-  "DOCK",
-]);
+const SPACE_KIND_BY_PHYSICAL_TEMPLATE = {
+  FLOOR: "cartesian-interior",
+  STORE: "cartesian-interior",
+  BAYS: "cartesian-interior",
+  BOOK: "cartesian-interior",
+  ROOMS: "cartesian-interior",
+  VENUE: "cartesian-interior",
+  COUNTER: "cartesian-interior",
+  DOCK: "cartesian-interior",
+  YARD: "cartesian-interior",
+  TERRITORY: "geographic",
+} as const satisfies Record<PhysicalTwinTemplate, SpaceKind>;
+
+/** Coordinate-space classification for a final template. Board templates are
+ * intentionally non-spatial and return undefined. */
+export function spaceKindForTwinTemplate(
+  template: TwinTemplate,
+): SpaceKind | undefined {
+  return template in SPACE_KIND_BY_PHYSICAL_TEMPLATE
+    ? SPACE_KIND_BY_PHYSICAL_TEMPLATE[template as PhysicalTwinTemplate]
+    : undefined;
+}
 
 const n = (singular: string, plural: string): TwinNoun => ({ singular, plural });
 const z = (key: string, label: string): TwinZoneSpec => ({ key, label });
@@ -518,7 +534,7 @@ export function deriveTwinProfile(archetype: ArchetypeDefinition): TwinProfile {
   const base: TwinProfile = {
     template,
     ...(variant ? { variant } : {}),
-    physical: PHYSICAL_TEMPLATES.has(template),
+    physical: spaceKindForTwinTemplate(template) !== undefined,
     zones: defaults.zones.map((zone) => ({ ...zone })),
     capacityZoneKey: defaults.capacityZoneKey,
     resourceNoun:
@@ -536,5 +552,13 @@ export function deriveTwinProfile(archetype: ArchetypeDefinition): TwinProfile {
     if (secondary) base.hybridBoard = secondary;
   }
 
-  return applyOverride(base, archetype.twinProfile);
+  const finalProfile = applyOverride(base, archetype.twinProfile);
+  const spaceKind = spaceKindForTwinTemplate(finalProfile.template);
+  return {
+    ...finalProfile,
+    // A template override changes its default physical classification too.
+    // Preserve the legacy explicit physical escape hatch when one was supplied.
+    physical: archetype.twinProfile?.physical ?? (spaceKind !== undefined),
+    ...(spaceKind ? { spaceKind } : {}),
+  };
 }
