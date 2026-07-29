@@ -39,6 +39,14 @@ Each row is filed under **the gate that made the decision**, not the doctrine it
 
 A tier reading **"never used"** means that gate has recorded nothing. Treat it as a question, not a conclusion: it can mean the gate genuinely is not exercised, or that nothing is wired to call it. Compare it against the **Consults by caller** panel on the same page — a coworker that never appears there has never consulted the kernel at all.
 
+## Escalated And Deferred Decisions: What To Do
+
+Rows marked **escalate** or **defer** carry an "awaiting review" chip until a human answers. Escalated means the AI stopped short of deciding alone — the call was high-risk, its confidence was low, two principles conflicted, or the consult carried no scoreable options. Deferred means it found no recorded guidance at all, so it declined to guess.
+
+Neither outcome silently blocks work. The coworker that asked handled its own moment and moved on; the one exception is a Build Studio build paused at a decision gate, and that row says so. The log header totals what is waiting per tier, and each decision's drill-in now explains, in plain language, what its outcome means, whether anything is waiting on you, and the next steps with links.
+
+Do not work the log line by line. Review & adjust groups the waiting rows into themes; answering a theme once — or adding a stance or craft guidance that covers it — teaches your AI so that question stops needing a human.
+
 ## Review & Adjust Findings
 
 `/coworker-decisions/review` surfaces findings over the accumulating decision ledger so you can keep governance sharp without reading every row: conflicting principles, gaps where the doctrine has no settled answer yet, a canonical decision that quietly drifted under a doctrine change, and stale decision material.

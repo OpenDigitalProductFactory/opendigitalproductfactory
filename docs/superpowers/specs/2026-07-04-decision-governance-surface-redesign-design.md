@@ -267,3 +267,32 @@ BI-EF3F4A2D) governs multi-tenant gate authority, not whether authoring works.
    "Posture" label on the review surface (§1.1).
 3. **Phase-1 stop point.** Is the reframed landing + linked existing surfaces enough to react to
    before committing Phases 2–4?
+
+---
+
+## 9. Addendum (2026-07-28, BI-404E9BEA): plain-language "what do I do about this?" help
+
+Operator finding: the Decision log and its drill-in show `ESCALATE`/`DEFER` rows with an
+"awaiting review" chip and a bare link to Review & adjust. A non-technical reader cannot tell what
+the outcome *is*, whether anything is blocked while it waits, or what to concretely do — 29 WWMD +
+45 WSID unresolved rows read as alarming homework with no instructions. This is a §7 success-criteria
+gap on the audit surface itself.
+
+Resolution — a deterministic guidance layer (`apps/web/lib/wiki/decision-help.ts`, pure/unit-tested;
+**no inference dependency**, so the help works even when the local model runtime is down):
+
+- **Per-row guidance** (`buildDecisionHelp`): maps outcome type + tier + risk + conflict /
+  insufficient-signal flags + build-gate linkage + resolution state to plain language — what the
+  outcome means, whether anything is actually waiting (a Build Studio gate blocks; a fire-and-forget
+  consult does not), and ordered next steps linking to Review & adjust / stance editor / craft
+  corpus. Rendered in the decision drill-in's Human review section for every outcome, including the
+  "nothing needed from you" read on recommend/arbitrate rows.
+- **Log-header digest** (`buildAwaitingDigest`): rolls the per-tier unresolved counts into one
+  headline ("N decisions are waiting on a human") with a progressive-disclosure explainer of
+  escalate vs defer, why nothing on the page is silently stuck, and that Review & adjust clusters
+  rows into themes answered once — not worked line by line.
+- **Contextual Docs**: a `/coworker-decisions` quick-help entry joins the BI-2DD18122 registry so
+  Help opened from any decision-governance page answers the five stuck-reader questions.
+
+A follow-up (separate BI) may add an AI-coworker-narrated summary of the unresolved cluster; it
+layers on top of — and must never replace — this deterministic floor.
