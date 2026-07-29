@@ -94,6 +94,22 @@ items between lanes, promise an inferred date, convert a `DigitalProduct`
 dependency into a business work dependency, or create a separate roadmap
 record. Snapshot exports are evidence packets, not importable plans.
 
+On Product and ProductLine **Direction**, recurring coworker playbooks are
+typed recipes over the same canonical operating context. Before scheduling,
+the owner sees the exact evidence sources, tools, proposed writes, approval
+boundary, cadence, and failure behavior. No global schedule is seeded, and a
+changed permission digest requires a fresh preview. A run may prepare a brief,
+recommendation, or review, but every canonical write keeps its existing
+approval gate.
+
+The scheduled card exposes current, unchanged, partial, failed, paused, and
+permission-changed states. Partial and failed runs retain the prior successful
+fingerprint so stale inputs remain eligible for recovery. **Inspect last run**
+opens the audited task history. Exports remain source-linked and
+non-importable. The coworker must report missing adoption evidence as
+unavailable and must not fabricate a product team, business unit, provider,
+consumer, subscriber, entitlement, outcome, or accepted recommendation.
+
 ## WWMD And Autonomy
 
 When a coworker hits an ambiguous decision, it should not guess from chat context alone. WWMD is the decision gate that lets the coworker consult the founder-kernel wiki and score options against platform principles.

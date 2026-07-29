@@ -16,10 +16,13 @@ import {
   createTypedFulfillmentInstance,
   materializeProductSold,
   persistProductFulfillmentInstance,
+} from "@/lib/products/product-sold";
+import {
   persistProductSoldComponentAllocations,
   snapshotProductSoldComponents,
   transitionProductSoldByEvidence,
-} from "@/lib/products/product-sold";
+} from "@/lib/products/product-sold-commercial-persistence";
+import { createProductManagementChangeCollector } from "@/lib/product-management/product-management-playbook-refresh";
 
 /** Sentinel: the pre-check found an overlapping agreement for this unit.
  *  Thrown to abort the reservation transaction with a friendly message before
@@ -219,6 +222,7 @@ export async function createReservation(input: {
     // constraint (EP-056D2A5E, kernel D2). Both the check and the create run in
     // ONE transaction so a concurrent reservation that slips past the check is
     // still rejected by the DB (SQLSTATE 23P01) instead of double-booking the unit.
+    const productManagementChanges = createProductManagementChangeCollector();
     const agreement = await prisma.$transaction(async (tx) => {
       if (input.rentableUnitId) {
         const existing = await tx.rentalAgreement.findMany({
@@ -311,6 +315,7 @@ export async function createReservation(input: {
         const materialized = await materializeProductSold({
           db: tx as never,
           draft,
+          collectChange: productManagementChanges.collect,
         });
         await persistProductSoldComponentAllocations({
           db: tx as never,
@@ -353,6 +358,7 @@ export async function createReservation(input: {
       }
       return ag;
     });
+    await productManagementChanges.flush();
     revalidatePath("/rental");
     return { ok: true, message: `Reservation ${agreement.agreementRef} created`, id: agreement.id };
   } catch (err) {

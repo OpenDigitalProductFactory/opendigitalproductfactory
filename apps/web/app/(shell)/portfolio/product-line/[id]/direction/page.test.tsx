@@ -43,6 +43,21 @@ vi.mock(
     ProductDirectionBrief: () => <div data-direction-brief />,
   }),
 );
+vi.mock(
+  "@/components/product/direction/ProductManagementPlaybooks",
+  () => ({
+    ProductManagementPlaybooks: () => <div data-playbooks />,
+  }),
+);
+vi.mock(
+  "@/lib/product-management/product-management-brief",
+  () => ({
+    buildStakeholderBriefFromOperatingContext: () => ({
+      schemaVersion: 1,
+      importable: false,
+    }),
+  }),
+);
 
 import ProductLineDirectionPage from "./page";
 

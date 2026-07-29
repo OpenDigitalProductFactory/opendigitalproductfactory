@@ -169,10 +169,12 @@ export function validateBacklogInput(input: BacklogItemInput): string | null {
 
 /** New scoped product demand enters intake explicitly; legacy rows stay null. */
 export function initialDemandStageForInput(
-  input: Pick<
-    BacklogItemInput,
-    "productLineId" | "businessProductId" | "digitalProductId" | "demandStage"
-  >,
+  input: {
+    productLineId?: string | null;
+    businessProductId?: string | null;
+    digitalProductId?: string | null;
+    demandStage?: DemandStage | null;
+  },
 ): DemandStage | null {
   if (input.demandStage !== undefined) return input.demandStage;
   return input.productLineId || input.businessProductId || input.digitalProductId

@@ -40,6 +40,13 @@ import {
   PRODUCT_INTELLIGENCE_WATCH_TASK_KIND,
 } from "@/lib/product-management/product-intelligence-watch-contract";
 import { proposeProductIntelligenceWatch } from "@/lib/product-management/product-intelligence-watch";
+import {
+  PRODUCT_MANAGEMENT_PLAYBOOK_TASK_KIND,
+} from "@/lib/product-management/product-management-playbook";
+import {
+  completeProductManagementPlaybookRun,
+  prepareProductManagementPlaybookRun,
+} from "@/lib/product-management/product-management-playbook-run";
 
 // ─── Cron helpers ───────────────────────────────────────────────────────────
 
@@ -345,11 +352,49 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
 
   const now = new Date();
   let taskRunRef: ScheduledTaskRunRef | null = null;
+  let preparedPlaybook: Awaited<
+    ReturnType<typeof prepareProductManagementPlaybookRun>
+  > | null = null;
   // BI-754C9E82: the resolved plan is needed in the catch block (retry policy);
   // null when failure precedes resolution (fall back to plain cron re-arm).
   let resolvedPlan: Awaited<ReturnType<typeof resolveUserAwareProactivityPlan>> | null = null;
 
   try {
+    if (task.taskKind === PRODUCT_MANAGEMENT_PLAYBOOK_TASK_KIND) {
+      preparedPlaybook = await prepareProductManagementPlaybookRun(task);
+      if (preparedPlaybook.unchanged) {
+        const oneShot = isOneShotCron(task.schedule);
+        const nextRunAt = oneShot
+          ? null
+          : computeNextCronRun(task.schedule, now);
+        await prisma.scheduledAgentTask.update({
+          where: { taskId },
+          data: {
+            lastRunAt: now,
+            lastStatus: "unchanged",
+            lastError: null,
+            nextRunAt,
+            attempts: 0,
+            ...(oneShot ? { isActive: false } : {}),
+          },
+        });
+        await prisma.scheduledJob
+          .update({
+            where: { jobId: taskId },
+            data: {
+              lastRunAt: now,
+              lastStatus: "unchanged",
+              lastError: null,
+              nextRunAt,
+              ...(oneShot ? { schedule: "disabled" } : {}),
+            },
+          })
+          .catch(() => {});
+        return;
+      }
+    }
+    const executionPrompt = preparedPlaybook?.prompt ?? task.prompt;
+
     // Get or create a dedicated thread for this scheduled task
     const contextKey = `scheduled:${taskId}`;
     const thread = await prisma.agentThread.upsert({
@@ -363,7 +408,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       data: {
         threadId: thread.id,
         role: "user",
-        content: `[Scheduled task: ${task.title}]\n\n${task.prompt}`,
+        content: `[Scheduled task: ${task.title}]\n\n${executionPrompt}`,
         agentId: task.agentId,
         routeContext: task.routeContext,
       },
@@ -395,7 +440,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       threadId: thread.id,
       routeContext: task.routeContext,
       title: task.title,
-      prompt: task.prompt,
+      prompt: executionPrompt,
       proactivity,
       delegatedPosture,
     });
@@ -405,7 +450,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       taskRunRecordId: taskRunRef.id,
       contextId: taskRunRef.contextId,
       role: "user",
-      content: `[Scheduled task: ${task.title}]\n\n${task.prompt}`,
+      content: `[Scheduled task: ${task.title}]\n\n${executionPrompt}`,
       metadata: {
         source: "scheduled",
         taskId: task.taskId,
@@ -430,7 +475,7 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       userContext,
     });
 
-    const scheduledPrompt = `[Scheduled task: ${task.title}]\n\n${task.prompt}`;
+    const scheduledPrompt = `[Scheduled task: ${task.title}]\n\n${executionPrompt}`;
     const chatHistory = [
       {
         role: "user" as const,
@@ -555,6 +600,19 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
 
     const scheduledSummary = extractScheduledTaskSummary(executedTools);
     const taskMessageContent = scheduledSummary?.compactStatus ?? result.content ?? "(No response)";
+    const playbookRunStatus =
+      preparedPlaybook &&
+      executedTools.some((tool) => {
+        const value = tool.result;
+        return (
+          value != null &&
+          typeof value === "object" &&
+          "success" in value &&
+          (value as { success?: unknown }).success === false
+        );
+      })
+        ? "partial"
+        : "completed";
 
     // Persist agent response
     await prisma.agentMessage.create({
@@ -601,13 +659,26 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       where: { taskId },
       data: {
         lastRunAt: now,
-        lastStatus: "ok",
+        lastStatus:
+          preparedPlaybook && playbookRunStatus === "partial" ? "partial" : "ok",
         lastError: null,
         lastThreadId: thread.id,
         taskRunId: taskRunRef.taskRunId,
         nextRunAt,
         // BI-754C9E82: success closes the retry cycle.
         attempts: 0,
+        ...(preparedPlaybook
+          ? {
+              taskConfig: completeProductManagementPlaybookRun(
+                task.taskConfig,
+                {
+                  fingerprint: preparedPlaybook.fingerprint,
+                  completedAt: now,
+                  status: playbookRunStatus,
+                },
+              ),
+            }
+          : {}),
         ...(oneShot ? { isActive: false } : {}),
       },
     });
@@ -621,6 +692,18 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
           scheduledSummary: scheduledSummary?.compactStatus ?? null,
           scheduledSummaryPayload: scheduledSummary?.payload ?? null,
           executedToolCount: executedTools.length,
+          ...(preparedPlaybook
+            ? {
+                productManagementPlaybook: {
+                  recipeId: preparedPlaybook.config.recipeId,
+                  inputFingerprint: preparedPlaybook.fingerprint,
+                  sourceIds: preparedPlaybook.sources.map(
+                    (source) => `${source.sourceKind}:${source.sourceId}`,
+                  ),
+                  outcome: playbookRunStatus,
+                },
+              }
+            : {}),
         },
       },
     });
@@ -629,7 +712,8 @@ export async function executeScheduledAgentTask(taskId: string): Promise<void> {
       where: { jobId: taskId },
       data: {
         lastRunAt: now,
-        lastStatus: "ok",
+        lastStatus:
+          preparedPlaybook && playbookRunStatus === "partial" ? "partial" : "ok",
         lastError: null,
         nextRunAt,
       },

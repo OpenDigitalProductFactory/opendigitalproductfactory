@@ -23,6 +23,7 @@ import {
   type ProductOutcomesTransactionalDb,
 } from "@/lib/product-management/outcomes-repository";
 import type { ToolPack } from "../tool-pack";
+import { queueProductManagementPlaybookRefreshForObjective } from "@/lib/product-management/product-management-playbook-refresh";
 
 const definitions: ToolDefinition[] = [
   {
@@ -286,6 +287,13 @@ async function createHandler(params: Record<string, unknown>) {
         reviewAt: dateValue(params["reviewAt"]),
       },
     );
+    await queueProductManagementPlaybookRefreshForObjective({
+      organizationId,
+      objectiveId: result.objectiveId,
+      sourceKind: "product-objective",
+      sourceId: result.objectiveId,
+      changedAt: new Date(),
+    });
     return successful(result.objectiveId, "Draft product objective created.");
   });
 }
@@ -356,6 +364,13 @@ async function updateHandler(params: Record<string, unknown>) {
           : {}),
       },
     );
+    await queueProductManagementPlaybookRefreshForObjective({
+      organizationId,
+      objectiveId: result.objectiveId,
+      sourceKind: "product-objective",
+      sourceId: result.objectiveId,
+      changedAt: new Date(),
+    });
     return successful(result.objectiveId, "Product objective updated.");
   });
 }
@@ -373,6 +388,13 @@ async function reviewHandler(params: Record<string, unknown>) {
         nextReviewAt: dateValue(params["nextReviewAt"]),
       },
     );
+    await queueProductManagementPlaybookRefreshForObjective({
+      organizationId,
+      objectiveId: result.objectiveId,
+      sourceKind: "product-objective",
+      sourceId: result.objectiveId,
+      changedAt: reviewedAt,
+    });
     return successful(result.objectiveId, "Product objective review recorded.");
   });
 }
@@ -388,6 +410,13 @@ async function transitionHandler(params: Record<string, unknown>) {
         to: params["to"] as ProductObjectiveStatus,
       },
     );
+    await queueProductManagementPlaybookRefreshForObjective({
+      organizationId,
+      objectiveId: result.objectiveId,
+      sourceKind: "product-objective",
+      sourceId: result.objectiveId,
+      changedAt: new Date(),
+    });
     return successful(
       result.objectiveId,
       `Product objective moved to ${result.status}.`,
@@ -405,6 +434,13 @@ async function linkWorkHandler(params: Record<string, unknown>) {
       backlogItemId: String(params["backlogItemId"] ?? ""),
       contributionKind:
         params["contributionKind"] as ProductObjectiveWorkContributionKind,
+    });
+    await queueProductManagementPlaybookRefreshForObjective({
+      organizationId,
+      objectiveId,
+      sourceKind: "product-objective",
+      sourceId: `${objectiveId}:${String(params["backlogItemId"] ?? "")}`,
+      changedAt: new Date(),
     });
     return successful(objectiveId, "Contributing work linked.");
   });
@@ -441,6 +477,13 @@ async function observationHandler(
           : null,
       },
     );
+    await queueProductManagementPlaybookRefreshForObjective({
+      organizationId,
+      objectiveId: String(params["objectiveId"] ?? ""),
+      sourceKind: "product-objective-observation",
+      sourceId: String(result["observationId"] ?? ""),
+      changedAt: new Date(),
+    });
     return successful(
       String(result["observationId"] ?? ""),
       correction ? "Corrected observation appended." : "Observation appended.",

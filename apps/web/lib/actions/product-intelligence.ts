@@ -10,6 +10,7 @@ import {
 import { ProductOperatingContextNotFoundError } from "@/lib/product-management/product-operating-context-query";
 import { createProductIntelligenceWatch } from "@/lib/product-management/product-intelligence-watch";
 import { proposeResearch } from "@/lib/wiki/research-proposal";
+import { queueProductManagementPlaybookRefreshBestEffort } from "@/lib/product-management/product-management-playbook-refresh";
 
 export type ProductIntelligenceActionResult =
   | { ok: true; message: string }
@@ -72,7 +73,9 @@ export async function proposeProductResearchAction(
 ): Promise<ProductIntelligenceActionResult> {
   try {
     const authorized = await resolveAuthorizedProduct(input.productId);
-    if ("error" in authorized) return { ok: false, error: authorized.error };
+    if ("error" in authorized) {
+      return { ok: false, error: authorized.error ?? "Not authenticated" };
+    }
     const result = await proposeResearch({
       organizationId: authorized.context.provider.id,
       productLineId: authorized.product.productLineId,
@@ -81,6 +84,16 @@ export async function proposeProductResearchAction(
       query: cleanRequired(input.query, "Research question"),
       proposedBy: "user",
     });
+    if (result.created) {
+      await queueProductManagementPlaybookRefreshBestEffort({
+        organizationId: authorized.context.provider.id,
+        productLineId: authorized.product.productLineId,
+        businessProductId: authorized.product.id,
+        sourceKind: "research-proposal",
+        sourceId: result.proposalId,
+        changedAt: new Date(),
+      });
+    }
     revalidatePath(intelligencePath(input.productId));
     return {
       ok: true,
@@ -98,7 +111,9 @@ export async function createProductIntelligenceWatchAction(
 ): Promise<ProductIntelligenceActionResult> {
   try {
     const authorized = await resolveAuthorizedProduct(input.productId);
-    if ("error" in authorized) return { ok: false, error: authorized.error };
+    if ("error" in authorized) {
+      return { ok: false, error: authorized.error ?? "Not authenticated" };
+    }
     const result = await createProductIntelligenceWatch({
       ownerUserId: authorized.userId,
       organizationId: authorized.context.provider.id,

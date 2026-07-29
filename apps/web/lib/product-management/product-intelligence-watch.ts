@@ -12,6 +12,7 @@ import {
   PRODUCT_INTELLIGENCE_WATCH_TASK_KIND,
   parseProductIntelligenceWatchConfig,
 } from "./product-intelligence-watch-contract";
+import { queueProductManagementPlaybookRefreshBestEffort } from "./product-management-playbook-refresh";
 
 export { PRODUCT_INTELLIGENCE_WATCH_TASK_KIND };
 
@@ -85,6 +86,7 @@ export async function proposeProductIntelligenceWatch(
     propose?: (
       input: ProposeResearchInput,
     ) => Promise<ProposeResearchResult>;
+    refresh?: typeof queueProductManagementPlaybookRefreshBestEffort;
   } = {},
 ): Promise<ProposeResearchResult> {
   if (task.taskKind !== PRODUCT_INTELLIGENCE_WATCH_TASK_KIND) {
@@ -93,7 +95,7 @@ export async function proposeProductIntelligenceWatch(
   const organizationId = cleanRequired(task.organizationId, "organization");
   const config = parseProductIntelligenceWatchConfig(task.taskConfig);
   const propose = deps.propose ?? ((input) => proposeResearch(input));
-  return propose({
+  const result = await propose({
     organizationId,
     productLineId: task.productLineId,
     businessProductId: task.businessProductId,
@@ -101,4 +103,15 @@ export async function proposeProductIntelligenceWatch(
     query: config.query,
     proposedBy: "schedule",
   });
+  if (result.created) {
+    await (deps.refresh ?? queueProductManagementPlaybookRefreshBestEffort)({
+      organizationId,
+      productLineId: task.productLineId,
+      businessProductId: task.businessProductId,
+      sourceKind: "research-proposal",
+      sourceId: result.proposalId,
+      changedAt: new Date(),
+    });
+  }
+  return result;
 }

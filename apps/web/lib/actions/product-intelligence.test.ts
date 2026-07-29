@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   load: vi.fn(),
   propose: vi.fn(),
   createWatch: vi.fn(),
+  refresh: vi.fn(),
   revalidatePath: vi.fn(),
 }));
 
@@ -34,6 +35,12 @@ vi.mock("@/lib/wiki/research-proposal", () => ({
 vi.mock("@/lib/product-management/product-intelligence-watch", () => ({
   createProductIntelligenceWatch: mocks.createWatch,
 }));
+vi.mock(
+  "@/lib/product-management/product-management-playbook-refresh",
+  () => ({
+    queueProductManagementPlaybookRefreshBestEffort: mocks.refresh,
+  }),
+);
 
 import {
   createProductIntelligenceWatchAction,
@@ -55,6 +62,7 @@ beforeEach(() => {
   });
   mocks.propose.mockResolvedValue({ proposalId: "proposal-1", created: true });
   mocks.createWatch.mockResolvedValue({ success: true, taskId: "task-1" });
+  mocks.refresh.mockResolvedValue(undefined);
 });
 
 describe("product intelligence actions", () => {
@@ -87,6 +95,14 @@ describe("product intelligence actions", () => {
       topic: "Competitive alternatives",
       query: "What changed in local salon memberships?",
       proposedBy: "user",
+    });
+    expect(mocks.refresh).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      productLineId: "line-1",
+      businessProductId: "product-1",
+      sourceKind: "research-proposal",
+      sourceId: "proposal-1",
+      changedAt: expect.any(Date),
     });
     expect(mocks.revalidatePath).toHaveBeenCalledWith(
       "/portfolio/product/product-1/direction/intelligence",

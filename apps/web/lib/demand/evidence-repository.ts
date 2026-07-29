@@ -38,6 +38,9 @@ export type DemandEvidenceDb = {
       id: string;
       evidenceLinkId: string;
       backlogItemId: string;
+      sourceKind: string;
+      sourceRef: string;
+      title: string;
       status: string;
     } | null>;
     update: (args: unknown) => Promise<unknown>;

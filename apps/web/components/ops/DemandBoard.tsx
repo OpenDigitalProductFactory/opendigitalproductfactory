@@ -24,6 +24,7 @@ import {
 } from "@/lib/actions/demand-activation";
 import { DEMAND_EVIDENCE_KINDS } from "@/lib/demand/evidence";
 import { computeDemandActivationTelemetry } from "@/lib/demand/activation-telemetry";
+import { DemandMiniButton as MiniButton } from "./DemandMiniButton";
 
 const VALUE_BAND_LABEL: Record<ReturnType<typeof valueBand>, string> = {
   high: "High value",
@@ -47,36 +48,6 @@ const QUADRANT_TOKEN: Record<ValueEffortQuadrant, string> = {
 };
 
 const ESTIMATE_SOURCE_LABEL: Record<string, string> = { ai: "AI", human: "human", agreed: "agreed" };
-
-/** Tiny inline text button used across the estimate controls. */
-function MiniButton({
-  onClick,
-  disabled,
-  title,
-  children,
-  tone = "accent",
-}: {
-  onClick: () => void;
-  disabled?: boolean;
-  title?: string;
-  children: React.ReactNode;
-  tone?: "accent" | "muted" | "success";
-}) {
-  const color =
-    tone === "success" ? "var(--dpf-success)" : tone === "muted" ? "var(--dpf-muted)" : "var(--dpf-accent)";
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={title}
-      className="rounded border px-1.5 py-0.5 text-[10px] font-medium disabled:opacity-40"
-      style={{ color, borderColor: color }}
-    >
-      {children}
-    </button>
-  );
-}
 
 /**
  * Interactive collaborative-estimation controls (EP-DELIVERY-FLOW BI-AA1763CD).
@@ -131,7 +102,7 @@ export function EstimateControls({ item }: { item: DemandItemView }) {
         onChange={(e) => setDraft(e.target.value)}
         placeholder="pts"
         aria-label="Effort points"
-        className="w-12 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-1 py-0.5 text-[10px] text-[var(--dpf-text)]"
+        className="w-12 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-1 py-0.5 text-dpf-caption text-[var(--dpf-text)]"
       />
       <MiniButton onClick={() => submitHuman()} disabled={pending} title="Set your estimate">
         Set
@@ -154,7 +125,7 @@ export function EstimateControls({ item }: { item: DemandItemView }) {
   const chip =
     prov.source === null ? null : prov.diverged ? (
       <span
-        className="rounded px-1.5 py-0.5 text-[10px] font-medium"
+        className="rounded px-1.5 py-0.5 text-dpf-caption font-medium"
         style={{ color: "var(--dpf-warning)", borderColor: "var(--dpf-warning)" }}
         title="AI and human estimates diverge — reconcile to trust the score"
       >
@@ -162,7 +133,7 @@ export function EstimateControls({ item }: { item: DemandItemView }) {
       </span>
     ) : (
       <span
-        className="rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--dpf-muted)]"
+        className="rounded px-1.5 py-0.5 text-dpf-caption font-medium text-[var(--dpf-muted)]"
         title={`Effort estimate: ${prov.effectiveJobSize} (${ESTIMATE_SOURCE_LABEL[prov.source] ?? prov.source})`}
       >
         est {prov.effectiveJobSize} · {ESTIMATE_SOURCE_LABEL[prov.source] ?? prov.source}
@@ -213,9 +184,9 @@ export function EstimateControls({ item }: { item: DemandItemView }) {
           ✎
         </MiniButton>
       )}
-      {pending && <span className="text-[10px] text-[var(--dpf-muted)]">…</span>}
+      {pending && <span className="text-dpf-caption text-[var(--dpf-muted)]">…</span>}
       {error && (
-        <span className="text-[10px] text-[var(--dpf-warning)]" title={error}>
+        <span className="text-dpf-caption text-[var(--dpf-warning)]" title={error}>
           {error.length > 40 ? `${error.slice(0, 40)}…` : error}
         </span>
       )}
@@ -301,14 +272,14 @@ export function DemandActivationControls({ item }: { item: DemandItemView }) {
         >
           {showEvidence ? "Cancel evidence" : "Link evidence"}
         </MiniButton>
-        <span className="text-[10px] text-[var(--dpf-muted)]">
+        <span className="text-dpf-caption text-[var(--dpf-muted)]">
           {item.evidenceLinks?.length ?? 0} evidence source
           {(item.evidenceLinks?.length ?? 0) === 1 ? "" : "s"}
         </span>
       </div>
       {showEvidence && (
         <div className="grid gap-2 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2 sm:grid-cols-2">
-          <label className="text-[10px] text-[var(--dpf-muted)]">
+          <label className="text-dpf-caption text-[var(--dpf-muted)]">
             Evidence kind
             <select
               value={sourceKind}
@@ -322,7 +293,7 @@ export function DemandActivationControls({ item }: { item: DemandItemView }) {
               ))}
             </select>
           </label>
-          <label className="text-[10px] text-[var(--dpf-muted)]">
+          <label className="text-dpf-caption text-[var(--dpf-muted)]">
             Stable reference
             <input
               value={sourceRef}
@@ -332,7 +303,7 @@ export function DemandActivationControls({ item }: { item: DemandItemView }) {
             />
           </label>
           {sourceKind !== "reviewed-knowledge" ? (
-            <label className="text-[10px] text-[var(--dpf-muted)]">
+            <label className="text-dpf-caption text-[var(--dpf-muted)]">
               Evidence title
               <input
                 value={title}
@@ -342,11 +313,11 @@ export function DemandActivationControls({ item }: { item: DemandItemView }) {
               />
             </label>
           ) : (
-            <p className="self-end text-[10px] text-[var(--dpf-muted)]">
+            <p className="self-end text-dpf-caption text-[var(--dpf-muted)]">
               The reviewed page supplies its canonical title and summary.
             </p>
           )}
-          <label className="text-[10px] text-[var(--dpf-muted)]">
+          <label className="text-dpf-caption text-[var(--dpf-muted)]">
             Summary (optional)
             <input
               value={summary}
@@ -382,13 +353,13 @@ export function DemandActivationControls({ item }: { item: DemandItemView }) {
       {message && (
         <p
           role="status"
-          className="text-[10px] text-[var(--dpf-muted)]"
+          className="text-dpf-caption text-[var(--dpf-muted)]"
         >
           {message}
         </p>
       )}
       {activation.blockers.length > 0 && (
-        <p className="text-[10px] text-[var(--dpf-muted)]">
+        <p className="text-dpf-caption text-[var(--dpf-muted)]">
           Next: {activation.blockers[0]}
         </p>
       )}
@@ -406,18 +377,18 @@ function DemandCard({ item }: { item: DemandItemView }) {
       <div className="font-medium text-[var(--dpf-text)] leading-snug">{item.title}</div>
       <div className="mt-1 flex flex-wrap items-center gap-1.5">
         <span
-          className="rounded px-1.5 py-0.5 text-[10px] font-medium"
+          className="rounded px-1.5 py-0.5 text-dpf-caption font-medium"
           style={{ color: VALUE_BAND_TOKEN[band], borderColor: VALUE_BAND_TOKEN[band] }}
         >
           {VALUE_BAND_LABEL[band]}
         </span>
-        <span className="text-[10px] text-[var(--dpf-muted)]">
+        <span className="text-dpf-caption text-[var(--dpf-muted)]">
           {item.effortSize ? `${item.effortSize} effort` : effort !== null ? `effort ${effort}` : "unsized"}
         </span>
         <EstimateControls item={item} />
         {item.claimStatus === "offered" && item.claimedByAgentId && (
           <span
-            className="rounded px-1.5 py-0.5 text-[10px] font-medium"
+            className="rounded px-1.5 py-0.5 text-dpf-caption font-medium"
             style={{ color: "var(--dpf-accent)", borderColor: "var(--dpf-accent)" }}
             title={`${item.claimedByAgentId} volunteered to build this — approve the pickup`}
           >
@@ -430,12 +401,12 @@ function DemandCard({ item }: { item: DemandItemView }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="mt-1 text-[10px] text-[var(--dpf-accent)] hover:underline"
+        className="mt-1 text-dpf-caption text-[var(--dpf-accent)] hover:underline"
       >
         {open ? "Hide" : "Why this score?"}
       </button>
       {open && (
-        <dl className="mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px] text-[var(--dpf-muted)]">
+        <dl className="mt-1 grid grid-cols-2 gap-x-2 gap-y-0.5 text-dpf-caption text-[var(--dpf-muted)]">
           <dt>Score</dt>
           <dd className="text-[var(--dpf-text)]">
             {item.demandScore ?? "—"} {item.demandScoreFramework ? `(${item.demandScoreFramework})` : ""}
@@ -565,12 +536,12 @@ function FlowLaneColumn({ col }: { col: FlowColumn }) {
         <span className="text-xs text-[var(--dpf-muted)]">{col.items.length}</span>
       </div>
       {isBet && (
-        <p className="mb-2 text-[10px] leading-snug text-[var(--dpf-warning)]">
+        <p className="mb-2 text-dpf-caption text-[var(--dpf-warning)]">
           Funded — a coworker volunteers to build it.
         </p>
       )}
       {isClassification && (
-        <p className="mb-2 text-[10px] leading-snug text-[var(--dpf-muted)]">
+        <p className="mb-2 text-dpf-caption text-[var(--dpf-muted)]">
           Review scope before treating this as active product demand.
         </p>
       )}
@@ -593,7 +564,7 @@ function FlowView({ items }: { items: DemandItemView[] }) {
   const board = columns.filter((c) => c.half === "board");
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between text-[10px] uppercase tracking-wide text-[var(--dpf-muted)]">
+      <div className="mb-2 flex items-center justify-between text-dpf-caption uppercase tracking-wide text-[var(--dpf-muted)]">
         <span>← Invest · value ÷ effort</span>
         <span>Execute · owner + burn-down →</span>
       </div>
@@ -697,7 +668,7 @@ function BalanceView({
             <div className="mb-1 flex items-center gap-2 text-sm">
               <span className="font-medium text-[var(--dpf-text)]">{BUCKET_LABELS[r.bucket]}</span>
               {r.starved && (
-                <span className="rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--dpf-warning)]">
+                <span className="rounded px-1.5 py-0.5 text-dpf-caption font-medium text-[var(--dpf-warning)]">
                   Starved
                 </span>
               )}

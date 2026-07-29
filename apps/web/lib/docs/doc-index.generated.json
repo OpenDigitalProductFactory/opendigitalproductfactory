@@ -1213,7 +1213,8 @@
         "state-and-evidence",
         "governed-transitions",
         "fleet-safe-evolution",
-        "derived-roadmap-boundary"
+        "derived-roadmap-boundary",
+        "product-management-playbook-boundary"
       ]
     },
     "docs/architecture/section-navigation.md": {
@@ -9955,6 +9956,7 @@
         "learn-from-product-outcomes",
         "read-the-evidence-derived-roadmap",
         "build-continuous-product-intelligence",
+        "schedule-recurring-product-work",
         "from-product-to-something-a-customer-can-select",
         "package-and-price-a-catalog-item",
         "review-customer-purchases-and-use",

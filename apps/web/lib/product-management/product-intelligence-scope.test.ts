@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  ProductIntelligenceScopeError,
   assertProductIntelligenceScopeExists,
   buildExactProductIntelligenceScopeWhere,
   buildProductIntelligenceVisibilityWhere,
@@ -45,7 +44,7 @@ describe("normalizeProductIntelligenceScope", () => {
         businessProductId: "product-1",
       }),
     ).toThrowError(
-      expect.objectContaining<ProductIntelligenceScopeError>({
+      expect.objectContaining({
         code: "conflicting-scope",
       }),
     );
@@ -58,7 +57,7 @@ describe("normalizeProductIntelligenceScope", () => {
         businessProductId: "product-1",
       }),
     ).toThrowError(
-      expect.objectContaining<ProductIntelligenceScopeError>({
+      expect.objectContaining({
         code: "organization-required",
       }),
     );
@@ -105,8 +104,8 @@ describe("normalizeProductIntelligenceScope", () => {
       organizationId: "org-1",
       OR: [
         { productLineId: null, businessProductId: null },
-        { productLineId: { in: ["line-1"] }, businessProductId: null },
-        { productLineId: null, businessProductId: { in: ["product-1"] } },
+        { productLineId: "line-1", businessProductId: null },
+        { productLineId: null, businessProductId: "product-1" },
       ],
     });
   });

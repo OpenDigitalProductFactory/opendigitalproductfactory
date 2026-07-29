@@ -156,7 +156,7 @@ describe("seeded registry", () => {
     for (const assetId of [
       "data:business-product-sold",
       "data:business-product-sold-component-allocation",
-    ]) {
+    ] as const) {
       expect(lookupAsset(DATA_ASSET_REGISTRY, assetId)).toMatchObject({
         domain: "business-product-portfolio",
         sensitivity: "internal",
@@ -169,7 +169,7 @@ describe("seeded registry", () => {
       "data:business-product-sold-party",
       "data:business-product-sold-entitlement",
       "data:business-product-fulfillment-instance",
-    ]) {
+    ] as const) {
       expect(lookupAsset(DATA_ASSET_REGISTRY, assetId)).toMatchObject({
         domain: "business-product-portfolio",
         sensitivity: "confidential",

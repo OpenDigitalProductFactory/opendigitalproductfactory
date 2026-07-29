@@ -426,6 +426,10 @@ describe("backlog pack — handler behavior (delegation preserved)", () => {
     updateHandler.handleUpdateBacklogItem.mockResolvedValue({ success: true, entityId: "BI-1" });
     const res = await backlogPack.handlers.update_backlog_item({ itemId: "BI-1", title: "t" }, "u1");
     expect(res).toEqual({ success: true, entityId: "BI-1" });
-    expect(updateHandler.handleUpdateBacklogItem).toHaveBeenCalledWith({ itemId: "BI-1", title: "t" });
+    expect(updateHandler.handleUpdateBacklogItem).toHaveBeenCalledWith(
+      { itemId: "BI-1", title: "t" },
+      "u1",
+      undefined,
+    );
   });
 });

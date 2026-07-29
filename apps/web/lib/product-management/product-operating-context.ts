@@ -172,7 +172,13 @@ export type ScheduledPlaybookContextItem = NamedStatusContextItem & {
   isActive: boolean;
   nextRunAt: Date | null;
   lastRunAt: Date | null;
+  taskRunId: string | null;
   lastStatus: string | null;
+  lastError: string | null;
+  taskKind: string | null;
+  recipeId: string | null;
+  permissionsDigest: string | null;
+  permissionsCurrent: boolean | null;
 };
 
 export interface ProductOperatingContextInput {
