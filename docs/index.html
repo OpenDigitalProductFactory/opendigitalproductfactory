@@ -1379,12 +1379,15 @@
 
     <div class="trust-layout">
       <figure class="trust-flow" aria-labelledby="trust-flow-title trust-flow-desc">
-        <svg viewBox="0 0 760 500" role="img">
+        <svg viewBox="0 0 760 630" role="img">
           <title id="trust-flow-title">Governed coworker action flow</title>
           <desc id="trust-flow-desc">
-            A user request enters an authority gate. Allowed work reaches a purposed coworker.
-            Low-risk actions can execute under policy; consequential actions pause for human
-            approval. Every outcome writes an audit receipt.
+            A user request enters an authority gate. Allowed work reaches a purposed coworker,
+            which consults the three-layer decision perspective: WWMD platform doctrine, WWWD
+            the organization&rsquo;s own business stance, and WSID the profession&rsquo;s
+            job-specific corpus. A risk decision follows; consequential actions pause for human
+            approval. Every outcome writes an audit receipt. Earned autonomy and the proactivity
+            dial govern how much the coworker initiates &mdash; never what it is authorized to do.
           </desc>
           <defs>
             <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
@@ -1395,16 +1398,30 @@
             <rect x="30" y="34" width="210" height="94" rx="18" fill="var(--surface-raised)"></rect>
             <rect x="275" y="34" width="210" height="94" rx="18" fill="var(--surface-raised)"></rect>
             <rect x="520" y="34" width="210" height="94" rx="18" fill="var(--surface-raised)"></rect>
-            <rect x="150" y="218" width="210" height="94" rx="18" fill="var(--surface-raised)"></rect>
-            <rect x="400" y="218" width="210" height="94" rx="18" fill="var(--surface-raised)"></rect>
-            <rect x="275" y="398" width="210" height="70" rx="18" fill="var(--surface-raised)"></rect>
+            <rect x="30" y="196" width="210" height="100" rx="18" fill="var(--surface-raised)"></rect>
+            <rect x="275" y="196" width="210" height="100" rx="18" fill="var(--surface-raised)"></rect>
+            <rect x="520" y="196" width="210" height="100" rx="18" fill="var(--surface-raised)"></rect>
+            <rect x="150" y="360" width="210" height="94" rx="18" fill="var(--surface-raised)"></rect>
+            <rect x="400" y="360" width="210" height="94" rx="18" fill="var(--surface-raised)"></rect>
+            <rect x="275" y="540" width="210" height="70" rx="18" fill="var(--surface-raised)"></rect>
+            <rect x="30" y="540" width="210" height="70" rx="18" fill="var(--surface-raised)" stroke-dasharray="7 5"></rect>
+            <rect x="520" y="540" width="210" height="70" rx="18" fill="var(--surface-raised)" stroke-dasharray="7 5"></rect>
           </g>
-          <g fill="none" stroke="var(--blue)" stroke-width="3" marker-end="url(#arrow)">
-            <path d="M240 81 H268"></path>
-            <path d="M485 81 H513"></path>
-            <path d="M625 128 V170 Q625 190 605 190 H275 Q255 190 255 211"></path>
-            <path d="M360 265 H393"></path>
-            <path d="M505 312 V360 Q505 380 485 380 H400 Q380 380 380 391"></path>
+          <g fill="none" stroke="var(--blue)" stroke-width="3">
+            <path d="M240 81 H268" marker-end="url(#arrow)"></path>
+            <path d="M485 81 H513" marker-end="url(#arrow)"></path>
+            <path d="M625 128 V164"></path>
+            <path d="M135 164 H625"></path>
+            <path d="M135 164 V189" marker-end="url(#arrow)"></path>
+            <path d="M380 164 V189" marker-end="url(#arrow)"></path>
+            <path d="M625 164 V189" marker-end="url(#arrow)"></path>
+            <path d="M135 296 V326"></path>
+            <path d="M380 296 V326"></path>
+            <path d="M625 296 V326"></path>
+            <path d="M135 326 H625"></path>
+            <path d="M255 326 V353" marker-end="url(#arrow)"></path>
+            <path d="M360 407 H393" marker-end="url(#arrow)"></path>
+            <path d="M505 454 V500 Q505 520 485 520 H400 Q380 520 380 533" marker-end="url(#arrow)"></path>
           </g>
           <g fill="var(--text)" font-family="Segoe UI, Arial, sans-serif" text-anchor="middle">
             <text x="135" y="72" font-size="17" font-weight="700">User intent</text>
@@ -1413,25 +1430,50 @@
             <text x="380" y="98" fill="var(--muted)" font-size="13">role &cap; grant &cap; policy</text>
             <text x="625" y="72" font-size="17" font-weight="700">Purposed coworker</text>
             <text x="625" y="98" fill="var(--muted)" font-size="13">bounded tools and scope</text>
-            <text x="255" y="256" font-size="17" font-weight="700">Risk decision</text>
-            <text x="255" y="282" fill="var(--muted)" font-size="13">act, propose, escalate, defer</text>
-            <text x="505" y="256" font-size="17" font-weight="700">Human approval</text>
-            <text x="505" y="282" fill="var(--muted)" font-size="13">when impact requires it</text>
-            <text x="380" y="427" font-size="17" font-weight="700">Outcome + receipt</text>
-            <text x="380" y="451" fill="var(--muted)" font-size="13">who, what, why, authority, result</text>
+            <text x="257" y="152" fill="var(--muted)" font-size="12">consults the decision perspective &mdash; scored, cited, logged</text>
+            <text x="135" y="226" font-size="16" font-weight="700">WWMD</text>
+            <text x="135" y="246" fill="var(--muted)" font-size="13">platform doctrine</text>
+            <text x="135" y="266" fill="var(--muted)" font-size="12">founder-kernel wiki,</text>
+            <text x="135" y="282" fill="var(--muted)" font-size="12">tiered principles</text>
+            <text x="380" y="226" font-size="16" font-weight="700">WWWD</text>
+            <text x="380" y="246" fill="var(--muted)" font-size="13">your business stance</text>
+            <text x="380" y="266" fill="var(--muted)" font-size="12">org-authored corpus, grows</text>
+            <text x="380" y="282" fill="var(--muted)" font-size="12">as your company decides</text>
+            <text x="625" y="226" font-size="16" font-weight="700">WSID</text>
+            <text x="625" y="246" fill="var(--muted)" font-size="13">profession craft</text>
+            <text x="625" y="266" fill="var(--muted)" font-size="12">job-specific corpus,</text>
+            <text x="625" y="282" fill="var(--muted)" font-size="12">source-traced pages</text>
+            <text x="255" y="398" font-size="17" font-weight="700">Risk decision</text>
+            <text x="255" y="424" fill="var(--muted)" font-size="13">act, propose, escalate, defer</text>
+            <text x="505" y="398" font-size="17" font-weight="700">Human approval</text>
+            <text x="505" y="424" fill="var(--muted)" font-size="13">when impact requires it</text>
+            <text x="380" y="569" font-size="17" font-weight="700">Outcome + receipt</text>
+            <text x="380" y="593" fill="var(--muted)" font-size="13">who, what, why, authority, result</text>
+            <text x="135" y="566" font-size="14" font-weight="700">Earned autonomy</text>
+            <text x="135" y="586" fill="var(--muted)" font-size="12">shadow &rarr; propose &rarr;</text>
+            <text x="135" y="602" fill="var(--muted)" font-size="12">supervised &rarr; autopilot</text>
+            <text x="625" y="566" font-size="14" font-weight="700">Proactivity dial</text>
+            <text x="625" y="586" fill="var(--muted)" font-size="12">quiet &middot; balanced &middot; assertive</text>
+            <text x="625" y="602" fill="var(--muted)" font-size="12">initiative, never new authority</text>
           </g>
         </svg>
         <ol class="trust-flow-mobile" aria-label="Governed coworker action flow">
           <li><strong>User intent</strong><span>request and context</span></li>
           <li><strong>Authority gate</strong><span>role &cap; grant &cap; policy</span></li>
           <li><strong>Purposed coworker</strong><span>bounded tools and scope</span></li>
+          <li><strong>Decision perspective</strong><span>WWMD platform doctrine &middot; WWWD your business stance &middot; WSID profession craft &mdash; scored, cited, logged</span></li>
           <li><strong>Risk decision</strong><span>act, propose, escalate, or defer</span></li>
           <li><strong>Human approval</strong><span>when impact requires it</span></li>
           <li><strong>Outcome and receipt</strong><span>who, what, why, authority, and result</span></li>
+          <li><strong>Autonomy dials</strong><span>earned trust (shadow &rarr; autopilot) and proactivity (quiet &rarr; assertive) set initiative, never authority</span></li>
         </ol>
         <figcaption>
-          The same authority and evidence model applies to in-product coworkers, screen actions,
-          Build Studio work, and external clients using the platform&rsquo;s MCP tools.
+          The coworker&rsquo;s judgment is layered: platform doctrine (WWMD), your
+          organization&rsquo;s own stance (WWWD), and profession craft (WSID) &mdash; scored,
+          cited, and logged, never blended into one opaque opinion. The same authority and
+          evidence model applies to in-product coworkers, screen actions, Build Studio work,
+          and external clients using the platform&rsquo;s MCP tools. See
+          <a href="/architecture/autonomy-and-wwmd/">how decisions and autonomy work</a>.
         </figcaption>
       </figure>
 
