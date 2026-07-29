@@ -467,3 +467,57 @@ pass (§4.1): the 2026-05 decision-perspective models were built profile-kind-ge
 
 See the implementation plan:
 `docs/superpowers/plans/2026-06-09-wsid-coworker-professional-corpus.md`.
+
+## 11. Addendum (2026-07-29): corpus priming layers, the weaning ladder, and rollout order
+
+Founder direction (Mark, 2026-07-29), recorded against the live state: all 23 registered
+families have a published baseline corpus in the DB (~186 pages, ~84 carrying dimension
+vectors), every `wsid-*` profile exists — and every one has **zero** `PerspectiveMaterial`
+rows, because the §4.6 "decision-bearing subset attached to the profession profile" step
+was designed but never implemented. The profession gate deferred 64 times on
+`architecture-tradeoff` while six published, vectored enterprise-architecture pages sat
+unread. BI-3B02FF9C implements the §4.6 promotion contract (page → material, with
+backfill); this addendum specifies what the corpus itself must grow into.
+
+### 11.1 The weaning ladder (why priming exists)
+
+The platform borrows decisions before it owns them. Cognitive load moves incrementally:
+**founder → WWMD → WWWD or directly WSID where applicable**. The fallback chain
+(`wsid-<family>` → platform profile) is the borrowing mechanism — a profession with no
+material of its own decides from WWMD doctrine, which is itself grounded in EA principles
+(the founder is an architect; WWMD encodes that). Priming a family's corpus, and capturing
+each human ruling as `ruled`-tier material (the stance ladder, never downgraded), is how a
+profession weans off the borrow: the same question must never climb back up the ladder
+once a human has settled it. `professionProfileSelected=false` on a decision row is the
+per-decision borrow marker; a family's borrow rate trending down is the weaning metric.
+
+### 11.2 Three corpus layers
+
+1. **Common professional knowledge (baseline)** — what any competent member of the
+   profession would treat as settled: bodies of knowledge, standards, canonical decision
+   factors and their default weights (the "common vectors"). Platform-seeded,
+   `organizationId = null`, graded B/derived per §4.6. This layer EXISTS for all 23
+   families but is uneven (4–17 pages); depth follows the demand signal (§11.3).
+2. **Industry / archetype variation** — how the profession's defaults shift inside a
+   vertical (what "operations" means in fabric-care vs lodging vs MSP). Overlay pages
+   scoped via the existing principle-taxonomy consumer contexts and archetype slugs;
+   seeded as part of each vertical-readiness program (e.g. lodging P3 BI-270FAE06), never
+   by forking the baseline page — variation pages cite and override, kernel-overlay style.
+3. **Locale / market / jurisdiction variation** — county-and-narrower governance, market
+   norms, and regulatory reality (licensing-permit-jurisdiction spec, location-reference
+   resolution, CADA precedent). Enters ONLY source-cited through the enrichment facade
+   (§4.7, conduit rule); high-stakes families (legal, compliance, finance, healthcare)
+   require human approval before material goes gate-live, per the competence-flywheel
+   risk tiering. Retrieval filters by the install's locale context; absence of a local
+   page falls back up the layers, never to silence.
+
+### 11.3 Rollout order and the minimum viable decision-pack
+
+Rollout order is not editorial: it is the defer demand signal the profile seeder was
+designed to emit ("defer counts function as the demand signal for Phase 6 rollout
+order"). Enterprise-architecture is first (64 deferrals). A family is "primed" when it
+carries a minimum viable decision-pack: enough decision-bearing material in its live
+decision classes (mapped `domainClass`, dimension vectors present) that the gate can
+recommend or arbitrate on the family's routine consult shapes instead of deferring —
+verified against the family's own recent deferral questions, not hypotheticals. Depth
+beyond the pack is pulled by gap capture (§4.7), not pushed speculatively.
