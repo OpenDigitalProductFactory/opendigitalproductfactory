@@ -393,6 +393,22 @@ export async function routeAndCall(
     };
   }
 
+  // BI-F4D3B9E9(c): persist the failed route decision BEFORE throwing, so the
+  // per-endpoint excludedTrace (which names the REAL excluder — clearance vs
+  // context vs cooldown vs capability) survives for diagnosis. The live outage
+  // this fixes threw here on every turn and never wrote a RouteDecisionLog row,
+  // leaving nothing but a count in the error string. Fire-and-forget with its
+  // own catch — audit failure must never mask the routing error itself.
+  const persistFailedDecision = () => {
+    if (options?.persistDecision === false) return;
+    persistRouteDecision(decision, {
+      actor: options?.routingActor ?? (options?.agentId ? { kind: "agent", id: options.agentId } : { kind: "system", id: "routed-inference" }),
+      agentMessageId: options?.agentMessageId ?? null,
+    }).catch((err) => {
+      console.error("[routeAndCall] Failed to persist no-eligible-endpoints route decision:", err);
+    });
+  };
+
   // EP-AGENT-CAP-002: Agent capability floor — hard block, no graceful degradation.
   // Only throw if the routing evidence shows the capability floor was the ACTUAL cause
   // of failure. If endpoints were excluded for sensitivity, status, rate-limit, or
@@ -402,6 +418,7 @@ export async function routeAndCall(
     const floorFailure = soleCapabilityFloorFailure(decision.candidates);
     if (floorFailure) {
       const missingCap = floorFailure.missingCapability;
+      persistFailedDecision();
       throw new NoEligibleEndpointsError(
         taskType,
         `No endpoint satisfies agent capability floor (EP-AGENT-CAP-002). ` +
@@ -428,6 +445,7 @@ export async function routeAndCall(
           `Enable a tool-capable LOCAL model (or run the build through the opencode engine, which supplies the tool loop), ` +
           `or turn off local-only inference in Admin > AI > Providers & Routing.`
         : `Configure a tool-capable provider (OpenAI, Anthropic, Gemini) or check that existing providers are active.`;
+      persistFailedDecision();
       throw new NoEligibleEndpointsError(
         taskType,
         `No tool-capable endpoint available. Build Studio requires tool support — cannot fall back to generic chat. ${fix}`,
@@ -454,6 +472,7 @@ export async function routeAndCall(
   }
 
   if (!decision.selectedEndpoint) {
+    persistFailedDecision();
     // Local-only inference: fail LOUDLY and specifically rather than letting the
     // generic "no eligible endpoints" mask the real cause (cloud is disabled and
     // no local model qualified for this task's tier/capability/context).
