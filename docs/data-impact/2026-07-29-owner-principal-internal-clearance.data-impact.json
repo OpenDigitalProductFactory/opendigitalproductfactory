@@ -1,0 +1,36 @@
+{
+  "version": "1",
+  "accountableOwner": "identity-and-access-management",
+  "affectedCopies": [
+    "Canonical Principal sensitivity-clearance record",
+    "Request-scoped EffectiveAuthContext authorization projection"
+  ],
+  "migration": {
+    "name": "20260729125500_backfill_owner_principal_internal_clearance",
+    "backfill": "append internal to active installation-owner principals resolved through User -> PrincipalAlias(user) -> Principal; retain every existing clearance value and leave principals without a canonical alias unchanged"
+  },
+  "tests": [
+    "packages/db/src/principal-sensitivity.test.ts",
+    "apps/web/lib/identity/principal-linking.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:principal#sensitivity-clearance",
+      "prismaModel": "Principal",
+      "lifecycleDisposition": "retained and removed with the canonical principal identity record",
+      "fields": [
+        {
+          "fieldId": "data:principal#sensitivityClearance",
+          "resolution": "governed",
+          "reason": "installation owners must be able to govern the platform's internal coworkers through the existing fail-closed authority evaluator; the automatic floor remains bounded to public and internal",
+          "provenance": "BI-473C3664; governed Build Studio canary authority-denial evidence",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": "authorization-only; automatically grant installation owners exactly the public and internal floor, preserve broader explicit grants, never infer confidential or restricted clearance from superuser status, and expose the result only through canonical principal resolution and EffectiveAuthContext"
+        }
+      ]
+    }
+  ]
+}

@@ -7,6 +7,11 @@ export const PRINCIPAL_SENSITIVITIES = [
 
 export type PrincipalSensitivity = (typeof PRINCIPAL_SENSITIVITIES)[number];
 
+export const INSTALLATION_OWNER_SENSITIVITY_FLOOR = [
+  "public",
+  "internal",
+] as const satisfies readonly PrincipalSensitivity[];
+
 const PRINCIPAL_SENSITIVITY_SET = new Set<string>(PRINCIPAL_SENSITIVITIES);
 
 export function isPrincipalSensitivity(value: string): value is PrincipalSensitivity {
@@ -25,4 +30,18 @@ export function normalizePrincipalSensitivities(
 
   const selected = new Set(values);
   return PRINCIPAL_SENSITIVITIES.filter((value) => selected.has(value));
+}
+
+export function resolvePrincipalSensitivityClearance(input: {
+  existing?: readonly string[] | null;
+  isSuperuser: boolean;
+}): PrincipalSensitivity[] {
+  return normalizePrincipalSensitivities(
+    input.isSuperuser
+      ? [
+          ...(input.existing ?? []),
+          ...INSTALLATION_OWNER_SENSITIVITY_FLOOR,
+        ]
+      : input.existing,
+  );
 }

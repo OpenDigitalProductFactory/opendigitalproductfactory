@@ -32,10 +32,43 @@ import {
   syncAgentPrincipal,
   syncCustomerPrincipal,
   syncEmployeePrincipal,
+  syncUserPrincipal,
 } from "./principal-linking";
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+describe("syncUserPrincipal", () => {
+  it("creates the installation owner principal with public and internal clearance", async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: "owner-user",
+      email: "owner@example.com",
+      isActive: true,
+      isSuperuser: true,
+      employeeProfile: null,
+    } as never);
+    vi.mocked(prisma.principalAlias.findFirst).mockResolvedValue(null);
+    vi.mocked(prisma.principal.create).mockResolvedValue({
+      id: "principal-owner",
+      principalId: "PRN-owner",
+      kind: "human",
+      status: "active",
+      displayName: "owner@example.com",
+      sensitivityClearance: ["public", "internal"],
+    } as never);
+    vi.mocked(prisma.principalAlias.createMany).mockResolvedValue({ count: 1 });
+    vi.mocked(prisma.principalAlias.findMany).mockResolvedValue([]);
+
+    await syncUserPrincipal("owner-user");
+
+    expect(prisma.principal.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        kind: "human",
+        sensitivityClearance: ["public", "internal"],
+      }),
+    });
+  });
 });
 
 describe("syncEmployeePrincipal", () => {

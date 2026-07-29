@@ -1,5 +1,9 @@
 import crypto from "node:crypto";
 import { prisma } from "@dpf/db";
+import {
+  resolvePrincipalSensitivityClearance,
+  type PrincipalSensitivity,
+} from "@dpf/db/principal-sensitivity";
 
 type PrincipalDb = Pick<
   typeof prisma,
@@ -25,6 +29,7 @@ type PrincipalRecord = {
   kind: string;
   status: string;
   displayName: string;
+  sensitivityClearance: PrincipalSensitivity[];
 };
 
 export type SyncedPrincipal = PrincipalRecord & {
@@ -118,14 +123,27 @@ async function upsertPrincipalForAliases(
     status?: string | null;
     displayName: string;
     aliases: AliasRecord[];
+    isSuperuser?: boolean;
   },
 ): Promise<SyncedPrincipal> {
   const existing = await findPrincipalByAliases(db, input.aliases);
   const nextStatus = normalizeStatus(input.status);
+  const existingSensitivityClearance = existing?.sensitivityClearance ?? [];
+  const sensitivityClearance = resolvePrincipalSensitivityClearance({
+    existing: existingSensitivityClearance,
+    isSuperuser: input.isSuperuser === true,
+  });
+  const clearanceChanged = existing
+    ? existingSensitivityClearance.length !== sensitivityClearance.length ||
+      existingSensitivityClearance.some(
+        (value, index) => value !== sensitivityClearance[index],
+      )
+    : true;
   const principal = existing
     ? existing.kind === input.kind &&
         existing.status === nextStatus &&
-        existing.displayName === input.displayName
+        existing.displayName === input.displayName &&
+        !clearanceChanged
       ? existing
       : await db.principal.update({
           where: { id: existing.id },
@@ -133,6 +151,7 @@ async function upsertPrincipalForAliases(
             kind: input.kind,
             status: nextStatus,
             displayName: input.displayName,
+            sensitivityClearance,
           },
         })
     : await db.principal.create({
@@ -141,6 +160,7 @@ async function upsertPrincipalForAliases(
           kind: input.kind,
           status: nextStatus,
           displayName: input.displayName,
+          sensitivityClearance,
         },
       });
 
@@ -152,6 +172,7 @@ async function upsertPrincipalForAliases(
     kind: principal.kind,
     status: principal.status,
     displayName: principal.displayName,
+    sensitivityClearance: principal.sensitivityClearance,
     aliases,
   };
 }
@@ -169,6 +190,11 @@ export async function syncEmployeePrincipal(
       displayName: true,
       status: true,
       workEmail: true,
+      user: {
+        select: {
+          isSuperuser: true,
+        },
+      },
     },
   });
 
@@ -197,6 +223,7 @@ export async function syncEmployeePrincipal(
     status: employee.status === "inactive" ? "inactive" : "active",
     displayName: employee.displayName,
     aliases,
+    isSuperuser: employee.user?.isSuperuser === true,
   });
 }
 
@@ -210,6 +237,7 @@ export async function syncUserPrincipal(
       id: true,
       email: true,
       isActive: true,
+      isSuperuser: true,
       employeeProfile: {
         select: {
           id: true,
@@ -245,6 +273,7 @@ export async function syncUserPrincipal(
     status: user.isActive ? "active" : "inactive",
     displayName: user.employeeProfile?.displayName ?? user.email,
     aliases,
+    isSuperuser: user.isSuperuser,
   });
 }
 

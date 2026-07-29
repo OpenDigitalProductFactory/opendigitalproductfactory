@@ -3,8 +3,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
+  INSTALLATION_OWNER_SENSITIVITY_FLOOR,
   PRINCIPAL_SENSITIVITIES,
   normalizePrincipalSensitivities,
+  resolvePrincipalSensitivityClearance,
 } from "./principal-sensitivity";
 
 describe("principal sensitivity clearance", () => {
@@ -32,5 +34,24 @@ describe("principal sensitivity clearance", () => {
     expect(() => normalizePrincipalSensitivities(["secret"])).toThrow(
       "Unknown principal sensitivity clearance: secret",
     );
+  });
+
+  it("gives the installation owner only the public and internal floor", () => {
+    expect(INSTALLATION_OWNER_SENSITIVITY_FLOOR).toEqual(["public", "internal"]);
+    expect(
+      resolvePrincipalSensitivityClearance({
+        existing: ["public"],
+        isSuperuser: true,
+      }),
+    ).toEqual(["public", "internal"]);
+  });
+
+  it("preserves governed clearance without widening ordinary principals", () => {
+    expect(
+      resolvePrincipalSensitivityClearance({
+        existing: ["public", "confidential"],
+        isSuperuser: false,
+      }),
+    ).toEqual(["public", "confidential"]);
   });
 });
