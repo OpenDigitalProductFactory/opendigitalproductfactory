@@ -295,3 +295,74 @@ export function assertDimensionScopeIntegrity(
     throw new Error("The spine cannot be empty — it is the commensurability layer.");
   }
 }
+
+// ---------------------------------------------------------------------------
+// Dimension SOURCING (BI-25CCF1A4 Phase 0) — how each axis's weight is kept
+// honest. This is the code analogue of the tier-rebalance spec's §1.4
+// epistemology taxonomy (measured / policy / revealed-preference / predictive),
+// which shipped as prose with no substrate.
+//
+// Sourcing is ORTHOGONAL to scope: scope (spine vs profession-local) says which
+// population owns the vocabulary; sourcing says where the weight comes from and
+// how it is refreshed. It is deliberately a label per axis (spec §8 Q2 proposed
+// per-axis to start; revisit only if a real conflict appears).
+// ---------------------------------------------------------------------------
+
+export const PRINCIPLE_DIMENSION_SOURCINGS = [
+  "basic", // hand-scored, stable doctrine. Refresh: PR + ratification.
+  "corpus-derived", // meaning derived from a profession's WSID corpus. Refresh: corpus change.
+  "revealed", // weight learned from rulings via weight-inference.ts (proposal ladder, human-ruled).
+  "external", // a live looked-up signal, validated-against-outcome before it scores (JSI §4.3).
+] as const;
+export type PrincipleDimensionSourcing =
+  (typeof PRINCIPLE_DIMENSION_SOURCINGS)[number];
+
+/**
+ * Every axis, sourcing-labelled. `satisfies Record<PrincipleDimension, …>` makes
+ * an unlabelled new axis a compile error, exactly like the scope registry above.
+ *
+ * HONEST BASELINE: every axis is `basic` today — uniformly hand-authored via
+ * `principleDimensionVector` (tier-rebalance §1.4). That uniformity IS the gap
+ * the per-job decision-vector inventory repairs (spec
+ * docs/superpowers/specs/2026-07-25-job-specific-decision-vector-inventory-design.md).
+ * An axis is reclassified here ONLY when its weight actually comes from that
+ * source — never on intent (schema-honesty-over-aspirational-naming). So this
+ * ships all-`basic` and grows by evidence as the inventory wires corpus
+ * derivation, revealed inference, or external lookup for a specific axis.
+ */
+export const PRINCIPLE_DIMENSION_SOURCING = {
+  long_term_maintainability: "basic",
+  blast_radius: "basic",
+  reusability: "basic",
+  evidence_density: "basic",
+  human_cognitive_load: "basic",
+  capacity_utilization: "basic",
+  governance_compliance: "basic",
+  public_safety: "basic",
+  speed_to_value: "basic",
+  schema_grounding: "basic",
+  operational_independence: "basic",
+  data_privacy: "basic",
+  cost_efficiency: "basic",
+  vendor_lock_in: "basic",
+  reversibility: "basic",
+  evidence_confidence: "basic",
+  customer_consent_state: "basic",
+  business_disruption: "basic",
+  operator_effort: "basic",
+  legibility_of_consequence: "basic",
+} as const satisfies Record<PrincipleDimension, PrincipleDimensionSourcing>;
+
+/** The sourcing class of one axis. */
+export function dimensionSourcing(dimension: PrincipleDimension): PrincipleDimensionSourcing {
+  return PRINCIPLE_DIMENSION_SOURCING[dimension];
+}
+
+/** Every axis currently sourced a given way (drives the per-job inventory's reclassification work). */
+export function dimensionsBySourcing(
+  sourcing: PrincipleDimensionSourcing,
+): readonly PrincipleDimension[] {
+  return PRINCIPLE_DIMENSIONS.filter(
+    (dimension) => PRINCIPLE_DIMENSION_SOURCING[dimension] === sourcing,
+  ) as readonly PrincipleDimension[];
+}
