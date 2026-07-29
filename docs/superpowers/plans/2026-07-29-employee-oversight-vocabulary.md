@@ -104,6 +104,30 @@ alone. Consolidating the two lenses is a follow-up candidate, not this change.
   `WorkforceRosterPanel.test.tsx` — cannot execute locally at all and are
   verified in CI.
 
+## Backlog coverage
+
+- Decision: atomic
+- Parent: BI-F2EC4699
+- Receipt: cms6pmiiz02vk01og4ayrtura
+- Dependencies: none
+- Rationale: A vocabulary change is only coherent when it lands whole — no phase is independently shippable, so every deliverable ships under BI-F2EC4699 alone.
+
+| Deliverable | Independently shippable | Depends on |
+| --- | --- | --- |
+| `oversight-copy-module` — canonical copy module + `employeeOversight` intent namespace | no | — |
+| `component-deduplication` — collapse the six drifted tier maps onto it | no | `oversight-copy-module` |
+| `role-resolved-prose-sweep` — employee/owner sweep across copy, gates, prompts | no | `oversight-copy-module` |
+| `docs-and-standard` — user-guide alignment + anti-regression rule | no | `component-deduplication`, `role-resolved-prose-sweep` |
+
+**Atomicity rationale.** A vocabulary change is only coherent when it lands whole.
+Shipping the module without the six call sites would leave the acronym rendering
+in five panels while a sixth showed plain language — a visibly inconsistent state
+worse than before. Shipping the prose sweep without the module would re-introduce
+the drifted per-component maps this change exists to delete. Shipping the code
+without the user-guide pages would leave documentation naming labels the portal no
+longer shows. Every phase is a partial rename of one surface vocabulary, so the
+change is delivered under BI-F2EC4699 alone.
+
 ## Follow-ups
 
 - Consolidate the `authority-projection` authority-lens labels with

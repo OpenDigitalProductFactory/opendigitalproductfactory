@@ -50,7 +50,7 @@ action may execute and record the result for audit.
 
 | Surface | Use it to answer |
 | --- | --- |
-| **Principals** | Which canonical human or coworker identity does this record represent, and which aliases point to it? |
+| **Principals** | Which canonical employee or coworker identity does this record represent, and which aliases point to it? |
 | **Groups** | Which platform role, business group, team membership, or coworker ownership connects this principal to work? |
 | **Authorization** | Which shared binding gives a subject access to a governed resource, with what status and evidence? |
 | **Directory** | What identity and group state can DPF project for directory-compatible consumers? |
@@ -77,8 +77,8 @@ action may execute and record the result for audit.
    DPF authorization grant.
 
 Coworker actions are re-evaluated when the tool actually runs. The platform
-intersects the current human authority, coworker grant, delegated scope,
-record scope, connection state, data sensitivity, and HITL policy. A denial is
+intersects the current employee authority, coworker grant, delegated scope,
+record scope, connection state, data sensitivity, and oversight policy. A denial is
 returned as a plain-language explanation; an action that needs judgment pauses
 the originating task and creates one approval envelope. Approving that envelope
 does not approve a different task or changed action.

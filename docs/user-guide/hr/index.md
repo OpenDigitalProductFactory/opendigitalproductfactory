@@ -7,16 +7,16 @@ description: "Operate the employee directory, workforce view, organization chart
 
 ## What the People Area Owns
 
-Open **People** at `/employee` to maintain the workforce record and see how human employees and AI coworkers contribute to the business. The page combines six views:
+Open **People** at `/employee` to maintain the workforce record and see how employees and AI coworkers contribute to the business. The page combines six views:
 
 - **Directory** — employee identity, organization placement, lifecycle dates, contact details, addresses, and pay basis
 - **Grid** — the same employee records in the shared workbook-style grid
-- **Workforce** — current work, concerns that need an operator, and a unified human/AI roster
+- **Workforce** — current work, concerns that need an operator, and a unified employee/AI roster
 - **Org Chart** — reporting lines and employees who do not yet have a manager
 - **Timesheets** — weekly time entry, manager approval, and optional customer/service billing context
 - **My Policies** — policy acknowledgements and requirements assigned to the signed-in user
 
-The page leads with staffing readiness and work that needs attention. Role IDs, human-in-the-loop tiers, service-level targets, and user access remain available under **Role governance & access** in full navigation mode.
+The page leads with staffing readiness and work that needs attention. Role IDs, oversight levels, service-level targets, and user access remain available under **Role governance & access** in full navigation mode.
 
 ## Workforce Operating Loop
 
@@ -24,7 +24,7 @@ The page leads with staffing readiness and work that needs attention. Role IDs, 
 flowchart LR
     A["Create employee<br/>Offer or onboarding"] --> B["Complete directory record<br/>Team, role, manager, location"]
     B --> C["Set pay basis<br/>Hourly or salary"]
-    C --> D["Active workforce<br/>Human and AI work"]
+    C --> D["Active workforce<br/>Employee and AI work"]
     D --> E["Record weekly time<br/>Save draft, then submit"]
     E --> F["Manager decision<br/>Approve or reject"]
     F --> G["Labour evidence<br/>Payroll and job-cost inputs"]
@@ -40,9 +40,9 @@ Use **Workforce** when you need to answer “who or what needs attention?” bef
 
 1. Review **Needs you** for unowned service-level commitments, approvals, and open handoffs.
 2. Address **Act now** concerns before lower-severity watch items.
-3. Review **Workforce at work** to see active builds and engagements, their phase, and whether a human, AI coworker, or nobody owns them.
-4. Use the roster below the activity view to inspect human and AI members together.
-5. For an AI coworker, check its work role, human-role parity, approval/interface owner, HITL tier, provider/model, and token budget before changing responsibility elsewhere.
+3. Review **Workforce at work** to see active builds and engagements, their phase, and whether an employee, AI coworker, or nobody owns them.
+4. Use the roster below the activity view to inspect employee and AI members together.
+5. For an AI coworker, check its work role, employee-role parity, approval/interface owner, oversight level, provider/model, and token budget before changing responsibility elsewhere.
 
 This view is an operating projection, not a substitute for the underlying build, engagement, employee, or agent record.
 
@@ -122,7 +122,7 @@ An acknowledgement records receipt; it does not prove competence, legal advice, 
 
 In full navigation mode, open **Role governance & access** below the People views.
 
-- Review each platform role’s ID, description, minimum HITL tier, service-level target, and assignment count.
+- Review each platform role’s ID, description, minimum oversight level, service-level target, and assignment count.
 - Treat an unassigned role as a coverage signal, not automatically as a hiring request.
 - In **HR user lifecycle**, select a platform user, choose the role, and set the account active or inactive.
 - Save the change and confirm the result message.
