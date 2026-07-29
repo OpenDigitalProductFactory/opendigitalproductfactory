@@ -140,11 +140,21 @@ export interface OrgLocaleClient {
  * the neutral default. Never throws for a missing settings row — a brand-new
  * deployment resolves to the default until onboarding sets the country.
  */
-export async function resolveOrgLocale(db: OrgLocaleClient): Promise<OrgLocaleSettings> {
-  const settings = await (
-    db.orgSettings?.findFirst({ select: { baseCurrency: true, locale: true, countryCode: true } }) ??
-    Promise.resolve(null)
-  ).catch(() => null);
+export async function resolveOrgLocale(
+  db: OrgLocaleClient,
+  opts?: { onReadFailure?: (error: unknown) => void },
+): Promise<OrgLocaleSettings> {
+  let settings: Awaited<ReturnType<OrgLocaleClient["orgSettings"]["findFirst"]>>;
+  try {
+    settings = await (
+      db.orgSettings?.findFirst({
+        select: { baseCurrency: true, locale: true, countryCode: true },
+      }) ?? Promise.resolve(null)
+    );
+  } catch (error) {
+    opts?.onReadFailure?.(error);
+    settings = null;
+  }
 
   if (!settings) return { ...DEFAULT_LOCALE_CURRENCY, countryCode: null };
 

@@ -114,6 +114,11 @@ describe("loadWorkspaceTwinPresentation — live overlay", () => {
     // home-mount condensing still applies to the live snapshot
     expect(result!.snapshot.cog).toBeUndefined();
     expect(result!.snapshot.quests).toEqual([]);
+    expect(result!.operations).toMatchObject({
+      freshness: "degraded",
+      degradedSourceCount: 1,
+    });
+    expect(result!.operations!.telemetry.queryCount).toBe(9);
   });
 
   it("falls back to the demo (demo: true) when no org is configured", async () => {
@@ -123,6 +128,7 @@ describe("loadWorkspaceTwinPresentation — live overlay", () => {
     });
     expect(result).not.toBeNull();
     expect(result!.demo).toBe(true);
+    expect(result!.operations).toBeNull();
     expect(result!.snapshot.cog).toBeUndefined();
   });
 

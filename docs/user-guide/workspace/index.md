@@ -17,7 +17,10 @@ maintained copy of a guide, note, policy, or imported source.
 The main rail separates two different decisions:
 
 - **Operations** answers “what is happening now, what conflicts exist, and what
-  should happen next?” It contains current work, queues, and immediate actions.
+  should happen next?” It contains current work, queues, physical resources, and
+  immediate actions. The resource cards are also exposed as an accessible list,
+  so the same current-state facts are available without relying on the spatial
+  layout alone.
 - **Performance** answers “how is the business doing over time, and what is
   driving the result?” It is available only to authorized owners and operations
   managers. If historical sources are not configured, it says so instead of
@@ -26,6 +29,23 @@ The main rail separates two different decisions:
 Performance is a separate main destination, not a tab inside Operations. Simple
 navigation keeps the day-to-day Operations surface and hides the manager view;
 Full navigation exposes both when the signed-in role is permitted.
+
+## Confirming an operational suggestion
+
+An AI coworker can suggest an assignment, but the suggestion is not a completed
+business action until the durable operations provider confirms it.
+
+- **Assigning…** means the command is pending. Keep the page open while the
+  current version and availability constraints are checked.
+- **Confirmed** means the assignment was durably committed.
+- **The operation changed** means another operator or process changed the same
+  current state first. Operations rolls back the optimistic selection, shows
+  safe alternatives when the provider returns them, and lets you retry against
+  the latest version.
+- **Command unavailable** means the current archetype has no durable command
+  provider connected. The platform deliberately does not pretend the suggestion
+  was applied.
+- A rejected or failed command leaves the business state unchanged.
 
 ## Key Concepts
 

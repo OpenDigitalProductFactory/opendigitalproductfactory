@@ -20,10 +20,23 @@ import {
   deriveTwinValueStreamBinding,
   type ArchetypeDefinition,
   type TwinProfile,
-  type TwinTemplate,
 } from "@dpf/storefront-templates";
 
 import { buildStageFlow, type StageDemand } from "./stage-flow";
+import {
+  daysBetween,
+  humanizeWait,
+  isWalkInWait,
+  moneyToNumber,
+  monthDay,
+  statusIntent,
+  titleCase,
+} from "./operations-format";
+import type { LiveTwinSnapshot } from "./operations-snapshot";
+import {
+  createOperationsLoadRuntime,
+  type OperationsProjectionDiagnostics,
+} from "./operations-load-runtime";
 
 import {
   deriveRestaurantCapacity,
@@ -57,7 +70,6 @@ import type {
   TwinCogSnapshot,
   TwinOutcome,
   TwinQueueSnapshot,
-  TwinSnapshot,
   TwinZoneSnapshot,
   UtilityMeterData,
   WorkItemData,
@@ -113,65 +125,10 @@ interface InvoiceRow {
   currency: string | null;
 }
 
-export interface LiveTwinSnapshot extends TwinSnapshot {
-  live: true;
-  archetypeId: string;
-  archetypeName: string;
-  template: TwinTemplate;
-}
-
-// ── small pure utilities ──
-function toNum(v: Money): number {
-  if (v == null) return 0;
-  if (typeof v === "number") return v;
-  const n = Number(typeof v === "string" ? v : v.toString());
-  return Number.isFinite(n) ? n : 0;
-}
-function titleCase(s: string): string {
-  return s.length === 0 ? s : s[0].toUpperCase() + s.slice(1);
-}
-function daysBetween(from: Date, to: Date): number {
-  return Math.ceil((to.getTime() - from.getTime()) / 86_400_000);
-}
-/** Humanize an elapsed duration for a queue-wait chip ("8m", "3h", "2d"). */
-export function humanizeWait(ms: number): string {
-  const mins = Math.max(0, Math.round(ms / 60_000));
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 48) return `${hrs}h`;
-  return `${Math.round(hrs / 24)}d`;
-}
-/** "07-16" — a compact month-day from an ISO date. */
-function monthDay(d: Date): string {
-  return d.toISOString().slice(5, 10);
-}
-/**
- * A pending item is only genuinely *waiting* — a live queue wait measured from
- * when it landed — when it has NO scheduled slot (a walk-in / unrouted request).
- * A reservation with a scheduled time is *upcoming* (or, once that slot passes
- * unfulfilled, *overdue*), never a multi-day "wait". This is what stops a
- * restaurant from reporting a nonsensical "3-day wait" on a booking row that was
- * simply created three days ago for a since-passed sitting.
- */
-function isWalkInWait(b: { scheduledAt: Date | null }): boolean {
-  return b.scheduledAt == null;
-}
-// Money formatting + the org's currency/locale now come from the shared
-// `@/lib/org-locale` spine (EP-ORG-LOCALE-CURRENCY) so the twin renders the
-// org's real currency (from OrgSettings, derived from the operator's country)
-// instead of inferring it from whichever bill row happened to carry one.
+export type { LiveTwinSnapshot } from "./operations-snapshot";
+export { humanizeWait, statusIntent } from "./operations-format";
 
 // ─────────────────────────── pure mapping helpers ───────────────────────────
-
-/** State → intent for a resource unit / booking. */
-export function statusIntent(status: string): Intent {
-  const s = status.toLowerCase();
-  if (["active", "confirmed", "completed", "paid", "healthy"].some((k) => s.includes(k))) return "success";
-  if (["pending", "scheduled", "in_progress", "inprogress", "onboarding"].some((k) => s.includes(k))) return "info";
-  if (["overdue", "failed", "at_risk", "at-risk", "blocked", "cancelled"].some((k) => s.includes(k))) return "danger";
-  if (["hold", "review", "draft", "stale", "watch"].some((k) => s.includes(k))) return "warning";
-  return "neutral";
-}
 
 /** Humans + AI coworkers on one plane — the roster IS the presence row. */
 export function rosterToPresence(members: WorkforceMember[], limit = 8): TwinActor[] {
@@ -195,7 +152,7 @@ export function rosterToPresence(members: WorkforceMember[], limit = 8): TwinAct
 export function resourceUnits(
   providers: ProviderRow[],
   members: WorkforceMember[],
-  limit = 8,
+  limit = 12,
 ): ResourceUnitData[] {
   if (providers.length > 0) {
     return providers.slice(0, limit).map((p) => ({
@@ -537,23 +494,33 @@ function floorWindows(def: ArchetypeDefinition): OperatingWindow[] {
   }));
 }
 
+export interface LivingBusinessLoadOptions {
+  db?: LivingBusinessClient;
+  now?: Date;
+  clock?: () => number;
+}
+
 /**
  * Load the live twin snapshot for the deployment's single org. Returns `null`
  * when no org is configured (or its archetype has no template definition) — the
  * caller falls back to `buildDemoTwinSnapshot`. Mirrors the `platform-loader`
  * idiom: injected client, `Promise.all` fan-out, fail-soft reads.
  */
-export async function loadLivingBusinessSnapshot(opts?: {
-  db?: LivingBusinessClient;
-  now?: Date;
-}): Promise<LiveTwinSnapshot | null> {
-  const db = opts?.db ?? ((await import("@dpf/db")).prisma as unknown as LivingBusinessClient);
+export async function loadLivingBusinessProjection(
+  opts?: LivingBusinessLoadOptions,
+): Promise<{ twin: LiveTwinSnapshot; diagnostics: OperationsProjectionDiagnostics } | null> {
+  const clock = opts?.clock ?? (() => performance.now());
+  const rawDb = opts?.db ?? ((await import("@dpf/db")).prisma as unknown as LivingBusinessClient);
   const now = opts?.now ?? new Date();
+  const observedAt = now.toISOString();
+  const runtime = createOperationsLoadRuntime({ client: rawDb, observedAt, clock });
+  const db = runtime.client;
   const in7 = new Date(now.getTime() + 7 * 86_400_000);
 
   const config = (await db.storefrontConfig.findFirst({
     select: { archetype: { select: { archetypeId: true, name: true } } },
   })) as { archetype: { archetypeId: string; name: string } | null } | null;
+  runtime.observe("configuration");
 
   const archetypeId = config?.archetype?.archetypeId;
   if (!archetypeId) return null;
@@ -563,27 +530,42 @@ export async function loadLivingBusinessSnapshot(opts?: {
   const profile: TwinProfile = deriveTwinProfile(def);
 
   const in90 = new Date(now.getTime() - 90 * 86_400_000);
+  let localeReadFailed = false;
   const [roster, bills, taxPeriods, obligations, bookings, providers, paidInvoices, orgLocale] = await Promise.all([
-    loadWorkforceRoster({ db }).catch(() => ({ members: [], summary: { total: 0, humans: 0, agents: 0, agentsWithUnmetNeeds: 0 } })),
-    db.bill
-      .findMany({
+    runtime.read(
+      "workforce",
+      loadWorkforceRoster({ db }),
+      { members: [], summary: { total: 0, humans: 0, agents: 0, agentsWithUnmetNeeds: 0 } },
+    ),
+    runtime.read(
+      "bills",
+      db.bill.findMany({
         where: { status: { notIn: ["paid", "void"] }, dueDate: { gte: now, lte: in7 } },
         select: { amountDue: true, dueDate: true, status: true, currency: true },
-      })
-      .catch(() => []) as Promise<BillRow[]>,
-    db.taxObligationPeriod
-      .findMany({
+      }) as Promise<BillRow[]>,
+      [],
+    ),
+    runtime.read(
+      "tax",
+      db.taxObligationPeriod.findMany({
         where: { filedAt: null },
         orderBy: { dueDate: "asc" },
         take: 1,
         select: { dueDate: true, status: true, filedAt: true },
-      })
-      .catch(() => []) as Promise<TaxPeriodRow[]>,
-    db.obligation
-      .findMany({ where: { status: "active" }, select: { status: true, reviewDate: true } })
-      .catch(() => []) as Promise<ObligationRow[]>,
-    db.storefrontBooking
-      .findMany({
+      }) as Promise<TaxPeriodRow[]>,
+      [],
+    ),
+    runtime.read(
+      "obligations",
+      db.obligation.findMany({
+        where: { status: "active" },
+        select: { status: true, reviewDate: true },
+      }) as Promise<ObligationRow[]>,
+      [],
+    ),
+    runtime.read(
+      "bookings",
+      db.storefrontBooking.findMany({
         where: { status: { notIn: ["completed", "cancelled"] } },
         orderBy: { scheduledAt: "asc" },
         take: 24,
@@ -595,24 +577,39 @@ export async function loadLivingBusinessSnapshot(opts?: {
           status: true,
           provider: { select: { name: true } },
         },
-      })
-      .catch(() => []) as Promise<BookingRow[]>,
-    db.serviceProvider
-      .findMany({ where: { isActive: true }, take: 12, select: { id: true, name: true, isActive: true } })
-      .catch(() => []) as Promise<ProviderRow[]>,
-    (db.invoice?.findMany
-      ? db.invoice
-          .findMany({
+      }) as Promise<BookingRow[]>,
+      [],
+    ),
+    runtime.read(
+      "resources",
+      db.serviceProvider.findMany({
+        where: { isActive: true },
+        take: 12,
+        select: { id: true, name: true, isActive: true },
+      }) as Promise<ProviderRow[]>,
+      [],
+    ),
+    db.invoice?.findMany
+      ? runtime.read(
+          "invoices",
+          db.invoice.findMany({
             where: { paidAt: { not: null, gte: in90 } },
             select: { totalAmount: true, currency: true },
-          })
-          .catch(() => [])
-      : Promise.resolve([])) as Promise<InvoiceRow[]>,
-    resolveOrgLocale(db),
+          }) as Promise<InvoiceRow[]>,
+          [],
+        )
+      : (runtime.unavailable("invoices"), Promise.resolve([])),
+    resolveOrgLocale(db, {
+      onReadFailure: () => {
+        localeReadFailed = true;
+      },
+    }),
   ]);
+  if (localeReadFailed) runtime.degrade("locale");
+  else runtime.observe("locale");
 
   const members = roster.members;
-  const billsDueAmount = bills.reduce((sum, b) => sum + toNum(b.amountDue), 0);
+  const billsDueAmount = bills.reduce((sum, b) => sum + moneyToNumber(b.amountDue), 0);
   // The org's own currency + locale (from OrgSettings, derived from the operator's
   // country) is authoritative for every money surface here — never inferred from
   // whichever bill/invoice row happened to carry a currency.
@@ -724,7 +721,7 @@ export async function loadLivingBusinessSnapshot(opts?: {
 
   // Customer outcomes (workstream D): revenue realized in the last 90 days + the
   // count of settled+paid work — the proof the business is producing.
-  const paidRevenue = paidInvoices.reduce((sum, inv) => sum + toNum(inv.totalAmount), 0);
+  const paidRevenue = paidInvoices.reduce((sum, inv) => sum + moneyToNumber(inv.totalAmount), 0);
   const outcomes: TwinOutcome[] = [
     {
       key: "revenue",
@@ -754,7 +751,7 @@ export async function loadLivingBusinessSnapshot(opts?: {
     ? [readinessQuest(floorSnapshot), ...genericQuests].filter((q): q is QuestData => q != null)
     : genericQuests;
 
-  return {
+  const twin: LiveTwinSnapshot = {
     live: true,
     archetypeId,
     archetypeName: config?.archetype?.name ?? def.name,
@@ -787,4 +784,16 @@ export async function loadLivingBusinessSnapshot(opts?: {
       coworkerGaps: roster.summary.agentsWithUnmetNeeds,
     }),
   };
+  return { twin, diagnostics: runtime.complete() };
+}
+
+/**
+ * Compatibility facade for existing TwinView callers. New Operations surfaces
+ * consume `loadVersionedOperationsSnapshot` and one bounded selector.
+ */
+export async function loadLivingBusinessSnapshot(
+  opts?: LivingBusinessLoadOptions,
+): Promise<LiveTwinSnapshot | null> {
+  const loaded = await loadLivingBusinessProjection(opts);
+  return loaded?.twin ?? null;
 }

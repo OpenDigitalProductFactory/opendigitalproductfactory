@@ -12,9 +12,14 @@
 // feed are all kit primitives; only the vocabulary and which-template come from
 // the profile.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { TwinProfile } from "@dpf/storefront-templates";
+import type { OperationalCommandResult } from "@/lib/twin/operations-command";
+import {
+  createOperationsInteractionMeasure,
+  markOperationsDecisionSurfaceReady,
+} from "@/lib/twin/operations-telemetry";
 
 import { AttributedFeed } from "./AttributedFeed";
 import { CapacityChips } from "./CapacityChips";
@@ -34,14 +39,69 @@ export interface TwinViewProps {
   profile: TwinProfile;
   snapshot: TwinSnapshot;
   className?: string;
+  /** Durable command closure supplied by an archetype adapter. */
+  onConfirmCog?: () => Promise<OperationalCommandResult>;
 }
 
 function titleCase(s: string): string {
   return s.length === 0 ? s : s[0].toUpperCase() + s.slice(1);
 }
 
-export function TwinView({ profile, snapshot, className = "" }: TwinViewProps) {
-  const [cogResolved, setCogResolved] = useState(false);
+export function TwinView({ profile, snapshot, className = "", onConfirmCog }: TwinViewProps) {
+  const [cogStatus, setCogStatus] = useState<
+    "idle" | "pending" | "confirmed" | "conflict" | "rejected" | "unsupported"
+  >(onConfirmCog ? "idle" : "unsupported");
+  const [cogStatusMessage, setCogStatusMessage] = useState<string | undefined>();
+  const [cogAlternatives, setCogAlternatives] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (
+      typeof performance !== "undefined" &&
+      typeof performance.mark === "function" &&
+      typeof performance.getEntriesByName === "function"
+    ) {
+      markOperationsDecisionSurfaceReady(performance);
+    }
+  }, []);
+
+  async function confirmCog() {
+    if (!onConfirmCog) return;
+    const finishMeasure =
+      typeof performance !== "undefined" &&
+      typeof performance.mark === "function" &&
+      typeof performance.measure === "function"
+        ? createOperationsInteractionMeasure(
+            performance,
+            "assign",
+            `cog-${Date.now().toString(36)}`,
+          )
+        : () => undefined;
+    setCogStatus("pending");
+    setCogStatusMessage("Assigning…");
+    setCogAlternatives([]);
+    try {
+      const result = await onConfirmCog();
+      finishMeasure(result.status);
+      setCogStatus(result.status);
+      setCogAlternatives(
+        result.status === "conflict"
+          ? result.alternatives.map((alternative) => alternative.label)
+          : [],
+      );
+      setCogStatusMessage(
+        result.status === "conflict"
+          ? "The operation changed. Review the latest state and try again."
+          : result.status === "rejected" || result.status === "unsupported"
+            ? result.message
+            : undefined,
+      );
+    } catch {
+      finishMeasure("rejected");
+      setCogStatus("rejected");
+      setCogAlternatives([]);
+      setCogStatusMessage("The assignment could not be confirmed. Nothing was changed.");
+    }
+  }
 
   // Zone label lookup comes from the profile; the snapshot supplies the units.
   const zoneLabel = useMemo(() => {
@@ -79,9 +139,15 @@ export function TwinView({ profile, snapshot, className = "" }: TwinViewProps) {
           proposal={snapshot.cog.proposal}
           signals={snapshot.cog.signals ?? profile.cog.signals}
           confirmLabel={snapshot.cog.confirmLabel}
-          resolved={cogResolved}
-          onConfirm={() => setCogResolved(true)}
-          onDismiss={() => setCogResolved(true)}
+          status={cogStatus}
+          statusMessage={cogStatusMessage}
+          alternatives={cogAlternatives}
+          onConfirm={onConfirmCog ? () => void confirmCog() : undefined}
+          onDismiss={() => {
+            setCogStatus("rejected");
+            setCogAlternatives([]);
+            setCogStatusMessage("Suggestion dismissed. Nothing was changed.");
+          }}
         />
       ) : null}
 

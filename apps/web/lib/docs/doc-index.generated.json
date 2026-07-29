@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 570,
+  "pageCount": 571,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1099,6 +1099,19 @@
         "operational-precedent-corpus",
         "cross-view-archetype-contracts",
         "design-grounding"
+      ]
+    },
+    "docs/architecture/operations-hot-path.md": {
+      "publicHref": "/architecture/operations-hot-path/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "operations-current-state-hot-path",
+        "read-contract",
+        "command-contract",
+        "performance-and-evidence",
+        "reuse-boundary"
       ]
     },
     "docs/architecture/package-boundaries.md": {
@@ -9984,6 +9997,7 @@
       "anchors": [
         "overview",
         "operations-and-performance",
+        "confirming-an-operational-suggestion",
         "key-concepts",
         "what-you-can-do"
       ]
