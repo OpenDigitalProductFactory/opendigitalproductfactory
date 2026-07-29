@@ -4,6 +4,7 @@
 import { resolveDocsPath } from "@/lib/docs-route-map";
 import { CHANGE_REVIEWER_ROUTE_CONTEXT } from "./change-reviewer-route";
 import { PERFORMANCE_ROUTE_CONTEXT } from "./performance-route";
+import { PRODUCT_LINE_ROUTE_CONTEXT } from "./product-line-route-context";
 import type { RouteContextDef } from "./route-context-types";
 export type { RouteContextDef } from "./route-context-types";
 
@@ -138,6 +139,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       },
     ],
   },
+  "/portfolio/product-line": PRODUCT_LINE_ROUTE_CONTEXT,
 
   "/inventory": {
     routePrefix: "/inventory",

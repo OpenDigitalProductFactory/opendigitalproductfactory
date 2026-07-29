@@ -249,6 +249,8 @@ describe("loadProductOperatingContext", () => {
     );
     expect(context.demand.items[0]).toMatchObject({
       id: "BI-PRODUCT",
+      productLineId: "line-1",
+      businessProductId: "product-1",
       evidenceCount: 1,
       readiness: expect.objectContaining({
         evidenceReady: true,
@@ -425,6 +427,7 @@ describe("loadProductOperatingContext", () => {
     const productObjective = vi.fn(async () => [
       {
         objectiveId: "OBJ-EVENTS",
+        productId: "product-1",
         title: "Increase private-event bookings",
         problemStatement: "Private-event demand is inconsistent.",
         outcomeHypothesis:
@@ -508,6 +511,7 @@ describe("loadProductOperatingContext", () => {
     );
     expect(context.objectives.items[0]).toMatchObject({
       objectiveId: "OBJ-EVENTS",
+      productId: "product-1",
       reviewDue: true,
       posture: {
         availability: "available",

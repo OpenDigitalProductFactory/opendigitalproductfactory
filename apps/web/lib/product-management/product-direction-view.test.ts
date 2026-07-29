@@ -168,6 +168,7 @@ describe("buildProductDirectionView", () => {
           {
             id: "OBJ-ONE",
             objectiveId: "OBJ-ONE",
+            productId: "product-one",
             sourceKind: "product-objective",
             asOf,
             title: "Increase repeat bookings",

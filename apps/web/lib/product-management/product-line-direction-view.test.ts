@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ProductOperatingContext } from "./product-operating-context";
-import {
-  buildProductLineComparison,
-  buildProductPortfolioHierarchy,
-} from "./product-line-direction-view";
+import { buildProductPortfolioHierarchy } from "./product-line-direction-view";
 
 const asOf = new Date("2026-07-28T20:00:00.000Z");
 
@@ -134,33 +131,6 @@ describe("product-line direction view", () => {
         }),
       ],
     });
-  });
-
-  it("compares canonical products and links to their Direction workspaces", () => {
-    const rows = buildProductLineComparison(context());
-
-    expect(rows).toEqual([
-      {
-        productId: "product-colour",
-        semanticId: "PROD-COLOUR",
-        name: "Colour appointments",
-        saleCount: 2,
-        additiveRevenue: 220,
-        currency: "USD",
-        unallocatedComponentCount: 0,
-        href: "/portfolio/product/product-colour/direction",
-      },
-      {
-        productId: "product-retail",
-        semanticId: "PROD-RETAIL",
-        name: "Salon retail",
-        saleCount: 1,
-        additiveRevenue: 40,
-        currency: "USD",
-        unallocatedComponentCount: 0,
-        href: "/portfolio/product/product-retail/direction",
-      },
-    ]);
   });
 
   it("includes malformed legacy cycles once without looping", () => {
