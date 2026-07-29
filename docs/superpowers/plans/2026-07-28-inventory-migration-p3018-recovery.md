@@ -190,8 +190,14 @@ is required.
 
 ## Backlog coverage
 
-Receipt `cms5gy5sm044g01o62s118dl4` records this plan as atomic under
-`BI-B92CFED7`.
+- Decision: atomic
+- Parent: `BI-B92CFED7`
+- Receipt: `cms5yvha102pc01ms7pwo4mnd`
+- Rationale: The restored historical migration identity, exact failed-ledger
+  recovery, and fleet verification are one release contract; shipping any
+  phase alone either leaves the canonical install wedged or creates an
+  unverified forward-history state.
+- Dependencies: none
 
 | Deliverable | BI | Depends on | Independently shippable |
 |---|---|---|---|
