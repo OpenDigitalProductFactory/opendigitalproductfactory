@@ -21,8 +21,13 @@ import {
   appendRevision,
   type WikiPageStatus,
 } from "@dpf/db/wiki-store";
+import {
+  parseProfessionPageSlug,
+  promoteProfessionPageMaterial,
+} from "@dpf/db/profession-material-promotion";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/actions/shared/guards";
+import { PROFESSION_REGISTRY } from "@/lib/decision-perspective/resolve-profession-profile";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -44,6 +49,15 @@ export type PublishedRow = {
   newStatus: WikiPageStatus;
 };
 
+export type CraftPromotionRow = {
+  pageId: string;
+  slug: string;
+  professionKey: string;
+  /** True when the material rows are approved+promoted (gate-visible). */
+  gateLive: boolean;
+  materialIds: string[];
+};
+
 export type RejectedRow = {
   pageId: string;
   reason: "not-found" | "kernel" | "cross-org" | "already-target-status";
@@ -54,6 +68,12 @@ export type PublishWikiOverlayPagesResult =
       ok: true;
       published: PublishedRow[];
       rejected: RejectedRow[];
+      /**
+       * WSID craft overrides that went gate-live with this publish
+       * (BI-3B02FF9C): publishing a craft/<professionKey>/ page also promotes
+       * owner-confirmed PerspectiveMaterial on the profession's wsid profile.
+       */
+      craftPromotions: CraftPromotionRow[];
     }
   | { ok: false; error: string };
 
@@ -107,6 +127,8 @@ export async function publishWikiOverlayPages(
         status: true,
         isKernel: true,
         organizationId: true,
+        pageKind: true,
+        abstract: true,
       },
     })) as Array<{
       id: string;
@@ -116,11 +138,14 @@ export async function publishWikiOverlayPages(
       status: WikiPageStatus;
       isKernel: boolean;
       organizationId: string | null;
+      pageKind: string;
+      abstract: string | null;
     }>;
 
     const foundIds = new Set(rows.map((r) => r.id));
     const published: PublishedRow[] = [];
     const rejected: RejectedRow[] = [];
+    const craftPromotions: CraftPromotionRow[] = [];
 
     for (const id of input.pageIds) {
       if (!foundIds.has(id)) {
@@ -160,11 +185,56 @@ export async function publishWikiOverlayPages(
         previousStatus,
         newStatus: targetStatus,
       });
+
+      // WSID Phase 6 (BI-3B02FF9C): publishing a craft override is the owner's
+      // approval, so it becomes gate-live doctrine — the profession sibling of
+      // publishBusinessStance's promoteStanceMaterial call. Promotion failure
+      // never rolls back the page publish: the page flip already happened and
+      // the seed backfill converges any missed material on its next run.
+      const slugInfo =
+        targetStatus === "published" ? parseProfessionPageSlug(row.slug) : null;
+      if (slugInfo?.corpus === "org-override") {
+        try {
+          const family = PROFESSION_REGISTRY.families.find(
+            (f) => f.professionKey === slugInfo.professionKey,
+          );
+          const promoted = await promoteProfessionPageMaterial({
+            db: prisma,
+            professionKey: slugInfo.professionKey,
+            contextSlugs: family?.contextSlugs ?? [],
+            page: {
+              id: row.id,
+              slug: row.slug,
+              title: row.title,
+              pageKind: row.pageKind,
+              abstract: row.abstract,
+            },
+            tier: "confirmed",
+          });
+          if (promoted.ok) {
+            craftPromotions.push({
+              pageId: row.id,
+              slug: row.slug,
+              professionKey: slugInfo.professionKey,
+              gateLive: promoted.gateLive,
+              materialIds: promoted.materialIds,
+            });
+          } else {
+            console.warn(
+              `[wiki-publish] craft promotion skipped for ${row.slug}: ${promoted.error}`,
+            );
+          }
+        } catch (promotionError) {
+          console.warn(
+            `[wiki-publish] craft promotion failed for ${row.slug}: ${(promotionError as Error).message}`,
+          );
+        }
+      }
       revalidatePath(`/coworker-decisions/${row.slug}`);
     }
     revalidatePath("/coworker-decisions");
 
-    return { ok: true, published, rejected };
+    return { ok: true, published, rejected, craftPromotions };
   } catch (err) {
     return {
       ok: false,

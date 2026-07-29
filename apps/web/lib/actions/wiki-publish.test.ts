@@ -10,6 +10,8 @@ vi.mock("@dpf/db", () => ({
       update: vi.fn(),
     },
     wikiPageRevision: { create: vi.fn(), findFirst: vi.fn() },
+    decisionPerspectiveProfile: { findUnique: vi.fn() },
+    perspectiveMaterial: { findUnique: vi.fn(), upsert: vi.fn() },
   },
 }));
 
@@ -31,6 +33,9 @@ beforeEach(() => {
     id: "org_test",
   });
   (prisma.wikiPageRevision.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+  (prisma.decisionPerspectiveProfile.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+  (prisma.perspectiveMaterial.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+  (prisma.perspectiveMaterial.upsert as ReturnType<typeof vi.fn>).mockResolvedValue({});
 });
 
 // ─── Auth + validation ──────────────────────────────────────────────────────
@@ -211,6 +216,92 @@ describe("publishWikiOverlayPages — batch flow", () => {
       expect(r.published.map((p) => p.pageId)).toEqual(["wp_ok"]);
       expect(r.rejected.map((r) => r.pageId)).toEqual(["wp_kernel"]);
     }
+  });
+});
+
+// ─── WSID craft promotion on publish (BI-3B02FF9C) ──────────────────────────
+
+describe("publishWikiOverlayPages — craft override promotion", () => {
+  const CRAFT_ROW = {
+    id: "wp_craft",
+    slug: "craft/enterprise-architecture/verify-the-substrate-first",
+    title: "Verify the substrate first",
+    body: "Check the live schema before proposing new substrate.",
+    status: "draft",
+    isKernel: false,
+    organizationId: "org_test",
+    pageKind: "heuristic",
+    abstract: "Substrate check precedes new-concept proposals.",
+  };
+
+  it("publishing a craft/<professionKey>/ page promotes owner-confirmed gate-live material", async () => {
+    (prisma.wikiPage.findMany as ReturnType<typeof vi.fn>).mockResolvedValueOnce([CRAFT_ROW]);
+    (prisma.wikiPage.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (prisma.wikiPageRevision.create as ReturnType<typeof vi.fn>).mockResolvedValue({ id: "rev" });
+    (prisma.decisionPerspectiveProfile.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      profileId: "wsid-enterprise-architecture",
+      currentVersionId: "wsid-enterprise-architecture-v1",
+    });
+
+    const r = await publishWikiOverlayPages({ pageIds: ["wp_craft"] });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+
+    expect(r.craftPromotions).toHaveLength(1);
+    expect(r.craftPromotions[0]).toMatchObject({
+      pageId: "wp_craft",
+      professionKey: "enterprise-architecture",
+      gateLive: true,
+    });
+    // EA craft doctrine answers architecture-tradeoff consults first.
+    expect(prisma.perspectiveMaterial.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { materialId: `wsid-enterprise-architecture:${CRAFT_ROW.slug}` },
+        create: expect.objectContaining({
+          domainClass: "architecture-tradeoff",
+          evidenceGrade: "A",
+          confidenceWeight: 0.9,
+          reviewStatus: "approved",
+          promotionState: "promoted",
+        }),
+      }),
+    );
+  });
+
+  it("promotion failure never fails the page publish", async () => {
+    (prisma.wikiPage.findMany as ReturnType<typeof vi.fn>).mockResolvedValueOnce([CRAFT_ROW]);
+    (prisma.wikiPage.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (prisma.wikiPageRevision.create as ReturnType<typeof vi.fn>).mockResolvedValue({ id: "rev" });
+    (prisma.decisionPerspectiveProfile.findUnique as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error("db down"),
+    );
+
+    const r = await publishWikiOverlayPages({ pageIds: ["wp_craft"] });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.published).toHaveLength(1);
+    expect(r.craftPromotions).toEqual([]);
+  });
+
+  it("does not promote for non-craft slugs or non-published target status", async () => {
+    (prisma.wikiPage.findMany as ReturnType<typeof vi.fn>).mockResolvedValue([
+      { ...CRAFT_ROW, id: "wp_stance", slug: "stances/b", pageKind: "stance" },
+    ]);
+    (prisma.wikiPage.update as ReturnType<typeof vi.fn>).mockResolvedValue({});
+    (prisma.wikiPageRevision.create as ReturnType<typeof vi.fn>).mockResolvedValue({ id: "rev" });
+
+    const stancePublish = await publishWikiOverlayPages({ pageIds: ["wp_stance"] });
+    expect(stancePublish.ok).toBe(true);
+    if (stancePublish.ok) expect(stancePublish.craftPromotions).toEqual([]);
+
+    (prisma.wikiPage.findMany as ReturnType<typeof vi.fn>).mockResolvedValueOnce([CRAFT_ROW]);
+    const reviewNeeded = await publishWikiOverlayPages({
+      pageIds: ["wp_craft"],
+      targetStatus: "review-needed",
+    });
+    expect(reviewNeeded.ok).toBe(true);
+    if (reviewNeeded.ok) expect(reviewNeeded.craftPromotions).toEqual([]);
+    expect(prisma.perspectiveMaterial.upsert).not.toHaveBeenCalled();
   });
 });
 

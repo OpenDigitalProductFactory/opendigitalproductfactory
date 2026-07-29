@@ -228,6 +228,86 @@ describe("evaluateProfessionDecisionGate", () => {
   });
 });
 
+// ─── WSID Phase 6 acceptance (BI-3B02FF9C) ──────────────────────────────────
+// The BI's concrete acceptance, in miniature: after the craft-material
+// promotion backfills the corpus and the owner publishes the two EA craft
+// overrides (confirmed A/0.9, architecture-tradeoff primary — the exact rows
+// promoteProfessionPageMaterial writes), an architecture-tradeoff consult on
+// wsid-enterprise-architecture returns recommend with
+// professionProfileSelected=true instead of the 64-deferral coverage gap.
+describe("evaluateProfessionDecisionGate — EA architecture-tradeoff acceptance", () => {
+  function promotedCraftRow(slug: string) {
+    return {
+      materialId: `wsid-enterprise-architecture:${slug}`,
+      profileId: "wsid-enterprise-architecture",
+      sourceType: "heuristic",
+      sourceRef: { slug, professionKey: "enterprise-architecture", corpus: "org-override" },
+      summary: "s",
+      domainClass: "architecture-tradeoff",
+      direction: "support",
+      domains: ["architecture-tradeoff"],
+      freshness: "current",
+      evidenceGrade: "A",
+      confidenceWeight: 0.9,
+      reviewStatus: "approved",
+      promotionState: "promoted",
+      lastValidatedAt: null,
+    };
+  }
+
+  it("recommends from the EA profile once the published craft overrides are gate-live", async () => {
+    const db = {
+      decisionInteraction: {
+        create: vi
+          .fn()
+          .mockImplementation(async (args: { data: Record<string, unknown> }) => ({ id: "row-1", ...args.data })),
+      },
+      decisionPerspectiveProfile: {
+        findUnique: vi.fn().mockImplementation(async (args: { where: { profileId: string } }) =>
+          args.where.profileId === "wsid-enterprise-architecture"
+            ? {
+                profileId: "wsid-enterprise-architecture",
+                name: "Enterprise Architecture",
+                kind: "profession",
+                scope: { professionKey: "enterprise-architecture" },
+                fallbackProfileId: null,
+                defaultResolver: null,
+                autonomyPolicy: null,
+                currentVersion: { versionId: "wsid-enterprise-architecture-v1", versionNumber: 1 },
+              }
+            : null,
+        ),
+      },
+      perspectiveMaterial: {
+        findMany: vi.fn().mockResolvedValue([
+          promotedCraftRow("craft/enterprise-architecture/architecture-review-verdicts"),
+          promotedCraftRow("craft/enterprise-architecture/verify-the-substrate-first"),
+        ]),
+      },
+    };
+
+    const result = await evaluateProfessionDecisionGate({
+      db: db as never,
+      // ea-architect is bound to the enterprise-architecture family in
+      // docs/professions/registry.json.
+      agentIdentity: { slugId: "ea-architect" },
+      question: "Introduce a read replica or denormalize the reporting tables?",
+      options: ["Read replica", "Denormalize"],
+      domainClass: "architecture-tradeoff",
+      riskTier: "low",
+      routeContext: "/coworker",
+    });
+
+    expect(result.professionKey).toBe("enterprise-architecture");
+    expect(result.professionProfileSelected).toBe(true);
+    expect(result.evaluation.outcomeType).toBe("recommend");
+    expect(result.allowed).toBe(true);
+    expect(result.evaluation.coverageGap).toBe(false);
+    // Two confirmed A/0.9 rows → mean effective weight 0.9, low risk → 0.9.
+    expect(result.evaluation.confidenceScore).toBeCloseTo(0.9, 5);
+  });
+});
+
 describe("resolveProfileMaterialForProfession", () => {
   function materialRow(profileId: string) {
     return {
