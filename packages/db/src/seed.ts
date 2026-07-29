@@ -6,6 +6,7 @@ import { prisma } from "./client.js";
 import { Prisma } from "../generated/client/client";
 import { parseRoleId, parseAgentTier, parseAgentType, parseAgentPortfolioSlug } from "./seed-helpers.js";
 import { resolveAgentIdentity } from "./agent-identity.js";
+import { resolvePrincipalSensitivityClearance } from "./principal-sensitivity.js";
 import { upsertCoworkerAgentTolerant } from "./coworker-agent-upsert.js";
 import { loadFingerprintCatalogIntoDb, defaultCatalogPath } from "./discovery-fingerprint-catalog-loader.js";
 import { seedEaArchimate4 } from "./seed-ea-archimate4.js";
@@ -591,21 +592,20 @@ async function seedDefaultAdminUser(): Promise<void> {
   if (!adminRole) throw new Error("HR-000 role not seeded");
 
   const existing = await prisma.user.findUnique({ where: { email: "admin@dpf.local" } });
-  if (existing) {
-    console.log("Default admin user already exists — skipping");
-    return;
-  }
-
-  const password = process.env.ADMIN_PASSWORD ?? "changeme123";
-  const hash = await bcrypt.hash(password, 12);
-  const user = await prisma.user.create({
-    data: {
-      email: "admin@dpf.local",
-      passwordHash: hash,
-      isSuperuser: true,
-      groups: { create: { platformRoleId: adminRole.id } },
-    },
-  });
+  const user =
+    existing ??
+    (await (async () => {
+      const password = process.env.ADMIN_PASSWORD ?? "changeme123";
+      const hash = await bcrypt.hash(password, 12);
+      return prisma.user.create({
+        data: {
+          email: "admin@dpf.local",
+          passwordHash: hash,
+          isSuperuser: true,
+          groups: { create: { platformRoleId: adminRole.id } },
+        },
+      });
+    })());
 
   // Principal convergence (AGENTS.md §11): every User must have a matching
   // Principal + PrincipalAlias so audit-attributed actions (issue edge-node
@@ -617,25 +617,57 @@ async function seedDefaultAdminUser(): Promise<void> {
   // because the seed runs in packages/db and cannot depend on apps/web. Keep
   // the row shape exactly matching `syncUserPrincipal` so the runtime
   // self-heal path produces identical rows.
-  const principal = await prisma.principal.create({
-    data: {
-      principalId: `PRN-${crypto.randomUUID()}`,
-      kind: "human",
-      status: "active",
-      displayName: user.email,
-    },
-  });
-  await prisma.principalAlias.create({
-    data: {
-      principalId: principal.id,
+  const existingAlias = await prisma.principalAlias.findFirst({
+    where: {
       aliasType: "user",
       aliasValue: user.id,
       issuer: "",
     },
+    include: { principal: true },
   });
+  const sensitivityClearance = resolvePrincipalSensitivityClearance({
+    existing: existingAlias?.principal.sensitivityClearance,
+    isSuperuser: user.isSuperuser,
+  });
+  const clearanceChanged = existingAlias
+    ? existingAlias.principal.sensitivityClearance.length !== sensitivityClearance.length ||
+      existingAlias.principal.sensitivityClearance.some(
+        (value, index) => value !== sensitivityClearance[index],
+      )
+    : true;
+  const principal = existingAlias
+    ? clearanceChanged
+      ? await prisma.principal.update({
+          where: { id: existingAlias.principal.id },
+          data: { sensitivityClearance },
+        })
+      : existingAlias.principal
+    : await prisma.principal.create({
+        data: {
+          principalId: `PRN-${crypto.randomUUID()}`,
+          kind: "human",
+          status: "active",
+          displayName: user.email,
+          sensitivityClearance,
+        },
+      });
+  if (!existingAlias) {
+    await prisma.principalAlias.create({
+      data: {
+        principalId: principal.id,
+        aliasType: "user",
+        aliasValue: user.id,
+        issuer: "",
+      },
+    });
+  }
 
-  console.log(`Created default admin: ${user.email} (default password set — CHANGE THIS IMMEDIATELY)`);
-  console.log(`  + Principal ${principal.principalId} + PrincipalAlias (aliasType=user, aliasValue=${user.id})`);
+  if (existing) {
+    console.log(`Converged default admin principal: ${principal.principalId}`);
+  } else {
+    console.log(`Created default admin: ${user.email} (default password set — CHANGE THIS IMMEDIATELY)`);
+    console.log(`  + Principal ${principal.principalId} + PrincipalAlias (aliasType=user, aliasValue=${user.id})`);
+  }
 }
 
 async function seedEaViewpoints(): Promise<void> {
