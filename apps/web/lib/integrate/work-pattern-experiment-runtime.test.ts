@@ -171,16 +171,20 @@ describe("executePersistedWorkPatternExperimentCell", () => {
         initiatingAgentId: null,
         a2aMetadata: { workPatternExperimentCell: { attempt: 1 } },
       },
-      fixtureParts: {
-        schemaVersion: 1,
-        kind: "build-replay-v1",
-        objective: "Implement the bounded fixture.",
-        targetFile: "apps/web/lib/fixtures/bounded.ts",
-        testFiles: ["apps/web/lib/fixtures/bounded.test.ts"],
-        methodInstructions: {
-          "method-digest": "Use the baseline method.",
+      fixtureParts: [{
+        type: "work-pattern-experiment-fixture",
+        mimeType: "application/json",
+        data: {
+          schemaVersion: 1,
+          kind: "build-replay-v1",
+          objective: "Implement the bounded fixture.",
+          targetFile: "apps/web/lib/fixtures/bounded.ts",
+          testFiles: ["apps/web/lib/fixtures/bounded.test.ts"],
+          methodInstructions: {
+            "method-digest": "Use the baseline method.",
+          },
         },
-      },
+      }],
     });
     vi.mocked(runtime.executeBuildReplay).mockResolvedValueOnce({
       result: {
@@ -222,7 +226,11 @@ describe("executePersistedWorkPatternExperimentCell", () => {
 
     expect(runtime.executeBuildReplay).toHaveBeenCalledWith({
       request: request(),
-      fixtureParts: expect.objectContaining({ kind: "build-replay-v1" }),
+      fixtureParts: [
+        expect.objectContaining({
+          type: "work-pattern-experiment-fixture",
+        }),
+      ],
       agentId: "agent-orchestrator",
     });
     expect(runtime.infer).not.toHaveBeenCalled();

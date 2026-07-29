@@ -12,15 +12,28 @@ import {
 function makePersistence(): WorkPatternExperimentPersistence & {
   rows: WorkPatternStoredTaskRun[];
   ledgers: Map<string, Record<string, unknown>>;
+  artifacts: Map<string, {
+    artifactId: string;
+    taskRunId: string;
+    parts: unknown;
+    metadata: unknown;
+  }>;
 } {
   const rows: WorkPatternStoredTaskRun[] = [];
   const ledgers = new Map<string, Record<string, unknown>>();
+  const artifacts = new Map<string, {
+    artifactId: string;
+    taskRunId: string;
+    parts: unknown;
+    metadata: unknown;
+  }>();
   let rowSequence = 0;
   let lock = Promise.resolve();
 
   return {
     rows,
     ledgers,
+    artifacts,
     async withDefinitionLock(_definitionKey, work) {
       const prior = lock;
       let release = () => {};
@@ -52,6 +65,21 @@ function makePersistence(): WorkPatternExperimentPersistence & {
       if (!row) throw new Error("missing_test_task_run");
       Object.assign(row, data);
       return row;
+    },
+    async findTaskArtifact(artifactId) {
+      return artifacts.get(artifactId) ?? null;
+    },
+    async createTaskArtifact(data) {
+      const existing = artifacts.get(data.artifactId);
+      if (existing) return existing;
+      const artifact = {
+        artifactId: data.artifactId,
+        taskRunId: data.taskRunId,
+        parts: data.parts,
+        metadata: data.metadata,
+      };
+      artifacts.set(data.artifactId, artifact);
+      return artifact;
     },
     async upsertLedger(ledgerId, create) {
       if (!ledgers.has(ledgerId)) ledgers.set(ledgerId, create);
@@ -152,6 +180,111 @@ describe("work-pattern experiment store", () => {
 
     expect(resumed.scheduledChildTaskRunIds).toEqual([first.children[1]!.taskRunId]);
     expect(persistence.rows).toHaveLength(3);
+  });
+
+  it("persists one immutable fixture before child dispatch and reuses it on resume", async () => {
+    const persistence = makePersistence();
+    const fixtureParts = {
+      schemaVersion: 1,
+      kind: "build-replay-v1",
+      objective: "Implement the bounded helper.",
+      targetFile: "apps/web/lib/fixtures/bounded.ts",
+      testFiles: ["apps/web/lib/fixtures/bounded.test.ts"],
+      methodInstructions: {
+        baseline: "Prefer the smallest pure implementation.",
+        candidate: "Prefer explicit branches.",
+      },
+    };
+    const buildInput = {
+      ...input,
+      activityKey: "build.implement",
+      cells: input.cells.map((cell) => ({
+        ...cell,
+        executionRequest: {
+          fixtureKey: "bounded-helper-v1",
+        },
+        fixtureParts,
+      })),
+    };
+    const deps = {
+      persistence,
+      resolveOwnerUserId: vi.fn().mockResolvedValue("user-owner"),
+    };
+
+    const first = await createOrResumeWorkPatternExperiment(buildInput, deps);
+    const resumed = await createOrResumeWorkPatternExperiment(buildInput, deps);
+
+    expect(persistence.artifacts.size).toBe(1);
+    expect(persistence.artifacts.values().next().value?.parts).toEqual([
+      expect.objectContaining({
+        type: "work-pattern-experiment-fixture",
+        mimeType: "application/json",
+        data: fixtureParts,
+      }),
+    ]);
+    for (const child of first.children) {
+      expect(
+        child.a2aMetadata.workPatternExperimentCell?.executionRequest,
+      ).toMatchObject({
+        fixtureKey: expect.stringMatching(/^ta_wpf_/),
+      });
+    }
+    expect(resumed.children.map((child) => child.taskRunId)).toEqual(
+      first.children.map((child) => child.taskRunId),
+    );
+  });
+
+  it("fails closed when a logical fixture identity is reused with changed bytes", async () => {
+    const persistence = makePersistence();
+    const deps = {
+      persistence,
+      resolveOwnerUserId: vi.fn().mockResolvedValue("user-owner"),
+    };
+    const fixtureParts = {
+      schemaVersion: 1,
+      kind: "build-replay-v1",
+      objective: "First version.",
+      targetFile: "apps/web/lib/fixtures/bounded.ts",
+      testFiles: ["apps/web/lib/fixtures/bounded.test.ts"],
+      methodInstructions: { baseline: "Smallest implementation." },
+    };
+    const withFixture = (parts: typeof fixtureParts) => ({
+      ...input,
+      activityKey: "build.implement",
+      cells: input.cells.map((cell) => ({
+        ...cell,
+        executionRequest: { fixtureKey: "bounded-helper-v1" },
+        fixtureParts: parts,
+      })),
+    });
+
+    await createOrResumeWorkPatternExperiment(withFixture(fixtureParts), deps);
+    await expect(createOrResumeWorkPatternExperiment(withFixture({
+      ...fixtureParts,
+      objective: "Changed version.",
+    }), deps)).rejects.toThrow("work_pattern_experiment_fixture_changed");
+    expect(persistence.artifacts.size).toBe(1);
+  });
+
+  it("fails before child creation when a referenced artifact is unavailable", async () => {
+    const persistence = makePersistence();
+    const deps = {
+      persistence,
+      resolveOwnerUserId: vi.fn().mockResolvedValue("user-owner"),
+    };
+
+    await expect(createOrResumeWorkPatternExperiment({
+      ...input,
+      cells: input.cells.map((cell) => ({
+        ...cell,
+        executionRequest: { fixtureKey: "ta_wpf_missing" },
+      })),
+    }, deps)).rejects.toThrow(
+      "work_pattern_experiment_fixture_unavailable:ta_wpf_missing",
+    );
+    expect(
+      persistence.rows.filter((row) => row.parentTaskRunId !== null),
+    ).toHaveLength(0);
   });
 
   it("retries by creating a new deterministic attempt and preserving the original", async () => {

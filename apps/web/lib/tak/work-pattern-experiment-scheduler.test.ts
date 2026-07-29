@@ -26,60 +26,79 @@ import {
 } from "./work-pattern-experiment-scheduler";
 
 function candidate(environmentKey = "shadow") {
-  const executionProfile = {
-    patternKey: "review-loop",
-    patternVersion: 1,
-    variantKey: "baseline",
-    activityKey: "build.review",
-    riskClass: "internal-reversible",
-    providerId: "provider",
-    modelId: "model",
-    modelProfileId: "profile",
-    toolPackDigest: "tools",
-    promptOrSkillDigest: "prompt",
-    contextPolicyKey: "hermetic",
-    recoveryPolicyKey: "bounded",
-    installScope: "canonical",
-    taskCorpusKey: "corpus",
-    taskCorpusVersion: "1",
-    environmentKey,
-    sourceCommitSha: "abc123",
+  const methods = [
+    { methodVariantKey: "baseline", patternVersion: 1 },
+    { methodVariantKey: "candidate", patternVersion: 2 },
+  ];
+  const models = [
+    { modelVariantKey: "model-a", modelProfileId: "profile-a" },
+    { modelVariantKey: "model-b", modelProfileId: "profile-b" },
+  ];
+  const fixtureParts = {
+    schemaVersion: 1 as const,
+    kind: "build-replay-v1" as const,
+    objective: "Implement the bounded helper.",
+    targetFile: "apps/web/lib/fixtures/bounded.ts",
+    testFiles: ["apps/web/lib/fixtures/bounded.test.ts"],
+    methodInstructions: {
+      baseline: "Prefer the smallest pure implementation.",
+      candidate: "Prefer explicit branches.",
+    },
   };
   return {
     definition: {
-      patternKey: "review-loop",
+      patternKey: "implementation-loop",
       taskCorpusKey: "corpus",
       taskCorpusVersion: "1",
       oracleKey: "oracle",
       oracleVersion: "1",
-      methodVariants: [{ methodVariantKey: "baseline", patternVersion: 1 }],
-      modelVariants: [{ modelVariantKey: "model-a", modelProfileId: "profile" }],
+      methodVariants: methods,
+      modelVariants: models,
       installScope: "canonical",
-      promotionPolicyKey: "bounded",
+      promotionPolicyKey: "governed-build-playbook-promotion",
       promotionPolicyVersion: 1,
     },
-    activityKey: "build.review",
+    activityKey: "build.implement",
     riskClass: "internal-reversible",
     pairKey: "pair",
-    cells: [
-      {
-        methodVariantKey: "baseline",
-        modelVariantKey: "model-a",
+    cells: methods.flatMap((method) =>
+      models.map((model) => ({
+        methodVariantKey: method.methodVariantKey,
+        modelVariantKey: model.modelVariantKey,
         executionRequest: {
           experimentRunId: "WPR-1",
           childTaskRunId: "TR-CELL-1",
-          cellKey: "baseline:model-a",
+          cellKey: `${method.methodVariantKey}:${model.modelVariantKey}`,
           pairKey: "pair",
-          methodVariantKey: "baseline",
-          modelVariantKey: "model-a",
-          executionProfile,
+          methodVariantKey: method.methodVariantKey,
+          modelVariantKey: model.modelVariantKey,
+          executionProfile: {
+            patternKey: "implementation-loop",
+            patternVersion: method.patternVersion,
+            variantKey: method.methodVariantKey,
+            activityKey: "build.implement",
+            riskClass: "internal-reversible",
+            providerId: "provider",
+            modelId: model.modelVariantKey,
+            modelProfileId: model.modelProfileId,
+            toolPackDigest: "tools",
+            promptOrSkillDigest: method.methodVariantKey,
+            contextPolicyKey: "hermetic",
+            recoveryPolicyKey: "bounded",
+            installScope: "canonical",
+            taskCorpusKey: "corpus",
+            taskCorpusVersion: "1",
+            environmentKey,
+            sourceCommitSha: "abc123",
+          },
           fixtureKey: "fixture",
           oracleKey: "oracle",
           oracleVersion: "1",
           resourcePolicyKey: "bounded",
         },
-      },
-    ],
+        fixtureParts,
+      })),
+    ),
   };
 }
 
@@ -105,11 +124,12 @@ describe("scheduleReviewedWorkPatternExperiment", () => {
     expect(createRun).toHaveBeenCalledWith(
       expect.objectContaining({
         orchestratingAgentId: "agent-1",
-        cells: [
+        cells: expect.arrayContaining([
           expect.objectContaining({
             executionRequest: expect.objectContaining({ fixtureKey: "fixture" }),
+            fixtureParts: expect.objectContaining({ kind: "build-replay-v1" }),
           }),
-        ],
+        ]),
       }),
       expect.objectContaining({ resolveOwnerUserId: expect.any(Function) }),
     );
@@ -134,6 +154,37 @@ describe("scheduleReviewedWorkPatternExperiment", () => {
       }),
     ).resolves.toEqual({
       scheduled: false,
+      reason: "authority_ceiling",
+    });
+    expect(createRun).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("rejects unsupported risk and malformed fixtures before opening the store", async () => {
+    const highRisk = candidate();
+    highRisk.riskClass = "outbound-or-floor";
+    for (const cell of highRisk.cells) {
+      cell.executionRequest.executionProfile.riskClass = "outbound-or-floor";
+    }
+    await expect(scheduleReviewedWorkPatternExperiment({
+      action: "approve",
+      candidate: highRisk,
+      reviewerUserId: "user-1",
+      orchestratingAgentId: "agent-1",
+    })).resolves.toEqual({
+      scheduled: false,
+      reason: "authority_ceiling",
+    });
+
+    const unsafe = candidate();
+    unsafe.cells[0]!.fixtureParts.targetFile = "apps/web/app/build/page.tsx";
+    await expect(scheduleReviewedWorkPatternExperiment({
+      action: "approve",
+      candidate: unsafe,
+      reviewerUserId: "user-1",
+      orchestratingAgentId: "agent-1",
+    })).resolves.toEqual({
+      scheduled: false,
       reason: "no_evidence_cleared_experiment",
     });
     expect(createRun).not.toHaveBeenCalled();
@@ -144,6 +195,7 @@ describe("scheduleReviewedWorkPatternExperiment", () => {
     const approved = candidate();
     approved.cells[0]!.executionRequest.executionProfile.activityKey = "build.implement";
     findUnique.mockResolvedValueOnce({
+      id: "parent-1",
       userId: "user-1",
       currentAgentId: "agent-1",
       initiatingAgentId: "agent-1",
@@ -159,7 +211,9 @@ describe("scheduleReviewedWorkPatternExperiment", () => {
           riskClass: "internal-reversible",
           methodVariants: approved.definition.methodVariants,
           modelVariants: approved.definition.modelVariants,
-          requiredCellKeys: [approved.cells[0]!.executionRequest.cellKey],
+          requiredCellKeys: approved.cells.map(
+            (cell) => cell.executionRequest.cellKey,
+          ),
           taskCorpusKey: approved.definition.taskCorpusKey,
           taskCorpusVersion: approved.definition.taskCorpusVersion,
           oracleKey: approved.definition.oracleKey,
@@ -231,7 +285,9 @@ describe("scheduleReviewedWorkPatternExperiment", () => {
           riskClass: "internal-reversible",
           methodVariants: approved.definition.methodVariants,
           modelVariants: approved.definition.modelVariants,
-          requiredCellKeys: [approved.cells[0]!.executionRequest.cellKey],
+          requiredCellKeys: approved.cells.map(
+            (cell) => cell.executionRequest.cellKey,
+          ),
           taskCorpusKey: approved.definition.taskCorpusKey,
           taskCorpusVersion: approved.definition.taskCorpusVersion,
           oracleKey: approved.definition.oracleKey,

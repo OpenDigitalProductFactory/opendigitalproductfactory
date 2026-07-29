@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { isRecord } from "@/lib/shared/coerce";
+import { parseHermeticBuildReplayFixture } from "@/lib/tak/work-pattern-experiment-fixture";
 import {
   parseWorkPatternExecutionProfile,
   type WorkPatternExecutionProfile,
@@ -296,8 +297,7 @@ export async function executePersistedWorkPatternExperimentCell(
   }
   const inferenceFixture = parseFixture(context.fixtureParts);
   const buildFixture =
-    isRecord(context.fixtureParts)
-    && context.fixtureParts.kind === "build-replay-v1";
+    parseHermeticBuildReplayFixture(context.fixtureParts) !== null;
   if (!inferenceFixture && !buildFixture) {
     throw new Error(`work_pattern_experiment_fixture_unavailable:${request.fixtureKey}`);
   }

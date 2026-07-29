@@ -54,6 +54,20 @@ on any invalid pair or hard regression, and before workspace creation for irreve
 risk. Experiment worktrees are removed after success or failure. They never advance a Feature
 Build, create a pull request, enter the merge queue, release, or mutate the live portal.
 
+A reviewed build candidate may carry its bounded replay fixture through the existing AI Workforce
+Living Playbook review. Approval does not leave the fixture inline in TaskRun metadata: under the
+experiment-definition lock, Build Studio validates the safe source/test paths and full 2x2
+method-model matrix, writes one immutable `TaskArtifact`, and stamps its artifact reference into
+each child execution request before dispatch. Automatic replicates reuse that artifact. Repeating
+the same review is idempotent; reusing the logical fixture key with different bytes or referencing
+a missing artifact parks before cell dispatch. Unsupported activity, non-shadow execution, and
+irreversible/outbound risk stop before the artifact or an execution workspace is created.
+
+The operator records the review from the existing coworker detail panel; no separate fixture
+admin page or approval queue exists. A pre-dispatch rejection remains visible as review/evidence
+history and should be corrected by submitting a new versioned candidate rather than editing the
+retained artifact or inserting database rows manually.
+
 The first qualifying same-install promotion creates a rollback-safe baseline binding and then
 activates the candidate binding in the same serialized transaction. The candidate is scoped to the
 exact install, corpus, activity, risk, and model profile proved by the experiment. A note that
@@ -136,10 +150,19 @@ Emergency stop: set `DPF_BUILD_AUTONOMOUS_PLAYBOOK_MODE=off` and disable the dow
 and PR reconciler switches. Existing records and in-flight evidence remain available; no schema
 rollback is required.
 
+Disabling the canary prevents new autonomous runs but intentionally keeps immutable experiment
+fixtures and decision evidence. Do not delete retained artifacts as a rollback step; a corrected
+fixture uses a new logical version, while same-key byte drift remains a fail-closed integrity
+signal.
+
 ## Verification checklist
 
 - Confirm shadow mode creates observations but no new autonomous transitions.
 - Confirm an active, exact-scope binding produces an execution profile reference on each phase.
+- Confirm reviewed fixture approval creates one immutable TaskArtifact, all four factorial cells
+  reference it, resume creates no duplicate, and the next replicate requires no additional click.
+- Confirm malformed, changed, missing, non-shadow, and high-risk fixtures stop before cell
+  dispatch; high-risk cases create neither an experiment artifact nor an execution workspace.
 - Confirm stale/mismatched/missing bindings and high/regulatory cases park before mutation.
 - Confirm recovery counters survive restart and exhaust into one escalation.
 - Confirm exact-head PR compare-and-swap, unresolved-thread handling, queue enrollment, and human
