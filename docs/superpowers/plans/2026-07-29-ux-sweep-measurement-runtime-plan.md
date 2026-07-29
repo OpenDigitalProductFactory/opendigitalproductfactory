@@ -51,6 +51,16 @@ One flag, one chokepoint: `DPF_MEASUREMENT_RUNTIME=1`
   awaited-under-measurement, fire-and-forget otherwise, and non-fatal
   rejection handling.
 
+## Backlog coverage
+
+- Decision: atomic
+- Parent: BI-232BA634
+- Receipt: cms6e02xl03j901l2b0y9ca2z
+- Rationale: the flag module, the instrumentation gating, and the workflow env
+  wire are one behavior — any one of them alone leaves the sweep exactly as
+  nondeterministic as before, so no phase is independently shippable.
+- Dependencies: none
+
 ## Residual risk / follow-up
 
 - Routes rendering *time itself* stay governed by the #3719 typed
