@@ -73,6 +73,25 @@ export function isValidPhone(
 }
 
 /**
+ * Strip the as-you-type mask from a number that is NOT valid for `country`,
+ * returning just the digits (with any leading "+" preserved). A partial or
+ * local-style entry like "555-0142" would otherwise be presented as an
+ * authoritative-looking "(555) 014-2" — a wrong grouping the guest never
+ * typed. Valid numbers pass through unchanged. Pure. (BI-7639D394)
+ */
+export function unmaskInvalidPhone(
+  value: string,
+  country: CountryCode = DEFAULT_PHONE_COUNTRY,
+): string {
+  const trimmed = value?.trim();
+  if (!trimmed) return "";
+  if (isValidPhone(trimmed, country)) return trimmed;
+  const digits = trimmed.replace(/[^\d]/g, "");
+  if (!digits) return trimmed;
+  return trimmed.startsWith("+") ? `+${digits}` : digits;
+}
+
+/**
  * Format a stored number for display (national format for in-country numbers,
  * international when a country code is present). Returns the input unchanged if
  * it cannot be parsed, so it is safe on legacy/free-form data.

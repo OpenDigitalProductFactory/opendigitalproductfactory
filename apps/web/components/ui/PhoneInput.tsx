@@ -1,12 +1,13 @@
 "use client";
 
 import { forwardRef, useCallback } from "react";
-import type { ChangeEvent, InputHTMLAttributes } from "react";
+import type { ChangeEvent, FocusEvent, InputHTMLAttributes } from "react";
 
 import {
   formatPhoneAsYouType,
   isValidPhone,
   toE164,
+  unmaskInvalidPhone,
   type CountryCode,
 } from "@/lib/phone";
 import { usePhoneCountry } from "@/components/ui/PhoneCountryContext";
@@ -23,8 +24,9 @@ export type PhoneChangeInfo = {
 
 type Props = Omit<
   InputHTMLAttributes<HTMLInputElement>,
-  "type" | "value" | "onChange"
+  "type" | "value" | "onChange" | "onBlur"
 > & {
+  onBlur?: (e: FocusEvent<HTMLInputElement>) => void;
   /** Provide for a controlled field. Omit (use `defaultValue`/`name`) for an uncontrolled one. */
   value?: string;
   /** Receives the value formatted as-you-type. Store this. */
@@ -58,6 +60,7 @@ export const PhoneInput = forwardRef<HTMLInputElement, Props>(function PhoneInpu
     onPhoneChange,
     inputMode,
     autoComplete,
+    onBlur,
     ...rest
   },
   ref,
@@ -85,6 +88,32 @@ export const PhoneInput = forwardRef<HTMLInputElement, Props>(function PhoneInpu
     [controlled, resolvedCountry, onValueChange, onPhoneChange],
   );
 
+  // On leaving the field, drop the mask from a number that never became valid:
+  // "555-0142" must not survive as the authoritative-looking "(555) 014-2"
+  // the guest never typed (BI-7639D394). Valid numbers keep their format.
+  const handleBlur = useCallback(
+    (e: FocusEvent<HTMLInputElement>) => {
+      const current = e.currentTarget.value;
+      const unmasked = unmaskInvalidPhone(current, resolvedCountry);
+      if (unmasked !== current) {
+        if (controlled) {
+          onValueChange?.(unmasked);
+        } else {
+          e.currentTarget.value = unmasked;
+          onValueChange?.(unmasked);
+        }
+        onPhoneChange?.({
+          value: unmasked,
+          e164: toE164(unmasked, resolvedCountry),
+          isValid: isValidPhone(unmasked, resolvedCountry),
+          country: resolvedCountry,
+        });
+      }
+      onBlur?.(e);
+    },
+    [controlled, resolvedCountry, onValueChange, onPhoneChange, onBlur],
+  );
+
   return (
     <input
       ref={ref}
@@ -93,6 +122,7 @@ export const PhoneInput = forwardRef<HTMLInputElement, Props>(function PhoneInpu
       autoComplete={autoComplete ?? "tel"}
       {...(controlled ? { value } : {})}
       onChange={handleChange}
+      onBlur={handleBlur}
       {...rest}
     />
   );

@@ -4,6 +4,7 @@ import {
   coercePhoneCountry,
   formatPhoneAsYouType,
   formatPhoneDisplay,
+  unmaskInvalidPhone,
   isValidPhone,
   toE164,
 } from "./phone";
@@ -67,6 +68,27 @@ describe("coercePhoneCountry", () => {
     expect(coercePhoneCountry("")).toBeNull();
     expect(coercePhoneCountry("ZZ")).toBeNull();
     expect(coercePhoneCountry("United States")).toBeNull();
+  });
+});
+
+describe("unmaskInvalidPhone", () => {
+  it("strips the wrong-confidence mask from an incomplete number (BI-7639D394)", () => {
+    // A guest typing the local-style "555-0142" gets live-masked to
+    // "(555) 014-2" — on blur that must degrade to honest digits.
+    expect(unmaskInvalidPhone("(555) 014-2", "US")).toBe("5550142");
+  });
+
+  it("keeps a valid number formatted", () => {
+    expect(unmaskInvalidPhone("(415) 555-1234", "US")).toBe("(415) 555-1234");
+  });
+
+  it("preserves a leading + on invalid international fragments", () => {
+    expect(unmaskInvalidPhone("+44 20", "US")).toBe("+4420");
+  });
+
+  it("passes through empty and digit-free values", () => {
+    expect(unmaskInvalidPhone("", "US")).toBe("");
+    expect(unmaskInvalidPhone("ext.", "US")).toBe("ext.");
   });
 });
 
