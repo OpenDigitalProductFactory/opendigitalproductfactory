@@ -161,6 +161,61 @@ describe("buildProductDirectionView", () => {
     expect(professional.evidencePreviewCount).toBe(8);
   });
 
+  it("puts an overdue product outcome in the decision lane and routes the primary action to Outcomes", () => {
+    const view = buildProductDirectionView(
+      context({
+        objectives: slice("product-objective", [
+          {
+            id: "OBJ-ONE",
+            objectiveId: "OBJ-ONE",
+            sourceKind: "product-objective",
+            asOf,
+            title: "Increase repeat bookings",
+            problemStatement: null,
+            outcomeHypothesis: "Clearer follow-up will increase repeat bookings.",
+            status: "active",
+            owner: null,
+            measureKind: "percentage",
+            measureDefinition: "Visits rebooked within 30 days",
+            measureUnit: "%",
+            baselineValue: 40,
+            targetValue: 60,
+            baselineNarrative: null,
+            targetNarrative: null,
+            reviewCadence: "monthly",
+            reviewAt: new Date("2026-07-27T00:00:00.000Z"),
+            reviewedAt: null,
+            createdAt: asOf,
+            updatedAt: asOf,
+            observations: [],
+            contributingWork: [],
+            posture: {
+              availability: "insufficient-evidence",
+              state: "unknown",
+              reason: "observation-missing",
+            },
+            reviewDue: true,
+            postureChanged: false,
+          },
+        ]),
+      }),
+      "guided",
+    );
+
+    expect(view.sections[0]?.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "OBJ-ONE",
+          detail: expect.stringContaining("Outcome review due"),
+        }),
+      ]),
+    );
+    expect(view.primaryAction).toEqual({
+      label: "Review outcome evidence",
+      href: "/portfolio/product/product-1/direction/outcomes",
+    });
+  });
+
   it("does not turn missing future contracts into zero-valued facts", () => {
     const view = buildProductDirectionView(context(), "guided");
     const outcomes = view.sections.find(

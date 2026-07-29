@@ -67,6 +67,14 @@ snapshot but leaves the stage unchanged. Moving to **ready** always uses the
 organization's WWWD funding gate, records its rationale and decision
 interaction, and then offers—not silently assigns—eligible work to a coworker.
 
+On a business Product's **Direction → Outcomes** page, the coworker can
+propose a draft objective, record a review, link same-product backlog work, or
+append an observation. It must use the business Product as the owner and keep
+`DigitalProduct` focused on architecture. It must not invent an owner,
+baseline, target, observation, customer, or contributing item. A correction
+appends a superseding observation; it never edits or deletes history. Every
+side-effecting proposal still uses the normal approval boundary.
+
 ## WWMD And Autonomy
 
 When a coworker hits an ambiguous decision, it should not guess from chat context alone. WWMD is the decision gate that lets the coworker consult the founder-kernel wiki and score options against platform principles.

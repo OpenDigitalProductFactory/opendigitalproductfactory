@@ -421,6 +421,119 @@ describe("loadProductOperatingContext", () => {
     });
   });
 
+  it("projects typed objectives, current observations, corrections, and contributing work", async () => {
+    const productObjective = vi.fn(async () => [
+      {
+        objectiveId: "OBJ-EVENTS",
+        title: "Increase private-event bookings",
+        problemStatement: "Private-event demand is inconsistent.",
+        outcomeHypothesis:
+          "Clear packages will convert more qualified enquiries.",
+        status: "active",
+        measureKind: "number",
+        measureDefinition: "Confirmed private events per month",
+        measureUnit: "events/month",
+        baselineValue: { toNumber: () => 3 },
+        targetValue: { toNumber: () => 6 },
+        baselineNarrative: null,
+        targetNarrative: null,
+        reviewCadence: "monthly",
+        reviewAt: new Date("2026-07-27T00:00:00.000Z"),
+        reviewedAt: null,
+        createdAt: new Date("2026-07-01T00:00:00.000Z"),
+        updatedAt: now,
+        ownerPrincipal: {
+          principalId: "PRN-OWNER",
+          displayName: "Owner operator",
+        },
+        contributingWork: [
+          {
+            contributionKind: "delivery",
+            backlogItem: {
+              itemId: "BI-EVENTS",
+              title: "Publish private-event packages",
+              status: "in-progress",
+            },
+          },
+        ],
+        observations: [
+          {
+            observationId: "OBS-CORRECTED",
+            observedAt: new Date("2026-07-27T00:00:00.000Z"),
+            numericValue: { toNumber: () => 4 },
+            narrative: "Booking ledger reconciled.",
+            measureKind: "number",
+            measureUnit: "events/month",
+            sourceKind: "booking",
+            sourceRef: "booking-ledger:2026-07",
+            confidence: 0.95,
+            supersedes: { observationId: "OBS-ORIGINAL" },
+            supersededBy: null,
+            createdAt: now,
+            recordedByPrincipal: null,
+          },
+          {
+            observationId: "OBS-ORIGINAL",
+            observedAt: new Date("2026-07-26T00:00:00.000Z"),
+            numericValue: { toNumber: () => 5 },
+            narrative: null,
+            measureKind: "number",
+            measureUnit: "events/month",
+            sourceKind: "manual",
+            sourceRef: null,
+            confidence: null,
+            supersedes: null,
+            supersededBy: { observationId: "OBS-CORRECTED" },
+            createdAt: new Date("2026-07-26T00:00:00.000Z"),
+            recordedByPrincipal: null,
+          },
+        ],
+      },
+    ]);
+    const context = await loadProductOperatingContext({
+      db: fakeDb({ productObjective: { findMany: productObjective } }),
+      organizationId: "org-1",
+      scope: { kind: "product", id: "product-1" },
+      authorize: vi.fn(async () => undefined),
+      requestedAt: now,
+    });
+
+    expect(productObjective).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          organizationId: "org-1",
+          productId: { in: ["product-1"] },
+        },
+      }),
+    );
+    expect(context.objectives.items[0]).toMatchObject({
+      objectiveId: "OBJ-EVENTS",
+      reviewDue: true,
+      posture: {
+        availability: "available",
+        direction: "increase",
+        state: "improving",
+        latestValue: 4,
+      },
+      observations: [
+        expect.objectContaining({
+          observationId: "OBS-CORRECTED",
+          supersedesObservationId: "OBS-ORIGINAL",
+          supersededByObservationId: null,
+        }),
+        expect.objectContaining({ observationId: "OBS-ORIGINAL" }),
+      ],
+      contributingWork: [
+        {
+          itemId: "BI-EVENTS",
+          title: "Publish private-event packages",
+          status: "in-progress",
+          contributionKind: "delivery",
+        },
+      ],
+    });
+  });
+
   it("projects only typed product intelligence watches without parsing prompt or route text", async () => {
     const scheduledAgentTask = vi.fn(async () => [
       {

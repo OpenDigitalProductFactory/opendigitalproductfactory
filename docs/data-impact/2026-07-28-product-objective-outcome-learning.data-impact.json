@@ -1,0 +1,128 @@
+{
+  "version": "1",
+  "accountableOwner": "product-management",
+  "affectedCopies": [
+    "Business Product Direction outcome projection",
+    "Product-line outcome rollups derived through Product membership",
+    "AI coworker product-outcome tool context",
+    "Backlog contribution links remain references to canonical BacklogItem rows",
+    "DigitalProduct remains unchanged and owns no business objective"
+  ],
+  "migration": {
+    "name": "20260728230000_add_product_objectives",
+    "backfill": "None. Three new tables begin empty; no existing Product, Principal, BacklogItem, baseline, target, owner, or observation is inferred."
+  },
+  "tests": [
+    "apps/web/lib/product-management/outcomes.test.ts",
+    "apps/web/lib/product-management/outcomes-repository.test.ts",
+    "apps/web/lib/product-management/product-operating-context-query.test.ts",
+    "apps/web/lib/mcp/packs/product-outcomes-pack.test.ts",
+    "apps/web/components/product/direction/ProductOutcomes.test.tsx"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:product-objective",
+      "prismaModel": "ProductObjective",
+      "lifecycleDisposition": "Business-product objective retained through closed and archived states. Product or organization deletion follows the owning business-data lifecycle; ordinary lifecycle actions preserve the record.",
+      "fields": [
+        {
+          "fieldId": "data:product-objective#organizationId-productId",
+          "resolution": "governed",
+          "reason": "Makes one organization-scoped business Product the objective owner while excluding DigitalProduct.",
+          "provenance": "BI-162FBDCC; WWMD DI-1FCEE688F5D7",
+          "flags": ["organization"],
+          "fieldPolicy": "Required composite Product relation; cross-organization objective ownership is rejected."
+        },
+        {
+          "fieldId": "data:product-objective#ownerPrincipalId",
+          "resolution": "governed",
+          "reason": "Uses canonical Principal identity when a real owner is known.",
+          "provenance": "Product Management Operating Loop design section 8",
+          "flags": ["subject"],
+          "fieldPolicy": "Optional canonical Principal relation only; no free-form or fabricated owner identity."
+        },
+        {
+          "fieldId": "data:product-objective#measure-contract",
+          "resolution": "governed",
+          "reason": "Supports compatible quantitative comparison and first-class qualitative learning.",
+          "provenance": "WWMD DI-9547279FA032",
+          "flags": [],
+          "fieldPolicy": "Closed measure family with explicit unit and separate numeric/narrative fields; missing evidence remains null."
+        },
+        {
+          "fieldId": "data:product-objective#lifecycle-review",
+          "resolution": "governed",
+          "reason": "Provides legal objective transitions and explicit review cadence without a general OKR suite.",
+          "provenance": "BI-162FBDCC acceptance criteria",
+          "flags": [],
+          "fieldPolicy": "draft to active or archived; active to closed or archived; closed to archived. Reviews do not fabricate observations."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:product-objective-work",
+      "prismaModel": "ProductObjectiveWork",
+      "lifecycleDisposition": "Reference link follows objective/backlog lifecycle and never replaces canonical BacklogItem state.",
+      "fields": [
+        {
+          "fieldId": "data:product-objective-work#objectiveId-backlogItemId",
+          "resolution": "governed",
+          "reason": "Connects real contributing demand or delivery work to one outcome.",
+          "provenance": "BI-162FBDCC objective-to-work trace",
+          "flags": [],
+          "fieldPolicy": "Application invariant requires the BacklogItem and objective to share organization and business Product."
+        },
+        {
+          "fieldId": "data:product-objective-work#contributionKind",
+          "resolution": "governed",
+          "reason": "Explains how canonical work contributes without changing backlog ownership.",
+          "provenance": "apps/web/lib/product-management/outcomes.ts",
+          "flags": [],
+          "fieldPolicy": "Closed canonical values demand, funded-bet, delivery, and release."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:product-outcome-observation",
+      "prismaModel": "ProductOutcomeObservation",
+      "lifecycleDisposition": "Append-only outcome evidence retained with its objective. Corrections supersede rather than mutate or delete prior observations.",
+      "fields": [
+        {
+          "fieldId": "data:product-outcome-observation#value-narrative-measure",
+          "resolution": "governed",
+          "reason": "Records quantitative or qualitative evidence under the objective measure contract.",
+          "provenance": "BI-162FBDCC outcome-learning contract",
+          "flags": [],
+          "fieldPolicy": "Observation snapshots measure kind and unit; posture excludes incompatible or missing values."
+        },
+        {
+          "fieldId": "data:product-outcome-observation#source-provenance",
+          "resolution": "governed",
+          "reason": "Keeps evidence origin and confidence visible instead of making the latest value an unexplained fact.",
+          "provenance": "Product Management Operating Loop design section 8",
+          "flags": [],
+          "fieldPolicy": "Typed source kind, optional stable reference, confidence, and structured provenance; no customer identity is inferred."
+        },
+        {
+          "fieldId": "data:product-outcome-observation#recordedByPrincipalId",
+          "resolution": "governed",
+          "reason": "Attributes evidence entry to canonical Principal when known.",
+          "provenance": "BI-162FBDCC identity boundary",
+          "flags": ["subject"],
+          "fieldPolicy": "Optional canonical Principal only; absent identity remains null."
+        },
+        {
+          "fieldId": "data:product-outcome-observation#supersedesObservationId",
+          "resolution": "governed",
+          "reason": "Preserves correction history and prevents a silent rewrite of learned evidence.",
+          "provenance": "BI-162FBDCC append-only invariant",
+          "flags": [],
+          "fieldPolicy": "A current observation may have at most one direct correction; correct the latest row for later revisions."
+        }
+      ]
+    }
+  ]
+}

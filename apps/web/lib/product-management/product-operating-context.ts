@@ -3,6 +3,7 @@ import {
   classifyEvidenceFreshness,
   sortNewestFirst,
 } from "../portfolio/evidence-view-adapters";
+import type { ProductObjectiveView } from "./outcomes";
 
 export type ProductOperatingScope =
   | { kind: "organization"; id: string }
@@ -131,6 +132,8 @@ export type NamedStatusContextItem = ContextItem & {
   status: string;
 };
 
+export type ProductObjectiveContextItem = ContextItem & ProductObjectiveView;
+
 export type ScheduledPlaybookContextItem = NamedStatusContextItem & {
   taskId: string;
   scope: "organization" | "product-line" | "business-product";
@@ -157,7 +160,7 @@ export interface ProductOperatingContextInput {
   intelligence: ContextSlice<IntelligenceContextItem>;
   demand: ContextSlice<DemandContextItem>;
   decisions: ContextSlice<NamedStatusContextItem>;
-  objectives: ContextSlice<NamedStatusContextItem>;
+  objectives: ContextSlice<ProductObjectiveContextItem>;
   roadmapInputs: ContextSlice<NamedStatusContextItem>;
   deliveryChanges: ContextSlice<NamedStatusContextItem>;
   architecture: ContextSlice<NamedStatusContextItem>;
@@ -200,7 +203,7 @@ export interface ProductOperatingContext {
   intelligence: ContextSlice<IntelligenceContextItem>;
   demand: ContextSlice<DemandContextItem>;
   decisions: ContextSlice<NamedStatusContextItem>;
-  objectives: ContextSlice<NamedStatusContextItem>;
+  objectives: ContextSlice<ProductObjectiveContextItem>;
   roadmapInputs: ContextSlice<NamedStatusContextItem>;
   deliveryChanges: ContextSlice<NamedStatusContextItem>;
   architecture: ContextSlice<NamedStatusContextItem>;

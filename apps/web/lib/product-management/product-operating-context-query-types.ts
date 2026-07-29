@@ -196,6 +196,55 @@ export type DependencyRow = {
   fromProduct: { name: string };
   toProduct: { name: string };
 };
+export type ProductObjectiveRow = {
+  objectiveId: string;
+  title: string;
+  problemStatement: string | null;
+  outcomeHypothesis: string;
+  status: string;
+  measureKind: string;
+  measureDefinition: string;
+  measureUnit: string | null;
+  baselineValue: NumberLike | null;
+  targetValue: NumberLike | null;
+  baselineNarrative: string | null;
+  targetNarrative: string | null;
+  reviewCadence: string | null;
+  reviewAt: Date | null;
+  reviewedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  ownerPrincipal: {
+    principalId: string;
+    displayName: string;
+  } | null;
+  contributingWork: Array<{
+    contributionKind: string;
+    backlogItem: {
+      itemId: string;
+      title: string;
+      status: string;
+    };
+  }>;
+  observations: Array<{
+    observationId: string;
+    observedAt: Date;
+    numericValue: NumberLike | null;
+    narrative: string | null;
+    measureKind: string;
+    measureUnit: string | null;
+    sourceKind: string;
+    sourceRef: string | null;
+    confidence: number | null;
+    supersedes: { observationId: string } | null;
+    supersededBy: { observationId: string } | null;
+    createdAt: Date;
+    recordedByPrincipal: {
+      principalId: string;
+      displayName: string;
+    } | null;
+  }>;
+};
 
 export type ProductOperatingContextQueryClient = {
   organization: {
@@ -214,6 +263,7 @@ export type ProductOperatingContextQueryClient = {
   eaElement: QueryDelegate<EaElementRow>;
   productDependency: QueryDelegate<DependencyRow>;
   scheduledAgentTask: QueryDelegate<ScheduledAgentTaskRow>;
+  productObjective?: QueryDelegate<ProductObjectiveRow>;
 };
 
 export class ProductOperatingContextNotFoundError extends Error {
