@@ -4,6 +4,7 @@ import { StorefrontInbox } from "@/components/storefront-admin/StorefrontInbox";
 import { getOrgSettings } from "@/lib/actions/currency";
 import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
 import { formatReservationWhen, nextActionForReservation } from "@/lib/storefront/booking-summary";
+import { nextActionForOrder, summarizeOrderItems } from "@/lib/storefront/order-lifecycle";
 
 export default async function InboxPage() {
   const config = await prisma.storefrontConfig.findFirst({ select: { id: true, timezone: true } });
@@ -48,8 +49,11 @@ export default async function InboxPage() {
       select: {
         id: true,
         orderRef: true,
+        customerName: true,
         customerEmail: true,
         totalAmount: true,
+        items: true,
+        status: true,
         createdAt: true,
       },
     }),
@@ -169,17 +173,25 @@ export default async function InboxPage() {
         nextAction: nextActionForReservation(booking.status),
       };
     }),
-    ...orders.map((order) => ({
-      id: order.id,
-      ref: order.orderRef,
-      name: null,
-      email: order.customerEmail,
-      type: "order",
-      detail: `${currencySymbol}${order.totalAmount.toString()}`,
-      createdAt: order.createdAt.toISOString(),
-      providerName: null,
-      status: "",
-    })),
+    ...orders.map((order) => {
+      // Fulfilment handoff (BI-115E0D1F): the owner sees who ordered, what, the
+      // order's lane status, and the exact next action — same contract as
+      // reservations.
+      const itemSummary = summarizeOrderItems(order.items);
+      return {
+        id: order.id,
+        ref: order.orderRef,
+        name: order.customerName,
+        email: order.customerEmail,
+        type: "order",
+        detail: `${currencySymbol}${order.totalAmount.toString()}`,
+        createdAt: order.createdAt.toISOString(),
+        providerName: null,
+        status: order.status,
+        itemName: itemSummary,
+        nextAction: nextActionForOrder(order.status),
+      };
+    }),
     ...donations.map((donation) => ({
       id: donation.id,
       ref: donation.donationRef,

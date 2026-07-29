@@ -39,6 +39,26 @@ needs a new time, or a double-booking to untangle) also appear in your workspace
 New customer enquiries that haven't been replied to or routed yet appear there too
 ("Reply to …"), so a waiting lead is never visible only in this inbox.
 
+## Orders
+
+Order entries show who ordered, what they ordered (for example "2× Margherita
+Pizza"), the total, and the order's current stage. Every order moves through one
+simple lane:
+
+**pending → accepted → ready → fulfilled** (or **cancelled** at any point before
+it's fulfilled).
+
+- a **Next** line states the one action the order needs (for example "Accept this
+  order to start preparing it");
+- one button moves the order forward — **Accept order**, then **Mark ready**, then
+  **Mark fulfilled** — and **Cancel** is available until the order is fulfilled;
+- cancelling always shows you the exact order first and explains that it won't be
+  prepared.
+
+As with reservations, each action shows a short working state, then a green note
+on success or a red note on failure (the order is unchanged and you can try
+again).
+
 ## What To Watch
 
 - enquiries that never get converted into owned follow-up work
