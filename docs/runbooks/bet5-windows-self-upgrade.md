@@ -147,6 +147,41 @@ These should not occur once the promoter is rebuilt from current `main`, but for
   `bet5_pgvector_foundation` record; if you need to do it by hand,
   `docker exec ... prisma migrate resolve --rolled-back 20260714110000_bet5_pgvector_foundation`.
 
+## Failure class: migration-unique-violation (P3018 + 23505)
+
+A data migration's bulk UPDATE/INSERT hits `duplicate key value violates unique constraint` and the
+failed record then wedges ALL later upgrades via P3009. Two known producers:
+
+1. **Concurrent writer** minting rows into a partial unique index while the migration backfills
+   (SUR-859DB221, 2026-07-16).
+2. **Damaged unique index holding heap duplicates** (BI-CF4ADDAC collation damage, self-upgrade
+   2026-07-29): a bulk rewrite forces non-HOT row versions, each re-inserting into the unique index,
+   and `_bt_check_unique` rejects duplicates the damaged index never caught — before the repair
+   migration later in the batch can converge them.
+
+Recovery decision (inspect `_prisma_migrations`: `applied_steps_count`, and whether the migration's
+columns/indexes exist in the DB):
+
+- **Schema half-applied** (columns/index present): `prisma migrate resolve --applied <name>` — NOT
+  `--rolled-back`, which would re-run the `ADD COLUMN` and fail `already exists`.
+- **Nothing applied** (`applied_steps_count = 0`, no DDL landed): fix the root cause (de-duplicate,
+  or ship a corrected migration), then
+  `docker compose --project-directory <install root> run --rm -T --no-deps --entrypoint sh portal -c
+  'cd /app && pnpm --filter @dpf/db exec prisma migrate resolve --rolled-back <name>'`
+  and re-trigger the upgrade.
+
+Authoring rules that prevent the class:
+
+- A bulk data migration on a table under active writes must not re-validate a **partial** unique
+  index — lock the table (`SHARE ROW EXCLUSIVE`) for the bounded window.
+- If a later migration in the same batch treats an index as **untrustworthy** (drops/rebuilds it),
+  no earlier migration may bulk-rewrite rows of that table while the index is live — drop the
+  damaged index first (the repair rebuilds and amcheck-validates it).
+- Migration tests must model a damaged unique index as `indisunique = true` **with** committed
+  duplicates and force **non-HOT** updates (index the rewritten column); a non-unique stand-in index
+  or a single-page HOT-friendly fixture both hide the re-validation failure — that is exactly how
+  the 2026-07-29 failure escaped `inventory-entity-index-integrity-migration.test.ts`.
+
 ## References
 
 - Implementation record + all four fixes: `docs/superpowers/plans/2026-07-13-bet5-db-compression-plan.md`

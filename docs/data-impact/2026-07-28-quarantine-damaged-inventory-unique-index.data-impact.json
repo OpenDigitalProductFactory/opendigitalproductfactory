@@ -1,0 +1,32 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "InventoryEntity operational estate registry",
+    "Prisma-to-EA current-state data-model mirror"
+  ],
+  "migration": {
+    "name": "20260728115800_quarantine_damaged_inventory_unique_index",
+    "backfill": "no row is inserted, updated, or deleted: when a sequential-scan probe (index access disabled) finds duplicate entityKey groups in the heap, the collation-damaged unique index InventoryEntity_entityKey_key is dropped so the 20260728115900 snapshot rewrite and the 20260728130000 repair can run; the repair migration rebuilds, REINDEXes, and amcheck-validates the index unconditionally, so damaged, healthy, already-upgraded, and fresh installs converge to the identical end state"
+  },
+  "tests": [
+    "packages/db/src/inventory-entity-index-integrity-migration.test.ts",
+    "scripts/check-data-impact.test.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:inventory-entity#entity-key-unique-index-quarantine",
+      "prismaModel": "InventoryEntity",
+      "lifecycleDisposition": "every row is retained untouched; only the damaged unique index object is conditionally dropped, and uniqueness enforcement is restored by the 20260728130000 repair migration after it converges the duplicate heap rows",
+      "fields": [
+        {
+          "fieldId": "data:inventory-entity#entityKey",
+          "resolution": "governed",
+          "reason": "an index that never caught the heap duplicates it was meant to forbid is already untrustworthy; quarantining it lets the ordered repair chain converge the duplicates and rebuild trustworthy uniqueness instead of wedging every self-upgrade at P3018/23505",
+          "provenance": "BI-193D851D live failure evidence (SUR-B848B86C, 2026-07-29), BI-CF4ADDAC collation-damage lineage, and the forced-non-HOT PostgreSQL migration fixture in inventory-entity-index-integrity-migration.test.ts"
+        }
+      ]
+    }
+  ]
+}
