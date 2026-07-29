@@ -130,7 +130,7 @@ Reduction is by *demotion, not deletion* — an axis used by ≤6% of principles
 A profession may declare its own axes, in its own corpus, subject to three rules:
 
 1. **Typed** — `benefit` or `cost`, with a `highMeans` statement, matching `DimensionGuidance`.
-2. **Projected** — every local axis declares a weight onto ≥1 spine axis. `hierarchy_clarity` projects onto `human_cognitive_load`. This is what preserves cross-profession commensurability: inside the profession the decision is scored at full resolution; when it leaves, it rolls up.
+2. **Projected** — every local axis declares a weight onto ≥1 spine axis, with kind matching each target's polarity (BI-72E8FF05: values roll through un-inverted, so `hierarchy_flatness`, cost-framed, projects onto the cost axis `human_cognitive_load`; the original benefit-framed `hierarchy_clarity` example scored backwards). This is what preserves cross-profession commensurability: inside the profession the decision is scored at full resolution; when it leaves, it rolls up.
 3. **Sourced** — same provenance invariant WSID already enforces: a local axis without a cited source cannot publish.
 
 This is the direct answer to *"add more vectors where there are more criteria to consider."* Vectors multiply **inside** a profession, where the criteria actually live, without inflating the shared space every profession must reason over.

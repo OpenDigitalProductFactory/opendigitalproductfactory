@@ -103,7 +103,7 @@ proposing anything.
   BI-106C2585) — the mechanism for a profession to declare a *net-new* axis
   inside its own corpus, namespaced so it can never collide with the spine. It
   **ships empty** (`profession-local-axes.ts:65-71`); the only worked axis
-  (`ux-design/hierarchy_clarity`) lives in a test. Phases 2–3 (thread the
+  (`ux-design/hierarchy_flatness`, cost-framed per BI-72E8FF05) lives in a test. Phases 2–3 (thread the
   caller's profession into `principle_decide`; validate + score the namespaced
   key) are **not built** (`plan 2026-07-24-profession-local-decision-axes.md:39-48`).
 - **Revealed-preference inference** (`weight-inference.ts`, BI-D88DFEEA): built,

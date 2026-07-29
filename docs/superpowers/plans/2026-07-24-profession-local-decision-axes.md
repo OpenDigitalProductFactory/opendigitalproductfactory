@@ -53,3 +53,16 @@ The founder-kernel evolution discipline (`2026-05-24`) requires an orthogonality
 ## Acceptance
 
 A profession declares a local axis end-to-end — typed, sourced, projected, scored at full resolution within the profession, correctly rolled up when the decision crosses professions; an unsourced or unprojected axis fails to publish (integrity assertion + provenance gate).
+
+## Addendum (2026-07-29, BI-72E8FF05): polarity coherence invariant
+
+`projectLocalAxisVector` rolls values through sign-preserved and un-inverted, so an axis's
+`kind` must match the polarity of every spine axis it projects onto — a benefit-framed axis
+landing on a cost axis (the original worked example: `hierarchy_clarity` →
+`human_cognitive_load`) asserts the opposite of what its scorer said and the decision still
+returns a confident ledger. `assertProfessionLocalAxisIntegrity` now enforces this at test
+time against `PRINCIPLE_COST_DIMENSIONS` (the same list the kernel sign guard uses;
+exposed as `spineDimensionKind`). Consequence for axis authors (incl. BI-F405AC58): an axis
+projecting onto a cost axis must score the deficit — `hierarchy_flatness`, `disclosure_debt`,
+`perceptual_clutter` — never the goodness. Mixed-polarity projection targets are rejected
+outright: one axis cannot be both.
