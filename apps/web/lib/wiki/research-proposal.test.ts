@@ -75,6 +75,8 @@ describe("proposeResearch", () => {
         proposalId: "rp_existing",
         organizationId: ORG,
         digitalProductId: null,
+        productLineId: null,
+        businessProductId: null,
         topic: "competitive-landscape",
         status: "pending",
       },

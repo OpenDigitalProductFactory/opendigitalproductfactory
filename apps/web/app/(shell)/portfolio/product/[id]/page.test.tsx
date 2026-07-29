@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@dpf/db", () => ({
+  INVENTORY_ENTITY_CANONICAL_WHERE: {},
   prisma: {
     digitalProduct: {
       findUnique: mocks.findDigital,
