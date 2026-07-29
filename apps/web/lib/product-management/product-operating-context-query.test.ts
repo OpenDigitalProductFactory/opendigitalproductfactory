@@ -201,6 +201,12 @@ describe("loadProductOperatingContext", () => {
         estimateAgreed: true,
         claimStatus: null,
         claimedByAgentId: null,
+        activeBuild: {
+          buildId: "FB-PRODUCT",
+          phase: "build",
+          updatedAt: now,
+          productVersions: [],
+        },
         demandEvidenceLinks: [
           {
             evidenceLinkId: "DME-1",
@@ -259,7 +265,77 @@ describe("loadProductOperatingContext", () => {
       latestDecision: expect.objectContaining({
         summary: "Funding deferred",
       }),
+      workType: "feature",
+      effortSize: "medium",
+      investmentBucket: "grow",
+      lastEvidenceChange: expect.objectContaining({
+        kind: "demand_funding_decision",
+      }),
+      delivery: expect.objectContaining({
+        sourceId: "FB-PRODUCT",
+        phase: "build",
+        shippedAt: null,
+      }),
     });
+  });
+
+  it("retains canonical change dates and DigitalProduct dependency endpoints as coordination evidence", async () => {
+    const db = fakeDb({
+      changeItem: {
+        findMany: vi.fn(async () => [
+          {
+            id: "change-1",
+            title: "Deploy booking update",
+            status: "scheduled",
+            updatedAt: now,
+            changeRequest: {
+              id: "CR-1",
+              plannedStartAt: new Date("2026-08-01T09:00:00.000Z"),
+              plannedEndAt: new Date("2026-08-01T11:00:00.000Z"),
+            },
+          },
+        ]),
+      },
+      productDependency: {
+        findMany: vi.fn(async () => [
+          {
+            id: "dependency-1",
+            relationType: "depends_on",
+            createdAt: now,
+            fromProduct: { id: "digital-1", name: "Booking portal" },
+            toProduct: { id: "digital-identity", name: "Identity" },
+          },
+        ]),
+      },
+    });
+
+    const context = await loadProductOperatingContext({
+      db,
+      organizationId: "org-1",
+      scope: { kind: "product", id: "product-1" },
+      authorize: vi.fn(async () => undefined),
+      requestedAt: now,
+    });
+
+    expect(context.deliveryChanges.items).toEqual([
+      expect.objectContaining({
+        id: "change-1",
+        coordinationKind: "delivery",
+        plannedStartAt: new Date("2026-08-01T09:00:00.000Z"),
+        plannedEndAt: new Date("2026-08-01T11:00:00.000Z"),
+      }),
+    ]);
+    expect(context.architecture.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "dependency-1",
+          coordinationKind: "architecture",
+          fromProductId: "digital-1",
+          toProductId: "digital-identity",
+          relationType: "depends_on",
+        }),
+      ]),
+    );
   });
 
   it("keeps the commercial-summary profile on the sales query boundary", async () => {

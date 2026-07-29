@@ -184,6 +184,15 @@ type BacklogRow = {
   estimateAgreed: boolean | null;
   claimStatus: string | null;
   claimedByAgentId: string | null;
+  activeBuild?: {
+    buildId: string;
+    phase: string;
+    updatedAt: Date;
+    productVersions?: Array<{
+      id: string;
+      shippedAt: Date;
+    }>;
+  } | null;
   demandEvidenceLinks: Array<{
     evidenceLinkId: string;
     sourceKind: string;
@@ -207,6 +216,11 @@ type ChangeRow = {
   title: string;
   status: string;
   updatedAt: Date;
+  changeRequest?: {
+    id: string;
+    plannedStartAt: Date | null;
+    plannedEndAt: Date | null;
+  };
 };
 type EaElementRow = {
   id: string;
@@ -218,8 +232,8 @@ type DependencyRow = {
   id: string;
   relationType: string;
   createdAt: Date;
-  fromProduct: { name: string };
-  toProduct: { name: string };
+  fromProduct: { id?: string; name: string };
+  toProduct: { id?: string; name: string };
 };
 type ProductObjectiveRow = {
   objectiveId: string;
@@ -970,6 +984,21 @@ export async function loadProductOperatingContext(input: {
             estimateAgreed: true,
             claimStatus: true,
             claimedByAgentId: true,
+            activeBuild: {
+              select: {
+                buildId: true,
+                phase: true,
+                updatedAt: true,
+                productVersions: {
+                  orderBy: { shippedAt: "desc" },
+                  take: 1,
+                  select: {
+                    id: true,
+                    shippedAt: true,
+                  },
+                },
+              },
+            },
             demandEvidenceLinks: {
               where: { status: "active" },
               orderBy: { createdAt: "desc" },
@@ -1026,6 +1055,13 @@ export async function loadProductOperatingContext(input: {
             title: true,
             status: true,
             updatedAt: true,
+            changeRequest: {
+              select: {
+                id: true,
+                plannedStartAt: true,
+                plannedEndAt: true,
+              },
+            },
           },
         })
       : Promise.resolve([]),
@@ -1056,8 +1092,8 @@ export async function loadProductOperatingContext(input: {
             id: true,
             relationType: true,
             createdAt: true,
-            fromProduct: { select: { name: true } },
-            toProduct: { select: { name: true } },
+            fromProduct: { select: { id: true, name: true } },
+            toProduct: { select: { id: true, name: true } },
           },
         })
       : Promise.resolve([]),
@@ -1285,6 +1321,7 @@ export async function loadProductOperatingContext(input: {
       asOf: row.updatedAt,
       title: row.name,
       status: row.lifecycleStatus ?? "unknown",
+      coordinationKind: "architecture" as const,
     })),
     ...dependencies.map((row) => ({
       id: row.id,
@@ -1292,6 +1329,10 @@ export async function loadProductOperatingContext(input: {
       asOf: row.createdAt,
       title: `${row.fromProduct.name} ${row.relationType} ${row.toProduct.name}`,
       status: "active",
+      coordinationKind: "architecture" as const,
+      fromProductId: row.fromProduct.id ?? null,
+      toProductId: row.toProduct.id ?? null,
+      relationType: row.relationType,
     })),
   ];
 
@@ -1420,14 +1461,37 @@ export async function loadProductOperatingContext(input: {
         asOf: row.updatedAt,
         title: row.title,
         status: row.status,
+        workType: row.workType,
         productLineId: row.productLineId,
         businessProductId: row.businessProductId,
         demandStage: row.demandStage,
         score: row.demandScore,
+        effortSize: row.effortSize,
+        investmentBucket: row.investmentBucket,
+        lastEvidenceChange: row.activities[0]
+          ? {
+              kind: row.activities[0].kind,
+              summary: row.activities[0].summary,
+              recordedAt: row.activities[0].recordedAt,
+            }
+          : null,
+        delivery: row.activeBuild
+          ? {
+              sourceId:
+                row.activeBuild.productVersions?.[0]?.id ??
+                row.activeBuild.buildId,
+              phase: row.activeBuild.phase,
+              asOf:
+                row.activeBuild.productVersions?.[0]?.shippedAt ??
+                row.activeBuild.updatedAt,
+              shippedAt:
+                row.activeBuild.productVersions?.[0]?.shippedAt ?? null,
+            }
+          : null,
       })),
       partialReason:
-        demand.length >= 250
-          ? "Demand evidence is bounded to the 250 newest records."
+        demand.length >= 100
+          ? "Demand evidence is bounded to the 100 newest records."
           : undefined,
       unavailableReason: !fullProfile
         ? "Demand is outside the commercial-summary query profile."
@@ -1532,6 +1596,9 @@ export async function loadProductOperatingContext(input: {
         asOf: row.updatedAt,
         title: row.title,
         status: row.status,
+        coordinationKind: "delivery" as const,
+        plannedStartAt: row.changeRequest?.plannedStartAt ?? null,
+        plannedEndAt: row.changeRequest?.plannedEndAt ?? null,
       })),
       unavailableReason: !fullProfile
         ? "Delivery changes are outside the commercial-summary query profile."

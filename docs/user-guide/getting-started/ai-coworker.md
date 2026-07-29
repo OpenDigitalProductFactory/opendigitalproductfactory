@@ -85,6 +85,15 @@ coworker must not infer margin, capacity, stock, conversion, repeat purchase,
 quality, cannibalization, a product team, or a consumer. Page load itself
 never calls the decision gate or changes the business.
 
+On a business Product or product line roadmap, choose **Review with coworker**
+to explain which bets are genuinely committed, which records still need
+classification, funding, or an active-objective link, and which dates or
+dependencies are unsupported. The coworker may route a stakeholder review
+through the existing organization decision/audit boundary. It must not drag
+items between lanes, promise an inferred date, convert a `DigitalProduct`
+dependency into a business work dependency, or create a separate roadmap
+record. Snapshot exports are evidence packets, not importable plans.
+
 ## WWMD And Autonomy
 
 When a coworker hits an ambiguous decision, it should not guess from chat context alone. WWMD is the decision gate that lets the coworker consult the founder-kernel wiki and score options against platform principles.

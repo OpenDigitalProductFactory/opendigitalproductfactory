@@ -110,10 +110,13 @@ export type IntelligenceContextItem = ContextItem & {
 export type DemandContextItem = ContextItem & {
   title: string;
   status: string;
+  workType?: string | null;
   productLineId?: string | null;
   businessProductId?: string | null;
   demandStage?: string | null;
   score?: number | null;
+  effortSize?: string | null;
+  investmentBucket?: string | null;
   evidenceCount?: number;
   readiness?: {
     classified: boolean;
@@ -127,11 +130,31 @@ export type DemandContextItem = ContextItem & {
     recordedAt: Date;
     payload: Record<string, unknown>;
   } | null;
+  lastEvidenceChange?: {
+    kind: string;
+    summary: string;
+    recordedAt: Date;
+  } | null;
+  delivery?: {
+    sourceId: string;
+    phase: string;
+    asOf: Date;
+    shippedAt: Date | null;
+  } | null;
 };
 
 export type NamedStatusContextItem = ContextItem & {
   title: string;
   status: string;
+};
+
+export type RoadmapCoordinationContextItem = NamedStatusContextItem & {
+  coordinationKind: "architecture" | "delivery";
+  plannedStartAt?: Date | null;
+  plannedEndAt?: Date | null;
+  fromProductId?: string | null;
+  toProductId?: string | null;
+  relationType?: string | null;
 };
 
 export type ProductObjectiveContextItem = ContextItem &
@@ -168,8 +191,8 @@ export interface ProductOperatingContextInput {
   decisions: ContextSlice<NamedStatusContextItem>;
   objectives: ContextSlice<ProductObjectiveContextItem>;
   roadmapInputs: ContextSlice<NamedStatusContextItem>;
-  deliveryChanges: ContextSlice<NamedStatusContextItem>;
-  architecture: ContextSlice<NamedStatusContextItem>;
+  deliveryChanges: ContextSlice<RoadmapCoordinationContextItem>;
+  architecture: ContextSlice<RoadmapCoordinationContextItem>;
   scheduledPlaybooks: ContextSlice<ScheduledPlaybookContextItem>;
 }
 
@@ -211,8 +234,8 @@ export interface ProductOperatingContext {
   decisions: ContextSlice<NamedStatusContextItem>;
   objectives: ContextSlice<ProductObjectiveContextItem>;
   roadmapInputs: ContextSlice<NamedStatusContextItem>;
-  deliveryChanges: ContextSlice<NamedStatusContextItem>;
-  architecture: ContextSlice<NamedStatusContextItem>;
+  deliveryChanges: ContextSlice<RoadmapCoordinationContextItem>;
+  architecture: ContextSlice<RoadmapCoordinationContextItem>;
   scheduledPlaybooks: ContextSlice<ScheduledPlaybookContextItem>;
 }
 
