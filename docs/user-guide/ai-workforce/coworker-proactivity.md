@@ -18,7 +18,7 @@ You don't start from a blank slate. Each coworker's default level is **derived f
 
 ## The Levels
 
-- **Reactive** — asks you before most things. You see the most.
+- **Quiet** — asks you before most things. You see the most.
 - **Balanced** — handles routine work and logs it; brings real business choices to you.
 - **Assertive** — acts and tells you after. You see the least.
 
