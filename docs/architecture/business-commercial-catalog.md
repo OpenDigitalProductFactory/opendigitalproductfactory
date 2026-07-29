@@ -168,11 +168,26 @@ the topic and question; prompt or route text is never parsed as scope. A watch
 tick writes only a pending `ResearchProposal`, so external research and
 publication remain behind their existing human gates.
 
-Demand, change, architecture, and dependency evidence is included
-only through the resolved enabling digital products. Product decisions,
-objectives, and outcomes remain explicitly unavailable until their owning
-phases provide typed associations. Prompt strings, route text, similar names,
-and empty result sets are never used to invent scope.
+Demand is projected from organization-scoped `BacklogItem` associations.
+Change, architecture, and dependency evidence is included only through
+resolved enabling digital products. Product decisions remain explicitly
+unavailable until their owning phase provides a typed association. Prompt
+strings, route text, similar names, and empty result sets are never used to
+invent scope.
+
+`ProductObjective` is the typed business-product outcome authority. Every
+objective carries `organizationId` and a composite relation to one business
+`Product`; it never targets `DigitalProduct`. `ProductObjectiveWork` links
+same-product `BacklogItem` rows without copying or changing backlog state.
+`ProductOutcomeObservation` is append-only. A correction inserts a new row
+whose `supersedesObservationId` points to the prior current record.
+
+The canonical measure family is `number`, `percentage`, `currency`,
+`duration`, or `qualitative`. Quantitative posture is derived only when the
+objective baseline, target, observation kind, and unit are compatible.
+Qualitative observations remain narrative evidence requiring review. Missing
+or incompatible evidence stays explicit. Product-line posture is derived
+through Product membership; no parallel outcome ledger is persisted.
 
 Current ServiceNow CRM/CSM documentation includes Sold Product, installed
 product/install-base, party, and entitlement concepts. DPF's `ProductSold` is
@@ -228,9 +243,17 @@ different evidence density over the same canonical projection. The page
 previews scope, write, approval boundary, and cadence before proposal or
 schedule creation.
 
+Outcome learning lives at
+`/portfolio/product/[id]/direction/outcomes`. The route reads the same
+`ProductOperatingContext` projection used by the Direction brief and writes
+through the focused product-outcome service. The MCP pack and server actions
+share the canonical enum, validation, authorization, lifecycle, posture, and
+append-only rules instead of implementing parallel contracts.
+
 ## Fleet-Safe Evolution
 
-The Phase 2 and Catalog Builder migrations are expand-only:
+The commercial, Catalog Builder, demand-activation, and product-outcome
+migrations are expand-only:
 
 - additive commercial and packaging tables;
 - nullable Storefront, quote, fulfillment-route, and promotion-provenance
@@ -240,6 +263,8 @@ The Phase 2 and Catalog Builder migrations are expand-only:
 - partial unique indexes for nullable default SKU and price-list scopes;
 - idempotent application reconciliation through the existing setup seed
   authority.
+- three new outcome tables begin empty; no Product, Principal, baseline,
+  target, observation, or work link is guessed from legacy data.
 
 On boot, storefronts with active unlinked items run the same setup
 reconciliation. Rows backed by real composition/product-line evidence are

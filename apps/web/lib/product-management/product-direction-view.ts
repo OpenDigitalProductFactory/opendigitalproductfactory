@@ -91,10 +91,31 @@ function demandItem(
   };
 }
 
+function objectiveDetail(
+  objective: ProductOperatingContext["objectives"]["items"][number],
+): string {
+  if (objective.posture.availability === "available") {
+    return `${objective.posture.state.replace("-", " ")} · ${objective.measureDefinition}`;
+  }
+  if (objective.posture.availability === "qualitative") {
+    return `qualitative review needed · ${objective.measureDefinition}`;
+  }
+  if (objective.posture.reason === "baseline-missing") {
+    return `baseline missing · ${objective.measureDefinition}`;
+  }
+  if (objective.posture.reason === "observation-missing") {
+    return `observation needed · ${objective.measureDefinition}`;
+  }
+  return `insufficient compatible evidence · ${objective.measureDefinition}`;
+}
+
 export function buildProductDirectionView(
   context: ProductOperatingContext,
   audience: ProductDirectionAudience,
 ): ProductDirectionView {
+  const dueObjective = context.objectives.items.find(
+    (objective) => objective.reviewDue,
+  );
   const decisionItems = [
     ...context.decisions.items.map((item) => ({
       id: item.id,
@@ -111,6 +132,16 @@ export function buildProductDirectionView(
           item.demandStage !== "ready",
       )
       .map(demandItem),
+    ...context.objectives.items
+      .filter((objective) => objective.reviewDue)
+      .map((objective) => ({
+        id: objective.id,
+        label: objective.title,
+        status: objective.status,
+        sourceKind: objective.sourceKind,
+        asOf: objective.asOf,
+        detail: `Outcome review due · ${objectiveDetail(objective)}`,
+      })),
   ].sort(
     (left, right) =>
       right.asOf.getTime() - left.asOf.getTime() ||
@@ -158,7 +189,7 @@ export function buildProductDirectionView(
     status: item.status,
     sourceKind: item.sourceKind,
     asOf: item.asOf,
-    detail: "Objective and outcome evidence",
+    detail: objectiveDetail(item),
   }));
 
   const coworkerItems = context.scheduledPlaybooks.items.map((item) => ({
@@ -234,16 +265,21 @@ export function buildProductDirectionView(
     evidencePreviewCount: audience === "professional" ? 8 : 3,
     primaryAction: {
       label:
-        decisionItems.length > 0
+        dueObjective
+          ? "Review outcome evidence"
+          : decisionItems.length > 0
           ? "Review demand decisions"
           : "Open product delivery flow",
-      href: `/ops/demand?organizationId=${encodeURIComponent(context.provider.id)}${
-        context.scope.kind === "product-line"
-          ? `&productLineId=${encodeURIComponent(context.productLine?.id ?? context.scope.id)}`
-          : context.scope.kind === "product"
-            ? `&productLineId=${encodeURIComponent(context.productLine?.id ?? "")}&businessProductId=${encodeURIComponent(context.products[0]?.id ?? context.scope.id)}`
-            : ""
-      }`,
+      href:
+        dueObjective && context.scope.kind === "product"
+          ? `/portfolio/product/${encodeURIComponent(context.scope.id)}/direction/outcomes`
+          : `/ops/demand?organizationId=${encodeURIComponent(context.provider.id)}${
+              context.scope.kind === "product-line"
+                ? `&productLineId=${encodeURIComponent(context.productLine?.id ?? context.scope.id)}`
+                : context.scope.kind === "product"
+                  ? `&productLineId=${encodeURIComponent(context.productLine?.id ?? "")}&businessProductId=${encodeURIComponent(context.products[0]?.id ?? context.scope.id)}`
+                  : ""
+            }`,
     },
     sections: [
       {

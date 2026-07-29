@@ -85,10 +85,37 @@ decision history as a read-only projection, so it cannot diverge from Delivery
 Flow.
 
 An unavailable card means the owning contract is not active or no safe typed
-association exists. For example, Objectives and Outcomes remain unavailable
-until their owning product-management phase is installed. An empty card means
-the source is available but has no matching evidence. Neither condition is
-rendered as a healthy zero.
+association exists. An empty card means the source is available but has no
+matching evidence. Neither condition is rendered as a healthy zero.
+
+### Learn from product outcomes
+
+From a business Product, open **Direction → Outcomes**. Define the first
+outcome in ordinary business language:
+
+1. name what is happening now;
+2. describe the change you expect and why;
+3. choose how you will notice it;
+4. record an honest starting point and target;
+5. choose when to review the evidence.
+
+Measures may be a number, percentage, currency, duration, or qualitative
+change. Currency, duration, and business-specific counts retain their unit so
+unlike observations are not compared. Qualitative outcomes use written
+starting and target expectations rather than invented numeric scores. A
+missing baseline, target, or observation is shown as insufficient evidence.
+
+New outcomes begin as drafts. Choose **Start learning** when the contract is
+ready, then append observations as evidence arrives. An observation names its
+source and can include a stable reference and confidence. If a value was
+wrong, choose **Correct observation**: DPF appends the correction and retains
+the original in history.
+
+Only backlog work already scoped to the same business Product can be linked as
+contributing work. The link does not move, fund, or reassign the backlog item.
+Closing or archiving an outcome preserves its observations and work links.
+Product-line outcome posture is derived from its real Products; no second
+product-line outcome ledger is created.
 
 The stable product URL is shared through a compatibility boundary. A business
 Product receives the business header and Direction navigation. A
@@ -239,6 +266,10 @@ one-off quote or order snapshot unless an operator explicitly promotes it.
   provenance and human publication control
 - Schedule proposal-only competitive scans without unattended research or
   publication
+- Define, review, close, and archive business-product outcomes
+- Append quantitative or qualitative observations with source provenance and
+  correction history
+- Link only real, same-product backlog work to the outcome it contributes to
 - Compare product-line sales evidence and drill into a business Product's
   Direction brief
 - Switch between guided and professional density without forking product truth
