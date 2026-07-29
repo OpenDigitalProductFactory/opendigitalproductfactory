@@ -10,6 +10,54 @@ vi.mock("@dpf/db", () => {
 
 vi.mock("@/lib/platform-runtime/work-admission", () => ({ admitRuntimeGuardedWork: vi.fn() }));
 
+describe("detectScheduledRunInferenceFailure", () => {
+  it("flags the live-reproduced all-endpoints-failed apology as a failed run (BI-E0F27E0E)", async () => {
+    const { detectScheduledRunInferenceFailure } = await import("./scheduled-task-runs");
+    expect(
+      detectScheduledRunInferenceFailure({
+        executedToolCount: 0,
+        content:
+          "The AI providers are momentarily busy (usually rate-limited or overloaded). Please try again in about 30 seconds — no setup change is needed.",
+      }),
+    ).toBe("rate-limit");
+  });
+
+  it("flags config-gap and connection apologies too", async () => {
+    const { detectScheduledRunInferenceFailure } = await import("./scheduled-task-runs");
+    expect(
+      detectScheduledRunInferenceFailure({
+        executedToolCount: 0,
+        content: "No AI providers are configured for this workspace.",
+      }),
+    ).toBe("config");
+    expect(
+      detectScheduledRunInferenceFailure({ executedToolCount: 0, content: "fetch failed" }),
+    ).toBe("connection");
+  });
+
+  it("never flags a run that executed tools, whatever the closing text", async () => {
+    const { detectScheduledRunInferenceFailure } = await import("./scheduled-task-runs");
+    expect(
+      detectScheduledRunInferenceFailure({
+        executedToolCount: 2,
+        content: "The AI providers are momentarily busy (usually rate-limited or overloaded).",
+      }),
+    ).toBeNull();
+  });
+
+  it("returns null for real content and empty output", async () => {
+    const { detectScheduledRunInferenceFailure } = await import("./scheduled-task-runs");
+    expect(
+      detectScheduledRunInferenceFailure({
+        executedToolCount: 0,
+        content: "Reviewed 8 orders; Margherita Pizza is trending at 11 units.",
+      }),
+    ).toBeNull();
+    expect(detectScheduledRunInferenceFailure({ executedToolCount: 0, content: null })).toBeNull();
+    expect(detectScheduledRunInferenceFailure({ executedToolCount: 0, content: "" })).toBeNull();
+  });
+});
+
 describe("createTaskRunForScheduledTask", () => {
   beforeEach(async () => {
     const { prisma } = await import("@dpf/db");
