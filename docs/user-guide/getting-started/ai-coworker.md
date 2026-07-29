@@ -75,6 +75,16 @@ baseline, target, observation, customer, or contributing item. A correction
 appends a superseding observation; it never edits or deletes history. Every
 side-effecting proposal still uses the normal approval boundary.
 
+On a product line's **Direction** page, the coworker can explain the cited
+performance projection and its missing measures without treating blanks as
+zero. **Ask what this business would do** turns the strongest supported
+opportunity into reversible options and calls the organization's WWWD
+decision gate. The recommendation retains its period, source records,
+confidence, blind spots, approval boundary, and follow-up measure. The
+coworker must not infer margin, capacity, stock, conversion, repeat purchase,
+quality, cannibalization, a product team, or a consumer. Page load itself
+never calls the decision gate or changes the business.
+
 ## WWMD And Autonomy
 
 When a coworker hits an ambiguous decision, it should not guess from chat context alone. WWMD is the decision gate that lets the coworker consult the founder-kernel wiki and score options against platform principles.

@@ -2,6 +2,14 @@ function roundCurrency(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100;
 }
 
+export function isRecognizedProductSoldStatus(status: string): boolean {
+  return (
+    status === "purchased" ||
+    status === "active" ||
+    status === "fulfilled"
+  );
+}
+
 /**
  * Canonical Product Sold rollup. Root sale revenue is additive; package
  * component allocations are attribution only and must never be added again.
@@ -9,6 +17,7 @@ function roundCurrency(value: number): number {
 export function summarizeProductSoldRevenue(
   rows: Array<{
     productSoldId: string;
+    status?: string;
     totalAmount: number;
     componentAllocations: Array<{
       catalogItemId: string;
@@ -17,8 +26,13 @@ export function summarizeProductSoldRevenue(
   }>,
 ) {
   const sales = [...new Map(rows.map((row) => [row.productSoldId, row])).values()];
+  const recognizedSales = sales.filter(
+    (sale) =>
+      sale.status === undefined ||
+      isRecognizedProductSoldStatus(sale.status),
+  );
   const allocations = new Map<string, number>();
-  for (const sale of sales) {
+  for (const sale of recognizedSales) {
     for (const allocation of sale.componentAllocations) {
       allocations.set(
         allocation.catalogItemId,
@@ -28,9 +42,9 @@ export function summarizeProductSoldRevenue(
     }
   }
   return {
-    saleCount: sales.length,
+    saleCount: recognizedSales.length,
     additiveRevenue: roundCurrency(
-      sales.reduce((sum, sale) => sum + sale.totalAmount, 0),
+      recognizedSales.reduce((sum, sale) => sum + sale.totalAmount, 0),
     ),
     componentAllocations: [...allocations.entries()]
       .sort(([left], [right]) => left.localeCompare(right))

@@ -223,6 +223,7 @@ type DependencyRow = {
 };
 type ProductObjectiveRow = {
   objectiveId: string;
+  productId: string;
   title: string;
   problemStatement: string | null;
   outcomeHypothesis: string;
@@ -1074,6 +1075,7 @@ export async function loadProductOperatingContext(input: {
           take: 100,
           select: {
             objectiveId: true,
+            productId: true,
             title: true,
             problemStatement: true,
             outcomeHypothesis: true,
@@ -1375,6 +1377,10 @@ export async function loadProductOperatingContext(input: {
       requestedAt,
       sourceKind: "product-sold",
       items: sold,
+      partialReason:
+        sold.length >= 250
+          ? "Product Sold evidence is bounded to the 250 newest records."
+          : undefined,
     }),
     intelligence: createContextSlice({
       requestedAt,
@@ -1414,9 +1420,15 @@ export async function loadProductOperatingContext(input: {
         asOf: row.updatedAt,
         title: row.title,
         status: row.status,
+        productLineId: row.productLineId,
+        businessProductId: row.businessProductId,
         demandStage: row.demandStage,
         score: row.demandScore,
       })),
+      partialReason:
+        demand.length >= 250
+          ? "Demand evidence is bounded to the 250 newest records."
+          : undefined,
       unavailableReason: !fullProfile
         ? "Demand is outside the commercial-summary query profile."
         : undefined,
@@ -1452,6 +1464,7 @@ export async function loadProductOperatingContext(input: {
           id: objective.objectiveId,
           sourceKind: "product-objective",
           asOf: objective.updatedAt,
+          productId: objective.productId,
           ...projectProductObjective(
             {
               objectiveId: objective.objectiveId,
@@ -1492,6 +1505,10 @@ export async function loadProductOperatingContext(input: {
           ),
         };
       }),
+      partialReason:
+        objectives.length >= 100
+          ? "Product objectives are bounded to the first 100 records in review order."
+          : undefined,
       unavailableReason: !fullProfile
         ? "Objectives are outside the commercial-summary query profile."
         : db.productObjective

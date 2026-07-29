@@ -110,6 +110,8 @@ export type IntelligenceContextItem = ContextItem & {
 export type DemandContextItem = ContextItem & {
   title: string;
   status: string;
+  productLineId?: string | null;
+  businessProductId?: string | null;
   demandStage?: string | null;
   score?: number | null;
   evidenceCount?: number;
@@ -132,7 +134,11 @@ export type NamedStatusContextItem = ContextItem & {
   status: string;
 };
 
-export type ProductObjectiveContextItem = ContextItem & ProductObjectiveView;
+export type ProductObjectiveContextItem = ContextItem &
+  ProductObjectiveView & {
+    /** Canonical business Product row id retained for line-level attribution. */
+    productId: string;
+  };
 
 export type ScheduledPlaybookContextItem = NamedStatusContextItem & {
   taskId: string;
@@ -327,6 +333,7 @@ function projectCommercialPerformance(
   const summary = summarizeProductSoldRevenue(
     sold.items.map((row) => ({
       productSoldId: row.id,
+      status: row.status,
       totalAmount: row.totalAmount,
       componentAllocations: row.componentAllocations.flatMap((allocation) =>
         allocation.allocatedAmount === null
@@ -364,6 +371,7 @@ function projectCommercialPerformanceByProduct(
     const summary = summarizeProductSoldRevenue(
       rows.map((row) => ({
         productSoldId: row.id,
+        status: row.status,
         totalAmount: row.totalAmount,
         componentAllocations: [],
       })),
