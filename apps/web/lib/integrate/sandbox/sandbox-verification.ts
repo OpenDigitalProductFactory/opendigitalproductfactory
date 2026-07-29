@@ -38,7 +38,7 @@ const VERIFY_WORKSPACE_DEFAULT = "/workspace";
 // worktree when isolation is on, else /workspace (default — byte-identical to the
 // prior string constants). BI-98B723C0 Phase 2c.
 export function sandboxTypecheckCommand(workdir: string = VERIFY_WORKSPACE_DEFAULT): string {
-  return `cd ${workdir} && pnpm --filter web typecheck 2>&1`;
+  return `cd ${workdir} && NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web typecheck 2>&1`;
 }
 // The sandbox container ships with NODE_ENV=development so the in-container Next
 // dev server behaves like local dev. Production builds must NOT inherit that:
@@ -48,7 +48,7 @@ export function sandboxTypecheckCommand(workdir: string = VERIFY_WORKSPACE_DEFAU
 // the prerender pass. Force NODE_ENV=production for the build gate only — the
 // dev-server launch in sandbox.ts is unaffected.
 export function sandboxBuildCommand(workdir: string = VERIFY_WORKSPACE_DEFAULT): string {
-  return `cd ${workdir} && NODE_ENV=production pnpm --filter web build 2>&1`;
+  return `cd ${workdir} && NODE_ENV=production NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web build 2>&1`;
 }
 // Back-compat string constants (default /workspace) for non-per-build callers.
 export const SANDBOX_TYPECHECK_COMMAND = sandboxTypecheckCommand();

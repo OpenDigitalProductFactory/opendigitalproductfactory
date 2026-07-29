@@ -33,11 +33,22 @@ describe("SANDBOX_BUILD_COMMAND", () => {
   // prerender pass. See BI-6A1CE023.
   it("forces NODE_ENV=production for the Next production build", () => {
     expect(SANDBOX_BUILD_COMMAND).toContain("NODE_ENV=production");
-    expect(SANDBOX_BUILD_COMMAND).toMatch(/NODE_ENV=production\s+pnpm --filter web build/);
+    expect(SANDBOX_BUILD_COMMAND).toMatch(
+      /NODE_ENV=production\s+NODE_OPTIONS=--max-old-space-size=8192\s+pnpm --filter web build/,
+    );
   });
 
   it("does not leak NODE_ENV into the typecheck command", () => {
     expect(SANDBOX_TYPECHECK_COMMAND).not.toContain("NODE_ENV");
+  });
+
+  it("gives TypeScript and Next enough heap for the current portal graph", () => {
+    expect(SANDBOX_TYPECHECK_COMMAND).toContain(
+      "NODE_OPTIONS=--max-old-space-size=8192",
+    );
+    expect(SANDBOX_BUILD_COMMAND).toContain(
+      "NODE_OPTIONS=--max-old-space-size=8192",
+    );
   });
 
   it("captures the production NODE_ENV in the command issued to the sandbox exec", async () => {
