@@ -165,6 +165,22 @@ From a worktree, the gate is:
 pnpm run pregate            # → node scripts/pregate.mjs
 ```
 
+**Guard parity preflight (BI-D35433FB).** Before the gate claims a
+`local-integration-ci` lease, `pregate.mjs` runs the deterministic CI policy
+guards host-natively — the same check commands CI's Policy Guards jobs run
+(module size, style drift, derived-artifact staleness, doc links, SBOM, plus
+the commit-range-driven UX-Fit and Design Grounding trailer gates), with guard
+self-tests stripped and PR-body-dependent gates (Seed-Fit, Decision Baseline)
+left to CI. A violation aborts in well under a minute **before any lease is
+claimed**, so a doomed run never occupies the contended sandbox slot. A guard
+this host cannot execute (missing isolated runtime) is reported as
+`environment-skipped` with its remedy — a warning, never a false red; CI
+remains the enforcer. Run it standalone with `pnpm run pregate:preflight`
+(`--plan` prints the guard plan without running it). Emergency skip:
+`DPF_SKIP_PREGATE_PREFLIGHT_REASON="<why>"` — printed on the gate run, and CI
+still enforces every guard. Routing probes (`--dry-run`) and evidence replays
+(`--finalize-evidence`) skip the preflight automatically.
+
 **Host-native/Node-first entry point (BI-2272D840, BI-52500C0D, BI-4BE30454).** `pregate.mjs`
 detects whether native `sh` actually works against *this* worktree — not just
 "sh is on PATH", but that it can resolve the worktree's own git state

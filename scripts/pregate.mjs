@@ -28,6 +28,17 @@ import { fileURLToPath } from "node:url";
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
 
+// Host-side guard parity preflight (BI-D35433FB): run the deterministic CI
+// policy guards before lease admission so a doomed gate never occupies a
+// contended local-integration-ci sandbox slot. Routing probes (--dry-run) and
+// evidence replays (--finalize-evidence) change nothing about the tree and
+// skip it; DPF_SKIP_PREGATE_PREFLIGHT_REASON is the recorded emergency skip.
+export function shouldRunPreflight(args, env = process.env) {
+  if (args.includes("--dry-run") || args.includes("--finalize-evidence")) return false;
+  if (env.DPF_SKIP_PREGATE_PREFLIGHT_REASON) return false;
+  return true;
+}
+
 export function detectWorkingShell({ cwd = process.cwd(), spawnSyncImpl = spawnSync } = {}) {
   if (process.env.DPF_PREGATE_FORCE_NODE === "1") return false;
   if (process.env.DPF_PREGATE_FORCE_SH === "1") return true;
@@ -41,6 +52,25 @@ export function detectWorkingShell({ cwd = process.cwd(), spawnSyncImpl = spawnS
 
 function main() {
   const args = process.argv.slice(2);
+
+  if (shouldRunPreflight(args)) {
+    const preflight = spawnSync(
+      process.execPath,
+      [join(SCRIPT_DIR, "pregate-preflight.mjs")],
+      { stdio: "inherit" },
+    );
+    if (preflight.error || (preflight.status ?? 1) !== 0) {
+      process.stderr.write(
+        "pregate: guard parity preflight failed — fix the deterministic guard failures above before the sandbox gate runs (no lease was claimed).\n",
+      );
+      process.exit(preflight.status ?? 1);
+    }
+  } else if (process.env.DPF_SKIP_PREGATE_PREFLIGHT_REASON) {
+    process.stderr.write(
+      `pregate: guard parity preflight SKIPPED — DPF_SKIP_PREGATE_PREFLIGHT_REASON=${process.env.DPF_SKIP_PREGATE_PREFLIGHT_REASON}\n`,
+    );
+  }
+
   const shWorks = detectWorkingShell();
 
   let result;
