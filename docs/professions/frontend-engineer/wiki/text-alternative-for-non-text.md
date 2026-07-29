@@ -4,6 +4,8 @@ pageKind: principle
 status: published
 abstract: Images and other non-text content need a concise text alternative so assistive technology can convey them. The alt attribute is mandatory; use empty alt only for decorative images.
 principleTier: commandment
+principleWeight: 0.2
+principleWeightRationale: Specialist profession rule — full-strength within its profession ring, weighted light in cross-domain aggregation so profession rules cannot collectively outvote engineering doctrine on decisions they have no bearing on (BI-68553F96 golden-decision drift; calibrated against the quick-vs-proper-normal margin floor).
 principleDirection: Give every meaningful non-text element a concise text alternative; use alt="" only for purely decorative images.
 principleConsumerArchetype: specialist
 principleAppliesTo:

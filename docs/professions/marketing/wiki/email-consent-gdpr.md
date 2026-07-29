@@ -4,6 +4,8 @@ pageKind: principle
 status: published
 abstract: EU marketing email requires opt-in consent under GDPR Article 7 — demonstrable, clearly distinguishable, freely given, and as easy to withdraw as to give. No pre-ticked boxes, no bundling. The structural opposite of US CAN-SPAM opt-out.
 principleTier: commandment
+principleWeight: 0.2
+principleWeightRationale: Specialist profession rule — full-strength within its profession ring, weighted light in cross-domain aggregation so profession rules cannot collectively outvote engineering doctrine on decisions they have no bearing on (BI-68553F96 golden-decision drift; calibrated against the quick-vs-proper-normal margin floor).
 principleDirection: For EU marketing email, obtain provable opt-in consent that is freely given and easily withdrawn; never rely on US opt-out.
 principleConsumerArchetype: specialist
 principleAppliesTo:

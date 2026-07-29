@@ -4,6 +4,8 @@ pageKind: principle
 status: published
 abstract: Parameterized queries (prepared statements) are the mandatory control for all database interactions; they physically separate code from data and eliminate the SQL injection attack surface at the protocol level.
 principleTier: commandment
+principleWeight: 0.2
+principleWeightRationale: Specialist profession rule — full-strength within its profession ring, weighted light in cross-domain aggregation so profession rules cannot collectively outvote engineering doctrine on decisions they have no bearing on (BI-68553F96 golden-decision drift; calibrated against the quick-vs-proper-normal margin floor).
 principleDirection: Always parameterize; never concatenate user-supplied input into SQL strings.
 principleConsumerArchetype: specialist
 principleAppliesTo:
@@ -11,7 +13,7 @@ principleAppliesTo:
   - external_coding_agent
 principleRingScope:
   - ring-1-coworker
-principleDimensionVector: {"governance_compliance": 1.0, "public_safety": 1.0, "blast_radius": 0.9}
+principleDimensionVector: {"governance_compliance": 1.0, "public_safety": 1.0, "blast_radius": -0.9}
 sources:
   - owasp/sql-injection-prevention
   - owasp/query-parameterization

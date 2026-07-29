@@ -4,6 +4,8 @@ pageKind: principle
 status: published
 abstract: Untrusted input must be validated, output-encoded, and bound as parameters — never concatenated into an interpreter string. Injection and broken access control remain the top web application risks.
 principleTier: commandment
+principleWeight: 0.2
+principleWeightRationale: Specialist profession rule — full-strength within its profession ring, weighted light in cross-domain aggregation so profession rules cannot collectively outvote engineering doctrine on decisions they have no bearing on (BI-68553F96 golden-decision drift; calibrated against the quick-vs-proper-normal margin floor).
 principleDirection: Treat all external input as hostile; parameterize queries, encode output, and enforce authorization server-side by default.
 principleConsumerArchetype: specialist
 principleAppliesTo:
@@ -11,7 +13,7 @@ principleAppliesTo:
   - external_coding_agent
 principleRingScope:
   - ring-1-coworker
-principleDimensionVector: {"governance_compliance": 1.0, "public_safety": 1.0, "blast_radius": 0.9}
+principleDimensionVector: {"governance_compliance": 1.0, "public_safety": 1.0, "blast_radius": -0.9}
 professionCompetencyLevel: foundational
 sources:
   - owasp/top-ten

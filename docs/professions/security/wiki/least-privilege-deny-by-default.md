@@ -4,6 +4,8 @@ pageKind: principle
 status: published
 abstract: Every user, service, and credential is granted the minimum access required, and access is denied unless explicitly allowed. Broken access control is the top web application security risk.
 principleTier: commandment
+principleWeight: 0.2
+principleWeightRationale: Specialist profession rule — full-strength within its profession ring, weighted light in cross-domain aggregation so profession rules cannot collectively outvote engineering doctrine on decisions they have no bearing on (BI-68553F96 golden-decision drift; calibrated against the quick-vs-proper-normal margin floor).
 principleDirection: Grant the minimum access required and deny by default; never provision broad standing access for convenience.
 principleConsumerArchetype: specialist
 principleAppliesTo:
@@ -11,7 +13,7 @@ principleAppliesTo:
   - external_coding_agent
 principleRingScope:
   - ring-1-coworker
-principleDimensionVector: {"governance_compliance": 1.0, "public_safety": 0.9, "blast_radius": 0.8}
+principleDimensionVector: {"governance_compliance": 1.0, "public_safety": 0.9, "blast_radius": -0.8}
 professionCompetencyLevel: foundational
 sources:
   - owasp/secrets-management

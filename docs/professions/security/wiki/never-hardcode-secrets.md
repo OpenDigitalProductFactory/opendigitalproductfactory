@@ -4,6 +4,8 @@ pageKind: principle
 status: published
 abstract: Secrets must never live in source code or config files. Centralize them in a managed store, encrypt at rest and in transit, rotate automatically, and detect leaks before commit.
 principleTier: commandment
+principleWeight: 0.2
+principleWeightRationale: Specialist profession rule — full-strength within its profession ring, weighted light in cross-domain aggregation so profession rules cannot collectively outvote engineering doctrine on decisions they have no bearing on (BI-68553F96 golden-decision drift; calibrated against the quick-vs-proper-normal margin floor).
 principleDirection: Keep secrets out of source and config; centralize, encrypt, rotate, and scan for leaks pre-commit.
 principleConsumerArchetype: specialist
 principleAppliesTo:
@@ -11,7 +13,7 @@ principleAppliesTo:
   - external_coding_agent
 principleRingScope:
   - ring-1-coworker
-principleDimensionVector: {"public_safety": 1.0, "governance_compliance": 0.9, "blast_radius": 0.8}
+principleDimensionVector: {"public_safety": 1.0, "governance_compliance": 0.9, "blast_radius": -0.8}
 professionCompetencyLevel: foundational
 sources:
   - owasp/secrets-management

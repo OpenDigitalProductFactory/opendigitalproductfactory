@@ -4,6 +4,8 @@ pageKind: principle
 status: published
 abstract: Every transaction is recorded with equal and opposite debit and credit entries; total debits must equal total credits, and Assets = Liabilities + Equity always holds. This is the non-negotiable foundation of bookkeeping.
 principleTier: commandment
+principleWeight: 0.2
+principleWeightRationale: Specialist profession rule — full-strength within its profession ring, weighted light in cross-domain aggregation so profession rules cannot collectively outvote engineering doctrine on decisions they have no bearing on (BI-68553F96 golden-decision drift; calibrated against the quick-vs-proper-normal margin floor).
 principleDirection: Record every transaction as balanced debit and credit entries; never post a one-sided or unbalanced entry.
 principleConsumerArchetype: specialist
 principleAppliesTo:
