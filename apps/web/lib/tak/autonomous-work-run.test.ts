@@ -433,7 +433,11 @@ describe("createAutonomousWorkRun", () => {
       mode: "act",
     });
 
-    expect(resolved).toEqual({ tools: toolList, toolsForProvider: [{ type: "function" }] });
+    expect(resolved).toEqual({
+      tools: toolList,
+      toolsForProvider: [{ type: "function" }],
+      deferredTools: [],
+    });
     expect(mcpTools.getAvailableTools).toHaveBeenCalledWith(
       { userId: "user-1", platformRole: null, isSuperuser: true },
       { mode: "act", agentId: "inventory-specialist" },
