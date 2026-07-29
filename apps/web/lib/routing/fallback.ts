@@ -3,6 +3,7 @@
  * and fallback chain. Replaces callWithFailover's dispatch loop.
  */
 import { callProvider, InferenceError } from "@/lib/ai-inference";
+import { LOCAL_TOOL_SELECTION_CLIFF } from "@/lib/tak/context-economy-metrics";
 import type { ChatMessage } from "@/lib/ai-inference";
 import { prisma } from "@dpf/db";
 import type { RouteDecision } from "./types";
@@ -254,8 +255,10 @@ export async function callWithFallbackChain(
   // phase-filtered tools), routing local as a fallback turns the agentic loop
   // into a 200-iteration spin. Skip local fallbacks above the threshold; the
   // selected primary endpoint is still tried regardless. See FB-71FB3A53
-  // thread, 2026-05-22.
-  const LOCAL_FALLBACK_MAX_TOOLS = 15;
+  // thread, 2026-05-22. The threshold IS the shared selection cliff — the
+  // coworker-tool-budget caps its total attachment to the same constant, so a
+  // budgeted surface is never disqualified here by an off-by-essentials gap.
+  const LOCAL_FALLBACK_MAX_TOOLS = LOCAL_TOOL_SELECTION_CLIFF;
   const skipLocalFallback = (tools?.length ?? 0) > LOCAL_FALLBACK_MAX_TOOLS;
 
   for (let i = 0; i < chain.length; i++) {
