@@ -439,6 +439,37 @@ export async function persistRouteDecision(
   return record.id;
 }
 
+/**
+ * BI-F4D3B9E9(c): persist a FAILED route decision (no endpoint selected) so the
+ * per-endpoint excludedTrace — which names the real excluder (clearance vs
+ * context vs cooldown vs capability) — survives for diagnosis instead of being
+ * dropped with the NoEligibleEndpointsError. Fire-and-forget with its own
+ * catch: audit failure must never mask the routing error itself. Callers pass
+ * their RouteAndCallOptions-shaped fields; `persistDecision: false` opts out,
+ * matching the success-path contract in routed-inference.
+ */
+export function persistFailedRouteDecision(
+  decision: import("./types").RouteDecision,
+  options?: {
+    persistDecision?: boolean;
+    routingActor?: RouteDecisionActor | null;
+    agentId?: string;
+    agentMessageId?: string | null;
+  },
+): void {
+  if (options?.persistDecision === false) return;
+  persistRouteDecision(decision, {
+    actor:
+      options?.routingActor ??
+      (options?.agentId
+        ? { kind: "agent", id: options.agentId }
+        : { kind: "system", id: "routed-inference" }),
+    agentMessageId: options?.agentMessageId ?? null,
+  }).catch((err) => {
+    console.error("[routing] Failed to persist no-eligible-endpoints route decision:", err);
+  });
+}
+
 export async function updateProviderSuitabilityReceipt(
   routeDecisionLogId: string,
   receipt: import("./provider-suitability/evidence").ProviderSuitabilityRouteReceipt,

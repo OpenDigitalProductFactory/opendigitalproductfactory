@@ -23,6 +23,7 @@ import {
   loadPolicyRules,
   loadOverrides,
   persistRouteDecision,
+  persistFailedRouteDecision,
 } from "@/lib/routing/loader";
 import { routeEndpointV2 } from "@/lib/routing/pipeline-v2";
 import {
@@ -393,21 +394,9 @@ export async function routeAndCall(
     };
   }
 
-  // BI-F4D3B9E9(c): persist the failed route decision BEFORE throwing, so the
-  // per-endpoint excludedTrace (which names the REAL excluder — clearance vs
-  // context vs cooldown vs capability) survives for diagnosis. The live outage
-  // this fixes threw here on every turn and never wrote a RouteDecisionLog row,
-  // leaving nothing but a count in the error string. Fire-and-forget with its
-  // own catch — audit failure must never mask the routing error itself.
-  const persistFailedDecision = () => {
-    if (options?.persistDecision === false) return;
-    persistRouteDecision(decision, {
-      actor: options?.routingActor ?? (options?.agentId ? { kind: "agent", id: options.agentId } : { kind: "system", id: "routed-inference" }),
-      agentMessageId: options?.agentMessageId ?? null,
-    }).catch((err) => {
-      console.error("[routeAndCall] Failed to persist no-eligible-endpoints route decision:", err);
-    });
-  };
+  // BI-F4D3B9E9(c): persist the failed route decision BEFORE throwing so the
+  // excludedTrace survives for diagnosis (see persistFailedRouteDecision).
+  const persistFailedDecision = () => persistFailedRouteDecision(decision, options);
 
   // EP-AGENT-CAP-002: Agent capability floor — hard block, no graceful degradation.
   // Only throw if the routing evidence shows the capability floor was the ACTUAL cause

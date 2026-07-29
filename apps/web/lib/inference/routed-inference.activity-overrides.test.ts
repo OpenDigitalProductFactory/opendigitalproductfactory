@@ -35,6 +35,15 @@ vi.mock("@/lib/routing/loader", () => ({
   loadPolicyRules: mocks.loadPolicyRules,
   loadOverrides: mocks.loadOverrides,
   persistRouteDecision: mocks.persistRouteDecision,
+  // Mirror the real gating so the persistDecision:false test observes the
+  // same contract the production helper enforces (BI-F4D3B9E9(c)).
+  persistFailedRouteDecision: (
+    decision: unknown,
+    options?: { persistDecision?: boolean },
+  ) => {
+    if (options?.persistDecision === false) return;
+    void mocks.persistRouteDecision(decision, options);
+  },
   updateProviderSuitabilityReceipt: mocks.updateProviderSuitabilityReceipt,
 }));
 
