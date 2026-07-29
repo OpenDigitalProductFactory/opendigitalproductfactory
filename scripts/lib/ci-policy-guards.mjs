@@ -56,6 +56,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/ci-build-artifact.test.mjs",
         "scripts/lib/ci-evidence-plan.test.mjs",
         "scripts/ci-policy-guards.test.mjs",
+        "scripts/pregate-preflight.test.mjs",
       ),
     ]),
     guard("mobile-jest-pin-guard", "Mobile Jest Pin Guard", [
