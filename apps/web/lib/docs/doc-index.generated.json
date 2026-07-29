@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 571,
+  "pageCount": 578,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -5082,6 +5082,18 @@
         "see-also"
       ]
     },
+    "docs/professions/enterprise-architecture/wiki/anchor-changes-to-a-value-stream-stage.md": {
+      "publicHref": "/professions/enterprise-architecture/wiki/anchor-changes-to-a-value-stream-stage/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "see-also"
+      ]
+    },
     "docs/professions/enterprise-architecture/wiki/archimate-three-layers.md": {
       "publicHref": "/professions/enterprise-architecture/wiki/archimate-three-layers/",
       "portalHref": null,
@@ -5107,6 +5119,18 @@
         "see-also"
       ]
     },
+    "docs/professions/enterprise-architecture/wiki/architecture-review-verdict-thresholds.md": {
+      "publicHref": "/professions/enterprise-architecture/wiki/architecture-review-verdict-thresholds/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "see-also"
+      ]
+    },
     "docs/professions/enterprise-architecture/wiki/conways-law.md": {
       "publicHref": "/professions/enterprise-architecture/wiki/conways-law/",
       "portalHref": null,
@@ -5120,6 +5144,30 @@
         "see-also"
       ]
     },
+    "docs/professions/enterprise-architecture/wiki/evolve-schema-additively.md": {
+      "publicHref": "/professions/enterprise-architecture/wiki/evolve-schema-additively/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "see-also"
+      ]
+    },
+    "docs/professions/enterprise-architecture/wiki/extend-canonical-models-never-fork.md": {
+      "publicHref": "/professions/enterprise-architecture/wiki/extend-canonical-models-never-fork/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "see-also"
+      ]
+    },
     "docs/professions/enterprise-architecture/wiki/it4it-value-streams.md": {
       "publicHref": "/professions/enterprise-architecture/wiki/it4it-value-streams/",
       "portalHref": null,
@@ -5129,6 +5177,30 @@
         "what-this-source-is",
         "the-four-value-streams",
         "how-dpf-coworkers-use-it",
+        "see-also"
+      ]
+    },
+    "docs/professions/enterprise-architecture/wiki/minimal-proven-associations.md": {
+      "publicHref": "/professions/enterprise-architecture/wiki/minimal-proven-associations/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
+        "see-also"
+      ]
+    },
+    "docs/professions/enterprise-architecture/wiki/name-and-type-the-contract-canonically.md": {
+      "publicHref": "/professions/enterprise-architecture/wiki/name-and-type-the-contract-canonically/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
         "see-also"
       ]
     },
@@ -5153,6 +5225,18 @@
         "what-this-source-is",
         "the-adm-phases",
         "how-dpf-coworkers-use-it",
+        "see-also"
+      ]
+    },
+    "docs/professions/enterprise-architecture/wiki/verify-the-substrate-before-proposing-new.md": {
+      "publicHref": "/professions/enterprise-architecture/wiki/verify-the-substrate-before-proposing-new/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "how-to-apply",
         "see-also"
       ]
     },

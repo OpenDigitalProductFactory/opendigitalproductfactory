@@ -903,6 +903,48 @@ const PROFESSION_EXTERNAL_SOURCES: Record<string, ExternalSourceEntry> = {
     retrievedAt: "2026-06-13",
   },
 
+  // ── Enterprise-architecture decision-pack (BI-D65E044E Phase 1) ──
+  // The six wave-6 pages above are descriptive (what TOGAF/ArchiMate/IT4IT ARE);
+  // the decision-pack pages need sources that ground REVIEW VERDICTS and schema
+  // evolution. ISO/IEC/IEEE 42010 is purchase-licensed, so — same treatment as
+  // TOGAF/ITIL/NIST above — the concept model is cited via an open summary.
+  "iso/42010": {
+    sourceType: "standard",
+    title: "ISO/IEC/IEEE 42010:2022 Architecture description (open summary)",
+    url: "https://en.wikipedia.org/wiki/ISO/IEC_42010",
+    license: "open-summary-iso-licensed",
+    abstract:
+      "Open summary of ISO/IEC/IEEE 42010:2022. Defines the architecture-description " +
+      "concept model — stakeholder, concern, viewpoint, view — and the rule that every " +
+      "view exists to address identified stakeholder concerns, with rationale recorded. " +
+      "The ISO standard itself is licensed (checklist-only).",
+    retrievedAt: "2026-07-29",
+  },
+  "fowler/parallel-change": {
+    sourceType: "web-article",
+    title: "Parallel Change (Danilo Sato, martinfowler.com)",
+    url: "https://martinfowler.com/bliki/ParallelChange.html",
+    license: "article-free-to-read",
+    abstract:
+      "The expand / migrate / contract pattern for making a backward-incompatible " +
+      "interface change safely: add the new shape alongside the old, migrate consumers " +
+      "incrementally, remove the old shape only once nothing depends on it — so every " +
+      "phase is independently releasable.",
+    retrievedAt: "2026-07-29",
+  },
+  "fowler/evolutionary-database-design": {
+    sourceType: "web-article",
+    title: "Evolutionary Database Design (Pramod Sadalage & Martin Fowler)",
+    url: "https://martinfowler.com/articles/evodb.html",
+    license: "article-free-to-read",
+    abstract:
+      "Database change as refactoring: every schema change is a small, sequenced " +
+      "migration script held in version control beside the application code, applied in " +
+      "order to a blank database. Conflicts are resolved by renumbering your own " +
+      "migration and retesting — not by editing one that has already been applied.",
+    retrievedAt: "2026-07-29",
+  },
+
   // ── IT operations / SRE family (WSID wave 6/7) ──
   // NIST SP 800-61 Rev.2 was withdrawn 2025-04-03 (superseded by Rev.3); the
   // IR-lifecycle phases are durable doctrine cited via an open secondary
@@ -1682,7 +1724,7 @@ const PROFESSION_EXTERNAL_SOURCES_GATED: Record<string, ExternalSourceEntry> = {
  * because its canonical home is a still-open sibling PR) resolve last-wins;
  * the entries are byte-identical, so there is no behavioral difference.
  */
-const ALL_PROFESSION_EXTERNAL_SOURCES: Record<string, ExternalSourceEntry> = {
+export const ALL_PROFESSION_EXTERNAL_SOURCES: Record<string, ExternalSourceEntry> = {
   ...PROFESSION_EXTERNAL_SOURCES,
   ...PROFESSION_EXTERNAL_SOURCES_GATED,
   ...PROVIDER_COMPLIANCE_EXTERNAL_SOURCES,
