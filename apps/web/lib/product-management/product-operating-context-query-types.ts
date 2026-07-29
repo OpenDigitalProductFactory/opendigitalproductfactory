@@ -159,6 +159,12 @@ export type BacklogRow = {
   estimateAgreed: boolean | null;
   claimStatus: string | null;
   claimedByAgentId: string | null;
+  activeBuild?: {
+    buildId: string;
+    phase: string;
+    updatedAt: Date;
+    productVersions?: Array<{ id: string; shippedAt: Date }>;
+  } | null;
   demandEvidenceLinks: Array<{
     evidenceLinkId: string;
     sourceKind: string;
@@ -182,6 +188,11 @@ export type ChangeRow = {
   title: string;
   status: string;
   updatedAt: Date;
+  changeRequest?: {
+    id: string;
+    plannedStartAt: Date | null;
+    plannedEndAt: Date | null;
+  };
 };
 export type EaElementRow = {
   id: string;
@@ -193,8 +204,8 @@ export type DependencyRow = {
   id: string;
   relationType: string;
   createdAt: Date;
-  fromProduct: { name: string };
-  toProduct: { name: string };
+  fromProduct: { id?: string; name: string };
+  toProduct: { id?: string; name: string };
 };
 export type ProductObjectiveRow = {
   objectiveId: string;

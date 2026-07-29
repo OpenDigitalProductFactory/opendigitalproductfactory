@@ -25,6 +25,10 @@ order: 3
    lines, business Products, or a real `DigitalProduct` enters Delivery Flow as
    **Raw**. Existing unscoped backlog records remain **Needs classification**;
    setup never guesses their intent or backfills a score.
+10. Product and product-line roadmaps remain empty until real demand passes the
+    governed funding gate and is explicitly linked to an active product
+    objective. Setup does not manufacture roadmap bets, dates, dependencies,
+    teams, or consumers from the selected product mix.
 
 ## Help Visibility Policy
 

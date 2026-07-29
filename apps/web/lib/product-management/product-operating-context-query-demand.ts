@@ -53,6 +53,18 @@ export function loadProductDemand(input: {
       estimateAgreed: true,
       claimStatus: true,
       claimedByAgentId: true,
+      activeBuild: {
+        select: {
+          buildId: true,
+          phase: true,
+          updatedAt: true,
+          productVersions: {
+            orderBy: { shippedAt: "desc" },
+            take: 1,
+            select: { id: true, shippedAt: true },
+          },
+        },
+      },
       demandEvidenceLinks: {
         where: { status: "active" },
         orderBy: { createdAt: "desc" },
@@ -133,14 +145,35 @@ export function projectProductDemand(input: {
       asOf: row.updatedAt,
       title: row.title,
       status: row.status,
+      workType: row.workType,
       productLineId: row.productLineId,
       businessProductId: row.businessProductId,
       demandStage: row.demandStage,
       score: row.demandScore,
+      effortSize: row.effortSize,
+      investmentBucket: row.investmentBucket,
+      lastEvidenceChange: row.activities[0]
+        ? {
+            kind: row.activities[0].kind,
+            summary: row.activities[0].summary,
+            recordedAt: row.activities[0].recordedAt,
+          }
+        : null,
+      delivery: row.activeBuild
+        ? {
+            sourceId:
+              row.activeBuild.productVersions?.[0]?.id ?? row.activeBuild.buildId,
+            phase: row.activeBuild.phase,
+            asOf:
+              row.activeBuild.productVersions?.[0]?.shippedAt ??
+              row.activeBuild.updatedAt,
+            shippedAt: row.activeBuild.productVersions?.[0]?.shippedAt ?? null,
+          }
+        : null,
     })),
     partialReason:
-      input.demand.length >= 250
-        ? "Demand evidence is bounded to the 250 newest records."
+      input.demand.length >= 100
+        ? "Demand evidence is bounded to the 100 newest records."
         : undefined,
     unavailableReason: !input.fullProfile
       ? "Demand is outside the commercial-summary query profile."

@@ -5,7 +5,7 @@ export const PRODUCT_LINE_ROUTE_CONTEXT: RouteContextDef = {
   domain: "Product-line Direction",
   sensitivity: "internal",
   domainContext:
-    "This route compares organization-owned business Products inside the Goods and Services for Sale hierarchy. Treat every metric as a cited projection with an explicit period, availability, freshness, confidence, and attribution rule. Product Sold revenue counts each root sale once; bundle allocations are non-additive. Never invent margin, conversion, repeat purchase, capacity, stock, quality, cannibalization, a product team, or a consumer. Recommendations are preparation only. When the operator wants to make a business choice, route the options and cited evidence through evaluate_org_business_decision so the organization's WWWD stance governs the recommendation. DigitalProduct remains the digital architecture and delivery authority.",
+    "This route compares organization-owned business Products inside the Goods and Services for Sale hierarchy and derives a product-line roadmap from the same canonical operating context. Treat every metric and roadmap bet as a cited projection with explicit availability, freshness, confidence, and attribution. A committed bet requires governed funding plus an active-objective link; never fabricate a date, dependency, product team, consumer, or roadmap authority. Product Sold revenue counts each root sale once; bundle allocations are non-additive. Recommendations are preparation only. Route business choices and stakeholder roadmap reviews through evaluate_org_business_decision. DigitalProduct remains the digital architecture and delivery authority.",
   domainTools: [
     "evaluate_org_business_decision",
     "search_knowledge",
@@ -14,6 +14,15 @@ export const PRODUCT_LINE_ROUTE_CONTEXT: RouteContextDef = {
   ],
   docsPath: "/docs/products/index",
   skills: [
+    {
+      label: "Review the line roadmap",
+      description:
+        "Explain committed bets, readiness gaps, confidence, and coordination",
+      capability: null,
+      taskType: "analysis",
+      prompt:
+        "Review the product-line roadmap projection on this page. Separate committed bets from readiness gaps, explain confidence and missing dates, and preserve ProductLine/Product as the business hierarchy while treating DigitalProduct edges only as architecture coordination evidence. If stakeholders need an auditable review, preview evaluate_org_business_decision; do not create a second roadmap authority.",
+    },
     {
       label: "Review this product line",
       description:

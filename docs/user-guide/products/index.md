@@ -134,6 +134,41 @@ Closing or archiving an outcome preserves its observations and work links.
 Product-line outcome posture is derived from its real Products; no second
 product-line outcome ledger is created.
 
+### Read the evidence-derived roadmap
+
+Open a business Product and choose **Direction → Roadmap**. A product line also
+shows its rolled-up roadmap on its **Direction** page. Both are current
+projections over the same operating context; neither is a separate planning
+board.
+
+The default view is **Now / Next / Later**:
+
+- **Now** contains funded, active-objective-linked work with current delivery
+  evidence.
+- **Next** contains funded, active-objective-linked work that is ready to
+  sequence.
+- **Later** contains committed work whose confidence, dependency, or
+  architecture evidence prevents a safer near-term position.
+
+A funded item is not a committed roadmap bet until it is explicitly linked to
+an active product objective. Unclassified demand, work that has not passed the
+funding gate, inactive objectives, and contradictory delivery records appear
+under **Needs evidence before commitment**. The roadmap does not guess the
+missing state.
+
+**Timeline**, **Outcomes**, and **Dependencies** are alternate views of the
+same projection. Timeline entries appear only when a canonical delivery or
+release record supplies a date. Digital-product architecture dependencies are
+shown as coordination evidence; they are not silently converted into business
+backlog dependencies.
+
+Choose **Review with coworker** to explain commitments, readiness gaps,
+confidence, dates, and coordination before recording a stakeholder review
+through the existing business-decision audit. **Download current snapshot**
+creates a timestamped JSON evidence packet with the filters, source IDs, and
+confidence shown on screen. The packet is marked non-importable and never
+replaces live demand, objective, dependency, or delivery records.
+
 The stable product URL is shared through a compatibility boundary. A business
 Product receives the business header and Direction navigation. A
 `DigitalProduct` keeps its existing lifecycle, architecture, delivery, and

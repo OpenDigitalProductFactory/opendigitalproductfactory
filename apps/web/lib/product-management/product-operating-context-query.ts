@@ -421,6 +421,13 @@ export async function loadProductOperatingContext(input: {
             title: true,
             status: true,
             updatedAt: true,
+            changeRequest: {
+              select: {
+                id: true,
+                plannedStartAt: true,
+                plannedEndAt: true,
+              },
+            },
             products: {
               where: { digitalProductId: { in: digitalProductIds } },
               select: { digitalProductId: true },
@@ -476,8 +483,8 @@ export async function loadProductOperatingContext(input: {
             id: true,
             relationType: true,
             createdAt: true,
-            fromProduct: { select: { name: true } },
-            toProduct: { select: { name: true } },
+            fromProduct: { select: { id: true, name: true } },
+            toProduct: { select: { id: true, name: true } },
           },
         })
       : Promise.resolve([]),
@@ -628,6 +635,7 @@ export async function loadProductOperatingContext(input: {
       asOf: row.updatedAt,
       title: row.name,
       status: row.lifecycleStatus ?? "unknown",
+      coordinationKind: "architecture" as const,
     })),
     ...dependencies.map((row) => ({
       id: row.id,
@@ -635,6 +643,10 @@ export async function loadProductOperatingContext(input: {
       asOf: row.createdAt,
       title: `${row.fromProduct.name} ${row.relationType} ${row.toProduct.name}`,
       status: "active",
+      coordinationKind: "architecture" as const,
+      fromProductId: row.fromProduct.id ?? null,
+      toProductId: row.toProduct.id ?? null,
+      relationType: row.relationType,
     })),
   ];
 
@@ -764,6 +776,9 @@ export async function loadProductOperatingContext(input: {
         asOf: row.updatedAt,
         title: row.title,
         status: row.status,
+        coordinationKind: "delivery" as const,
+        plannedStartAt: row.changeRequest?.plannedStartAt ?? null,
+        plannedEndAt: row.changeRequest?.plannedEndAt ?? null,
       })),
       unavailableReason: !fullProfile
         ? "Delivery changes are outside the commercial-summary query profile."

@@ -5,6 +5,7 @@ import { resolveDocsPath } from "@/lib/docs-route-map";
 import { CHANGE_REVIEWER_ROUTE_CONTEXT } from "./change-reviewer-route";
 import { PERFORMANCE_ROUTE_CONTEXT } from "./performance-route";
 import { PRODUCT_LINE_ROUTE_CONTEXT } from "./product-line-route-context";
+import { PRODUCT_ROUTE_CONTEXT } from "./product-route-context";
 import type { RouteContextDef } from "./route-context-types";
 export type { RouteContextDef } from "./route-context-types";
 
@@ -226,82 +227,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     ],
   },
 
-  "/portfolio/product": {
-    routePrefix: "/portfolio/product",
-    domain: "Products",
-    sensitivity: "internal",
-    domainContext:
-      "This historic route resolves one of two explicit authorities. A business Product is owned by Goods and Services for Sale and may expose direction, intelligence, demand, commercial packaging, and typed outcome learning. A DigitalProduct remains the digital architecture and delivery authority. Never infer one from the other, invent a team or consumer, or attach a business objective to DigitalProduct. On a business Product outcomes page, define/review objectives, append evidence, preserve correction history, and link only backlog already scoped to the same Product.",
-    domainTools: [
-      "summarize_estate_posture",
-      "review_estate_identity",
-      "validate_version_confidence",
-      "explain_blast_radius",
-      "create_product_objective",
-      "update_product_objective",
-      "review_product_objective",
-      "transition_product_objective",
-      "link_product_objective_work",
-      "record_product_outcome_observation",
-      "correct_product_outcome_observation",
-      "wiki_query",
-      "search_knowledge",
-      "search_knowledge_base",
-    ],
-    docsPath: "/docs/products/index",
-    skills: [
-      {
-        label: "Define an outcome",
-        description: "Capture what should improve and how evidence will be reviewed",
-        capability: "manage_backlog",
-        prompt:
-          "Help me define a product outcome. Confirm this is a business Product, ask for the problem, hoped-for change, measure, honest baseline, target, and review date, then preview the governed create_product_objective write. Do not invent missing evidence or use DigitalProduct as the owner.",
-      },
-      {
-        label: "Review outcome evidence",
-        description: "Assess current observations without filling evidence gaps",
-        capability: "manage_backlog",
-        prompt:
-          "Review the product outcome evidence on this page. Lead with overdue reviews and changed posture. Name missing baselines or incompatible measures as insufficient evidence, and only propose an observation or review write after showing its source and effect.",
-      },
-      {
-        label: "Summarize estate posture",
-        description: "Highlight the biggest support, freshness, and evidence risks",
-        capability: "view_inventory",
-        prompt: "Summarize the estate posture for this product and tell me what needs attention first.",
-      },
-      {
-        label: "Review item identity",
-        description: "Explain who made the item, what it likely is, and how solid that identity is",
-        capability: "view_inventory",
-        prompt: "Review the identity evidence for this item and tell me what we know versus what still needs review.",
-      },
-      {
-        label: "Explain blast radius",
-        description: "Show what breaks or becomes unreachable if an item fails",
-        capability: "view_inventory",
-        prompt: "Explain the blast radius for the item I'm looking at.",
-      },
-      {
-        label: "Check support posture",
-        description: "Assess vendor support lifecycle and update posture",
-        capability: "view_inventory",
-        prompt: "Check the support posture for this item.",
-      },
-      {
-        label: "Check version confidence",
-        description: "Explain how strong the version evidence really is",
-        capability: "view_inventory",
-        prompt: "Check how confident we are in the version information for this item.",
-      },
-      {
-        label: "Report an issue",
-        description: "Report a bug or give feedback",
-        capability: null,
-        prompt: "I'd like to report an issue or give feedback about this page.",
-      },
-    ],
-  },
+  "/portfolio/product": PRODUCT_ROUTE_CONTEXT,
 
   "/ea": {
     routePrefix: "/ea",
