@@ -188,10 +188,12 @@ recall conditions above.
 
 ## Exact-tree production-build reuse
 
-For pull-request and merge-group events, the `Production Build` job packages
-the deploy-equivalent standalone runtime plus static assets after a successful
-`pnpm --filter web build` and publishes it for the matching
-`UX Route Budget Sweep`. The one-day artifact contains a
+For pull-request, merge-group, push, and CI workflow-dispatch events, the
+`Production Build` job packages the deploy-equivalent standalone runtime plus
+static assets after a successful `pnpm --filter web build`. The CI workflow
+then calls the reusable UX runtime through an explicit `needs: build` edge and
+passes that same-run artifact to the stable `UX Route Budget Sweep` check. The
+one-day artifact contains a
 versioned receipt and a compressed payload. The receipt binds the payload to:
 
 - repository, commit SHA, and immutable Git tree SHA;
@@ -201,10 +203,10 @@ versioned receipt and a compressed payload. The receipt binds the payload to:
 - payload byte count and SHA-256 checksum; and
 - the successful production-build command plus creation/expiry times.
 
-The UX workflow finds only a `CI` run with the same event and Actions run-head
-identity (the PR head SHA for pull requests; `GITHUB_SHA` otherwise). The
-receipt separately binds the synthetic merge checkout and its immutable tree.
-After download, `scripts/ci-build-artifact.mjs consume` independently recomputes
+The UX runtime downloads only the artifact named for its current Actions run
+and attempt. It does not search other workflow runs or poll the Actions API.
+The receipt separately binds the synthetic merge checkout and its immutable
+tree. After download, `scripts/ci-build-artifact.mjs consume` independently recomputes
 the current tree, toolchain, payload checksum, byte count, archive inventory,
 and expiry before replacing `apps/web/.next`. The archive must contain only the
 `.next` root and must include the standalone runtime's `BUILD_ID` and canonical
@@ -213,30 +215,25 @@ assets to the standalone layout, then starts the same `apps/web/server.js`
 entry point used by the production container. Development-only server output
 and source maps are not transported.
 
-This follows GitHub's cross-run artifact contract: a consumer supplies both a
-token and source run identifier, and the token has only `actions: read` plus
-`contents: read`. See [Store and share data with workflow artifacts](https://docs.github.com/en/actions/tutorials/store-and-share-data)
-and [REST API endpoints for GitHub Actions artifacts](https://docs.github.com/en/rest/actions/artifacts).
+This follows GitHub's same-run artifact contract: the producer uploads a named
+workflow artifact and a dependent job downloads it in the same run. The
+workflow retains only `actions: read` plus `contents: read`. See
+[Store and share data with workflow artifacts](https://docs.github.com/en/actions/tutorials/store-and-share-data).
 
-Reuse is an optimization, never an exemption. Discovery is bounded to ten
-minutes, but that deadline only bounds a producer that is still queued or
-running. Once at least one matching producer exists and every one of them is
-terminal without a usable artifact, discovery stops immediately and the local
-build starts: no later poll can surface evidence that a finished run never
-published. This matters most on `heavy=false` pull requests, where `Production
-Build` is skipped by design and no artifact can ever appear. A run status the
-locator does not recognise counts as still active, so uncertainty preserves
-bounded polling rather than abandoning reuse early. Missing, late, expired,
+Reuse is an optimization, never an exemption. On `heavy=false` changes, or
+when packaging/upload does not produce a usable artifact, the reusable runtime
+starts the normal local production build immediately. Missing, expired,
 incomplete, corrupt, or identity-mismatched
 evidence removes any partial `.next` output and runs the normal local production
 build. Packaging or upload failure is also non-authoritative: `Production Build`
-retains its successful result and UX rebuilds locally. Main-branch pushes and
-manual baseline calibration always build locally;
-cross-lifecycle merge-group-to-push reuse remains owned by `BI-9585E580`.
+retains its successful result and UX rebuilds locally. Manual baseline
+calibration invokes the reusable workflow directly and always builds locally.
+The retained cross-run locator is not used by the blocking PR, merge-group, or
+push path; cross-lifecycle merge-group-to-push reuse remains owned by
+`BI-9585E580`.
 
 The CI and UX job summaries report payload bytes and packaging or
-download/validation/extraction duration, and the locate step emits a
-`discovery_ms` output on every outcome. Compare those transfer measurements
+download/validation/extraction duration. Compare those transfer measurements
 with the avoided UX build duration before retaining or tuning the artifact.
 
 ## UX route-sweep stability

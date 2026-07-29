@@ -35,11 +35,14 @@ Branch protection uses the smaller, versioned contract in
 [`config/merge-readiness-policy.json`](../../config/merge-readiness-policy.json):
 
 - **Merge Readiness** aggregates every job in `.github/workflows/ci.yml`;
-- **UX Route Budget Sweep** owns the separate browser/Postgres runtime; and
+- **UX Route Budget Sweep** is the stable aggregate for the reusable
+  browser/Postgres runtime called by CI; and
 - **DCO** proves commit sign-off.
 
-Both repository workflows run for `pull_request` and `merge_group`. The repo guard fails if a CI job
-is not included in the aggregate or either workflow loses merge-group coverage. Use
+CI runs for `pull_request` and `merge_group`, while the UX implementation is a
+reusable workflow that CI calls after its exact-tree production build. The repo
+guard fails if a CI job is not included in the aggregate, CI loses merge-group
+coverage, or the UX workflow loses its callable contract. Use
 `pnpm merge-policy:check` for local conformance and `pnpm merge-policy:audit` to compare the
 manifest with live `main` protection. `pnpm merge-policy:apply` changes only required status
 checks; use it after new contexts have proven green on `main`, never before.

@@ -1,8 +1,9 @@
 name: CI
 
 # CodeQL actions/missing-workflow-permissions: least-privilege default
-# applied at workflow level. All CI jobs only need to read the source.
+# applied at workflow level. UX also reads same-run build artifacts.
 permissions:
+  actions: read
   contents: read
 
 on:
@@ -382,9 +383,7 @@ jobs:
       # the payload checksum to the immutable Git tree, planner, and toolchain.
       - name: Package exact-tree production build
         id: package-build
-        if: >-
-          needs.changes.outputs.heavy == 'true' &&
-          (github.event_name == 'pull_request' || github.event_name == 'merge_group')
+        if: needs.changes.outputs.heavy == 'true'
         continue-on-error: true
         env:
           DPF_CI_PLANNER_DIGEST: ${{ needs.changes.outputs.evidence_plan_digest }}
@@ -393,7 +392,6 @@ jobs:
       - name: Upload exact-tree production build
         if: >-
           needs.changes.outputs.heavy == 'true' &&
-          (github.event_name == 'pull_request' || github.event_name == 'merge_group') &&
           steps.package-build.outcome == 'success'
         continue-on-error: true
         uses: actions/upload-artifact@v7
@@ -402,6 +400,38 @@ jobs:
           path: ${{ runner.temp }}/web-production-build
           if-no-files-found: error
           retention-days: 1
+
+  # BI-D9E8B8CB. The route runtime is a reusable workflow so manual baseline
+  # calibration and blocking CI share one behavioral definition. `needs: build`
+  # replaces cross-workflow Actions API polling with a direct producer edge.
+  ux-route-sweep-runtime:
+    name: UX Route Sweep Runtime
+    needs: [changes, build]
+    uses: ./.github/workflows/ux-route-sweep.yml
+    permissions:
+      actions: read
+      contents: read
+    with:
+      reuse_current_run_build: ${{ needs.changes.outputs.heavy == 'true' }}
+      workers: "2"
+
+  # Preserve the stable branch-protection context even though the runtime now
+  # lives in a reusable workflow. `always()` converts dependency skip/failure
+  # into an explicit red check instead of leaving merge queue status ambiguous.
+  ux-route-sweep:
+    name: UX Route Budget Sweep
+    runs-on: ubuntu-latest
+    if: always()
+    needs: ux-route-sweep-runtime
+    steps:
+      - name: Assert the route runtime passed
+        env:
+          RUNTIME_RESULT: ${{ needs.ux-route-sweep-runtime.result }}
+        run: |
+          if [ "$RUNTIME_RESULT" != "success" ]; then
+            echo "::error::UX Route Sweep Runtime concluded $RUNTIME_RESULT"
+            exit 1
+          fi
 
   dockerfile-node-version:
     name: Dockerfile Node Version
@@ -510,6 +540,8 @@ jobs:
       - test-packages
       - unit-tests
       - build
+      - ux-route-sweep-runtime
+      - ux-route-sweep
       - dockerfile-node-version
       - compose-image-pins
       - adp-integration-tests
