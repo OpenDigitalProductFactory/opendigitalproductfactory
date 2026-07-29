@@ -37,12 +37,15 @@ export interface ResourceUnitGridProps {
 /** A responsive grid of units — the interior of a zone. */
 export function ResourceUnitGrid({ units, className = "" }: ResourceUnitGridProps) {
   return (
-    <div
+    <ul
+      aria-label="Resources"
       className={`grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 ${className}`.trim()}
     >
       {units.map(({ key, ...unit }) => (
-        <ResourceUnit key={key} {...unit} />
+        <li key={key}>
+          <ResourceUnit {...unit} />
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }

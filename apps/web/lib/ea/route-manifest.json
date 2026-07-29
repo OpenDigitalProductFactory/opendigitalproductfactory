@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 586,
+  "routeCount": 587,
   "routes": [
     {
       "routePath": "/",
@@ -1063,6 +1063,17 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/onboarding/roster/import/route.ts"
+    },
+    {
+      "routePath": "/api/operations/snapshot",
+      "kind": "route",
+      "segments": [
+        "api",
+        "operations",
+        "snapshot"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/operations/snapshot/route.ts"
     },
     {
       "routePath": "/api/ops/self-upgrade/impact-summary",

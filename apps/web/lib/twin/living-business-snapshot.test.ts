@@ -18,6 +18,7 @@ import {
   statusIntent,
   type LivingBusinessClient,
 } from "./living-business-snapshot";
+import { loadVersionedOperationsSnapshot } from "./operations-loader";
 import type { WorkforceMember } from "@/lib/workforce/workforce-roster";
 
 const NOW = new Date("2026-07-15T09:00:00Z");
@@ -340,5 +341,85 @@ describe("loadLivingBusinessSnapshot — loader", () => {
     // waitlist — not the archetype-agnostic Workforce/AI counters (BI-7C95A586).
     expect(snap!.capacityChips.some((c) => c.key === "tables-open")).toBe(true);
     expect(snap!.capacityChips.some((c) => c.key === "ai")).toBe(false);
+
+    const ticks = [1_000, 1_042];
+    const operations = await loadVersionedOperationsSnapshot({
+      db,
+      now: NOW,
+      clock: () => ticks.shift() ?? 1_042,
+    });
+    expect(operations).not.toBeNull();
+    expect(operations!.identity).toMatchObject({ archetypeId: "restaurant", template: "FLOOR" });
+    expect(operations!.telemetry).toMatchObject({ durationMs: 42, queryCount: 10 });
+    expect(operations!.telemetry.payloadBytes).toBe(
+      new TextEncoder().encode(JSON.stringify(operations)).byteLength,
+    );
+    expect(operations!.freshness).toBe("current");
+
+    const localeFailing = await loadVersionedOperationsSnapshot({
+      db: {
+        ...db,
+        orgSettings: {
+          findFirst: async () => {
+            throw new Error("locale source unavailable");
+          },
+        },
+      } as unknown as LivingBusinessClient,
+      now: NOW,
+    });
+    expect(localeFailing!.degradedSources).toContainEqual({
+      source: "locale",
+      reason: "query-failed",
+    });
+    expect(localeFailing!.freshness).toBe("degraded");
+  });
+
+  it("keeps a restaurant busy-shift snapshot bounded to the operational read contract", async () => {
+    const bookings = Array.from({ length: 24 }, (_, index) => ({
+      id: `booking-${index + 1}`,
+      providerId: index < 12 ? `table-${(index % 12) + 1}` : null,
+      scheduledAt: new Date(NOW.getTime() + index * 5 * 60_000),
+      createdAt: new Date(NOW.getTime() - (index + 1) * 60_000),
+      status: index < 12 ? "confirmed" : "pending",
+      provider: index < 12 ? { name: `Table ${(index % 12) + 1}` } : null,
+    }));
+    const providers = Array.from({ length: 12 }, (_, index) => ({
+      id: `table-${index + 1}`,
+      name: `Table ${index + 1}`,
+      isActive: true,
+    }));
+    const db = {
+      ...emptyRoster,
+      storefrontConfig: {
+        findFirst: async () => ({
+          archetype: { archetypeId: "restaurant", name: "Dine-in restaurant" },
+        }),
+      },
+      orgSettings: {
+        findFirst: async () => ({
+          baseCurrency: "USD",
+          locale: "en-US",
+          countryCode: "US",
+        }),
+      },
+      bill: { findMany: async () => [] },
+      taxObligationPeriod: { findMany: async () => [] },
+      obligation: { findMany: async () => [] },
+      invoice: { findMany: async () => [] },
+      storefrontBooking: { findMany: async () => bookings },
+      serviceProvider: { findMany: async () => providers },
+    } as unknown as LivingBusinessClient;
+
+    const operations = await loadVersionedOperationsSnapshot({ db, now: NOW });
+
+    expect(operations).not.toBeNull();
+    expect(operations!.identity).toMatchObject({ archetypeId: "restaurant", template: "FLOOR" });
+    expect(operations!.scene.zones.flatMap((zone) => zone.units)).toHaveLength(12);
+    // The complete physical floor stays visible, while repeated demand rows are
+    // intentionally bounded for decision-speed and payload stability.
+    expect(operations!.scene.workItems).toHaveLength(5);
+    expect(operations!.queue.queues.flatMap((queue) => queue.items)).toHaveLength(6);
+    expect(operations!.telemetry.queryCount).toBe(10);
+    expect(operations!.telemetry.payloadBytes).toBeLessThan(100_000);
   });
 });

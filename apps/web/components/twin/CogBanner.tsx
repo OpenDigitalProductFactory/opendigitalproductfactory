@@ -23,7 +23,11 @@ export interface CogBannerProps {
   confirmLabel?: string;
   onConfirm?: () => void;
   onDismiss?: () => void;
-  /** Confirmed/handled — collapses to an attributed, non-actionable state. */
+  status?: "idle" | "pending" | "confirmed" | "conflict" | "rejected" | "unsupported";
+  statusMessage?: string;
+  /** Conflict-safe choices returned by the durable operations provider. */
+  alternatives?: readonly string[];
+  /** @deprecated Use status="confirmed". Preserved for existing callers. */
   resolved?: boolean;
 }
 
@@ -34,8 +38,13 @@ export function CogBanner({
   confirmLabel = "Confirm",
   onConfirm,
   onDismiss,
+  status = onConfirm ? "idle" : "unsupported",
+  statusMessage,
+  alternatives = [],
   resolved,
 }: CogBannerProps) {
+  const effectiveStatus = resolved ? "confirmed" : status;
+  const actionable = effectiveStatus === "idle" || effectiveStatus === "conflict";
   return (
     <div
       className="flex flex-col gap-2 rounded-lg border p-3"
@@ -43,15 +52,16 @@ export function CogBanner({
         borderColor: "var(--dpf-accent)",
         backgroundColor: "var(--dpf-accent-soft)",
       }}
-      data-resolved={resolved ? "true" : undefined}
+      data-resolved={effectiveStatus === "confirmed" ? "true" : undefined}
+      data-command-status={effectiveStatus}
     >
       <div className="flex items-start gap-2">
         <Bot aria-hidden size={16} style={{ color: "var(--dpf-accent)" }} className="mt-0.5" />
         <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--dpf-accent)]">
+          <span className="text-dpf-caption font-semibold uppercase tracking-[0.14em] text-[var(--dpf-accent)]">
             {cogLabel} suggests
           </span>
-          <span className="text-sm font-medium text-[var(--dpf-text)]">{proposal}</span>
+          <span className="text-dpf-body font-medium text-[var(--dpf-text)]">{proposal}</span>
         </div>
       </div>
 
@@ -60,7 +70,7 @@ export function CogBanner({
           {signals.map((s) => (
             <span
               key={s}
-              className="rounded-full border border-[var(--dpf-accent)] px-1.5 py-0.5 text-[10px] text-[var(--dpf-accent)]"
+              className="rounded-full border border-[var(--dpf-accent)] px-1.5 py-0.5 text-dpf-caption text-[var(--dpf-accent)]"
             >
               {s}
             </span>
@@ -68,29 +78,62 @@ export function CogBanner({
         </div>
       ) : null}
 
-      {resolved ? (
-        <span className="inline-flex items-center gap-1 pl-6 text-[11px] text-[var(--dpf-success)]">
+      {effectiveStatus === "confirmed" ? (
+        <span className="inline-flex items-center gap-1 pl-6 text-dpf-caption text-[var(--dpf-success)]">
           <Check aria-hidden size={12} /> Confirmed
         </span>
       ) : (
-        <div className="flex items-center gap-2 pl-6">
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium text-[var(--dpf-surface-1)]"
-            style={{ backgroundColor: "var(--dpf-accent)" }}
-          >
-            <Check aria-hidden size={13} />
-            {confirmLabel}
-          </button>
-          <button
-            type="button"
-            onClick={onDismiss}
-            className="inline-flex items-center gap-1 rounded-md border border-[var(--dpf-border)] px-2 py-1 text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
-          >
-            <X aria-hidden size={13} />
-            Dismiss
-          </button>
+        <div className="flex flex-col gap-1.5 pl-6">
+          {effectiveStatus !== "idle" ? (
+            <span className="text-dpf-caption text-[var(--dpf-muted)]" role="status">
+              {statusMessage ??
+                (effectiveStatus === "pending"
+                  ? "Assigning…"
+                  : effectiveStatus === "conflict"
+                    ? "The operation changed. Review the latest state and try again."
+                    : effectiveStatus === "rejected"
+                      ? "This assignment was not applied."
+                      : "Connect an operations command provider before assigning.")}
+            </span>
+          ) : null}
+          {effectiveStatus === "conflict" && alternatives.length > 0 ? (
+            <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1.5">
+              <span className="text-dpf-caption font-semibold uppercase tracking-[0.12em] text-[var(--dpf-muted)]">
+                Available alternatives
+              </span>
+              <ul className="mt-1 list-disc pl-4 text-dpf-caption text-[var(--dpf-text-secondary)]">
+                {alternatives.map((alternative) => (
+                  <li key={alternative}>{alternative}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={!actionable || !onConfirm}
+              className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-dpf-caption font-medium text-[var(--dpf-surface-1)]"
+              style={{ backgroundColor: "var(--dpf-accent)" }}
+            >
+              <Check aria-hidden size={13} />
+              {effectiveStatus === "pending"
+                ? "Assigning…"
+                : effectiveStatus === "unsupported"
+                  ? "Command unavailable"
+                  : effectiveStatus === "conflict"
+                    ? "Try again"
+                    : confirmLabel}
+            </button>
+            <button
+              type="button"
+              onClick={onDismiss}
+              className="inline-flex items-center gap-1 rounded-md border border-[var(--dpf-border)] px-2 py-1 text-dpf-caption text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+            >
+              <X aria-hidden size={13} />
+              Dismiss
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -82,10 +82,18 @@ describe("resolveOrgLocale", () => {
     expect(out).toEqual({ currency: "AUD", locale: "en-AU", countryCode: "AU" });
   });
 
-  it("never throws when the query fails — degrades to the default", async () => {
+  it("never throws when the query fails — degrades to the default and reports it", async () => {
     const failing: OrgLocaleClient = {
       orgSettings: { findFirst: async () => { throw new Error("db down"); } },
     };
-    expect(await resolveOrgLocale(failing)).toEqual({ currency: "USD", locale: "en-US", countryCode: null });
+    let failure: unknown;
+    expect(
+      await resolveOrgLocale(failing, {
+        onReadFailure: (error) => {
+          failure = error;
+        },
+      }),
+    ).toEqual({ currency: "USD", locale: "en-US", countryCode: null });
+    expect(failure).toBeInstanceOf(Error);
   });
 });

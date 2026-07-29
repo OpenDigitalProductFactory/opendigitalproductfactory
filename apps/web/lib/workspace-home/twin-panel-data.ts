@@ -21,13 +21,25 @@ import {
 } from "@dpf/storefront-templates";
 
 import { buildDemoTwinSnapshot, type TwinSnapshot } from "@/components/twin";
-import { loadLivingBusinessSnapshot } from "@/lib/twin/living-business-snapshot";
+import { loadVersionedOperationsSnapshot } from "@/lib/twin/operations-loader";
+import {
+  toLivingBusinessSnapshot,
+  type OperationsSnapshotTelemetry,
+} from "@/lib/twin/operations-snapshot";
 
 export interface WorkspaceTwinPresentation {
   archetypeId: string;
   archetypeName: string;
   profile: TwinProfile;
   snapshot: TwinSnapshot;
+  operations: {
+    version: string;
+    asOf: string;
+    sourceWatermark: string | null;
+    freshness: "current" | "stale" | "degraded";
+    degradedSourceCount: number;
+    telemetry: OperationsSnapshotTelemetry;
+  } | null;
   /**
    * True while the snapshot is deterministic demo fixture data — the live
    * `LivingBusinessSnapshot` projection (parent spec P4) has not been wired.
@@ -83,6 +95,7 @@ export function resolveWorkspaceTwinPresentation(
     archetypeName: archetypeName?.trim() || def.name,
     profile,
     snapshot: condenseForWorkspaceHome(snapshot),
+    operations: null,
     demo,
   };
 }
@@ -100,14 +113,26 @@ export function resolveWorkspaceTwinPresentation(
 export async function loadWorkspaceTwinPresentation(
   archetypeId: string | null | undefined,
   archetypeName?: string | null,
-  opts?: Parameters<typeof loadLivingBusinessSnapshot>[0],
+  opts?: Parameters<typeof loadVersionedOperationsSnapshot>[0],
 ): Promise<WorkspaceTwinPresentation | null> {
   const base = resolveWorkspaceTwinPresentation(archetypeId, archetypeName);
   if (!base) return null;
   try {
-    const live = await loadLivingBusinessSnapshot(opts);
-    if (live && live.archetypeId === base.archetypeId) {
-      return { ...base, snapshot: condenseForWorkspaceHome(live), demo: false };
+    const operations = await loadVersionedOperationsSnapshot(opts);
+    if (operations && operations.identity.archetypeId === base.archetypeId) {
+      return {
+        ...base,
+        snapshot: condenseForWorkspaceHome(toLivingBusinessSnapshot(operations)),
+        operations: {
+          version: operations.version,
+          asOf: operations.asOf,
+          sourceWatermark: operations.sourceWatermark,
+          freshness: operations.freshness,
+          degradedSourceCount: operations.degradedSources.length,
+          telemetry: operations.telemetry,
+        },
+        demo: false,
+      };
     }
   } catch {
     // Projection failed (no DB in this context, transient error) — keep the demo.
