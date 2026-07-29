@@ -219,6 +219,10 @@ export async function submitRemoteCoworkerTask(input: {
     agentId: resolvedAgentId,
     mode: toolMode,
     externalAccessEnabled: true,
+    // BI-CAP-F2D39F8F: budget the attachment to the serving model; the remote
+    // task prompt ranks which tools stay attached.
+    routeContext: parsed.routeContext,
+    intentQuery: parsed.prompt,
   });
 
   try {
@@ -228,6 +232,7 @@ export async function submitRemoteCoworkerTask(input: {
       sensitivity: agent.sensitivity ?? "internal",
       tools: tools.tools,
       toolsForProvider: tools.toolsForProvider,
+      deferredTools: tools.deferredTools,
       userId: token.userId,
       routeContext: parsed.routeContext,
       agentId: resolvedAgentId,
