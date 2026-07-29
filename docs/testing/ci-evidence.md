@@ -299,6 +299,21 @@ change-lanes projection's ten-minute stale-heartbeat threshold. Retaining only
 the earlier seed timestamp would make the same source alternate between a
 healthy lane and a five-word stale-heartbeat blocker.
 
+The portal itself boots in **measurement runtime** (`DPF_MEASUREMENT_RUNTIME=1`,
+BI-232BA634). A production boot fires instrumentation reconcilers and watchdog
+intervals that keep writing operational state — self-upgrade/quiescence/backup
+stuck-run reconciles, build resume, model-context re-assertion, org backfills —
+while the crawl is measuring the routes that render that state; merge-group runs
+30434754297 and 30438124151 measured the identical git tree (`79055b61`) and
+flipped fail/pass on `/workspace` because of exactly such a write. Under
+measurement runtime, render-relevant idempotent boot syncs (platform version,
+OVSM and org-WWWD backfills) are awaited inside `register()` so every request
+observes the same post-sync state, and operational self-heal maintenance is
+skipped — an ephemeral sweep portal has nothing to heal, and its background
+writes are the nondeterminism. Production and dev boots (flag unset) are
+unchanged; the classification lives in `apps/web/lib/runtime/measurement-runtime.ts`
+and the gating in `apps/web/instrumentation.ts`.
+
 Fixture-facing health copy must also be semantically stable. The Communications
 speech-to-text card classifies transport failures as `endpoint unavailable`
 instead of rendering Node/undici's platform-specific DNS or socket error text.

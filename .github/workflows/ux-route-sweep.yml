@@ -194,6 +194,11 @@ jobs:
       - name: Start the portal
         env:
           DPF_REUSED_BUILD: ${{ steps.materialize-build.outputs.reused }}
+          # Measurement-runtime boot (BI-232BA634): render-relevant boot syncs
+          # are awaited before the portal serves, and the fire-and-forget
+          # self-heal reconcilers/watchdogs that mutate operational state
+          # mid-crawl are disabled — same-tree sweeps measure the same portal.
+          DPF_MEASUREMENT_RUNTIME: "1"
         run: |
           if [ "$DPF_REUSED_BUILD" = "true" ]; then
             (cd apps/web/.next/standalone && PORT=3000 HOSTNAME=127.0.0.1 node apps/web/server.js) &
