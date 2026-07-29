@@ -336,7 +336,7 @@ export function StorefrontInbox({
               </span>
             </div>
             <div style={{ fontSize: 13 }}>{e.name ?? "Anonymous"} · {e.email}</div>
-            {e.type === "booking" ? (
+            {e.type === "booking" && (
               <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>
                   {e.itemName ?? "Reservation"}
@@ -356,7 +356,8 @@ export function StorefrontInbox({
                   </div>
                 )}
               </div>
-            ) : e.type === "order" ? (
+            )}
+            {e.type === "order" && (
               <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>
                   {e.itemName ?? "Order"}
@@ -368,8 +369,9 @@ export function StorefrontInbox({
                   </div>
                 )}
               </div>
-            ) : (
-              e.detail && <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12, marginTop: 2 }}>{e.detail}</div>
+            )}
+            {e.type !== "booking" && e.type !== "order" && e.detail && (
+              <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12, marginTop: 2 }}>{e.detail}</div>
             )}
             {e.type === "inquiry" && (() => {
               // A successful send stores the created itemId (BI-…); anything
