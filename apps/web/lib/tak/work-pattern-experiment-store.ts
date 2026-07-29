@@ -1,6 +1,14 @@
+import { randomUUID } from "node:crypto";
+
 import { resolveScheduledOwnerUserId } from "@/lib/queue/scheduled-owner";
 import { isRecord } from "@/lib/shared/coerce";
 
+import {
+  buildWorkPatternFixtureArtifactParts,
+  parseHermeticBuildReplayFixture,
+  workPatternFixtureArtifactId,
+  workPatternFixtureDigest,
+} from "./work-pattern-experiment-fixture";
 import {
   workPatternCellKey,
   workPatternExperimentChildTaskRunId,
@@ -54,6 +62,20 @@ export type WorkPatternStoredTaskRun = {
 
 export type WorkPatternTaskRunCreate = Omit<WorkPatternStoredTaskRun, "id">;
 
+export type WorkPatternStoredTaskArtifact = {
+  artifactId: string;
+  taskRunId: string;
+  parts: unknown;
+  metadata: unknown;
+};
+
+export type WorkPatternTaskArtifactCreate = WorkPatternStoredTaskArtifact & {
+  id: string;
+  name: string;
+  description: string;
+  producerAgentId: string;
+};
+
 export type WorkPatternExperimentPersistenceSession = {
   listTaskRuns: (repeatedPatternKey: string) => Promise<WorkPatternStoredTaskRun[]>;
   findTaskRun: (taskRunId: string) => Promise<WorkPatternStoredTaskRun | null>;
@@ -62,6 +84,12 @@ export type WorkPatternExperimentPersistenceSession = {
     taskRunId: string,
     data: Partial<Pick<WorkPatternStoredTaskRun, "status" | "a2aMetadata">>,
   ) => Promise<WorkPatternStoredTaskRun>;
+  findTaskArtifact: (
+    artifactId: string,
+  ) => Promise<WorkPatternStoredTaskArtifact | null>;
+  createTaskArtifact: (
+    data: WorkPatternTaskArtifactCreate,
+  ) => Promise<WorkPatternStoredTaskArtifact>;
   upsertLedger: (
     ledgerId: string,
     create: Record<string, unknown>,
@@ -89,6 +117,7 @@ export type WorkPatternExperimentInput = {
     methodVariantKey: string;
     modelVariantKey: string;
     executionRequest?: unknown;
+    fixtureParts?: unknown;
   }>;
   orchestratingAgentId: string;
   buildId?: string;
@@ -156,6 +185,50 @@ function assertNonEmpty(value: string, error: string): void {
   if (typeof value !== "string" || value.trim().length === 0) throw new Error(error);
 }
 
+type PreparedFixture = {
+  logicalFixtureKey: string;
+  artifactId: string;
+  fixtureDigest: string;
+  parts: ReturnType<typeof buildWorkPatternFixtureArtifactParts>;
+};
+
+function prepareFixtureArtifacts(
+  input: WorkPatternExperimentInput,
+  definitionKey: string,
+): Map<string, PreparedFixture> {
+  const prepared = new Map<string, PreparedFixture>();
+  for (const cell of input.cells) {
+    if (cell.fixtureParts === undefined) continue;
+    if (
+      !isRecord(cell.executionRequest)
+      || typeof cell.executionRequest.fixtureKey !== "string"
+      || cell.executionRequest.fixtureKey.trim().length === 0
+    ) {
+      throw new Error("work_pattern_experiment_fixture_key_missing");
+    }
+    const fixture = parseHermeticBuildReplayFixture(cell.fixtureParts);
+    if (!fixture) throw new Error("work_pattern_experiment_fixture_invalid");
+    const logicalFixtureKey = cell.executionRequest.fixtureKey;
+    const fixtureDigest = workPatternFixtureDigest(fixture);
+    const existing = prepared.get(logicalFixtureKey);
+    if (existing && existing.fixtureDigest !== fixtureDigest) {
+      throw new Error(
+        `work_pattern_experiment_fixture_changed:${logicalFixtureKey}`,
+      );
+    }
+    prepared.set(logicalFixtureKey, {
+      logicalFixtureKey,
+      artifactId: workPatternFixtureArtifactId(
+        definitionKey,
+        logicalFixtureKey,
+      ),
+      fixtureDigest,
+      parts: buildWorkPatternFixtureArtifactParts(fixture),
+    });
+  }
+  return prepared;
+}
+
 export async function createOrResumeWorkPatternExperiment(
   input: WorkPatternExperimentInput,
   deps: WorkPatternExperimentStoreDeps,
@@ -170,10 +243,12 @@ export async function createOrResumeWorkPatternExperiment(
   assertNonEmpty(input.pairKey, "missing_pair_key");
   if (input.cells.length === 0) throw new Error("missing_experiment_cells");
 
+  const definitionKey = workPatternExperimentDefinitionKey(input.definition);
+  const preparedFixtures = prepareFixtureArtifacts(input, definitionKey);
+
   // Resolve the accountable human before entering the write transaction so a
   // missing install owner cannot leave a partial manifest.
   const userId = await (deps.resolveOwnerUserId ?? resolveScheduledOwnerUserId)();
-  const definitionKey = workPatternExperimentDefinitionKey(input.definition);
   const repeatedPatternKey = patternStorageKey(definitionKey);
 
   return deps.persistence.withDefinitionLock(definitionKey, async (session) => {
@@ -236,6 +311,38 @@ export async function createOrResumeWorkPatternExperiment(
       throw new Error("work_pattern_experiment_status_divergence");
     }
 
+    for (const fixture of preparedFixtures.values()) {
+      const existing = await session.findTaskArtifact(fixture.artifactId);
+      if (existing) {
+        const existingFixture = parseHermeticBuildReplayFixture(existing.parts);
+        if (
+          !existingFixture
+          || workPatternFixtureDigest(existingFixture) !== fixture.fixtureDigest
+        ) {
+          throw new Error(
+            `work_pattern_experiment_fixture_changed:${fixture.logicalFixtureKey}`,
+          );
+        }
+        continue;
+      }
+      await session.createTaskArtifact({
+        id: randomUUID(),
+        artifactId: fixture.artifactId,
+        taskRunId: parent.id,
+        name: `Work-pattern fixture ${fixture.logicalFixtureKey}`,
+        description:
+          `Immutable fixture for ${storedManifest.experimentDefinitionKey}.`,
+        parts: fixture.parts,
+        metadata: {
+          schemaVersion: 1,
+          experimentDefinitionKey: storedManifest.experimentDefinitionKey,
+          logicalFixtureKey: fixture.logicalFixtureKey,
+          fixtureDigest: fixture.fixtureDigest,
+        },
+        producerAgentId: input.orchestratingAgentId,
+      });
+    }
+
     const children: WorkPatternStoredTaskRun[] = [];
     const scheduledChildTaskRunIds: string[] = [];
     for (const cell of requiredCells) {
@@ -247,7 +354,7 @@ export async function createOrResumeWorkPatternExperiment(
       });
       let child = await session.findTaskRun(taskRunId);
       if (!child) {
-        const normalizedExecutionRequest =
+        let normalizedExecutionRequest =
           cell.executionRequest !== undefined && isRecord(cell.executionRequest)
             ? {
                 ...cell.executionRequest,
@@ -259,6 +366,28 @@ export async function createOrResumeWorkPatternExperiment(
                 modelVariantKey: cell.modelVariantKey,
               }
             : cell.executionRequest;
+        if (
+          isRecord(normalizedExecutionRequest)
+          && typeof normalizedExecutionRequest.fixtureKey === "string"
+        ) {
+          const fixture = preparedFixtures.get(
+            normalizedExecutionRequest.fixtureKey,
+          );
+          if (fixture) {
+            normalizedExecutionRequest = {
+              ...normalizedExecutionRequest,
+              fixtureKey: fixture.artifactId,
+            };
+          } else if (
+            !(await session.findTaskArtifact(
+              normalizedExecutionRequest.fixtureKey,
+            ))
+          ) {
+            throw new Error(
+              `work_pattern_experiment_fixture_unavailable:${normalizedExecutionRequest.fixtureKey}`,
+            );
+          }
+        }
         const cellMetadata: WorkPatternCellMetadata = {
           schemaVersion: 1,
           experimentRunId,
@@ -438,6 +567,10 @@ type PrismaLike = {
     options?: { isolationLevel: "Serializable" },
   ) => Promise<T>;
   taskRun: PrismaLikeTaskRun;
+  taskArtifact: {
+    findUnique: (args: unknown) => Promise<WorkPatternStoredTaskArtifact | null>;
+    create: (args: unknown) => Promise<WorkPatternStoredTaskArtifact>;
+  };
   decisionShadowLedger: {
     upsert: (args: unknown) => Promise<Record<string, unknown>>;
   };
@@ -470,6 +603,18 @@ function prismaSession(client: Omit<PrismaLike, "$transaction">): WorkPatternExp
         where: { taskRunId },
         data,
       }),
+    findTaskArtifact: (artifactId) =>
+      client.taskArtifact.findUnique({
+        where: { artifactId },
+        select: {
+          artifactId: true,
+          taskRunId: true,
+          parts: true,
+          metadata: true,
+        },
+      }),
+    createTaskArtifact: (data) =>
+      client.taskArtifact.create({ data }),
     upsertLedger: (ledgerId, create) =>
       client.decisionShadowLedger.upsert({
         where: { ledgerId },

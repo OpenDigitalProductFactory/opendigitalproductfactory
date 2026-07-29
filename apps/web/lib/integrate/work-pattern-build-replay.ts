@@ -1,8 +1,15 @@
 import { createHash } from "node:crypto";
 
-import { isRecord } from "@/lib/shared/coerce";
 import type { WorkPatternExecutionProfile } from "@/lib/tak/work-pattern-experiment-types";
 import { DEFAULT_WORK_PATTERN_PROMOTION_POLICY } from "@/lib/tak/work-pattern-promotion-policy";
+import {
+  parseHermeticBuildReplayFixture,
+} from "@/lib/tak/work-pattern-experiment-fixture";
+
+export {
+  parseHermeticBuildReplayFixture,
+  type HermeticBuildReplayFixture,
+} from "@/lib/tak/work-pattern-experiment-fixture";
 
 import {
   buildSandboxWorktreeAddCommand,
@@ -22,15 +29,6 @@ import {
   type WorkPatternExperimentCellRequest,
   type WorkPatternExperimentCellResult,
 } from "./work-pattern-experiment-adapter";
-
-export type HermeticBuildReplayFixture = {
-  schemaVersion: 1;
-  kind: "build-replay-v1";
-  objective: string;
-  targetFile: string;
-  testFiles: string[];
-  methodInstructions: Record<string, string>;
-};
 
 type InferenceResult = {
   content: string;
@@ -67,57 +65,8 @@ export type HermeticBuildReplayExecution = {
   outputTokens: number;
 };
 
-const SAFE_LIBRARY_TARGET =
-  /^(?:apps\/web\/lib|packages\/[a-zA-Z0-9._-]+\/src)\/[a-zA-Z0-9._/-]+\.ts$/;
-const SAFE_TEST_PATH =
-  /^(?:apps\/web\/lib|packages\/[a-zA-Z0-9._-]+\/src)\/[a-zA-Z0-9._/-]+\.(?:test|spec)\.ts$/;
 const SAFE_TASK_ID = /^[a-zA-Z0-9-]+$/;
 const SAFE_COMMIT = /^[a-fA-F0-9]{7,64}$/;
-
-function nonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
-
-function safeRepoPath(value: unknown, pattern: RegExp): value is string {
-  return nonEmptyString(value)
-    && pattern.test(value)
-    && !value.includes("..")
-    && !value.includes("//");
-}
-
-export function parseHermeticBuildReplayFixture(
-  value: unknown,
-): HermeticBuildReplayFixture | null {
-  if (
-    !isRecord(value)
-    || value.schemaVersion !== 1
-    || value.kind !== "build-replay-v1"
-    || !nonEmptyString(value.objective)
-    || !safeRepoPath(value.targetFile, SAFE_LIBRARY_TARGET)
-    || /\.(?:test|spec)\.ts$/.test(value.targetFile)
-    || !Array.isArray(value.testFiles)
-    || value.testFiles.length === 0
-    || value.testFiles.length > 4
-    || value.testFiles.some((path) => !safeRepoPath(path, SAFE_TEST_PATH))
-    || !isRecord(value.methodInstructions)
-  ) {
-    return null;
-  }
-  const methodInstructions: Record<string, string> = {};
-  for (const [digest, instruction] of Object.entries(value.methodInstructions)) {
-    if (!nonEmptyString(digest) || !nonEmptyString(instruction)) return null;
-    methodInstructions[digest] = instruction;
-  }
-  if (Object.keys(methodInstructions).length === 0) return null;
-  return {
-    schemaVersion: 1,
-    kind: "build-replay-v1",
-    objective: value.objective,
-    targetFile: value.targetFile,
-    testFiles: [...value.testFiles] as string[],
-    methodInstructions,
-  };
-}
 
 function sourceFromResponse(content: string): string | null {
   const fenced = content.match(/```(?:typescript|tsx|ts|javascript|jsx|js)?\s*\n([\s\S]*?)```/i);

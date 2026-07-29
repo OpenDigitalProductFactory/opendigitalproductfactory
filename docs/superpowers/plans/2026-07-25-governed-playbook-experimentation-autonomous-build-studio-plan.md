@@ -1107,6 +1107,111 @@ For the happy path, verify:
 - source-local tests, production build, migration compatibility, runtime verification, and PR health
   are green before merge-queue enrollment.
 
+### Task 3.6 — close the live fixture-origination gap discovered during Stage D
+
+**Why this remains inside `BI-356E69B1`:** after PR #3708 and its dependency repairs merged, the
+governed live-install preflight reached `CAN-TEST`, but the production database contained no
+`TaskArtifact` whose parts were a `build-replay-v1` fixture. The reviewed candidate path could
+reference an existing `fixtureKey`, while no governed path could atomically persist the immutable
+fixture behind that key. A direct database insert would bypass the approved Work Pattern review
+and is not acceptable evidence. This task completes the already-approved low-risk canary exit gate;
+it is not a new independently shippable product outcome.
+
+**Budget:** 5 units = 4 feature + 1 bounded structural refactor (exactly 20%)
+
+**Refactor allocation — 1 unit:**
+
+- move the pure `build-replay-v1` fixture parser/contract out of the execution adapter into one
+  shared Work Pattern fixture module so review-time validation and runtime execution use the same
+  source of truth;
+- do not introduce a general artifact framework, new lifecycle, or alternate experiment store.
+
+**Modify:**
+
+- `apps/web/lib/tak/work-pattern-experiment-store.ts`
+- `apps/web/lib/tak/work-pattern-experiment-store.test.ts`
+- `apps/web/lib/tak/work-pattern-experiment-scheduler.ts`
+- `apps/web/lib/tak/work-pattern-experiment-scheduler.test.ts`
+- `apps/web/lib/integrate/work-pattern-build-replay.ts`
+- `apps/web/lib/integrate/work-pattern-build-replay.test.ts`
+- `apps/web/lib/actions/work-pattern-review.test.ts`
+- `docs/operations/autonomous-build-completion.md`
+
+**Create:**
+
+- `apps/web/lib/tak/work-pattern-experiment-fixture.ts`
+- `apps/web/lib/tak/work-pattern-experiment-fixture.test.ts`
+
+**Contract:**
+
+1. A reviewed candidate may carry one immutable fixture payload for a cell in addition to its
+   logical `fixtureKey`.
+2. Review-time parsing rejects malformed build fixtures, unsafe target/test paths, missing method
+   instructions, and cells whose fixture identity is inconsistent with the declared corpus/oracle.
+3. The scheduler applies the existing promotion-policy activity/risk/environment ceiling before
+   any TaskRun or artifact write; high-risk and non-shadow candidates remain review evidence only.
+4. Under the existing experiment-definition lock, the store derives a stable artifact identity
+   from the definition and logical fixture key, stores the canonical fixture digest as immutable
+   metadata, and persists the fixture on the existing parent `TaskRun` through `TaskArtifact`
+   before any child is dispatchable.
+5. The writer uses the existing A2A `TaskArtifact.parts` envelope
+   (`[{ type, mimeType, data }]`) rather than establishing a raw-object convention. The shared
+   parser unwraps that canonical envelope and retains read compatibility with any direct-object
+   fixture produced by the already-merged runtime contract.
+6. The persisted child execution request references the derived `TaskArtifact.artifactId`, never
+   raw inline fixture bytes. Later replicates reuse the immutable artifact.
+7. A retry with identical bytes is idempotent. A logical-key collision with different bytes fails
+   closed before dispatch and retains the prior artifact.
+8. Candidates that already reference a valid immutable artifact remain compatible. Missing
+   artifacts fail before queue dispatch with a plain evidence error.
+9. High-risk or non-shadow candidates still stop at the existing authority ceiling before fixture
+   workspace creation. Fixture persistence grants no execution, PR, merge, release, or live-state
+   authority.
+
+**Tests first:**
+
+- reviewed low-risk candidate with inline fixture creates one parent, one immutable artifact, and
+  child requests that reference it;
+- resume and automatic replicates create no duplicate artifact;
+- changed bytes under the same logical fixture identity fail closed;
+- missing artifact without inline fixture fails before queue send;
+- malformed/unsafe build fixture is rejected before any TaskRun or artifact write;
+- high-risk/non-shadow cases do not create an artifact or workspace;
+- inference-only experiment fixtures remain byte-compatible;
+- runtime build replay consumes the shared parser without behavior drift.
+
+**Migration impact:** none. `TaskArtifact`, `TaskRun`, and their existing relation are sufficient;
+no column, enum, index, or seed mutation is required.
+
+**UX verification:** use the existing AI Workforce coworker detail review panel. Submit a bounded
+candidate, approve it through the authenticated operator action, verify the success/attention copy
+at desktop and narrow width, and confirm no raw artifact or TaskRun identifiers appear at default
+altitude. No new route, tab, dashboard, or approval queue is permitted.
+
+**Recovery scenarios:**
+
+- interrupted persistence resumes to the same artifact and child IDs;
+- provider/sandbox failure leaves the immutable fixture reusable and consumes only the existing
+  recovery budget;
+- malformed or changed fixture parks before dispatch with one deduplicated escalation;
+- cleanup removes detached build worktrees but never deletes the retained evidence artifact;
+- kill switches and same-scope binding rollback continue to stop new autonomous runs.
+
+**Documentation impact:** update the operator runbook to explain how a reviewed fixture becomes an
+immutable experiment artifact, how to recognize a pre-dispatch fixture rejection, and how to
+disable the canary without bypassing governed recovery.
+
+**Task 3.6 exit:**
+
+- a supported portal-originated low-risk build fixture completes at least one full factorial
+  replicate and automatically schedules the next required replicate without another click;
+- the live evidence chain joins `CoworkerCapabilityNeed` review → `DecisionInteraction` →
+  parent/child `TaskRun` → immutable `TaskArtifact` → `DecisionShadowLedger`;
+- a forced high-risk fixture escalates before artifact/workspace execution;
+- no experiment cell creates a FeatureBuild, PR, merge, release, or direct deployment;
+- targeted tests, typecheck, production build, migration compatibility, authenticated UX, and the
+  governed exact-SHA gate pass before PR creation.
+
 ---
 
 ## Rollout sequence
