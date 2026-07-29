@@ -75,8 +75,9 @@ describe("resolveAutonomousWorkTools — attachment budget (BI-CAP-F2D39F8F)", (
       intentQuery: "Review today's storefront orders and propose restocking.",
     });
 
-    // 24,576-token cliff-prone local window → 15-tool cap + load_tools rides on top.
-    expect(result.tools.length).toBeLessThanOrEqual(16);
+    // 24,576-token cliff-prone local window → 15-tool cap TOTAL, load_tools
+    // included — the same threshold as the routing layer's local-fallback gate.
+    expect(result.tools.length).toBeLessThanOrEqual(15);
     expect(result.tools.some((t) => t.name === "load_tools")).toBe(true);
     expect(result.deferredTools.length).toBe(115 - (result.tools.length - 1));
     expect(result.toolsForProvider.length).toBe(result.tools.length);

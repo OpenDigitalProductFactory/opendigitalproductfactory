@@ -139,7 +139,10 @@ describe("capSkillCatalog", () => {
 });
 
 describe("selectCoworkerToolBudget", () => {
-  it("always attaches tier-0 (load_tools + page actions) even past the cap", () => {
+  it("bounds the TOTAL attached surface — essentials take priority within the cap, not on top of it", () => {
+    // BI-CAP-F2D39F8F follow-through: essentials riding on top of the cap made
+    // the attached set exceed the routing layer's local-fallback gate (cap 15 +
+    // route tools + load_tools = 20 → local serving disqualified).
     const tools = [
       tool("wiki_query"),
       tool("create_backlog_item"),
@@ -152,22 +155,22 @@ describe("selectCoworkerToolBudget", () => {
       roleGrants: ["backlog_write"],
       pageActionNames: new Set(["page_action_x"]),
       alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
-      cap: 2,
+      cap: 3,
     });
     const names = attached.map((t) => t.name);
+    // Total stays within the cap; tier-0 wins the first slots, then tier-1.
+    expect(attached).toHaveLength(3);
     expect(names).toContain(LOAD_TOOLS_TOOL_NAME);
     expect(names).toContain("page_action_x");
-    // cap=2 fills with role (tier1) then core (tier2); the tier-3 tail defers.
     expect(names).toContain("create_backlog_item");
-    expect(names).toContain("search_code_graph");
-    expect(deferred.map((t) => t.name)).toEqual(["wiki_query"]);
+    expect(deferred.map((t) => t.name)).toEqual(["wiki_query", "search_code_graph"]);
   });
 
-  it("forces route domain tools into tier-0 so route-relevant tools survive the cap (BI-B5C358B1)", () => {
-    // Reproduces the Scrum Master incident shape: the backlog tools do not
-    // lexically match "pressing/issues/resolved", so the intent ranker scores them
-    // 0 and, under a tight local cap, they would be deferred. Forcing the route's
-    // domainTools into tier-0 (as agent-coworker now does) guarantees they attach.
+  it("keeps route domain tools first under the cap so route-relevant tools survive (BI-B5C358B1)", () => {
+    // The Scrum Master incident shape: the backlog tools do not lexically match
+    // "pressing/issues/resolved", so the intent ranker scores them 0 and, under a
+    // tight local cap, they would be deferred. Tier-0 priority (as agent-coworker
+    // passes route domainTools) attaches them ahead of everything else.
     const tools = [
       tool("wiki_query", "wiki"),
       tool("search_code_graph", "code graph"),
@@ -180,13 +183,39 @@ describe("selectCoworkerToolBudget", () => {
       roleGrants: ["backlog_read"],
       pageActionNames: new Set(["query_backlog", "get_backlog_item"]), // route domainTools
       alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
-      cap: 1,
+      cap: 2,
       intentQuery,
     });
     const names = attached.map((t) => t.name);
+    expect(attached).toHaveLength(2);
     expect(names).toContain("query_backlog");
     expect(names).toContain("get_backlog_item");
     expect(deferred.map((t) => t.name)).not.toContain("query_backlog");
+  });
+
+  it("never exceeds the local-fallback gate: cap-15 + route tools + load_tools attach ≤ 15 total", () => {
+    // Regression for the live TR-SCHED-7044CD4F miss: 115 authorized, cap 15,
+    // 4 route domain tools + load_tools rode on top → attached=20 → routing
+    // skipped the local fallback ("20 tools > 15 threshold") and the run died
+    // on exhausted cloud pools. Total-inclusive budgeting keeps the surface
+    // servable locally.
+    const surface = [
+      tool(LOAD_TOOLS_TOOL_NAME),
+      ...Array.from({ length: 4 }, (_, i) => tool(`storefront_action_${i}`)),
+      ...Array.from({ length: 110 }, (_, i) => tool(`breadth_${i}`, "misc")),
+    ];
+    const { attached, deferred } = selectCoworkerToolBudget({
+      tools: surface,
+      roleGrants: [],
+      pageActionNames: new Set(["storefront_action_0", "storefront_action_1", "storefront_action_2", "storefront_action_3"]),
+      alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
+      cap: 15,
+    });
+    expect(attached.length).toBeLessThanOrEqual(15);
+    const names = attached.map((t) => t.name);
+    expect(names).toContain(LOAD_TOOLS_TOOL_NAME);
+    for (let i = 0; i < 4; i++) expect(names).toContain(`storefront_action_${i}`);
+    expect(attached.length + deferred.length).toBe(surface.length);
   });
 
   it("prefers role tools over core, and core over the breadth tail, when the cap bites", () => {

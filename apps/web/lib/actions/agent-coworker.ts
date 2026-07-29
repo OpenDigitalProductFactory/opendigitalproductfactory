@@ -1340,7 +1340,7 @@ export async function sendMessage(input: {
     roleGrants,
     pageActionNames: new Set([...pageActions.map((t) => t.name), ...routeDomainToolNames, ...brokeredToolNames]),
     alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
-    cap: toolCap,
+    cap: availableTools.length > toolCap ? Math.max(1, toolCap - 1) : toolCap,
     // BI-ACE1EBA4 — when the cap forces deferral, keep the tools most relevant to
     // this turn's intent within each priority tier.
     intentQuery: trimmedContent,

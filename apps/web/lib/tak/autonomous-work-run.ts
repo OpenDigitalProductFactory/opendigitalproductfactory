@@ -242,12 +242,16 @@ export async function resolveAutonomousWorkTools(input: {
       routeDomainToolNames = resolveRouteContext(input.routeContext).domainTools ?? [];
     }
 
+    // When the surface will be deferred, load_tools is prepended below — reserve
+    // its slot so the TOTAL (incl. load_tools) never exceeds the cap, which is
+    // also the routing layer's local-fallback gate.
+    const effectiveCap = authorized.length > cap ? Math.max(1, cap - 1) : cap;
     const { attached, deferred } = selectCoworkerToolBudget({
       tools: authorized,
       roleGrants,
       pageActionNames: new Set(routeDomainToolNames),
       alwaysIncludeNames: new Set([LOAD_TOOLS_TOOL_NAME]),
-      cap,
+      cap: effectiveCap,
       intentQuery: input.intentQuery,
     });
     const tools = deferred.length > 0 ? [LOAD_TOOLS_TOOL, ...attached] : attached;

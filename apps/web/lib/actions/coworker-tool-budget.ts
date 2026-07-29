@@ -25,14 +25,16 @@ import { CORE_MCP_TOOL_NAMES } from "@/lib/mcp/tool-tier";
 import { LOCAL_TOOL_SELECTION_CLIFF } from "@/lib/tak/context-economy-metrics";
 
 /**
- * Default ceiling on the NON-essential (role/core/breadth) tool schemas attached
- * per coworker turn; the few essential tools (load_tools + route page actions)
- * ride on top. Chosen to keep the serialized tool block comfortably inside a
- * budget local model's served context with room for the system prompt,
- * conversation history, and the reply: ~48 tools * ~330 tok ≈ ~16k tok of schemas,
- * leaving ~16k of a 32k window for everything else. Deferred tools remain
- * authorized and loadable on demand, so this caps cost, never capability. Tune
- * per install as served context grows.
+ * Default ceiling on the TOTAL tool schemas attached per coworker turn —
+ * essentials (load_tools + route page actions) take top priority within it,
+ * they do not ride on top (the local selection cliff and the routing-layer
+ * local-fallback gate both judge the whole attached set). Chosen to keep the
+ * serialized tool block comfortably inside a budget local model's served
+ * context with room for the system prompt, conversation history, and the
+ * reply: ~48 tools * ~330 tok ≈ ~16k tok of schemas, leaving ~16k of a 32k
+ * window for everything else. Deferred tools remain authorized and loadable on
+ * demand, so this caps cost, never capability. Tune per install as served
+ * context grows.
  */
 export const MAX_COWORKER_ATTACHED_TOOLS = 48;
 
@@ -311,16 +313,23 @@ export function selectCoworkerToolBudget(params: {
 
   const attached: Array<{ t: ToolDefinition; i: number }> = [];
   const deferred: Array<{ t: ToolDefinition; i: number }> = [];
-  // tier-0 (load_tools + page actions) is essential and always attached; it does
-  // NOT consume the cap. The cap bounds the non-essential (role/core/breadth)
-  // tools, filled in priority order.
-  let nonEssentialCount = 0;
+  // The cap bounds the TOTAL attached surface (BI-CAP-F2D39F8F follow-through):
+  // the local selection cliff and the routing-layer local-fallback gate both
+  // judge the WHOLE tool set the model sees, so essentials riding on top of the
+  // cap silently disqualified local serving (live repro: cap 15 + 4 route tools
+  // + load_tools = 20 attached → "Skipping local fallback (20 tools > 15)").
+  // Tier-0 (page actions) keeps top PRIORITY within the cap rather than a free
+  // pass past it; with the real cap floor (12) route domain tools always fit.
+  // The always-include set (load_tools — the escape hatch that reaches every
+  // deferred tool) attaches unconditionally and counts toward the cap.
+  let attachedCount = 0;
   for (const entry of ranked) {
-    if (entry.tier === 0) {
+    if (always.has(entry.t.name)) {
       attached.push(entry);
-    } else if (nonEssentialCount < cap) {
+      attachedCount++;
+    } else if (attachedCount < cap) {
       attached.push(entry);
-      nonEssentialCount++;
+      attachedCount++;
     } else {
       deferred.push(entry);
     }
