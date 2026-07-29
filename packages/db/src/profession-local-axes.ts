@@ -25,6 +25,7 @@
 // substrate-only and enforced entirely at compile + test time.
 
 import {
+  PRINCIPLE_COST_DIMENSIONS,
   PRINCIPLE_DIMENSIONS,
   isPrincipleDimension,
   type PrincipleDimension,
@@ -33,6 +34,13 @@ import { isSpineDimension } from "./dimension-scope";
 
 /** benefit = higher is better; cost = higher is worse (negative weight). */
 export type ProfessionLocalAxisKind = "benefit" | "cost";
+
+const COST_DIMENSION_SET: ReadonlySet<string> = new Set(PRINCIPLE_COST_DIMENSIONS);
+
+/** The spine's own polarity for a dimension, from the one cost list the sign guard enforces. */
+export function spineDimensionKind(dimension: PrincipleDimension): ProfessionLocalAxisKind {
+  return COST_DIMENSION_SET.has(dimension) ? "cost" : "benefit";
+}
 
 export type ProfessionLocalAxis = {
   /** professionKey from docs/professions/registry.json that owns this axis. */
@@ -88,7 +96,9 @@ export function localAxesFor(
  * spine. Spine axes pass through; a local axis contributes its weight to each
  * spine axis it declares, split evenly so a demotion/roll-up can never amplify a
  * principle beyond its authored magnitude. Sign is preserved, so a cost axis
- * stays a cost after roll-up. A namespaced key that is not a known local axis
+ * stays a cost after roll-up — and because values roll through un-inverted,
+ * integrity enforces that an axis's kind matches every projection target's
+ * polarity (BI-72E8FF05). A namespaced key that is not a known local axis
  * for this profession is dropped rather than invented — mirroring
  * projectVectorOntoSpine's treatment of non-dimension keys.
  *
@@ -190,6 +200,22 @@ export function assertProfessionLocalAxisIntegrity(
         throw new Error(
           `Profession-local axis "${axis.key}" projects onto "${target}", which is ` +
             `itself profession-local. Projections must terminate on the spine in one hop.`,
+        );
+      }
+      // Polarity coherence (BI-72E8FF05): projection rolls the raw value through
+      // with sign preserved, so a benefit axis landing on a cost spine axis
+      // asserts the OPPOSITE of what its scorer said (0.9 "clearer hierarchy"
+      // arrives as 0.9 "more cognitive load") — and the decision still returns a
+      // confident ledger. Fail loud here instead of inverting silently in the
+      // scoring path.
+      const targetKind = spineDimensionKind(target);
+      if (targetKind !== axis.kind) {
+        throw new Error(
+          `Profession-local axis "${axis.key}" is declared "${axis.kind}" but projects ` +
+            `onto "${target}", a ${targetKind} spine axis. Polarity must match: reframe ` +
+            `the axis so a HIGH score means more of what the target measures (e.g. score ` +
+            `the deficit — "clutter", not "clarity" — to land on a cost axis), or project ` +
+            `onto a ${axis.kind} spine axis instead.`,
         );
       }
     }

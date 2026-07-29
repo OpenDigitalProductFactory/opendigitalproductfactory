@@ -26,13 +26,16 @@ const REGISTRY_PROFESSIONS: ReadonlySet<string> = new Set(
 
 // A worked example — NOT added to the shipped registry (which stays empty until
 // a real corpus scores an axis), but exercised here so the machinery is proven
-// end-to-end. `hierarchy_clarity` is the spec's own example: a ux-design axis
-// that rolls up onto human_cognitive_load.
+// end-to-end. Cost-framed (BI-72E8FF05): it projects onto human_cognitive_load,
+// a COST spine axis, so the local axis must score the deficit — how much the
+// hierarchy resists parsing — never the clarity. The earlier benefit-framed
+// `hierarchy_clarity` version rolled 0.9 "clearer" through as 0.9 "more
+// cognitive load" and scored exactly backwards.
 const EXAMPLE: ProfessionLocalAxis = {
   profession: "ux-design",
-  key: "ux-design/hierarchy_clarity",
-  kind: "benefit",
-  highMeans: "the option makes the visual hierarchy easier to parse at a glance",
+  key: "ux-design/hierarchy_flatness",
+  kind: "cost",
+  highMeans: "the option makes the visual hierarchy HARDER to parse at a glance",
   projectsOnto: ["human_cognitive_load"],
   source: "nng/visual-hierarchy",
 };
@@ -62,11 +65,11 @@ describe("assertProfessionLocalAxisIntegrity — the rules that keep axes commen
   });
 
   it("rejects a bare (non-namespaced) key", () => {
-    expect(() => check({ key: "hierarchy_clarity" })).toThrow(/namespaced/);
+    expect(() => check({ key: "hierarchy_flatness" })).toThrow(/namespaced/);
   });
 
   it("rejects a key namespaced under a different profession than it claims", () => {
-    expect(() => check({ key: "finance/hierarchy_clarity" })).toThrow(/namespaced/);
+    expect(() => check({ key: "finance/hierarchy_flatness" })).toThrow(/namespaced/);
   });
 
   it("rejects shadowing a spine axis name", () => {
@@ -91,6 +94,32 @@ describe("assertProfessionLocalAxisIntegrity — the rules that keep axes commen
       assertProfessionLocalAxisIntegrity(REGISTRY_PROFESSIONS, [EXAMPLE, EXAMPLE]),
     ).toThrow(/Duplicate/);
   });
+
+  // BI-72E8FF05: projection preserves sign, so kind must match every target's
+  // polarity — otherwise a scorer's 0.9 "more of a good thing" arrives on a
+  // cost axis asserting 0.9 "more of a bad thing", silently backwards.
+  it("rejects a benefit axis projecting onto a cost spine axis", () => {
+    expect(() =>
+      check({
+        key: "ux-design/hierarchy_clarity",
+        kind: "benefit",
+        highMeans: "the option makes the visual hierarchy easier to parse",
+        projectsOnto: ["human_cognitive_load"],
+      }),
+    ).toThrow(/declared "benefit" but projects onto "human_cognitive_load", a cost/);
+  });
+
+  it("rejects a cost axis projecting onto a benefit spine axis", () => {
+    expect(() =>
+      check({ projectsOnto: ["long_term_maintainability"] }),
+    ).toThrow(/declared "cost" but projects onto "long_term_maintainability", a benefit/);
+  });
+
+  it("rejects mixed-polarity projection targets — one axis cannot be both", () => {
+    expect(() =>
+      check({ projectsOnto: ["human_cognitive_load", "long_term_maintainability"] }),
+    ).toThrow(/Polarity must match/);
+  });
 });
 
 describe("projectLocalAxisVector — roll-up onto the spine", () => {
@@ -103,7 +132,7 @@ describe("projectLocalAxisVector — roll-up onto the spine", () => {
   });
 
   it("rolls a local axis onto its declared spine target", () => {
-    expect(projectLocalAxisVector("ux-design", { "ux-design/hierarchy_clarity": 0.8 }, reg)).toEqual({
+    expect(projectLocalAxisVector("ux-design", { "ux-design/hierarchy_flatness": 0.8 }, reg)).toEqual({
       human_cognitive_load: 0.8,
     });
   });
@@ -111,21 +140,23 @@ describe("projectLocalAxisVector — roll-up onto the spine", () => {
   it("sums when a local axis and its spine target are both scored", () => {
     const out = projectLocalAxisVector(
       "ux-design",
-      { human_cognitive_load: 0.3, "ux-design/hierarchy_clarity": 0.4 },
+      { human_cognitive_load: 0.3, "ux-design/hierarchy_flatness": 0.4 },
       reg,
     );
     expect(out.human_cognitive_load).toBeCloseTo(0.7);
   });
 
   it("splits weight across targets so roll-up cannot amplify a principle", () => {
+    // Both targets are cost spine axes, matching the axis's cost kind — the
+    // polarity-coherence invariant holds for multi-target projections too.
     const multi: ProfessionLocalAxis = {
       ...EXAMPLE,
-      key: "ux-design/legibility",
-      projectsOnto: ["human_cognitive_load", "long_term_maintainability"],
+      key: "ux-design/interaction_drag",
+      projectsOnto: ["human_cognitive_load", "blast_radius"],
     };
-    const out = projectLocalAxisVector("ux-design", { "ux-design/legibility": 0.6 }, [multi]);
+    const out = projectLocalAxisVector("ux-design", { "ux-design/interaction_drag": 0.6 }, [multi]);
     expect(out.human_cognitive_load).toBeCloseTo(0.3);
-    expect(out.long_term_maintainability).toBeCloseTo(0.3);
+    expect(out.blast_radius).toBeCloseTo(0.3);
     expect(Object.values(out).reduce((a, b) => a + b, 0)).toBeCloseTo(0.6);
   });
 
@@ -143,7 +174,7 @@ describe("projectLocalAxisVector — roll-up onto the spine", () => {
   it("drops a local axis that belongs to a DIFFERENT profession", () => {
     // Commensurability boundary: another profession's axis is not in scope, so
     // it does not silently leak into this profession's roll-up.
-    expect(projectLocalAxisVector("finance", { "ux-design/hierarchy_clarity": 0.9 }, reg)).toEqual({});
+    expect(projectLocalAxisVector("finance", { "ux-design/hierarchy_flatness": 0.9 }, reg)).toEqual({});
   });
 
   it("ignores keys that are neither spine nor a known local axis", () => {
@@ -153,7 +184,7 @@ describe("projectLocalAxisVector — roll-up onto the spine", () => {
 
 describe("helpers", () => {
   it("localAxisKey namespaces consistently", () => {
-    expect(localAxisKey("ux-design", "hierarchy_clarity")).toBe("ux-design/hierarchy_clarity");
+    expect(localAxisKey("ux-design", "hierarchy_flatness")).toBe("ux-design/hierarchy_flatness");
   });
 
   it("localAxesFor returns only the named profession's axes", () => {

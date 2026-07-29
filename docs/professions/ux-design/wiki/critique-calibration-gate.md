@@ -71,7 +71,7 @@ WSID craft decisions are weighed through `evaluate_profession_decision`, which g
 
 The short version: vectors make this gate's *reasoning* legible and its *promotions* auditable. They do not move where the authority sits.
 
-**Profession-local axes are deliberately not declared yet.** The vector design lets a profession declare its own axes — typed `benefit`/`cost`, each projecting onto at least one spine axis so the decision still rolls up when it leaves the profession, and each carrying a cited source. UX design is the design's own worked example: `hierarchy_clarity` projecting onto `human_cognitive_load`.
+**Profession-local axes are deliberately not declared yet.** The vector design lets a profession declare its own axes — typed `benefit`/`cost`, each projecting onto at least one spine axis so the decision still rolls up when it leaves the profession, and each carrying a cited source. UX design is the design's own worked example: `hierarchy_flatness` — cost-framed, scoring the deficit — projecting onto `human_cognitive_load`, a cost spine axis. An axis's kind must match its projection targets' polarity (BI-72E8FF05); a benefit-framed axis on a cost target would score backwards.
 
 The obvious candidates here are already named by the craft pages — hierarchy clarity, content density, disclosure quality, and perceptual coherence (the deterministic family), each of which would project onto cognitive load and, for the last, onto aesthetic judgment.
 
