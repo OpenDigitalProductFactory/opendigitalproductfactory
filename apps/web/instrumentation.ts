@@ -2,6 +2,7 @@
 // See: https://nextjs.org/docs/app/building-your-application/optimizing/instrumentation
 
 import { envFlagEnabled } from "@/lib/runtime/env-flags";
+import { isMeasurementRuntime, settleBootSync } from "@/lib/runtime/measurement-runtime";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { sweepOrphanedPromoterContainers } from "@/lib/self-upgrade/promoter-sweep";
 
@@ -980,6 +981,17 @@ export async function register() {
     // boot rather than waiting for a contribution to trip it.
     warnIfLegacyHiveTokenEnvSet();
 
+    // Measurement-runtime boot (BI-232BA634): the UX route sweep measures a
+    // frozen baseline against a live portal, so background boot writers are
+    // the nondeterminism. Under this flag, render-relevant syncs are awaited
+    // and operational self-heal maintenance is skipped entirely.
+    const measurementRuntime = isMeasurementRuntime();
+    if (measurementRuntime) {
+      console.log(
+        "[instrumentation] Measurement runtime: boot syncs awaited, background maintenance disabled (DPF_MEASUREMENT_RUNTIME)",
+      );
+    }
+
     // Plane-2 decision-routing gate (BI-B22DE548): register the server-side
     // governance hook so an in-portal coworker / Build Studio agent that takes a
     // consequential backlog decision (triage/retire) without consulting the
@@ -994,8 +1006,9 @@ export async function register() {
 
     // Mirror version.json into PlatformConfig["platform.version"] so the
     // DB-backed runtime metadata matches the canonical file. Non-fatal —
-    // logs loudly on failure but does not block startup.
-    void syncPlatformVersionOnBoot();
+    // logs loudly on failure but does not block startup (awaited under
+    // measurement runtime so routes render one consistent version).
+    await settleBootSync(measurementRuntime, syncPlatformVersionOnBoot);
 
     // DB-continuity guard (BI-B61779DB): detect a reverted/stale postgres volume
     // BEFORE any reconciler trusts the data. A monotonic epoch lives in BOTH the
@@ -1022,107 +1035,115 @@ export async function register() {
       }
     }
 
-    // Voice-service desired-state fail-loud (BI-264565A4): if narration is
-    // enabled but the TTS sidecar is down, log CRITICAL at boot — Prometheus
-    // can't scrape a /health-only sidecar, and this beats the VoiceServiceDown
-    // alert's scrape+2m delay. Non-fatal; detection only (self-heal is a
-    // separate follow-up).
-    void (async () => {
-      const { assertVoiceServiceOnBoot } = await import(
-        "@/lib/operate/voice-service-continuity"
+    // Operational self-heal maintenance (voice continuity, stuck-run
+    // reconciles, watchdog intervals, model-context re-assertion). Skipped
+    // wholesale under measurement runtime: an ephemeral sweep portal has no
+    // stuck state to heal, and these fire-and-forget writers racing the crawl
+    // are exactly the same-tree pass/fail nondeterminism BI-232BA634 removed.
+    if (!measurementRuntime) {
+      // Voice-service desired-state fail-loud (BI-264565A4): if narration is
+      // enabled but the TTS sidecar is down, log CRITICAL at boot — Prometheus
+      // can't scrape a /health-only sidecar, and this beats the VoiceServiceDown
+      // alert's scrape+2m delay. Non-fatal; detection only (self-heal is a
+      // separate follow-up).
+      void (async () => {
+        const { assertVoiceServiceOnBoot } = await import(
+          "@/lib/operate/voice-service-continuity"
+        );
+        await assertVoiceServiceOnBoot();
+      })();
+
+      // Self-heal a quiescence level left stuck by a swap that killed the
+      // coordinator mid-protocol — otherwise the portal refuses gated requests
+      // ("portal_quiescing") forever. Must run before reconciliation.
+      void resetStuckQuiescenceLevelOnBoot();
+
+      // Close the loop on any self-upgrade run whose orchestrator died mid-swap
+      // (a real upgrade recreates this very container). Records succeeded when we
+      // came up on the target SHA; fails orphans so triggers aren't blocked.
+      void reconcileSelfUpgradeRunsOnBoot();
+
+      // Periodic safety net — cron-independent (the boot reconcile above and the
+      // Inngest cron can BOTH miss this). If a swap's orchestrator dies while the
+      // portal stays UP (no reboot), the SelfUpgradeRun sits "running" forever and
+      // every future trigger silently no-ops (requestPortalSelfUpgradeAction). The
+      // June-10 run sat "running" for 4 days until a manual restart — this re-runs
+      // the reconcile in-process so a stuck run self-heals within ~20 min instead.
+      // Staleness-guarded so a legitimately in-flight upgrade is never touched.
+      setInterval(
+        () => {
+          void reconcileSelfUpgradeRunsOnBoot(console, { staleAfterMs: 30 * 60 * 1000 });
+          // Backstop: force-remove any promoter container orphaned by a portal
+          // restart that killed runPromoter's own timeout timer (BI-3EC7FDB0).
+          void sweepOrphanedPromoterContainers({ maxAgeMs: 30 * 60 * 1000 });
+        },
+        20 * 60 * 1000,
       );
-      await assertVoiceServiceOnBoot();
-    })();
 
-    // Self-heal a quiescence level left stuck by a swap that killed the
-    // coordinator mid-protocol — otherwise the portal refuses gated requests
-    // ("portal_quiescing") forever. Must run before reconciliation.
-    void resetStuckQuiescenceLevelOnBoot();
-
-    // Close the loop on any self-upgrade run whose orchestrator died mid-swap
-    // (a real upgrade recreates this very container). Records succeeded when we
-    // came up on the target SHA; fails orphans so triggers aren't blocked.
-    void reconcileSelfUpgradeRunsOnBoot();
-
-    // Periodic safety net — cron-independent (the boot reconcile above and the
-    // Inngest cron can BOTH miss this). If a swap's orchestrator dies while the
-    // portal stays UP (no reboot), the SelfUpgradeRun sits "running" forever and
-    // every future trigger silently no-ops (requestPortalSelfUpgradeAction). The
-    // June-10 run sat "running" for 4 days until a manual restart — this re-runs
-    // the reconcile in-process so a stuck run self-heals within ~20 min instead.
-    // Staleness-guarded so a legitimately in-flight upgrade is never touched.
-    setInterval(
-      () => {
-        void reconcileSelfUpgradeRunsOnBoot(console, { staleAfterMs: 30 * 60 * 1000 });
-        // Backstop: force-remove any promoter container orphaned by a portal
-        // restart that killed runPromoter's own timeout timer (BI-3EC7FDB0).
-        void sweepOrphanedPromoterContainers({ maxAgeMs: 30 * 60 * 1000 });
-      },
-      20 * 60 * 1000,
-    );
-
-    // Close the SAME self-swap gap for the quiescence coordinator. A succeeded
-    // upgrade whose swap kills the orchestrator leaves the coordinator to time
-    // out and falsely emit `failed`, surfacing as a bogus "Upgrade postponed,
-    // failed" banner. The surviving portal completes the swap-complete handshake
-    // here (boot), plus a periodic net for the portal-stays-up orphan case.
-    void reconcileQuiescenceRunsOnBoot();
-    setInterval(
-      () => {
-        void reconcileQuiescenceRunsOnBoot(console, { staleAfterMs: 30 * 60 * 1000 });
-      },
-      20 * 60 * 1000,
-    );
-
-    // Same boot + periodic safety net for BackupRun rows stuck "running": a
-    // backup runner that dies mid-dump leaves a false "in progress" row forever
-    // (no other recovery), polluting the backup-health card + corruption alerts.
-    void (async () => {
-      const { reconcileStuckBackupRuns } = await import(
-        "@/lib/operate/backups/reconcile-stuck-runs"
+      // Close the SAME self-swap gap for the quiescence coordinator. A succeeded
+      // upgrade whose swap kills the orchestrator leaves the coordinator to time
+      // out and falsely emit `failed`, surfacing as a bogus "Upgrade postponed,
+      // failed" banner. The surviving portal completes the swap-complete handshake
+      // here (boot), plus a periodic net for the portal-stays-up orphan case.
+      void reconcileQuiescenceRunsOnBoot();
+      setInterval(
+        () => {
+          void reconcileQuiescenceRunsOnBoot(console, { staleAfterMs: 30 * 60 * 1000 });
+        },
+        20 * 60 * 1000,
       );
-      await reconcileStuckBackupRuns();
-      setInterval(() => void reconcileStuckBackupRuns(), 20 * 60 * 1000);
-    })();
 
-    // Self-heal the local model's served context window. A Docker Desktop / DMR
-    // restart wipes DMR's per-model `context-size` override back to the model
-    // card default (qwen3-coder = 4k), which silently overflows EVERY local
-    // coworker turn (exceed_context_size_error: request ~24k > n_ctx 4096). The
-    // first-run bootstrap raises it once; this re-asserts it on every boot (the
-    // common case: a Docker restart restarts the portal too) plus a periodic net
-    // (a DMR-only restart while the portal stays up). Idempotent + best-effort.
-    void (async () => {
-      const { reconcileLocalModelContext } = await import(
-        "@/lib/inference/local-model-context-reconcile"
-      );
-      const logCtx = (r: Awaited<ReturnType<typeof reconcileLocalModelContext>>) => {
-        if (r.status === "raised") {
-          console.log(
-            `[local-model-context] raised ${r.modelId} ${r.before ?? "unset"} → ${r.after} tokens`,
-          );
-        } else if (r.status === "deferred") {
-          console.warn(
-            `[local-model-context] raise deferred (${r.reason ?? "unknown"}); applies on next model load`,
-          );
-        }
-      };
-      logCtx(await reconcileLocalModelContext());
-      setInterval(() => void reconcileLocalModelContext().then(logCtx), 20 * 60 * 1000);
-    })();
+      // Same boot + periodic safety net for BackupRun rows stuck "running": a
+      // backup runner that dies mid-dump leaves a false "in progress" row forever
+      // (no other recovery), polluting the backup-health card + corruption alerts.
+      void (async () => {
+        const { reconcileStuckBackupRuns } = await import(
+          "@/lib/operate/backups/reconcile-stuck-runs"
+        );
+        await reconcileStuckBackupRuns();
+        setInterval(() => void reconcileStuckBackupRuns(), 20 * 60 * 1000);
+      })();
+
+      // Self-heal the local model's served context window. A Docker Desktop / DMR
+      // restart wipes DMR's per-model `context-size` override back to the model
+      // card default (qwen3-coder = 4k), which silently overflows EVERY local
+      // coworker turn (exceed_context_size_error: request ~24k > n_ctx 4096). The
+      // first-run bootstrap raises it once; this re-asserts it on every boot (the
+      // common case: a Docker restart restarts the portal too) plus a periodic net
+      // (a DMR-only restart while the portal stays up). Idempotent + best-effort.
+      void (async () => {
+        const { reconcileLocalModelContext } = await import(
+          "@/lib/inference/local-model-context-reconcile"
+        );
+        const logCtx = (r: Awaited<ReturnType<typeof reconcileLocalModelContext>>) => {
+          if (r.status === "raised") {
+            console.log(
+              `[local-model-context] raised ${r.modelId} ${r.before ?? "unset"} → ${r.after} tokens`,
+            );
+          } else if (r.status === "deferred") {
+            console.warn(
+              `[local-model-context] raise deferred (${r.reason ?? "unknown"}); applies on next model load`,
+            );
+          }
+        };
+        logCtx(await reconcileLocalModelContext());
+        setInterval(() => void reconcileLocalModelContext().then(logCtx), 20 * 60 * 1000);
+      })();
+    }
 
     // Backfill the operational value stream (OVSM) EA view for any storefront
     // that completed setup before the #1798 generator was running on it — those
     // installs have a StorefrontConfig + archetype but no archetype_value_stream
     // EaView, so /ea/value-streams shows the empty state forever with nothing to
     // self-heal it. Cheap when already present (existence check, no projection);
-    // idempotent and non-fatal per org.
-    void (async () => {
+    // idempotent and non-fatal per org. Awaited under measurement runtime so
+    // every measured route observes the same post-backfill state.
+    await settleBootSync(measurementRuntime, async () => {
       const { backfillOperationalValueStreamsOnBoot } = await import(
         "@/lib/storefront/backfill-operational-value-streams"
       );
       await backfillOperationalValueStreamsOnBoot();
-    })();
+    });
 
     // Backfill the org WWWD corpus (BI-44526F3E Phase A) for any install that
     // completed setup before the onboarding seed chain existed — those orgs
@@ -1130,53 +1151,59 @@ export async function register() {
     // Decision Governance hub shows "no stance of your own yet" forever and
     // business decisions silently fall back to platform doctrine. Cheap when
     // already present (existence checks only); idempotent and non-fatal per org.
-    void (async () => {
+    // Awaited under measurement runtime: this backfill flips empty-state prose
+    // on governance/workspace surfaces, so racing it is measurable word drift.
+    await settleBootSync(measurementRuntime, async () => {
       const { backfillOrgWwwdOnBoot } = await import(
         "@/lib/onboarding/backfill-org-wwwd-on-boot"
       );
       await backfillOrgWwwdOnBoot();
-    })();
+    });
 
     // Build Studio engine reliability (spec §3.1 engine-first / FB-78E967D4).
-    // These run unconditionally — they are correctness reconcilers, not optional
-    // maintenance — and FIX 1 runs before FIX 2 so contradictory checkpoints are
-    // coerced/cleared before the resume pass considers them.
+    // These are correctness reconcilers, not optional maintenance — skipped
+    // only under measurement runtime (an ephemeral sweep portal runs no
+    // builds, and their FeatureBuild writes race the crawl) — and FIX 1 runs
+    // before FIX 2 so contradictory checkpoints are coerced/cleared before
+    // the resume pass considers them.
     //
     // FIX 1: auto-recover builds whose buildExecState landed in a contradictory
     // shape (was previously only escapable via the manual "Reset Build").
     // FIX 2: re-dispatch builds whose fire-and-forget pipeline was killed by a
     // portal recycle, leaving a row stranded mid-step that nothing resumes.
-    void (async () => {
-      await recoverContradictoryBuildExecStatesOnBoot();
-      await resumeStrandedBuildsOnBoot();
-      // Complete any ship-phase builds whose merged code went live in the
-      // self-upgrade that just (re)started this portal (autonomous-completion
-      // path; no-op when the flag is off).
-      await reconcileDeployedShipBuilds();
-    })();
+    if (!measurementRuntime) {
+      void (async () => {
+        await recoverContradictoryBuildExecStatesOnBoot();
+        await resumeStrandedBuildsOnBoot();
+        // Complete any ship-phase builds whose merged code went live in the
+        // self-upgrade that just (re)started this portal (autonomous-completion
+        // path; no-op when the flag is off).
+        await reconcileDeployedShipBuilds();
+      })();
 
-    // Periodic build-resume (cron-independent) — the boot reconcile above runs
-    // ONLY once at startup, so any build CREATED or STRANDED after boot (e.g. a
-    // decomposition's child builds, a fresh promote, or a phase that strands
-    // mid-pipeline) sits untouched until the next reboot. Observed live: the 3
-    // children from a decomposition stuck at zero phases 19+ min post-restart,
-    // because resumeStrandedBuildsOnBoot had already run before they existed.
-    // Re-run the SAME reconcilers on an interval so the drain is CONTINUOUS, not
-    // boot-only — mirroring the self-upgrade-reconcile and stale-slot-reclaim
-    // periodic safety nets above. Both reconcilers are idempotent; the resume
-    // uses a LONGER staleness (20 min) than the boot default (5 min) so a
-    // legitimately slow in-flight phase (an ideate dispatch can run ~14 min) is
-    // never re-dispatched out from under itself.
-    setInterval(
-      () => {
-        void (async () => {
-          await recoverContradictoryBuildExecStatesOnBoot();
-          await resumeStrandedBuildsOnBoot({ staleAfterMs: 20 * 60 * 1000 });
-          await reconcileDeployedShipBuilds();
-        })();
-      },
-      10 * 60 * 1000,
-    );
+      // Periodic build-resume (cron-independent) — the boot reconcile above runs
+      // ONLY once at startup, so any build CREATED or STRANDED after boot (e.g. a
+      // decomposition's child builds, a fresh promote, or a phase that strands
+      // mid-pipeline) sits untouched until the next reboot. Observed live: the 3
+      // children from a decomposition stuck at zero phases 19+ min post-restart,
+      // because resumeStrandedBuildsOnBoot had already run before they existed.
+      // Re-run the SAME reconcilers on an interval so the drain is CONTINUOUS, not
+      // boot-only — mirroring the self-upgrade-reconcile and stale-slot-reclaim
+      // periodic safety nets above. Both reconcilers are idempotent; the resume
+      // uses a LONGER staleness (20 min) than the boot default (5 min) so a
+      // legitimately slow in-flight phase (an ideate dispatch can run ~14 min) is
+      // never re-dispatched out from under itself.
+      setInterval(
+        () => {
+          void (async () => {
+            await recoverContradictoryBuildExecStatesOnBoot();
+            await resumeStrandedBuildsOnBoot({ staleAfterMs: 20 * 60 * 1000 });
+            await reconcileDeployedShipBuilds();
+          })();
+        },
+        10 * 60 * 1000,
+      );
+    }
 
     const optionalStartupTasksEnabled = areOptionalStartupTasksEnabled();
     if (!optionalStartupTasksEnabled) {
