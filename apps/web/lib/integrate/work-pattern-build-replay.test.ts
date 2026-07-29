@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  buildHermeticDependencyInstallCommand,
   executeHermeticBuildReplay,
   parseHermeticBuildReplayFixture,
 } from "./work-pattern-build-replay";
@@ -49,6 +50,19 @@ const fixture = {
 };
 
 describe("hermetic build replay", () => {
+  it("materializes worktree-local dependencies before Next verification", () => {
+    const command = buildHermeticDependencyInstallCommand(
+      "/workspace/.builds/TR-CELL-1",
+    );
+
+    expect(command).toContain(
+      "if [ -L /workspace/.builds/TR-CELL-1/node_modules ]; then rm",
+    );
+    expect(command).toContain("CI=true pnpm install --offline --frozen-lockfile");
+    expect(command).not.toContain("; &&");
+    expect(command).not.toContain("ln -sfn");
+  });
+
   it("rejects traversal, shell-bearing paths, and mutable authority", () => {
     expect(parseHermeticBuildReplayFixture({
       ...fixture,
@@ -121,7 +135,12 @@ describe("hermetic build replay", () => {
     });
 
     expect(exec.mock.calls[0]?.[1]).toContain("git worktree add");
-    expect(exec.mock.calls[1]?.[1]).toContain("base64 -d");
+    expect(
+      exec.mock.calls.some(([, command]) =>
+        command.includes("pnpm install --offline --frozen-lockfile"),
+      ),
+    ).toBe(true);
+    expect(exec.mock.calls.some(([, command]) => command.includes("base64 -d"))).toBe(true);
     expect(exec.mock.calls.at(-1)?.[1]).toContain("git worktree remove");
     expect(infer).toHaveBeenCalledWith(expect.objectContaining({
       profile: expect.objectContaining({

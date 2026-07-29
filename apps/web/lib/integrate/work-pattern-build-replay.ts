@@ -78,6 +78,24 @@ function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+export function buildHermeticDependencyInstallCommand(workdir: string): string {
+  const linkedDependencyPaths = [
+    `${workdir}/node_modules`,
+    `${workdir}/apps/web/node_modules`,
+    `${workdir}/packages/db/node_modules`,
+    `${workdir}/packages/dpf-skill-pack/node_modules`,
+    `${workdir}/packages/dpf-bootstrap/node_modules`,
+  ];
+  const unlinkCommands = linkedDependencyPaths
+    .map((path) => `if [ -L ${path} ]; then rm ${path}; fi`)
+    .join(" && ");
+  return [
+    unlinkCommands,
+    `cd ${workdir}`,
+    "CI=true pnpm install --offline --frozen-lockfile",
+  ].join(" && ");
+}
+
 async function productionDeps(): Promise<HermeticBuildReplayDeps> {
   const [{ execInSandbox }, { routeAndCall }] = await Promise.all([
     import("./sandbox/sandbox"),
@@ -166,6 +184,10 @@ export async function executeHermeticBuildReplay(input: {
     ),
   );
   try {
+    await deps.exec(
+      deps.containerId,
+      buildHermeticDependencyInstallCommand(workdir),
+    );
     const result = await executeWorkPatternExperimentCell(input.request, {
       prepareWorkspace: async () => ({
         workspaceId:
