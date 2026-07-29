@@ -37,11 +37,28 @@ business-product hierarchy created from the product mix confirmed during
 Storefront setup. Select a product line to compare its managed products, or
 select a product to open its **Direction** brief.
 
-A product-line comparison currently uses only recorded Product Sold sales and
-additive revenue. Package allocations remain non-additive attribution. Mixed
-currencies are labelled instead of being presented as one valid currency
-total. Margin, adoption, forecasts, and outcomes are not inferred when their
-typed evidence does not exist.
+A product-line Direction page compares recorded performance over an explicit
+current period and baseline. Recognized Product Sold sales and revenue exclude
+cancelled and fully refunded records. Each root sale is counted once; package
+allocations remain non-additive attribution. Mixed currencies are labelled
+instead of being presented as one valid currency total.
+
+The page also shows attributed demand and compatible objective posture when
+those records exist. Conversion, repeat purchase, package attach rate, margin,
+capacity, stock, quality, and cannibalization remain visibly unavailable until
+a canonical business-Product evidence adapter exists. A missing measure is
+never shown as zero.
+
+**What deserves attention?** lists only deterministic, evidence-backed
+investigations. Each recommendation identifies the evidence window,
+confidence, blind spots, approval boundary, and follow-up measure. In Simple
+mode the language is owner-operator friendly; Full mode reveals the denser
+decision detail. Both modes use the same projection.
+
+Open the page coworker and choose **Ask what this business would do** to turn a
+recommendation into reversible options and consult the organization's WWWD
+stance. Rendering the page does not call a model or change pricing, capacity,
+marketing, catalog, or funding.
 
 The product brief is ordered around work:
 

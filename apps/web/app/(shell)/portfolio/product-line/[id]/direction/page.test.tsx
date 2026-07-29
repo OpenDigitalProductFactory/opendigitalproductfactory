@@ -25,12 +25,16 @@ vi.mock(
   }),
 );
 
-vi.mock("@/components/product/ProductLineComparison", () => ({
-  ProductLineComparison: ({
-    rows,
+vi.mock("@/components/product/ProductLinePerformance", () => ({
+  ProductLinePerformance: ({
+    view,
   }: {
-    rows: Array<{ name: string }>;
-  }) => <div data-comparison>{rows.map((row) => row.name).join(",")}</div>,
+    view: { products: Array<{ name: string }> };
+  }) => (
+    <div data-comparison>
+      {view.products.map((row) => row.name).join(",")}
+    </div>
+  ),
 }));
 
 vi.mock(

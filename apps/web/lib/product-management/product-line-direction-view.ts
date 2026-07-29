@@ -12,42 +12,6 @@ export type ProductLinePortfolioNode = {
   children: ProductLinePortfolioNode[];
 };
 
-export type ProductLineComparisonRow = {
-  productId: string;
-  semanticId: string;
-  name: string;
-  saleCount: number;
-  additiveRevenue: number;
-  currency: string | null;
-  unallocatedComponentCount: number;
-  href: string;
-};
-
-export function buildProductLineComparison(
-  context: ProductOperatingContext,
-): ProductLineComparisonRow[] {
-  const performance = new Map(
-    context.commercialPerformanceByProduct.map((row) => [
-      row.productId,
-      row,
-    ]),
-  );
-  return context.products.map((product) => {
-    const measures = performance.get(product.id);
-    return {
-      productId: product.id,
-      semanticId: product.productId,
-      name: product.name,
-      saleCount: measures?.saleCount ?? 0,
-      additiveRevenue: measures?.additiveRevenue ?? 0,
-      currency: measures?.currency ?? null,
-      unallocatedComponentCount:
-        measures?.unallocatedComponentCount ?? 0,
-      href: `/portfolio/product/${product.id}/direction`,
-    };
-  });
-}
-
 export function buildProductPortfolioHierarchy(
   context: ProductOperatingContext,
 ): ProductLinePortfolioNode[] {
