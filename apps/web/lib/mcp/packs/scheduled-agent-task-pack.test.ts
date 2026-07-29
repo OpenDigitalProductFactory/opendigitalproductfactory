@@ -4,6 +4,8 @@ const core = vi.hoisted(() => ({
   scheduleAgentTaskFor: vi.fn(),
   getScheduledAgentTasksFor: vi.fn(),
   cancelAgentTaskFor: vi.fn(),
+  setAgentTaskActiveFor: vi.fn(),
+  rerunAgentTaskFor: vi.fn(),
 }));
 vi.mock("@/lib/operate/scheduled-jobs/agent-task-core", () => core);
 
@@ -14,12 +16,18 @@ const EXPECTED_TOOLS = [
   "create_scheduled_agent_task",
   "list_scheduled_agent_tasks",
   "cancel_scheduled_agent_task",
+  "pause_scheduled_agent_task",
+  "resume_scheduled_agent_task",
+  "rerun_scheduled_agent_task",
 ];
 
 const EXPECTED_GRANTS: Record<string, string[]> = {
   create_scheduled_agent_task: ["work_capsule_write"],
   cancel_scheduled_agent_task: ["work_capsule_write"],
   list_scheduled_agent_tasks: ["work_capsule_read"],
+  pause_scheduled_agent_task: ["work_capsule_write"],
+  resume_scheduled_agent_task: ["work_capsule_write"],
+  rerun_scheduled_agent_task: ["work_capsule_write"],
 };
 
 beforeEach(() => {
@@ -27,7 +35,7 @@ beforeEach(() => {
 });
 
 describe("scheduled-agent-task pack — registration", () => {
-  it("exposes exactly the three scheduled-agent-task tools", () => {
+  it("exposes the governed scheduled-agent-task lifecycle tools", () => {
     expect(scheduledAgentTaskPack.definitions.map((d) => d.name).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(Object.keys(scheduledAgentTaskPack.handlers).sort()).toEqual([...EXPECTED_TOOLS].sort());
   });
@@ -47,6 +55,9 @@ describe("scheduled-agent-task pack — registration", () => {
     expect(byName.create_scheduled_agent_task.sideEffect).toBe(true);
     expect(byName.cancel_scheduled_agent_task.sideEffect).toBe(true);
     expect(byName.list_scheduled_agent_tasks.sideEffect).toBe(false);
+    expect(byName.pause_scheduled_agent_task.sideEffect).toBe(true);
+    expect(byName.resume_scheduled_agent_task.sideEffect).toBe(true);
+    expect(byName.rerun_scheduled_agent_task.sideEffect).toBe(true);
   });
 
   it("grants mirror agent-grants for every tool", () => {
@@ -86,6 +97,41 @@ describe("scheduled-agent-task pack — handler behavior (delegation preserved)"
     expect(res.success).toBe(true);
     expect(res.message).toContain("(shifted to 09:05)");
     expect(core.scheduleAgentTaskFor.mock.calls[0][1].routeContext).toBe("/operate");
+  });
+
+  it("forwards typed Product scope and previewed playbook config", async () => {
+    core.scheduleAgentTaskFor.mockResolvedValue({
+      success: true,
+      taskId: "agent-task-pm",
+    });
+    const taskConfig = {
+      schemaVersion: 1,
+      recipeId: "roadmap-refresh",
+      permissionsDigest: "pm-permissions-123",
+      minimumRefreshMinutes: 60,
+    };
+    await scheduledAgentTaskPack.handlers.create_scheduled_agent_task(
+      {
+        agentId: "portfolio-advisor",
+        title: "Refresh roadmap",
+        prompt: "Prepared by the typed recipe.",
+        schedule: "0 9 * * 4",
+        organizationId: "org-1",
+        businessProductId: "product-1",
+        taskKind: "product-management-playbook",
+        taskConfig,
+      },
+      "u1",
+    );
+    expect(core.scheduleAgentTaskFor).toHaveBeenCalledWith(
+      "u1",
+      expect.objectContaining({
+        organizationId: "org-1",
+        businessProductId: "product-1",
+        taskKind: "product-management-playbook",
+        taskConfig,
+      }),
+    );
   });
 
   it("create_scheduled_agent_task surfaces a scheduling failure as an error", async () => {
@@ -135,5 +181,40 @@ describe("scheduled-agent-task pack — handler behavior (delegation preserved)"
     const res = await scheduledAgentTaskPack.handlers.cancel_scheduled_agent_task({ taskId: "agent-task-x" }, "u2");
     expect(res.success).toBe(false);
     expect(res.error).toBe("Not authorized to cancel this scheduled agent task");
+  });
+
+  it("pauses, resumes, and queues reruns through the ownership-checked core", async () => {
+    core.setAgentTaskActiveFor.mockResolvedValue({ success: true });
+    core.rerunAgentTaskFor.mockResolvedValue({ success: true });
+
+    await scheduledAgentTaskPack.handlers.pause_scheduled_agent_task(
+      { taskId: "agent-task-1" },
+      "u1",
+    );
+    await scheduledAgentTaskPack.handlers.resume_scheduled_agent_task(
+      { taskId: "agent-task-1" },
+      "u1",
+    );
+    await scheduledAgentTaskPack.handlers.rerun_scheduled_agent_task(
+      { taskId: "agent-task-1" },
+      "u1",
+    );
+
+    expect(core.setAgentTaskActiveFor).toHaveBeenNthCalledWith(
+      1,
+      "u1",
+      "agent-task-1",
+      false,
+    );
+    expect(core.setAgentTaskActiveFor).toHaveBeenNthCalledWith(
+      2,
+      "u1",
+      "agent-task-1",
+      true,
+    );
+    expect(core.rerunAgentTaskFor).toHaveBeenCalledWith(
+      "u1",
+      "agent-task-1",
+    );
   });
 });

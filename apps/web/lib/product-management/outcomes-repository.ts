@@ -243,7 +243,6 @@ export async function createProductObjective(
         "Outcome hypothesis",
       ),
       ownerPrincipalId,
-      measureKind,
       measureDefinition: cleanRequired(
         input.measureDefinition,
         "Measure definition",

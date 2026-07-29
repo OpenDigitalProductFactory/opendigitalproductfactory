@@ -36,6 +36,10 @@ import {
   setAgentTaskActiveFor,
   rerunAgentTaskFor,
 } from "./agent-task-core";
+import {
+  buildPlaybookPermissionDigest,
+  getProductManagementPlaybook,
+} from "@/lib/product-management/product-management-playbook";
 
 const baseInput = { agentId: "a", title: "t", prompt: "p", routeContext: "/x", schedule: "0 9 1 * *" };
 
@@ -134,6 +138,69 @@ describe("scheduleAgentTaskFor", () => {
       error: expect.stringMatching(/configuration/i),
     });
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it("requires explicit product-management scope and a current preview digest", async () => {
+    const { prisma } = await import("@dpf/db");
+    const create = prisma.scheduledAgentTask.create as ReturnType<typeof vi.fn>;
+    create.mockClear();
+    const recipe = getProductManagementPlaybook("roadmap-refresh");
+    const config = {
+      schemaVersion: 1 as const,
+      recipeId: recipe.id,
+      permissionsDigest: buildPlaybookPermissionDigest(recipe),
+      minimumRefreshMinutes: 60,
+    };
+
+    const withoutScope = await scheduleAgentTaskFor("u1", {
+      ...baseInput,
+      taskKind: "product-management-playbook",
+      taskConfig: config,
+    });
+    const wrongScope = await scheduleAgentTaskFor("u1", {
+      ...baseInput,
+      organizationId: "org-1",
+      taskKind: "product-management-playbook",
+      taskConfig: config,
+    });
+    const stalePreview = await scheduleAgentTaskFor("u1", {
+      ...baseInput,
+      organizationId: "org-1",
+      businessProductId: "product-1",
+      taskKind: "product-management-playbook",
+      taskConfig: { ...config, permissionsDigest: "old" },
+    });
+    const valid = await scheduleAgentTaskFor("u1", {
+      ...baseInput,
+      organizationId: "org-1",
+      businessProductId: "product-1",
+      taskKind: "product-management-playbook",
+      taskConfig: config,
+    });
+
+    expect(withoutScope).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/organization scope/i),
+    });
+    expect(wrongScope).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/does not support organization/i),
+    });
+    expect(stalePreview).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/permission scope changed/i),
+    });
+    expect(valid).toMatchObject({ success: true });
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          taskKind: "product-management-playbook",
+          taskConfig: expect.objectContaining({
+            recipeId: "roadmap-refresh",
+          }),
+        }),
+      }),
+    );
   });
 });
 

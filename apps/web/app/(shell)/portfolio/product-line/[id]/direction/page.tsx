@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { ProductDirectionBrief } from "@/components/product/direction/ProductDirectionBrief";
 import { ProductRoadmap } from "@/components/product/direction/ProductRoadmap";
+import { ProductManagementPlaybooks } from "@/components/product/direction/ProductManagementPlaybooks";
 import { ProductLinePerformance } from "@/components/product/ProductLinePerformance";
 import {
   ProductManagementAccessError,
@@ -11,6 +12,8 @@ import {
 import { ProductOperatingContextNotFoundError } from "@/lib/product-management/product-operating-context-query";
 import { buildProductDirectionView } from "@/lib/product-management/product-direction-view";
 import { buildProductLinePerformance } from "@/lib/product-management/product-performance";
+import { buildStakeholderBriefFromOperatingContext } from "@/lib/product-management/product-management-brief";
+import { buildProductManagementAdoptionEvidence } from "@/lib/product-management/product-management-adoption";
 import {
   resolveProductRoadmapAudience,
   resolveProductRoadmapView,
@@ -23,10 +26,10 @@ import {
 
 export default async function ProductLineDirectionPage({
   params,
-  searchParams,
+  searchParams = Promise.resolve({}),
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{
+  searchParams?: Promise<{
     view?: string | string[];
     audience?: string | string[];
   }>;
@@ -81,6 +84,16 @@ export default async function ProductLineDirectionPage({
         audience={roadmapAudience}
       />
       <ProductDirectionBrief context={context} view={view} showLead={false} />
+      <ProductManagementPlaybooks
+        scope={context.scope}
+        audience={view.audience}
+        scheduledPlaybooks={context.scheduledPlaybooks.items}
+        snapshot={buildStakeholderBriefFromOperatingContext({
+          context,
+          view,
+        })}
+        adoptionEvidence={buildProductManagementAdoptionEvidence({ context })}
+      />
     </div>
   );
 }

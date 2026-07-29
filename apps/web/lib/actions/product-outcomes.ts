@@ -24,6 +24,7 @@ import type {
   ProductOutcomeMeasureKind,
   ProductOutcomeSourceKind,
 } from "@/lib/product-management/outcomes";
+import { queueProductManagementPlaybookRefreshForProduct } from "@/lib/product-management/product-management-playbook-refresh";
 
 export type ProductOutcomeActionResult =
   | { ok: true; message: string }
@@ -98,7 +99,7 @@ export async function createProductObjectiveAction(
   try {
     const organization =
       await requireCurrentProductManagementOrganization();
-    await createProductObjective(prisma as unknown as ProductOutcomesDb, {
+    const objective = await createProductObjective(prisma as unknown as ProductOutcomesDb, {
       organizationId: organization.id,
       productId: input.productId,
       title: input.title,
@@ -114,6 +115,13 @@ export async function createProductObjectiveAction(
       targetNarrative: input.targetNarrative,
       reviewCadence: input.reviewCadence,
       reviewAt: dateValue(input.reviewAt, "Review date"),
+    });
+    await queueProductManagementPlaybookRefreshForProduct({
+      organizationId: organization.id,
+      businessProductId: input.productId,
+      sourceKind: "product-objective",
+      sourceId: objective.objectiveId,
+      changedAt: new Date(),
     });
     revalidatePath(pathFor(input.productId));
     revalidatePath(`/portfolio/product/${encodeURIComponent(input.productId)}/direction`);
@@ -135,11 +143,18 @@ export async function reviewProductObjectiveAction(input: {
   try {
     const organization =
       await requireCurrentProductManagementOrganization();
-    await reviewProductObjective(prisma as unknown as ProductOutcomesDb, {
+    const objective = await reviewProductObjective(prisma as unknown as ProductOutcomesDb, {
       organizationId: organization.id,
       objectiveId: input.objectiveId,
       reviewedAt: new Date(),
       nextReviewAt: dateValue(input.nextReviewAt, "Next review date"),
+    });
+    await queueProductManagementPlaybookRefreshForProduct({
+      organizationId: organization.id,
+      businessProductId: input.productId,
+      sourceKind: "product-objective",
+      sourceId: objective.objectiveId,
+      changedAt: new Date(),
     });
     revalidatePath(pathFor(input.productId));
     return { ok: true, message: "Review recorded." };
@@ -156,10 +171,17 @@ export async function transitionProductObjectiveAction(input: {
   try {
     const organization =
       await requireCurrentProductManagementOrganization();
-    await transitionProductObjective(prisma as unknown as ProductOutcomesDb, {
+    const objective = await transitionProductObjective(prisma as unknown as ProductOutcomesDb, {
       organizationId: organization.id,
       objectiveId: input.objectiveId,
       to: input.to,
+    });
+    await queueProductManagementPlaybookRefreshForProduct({
+      organizationId: organization.id,
+      businessProductId: input.productId,
+      sourceKind: "product-objective",
+      sourceId: objective.objectiveId,
+      changedAt: new Date(),
     });
     revalidatePath(pathFor(input.productId));
     revalidatePath(`/portfolio/product/${encodeURIComponent(input.productId)}/direction`);
@@ -183,7 +205,7 @@ export async function recordProductOutcomeObservationAction(
   try {
     const organization =
       await requireCurrentProductManagementOrganization();
-    await recordProductOutcomeObservation(
+    const observation = await recordProductOutcomeObservation(
       prisma as unknown as ProductOutcomesTransactionalDb,
       {
         organizationId: organization.id,
@@ -202,6 +224,13 @@ export async function recordProductOutcomeObservationAction(
         supersedesObservationId: input.supersedesObservationId ?? null,
       },
     );
+    await queueProductManagementPlaybookRefreshForProduct({
+      organizationId: organization.id,
+      businessProductId: input.productId,
+      sourceKind: "product-objective-observation",
+      sourceId: String(observation["observationId"] ?? input.objectiveId),
+      changedAt: new Date(),
+    });
     revalidatePath(pathFor(input.productId));
     revalidatePath(`/portfolio/product/${encodeURIComponent(input.productId)}/direction`);
     return {

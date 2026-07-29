@@ -17,11 +17,13 @@ import {
   persistProductSoldPartyLinks,
   persistProductSoldEntitlement,
   persistProductFulfillmentInstance,
-  persistProductSoldComponentAllocations,
-  transitionProductSoldByEvidence,
   summarizeProductSoldRevenue,
   transitionProductSold,
 } from "./product-sold";
+import {
+  persistProductSoldComponentAllocations,
+  transitionProductSoldByEvidence,
+} from "./product-sold-commercial-persistence";
 
 const commercialSelection = {
   organizationId: "org-one",

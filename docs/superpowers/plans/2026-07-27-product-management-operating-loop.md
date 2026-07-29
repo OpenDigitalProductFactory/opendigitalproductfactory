@@ -448,6 +448,26 @@ Across the delivery graph, reserve approximately 20% of total implementation cap
 
 **Phase gate:** skill/prompt/schedule tests, build, complete recurring-workflow UX verification, export inspection, and documentation review.
 
+### Phase 12 implementation history — 2026-07-28
+
+`BI-B7621682` is implemented on `feat/product-management-playbooks` through a
+typed eight-recipe catalog, the existing skill/prompt seed authority,
+`ScheduledAgentTask`/`TaskRun`, scoped canonical-change refresh, Product
+Operating Context, and Product/ProductLine Direction. WWMD
+`DI-8C52F77BECD4` selected extension of the existing substrate; UX-fit decision
+`DI-4474CE5B14AC` selected contextual progressive disclosure with preview and
+explicit confirmation.
+
+The implementation adds no playbook/run model and no Phase 12 migration.
+Derived briefs remain source-linked and non-importable. Commercial refresh is
+deferred until the owning transaction commits. The reserved refactoring pass
+split operating-context query/projection/support, demand-scoring
+administration, backlog definitions, Product Sold commercial persistence,
+quote acceptance, demand-board controls, and product-management grant
+metadata. Module-size and style/token ratchets pass without baseline growth.
+Runtime tests, production build, stacked migration application, and browser UX
+remain pending the one combined governed `local-integration-ci` lease.
+
 ## Cross-cutting verification contract
 
 Every child branch must:

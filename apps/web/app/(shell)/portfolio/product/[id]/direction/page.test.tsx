@@ -44,6 +44,23 @@ vi.mock(
     ),
   }),
 );
+vi.mock(
+  "@/components/product/direction/ProductManagementPlaybooks",
+  () => ({
+    ProductManagementPlaybooks: ({ audience }: { audience: string }) => (
+      <div data-playbook-audience={audience}>playbooks</div>
+    ),
+  }),
+);
+vi.mock(
+  "@/lib/product-management/product-management-brief",
+  () => ({
+    buildStakeholderBriefFromOperatingContext: () => ({
+      schemaVersion: 1,
+      importable: false,
+    }),
+  }),
+);
 
 import ProductDirectionPage from "./page";
 

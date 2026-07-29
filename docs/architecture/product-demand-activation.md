@@ -93,3 +93,36 @@ marked `importable: false`.
 This is an expand-first Phase 11 change with no schema migration. The fleet's
 legacy unclassified backlog remains unchanged and cannot enter a committed
 roadmap lane by inference.
+
+## Product-management playbook boundary
+
+Reusable product-management playbooks extend the existing skill, prompt,
+scheduled-task, TaskRun, Product Operating Context, and Product Direction
+substrate. `ScheduledAgentTask` remains schedule authority and `TaskRun`
+remains execution/provenance authority. The recipe catalog is the single
+source for supported scope, canonical inputs, allowed tools, derived output,
+proposed writes, approvals, cadence, failure behavior, and refresh sources.
+No `ProductPlaybook`, schedule, run, roadmap, or strategy table is added.
+
+The nullable `taskKind = "product-management-playbook"` discriminator and
+versioned `taskConfig` use the earlier expand-first scheduler columns. Existing
+generic tasks remain valid with null kind, scope, and config. Phase 12 adds no
+migration and no tightening constraint.
+
+Execution loads the current Product Operating Context, validates the recipe's
+permission digest, records source IDs and the input fingerprint, and skips an
+unchanged run without model work. Only a fully successful run advances the
+last-successful fingerprint. Partial and failed runs remain retryable.
+Canonical changes queue a scoped refresh after the owning database transaction
+commits; refresh lookup never crosses into an uncommitted commercial write.
+
+Product and ProductLine Direction are the contextual operator surfaces.
+Preview and explicit confirmation precede scheduling; detail is progressively
+disclosed. The generic scheduler remains an operations surface, not a second
+product workflow. Run inspection links to the existing AI history route, and
+portable briefs are timestamped, source-linked, and `importable: false`.
+
+Business `ProductLine` and `Product` remain owned by Goods and Services for
+Sale. `DigitalProduct` contributes architecture or delivery evidence only
+through a real existing association. WWMD remains platform-development
+governance, not a store for customer product-management decisions.

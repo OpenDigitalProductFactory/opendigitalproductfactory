@@ -50,6 +50,7 @@ describe("proposeProductIntelligenceWatch", () => {
       proposalId: "rp-1",
       created: true,
     }));
+    const refresh = vi.fn(async () => undefined);
 
     await expect(
       proposeProductIntelligenceWatch(
@@ -63,7 +64,7 @@ describe("proposeProductIntelligenceWatch", () => {
             query: "Changes in regional conference demand",
           },
         },
-        { propose },
+        { propose, refresh },
       ),
     ).resolves.toEqual({ proposalId: "rp-1", created: true });
 
@@ -75,6 +76,14 @@ describe("proposeProductIntelligenceWatch", () => {
       query: "Changes in regional conference demand",
       proposedBy: "schedule",
     });
+    expect(refresh).toHaveBeenCalledWith(
+      expect.objectContaining({
+        organizationId: "org-1",
+        productLineId: "line-1",
+        sourceKind: "research-proposal",
+        sourceId: "rp-1",
+      }),
+    );
   });
 
   it("fails closed on missing typed config instead of parsing the prompt", async () => {

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
-import { transitionProductSoldByEvidence } from "@/lib/products/product-sold";
+import { transitionProductSoldByEvidence } from "@/lib/products/product-sold-commercial-persistence";
 
 export async function POST(
   _req: NextRequest,

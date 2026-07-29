@@ -29,6 +29,12 @@ order: 3
     governed funding gate and is explicitly linked to an active product
     objective. Setup does not manufacture roadmap bets, dates, dependencies,
     teams, or consumers from the selected product mix.
+11. Setup does not activate recurring product-management work. After real
+    product evidence exists, an owner may open Product or ProductLine
+    **Direction**, preview a coworker playbook's exact read/write and approval
+    boundary, and explicitly opt into its suggested cadence. A simple
+    one-line business is not asked to configure enterprise scheduling,
+    product teams, business units, or placeholder consumers.
 
 ## Help Visibility Policy
 

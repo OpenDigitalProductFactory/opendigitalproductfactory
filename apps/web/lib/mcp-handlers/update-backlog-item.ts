@@ -9,7 +9,10 @@
 import { attributeBacklogPortfolio, prisma } from "@dpf/db";
 import { BACKLOG_SCOPE_KIND_VALUES } from "@/lib/explore/backlog";
 import type { ToolResult } from "../mcp-tools";
-import { resolveProductManagementScopeRefs } from "@/lib/product-management/product-management-scope";
+import {
+  resolveProductManagementScopeRefs,
+  type ProductManagementScope,
+} from "@/lib/product-management/product-management-scope";
 
 function cleanStringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
@@ -94,6 +97,7 @@ export async function handleUpdateBacklogItem(
     businessProductRef !== null ||
     digitalProductRef !== null;
   let classifiedAtProductBoundary = false;
+  let classifiedScope: ProductManagementScope | null = null;
   if (productScopeTouched) {
     const organizationRef =
       cleanOptionalString(params["organizationId"]) ?? existing.organizationId;
@@ -119,6 +123,7 @@ export async function handleUpdateBacklogItem(
       data["productLineId"] = scope.productLineId;
       data["businessProductId"] = scope.businessProductId;
       data["digitalProductId"] = scope.digitalProductId;
+      classifiedScope = scope;
       if (existing.demandStage === null) {
         data["demandStage"] = "raw";
         classifiedAtProductBoundary = true;
@@ -182,10 +187,10 @@ export async function handleUpdateBacklogItem(
           payload: {
             from: "unclassified",
             to: "raw",
-            organizationId: data["organizationId"],
-            productLineId: data["productLineId"],
-            businessProductId: data["businessProductId"],
-            digitalProductId: data["digitalProductId"],
+            organizationId: classifiedScope?.organizationId ?? null,
+            productLineId: classifiedScope?.productLineId ?? null,
+            businessProductId: classifiedScope?.businessProductId ?? null,
+            digitalProductId: classifiedScope?.digitalProductId ?? null,
           },
           recordedById: userId ?? null,
           recordedByAgentId: context?.agentId ?? null,

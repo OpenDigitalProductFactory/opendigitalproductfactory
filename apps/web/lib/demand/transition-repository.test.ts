@@ -72,11 +72,12 @@ describe("transitionDemandItem", () => {
 
   it("rejects skipping evidence and does not write", async () => {
     const { db, update } = repository("raw");
-    db.backlogItem.findUnique = vi.fn(async () => ({
-      ...(await repository("raw").db.backlogItem.findUnique({})),
+    const existing = await db.backlogItem.findUnique();
+    db.backlogItem.findUnique.mockResolvedValue({
+      ...existing!,
       body: null,
       demandEvidenceLinks: [],
-    }));
+    } as never);
 
     const result = await transitionDemandItem(db as unknown as DemandTransitionDb, {
       itemId: "BI-1",

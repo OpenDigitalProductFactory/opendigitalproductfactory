@@ -150,7 +150,10 @@ describe("evidence-backed demand activation tools", () => {
     const transition = demandScoringPack.definitions.find(
       (d) => d.name === "transition_demand_item",
     );
-    expect(transition?.inputSchema.properties?.["to"]).toMatchObject({
+    const transitionProperties = transition?.inputSchema.properties as
+      | Record<string, unknown>
+      | undefined;
+    expect(transitionProperties?.["to"]).toMatchObject({
       enum: ["raw", "screened", "shaped"],
     });
   });
