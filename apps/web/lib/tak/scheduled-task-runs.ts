@@ -4,8 +4,27 @@ import {
 } from "@/lib/tak/autonomous-work-run";
 import type { ProactivityPlan } from "@/lib/proactivity/proactivity-types";
 import type { ResolvedDelegatedPosture } from "@/lib/proactivity/delegated-posture";
+import {
+  classifyInferenceFailure,
+  type InferenceFailureKind,
+} from "@/lib/build/inference-failure";
 
 export type ScheduledTaskRunRef = AutonomousWorkRunRef;
+
+/**
+ * A scheduled run whose loop executed zero tools and produced only a
+ * provider-failure apology did no work: it must fail (and enter the
+ * BI-754C9E82 retry cadence), not complete quietly with a healthy lastStatus.
+ * Returns the failure kind for such a run, or null for a real result. Pure.
+ * (BI-E0F27E0E)
+ */
+export function detectScheduledRunInferenceFailure(input: {
+  executedToolCount: number;
+  content: string | null | undefined;
+}): InferenceFailureKind | null {
+  if (input.executedToolCount > 0) return null;
+  return classifyInferenceFailure(input.content);
+}
 
 export async function createTaskRunForScheduledTask(input: {
   taskId: string;
