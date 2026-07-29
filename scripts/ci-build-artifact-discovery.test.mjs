@@ -79,6 +79,62 @@ async function runLocate(stub, { waitSeconds }) {
   return { elapsedMs: Date.now() - startedAt, output, stdout, stderr };
 }
 
+function stubCurrentRunApi({ artifact, producerStatus = "in_progress" }) {
+  let artifactRequests = 0;
+  const server = createServer((req, res) => {
+    res.setHeader("content-type", "application/json");
+    if (req.url.includes("/artifacts")) {
+      artifactRequests += 1;
+      res.end(JSON.stringify({ artifacts: artifact ? [artifact] : [] }));
+      return;
+    }
+    if (req.url.includes("/jobs")) {
+      res.end(JSON.stringify({
+        jobs: [{ name: "Production Build", status: producerStatus }],
+      }));
+      return;
+    }
+    res.statusCode = 404;
+    res.end("{}");
+  });
+  return {
+    server,
+    listen: () => new Promise((r) => server.listen(0, "127.0.0.1", r)),
+    baseUrl: () => `http://127.0.0.1:${server.address().port}`,
+    artifactRequests: () => artifactRequests,
+  };
+}
+
+async function runAwaitCurrent(stub, { waitSeconds = 6, terminalGraceSeconds = 0 }) {
+  const dir = mkdtempSync(join(tmpdir(), "dpf-await-current-"));
+  const outputPath = join(dir, "github-output");
+  writeFileSync(outputPath, "");
+  const startedAt = Date.now();
+  const { stdout, stderr } = await execFileAsync(
+    process.execPath,
+    [SCRIPT, "await-current-run",
+      "--artifact-name", "web-production-build-501-1",
+      "--producer-job-name", "Production Build",
+      "--wait-seconds", String(waitSeconds),
+      "--terminal-grace-seconds", String(terminalGraceSeconds)],
+    {
+      cwd: ROOT,
+      env: {
+        ...process.env,
+        DPF_GITHUB_API_BASE_URL: stub.baseUrl(),
+        GITHUB_OUTPUT: outputPath,
+        GITHUB_REPOSITORY: "OpenDigitalProductFactory/opendigitalproductfactory",
+        GITHUB_RUN_ID: "501",
+        GITHUB_TOKEN: "stub-token",
+        GITHUB_STEP_SUMMARY: "",
+      },
+    },
+  );
+  const output = readFileSync(outputPath, "utf8");
+  rmSync(dir, { recursive: true, force: true });
+  return { elapsedMs: Date.now() - startedAt, output, stdout, stderr };
+}
+
 describe("locate discovery termination", () => {
   const servers = [];
   after(() => servers.forEach((s) => s.close()));
@@ -142,5 +198,36 @@ describe("locate discovery termination", () => {
 
     assert.match(result.output, /found=false/);
     assert.ok(result.elapsedMs < 15_000, `expected fast fail-safe, waited ${result.elapsedMs}ms`);
+  });
+});
+
+describe("current-run artifact rendezvous", () => {
+  const servers = [];
+  after(() => servers.forEach((s) => s.close()));
+
+  it("accepts only the exact artifact from the current run", async () => {
+    const stub = stubCurrentRunApi({
+      artifact: { id: 900, name: "web-production-build-501-1", expired: false },
+    });
+    servers.push(stub.server);
+    await stub.listen();
+
+    const result = await runAwaitCurrent(stub, {});
+
+    assert.match(result.output, /found=true/);
+    assert.match(result.output, /artifact_name=web-production-build-501-1/);
+    assert.match(result.output, /source_run_id=501/);
+    assert.equal(stub.artifactRequests(), 1);
+  });
+
+  it("falls back when the same-run producer is terminal without an artifact", async () => {
+    const stub = stubCurrentRunApi({ producerStatus: "completed" });
+    servers.push(stub.server);
+    await stub.listen();
+
+    const result = await runAwaitCurrent(stub, {});
+
+    assert.match(result.output, /found=false/);
+    assert.ok(result.elapsedMs < 5_000, `expected terminal fallback, waited ${result.elapsedMs}ms`);
   });
 });

@@ -33,6 +33,11 @@ export function workflowHasMergeGroup(source) {
   return beforeJobs.some((line) => /^  merge_group:\s*(?:\{\})?$/.test(line));
 }
 
+export function workflowIsCallable(source) {
+  const beforeJobs = source.split(/\r?\n/).slice(0, source.split(/\r?\n/).findIndex((line) => line === "jobs:"));
+  return beforeJobs.some((line) => /^  workflow_call:\s*(?:\{\})?$/.test(line));
+}
+
 export function parseAggregate(source, aggregateJobId) {
   const lines = source.split(/\r?\n/);
   const start = lines.findIndex((line) => line === `  ${aggregateJobId}:`);
@@ -56,7 +61,7 @@ export function parseAggregate(source, aggregateJobId) {
 export function validateWorkflowConformance({ manifest, ciSource, uxSource }) {
   const errors = [];
   if (!workflowHasMergeGroup(ciSource)) errors.push(`${manifest.workflows.ci} must handle merge_group`);
-  if (!workflowHasMergeGroup(uxSource)) errors.push(`${manifest.workflows.ux} must handle merge_group`);
+  if (!workflowIsCallable(uxSource)) errors.push(`${manifest.workflows.ux} must handle workflow_call`);
 
   const jobs = parseWorkflowJobIds(ciSource);
   const aggregate = parseAggregate(ciSource, manifest.aggregateJobId);
@@ -67,11 +72,17 @@ export function validateWorkflowConformance({ manifest, ciSource, uxSource }) {
   if (aggregate.name !== manifest.aggregateJobName) {
     errors.push(`aggregate name must be ${manifest.aggregateJobName}`);
   }
-  const uxJob = parseAggregate(uxSource, manifest.uxJobId);
+  const uxJob = parseAggregate(ciSource, manifest.uxJobId);
   if (!uxJob) {
     errors.push(`missing UX job ${manifest.uxJobId}`);
   } else if (uxJob.name !== manifest.uxJobName) {
     errors.push(`UX job name must be ${manifest.uxJobName}`);
+  }
+  const uxRuntimeJob = parseAggregate(uxSource, manifest.uxRuntimeJobId);
+  if (!uxRuntimeJob) {
+    errors.push(`missing UX runtime job ${manifest.uxRuntimeJobId}`);
+  } else if (uxRuntimeJob.name !== manifest.uxRuntimeJobName) {
+    errors.push(`UX runtime job name must be ${manifest.uxRuntimeJobName}`);
   }
   const expected = jobs.filter((jobId) => jobId !== manifest.aggregateJobId).sort();
   const actual = [...aggregate.needs].sort();

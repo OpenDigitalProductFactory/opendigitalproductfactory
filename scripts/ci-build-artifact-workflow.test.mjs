@@ -17,20 +17,58 @@ describe("production-build artifact workflow wiring", () => {
     assert.match(ci, /steps\.package-build\.outcome == 'success'/);
   });
 
-  it("reuses only PR and merge-group artifacts and retains a fail-safe build", () => {
-    assert.match(ux, /github\.event_name == 'pull_request' \|\| github\.event_name == 'merge_group'/);
-    assert.match(ux, /node scripts\/ci-build-artifact\.mjs locate/);
-    assert.match(ux, /DPF_CI_RUN_HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \|\| github\.sha \}\}/);
-    assert.match(ux, /--wait-seconds 600/);
+  it("rendezvous with the same-run build without serializing fixture setup", () => {
+    assert.match(ci, /ux-route-sweep-runtime:[\s\S]*?needs: changes/);
+    assert.doesNotMatch(ci, /ux-route-sweep-runtime:[\s\S]*?needs: \[changes, build\]/);
+    assert.match(ci, /uses: \.\/\.github\/workflows\/ux-route-sweep\.yml/);
+    assert.match(
+      ci,
+      /reuse_current_run_build: \$\{\{ needs\.changes\.outputs\.heavy == 'true' \}\}/,
+    );
+    assert.match(ux, /workflow_call:/);
+    assert.doesNotMatch(ux, /^\s{2}pull_request:/m);
+    assert.doesNotMatch(ux, /^\s{2}merge_group:/m);
+    assert.doesNotMatch(ux, /node scripts\/ci-build-artifact\.mjs locate/);
+    assert.match(ux, /node scripts\/ci-build-artifact\.mjs await-current-run/);
+    assert.match(
+      ux,
+      /--artifact-name web-production-build-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/,
+    );
+    assert.match(ux, /--producer-job-name "Production Build"/);
     assert.match(ux, /uses: actions\/download-artifact@v8/);
+    assert.match(
+      ux,
+      /name: web-production-build-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/,
+    );
+    assert.doesNotMatch(ux, /github-token:/);
+    assert.doesNotMatch(ux, /run-id:/);
     assert.match(ux, /node scripts\/ci-build-artifact\.mjs consume/);
+    assert.match(ux, /--source-run-id "\$\{\{ github\.run_id \}\}"/);
     assert.match(ux, /if: steps\.materialize-build\.outputs\.reused != 'true'/);
     assert.match(ux, /run: pnpm --filter web build/);
     assert.match(ux, /DPF_REUSED_BUILD: \$\{\{ steps\.materialize-build\.outputs\.reused \}\}/);
     assert.match(ux, /cd apps\/web\/\.next\/standalone[\s\S]*?node apps\/web\/server\.js/);
+    assert.ok(
+      ux.indexOf("Install Playwright Chromium") < ux.indexOf("Await current-run production build"),
+      "browser setup should overlap the producer build",
+    );
+  });
+
+  it("preserves the stable required check and manual calibration path", () => {
+    assert.match(
+      ci,
+      /ux-route-sweep:\s*\n\s+name: UX Route Budget Sweep\s*\n\s+runs-on: ubuntu-latest\s*\n\s+if: always\(\)\s*\n\s+needs: ux-route-sweep-runtime/,
+    );
+    assert.match(ci, /needs\.ux-route-sweep-runtime\.result/);
+    assert.match(ci, /merge_group:/);
+    assert.match(ux, /workflow_dispatch:/);
+    assert.doesNotMatch(ux, /^\s{2}push:/m);
+    assert.match(ux, /update_baseline:/);
+    assert.match(ux, /--update-baseline/);
   });
 
   it("grants only read access to workflow artifacts", () => {
+    assert.match(ci, /permissions:[\s\S]*?actions: read[\s\S]*?contents: read/);
     assert.match(ux, /permissions:[\s\S]*?actions: read[\s\S]*?contents: read/);
     assert.doesNotMatch(ux, /actions: write/);
   });
