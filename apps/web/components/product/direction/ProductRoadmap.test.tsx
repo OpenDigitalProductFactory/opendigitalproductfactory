@@ -1,3 +1,6 @@
+// @vitest-environment jsdom
+
+import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import {
@@ -150,10 +153,10 @@ describe("ProductRoadmap", () => {
       screen.getByText("No canonical work dependency links"),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Source posture and projection boundary"),
-    ).toBeInTheDocument();
+      screen.getAllByText("Source posture and projection boundary"),
+    ).toHaveLength(2);
     expect(
-      screen.getByText(/cannot be imported/),
-    ).toBeInTheDocument();
+      screen.getAllByText(/cannot be imported/),
+    ).toHaveLength(2);
   });
 });

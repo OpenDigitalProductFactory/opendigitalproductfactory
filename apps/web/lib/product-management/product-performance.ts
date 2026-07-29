@@ -317,7 +317,7 @@ function salesMeasures(
       confidence: current.unallocatedComponentCount > 0 ? "medium" : "high",
       evidence: revenueEvidence,
       reason: current.mixedCurrencies
-        ? "Recorded sales use multiple currencies and no canonical conversion rate is connected."
+        ? "Recorded sales contain mixed currency values and no canonical conversion rate is connected."
         : noEvidence
           ? "No Product Sold evidence is recorded for either comparison period."
           : null,

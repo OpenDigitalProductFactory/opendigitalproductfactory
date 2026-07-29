@@ -49,5 +49,12 @@ export const PRODUCT_LINE_ROUTE_CONTEXT: RouteContextDef = {
       prompt:
         "Explain which product-line measures are unavailable or partial, why the current records cannot support them, and the smallest real evidence connection that would make each measure trustworthy. Do not treat missing evidence as zero.",
     },
+    {
+      label: "Report an issue",
+      description: "Report a bug or give feedback",
+      capability: null,
+      taskType: "conversation",
+      prompt: "I'd like to report an issue or give feedback about this page.",
+    },
   ],
 };

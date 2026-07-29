@@ -101,6 +101,8 @@ const CUSTOMER_ACCOUNT_ADAPTER: MergeAdapter = {
     { model: "edgeNode", field: "customerAccountId" },
     { model: "bootstrapToken", field: "targetCustomerAccountId" },
     { model: "memberEquityEntry", field: "memberAccountId" },
+    { model: "productSoldParty", field: "accountId" },
+    { model: "productSoldEntitlement", field: "accountId" },
   ],
   softReferences: [
     { model: "remoteAction", field: "customerAccountId" },
@@ -153,6 +155,8 @@ const CUSTOMER_CONTACT_ADAPTER: MergeAdapter = {
     { model: "activity", field: "contactId" },
     { model: "rentalAgreement", field: "customerContactId" },
     { model: "invoice", field: "contactId" },
+    { model: "productSoldParty", field: "contactId" },
+    { model: "productSoldEntitlement", field: "contactId" },
   ],
   softReferences: [{ model: "journalLine", field: "contactId" }],
   isTombstoned: (row) => row["mergedIntoId"] != null,

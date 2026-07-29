@@ -535,6 +535,14 @@ export function projectProductRoadmap(
     lanes[lane].sort(compareRoadmapItems);
   }
   completed.sort(compareRoadmapItems);
+  const sequenceRank = new Map(
+    [
+      ...lanes.now,
+      ...lanes.next,
+      ...lanes.later,
+      ...completed,
+    ].map((item, index) => [item.id, index]),
+  );
 
   const timeline = eligible
     .flatMap(({ demand }) => {
@@ -583,7 +591,12 @@ export function projectProductRoadmap(
     .map((objective) => {
       const itemIds = objective.workItemIds
         .filter((itemId) => provisionalItems.has(itemId))
-        .sort();
+        .sort(
+          (left, right) =>
+            (sequenceRank.get(left) ?? Number.MAX_SAFE_INTEGER) -
+              (sequenceRank.get(right) ?? Number.MAX_SAFE_INTEGER) ||
+            left.localeCompare(right),
+        );
       return {
         objectiveId: objective.id,
         title: objective.title,
