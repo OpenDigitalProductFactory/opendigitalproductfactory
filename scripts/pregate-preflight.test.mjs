@@ -16,8 +16,10 @@ import {
   LOCAL_SAFE_PR_GUARD_IDS,
   PREFLIGHT_SKIP_ENV,
   buildPreflightPlan,
+  isEnvironmentFailureOutput,
   runPreflight,
 } from "./lib/pregate-preflight.mjs";
+import { loadPinnedGuardTypeScript } from "./lib/load-pinned-guard-typescript.mjs";
 import { shouldRunPreflight } from "./pregate.mjs";
 
 const repoRoot = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
@@ -103,10 +105,30 @@ function fakeExecute(command, args) {
   if (script.includes("env-broken")) {
     return {
       exitCode: 1,
-      output: "Error: Repo guard TypeScript resolved outside its isolated pnpm graph: …",
+      output: "GuardRuntimeEnvironmentError: Repo guard runtime is unavailable",
     };
   }
   return { exitCode: 0, output: "" };
+}
+
+function capturePinnedLoaderError(overrides) {
+  try {
+    loadPinnedGuardTypeScript({
+      runtimeManifest: { devDependencies: { typescript: "6.0.3" } },
+      lockText: [
+        "importers:",
+        "  packages/repo-guard-runtime:",
+        "    devDependencies:",
+        "      typescript:",
+        "        specifier: 6.0.3",
+        "        version: 6.0.3",
+      ].join("\n"),
+      ...overrides,
+    });
+    assert.fail("expected the pinned runtime loader to reject");
+  } catch (error) {
+    return String(error?.stack ?? error);
+  }
 }
 
 test("runPreflight fails on a genuine guard violation", async () => {
@@ -128,6 +150,38 @@ test("runPreflight reclassifies environment failures as skipped_environment, not
   assert.equal(envEntry.status, "skipped_environment");
 });
 
+test("runPreflight reclassifies the pinned guard loader's canonical missing-runtime error", async () => {
+  const output = capturePinnedLoaderError({
+    resolvePackage() {
+      throw new Error("missing");
+    },
+  });
+
+  assert.match(output, /Pinned repo guard TypeScript 6\.0\.3 is missing/);
+  assert.match(output, /GuardRuntimeEnvironmentError/);
+  const result = await runPreflight({
+    plan: [{
+      id: "pinned-runtime-missing",
+      legacyJobId: "pinned-runtime-missing",
+      name: "Pinned Runtime Missing",
+      commands: [["node", ["scripts/pinned-runtime-missing.mjs"]]],
+    }],
+    execute: () => ({ exitCode: 1, output }),
+    env: {},
+  });
+
+  assert.equal(result.ok, true, "source-only runtime absence must not block sandbox admission");
+  assert.equal(result.entries[0].status, "skipped_environment");
+});
+
+test("wrong-graph guard runtime resolution carries the same stable environment signal", () => {
+  const output = capturePinnedLoaderError({
+    resolvePackage: () => "D:/unrelated/node_modules/typescript/package.json",
+  });
+  assert.match(output, /GuardRuntimeEnvironmentError/);
+  assert.ok(isEnvironmentFailureOutput(output));
+});
+
 test("runPreflight honors the recorded emergency skip", async () => {
   const result = await runPreflight({
     plan: PLAN,
@@ -141,11 +195,11 @@ test("runPreflight honors the recorded emergency skip", async () => {
   assert.equal(result.skipReason, "hotfix: guard outage BI-XXXX");
 });
 
-test("ENVIRONMENT_FAILURE_RE matches runtime-absence signatures, not guard verdicts", () => {
+test("environment failure classification uses stable runtime signals, not guard verdicts", () => {
   assert.ok(ENVIRONMENT_FAILURE_RE.test("Error [ERR_MODULE_NOT_FOUND]: Cannot find package"));
-  assert.ok(ENVIRONMENT_FAILURE_RE.test("TypeScript resolved outside its isolated pnpm graph"));
-  assert.ok(!ENVIRONMENT_FAILURE_RE.test("module exceeds ratchet baseline: 1050 > 1047 lines"));
-  assert.ok(!ENVIRONMENT_FAILURE_RE.test("Missing UX-Fit-Decision trailer"));
+  assert.ok(isEnvironmentFailureOutput("GuardRuntimeEnvironmentError: localized wording"));
+  assert.ok(!isEnvironmentFailureOutput("module exceeds ratchet baseline: 1050 > 1047 lines"));
+  assert.ok(!isEnvironmentFailureOutput("Missing UX-Fit-Decision trailer"));
 });
 
 // ── pregate wiring ──────────────────────────────────────────────────────────

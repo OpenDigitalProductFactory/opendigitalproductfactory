@@ -7,6 +7,15 @@ const LIB_DIR = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_REPO_ROOT = resolve(LIB_DIR, "../..");
 const INSTALL_COMMAND = "pnpm install --frozen-lockfile --ignore-scripts --filter @dpf/repo-guard-runtime";
 
+export const GUARD_RUNTIME_ENVIRONMENT_ERROR_NAME = "GuardRuntimeEnvironmentError";
+
+export class GuardRuntimeEnvironmentError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = GUARD_RUNTIME_ENVIRONMENT_ERROR_NAME;
+  }
+}
+
 function normalize(path) { return path.replaceAll("\\", "/"); }
 function escapeRegex(value) { return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
 function importerBlock(lockText) {
@@ -38,7 +47,9 @@ export function loadPinnedGuardTypeScript(options = {}) {
   let resolvedPackagePath;
   try { resolvedPackagePath = resolvePackage(); }
   catch {
-    throw new Error(`Pinned repo guard TypeScript ${pin} is missing; run ${INSTALL_COMMAND}.`);
+    throw new GuardRuntimeEnvironmentError(
+      `Pinned repo guard TypeScript ${pin} is missing; run ${INSTALL_COMMAND}.`,
+    );
   }
   const normalizedResolved = normalize(resolve(resolvedPackagePath));
   const normalizedRoot = normalize(repoRoot);
@@ -46,13 +57,23 @@ export function loadPinnedGuardTypeScript(options = {}) {
   const hoistedPath = `${normalizedRoot}/node_modules/typescript/package.json`;
   const pnpmPath = new RegExp(`^${escapeRegex(normalizedRoot)}/node_modules/\\.pnpm/typescript@${exactPin}(?:_[^/]+)?/node_modules/typescript/package\\.json$`);
   if (normalizedResolved !== localPath && normalizedResolved !== hoistedPath && !pnpmPath.test(normalizedResolved)) {
-    throw new Error(`Repo guard TypeScript resolved outside its isolated pnpm graph: ${resolvedPackagePath}; run ${INSTALL_COMMAND}.`);
+    throw new GuardRuntimeEnvironmentError(
+      `Repo guard TypeScript resolved outside its isolated pnpm graph: ${resolvedPackagePath}; run ${INSTALL_COMMAND}.`,
+    );
   }
 
   const readResolvedPackage = options.readResolvedPackage ?? ((path) => JSON.parse(readFileSync(path, "utf8")));
   const resolvedVersion = readResolvedPackage(resolvedPackagePath).version;
-  if (resolvedVersion !== pin) throw new Error(`Repo guard TypeScript expected ${pin} but resolved ${resolvedVersion}.`);
+  if (resolvedVersion !== pin) {
+    throw new GuardRuntimeEnvironmentError(
+      `Repo guard TypeScript expected ${pin} but resolved ${resolvedVersion}.`,
+    );
+  }
   const loaded = (options.loadModule ?? (() => runtimeRequire("typescript")))();
-  if (loaded?.version !== pin) throw new Error(`Repo guard TypeScript expected ${pin} but loaded ${loaded?.version ?? "unknown"}.`);
+  if (loaded?.version !== pin) {
+    throw new GuardRuntimeEnvironmentError(
+      `Repo guard TypeScript expected ${pin} but loaded ${loaded?.version ?? "unknown"}.`,
+    );
+  }
   return loaded;
 }
