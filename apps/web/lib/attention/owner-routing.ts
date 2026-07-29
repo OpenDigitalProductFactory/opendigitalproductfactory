@@ -53,7 +53,7 @@ export function classifyOwnerAttentionLane(
   }
   if (item.source === "research-proposal") {
     return appliedLevel === "quiet"
-      ? decision("needs-you-now", "Reactive mode asks before low-risk research.", false, appliedLevel)
+      ? decision("needs-you-now", "Quiet mode asks before low-risk research.", false, appliedLevel)
       : decision("weekly-digest", "Low-urgency research can be reviewed together.", false, appliedLevel);
   }
   if (item.source === "coworker-memory") {

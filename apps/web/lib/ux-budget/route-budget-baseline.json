@@ -1608,17 +1608,6 @@
       "axeViolations": 2,
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - link\n  - paragraph\n    - text\n  - link\n  - heading [level=1]\n  - paragraph\n    - text\n  - text"
     },
-    "/platform/development/change-lanes": {
-      "defaultVisibleWords": 317,
-      "leadBandWords": 0,
-      "primaryActions": 1,
-      "visibleFields": 0,
-      "maxChoicesPerControl": 0,
-      "subLegibleControls": 1,
-      "buriedPrimaryAction": 0,
-      "axeViolations": 2,
-      "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - heading [level=1]\n  - paragraph\n    - text\n  - text\n  - button\n  - text\n  - region\n    - heading [level=2]\n    - text\n    - paragraph\n      - text\n    - text\n    - heading [level=3]\n    - list\n      - listitem\n        - text\n    - heading [level=3]\n    - list\n      - listitem\n        - text\n  - button\n    - text\n  - table\n    - rowgroup\n      - row\n        - columnheader\n        - columnheader\n          - text\n        - columnheader\n    - rowgroup\n      - row\n        - cell\n          - text\n        - cell\n          - link\n        - cell\n          - text"
-    },
     "/platform/device-catalog": {
       "defaultVisibleWords": 386,
       "leadBandWords": 0,
@@ -1750,17 +1739,6 @@
       "buriedPrimaryAction": 0,
       "axeViolations": 2,
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - link\n  - paragraph\n    - text\n  - link\n  - heading [level=1]\n  - paragraph\n    - text\n  - heading [level=2]\n  - text\n  - paragraph\n    - text\n  - text"
-    },
-    "/platform/schedule": {
-      "defaultVisibleWords": 331,
-      "leadBandWords": 0,
-      "primaryActions": 1,
-      "visibleFields": 0,
-      "maxChoicesPerControl": 0,
-      "subLegibleControls": 9,
-      "buriedPrimaryAction": 0,
-      "axeViolations": 5,
-      "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - heading [level=1]\n  - paragraph\n    - text\n    - link\n    - text\n  - link\n  - paragraph\n    - text\n  - link\n  - text\n  - button\n  - group\n    - button\n  - button\n    - img\n  - button [disabled]\n  - heading [level=2]\n  - button [pressed]\n  - button\n  - grid\n    - rowgroup\n      - row\n        - columnheader\n          - text\n    - rowgroup\n      - row\n        - gridcell\n          - text\n  - text\n  - button"
     },
     "/platform/service-desk": {
       "defaultVisibleWords": 121,
@@ -2190,17 +2168,6 @@
       "buriedPrimaryAction": 0,
       "axeViolations": 2,
       "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - region\n    - paragraph\n      - text\n    - link\n  - heading [level=2]\n  - link\n  - paragraph\n    - text\n  - complementary\n    - text\n  - heading [level=1]\n  - paragraph\n    - text\n  - region\n    - heading [level=2]\n    - paragraph\n      - text\n    - text\n    - link\n      - paragraph\n        - text\n    - paragraph\n      - text\n    - link\n      - paragraph\n        - text\n      - text\n  - region\n    - paragraph\n      - text\n    - heading [level=2]\n    - link\n    - list\n      - listitem\n        - paragraph\n          - text\n        - list\n          - listitem\n            - text\n  - paragraph\n    - text\n  - button\n    - text\n  - region\n    - paragraph\n      - text\n    - heading [level=2]\n    - button"
-    },
-    "/workspace/calendar": {
-      "defaultVisibleWords": 246,
-      "leadBandWords": 0,
-      "primaryActions": 1,
-      "visibleFields": 0,
-      "maxChoicesPerControl": 0,
-      "subLegibleControls": 9,
-      "buriedPrimaryAction": 0,
-      "axeViolations": 4,
-      "ariaSnapshot": "- link\n- banner\n  - link\n    - text\n    - paragraph\n      - text\n  - link\n  - button\n  - text\n  - button\n- complementary\n  - navigation\n    - group\n      - button\n      - button [pressed]\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n    - paragraph\n      - text\n    - link\n      - text\n- main\n  - navigation\n    - link\n    - text\n  - heading [level=1]\n  - paragraph\n    - text\n    - link\n    - text\n  - text\n  - button\n  - group\n    - button\n  - button\n    - img\n  - button [disabled]\n  - heading [level=2]\n  - button [pressed]\n  - button\n  - grid\n    - rowgroup\n      - row\n        - columnheader\n          - text\n    - rowgroup\n      - row\n        - gridcell\n          - text\n  - text\n  - button"
     },
     "/workspace/documents": {
       "defaultVisibleWords": 109,

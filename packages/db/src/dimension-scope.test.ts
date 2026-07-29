@@ -10,6 +10,10 @@ import {
   PRINCIPLE_DIMENSION_SCOPE,
   PRINCIPLE_SPINE_DIMENSIONS,
   PRINCIPLE_LOCAL_DIMENSIONS,
+  PRINCIPLE_DIMENSION_SOURCING,
+  PRINCIPLE_DIMENSION_SOURCINGS,
+  dimensionSourcing,
+  dimensionsBySourcing,
   assertDimensionScopeIntegrity,
   isSpineDimension,
   projectVectorOntoSpine,
@@ -190,5 +194,39 @@ describe("dimension scope — the judgement calls are pinned deliberately", () =
   it("leaves a spine that is smaller than the full registry but not degenerate", () => {
     expect(PRINCIPLE_SPINE_DIMENSIONS.length).toBeLessThan(PRINCIPLE_DIMENSIONS.length);
     expect(PRINCIPLE_SPINE_DIMENSIONS.length).toBeGreaterThanOrEqual(8);
+  });
+});
+
+// BI-25CCF1A4 Phase 0 — dimension sourcing. Sourcing (how a weight is kept
+// honest) is orthogonal to scope (which population owns the vocabulary). These
+// pin the honest baseline and the schema-honesty invariant: no axis is labelled
+// with a source it does not yet actually draw its weight from.
+describe("dimension sourcing — every axis is sourcing-classified", () => {
+  it("labels every dimension with a known sourcing class", () => {
+    for (const d of PRINCIPLE_DIMENSIONS) {
+      expect(PRINCIPLE_DIMENSION_SOURCING[d], `${d} has no sourcing class`).toBeDefined();
+      expect(PRINCIPLE_DIMENSION_SOURCINGS).toContain(dimensionSourcing(d));
+    }
+  });
+
+  it("ships the HONEST baseline: every axis is `basic` (uniformly hand-authored) — that uniformity is the gap the inventory repairs", () => {
+    // Schema-honesty: an axis is reclassified ONLY when its weight actually
+    // comes from that source. Until the per-job inventory wires corpus
+    // derivation / revealed inference / external lookup, everything is basic.
+    for (const d of PRINCIPLE_DIMENSIONS) {
+      expect(dimensionSourcing(d), `${d} claims a source it is not yet wired to`).toBe("basic");
+    }
+    expect(dimensionsBySourcing("basic")).toHaveLength(PRINCIPLE_DIMENSIONS.length);
+    for (const s of ["corpus-derived", "revealed", "external"] as const) {
+      expect(dimensionsBySourcing(s), `${s} must stay empty until an axis is wired to it`).toHaveLength(0);
+    }
+  });
+
+  it("dimensionsBySourcing partitions the registry (every axis in exactly one class)", () => {
+    const counted = PRINCIPLE_DIMENSION_SOURCINGS.reduce(
+      (sum, s) => sum + dimensionsBySourcing(s).length,
+      0,
+    );
+    expect(counted).toBe(PRINCIPLE_DIMENSIONS.length);
   });
 });

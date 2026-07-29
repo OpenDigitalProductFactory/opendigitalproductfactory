@@ -118,7 +118,8 @@ export type AttentionTechnicalMetadata = {
 };
 
 /** Proactivity evidence carried by a coworker-owned source. The existing closed
- * level union remains canonical; the owner UI calls `quiet` “Reactive”. */
+ * level union remains canonical; owner-facing labels come from
+ * PROACTIVITY_LEVEL_COPY (`quiet` renders as “Quiet”). */
 export type AttentionProactivity = {
   level: import("@/lib/proactivity/proactivity-types").ProactivityLevel;
   actorId?: string;

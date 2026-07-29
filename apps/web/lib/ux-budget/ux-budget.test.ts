@@ -301,8 +301,8 @@ describe("generated route-shell registry", () => {
         (route) => route.sweepEligible === Boolean(route.sweepExclusionReason),
       ),
     ).toEqual([]);
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(203);
-    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(107);
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(200);
+    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(110);
   });
 
   it("keeps contextual sweep exclusions explicit, valid, and non-stale", () => {
