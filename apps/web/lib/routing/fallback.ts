@@ -18,6 +18,7 @@ import {
   type EndpointUnavailableReason,
 } from "./rate-tracker";
 import { scheduleRecovery } from "./rate-recovery";
+import { isLocalProviderId } from "./provider-locality";
 import { invalidateRoutingLoaderCache } from "./loader";
 import { recordRouteOutcome } from "./route-outcome";
 import { autoDiscoverAndProfile } from "@/lib/ai-provider-internals";
@@ -430,6 +431,21 @@ export async function callWithFallbackChain(
         } else if (e.code === "billing") {
           // 402: billing lapse is account-level and permanent until fixed.
           // Disable the entire provider — same treatment as auth failure.
+          //
+          // EXCEPT local serving engines (BI-F4D3B9E9): DMR/Ollama have no
+          // billing account, so a "billing"-classified response is an
+          // interface anomaly (reload race, proxy hiccup, misread body).
+          // Disabling the provider turns a per-request glitch into a
+          // workforce-wide outage on a local-first install — degrade the
+          // model with a recovery probe instead.
+          if (isLocalProviderId(entry.providerId)) {
+            console.warn(
+              `[callWithFallbackChain] ${e.code}-classified error from LOCAL provider ${entry.providerId} — ` +
+                `local engines have no billing/credentials; degrading the model instead of disabling the provider.`,
+            );
+            await markModelDegraded(entry.providerId, entry.modelId, `local_${e.code}_misclassification`);
+            scheduleRecovery(entry.providerId, entry.modelId);
+          } else {
           await prisma.modelProvider
             .update({
               where: { providerId: entry.providerId },
@@ -438,6 +454,7 @@ export async function callWithFallbackChain(
             .catch((err) =>
               console.error(`[callWithFallbackChain] failed to disable ${entry.providerId} after billing error:`, err),
             );
+          }
 
         } else if (e.code === "request_too_large") {
           // 413: falling through to the next provider won't help — the same
@@ -484,6 +501,21 @@ export async function callWithFallbackChain(
           // then silently breaks Build Studio). So for OAuth providers, attempt
           // a token refresh and retry the same entry once before disabling;
           // only disable if the refresh fails or the retry still auth-fails.
+          //
+          // LOCAL serving engines short-circuit first (BI-F4D3B9E9): DMR/Ollama
+          // carry no credentials, so an "auth"-classified response is an
+          // interface anomaly (reload race, proxy hiccup), not a bad key.
+          // Disabling the provider here turned a single context-overflow window
+          // into a 35-minute workforce-wide outage on the fully-local install —
+          // degrade the model with a recovery probe instead.
+          if (isLocalProviderId(entry.providerId)) {
+            console.warn(
+              `[callWithFallbackChain] auth-classified error from LOCAL provider ${entry.providerId} — ` +
+                `local engines have no credentials; degrading the model instead of disabling the provider.`,
+            );
+            await markModelDegraded(entry.providerId, entry.modelId, "local_auth_misclassification");
+            scheduleRecovery(entry.providerId, entry.modelId);
+          } else {
           const isOAuth = provider.authMethod?.startsWith("oauth2") ?? false;
           if (isOAuth && !authRefreshRetried) {
             authRefreshRetried = true;
@@ -513,6 +545,7 @@ export async function callWithFallbackChain(
                 err,
               ),
             );
+          }
         } else if (shouldDegradeModelForInterfaceDrift(e.code, e.message)) {
           await markModelDegraded(entry.providerId, entry.modelId, "interface drift");
 

@@ -35,6 +35,15 @@ vi.mock("@/lib/routing/loader", () => ({
   loadPolicyRules: mocks.loadPolicyRules,
   loadOverrides: mocks.loadOverrides,
   persistRouteDecision: mocks.persistRouteDecision,
+  // Mirror the real gating so the persistDecision:false test observes the
+  // same contract the production helper enforces (BI-F4D3B9E9(c)).
+  persistFailedRouteDecision: (
+    decision: unknown,
+    options?: { persistDecision?: boolean },
+  ) => {
+    if (options?.persistDecision === false) return;
+    void mocks.persistRouteDecision(decision, options);
+  },
   updateProviderSuitabilityReceipt: mocks.updateProviderSuitabilityReceipt,
 }));
 
@@ -533,6 +542,79 @@ describe("routeAndCall activity harness overrides", () => {
       rawPayloadStored: false,
     });
     expect(JSON.stringify(preview.decision.inferenceDataScreenReceipt)).not.toContain("alex@example.com");
+  });
+
+  // ── BI-F4D3B9E9(c): the no-eligible-endpoints throw must persist the failed
+  //    RouteDecision (with its per-endpoint excludedTrace) instead of dropping
+  //    it — the live outage threw here on every turn and left no audit row,
+  //    reducing diagnosis to a bare excluded-count in an error string. ────────
+  it("persists the failed route decision before throwing NoEligibleEndpointsError", async () => {
+    mocks.routeEndpointV2.mockResolvedValue({
+      selectedEndpoint: null,
+      selectedModelId: null,
+      reason: "No eligible endpoints for task type 'conversation' with sensitivity 'restricted'. 1 endpoint(s) excluded.",
+      fitnessScore: 0,
+      fallbackChain: [],
+      candidates: [
+        {
+          endpointId: "local:qwen3-coder",
+          providerId: "local",
+          modelId: "qwen3-coder",
+          endpointName: "Qwen3 Coder",
+          fitnessScore: 0,
+          dimensionScores: {},
+          costPerOutputMToken: 0,
+          excluded: true,
+          excludedReason: "Context window too small: 24576 < 30000",
+        },
+      ],
+      excludedCount: 1,
+      excludedReasons: ["local:qwen3-coder: Context window too small: 24576 < 30000"],
+      policyRulesApplied: [],
+      taskType: "conversation",
+      sensitivity: "restricted",
+      timestamp: new Date("2026-07-29T00:00:00.000Z"),
+      executionPlan: null,
+    });
+
+    await expect(
+      routeAndCall([{ role: "user", content: "hi" }], "system", "restricted", { taskType: "conversation" }),
+    ).rejects.toThrow(/No eligible endpoints/);
+
+    expect(mocks.persistRouteDecision).toHaveBeenCalledTimes(1);
+    const [persistedDecision] = mocks.persistRouteDecision.mock.calls[0];
+    expect(persistedDecision.selectedEndpoint).toBeNull();
+    expect(persistedDecision.candidates[0]).toMatchObject({
+      excluded: true,
+      excludedReason: expect.stringContaining("Context window too small"),
+    });
+  });
+
+  it("does not persist the failed decision when persistDecision is disabled", async () => {
+    mocks.routeEndpointV2.mockResolvedValue({
+      selectedEndpoint: null,
+      selectedModelId: null,
+      reason: "No eligible endpoints.",
+      fitnessScore: 0,
+      fallbackChain: [],
+      candidates: [],
+      excludedCount: 0,
+      excludedReasons: [],
+      policyRulesApplied: [],
+      taskType: "conversation",
+      sensitivity: "internal",
+      timestamp: new Date("2026-07-29T00:00:00.000Z"),
+      executionPlan: null,
+    });
+
+    await expect(
+      routeAndCall([{ role: "user", content: "hi" }], "system", "internal", {
+        taskType: "conversation",
+        persistDecision: false,
+      }),
+    ).rejects.toThrow(/No eligible endpoints/);
+
+    expect(mocks.persistRouteDecision).not.toHaveBeenCalled();
   });
 });
 

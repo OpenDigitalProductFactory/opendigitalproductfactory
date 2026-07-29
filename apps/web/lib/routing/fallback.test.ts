@@ -657,6 +657,69 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
         data: { status: "disabled" },
       });
     });
+
+    // ── BI-F4D3B9E9(a): a LOCAL serving engine has no credentials, so an
+    //    auth-classified response is an interface anomaly, never a bad key.
+    //    Disabling the provider turned one context-overflow window into a
+    //    35-minute workforce-wide outage on a local-first install. ──────────
+    it("degrades the model instead of disabling a LOCAL provider on an auth-classified error", async () => {
+      mockCallProvider.mockRejectedValue(
+        new InferenceError("Unexpected 401 during model reload", "auth", "local", 401),
+      );
+
+      await expect(
+        callWithFallbackChain(
+          makeDecision("local", "docker.io/ai/qwen3-coder:latest"),
+          [{ role: "user", content: "hi" }],
+          "system",
+        ),
+      ).rejects.toThrow();
+
+      expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockPrisma.modelProfile.updateMany).toHaveBeenCalledWith({
+        where: { providerId: "local", modelId: "docker.io/ai/qwen3-coder:latest" },
+        data: { modelStatus: "degraded" },
+      });
+    });
+
+    it("degrades the model instead of disabling a LOCAL provider on a billing-classified error", async () => {
+      mockCallProvider.mockRejectedValue(
+        new InferenceError("Unexpected 402 from local runtime", "billing", "local", 402),
+      );
+
+      await expect(
+        callWithFallbackChain(
+          makeDecision("local", "docker.io/ai/qwen3-coder:latest"),
+          [{ role: "user", content: "hi" }],
+          "system",
+        ),
+      ).rejects.toThrow();
+
+      expect(mockPrisma.modelProvider.update).not.toHaveBeenCalled();
+      expect(mockPrisma.modelProfile.updateMany).toHaveBeenCalledWith({
+        where: { providerId: "local", modelId: "docker.io/ai/qwen3-coder:latest" },
+        data: { modelStatus: "degraded" },
+      });
+    });
+
+    it("still disables a CLOUD provider on billing errors (unchanged behavior)", async () => {
+      mockCallProvider.mockRejectedValue(
+        new InferenceError("Payment required", "billing", "prov1", 402),
+      );
+
+      await expect(
+        callWithFallbackChain(
+          makeDecision("prov1", "model1"),
+          [{ role: "user", content: "hi" }],
+          "system",
+        ),
+      ).rejects.toThrow();
+
+      expect(mockPrisma.modelProvider.update).toHaveBeenCalledWith({
+        where: { providerId: "prov1" },
+        data: { status: "disabled" },
+      });
+    });
   });
 
   describe("provider interface drift", () => {
