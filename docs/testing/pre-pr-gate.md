@@ -150,9 +150,14 @@ BI-166C59F3 Phase 1 added the shared local-CI convergence sandbox workflow;
 BI-C74F4DE9 made it mechanically enforced (the gate used to be dormant — the
 `pre-push` hook only ran Git LFS and never chained the gate). The sandbox
 runtime is declared in `docker-compose.local-ci.yml` behind the `local-ci`
-profile, uses `COMPOSE_PROJECT_NAME=dpf-local-ci`, serves the portal on
-`http://localhost:3010`, and connects to the existing dev data services on
-host ports `5433`, `6334`, and `7475`/`7688`.
+profile. A versioned slot manifest owns every mutable identity: scratch
+checkout, process fence, Compose project, portal and PostgreSQL ports,
+container/database/volume, dependency convergence state, output, and evidence.
+Slot 0 preserves the singleton portal on `http://localhost:3010` and uses its
+dedicated PostgreSQL endpoint on port `54329`; it may still consume shared,
+read-only or concurrency-safe development services such as Qdrant and Neo4j.
+Slot 1 is declared and testable, but automatic admission remains fixed at one
+until BI-A4427AB8 runs the separately governed capacity pilot.
 
 From a worktree, the gate is:
 
@@ -160,25 +165,28 @@ From a worktree, the gate is:
 pnpm run pregate            # → node scripts/pregate.mjs
 ```
 
-**Host-native/Node-first entry point (BI-2272D840, BI-52500C0D).** `pregate.mjs`
+**Host-native/Node-first entry point (BI-2272D840, BI-52500C0D, BI-4BE30454).** `pregate.mjs`
 detects whether native `sh` actually works against *this* worktree — not just
 "sh is on PATH", but that it can resolve the worktree's own git state
 (`sh -c 'git rev-parse --show-toplevel'`) — and routes accordingly:
 
 - Working native `sh` (Git-for-Windows shell, Linux/macOS): delegates to
-  `scripts/gate-worktree.sh`.
+  `scripts/gate-worktree.sh`, which is a compatibility adapter into the
+  canonical Node gate.
 - No working native `sh` (e.g. a Windows worktree with no Git Bash and a WSL
   install that cannot cleanly read the worktree's `.git` indirection — the
   exact failure BI-C22152E7 hit): routes to `scripts/gate-worktree.mjs`, a
-  Node-native port of the same lease-claim / heartbeat / fenced-run /
-  evidence-record / lease-release flow (`scripts/local-ci-runner.mjs` ports the checked-in
-  runner's scratch-workspace + DB-resolution steps; both call the same
-  `scripts/local-integration-ci.mjs` plan). Missing native `sh` is therefore
+  canonical lease-claim / heartbeat / fenced-run / evidence-record /
+  lease-release flow. `scripts/local-ci-runner.sh` is likewise a compatibility
+  adapter into `scripts/local-ci-runner.mjs`; both host surfaces therefore call
+  the same `scripts/local-integration-ci.mjs` plan and slot manifest. Missing native `sh` is therefore
   classified as **sandbox-routable, never a build blocker** — the agent no
   longer needs to recognize that doctrine and hand-drive the lease steps.
 
-Either path produces the same evidence shape (branch/SHA, lease id, freshness
-verdict, toolchain fingerprint, expiry) and writes the same
+Either path produces the same evidence shape (manifest version and slot,
+branch/SHA, integration tree, database and Compose identity, production
+artifact, lease id, freshness verdict, toolchain fingerprint, expiry) and
+writes the same
 `.git/dpf-local-ci-gate.json` state file, so the pre-push gate below accepts
 either without caring which one ran. Force a specific path for
 testing/debugging with `DPF_PREGATE_FORCE_SH=1` or `DPF_PREGATE_FORCE_NODE=1`.
@@ -191,8 +199,8 @@ writes the latest gate result to Git-local state
 (`.git/dpf-local-ci-gate.json`). Renewal loss is
 fail-closed: before further sandbox mutation the gate terminates its complete
 child process tree, records a fenced outcome, and releases idempotently.
-Admission also takes an atomic host-local owner fence in the shared Git
-directory. A competing claimant waits while that fence's PID is alive even if
+Admission also takes an atomic slot-local owner fence in the shared Git
+directory. A competing claimant for that slot waits while the fence's PID is alive even if
 an older database TTL has elapsed; a dead PID is reaped as an orphan. The
 database lease remains the governed cross-process record, while this local
 fence closes the host process-liveness gap the database cannot observe.
@@ -207,16 +215,18 @@ is available only as an explicit `scripts/gate-worktree.sh --push` (or
 `scripts/gate-worktree.mjs --push`) operation for recovery/transition cases
 that intentionally need it.
 
-**The gate command has a checked-in default (BI-157DC9B2):**
-[`scripts/local-ci-runner.sh`](../../scripts/local-ci-runner.sh) runs the
+**The gate command has a checked-in default (BI-157DC9B2, BI-4BE30454):**
+[`scripts/local-ci-runner.mjs`](../../scripts/local-ci-runner.mjs) runs the
 canonical merged-code plan (`scripts/lib/local-integration-ci.mjs`: checkout
 the locally available accepted-base ref, `origin/main` by default → merge
 candidate → sandbox-freshness converge → vitest → typecheck → production build)
 in a dedicated **non-mutating scratch worktree** (`~/dpf-worktrees/.local-ci-runner`
-by default) — never in your topic worktree. It records content-addressed
+for slot 0 and a manifest-owned sibling for slot 1) — never in your topic
+worktree. It records content-addressed
 metadata to `.git/dpf-local-ci-metadata.json` and into MCP evidence: candidate
 ref/SHA, base ref/SHA, integration commit SHA, synthesized tree SHA, command
-list, timestamps, whether the accepted base came from a local ref or explicit
+list, timestamps, slot key, Compose/PostgreSQL identities, the exact production
+artifact identity, whether the accepted base came from a local ref or explicit
 `--fetch-base`, toolchain fingerprint, and gate-evidence expiry. The evidence
 also carries a `resilience` envelope: `publicationMode` (`deferred` by default
 or explicit `push-before-lease`), `acceptedBaseMode` (`local-ref` or
@@ -237,7 +247,7 @@ Node's experimental host web-storage disabled so Node 26 cannot shadow the
 `localStorage` and `sessionStorage` implementations owned by jsdom. This is a
 test-runner compatibility setting, not a change to application runtime policy.
 
-The candidate wrapper owns the freshness-evidence handoff path. Before each
+The candidate wrapper owns the slot-scoped freshness-evidence handoff path. Before each
 run it removes any prior report from the candidate gitdir and passes
 `DPF_LOCAL_CI_FRESHNESS_REPORT_FILE` through the runner to the freshness
 preflight in the scratch integration worktree. The preflight writes there and
@@ -255,10 +265,11 @@ link inside the sandbox's own `node_modules` before its single governed
 dependency drift, it runs one bounded `pnpm install --force --frozen-lockfile`
 retry to refresh the sandbox store/link graph; a second red verdict remains
 `blocked_sandbox_drift`, never product evidence. The dedicated
-`.local-ci-runner` scratch checkout has one final native recovery path: reset
-that scratch checkout's own `node_modules` and reinstall from the lockfile. The
-convergence lock lives in git-private state, outside `node_modules`, so the
-reset cannot erase its own duplicate-install guard.
+slot scratch checkout has one final native recovery path: reset that exact
+checkout's own `node_modules` and reinstall from the lockfile. The convergence
+lock and scratch pnpm store are derived from the same manifest, so convergence
+or cleanup in one slot cannot erase the peer's duplicate-install guard or
+dependency graph.
 
 The network-disconnect proof is encoded in
 `tests/release/local-ci-gate-contract.test.mjs`: the contract denies network

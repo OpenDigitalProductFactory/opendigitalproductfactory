@@ -828,7 +828,7 @@ exec "${realGit}" "$@"
 // scripts/lib/ensure-pre-push-hook.test.mjs.
 const prePushHook = fileURLToPath(new URL("../../.githooks/lib/pre-push-chained.sh", import.meta.url));
 const prePushGate = fileURLToPath(new URL("../../.githooks/pre-push-gate", import.meta.url));
-const runnerScript = fileURLToPath(new URL("../../scripts/local-ci-runner.sh", import.meta.url));
+const runnerScript = fileURLToPath(new URL("../../scripts/local-ci-runner.mjs", import.meta.url));
 
 function cleanHookEnv(extra = {}) {
   const env = { ...process.env, ...extra };
@@ -1114,8 +1114,8 @@ exit 0
 
 // ── checked-in default runner (BI-157DC9B2) ──────────────────────────────────
 
-shellContractTest("local-ci-runner.sh --dry-run resolves candidate, root and a non-mutating scratch workspace", () => {
-  const result = spawnSync("sh", [runnerScript, "--dry-run", "--candidate", "feat/topic"], {
+shellContractTest("local-ci-runner.mjs --dry-run resolves candidate, root and a non-mutating scratch workspace", () => {
+  const result = spawnSync(process.execPath, [runnerScript, "--dry-run", "--candidate", "feat/topic"], {
     cwd: repoRoot,
     encoding: "utf8",
     env: process.env,
@@ -1127,8 +1127,8 @@ shellContractTest("local-ci-runner.sh --dry-run resolves candidate, root and a n
   assert.match(result.stdout, /plan=node scripts\/local-integration-ci\.mjs --candidate feat\/topic/);
 });
 
-shellContractTest("local-ci-runner.sh refuses to gate main or a detached HEAD", () => {
-  const onMain = spawnSync("sh", [runnerScript, "--dry-run", "--candidate", "main"], {
+shellContractTest("local-ci-runner.mjs refuses to gate main or a detached HEAD", () => {
+  const onMain = spawnSync(process.execPath, [runnerScript, "--dry-run", "--candidate", "main"], {
     cwd: repoRoot,
     encoding: "utf8",
     env: process.env,
@@ -1141,23 +1141,28 @@ shellContractTest("local-ci-runner.sh refuses to gate main or a detached HEAD", 
 // The scratch merge workspace is a linked worktree of the root clone and
 // shares its .git/shallow. A disjoint shallow graft there makes the merge
 // step fail with "refusing to merge unrelated histories" even when the
-// branches share real ancestry on the remote. local-ci-runner.sh must
+// branches share real ancestry on the remote. local-ci-runner.mjs must
 // unshallow the root once, up front, before that merge ever runs.
 
 function stubGitFor(shallow) {
   const stubDir = mkdtempSync(join(tmpdir(), "dpf-local-ci-shallow-stub-"));
   const callsFile = join(stubDir, "calls.log");
   const fakeRoot = join(stubDir, "fake-root").replace(/\\/g, "/");
+  mkdirSync(fakeRoot, { recursive: true });
   writeFileSync(join(stubDir, "git"), `#!/bin/sh
-echo "$*" >> "${callsFile}"
+echo "$PWD|$*" >> "${callsFile}"
 case "$*" in
   "rev-parse --show-toplevel")
     echo "${fakeRoot}" ;;
-  "-C ${fakeRoot} worktree list --porcelain")
+  "worktree list --porcelain")
     echo "worktree ${fakeRoot}" ;;
-  "-C ${fakeRoot} rev-parse --is-shallow-repository")
+  "rev-parse --path-format=absolute --git-common-dir")
+    echo "${fakeRoot}/.git" ;;
+  "rev-parse --absolute-git-dir")
+    echo "${fakeRoot}/.git" ;;
+  "rev-parse --is-shallow-repository")
     echo "${shallow ? "true" : "false"}" ;;
-  "-C ${fakeRoot} fetch --unshallow origin")
+  "fetch --unshallow origin")
     exit 0 ;;
   *)
     exit 7 ;;
@@ -1167,11 +1172,11 @@ esac
   return { stubDir, callsFile };
 }
 
-shellContractTest("local-ci-runner.sh unshallows the root clone before merging when the root is shallow", () => {
+shellContractTest("local-ci-runner.mjs unshallows the root clone before merging when the root is shallow", () => {
   const { stubDir, callsFile } = stubGitFor(true);
   const metadataFile = join(stubDir, "metadata.json");
 
-  const result = spawnSync("sh", [runnerScript, "--candidate", "feat/topic"], {
+  const result = spawnSync(process.execPath, [runnerScript, "--candidate", "feat/topic"], {
     cwd: repoRoot,
     encoding: "utf8",
     env: {
@@ -1182,8 +1187,8 @@ shellContractTest("local-ci-runner.sh unshallows the root clone before merging w
   });
 
   const calls = readFileSync(callsFile, "utf8");
-  assert.match(calls, /-C .*fake-root rev-parse --is-shallow-repository/);
-  assert.match(calls, /-C .*fake-root fetch --unshallow origin/);
+  assert.match(calls, /fake-root\|rev-parse --is-shallow-repository/);
+  assert.match(calls, /fake-root\|fetch --unshallow origin/);
   assert.match(result.stdout, /root clone is shallow.*BI-AA2201B0/);
   // Stub git doesn't understand `rev-parse --verify`, so the script dies
   // resolving the candidate sha next — proving the unshallow step ran
@@ -1192,11 +1197,11 @@ shellContractTest("local-ci-runner.sh unshallows the root clone before merging w
   assert.match(result.stderr, /candidate ref not found locally/);
 });
 
-shellContractTest("local-ci-runner.sh skips the unshallow fetch when the root clone is already full", () => {
+shellContractTest("local-ci-runner.mjs skips the unshallow fetch when the root clone is already full", () => {
   const { stubDir, callsFile } = stubGitFor(false);
   const metadataFile = join(stubDir, "metadata.json");
 
-  spawnSync("sh", [runnerScript, "--candidate", "feat/topic"], {
+  spawnSync(process.execPath, [runnerScript, "--candidate", "feat/topic"], {
     cwd: repoRoot,
     encoding: "utf8",
     env: {
@@ -1207,15 +1212,15 @@ shellContractTest("local-ci-runner.sh skips the unshallow fetch when the root cl
   });
 
   const calls = readFileSync(callsFile, "utf8");
-  assert.match(calls, /-C .*fake-root rev-parse --is-shallow-repository/);
+  assert.match(calls, /fake-root\|rev-parse --is-shallow-repository/);
   assert.doesNotMatch(calls, /fetch --unshallow/);
 });
 
-shellContractTest("local-ci-runner.sh --dry-run never fetches --unshallow even on a shallow root", () => {
+shellContractTest("local-ci-runner.mjs --dry-run never fetches --unshallow even on a shallow root", () => {
   const { stubDir, callsFile } = stubGitFor(true);
   const metadataFile = join(stubDir, "metadata.json");
 
-  const result = spawnSync("sh", [runnerScript, "--dry-run", "--candidate", "feat/topic"], {
+  const result = spawnSync(process.execPath, [runnerScript, "--dry-run", "--candidate", "feat/topic"], {
     cwd: repoRoot,
     encoding: "utf8",
     env: {

@@ -5,12 +5,37 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   createLocalIntegrationPlan,
+  createProductionArtifactIdentity,
   createToolchainFingerprint,
   resolveGitRevision,
   resolveCommandInvocation,
 } from "./local-integration-ci.mjs";
 
 describe("createLocalIntegrationPlan", () => {
+  it("binds the production artifact to the exact integration tree", () => {
+    assert.deepEqual(createProductionArtifactIdentity({
+      buildStrategy: "docker-build",
+      integrationTreeSha: "tree-abc",
+      dockerImageTag: "dpf-local-integration-slot-1-feat-safe-build",
+      dockerImageId: "sha256:image-123",
+    }), {
+      kind: "docker-image",
+      integrationTreeSha: "tree-abc",
+      identity: "sha256:image-123",
+      locator: "dpf-local-integration-slot-1-feat-safe-build",
+    });
+    assert.deepEqual(createProductionArtifactIdentity({
+      buildStrategy: "host-next",
+      integrationTreeSha: "tree-def",
+      nextBuildId: "next-build-456",
+    }), {
+      kind: "next-build",
+      integrationTreeSha: "tree-def",
+      identity: "next-build-456",
+      locator: "apps/web/.next",
+    });
+  });
+
   it("creates a stable toolchain fingerprint for local-CI evidence (BI-76551B2D)", () => {
     const evidence = createToolchainFingerprint({
       buildStrategy: "host-next",
@@ -70,6 +95,24 @@ describe("createLocalIntegrationPlan", () => {
       "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web typecheck",
       "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web exec next build",
     ]);
+  });
+
+  it("scopes integration refs and freshness to the admitted slot", () => {
+    const plan = createLocalIntegrationPlan({
+      candidateBranch: "feat/slot-safe-gate",
+      mode: "single-branch",
+      siblingBranches: [],
+      hostPlatform: "linux",
+      slotKey: "slot-1",
+    });
+
+    assert.equal(
+      plan.integrationBranch,
+      "local-integration/slot-1/feat-slot-safe-gate",
+    );
+    assert.ok(plan.commands.map((command) => command.join(" ")).includes(
+      "node scripts/sandbox-freshness-preflight.mjs --converge --branch local-integration/slot-1/feat-slot-safe-gate --slot-key slot-1",
+    ));
   });
 
   it("disables Node host web-storage before Vitest starts jsdom workers (BI-3E989BEA)", () => {

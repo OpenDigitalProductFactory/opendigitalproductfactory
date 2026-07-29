@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 569,
+  "pageCount": 570,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -4209,6 +4209,18 @@
         "optional-enable-linkedin-ads-phase-4"
       ]
     },
+    "docs/operations/local-ci-sandbox-slots.md": {
+      "publicHref": "/operations/local-ci-sandbox-slots/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "local-ci-sandbox-slots",
+        "current-operating-mode",
+        "recovery",
+        "evidence-contract"
+      ]
+    },
     "docs/operations/mobile-privacy-policy-draft.md": {
       "publicHref": "/operations/mobile-privacy-policy-draft/",
       "portalHref": null,
@@ -4310,6 +4322,7 @@
         "live-portal",
         "build-runtime-also-called-live-preview-in-build-studio-ui",
         "contributor-preview",
+        "contributor-verification-sandbox",
         "diagnostic-surfaces-where-technical-names-still-appear",
         "related"
       ]

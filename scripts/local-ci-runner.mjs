@@ -7,17 +7,20 @@
 // Git-for-Windows shell and a WSL install that cannot cleanly read the
 // worktree's `.git` indirection).
 //
-// scripts/local-ci-runner.sh remains the canonical entry point wherever a
-// native sh works — see scripts/pregate.mjs for the detection/routing layer.
-// This file is a straight behavioral port: same flags, same dry-run output
-// shape, same scratch-workspace location, same DB-resolution order, so
-// evidence produced on either path is equivalent.
+// This file is the canonical implementation on every host.
+// scripts/local-ci-runner.sh is a compatibility entry point that delegates
+// here so the lease/resource contract has one implementation source.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { connect } from "node:net";
-import { dirname, basename, join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  assertLocalCiCleanupTarget,
+  createLocalCiSlotManifest,
+  localCiSlotEnvironment,
+} from "./lib/local-ci-slot-manifest.mjs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 
@@ -58,41 +61,78 @@ function dockerAvailable() {
   return result.status === 0;
 }
 
-async function resolveDatabaseUrl(env) {
-  if (env.DATABASE_URL) return env.DATABASE_URL;
-  if (env.DPF_LOCAL_CI_TEST_DATABASE_URL) return env.DPF_LOCAL_CI_TEST_DATABASE_URL;
+export function planPostgresOwnership({
+  hasDocker,
+  manifestContainerExists,
+  manifestContainerUsesPgvector,
+  assignedPortReachable,
+}) {
+  if (!hasDocker) return "unavailable";
+  if (manifestContainerExists && !manifestContainerUsesPgvector) return "replace";
+  if (manifestContainerExists) return "reuse";
+  if (assignedPortReachable) return "foreign-port-conflict";
+  return "provision";
+}
 
-  if (await tcpReachable("127.0.0.1", 5433)) {
-    return "postgresql://dpf:dpf_dev@127.0.0.1:5433/dpf";
+async function resolveDatabaseUrl(env, manifest) {
+  if (env.DPF_LOCAL_CI_ALLOW_EXPLICIT_DATABASE_URL === "1") {
+    if (env.DPF_LOCAL_CI_TEST_DATABASE_URL) return env.DPF_LOCAL_CI_TEST_DATABASE_URL;
+    if (env.DATABASE_URL) return env.DATABASE_URL;
   }
 
-  if (!dockerAvailable()) return "";
+  const hasDocker = dockerAvailable();
+  if (!hasDocker) return "";
 
   // BET-5 (BI-032B49EB): the provisioned Postgres must ship pgvector — recreate
-  // a pre-BET-5 alpine-image container onto pgvector rather than reuse it. The
-  // sandbox DB is ephemeral (no volume), so recreating loses nothing.
-  const inspect = spawnSync("docker", ["inspect", "dpf-local-ci-postgres"], { encoding: "utf8" });
-  if (inspect.status === 0) {
-    const image = spawnSync("docker", ["inspect", "dpf-local-ci-postgres", "--format", "{{.Config.Image}}"], { encoding: "utf8" });
-    if (!(image.stdout || "").includes("pgvector")) {
-      spawnSync("docker", ["rm", "-f", "dpf-local-ci-postgres"], { encoding: "utf8" });
+  // a pre-BET-5 alpine-image container onto pgvector rather than reuse it.
+  // A listener on the assigned port is not ownership evidence: only the exact
+  // manifest container may satisfy this slot.
+  let inspect = spawnSync("docker", ["inspect", manifest.postgres.container], { encoding: "utf8" });
+  let manifestContainerExists = inspect.status === 0;
+  let manifestContainerUsesPgvector = false;
+  if (manifestContainerExists) {
+    const image = spawnSync("docker", ["inspect", manifest.postgres.container, "--format", "{{.Config.Image}}"], { encoding: "utf8" });
+    manifestContainerUsesPgvector = (image.stdout || "").includes("pgvector");
+    if (!manifestContainerUsesPgvector) {
+      spawnSync("docker", ["rm", "-f", manifest.postgres.container], { encoding: "utf8" });
+      manifestContainerExists = false;
     }
   }
-  const stillMissing = spawnSync("docker", ["inspect", "dpf-local-ci-postgres"], { encoding: "utf8" }).status !== 0;
-  if (stillMissing) {
+
+  const ownershipPlan = planPostgresOwnership({
+    hasDocker,
+    manifestContainerExists,
+    manifestContainerUsesPgvector,
+    assignedPortReachable: await tcpReachable("127.0.0.1", manifest.postgres.hostPort),
+  });
+  if (ownershipPlan === "foreign-port-conflict") {
+    die(
+      `${manifest.slotKey} Postgres port ${manifest.postgres.hostPort} is occupied, ` +
+      `but manifest container ${manifest.postgres.container} does not exist; refusing foreign database reuse`,
+    );
+  }
+  if (ownershipPlan === "provision") {
     const run = spawnSync("docker", [
-      "run", "-d", "--name", "dpf-local-ci-postgres", "-p", "54329:5432",
-      "-e", "POSTGRES_USER=dpf", "-e", "POSTGRES_PASSWORD=dpf_dev", "-e", "POSTGRES_DB=dpf",
+      "run", "-d", "--name", manifest.postgres.container,
+      "-p", `${manifest.postgres.hostPort}:5432`,
+      "-v", `${manifest.postgres.volume}:/var/lib/postgresql/data`,
+      "-e", "POSTGRES_USER=dpf", "-e", "POSTGRES_PASSWORD=dpf_dev",
+      "-e", `POSTGRES_DB=${manifest.postgres.database}`,
       "pgvector/pgvector:pg16",
     ], { encoding: "utf8" });
-    if (run.status !== 0) return "";
+    if (run.status !== 0) {
+      die(`could not provision ${manifest.postgres.container}: ${(run.stderr || run.stdout || "").trim()}`);
+    }
   } else {
-    spawnSync("docker", ["start", "dpf-local-ci-postgres"], { encoding: "utf8" });
+    const start = spawnSync("docker", ["start", manifest.postgres.container], { encoding: "utf8" });
+    if (start.status !== 0) {
+      die(`could not start ${manifest.postgres.container}: ${(start.stderr || start.stdout || "").trim()}`);
+    }
   }
 
   for (let tries = 0; tries < 30; tries += 1) {
-    const ready = spawnSync("docker", ["exec", "dpf-local-ci-postgres", "pg_isready", "-U", "dpf"], { encoding: "utf8" });
-    if (ready.status === 0) return "postgresql://dpf:dpf_dev@127.0.0.1:54329/dpf";
+    const ready = spawnSync("docker", ["exec", manifest.postgres.container, "pg_isready", "-U", "dpf", "-d", manifest.postgres.database], { encoding: "utf8" });
+    if (ready.status === 0) return manifest.postgres.url;
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
   return "";
@@ -117,7 +157,8 @@ function ensureScratchWorkspace(root, workspace) {
   }
 }
 
-function cleanScratchWorkspace(workspace) {
+function cleanScratchWorkspace(workspace, manifest) {
+  assertLocalCiCleanupTarget(manifest, workspace);
   spawnSync("git", ["-C", workspace, "merge", "--abort"], { encoding: "utf8" });
   spawnSync("git", ["-C", workspace, "reset", "--hard", "--quiet"], { encoding: "utf8" });
   spawnSync("git", ["-C", workspace, "clean", "-fd", "--quiet", "-e", "node_modules", "-e", ".env"], { encoding: "utf8" });
@@ -137,7 +178,8 @@ async function main() {
       "  --candidate BRANCH   Branch to gate (default: current branch)\n" +
       "  --base-ref REF       Locally available accepted-base ref (default: origin/main)\n" +
       "  --fetch-base         Fetch origin/main before checkout (explicit network mode)\n" +
-      "  --workspace PATH     Scratch merge workspace (default: <root>-worktrees/.local-ci-runner)\n" +
+      "  --slot-key SLOT      Admitted physical slot (default: DPF_LOCAL_CI_SLOT_KEY or slot-0)\n" +
+      "  --workspace PATH     Explicit scratch workspace override (default: admitted manifest)\n" +
       "  --dry-run            Print the resolved workspace + plan; run nothing\n" +
       "  --help               Show this help\n",
     );
@@ -148,6 +190,7 @@ async function main() {
   let candidate = valueAfter("--candidate");
   const baseRef = valueAfter("--base-ref") || env.DPF_LOCAL_CI_BASE_REF || "origin/main";
   const fetchBase = argv.includes("--fetch-base") || env.DPF_LOCAL_CI_FETCH_BASE === "1";
+  const slotKey = valueAfter("--slot-key") || env.DPF_LOCAL_CI_SLOT_KEY || "slot-0";
   let workspace = valueAfter("--workspace") || env.DPF_LOCAL_CI_WORKSPACE || "";
   const dryRun = argv.includes("--dry-run");
 
@@ -160,23 +203,37 @@ async function main() {
   const root = resolveRootClone(repoTop);
   if (!root) die("could not resolve the root clone");
 
-  if (!workspace) {
-    workspace = join(`${dirname(root)}/${basename(root)}-worktrees`, ".local-ci-runner");
+  const gitCommonDir = gitOrEmpty(["rev-parse", "--path-format=absolute", "--git-common-dir"], repoTop);
+  const candidateGitDir = gitOrEmpty(["rev-parse", "--absolute-git-dir"], repoTop);
+  const manifest = createLocalCiSlotManifest({
+    slotKey,
+    rootClone: root,
+    gitCommonDir,
+    candidateGitDir,
+  });
+  if (!workspace) workspace = manifest.scratch.workspace;
+
+  if (!dryRun && gitOrEmpty(["rev-parse", "--is-shallow-repository"], root) === "true") {
+    process.stdout.write("local-ci-runner: root clone is shallow — fetching full history so the scratch merge has a common ancestor (BI-AA2201B0)\n");
+    const unshallow = git(["fetch", "--unshallow", "origin"], root);
+    if (unshallow.status !== 0) {
+      die(`failed to unshallow root clone at ${root}: ${unshallow.stderr || unshallow.stdout}`);
+    }
   }
 
   const candidateSha = gitOrEmpty(["-C", repoTop, "rev-parse", "--verify", candidate]);
   const baseSha = gitOrEmpty(["-C", repoTop, "rev-parse", "--verify", baseRef]);
   const baseCommitDate = baseSha ? gitOrEmpty(["-C", repoTop, "show", "-s", "--format=%cI", baseSha]) : "";
-  const metadataFile = env.DPF_LOCAL_CI_METADATA_FILE || gitOrEmpty(["-C", repoTop, "rev-parse", "--git-path", "dpf-local-ci-metadata.json"]);
+  const metadataFile = env.DPF_LOCAL_CI_METADATA_FILE || manifest.evidence.metadata;
 
   if (dryRun) {
     process.stdout.write("local-ci-runner dry-run\n");
     process.stdout.write(
-      `candidate=${candidate}\ncandidateSha=${candidateSha || "unresolved"}\nbaseRef=${baseRef}\nbaseSha=${baseSha || "unresolved"}\nbaseCommitDate=${baseCommitDate}\nfetchBase=${fetchBase ? "1" : "0"}\nroot=${root}\nworkspace=${workspace}\nmetadataFile=${metadataFile}\n`,
+      `candidate=${candidate}\ncandidateSha=${candidateSha || "unresolved"}\nbaseRef=${baseRef}\nbaseSha=${baseSha || "unresolved"}\nbaseCommitDate=${baseCommitDate}\nfetchBase=${fetchBase ? "1" : "0"}\nslotKey=${manifest.slotKey}\nmanifestVersion=${manifest.schemaVersion}\nroot=${root}\nworkspace=${workspace}\ncomposeProject=${manifest.compose.project}\nportalUrl=${manifest.portal.url}\npostgresContainer=${manifest.postgres.container}\npostgresDatabase=${manifest.postgres.database}\nmetadataFile=${metadataFile}\n`,
     );
     const fetchFlag = fetchBase ? " --fetch-base" : "";
     process.stdout.write(
-      `plan=node scripts/local-integration-ci.mjs --candidate ${candidate} --base-ref ${baseRef} --candidate-sha ${candidateSha} --base-sha ${baseSha} --metadata-out ${metadataFile}${fetchFlag} (in workspace)\n`,
+      `plan=node scripts/local-integration-ci.mjs --candidate ${candidate} --base-ref ${baseRef} --candidate-sha ${candidateSha} --base-sha ${baseSha} --slot-key ${manifest.slotKey} --metadata-out ${metadataFile}${fetchFlag} (in workspace)\n`,
     );
     process.exit(0);
   }
@@ -191,16 +248,18 @@ async function main() {
   }
 
   ensureScratchWorkspace(root, workspace);
-  cleanScratchWorkspace(workspace);
+  cleanScratchWorkspace(workspace, manifest);
 
-  const testDatabaseUrl = await resolveDatabaseUrl(env);
-  const childEnv = { ...env };
+  const slotEnv = localCiSlotEnvironment(manifest);
+  const childEnv = { ...env, ...slotEnv };
+  const testDatabaseUrl = await resolveDatabaseUrl(env, manifest);
   const args = [
     join(repoTop, "scripts", "local-integration-ci.mjs"),
     "--candidate", candidate,
     "--base-ref", baseRef,
     "--candidate-sha", candidateSha,
     "--base-sha", baseSha,
+    "--slot-key", manifest.slotKey,
     "--metadata-out", metadataFile,
   ];
   if (fetchBase) args.push("--fetch-base");
