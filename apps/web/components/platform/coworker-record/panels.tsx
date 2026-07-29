@@ -13,7 +13,7 @@ import {
   PROFESSION_COMPETENCY_LEVELS,
 } from "@dpf/db/wiki-taxonomy";
 import { LocalTime } from "@/components/ui/LocalTime";
-import { getOversightCopy, oversightLabel } from "@/lib/workforce/oversight-copy";
+import { oversightLabel } from "@/lib/workforce/oversight-copy";
 
 const GAP_REASON_LABEL: Record<string, string> = {
   unmapped: "Unmapped role",
@@ -209,11 +209,7 @@ export function OverviewPanel({ record, summary }: { record: CoworkerRecord; sum
           <InfoCard label="Value stream" value={agent.valueStream ?? "—"} />
           <InfoCard label="Lifecycle stage" value={agent.lifecycleStage} />
           <InfoCard label="Sensitivity" value={agent.sensitivity} />
-          <InfoCard
-            label="Oversight"
-            value={oversightLabel(agent.hitlTierDefault)}
-            hint={getOversightCopy(agent.hitlTierDefault)?.description}
-          />
+          <InfoCard label="Oversight" value={oversightLabel(agent.hitlTierDefault)} />
           <InfoCard label="Supervising employee" value={agent.humanSupervisorId ?? "—"} />
           <InfoCard label="Owning team" value={owningTeam ?? "—"} />
           <InfoCard label="Escalates to" value={agent.escalatesTo ?? "none"} />

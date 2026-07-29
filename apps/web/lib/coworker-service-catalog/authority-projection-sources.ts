@@ -263,7 +263,7 @@ function collectService(
         observedValue: safeObservedValue(service.hitlTier, Boolean(level)),
         normalizedLevel: level,
         detail: level
-          ? `Service ${ref || "<missing>"} oversight is ${oversightLabel(service.hitlTier)}`
+          ? `Service ${ref || "<missing>"} oversight is ${oversightLabel(typeof service.hitlTier === "number" ? service.hitlTier : null)}`
           : `Service ${ref || "<missing>"} oversight is unresolved`,
       },
       selected && level
@@ -334,7 +334,7 @@ function collectAgent(
       observedValue: safeObservedValue(agent.hitlTierDefault, Boolean(level)),
       normalizedLevel: level,
       detail: level
-        ? `Agent ${ref || "<missing>"} oversight is ${oversightLabel(agent.hitlTierDefault)}`
+        ? `Agent ${ref || "<missing>"} oversight is ${oversightLabel(typeof agent.hitlTierDefault === "number" ? agent.hitlTierDefault : null)}`
         : `Agent ${ref || "<missing>"} oversight default is unresolved`,
     },
     selected && level
