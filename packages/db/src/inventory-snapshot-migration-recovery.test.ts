@@ -2,16 +2,20 @@ import { randomUUID } from "node:crypto";
 import pg from "pg";
 import { afterAll, describe, expect, it } from "vitest";
 // @ts-expect-error - production helper is intentionally runtime-native ESM.
-import {
+import * as inventorySnapshotRecovery from "../scripts/lib/inventory-snapshot-migration-recovery.mjs";
+// @ts-expect-error - production helper is intentionally runtime-native ESM.
+import * as inventorySnapshotRecoveryRunner from "../scripts/recover-inventory-snapshot-migration.mjs";
+
+const {
   classifyInventorySnapshotRecovery,
   INDEX_QUARANTINE_SHA256,
   INVENTORY_SNAPSHOT_SHA256,
   INVENTORY_SNAPSHOT_MIGRATION,
-} from "../scripts/lib/inventory-snapshot-migration-recovery.mjs";
-import {
+} = inventorySnapshotRecovery;
+const {
   inspectRecoveryState,
   verifyRolledBackMigration,
-} from "../scripts/recover-inventory-snapshot-migration.mjs";
+} = inventorySnapshotRecoveryRunner;
 
 const exactFailure = {
   id: "11111111-1111-4111-8111-111111111111",
