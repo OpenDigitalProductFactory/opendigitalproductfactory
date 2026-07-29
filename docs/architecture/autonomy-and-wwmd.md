@@ -36,7 +36,7 @@ DPF partitions decisions into **three scopes that do not inherit each other's au
 
 | Layer | Shorthand | Answers | Doctrine it consults | Gate |
 |-------|-----------|---------|----------------------|------|
-| **WWMD** | *What Would Mark Do?* | What would the **founder / platform** do here? | The founder-kernel wiki: tiered principles (commandment / core / contextual) | `principle_decide` |
+| **WWMD** | *What Would Mark Do?* | How should the **platform and its ecosystem** evolve here? | The founder-kernel wiki: tiered principles (commandment / core / contextual) | `principle_decide` |
 | **WWWD** | *What Would We Do?* | What would **this organization** do here? | The org's own governed corpus: stance pages, spend ceilings, recorded rulings | `evaluate_org_business_decision` |
 | **WSID** | *What Should I Do?* | What would a **competent professional in this role** do here? | A per-profession, source-traced corpus (23 profession families and growing) | `evaluate_profession_decision` |
 
@@ -49,9 +49,9 @@ Code references:
 - [`decision-routing-block.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/tak/decision-routing-block.ts) — the routing contract in every coworker prompt
 - [`org-business-gate.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision-perspective/org-business-gate.ts), [`profession-gate.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/apps/web/lib/decision-perspective/profession-gate.ts) — the WWWD and WSID gates
 
-### WWMD — the platform's doctrine
+### WWMD — platform evolution and the ecosystem
 
-WWMD is the founder kernel: tiered principles authored, reviewed, and versioned in the governed wiki. Retrieval for `principle_decide` splits **relevance from authority**:
+WWMD owns the decisions about how the platform itself evolves and how the shared ecosystem behaves: build and architecture trade-offs, what generalizes into the Hive Mind commons versus stays local, contribution and governance standards for the substrate every install shares. It is deliberately *not* the layer for a customer's business calls — that is WWWD's job. Its doctrine is the founder kernel: tiered principles authored, reviewed, and versioned in the governed wiki. Retrieval for `principle_decide` splits **relevance from authority**:
 
 - **Commandments always come from Postgres** — the authoring store — and are always in scope. They are never subject to a similarity search deciding whether they "apply."
 - **Core and contextual principles are found by vector search in Qdrant**, which ranks relevance — core principles top-K ranked, contextual principles additionally gated by a cosine-similarity threshold (default `0.75`) so narrow operational rules only enter when genuinely close to the question.
@@ -94,9 +94,9 @@ Code references:
 <svg viewBox="0 0 880 760" role="img" aria-labelledby="decision-stack-title decision-stack-desc" style="width:100%;height:auto;max-width:880px">
   <title id="decision-stack-title">The DPF decision stack</title>
   <desc id="decision-stack-desc">
-    An open question is routed to the scope that owns it: WWMD platform doctrine,
-    WWWD the organization's own stance corpus, or WSID the profession's job-specific
-    corpus. All three feed one scoring engine (contribution equals tier weight times
+    An open question is routed to the scope that owns it: WWMD platform evolution
+    and ecosystem, WWWD the organization's own stance corpus, or WSID the
+    profession's job-specific corpus. All three feed one scoring engine (contribution equals tier weight times
     alignment), then guardrails, then one of four outcomes. Autonomy dials govern how
     the coworker may act on the outcome; every call writes an append-only ledger row,
     and resolutions flow back to grow the doctrine.
@@ -145,7 +145,7 @@ Code references:
     <text x="440" y="60" fill="var(--fg-muted, #a4adb8)" font-size="12">a coworker hits an ambiguity code cannot answer</text>
     <text x="440" y="140" font-size="14" font-weight="700">Scope routing &mdash; which layer owns this decision?</text>
     <text x="158" y="230" font-size="15" font-weight="700">WWMD</text>
-    <text x="158" y="250" fill="var(--fg-muted, #a4adb8)" font-size="12">platform doctrine</text>
+    <text x="158" y="250" fill="var(--fg-muted, #a4adb8)" font-size="12">platform evolution &amp; ecosystem</text>
     <text x="158" y="278" fill="var(--fg-muted, #a4adb8)" font-size="12">founder-kernel wiki</text>
     <text x="158" y="296" fill="var(--fg-muted, #a4adb8)" font-size="12">tiered principles</text>
     <text x="158" y="322" fill="var(--fg-muted, #a4adb8)" font-size="11">Qdrant ranks relevance &middot; Postgres holds authority</text>
