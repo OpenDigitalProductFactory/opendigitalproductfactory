@@ -10,7 +10,14 @@ import {
   type ProductOperatingContext,
   type ProductOperatingScope,
   type ProductSoldContextItem,
+  type ScheduledPlaybookContextItem,
 } from "./product-operating-context";
+import {
+  buildProductIntelligenceProjectionWhere,
+  buildScheduledProductIntelligenceVisibilityWhere,
+  normalizeProductIntelligenceScope,
+} from "./product-intelligence-scope";
+import { SCHEDULED_AGENT_TASK_KINDS } from "@/lib/operate/scheduled-jobs/agent-task-kind";
 
 type QueryDelegate<T> = {
   findMany(args: unknown): Promise<T[]>;
@@ -87,15 +94,34 @@ type ProductSoldRow = {
 type ResearchProposalRow = {
   proposalId: string;
   digitalProductId: string | null;
+  productLineId: string | null;
+  businessProductId: string | null;
   topic: string;
+  query: string;
   status: string;
+  resultSummary: string | null;
+  metadata: unknown;
   updatedAt: Date;
 };
 type BattlecardRow = {
   battlecardId: string;
   digitalProductId: string | null;
+  productLineId: string | null;
+  businessProductId: string | null;
   competitorName: string;
   status: string;
+  updatedAt: Date;
+};
+type ScheduledAgentTaskRow = {
+  taskId: string;
+  title: string;
+  productLineId: string | null;
+  businessProductId: string | null;
+  schedule: string;
+  isActive: boolean;
+  nextRunAt: Date | null;
+  lastRunAt: Date | null;
+  lastStatus: string | null;
   updatedAt: Date;
 };
 type KnowledgeArticleRow = {
@@ -104,6 +130,21 @@ type KnowledgeArticleRow = {
   status: string;
   updatedAt: Date;
   products: Array<{ digitalProductId: string }>;
+};
+type ReviewedResearchSourceRow = {
+  sourceKey: string;
+  locator: unknown;
+  retrievedAt: Date | null;
+  pageSources: Array<{
+    page: {
+      id: string;
+      title: string;
+      abstract: string | null;
+      status: string;
+      lastReviewedAt: Date | null;
+      updatedAt: Date;
+    };
+  }>;
 };
 type BacklogRow = {
   itemId: string;
@@ -145,10 +186,12 @@ export type ProductOperatingContextQueryClient = {
   researchProposal: QueryDelegate<ResearchProposalRow>;
   marketingBattlecard: QueryDelegate<BattlecardRow>;
   knowledgeArticle: QueryDelegate<KnowledgeArticleRow>;
+  rawSource: QueryDelegate<ReviewedResearchSourceRow>;
   backlogItem: QueryDelegate<BacklogRow>;
   changeItem: QueryDelegate<ChangeRow>;
   eaElement: QueryDelegate<EaElementRow>;
   productDependency: QueryDelegate<DependencyRow>;
+  scheduledAgentTask: QueryDelegate<ScheduledAgentTaskRow>;
 };
 
 export class ProductOperatingContextNotFoundError extends Error {
@@ -175,6 +218,161 @@ function recordOf(value: unknown): Record<string, unknown> {
 
 function stringOf(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value : null;
+}
+
+function dateOf(value: unknown): Date | null {
+  if (value instanceof Date) return value;
+  if (typeof value !== "string") return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function researchEvidenceOf(metadata: unknown): {
+  confidence: "low" | "medium" | "high" | null;
+  comparisonKind: "first-run" | "changed-since" | null;
+  emptyReason:
+    | "no-results"
+    | "provider-unavailable"
+    | "synthesis-empty"
+    | null;
+  retrievedAt: Date | null;
+  sourceUrls: string[];
+} {
+  const evidence = recordOf(recordOf(metadata)["evidence"]);
+  const confidence =
+    evidence["confidence"] === "low" ||
+    evidence["confidence"] === "medium" ||
+    evidence["confidence"] === "high"
+      ? evidence["confidence"]
+      : null;
+  const comparisonKind =
+    evidence["comparisonKind"] === "first-run" ||
+    evidence["comparisonKind"] === "changed-since"
+      ? evidence["comparisonKind"]
+      : null;
+  const emptyReason =
+    evidence["emptyReason"] === "no-results" ||
+    evidence["emptyReason"] === "provider-unavailable" ||
+    evidence["emptyReason"] === "synthesis-empty"
+      ? evidence["emptyReason"]
+      : null;
+  const sourceUrls = Array.isArray(evidence["sourceUrls"])
+    ? evidence["sourceUrls"].filter(
+        (url): url is string => typeof url === "string" && url.length > 0,
+      )
+    : [];
+  return {
+    confidence,
+    comparisonKind,
+    emptyReason,
+    retrievedAt: dateOf(evidence["retrievedAt"]),
+    sourceUrls,
+  };
+}
+
+function researchLocatorEvidenceOf(locatorValue: unknown): {
+  confidence: "low" | "medium" | "high" | null;
+  comparisonKind: "first-run" | "changed-since" | null;
+  sourceUrls: string[];
+} {
+  const locator = recordOf(locatorValue);
+  const confidence =
+    locator["confidence"] === "low" ||
+    locator["confidence"] === "medium" ||
+    locator["confidence"] === "high"
+      ? locator["confidence"]
+      : null;
+  const comparisonKind =
+    locator["comparisonKind"] === "first-run" ||
+    locator["comparisonKind"] === "changed-since"
+      ? locator["comparisonKind"]
+      : null;
+  const sourceUrls = Array.isArray(locator["urls"])
+    ? locator["urls"].filter(
+        (url): url is string => typeof url === "string" && url.trim().length > 0,
+      )
+    : [];
+  return { confidence, comparisonKind, sourceUrls };
+}
+
+function reviewedResearchScopeOf(
+  locatorValue: unknown,
+  organizationId: string,
+) {
+  const locator = recordOf(locatorValue);
+  if (stringOf(locator["sourceType"]) !== "research") return null;
+  try {
+    return normalizeProductIntelligenceScope({
+      organizationId,
+      productLineId: stringOf(locator["productLineId"]),
+      businessProductId: stringOf(locator["businessProductId"]),
+      digitalProductId: stringOf(locator["digitalProductId"]),
+    });
+  } catch {
+    return null;
+  }
+}
+
+function scopeIsVisible(
+  scope: ReturnType<typeof normalizeProductIntelligenceScope>,
+  visible: {
+    productLineIds: string[];
+    productIds: string[];
+    digitalProductIds: string[];
+  },
+): boolean {
+  if (scope.kind === "organization") return true;
+  if (scope.kind === "product-line") {
+    return visible.productLineIds.includes(scope.productLineId!);
+  }
+  if (scope.kind === "business-product") {
+    return visible.productIds.includes(scope.businessProductId!);
+  }
+  return visible.digitalProductIds.includes(scope.digitalProductId!);
+}
+
+function dedupeIntelligenceItems(
+  items: IntelligenceContextItem[],
+): IntelligenceContextItem[] {
+  const byCanonicalSource = new Map<string, IntelligenceContextItem>();
+  for (const item of items) {
+    const key = `${item.sourceKind}:${item.id}`;
+    const existing = byCanonicalSource.get(key);
+    if (!existing) {
+      byCanonicalSource.set(key, item);
+      continue;
+    }
+    byCanonicalSource.set(key, {
+      ...existing,
+      asOf:
+        existing.asOf.getTime() >= item.asOf.getTime()
+          ? existing.asOf
+          : item.asOf,
+      retrievedAt:
+        !existing.retrievedAt ||
+        (item.retrievedAt &&
+          item.retrievedAt.getTime() > existing.retrievedAt.getTime())
+          ? item.retrievedAt
+          : existing.retrievedAt,
+      sourceUrls: Array.from(
+        new Set([...(existing.sourceUrls ?? []), ...(item.sourceUrls ?? [])]),
+      ).sort(),
+    });
+  }
+  return [...byCanonicalSource.values()];
+}
+
+function intelligenceScopeOf(row: {
+  productLineId: string | null;
+  businessProductId: string | null;
+  digitalProductId: string | null;
+}, organizationId: string) {
+  return normalizeProductIntelligenceScope({
+    organizationId,
+    productLineId: row.productLineId,
+    businessProductId: row.businessProductId,
+    digitalProductId: row.digitalProductId,
+  }).kind;
 }
 
 function productSoldConsumers(row: ProductSoldRow): ConsumerEvidenceContextItem[] {
@@ -456,10 +654,32 @@ export async function loadProductOperatingContext(input: {
   }
   const enablingDigitalProducts = [...enablingById.values()];
   const digitalProductIds = enablingDigitalProducts.map((product) => product.id);
+  const productLineIds =
+    input.scope.kind === "organization"
+      ? identity.productLines.map((line) => line.id)
+      : input.scope.kind === "product-line"
+        ? collectProductLineSubtreeIds(identity.productLines, input.scope.id)
+        : identity.selectedProductLine
+          ? [identity.selectedProductLine.id]
+          : [];
+  const intelligenceWhere = buildProductIntelligenceProjectionWhere({
+    organizationId: input.organizationId,
+    productLineIds,
+    businessProductIds: productIds,
+    digitalProductIds,
+  });
+  const scheduledIntelligenceWhere =
+    buildScheduledProductIntelligenceVisibilityWhere({
+      organizationId: input.organizationId,
+      productLineIds,
+      businessProductIds: productIds,
+    });
 
   const [
     research,
     battlecards,
+    scheduledWatches,
+    reviewedResearchSources,
     knowledge,
     demand,
     changes,
@@ -468,45 +688,101 @@ export async function loadProductOperatingContext(input: {
   ] = await Promise.all([
     fullProfile
       ? db.researchProposal.findMany({
-          where: {
-            organizationId: input.organizationId,
-            OR: [
-              { digitalProductId: null },
-              ...(digitalProductIds.length > 0
-                ? [{ digitalProductId: { in: digitalProductIds } }]
-                : []),
-            ],
-          },
+          where: intelligenceWhere,
           orderBy: [{ updatedAt: "desc" }, { proposalId: "asc" }],
           take: 50,
           select: {
             proposalId: true,
             digitalProductId: true,
+            productLineId: true,
+            businessProductId: true,
             topic: true,
+            query: true,
             status: true,
+            resultSummary: true,
+            metadata: true,
             updatedAt: true,
           },
         })
       : Promise.resolve([]),
     fullProfile
       ? db.marketingBattlecard.findMany({
-          where: {
-            organizationId: input.organizationId,
-            OR: [
-              { digitalProductId: null },
-              ...(digitalProductIds.length > 0
-                ? [{ digitalProductId: { in: digitalProductIds } }]
-                : []),
-            ],
-          },
+          where: intelligenceWhere,
           orderBy: [{ updatedAt: "desc" }, { battlecardId: "asc" }],
           take: 50,
           select: {
             battlecardId: true,
             digitalProductId: true,
+            productLineId: true,
+            businessProductId: true,
             competitorName: true,
             status: true,
             updatedAt: true,
+          },
+        })
+      : Promise.resolve([]),
+    fullProfile
+      ? db.scheduledAgentTask.findMany({
+          where: {
+            taskKind: SCHEDULED_AGENT_TASK_KINDS[0],
+            ...scheduledIntelligenceWhere,
+          },
+          orderBy: [{ nextRunAt: "asc" }, { taskId: "asc" }],
+          take: 50,
+          select: {
+            taskId: true,
+            title: true,
+            productLineId: true,
+            businessProductId: true,
+            schedule: true,
+            isActive: true,
+            nextRunAt: true,
+            lastRunAt: true,
+            lastStatus: true,
+            updatedAt: true,
+          },
+        })
+      : Promise.resolve([]),
+    fullProfile
+      ? db.rawSource.findMany({
+          where: {
+            organizationId: input.organizationId,
+            sourceType: "research",
+            pageSources: {
+              some: {
+                page: {
+                  status: "published",
+                  lastReviewedAt: { not: null },
+                },
+              },
+            },
+          },
+          orderBy: [{ retrievedAt: "desc" }, { sourceKey: "asc" }],
+          take: 100,
+          select: {
+            sourceKey: true,
+            locator: true,
+            retrievedAt: true,
+            pageSources: {
+              where: {
+                page: {
+                  status: "published",
+                  lastReviewedAt: { not: null },
+                },
+              },
+              select: {
+                page: {
+                  select: {
+                    id: true,
+                    title: true,
+                    abstract: true,
+                    status: true,
+                    lastReviewedAt: true,
+                    updatedAt: true,
+                  },
+                },
+              },
+            },
           },
         })
       : Promise.resolve([]),
@@ -602,30 +878,64 @@ export async function loadProductOperatingContext(input: {
   ]);
 
   const intelligenceItems: IntelligenceContextItem[] = [
-    ...research.map((row) => ({
-      id: row.proposalId,
-      sourceKind: "research-proposal",
-      asOf: row.updatedAt,
-      title: row.topic,
-      scope:
-        row.digitalProductId === null
-          ? ("organization" as const)
-          : ("digital-product" as const),
-      digitalProductId: row.digitalProductId,
-      status: row.status,
-    })),
+    ...research.map((row) => {
+      const evidence = researchEvidenceOf(row.metadata);
+      return {
+        id: row.proposalId,
+        sourceKind: "research-proposal",
+        asOf: row.updatedAt,
+        title: row.topic,
+        detail:
+          row.status === "pending" ? row.query : row.resultSummary ?? row.query,
+        scope: intelligenceScopeOf(row, input.organizationId),
+        productLineId: row.productLineId,
+        businessProductId: row.businessProductId,
+        digitalProductId: row.digitalProductId,
+        status: row.status,
+        ...evidence,
+      };
+    }),
     ...battlecards.map((row) => ({
       id: row.battlecardId,
       sourceKind: "marketing-battlecard",
       asOf: row.updatedAt,
       title: row.competitorName,
-      scope:
-        row.digitalProductId === null
-          ? ("organization" as const)
-          : ("digital-product" as const),
+      scope: intelligenceScopeOf(row, input.organizationId),
+      productLineId: row.productLineId,
+      businessProductId: row.businessProductId,
       digitalProductId: row.digitalProductId,
       status: row.status,
     })),
+    ...reviewedResearchSources.flatMap((row) => {
+      const scope = reviewedResearchScopeOf(row.locator, input.organizationId);
+      if (
+        !scope ||
+        !scopeIsVisible(scope, {
+          productLineIds,
+          productIds,
+          digitalProductIds,
+        })
+      ) {
+        return [];
+      }
+      const evidence = researchLocatorEvidenceOf(row.locator);
+      const relatedProposalId = stringOf(recordOf(row.locator)["proposalId"]);
+      return row.pageSources.map(({ page }) => ({
+        id: page.id,
+        sourceKind: "wiki-page",
+        asOf: page.lastReviewedAt ?? page.updatedAt,
+        title: page.title,
+        detail: page.abstract,
+        relatedProposalId,
+        scope: scope.kind,
+        productLineId: scope.productLineId,
+        businessProductId: scope.businessProductId,
+        digitalProductId: scope.digitalProductId,
+        status: page.status,
+        retrievedAt: row.retrievedAt,
+        ...evidence,
+      }));
+    }),
     ...knowledge.flatMap((row) =>
       row.products.map((link) => ({
         id: row.articleId,
@@ -633,11 +943,35 @@ export async function loadProductOperatingContext(input: {
         asOf: row.updatedAt,
         title: row.title,
         scope: "digital-product" as const,
+        productLineId: null,
+        businessProductId: null,
         digitalProductId: link.digitalProductId,
         status: row.status,
       })),
     ),
   ];
+
+  const scheduledPlaybooks: ScheduledPlaybookContextItem[] =
+    scheduledWatches.map((row) => ({
+      id: row.taskId,
+      taskId: row.taskId,
+      sourceKind: "scheduled-agent-task",
+      asOf: row.updatedAt,
+      title: row.title,
+      status: row.isActive ? "active" : "paused",
+      scope: row.businessProductId
+        ? ("business-product" as const)
+        : row.productLineId
+          ? ("product-line" as const)
+          : ("organization" as const),
+      productLineId: row.productLineId,
+      businessProductId: row.businessProductId,
+      schedule: row.schedule,
+      isActive: row.isActive,
+      nextRunAt: row.nextRunAt,
+      lastRunAt: row.lastRunAt,
+      lastStatus: row.lastStatus,
+    }));
 
   const sold: ProductSoldContextItem[] = soldRows.map((row) => ({
     id: row.id,
@@ -778,7 +1112,7 @@ export async function loadProductOperatingContext(input: {
     intelligence: createContextSlice({
       requestedAt,
       sourceKind: "research-battlecard-knowledge",
-      items: intelligenceItems,
+      items: dedupeIntelligenceItems(intelligenceItems),
       unavailableReason: !fullProfile
         ? "Intelligence is outside the commercial-summary query profile."
         : undefined,
@@ -846,9 +1180,10 @@ export async function loadProductOperatingContext(input: {
     scheduledPlaybooks: createContextSlice({
       requestedAt,
       sourceKind: "scheduled-agent-task",
-      items: [],
-      unavailableReason:
-        "ScheduledAgentTask has no typed organization or product association; prompt and route text are not inferred.",
+      items: scheduledPlaybooks,
+      unavailableReason: !fullProfile
+        ? "Scheduled product intelligence is outside the commercial-summary query profile."
+        : undefined,
     }),
   });
 }

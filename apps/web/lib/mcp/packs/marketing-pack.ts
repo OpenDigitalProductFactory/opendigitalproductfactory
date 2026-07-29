@@ -202,6 +202,43 @@ const definitions: ToolDefinition[] = [
     sideEffect: false,
   },
   {
+    name: "propose_product_research",
+    description:
+      "Create a pending, operator-reviewable research proposal for one organization, business product line, business product, or enabling DigitalProduct. This does not search the web, run inference, or publish knowledge. Use when a competitive or market claim needs external evidence; provide at most one narrower scope and never infer a product/team/consumer relationship.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        topic: {
+          type: "string",
+          description: "Short stable topic for deduplication and review",
+        },
+        query: {
+          type: "string",
+          description: "The focused research question the operator will review",
+        },
+        digitalProductId: {
+          type: "string",
+          description:
+            "Optional enabling DigitalProduct database id. Use exactly one narrower scope.",
+        },
+        productLineId: {
+          type: "string",
+          description:
+            "Optional business ProductLine database id. Use exactly one narrower scope.",
+        },
+        businessProductId: {
+          type: "string",
+          description:
+            "Optional business Product database id. Use exactly one narrower scope.",
+        },
+      },
+      required: ["topic", "query"],
+    },
+    requiredCapability: "operate_marketing",
+    sideEffect: true,
+    coworkerArtifact: true,
+  },
+  {
     name: "create_battlecard",
     description:
       "Create a durable competitive battlecard for one competitor: our positioning against them, their strengths and weaknesses, our differentiators, win themes, and structured objection handling. Use to turn competitive-analysis findings into a reusable asset the sales/marketing motion can lean on — not just chat. Read them back as a competitive matrix with get_battlecards.",
@@ -213,6 +250,16 @@ const definitions: ToolDefinition[] = [
           type: "string",
           description:
             "Optional DigitalProduct database id when this positioning is product-specific. Omit for organization-wide positioning; never infer it.",
+        },
+        productLineId: {
+          type: "string",
+          description:
+            "Optional business ProductLine database id. Use exactly one narrower scope and never infer it from a DigitalProduct.",
+        },
+        businessProductId: {
+          type: "string",
+          description:
+            "Optional business Product database id. Use exactly one narrower scope and never infer it from a DigitalProduct.",
         },
         positioning: { type: "string", description: "How we position against them in one or two sentences" },
         theirStrengths: { type: "array", items: { type: "string" }, description: "What they do well (be honest)" },
@@ -250,6 +297,16 @@ const definitions: ToolDefinition[] = [
           type: "string",
           description:
             "Optional DigitalProduct database id to return only product-specific cards. Omit to return all organization cards.",
+        },
+        productLineId: {
+          type: "string",
+          description:
+            "Optional business ProductLine database id to return only line-scoped cards.",
+        },
+        businessProductId: {
+          type: "string",
+          description:
+            "Optional business Product database id to return only product-scoped cards.",
         },
       },
       required: [],
@@ -440,6 +497,14 @@ async function createBattlecardHandler(
       typeof params["digitalProductId"] === "string"
         ? params["digitalProductId"]
         : null,
+    productLineId:
+      typeof params["productLineId"] === "string"
+        ? params["productLineId"]
+        : null,
+    businessProductId:
+      typeof params["businessProductId"] === "string"
+        ? params["businessProductId"]
+        : null,
     competitorName: String(params["competitorName"] ?? ""),
     positioning: typeof params["positioning"] === "string" ? params["positioning"] : undefined,
     theirStrengths: asStrings(params["theirStrengths"]),
@@ -456,6 +521,61 @@ async function createBattlecardHandler(
   return { success: true, entityId: result.battlecardId, message: result.message };
 }
 
+async function proposeProductResearchHandler(
+  params: Record<string, unknown>,
+): Promise<ToolResult> {
+  const [{ getMarketingWorkspaceSnapshot }, { proposeResearch }] =
+    await Promise.all([
+      import("@/lib/marketing"),
+      import("@/lib/wiki/research-proposal"),
+    ]);
+  const snapshot = await getMarketingWorkspaceSnapshot();
+  if (!snapshot) {
+    return {
+      success: false,
+      error: "no-workspace",
+      message:
+        "No configured marketing workspace; cannot create a research proposal.",
+    };
+  }
+  try {
+    const result = await proposeResearch({
+      organizationId: snapshot.organization.id,
+      digitalProductId:
+        typeof params["digitalProductId"] === "string"
+          ? params["digitalProductId"]
+          : null,
+      productLineId:
+        typeof params["productLineId"] === "string"
+          ? params["productLineId"]
+          : null,
+      businessProductId:
+        typeof params["businessProductId"] === "string"
+          ? params["businessProductId"]
+          : null,
+      topic: String(params["topic"] ?? ""),
+      query: String(params["query"] ?? ""),
+      proposedBy: "user",
+    });
+    return {
+      success: true,
+      entityId: result.proposalId,
+      message: result.created
+        ? "Research proposal created for operator review."
+        : "An identical research proposal is already awaiting review.",
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: "invalid-product-intelligence-scope",
+      message:
+        error instanceof Error
+          ? error.message
+          : "The research scope could not be validated.",
+    };
+  }
+}
+
 async function getBattlecardsHandler(
   params: Record<string, unknown>,
 ): Promise<ToolResult> {
@@ -464,6 +584,14 @@ async function getBattlecardsHandler(
     digitalProductId:
       typeof params["digitalProductId"] === "string"
         ? params["digitalProductId"]
+        : undefined,
+    productLineId:
+      typeof params["productLineId"] === "string"
+        ? params["productLineId"]
+        : undefined,
+    businessProductId:
+      typeof params["businessProductId"] === "string"
+        ? params["businessProductId"]
         : undefined,
   });
   if ("error" in result) {
@@ -486,6 +614,7 @@ export const marketingPack: ToolPack = {
     create_asset_variant: (params, userId, context) => createAssetVariantHandler(params, userId, context),
     record_variant_result: (params) => recordVariantResultHandler(params),
     get_asset_variants: (params) => getAssetVariantsHandler(params),
+    propose_product_research: (params) => proposeProductResearchHandler(params),
     create_battlecard: (params, userId, context) => createBattlecardHandler(params, userId, context),
     get_battlecards: (params) => getBattlecardsHandler(params),
   },
@@ -500,6 +629,7 @@ export const marketingPack: ToolPack = {
     create_asset_variant: ["marketing_write"],
     record_variant_result: ["marketing_write"],
     get_asset_variants: ["marketing_read"],
+    propose_product_research: ["marketing_write"],
     create_battlecard: ["marketing_write"],
     get_battlecards: ["marketing_read"],
   },

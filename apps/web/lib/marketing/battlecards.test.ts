@@ -9,6 +9,8 @@ function card(overrides: Partial<BattlecardRow> & { competitorName: string }): B
   return {
     battlecardId: `bc_${overrides.competitorName}`,
     digitalProductId: null,
+    productLineId: null,
+    businessProductId: null,
     positioning: null,
     theirStrengths: [],
     theirWeaknesses: [],
@@ -83,6 +85,8 @@ describe("battlecardScopeWhere", () => {
     ).toEqual({
       organizationId: "org-1",
       digitalProductId: null,
+      productLineId: null,
+      businessProductId: null,
     });
     expect(
       battlecardScopeWhere({
@@ -92,6 +96,19 @@ describe("battlecardScopeWhere", () => {
     ).toEqual({
       organizationId: "org-1",
       digitalProductId: "digital-1",
+      productLineId: null,
+      businessProductId: null,
+    });
+    expect(
+      battlecardScopeWhere({
+        organizationId: "org-1",
+        businessProductId: "product-1",
+      }),
+    ).toEqual({
+      organizationId: "org-1",
+      digitalProductId: null,
+      productLineId: null,
+      businessProductId: "product-1",
     });
   });
 });

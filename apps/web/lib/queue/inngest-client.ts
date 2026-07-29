@@ -12,6 +12,8 @@ export interface ResearchExecuteRunEvent {
     proposalId: string;
     organizationId: string;
     digitalProductId: string | null;
+    productLineId: string | null;
+    businessProductId: string | null;
     topic: string;
     query: string;
   };

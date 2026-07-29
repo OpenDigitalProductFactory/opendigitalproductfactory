@@ -148,17 +148,31 @@ Product
 ```
 
 It does not add or infer a general Product-to-DigitalProduct association.
-Research proposals and marketing battlecards may carry a nullable
-`digitalProductId`; null remains the truthful organization-wide scope.
-Product-scoped research execution preserves that identifier in the canonical
-`WikiPage`/`WikiPageSource` provenance. It does not dual-write a legacy
-`KnowledgeArticle`; an article remains an explicit retained snapshot.
+Research proposals and marketing battlecards may carry exactly one nullable
+narrower target: business `productLineId`, business `businessProductId`, or
+architecture `digitalProductId`. All null remains the truthful
+organization-wide scope. Composite foreign keys keep business targets inside
+the owning organization, and a check constraint prevents a business and
+digital target from being combined.
 
-Demand, knowledge, change, architecture, and dependency evidence is included
+Product-scoped research execution preserves scope, source URLs, retrieval
+time, confidence, comparison baseline, and proposal identity in canonical
+`RawSource → WikiPageSource → WikiPage` provenance. `WikiPage` remains draft
+until reviewed and published. The read boundary projects published reviewed
+Wiki research as authority and retains `KnowledgeArticle` only as a
+compatibility source for explicit legacy DigitalProduct links.
+
+`ScheduledAgentTask` owns recurring product-intelligence cadence through the
+closed `product-intelligence-watch` task kind. Its structured config contains
+the topic and question; prompt or route text is never parsed as scope. A watch
+tick writes only a pending `ResearchProposal`, so external research and
+publication remain behind their existing human gates.
+
+Demand, change, architecture, and dependency evidence is included
 only through the resolved enabling digital products. Product decisions,
-objectives, outcomes, and scheduled playbooks remain explicitly unavailable
-until their owning phases provide typed associations. Prompt strings, route
-text, similar names, and empty result sets are never used to invent scope.
+objectives, and outcomes remain explicitly unavailable until their owning
+phases provide typed associations. Prompt strings, route text, similar names,
+and empty result sets are never used to invent scope.
 
 Current ServiceNow CRM/CSM documentation includes Sold Product, installed
 product/install-base, party, and entitlement concepts. DPF's `ProductSold` is
@@ -205,6 +219,14 @@ Facts, deterministic calculations, missing contracts, and future AI-assisted
 work remain visibly distinct. Direction links are read-only; the preview
 component discloses scope and consequences before any transition to a governed
 mutation workflow.
+
+Continuous intelligence lives at
+`/portfolio/product/[id]/direction/intelligence`. Its server-derived view keeps
+pending proposals, research drafts, reviewed Wiki findings, battlecards, stale
+evidence, and typed watches separate. Guided and professional modes disclose
+different evidence density over the same canonical projection. The page
+previews scope, write, approval boundary, and cadence before proposal or
+schedule creation.
 
 ## Fleet-Safe Evolution
 

@@ -288,7 +288,7 @@ CONFIRMED TOOL ROSTER (authoritative — call these when appropriate; NEVER clai
   campaign aggregate: create_marketing_campaign, update_marketing_campaign, attach_to_campaign, get_campaign_plan
   artifact/internal: save_marketing_review, create_marketing_campaign_brief, create_marketing_asset_task, record_marketing_kpi_checkpoint, create_marketing_automation_candidate, draft_marketing_asset, analyze_seo_opportunity, get_marketing_summary, suggest_campaign_ideas, build_tracked_links
   A/B variants: create_asset_variant, record_variant_result, get_asset_variants (ranked winner recommendation with a min-impressions guard)
-  competitive: create_battlecard, get_battlecards (durable per-competitor cards + a competitive matrix; upgrades competitive-analysis from chat to a saved asset)
+  competitive: propose_product_research (pending proposal only; human approval precedes external research), create_battlecard, get_battlecards (durable per-competitor cards + a competitive matrix)
   recurring work: for long-running/recurring marketing work (e.g. a campaign that publishes on a weekly cadence), create_recurring_work_engagement (a rule + timezone → materialized, DST-correct instances), then transition_work_engagement to advance status and record_work_engagement_activity to log milestones/blockers/deliverables; get_work_engagement_instances shows what's scheduled/done across the series
   publish (requires connected integration + approved draft): publish_to_linkedin, send_marketing_email, place_linkedin_ad
   analytics: refresh_channel_kpis, get_campaign_performance, get_content_calendar

@@ -123,6 +123,12 @@ a source unavailable until real offerings, purchases, research, delivery work,
 or architecture links exist. Adding another product line changes what is
 disclosed, not the underlying provider/consumer model.
 
+Setup does not schedule market research or invent competitor knowledge. After
+launch, an operator may open a business Product's **Direction → Intelligence**
+page to preview a focused proposal or an optional recurring proposal-only scan.
+Research still requires explicit approval, and its draft must be reviewed
+before publication.
+
 After setup, open **Products → Goods and Services for Sale**. The hierarchy is
 shown above the digital-product inventory. A simple one-line business sees one
 line and can go directly to its managed product. A mixed salon, hotel, or
