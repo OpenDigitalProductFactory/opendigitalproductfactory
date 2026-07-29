@@ -6121,6 +6121,11 @@ model PlatformIssueReport {
   // can't express partial-unique predicates); it lets a resolved signature
   // re-file when the problem recurs while preventing duplicate open reports.
   dedupeKey           String?
+  // BI-854A9A5C: retained issue-report merge lineage. Integrity repair keeps
+  // every reportId and diagnostic payload while suppressing duplicate active
+  // identities; mergedInto points each retained loser at the canonical report.
+  mergedIntoId        String?
+  suppressionReason   String?       @db.VarChar(80)
   // Governed Hermes learning Slice 1: link runtime issues to the thread/run
   // that produced them so reflection can avoid route/time-window heuristics.
   threadId            String?
@@ -6150,6 +6155,8 @@ model PlatformIssueReport {
   upstreamSyncedAt    DateTime?
   reportedBy          User?         @relation(fields: [reportedById], references: [id])
   featureBuild        FeatureBuild? @relation(fields: [featureBuildId], references: [id], onDelete: SetNull)
+  mergedInto          PlatformIssueReport?  @relation("PlatformIssueReportMerge", fields: [mergedIntoId], references: [id], onDelete: SetNull)
+  mergedFrom          PlatformIssueReport[] @relation("PlatformIssueReportMerge")
 
   @@unique([reportedById, supportSessionId])
   @@index([featureBuildId])
@@ -6159,6 +6166,7 @@ model PlatformIssueReport {
   @@index([errorDigest])
   // BI-5FE8656F: dedupeKey lookup powers the scanner's idempotency check.
   @@index([dedupeKey])
+  @@index([mergedIntoId])
   @@index([reportedById, supportSessionId, createdAt(sort: Desc)])
 }
 

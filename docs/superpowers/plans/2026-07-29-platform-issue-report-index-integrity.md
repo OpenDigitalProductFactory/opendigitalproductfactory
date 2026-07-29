@@ -42,7 +42,7 @@ For a compatible group, require identical values for issue identity and ownershi
 - `severity =` highest observed severity (`critical`, `high`, `medium`, `low`)
 - `stagedUntilPromoted = bool_and(stagedUntilPromoted)`
 
-For an incompatible group, do not aggregate. Set only the noncanonical rows to `status='suppressed'`, point `mergedIntoId` at the survivor, and record the incompatible reason. In both paths, IDs, `reportId`, title, description, stack, responder decision, timestamps, upstream fields, and all other diagnostic payloads remain on the retained rows.
+For an incompatible group, or a structurally compatible group whose recurrence total cannot fit the existing PostgreSQL `integer` field, do not aggregate. Set only the noncanonical rows to `status='suppressed'`, point `mergedIntoId` at the survivor, and record the incompatible reason. In both paths, IDs, `reportId`, title, description, stack, responder decision, timestamps, upstream fields, and all other diagnostic payloads remain on the retained rows, so an overflowed total remains derivable from the retained individual counters.
 
 ## Implementation
 
@@ -52,7 +52,7 @@ Add `packages/db/src/platform-issue-report-index-integrity-migration.test.ts`.
 
 The disposable PostgreSQL fixture must reproduce:
 
-- multiple duplicate groups and one three-row group;
+- multiple duplicate groups, one three-row group, and an integer-overflow group;
 - compatible and incompatible ownership/lifecycle data;
 - null time fields, mixed severity, large occurrence counts, and existing terminal duplicates;
 - a non-unique/corrupted-index stand-in that allowed active duplicates;
@@ -66,7 +66,7 @@ Expected assertions:
 - every loser retained with unchanged public/diagnostic payload and explicit lineage;
 - terminal duplicates remain allowed;
 - zero active heap duplicate groups;
-- exact lookup and partial-unique index definitions;
+- exact lookup and partial-unique index definitions plus self-FK actions;
 - index catalog flags plus targeted `amcheck`;
 - a direct second active insert fails with `23505`;
 - running the migration a second time produces identical rows.
@@ -80,7 +80,7 @@ Modify `packages/db/prisma/schema.prisma` and add:
 In one transaction:
 
 1. Add the nullable lineage fields, self-FK, and lineage index idempotently.
-2. Take a bounded write-blocking table lock so no producer can race the repair.
+2. Take the write-blocking table lock after the governed promoter has quiesced producers, so no producer can race the repair. Do not add a migration-local lock timeout: a timeout would turn transient contention into an unresolved Prisma migration.
 3. Drop both dedupe indexes before reading, then force heap-only planning.
 4. Build a repair map for every active duplicate group, classify compatibility, and choose the deterministic survivor.
 5. Aggregate only compatible survivors; suppress and lineage-link every noncanonical row.

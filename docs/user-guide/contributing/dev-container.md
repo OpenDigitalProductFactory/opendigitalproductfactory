@@ -52,6 +52,7 @@ Login: `admin@dpf.local` / `changeme123`
 
 - The clone resets the disposable development application tables before copying. Restricted provider, credential, token, and connection records are not copied; production-derived search/vector values are omitted rather than carrying source terms or embeddings into the preview.
 - Additive source-schema differences are expected during concurrent development. Source-only columns or tables are left out of the preview, destination-only columns use their migrated defaults, and a shared column with an incompatible type stops the clone with a precise error instead of risking a corrupt preview.
+- Before copying, the clone verifies the live source's critical identity indexes and their heap semantics. A message naming `InventoryEntity_entityKey_key` or `PlatformIssueReport_dedupeKey_open_key` is a **source-integrity stop**: the live source must be repaired through a forward migration before preview can proceed. Recreating the disposable preview volume cannot repair that source condition.
 - Clone publication is fail-safe: if any table cannot be copied or sanitized, the development application tables are cleared again while Prisma migration history is retained. The Contributor preview will not start against a partially copied relational dataset. Correct the reported source/tooling error and restart the development initialization step to retry.
 
 ### Related

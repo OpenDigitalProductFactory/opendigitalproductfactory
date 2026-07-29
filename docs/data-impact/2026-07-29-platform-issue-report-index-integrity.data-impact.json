@@ -1,0 +1,56 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "PlatformIssueReport operational issue ledger",
+    "PlatformIssueReport active dedupe identity projection",
+    "Contributor sanitized-clone source and destination",
+    "Prisma-to-EA current-state data-model mirror"
+  ],
+  "migration": {
+    "name": "20260729143000_repair_platform_issue_report_index_integrity",
+    "backfill": "after governed producer quiescence, hold a write-blocking lock, discover active dedupeKey duplicates from the heap, retain the newest report as canonical, aggregate only structurally compatible recurrence counters whose total fits the existing integer field, retain incompatible or unrepresentable diagnostic payloads without aggregation, suppress every noncanonical row with typed mergedIntoId lineage and a bounded suppressionReason, then recreate and physically verify both dedupe indexes"
+  },
+  "tests": [
+    "packages/db/src/platform-issue-report-index-integrity-migration.test.ts",
+    "packages/db/src/sanitized-clone-source-integrity.test.ts",
+    "packages/db/src/sanitized-clone.postgres.test.ts",
+    "packages/db/scripts/index-integrity-guard.postgres.test.ts",
+    "scripts/check-data-impact.test.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:platform-issue-report#dedupe-index-integrity-repair",
+      "prismaModel": "PlatformIssueReport",
+      "lifecycleDisposition": "the newest createdAt then lexical-id report remains active; every duplicate loser remains durable with its public reportId and diagnostic payload, status suppressed, explicit mergedIntoId lineage, and a machine-readable repair reason",
+      "fields": [
+        {
+          "fieldId": "data:platform-issue-report#dedupeKey",
+          "resolution": "governed",
+          "reason": "restore one trustworthy active report per automated issue identity without deleting evidence or preventing recurrence after a terminal resolution",
+          "provenance": "BI-854A9A5C forced-heap duplicate evidence, bt_index_parent_check failure, and decisions DI-1E67EDBA1253 and DI-5B6BC9A24BBA"
+        },
+        {
+          "fieldId": "data:platform-issue-report#mergedIntoId",
+          "resolution": "governed",
+          "reason": "retain a typed path from every suppressed duplicate to the canonical active report",
+          "provenance": "decision DI-5FE9191AADBD and existing DPF merge-tombstone substrate"
+        },
+        {
+          "fieldId": "data:platform-issue-report#suppressionReason",
+          "resolution": "governed",
+          "reason": "distinguish compatible recurrence aggregation from incompatible retained suppression without rewriting diagnostic descriptions",
+          "provenance": "decisions DI-1E67EDBA1253 and DI-5B6BC9A24BBA"
+        }
+      ]
+    },
+    {
+      "kind": "projection",
+      "store": "postgres:contributor-sanitized-clone",
+      "derivedContractId": "critical-source-index-integrity-to-sanitized-contributor-preview",
+      "cleanupTest": "packages/db/src/sanitized-clone.postgres.test.ts",
+      "reconciliationTest": "packages/db/src/sanitized-clone-source-integrity.test.ts"
+    }
+  ]
+}
