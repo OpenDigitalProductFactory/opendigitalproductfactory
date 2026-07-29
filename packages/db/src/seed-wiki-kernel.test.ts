@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { resolve } from "path";
 import { describe, expect, it } from "vitest";
 import {
@@ -7,6 +7,7 @@ import {
   extractPrinciplePayload,
   extractWikilinks,
   parseFrontmatter,
+  PRINCIPLE_ONLY_FRONTMATTER_KEYS,
   type SeedablePage,
   type WikiPageFrontmatter,
 } from "./seed-wiki-kernel";
@@ -389,15 +390,17 @@ describe("seed-wiki-kernel: extractPrinciplePayload", () => {
     expect(payload.principleAppliesTo).toEqual(["human"]);
   });
 
-  it("does not forward consumer-archetype keys on non-principle pages", () => {
-    const payload = extractPrinciplePayload({
-      title: "Edge Node",
-      pageKind: "entity",
-      // These would be invalid on an entity but the helper must short-circuit
-      // before any coherence check fires.
-      principleConsumerArchetype: "route-domain-specific" as never,
-    });
-    expect(payload).toEqual({});
+  it("rejects consumer-archetype keys on non-principle pages", () => {
+    // Previously this short-circuited to {}: the archetype was dropped and the
+    // author never learned. The kind mismatch must be what surfaces here — not
+    // the "route-domain-specific requires a context" coherence check.
+    expect(() =>
+      extractPrinciplePayload({
+        title: "Edge Node",
+        pageKind: "entity",
+        principleConsumerArchetype: "route-domain-specific" as never,
+      }),
+    ).toThrow(/principleConsumerArchetype/);
   });
 
   // ─── Ring-scope axis (spec 2026-05-24-founder-kernel-evolution-discipline) ───
@@ -442,13 +445,136 @@ describe("seed-wiki-kernel: extractPrinciplePayload", () => {
     expect(payload.principleRingScope).toEqual(["universal-ring"]);
   });
 
-  it("does not forward principleRingScope on non-principle pages", () => {
-    const payload = extractPrinciplePayload({
-      title: "Edge Node",
-      pageKind: "entity",
-      principleRingScope: ["ring-1-coworker"] as never,
+  it("rejects principleRingScope on non-principle pages", () => {
+    expect(() =>
+      extractPrinciplePayload({
+        title: "Edge Node",
+        pageKind: "entity",
+        principleRingScope: ["ring-1-coworker"] as never,
+      }),
+    ).toThrow(/principleRingScope/);
+  });
+
+  // ─── Principle payload on the wrong pageKind ─────────────────────────────
+  // Regression cover for the silent drop found while building BI-D65E044E
+  // Phase 1: a decision-bearing vector authored on a `heuristic` page seeded
+  // as prose with the entire payload discarded — no vector, so it contributed
+  // nothing to structured option scoring and could not move a verdict. The
+  // principle lint detectors select on `pageKind === "principle"`, so nothing
+  // downstream could catch it either. `make-silent-failures-observable`
+  // requires the author to learn at authoring time.
+
+  it("throws when a heuristic page declares a principle dimension vector", () => {
+    expect(() =>
+      extractPrinciplePayload({
+        title: "Prefer 3NF Until Measured",
+        pageKind: "heuristic",
+        principleDimensionVector: { schema_grounding: 1.0 },
+      }),
+    ).toThrow(/principleDimensionVector/);
+  });
+
+  it("names every declared principle-only key, and the file, in the message", () => {
+    expect(() =>
+      extractPrinciplePayload(
+        {
+          title: "Prefer 3NF Until Measured",
+          pageKind: "heuristic",
+          principleTier: "core",
+          principleDirection: "Normalize first.",
+          principleDimensionVector: { schema_grounding: 1.0 },
+        },
+        "docs/professions/data-architect/wiki/prefer-3nf.md",
+      ),
+    ).toThrow(/principleTier, principleDirection, principleDimensionVector/);
+
+    // The path is what makes this actionable inside a many-hundred-page seed.
+    expect(() =>
+      extractPrinciplePayload(
+        {
+          title: "Prefer 3NF Until Measured",
+          pageKind: "heuristic",
+          principleDimensionVector: { schema_grounding: 1.0 },
+        },
+        "docs/professions/data-architect/wiki/prefer-3nf.md",
+      ),
+    ).toThrow(/prefer-3nf\.md/);
+  });
+
+  it("rejects principle payload on every non-principle kind", () => {
+    for (const kind of [
+      "heuristic",
+      "stance",
+      "entity",
+      "summary",
+      "decision",
+      "runbook",
+      "index",
+    ] as const) {
+      expect(() =>
+        extractPrinciplePayload({
+          title: "T",
+          pageKind: kind,
+          principleDimensionVector: { schema_grounding: 1.0 },
+        }),
+      ).toThrow(/pageKind: principle ONLY/);
+    }
+  });
+
+  it("fires on real authored markdown, not just object literals", () => {
+    // End-to-end from the raw file shape an author actually writes: the
+    // reported case was a profession-corpus page authored exactly like this.
+    const raw = `---
+title: Prefer 3NF Until Measured
+pageKind: heuristic
+principleDimensionVector: {"schema_grounding": 1.0}
+principleDirection: Normalize first; denormalize on measured read pressure.
+---
+
+Prefer 3NF until a measured read-path needs denormalization.`;
+
+    const { frontmatter } = parseFrontmatter<WikiPageFrontmatter>(raw);
+    expect(frontmatter.principleDimensionVector).toEqual({
+      schema_grounding: 1.0,
     });
-    expect(payload).toEqual({});
+
+    expect(() =>
+      extractPrinciplePayload(frontmatter, "docs/professions/x/wiki/y.md"),
+    ).toThrow(/principleDirection, principleDimensionVector|principleDimensionVector/);
+  });
+
+  it("still returns {} for a non-principle page that declares no payload", () => {
+    // The guard must not turn every ordinary corpus page into a seed failure.
+    expect(
+      extractPrinciplePayload({ title: "Edge Node", pageKind: "heuristic" }),
+    ).toEqual({});
+  });
+
+  it("keeps the guard key list in sync with the payload builder", () => {
+    // Every key the builder forwards must also be a key the guard rejects on
+    // the wrong kind. If the two drift, a newly added principle field silently
+    // escapes the check — reintroducing exactly this bug for that field.
+    const full: WikiPageFrontmatter = {
+      title: "T",
+      pageKind: "principle",
+      principleTier: "core",
+      principleDirection: "D",
+      principleWeight: 0.5,
+      principleWeightRationale: "R",
+      principleDimensionVector: { schema_grounding: 1.0 },
+      principleDimensions: ["schema_grounding"],
+      principleAppliesTo: ["human", "in_platform_coworker"],
+      principleRingScope: ["ring-1-coworker"],
+      principleConsumerArchetype: "universal",
+      principleConsumerContexts: ["data-model"],
+      principlePublic: true,
+      principlePublicRationale: "PR",
+    };
+
+    const guarded = new Set<string>(PRINCIPLE_ONLY_FRONTMATTER_KEYS);
+    for (const key of Object.keys(extractPrinciplePayload(full))) {
+      expect(guarded.has(key)).toBe(true);
+    }
   });
 });
 
@@ -475,6 +601,54 @@ describe("founder-kernel principle frontmatter", () => {
     }
 
     expect(missing).toEqual([]);
+  });
+
+  it("no authored page declares principle payload on a non-principle kind", () => {
+    // The seeder guard only fires when the seed actually runs (which needs a
+    // DB). This sweep is the cheap CI-time equivalent, so an author learns at
+    // PR time instead of at deploy time. Covers both corpora: the founder
+    // kernel and every profession corpus under docs/professions/*/wiki/.
+    const repoRoot = resolve(process.cwd(), "../..");
+
+    const walk = (dir: string): string[] => {
+      if (!existsSync(dir)) return [];
+      const out: string[] = [];
+      for (const entry of readdirSync(dir)) {
+        const full = resolve(dir, entry);
+        if (statSync(full).isDirectory()) out.push(...walk(full));
+        else if (entry.endsWith(".md") && !entry.startsWith("README"))
+          out.push(full);
+      }
+      return out;
+    };
+
+    const files = [
+      ...walk(resolve(repoRoot, "docs/founder-kernel/wiki")),
+      ...walk(resolve(repoRoot, "docs/professions")),
+    ];
+    // Guard the guard: if the corpus paths ever move, this test must fail
+    // loudly rather than silently sweep zero files and report success.
+    expect(files.length).toBeGreaterThan(50);
+
+    const offenders: string[] = [];
+    for (const file of files) {
+      const { frontmatter } = parseFrontmatter<WikiPageFrontmatter>(
+        readFileSync(file, "utf8"),
+      );
+      if (frontmatter.pageKind === "principle") continue;
+
+      const declared = PRINCIPLE_ONLY_FRONTMATTER_KEYS.filter(
+        (key) => frontmatter[key] !== undefined,
+      );
+      if (declared.length > 0) {
+        offenders.push(
+          `${file.slice(repoRoot.length + 1).replace(/\\/g, "/")} ` +
+            `[pageKind: ${frontmatter.pageKind}] declares ${declared.join(", ")}`,
+        );
+      }
+    }
+
+    expect(offenders).toEqual([]);
   });
 });
 
