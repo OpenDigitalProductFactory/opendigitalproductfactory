@@ -163,7 +163,19 @@ export async function queueProductManagementPlaybookRefresh(
 export async function queueProductManagementPlaybookRefreshBestEffort(
   change: ProductManagementCanonicalChange,
 ): Promise<void> {
-  await queueProductManagementPlaybookRefresh(change).catch((error) => {
+  const compatibilityDb = prisma as unknown as Partial<ProductManagementPlaybookRefreshDb>;
+  if (
+    typeof compatibilityDb.scheduledAgentTask?.findMany !== "function" ||
+    typeof compatibilityDb.scheduledAgentTask?.updateMany !== "function" ||
+    typeof compatibilityDb.scheduledJob?.updateMany !== "function"
+  ) {
+    return;
+  }
+
+  await queueProductManagementPlaybookRefresh(
+    change,
+    compatibilityDb as ProductManagementPlaybookRefreshDb,
+  ).catch((error) => {
     console.warn(
       "[product-management-playbook-refresh] Failed to queue refresh for %s:%s: %s",
       change.sourceKind,
@@ -176,15 +188,20 @@ export async function queueProductManagementPlaybookRefreshBestEffort(
 export async function queueProductManagementPlaybookRefreshForProduct(
   change: ProductManagementProductChange,
 ): Promise<void> {
-  const product = await prisma.product
-    .findFirst({
+  let product: { productLineId: string | null } | null = null;
+  try {
+    product = await prisma.product.findFirst({
       where: {
         id: change.businessProductId,
         organizationId: change.organizationId,
       },
       select: { productLineId: true },
-    })
-    .catch(() => null);
+    });
+  } catch {
+    // Refresh is a derived, best-effort projection. Older compatibility
+    // clients and focused test doubles may not expose the Product delegate;
+    // they must never break the canonical sale/booking transaction.
+  }
   await queueProductManagementPlaybookRefreshBestEffort({
     ...change,
     productLineId: product?.productLineId ?? null,

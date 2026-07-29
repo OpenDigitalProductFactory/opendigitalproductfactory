@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getMarketingWorkspaceSnapshot } = vi.hoisted(() => ({
+const { getMarketingOperatingSnapshot, getMarketingWorkspaceSnapshot } = vi.hoisted(() => ({
+  getMarketingOperatingSnapshot: vi.fn(),
   getMarketingWorkspaceSnapshot: vi.fn(),
 }));
 
@@ -31,6 +32,10 @@ vi.mock("@/lib/marketing", () => ({
       .map((part) => part[0]?.toUpperCase() + part.slice(1))
       .join(" "),
   getMarketingWorkspaceSnapshot,
+}));
+
+vi.mock("@/lib/marketing/operating-snapshot", () => ({
+  getMarketingOperatingSnapshot,
 }));
 
 vi.mock("@/components/agent/AgentWorkLauncher", () => ({
@@ -134,11 +139,12 @@ function snapshot() {
   };
 }
 
-describe("CustomerMarketingPage", () => {
-  beforeEach(() => {
-    getMarketingWorkspaceSnapshot.mockResolvedValue(snapshot());
-  });
+beforeEach(() => {
+  getMarketingOperatingSnapshot.mockResolvedValue(null);
+  getMarketingWorkspaceSnapshot.mockResolvedValue(snapshot());
+});
 
+describe("CustomerMarketingPage", () => {
   it("offers Slice 5 agentic operations topics in the marketing route context", async () => {
     const html = renderToStaticMarkup(await CustomerMarketingPage());
 
