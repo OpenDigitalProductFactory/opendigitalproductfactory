@@ -194,7 +194,12 @@ export default function ChangesClient() {
 
   if (loading) {
     return (
-      <div className="text-center py-12 text-[var(--dpf-muted)]">Loading changes...</div>
+      <div
+        className="text-center py-12 text-[var(--dpf-muted)]"
+        data-dpf-ux-settle="pending"
+      >
+        Loading changes...
+      </div>
     );
   }
 

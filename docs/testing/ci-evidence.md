@@ -244,7 +244,8 @@ The marker is an explicit component-owned readiness contract, not a route-name
 exception in the test harness. The authenticated shell owns the initial React
 hydration marker for every route. Components that start additional first-load
 work own narrower markers; the business calendar, for example, remains pending
-until FullCalendar's visible-range event refresh completes.
+until FullCalendar's visible-range event refresh completes, and Operations
+Changes remains pending until its initial RFC list request settles.
 
 The sweep also supplies `/build/work` with a deterministic one-branch Git
 repository through `DPF_WORK_CONTROL_REPO_ROOT`. GitHub's named
