@@ -35,21 +35,19 @@ export function DecisionAwaitingHelp({ stats }: { stats: DecisionTierStats[] }) 
         <div className="mt-2 space-y-2 text-xs text-[var(--dpf-muted)] max-w-2xl">
           <p>
             <span className="font-medium text-[var(--dpf-text)]">Escalated</span> means your AI
-            stopped short of making a call alone — the decision was risky, its confidence was low,
-            or two of your principles disagreed.{" "}
-            <span className="font-medium text-[var(--dpf-text)]">Deferred</span> means it found
-            nothing recorded that answers the question, so it declined to guess.
+            stopped short of deciding alone — the call was risky, confidence was low, or two
+            principles disagreed.{" "}
+            <span className="font-medium text-[var(--dpf-text)]">Deferred</span> means it found no
+            recorded guidance, so it declined to guess.
           </p>
           <p>
-            Nothing on this page is silently stuck: the coworker that asked handled its moment
-            (usually by taking the safest option or asking in its own session) and moved on. The
-            one exception is a Build Studio build waiting at a decision gate — its own record says
-            so.
+            Nothing here is silently stuck. The coworker that asked already handled its moment and
+            moved on. The one exception, a build paused at a decision gate, says so on its own
+            record.
           </p>
           <p>
-            You do not work this log line by line. Review &amp; adjust rolls these rows into a
-            short list of themes — answer a theme once, or add a stance that covers it, and your AI
-            stops needing to ask.
+            You do not work this log line by line. Review &amp; adjust groups these rows into a
+            few themes. Answer a theme once — or add a stance — and your AI stops needing to ask.
           </p>
         </div>
       </details>
