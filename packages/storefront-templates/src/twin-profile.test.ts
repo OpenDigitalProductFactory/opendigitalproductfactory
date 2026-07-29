@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
 import { ALL_ARCHETYPES } from "./archetypes/index";
-import { deriveTwinProfile, type TwinTemplate } from "./twin-profile";
+import {
+  deriveTwinProfile,
+  spaceKindForTwinTemplate,
+  type TwinTemplate,
+} from "./twin-profile";
 import type { ArchetypeDefinition } from "./types";
 import { deriveFieldDispatchProfile } from "./field-dispatch";
 import { readActivationProfile } from "./activation-profile";
@@ -59,6 +63,14 @@ describe("deriveTwinProfile — totality", () => {
       expect(twin.cog.kind, `${a.archetypeId} needs a cog`).toBeTruthy();
       expect(twin.cog.signals.length, `${a.archetypeId} cog needs signals`).toBeGreaterThan(0);
       expect(typeof twin.physical).toBe("boolean");
+      if (twin.physical) {
+        expect(
+          ["cartesian-interior", "geographic", "node-graph"],
+          `${a.archetypeId} needs a spatial coordinate system`,
+        ).toContain(twin.spaceKind);
+      } else {
+        expect(twin.spaceKind, `${a.archetypeId} board must remain non-spatial`).toBeUndefined();
+      }
       // capacityZoneKey must name a real zone — consumers render resource units
       // into that region, so a dangling key would drop the whole capacity view.
       expect(
@@ -78,6 +90,27 @@ describe("deriveTwinProfile — totality", () => {
     for (const a of ALL_ARCHETYPES) {
       const twin = deriveTwinProfile(a);
       expect(twin.physical, `${a.archetypeId}`).toBe(!BOARD_TEMPLATES.includes(twin.template));
+    }
+  });
+
+  it("maps every physical template to its renderer coordinate space", () => {
+    const cartesian: TwinTemplate[] = [
+      "FLOOR",
+      "STORE",
+      "BAYS",
+      "BOOK",
+      "ROOMS",
+      "VENUE",
+      "COUNTER",
+      "DOCK",
+      "YARD",
+    ];
+    for (const template of cartesian) {
+      expect(spaceKindForTwinTemplate(template), template).toBe("cartesian-interior");
+    }
+    expect(spaceKindForTwinTemplate("TERRITORY")).toBe("geographic");
+    for (const template of BOARD_TEMPLATES) {
+      expect(spaceKindForTwinTemplate(template), template).toBeUndefined();
     }
   });
 });
@@ -159,6 +192,35 @@ describe("deriveTwinProfile — leaf override (ADR-4 escape hatch)", () => {
     expect(twin.resourceNoun.singular).toBe("counter");
     expect(twin.resourceNoun.plural).toBeTruthy(); // plural falls through from the STORE default
     expect(twin.cog.kind).toBe("restock-and-pick");
+    expect(twin.spaceKind).toBe("cartesian-interior");
+  });
+
+  it("recomputes spaceKind from the final overridden template", () => {
+    const physicalBase = byCategory("food-hospitality")[0] ?? ALL_ARCHETYPES[0];
+    const geographic = deriveTwinProfile({
+      ...physicalBase,
+      twinProfile: { template: "TERRITORY" },
+    });
+    expect(geographic.physical).toBe(true);
+    expect(geographic.spaceKind).toBe("geographic");
+
+    const board = deriveTwinProfile({
+      ...physicalBase,
+      twinProfile: { template: "PIPELINE" },
+    });
+    expect(board.physical).toBe(false);
+    expect(board.spaceKind).toBeUndefined();
+
+    const boardBase =
+      byCategory("software-platform")[0] ??
+      ALL_ARCHETYPES.find((archetype) => !deriveTwinProfile(archetype).physical) ??
+      ALL_ARCHETYPES[0];
+    const cartesian = deriveTwinProfile({
+      ...boardBase,
+      twinProfile: { template: "FLOOR" },
+    });
+    expect(cartesian.physical).toBe(true);
+    expect(cartesian.spaceKind).toBe("cartesian-interior");
   });
 });
 
