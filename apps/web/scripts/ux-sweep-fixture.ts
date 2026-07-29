@@ -18,13 +18,15 @@
  *
  *   pnpm --filter web ux:sweep-fixture
  */
-import { prisma } from "@dpf/db";
+import { Prisma, prisma } from "@dpf/db";
 
 import { convergeUxSweepFixture } from "./ux-sweep-fixture-core.mjs";
 
 void (async () => {
   try {
-    const result = await convergeUxSweepFixture(prisma);
+    const result = await convergeUxSweepFixture(prisma, new Date(), {
+      dbNull: Prisma.DbNull,
+    });
     console.error(
       result.setupChanged
         ? `[ux-sweep-fixture] marked platform setup complete (${result.setupProgressId})`
@@ -32,6 +34,12 @@ void (async () => {
     );
     console.error(
       `[ux-sweep-fixture] refreshed ${result.refreshedRuntimeTargets} running root-portal heartbeat(s)`,
+    );
+    console.error(
+      "[ux-sweep-fixture] converged weekly-digest inputs " +
+        `(memory=${result.convergedWeeklyDigestInputs.coworkerMemoryNotes}, ` +
+        `research=${result.convergedWeeklyDigestInputs.researchProposals}, ` +
+        `unlinked-defers=${result.convergedWeeklyDigestInputs.unlinkedDeferredDecisions})`,
     );
   } catch (err) {
     console.error("[ux-sweep-fixture] failed:", err);
