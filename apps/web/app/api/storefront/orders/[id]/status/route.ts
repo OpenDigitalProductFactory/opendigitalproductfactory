@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
+import { apiErrorResponse } from "@/lib/api/error";
 import { canTransitionOrder, isOrderStatus } from "@/lib/storefront/order-lifecycle";
 
 export async function POST(
@@ -9,14 +10,14 @@ export async function POST(
 ) {
   const session = await auth();
   if (!session?.user || (session.user as { type?: string }).type !== "admin") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return apiErrorResponse("UNAUTHORIZED", "Unauthorized", 401);
   }
 
   const { id } = await params;
 
   const body = (await req.json().catch(() => ({}))) as { status?: unknown };
   if (!isOrderStatus(body.status)) {
-    return NextResponse.json({ error: "A valid target status is required" }, { status: 400 });
+    return apiErrorResponse("INVALID_STATUS", "A valid target status is required", 400);
   }
 
   const order = await prisma.storefrontOrder.findUnique({
@@ -24,13 +25,14 @@ export async function POST(
     select: { id: true, status: true },
   });
   if (!order) {
-    return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    return apiErrorResponse("NOT_FOUND", "Order not found", 404);
   }
 
   if (!canTransitionOrder(order.status, body.status)) {
-    return NextResponse.json(
-      { error: `An order that is ${order.status} cannot become ${body.status}` },
-      { status: 409 },
+    return apiErrorResponse(
+      "INVALID_TRANSITION",
+      `An order that is ${order.status} cannot become ${body.status}`,
+      409,
     );
   }
 

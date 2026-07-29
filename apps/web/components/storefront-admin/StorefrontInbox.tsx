@@ -107,7 +107,12 @@ export function StorefrontInbox({
       const res = await opts.request();
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(typeof body.error === "string" ? body.error : opts.failureMessage);
+        // Booking routes return { error }; envelope routes return { message }.
+        const detail =
+          typeof body.error === "string" ? body.error
+          : typeof body.message === "string" ? body.message
+          : opts.failureMessage;
+        throw new Error(detail);
       }
       setStatusOverride((s) => ({ ...s, [e.id]: opts.successStatus }));
       setBookingAction((s) => ({ ...s, [e.id]: { phase: "done", message: opts.successMessage } }));

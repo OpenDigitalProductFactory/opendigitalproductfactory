@@ -302,7 +302,10 @@ describe("StorefrontInbox — order rows", () => {
   });
 
   it("surfaces a failed transition as a retryable error", async () => {
-    stubFetch({ ok: false, body: { error: "An order that is fulfilled cannot become accepted" } });
+    stubFetch({
+      ok: false,
+      body: { code: "INVALID_TRANSITION", message: "An order that is fulfilled cannot become accepted" },
+    });
     render(<StorefrontInbox entries={[order()]} defaultDigitalProduct={defaultDigitalProduct} />);
 
     fireEvent.click(screen.getByRole("button", { name: /accept order ORD-0001/i }));
