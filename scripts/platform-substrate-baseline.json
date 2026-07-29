@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-29T11:06:26.345Z",
-  "gitSha": "8987f682f5ba0b876d3e47aa4b175474729e3c90",
+  "generatedAt": "2026-07-29T16:02:38.215Z",
+  "gitSha": "9639c482acafb470d9634df8cfc44aed77e6ee36",
   "manifestVersion": 2,
   "metrics": {
     "defaultRequiredServiceCount": {
@@ -25,7 +25,7 @@
     },
     "productionModuleHotspotCount": {
       "direction": "non-increasing",
-      "value": 68
+      "value": 69
     },
     "providerConnectionStateProjectorCount": {
       "direction": "non-increasing",
