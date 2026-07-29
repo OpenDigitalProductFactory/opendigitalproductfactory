@@ -223,6 +223,97 @@ describe("StorefrontInbox — booking confirm/cancel result states", () => {
   });
 });
 
+// ── Order fulfilment lane (BI-115E0D1F) ─────────────────────────────────────
+function order(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "ord_1",
+    ref: "ORD-0001",
+    name: "Quinn Doyle",
+    email: "quinn@example.com",
+    type: "order",
+    detail: "$32",
+    createdAt: "2026-07-29T10:00:00.000Z",
+    providerName: null,
+    status: "pending",
+    backlogItemId: null,
+    itemName: "2× Margherita Pizza",
+    nextAction: "Accept this order to start preparing it",
+    ...overrides,
+  };
+}
+
+describe("StorefrontInbox — order rows", () => {
+  it("shows the customer name, contents, status, and next action", () => {
+    render(<StorefrontInbox entries={[order()]} defaultDigitalProduct={defaultDigitalProduct} />);
+    expect(screen.getByText(/quinn doyle · quinn@example\.com/i)).toBeTruthy();
+    expect(screen.getByText(/2× margherita pizza/i)).toBeTruthy();
+    expect(screen.getByText("pending")).toBeTruthy();
+    expect(screen.getByText(/next: accept this order to start preparing it/i)).toBeTruthy();
+  });
+
+  it("advances a pending order to accepted and shows the result", async () => {
+    const fetchMock = stubFetch({ ok: true });
+    render(<StorefrontInbox entries={[order()]} defaultDigitalProduct={defaultDigitalProduct} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /accept order ORD-0001/i }));
+
+    await waitFor(() => expect(screen.getByText(/accepted — it's now in preparation\./i)).toBeTruthy());
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/storefront/orders/ord_1/status",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ status: "accepted" }) }),
+    );
+    // The row's forward action follows the new status without a reload.
+    expect(screen.getByRole("button", { name: /mark ready ORD-0001/i })).toBeTruthy();
+  });
+
+  it("offers Mark ready then Mark fulfilled along the lane", () => {
+    render(
+      <StorefrontInbox
+        entries={[order({ id: "ord_a", ref: "ORD-A", status: "accepted" }), order({ id: "ord_r", ref: "ORD-R", status: "ready" })]}
+        defaultDigitalProduct={defaultDigitalProduct}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /mark ready ORD-A/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /mark fulfilled ORD-R/i })).toBeTruthy();
+  });
+
+  it("confirms before cancelling and hides all actions on terminal orders", async () => {
+    dialogMocks.confirmDialog.mockResolvedValue(true);
+    const fetchMock = stubFetch({ ok: true });
+    render(
+      <StorefrontInbox
+        entries={[order(), order({ id: "ord_f", ref: "ORD-F", status: "fulfilled" })]}
+        defaultDigitalProduct={defaultDigitalProduct}
+      />,
+    );
+
+    // Terminal order: no advance, no cancel.
+    expect(screen.queryByRole("button", { name: /cancel order ORD-F/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /cancel order ORD-0001/i }));
+    await waitFor(() => expect(screen.getByText(/cancelled — this order won't be prepared\./i)).toBeTruthy());
+    expect(dialogMocks.confirmDialog).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringMatching(/ORD-0001 for Quinn Doyle/i) }),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/storefront/orders/ord_1/status",
+      expect.objectContaining({ body: JSON.stringify({ status: "cancelled" }) }),
+    );
+  });
+
+  it("surfaces a failed transition as a retryable error", async () => {
+    stubFetch({
+      ok: false,
+      body: { code: "INVALID_TRANSITION", message: "An order that is fulfilled cannot become accepted" },
+    });
+    render(<StorefrontInbox entries={[order()]} defaultDigitalProduct={defaultDigitalProduct} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /accept order ORD-0001/i }));
+
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toMatch(/cannot become accepted/i));
+  });
+});
+
 // ── Filter announcement + labelled provider select (BI-F0B389C9 residue) ─────
 describe("StorefrontInbox — filter chips and provider select", () => {
   it("marks the active filter chip and announces the result count", () => {

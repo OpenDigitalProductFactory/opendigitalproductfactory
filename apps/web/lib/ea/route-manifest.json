@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 585,
+  "routeCount": 586,
   "routes": [
     {
       "routePath": "/",
@@ -1604,6 +1604,21 @@
         "id"
       ],
       "file": "apps/web/app/api/storefront/bookings/[id]/confirm/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/orders/[id]/status",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "orders",
+        "[id]",
+        "status"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/storefront/orders/[id]/status/route.ts"
     },
     {
       "routePath": "/api/storefront/sign-up",

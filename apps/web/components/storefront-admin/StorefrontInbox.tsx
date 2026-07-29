@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { confirmDialog, promptDialog } from "@/components/ui/Dialog";
 import { reservationActionLabel } from "@/lib/storefront/booking-summary";
+import { type OrderStatus } from "@/lib/storefront/order-lifecycle";
 
 type Entry = {
   id: string;
@@ -36,6 +37,17 @@ const STATUS_STYLES: Record<string, { background: string; color: string }> = {
   completed: { background: "rgba(79,70,229,0.15)", color: "var(--dpf-accent)" },
   cancelled: { background: "color-mix(in srgb, var(--dpf-error) 15%, transparent)", color: "var(--dpf-error)" },
   "needs-reschedule": { background: "rgba(249,115,22,0.15)", color: "#f97316" },
+  // Order fulfilment lane (BI-115E0D1F).
+  accepted: { background: "rgba(79,70,229,0.15)", color: "var(--dpf-accent)" },
+  ready: { background: "color-mix(in srgb, var(--dpf-success) 15%, transparent)", color: "var(--dpf-success)" },
+  fulfilled: { background: "rgba(79,70,229,0.15)", color: "var(--dpf-accent)" },
+};
+
+// The owner-facing verb that moves an order forward from each lane status.
+const ORDER_ADVANCE: Record<string, { to: OrderStatus; verb: string; done: string } | undefined> = {
+  pending: { to: "accepted", verb: "Accept order", done: "Accepted — it's now in preparation." },
+  accepted: { to: "ready", verb: "Mark ready", done: "Ready — hand it over and mark it fulfilled." },
+  ready: { to: "fulfilled", verb: "Mark fulfilled", done: "Fulfilled — this order is complete." },
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -95,7 +107,12 @@ export function StorefrontInbox({
       const res = await opts.request();
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(typeof body.error === "string" ? body.error : opts.failureMessage);
+        // Booking routes return { error }; envelope routes return { message }.
+        const detail =
+          typeof body.error === "string" ? body.error
+          : typeof body.message === "string" ? body.message
+          : opts.failureMessage;
+        throw new Error(detail);
       }
       setStatusOverride((s) => ({ ...s, [e.id]: opts.successStatus }));
       setBookingAction((s) => ({ ...s, [e.id]: { phase: "done", message: opts.successMessage } }));
@@ -149,6 +166,32 @@ export function StorefrontInbox({
       failureMessage: "Couldn't confirm the booking.",
       request: () => fetch(`/api/storefront/bookings/${e.id}/confirm`, { method: "POST" }),
     });
+  }
+
+  async function advanceOrder(e: Entry, to: OrderStatus, doneMessage: string) {
+    await runBookingAction(e, {
+      pendingMessage: "Updating…",
+      successStatus: to,
+      successMessage: doneMessage,
+      failureMessage: "Couldn't update the order.",
+      request: () =>
+        fetch(`/api/storefront/orders/${e.id}/status`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: to }),
+        }),
+    });
+  }
+
+  async function cancelOrder(e: Entry) {
+    const ok = await confirmDialog({
+      title: `Cancel order ${e.ref}`,
+      message: `Order ${e.ref}${e.name ? ` for ${e.name}` : ""}. The order becomes cancelled and won't be prepared.`,
+      confirmLabel: "Cancel order",
+      cancelLabel: "Keep order",
+    });
+    if (!ok) return;
+    await advanceOrder(e, "cancelled", "Cancelled — this order won't be prepared.");
   }
 
   async function sendInquiryToProductBacklog(id: string) {
@@ -280,7 +323,7 @@ export function StorefrontInbox({
                 </span>
               )}
               <span style={{ fontSize: 12, fontFamily: "monospace" }}>{e.ref}</span>
-              {e.type === "booking" && (statusOverride[e.id] ?? e.status) && (
+              {(e.type === "booking" || e.type === "order") && (statusOverride[e.id] ?? e.status) && (
                 <StatusBadge status={statusOverride[e.id] ?? e.status} />
               )}
               {e.type === "booking" && e.providerName && (
@@ -293,7 +336,7 @@ export function StorefrontInbox({
               </span>
             </div>
             <div style={{ fontSize: 13 }}>{e.name ?? "Anonymous"} · {e.email}</div>
-            {e.type === "booking" ? (
+            {e.type === "booking" && (
               <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>
                   {e.itemName ?? "Reservation"}
@@ -313,8 +356,22 @@ export function StorefrontInbox({
                   </div>
                 )}
               </div>
-            ) : (
-              e.detail && <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12, marginTop: 2 }}>{e.detail}</div>
+            )}
+            {e.type === "order" && (
+              <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>
+                  {e.itemName ?? "Order"}
+                  {e.detail && <span className="text-[var(--dpf-muted)]" style={{ fontWeight: 400 }}> · {e.detail}</span>}
+                </div>
+                {e.nextAction && (
+                  <div style={{ fontSize: 12, color: "var(--dpf-accent)" }}>
+                    Next: {e.nextAction}
+                  </div>
+                )}
+              </div>
+            )}
+            {e.type !== "booking" && e.type !== "order" && e.detail && (
+              <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12, marginTop: 2 }}>{e.detail}</div>
             )}
             {e.type === "inquiry" && (() => {
               // A successful send stores the created itemId (BI-…); anything
@@ -383,6 +440,70 @@ export function StorefrontInbox({
                     <p className="text-[var(--dpf-muted)]" style={{ fontSize: 11, margin: 0 }}>
                       Creates an internal work item for your team to follow up. The customer isn&apos;t notified.
                     </p>
+                  )}
+                </div>
+              );
+            })()}
+            {e.type === "order" && (() => {
+              const status = statusOverride[e.id] ?? e.status;
+              const action = bookingAction[e.id];
+              const busy = action?.phase === "pending";
+              const advance = ORDER_ADVANCE[status];
+              const cancellable = status !== "fulfilled" && status !== "cancelled";
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {advance && (
+                      <button
+                        onClick={() => advanceOrder(e, advance.to, advance.done)}
+                        disabled={busy}
+                        aria-label={`${advance.verb} ${e.ref}`}
+                        className="dpf-tap-target border border-[var(--dpf-success)] text-[var(--dpf-success)]"
+                        style={{
+                          padding: "3px 12px",
+                          borderRadius: 4,
+                          background: "none",
+                          cursor: busy ? "wait" : "pointer",
+                          fontSize: 12,
+                          opacity: busy ? 0.6 : 1,
+                        }}
+                      >
+                        {busy ? "Working…" : advance.verb}
+                      </button>
+                    )}
+                    {cancellable && (
+                      <button
+                        onClick={() => cancelOrder(e)}
+                        disabled={busy}
+                        aria-label={`Cancel order ${e.ref}`}
+                        className="dpf-tap-target border border-[var(--dpf-error)] text-[var(--dpf-error)]"
+                        style={{
+                          padding: "3px 12px",
+                          borderRadius: 4,
+                          background: "none",
+                          cursor: busy ? "wait" : "pointer",
+                          fontSize: 12,
+                          opacity: busy ? 0.6 : 1,
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                  {action && (
+                    <span
+                      role={action.phase === "error" ? "alert" : "status"}
+                      className={
+                        action.phase === "error"
+                          ? "text-[var(--dpf-error)]"
+                          : action.phase === "done"
+                            ? "text-[var(--dpf-success)]"
+                            : "text-[var(--dpf-muted)]"
+                      }
+                      style={{ fontSize: 12 }}
+                    >
+                      {action.message}
+                    </span>
                   )}
                 </div>
               );
