@@ -61,9 +61,11 @@ Give every physical operational-twin template one derived coordinate-space class
 
 ## Backlog coverage
 
-- **Decision:** atomic
-- **Receipt:** `cms6531fc001d01o610vai1vn`
-- **Parent BI:** BI-EA4B8638
-- **Deliverable:** `scene-contract-foundation` — derived physical `spaceKind` mapping and renderer-neutral `SceneLayout` contract
-- **Dependencies:** none
-- **Rationale:** the mapping and types are one compile-time boundary; neither independently enables a renderer, and splitting them would publish an intermediate API unable to express its mapped scene.
+- Decision: atomic
+- Parent: `BI-EA4B8638`
+- Receipt: `cms6531fc001d01o610vai1vn`
+- Deliverable: `scene-contract-foundation` — derived physical `spaceKind` mapping and renderer-neutral `SceneLayout` contract
+- Dependencies: none
+- Rationale: the mapping and types are one compile-time boundary; neither independently enables a renderer, and splitting them would publish an intermediate API unable to express its mapped scene.
+
+Operational-Precedent: restaurant-floor
