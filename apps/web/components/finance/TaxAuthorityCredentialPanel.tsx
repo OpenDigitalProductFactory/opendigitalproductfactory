@@ -235,7 +235,7 @@ export function TaxAuthorityCredentialPanel({ registrations, authorityCredential
                       onChange={(event) => updateField(registration.id, "mfaMode", event.target.value as SaveTaxAuthorityCredentialInput["mfaMode"])}
                       className={`mt-1 w-full ${inputClasses}`}
                     >
-                      <option value="human_step_up" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">Human step-up</option>
+                      <option value="human_step_up" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">Employee step-up</option>
                       <option value="totp_shared" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">Shared TOTP</option>
                       <option value="email_code" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">Email code</option>
                       <option value="sms_code" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">SMS code</option>

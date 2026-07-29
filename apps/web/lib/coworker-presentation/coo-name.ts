@@ -17,11 +17,11 @@ export type CooNameValidation =
 const RESERVED_NAMES = new Map<string, string>([
   ["system", "That name is reserved for an internal system identity."],
   ["onboarding coo", "That name belongs to the distinct setup coworker."],
-  ["ceo", "That name implies an accountable human role. Choose a conversational name instead."],
-  ["chief executive officer", "That name implies an accountable human role. Choose a conversational name instead."],
-  ["owner", "That name implies an accountable human role. Choose a conversational name instead."],
-  ["founder", "That name implies an accountable human role. Choose a conversational name instead."],
-  ["accountable officer", "That name implies an accountable human role. Choose a conversational name instead."],
+  ["ceo", "That name implies an accountable owner role. Choose a conversational name instead."],
+  ["chief executive officer", "That name implies an accountable owner role. Choose a conversational name instead."],
+  ["owner", "That name implies an accountable owner role. Choose a conversational name instead."],
+  ["founder", "That name implies an accountable owner role. Choose a conversational name instead."],
+  ["accountable officer", "That name implies an accountable owner role. Choose a conversational name instead."],
 ]);
 
 function normalizeForComparison(value: string): string {

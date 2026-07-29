@@ -6,6 +6,7 @@ import { OwnerFirstDisclosure } from "@/components/owner-first/OwnerFirstDisclos
 import { loadOwnerFirstContext } from "@/lib/owner-first/context";
 import { buildEmployeeOwnerSummary } from "@/lib/owner-first/domain-summary";
 import { isSimpleNavMode, NAV_MODE_COOKIE, resolveNavModeFromCookie } from "@/lib/navigation/nav-mode";
+import { oversightLabel } from "@/lib/workforce/oversight-copy";
 import { EmployeeDirectoryPanel } from "@/components/employee/EmployeeDirectoryPanel";
 import { EmployeeProfilePanel } from "@/components/employee/EmployeeProfilePanel";
 import { EmployeeTabNav } from "@/components/employee/EmployeeTabNav";
@@ -145,7 +146,7 @@ export default async function EmployeePage({ searchParams }: Props) {
 
   // Owner-first: lead with service-staffing readiness, then demote role
   // governance behind progressive disclosure (BI-3BCAF95F). For a Restaurant
-  // owner, "who is on for the next service" comes before HITL tiers and SLAs.
+  // owner, "who is on for the next service" comes before oversight and SLAs.
   const simple = isSimpleNavMode(
     resolveNavModeFromCookie((await cookies()).get(NAV_MODE_COOKIE)?.value),
   );
@@ -260,14 +261,14 @@ export default async function EmployeePage({ searchParams }: Props) {
         )}
       </div>
 
-      {/* Role governance — HITL tiers, SLAs, and user access. Demoted behind
+      {/* Role governance — oversight, SLAs, and user access. Demoted behind
           progressive disclosure so staffing readiness leads (BI-3BCAF95F). Simple
           mode drops it entirely to reduce body content. */}
       {!simple && (
         <div className="mt-8">
           <OwnerFirstDisclosure
             summary="Role governance & access"
-            hint="HITL tiers, SLAs, and who can do what"
+            hint="Oversight, SLAs, and who can do what"
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {roles.map((r) => {
@@ -296,7 +297,7 @@ export default async function EmployeePage({ searchParams }: Props) {
                     )}
                     <div className="flex flex-wrap gap-2">
                       <span className="text-[9px] text-[var(--dpf-muted)]">
-                        HITL T{r.hitlTierMin}
+                        {oversightLabel(r.hitlTierMin, { short: true })}
                       </span>
                       <span className="text-[9px] text-[var(--dpf-muted)]">{sla}</span>
                       <span className="text-[9px] text-[var(--dpf-muted)]">

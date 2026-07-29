@@ -382,7 +382,7 @@ export const DEFAULT_WORKSPACE_HOME_CONTRIBUTIONS: WorkspaceHomeContribution[] =
     id: "home-msp-it-services",
     label: "Managed service health home",
     description:
-      "Customer estate health, incidents, integration posture, and HITL decisions for MSP-style operating models.",
+      "Customer estate health, incidents, integration posture, and oversight decisions for MSP-style operating models.",
     primaryOperatingQuestion: "what is red on the customer estate?",
     topConcerns: [
       "customer systems in degraded health",

@@ -90,8 +90,8 @@ export function DecisionCanvas({ viewModel }: { viewModel: DecisionCanvasViewMod
           </section>
 
           {viewModel.outcome.hasHumanOutcome ? (
-            <section className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4" aria-label="Human outcome">
-              <h2 className="text-sm font-semibold">Human Outcome</h2>
+            <section className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4" aria-label="Owner outcome">
+              <h2 className="text-sm font-semibold">Owner outcome</h2>
               <p className="mt-2 text-sm">{viewModel.outcome.chosenOption ?? "Outcome recorded"}</p>
               {viewModel.outcome.rationale ? (
                 <p className="mt-1 text-sm text-[var(--dpf-muted)]">{viewModel.outcome.rationale}</p>

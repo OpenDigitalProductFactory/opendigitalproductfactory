@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 
+import { getOversightCopy, oversightLabel, oversightStyle } from "@/lib/workforce/oversight-copy";
+
 export type BmrRoleRow = {
   productId: string;
   productName: string;
@@ -51,13 +53,6 @@ function getMatchingGrants(grants: string[], category: string): string[] {
   if (!categoryGrants) return [];
   return categoryGrants.filter((g) => grants.includes(g));
 }
-
-const HITL_COLOURS: Record<number, string> = {
-  0: "var(--dpf-error)",
-  1: "#f97316",
-  2: "var(--dpf-info)",
-  3: "var(--dpf-success)",
-};
 
 const ESCALATION_LABELS: Record<string, string> = {
   "HR-000": "CDIO",
@@ -365,7 +360,7 @@ export function AuthorityMatrixPanel({ agents, bmrRows }: AuthorityMatrixProps) 
             <span>Business Model</span>
             <span>Role</span>
             <span>Authority Domain</span>
-            <span>HITL</span>
+            <span>Oversight</span>
             <span>Escalates To</span>
             <span>Assigned To</span>
           </div>
@@ -373,7 +368,7 @@ export function AuthorityMatrixPanel({ agents, bmrRows }: AuthorityMatrixProps) 
           {/* Rows */}
           <div style={{ display: "flex", flexDirection: "column" }}>
             {bmrRows.map((row, i) => {
-              const tierColour = HITL_COLOURS[row.hitlTierDefault] ?? "var(--dpf-muted)";
+              const tierStyle = oversightStyle(row.hitlTierDefault);
               const escLabel = row.escalatesTo
                 ? (ESCALATION_LABELS[row.escalatesTo] ?? row.escalatesTo)
                 : "—";
@@ -411,16 +406,17 @@ export function AuthorityMatrixPanel({ agents, bmrRows }: AuthorityMatrixProps) 
                     {row.authorityDomain ?? "—"}
                   </span>
                   <span
+                    title={getOversightCopy(row.hitlTierDefault)?.description}
                     style={{
                       fontSize: 9,
-                      background: `${tierColour}20`,
-                      color: tierColour,
+                      background: tierStyle.softBg,
+                      color: tierStyle.fg,
                       borderRadius: 3,
                       padding: "1px 5px",
                       textAlign: "center",
                     }}
                   >
-                    {row.hitlTierDefault}
+                    {oversightLabel(row.hitlTierDefault, { short: true })}
                   </span>
                   <span style={{ fontSize: 9, color: "var(--dpf-muted)" }}>{escLabel}</span>
                   <span style={{ fontSize: 9, color: row.assignee ? "var(--dpf-text)" : "var(--dpf-muted)", fontStyle: row.assignee ? "normal" : "italic" }}>

@@ -424,7 +424,7 @@ export function buildMarketingAutomationView(
       status: candidate.status,
       approvalLabel,
       safetyLabel: candidate.approvalRequired
-        ? "Human approval before this can run"
+        ? "Employee approval before this can run"
         : "Keep disabled until reviewed",
       intent,
     };

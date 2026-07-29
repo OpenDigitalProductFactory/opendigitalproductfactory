@@ -934,7 +934,7 @@ export async function updateTaxRemittanceRunStatus(input: UpdateTaxRemittanceRun
       title: `${run.period.registration.jurisdictionReference.authorityName} execution failed`,
       details:
         nullableString(parsed.failureDetails) ??
-        "The remittance run failed and needs human follow-up before filing can continue.",
+        "The remittance run failed and needs employee follow-up before filing can continue.",
       severity: "high",
     });
     await createTaxNotification(

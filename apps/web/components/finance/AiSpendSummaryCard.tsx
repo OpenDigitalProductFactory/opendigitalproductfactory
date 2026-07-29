@@ -41,7 +41,7 @@ export function AiSpendSummaryCard({
         { label: "AI profiles", value: `${supplierCount}/${activeProviderCount}` },
         { label: "Committed spend", value: `${currencySymbol}${formatMoney(committedSpend)}` },
         { label: "Unpriced providers", value: `${untrackedProviderCount}` },
-        { label: "Human asks", value: `${openWorkItems + contractsNeedingSetup}` },
+        { label: "Employee asks", value: `${openWorkItems + contractsNeedingSetup}` },
         ...(projectedUnusedCommitment > 0
           ? [{ label: "Unused at risk", value: `${currencySymbol}${formatMoney(projectedUnusedCommitment)}` }]
           : []),

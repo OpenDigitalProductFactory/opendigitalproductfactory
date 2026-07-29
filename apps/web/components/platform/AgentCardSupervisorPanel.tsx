@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { InternalAgentCard } from "@/lib/tak/agent-card-types";
+import { oversightLabel } from "@/lib/workforce/oversight-copy";
 
 type AgentCardSupervisorPanelProps = {
   cards: InternalAgentCard[];
@@ -137,7 +138,7 @@ function AgentCardArticle({ card }: { card: InternalAgentCard }) {
         <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
           <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--dpf-muted)]">Oversight</p>
           <div className="mt-2 flex flex-wrap gap-2">
-            <Chip emphasis="accent">HITL {authority.hitlTier}</Chip>
+            <Chip emphasis="accent">{oversightLabel(authority.hitlTier, { short: true })}</Chip>
             <Chip>{approvalPosture}</Chip>
           </div>
         </div>
@@ -308,7 +309,7 @@ export function AgentCardSupervisorPanel({ cards }: AgentCardSupervisorPanelProp
         <Metric label="Projected cards" value={cards.length} note={`${linkedCount} GAID linked`} />
         <Metric label="Approval posture" value={approvalCount} note="proposal/review constrained" />
         <Metric label="Exposed tools" value={exposedToolCount} note="from AIDoc or grant mapping" />
-        <Metric label="Pending proposals" value={pendingProposalCount} note="awaiting human decision" />
+        <Metric label="Pending proposals" value={pendingProposalCount} note="awaiting employee decision" />
         <Metric label="Recent receipts" value={recentReceiptCount} note="receipt-backed executions" />
       </div>
 

@@ -43,7 +43,7 @@ const GEOGRAPHIC_SCOPE_OPTIONS = [
 // enum; labels are plain-language display only (easily re-tuned). Pre-set from
 // the industry default — sets the autonomy *envelope*, not the live level.
 const RISK_POSTURE_OPTIONS = [
-  { value: "conservative", label: "Cautious", description: "More human review; AI acts only on safe, routine work" },
+  { value: "conservative", label: "Cautious", description: "More employee review; AI acts only on safe, routine work" },
   { value: "balanced", label: "Balanced", description: "AI handles the everyday; checks in on consequential calls" },
   { value: "progressive", label: "Fast-moving", description: "AI runs with more autonomy; you stay in the loop on the big ones" },
 ];

@@ -25,7 +25,9 @@ type Props = {
   assignedModels: AssignedModel[];
 };
 
-const HITL_COLOURS: Record<string, string> = {
+// Built-in vs custom business model. Named for what it keys on — this was
+// previously called HITL_COLOURS, which it never was (BI-F2EC4699).
+const BUILT_IN_COLOURS: Record<string, string> = {
   true: "var(--dpf-accent)",
   false: "var(--dpf-warning)",
 };
@@ -56,7 +58,7 @@ export function BusinessModelSelector({ productId, availableModels, assignedMode
       {assignedModels.length > 0 && (
         <div style={{ marginBottom: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
           {assignedModels.map((a) => {
-            const colour = HITL_COLOURS[String(a.businessModel.isBuiltIn)];
+            const colour = BUILT_IN_COLOURS[String(a.businessModel.isBuiltIn)];
             return (
               <div
                 key={a.id}

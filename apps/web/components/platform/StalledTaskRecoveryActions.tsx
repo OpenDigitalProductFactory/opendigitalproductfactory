@@ -118,7 +118,7 @@ export function StalledTaskRecoveryActions({
           onClick={onEscalate}
           disabled={pending}
           className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-1 text-xs font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-warning)] hover:text-white disabled:opacity-50"
-          title="Park for human review; notifies the accountable owner"
+          title="Park for review; notifies the accountable owner"
         >
           Escalate
         </button>

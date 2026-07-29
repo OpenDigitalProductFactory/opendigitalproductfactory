@@ -247,7 +247,7 @@ describe("triageIssueReports — self-fix escalation projection guard (BI-0ACD9A
     reportId: "PIR-ESC01",
     type: "build-stall-escalation",
     severity: "high",
-    title: 'Build Studio needs a human: "X" stuck at plan review',
+    title: 'Build Studio needs you: "X" stuck at plan review',
     description: "blocked",
     routeContext: null,
     errorStack: null,

@@ -63,7 +63,7 @@ export function ProductTabNav({ productId }: { productId: string }) {
     {
       label: "Team",
       href: `${base}/team`,
-      description: "Assign human owners and keep the product's working knowledge close to them.",
+      description: "Assign employee owners and keep the product's working knowledge close to them.",
       subItems: [
         { label: "Team", href: `${base}/team` },
         { label: "Knowledge", href: `${base}/knowledge` },

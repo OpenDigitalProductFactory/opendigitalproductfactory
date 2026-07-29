@@ -66,9 +66,9 @@ type QueueSectionConfig = {
 const SECTIONS: QueueSectionConfig[] = [
   {
     key: "humanReview",
-    title: "Human Review",
+    title: "Employee review",
     description: "Ambiguous items with enough evidence to review, but not enough certainty to act on automatically.",
-    emptyLabel: "No items are waiting on human review.",
+    emptyLabel: "No items are waiting on employee review.",
   },
   {
     key: "needsMoreEvidence",

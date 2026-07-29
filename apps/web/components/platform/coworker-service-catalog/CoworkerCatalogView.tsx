@@ -1,4 +1,5 @@
 import type { CoworkerCatalog, CoworkerOfferCatalogItem } from "@/lib/coworker-service-catalog/catalog";
+import { oversightLabel } from "@/lib/workforce/oversight-copy";
 
 export function CoworkerCatalogView({ catalog }: { catalog: CoworkerCatalog }) {
   const activeOffers = catalog.offers.filter((offer) => offer.status === "active");
@@ -85,7 +86,7 @@ function OfferRow({ offer }: { offer: CoworkerOfferCatalogItem }) {
         </div>
       </div>
       <Cell primary={offer.provider.displayName} secondary={offer.providerOrganization ?? offer.provider.kind} />
-      <Cell primary={offer.riskTier} secondary={offer.service.hitlTier === 0 ? "human-only" : `HITL ${offer.service.hitlTier}`} />
+      <Cell primary={offer.riskTier} secondary={oversightLabel(offer.service.hitlTier, { short: true })} />
       <Cell primary={offer.authorityBoundary} secondary={offer.requiredApprovals.length ? "approval required" : "no approval rule"} />
       <Cell primary={offer.availabilityScope} secondary={offer.digitalProduct?.name ?? "No product anchor"} />
     </div>

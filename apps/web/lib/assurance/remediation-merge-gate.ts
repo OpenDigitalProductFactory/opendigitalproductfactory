@@ -85,7 +85,7 @@ export function decideRemediationMerge(facts: RemediationMergeFacts): MergeGateD
     return { action: "auto-merge", reason: "patch bump, all preconditions met (WWMD patch-only-auto)" };
   }
   if (facts.changeClass === "minor" || facts.changeClass === "major") {
-    return { action: "escalate", reason: `${facts.changeClass}-bump requires human review (WWMD patch-only-auto ceiling)` };
+    return { action: "escalate", reason: `${facts.changeClass}-bump requires employee review (WWMD patch-only-auto ceiling)` };
   }
   return { action: "escalate", reason: "unclassified change — cannot confirm a forward patch; escalating on uncertainty" };
 }

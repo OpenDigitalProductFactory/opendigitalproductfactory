@@ -148,7 +148,7 @@ export function EstimateControls({ item }: { item: DemandItemView }) {
       <span
         className="rounded px-1.5 py-0.5 text-[10px] font-medium"
         style={{ color: "var(--dpf-warning)", borderColor: "var(--dpf-warning)" }}
-        title="AI and human estimates diverge — reconcile to trust the score"
+        title="AI and employee estimates diverge — reconcile to trust the score"
       >
         ⇄ AI {item.estimateAiJobSize} ↔ you {item.estimateHumanJobSize}
       </span>

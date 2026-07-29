@@ -1,3 +1,5 @@
+import { oversightLabel } from "@/lib/workforce/oversight-copy";
+
 type AgentGovernanceCardModel = {
   id: string;
   agentId: string;
@@ -58,7 +60,7 @@ export function AgentGovernanceCard({ agent }: Props) {
           Tool grants: <span className="text-[var(--dpf-text)]">{agent.grantCount} granted</span>
         </p>
         <p>
-          HITL tier: <span className="text-[var(--dpf-text)]">{agent.hitlTier != null ? `Tier ${agent.hitlTier}` : "Not set"}</span>
+          Oversight: <span className="text-[var(--dpf-text)]">{oversightLabel(agent.hitlTier)}</span>
         </p>
         {agent.escalatesTo ? (
           <p>

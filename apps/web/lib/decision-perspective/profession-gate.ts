@@ -81,7 +81,7 @@ function operatorMessageFor(
     case "defer":
       return `No applicable craft guidance found via ${scope}. ${evaluation.rationale}`;
     case "escalate":
-      return `This craft decision needs a human call (${scope}). ${evaluation.rationale}`;
+      return `This craft decision needs an owner call (${scope}). ${evaluation.rationale}`;
     case "arbitrate":
       return `Decided from ${scope} at ${evaluation.confidenceScore} confidence.`;
     default:
@@ -115,7 +115,7 @@ function failClosedEvaluation(input: {
     riskTier: input.riskTier,
     question: input.question,
     options: input.options,
-    rationale: `WSID fail-closed escalation: ${errorClass(input.error)}. The decision could not be safely evaluated, so it routes to a human.`,
+    rationale: `WSID fail-closed escalation: ${errorClass(input.error)}. The decision could not be safely evaluated, so it routes to the owner.`,
     materialScores: [],
     sources: [],
     gapReason: "material-below-confidence",

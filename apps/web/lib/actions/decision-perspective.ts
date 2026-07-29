@@ -39,7 +39,7 @@ export async function captureDecisionInteraction(input: DecisionGateCaptureDraft
   const userId = await requireBuildCaptureUser();
   const answer = trimmed(input.answer);
   if (!answer) {
-    throw new Error("Human direction is required");
+    throw new Error("Owner direction is required");
   }
 
   const row = await prisma.decisionInteraction.findUnique({
@@ -150,7 +150,7 @@ export async function captureDecisionInteraction(input: DecisionGateCaptureDraft
         data: {
           buildId: input.buildId,
           tool: "wwmd_escalation_capture",
-          summary: `WWMD human direction captured for ${row.interactionId}.`,
+          summary: `WWMD owner direction captured for ${row.interactionId}.`,
         },
       });
 

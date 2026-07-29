@@ -194,7 +194,7 @@ function nextActionFor(
     // WWMD -> founder review (Mark's voice); WWWD or unspecified -> owner/operator review.
     return perspective === "wwmd" ? "Send to founder review" : "Send to owner review";
   }
-  if (outcomeType === "escalate") return "Ask for human decision";
+  if (outcomeType === "escalate") return "Ask for an owner decision";
   return "Use recommended option";
 }
 

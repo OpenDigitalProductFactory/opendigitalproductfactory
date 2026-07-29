@@ -91,11 +91,11 @@ export function buildMarketingAgenticOperationTopics(
       prompt:
         "Look for repeated marketing or sales-support actions that could become internal automation candidates. " +
         `${strategyContext} ${channelContext} Current gaps: ${gapContext} ` +
-        "Create proposal-only candidates with create_marketing_automation_candidate, including trigger, action, rationale, and why human approval is required. " +
+        "Create proposal-only candidates with create_marketing_automation_candidate, including trigger, action, rationale, and why employee approval is required. " +
         `${SIDE_EFFECT_BOUNDARY}`,
       contextSummary: `${channelContext} ${gapContext}`,
       expectedNextStep:
-        "Marketing Strategist should save proposal-only candidates with human approval posture.",
+        "Marketing Strategist should save proposal-only candidates with employee approval posture.",
     },
     {
       id: "integration-recommendations",

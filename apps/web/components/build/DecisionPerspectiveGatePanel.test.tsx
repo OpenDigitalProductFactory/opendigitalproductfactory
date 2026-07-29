@@ -84,7 +84,7 @@ describe("DecisionPerspectiveGatePanel", () => {
     expect(html).toContain("Escalation open");
     expect(html).toContain("Principle conflict");
     expect(html).toContain("No sources");
-    expect(html).toContain("Capture human direction");
+    expect(html).toContain("Capture owner direction");
     expect(html).toContain("data-testid=\"wwmd-gate-capture\"");
   });
 
@@ -154,8 +154,8 @@ describe("DecisionPerspectiveGatePanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Capture human direction" }));
-    fireEvent.change(screen.getByLabelText("Human direction"), {
+    fireEvent.click(screen.getByRole("button", { name: "Capture owner direction" }));
+    fireEvent.change(screen.getByLabelText("Owner direction"), {
       target: { value: "Proceed after the owner confirms the implementation scope." },
     });
     fireEvent.change(screen.getByLabelText("Decision criteria"), {
@@ -202,10 +202,10 @@ describe("DecisionPerspectiveGatePanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Capture human direction" }));
+    fireEvent.click(screen.getByRole("button", { name: "Capture owner direction" }));
     // the picker renders (defaulting to the recommendation); pick the other one
     fireEvent.click(screen.getByRole("radio", { name: /Revise the plan/ }));
-    fireEvent.change(screen.getByLabelText("Human direction"), {
+    fireEvent.change(screen.getByLabelText("Owner direction"), {
       target: { value: "Revise the plan before proceeding." },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save WWMD capture" }));
@@ -225,7 +225,7 @@ describe("DecisionPerspectiveGatePanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Capture human direction" }));
+    fireEvent.click(screen.getByRole("button", { name: "Capture owner direction" }));
     expect(screen.queryByTestId("wwmd-gate-option-pick")).toBeNull();
     expect(screen.queryByRole("radio")).toBeNull();
   });

@@ -30,7 +30,7 @@ const WORK_QUEUE_GUIDE = [
   {
     title: "Needs you",
     href: "/workspace/inbox",
-    description: "Start here for approvals, paused coworkers, escalations, and anything blocking a human outcome.",
+    description: "Start here for approvals, paused coworkers, escalations, and anything blocking an owner decision.",
   },
   {
     title: "My queue",

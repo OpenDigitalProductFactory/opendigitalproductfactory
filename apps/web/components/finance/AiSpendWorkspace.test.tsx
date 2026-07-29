@@ -76,7 +76,7 @@ describe("AiSpendWorkspace", () => {
 
     expect(html).toContain("Unpriced active providers");
     expect(html).toContain("2 need finance setup");
-    expect(html).toContain("Human asks queued");
+    expect(html).toContain("Employee asks queued");
     expect(html).toContain("Finance Specialist needs human input");
     expect(html).toContain("Provision Anthropic billing browser profile for Finance Specialist");
     expect(html).toContain("Can you sign in once to the Anthropic billing portal");

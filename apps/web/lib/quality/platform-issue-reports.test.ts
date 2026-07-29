@@ -267,7 +267,7 @@ describe("createPlatformIssueReport", () => {
       type: "build-stall-escalation",
       source: "build-studio",
       severity: "high",
-      title: "Build Studio needs a human",
+      title: "Build Studio needs you",
       selfFixClass: "needs-human",
     });
     const args = prismaMock.platformIssueReport.create.mock.calls[0]?.[0];

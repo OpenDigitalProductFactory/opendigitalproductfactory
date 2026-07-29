@@ -80,7 +80,7 @@ export function formatEscalationReport(args: {
   const { buildId, featureTitle, biTitle, phase, rounds, issues, selfFixClass } = args;
 
   const subject = (biTitle?.trim() || featureTitle?.trim() || buildId).slice(0, 200);
-  const title = `Build Studio needs a human: "${subject}" stuck at ${phase} review`;
+  const title = `Build Studio needs you: "${subject}" stuck at ${phase} review`;
 
   const shown = issues.slice(0, MAX_ISSUES_LISTED);
   const issueLines = shown.length
@@ -96,14 +96,14 @@ export function formatEscalationReport(args: {
 
   const description =
     `Build ${buildId} ("${subject}") could not be self-repaired by Build Studio ` +
-    `and has been escalated for human attention.\n\n` +
+    `and has been escalated for owner attention.\n\n` +
     `Phase: ${phase}\n` +
     `Self-fix feasibility: ${selfFixClass}\n\n` +
     `What was attempted:\n${roundsAttempted}\n\n` +
     `Unresolved blocking issues (root cause):\n${issueLines}${overflow}\n\n` +
     `The build's WIP slot has been freed (build marked abandoned) and the ` +
     `originating backlog item parked as "deferred" so the work is not lost — ` +
-    `it awaits a human (or reseller/partner) before it is re-promoted. ` +
+    `it awaits an owner (or reseller/partner) before it is re-promoted. ` +
     `(BI-3E0EE3BA)`;
 
   return { title, description };
@@ -210,7 +210,7 @@ export async function escalateBuildToHuman(args: EscalateBuildArgs): Promise<Esc
         phase: "abandoned",
         abandonedAt: now,
         abandonReason:
-          `Escalated to human after ${rounds} self-repair round(s) at ${phase} review ` +
+          `Escalated to the owner after ${rounds} self-repair round(s) at ${phase} review ` +
           `(${selfFixClass})${reportId ? `; tracked as ${reportId}` : ""}. ` +
           `Freed a Build Studio WIP slot. (BI-3E0EE3BA)`,
         updatedAt: now,
@@ -249,14 +249,14 @@ export async function escalateBuildToHuman(args: EscalateBuildArgs): Promise<Esc
         buildId,
         tool: "build:escalate-human",
         summary:
-          `Escalated to human (${selfFixClass}) after ${rounds} self-repair round(s) at ${phase} review` +
+          `Escalated to the owner (${selfFixClass}) after ${rounds} self-repair round(s) at ${phase} review` +
           `${reportId ? ` — ${reportId}` : ""}. WIP freed; backlog item parked.`,
       },
     });
   } catch { /* audit is best-effort */ }
 
   await safeLog(
-    `Escalated to human: ${selfFixClass}${reportId ? ` (${reportId})` : ""}. ` +
+    `Escalated to the owner: ${selfFixClass}${reportId ? ` (${reportId})` : ""}. ` +
     `WIP slot freed${backlogItemDeferred ? "; backlog item parked as deferred" : ""}.`,
   );
 

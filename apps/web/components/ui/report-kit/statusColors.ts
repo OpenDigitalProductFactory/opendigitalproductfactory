@@ -78,6 +78,17 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     reversible: "info",
     deadline: "warning",
   },
+  // How much oversight an AI coworker runs under, stored as hitlTier 0..3
+  // (BI-F2EC4699). Keyed by the plain-language slug rather than the tier number
+  // so the registry reads the way the portal renders it. Six components used to
+  // carry their own drifted tier→colour maps, two of them with raw hex; they all
+  // resolve here now, via lib/workforce/oversight-copy.ts.
+  employeeOversight: {
+    "employee-only": "danger",
+    "needs-approval": "warning",
+    "employee-review": "info",
+    "on-its-own": "success",
+  },
   // Decision governance ledger (DecisionInteraction.outcomeType / riskTier).
   decisionOutcome: {
     recommend: "success",

@@ -144,7 +144,7 @@ export function AiSpendWorkspace({
           intent={overview.untrackedProviderCount > 0 || overview.contractsNeedingSetup > 0 ? "danger" : "success"}
         />
         <StatCard
-          label="Human asks queued"
+          label="Employee asks queued"
           value={`${overview.openWorkItems}`}
           hint="Finance Specialist follow-ups"
           intent={overview.openWorkItems > 0 ? "warning" : "success"}

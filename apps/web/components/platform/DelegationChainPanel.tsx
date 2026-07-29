@@ -2,6 +2,14 @@
 
 import { useState } from "react";
 
+import {
+  OVERSIGHT_TIERS_ASC,
+  getOversightCopy,
+  oversightColour,
+  oversightLabel,
+  oversightStyle,
+} from "@/lib/workforce/oversight-copy";
+
 type AgentNode = {
   agentId: string;
   agentName: string;
@@ -28,38 +36,26 @@ type DelegationChainProps = {
   bmrNodes?: BmrNode[];
 };
 
-const HITL_COLORS: Record<number, string> = {
-  0: "var(--dpf-error)",
-  1: "#f97316",
-  2: "#3b82f6",
-  3: "var(--dpf-success)",
-};
-
-const HITL_LABELS: Record<number, string> = {
-  0: "HITL-0",
-  1: "HITL-1",
-  2: "HITL-2",
-  3: "HITL-3",
-};
-
-function HitlBadge({ tier }: { tier: number }) {
-  const color = HITL_COLORS[tier] ?? "var(--dpf-muted)";
-  const label = HITL_LABELS[tier] ?? `HITL-${tier}`;
+function OversightBadge({ tier }: { tier: number }) {
+  const copy = getOversightCopy(tier);
+  const style = oversightStyle(tier);
   return (
     <span
+      title={copy?.description}
+      aria-label={copy?.ariaLabel}
       style={{
         display: "inline-block",
         fontSize: 9,
         fontWeight: 700,
         padding: "1px 5px",
         borderRadius: 3,
-        background: `${color}20`,
-        color,
+        background: style.softBg,
+        color: style.fg,
         letterSpacing: "0.04em",
         lineHeight: "14px",
       }}
     >
-      {label}
+      {oversightLabel(tier, { short: true })}
     </span>
   );
 }
@@ -217,8 +213,8 @@ function AgentRow({
           {agent.tier}
         </span>
 
-        {/* HITL badge */}
-        <HitlBadge tier={agent.hitlTier} />
+        {/* Oversight badge — plain-language tier, see lib/workforce/oversight-copy.ts */}
+        <OversightBadge tier={agent.hitlTier} />
 
         {/* Value stream */}
         <ValueStreamTag stream={agent.valueStream} />
@@ -337,12 +333,10 @@ export function DelegationChainPanel({ agents, bmrNodes }: DelegationChainProps)
 
       {/* Legend */}
       <div style={{ display: "flex", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
-        {[0, 1, 2, 3].map((tier) => (
-          <span key={tier} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <HitlBadge tier={tier} />
-            <span style={{ fontSize: 9, color: "var(--dpf-muted)" }}>
-              {tier === 0 ? "Always human" : tier === 1 ? "Review required" : tier === 2 ? "Spot-check" : "Autonomous"}
-            </span>
+        {OVERSIGHT_TIERS_ASC.map((copy) => (
+          <span key={copy.tier} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <OversightBadge tier={copy.tier} />
+            <span style={{ fontSize: 9, color: "var(--dpf-muted)" }}>{copy.description}</span>
           </span>
         ))}
       </div>
@@ -413,7 +407,7 @@ export function DelegationChainPanel({ agents, bmrNodes }: DelegationChainProps)
                 {bmrNodes
                   ?.filter((n) => n.escalatesTo === group.supervisorId)
                   .map((n, i) => {
-                    const tierColour = HITL_COLORS[n.hitlTierDefault] ?? "var(--dpf-muted)";
+                    const tierColour = oversightColour(n.hitlTierDefault);
                     return (
                       <div
                         key={`bmr-${group.supervisorId}-${i}`}
@@ -445,7 +439,7 @@ export function DelegationChainPanel({ agents, bmrNodes }: DelegationChainProps)
                         <span style={{ fontSize: 9, color: "var(--dpf-muted)" }}>
                           {n.productName} · {n.modelName}
                         </span>
-                        <HitlBadge tier={n.hitlTierDefault} />
+                        <OversightBadge tier={n.hitlTierDefault} />
                         <span style={{ fontSize: 9, color: n.assignee ? "var(--dpf-text)" : "var(--dpf-muted)", fontStyle: n.assignee ? "normal" : "italic", minWidth: 80, textAlign: "right" }}>
                           {n.assignee ?? "unassigned"}
                         </span>
@@ -474,10 +468,13 @@ export function DelegationChainPanel({ agents, bmrNodes }: DelegationChainProps)
         <span>Total agents: {agents.length}</span>
         <span>Supervisor roles: {groups.length}</span>
         <span>
-          Tier 0: {agents.filter((a) => a.hitlTier === 0).length} |{" "}
-          Tier 1: {agents.filter((a) => a.hitlTier === 1).length} |{" "}
-          Tier 2: {agents.filter((a) => a.hitlTier === 2).length} |{" "}
-          Tier 3: {agents.filter((a) => a.hitlTier === 3).length}
+          {OVERSIGHT_TIERS_ASC.map((copy, i) => (
+            <span key={copy.tier}>
+              {i > 0 ? " | " : ""}
+              {oversightLabel(copy.tier, { short: true })}:{" "}
+              {agents.filter((a) => a.hitlTier === copy.tier).length}
+            </span>
+          ))}
         </span>
       </div>
     </div>

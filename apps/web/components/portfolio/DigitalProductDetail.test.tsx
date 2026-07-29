@@ -240,7 +240,7 @@ describe("DigitalProductDetail", () => {
     it("renders the AI Coworker section with parity anchor + approval owner", () => {
       const html = renderToStaticMarkup(<DigitalProductDetail vm={coworkerVm} />);
       expect(html).toContain(">AI Coworker<");
-      expect(html).toContain("Human-role parity");
+      expect(html).toContain("Employee-role parity");
       expect(html).toContain("Approval / interface owner");
       expect(html).toContain("AGT-COO");
       expect(html).toContain("HR-000");

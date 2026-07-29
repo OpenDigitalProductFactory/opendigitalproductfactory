@@ -140,7 +140,7 @@ describe("InventoryExceptionQueue", () => {
     );
 
     expect(html).toContain("Triage Workbench");
-    expect(html).toContain("Human Review");
+    expect(html).toContain("Employee review");
     expect(html).toContain("Needs More Evidence");
     expect(html).toContain("Taxonomy Gaps");
     expect(html).toContain("Auto Attributed");

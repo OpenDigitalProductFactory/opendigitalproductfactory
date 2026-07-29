@@ -7,7 +7,7 @@ import type { TaskNodeData, ProcessActorKind } from "@/lib/build/process-graph-b
 const ACTOR_LABELS: Record<ProcessActorKind, string> = {
   ai_coworker: "AI",
   system: "SYS",
-  human_hitl: "HITL",
+  human_hitl: "EMPLOYEE",
   review_gate: "GATE",
 };
 

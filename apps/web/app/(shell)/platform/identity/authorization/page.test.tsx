@@ -205,7 +205,7 @@ describe("PlatformIdentityAuthorizationPage", () => {
     expect(html).toContain("Filter bindings");
     expect(html).toContain("Refresh inferred bindings");
     expect(html).toContain("Role bundles");
-    expect(html).toContain("Current human assignments");
+    expect(html).toContain("Current employee assignments");
     expect(html).toContain("Team memberships");
     expect(html).toContain("AI coworker authority coverage");
     expect(html).toContain("HR-200");

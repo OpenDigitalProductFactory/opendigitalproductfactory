@@ -12,7 +12,7 @@ three decision scopes are. The platform [overview](../../architecture/platform-o
 page closes the gap they both leave: it walks a **real question end-to-end through the gate** for
 each scope — the situation, the options the coworker framed, the **decision vectors that were
 scored**, the outcome the gate returned, and the ledger row it wrote — and then shows how
-**human-in-the-loop (HITL)** and the **immutable decision ledger** wrap every one of them.
+**employee-in-the-loop** (recorded internally as the HITL tier) and the **immutable decision ledger** wrap every one of them.
 
 The three scopes are the same engine pointed at three different bodies of doctrine:
 
@@ -50,7 +50,7 @@ reading the examples — each example is just this loop with different doctrine 
 5. **Outcome** — `recommend` / `arbitrate` / `escalate` / `defer`, with the winning option,
    composite scores, margin, confidence, and the per-principle contribution ledger.
 6. **Ledger** — a `DecisionInteraction` row records the profile + version, domain class, outcome,
-   confidence before/after, cited sources, rationale, the resolved profile chain, and whether a human
+   confidence before/after, cited sources, rationale, the resolved profile chain, and whether an employee
    escalation or deferral follow-up was captured.
 
 ---
@@ -120,7 +120,7 @@ customer's business decision**.
 | Applicable org (WWWD) materials | 0 promoted, 0 approved | `coverageGap: true` |
 | Resolved profile chain | `[WWWD-ORG → DPF-doctrine(advisory) → defer]` | platform judgment not borrowed as authority |
 | Confidence | low | below the autonomy policy's recommendation floor |
-| Risk tier | high | high risk forces a human resolver regardless |
+| Risk tier | high | high risk forces an employee resolver regardless |
 
 **Result.** The gate will not fabricate a credit policy from the founder kernel, and it will not let a
 high-risk financial commitment ride on low confidence.
@@ -184,30 +184,30 @@ saw escalate in Example 2.
 ## Human-in-the-loop: where a person enters each path
 
 The four outcomes are not a fixed automation level; they are inputs to the **autonomy policy** and the
-**HITL tier** for the calling coworker. The two work together:
+**oversight level** for the calling coworker. The two work together:
 
-| Outcome | Default human involvement | Governed by |
+| Outcome | Default employee involvement | Governed by |
 |---|---|---|
 | `recommend` | Coworker proceeds; the recommendation is logged and remains reversible. The caller still owns approval of any *action* the recommendation implies. | Tool grants + action approval envelope |
 | `arbitrate` | Allowed **only** for low-risk decisions above the policy's confidence floor; otherwise treated as `escalate`. | `DecisionAutonomyPolicy.maxRiskForArbitration` + confidence floors |
-| `escalate` | Work pauses; an approval surface is raised to the right resolver (founder review for WWMD, owner/operator review for WWWD). | HITL tier + resolver rule |
+| `escalate` | Work pauses; an approval surface is raised to the right resolver (founder review for WWMD, owner/operator review for WWWD). | Oversight level + resolver rule |
 | `defer` | No guess is made; the unanswered question is captured as a **profile gap** for curation. | Review queue + enrichment pipeline |
 
 Two rules make this trustworthy rather than theatrical:
 
-- **High risk overrides confidence.** A `high` or `critical` risk tier raises a human surface even when
+- **High risk overrides confidence.** A `high` or `critical` risk tier raises an employee surface even when
   the math looks strong — Example 2 escalated partly for this reason. Autonomy is earned per risk tier,
   not granted globally.
-- **HITL tiers bound autonomy independently of the gate.** Tier 0 (executive oversight) through Tier 3
+- **Oversight levels bound autonomy independently of the gate.** Tier 0 (executive oversight) through Tier 3
   (informational) gate *whether the coworker may act at all*; the Decision Perspective outcome only
   decides *what the coworker recommends doing*. A Tier-1 coworker with a `recommend` outcome still
   routes its resulting action through manager approval. See
   [authority and audit](../platform/authority-and-audit.md) and the AI Workforce
   [Authority tab](index.md).
 
-The **confidence model** is what lets the human surface appear less often over time without lowering the
+The **confidence model** is what lets the employee surface appear less often over time without lowering the
 bar: *confidence is earned in drops and lost in buckets.* A recommendation that is made, observed, and
-human-confirmed nudges the profile's confidence for that domain up slowly; one contradicted or stale
+employee-confirmed nudges the profile's confidence for that domain up slowly; one contradicted or stale
 rationale pulls it back fast.
 
 ## The immutable decision ledger
@@ -261,7 +261,7 @@ doubt* it faces:
 - **WSID** had crisp professional doctrine with a commandment that actively *blocked* the tempting-wrong
   option → source-traced `recommend` with a `commandmentConflict` flag on `FLOAT`.
 
-In all three, the human is in the loop at exactly the point where judgment is genuinely required, and
+In all three, an employee is in the loop at exactly the point where judgment is genuinely required, and
 the ledger makes every path — including the ones where the platform chose *not* to decide —
 reconstructable.
 
@@ -271,7 +271,7 @@ reconstructable.
   kinds, inheritance chain, voice layer)
 - [Autonomy, WWMD, and trusted coworker decisions](../../architecture/autonomy-and-wwmd.md) — the architecture
   note and code references
-- [Authority and audit](../platform/authority-and-audit.md) — HITL tiers, tool grants, and the
+- [Authority and audit](../platform/authority-and-audit.md) — oversight levels, tool grants, and the
   authorization decision log
 - Specs: `docs/superpowers/specs/2026-05-17-wwmd-decision-perspective-kernel-design.md`,
   `docs/superpowers/specs/2026-06-09-wsid-coworker-professional-corpus-design.md`

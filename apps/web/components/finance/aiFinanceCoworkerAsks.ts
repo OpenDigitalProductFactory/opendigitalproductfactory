@@ -72,14 +72,14 @@ function workItemMetadata(workItem: FinanceWorkItem): WorkItemMetadata {
 function buildAskPrompt(ask: Omit<FinanceCoworkerAsk, "coworkerPrompt">) {
   return [
     `Finance Specialist, resolve "${ask.title}" for ${ask.providerName}.`,
-    `Ask the human: ${ask.question}`,
+    `Ask an employee: ${ask.question}`,
     ask.missingFields.length > 0
       ? `Missing fields: ${ask.missingFields.map(humanizeFinanceLabel).join(", ")}.`
       : null,
     ask.routeTarget && ask.routeTarget !== "/finance/spend/ai"
       ? `Relevant setup route: ${ask.routeTarget}.`
       : null,
-    "Use browser tools when credentials are available, and queue any remaining exact human asks instead of accepting zero-cost placeholders.",
+    "Use browser tools when credentials are available, and queue any remaining exact employee asks instead of accepting zero-cost placeholders.",
   ].filter(Boolean).join(" ");
 }
 
@@ -119,8 +119,8 @@ export function buildTraceabilityPrompt(overview: Overview, traceabilityGapCount
     "Finance Specialist, triage the AI spend traceability gaps on /finance/spend/ai.",
     `${traceabilityGapCount} gaps are visible across ${overview.untrackedProviderCount} unpriced active providers, ${overview.contractsNeedingSetup} draft finance setups, and ${overview.openWorkItems} queued human asks.`,
     visibleAskCount > 0
-      ? "Start with the listed human asks and use browser retrieval where credentials or scoped profiles are available."
-      : "Identify the next exact human ask required to close the missing AI provider cost data.",
+      ? "Start with the listed employee asks and use browser retrieval where credentials or scoped profiles are available."
+      : "Identify the next exact employee ask required to close the missing AI provider cost data.",
     "Do not treat $0 spend as healthy while provider subscription or billing details are unknown.",
   ].join(" ");
 }

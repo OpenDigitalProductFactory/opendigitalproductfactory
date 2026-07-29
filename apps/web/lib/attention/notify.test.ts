@@ -27,7 +27,7 @@ const baseInput = {
   source: "escalation" as const,
   itemKey: "PIR-1",
   userId: "principal-7",
-  title: "Build Studio needs a human",
+  title: "Build Studio needs you",
   deepLink: "/build?buildId=FB-9",
   riskClass: "high-risk",
 };
@@ -51,7 +51,7 @@ describe("notifyAttention", () => {
     expect(created[0]).toEqual({
       userId: "principal-7",
       type: "attention:escalation:PIR-1",
-      title: "Build Studio needs a human",
+      title: "Build Studio needs you",
       body: null,
       deepLink: "/build?buildId=FB-9",
     });

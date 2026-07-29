@@ -3,6 +3,7 @@ import {
   type CoworkerAuthorityBoundary,
 } from "./types";
 import { isRecord } from "../shared/coerce";
+import { oversightLabel } from "@/lib/workforce/oversight-copy";
 import {
   BASE_OWNER_ACTIONS,
   LEVEL_RANK,
@@ -262,8 +263,8 @@ function collectService(
         observedValue: safeObservedValue(service.hitlTier, Boolean(level)),
         normalizedLevel: level,
         detail: level
-          ? `Service ${ref || "<missing>"} uses HITL tier ${String(service.hitlTier)}`
-          : `Service ${ref || "<missing>"} HITL tier is unresolved`,
+          ? `Service ${ref || "<missing>"} oversight is ${oversightLabel(service.hitlTier)}`
+          : `Service ${ref || "<missing>"} oversight is unresolved`,
       },
       selected && level
         ? {
@@ -333,8 +334,8 @@ function collectAgent(
       observedValue: safeObservedValue(agent.hitlTierDefault, Boolean(level)),
       normalizedLevel: level,
       detail: level
-        ? `Agent ${ref || "<missing>"} uses HITL tier ${String(agent.hitlTierDefault)}`
-        : `Agent ${ref || "<missing>"} HITL default is unresolved`,
+        ? `Agent ${ref || "<missing>"} oversight is ${oversightLabel(agent.hitlTierDefault)}`
+        : `Agent ${ref || "<missing>"} oversight default is unresolved`,
     },
     selected && level
       ? {
