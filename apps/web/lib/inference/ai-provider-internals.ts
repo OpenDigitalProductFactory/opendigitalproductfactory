@@ -534,63 +534,101 @@ export async function discoverModelsInternal(
 
   const newCount = await upsertDiscoveredModels(providerId, models);
 
-  // ── EP-INF-002: Discovery reconciliation — detect gone models ──
+  await reconcileDiscoveredModelPresence(providerId, freshModelIds);
+
+  return { discovered: models.length, newCount };
+}
+
+/**
+ * Retirement reasons that record the PROVIDER ITSELF confirming a model is
+ * dead even though it may still appear in the provider's catalog listing —
+ * Google keeps sunset aliases listed while rejecting calls. Cloud presence
+ * reconciliation never auto-reactivates these. Local serving engines
+ * (DMR/Ollama) are exempt: their /models list is the serving truth — a listed
+ * model is loadable, so a model_not_found recorded during an engine outage
+ * must heal once the model is listed again (BI-B6B8C1F9).
+ */
+export const PERMANENT_RETIRE_REASONS = [
+  "model_not_found from provider",
+  "Deprecated by provider at discovery time",
+];
+
+/**
+ * EP-INF-002: Discovery reconciliation — heal returned models, detect gone ones.
+ *
+ * A retired ModelProfile is reactivated whenever the provider currently lists
+ * the model. This deliberately does NOT depend on missedDiscoveryCount:
+ * profiles retired by a runtime 404 during an outage or demoted by a
+ * dedupe/retriage migration (BI-84792669 left reactivation as an unowned
+ * "operational decision") carry a count of 0 and previously stayed retired
+ * forever while discovery listed the model every day — the "no AI model
+ * available" coworker outage (BI-B6B8C1F9).
+ *
+ * Missed-discovery counting and retirement stay cloud-only: a local list miss
+ * is more likely an engine hiccup than a removal, and retiring the bundled
+ * local fallback is exactly what stranded restricted-sensitivity routing.
+ */
+export async function reconcileDiscoveredModelPresence(
+  providerId: string,
+  freshModelIds: ReadonlySet<string>,
+): Promise<void> {
   const isLocalProvider = providerId === "local" || providerId === "ollama";
-  if (!isLocalProvider) {
-    const allKnown = await prisma.discoveredModel.findMany({
-      where: { providerId },
-      select: { id: true, modelId: true, missedDiscoveryCount: true },
+  const allKnown = await prisma.discoveredModel.findMany({
+    where: { providerId },
+    select: { id: true, modelId: true, missedDiscoveryCount: true },
+  });
+
+  const present = allKnown.filter((known) => freshModelIds.has(known.modelId));
+
+  const countersToReset = present.filter((known) => known.missedDiscoveryCount > 0);
+  if (countersToReset.length > 0) {
+    await prisma.discoveredModel.updateMany({
+      where: { id: { in: countersToReset.map((known) => known.id) } },
+      data: { missedDiscoveryCount: 0 },
     });
+  }
 
-    for (const known of allKnown) {
-      if (freshModelIds.has(known.modelId)) {
-        // Model still exists — reset counter and reactivate if retired
-        if (known.missedDiscoveryCount > 0) {
-          await prisma.discoveredModel.update({
-            where: { id: known.id },
-            data: { missedDiscoveryCount: 0 },
-          });
-          // Don't reactivate models retired due to a provider-confirmed error
-          // (model_not_found, deprecated by provider).  Google still lists
-          // sunset aliases in their model catalog even though calls are rejected.
-          await prisma.modelProfile.updateMany({
-            where: {
-              providerId,
-              modelId: known.modelId,
-              modelStatus: "retired",
-              retiredReason: { notIn: [
-                "model_not_found from provider",
-                "Deprecated by provider at discovery time",
-              ] },
-            },
-            data: { modelStatus: "active", retiredAt: null, retiredReason: null },
-          });
-        }
-      } else {
-        // Model not in fresh list — increment counter
-        const newMissedCount = known.missedDiscoveryCount + 1;
-        await prisma.discoveredModel.update({
-          where: { id: known.id },
-          data: { missedDiscoveryCount: newMissedCount },
-        });
-
-        if (newMissedCount >= 2) {
-          await prisma.modelProfile.updateMany({
-            where: { providerId, modelId: known.modelId },
-            data: {
-              modelStatus: "retired",
-              retiredAt: new Date(),
-              retiredReason: `Model no longer listed by provider after ${newMissedCount} discovery cycles`,
-            },
-          });
-          // CodeQL js/log-injection: modelId + providerId user-influenced.
-          console.log(`[discovery] Retired model ${JSON.stringify(known.modelId)} from ${JSON.stringify(providerId)} (missed ${newMissedCount} discoveries)`);
-        }
-      }
+  if (present.length > 0) {
+    const reactivated = await prisma.modelProfile.updateMany({
+      where: {
+        providerId,
+        modelId: { in: present.map((known) => known.modelId) },
+        modelStatus: "retired",
+        ...(isLocalProvider ? {} : { retiredReason: { notIn: PERMANENT_RETIRE_REASONS } }),
+      },
+      data: { modelStatus: "active", retiredAt: null, retiredReason: null },
+    });
+    if (reactivated.count > 0) {
+      // CodeQL js/log-injection: providerId user-influenced.
+      console.log(`[discovery] Reactivated ${reactivated.count} retired model profile(s) re-listed by ${JSON.stringify(providerId)}`);
     }
   }
 
-  return { discovered: models.length, newCount };
+  if (isLocalProvider) return;
+
+  for (const known of allKnown) {
+    if (freshModelIds.has(known.modelId)) continue;
+
+    // Model not in fresh list — increment counter
+    const newMissedCount = known.missedDiscoveryCount + 1;
+    await prisma.discoveredModel.update({
+      where: { id: known.id },
+      data: { missedDiscoveryCount: newMissedCount },
+    });
+
+    if (newMissedCount >= 2) {
+      await prisma.modelProfile.updateMany({
+        where: { providerId, modelId: known.modelId },
+        data: {
+          modelStatus: "retired",
+          retiredAt: new Date(),
+          retiredReason: `Model no longer listed by provider after ${newMissedCount} discovery cycles`,
+        },
+      });
+      // CodeQL js/log-injection: modelId + providerId user-influenced.
+      console.log(`[discovery] Retired model ${JSON.stringify(known.modelId)} from ${JSON.stringify(providerId)} (missed ${newMissedCount} discoveries)`);
+    }
+  }
 }
 
 

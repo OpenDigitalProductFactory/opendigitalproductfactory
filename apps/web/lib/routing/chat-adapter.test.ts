@@ -724,6 +724,28 @@ describe("chatAdapter", () => {
     expect(url).toBe("https://api.openai.com/v1/chat/completions");
   });
 
+  // ── OpenAI-compat: baseUrl carrying its own version segment (Z.ai /v4) ──
+
+  it("OpenAI-compat: versioned baseUrl (Z.ai /v4) does not get /v1 appended (BI-B6B8C1F9)", async () => {
+    stubFetchOk({
+      choices: [{ message: { content: "ok" } }],
+      usage: { prompt_tokens: 2, completion_tokens: 1 },
+    });
+
+    const req = makeRequest({
+      providerId: "zai-coding",
+      modelId: "glm-5.2",
+      provider: { baseUrl: "https://api.z.ai/api/coding/paas/v4", headers: { Authorization: "Bearer test" } },
+    });
+
+    await chatAdapter.execute(req);
+
+    // Appending /v1 here produced …/v4/v1/chat/completions → a 404 the fallback
+    // chain read as model-not-found, auto-retiring every Z.ai model.
+    const [url] = mockFetch.mock.calls[0];
+    expect(url).toBe("https://api.z.ai/api/coding/paas/v4/chat/completions");
+  });
+
   // ── Anthropic tool calls extracted from response ──
 
   it("Anthropic: tool_use blocks extracted as toolCalls", async () => {

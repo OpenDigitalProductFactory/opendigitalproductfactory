@@ -11,6 +11,7 @@
 import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
 import { InferenceError, classifyHttpError } from "@/lib/ai-inference";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
+import { resolveOpenAiCompatibleApiBase } from "./openai-base";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -50,7 +51,7 @@ export const embeddingAdapter: ExecutionAdapterHandler = {
       };
     } else {
       // ── OpenAI-compatible ──────────────────────────────────────────────
-      const apiBase = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
+      const apiBase = resolveOpenAiCompatibleApiBase(baseUrl);
       url = `${apiBase}/embeddings`;
       body = {
         model: modelId,

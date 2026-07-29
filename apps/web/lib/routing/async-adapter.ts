@@ -14,6 +14,7 @@
 import type { AdapterRequest, AdapterResult, ExecutionAdapterHandler } from "./adapter-types";
 import { InferenceError, classifyHttpError } from "@/lib/ai-inference";
 import { registerExecutionAdapter } from "./execution-adapter-registry";
+import { resolveOpenAiCompatibleApiBase } from "./openai-base";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -54,7 +55,7 @@ export const asyncAdapter: ExecutionAdapterHandler = {
     } else {
       // ── Generic async start — future providers ─────────────────────
       // Fallback: try standard endpoint with async flag
-      const apiBase = baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
+      const apiBase = resolveOpenAiCompatibleApiBase(baseUrl);
       url = `${apiBase}/chat/completions`;
       body = {
         model: modelId,
