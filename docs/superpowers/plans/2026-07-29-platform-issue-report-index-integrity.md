@@ -1,7 +1,7 @@
 # PlatformIssueReport index-integrity repair
 
-**Backlog item:** `BI-854A9A5C`  
-**Branch:** `fix/platform-issue-report-index-integrity`  
+**Backlog item:** `BI-854A9A5C`
+**Branch:** `fix/platform-issue-report-index-integrity`
 **Work Capsule:** `WC-99E24F85`
 
 > **For agentic workers:** execute this plan one independently reviewable backlog item at a time - one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff.
