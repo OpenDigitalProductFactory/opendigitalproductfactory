@@ -1983,7 +1983,7 @@ export async function seedProfessionCorpus(
       archetypeCoverage,
     );
 
-    const principlePayload = extractPrinciplePayload(frontmatter);
+    const principlePayload = extractPrinciplePayload(frontmatter, file);
 
     // Persist the validated WSID variant axes into WikiPage.metadata so the
     // HRIS coverage helper, the runtime retrieval service, and the gate variant

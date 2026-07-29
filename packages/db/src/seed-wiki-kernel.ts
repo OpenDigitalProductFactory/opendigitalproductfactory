@@ -82,11 +82,36 @@ function readManifest(): Manifest {
 // ─── Principle Payload Extractor ───────────────────────────────────────────
 
 /**
+ * Every frontmatter key that only a `pageKind: principle` page may carry.
+ *
+ * Kept as one list so the "wrong kind" guard below cannot drift out of sync
+ * with the payload builder at the bottom of `extractPrinciplePayload` — the
+ * two must cover the same key set or a field silently escapes the check.
+ */
+export const PRINCIPLE_ONLY_FRONTMATTER_KEYS = [
+  "principleTier",
+  "principleDirection",
+  "principleWeight",
+  "principleWeightRationale",
+  "principleDimensionVector",
+  "principleDimensions",
+  "principleAppliesTo",
+  "principleRingScope",
+  "principleConsumerArchetype",
+  "principleConsumerContexts",
+  "principlePublic",
+  "principlePublicRationale",
+  "principleRuntimeEnforcement",
+] as const satisfies readonly (keyof WikiPageFrontmatter)[];
+
+/**
  * Pull the principle-only fields out of a `WikiPageFrontmatter` and shape
  * them for `upsertWikiPage`'s `WikiPagePrincipleInput`.
  *
  * - Returns `{}` for non-principle pages so callers can spread the result
- *   unconditionally without leaking principle keys onto other kinds.
+ *   unconditionally without leaking principle keys onto other kinds. A
+ *   non-principle page that *declares* principle payload is a hard error
+ *   rather than a silent `{}` — see the guard below.
  * - Validates every key in `principleDimensionVector` and every entry in
  *   `principleDimensions` against the `PRINCIPLE_DIMENSIONS` registry.
  *   Throws with a clear message naming the offending key — per
@@ -100,8 +125,36 @@ function readManifest(): Manifest {
  */
 export function extractPrinciplePayload(
   frontmatter: WikiPageFrontmatter,
+  sourcePath?: string,
 ): WikiPagePrincipleInput {
   if (frontmatter.pageKind !== "principle") {
+    // A non-principle page that declares principle payload used to seed as
+    // prose with the whole payload dropped on the floor: no vector, no tier,
+    // no contribution to structured option scoring, and no way for the author
+    // to find out — the principle lint detectors only ever see
+    // `pageKind === "principle"` pages, so nothing downstream could catch it
+    // either. That is precisely the failure mode
+    // `make-silent-failures-observable` forbids, so fail at authoring time.
+    const declared = PRINCIPLE_ONLY_FRONTMATTER_KEYS.filter(
+      (key) => frontmatter[key] !== undefined,
+    );
+    if (declared.length > 0) {
+      const where = sourcePath ? ` (${sourcePath})` : "";
+      throw new Error(
+        `Page "${frontmatter.title}"${where} has pageKind ` +
+          `"${frontmatter.pageKind}" but declares principle-only frontmatter: ` +
+          `${declared.join(", ")}. The principle payload (tier, direction, ` +
+          `dimension vector, applies-to, ring scope, …) is carried by ` +
+          `pageKind: principle ONLY — spec ` +
+          `2026-06-09-wsid-coworker-professional-corpus-design.md §4.6 makes ` +
+          `"principle" the decision-bearing kind, and option scoring, ` +
+          `principle recall, and the principle lint detectors all select on ` +
+          `it. Declared here, the payload would be silently discarded. ` +
+          `Fix one of: (a) change pageKind to "principle" if this page is ` +
+          `meant to move decision verdicts; or (b) drop the listed field(s) ` +
+          `if this is a defeasible rule of thumb that should stay prose.`,
+      );
+    }
     return {};
   }
 
@@ -401,7 +454,7 @@ async function seedWikiPages(
     const slug = frontmatter.slug ?? deriveSlug(file, wikiDir);
     const status = frontmatter.status ?? "published";
 
-    const principlePayload = extractPrinciplePayload(frontmatter);
+    const principlePayload = extractPrinciplePayload(frontmatter, file);
 
     const upserted = (await upsertWikiPage(prisma, {
       slug,

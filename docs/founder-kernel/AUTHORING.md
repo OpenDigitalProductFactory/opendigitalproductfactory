@@ -61,7 +61,7 @@ That&#39;s the loop.
 ```yaml
 ---
 title: Plain English Title          # required, shown in the viewer header
-pageKind: stance                    # required — entity | stance | heuristic | decision | runbook | summary | index
+pageKind: stance                    # required — entity | stance | heuristic | principle | decision | runbook | summary | index
 status: published                   # optional, default published. Other values: draft | review-needed | archived
 abstract: One paragraph summary.    # optional but recommended (shown under title in viewer)
 sources:                            # optional list of raw-source slugs that back this page
@@ -69,6 +69,29 @@ sources:                            # optional list of raw-source slugs that bac
   - articles/portfolio-as-anchor
 ---
 ```
+
+### The principle payload is `pageKind: principle` only
+
+The `principle*` frontmatter keys — `principleTier`, `principleDirection`,
+`principleWeight`, `principleWeightRationale`, `principleDimensionVector`,
+`principleDimensions`, `principleAppliesTo`, `principleRingScope`,
+`principleConsumerArchetype`, `principleConsumerContexts`, `principlePublic`,
+`principlePublicRationale`, `principleRuntimeEnforcement` — are read **only**
+from a `pageKind: principle` page. Structured option scoring reads the
+principle's dimensions, principle recall selects on the kind, and every
+`principle-*` lint detector filters to it.
+
+Declaring any of them on a `heuristic`, `stance`, `entity`, `summary`,
+`decision`, `runbook`, or `index` page is a **seed-time error** — the seeder
+names the file and the offending keys and refuses to seed. It does not
+silently drop them.
+
+This is deliberate, not a gap. A `heuristic` is defeasible by construction
+(*"prefer 3NF until a measured read-path needs denormalization"*); a
+`principle` carries a tier and a direction that move a decision verdict. If a
+rule is meant to move verdicts, author it as a `principle`. If it is genuinely
+a rule of thumb, keep it as prose and let it inform the reader rather than
+outvote the ledger.
 
 Fields are parsed by the YAML subset shared with `seed-skills.ts` and `seed-prompt-templates.ts`. Scalars, inline arrays (`[a, b]`), and block-style lists (`- item`) all work. **No nested objects.** Quotes are optional; surrounding `"`/`'` are stripped.
 
@@ -225,6 +248,7 @@ Customers will be able to override kernel pages with their own takes via the `ke
 | `Missing YAML frontmatter delimiters (---)` | File doesn&#39;t open with `---\n…\n---\n` | Add the frontmatter block at the top. |
 | `pageKind: summary` page flagged `stance-extraction-needed` | Summary lacks a `[[stances/…]]` or `[[heuristics/…]]` wikilink | Extract a stance or heuristic as its own page and link to it from the summary body. |
 | `dangling-xref` error blocks publish | A `[[wikilink]]` target doesn&#39;t exist | Create the target page first, or remove/fix the link. |
+| Seed fails: `has pageKind "heuristic" but declares principle-only frontmatter` | A non-`principle` page declares `principleDimensionVector`, `principleTier`, or another `principle*` key. Those are read only from `pageKind: principle`. | Change `pageKind` to `principle` if the page is meant to move decision verdicts, or drop the `principle*` keys if it is a rule of thumb. See §3. |
 | Page doesn&#39;t appear at `/wiki/<slug>` after seed | Slug mismatch | Check the file path. Slug is `<path-under-wiki-without-ext>` unless overridden. |
 | Same page seeds with `version=1` every time | Body actually unchanged between runs | Expected behaviour — revision chain only advances on body change. |
 | Qdrant upsert returns `qdrant=no-sidecar` | `embeddings.jsonl` missing | Run `tsx scripts/build-kernel-embeddings.ts` to generate it. The seed still writes Postgres rows even without it. |
