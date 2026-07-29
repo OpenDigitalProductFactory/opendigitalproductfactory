@@ -42,6 +42,24 @@ function jsonResponse(data: unknown) {
 }
 
 describe("ChangesClient expandable RFC details", () => {
+  it("keeps the UX sweep pending until the initial RFC list settles", async () => {
+    let resolveList!: (response: Response) => void;
+    const listRequest = new Promise<Response>((resolve) => {
+      resolveList = resolve;
+    });
+    vi.stubGlobal("fetch", vi.fn(() => listRequest));
+
+    const { container } = render(<ChangesClient />);
+    expect(container.querySelector('[data-dpf-ux-settle="pending"]')).not.toBeNull();
+
+    resolveList({ ok: true, json: async () => ({ data: [] }) } as Response);
+
+    await waitFor(() => {
+      expect(container.querySelector("[data-dpf-ux-settle]")).toBeNull();
+    });
+    expect(screen.getByText('No changes with status "active".')).toBeTruthy();
+  });
+
   it("keeps one summary, shows in-panel loading, and reveals connected detail", async () => {
     let resolveDetail!: (response: Response) => void;
     const detailRequest = new Promise<Response>((resolve) => {

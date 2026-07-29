@@ -25,6 +25,7 @@ import { isUnifiedCoworkerEnabled } from "@/lib/feature-flags";
 import { resolveHomePhoneCountry } from "@/lib/phone-country.server";
 import { PhoneCountryProvider } from "@/components/ui/PhoneCountryContext";
 import { NAV_MODE_COOKIE, resolveNavModeFromCookie } from "@/lib/navigation/nav-mode";
+import { UxInitialLoadBoundary } from "@/components/shell/UxInitialLoadBoundary";
 
 export default async function ShellLayout({ children }: { children: React.ReactNode }) {
   // First-run check — redirect to setup if no org exists.
@@ -249,7 +250,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
                   style={{ maxWidth: "var(--shell-page-content-max-width, none)" }}
                 >
                   {shellNavSections.length > 0 && <ShellBreadcrumb />}
-                  {children}
+                  <UxInitialLoadBoundary>{children}</UxInitialLoadBoundary>
                 </div>
               </div>
             </div>

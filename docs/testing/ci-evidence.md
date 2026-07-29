@@ -273,7 +273,11 @@ quiet, capped at 10 seconds, before capture. This is the deterministic hydration
 boundary: `networkidle` is not valid for a portal with long-lived streams, while
 measuring immediately after `load` races client-populated rows and status labels.
 The marker is an explicit component-owned readiness contract, not a route-name
-exception in the test harness.
+exception in the test harness. The authenticated shell owns the initial React
+hydration marker for every route. Components that start additional first-load
+work own narrower markers; the business calendar, for example, remains pending
+until FullCalendar's visible-range event refresh completes, and Operations
+Changes remains pending until its initial RFC list request settles.
 
 The sweep also supplies `/build/work` with a deterministic one-branch Git
 repository through `DPF_WORK_CONTROL_REPO_ROOT`. GitHub's named
@@ -281,6 +285,21 @@ repository through `DPF_WORK_CONTROL_REPO_ROOT`. GitHub's named
 produce different "Adoptable work" structures for identical source. Production
 continues to resolve the real host clone from `DPF_REPO_ROOT`; the narrow
 override exists only for the route-sweep fixture.
+
+The authenticated database fixture converges setup state before the production
+portal starts, then runs an idempotent second pass after the portal is serving
+to refresh the seeded running root-portal heartbeat. The ordering is part of the
+fixture contract: startup must not observe an incomplete first-run install, and
+artifact discovery or a fallback build can legitimately take longer than the
+change-lanes projection's ten-minute stale-heartbeat threshold. Retaining only
+the earlier seed timestamp would make the same source alternate between a
+healthy lane and a five-word stale-heartbeat blocker.
+
+Fixture-facing health copy must also be semantically stable. The Communications
+speech-to-text card classifies transport failures as `endpoint unavailable`
+instead of rendering Node/undici's platform-specific DNS or socket error text.
+The operator still sees the affected provider URL and actionable recovery path,
+while identical source no longer gains or loses words with runner networking.
 
 Manual workflow dispatch accepts a bounded worker count of `1`, `2`, or `4`;
 the measured default is **2**. Before `BI-CC7CA516`, all three settings
