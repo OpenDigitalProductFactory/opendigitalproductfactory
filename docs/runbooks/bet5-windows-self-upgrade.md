@@ -162,6 +162,14 @@ failed record then wedges ALL later upgrades via P3009. Two known producers:
 Recovery decision (inspect `_prisma_migrations`: `applied_steps_count`, and whether the migration's
 columns/indexes exist in the DB):
 
+- **Exact inventory snapshot failure** (`20260728115900_snapshot_inventory_observation_facts`):
+  the promoter automatically marks the row rolled back only when it is the sole unresolved
+  migration in the entire Prisma ledger, its checksum matches the committed migration bytes, its
+  database row id is a valid UUID, and the log names SQLSTATE `23505` and
+  `InventoryEntity_entityKey_key`, `applied_steps_count = 0`, no durable
+  `_dpfObservationSnapshot` exists, and the candidate carries the exact committed `11:58`
+  quarantine migration. It verifies that same row after resolution before normal deploy. Any
+  mismatch fails closed before the portal swap and requires the evidence-led decision below.
 - **Schema half-applied** (columns/index present): `prisma migrate resolve --applied <name>` — NOT
   `--rolled-back`, which would re-run the `ADD COLUMN` and fail `already exists`.
 - **Nothing applied** (`applied_steps_count = 0`, no DDL landed): fix the root cause (de-duplicate,

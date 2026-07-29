@@ -10,11 +10,13 @@
     "Contributor sanitized-clone source and destination"
   ],
   "migration": {
-    "name": "20260728115900_snapshot_inventory_observation_facts through 20260728181500_restore_human_identity_tuple_provenance",
-    "backfill": "forced-heap entity and relationship convergence: retain the earliest deterministic canonical identity, repoint hard and registered soft references, preserve the newest coherent observation and human-confirmed identity facts, retain entity and relationship collision losers as inactive superseded tombstones with mergedIntoId lineage, retain merge-created relationship self loops as inactive tombstones with an explicit repair reason and no fabricated survivor, rebuild the unique entityKey index, and provision read-only amcheck verification; no row or primary key is deleted"
+    "name": "20260728115800_quarantine_damaged_inventory_unique_index through 20260728130000_repair_inventory_entity_index_integrity",
+    "backfill": "quarantine the untrustworthy entityKey index before any whole-table update, snapshot each duplicate row's mutable observation facts, then perform forced-heap entity and relationship convergence: retain the earliest deterministic canonical identity, repoint hard and registered soft references, preserve the newest coherent observation and human-confirmed identity facts, retain entity and relationship collision losers as inactive superseded tombstones with mergedIntoId lineage, retain merge-created relationship self loops as inactive tombstones with an explicit repair reason and no fabricated survivor, rebuild the unique entityKey index, and provision read-only amcheck verification; the exact historical 12:00 repair identity is restored for installs that already applied it, and no row or primary key is deleted"
   },
   "tests": [
     "packages/db/src/inventory-entity-index-integrity-migration.test.ts",
+    "packages/db/src/inventory-migration-history.test.ts",
+    "packages/db/src/inventory-snapshot-migration-recovery.test.ts",
     "packages/db/src/inventory-entity-merge-references.test.ts",
     "packages/db/src/inventory-entity-canonical-read-completeness.test.ts",
     "packages/db/src/discovery-sync.integrity.test.ts",
@@ -46,7 +48,7 @@
           "fieldId": "data:inventory-entity#observation-and-identity-facts",
           "resolution": "governed",
           "reason": "preserve the newest coherent discovery observation and any later human-confirmed identity correction across a failed or retried repair",
-          "provenance": "snapshot, retry, and identity-ledger migration fixtures under BI-CF4ADDAC"
+          "provenance": "pre-snapshot, retry, and identity-ledger migration fixtures under BI-CF4ADDAC and BI-B92CFED7"
         }
       ]
     },

@@ -403,6 +403,38 @@ if [[ $_dry_run -eq 0 ]]; then
   docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
     "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
     -c 'cd /app && pnpm --filter @dpf/db exec prisma migrate resolve --rolled-back 20260714110000_bet5_pgvector_foundation' >/dev/null 2>&1 || true
+
+  # BI-B92CFED7: a pre-fix self-upgrade can leave the 11:59 observation
+  # snapshot failed at its first UPDATE because a corrupted unique index still
+  # contains duplicate heap keys. The candidate-owned checker proves the exact
+  # allowlisted failure, zero applied steps, zero durable snapshot effects, and
+  # the exact pre-snapshot quarantine guard. Any mismatch aborts before the
+  # portal swap.
+  _inventory_snapshot_recovery="$(
+    docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+      "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
+      -c 'cd /app && node packages/db/scripts/recover-inventory-snapshot-migration.mjs'
+  )" || {
+    printf 'error: inventory snapshot migration recovery did not prove a safe state\n' >&2
+    exit 1
+  }
+  case "$_inventory_snapshot_recovery" in
+    recover:*)
+      _inventory_snapshot_migration_id="${_inventory_snapshot_recovery#recover:}"
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+        "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
+        -c 'cd /app && pnpm --filter @dpf/db exec prisma migrate resolve --rolled-back 20260728115900_snapshot_inventory_observation_facts'
+      docker compose ${_env_args[@]+"${_env_args[@]}"} --project-directory "$PROMOTE_SOURCE" -p "$_project" \
+        "${_f_args[@]}" run --rm -T --no-deps --entrypoint sh portal \
+        -c 'cd /app && node packages/db/scripts/recover-inventory-snapshot-migration.mjs --verify-rolled-back "$1"' \
+        sh "$_inventory_snapshot_migration_id"
+      ;;
+    not-needed) ;;
+    *)
+      printf 'error: inventory snapshot migration recovery returned an unknown decision\n' >&2
+      exit 1
+      ;;
+  esac
 fi
 
 # --- Step 3b: migrate ---
