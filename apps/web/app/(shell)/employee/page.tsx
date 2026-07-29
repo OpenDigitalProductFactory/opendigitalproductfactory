@@ -297,7 +297,7 @@ export default async function EmployeePage({ searchParams }: Props) {
                     )}
                     <div className="flex flex-wrap gap-2">
                       <span className="text-[9px] text-[var(--dpf-muted)]">
-                        {oversightLabel(r.hitlTierMin, { short: true })}
+                        {oversightLabel(r.hitlTierMin, { dense: true })}
                       </span>
                       <span className="text-[9px] text-[var(--dpf-muted)]">{sla}</span>
                       <span className="text-[9px] text-[var(--dpf-muted)]">

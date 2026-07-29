@@ -166,7 +166,7 @@ export function BusinessModelRolePanel({ productId, assignedModels, users }: Pro
                               padding: "1px 5px",
                             }}
                           >
-                            {oversightLabel(role.hitlTierDefault, { short: true })}
+                            {oversightLabel(role.hitlTierDefault, { dense: true })}
                           </span>
                         </div>
                         {role.authorityDomain && (

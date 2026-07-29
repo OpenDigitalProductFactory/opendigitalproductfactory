@@ -92,7 +92,7 @@ export function AuthorizationBundlePanel({
                     <h3 className="mt-1 text-sm font-semibold text-[var(--dpf-text)]">{bundle.name}</h3>
                   </div>
                   <span className="rounded-full border border-[var(--dpf-border)] px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-[var(--dpf-text)]">
-                    {oversightLabel(bundle.hitlTierMin, { short: true })} or above
+                    {oversightLabel(bundle.hitlTierMin, { dense: true })}+
                   </span>
                 </div>
                 {bundle.description ? (

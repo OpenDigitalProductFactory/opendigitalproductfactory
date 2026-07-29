@@ -820,7 +820,7 @@ export function EffectivePermissionsPanel({
                         padding: "1px 5px",
                       }}
                     >
-                      {oversightLabel(role.hitlTierDefault, { short: true })}
+                      {oversightLabel(role.hitlTierDefault, { dense: true })}
                     </span>
                   </span>
                   <span style={{ fontSize: 9, color: "var(--dpf-muted)" }}>{escalationLabel}</span>

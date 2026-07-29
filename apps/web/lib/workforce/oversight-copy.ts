@@ -38,8 +38,18 @@ export interface OversightCopy {
   slug: OversightSlug;
   /** Full label for cards, detail rows, and selects. */
   label: string;
-  /** Compact label for chips, badges, and dense table cells. */
+  /** Compact label for chips and badges. */
   shortLabel: string;
+  /**
+   * Single-word token for DENSE surfaces — matrix cells and per-row badges on
+   * pages that render hundreds of rows (`/platform/audit/authority` alone shows
+   * ~15,500 words). Those cells previously showed a bare tier number, which is
+   * meaningless to a reader; a one-word token carries the meaning at the same
+   * word cost, with `description` supplied as the tooltip. Keeping this separate
+   * from `shortLabel` is what lets the plain language land without regressing
+   * the UX route word budget.
+   */
+  cellLabel: string;
   /** One sentence a non-technical owner can act on. */
   description: string;
   /** Semantic intent — resolves to a --dpf-* token via report-kit. */
@@ -61,6 +71,7 @@ export const OVERSIGHT_COPY: Record<OversightSlug, OversightCopy> = {
     slug: "employee-only",
     label: "Employee only",
     shortLabel: "Employee only",
+    cellLabel: "Manual",
     description: "An employee does this work. Your AI coworker never acts on it.",
     intent: resolveIntent("employeeOversight", "employee-only"),
     ariaLabel: "Employee only, your AI coworker never acts on this",
@@ -70,6 +81,7 @@ export const OVERSIGHT_COPY: Record<OversightSlug, OversightCopy> = {
     slug: "needs-approval",
     label: "Needs approval",
     shortLabel: "Needs approval",
+    cellLabel: "Approve",
     description: "Your AI coworker prepares the work, then waits for an employee to approve it.",
     intent: resolveIntent("employeeOversight", "needs-approval"),
     ariaLabel: "Needs approval from an employee before it goes ahead",
@@ -79,6 +91,7 @@ export const OVERSIGHT_COPY: Record<OversightSlug, OversightCopy> = {
     slug: "employee-review",
     label: "Employee review",
     shortLabel: "Reviewed",
+    cellLabel: "Review",
     description: "Your AI coworker does the work, and an employee reviews it afterwards.",
     intent: resolveIntent("employeeOversight", "employee-review"),
     ariaLabel: "Reviewed by an employee after the work is done",
@@ -88,6 +101,7 @@ export const OVERSIGHT_COPY: Record<OversightSlug, OversightCopy> = {
     slug: "on-its-own",
     label: "Runs on its own",
     shortLabel: "On its own",
+    cellLabel: "Auto",
     description: "Your AI coworker handles this without asking.",
     intent: resolveIntent("employeeOversight", "on-its-own"),
     ariaLabel: "Runs on its own, no employee step needed",
@@ -130,10 +144,11 @@ export function oversightStyle(tier: number | null | undefined) {
  */
 export function oversightLabel(
   tier: number | null | undefined,
-  options?: { short?: boolean; fallback?: string },
+  options?: { short?: boolean; dense?: boolean; fallback?: string },
 ): string {
   const copy = getOversightCopy(tier);
   if (!copy) return options?.fallback ?? "Not set";
+  if (options?.dense) return copy.cellLabel;
   return options?.short ? copy.shortLabel : copy.label;
 }
 

@@ -88,4 +88,32 @@ describe("oversight copy (BI-F2EC4699)", () => {
     expect(oversightLabel(2, { short: true })).toBe("Reviewed");
     expect(oversightLabel(3, { short: true })).toBe("On its own");
   });
+
+  // Dense surfaces (matrix cells, per-row badges) previously showed a bare tier
+  // NUMBER — one word, and meaningless. The dense token has to carry meaning at
+  // that same one-word cost or the UX route word budget regresses: rendering
+  // "Employee review" in every row of /platform/audit/authority grew that page
+  // by 184 words and failed the ratchet.
+  it("keeps the dense token to a single word so the route word budget holds", () => {
+    for (const tier of [0, 1, 2, 3]) {
+      const dense = oversightLabel(tier, { dense: true });
+      expect(dense.trim().split(/\s+/)).toHaveLength(1);
+      expect(dense.toLowerCase()).not.toContain("hitl");
+      expect(dense.toLowerCase()).not.toContain("human");
+      // Still a word, not a digit dressed up as one.
+      expect(dense).not.toMatch(/^\d+$/);
+    }
+  });
+
+  it("maps each tier to a distinct dense token", () => {
+    const dense = [0, 1, 2, 3].map((t) => oversightLabel(t, { dense: true }));
+    expect(dense).toEqual(["Manual", "Approve", "Review", "Auto"]);
+    expect(new Set(dense).size).toBe(4);
+  });
+
+  it("prefers dense over short when both are passed, and still falls back", () => {
+    expect(oversightLabel(2, { dense: true, short: true })).toBe("Review");
+    expect(oversightLabel(9, { dense: true })).toBe("Not set");
+    expect(oversightLabel(9, { dense: true, fallback: "—" })).toBe("—");
+  });
 });

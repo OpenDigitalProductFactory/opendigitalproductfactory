@@ -55,7 +55,7 @@ function OversightBadge({ tier }: { tier: number }) {
         lineHeight: "14px",
       }}
     >
-      {oversightLabel(tier, { short: true })}
+      {oversightLabel(tier, { dense: true })}
     </span>
   );
 }
@@ -334,10 +334,7 @@ export function DelegationChainPanel({ agents, bmrNodes }: DelegationChainProps)
       {/* Legend */}
       <div style={{ display: "flex", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
         {OVERSIGHT_TIERS_ASC.map((copy) => (
-          <span key={copy.tier} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <OversightBadge tier={copy.tier} />
-            <span style={{ fontSize: 9, color: "var(--dpf-muted)" }}>{copy.description}</span>
-          </span>
+          <OversightBadge key={copy.tier} tier={copy.tier} />
         ))}
       </div>
 
@@ -471,7 +468,7 @@ export function DelegationChainPanel({ agents, bmrNodes }: DelegationChainProps)
           {OVERSIGHT_TIERS_ASC.map((copy, i) => (
             <span key={copy.tier}>
               {i > 0 ? " | " : ""}
-              {oversightLabel(copy.tier, { short: true })}:{" "}
+              {oversightLabel(copy.tier, { dense: true })}:{" "}
               {agents.filter((a) => a.hitlTier === copy.tier).length}
             </span>
           ))}

@@ -73,7 +73,7 @@ export function GroupMembershipPanel({
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-medium text-[var(--dpf-text)]">{group.memberCount} members</p>
-                    <p className="mt-1 text-[11px] text-[var(--dpf-muted)]">{oversightLabel(group.hitlTierMin, { short: true })} or above</p>
+                    <p className="mt-1 text-[11px] text-[var(--dpf-muted)]">{oversightLabel(group.hitlTierMin, { dense: true })}+</p>
                   </div>
                 </div>
 

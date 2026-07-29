@@ -416,7 +416,7 @@ export function AuthorityMatrixPanel({ agents, bmrRows }: AuthorityMatrixProps) 
                       textAlign: "center",
                     }}
                   >
-                    {oversightLabel(row.hitlTierDefault, { short: true })}
+                    {oversightLabel(row.hitlTierDefault, { dense: true })}
                   </span>
                   <span style={{ fontSize: 9, color: "var(--dpf-muted)" }}>{escLabel}</span>
                   <span style={{ fontSize: 9, color: row.assignee ? "var(--dpf-text)" : "var(--dpf-muted)", fontStyle: row.assignee ? "normal" : "italic" }}>
