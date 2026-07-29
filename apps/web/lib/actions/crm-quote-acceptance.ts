@@ -1,27 +1,22 @@
 import { prisma } from "@dpf/db";
-
 import { generateInvoiceFromSalesOrder } from "@/lib/actions/finance";
 import {
   appendProductSoldEvidence,
   createProductSoldDraft,
   createProductSoldPartyLinks,
   materializeProductSold,
-  persistProductSoldComponentAllocations,
   persistProductSoldPartyLinks,
-  snapshotProductSoldComponents,
 } from "@/lib/products/product-sold";
+import {
+  persistProductSoldComponentAllocations,
+  snapshotProductSoldComponents,
+} from "@/lib/products/product-sold-commercial-persistence";
+import { createProductManagementChangeCollector } from "@/lib/product-management/product-management-playbook-refresh";
 
-type LogSystemActivity = (
+ type LogSystemActivity = (
   subject: string,
-  options?: {
-    type?: string;
-    body?: string;
-    accountId?: string;
-    contactId?: string;
-    opportunityId?: string;
-  },
+  opts?: { type?: string; body?: string; accountId?: string; contactId?: string; opportunityId?: string },
 ) => Promise<unknown>;
-
 async function nextSalesOrderRef(): Promise<string> {
   const year = new Date().getFullYear();
   const result = await prisma.$queryRawUnsafe<{ nextval: bigint }[]>(
@@ -30,9 +25,9 @@ async function nextSalesOrderRef(): Promise<string> {
   const seq = Number(result[0]!.nextval);
   return `SO-${year}-${String(seq).padStart(4, "0")}`;
 }
-
 export async function acceptQuoteImpl(
   quoteId: string,
+  userId: string | undefined,
   logSystemActivity: LogSystemActivity,
 ) {
   const quote = await prisma.quote.findUnique({
@@ -43,7 +38,10 @@ export async function acceptQuoteImpl(
   if (quote.status === "accepted") throw new Error("Quote already accepted");
 
   const orderRef = await nextSalesOrderRef();
+
+  const productManagementChanges = createProductManagementChangeCollector();
   const result = await prisma.$transaction(async (tx) => {
+    // Accept quote
     const accepted = await tx.quote.update({
       where: { id: quoteId },
       data: { status: "accepted", acceptedAt: new Date() },
@@ -68,6 +66,7 @@ export async function acceptQuoteImpl(
       },
     });
 
+    // Create sales order
     const order = await tx.salesOrder.create({
       data: {
         orderRef,
@@ -138,6 +137,7 @@ export async function acceptQuoteImpl(
       const materialized = await materializeProductSold({
         db: tx as never,
         draft,
+        collectChange: productManagementChanges.collect,
       });
       await persistProductSoldComponentAllocations({
         db: tx as never,
@@ -178,6 +178,7 @@ export async function acceptQuoteImpl(
       });
     }
 
+    // Close opportunity as won
     await tx.opportunity.update({
       where: { id: accepted.opportunityId },
       data: {
@@ -188,8 +189,10 @@ export async function acceptQuoteImpl(
         isDormant: false,
       },
     });
+
     return { quote: accepted, salesOrder: order };
   });
+  await productManagementChanges.flush();
 
   await logSystemActivity(
     `Quote ${result.quote.quoteNumber} accepted → Sales Order ${result.salesOrder.orderRef} created`,
@@ -199,20 +202,19 @@ export async function acceptQuoteImpl(
       opportunityId: result.quote.opportunityId,
     },
   );
+
   await logSystemActivity("Opportunity closed WON (quote accepted)", {
     type: "status_change",
     accountId: result.quote.accountId,
     opportunityId: result.quote.opportunityId,
   });
 
+  // Auto-generate invoice from sales order
   try {
     await generateInvoiceFromSalesOrder(result.salesOrder.id);
-  } catch (error) {
-    console.error(
-      "Auto-invoice generation failed for SalesOrder",
-      result.salesOrder.orderRef,
-      error,
-    );
+  } catch (err) {
+    console.error("Auto-invoice generation failed for SalesOrder", result.salesOrder.orderRef, err);
   }
+
   return result;
 }

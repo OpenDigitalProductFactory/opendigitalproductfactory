@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  ProductManagementScopeError,
   buildExactProductManagementScopeWhere,
   buildProductManagementProjectionWhere,
   normalizeProductManagementScope,
@@ -75,7 +74,7 @@ describe("product-management scope", () => {
         digitalProductId: "digital-1",
       }),
     ).toThrowError(
-      expect.objectContaining<ProductManagementScopeError>({
+      expect.objectContaining({
         code: "conflicting-scope",
       }),
     );

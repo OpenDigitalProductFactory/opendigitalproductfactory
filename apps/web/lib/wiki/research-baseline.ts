@@ -27,7 +27,9 @@ type BaselineRow = {
 
 export type ResearchBaselineClient = {
   rawSource: {
-    findMany: (args: any) => Promise<unknown>;
+    // Prisma's generated generic delegate is intentionally adapted here.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    findMany: (args: any) => PromiseLike<unknown>;
   };
 };
 

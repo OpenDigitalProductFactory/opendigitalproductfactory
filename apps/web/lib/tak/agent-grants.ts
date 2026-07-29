@@ -1,7 +1,7 @@
 // Direct JSON import — bundler resolves this at build time, works in both dev and Docker standalone
 import agentRegistryData from "../../../../packages/db/data/agent_registry.json";
+import { PRODUCT_MANAGEMENT_TOOL_GRANTS } from "./product-management-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
-
 /**
  * Implications between agent grant categories. A grant on the left of the
  * mapping implicitly satisfies every grant on the right. Used to refactor
@@ -136,9 +136,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   create_backlog_item: ["backlog_write"],
   update_backlog_item: ["backlog_write"],
   score_demand_item: ["backlog_write"],
-  transition_demand_item: ["backlog_write"],
-  link_demand_evidence: ["backlog_write"],
-  supersede_demand_evidence: ["backlog_write"],
+  ...PRODUCT_MANAGEMENT_TOOL_GRANTS,
   record_effort_estimate: ["backlog_write"],
   set_demand_policy: ["backlog_write"],
   set_backlog_delivery_budget: ["backlog_write"],
@@ -147,13 +145,6 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   sweep_duplicate_demand: ["backlog_read"],
   run_capacity_drain: ["backlog_write"],
   approve_demand_for_funding: ["backlog_write"],
-  create_product_objective: ["backlog_write"],
-  update_product_objective: ["backlog_write"],
-  review_product_objective: ["backlog_write"],
-  transition_product_objective: ["backlog_write"],
-  link_product_objective_work: ["backlog_write"],
-  record_product_outcome_observation: ["backlog_write"],
-  correct_product_outcome_observation: ["backlog_write"],
   query_backlog: ["backlog_read"],
   report_quality_issue: ["backlog_write"],
   escalate_feedback_upstream: ["backlog_write"],
@@ -581,7 +572,6 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   create_asset_variant:         ["marketing_write"],
   record_variant_result:        ["marketing_write"],
   get_battlecards:              ["marketing_read"],
-  propose_product_research:     ["marketing_write"],
   create_battlecard:            ["marketing_write"],
   get_work_engagement_instances:   ["work_engagement_read"],
   create_recurring_work_engagement: ["work_engagement_write"],

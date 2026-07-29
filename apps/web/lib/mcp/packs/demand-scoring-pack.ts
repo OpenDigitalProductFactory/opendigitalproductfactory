@@ -26,6 +26,7 @@ import {
   setDemandPolicyHandler,
   sweepDuplicateDemandHandler,
 } from "./demand-scoring-administration";
+import { queueProductManagementPlaybookRefreshForBacklogItem } from "@/lib/product-management/product-management-playbook-refresh";
 
 const definitions: ToolDefinition[] = [
   {
@@ -383,6 +384,10 @@ async function scoreDemandItemHandler(
       },
     }),
   ]);
+  await queueProductManagementPlaybookRefreshForBacklogItem({
+    itemId,
+    changedAt: new Date(),
+  });
   return {
     success: true,
     entityId: itemId,
@@ -434,6 +439,10 @@ async function transitionDemandItemHandler(
       message: result.message,
     };
   }
+  await queueProductManagementPlaybookRefreshForBacklogItem({
+    itemId: result.itemId,
+    changedAt: new Date(),
+  });
   return {
     success: true,
     entityId: result.itemId,
@@ -480,6 +489,11 @@ async function linkDemandEvidenceHandler(
   if (!result.ok) {
     return { success: false, error: result.code, message: result.message };
   }
+  await queueProductManagementPlaybookRefreshForBacklogItem({
+    itemId: String(params["itemId"] ?? ""),
+    sourceId: result.evidenceLinkId,
+    changedAt: new Date(),
+  });
   return {
     success: true,
     entityId: result.evidenceLinkId,
@@ -637,6 +651,11 @@ async function recordEffortEstimateHandler(
       },
     }),
   ]);
+  await queueProductManagementPlaybookRefreshForBacklogItem({
+    itemId,
+    changedAt: now,
+  });
+
   const divergeNote = provenance.diverged
     ? ` ⇄ AI ${estimateAiJobSize} ↔ human ${estimateHumanJobSize} — reconcile.`
     : "";

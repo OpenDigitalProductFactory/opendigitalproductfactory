@@ -1,6 +1,7 @@
 /** Closed discriminators for deterministic scheduled-agent-task execution. */
 export const SCHEDULED_AGENT_TASK_KINDS = [
   "product-intelligence-watch",
+  "product-management-playbook",
 ] as const;
 
 export type ScheduledAgentTaskKind =

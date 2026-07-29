@@ -1,15 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  loadProductOperatingContext,
-  ProductOperatingContextNotFoundError,
-  type ProductOperatingContextQueryClient,
-} from "./product-operating-context-query";
+import { loadProductOperatingContext, ProductOperatingContextNotFoundError, type ProductOperatingContextQueryClient } from "./product-operating-context-query";
 
 const now = new Date("2026-07-28T20:00:00.000Z");
-
-function fakeDb(
-  overrides: Partial<ProductOperatingContextQueryClient> = {},
-): ProductOperatingContextQueryClient {
+function fakeDb(overrides: Partial<ProductOperatingContextQueryClient> = {}):
+  ProductOperatingContextQueryClient {
   const empty = vi.fn(async () => []);
   return {
     organization: {
@@ -133,7 +127,6 @@ describe("loadProductOperatingContext", () => {
   it("authorizes once, scopes every business query to the organization, and resolves enabling digital products through operational offerings", async () => {
     const db = fakeDb();
     const authorize = vi.fn(async () => undefined);
-
     const context = await loadProductOperatingContext({
       db,
       organizationId: "org-1",
@@ -625,7 +618,11 @@ describe("loadProductOperatingContext", () => {
         isActive: false,
         nextRunAt: null,
         lastRunAt: new Date("2026-07-28T09:00:00.000Z"),
+        taskRunId: null,
         lastStatus: "ok",
+        lastError: null,
+        taskKind: "product-intelligence-watch",
+        taskConfig: { topic: "competitors", query: "What changed?" },
         updatedAt: now,
       },
     ]);
@@ -640,7 +637,12 @@ describe("loadProductOperatingContext", () => {
     expect(scheduledAgentTask).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          taskKind: "product-intelligence-watch",
+          taskKind: {
+            in: [
+              "product-intelligence-watch",
+              "product-management-playbook",
+            ],
+          },
           organizationId: "org-1",
         }),
       }),

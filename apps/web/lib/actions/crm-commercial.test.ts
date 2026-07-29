@@ -42,11 +42,22 @@ vi.mock("@/lib/actions/finance", () => ({
   generateInvoiceFromSalesOrder: vi.fn(),
 }));
 
+vi.mock(
+  "@/lib/product-management/product-management-playbook-refresh",
+  () => ({
+    createProductManagementChangeCollector: vi.fn(() => ({
+      collect: vi.fn(),
+      flush: vi.fn(async () => undefined),
+    })),
+  }),
+);
+
 import { prisma } from "@dpf/db";
-import { acceptQuote, createQuote } from "./crm";
+import { createQuote, acceptQuote } from "./crm";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Dedup gate candidate fetch: default to "no similar rows".
   vi.mocked(prisma.$queryRaw).mockResolvedValue([]);
 });
 

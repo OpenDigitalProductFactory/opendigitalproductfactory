@@ -11,7 +11,7 @@
 // A "use server" file exports only client-callable actions, so a userId
 // parameter there would be client-spoofable — hence this separate core.
 
-import { prisma, type Prisma } from "@dpf/db";
+import { Prisma, prisma } from "@dpf/db";
 import { randomUUID } from "crypto";
 import { SCHEDULING_MAP } from "@/lib/operate/scheduled-jobs/scheduling-map";
 import { occupiedTicks, deconflictCron } from "@/lib/operate/scheduled-jobs/scheduling-allocator";
@@ -30,6 +30,12 @@ import {
   PRODUCT_INTELLIGENCE_WATCH_TASK_KIND,
   parseProductIntelligenceWatchConfig,
 } from "@/lib/product-management/product-intelligence-watch-contract";
+import {
+  PRODUCT_MANAGEMENT_PLAYBOOK_TASK_KIND,
+  getProductManagementPlaybook,
+  parseProductManagementPlaybookConfig,
+  productManagementPlaybookScopeKind,
+} from "@/lib/product-management/product-management-playbook";
 
 export type ScheduleAgentTaskInput = {
   agentId: string;
@@ -135,6 +141,34 @@ export async function scheduleAgentTaskFor(
       };
     }
   }
+  if (input.taskKind === PRODUCT_MANAGEMENT_PLAYBOOK_TASK_KIND) {
+    if (!productScope) {
+      return {
+        success: false,
+        error:
+          "Product-management playbooks require an organization scope.",
+      };
+    }
+    try {
+      const config = parseProductManagementPlaybookConfig(input.taskConfig);
+      const recipe = getProductManagementPlaybook(config.recipeId);
+      const scopeKind = productManagementPlaybookScopeKind(productScope.kind);
+      if (!recipe.supportedScopes.includes(scopeKind)) {
+        return {
+          success: false,
+          error: `${recipe.label} does not support ${scopeKind} scope.`,
+        };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Invalid product-management playbook configuration.",
+      };
+    }
+  }
 
   const taskId = `agent-task-${randomUUID().slice(0, 8)}`;
   const now = new Date();
@@ -168,7 +202,10 @@ export async function scheduleAgentTaskFor(
       productLineId: productScope?.productLineId ?? null,
       businessProductId: productScope?.businessProductId ?? null,
       taskKind: input.taskKind ?? null,
-      taskConfig: input.taskConfig as Prisma.InputJsonValue | undefined,
+      taskConfig:
+        input.taskConfig === undefined
+          ? undefined
+          : (input.taskConfig as Prisma.InputJsonValue),
       nextRunAt,
     },
   });

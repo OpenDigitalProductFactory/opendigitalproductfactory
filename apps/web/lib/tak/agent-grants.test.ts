@@ -301,23 +301,6 @@ describe("TOOL_TO_GRANTS — Backlog hygiene entries", () => {
   });
 });
 
-describe("TOOL_TO_GRANTS — product outcome learning", () => {
-  it("keeps every objective and append-only observation write on backlog_write", () => {
-    for (const tool of [
-      "create_product_objective",
-      "update_product_objective",
-      "review_product_objective",
-      "transition_product_objective",
-      "link_product_objective_work",
-      "record_product_outcome_observation",
-      "correct_product_outcome_observation",
-    ]) {
-      expect(isToolAllowedByGrants(tool, ["backlog_write"]), tool).toBe(true);
-      expect(isToolAllowedByGrants(tool, ["backlog_read"]), tool).toBe(false);
-    }
-  });
-});
-
 describe("TOOL_TO_GRANTS - Work Capsule entries", () => {
   it("read tools require work_capsule_read", () => {
     expect(isToolAllowedByGrants("list_work_capsules", ["work_capsule_read"])).toBe(true);

@@ -809,6 +809,7 @@ async function nextQuoteNumber(): Promise<string> {
   return `QUO-${year}-${String(seq).padStart(4, "0")}`;
 }
 
+/** Generate sequential sales order ref: SO-YYYY-NNNN */
 export async function createQuote(input: {
   opportunityId: string;
   validUntil: string;
@@ -1060,8 +1061,7 @@ export async function sendQuote(quoteId: string, userId?: string) {
 }
 
 export async function acceptQuote(quoteId: string, userId?: string) {
-  void userId;
-  return acceptQuoteImpl(quoteId, logSystemActivity);
+  return acceptQuoteImpl(quoteId, userId, logSystemActivity);
 }
 
 export async function rejectQuote(

@@ -32,8 +32,8 @@ function makeDeps(over: Partial<ResearchExecutionDeps> = {}): {
       ],
       empty: false,
       emptyReason: null,
-      confidence: "low",
-      comparison: { kind: "first-run", baselineReviewedAt: null },
+      confidence: "low" as const,
+      comparison: { kind: "first-run" as const, baselineReviewedAt: null },
     })),
     baseline: vi.fn(async () => null),
     enrich: vi.fn(async () => ({ committed: [{ pageId: "wp_1", slug: "stances/market" }] })),
@@ -91,9 +91,9 @@ describe("runResearchExecution", () => {
         text: "",
         sources: [],
         empty: true,
-        emptyReason: "no-results",
-        confidence: "low",
-        comparison: { kind: "first-run", baselineReviewedAt: null },
+        emptyReason: "no-results" as const,
+        confidence: "low" as const,
+        comparison: { kind: "first-run" as const, baselineReviewedAt: null },
       })),
     });
     const res = await runResearchExecution(INPUT, deps);
@@ -159,9 +159,9 @@ describe("runResearchExecution", () => {
         text: "",
         sources: [],
         empty: true,
-        emptyReason: "provider-unavailable",
-        confidence: "low",
-        comparison: { kind: "first-run", baselineReviewedAt: null },
+        emptyReason: "provider-unavailable" as const,
+        confidence: "low" as const,
+        comparison: { kind: "first-run" as const, baselineReviewedAt: null },
       })),
     });
 

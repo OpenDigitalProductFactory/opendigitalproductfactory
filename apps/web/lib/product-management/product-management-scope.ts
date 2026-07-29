@@ -180,19 +180,34 @@ export function buildProductManagementProjectionWhere(input: {
   };
 }
 
+/**
+ * Structural compatibility boundary for Prisma and focused test delegates.
+ * `any` is deliberate for the delegate argument: Prisma's generated findFirst
+ * signatures are generic and cannot satisfy an `(unknown) =>` function under
+ * strict contravariance, while this module owns the exact query objects.
+ */
+type ScopeFindFirst<TResult> = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  findFirst: (args: any) => PromiseLike<TResult | null>;
+};
+
 export type ProductManagementScopeClient = {
-  organization: { findFirst: (args: unknown) => Promise<{ id: string } | null> };
+  organization: ScopeFindFirst<{ id: string }>;
   productLine: {
-    findFirst: (
-      args: unknown,
-    ) => Promise<{ id: string; organizationId?: string } | null>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    findFirst: (args: any) => PromiseLike<{
+      id: string;
+      organizationId?: string;
+    } | null>;
   };
   product: {
-    findFirst: (
-      args: unknown,
-    ) => Promise<{ id: string; organizationId?: string } | null>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    findFirst: (args: any) => PromiseLike<{
+      id: string;
+      organizationId?: string;
+    } | null>;
   };
-  digitalProduct: { findFirst: (args: unknown) => Promise<{ id: string } | null> };
+  digitalProduct: ScopeFindFirst<{ id: string }>;
 };
 
 export type ProductManagementScopeRefs = {

@@ -9,9 +9,12 @@ import {
   createTypedFulfillmentInstance,
   materializeProductSold,
   persistProductFulfillmentInstance,
+} from "@/lib/products/product-sold";
+import {
   persistProductSoldComponentAllocations,
   snapshotProductSoldComponents,
-} from "@/lib/products/product-sold";
+} from "@/lib/products/product-sold-commercial-persistence";
+import { createProductManagementChangeCollector } from "@/lib/product-management/product-management-playbook-refresh";
 
 /** Sentinel: the hold token was missing/expired when re-checked inside the
  *  booking transaction. Thrown to abort the transaction and surface a clean
@@ -183,6 +186,7 @@ export async function submitBooking(
   // DB rejects the loser with SQLSTATE 23P01 rather than double-booking.
   const ref = makeRef("BK");
   let created: { id: string; bookingRef: string };
+  const productManagementChanges = createProductManagementChangeCollector();
   try {
     created = await prisma.$transaction(async (tx) => {
       const materializeBooking = async (
@@ -244,6 +248,7 @@ export async function submitBooking(
         const materialized = await materializeProductSold({
           db: tx as never,
           draft,
+          collectChange: productManagementChanges.collect,
         });
         await persistProductSoldComponentAllocations({
           db: tx as never,
@@ -362,6 +367,7 @@ export async function submitBooking(
     }
     throw err;
   }
+  await productManagementChanges.flush();
 
   return { success: true, ref: created.bookingRef, type: "booking" };
 }
@@ -465,6 +471,7 @@ export async function submitOrder(
   const ref = makeRef("ORD");
   const currency = data.currency ?? "GBP";
   const purchasedAt = new Date();
+  const productManagementChanges = createProductManagementChangeCollector();
   const created = await prisma.$transaction(async (tx) => {
     const order = await tx.storefrontOrder.create({
       data: {
@@ -562,6 +569,7 @@ export async function submitOrder(
       const materialized = await materializeProductSold({
         db: tx as never,
         draft,
+        collectChange: productManagementChanges.collect,
       });
       await persistProductSoldComponentAllocations({
         db: tx as never,
@@ -576,6 +584,7 @@ export async function submitOrder(
 
     return order;
   });
+  await productManagementChanges.flush();
 
   // Auto-generate invoice from storefront order
   try {

@@ -3,6 +3,7 @@ import { DEMAND_SCORE_FRAMEWORKS, INVESTMENT_BUCKET_VALUES } from "@/lib/explore
 import type { DemandTransitionDb } from "@/lib/demand/transition-repository";
 import { fundingRiskTier } from "@/lib/demand/funding-risk";
 import type { ToolResult } from "@/lib/mcp-tools";
+import { queueProductManagementPlaybookRefreshForBacklogItem } from "@/lib/product-management/product-management-playbook-refresh";
 
 function mergeBucketTargets(current: unknown, incoming: unknown): Record<string, number> {
   const merged: Record<string, number> =
@@ -382,6 +383,11 @@ export async function approveDemandForFundingHandler(
       recordedById: userId,
       recordedByAgentId: context?.agentId ?? null,
     },
+  });
+  await queueProductManagementPlaybookRefreshForBacklogItem({
+    itemId: item.itemId,
+    sourceId: decision.interactionId,
+    changedAt: new Date(),
   });
   const volunteerNote = volunteered.offered ? ` ${volunteered.agentId} volunteered — approve the pickup.` : "";
   return {

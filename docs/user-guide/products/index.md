@@ -214,6 +214,33 @@ creating a fabricated report. Failed runs remain visible with their failure
 summary. A first-run page offers one useful research action rather than
 displaying a zero-filled dashboard.
 
+## Schedule recurring product work
+
+Product and ProductLine **Direction** pages offer optional coworker playbooks
+for recurring reviews such as weekly intelligence, demand triage, roadmap
+refresh, outcome review, commercial opportunity review, and stakeholder
+briefing. Nothing is scheduled by setup and selecting a playbook does not run
+it.
+
+Choose a useful review, then select **Preview first run**. The preview shows the
+current business scope, evidence sources, allowed tools, proposed writes,
+approval boundary, cadence, and failure behavior. Only after that preview can
+you explicitly confirm the schedule. If the recipe's permissions or write
+boundary later changes, DPF requires another preview before rerun.
+
+Scheduled cards distinguish current, unchanged, partial, failed, paused, and
+permission-changed states in text. A partial or failed run does not replace the
+last successful evidence fingerprint. Use **Inspect last run** for the audited
+run record, or pause, resume, and request a rerun from the same Direction
+surface.
+
+**Export owner brief** downloads a timestamped, source-linked snapshot of the
+current operating context. It is derived evidence marked `importable: false`;
+it cannot become a second roadmap, objective, demand, or decision authority.
+Adoption measures appear only when canonical timestamps and decision or review
+records support them. Unsupported measures say **Unavailable** instead of
+inventing movement or acceptance.
+
 ## From Product To Something A Customer Can Select
 
 The commercial path is:
@@ -318,6 +345,9 @@ one-off quote or order snapshot unless an operator explicitly promotes it.
   provenance and human publication control
 - Schedule proposal-only competitive scans without unattended research or
   publication
+- Preview, schedule, inspect, pause, resume, and rerun evidence-bound product
+  playbooks without creating a second planning authority
+- Export a non-importable owner brief with source provenance
 - Define, review, close, and archive business-product outcomes
 - Append quantitative or qualitative observations with source provenance and
   correction history
