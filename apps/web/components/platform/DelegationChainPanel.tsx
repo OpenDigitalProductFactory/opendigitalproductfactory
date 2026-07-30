@@ -5,7 +5,6 @@ import { useState } from "react";
 import {
   OVERSIGHT_TIERS_ASC,
   getOversightCopy,
-  oversightColour,
   oversightLabel,
   oversightStyle,
 } from "@/lib/workforce/oversight-copy";
@@ -404,7 +403,6 @@ export function DelegationChainPanel({ agents, bmrNodes }: DelegationChainProps)
                 {bmrNodes
                   ?.filter((n) => n.escalatesTo === group.supervisorId)
                   .map((n, i) => {
-                    const tierColour = oversightColour(n.hitlTierDefault);
                     return (
                       <div
                         key={`bmr-${group.supervisorId}-${i}`}

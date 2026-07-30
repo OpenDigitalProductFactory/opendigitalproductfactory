@@ -123,15 +123,6 @@ export function getOversightCopy(tier: number | null | undefined): OversightCopy
   return OVERSIGHT_COPY[TIER_SLUG[tier]];
 }
 
-/**
- * Token-backed colour for a tier, for surfaces that colour a cell or dot
- * directly. Falls back to the muted token for an unmapped tier.
- */
-export function oversightColour(tier: number | null | undefined): string {
-  const copy = getOversightCopy(tier);
-  return copy ? intentStyle(copy.intent).fg : "var(--dpf-muted)";
-}
-
 /** Full token-backed style (fg/border/softBg) for a tier. */
 export function oversightStyle(tier: number | null | undefined) {
   const copy = getOversightCopy(tier);

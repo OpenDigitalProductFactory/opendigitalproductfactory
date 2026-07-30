@@ -4,7 +4,6 @@ import {
   OVERSIGHT_TIERS_ASC,
   getOversightCopy,
   isOversightTier,
-  oversightColour,
   oversightLabel,
   oversightStyle,
 } from "./oversight-copy";
@@ -62,9 +61,11 @@ describe("oversight copy (BI-F2EC4699)", () => {
   // The six inline maps this module replaced had drifted, two with raw hex.
   it("resolves every tier colour to a --dpf-* token and never raw hex", () => {
     for (const tier of [0, 1, 2, 3]) {
-      const colour = oversightColour(tier);
-      expect(colour).toContain("var(--dpf-");
-      expect(colour).not.toMatch(/#[0-9a-fA-F]{3,8}/);
+      const { fg, border, softBg } = oversightStyle(tier);
+      for (const value of [fg, border, softBg]) {
+        expect(value).toContain("var(--dpf-");
+        expect(value).not.toMatch(/#[0-9a-fA-F]{3,8}/);
+      }
     }
     // Distinct intents per tier, so the four rows stay visually separable.
     const intents = OVERSIGHT_TIERS_ASC.map((c) => c.intent);
@@ -72,9 +73,8 @@ describe("oversight copy (BI-F2EC4699)", () => {
   });
 
   it("falls back to the muted token and a neutral style for an unmapped tier", () => {
-    expect(oversightColour(7)).toBe("var(--dpf-muted)");
-    expect(oversightColour(null)).toBe("var(--dpf-muted)");
     expect(oversightStyle(7).fg).toBe("var(--dpf-muted)");
+    expect(oversightStyle(null).fg).toBe("var(--dpf-muted)");
   });
 
   it("labels an unmapped tier without fabricating a governance posture", () => {
