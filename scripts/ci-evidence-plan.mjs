@@ -138,10 +138,15 @@ function writeText(path, contents) {
 
 export function githubOutputsForPlan(plan) {
   // Keep the portal UX decision independent from the broader heavy-CI switch.
-  // Today docs-only and app-mobile-only changes are the two scopes that cannot
-  // alter the rendered web portal. Deriving the dedicated output from those
-  // existing audited scope fields preserves the calibrated plan digest.
-  const portalUxRequired = !plan.scope.docsOnly && !plan.scope.mobileOnly;
+  // A clean pull_request is the only lifecycle allowed to omit runtime proof:
+  // merge_group, push, dispatch, schedule, local-CI, missing event identity,
+  // and any escalated/full-suite plan remain exhaustive. This is intentionally
+  // stricter than file scope alone because merge-group coverage is the safety
+  // net that permits the PR-head optimization.
+  const nonPortalPullRequest = plan.eventName === "pull_request"
+    && plan.fullSuite === false
+    && (plan.scope.docsOnly || plan.scope.mobileOnly);
+  const portalUxRequired = !nonPortalPullRequest;
   return [
     `heavy=${plan.scope.heavy}`,
     `portal_ux_required=${portalUxRequired}`,
