@@ -309,6 +309,12 @@ describe("projectCoworkerDiscovery", () => {
       scopes: ["internal-only"],
       labels: ["Internal only"],
     });
+    expect(projection.workSearchText).toContain(
+      "Marketing campaign execution",
+    );
+    expect(projection.workSearchText).not.toContain(
+      "Marketing customer outreach",
+    );
   });
 
   it("uses one deterministic service when multiple services share the winning state", () => {

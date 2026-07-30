@@ -188,6 +188,15 @@ and to nullable provider metadata.
 | Capability-need recovery could still send workforce-only roles to an Operations 404 | Every recovery destination now declares its route capability, and one generic authorization check suppresses inaccessible actions |
 | A missing provider organization made mobile label the provider kind as an organization | The shared projection preserves the secondary provider fact's semantic label and tests both organization and provider-type cases |
 
+A ninth UX pass checked whether every discovery cue and recovery command still
+described the same actionable work.
+
+| Ninth critique | Correction |
+| --- | --- |
+| `Review capabilities` appeared for read-only platform roles | Capability recovery now requires `manage_platform`, the same authority that enables the destination editor |
+| Desktop showed a provider kind without identifying what the secondary value meant | Desktop and mobile both render the projection-owned provider organization/type label |
+| Search indexed hidden unavailable sibling services while the card advertised only its winning service | Searchable work text now comes from the same winning service as area, job, interaction, availability, and actions |
+
 ## Phase 1: Test-Drive Service-Scoped Readiness
 
 Add failing unit tests before implementation.

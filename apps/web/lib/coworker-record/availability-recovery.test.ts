@@ -76,6 +76,32 @@ describe("availabilityRecoveryTarget", () => {
     });
   });
 
+  it("requires repair authority before offering capability setup", () => {
+    const availability = blockedAvailability({
+      kind: "capabilities",
+      label: "Review capabilities",
+    });
+
+    expect(
+      availabilityRecoveryTarget(
+        availability,
+        "/platform/ai/agent/marketing-specialist",
+        new Set(["view_platform"]),
+      ),
+    ).toBeNull();
+    expect(
+      availabilityRecoveryTarget(
+        availability,
+        "/platform/ai/agent/marketing-specialist",
+        new Set(["view_platform", "manage_platform"]),
+      ),
+    ).toEqual({
+      href: "/platform/ai/agent/marketing-specialist#capabilities",
+      label: "Review capabilities",
+      requiredCapability: "manage_platform",
+    });
+  });
+
   it("does not offer a misleading action for platform-managed catalog defects", () => {
     expect(
       availabilityRecoveryTarget(

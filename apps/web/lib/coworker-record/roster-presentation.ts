@@ -340,7 +340,9 @@ export function projectCoworkerDiscovery(input: {
       primarySummary ||
       primaryServiceEvidence?.name ||
       rosterPlainJob(input.agentDescription, input.services),
-    workSearchText: rosterWorkSearchText(input.services),
+    workSearchText: rosterWorkSearchText(
+      primaryServiceEvidence ? [primaryServiceEvidence] : input.services,
+    ),
     interaction: projectCoworkerInteraction(
       primaryServiceEvidence ? [primaryServiceEvidence] : input.services,
     ),

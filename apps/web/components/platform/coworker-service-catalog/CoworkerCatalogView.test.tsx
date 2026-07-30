@@ -98,6 +98,7 @@ describe("CoworkerCatalogView", () => {
     expect(html).toContain('data-catalog-layout="desktop"');
     expect(html).toContain("lg:hidden");
     expect(html).toContain("lg:block");
+    expect(html).toContain("Provider organization: ");
   });
 
   it("shares one complete offer interpretation across desktop and mobile", () => {

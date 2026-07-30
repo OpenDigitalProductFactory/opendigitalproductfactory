@@ -207,10 +207,7 @@ function OfferRow({
           ))}
         </div>
       </div>
-      <Cell
-        primary={presentation.provider.primary}
-        secondary={presentation.provider.secondary}
-      />
+      <Cell {...presentation.provider} />
       <Cell {...presentation.risk} />
       <Cell {...presentation.authority} />
       <Cell {...presentation.availability} />
@@ -255,11 +252,22 @@ function MobileFact({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Cell({ primary, secondary }: { primary: string; secondary: string }) {
+function Cell({
+  primary,
+  secondary,
+  secondaryLabel,
+}: {
+  primary: string;
+  secondary: string;
+  secondaryLabel?: string;
+}) {
   return (
     <div className="min-w-0 px-2">
       <div className="truncate font-medium text-[var(--dpf-text)]">{primary}</div>
-      <div className="mt-1 truncate text-[var(--dpf-muted)]">{secondary}</div>
+      <div className="mt-1 truncate text-[var(--dpf-muted)]">
+        {secondaryLabel ? `${secondaryLabel}: ` : ""}
+        {secondary}
+      </div>
     </div>
   );
 }

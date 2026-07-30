@@ -26,7 +26,7 @@ export function availabilityRecoveryTarget(
     },
     capabilities: {
       href: `${detailHref}#capabilities`,
-      requiredCapability: "view_platform",
+      requiredCapability: "manage_platform",
     },
     "capability-needs": {
       href: "/ops?origin=capability-need",
