@@ -98,6 +98,10 @@ describe("CoworkerCatalogView", () => {
     expect(html).toContain('data-catalog-layout="desktop"');
     expect(html).toContain("lg:hidden");
     expect(html).toContain("lg:block");
+    expect(html).toContain("<table");
+    expect(html).toContain("<thead");
+    expect(html.match(/scope="col"/g)).toHaveLength(5);
+    expect(html).toContain("<tbody");
     expect(html).toContain("Provider organization: ");
   });
 

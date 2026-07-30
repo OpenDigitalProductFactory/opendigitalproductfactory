@@ -197,6 +197,15 @@ described the same actionable work.
 | Desktop showed a provider kind without identifying what the secondary value meant | Desktop and mobile both render the projection-owned provider organization/type label |
 | Search indexed hidden unavailable sibling services while the card advertised only its winning service | Searchable work text now comes from the same winning service as area, job, interaction, availability, and actions |
 
+A tenth UX pass checked semantic structure, permission-negative fixtures, and
+whether the responsive contract was proven in a browser.
+
+| Tenth critique | Correction |
+| --- | --- |
+| Positive recovery fixtures omitted the capabilities required by their destinations | Fixtures now grant the destination capability explicitly and prove the recovery action is hidden from roles without it |
+| The desktop catalog looked tabular but exposed only generic layout containers | The dense projection now uses a native table with scoped column headers, rows, and cells |
+| Mobile behavior was inferred from CSS classes rather than a rendered route | A dedicated 390x844 Playwright contract proves one visible layout, fact parity, no catalog action, no horizontal overflow, no serious/critical Axe findings, and no console errors |
+
 ## Phase 1: Test-Drive Service-Scoped Readiness
 
 Add failing unit tests before implementation.

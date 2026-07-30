@@ -20,15 +20,19 @@ export default defineConfig({
     {
       name: "chromium",
       // ai-routing specs run under their own projects; the storefront owner
-      // mobile smoke runs only under the 390px project below (BI-F0B389C9).
-      testIgnore: [/.*ai-routing-.*\.spec\.ts/, /.*storefront-owner-mobile\.spec\.ts/],
+      // and catalog mobile smokes run only under the 390px project below.
+      testIgnore: [
+        /.*ai-routing-.*\.spec\.ts/,
+        /.*storefront-owner-mobile\.spec\.ts/,
+        /.*coworker-catalog-mobile\.spec\.ts/,
+      ],
       use: { ...devices["Desktop Chrome"] },
     },
     {
-      // BI-F0B389C9: owner setup usability at phone width. Same seeded-admin
-      // auth as the desktop project, viewport pinned to 390x844.
+      // Phone-width usability contracts. Same seeded-admin auth as the desktop
+      // project, viewport pinned to 390x844.
       name: "mobile-390",
-      testMatch: /.*storefront-owner-mobile\.spec\.ts/,
+      testMatch: /.*(?:storefront-owner-mobile|coworker-catalog-mobile)\.spec\.ts/,
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 390, height: 844 },

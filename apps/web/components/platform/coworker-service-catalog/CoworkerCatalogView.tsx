@@ -51,19 +51,30 @@ export function CoworkerCatalogView({ catalog }: { catalog: CoworkerCatalog }) {
             data-catalog-layout="desktop"
             className="hidden overflow-x-auto rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] lg:block"
           >
-            <div className="min-w-[740px]">
-              <div className="grid grid-cols-[minmax(220px,1.4fr)_minmax(160px,0.9fr)_110px_130px_120px] border-b border-[var(--dpf-border)] px-3 py-2 text-[11px] font-semibold uppercase text-[var(--dpf-muted)]">
-                <span>Offer</span>
-                <span>Provider</span>
-                <span>Risk</span>
-                <span>Authority</span>
-                <span>Availability</span>
-              </div>
-              <div>
+            <table className="w-full min-w-[740px] table-fixed border-collapse text-left">
+              <colgroup>
+                <col className="w-[31%]" />
+                <col className="w-[22%]" />
+                <col className="w-[14%]" />
+                <col className="w-[18%]" />
+                <col className="w-[15%]" />
+              </colgroup>
+              <thead>
+                <tr className="border-b border-[var(--dpf-border)] text-[11px] font-semibold uppercase text-[var(--dpf-muted)]">
+                  <th className="px-3 py-2" scope="col">Offer</th>
+                  <th className="px-2 py-2" scope="col">Provider</th>
+                  <th className="px-2 py-2" scope="col">Risk</th>
+                  <th className="px-2 py-2" scope="col">Authority</th>
+                  <th className="px-2 py-2" scope="col">Availability</th>
+                </tr>
+              </thead>
+              <tbody>
                 {activeOffers.length === 0 ? (
-                  <div className="px-3 py-8 text-sm text-[var(--dpf-muted)]">
-                    No active coworker offers are cataloged yet.
-                  </div>
+                  <tr>
+                    <td className="px-3 py-8 text-sm text-[var(--dpf-muted)]" colSpan={5}>
+                      No active coworker offers are cataloged yet.
+                    </td>
+                  </tr>
                 ) : (
                   activeOfferRows.map(({ offer, presentation }) => (
                     <OfferRow
@@ -73,8 +84,8 @@ export function CoworkerCatalogView({ catalog }: { catalog: CoworkerCatalog }) {
                     />
                   ))
                 )}
-              </div>
-            </div>
+              </tbody>
+            </table>
           </div>
         </div>
 
@@ -197,8 +208,8 @@ function OfferRow({
   presentation: OfferPresentation;
 }) {
   return (
-    <div className="grid grid-cols-[minmax(220px,1.4fr)_minmax(160px,0.9fr)_110px_130px_120px] gap-0 border-b border-[var(--dpf-border)] px-3 py-3 text-xs last:border-b-0">
-      <div className="min-w-0">
+    <tr className="border-b border-[var(--dpf-border)] text-xs last:border-b-0">
+      <td className="min-w-0 px-3 py-3 align-top">
         <div className="font-semibold text-[var(--dpf-text)]">{offer.name}</div>
         <div className="mt-1 text-[var(--dpf-muted)]">{offer.summary}</div>
         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -206,12 +217,12 @@ function OfferRow({
             <Chip key={chip.label} label={chip.label} value={chip.value} />
           ))}
         </div>
-      </div>
+      </td>
       <Cell {...presentation.provider} />
       <Cell {...presentation.risk} />
       <Cell {...presentation.authority} />
       <Cell {...presentation.availability} />
-    </div>
+    </tr>
   );
 }
 
@@ -262,13 +273,13 @@ function Cell({
   secondaryLabel?: string;
 }) {
   return (
-    <div className="min-w-0 px-2">
+    <td className="min-w-0 px-2 py-3 align-top">
       <div className="truncate font-medium text-[var(--dpf-text)]">{primary}</div>
       <div className="mt-1 truncate text-[var(--dpf-muted)]">
         {secondaryLabel ? `${secondaryLabel}: ` : ""}
         {secondary}
       </div>
-    </div>
+    </td>
   );
 }
 

@@ -224,7 +224,7 @@ describe("RosterView", () => {
   });
 
   it("shows one availability warning and an honest recovery path", () => {
-    render(
+    const { rerender } = render(
       <RosterView
         rows={[
           row({
@@ -252,6 +252,7 @@ describe("RosterView", () => {
           }),
         ]}
         facets={facets}
+        grantedCapabilities={["view_storefront"]}
       />,
     );
 
@@ -265,6 +266,32 @@ describe("RosterView", () => {
         .getByRole("link", { name: "Review business type" })
         .getAttribute("href"),
     ).toBe("/storefront/settings/business");
+
+    rerender(
+      <RosterView
+        rows={[
+          row({
+            availability: {
+              state: "coverage-not-defined",
+              label: "Coverage not defined",
+              reason: "No storefront business type is configured.",
+              matchLevel: null,
+              evidence: [],
+              recovery: {
+                kind: "business-type",
+                label: "Review business type",
+              },
+            },
+            canStartConversation: false,
+          }),
+        ]}
+        facets={facets}
+        grantedCapabilities={[]}
+      />,
+    );
+    expect(
+      screen.queryByRole("link", { name: "Review business type" }),
+    ).toBeNull();
   });
 
   it("keeps setup recovery in the coworker record and preserves roster context", () => {
@@ -273,7 +300,7 @@ describe("RosterView", () => {
       "",
       "/platform/ai/overview?tab=coworkers&interaction=talks-to-customers",
     );
-    render(
+    const { rerender } = render(
       <RosterView
         rows={[
           row({
@@ -302,6 +329,7 @@ describe("RosterView", () => {
         ]}
         facets={facets}
         initialQuery="tab=coworkers&interaction=talks-to-customers"
+        grantedCapabilities={["manage_platform"]}
       />,
     );
 
@@ -314,5 +342,32 @@ describe("RosterView", () => {
     expect(href).toContain("/platform/ai/agent/customer-advisor?");
     expect(href).toContain("returnTo=");
     expect(href?.endsWith("#capabilities")).toBe(true);
+
+    rerender(
+      <RosterView
+        rows={[
+          row({
+            availability: {
+              state: "setup-needed",
+              label: "Setup needed",
+              reason: "Assign the advertised skills.",
+              matchLevel: "leaf",
+              evidence: [],
+              recovery: {
+                kind: "capabilities",
+                label: "Review capabilities",
+              },
+            },
+            canStartConversation: false,
+          }),
+        ]}
+        facets={facets}
+        initialQuery="tab=coworkers&interaction=talks-to-customers"
+        grantedCapabilities={["view_platform"]}
+      />,
+    );
+    expect(
+      screen.queryByRole("link", { name: "Review capabilities" }),
+    ).toBeNull();
   });
 });
