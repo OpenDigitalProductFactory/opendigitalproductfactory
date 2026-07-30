@@ -100,6 +100,48 @@ export function createCommandFailureDiagnostics({ invocation, result, elapsedMs 
   };
 }
 
+export function executeLocalIntegrationPlan(plan, {
+  spawnSyncImpl = spawnSync,
+  baseEnv = process.env,
+  platform = process.platform,
+  now = Date.now,
+  log = console.log,
+  error = console.error,
+} = {}) {
+  let completedCommandCount = 0;
+  for (const command of plan.commands) {
+    log(`[local-integration-ci] ${command.join(" ")}`);
+    const invocation = resolveCommandInvocation(command, baseEnv);
+    const commandStartedAt = now();
+    const result = spawnSyncImpl(invocation.command, invocation.args, {
+      stdio: "inherit",
+      shell: platform === "win32",
+      env: invocation.env,
+    });
+    if (result.status !== 0) {
+      const diagnostics = createCommandFailureDiagnostics({
+        invocation,
+        result,
+        elapsedMs: now() - commandStartedAt,
+      });
+      error(`[local-integration-ci] command-failure ${JSON.stringify(diagnostics)}`);
+      return {
+        status: result.status ?? 1,
+        completedCommandCount,
+        failedCommand: [...command],
+        diagnostics,
+      };
+    }
+    completedCommandCount += 1;
+  }
+  return {
+    status: 0,
+    completedCommandCount,
+    failedCommand: null,
+    diagnostics: null,
+  };
+}
+
 export function resolveGitRevision(ref, { spawnSyncImpl = spawnSync, cwd } = {}) {
   const result = spawnSyncImpl("git", ["rev-parse", "--verify", ref], {
     cwd,
