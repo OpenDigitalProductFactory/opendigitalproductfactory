@@ -55,7 +55,8 @@ vi.mock("@/lib/auth", () => ({
   }),
 }));
 
-vi.mock("@/lib/permissions", () => ({
+vi.mock("@/lib/permissions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/permissions")>()),
   can: vi.fn().mockReturnValue(true),
 }));
 

@@ -50,7 +50,8 @@ vi.mock("@/lib/auth", () => ({
   auth: vi.fn().mockResolvedValue({ user: { id: "u1", platformRole: "admin", isSuperuser: true } }),
 }));
 
-vi.mock("@/lib/permissions", () => ({
+vi.mock("@/lib/permissions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/permissions")>()),
   can: vi.fn().mockReturnValue(true),
 }));
 

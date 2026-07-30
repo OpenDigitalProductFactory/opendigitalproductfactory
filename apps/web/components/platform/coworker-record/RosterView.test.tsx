@@ -153,7 +153,9 @@ describe("RosterView", () => {
     expect(headings[0]?.textContent).toBe("Customers and sales");
     expect(headings[1]?.textContent).toBe("Platform and back office");
     expect(screen.getAllByRole("button", { name: "Ask Marketing Specialist" })).toHaveLength(1);
-    expect(screen.getByText("Ready work: Marketing campaign execution")).toBeTruthy();
+    expect(
+      screen.getAllByText("Ready work: Marketing campaign execution"),
+    ).toHaveLength(2);
     expect(
       screen
         .getByRole("button", { name: "Ask Marketing Specialist" })
