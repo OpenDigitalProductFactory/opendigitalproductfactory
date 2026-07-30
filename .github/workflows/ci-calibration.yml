@@ -246,7 +246,9 @@ jobs:
         uses: actions/cache/restore@v5
         with:
           path: apps/web/.next/cache
-          key: turbopack-build-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'apps/web/**/*.{ts,tsx,js,jsx}') }}
+          # hashFiles does not expand brace globs. Keep every supported web
+          # source extension explicit so a source edit always rolls the key.
+          key: turbopack-build-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('apps/web/**/*.ts', 'apps/web/**/*.tsx', 'apps/web/**/*.js', 'apps/web/**/*.jsx') }}
 
       - name: Measure Turbopack restore
         id: turbopack-restore-measure
@@ -287,7 +289,7 @@ jobs:
         uses: actions/cache/save@v5
         with:
           path: apps/web/.next/cache
-          key: turbopack-build-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'apps/web/**/*.{ts,tsx,js,jsx}') }}
+          key: turbopack-build-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('apps/web/**/*.ts', 'apps/web/**/*.tsx', 'apps/web/**/*.js', 'apps/web/**/*.jsx') }}
 
       - name: Measure Turbopack save
         id: turbopack-save-measure

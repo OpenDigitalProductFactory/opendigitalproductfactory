@@ -93,7 +93,11 @@ Workflow: `.github/workflows/ci-calibration.yml` (`CI Calibration`)
 - Runs on a schedule (Mon/Thu 06:00 UTC) and `workflow_dispatch`
 - Never runs on `pull_request` and is never a required merge check
 - Executes observation unit tests, web + database coverage, shadow related-test comparison
-- Measures exact-key cache economics for `pnpm-store` and `turbopack-build` (`actions/cache/restore@v5` + `actions/cache/save@v5`, no prefix `restore-keys` on Turbopack)
+- Measures exact-key cache economics for `pnpm-store` and `turbopack-build`
+  (`actions/cache/restore@v5` + `actions/cache/save@v5`, no prefix
+  `restore-keys` on Turbopack). The Turbopack key hashes the lockfile plus
+  explicit `ts`, `tsx`, `js`, and `jsx` source globs; GitHub `hashFiles` does
+  not expand brace globs.
 - Publishes a versioned observation artifact bound to the immutable tree SHA (`ci-observation`, 30-day retention)
 
 ## Activation gate (later waves)
