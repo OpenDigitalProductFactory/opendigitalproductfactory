@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ExpandableCard } from "./ExpandableCard";
+import { countDisclosureRegions, defaultVisibleHtml } from "../../../lib/ux-budget";
 
 afterEach(() => cleanup());
 
@@ -83,6 +84,27 @@ describe("ExpandableCard", () => {
     expect(container.innerHTML).toContain("var(--dpf-");
     expect(container.innerHTML).not.toMatch(/#[0-9a-f]{3,8}/i);
     expect(container.querySelector('[data-open="true"]')).toBeTruthy();
+  });
+
+  // BI-2B196D07 — measured through the real budget helpers, because the defect was that
+  // the canonical construct was invisible to them: zero disclosure regions meant a
+  // correctly-deferring surface failed the blocking `deferred-detail` check while the
+  // same surface built from a raw <details> passed.
+  it("is countable as a disclosure region while its summary stays in the measured scope", () => {
+    const { container } = render(
+      <ExpandableCard
+        id="change-rfc-9"
+        open={false}
+        onOpenChange={() => undefined}
+        summary={<span>RFC-9 summary line</span>}
+      >
+        <p>Deferred approval chain</p>
+      </ExpandableCard>,
+    );
+
+    const html = container.innerHTML;
+    expect(countDisclosureRegions(html)).toBe(1);
+    expect(defaultVisibleHtml(html)).toContain("RFC-9 summary line");
   });
 
   it("renders always-visible actions outside the disclosure trigger", () => {

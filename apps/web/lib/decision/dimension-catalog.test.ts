@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { describe, it, expect } from "vitest";
 
 import {
@@ -19,6 +22,29 @@ describe("dimension catalogue coverage", () => {
   it("covers every dimension in the registry, and invents none", () => {
     expect([...DIMENSION_KEYS].sort()).toEqual([...PRINCIPLE_DIMENSIONS].sort());
     expect(DIMENSION_CATALOG).toHaveLength(PRINCIPLE_DIMENSIONS.length);
+  });
+
+  // BI-2B196D07 (finding F4). AGENTS.md is the always-on instruction plane: whatever it
+  // says about sign convention is what every external agent acts on. It claimed "the four
+  // cost axes" and listed four while the registry held five, so agents supplied
+  // `operator_effort` as though higher were better — inverting the sign on the axis most
+  // relevant to disclosure and cognitive-load decisions. Prose drifting from a code
+  // registry on a load-bearing rule is the exact failure BI-0020D511 exists to stop, so
+  // the count and the names are now asserted rather than trusted.
+  it("AGENTS.md names every cost axis, with a count that matches the registry", () => {
+    const agentsMd = readFileSync(
+      fileURLToPath(new URL("../../../../AGENTS.md", import.meta.url)),
+      "utf8",
+    );
+    const sentence = /\b(\w+)\s+\*\*cost\*\*\s+axes\s+\(([^)]*)\)/.exec(agentsMd);
+    expect(sentence, "AGENTS.md no longer describes the cost axes — update this guard").not.toBeNull();
+
+    const [, writtenCount, listed] = sentence!;
+    const named = [...listed.matchAll(/`([a-z_]+)`/g)].map((m) => m[1]);
+    expect(named.sort()).toEqual([...PRINCIPLE_COST_DIMENSIONS].sort());
+
+    const numberWords = ["zero", "one", "two", "three", "four", "five", "six", "seven"];
+    expect(writtenCount).toBe(numberWords[PRINCIPLE_COST_DIMENSIONS.length]);
   });
 
   it("gives every dimension non-empty guidance", () => {
