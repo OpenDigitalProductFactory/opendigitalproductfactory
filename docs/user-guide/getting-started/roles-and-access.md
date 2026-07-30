@@ -55,18 +55,20 @@ Access is controlled by capabilities — specific permissions like `view_portfol
 
 The `manage_business_models` capability is granted to HR-000, HR-200, and HR-300, allowing them to create, clone, and manage business model templates.
 
-## HITL (Human-in-the-Loop) Tiers
+## Oversight levels
 
-Both platform governance roles and business model roles carry a HITL tier that controls how much autonomy the AI agents have when acting within that role's authority domain:
+Both platform governance roles and business model roles carry an oversight level that controls how much autonomy your AI coworkers have when acting within that role's authority domain. The portal shows the plain label; the level is stored internally as the HITL tier (0-3), which is the technical name for the same setting.
 
-| Tier | Label | Behaviour |
-| ---- | ----- | --------- |
-| 0 | Blocked | Agent cannot act — human must always decide |
-| 1 | Approve before | Human must approve the proposal before execution |
-| 2 | Review after | Agent acts immediately; human reviews asynchronously |
-| 3 | Autonomous | Agent acts and logs; no human review required |
+| Level | Shown as | What happens |
+| ----- | -------- | ------------ |
+| 0 | Employee only | The coworker cannot act — an employee always decides |
+| 1 | Needs approval | An employee must approve the proposal before it runs |
+| 2 | Employee review | The coworker acts immediately; an employee reviews it afterwards |
+| 3 | Runs on its own | The coworker acts and logs it; no employee review needed |
 
-Business model roles default to HITL tier 2 (spot-check). Platform governance roles vary by risk profile.
+In dense tables the same four levels are abbreviated to **Manual**, **Approve**, **Review**, and **Auto**.
+
+Business model roles default to **Employee review**. Platform governance roles vary by risk profile.
 
 ## Customer Accounts
 

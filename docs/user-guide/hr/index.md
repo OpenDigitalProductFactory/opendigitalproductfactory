@@ -147,7 +147,7 @@ After a workforce change, confirm the relevant evidence:
 - timesheet state, approver, approval date, or rejection reason
 - customer/service context for billable hours
 - policy acknowledgement or requirement completion
-- platform role, HITL tier, and active/inactive account state
+- platform role, oversight level, and active/inactive account state
 - append-only lifecycle event and effective date where one was produced
 
 If a change is wrong, prefer the supported corrective action: edit a draft or rejected timesheet, reject a submitted period with a reason, restore an account’s active state, or make a new governed lifecycle correction. Preserve the prior audit evidence.

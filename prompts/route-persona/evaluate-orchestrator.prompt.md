@@ -70,7 +70,7 @@ The runtime grants come from [`packages/db/data/agent_registry.json`](../../../p
 - `backlog_read` — read backlog items in your VS
 - `decision_record_create` — record stage-gate decisions
 - `agent_control_read` — read agent status when delegating
-- `role_registry_read` — read the human role registry to identify HR escalation targets
+- `role_registry_read` — read the employee role registry to identify HR escalation targets
 - `investment_proposal_create` — author investment proposals (currently aspirational; no tool implementation yet — see #322 self-assessment)
 - `gap_analysis_read` — read gap analyses (currently aspirational)
 - `spec_plan_read` — read specs and plans

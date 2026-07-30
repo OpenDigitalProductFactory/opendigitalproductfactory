@@ -9631,7 +9631,7 @@
         "platform-governance-role-access",
         "superuser-status",
         "capabilities",
-        "hitl-human-in-the-loop-tiers",
+        "oversight-levels",
         "customer-accounts"
       ]
     },
@@ -9908,7 +9908,7 @@
         "built-in-business-model-templates",
         "assigning-a-business-model-to-a-product",
         "assigning-users-to-roles",
-        "hitl-tier",
+        "oversight-level",
         "escalation",
         "creating-custom-business-models"
       ]

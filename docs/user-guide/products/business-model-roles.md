@@ -51,11 +51,11 @@ Once a business model is assigned to a product, its roles are available in the *
 
 Each role can only have one active assignment at a time. The assignment is effective immediately.
 
-## HITL Tier
+## Oversight level
 
-Each role carries a default HITL (Human-in-the-Loop) tier that controls AI agent autonomy for actions within that authority domain. All built-in roles default to **HITL tier 2** (spot-check):
+Each role carries a default oversight level that controls AI coworker autonomy for actions within that authority domain. The level is stored internally as the HITL tier; the portal shows the plain label. All built-in roles default to **Employee review**:
 
-- The agent acts immediately on proposals within the authority domain
+- The coworker acts immediately on proposals within the authority domain
 - The assigned role holder receives an async notification to review
 - No pre-approval is needed unless the action escalates to a platform governance role
 
