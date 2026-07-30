@@ -39,6 +39,20 @@
 
 <!-- Paste the exact canonical-runtime evidence: command, output snippet, screenshot link, MCP evidence record, or CI job URL. -->
 
+## Pre-PR readiness
+
+<!-- Complete these before creating the PR. A pushed branch is the handoff artifact while any item remains open. -->
+
+- [ ] `pnpm gate:context` reviewed before implementation and again against the final diff
+- [ ] `pnpm run pregate:preflight` passed before requesting a shared-sandbox lease
+- [ ] Exact-tree local-CI evidence captured with `pnpm run pregate`, or an allowed `Local-CI-Override` is documented below
+- [ ] `pnpm pr:ready -- --pr-body-file <this-body-file>` returned `PR readiness: READY` after the final push
+
+<!-- Add exactly one when applicable:
+Local-CI-Evidence: <evidence-record-id> (<branch>@<sha>)
+Local-CI-Override: <allowed reason>
+-->
+
 ## Related issues / Epic
 
 <!-- Link issues this PR closes or relates to. Use "Closes #123" to auto-close on merge. -->

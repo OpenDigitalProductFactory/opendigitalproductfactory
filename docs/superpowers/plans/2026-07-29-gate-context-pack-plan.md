@@ -54,7 +54,26 @@ found by this slice's first drift-guard run and fixed in the same change.
    generator module verbatim.
 3. **pr-readiness-convergence** → BI-9652021C: `buildGatePlan()` derived from
    `POLICY_GUARD_PROFILES`; readiness report leads with the gate-context
-   section; one trailer inventory.
+   section; one trailer inventory; the shared `dpf-pr-with-dco` skill and
+   GitHub PR template both require the mechanical readiness verdict after the
+   final push and before PR creation.
+
+## Acceptance (pr-readiness-convergence slice)
+
+- Deleting or adding an executable policy command in
+  `POLICY_GUARD_PROFILES` changes the pre-PR plan without editing a second
+  registry; policy self-tests are not redundantly replayed and CI setup that
+  mutates Git state is excluded from author worktrees. A missing source-only
+  host runtime is reported honestly as CI-enforced rather than mislabeled as a
+  product failure, matching the pregate-preflight degradation contract.
+- The readiness report renders the prospective gate-context checklist before
+  its pass/fail verdict for the exact `origin/main...HEAD` diff.
+- Trailer parsing and prospective trailer guidance consume one canonical
+  trailer-name contract.
+- The shared external-agent PR skill and GitHub template instruct authors to
+  run `pnpm gate:context`, the cheap no-lease preflight, exact-tree pregate
+  when applicable, and `pnpm pr:ready -- --pr-body-file ...` before creating
+  a regular PR.
 
 ## Acceptance (this slice)
 

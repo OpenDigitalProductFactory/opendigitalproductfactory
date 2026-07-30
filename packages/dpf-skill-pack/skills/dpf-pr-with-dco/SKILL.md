@@ -88,6 +88,13 @@ DPF's PR contract is strict and non-negotiable: **every change lands via PR**, *
    ```
    For UX changes: drive the change against the running app (`/run` or `/verify` skill) and capture dynamic-analysis evidence.
 
+   Before requesting the shared sandbox, run the cheap deterministic checks:
+   ```
+   pnpm gate:context
+   pnpm run pregate:preflight
+   ```
+   Resolve the prospective constraints and host-side guard failures first. Do not spend a scarce sandbox lease discovering a missing PR trailer, plan receipt, derived artifact, or source-policy violation.
+
 3b. **Local-CI sandbox gate (default-on pre-push, BI-C74F4DE9).** For runtime-code branches, run `pnpm run pregate` before the push — the chained pre-push hook refuses an ungated push otherwise. Carry the evidence into the PR body as a trailer so `pnpm pr:health` reads the branch as merge-ready even when checked from another machine:
    ```
    Local-CI-Evidence: <evidence-record-id> (<branch>@<sha>)
@@ -112,24 +119,15 @@ DPF's PR contract is strict and non-negotiable: **every change lands via PR**, *
    ```
    `-u origin <branch>` only on the first push.
 
-7. **Open the regular PR.** Do not use `--draft`; a DPF PR is the ready-for-review / ready-to-merge signal.
+7. **Prepare and mechanically validate the PR body.** Write the final Markdown body to a temporary file using the client's native filesystem tool, including exact verification evidence and any required trailers. After the final push, run:
    ```
-   gh pr create --title "<convention>: <imperative summary>" --body "$(cat <<'EOF'
-   ## Summary
-   - <1-3 bullet points naming what the PR does and why>
-   - <reference parent BI / epic if applicable, e.g. "BI-XXXX">
+   pnpm pr:ready -- --pr-body-file <path-to-pr-body.md>
+   ```
+   This command derives its local checks from the same policy profiles as CI, validates Git/DCO/push state and PR trailers, and leads with the gate-context checklist for the exact diff. If it reports `PR readiness: NOT READY`, fix every blocker and rerun it. Do not create the PR yet.
 
-   ## Test plan
-   - [x] vitest <target file or suite>: <N passing>
-   - [x] typecheck: clean
-   - [x] next build: <pass or n/a if no UI surface>
-   - [x] UX verification: <dynamic-analysis report or n/a>
-
-   <Any operator-context notes — overlap sweep result, dependencies, etc.>
-
-   🤖 Generated with [Claude Code](https://claude.com/claude-code)
-   EOF
-   )"
+8. **Open the regular PR only after `pr:ready` reports READY.** Do not use `--draft`; a DPF PR is the ready-for-review / ready-to-merge signal. Reuse the exact body file that passed readiness:
+   ```
+   gh pr create --title "<convention>: <imperative summary>" --body-file <path-to-pr-body.md>
    ```
 
    - Title: imperative form, prefixed by repo convention (`docs:`, `fix:`, `feat:`, `chore:`, `spec:`). Under ~72 chars.
@@ -140,7 +138,7 @@ DPF's PR contract is strict and non-negotiable: **every change lands via PR**, *
      ```
      Expected: `isDraft` is `false`. If it is `true` and the branch gates are green, run `gh pr ready <number>` immediately; if the gates are not green, close the PR and keep the branch.
 
-8. **Report the PR URL.** With the BI id (if applicable) and the build-gate evidence summary so the operator can ratify without re-running checks.
+9. **Report the PR URL.** With the BI id (if applicable) and the build-gate evidence summary so the operator can ratify without re-running checks.
 
 ## Output template
 

@@ -10,7 +10,10 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { buildGatePlan, evaluateReadiness, formatReadinessReport } from "./pr-readiness/core.mjs";
+import { collectWorktreeDiff } from "./gate-context.mjs";
+import { buildGateContext } from "./lib/gate-context.mjs";
 import { fetchOriginMainSharedSafe, isShallowRepository } from "./lib/git-fetch-shared-safe.mjs";
+import { isEnvironmentFailureOutput } from "./lib/pregate-preflight.mjs";
 
 function git(args, { allowFail = false } = {}) {
   try {
@@ -89,10 +92,8 @@ function readRepoState() {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
-  const changedFiles = git(["diff", "--name-only", "origin/main...HEAD"], { allowFail: true })
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+  const worktreeDiff = collectWorktreeDiff({ base: "origin/main" });
+  const changedFiles = worktreeDiff.changedFiles.map((entry) => entry.path);
 
   return {
     branch,
@@ -100,6 +101,8 @@ function readRepoState() {
     isShallow: isShallowRepository((args) => git(args)),
     mergeBases,
     changedFiles,
+    changedFileEntries: worktreeDiff.changedFiles,
+    addedLinesByFile: worktreeDiff.addedLinesByFile,
     statusPorcelain: git(["status", "--porcelain"], { allowFail: true }),
     upstream: upstream || null,
     ahead: aheadBehind.ahead,
@@ -116,11 +119,13 @@ function runGate(gate) {
     encoding: "utf8",
     maxBuffer: 32 * 1024 * 1024,
   });
+  const output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
   return {
     name: gate.name,
     ok: result.status === 0,
+    skippedEnvironment: result.status !== 0 && isEnvironmentFailureOutput(output),
     exitCode: result.status ?? 1,
-    output: [result.stdout, result.stderr].filter(Boolean).join("\n").trim(),
+    output,
   };
 }
 
@@ -148,7 +153,11 @@ function main() {
 
   const gatePlan = buildGatePlan({ prBody: args.prBody, prLabelsJson: args.prLabelsJson });
   const gateResults = args.runGates ? gatePlan.map(runGate) : [];
-  const verdict = evaluateReadiness({ repo, gateResults, prBody: args.prBody });
+  const gateContext = buildGateContext({
+    changedFiles: repo.changedFileEntries,
+    addedLinesByFile: repo.addedLinesByFile,
+  });
+  const verdict = evaluateReadiness({ repo, gateResults, prBody: args.prBody, gateContext });
   process.stdout.write(formatReadinessReport(verdict));
   process.exit(verdict.ready ? 0 : 1);
 }

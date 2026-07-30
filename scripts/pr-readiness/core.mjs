@@ -1,16 +1,23 @@
 import { SEED_FIT_DECISIONS } from "../lib/seed-fit-gate.mjs";
+import { POLICY_GUARD_PROFILES } from "../lib/ci-policy-guards.mjs";
+import { formatGateContextMarkdown } from "../lib/gate-context.mjs";
+import {
+  PR_TRAILER_NAMES,
+  SUPPORTED_PR_TRAILERS,
+} from "../lib/pr-trailer-contract.mjs";
 
 const VALID_SEED_FIT_DECISIONS = new Set(SEED_FIT_DECISIONS);
-
-const SUPPORTED_TRAILERS = new Set([
-  "Process-Spine-Decision",
-  "UX-Fit-Decision",
-  "Seed-Fit-Decision",
-  "Design-Grounding-Decision",
-  "Docs-Impact-Decision",
-  "Local-CI-Evidence",
-  "Local-CI-Override",
+const MUTATING_GIT_COMMANDS = new Set([
+  "checkout",
+  "clean",
+  "commit",
+  "merge",
+  "rebase",
+  "reset",
+  "switch",
 ]);
+
+export const SUPPORTED_TRAILERS = new Set(SUPPORTED_PR_TRAILERS);
 
 /**
  * Trailers that are still PARSED so the author gets told they are inert, rather than
@@ -19,35 +26,46 @@ const SUPPORTED_TRAILERS = new Set([
  */
 const RETIRED_TRAILERS = new Map([
   [
-    "UX-Fit-Decision",
+    PR_TRAILER_NAMES.uxFitRetired,
     'retired by BI-D967DEE0 — the UX-Fit Gate now requires a measured manifest at docs/ux-fit/<date>-<slug>.ux-fit.json (evidence.kind "sweep-measurement" or "propose-n-pick"). This trailer no longer satisfies any gate.',
   ],
 ]);
 
-const REQUIRED_GATE_SCRIPTS = [
-  ["Spec/Plan/Doc Gate", "scripts/check-spec-plan-doc.mjs"],
-  ["Plan Backlog Coverage Gate", "scripts/check-plan-backlog-coverage.mjs"],
-  ["Seed Contribution Fit Gate", "scripts/check-seed-fit-decision.mjs"],
-  ["UX-Fit Gate", "scripts/check-ux-fit-decision.mjs"],
-  ["Design Grounding Gate", "scripts/check-design-grounding-decision.mjs"],
-  ["Data-Impact Gate", "scripts/check-data-impact.mjs"],
-  ["Docs Impact Gate", "scripts/check-docs-impact.mjs"],
-  ["Doc Link Integrity", "scripts/check-doc-links.mjs"],
-  ["Doc Reference Integrity", "scripts/check-doc-reference-integrity.mjs"],
-  ["Retired Superpowers Skill Guard", "scripts/check-no-retired-superpowers-skills.mjs"],
-];
+function isSelfTest([command, args]) {
+  return command === "node" && args[0] === "--test";
+}
 
-export function buildGatePlan({ prBody = "", prLabelsJson = "[]" } = {}) {
-  return REQUIRED_GATE_SCRIPTS.map(([name, script]) => ({
-    name,
-    command: [process.execPath, [script]],
-    env: {
-      BASE_SHA: "origin/main",
-      PR_BODY: prBody,
-      PR_LABELS_JSON: prLabelsJson,
-      GITHUB_EVENT_NAME: "pull_request",
-    },
-  }));
+function mutatesGitState([command, args]) {
+  return command === "git" && MUTATING_GIT_COMMANDS.has(args[0]);
+}
+
+export function buildGatePlan({
+  prBody = "",
+  prLabelsJson = "[]",
+  profiles = POLICY_GUARD_PROFILES,
+} = {}) {
+  const env = {
+    BASE_SHA: "origin/main",
+    PR_BODY: prBody,
+    PR_LABELS_JSON: prLabelsJson,
+    GITHUB_EVENT_NAME: "pull_request",
+  };
+
+  return ["source", "pull-request"].flatMap((profileName) =>
+    (profiles[profileName] ?? []).flatMap((entry) => {
+      // The readiness command runs in the author's topic worktree. Never replay
+      // CI setup that rewrites Git state there. Its checks remain covered by CI
+      // and by the exact-tree local-CI gate.
+      if (entry.commands.some(mutatesGitState)) return [];
+
+      const commands = entry.commands.filter((command) => !isSelfTest(command));
+      return commands.map((command, index) => ({
+        name: commands.length === 1 ? entry.name : `${entry.name} (${index + 1}/${commands.length})`,
+        command,
+        env,
+      }));
+    }),
+  );
 }
 
 export function parsePrBodyTrailers(prBody = "") {
@@ -83,14 +101,14 @@ export function validatePrBodyTrailers(prBody = "") {
     }
   }
 
-  const seedFit = byName.get("Seed-Fit-Decision")?.[0]?.value;
+  const seedFit = byName.get(PR_TRAILER_NAMES.seedFit)?.[0]?.value;
   if (seedFit && !VALID_SEED_FIT_DECISIONS.has(seedFit)) {
     blockers.push(
       `Invalid Seed-Fit-Decision "${seedFit}". Valid values: ${[...VALID_SEED_FIT_DECISIONS].join(", ")}.`,
     );
   }
 
-  if (byName.has("Local-CI-Evidence") && byName.has("Local-CI-Override")) {
+  if (byName.has(PR_TRAILER_NAMES.localCiEvidence) && byName.has(PR_TRAILER_NAMES.localCiOverride)) {
     blockers.push("Use either Local-CI-Evidence or Local-CI-Override, not both.");
   }
 
@@ -103,7 +121,7 @@ export function validatePrBodyTrailers(prBody = "") {
   return { ok: blockers.length === 0, blockers, warnings, trailers };
 }
 
-export function evaluateReadiness({ repo, gateResults = [], prBody = "" } = {}) {
+export function evaluateReadiness({ repo, gateResults = [], prBody = "", gateContext = null } = {}) {
   const blockers = [];
   const warnings = [];
   const notes = [];
@@ -144,6 +162,12 @@ export function evaluateReadiness({ repo, gateResults = [], prBody = "" } = {}) 
   warnings.push(...trailerVerdict.warnings);
 
   for (const gate of gateResults) {
+    if (gate.skippedEnvironment) {
+      warnings.push(
+        `${gate.name} could not run on this source-only host; CI still enforces it. ${summarizeGateOutput(gate.output)}`,
+      );
+      continue;
+    }
     if (gate.ok) {
       passed.push(gate.name);
       continue;
@@ -170,11 +194,15 @@ export function evaluateReadiness({ repo, gateResults = [], prBody = "" } = {}) 
     branch: repo?.branch ?? "(unknown)",
     base: "origin/main",
     mergeBase: repo?.mergeBases?.[0] ?? null,
+    gateContext,
   };
 }
 
 export function formatReadinessReport(result) {
   const lines = [];
+  if (result.gateContext) {
+    lines.push(formatGateContextMarkdown(result.gateContext).trimEnd(), "");
+  }
   lines.push(`PR readiness: ${result.ready ? "READY" : "NOT READY"}`);
   lines.push(`Branch: ${result.branch}`);
   lines.push(`Base: ${result.base}${result.mergeBase ? ` (merge-base ${result.mergeBase.slice(0, 12)})` : ""}`);
