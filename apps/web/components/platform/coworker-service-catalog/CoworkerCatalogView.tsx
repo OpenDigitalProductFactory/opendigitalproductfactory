@@ -14,10 +14,12 @@ type OfferRowModel = {
 
 export function CoworkerCatalogView({ catalog }: { catalog: CoworkerCatalog }) {
   const activeOffers = catalog.offers.filter((offer) => offer.status === "active");
-  const activeOfferRows = activeOffers.map((offer) => ({
-    offer,
-    presentation: projectOfferPresentation(offer),
-  }));
+  const activeOfferRows = activeOffers
+    .map((offer) => ({
+      offer,
+      presentation: projectOfferPresentation(offer),
+    }))
+    .sort((left, right) => left.offer.name.localeCompare(right.offer.name));
   const columns: Column<OfferRowModel>[] = [
     {
       key: "offer",
@@ -26,35 +28,30 @@ export function CoworkerCatalogView({ catalog }: { catalog: CoworkerCatalog }) {
       cell: ({ offer, presentation }) => (
         <OfferCell offer={offer} presentation={presentation} />
       ),
-      sortAccessor: ({ offer }) => offer.name,
     },
     {
       key: "provider",
       header: "Provider",
       width: "22%",
       cell: ({ presentation }) => <DetailCell {...presentation.provider} />,
-      sortAccessor: ({ presentation }) => presentation.provider.primary,
     },
     {
       key: "risk",
       header: "Risk",
       width: "14%",
       cell: ({ presentation }) => <DetailCell {...presentation.risk} />,
-      sortAccessor: ({ presentation }) => presentation.risk.primary,
     },
     {
       key: "authority",
       header: "Authority",
       width: "18%",
       cell: ({ presentation }) => <DetailCell {...presentation.authority} />,
-      sortAccessor: ({ presentation }) => presentation.authority.primary,
     },
     {
       key: "availability",
       header: "Availability",
       width: "15%",
       cell: ({ presentation }) => <DetailCell {...presentation.availability} />,
-      sortAccessor: ({ presentation }) => presentation.availability.primary,
     },
   ];
   const highRisk = catalog.offers.filter((offer) => offer.riskTier === "high" || offer.riskTier === "critical").length;
@@ -99,6 +96,9 @@ export function CoworkerCatalogView({ catalog }: { catalog: CoworkerCatalog }) {
 
           <div
             data-catalog-layout="desktop"
+            role="region"
+            aria-label="Coworker offers"
+            tabIndex={0}
             className="hidden overflow-x-auto rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] lg:block"
           >
             <DataTable
@@ -106,7 +106,6 @@ export function CoworkerCatalogView({ catalog }: { catalog: CoworkerCatalog }) {
               columns={columns}
               rows={activeOfferRows}
               getRowKey={({ offer }) => offer.offerId}
-              initialSort={{ key: "offer", dir: "asc" }}
               empty="No active coworker offers are cataloged yet."
             />
           </div>
@@ -292,8 +291,13 @@ function DetailCell({
   return (
     <div className="min-w-0 py-1">
       <div className="truncate font-medium text-[var(--dpf-text)]">{primary}</div>
-      <div className="mt-1 truncate text-[var(--dpf-muted)]">
-        {secondaryLabel ? `${secondaryLabel}: ` : ""}
+      <div
+        className="mt-1 truncate text-[var(--dpf-muted)]"
+        role={secondaryLabel ? "note" : undefined}
+        aria-label={
+          secondaryLabel ? `${secondaryLabel}: ${secondary}` : undefined
+        }
+      >
         {secondary}
       </div>
     </div>

@@ -102,7 +102,18 @@ describe("CoworkerCatalogView", () => {
     expect(html).toContain("<thead");
     expect(html.match(/scope="col"/g)).toHaveLength(5);
     expect(html).toContain("<tbody");
-    expect(html).toContain("Provider organization: ");
+    const desktopRegion = html.match(
+      /<div[^>]*data-catalog-layout="desktop"[^>]*>/,
+    )?.[0];
+    expect(desktopRegion).toContain('role="region"');
+    expect(desktopRegion).toContain('aria-label="Coworker offers"');
+    expect(desktopRegion).toContain('tabindex="0"');
+    expect(desktopRegion).toContain("overflow-x-auto");
+    expect(html).toContain('role="note"');
+    expect(html).toContain(
+      'aria-label="Provider organization: Example Works"',
+    );
+    expect(html).not.toContain("Provider organization: <!-- -->");
   });
 
   it("shares one complete offer interpretation across desktop and mobile", () => {
