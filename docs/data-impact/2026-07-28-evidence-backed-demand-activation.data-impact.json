@@ -1,0 +1,63 @@
+{
+  "version": "1",
+  "accountableOwner": "product-management",
+  "affectedCopies": [
+    "BacklogItem may carry explicit organization, ProductLine, and business Product scope",
+    "DemandEvidenceLink references real evidence without replacing the source authority",
+    "Legacy backlog items remain unclassified",
+    "Demand scoring and Product Direction consume canonical scope and evidence links"
+  ],
+  "migration": {
+    "name": "20260728224000_add_demand_activation_scope_and_evidence",
+    "backfill": "None. Backlog scope fields are nullable and the new evidence-link table begins empty; no historical backlog item, customer, demand signal, score, product line, business product, or consumer is inferred."
+  },
+  "tests": [
+    "apps/web/lib/demand/evidence.test.ts",
+    "apps/web/lib/demand/evidence-repository.test.ts",
+    "apps/web/lib/demand/activation.test.ts",
+    "apps/web/lib/product-management/product-management-scope.test.ts",
+    "apps/web/app/api/storefront/admin/inquiries/[id]/product-backlog/route.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:backlog-business-product-scope",
+      "prismaModel": "BacklogItem",
+      "lifecycleDisposition": "Optional commercial scope follows the canonical backlog item lifecycle; unclassified legacy work remains valid and is never silently reassigned.",
+      "fields": [
+        {
+          "fieldId": "data:backlog-business-product-scope#organization-productLine-businessProduct",
+          "resolution": "governed",
+          "reason": "Allows real demand and delivery work to be reported at the canonical business product boundary.",
+          "provenance": "BI-9E608678 demand activation scope",
+          "flags": ["organization"],
+          "fieldPolicy": "Nullable canonical relations only; application invariants require organization membership and consistent ProductLine/Product scope."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:demand-evidence-link",
+      "prismaModel": "DemandEvidenceLink",
+      "lifecycleDisposition": "Evidence links are retained with the backlog item and effective status; source records remain authoritative and are not copied into fabricated customer or demand entities.",
+      "fields": [
+        {
+          "fieldId": "data:demand-evidence-link#source-kind-reference",
+          "resolution": "governed",
+          "reason": "Makes the customer, booking, order, subscription, fulfillment, inquiry, or research basis for activation inspectable.",
+          "provenance": "BI-9E608678 evidence-backed activation invariant",
+          "flags": [],
+          "fieldPolicy": "Typed source and stable reference are required; missing evidence means no link and no evidence-backed activation claim."
+        },
+        {
+          "fieldId": "data:demand-evidence-link#confidence-review",
+          "resolution": "governed",
+          "reason": "Preserves confidence and review state instead of presenting derived demand as an unexplained fact.",
+          "provenance": "apps/web/lib/demand/evidence.ts",
+          "flags": [],
+          "fieldPolicy": "Confidence remains optional and bounded; review timestamps are recorded only when a real review occurs."
+        }
+      ]
+    }
+  ]
+}
