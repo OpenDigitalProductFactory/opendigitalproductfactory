@@ -1194,7 +1194,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 40
+    "textMass": 61
   },
   "apps/web/app/(shell)/ops/dev-loop/page.tsx": {
     "vocabulary": 0,
@@ -1761,7 +1761,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 28
+    "textMass": 8
   },
   "apps/web/app/(shell)/portfolio/product/[id]/direction/roadmap/page.tsx": {
     "vocabulary": 0,
@@ -5716,7 +5716,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 205
+    "textMass": 271
   },
   "apps/web/components/ops/EpicCard.tsx": {
     "vocabulary": 0,
@@ -6936,19 +6936,19 @@
     "longSentences": 0,
     "textMass": 13
   },
-  "apps/web/components/product/ProductLineComparison.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 33
-  },
   "apps/web/components/product/ProductLineHeader.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
     "textMass": 2
+  },
+  "apps/web/components/product/ProductLinePerformance.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 118
   },
   "apps/web/components/product/ProductLineTabNav.tsx": {
     "vocabulary": 0,
@@ -7005,6 +7005,20 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 41
+  },
+  "apps/web/components/product/direction/ProductOutcomeEvidenceForms.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 20
+  },
+  "apps/web/components/product/direction/ProductOutcomes.tsx": {
+    "vocabulary": 1,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 199
   },
   "apps/web/components/product/intelligence/ProductIntelligence.tsx": {
     "vocabulary": 0,

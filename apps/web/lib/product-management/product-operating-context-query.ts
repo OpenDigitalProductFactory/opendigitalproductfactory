@@ -15,8 +15,14 @@ import {
   buildScheduledProductIntelligenceVisibilityWhere,
 } from "./product-intelligence-scope";
 import { SCHEDULED_AGENT_TASK_KINDS } from "@/lib/operate/scheduled-jobs/agent-task-kind";
-import { mapDemandRows } from "@/lib/demand/demand-data";
-import { buildProductManagementProjectionWhere } from "./product-management-scope";
+import {
+  loadProductDemand,
+  projectProductDemand,
+} from "./product-operating-context-query-demand";
+import {
+  loadProductObjectives,
+  projectProductObjectives,
+} from "./product-operating-context-query-objectives";
 import {
   ProductOperatingContextNotFoundError,
   numberOf,
@@ -28,7 +34,6 @@ import {
   type EaElementRow,
   type KnowledgeArticleRow,
   type ProductLineRow,
-  type ProductObjectiveRow,
   type ProductOperatingContextQueryClient,
   type ProductOperatingContextQueryProfile,
   type ProductRow,
@@ -36,13 +41,6 @@ import {
   type ReviewedResearchSourceRow,
   type ScheduledAgentTaskRow,
 } from "./product-operating-context-query-types";
-import {
-  PRODUCT_OBJECTIVE_STATUSES,
-  PRODUCT_OUTCOME_MEASURE_KINDS,
-  projectProductObjective,
-  type ProductObjectiveStatus,
-  type ProductOutcomeMeasureKind,
-} from "./outcomes";
 import {
   dedupeIntelligenceItems,
   intelligenceScopeOf,
@@ -57,20 +55,6 @@ export {
   type ProductOperatingContextQueryClient,
   type ProductOperatingContextQueryProfile,
 } from "./product-operating-context-query-types";
-function canonicalObjectiveStatus(value: string): ProductObjectiveStatus {
-  return PRODUCT_OBJECTIVE_STATUSES.includes(value as ProductObjectiveStatus)
-    ? (value as ProductObjectiveStatus)
-    : "draft";
-}
-function canonicalMeasureKind(value: string): ProductOutcomeMeasureKind {
-  return PRODUCT_OUTCOME_MEASURE_KINDS.includes(value as ProductOutcomeMeasureKind)
-    ? (value as ProductOutcomeMeasureKind)
-    : "qualitative";
-}
-function optionalNumberOf(value: ProductObjectiveRow["baselineValue"]): number | null {
-  if (value == null) return null;
-  return typeof value === "number" ? value : value.toNumber();
-}
 async function resolveBusinessScope(input: {
   db: ProductOperatingContextQueryClient;
   organizationId: string;
@@ -311,13 +295,6 @@ export async function loadProductOperatingContext(input: {
       productLineIds,
       businessProductIds: productIds,
     });
-  const demandWhere = buildProductManagementProjectionWhere({
-    organizationId: input.organizationId,
-    productLineIds,
-    businessProductIds: productIds,
-    digitalProductIds,
-  });
-
   const [
     research,
     battlecards,
@@ -451,86 +428,14 @@ export async function loadProductOperatingContext(input: {
           },
         })
       : Promise.resolve([]),
-    fullProfile
-      ? db.backlogItem.findMany({
-          where: demandWhere,
-          orderBy: [{ updatedAt: "desc" }, { itemId: "asc" }],
-          take: 100,
-          select: {
-            itemId: true,
-            title: true,
-            body: true,
-            status: true,
-            workType: true,
-            organizationId: true,
-            productLineId: true,
-            businessProductId: true,
-            digitalProductId: true,
-            demandStage: true,
-            demandScore: true,
-            demandScoreFramework: true,
-            effortSize: true,
-            jobSize: true,
-            reach: true,
-            occurrenceCount: true,
-            impact: true,
-            confidence: true,
-            businessValue: true,
-            timeCriticality: true,
-            riskOpportunity: true,
-            investmentBucket: true,
-            estimateAiJobSize: true,
-            estimateHumanJobSize: true,
-            estimateSource: true,
-            estimateAgreed: true,
-            claimStatus: true,
-            claimedByAgentId: true,
-            demandEvidenceLinks: {
-              where: { status: "active" },
-              orderBy: { createdAt: "desc" },
-              select: {
-                evidenceLinkId: true,
-                sourceKind: true,
-                sourceRef: true,
-                title: true,
-                summary: true,
-                confidence: true,
-                reviewedAt: true,
-              },
-            },
-            activities: {
-              where: {
-                kind: {
-                  in: [
-                    "demand_stage_transition",
-                    "demand_scored",
-                    "demand_funding_decision",
-                    "demand_evidence_linked",
-                    "demand_evidence_superseded",
-                  ],
-                },
-              },
-              orderBy: { recordedAt: "desc" },
-              take: 20,
-              select: {
-                kind: true,
-                summary: true,
-                recordedAt: true,
-                payload: true,
-              },
-            },
-            updatedAt: true,
-            epic: {
-              select: {
-                epicId: true,
-                title: true,
-                status: true,
-                updatedAt: true,
-              },
-            },
-          },
-        })
-      : Promise.resolve([]),
+    loadProductDemand({
+      db,
+      fullProfile,
+      organizationId: input.organizationId,
+      productLineIds,
+      productIds,
+      digitalProductIds,
+    }),
     fullProfile && digitalProductIds.length > 0
       ? db.changeItem.findMany({
           where: { digitalProductId: { in: digitalProductIds } },
@@ -576,76 +481,12 @@ export async function loadProductOperatingContext(input: {
           },
         })
       : Promise.resolve([]),
-    fullProfile && db.productObjective
-      ? db.productObjective.findMany({
-          where: {
-            organizationId: input.organizationId,
-            productId: { in: productIds },
-          },
-          orderBy: [
-            { reviewAt: "asc" },
-            { updatedAt: "desc" },
-            { objectiveId: "asc" },
-          ],
-          take: 100,
-          select: {
-            objectiveId: true,
-            productId: true,
-            title: true,
-            problemStatement: true,
-            outcomeHypothesis: true,
-            status: true,
-            measureKind: true,
-            measureDefinition: true,
-            measureUnit: true,
-            baselineValue: true,
-            targetValue: true,
-            baselineNarrative: true,
-            targetNarrative: true,
-            reviewCadence: true,
-            reviewAt: true,
-            reviewedAt: true,
-            createdAt: true,
-            updatedAt: true,
-            ownerPrincipal: {
-              select: { principalId: true, displayName: true },
-            },
-            contributingWork: {
-              orderBy: { createdAt: "asc" },
-              select: {
-                contributionKind: true,
-                backlogItem: {
-                  select: { itemId: true, title: true, status: true },
-                },
-              },
-            },
-            observations: {
-              orderBy: [
-                { observedAt: "desc" },
-                { createdAt: "desc" },
-                { observationId: "asc" },
-              ],
-              select: {
-                observationId: true,
-                observedAt: true,
-                numericValue: true,
-                narrative: true,
-                measureKind: true,
-                measureUnit: true,
-                sourceKind: true,
-                sourceRef: true,
-                confidence: true,
-                createdAt: true,
-                supersedes: { select: { observationId: true } },
-                supersededBy: { select: { observationId: true } },
-                recordedByPrincipal: {
-                  select: { principalId: true, displayName: true },
-                },
-              },
-            },
-          },
-        })
-      : Promise.resolve([]),
+    loadProductObjectives({
+      db,
+      fullProfile,
+      organizationId: input.organizationId,
+      productIds,
+    }),
   ]);
 
   const intelligenceItems: IntelligenceContextItem[] = [
@@ -780,9 +621,6 @@ export async function loadProductOperatingContext(input: {
     }
   }
 
-  const demandViews = new Map(
-    mapDemandRows(demand).map((view) => [view.itemId, view]),
-  );
   const architectureItems = [
     ...elements.map((row) => ({
       id: row.id,
@@ -895,49 +733,7 @@ export async function loadProductOperatingContext(input: {
         ? "Intelligence is outside the commercial-summary query profile."
         : undefined,
     }),
-    demand: createContextSlice({
-      requestedAt,
-      sourceKind: "backlog-item",
-      items: demand.map((row) => ({
-        ...(demandViews.get(row.itemId)?.activation
-          ? {
-              evidenceCount:
-                demandViews.get(row.itemId)!.activation!.score.evidenceCount,
-              readiness:
-                demandViews.get(row.itemId)!.activation!.readiness,
-              blockers:
-                demandViews.get(row.itemId)!.activation!.blockers,
-              latestDecision: demandViews.get(row.itemId)!.decisionHistory?.[0]
-                ? {
-                    summary:
-                      demandViews.get(row.itemId)!.decisionHistory![0]!.summary,
-                    recordedAt: new Date(
-                      demandViews.get(row.itemId)!.decisionHistory![0]!.recordedAt,
-                    ),
-                    payload:
-                      demandViews.get(row.itemId)!.decisionHistory![0]!.payload,
-                  }
-                : null,
-            }
-          : {}),
-        id: row.itemId,
-        sourceKind: "backlog-item",
-        asOf: row.updatedAt,
-        title: row.title,
-        status: row.status,
-        productLineId: row.productLineId,
-        businessProductId: row.businessProductId,
-        demandStage: row.demandStage,
-        score: row.demandScore,
-      })),
-      partialReason:
-        demand.length >= 250
-          ? "Demand evidence is bounded to the 250 newest records."
-          : undefined,
-      unavailableReason: !fullProfile
-        ? "Demand is outside the commercial-summary query profile."
-        : undefined,
-    }),
+    demand: projectProductDemand({ demand, requestedAt, fullProfile }),
     decisions: createContextSlice({
       requestedAt,
       sourceKind: "decision-interaction",
@@ -945,79 +741,11 @@ export async function loadProductOperatingContext(input: {
       unavailableReason:
         "No typed business-product decision association exists yet.",
     }),
-    objectives: createContextSlice({
+    objectives: projectProductObjectives({
+      objectives,
       requestedAt,
-      sourceKind: "product-objective",
-      items: objectives.map((objective) => {
-        const measureKind = canonicalMeasureKind(objective.measureKind);
-        const observations = objective.observations.map((observation) => ({
-          observationId: observation.observationId,
-          observedAt: observation.observedAt,
-          numericValue: optionalNumberOf(observation.numericValue),
-          narrative: observation.narrative,
-          sourceKind: observation.sourceKind,
-          sourceRef: observation.sourceRef,
-          confidence: observation.confidence,
-          recordedBy: observation.recordedByPrincipal,
-          supersedesObservationId: observation.supersedes?.observationId ?? null,
-          supersededByObservationId:
-            observation.supersededBy?.observationId ?? null,
-          createdAt: observation.createdAt,
-        }));
-        return {
-          id: objective.objectiveId,
-          sourceKind: "product-objective",
-          asOf: objective.updatedAt,
-          productId: objective.productId,
-          ...projectProductObjective(
-            {
-              objectiveId: objective.objectiveId,
-              title: objective.title,
-              problemStatement: objective.problemStatement,
-              outcomeHypothesis: objective.outcomeHypothesis,
-              status: canonicalObjectiveStatus(objective.status),
-              owner: objective.ownerPrincipal,
-              measureKind,
-              measureDefinition: objective.measureDefinition,
-              measureUnit: objective.measureUnit,
-              baselineValue: optionalNumberOf(objective.baselineValue),
-              targetValue: optionalNumberOf(objective.targetValue),
-              baselineNarrative: objective.baselineNarrative,
-              targetNarrative: objective.targetNarrative,
-              reviewCadence: objective.reviewCadence,
-              reviewAt: objective.reviewAt,
-              reviewedAt: objective.reviewedAt,
-              createdAt: objective.createdAt,
-              updatedAt: objective.updatedAt,
-              observations,
-              contributingWork: objective.contributingWork.map((work) => ({
-                itemId: work.backlogItem.itemId,
-                title: work.backlogItem.title,
-                status: work.backlogItem.status,
-                contributionKind: work.contributionKind,
-              })),
-              observationMeasures: objective.observations
-                .filter((observation) => observation.supersededBy === null)
-                .map((observation) => ({
-                  numericValue: optionalNumberOf(observation.numericValue),
-                  narrative: observation.narrative,
-                  measureKind: canonicalMeasureKind(observation.measureKind),
-                  measureUnit: observation.measureUnit,
-                })),
-            },
-            requestedAt,
-          ),
-        };
-      }),
-      partialReason:
-        objectives.length >= 100
-          ? "Product objectives are bounded to the first 100 records in review order."
-          : undefined,
-      unavailableReason: !fullProfile
-        ? "Objectives are outside the commercial-summary query profile."
-        : db.productObjective
-          ? undefined
-          : "The product objective query delegate is unavailable.",
+      fullProfile,
+      delegateAvailable: Boolean(db.productObjective),
     }),
     roadmapInputs: createContextSlice({
       requestedAt,
