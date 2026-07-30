@@ -772,6 +772,10 @@ export type BuildContext = {
    *  (Deliberation Pattern Framework v1, Step 8.6). Surfaces WHY a debate or
    *  peer review was activated so downstream agents can explain decisions. */
   deliberationReason?: string;
+  /** Prospective CI gate constraints for the plan's intended files, generated
+   *  by the gate-context pack (BI-2677A465) from the same registries CI
+   *  enforces. Advisory: informs generation; CI remains the authority. */
+  gateContext?: string;
 };
 
 function formatReviewGateSection(ctx: BuildContext): string[] {
@@ -891,6 +895,13 @@ export async function getBuildContextSection(ctx: BuildContext): Promise<string>
     lines.push("--- Scout Findings (Pre-Design Research) ---");
     lines.push(ctx.scoutFindings);
     lines.push("Use these findings to ask informed clarification questions. Do NOT ask about things already discovered in scout findings.");
+  }
+
+  if (ctx.gateContext) {
+    lines.push("");
+    lines.push("--- CI Gate Constraints (for the files this plan touches) ---");
+    lines.push(ctx.gateContext);
+    lines.push("These are derived from the live gate registries and WILL be enforced by CI. Design and generate within them — do not discover them at push time. Advisory context only: passing here proves nothing; CI remains the authority.");
   }
 
   if (ctx.intentConfirmation) {

@@ -37,6 +37,8 @@ apps/web/lib/finance/ai-provider-finance.ts	1309
 apps/web/lib/inference/ai-provider-internals.ts	1266
 apps/web/lib/inference/routed-inference.ts	835
 apps/web/lib/integrate/build-agent-prompts.ts	1064
+apps/web/lib/inference/routed-inference.ts	806
+apps/web/lib/integrate/build-agent-prompts.ts	1075
 apps/web/lib/integrate/build-orchestrator.ts	1796
 apps/web/lib/integrate/sandbox/build-branch.ts	949
 apps/web/lib/marketing.ts	1369

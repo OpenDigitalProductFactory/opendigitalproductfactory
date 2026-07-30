@@ -76,9 +76,13 @@ test("the UX-Fit constraint names the measured manifest, never the retired trail
   assert.match(uxFit.alternative, /RETIRED/);
 });
 
-test("schema changes surface the Data-Impact requirement", () => {
+test("schema changes surface the Data-Impact requirement and NAME the surface kind", () => {
   const ctx = build([{ path: "packages/db/prisma/schema.prisma", status: "M" }]);
-  assert.ok(ctx.trailers.some((t) => t.gate === "Data-Impact"));
+  const dataImpact = ctx.trailers.find((t) => t.gate === "Data-Impact");
+  assert.ok(dataImpact);
+  // classifyChangedSurfaces returns kind strings; mapping .kind over them
+  // rendered "changed: ;" — the kind must appear in the constraint text.
+  assert.match(dataImpact.because, /changed: schema/);
 });
 
 // ── ratchets, artifacts, routes, migrations ──────────────────────────────────
