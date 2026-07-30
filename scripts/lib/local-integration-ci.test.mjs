@@ -95,8 +95,8 @@ describe("createLocalIntegrationPlan", () => {
       "node scripts/gen-doc-index.mjs --check",
       "node scripts/check-doc-links.mjs",
       "node scripts/check-guards.mjs",
-      "env NODE_OPTIONS=--no-experimental-webstorage pnpm --filter web exec vitest run --maxWorkers=4",
       "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web typecheck",
+      "env NODE_OPTIONS=--no-experimental-webstorage pnpm --filter web exec vitest run --maxWorkers=4",
       "env NODE_ENV=production NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web exec next build",
     ]);
   });
@@ -228,6 +228,27 @@ describe("createLocalIntegrationPlan", () => {
     assert.ok(docsLinkIndex > docIndexIndex);
     assert.ok(repoGuardIndex > docsLinkIndex);
     assert.ok(repoGuardIndex < vitestIndex);
+  });
+
+  it("fails fast on typecheck before spending the sandbox on exhaustive tests", () => {
+    const plan = createLocalIntegrationPlan({
+      candidateBranch: "feat/x",
+      mode: "single-branch",
+      siblingBranches: [],
+      hostPlatform: "linux",
+    });
+    const commands = plan.commands.map((command) => command.join(" "));
+    const typecheckIndex = commands.indexOf(
+      "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web typecheck",
+    );
+    const vitestIndex = commands.findIndex((command) => command.includes("vitest run"));
+    const buildIndex = commands.findIndex((command) => command.includes("next build"));
+
+    assert.ok(typecheckIndex > -1, "typecheck must remain in the local-CI plan");
+    assert.ok(vitestIndex > -1, "exhaustive Vitest must remain in the local-CI plan");
+    assert.ok(buildIndex > -1, "the production build must remain in the local-CI plan");
+    assert.ok(typecheckIndex < vitestIndex, "typecheck must fail before exhaustive Vitest starts");
+    assert.ok(vitestIndex < buildIndex, "exhaustive Vitest must still precede the production build");
   });
 
   it("adds sibling branches in order for concurrent development", () => {

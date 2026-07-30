@@ -240,6 +240,14 @@ fence-owner process as every other host. Windows process-tree snapshots are
 intentionally sampled more slowly because each WMI/CIM process-table read is
 itself a heavyweight host operation; `DPF_GATE_PROCESS_SCAN_MS` and
 `DPF_GATE_DESCENDANT_POLL_MS` remain explicit debugging overrides.
+
+**Fail-fast command order (BI-7BCCDE3D).** Inside an admitted runtime-code
+gate, freshness, Prisma generation, migrations, and the cheap doc/repository
+guards run first. Web typecheck then runs before exhaustive Vitest, followed by
+the production build. This preserves every successful-candidate proof while
+returning a definitive compile/type-generation failure before the shared slot
+spends several minutes on tests that cannot make that candidate buildable.
+
 Claim, heartbeat, signal/fence, and release timestamps are included in the
 evidence and Git-local state. An expired TTL is never permission for the old
 owner to continue working. The gate does

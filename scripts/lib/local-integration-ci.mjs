@@ -252,13 +252,16 @@ export function createLocalIntegrationPlan(input) {
     ["node", "scripts/gen-doc-index.mjs", "--check"],
     ["node", "scripts/check-doc-links.mjs"],
     ["node", "scripts/check-guards.mjs"],
-    ["env", HOST_TEST_NODE_OPTIONS, "pnpm", "--filter", "web", "exec", "vitest", "run", HOST_TEST_MAX_WORKERS],
-    // typecheck needs the same heap headroom as the host-next build: with the
+    // Fail fast on the definitive compile/type-generation proof before spending
+    // the shared sandbox on the exhaustive suite. A red typecheck cannot become
+    // green after tests, while successful candidates still execute every gate.
+    // Typecheck needs the same heap headroom as the host-next build: with the
     // node 24 default heap, `tsc --noEmit` over apps/web SIGABRTs (exit 134)
     // exactly like the build worker did (BI-B5011ACE) — observed live on the
     // first BI-157DC9B2 gate run, 2026-07-06. The runner interprets the `env`
     // prefix itself, so this heap contract is identical on every host.
     ["env", HOST_BUILD_NODE_OPTIONS, "pnpm", "--filter", "web", "typecheck"],
+    ["env", HOST_TEST_NODE_OPTIONS, "pnpm", "--filter", "web", "exec", "vitest", "run", HOST_TEST_MAX_WORKERS],
     productionBuildCommand,
   ];
   return {
