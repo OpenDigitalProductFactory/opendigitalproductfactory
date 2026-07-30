@@ -162,6 +162,27 @@ describe("coworker certification runner (EP-COWORKER-LIFECYCLE Phase 2)", () => 
     expect(created.findings).toHaveLength(0);
   });
 
+  it("a no-dispatch routing response yields an INCONCLUSIVE run instead of scoring operator-safe copy", async () => {
+    const { deps, created } = makeDeps({
+      loopContent:
+        "No AI model can handle this request right now. This usually means your cloud " +
+        "AI providers are disconnected or their sign-in has expired, and the built-in " +
+        "local model can't fit this assistant's larger requests on its own. Open " +
+        "Platform > AI Operations > Providers & Routing to reconnect a provider — " +
+        "waiting won't clear this on its own.",
+      executedTools: [],
+    });
+
+    const sweep = await runCoworkerCertificationSweep({ agentIds: ["coo"], deps });
+
+    expect(sweep.results[0].status).toBe("inconclusive");
+    expect(sweep.inconclusive).toBe(1);
+    expect(sweep.failed).toBe(0);
+    expect((created.runs[0] as Record<string, unknown>).status).toBe("inconclusive");
+    expect(sweep.results[0].journeys.every((journey) => journey.capacityInconclusive)).toBe(true);
+    expect(created.findings).toHaveLength(0);
+  });
+
   it("a recovered oracle is absent-cleaned via updateMany scoped to the agent", async () => {
     const { deps, updateManyCalls } = makeDeps();
     await runCoworkerCertificationSweep({ agentIds: ["coo"], deps });

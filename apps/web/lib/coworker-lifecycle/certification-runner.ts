@@ -45,9 +45,10 @@ export type JourneyResult = {
   journeyId: string;
   mode: GoldenJourney["mode"];
   passed: boolean;
-  /** The journey could not be assessed because inference was at capacity and the
-   *  admission wait was exhausted — capacity backpressure, NOT a substantive
-   *  failure of the coworker. Such a run is requeued, never scored as a failure. */
+  /** The journey could not be assessed because inference never exercised the
+   *  coworker — capacity backpressure, provider unavailability, or no eligible
+   *  routed endpoint. Retained under its original serialized name for receipt
+   *  compatibility. Such a run is never scored as a coworker failure. */
   capacityInconclusive: boolean;
   verdicts: OracleVerdict[];
   executedToolNames: string[];
@@ -141,7 +142,7 @@ function defaultDeps(): CertificationDeps {
   };
 }
 
-function capacityInconclusiveJourney(
+function inferenceInconclusiveJourney(
   journey: GoldenJourney,
   startedAt: number,
   deps: CertificationDeps,
@@ -201,12 +202,14 @@ async function executeJourney(
       modelRequirements,
     });
 
-    // runAgenticLoop intentionally converts routing failures into operator-safe
-    // content instead of throwing. Preserve that UX contract while recognizing
-    // its canonical capacity signal here: a pool/rate-limit exhaustion means the
-    // coworker was not actually exercised and must be requeued, not failed.
-    if (classifyInferenceFailure(loop.content) === "rate-limit") {
-      return capacityInconclusiveJourney(journey, startedAt, deps);
+    // runAgenticLoop intentionally converts routing/dispatch failures into
+    // operator-safe content instead of throwing. Any canonical inference-failure
+    // reply means the model never produced a behavioral answer, so certification
+    // has no coworker behavior to score. This includes non-transient configuration
+    // gaps: bounded scheduling decides whether to retry, while the AssuranceRun
+    // remains honestly inconclusive rather than falsely failing the coworker.
+    if (classifyInferenceFailure(loop.content) !== null) {
+      return inferenceInconclusiveJourney(journey, startedAt, deps);
     }
 
     const verdicts = evaluateJourneyOracles({
@@ -235,7 +238,7 @@ async function executeJourney(
     // the journey inconclusive with NO failure verdicts, so the run is requeued
     // and the coworker is never wrongly failed for a busy box.
     if (isAdmissionTimeout(error)) {
-      return capacityInconclusiveJourney(journey, startedAt, deps);
+      return inferenceInconclusiveJourney(journey, startedAt, deps);
     }
     const message = getErrorMessage(error);
     const verdicts = evaluateJourneyOracles({

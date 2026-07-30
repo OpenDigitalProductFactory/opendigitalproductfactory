@@ -50,6 +50,11 @@ describe("classifyInferenceFailure", () => {
         "No AI provider credentials are configured for this feature. Open Platform › AI Operations › Providers & Routing, connect a cloud provider (Claude, OpenAI, Google, or similar), then try again.",
       ),
     ).toBe("config");
+    expect(
+      classifyInferenceFailure(
+        "No AI model can handle this request right now. This usually means your cloud AI providers are disconnected or their sign-in has expired, and the built-in local model can't fit this assistant's larger requests on its own. Open Platform > AI Operations > Providers & Routing to reconnect a provider — waiting won't clear this on its own.",
+      ),
+    ).toBe("config");
   });
 
   it("classifies empty-response fallbacks", () => {
