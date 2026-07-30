@@ -42,8 +42,9 @@ aggregate, and workflow contract tests are unsafe to ship separately.
 2. Guard the reusable `sweep` job with `inputs.run_sweep == true`, before runner and
    service allocation.
 3. Emit `portal_ux_required` from the planner's existing scope fields without
-   changing the semantic plan or its calibrated digest, then pass that output
-   to `run_sweep`.
+   changing the semantic plan or its calibrated digest. Permit `false` only
+   when `eventName=pull_request`, `fullSuite=false`, and the audited scope is
+   docs-only or app-mobile-only; then pass that output to `run_sweep`.
 4. Make the stable aggregate depend on both `changes` and the runtime call. Accept
    `runtime=skipped` only when the authoritative signal is exactly
    `portal_ux_required=false`; require `runtime=success` otherwise.
@@ -60,6 +61,11 @@ aggregate, and workflow contract tests are unsafe to ship separately.
   allocation and compare wall time against PR #3735's 585-second UX runtime
   baseline.
 - Merge-group for the same PR: verify the full route sweep still runs and passes.
+- Acceptance run 30579201050 proved the PR-head skip, but merge-group run
+  30579822976 also skipped because the first implementation derived the output
+  from file scope alone. PR #3793 was dequeued before merge. The corrective
+  contract makes every non-PR or escalated lifecycle exhaustive and keeps
+  missing event identity fail-closed.
 
 ## Risks and rollback
 

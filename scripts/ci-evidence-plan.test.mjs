@@ -110,18 +110,24 @@ describe("ci-evidence-plan CLI", () => {
 
   it("keeps portal UX scope independent from the broad heavy-CI switch", () => {
     const runtime = githubOutputsForPlan({
+      eventName: "pull_request",
+      fullSuite: false,
       scope: { docsOnly: false, mobileOnly: false, heavy: true, mobile: false },
       evidenceTier: "exhaustive",
       digest: "a".repeat(64),
       selection: { selectedPercentage: 100 },
     });
     const docs = githubOutputsForPlan({
+      eventName: "pull_request",
+      fullSuite: false,
       scope: { docsOnly: true, mobileOnly: false, heavy: false, mobile: false },
       evidenceTier: "affected",
       digest: "b".repeat(64),
       selection: { selectedPercentage: 0 },
     });
     const mobile = githubOutputsForPlan({
+      eventName: "pull_request",
+      fullSuite: false,
       scope: { docsOnly: false, mobileOnly: true, heavy: false, mobile: true },
       evidenceTier: "affected",
       digest: "c".repeat(64),
@@ -131,6 +137,35 @@ describe("ci-evidence-plan CLI", () => {
     assert.match(runtime, /^portal_ux_required=true$/m);
     assert.match(docs, /^portal_ux_required=false$/m);
     assert.match(mobile, /^portal_ux_required=false$/m);
+  });
+
+  it("requires portal UX for exhaustive and non-PR lifecycles even when the diff is docs-only", () => {
+    const docsOnlyPlan = {
+      eventName: "pull_request",
+      fullSuite: false,
+      scope: { docsOnly: true, mobileOnly: false, heavy: false, mobile: false },
+      evidenceTier: "affected",
+      digest: "d".repeat(64),
+      selection: { selectedPercentage: 0 },
+    };
+
+    for (const eventName of ["merge_group", "push", "workflow_dispatch", "schedule", "local-ci"]) {
+      const output = githubOutputsForPlan({ ...docsOnlyPlan, eventName });
+      assert.match(output, /^portal_ux_required=true$/m, `${eventName} must stay exhaustive`);
+    }
+
+    const escalatedPullRequest = githubOutputsForPlan({
+      ...docsOnlyPlan,
+      fullSuite: true,
+      evidenceTier: "exhaustive",
+    });
+    assert.match(escalatedPullRequest, /^portal_ux_required=true$/m);
+
+    const missingLifecycle = githubOutputsForPlan({
+      ...docsOnlyPlan,
+      eventName: undefined,
+    });
+    assert.match(missingLifecycle, /^portal_ux_required=true$/m);
   });
 
   it("turns malformed optional advice into exhaustive evidence instead of aborting", () => {
