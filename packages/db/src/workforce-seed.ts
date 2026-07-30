@@ -313,6 +313,7 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
     "backlog_write",
     "marketing_read",
     "marketing_write",
+    "storefront_read",
     "web_search",
   ],
   "ops-coordinator": ["backlog_read", "backlog_write", "backlog_triage", "registry_read", "portfolio_read"],

@@ -559,6 +559,9 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   get_finance_period_summary:   ["financial_report_create"],
 
   // Marketing / Storefront
+  // Guest activity (orders / reservations / inquiries) is the storefront's
+  // demand signal; one consolidated read tool carries it.
+  list_storefront_activity:     ["storefront_read"],
   get_marketing_summary:        ["marketing_read"],
   suggest_campaign_ideas:       ["marketing_read"],
   build_tracked_links:          ["marketing_read"],
