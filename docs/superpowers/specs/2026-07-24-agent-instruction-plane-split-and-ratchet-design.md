@@ -265,3 +265,82 @@ Ordering is by dependency and blast radius; each phase is independently shippabl
 2. **§17 split line.** How much of Delivery Surfaces is doctrine vs runbook is the least mechanical call in §4b — worth a second reviewer's eyes.
 3. **Phase 4.** Carry graph dual-homing in this BI, or split it to a follow-on the moment Phases 1–3 land?
 4. **The §5 hard flip.** If the Phase-2 observe-mode data shows the governed-share is *not* dominant, is the narrower reconciliation (shape-default + clarification-exception) acceptable, or does the founder want a different escape from the vocabulary-deny-list whack-a-mole?
+
+---
+
+## 12. Addendum (2026-07-30) — Anthropic's "context engineering for Claude 5" guidance, evaluated against this design
+
+**Why this section exists.** Anthropic published prompting/context-engineering guidance for the Claude 5 generation, reporting that **>80% of Claude Code's own system prompt was removed with no measurable loss** on their coding evals, and recommending five shifts: *rules → judgement*, *examples → interface design*, *upfront → progressive disclosure*, *repetition → simple tool descriptions*, *simple specs → rich references*. The founder asked whether these apply to DPF, whether they hold on **non-Claude surfaces**, and what else we should be doing. This addendum answers those three questions against measured substrate. It does not reopen the §3 kernel decision — it **ratifies Option B** and adds four gaps that Option B, as written, does not close.
+
+### 12a. Re-measurement at this branch
+
+| Plane | §1 (2026-07-24) | Now (2026-07-30) | Note |
+|---|---|---|---|
+| `AGENTS.md` | 112,507 bytes | **90,298 bytes** | −20% already banked between the spec and now |
+| `CLAUDE.md` + `CONVENTIONS.md` | 438 | **438** | exact |
+| **Pointer-forced subtotal** (what the ratchet measured) | — | **90,736** | the whole of `manifest.alwaysOn` |
+| **Harness-injected skill frontmatter** (31 × `name`+`description`) | *not measured* | **16,195** | **invisible to the Phase 0 ratchet** |
+| **True always-on total** | — | **106,931 bytes / ~26.7k tokens** | |
+
+**The Phase 0 ratchet under-measured the always-on plane by 17.7%.** The gap is not an accounting nicety — it is a live evasion path for Phase 1, and §12c fixes it.
+
+### 12b. What the guidance ratifies (no design change needed)
+
+- **Progressive disclosure over front-loading** is the article's central move and is exactly §4's doctrine/procedure/history split. Independent convergence on the design already chosen.
+- **"Lost in the middle"** — the article's observation that over-constraining forces the model to *reconcile conflicting instructions before acting* is the same failure this spec's Problem 3 recorded empirically (§340 was in context and was still missed).
+- **Rich references over simple specs.** DPF is ahead here: `principle_decide` rubrics, committed `docs/ux-fit/*.ux-fit.json` evidence, the HTML-artifact spec format (§16 of `AGENTS.md`), and executable specs-as-tests are all instances of the pattern the article recommends adopting.
+- **Deterministic enforcement.** The article's "delete the rule" advice presumes nothing else holds the line. DPF's hooks + CI gates already do, which is what makes deletion *safer here than at most shops* — see the criterion in §12d.
+
+### 12c. Gap 1 — the harness-injected plane (CLOSED on this branch)
+
+`manifest.alwaysOn` measures whole files that the **pointer** forces. It cannot see what the **harness** injects: Claude Code and Codex load every installed skill's frontmatter `name` + `description` into the system prompt of *every* session, while the skill *body* stays progressive-disclosure.
+
+This is the same evasion manifest-closure blocks one layer up, and Phase 1 walks straight into it: Phase 1's plan is to **move procedure out of `AGENTS.md` and into skills**. Every such move creates pressure to make the destination skill's *description* more discriminating — so the ratchet would report a 60% reduction while the true always-on cost barely moved. A ratchet that can be satisfied by relocation is not a ratchet.
+
+**Landed:** a second manifest tier, `alwaysOnExtracted`, measuring an *extracted portion* of a file glob rather than whole files (`scripts/check-instruction-plane-size.mjs`, `frontmatterFields` / `extractGroup`). It ratchets identically (shrink-only, baselined) and adds a per-item advisory (`maxExtractedItemChars`, 700) flagging descriptions that have grown into how-to prose. Six skills exceed it today, the worst at 1,054 bytes. Tests cover the relocation case specifically: growing an extracted group while the files shrink **fails**.
+
+> **Phase 1 acceptance is amended:** the target is measured against the manifest total **including `alwaysOnExtracted`**, not the pointer-forced subtotal. Against the true 106,931-byte baseline, the ≤45,000 target is a 58% cut, not the 50% it would appear to be from `AGENTS.md` alone.
+
+### 12d. Gap 2 — "let the model use judgement" is surface-asymmetric; the deletion criterion is enforcement, not model capability
+
+**This is the founder's central question, and the article does not answer it — it is written by and for a single-surface product (Claude Code on Opus 5 / Fable 5).** DPF is explicitly four peer surfaces (`AGENTS.md` §17) plus in-portal coworkers, and the guidance's premise does not distribute evenly across them:
+
+| Surface | Reads `AGENTS.md`? | Judgement premise holds? |
+|---|---|---|
+| Claude Code (Opus 5 / Fable 5) | yes, via pointer | **yes** — the population the article was evaluated on |
+| Codex CLI | yes, via `AGENTS.md` natively | **unverified** — no DPF eval exists |
+| Grok CLI | yes, via pointer | **unverified** |
+| Build Studio / in-portal coworkers | no — prompts + seeded skills | **no** — the binding window is the ~24,576-token *local* served window and the ~15-tool selection cliff (`docs/architecture/context-engineering-standards.md`) |
+
+Deleting a rule because "the model can now judge it" is therefore a bet placed on the **strongest** surface and paid for by the **weakest**. Since `AGENTS.md` is one shared file, a deletion that Opus 5 absorbs silently degrades the local-model path where DPF's founder strategy actually lives.
+
+**The safe criterion is not model capability — it is enforcement.** DPF already has the discriminator the article lacks, and it is DPF's own §17 keystone (*governance approves evidence, not provenance*):
+
+> **A rule may be shortened to a one-line statement + pointer when a hook, CI gate, or tool schema enforces it deterministically.** The enforcement is surface-agnostic by construction, so the shortening is safe on all four surfaces. A rule that is *not* mechanically enforced must keep enough prose for the **weakest** surface to comply, or be promoted to enforcement first (this spec's §5 guardify-twice-failed sub-rule).
+
+This criterion is *more* aggressive than the article for DPF's enforced rules — `AGENTS.md` says "Enforced in CI" 16 times, and each such paragraph currently restates the rule, its rationale, its failure anecdote, and its BI number in always-on prose when the gate already blocks the PR. It is *less* aggressive than the article for unenforced judgement calls. Phase 1 should tier each section by this criterion rather than by prose length alone.
+
+### 12e. Gap 3 — moving procedure into skills does not help unless the skills themselves are progressively disclosed
+
+All **31** DPF skills are single-file monoliths: `packages/dpf-skill-pack/skills/*/` contains **exactly one file each**, 250,245 bytes total, largest 210 lines. There is no `reference/`, no sub-file, no `@`-mention tree — the article's specific recommendation for long skills ("divide it into many files and split them out").
+
+Phase 1 moves `AGENTS.md` §4/§6/§8/§16 procedure *into* these files. Loading a 210-line skill to answer a two-line question is a smaller version of the problem this spec exists to fix. **Phase 1 should split any destination skill past ~150 lines into `SKILL.md` (trigger + decision spine) + `reference/*.md` (the steps)**, so the second disclosure level exists before procedure lands on it.
+
+### 12f. Gap 4 — the ratchet is a byte gate with no behavioural counterpart
+
+§4c is explicit that the ratchet is "deliberately dumb," and that is correct for what it does. But byte reduction and doctrine *compliance* are different quantities, and Phase 1 currently has no way to detect that it cut 58% and broke a rule. The article's own claim is framed as *"no measurable loss on our coding evaluations"* — the eval is what licenses the deletion. DPF has the substrate for the equivalent (`apps/web/lib/tak/context-economy-metrics.ts`, the golden-journey certification sweep) but points none of it at contributor sessions.
+
+**Recommended Phase 1 acceptance addition:** a small compliance set — one task per commandment-tier rule (DCO sign-off, branch guard, no-hardcoded-colors, worktree-not-runtime, consult-scopes-before-asking) run against pre- and post-split doctrine on at least Claude Code **and** one non-Claude surface. Without it the 58% cut is unfalsifiable, and per §12d it is exactly the non-Claude surfaces that would absorb the regression.
+
+### 12g. Other optimizations worth considering (beyond the article)
+
+1. **Directory-scoped `AGENTS.md`.** §3 of the root file notes subdirectory files "MAY extend this… none exist today." Both Claude Code and Codex load nested `AGENTS.md` by path proximity — a genuine, zero-cost progressive-disclosure channel that Phase 1 should use as a *destination tier* alongside skills: `apps/web/AGENTS.md` (§12 UI styling), `packages/db/AGENTS.md` (§3 enums, §11 stewardship, migration safety), `scripts/AGENTS.md`. Rules land closer to the code they govern and cost nothing to sessions working elsewhere.
+2. **Residual restatement inside the doctrine plane.** "Worktree is source-control, not runtime" is stated in §4, §5, §6 and §14; the canonical worktree location in §4 (twice) and §17. The §8/§8a *advise-safe* duplicate is removed on this branch. The spec's Problem 1 concluded duplication was low — that holds for *principle links*, but not for these load-bearing operational rules, which are restated in different words each time (the §2 drift failure mode).
+3. **Apply DPF's own `?tier=core` idea to prose.** The MCP surface already ships a curated core tier. The same shape fits doctrine: a core `AGENTS.md` plus named on-demand tiers, which is what Phase 1 builds — worth stating explicitly so the two surfaces stay conceptually aligned.
+4. **`triggerPattern` regexes are the article's "examples" anti-pattern.** Every skill carries both a natural-language `description` (Surface A) and a hand-maintained `triggerPattern` regex (Surface B) — two encodings of the same routing intent, which can and do drift. The article's *design interfaces, don't give examples* argues for letting the description do the work on both surfaces. Worth a scoped follow-on, not Phase 1.
+5. **Dual frontmatter (`allowed-tools` / `allowedTools`) is duplicated per skill.** Same SSOT hazard, and both are billed to the always-on plane now that §12c measures it.
+6. **`SessionStart` hook output is always-on context too.** The janitor, freshness, governance-freshness and process-spine banners print into every session and are outside the manifest. Not urgent at current size, but it is the next unmeasured tier once §12c closes this one.
+
+### 12h. Net assessment
+
+The article does not change this spec's decision; it **independently converges on Option B** and supplies the outside-view argument for a target the founder was still weighing in §11 Q1 (the ~35k stretch now looks defensible, not aggressive). Its transferable core — *progressive disclosure, single statement per rule, design the interface instead of demonstrating it* — is structural and holds on every surface. Its headline move — *delete constraints and trust model judgement* — is **not** portable as stated, and adopting it verbatim would be a bet on Opus 5 charged to the local-model path. §12d's enforcement criterion is the portable form, and it is one DPF is unusually well-placed to apply because the enforcement already exists.

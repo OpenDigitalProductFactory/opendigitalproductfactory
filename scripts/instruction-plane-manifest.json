@@ -1,12 +1,21 @@
 {
-  "_comment": "Always-on agent instruction plane (BI-0020D511, Phase 0). The ratchet (scripts/check-instruction-plane-size.mjs) sums BYTES across `alwaysOn` and forbids growth past scripts/instruction-plane-baseline.txt; the `pointerFile` may only force files listed in `alwaysOn` (closure check). Design: docs/superpowers/specs/2026-07-24-agent-instruction-plane-split-and-ratchet-design.md §4c.",
+  "_comment": "Always-on agent instruction plane (BI-0020D511). The ratchet (scripts/check-instruction-plane-size.mjs) sums BYTES across `alwaysOn` plus every `alwaysOnExtracted` group, and forbids growth past scripts/instruction-plane-baseline.txt; the `pointerFile` may only force files listed in `alwaysOn` (closure check). Design: docs/superpowers/specs/2026-07-24-agent-instruction-plane-split-and-ratchet-design.md §4c (pointer-forced tier) and §12 (harness-injected tier).",
   "pointerFile": "CLAUDE.md",
   "alwaysOn": [
     "CLAUDE.md",
     "AGENTS.md",
     "CONVENTIONS.md"
   ],
+  "_alwaysOnExtractedComment": "The second always-on tier: content the HARNESS injects rather than the pointer forcing. Claude Code and Codex load every installed skill's frontmatter name+description into the system prompt of EVERY session; the bodies stay progressive-disclosure. Without this tier the Phase 1 split could shrink AGENTS.md by relocating prose into skill descriptions and the ratchet would report a win that never happened.",
+  "alwaysOnExtracted": [
+    {
+      "id": "dpf-skill-pack-descriptions",
+      "glob": "packages/dpf-skill-pack/skills/*/SKILL.md",
+      "fields": ["name", "description"]
+    }
+  ],
   "perSectionCharBudget": 6000,
   "maxLineChars": 800,
+  "maxExtractedItemChars": 700,
   "structuralStrict": false
 }
