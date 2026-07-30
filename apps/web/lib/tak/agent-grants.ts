@@ -1,7 +1,7 @@
 // Direct JSON import — bundler resolves this at build time, works in both dev and Docker standalone
 import agentRegistryData from "../../../../packages/db/data/agent_registry.json";
+import { PRODUCT_MANAGEMENT_TOOL_GRANTS } from "./product-management-tool-grants";
 const agentRegistry = agentRegistryData as { agents: Array<Record<string, unknown>> };
-
 /**
  * Implications between agent grant categories. A grant on the left of the
  * mapping implicitly satisfies every grant on the right. Used to refactor
@@ -136,6 +136,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   create_backlog_item: ["backlog_write"],
   update_backlog_item: ["backlog_write"],
   score_demand_item: ["backlog_write"],
+  ...PRODUCT_MANAGEMENT_TOOL_GRANTS,
   record_effort_estimate: ["backlog_write"],
   set_demand_policy: ["backlog_write"],
   set_backlog_delivery_budget: ["backlog_write"],
@@ -571,7 +572,6 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   create_asset_variant:         ["marketing_write"],
   record_variant_result:        ["marketing_write"],
   get_battlecards:              ["marketing_read"],
-  propose_product_research:     ["marketing_write"],
   create_battlecard:            ["marketing_write"],
   get_work_engagement_instances:   ["work_engagement_read"],
   create_recurring_work_engagement: ["work_engagement_write"],

@@ -55,6 +55,26 @@ counted as completed.
 
 ## Shared Demand
 
+### Activate local demand
+
+The first lane in **Operations > Delivery Flow** is **Needs classification**.
+It contains historical or unscoped backlog requests whose product-demand intent
+cannot be inferred safely. Classify only real demand; do not create a product,
+team, customer, subscriber, or entitlement to make a card look complete.
+
+An item advances one adjacent stage at a time:
+
+- **Raw → Screened** requires a stated problem and reviewed evidence.
+- **Screened → Shaped** requires a computable, explainable score, visible
+  confidence, a selected investment bucket, and reconciled effort provenance.
+- **Shaped → Ready** requires the existing organization-governed funding
+  decision.
+
+Use **Link evidence** to retain a stable source reference. Booking, order,
+subscription, and fulfillment records are evidence only when they really
+exist. The completeness line measures classified, evidence-linked,
+explainably-scored, and funding-decided records; it does not reward clicks.
+
 Open **Operations > Delivery Flow** (`/ops/demand`) to review demand shared by
 approved DPF connections. A shared item is an observation from another
 installation, not a local backlog item. You can follow it, offer help, or adopt

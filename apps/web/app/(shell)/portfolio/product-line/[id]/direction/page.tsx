@@ -1,7 +1,9 @@
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { ProductDirectionBrief } from "@/components/product/direction/ProductDirectionBrief";
-import { ProductLineComparison } from "@/components/product/ProductLineComparison";
+import { ProductRoadmap } from "@/components/product/direction/ProductRoadmap";
+import { ProductManagementPlaybooks } from "@/components/product/direction/ProductManagementPlaybooks";
+import { ProductLinePerformance } from "@/components/product/ProductLinePerformance";
 import {
   ProductManagementAccessError,
   ProductManagementOrganizationNotFoundError,
@@ -9,7 +11,14 @@ import {
 } from "@/lib/product-management/current-product-operating-context.server";
 import { ProductOperatingContextNotFoundError } from "@/lib/product-management/product-operating-context-query";
 import { buildProductDirectionView } from "@/lib/product-management/product-direction-view";
-import { buildProductLineComparison } from "@/lib/product-management/product-line-direction-view";
+import { buildProductLinePerformance } from "@/lib/product-management/product-performance";
+import { buildStakeholderBriefFromOperatingContext } from "@/lib/product-management/product-management-brief";
+import { buildProductManagementAdoptionEvidence } from "@/lib/product-management/product-management-adoption";
+import {
+  resolveProductRoadmapAudience,
+  resolveProductRoadmapView,
+} from "@/lib/product-management/product-roadmap";
+import { projectProductRoadmapFromOperatingContext } from "@/lib/product-management/product-roadmap-operating-context";
 import {
   NAV_MODE_COOKIE,
   resolveNavModeFromCookie,
@@ -17,10 +26,15 @@ import {
 
 export default async function ProductLineDirectionPage({
   params,
+  searchParams = Promise.resolve({}),
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{
+    view?: string | string[];
+    audience?: string | string[];
+  }>;
 }) {
-  const { id } = await params;
+  const [{ id }, query] = await Promise.all([params, searchParams]);
   let context;
   try {
     context = await loadCurrentProductOperatingContextByKey(
@@ -46,12 +60,40 @@ export default async function ProductLineDirectionPage({
     context,
     navMode === "worker" ? "guided" : "professional",
   );
-  const rows = buildProductLineComparison(context);
+  const performance = buildProductLinePerformance(context);
+  const one = (value: string | string[] | undefined) =>
+    Array.isArray(value) ? value[0] : value;
+  const roadmapAudience = resolveProductRoadmapAudience(
+    one(query.audience),
+    navMode === "worker" ? "owner-operator" : "product-manager",
+  );
 
   return (
     <div className="space-y-dpf-xl">
-      <ProductLineComparison rows={rows} />
+      <ProductLinePerformance
+        view={performance}
+        audience={
+          navMode === "worker" ? "owner-operator" : "professional-pm"
+        }
+      />
+      <ProductRoadmap
+        scopeId={id}
+        scopeHref={`/portfolio/product-line/${encodeURIComponent(id)}/direction`}
+        workspace={projectProductRoadmapFromOperatingContext(context)}
+        view={resolveProductRoadmapView(one(query.view))}
+        audience={roadmapAudience}
+      />
       <ProductDirectionBrief context={context} view={view} showLead={false} />
+      <ProductManagementPlaybooks
+        scope={context.scope}
+        audience={view.audience}
+        scheduledPlaybooks={context.scheduledPlaybooks.items}
+        snapshot={buildStakeholderBriefFromOperatingContext({
+          context,
+          view,
+        })}
+        adoptionEvidence={buildProductManagementAdoptionEvidence({ context })}
+      />
     </div>
   );
 }

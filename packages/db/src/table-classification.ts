@@ -38,6 +38,12 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   DigitalProduct: "internal",
   ProductLine: "internal",
   Product: "internal",
+  ProductObjective: "internal",
+  ProductObjectiveWork: "internal",
+  // Outcome narratives/provenance and linked demand evidence can carry
+  // customer-derived context even though their owning product records do not.
+  ProductOutcomeObservation: "confidential",
+  DemandEvidenceLink: "confidential",
   ProductOffering: "internal",
   CatalogItem: "internal",
   ProductConfiguration: "internal",

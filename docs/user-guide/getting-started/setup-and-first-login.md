@@ -21,6 +21,20 @@ order: 3
    adjacent lines the business genuinely sells. The organization is the
    provider by default; setup does not create placeholder customers, teams,
    subscribers, or entitlements.
+9. New backlog demand explicitly linked to one of those confirmed product
+   lines, business Products, or a real `DigitalProduct` enters Delivery Flow as
+   **Raw**. Existing unscoped backlog records remain **Needs classification**;
+   setup never guesses their intent or backfills a score.
+10. Product and product-line roadmaps remain empty until real demand passes the
+    governed funding gate and is explicitly linked to an active product
+    objective. Setup does not manufacture roadmap bets, dates, dependencies,
+    teams, or consumers from the selected product mix.
+11. Setup does not activate recurring product-management work. After real
+    product evidence exists, an owner may open Product or ProductLine
+    **Direction**, preview a coworker playbook's exact read/write and approval
+    boundary, and explicitly opt into its suggested cadence. A simple
+    one-line business is not asked to configure enterprise scheduling,
+    product teams, business units, or placeholder consumers.
 
 ## Help Visibility Policy
 

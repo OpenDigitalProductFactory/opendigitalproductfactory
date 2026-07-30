@@ -123,6 +123,13 @@ a source unavailable until real offerings, purchases, research, delivery work,
 or architecture links exist. Adding another product line changes what is
 disclosed, not the underlying provider/consumer model.
 
+Setup also does not ask for targets, baseline values, owners, or outcome
+observations. After launch, define those only for a real business Product from
+**Products → Direction → Outcomes**. A one-line business sees the same simple
+outcome form as a mixed business; product-line rollups remain derived from the
+Products underneath rather than requiring enterprise planning fields during
+setup.
+
 Setup does not schedule market research or invent competitor knowledge. After
 launch, an operator may open a business Product's **Direction → Intelligence**
 page to preview a focused proposal or an optional recurring proposal-only scan.

@@ -43,10 +43,34 @@ describe("resolveRouteContext", () => {
 
   it("matches product estate routes ahead of the broader portfolio context", () => {
     const ctx = resolveRouteContext("/portfolio/product/prod-123/inventory");
-    expect(ctx.domain).toBe("Digital Product Estate");
+    expect(ctx.domain).toBe("Products");
     expect(ctx.routePrefix).toBe("/portfolio/product");
     expect(ctx.domainTools).toContain("review_estate_identity");
     expect(ctx.domainTools).toContain("explain_blast_radius");
+    expect(ctx.domainTools).toContain("create_product_objective");
+    expect(ctx.domainTools).toContain("record_product_outcome_observation");
+    expect(ctx.domainTools).toContain("evaluate_org_business_decision");
+    expect(
+      ctx.skills.some((skill) => skill.label === "Review this roadmap"),
+    ).toBe(true);
+    expect(ctx.domainContext).toContain("fabricate a roadmap date");
+  });
+
+  it("routes product-line advice through the business WWWD boundary", () => {
+    const ctx = resolveRouteContext(
+      "/portfolio/product-line/line-1/direction",
+    );
+    expect(ctx.domain).toBe("Product-line Direction");
+    expect(ctx.routePrefix).toBe("/portfolio/product-line");
+    expect(ctx.domainTools).toContain("evaluate_org_business_decision");
+    expect(
+      ctx.skills.some(
+        (skill) => skill.label === "Ask what this business would do",
+      ),
+    ).toBe(true);
+    expect(
+      ctx.skills.some((skill) => skill.label === "Review the line roadmap"),
+    ).toBe(true);
   });
 
   it("falls back to workspace for unknown routes", () => {

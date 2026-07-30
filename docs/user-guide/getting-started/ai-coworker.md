@@ -60,6 +60,56 @@ The Phase 6 preview performs no write; it takes you to the existing Delivery
 workflow, where any later funding or backlog mutation keeps its own governed
 confirmation.
 
+In Delivery Flow, a coworker may propose classification, evidence links,
+scoring inputs, or an effort estimate. Those proposals do not fabricate
+evidence or advance the lifecycle automatically. Scoring records an explanation
+snapshot but leaves the stage unchanged. Moving to **ready** always uses the
+organization's WWWD funding gate, records its rationale and decision
+interaction, and then offers—not silently assigns—eligible work to a coworker.
+
+On a business Product's **Direction → Outcomes** page, the coworker can
+propose a draft objective, record a review, link same-product backlog work, or
+append an observation. It must use the business Product as the owner and keep
+`DigitalProduct` focused on architecture. It must not invent an owner,
+baseline, target, observation, customer, or contributing item. A correction
+appends a superseding observation; it never edits or deletes history. Every
+side-effecting proposal still uses the normal approval boundary.
+
+On a product line's **Direction** page, the coworker can explain the cited
+performance projection and its missing measures without treating blanks as
+zero. **Ask what this business would do** turns the strongest supported
+opportunity into reversible options and calls the organization's WWWD
+decision gate. The recommendation retains its period, source records,
+confidence, blind spots, approval boundary, and follow-up measure. The
+coworker must not infer margin, capacity, stock, conversion, repeat purchase,
+quality, cannibalization, a product team, or a consumer. Page load itself
+never calls the decision gate or changes the business.
+
+On a business Product or product line roadmap, choose **Review with coworker**
+to explain which bets are genuinely committed, which records still need
+classification, funding, or an active-objective link, and which dates or
+dependencies are unsupported. The coworker may route a stakeholder review
+through the existing organization decision/audit boundary. It must not drag
+items between lanes, promise an inferred date, convert a `DigitalProduct`
+dependency into a business work dependency, or create a separate roadmap
+record. Snapshot exports are evidence packets, not importable plans.
+
+On Product and ProductLine **Direction**, recurring coworker playbooks are
+typed recipes over the same canonical operating context. Before scheduling,
+the owner sees the exact evidence sources, tools, proposed writes, approval
+boundary, cadence, and failure behavior. No global schedule is seeded, and a
+changed permission digest requires a fresh preview. A run may prepare a brief,
+recommendation, or review, but every canonical write keeps its existing
+approval gate.
+
+The scheduled card exposes current, unchanged, partial, failed, paused, and
+permission-changed states. Partial and failed runs retain the prior successful
+fingerprint so stale inputs remain eligible for recovery. **Inspect last run**
+opens the audited task history. Exports remain source-linked and
+non-importable. The coworker must report missing adoption evidence as
+unavailable and must not fabricate a product team, business unit, provider,
+consumer, subscriber, entitlement, outcome, or accepted recommendation.
+
 ## WWMD And Autonomy
 
 When a coworker hits an ambiguous decision, it should not guess from chat context alone. WWMD is the decision gate that lets the coworker consult the founder-kernel wiki and score options against platform principles.

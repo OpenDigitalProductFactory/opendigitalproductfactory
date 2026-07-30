@@ -4,16 +4,11 @@
   "decisionInteractionId": "DI-26D56D03E6BD",
   "scope": {
     "files": [
-      "apps/web/app/(shell)/portfolio/product-line/[id]/direction/page.tsx",
-      "apps/web/app/(shell)/portfolio/product/[id]/direction/intelligence/page.tsx",
-      "apps/web/app/(shell)/portfolio/product/[id]/direction/outcomes/page.tsx",
-      "apps/web/app/(shell)/portfolio/product/[id]/direction/page.tsx",
-      "apps/web/app/(shell)/portfolio/product/[id]/direction/roadmap/page.tsx",
-      "apps/web/app/(shell)/storefront/items/[id]/catalog/page.tsx",
-      "apps/web/app/(shell)/storefront/items/[id]/purchases/page.tsx",
-      "apps/web/components/product/intelligence/ProductIntelligenceControls.tsx",
-      "apps/web/components/storefront-admin/CatalogBuilderPanel.tsx",
-      "apps/web/components/storefront-admin/ItemFormDialog.tsx"
+      "apps/web/components/ops/DemandBoard.tsx",
+      "apps/web/components/product/direction/ProductManagementPlaybooks.tsx",
+      "apps/web/components/product/direction/ProductOutcomeEvidenceForms.tsx",
+      "apps/web/components/product/direction/ProductOutcomes.tsx",
+      "apps/web/components/platform/SkillsObservatoryPanel.tsx"
     ]
   },
   "evidence": {

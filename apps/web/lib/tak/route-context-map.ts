@@ -4,6 +4,8 @@
 import { resolveDocsPath } from "@/lib/docs-route-map";
 import { CHANGE_REVIEWER_ROUTE_CONTEXT } from "./change-reviewer-route";
 import { PERFORMANCE_ROUTE_CONTEXT } from "./performance-route";
+import { PRODUCT_LINE_ROUTE_CONTEXT } from "./product-line-route-context";
+import { PRODUCT_ROUTE_CONTEXT } from "./product-route-context";
 import type { RouteContextDef } from "./route-context-types";
 export type { RouteContextDef } from "./route-context-types";
 
@@ -138,6 +140,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       },
     ],
   },
+  "/portfolio/product-line": PRODUCT_LINE_ROUTE_CONTEXT,
 
   "/inventory": {
     routePrefix: "/inventory",
@@ -224,61 +227,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     ],
   },
 
-  "/portfolio/product": {
-    routePrefix: "/portfolio/product",
-    domain: "Digital Product Estate",
-    sensitivity: "internal",
-    domainContext:
-      "This page shows the managed estate for one digital product. The goal is to explain what supports the product, what it depends on, how strong the discovery evidence is, and where lifecycle or vulnerability posture may create risk. Emphasize manufacturer, version confidence, support status, dependencies, and purpose alignment.",
-    domainTools: [
-      "summarize_estate_posture",
-      "review_estate_identity",
-      "validate_version_confidence",
-      "explain_blast_radius",
-      "wiki_query",
-      "search_knowledge",
-      "search_knowledge_base",
-    ],
-    docsPath: "/docs/products/index",
-    skills: [
-      {
-        label: "Summarize estate posture",
-        description: "Highlight the biggest support, freshness, and evidence risks",
-        capability: "view_inventory",
-        prompt: "Summarize the estate posture for this product and tell me what needs attention first.",
-      },
-      {
-        label: "Review item identity",
-        description: "Explain who made the item, what it likely is, and how solid that identity is",
-        capability: "view_inventory",
-        prompt: "Review the identity evidence for this item and tell me what we know versus what still needs review.",
-      },
-      {
-        label: "Explain blast radius",
-        description: "Show what breaks or becomes unreachable if an item fails",
-        capability: "view_inventory",
-        prompt: "Explain the blast radius for the item I'm looking at.",
-      },
-      {
-        label: "Check support posture",
-        description: "Assess vendor support lifecycle and update posture",
-        capability: "view_inventory",
-        prompt: "Check the support posture for this item.",
-      },
-      {
-        label: "Check version confidence",
-        description: "Explain how strong the version evidence really is",
-        capability: "view_inventory",
-        prompt: "Check how confident we are in the version information for this item.",
-      },
-      {
-        label: "Report an issue",
-        description: "Report a bug or give feedback",
-        capability: null,
-        prompt: "I'd like to report an issue or give feedback about this page.",
-      },
-    ],
-  },
+  "/portfolio/product": PRODUCT_ROUTE_CONTEXT,
 
   "/ea": {
     routePrefix: "/ea",

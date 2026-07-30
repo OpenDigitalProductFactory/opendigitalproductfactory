@@ -25,18 +25,37 @@ vi.mock(
   }),
 );
 
-vi.mock("@/components/product/ProductLineComparison", () => ({
-  ProductLineComparison: ({
-    rows,
+vi.mock("@/components/product/ProductLinePerformance", () => ({
+  ProductLinePerformance: ({
+    view,
   }: {
-    rows: Array<{ name: string }>;
-  }) => <div data-comparison>{rows.map((row) => row.name).join(",")}</div>,
+    view: { products: Array<{ name: string }> };
+  }) => (
+    <div data-comparison>
+      {view.products.map((row) => row.name).join(",")}
+    </div>
+  ),
 }));
 
 vi.mock(
   "@/components/product/direction/ProductDirectionBrief",
   () => ({
     ProductDirectionBrief: () => <div data-direction-brief />,
+  }),
+);
+vi.mock(
+  "@/components/product/direction/ProductManagementPlaybooks",
+  () => ({
+    ProductManagementPlaybooks: () => <div data-playbooks />,
+  }),
+);
+vi.mock(
+  "@/lib/product-management/product-management-brief",
+  () => ({
+    buildStakeholderBriefFromOperatingContext: () => ({
+      schemaVersion: 1,
+      importable: false,
+    }),
   }),
 );
 

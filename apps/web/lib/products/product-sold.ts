@@ -1,9 +1,4 @@
 import { newId } from "../shared/new-id";
-export {
-  persistProductSoldComponentAllocations,
-  snapshotProductSoldComponents,
-  transitionProductSoldByEvidence,
-} from "./product-sold-commercial-persistence";
 export { summarizeProductSoldRevenue } from "./commercial-performance";
 
 export const PRODUCT_SOLD_STATUSES = [
@@ -472,6 +467,13 @@ export function evidenceSourceData(
 export async function materializeProductSold(input: {
   db: ProductSoldWriteClient;
   draft: ReturnType<typeof createProductSoldDraft>;
+  collectChange?: (change: {
+    organizationId: string;
+    businessProductId: string;
+    sourceKind: "product-sold";
+    sourceId: string;
+    changedAt: Date;
+  }) => Promise<void>;
 }): Promise<{ id: string; productSoldId: string; evidenceId: string }> {
   const draft = input.draft;
   const source = evidenceSourceData(
@@ -533,6 +535,13 @@ export async function materializeProductSold(input: {
   if (!evidenceId) {
     throw new Error("Product Sold materialization lost its source evidence");
   }
+  await input.collectChange?.({
+    organizationId: draft.organizationId,
+    businessProductId: draft.productId,
+    sourceKind: "product-sold",
+    sourceId: result.productSoldId,
+    changedAt: draft.purchasedAt,
+  });
   return {
     id: result.id,
     productSoldId: result.productSoldId,

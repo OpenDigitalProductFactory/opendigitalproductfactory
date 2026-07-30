@@ -9,6 +9,10 @@
 import { attributeBacklogPortfolio, prisma } from "@dpf/db";
 import { BACKLOG_SCOPE_KIND_VALUES } from "@/lib/explore/backlog";
 import type { ToolResult } from "../mcp-tools";
+import {
+  resolveProductManagementScopeRefs,
+  type ProductManagementScope,
+} from "@/lib/product-management/product-management-scope";
 
 function cleanStringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
@@ -16,7 +20,15 @@ function cleanStringArray(value: unknown): string[] | undefined {
   return cleaned;
 }
 
-export async function handleUpdateBacklogItem(params: Record<string, unknown>): Promise<ToolResult> {
+function cleanOptionalString(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+export async function handleUpdateBacklogItem(
+  params: Record<string, unknown>,
+  userId?: string,
+  context?: { agentId?: string },
+): Promise<ToolResult> {
   const existing = await prisma.backlogItem.findUnique({ where: { itemId: String(params["itemId"]) } });
   if (!existing) return { success: false, error: "Item not found", message: `Item ${String(params["itemId"])} not found` };
   const data: Record<string, unknown> = {};
@@ -77,14 +89,70 @@ export async function handleUpdateBacklogItem(params: Record<string, unknown>): 
   // the FK ids (BacklogItem.digitalProductId / taxonomyNodeId / portfolioId).
   let explicitPortfolio = false;
   let touchedLinks = false;
-  if (typeof params["digitalProductId"] === "string") {
-    const prod = await prisma.digitalProduct.findUnique({
-      where: { productId: params["digitalProductId"] },
+  const productLineRef = cleanOptionalString(params["productLineId"]);
+  const businessProductRef = cleanOptionalString(params["businessProductId"]);
+  const digitalProductRef = cleanOptionalString(params["digitalProductId"]);
+  const productScopeTouched =
+    productLineRef !== null ||
+    businessProductRef !== null ||
+    digitalProductRef !== null;
+  let classifiedAtProductBoundary = false;
+  let classifiedScope: ProductManagementScope | null = null;
+  if (productScopeTouched) {
+    const organizationRef =
+      cleanOptionalString(params["organizationId"]) ?? existing.organizationId;
+    if (!organizationRef) {
+      return {
+        success: false,
+        error: "organization_required",
+        message:
+          "organizationId is required when assigning product-management scope.",
+      };
+    }
+    try {
+      const scope = await resolveProductManagementScopeRefs(
+        {
+          organizationRef,
+          productLineRef,
+          businessProductRef,
+          digitalProductRef,
+        },
+        prisma,
+      );
+      data["organizationId"] = scope.organizationId;
+      data["productLineId"] = scope.productLineId;
+      data["businessProductId"] = scope.businessProductId;
+      data["digitalProductId"] = scope.digitalProductId;
+      classifiedScope = scope;
+      if (existing.demandStage === null) {
+        data["demandStage"] = "raw";
+        classifiedAtProductBoundary = true;
+      }
+      touchedLinks = true;
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Invalid product-management scope.";
+      return { success: false, error: "invalid_product_scope", message };
+    }
+  } else if (cleanOptionalString(params["organizationId"])) {
+    const organization = await prisma.organization.findFirst({
+      where: {
+        OR: [
+          { id: cleanOptionalString(params["organizationId"])! },
+          { orgId: cleanOptionalString(params["organizationId"])! },
+          { slug: cleanOptionalString(params["organizationId"])! },
+        ],
+      },
       select: { id: true },
     });
-    if (!prod) return { success: false, error: "digital_product_not_found", message: `DigitalProduct ${params["digitalProductId"]} not found` };
-    data["digitalProductId"] = prod.id;
-    touchedLinks = true;
+    if (!organization) {
+      return {
+        success: false,
+        error: "organization_not_found",
+        message: `Organization ${String(params["organizationId"])} not found`,
+      };
+    }
+    data["organizationId"] = organization.id;
   }
   if (typeof params["taxonomyNodeId"] === "string") {
     const node = await prisma.taxonomyNode.findUnique({
@@ -105,7 +173,31 @@ export async function handleUpdateBacklogItem(params: Record<string, unknown>): 
     explicitPortfolio = true;
   }
 
-  await prisma.backlogItem.update({ where: { itemId: String(params["itemId"]) }, data });
+  await prisma.$transaction(async (tx) => {
+    await tx.backlogItem.update({
+      where: { itemId: String(params["itemId"]) },
+      data,
+    });
+    if (classifiedAtProductBoundary) {
+      await tx.backlogItemActivity.create({
+        data: {
+          backlogItemId: existing.id,
+          kind: "demand_classified",
+          summary: "Classified product demand into raw intake",
+          payload: {
+            from: "unclassified",
+            to: "raw",
+            organizationId: classifiedScope?.organizationId ?? null,
+            productLineId: classifiedScope?.productLineId ?? null,
+            businessProductId: classifiedScope?.businessProductId ?? null,
+            digitalProductId: classifiedScope?.digitalProductId ?? null,
+          },
+          recordedById: userId ?? null,
+          recordedByAgentId: context?.agentId ?? null,
+        },
+      });
+    }
+  });
 
   // When links changed and the portfolio wasn't explicitly pinned, re-derive the
   // denormalized portfolioId cache from the links (product -> taxonomy -> epic).

@@ -133,3 +133,35 @@ describe("set_backlog_delivery_budget", () => {
     expect(result.message).toMatch(new RegExp(`${BUILD_WIP_CAP - 1}/${BUILD_WIP_CAP} of Build Studio's shared-sandbox`));
   });
 });
+
+describe("evidence-backed demand activation tools", () => {
+  it("registers one governed tool per write and reserves ready for funding", () => {
+    for (const name of [
+      "transition_demand_item",
+      "link_demand_evidence",
+      "supersede_demand_evidence",
+    ]) {
+      expect(demandScoringPack.definitions.find((d) => d.name === name)).toMatchObject({
+        requiredCapability: "manage_backlog",
+        sideEffect: true,
+      });
+      expect(demandScoringPack.grants[name]).toEqual(["backlog_write"]);
+    }
+    const transition = demandScoringPack.definitions.find(
+      (d) => d.name === "transition_demand_item",
+    );
+    const transitionProperties = transition?.inputSchema.properties as
+      | Record<string, unknown>
+      | undefined;
+    expect(transitionProperties?.["to"]).toMatchObject({
+      enum: ["raw", "screened", "shaped"],
+    });
+  });
+
+  it("does not let score_demand_item override lifecycle stage", () => {
+    const score = demandScoringPack.definitions.find(
+      (d) => d.name === "score_demand_item",
+    );
+    expect(score?.inputSchema.properties).not.toHaveProperty("demandStage");
+  });
+});

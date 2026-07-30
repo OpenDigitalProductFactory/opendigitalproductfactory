@@ -62,6 +62,10 @@ AbsorptionPosture  reference-data  # Authored absorption classification (BI-ECO-
 EdgeNodeCertificate  domain-lifecycle-managed  # Certificate records follow the Edge Node enrollment, rotation, revocation, and cascade-delete lifecycle; an age-based purge could remove an active authorization binding.
 ProductLine  domain-lifecycle-managed  # Organization-owned hierarchy changes through explicit business-product lifecycle actions and organization cascade, never an age-based sweep.
 Product      domain-lifecycle-managed  # Organization-owned product definitions change through explicit business-product lifecycle actions and product-line cascade, never an age-based sweep.
+ProductObjective  domain-lifecycle-managed  # Product objectives close or archive through explicit outcome-review actions and follow the owning Product lifecycle; age alone cannot decide whether an objective is still governing work.
+ProductObjectiveWork  domain-lifecycle-managed  # Objective-to-work links follow their ProductObjective and BacklogItem parents; an independent age sweep would sever active outcome traceability.
+ProductOutcomeObservation  domain-lifecycle-managed  # Append-only observations and corrections follow the owning objective and its explicit review lifecycle; age-based deletion would break the outcome-learning chain.
+DemandEvidenceLink  domain-lifecycle-managed  # Reviewed demand evidence is superseded or removed through the canonical BacklogItem lifecycle; an independent sweep would make investment scores unexplainable.
 OperationalSceneLayout  domain-lifecycle-managed  # Operator-authored geometry follows the owning organization's explicit layout lifecycle and cascades with the organization; an age-based sweep could delete an active floor plan.
 ProductOffering  domain-lifecycle-managed  # Organization-owned commercial packaging follows explicit offering status/effective-date actions and product cascade, never an age-based sweep.
 CatalogItem  domain-lifecycle-managed  # Canonical ways-to-buy follow explicit catalog status/effective-date actions and offering cascade, never an age-based sweep.

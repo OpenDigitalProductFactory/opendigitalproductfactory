@@ -1,103 +1,38 @@
 /**
- * Canonical scope contract for product-management intelligence.
- *
- * Business ProductLine/Product scope and EEMD DigitalProduct scope are
- * intentionally independent. One record can target at most one narrower
- * boundary; no caller may infer a business target from a digital product (or
- * vice versa), and organization-wide evidence remains a first-class case.
+ * Compatibility adapter for the Phase 7 intelligence imports. The canonical
+ * scope contract now lives in product-management-scope so demand, intelligence,
+ * objectives, and later roadmap projections cannot drift into parallel rules.
  */
 
-export type ProductIntelligenceScopeKind =
-  | "organization"
-  | "product-line"
-  | "business-product"
-  | "digital-product";
+import {
+  ProductManagementScopeError,
+  assertProductManagementScopeExists,
+  buildExactProductManagementScopeWhere,
+  buildProductManagementProjectionWhere,
+  cleanProductManagementScopeId,
+  normalizeProductManagementScope,
+  productManagementScopeLabel,
+  type ProductManagementScope,
+  type ProductManagementScopeClient,
+  type ProductManagementScopeErrorCode,
+  type ProductManagementScopeInput,
+  type ProductManagementScopeKind,
+} from "./product-management-scope";
 
-export type ProductIntelligenceScopeInput = {
-  organizationId: string;
-  productLineId?: string | null;
-  businessProductId?: string | null;
-  digitalProductId?: string | null;
+export {
+  ProductManagementScopeError as ProductIntelligenceScopeError,
+  assertProductManagementScopeExists as assertProductIntelligenceScopeExists,
+  buildExactProductManagementScopeWhere as buildExactProductIntelligenceScopeWhere,
+  normalizeProductManagementScope as normalizeProductIntelligenceScope,
+  productManagementScopeLabel as productIntelligenceScopeLabel,
 };
 
-export type ProductIntelligenceScope = {
-  kind: ProductIntelligenceScopeKind;
-  organizationId: string;
-  productLineId: string | null;
-  businessProductId: string | null;
-  digitalProductId: string | null;
-};
-
+export type ProductIntelligenceScopeKind = ProductManagementScopeKind;
+export type ProductIntelligenceScopeInput = ProductManagementScopeInput;
+export type ProductIntelligenceScope = ProductManagementScope;
 export type ProductIntelligenceScopeErrorCode =
-  | "organization-required"
-  | "conflicting-scope"
-  | "scope-not-found";
-
-export class ProductIntelligenceScopeError extends Error {
-  constructor(
-    readonly code: ProductIntelligenceScopeErrorCode,
-    message: string,
-  ) {
-    super(message);
-    this.name = "ProductIntelligenceScopeError";
-  }
-}
-
-function cleanId(value: string | null | undefined): string | null {
-  const cleaned = value?.trim();
-  return cleaned ? cleaned : null;
-}
-
-export function normalizeProductIntelligenceScope(
-  input: ProductIntelligenceScopeInput,
-): ProductIntelligenceScope {
-  const organizationId = cleanId(input.organizationId);
-  if (!organizationId) {
-    throw new ProductIntelligenceScopeError(
-      "organization-required",
-      "Product intelligence scope requires an organization.",
-    );
-  }
-
-  const productLineId = cleanId(input.productLineId);
-  const businessProductId = cleanId(input.businessProductId);
-  const digitalProductId = cleanId(input.digitalProductId);
-  const targets = [productLineId, businessProductId, digitalProductId].filter(Boolean);
-  if (targets.length > 1) {
-    throw new ProductIntelligenceScopeError(
-      "conflicting-scope",
-      "Choose one narrower intelligence scope: product line, business product, or digital product.",
-    );
-  }
-
-  const kind: ProductIntelligenceScopeKind = productLineId
-    ? "product-line"
-    : businessProductId
-      ? "business-product"
-      : digitalProductId
-        ? "digital-product"
-        : "organization";
-
-  return {
-    kind,
-    organizationId,
-    productLineId,
-    businessProductId,
-    digitalProductId,
-  };
-}
-
-export function buildExactProductIntelligenceScopeWhere(
-  input: ProductIntelligenceScopeInput,
-) {
-  const scope = normalizeProductIntelligenceScope(input);
-  return {
-    organizationId: scope.organizationId,
-    productLineId: scope.productLineId,
-    businessProductId: scope.businessProductId,
-    digitalProductId: scope.digitalProductId,
-  };
-}
+  ProductManagementScopeErrorCode;
+export type ProductIntelligenceScopeClient = ProductManagementScopeClient;
 
 export function buildProductIntelligenceVisibilityWhere(input: {
   organizationId: string;
@@ -105,89 +40,35 @@ export function buildProductIntelligenceVisibilityWhere(input: {
   businessProductId: string;
   enablingDigitalProductIds?: string[];
 }) {
-  const organizationId = cleanId(input.organizationId);
-  const productLineId = cleanId(input.productLineId);
-  const businessProductId = cleanId(input.businessProductId);
+  const organizationId = cleanProductManagementScopeId(input.organizationId);
+  const productLineId = cleanProductManagementScopeId(input.productLineId);
+  const businessProductId = cleanProductManagementScopeId(
+    input.businessProductId,
+  );
   if (!organizationId || !productLineId || !businessProductId) {
-    throw new ProductIntelligenceScopeError(
+    throw new ProductManagementScopeError(
       "organization-required",
       "Product intelligence visibility requires an organization, product line, and business product.",
     );
   }
-
-  return buildProductIntelligenceProjectionWhere({
+  return buildProductManagementProjectionWhere({
     organizationId,
     productLineIds: [productLineId],
     businessProductIds: [businessProductId],
     digitalProductIds: input.enablingDigitalProductIds,
   });
 }
+export const buildProductIntelligenceProjectionWhere =
+  buildProductManagementProjectionWhere;
 
-function uniqueIds(values: Array<string | null | undefined>): string[] {
+function uniqueIds(values: string[]): string[] {
   return Array.from(
-    new Set(values.map(cleanId).filter((id): id is string => Boolean(id))),
+    new Set(
+      values
+        .map(cleanProductManagementScopeId)
+        .filter((id): id is string => Boolean(id)),
+    ),
   ).sort();
-}
-
-export function buildProductIntelligenceProjectionWhere(input: {
-  organizationId: string;
-  productLineIds?: string[];
-  businessProductIds?: string[];
-  digitalProductIds?: string[];
-}) {
-  const organizationId = cleanId(input.organizationId);
-  if (!organizationId) {
-    throw new ProductIntelligenceScopeError(
-      "organization-required",
-      "Product intelligence visibility requires an organization.",
-    );
-  }
-  const productLineIds = uniqueIds(input.productLineIds ?? []);
-  const businessProductIds = uniqueIds(input.businessProductIds ?? []);
-  const digitalProductIds = uniqueIds(input.digitalProductIds ?? []);
-  return {
-    organizationId,
-    OR: [
-      {
-        productLineId: null,
-        businessProductId: null,
-        digitalProductId: null,
-      },
-      ...(productLineIds.length > 0
-        ? [
-            {
-              productLineId:
-                productLineIds.length === 1
-                  ? productLineIds[0]
-                  : { in: productLineIds },
-              businessProductId: null,
-              digitalProductId: null,
-            },
-          ]
-        : []),
-      ...(businessProductIds.length > 0
-        ? [
-            {
-              productLineId: null,
-              businessProductId:
-                businessProductIds.length === 1
-                  ? businessProductIds[0]
-                  : { in: businessProductIds },
-              digitalProductId: null,
-            },
-          ]
-        : []),
-      ...(digitalProductIds.length > 0
-        ? [
-            {
-              productLineId: null,
-              businessProductId: null,
-              digitalProductId: { in: digitalProductIds },
-            },
-          ]
-        : []),
-    ],
-  };
 }
 
 export function buildScheduledProductIntelligenceVisibilityWhere(input: {
@@ -195,9 +76,9 @@ export function buildScheduledProductIntelligenceVisibilityWhere(input: {
   productLineIds?: string[];
   businessProductIds?: string[];
 }) {
-  const organizationId = cleanId(input.organizationId);
+  const organizationId = cleanProductManagementScopeId(input.organizationId);
   if (!organizationId) {
-    throw new ProductIntelligenceScopeError(
+    throw new ProductManagementScopeError(
       "organization-required",
       "Scheduled product intelligence visibility requires an organization.",
     );
@@ -232,84 +113,4 @@ export function buildScheduledProductIntelligenceVisibilityWhere(input: {
         : []),
     ],
   };
-}
-
-export type ProductIntelligenceScopeClient = {
-  organization: {
-    findFirst: (args: any) => Promise<unknown>;
-  };
-  productLine: {
-    findFirst: (args: any) => Promise<unknown>;
-  };
-  product: {
-    findFirst: (args: any) => Promise<unknown>;
-  };
-  digitalProduct: {
-    findFirst: (args: any) => Promise<unknown>;
-  };
-};
-
-export async function assertProductIntelligenceScopeExists(
-  scope: ProductIntelligenceScope,
-  db: ProductIntelligenceScopeClient,
-): Promise<void> {
-  const organization = await db.organization.findFirst({
-    where: { id: scope.organizationId },
-    select: { id: true },
-  });
-  if (!organization) {
-    throw new ProductIntelligenceScopeError(
-      "scope-not-found",
-      "The organization for this intelligence scope was not found.",
-    );
-  }
-
-  const target =
-    scope.kind === "product-line"
-      ? await db.productLine.findFirst({
-          where: {
-            id: scope.productLineId,
-            organizationId: scope.organizationId,
-            effectiveTo: null,
-          },
-          select: { id: true },
-        })
-      : scope.kind === "business-product"
-        ? await db.product.findFirst({
-            where: {
-              id: scope.businessProductId,
-              organizationId: scope.organizationId,
-              effectiveTo: null,
-            },
-            select: { id: true },
-          })
-        : scope.kind === "digital-product"
-          ? await db.digitalProduct.findFirst({
-              where: {
-                id: scope.digitalProductId,
-                organizationId: scope.organizationId,
-              },
-              select: { id: true },
-            })
-          : organization;
-
-  if (!target) {
-    throw new ProductIntelligenceScopeError(
-      "scope-not-found",
-      `The ${scope.kind} target is not available in this organization.`,
-    );
-  }
-}
-
-export function productIntelligenceScopeLabel(scope: ProductIntelligenceScope): string {
-  switch (scope.kind) {
-    case "product-line":
-      return "Product line";
-    case "business-product":
-      return "Product";
-    case "digital-product":
-      return "Digital architecture";
-    default:
-      return "Whole business";
-  }
 }

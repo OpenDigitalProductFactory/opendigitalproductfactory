@@ -3,6 +3,7 @@ import {
   classifyEvidenceFreshness,
   sortNewestFirst,
 } from "../portfolio/evidence-view-adapters";
+import type { ProductObjectiveView } from "./outcomes";
 
 export type ProductOperatingScope =
   | { kind: "organization"; id: string }
@@ -109,14 +110,58 @@ export type IntelligenceContextItem = ContextItem & {
 export type DemandContextItem = ContextItem & {
   title: string;
   status: string;
+  workType?: string | null;
+  productLineId?: string | null;
+  businessProductId?: string | null;
   demandStage?: string | null;
   score?: number | null;
+  effortSize?: string | null;
+  investmentBucket?: string | null;
+  evidenceCount?: number;
+  readiness?: {
+    classified: boolean;
+    evidenceReady: boolean;
+    scoreReady: boolean;
+    fundingReady: boolean;
+  };
+  blockers?: string[];
+  latestDecision?: {
+    summary: string;
+    recordedAt: Date;
+    payload: Record<string, unknown>;
+  } | null;
+  lastEvidenceChange?: {
+    kind: string;
+    summary: string;
+    recordedAt: Date;
+  } | null;
+  delivery?: {
+    sourceId: string;
+    phase: string;
+    asOf: Date;
+    shippedAt: Date | null;
+  } | null;
 };
 
 export type NamedStatusContextItem = ContextItem & {
   title: string;
   status: string;
 };
+
+export type RoadmapCoordinationContextItem = NamedStatusContextItem & {
+  coordinationKind: "architecture" | "delivery";
+  plannedStartAt?: Date | null;
+  plannedEndAt?: Date | null;
+  fromProductId?: string | null;
+  toProductId?: string | null;
+  relationType?: string | null;
+};
+
+export type ProductObjectiveContextItem = ContextItem &
+  ProductObjectiveView & {
+    /** Canonical business Product row id retained for line-level attribution. */
+    productId: string;
+  };
 
 export type ScheduledPlaybookContextItem = NamedStatusContextItem & {
   taskId: string;
@@ -127,7 +172,13 @@ export type ScheduledPlaybookContextItem = NamedStatusContextItem & {
   isActive: boolean;
   nextRunAt: Date | null;
   lastRunAt: Date | null;
+  taskRunId: string | null;
   lastStatus: string | null;
+  lastError: string | null;
+  taskKind: string | null;
+  recipeId: string | null;
+  permissionsDigest: string | null;
+  permissionsCurrent: boolean | null;
 };
 
 export interface ProductOperatingContextInput {
@@ -144,10 +195,10 @@ export interface ProductOperatingContextInput {
   intelligence: ContextSlice<IntelligenceContextItem>;
   demand: ContextSlice<DemandContextItem>;
   decisions: ContextSlice<NamedStatusContextItem>;
-  objectives: ContextSlice<NamedStatusContextItem>;
+  objectives: ContextSlice<ProductObjectiveContextItem>;
   roadmapInputs: ContextSlice<NamedStatusContextItem>;
-  deliveryChanges: ContextSlice<NamedStatusContextItem>;
-  architecture: ContextSlice<NamedStatusContextItem>;
+  deliveryChanges: ContextSlice<RoadmapCoordinationContextItem>;
+  architecture: ContextSlice<RoadmapCoordinationContextItem>;
   scheduledPlaybooks: ContextSlice<ScheduledPlaybookContextItem>;
 }
 
@@ -187,10 +238,10 @@ export interface ProductOperatingContext {
   intelligence: ContextSlice<IntelligenceContextItem>;
   demand: ContextSlice<DemandContextItem>;
   decisions: ContextSlice<NamedStatusContextItem>;
-  objectives: ContextSlice<NamedStatusContextItem>;
+  objectives: ContextSlice<ProductObjectiveContextItem>;
   roadmapInputs: ContextSlice<NamedStatusContextItem>;
-  deliveryChanges: ContextSlice<NamedStatusContextItem>;
-  architecture: ContextSlice<NamedStatusContextItem>;
+  deliveryChanges: ContextSlice<RoadmapCoordinationContextItem>;
+  architecture: ContextSlice<RoadmapCoordinationContextItem>;
   scheduledPlaybooks: ContextSlice<ScheduledPlaybookContextItem>;
 }
 
@@ -311,6 +362,7 @@ function projectCommercialPerformance(
   const summary = summarizeProductSoldRevenue(
     sold.items.map((row) => ({
       productSoldId: row.id,
+      status: row.status,
       totalAmount: row.totalAmount,
       componentAllocations: row.componentAllocations.flatMap((allocation) =>
         allocation.allocatedAmount === null
@@ -348,6 +400,7 @@ function projectCommercialPerformanceByProduct(
     const summary = summarizeProductSoldRevenue(
       rows.map((row) => ({
         productSoldId: row.id,
+        status: row.status,
         totalAmount: row.totalAmount,
         componentAllocations: [],
       })),

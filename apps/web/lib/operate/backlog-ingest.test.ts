@@ -81,6 +81,16 @@ describe("validateIngestInput", () => {
     expect(
       validateIngestInput({ workType: "bug", source: "user-request", status: "open", triageOutcome: "build" }),
     ).toMatch(/effortSize is required/));
+  it("rejects newly scoped demand that skips raw intake", () =>
+    expect(
+      validateIngestInput({
+        workType: "feature",
+        source: "user-request",
+        organizationId: "org-1",
+        businessProductId: "product-1",
+        demandStage: "ready",
+      }),
+    ).toMatch(/must enter at raw/i));
 });
 
 // ─── Orchestrator (fake store, no DB) ─────────────────────────────────────────
@@ -215,6 +225,46 @@ describe("ingestBacklogItem", () => {
     );
 
     expect(created[0].epicId).toBe("epic-cuid-123");
+  });
+
+  it("classifies newly scoped product demand but leaves legacy intake untouched", async () => {
+    const scoped = makeStore();
+    await ingestBacklogItem(
+      {
+        title: "Improve private event bookings",
+        type: "product",
+        workType: "feature",
+        source: "user-request",
+        organizationId: "org-1",
+        businessProductId: "product-events",
+      },
+      { store: scoped.store, indexKnowledge: () => {} },
+    );
+
+    expect(scoped.created[0]).toMatchObject({
+      organizationId: "org-1",
+      businessProductId: "product-events",
+      demandStage: "raw",
+    });
+    expect(scoped.created[0]).not.toHaveProperty("digitalProductId");
+    expect(scoped.activities).toEqual([
+      expect.objectContaining({
+        kind: "demand_classified",
+        payload: { from: "unclassified", to: "raw", deterministic: true },
+      }),
+    ]);
+
+    const legacy = makeStore();
+    await ingestBacklogItem(
+      {
+        title: "Historical unscoped request",
+        workType: "feature",
+        source: "user-request",
+      },
+      { store: legacy.store, indexKnowledge: () => {} },
+    );
+    expect(legacy.created[0]).not.toHaveProperty("demandStage");
+    expect(legacy.activities).toHaveLength(0);
   });
 
   it("throws on invalid input rather than writing a bad row", async () => {

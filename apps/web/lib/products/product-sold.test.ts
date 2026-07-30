@@ -17,11 +17,13 @@ import {
   persistProductSoldPartyLinks,
   persistProductSoldEntitlement,
   persistProductFulfillmentInstance,
-  persistProductSoldComponentAllocations,
-  transitionProductSoldByEvidence,
   summarizeProductSoldRevenue,
   transitionProductSold,
 } from "./product-sold";
+import {
+  persistProductSoldComponentAllocations,
+  transitionProductSoldByEvidence,
+} from "./product-sold-commercial-persistence";
 
 const commercialSelection = {
   organizationId: "org-one",
@@ -363,6 +365,35 @@ describe("Product Sold domain", () => {
           additive: false,
         },
       ],
+    });
+  });
+
+  it("excludes cancelled and fully refunded sales from recognized performance", () => {
+    expect(
+      summarizeProductSoldRevenue([
+        {
+          productSoldId: "fulfilled",
+          status: "fulfilled",
+          totalAmount: 125,
+          componentAllocations: [],
+        },
+        {
+          productSoldId: "cancelled",
+          status: "cancelled",
+          totalAmount: 75,
+          componentAllocations: [],
+        },
+        {
+          productSoldId: "refunded",
+          status: "refunded",
+          totalAmount: 50,
+          componentAllocations: [],
+        },
+      ]),
+    ).toEqual({
+      saleCount: 1,
+      additiveRevenue: 125,
+      componentAllocations: [],
     });
   });
 

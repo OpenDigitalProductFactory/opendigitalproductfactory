@@ -78,7 +78,7 @@ export function buildResearchPrompt(
     "Synthesise findings ONLY from the provided search results. Do NOT invent or fabricate facts, figures, market sizes, or competitor names that are not supported by the snippets.",
     "When the evidence is thin or uncertain, say so plainly rather than guessing.",
     reviewedBaseline
-      ? "Report only material findings that are new, changed, contradicted, or newly uncertain since the supplied last reviewed baseline; do not repeat unchanged background."
+      ? "Report only what changed since the supplied last reviewed baseline: material findings that are new, contradicted, or newly uncertain. Do not repeat unchanged background."
       : "This is the first reviewed baseline, so summarise the current evidence without implying a prior change.",
     "Write 2-5 short markdown paragraphs (or bullets) of grounded findings. Do not add a sources list — that is appended separately.",
   ].join(" ");

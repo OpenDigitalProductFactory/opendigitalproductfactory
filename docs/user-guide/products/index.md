@@ -37,11 +37,28 @@ business-product hierarchy created from the product mix confirmed during
 Storefront setup. Select a product line to compare its managed products, or
 select a product to open its **Direction** brief.
 
-A product-line comparison currently uses only recorded Product Sold sales and
-additive revenue. Package allocations remain non-additive attribution. Mixed
-currencies are labelled instead of being presented as one valid currency
-total. Margin, adoption, forecasts, and outcomes are not inferred when their
-typed evidence does not exist.
+A product-line Direction page compares recorded performance over an explicit
+current period and baseline. Recognized Product Sold sales and revenue exclude
+cancelled and fully refunded records. Each root sale is counted once; package
+allocations remain non-additive attribution. Mixed currencies are labelled
+instead of being presented as one valid currency total.
+
+The page also shows attributed demand and compatible objective posture when
+those records exist. Conversion, repeat purchase, package attach rate, margin,
+capacity, stock, quality, and cannibalization remain visibly unavailable until
+a canonical business-Product evidence adapter exists. A missing measure is
+never shown as zero.
+
+**What deserves attention?** lists only deterministic, evidence-backed
+investigations. Each recommendation identifies the evidence window,
+confidence, blind spots, approval boundary, and follow-up measure. In Simple
+mode the language is owner-operator friendly; Full mode reveals the denser
+decision detail. Both modes use the same projection.
+
+Open the page coworker and choose **Ask what this business would do** to turn a
+recommendation into reversible options and consult the organization's WWWD
+stance. Rendering the page does not call a model or change pricing, capacity,
+marketing, catalog, or funding.
 
 The product brief is ordered around work:
 
@@ -56,11 +73,101 @@ detail. **Full** uses a denser professional presentation. This changes only the
 projection; it does not create a different role, product model, provider, or
 consumer.
 
+### Activate product demand with evidence
+
+Product Direction projects the same demand records owned by **Operations >
+Delivery Flow**. Choose **Review demand decisions** to open that canonical flow
+already filtered to the current organization, product line, or Product.
+
+Historical backlog rows with no demand stage appear as **Needs
+classification**. They are not silently called raw. For an active request:
+
+1. classify it as product demand;
+2. state the customer or business problem;
+3. link at least one reviewed source such as published Knowledge, customer
+   feedback, a booking, order, subscription, fulfillment record, or research;
+4. record value, confidence, and an attributed effort estimate;
+5. reconcile AI and human effort when they differ;
+6. move the request through screened and shaped;
+7. request the organization-governed funding decision.
+
+**Why this score?** shows the exact inputs, confidence, evidence count, effort
+source, missing fields, and whether the result is provisional. Scoring does not
+move an item through the lifecycle. Each transition is a separate audited act,
+and only the funding decision can move shaped demand to ready.
+
+Evidence links retain the source system's stable reference; they do not copy or
+replace the source fact. Product Direction shows the latest rationale and
+decision history as a read-only projection, so it cannot diverge from Delivery
+Flow.
+
 An unavailable card means the owning contract is not active or no safe typed
-association exists. For example, Objectives and Outcomes remain unavailable
-until their owning product-management phase is installed. An empty card means
-the source is available but has no matching evidence. Neither condition is
-rendered as a healthy zero.
+association exists. An empty card means the source is available but has no
+matching evidence. Neither condition is rendered as a healthy zero.
+
+### Learn from product outcomes
+
+From a business Product, open **Direction → Outcomes**. Define the first
+outcome in ordinary business language:
+
+1. name what is happening now;
+2. describe the change you expect and why;
+3. choose how you will notice it;
+4. record an honest starting point and target;
+5. choose when to review the evidence.
+
+Measures may be a number, percentage, currency, duration, or qualitative
+change. Currency, duration, and business-specific counts retain their unit so
+unlike observations are not compared. Qualitative outcomes use written
+starting and target expectations rather than invented numeric scores. A
+missing baseline, target, or observation is shown as insufficient evidence.
+
+New outcomes begin as drafts. Choose **Start learning** when the contract is
+ready, then append observations as evidence arrives. An observation names its
+source and can include a stable reference and confidence. If a value was
+wrong, choose **Correct observation**: DPF appends the correction and retains
+the original in history.
+
+Only backlog work already scoped to the same business Product can be linked as
+contributing work. The link does not move, fund, or reassign the backlog item.
+Closing or archiving an outcome preserves its observations and work links.
+Product-line outcome posture is derived from its real Products; no second
+product-line outcome ledger is created.
+
+### Read the evidence-derived roadmap
+
+Open a business Product and choose **Direction → Roadmap**. A product line also
+shows its rolled-up roadmap on its **Direction** page. Both are current
+projections over the same operating context; neither is a separate planning
+board.
+
+The default view is **Now / Next / Later**:
+
+- **Now** contains funded, active-objective-linked work with current delivery
+  evidence.
+- **Next** contains funded, active-objective-linked work that is ready to
+  sequence.
+- **Later** contains committed work whose confidence, dependency, or
+  architecture evidence prevents a safer near-term position.
+
+A funded item is not a committed roadmap bet until it is explicitly linked to
+an active product objective. Unclassified demand, work that has not passed the
+funding gate, inactive objectives, and contradictory delivery records appear
+under **Needs evidence before commitment**. The roadmap does not guess the
+missing state.
+
+**Timeline**, **Outcomes**, and **Dependencies** are alternate views of the
+same projection. Timeline entries appear only when a canonical delivery or
+release record supplies a date. Digital-product architecture dependencies are
+shown as coordination evidence; they are not silently converted into business
+backlog dependencies.
+
+Choose **Review with coworker** to explain commitments, readiness gaps,
+confidence, dates, and coordination before recording a stakeholder review
+through the existing business-decision audit. **Download current snapshot**
+creates a timestamped JSON evidence packet with the filters, source IDs, and
+confidence shown on screen. The packet is marked non-importable and never
+replaces live demand, objective, dependency, or delivery records.
 
 The stable product URL is shared through a compatibility boundary. A business
 Product receives the business header and Direction navigation. A
@@ -106,6 +213,33 @@ If no source returns a useful result, the completed proposal says so instead of
 creating a fabricated report. Failed runs remain visible with their failure
 summary. A first-run page offers one useful research action rather than
 displaying a zero-filled dashboard.
+
+## Schedule recurring product work
+
+Product and ProductLine **Direction** pages offer optional coworker playbooks
+for recurring reviews such as weekly intelligence, demand triage, roadmap
+refresh, outcome review, commercial opportunity review, and stakeholder
+briefing. Nothing is scheduled by setup and selecting a playbook does not run
+it.
+
+Choose a useful review, then select **Preview first run**. The preview shows the
+current business scope, evidence sources, allowed tools, proposed writes,
+approval boundary, cadence, and failure behavior. Only after that preview can
+you explicitly confirm the schedule. If the recipe's permissions or write
+boundary later changes, DPF requires another preview before rerun.
+
+Scheduled cards distinguish current, unchanged, partial, failed, paused, and
+permission-changed states in text. A partial or failed run does not replace the
+last successful evidence fingerprint. Use **Inspect last run** for the audited
+run record, or pause, resume, and request a rerun from the same Direction
+surface.
+
+**Export owner brief** downloads a timestamped, source-linked snapshot of the
+current operating context. It is derived evidence marked `importable: false`;
+it cannot become a second roadmap, objective, demand, or decision authority.
+Adoption measures appear only when canonical timestamps and decision or review
+records support them. Unsupported measures say **Unavailable** instead of
+inventing movement or acceptance.
 
 ## From Product To Something A Customer Can Select
 
@@ -211,6 +345,13 @@ one-off quote or order snapshot unless an operator explicitly promotes it.
   provenance and human publication control
 - Schedule proposal-only competitive scans without unattended research or
   publication
+- Preview, schedule, inspect, pause, resume, and rerun evidence-bound product
+  playbooks without creating a second planning authority
+- Export a non-importable owner brief with source provenance
+- Define, review, close, and archive business-product outcomes
+- Append quantitative or qualitative observations with source provenance and
+  correction history
+- Link only real, same-product backlog work to the outcome it contributes to
 - Compare product-line sales evidence and drill into a business Product's
   Direction brief
 - Switch between guided and professional density without forking product truth

@@ -19,11 +19,14 @@ import {
   BACKLOG_SOURCE_VALUES,
   BACKLOG_SCOPE_KIND_VALUES,
   BACKLOG_WORK_TYPE_VALUES,
+  DEMAND_STAGE_VALUES,
+  initialDemandStageForInput,
   type BacklogWorkType,
   type BacklogSource,
   type BacklogTriageOutcome,
   type BacklogEffortSize,
   type BacklogScopeKind,
+  type DemandStage,
 } from "@/lib/explore/backlog";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -47,6 +50,10 @@ export interface BacklogIngestInput {
   /** Semantic (EP-…) or cuid epic id; resolved to the FK in the orchestrator. */
   epicId?: string;
   digitalProductId?: string | null;
+  organizationId?: string | null;
+  productLineId?: string | null;
+  businessProductId?: string | null;
+  demandStage?: DemandStage | null;
   taxonomyNodeId?: string | null;
   submittedById?: string | null;
   agentId?: string | null;
@@ -154,6 +161,11 @@ export function validateIngestInput(input: {
   triageOutcome?: string | null;
   effortSize?: string | null;
   scopeKind?: string | null;
+  organizationId?: string | null;
+  productLineId?: string | null;
+  businessProductId?: string | null;
+  digitalProductId?: string | null;
+  demandStage?: string | null;
 }): string | null {
   if (!input.workType || !(BACKLOG_WORK_TYPE_VALUES as readonly string[]).includes(input.workType)) {
     return `workType is required (one of: ${BACKLOG_WORK_TYPE_VALUES.join(" | ")}).`;
@@ -174,6 +186,35 @@ export function validateIngestInput(input: {
   }
   if (input.scopeKind && !(BACKLOG_SCOPE_KIND_VALUES as readonly string[]).includes(input.scopeKind)) {
     return `scopeKind must be one of: ${BACKLOG_SCOPE_KIND_VALUES.join(" | ")}.`;
+  }
+  const narrowTargets = [
+    input.productLineId,
+    input.businessProductId,
+    input.digitalProductId,
+  ].filter((value) => Boolean(value?.trim()));
+  if (narrowTargets.length > 1) {
+    return "Choose one product-management target: product line, business product, or digital product.";
+  }
+  if (
+    (input.productLineId || input.businessProductId) &&
+    !input.organizationId
+  ) {
+    return "organizationId is required for business product demand.";
+  }
+  if (
+    input.demandStage !== undefined &&
+    input.demandStage !== null &&
+    !(DEMAND_STAGE_VALUES as readonly string[]).includes(input.demandStage)
+  ) {
+    return `demandStage must be one of: ${DEMAND_STAGE_VALUES.join(" | ")}.`;
+  }
+  if (
+    narrowTargets.length > 0 &&
+    input.demandStage !== undefined &&
+    input.demandStage !== null &&
+    input.demandStage !== "raw"
+  ) {
+    return "New scoped product demand must enter at raw.";
   }
   return null;
 }
@@ -231,6 +272,11 @@ export async function ingestBacklogItem(
     triageOutcome,
     effortSize,
     scopeKind: input.scopeKind ?? null,
+    organizationId: input.organizationId ?? null,
+    productLineId: input.productLineId ?? null,
+    businessProductId: input.businessProductId ?? null,
+    digitalProductId: input.digitalProductId ?? null,
+    demandStage: input.demandStage,
   });
   if (validationError) {
     throw new Error(`[backlog-ingest] ${validationError}`);
@@ -285,6 +331,7 @@ export async function ingestBacklogItem(
 
   const itemId = input.itemId?.trim() || generateBacklogItemId(input.itemIdPrefix);
   const body = composeIngestBody(input.body, marker);
+  const demandStage = initialDemandStageForInput(input);
 
   const item = await store.backlogItem.create({
     data: {
@@ -302,6 +349,10 @@ export async function ingestBacklogItem(
       ...(typeof input.priority === "number" ? { priority: input.priority } : {}),
       ...(epicCuid ? { epicId: epicCuid } : {}),
       ...(input.digitalProductId ? { digitalProductId: input.digitalProductId } : {}),
+      ...(input.organizationId ? { organizationId: input.organizationId } : {}),
+      ...(input.productLineId ? { productLineId: input.productLineId } : {}),
+      ...(input.businessProductId ? { businessProductId: input.businessProductId } : {}),
+      ...(demandStage ? { demandStage } : {}),
       ...(input.taxonomyNodeId ? { taxonomyNodeId: input.taxonomyNodeId } : {}),
       ...(input.submittedById ? { submittedById: input.submittedById } : {}),
       ...(input.agentId ? { agentId: input.agentId } : {}),
@@ -314,6 +365,22 @@ export async function ingestBacklogItem(
   });
 
   await writeOriginActivity(item.id, true);
+  if (demandStage === "raw") {
+    await store.backlogItemActivity.create({
+      data: {
+        backlogItemId: item.id,
+        kind: "demand_classified",
+        summary: "New scoped product demand entered intake",
+        payload: { from: "unclassified", to: "raw", deterministic: true },
+        ...(input.submittedById
+          ? { recordedById: input.submittedById }
+          : {}),
+        ...(input.agentId
+          ? { recordedByAgentId: input.agentId }
+          : {}),
+      },
+    });
+  }
   indexKnowledge({ entityId: item.itemId, title: input.title, content: input.body ?? "" });
 
   return { itemId: item.itemId, id: item.id, created: true };

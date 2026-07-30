@@ -168,11 +168,26 @@ the topic and question; prompt or route text is never parsed as scope. A watch
 tick writes only a pending `ResearchProposal`, so external research and
 publication remain behind their existing human gates.
 
-Demand, change, architecture, and dependency evidence is included
-only through the resolved enabling digital products. Product decisions,
-objectives, and outcomes remain explicitly unavailable until their owning
-phases provide typed associations. Prompt strings, route text, similar names,
-and empty result sets are never used to invent scope.
+Demand is projected from organization-scoped `BacklogItem` associations.
+Change, architecture, and dependency evidence is included only through
+resolved enabling digital products. Product decisions remain explicitly
+unavailable until their owning phase provides a typed association. Prompt
+strings, route text, similar names, and empty result sets are never used to
+invent scope.
+
+`ProductObjective` is the typed business-product outcome authority. Every
+objective carries `organizationId` and a composite relation to one business
+`Product`; it never targets `DigitalProduct`. `ProductObjectiveWork` links
+same-product `BacklogItem` rows without copying or changing backlog state.
+`ProductOutcomeObservation` is append-only. A correction inserts a new row
+whose `supersedesObservationId` points to the prior current record.
+
+The canonical measure family is `number`, `percentage`, `currency`,
+`duration`, or `qualitative`. Quantitative posture is derived only when the
+objective baseline, target, observation kind, and unit are compatible.
+Qualitative observations remain narrative evidence requiring review. Missing
+or incompatible evidence stays explicit. Product-line posture is derived
+through Product membership; no parallel outcome ledger is persisted.
 
 Current ServiceNow CRM/CSM documentation includes Sold Product, installed
 product/install-base, party, and entitlement concepts. DPF's `ProductSold` is
@@ -206,11 +221,22 @@ Business-product Direction lives at
 authority is introduced.
 
 `apps/web/lib/product-management/product-direction-view.ts` derives the
-decision-first presentation. `product-line-direction-view.ts` derives the
-hierarchy and per-product comparison from the same context. The comparison
-uses only canonical Product Sold sale count and additive root revenue. It
-withholds a currency total when records contain mixed currencies and labels
-unallocated package components as a reporting blind spot.
+decision-first Product presentation. `product-performance.ts` derives typed
+period, availability, freshness, confidence, trend, evidence, and rollup
+contracts for Product and ProductLine. `product-performance-advice.ts` derives
+bounded recommendation candidates from that same projection.
+
+The performance boundary counts each canonical Product Sold root once, excludes
+cancelled and fully refunded records from recognized sales/revenue, and keeps
+package component allocations non-additive. It withholds revenue when records
+contain mixed currencies, labels bounded query windows and unallocated package
+components, and carries Product attribution for demand and objective evidence.
+Nested line rollups reuse the cycle-safe ProductLine hierarchy walker.
+
+Finance, CRM conversion, stable repeat-purchase identity, capacity, stock,
+quality, shared-cost margin, and cannibalization remain explicit unavailable
+measure contracts until a verified adapter connects them to business Product.
+No summary row or generated prose is persisted.
 
 The shell's existing navigation-mode preference controls disclosure density:
 worker/Simple is guided and operator/Full is professional. This is a
@@ -220,6 +246,14 @@ work remain visibly distinct. Direction links are read-only; the preview
 component discloses scope and consequences before any transition to a governed
 mutation workflow.
 
+Product-line recommendations are pure, cited read-model output. The
+`/portfolio/product-line` coworker route may call the existing
+`evaluate_org_business_decision` tool only after the operator asks to consider
+a real choice. That action records the WWWD decision interaction; page render
+does not invoke inference. Corrections become a later governed decision and
+observed effects stay in ProductObjective outcome history, avoiding a parallel
+ProductAdvice ledger.
+
 Continuous intelligence lives at
 `/portfolio/product/[id]/direction/intelligence`. Its server-derived view keeps
 pending proposals, research drafts, reviewed Wiki findings, battlecards, stale
@@ -228,9 +262,17 @@ different evidence density over the same canonical projection. The page
 previews scope, write, approval boundary, and cadence before proposal or
 schedule creation.
 
+Outcome learning lives at
+`/portfolio/product/[id]/direction/outcomes`. The route reads the same
+`ProductOperatingContext` projection used by the Direction brief and writes
+through the focused product-outcome service. The MCP pack and server actions
+share the canonical enum, validation, authorization, lifecycle, posture, and
+append-only rules instead of implementing parallel contracts.
+
 ## Fleet-Safe Evolution
 
-The Phase 2 and Catalog Builder migrations are expand-only:
+The commercial, Catalog Builder, demand-activation, and product-outcome
+migrations are expand-only:
 
 - additive commercial and packaging tables;
 - nullable Storefront, quote, fulfillment-route, and promotion-provenance
@@ -240,6 +282,8 @@ The Phase 2 and Catalog Builder migrations are expand-only:
 - partial unique indexes for nullable default SKU and price-list scopes;
 - idempotent application reconciliation through the existing setup seed
   authority.
+- three new outcome tables begin empty; no Product, Principal, baseline,
+  target, observation, or work link is guessed from legacy data.
 
 On boot, storefronts with active unlinked items run the same setup
 reconciliation. Rows backed by real composition/product-line evidence are

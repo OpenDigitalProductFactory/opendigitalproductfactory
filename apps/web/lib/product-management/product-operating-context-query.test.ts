@@ -1,15 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  loadProductOperatingContext,
-  ProductOperatingContextNotFoundError,
-  type ProductOperatingContextQueryClient,
-} from "./product-operating-context-query";
+import { loadProductOperatingContext, ProductOperatingContextNotFoundError, type ProductOperatingContextQueryClient } from "./product-operating-context-query";
 
 const now = new Date("2026-07-28T20:00:00.000Z");
-
-function fakeDb(
-  overrides: Partial<ProductOperatingContextQueryClient> = {},
-): ProductOperatingContextQueryClient {
+function fakeDb(overrides: Partial<ProductOperatingContextQueryClient> = {}):
+  ProductOperatingContextQueryClient {
   const empty = vi.fn(async () => []);
   return {
     organization: {
@@ -133,7 +127,6 @@ describe("loadProductOperatingContext", () => {
   it("authorizes once, scopes every business query to the organization, and resolves enabling digital products through operational offerings", async () => {
     const db = fakeDb();
     const authorize = vi.fn(async () => undefined);
-
     const context = await loadProductOperatingContext({
       db,
       organizationId: "org-1",
@@ -168,6 +161,174 @@ describe("loadProductOperatingContext", () => {
       "digital-product",
       "organization",
     ]);
+  });
+
+  it("projects business-product demand directly without requiring a DigitalProduct", async () => {
+    const backlogItem = vi.fn(async () => [
+      {
+        itemId: "BI-PRODUCT",
+        title: "Reduce booking abandonment",
+        body: "Customers abandon appointment booking.",
+        status: "open",
+        workType: "feature",
+        organizationId: "org-1",
+        productLineId: null,
+        businessProductId: "product-1",
+        digitalProductId: null,
+        demandStage: "screened",
+        demandScore: 8,
+        demandScoreFramework: "rice",
+        effortSize: "medium",
+        jobSize: 4,
+        reach: 20,
+        occurrenceCount: 20,
+        impact: 2,
+        confidence: 0.8,
+        businessValue: null,
+        timeCriticality: null,
+        riskOpportunity: null,
+        investmentBucket: "grow",
+        estimateAiJobSize: 4,
+        estimateHumanJobSize: 4,
+        estimateSource: "agreed",
+        estimateAgreed: true,
+        claimStatus: null,
+        claimedByAgentId: null,
+        activeBuild: {
+          buildId: "FB-PRODUCT",
+          phase: "build",
+          updatedAt: now,
+          productVersions: [],
+        },
+        demandEvidenceLinks: [
+          {
+            evidenceLinkId: "DME-1",
+            sourceKind: "booking",
+            sourceRef: "booking-1",
+            title: "Abandoned booking",
+            summary: null,
+            confidence: 0.8,
+            reviewedAt: now,
+          },
+        ],
+        activities: [
+          {
+            kind: "demand_funding_decision",
+            summary: "Funding deferred",
+            recordedAt: now,
+            payload: { funded: false, rationale: "Needs stronger evidence" },
+          },
+        ],
+        updatedAt: now,
+        epic: null,
+      },
+    ]);
+    const db = fakeDb({
+      productOffering: { findMany: vi.fn(async () => []) },
+      backlogItem: { findMany: backlogItem },
+    });
+
+    const context = await loadProductOperatingContext({
+      db,
+      organizationId: "org-1",
+      scope: { kind: "product", id: "product-1" },
+      authorize: vi.fn(async () => undefined),
+      requestedAt: now,
+    });
+
+    expect(backlogItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          organizationId: "org-1",
+          OR: expect.arrayContaining([
+            expect.objectContaining({ businessProductId: "product-1" }),
+          ]),
+        }),
+      }),
+    );
+    expect(context.demand.items[0]).toMatchObject({
+      id: "BI-PRODUCT",
+      productLineId: "line-1",
+      businessProductId: "product-1",
+      evidenceCount: 1,
+      readiness: expect.objectContaining({
+        evidenceReady: true,
+        scoreReady: true,
+      }),
+      latestDecision: expect.objectContaining({
+        summary: "Funding deferred",
+      }),
+      workType: "feature",
+      effortSize: "medium",
+      investmentBucket: "grow",
+      lastEvidenceChange: expect.objectContaining({
+        kind: "demand_funding_decision",
+      }),
+      delivery: expect.objectContaining({
+        sourceId: "FB-PRODUCT",
+        phase: "build",
+        shippedAt: null,
+      }),
+    });
+  });
+
+  it("retains canonical change dates and DigitalProduct dependency endpoints as coordination evidence", async () => {
+    const db = fakeDb({
+      changeItem: {
+        findMany: vi.fn(async () => [
+          {
+            id: "change-1",
+            title: "Deploy booking update",
+            status: "scheduled",
+            updatedAt: now,
+            changeRequest: {
+              id: "CR-1",
+              plannedStartAt: new Date("2026-08-01T09:00:00.000Z"),
+              plannedEndAt: new Date("2026-08-01T11:00:00.000Z"),
+            },
+          },
+        ]),
+      },
+      productDependency: {
+        findMany: vi.fn(async () => [
+          {
+            id: "dependency-1",
+            relationType: "depends_on",
+            createdAt: now,
+            fromProduct: { id: "digital-1", name: "Booking portal" },
+            toProduct: { id: "digital-identity", name: "Identity" },
+          },
+        ]),
+      },
+    });
+
+    const context = await loadProductOperatingContext({
+      db,
+      organizationId: "org-1",
+      scope: { kind: "product", id: "product-1" },
+      authorize: vi.fn(async () => undefined),
+      requestedAt: now,
+    });
+
+    expect(context.deliveryChanges.items).toEqual([
+      expect.objectContaining({
+        id: "change-1",
+        coordinationKind: "delivery",
+        plannedStartAt: new Date("2026-08-01T09:00:00.000Z"),
+        plannedEndAt: new Date("2026-08-01T11:00:00.000Z"),
+      }),
+    ]);
+    expect(context.architecture.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "dependency-1",
+          coordinationKind: "architecture",
+          fromProductId: "digital-1",
+          toProductId: "digital-identity",
+          relationType: "depends_on",
+        }),
+      ]),
+    );
   });
 
   it("keeps the commercial-summary profile on the sales query boundary", async () => {
@@ -331,6 +492,121 @@ describe("loadProductOperatingContext", () => {
     });
   });
 
+  it("projects typed objectives, current observations, corrections, and contributing work", async () => {
+    const productObjective = vi.fn(async () => [
+      {
+        objectiveId: "OBJ-EVENTS",
+        productId: "product-1",
+        title: "Increase private-event bookings",
+        problemStatement: "Private-event demand is inconsistent.",
+        outcomeHypothesis:
+          "Clear packages will convert more qualified enquiries.",
+        status: "active",
+        measureKind: "number",
+        measureDefinition: "Confirmed private events per month",
+        measureUnit: "events/month",
+        baselineValue: { toNumber: () => 3 },
+        targetValue: { toNumber: () => 6 },
+        baselineNarrative: null,
+        targetNarrative: null,
+        reviewCadence: "monthly",
+        reviewAt: new Date("2026-07-27T00:00:00.000Z"),
+        reviewedAt: null,
+        createdAt: new Date("2026-07-01T00:00:00.000Z"),
+        updatedAt: now,
+        ownerPrincipal: {
+          principalId: "PRN-OWNER",
+          displayName: "Owner operator",
+        },
+        contributingWork: [
+          {
+            contributionKind: "delivery",
+            backlogItem: {
+              itemId: "BI-EVENTS",
+              title: "Publish private-event packages",
+              status: "in-progress",
+            },
+          },
+        ],
+        observations: [
+          {
+            observationId: "OBS-CORRECTED",
+            observedAt: new Date("2026-07-27T00:00:00.000Z"),
+            numericValue: { toNumber: () => 4 },
+            narrative: "Booking ledger reconciled.",
+            measureKind: "number",
+            measureUnit: "events/month",
+            sourceKind: "booking",
+            sourceRef: "booking-ledger:2026-07",
+            confidence: 0.95,
+            supersedes: { observationId: "OBS-ORIGINAL" },
+            supersededBy: null,
+            createdAt: now,
+            recordedByPrincipal: null,
+          },
+          {
+            observationId: "OBS-ORIGINAL",
+            observedAt: new Date("2026-07-26T00:00:00.000Z"),
+            numericValue: { toNumber: () => 5 },
+            narrative: null,
+            measureKind: "number",
+            measureUnit: "events/month",
+            sourceKind: "manual",
+            sourceRef: null,
+            confidence: null,
+            supersedes: null,
+            supersededBy: { observationId: "OBS-CORRECTED" },
+            createdAt: new Date("2026-07-26T00:00:00.000Z"),
+            recordedByPrincipal: null,
+          },
+        ],
+      },
+    ]);
+    const context = await loadProductOperatingContext({
+      db: fakeDb({ productObjective: { findMany: productObjective } }),
+      organizationId: "org-1",
+      scope: { kind: "product", id: "product-1" },
+      authorize: vi.fn(async () => undefined),
+      requestedAt: now,
+    });
+
+    expect(productObjective).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          organizationId: "org-1",
+          productId: { in: ["product-1"] },
+        },
+      }),
+    );
+    expect(context.objectives.items[0]).toMatchObject({
+      objectiveId: "OBJ-EVENTS",
+      productId: "product-1",
+      reviewDue: true,
+      posture: {
+        availability: "available",
+        direction: "increase",
+        state: "improving",
+        latestValue: 4,
+      },
+      observations: [
+        expect.objectContaining({
+          observationId: "OBS-CORRECTED",
+          supersedesObservationId: "OBS-ORIGINAL",
+          supersededByObservationId: null,
+        }),
+        expect.objectContaining({ observationId: "OBS-ORIGINAL" }),
+      ],
+      contributingWork: [
+        {
+          itemId: "BI-EVENTS",
+          title: "Publish private-event packages",
+          status: "in-progress",
+          contributionKind: "delivery",
+        },
+      ],
+    });
+  });
+
   it("projects only typed product intelligence watches without parsing prompt or route text", async () => {
     const scheduledAgentTask = vi.fn(async () => [
       {
@@ -342,7 +618,11 @@ describe("loadProductOperatingContext", () => {
         isActive: false,
         nextRunAt: null,
         lastRunAt: new Date("2026-07-28T09:00:00.000Z"),
+        taskRunId: null,
         lastStatus: "ok",
+        lastError: null,
+        taskKind: "product-intelligence-watch",
+        taskConfig: { topic: "competitors", query: "What changed?" },
         updatedAt: now,
       },
     ]);
@@ -357,7 +637,12 @@ describe("loadProductOperatingContext", () => {
     expect(scheduledAgentTask).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          taskKind: "product-intelligence-watch",
+          taskKind: {
+            in: [
+              "product-intelligence-watch",
+              "product-management-playbook",
+            ],
+          },
           organizationId: "org-1",
         }),
       }),

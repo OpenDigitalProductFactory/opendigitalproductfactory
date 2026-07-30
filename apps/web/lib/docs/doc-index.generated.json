@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 580,
+  "pageCount": 581,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1200,6 +1200,21 @@
         "scope-and-exclusions",
         "completion-evidence",
         "what-success-means"
+      ]
+    },
+    "docs/architecture/product-demand-activation.md": {
+      "publicHref": "/architecture/product-demand-activation/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "product-demand-activation",
+        "scope-boundary",
+        "state-and-evidence",
+        "governed-transitions",
+        "fleet-safe-evolution",
+        "derived-roadmap-boundary",
+        "product-management-playbook-boundary"
       ]
     },
     "docs/architecture/section-navigation.md": {
@@ -9744,6 +9759,7 @@
         "what-you-can-do",
         "reading-epic-progress",
         "shared-demand",
+        "activate-local-demand",
         "founder-shared-portfolio",
         "promotions",
         "business-journeys",
@@ -9912,7 +9928,8 @@
       "anchors": [
         "overview",
         "key-concepts",
-        "what-you-can-do"
+        "what-you-can-do",
+        "product-direction-and-review"
       ]
     },
     "docs/user-guide/products/business-model-roles.md": {
@@ -9938,7 +9955,11 @@
       "anchors": [
         "overview",
         "use-product-direction",
+        "activate-product-demand-with-evidence",
+        "learn-from-product-outcomes",
+        "read-the-evidence-derived-roadmap",
         "build-continuous-product-intelligence",
+        "schedule-recurring-product-work",
         "from-product-to-something-a-customer-can-select",
         "package-and-price-a-catalog-item",
         "review-customer-purchases-and-use",

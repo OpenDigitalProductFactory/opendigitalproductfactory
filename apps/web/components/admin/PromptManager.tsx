@@ -17,8 +17,10 @@ export function PromptManager({
   initialCatalog: PromptCatalogGroup[];
 }) {
   const [catalog] = useState(initialCatalog);
-  // All categories start expanded; clicking a header toggles collapse
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  // Reveal global catalog categories on demand.
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(initialCatalog.map((group) => [group.category, true])),
+  );
   const [selected, setSelected] = useState<{
     category: string;
     slug: string;

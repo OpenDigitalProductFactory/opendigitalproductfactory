@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 import { ProductDirectionBrief } from "@/components/product/direction/ProductDirectionBrief";
+import { ProductManagementPlaybooks } from "@/components/product/direction/ProductManagementPlaybooks";
 import {
   ProductManagementAccessError,
   ProductManagementOrganizationNotFoundError,
@@ -8,6 +9,8 @@ import {
 } from "@/lib/product-management/current-product-operating-context.server";
 import { ProductOperatingContextNotFoundError } from "@/lib/product-management/product-operating-context-query";
 import { buildProductDirectionView } from "@/lib/product-management/product-direction-view";
+import { buildStakeholderBriefFromOperatingContext } from "@/lib/product-management/product-management-brief";
+import { buildProductManagementAdoptionEvidence } from "@/lib/product-management/product-management-adoption";
 import {
   NAV_MODE_COOKIE,
   resolveNavModeFromCookie,
@@ -40,5 +43,19 @@ export default async function ProductDirectionPage({ params }: Props) {
     navMode === "worker" ? "guided" : "professional",
   );
 
-  return <ProductDirectionBrief context={context} view={view} />;
+  return (
+    <div className="space-y-dpf-xl">
+      <ProductDirectionBrief context={context} view={view} />
+      <ProductManagementPlaybooks
+        scope={context.scope}
+        audience={view.audience}
+        scheduledPlaybooks={context.scheduledPlaybooks.items}
+        snapshot={buildStakeholderBriefFromOperatingContext({
+          context,
+          view,
+        })}
+        adoptionEvidence={buildProductManagementAdoptionEvidence({ context })}
+      />
+    </div>
+  );
 }
