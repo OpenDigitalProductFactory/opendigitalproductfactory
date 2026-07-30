@@ -9928,7 +9928,8 @@
       "anchors": [
         "overview",
         "key-concepts",
-        "what-you-can-do"
+        "what-you-can-do",
+        "product-direction-and-review"
       ]
     },
     "docs/user-guide/products/business-model-roles.md": {

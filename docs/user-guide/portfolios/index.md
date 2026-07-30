@@ -47,3 +47,22 @@ Guided mode keeps child lines and evidence sources collapsed; professional mode
 opens denser comparisons. Both views use the same product-line hierarchy and
 commercial evidence, so changing disclosure does not change the underlying
 reporting boundary.
+
+## Product direction and review
+
+A product line's **Direction** workspace compares its Products using the
+evidence the organization actually has: sales, demand, objectives, outcome
+observations, and linked delivery work. It highlights missing evidence as
+unavailable rather than turning it into a zero, and prepares a reviewable next
+decision without changing pricing, funding, capacity, or the catalog.
+
+Open an individual Product from that comparison to review its current
+objectives, learned outcomes, derived Now/Next/Later roadmap, and recurring
+product-management playbooks. Roadmap lanes are projections over the canonical
+backlog and objective links; they do not create a second roadmap authority or
+invent dates, dependencies, product teams, or consumers.
+
+For a simple business, the first view stays focused on the owner-operator's
+next useful action. Denser evidence provenance, comparison detail, and coworker
+scheduling controls appear only when the operator asks for them or switches to
+professional disclosure.
