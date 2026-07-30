@@ -205,6 +205,7 @@ whether the responsive contract was proven in a browser.
 | Positive recovery fixtures omitted the capabilities required by their destinations | Fixtures now grant the destination capability explicitly and prove the recovery action is hidden from roles without it |
 | The desktop catalog looked tabular but exposed only generic layout containers | The dense projection now uses a native table with scoped column headers, rows, and cells |
 | Mobile behavior was inferred from CSS classes rather than a rendered route | A dedicated 390x844 Playwright contract proves one visible layout, fact parity, no catalog action, no horizontal overflow, no serious/critical Axe findings, and no console errors |
+| The root E2E spec relied on Axe being hoisted from the web workspace | The root Playwright runner now declares its own Axe dependency; the web declaration remains for the web-owned route sweep |
 
 ## Phase 1: Test-Drive Service-Scoped Readiness
 
