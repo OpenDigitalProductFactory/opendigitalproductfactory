@@ -61,8 +61,7 @@ apps/web/lib/tak/agent-routing.ts	995
 apps/web/lib/tak/agentic-loop.test.ts	2387
 apps/web/lib/tak/agentic-loop.ts	2700
 apps/web/lib/tak/agent-grants.test.ts	913
-apps/web/lib/tak/agent-grants.ts	861
-apps/web/lib/tak/agent-grants.ts	859
+apps/web/lib/tak/agent-grants.ts	862
 apps/web/lib/tak/agent-routing.ts	996
 apps/web/lib/tak/agentic-loop.test.ts	2311
 apps/web/lib/tak/agentic-loop.ts	2683
