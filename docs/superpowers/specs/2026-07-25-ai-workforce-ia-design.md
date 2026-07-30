@@ -9,6 +9,9 @@ authority projections are merged; declaration integrity is owned by
 - Primary placement WWMD: `DI-D27A79E99964`
 - State/action WWMD: `DI-B17F4DE8FD51`
 
+Interactive review artifact:
+[`2026-07-30-ai-workforce-five-lens-prototype.html`](assets/2026-07-30-ai-workforce-five-lens-prototype.html).
+
 ## Problem
 
 DPF has too many AI coworker surfaces exposed as peer destinations. Operators can see AI Workforce, Coworker Decision Engine, Build Studio, Admin/Agents, provider setup, prompts, skills, memory, routing, runtime health, finance AI, marketing/customer AI, identity/authority, and embedded coworker panels, but they cannot quickly answer:
@@ -746,10 +749,17 @@ To align the Information Architecture with foundational DPF governance, coworker
 * **UI Refinement**: Under the **Decisions** lens and the coworker's Governance section, split controls and lists into:
   - **Phase-Boundary Approvals**: For workflow transitions (e.g., approving a plan to proceed to build).
   - **Consequential Side-Effect Approvals**: For proposal tools (e.g., executing schema migrations, deploying to staging).
-  - Provide direct link navigation from decision rows to the global **Paused-Work surface** or cross-process inbox.
+  - Project the canonical `AttentionItem` and its existing owner action. A
+    general `/workspace/inbox` link may open the full Needs you queue, but a
+    row-specific action must preserve the item's real owner/context and must not
+    invent an unsupported Inbox deep-link parameter.
 
 ### 5. Memory Compaction & Looping Diagnostics
-* **Principle 5 Alignment (Selective Memory)**: Surface the efficiency of the vector storage (Qdrant) by showing a breakdown of "Salient Context" (durable decisions, user choices, constraints) vs. transient notes. Provide a compaction/pruning trigger.
+* **Principle 5 Alignment (Selective Memory)**: Use the canonical,
+  storage-neutral memory projection to show "Salient Context" (durable
+  decisions, user choices, constraints) separately from transient notes. This
+  IA remains read-only; compaction or pruning belongs to the owning memory
+  workflow and is not introduced here.
 * **Principle 8 Alignment (Fail Fast, Explain Clearly)**: In both **Work** and
   **Health**, bubble up active tool-repetition alerts (for example the 3-5
   repetition limit) as high-priority operational exceptions instead of burying
