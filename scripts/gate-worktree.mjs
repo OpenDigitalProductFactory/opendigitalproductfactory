@@ -816,14 +816,17 @@ async function main() {
   ]));
   for (const [signal, handler] of Object.entries(signalHandlers)) process.once(signal, handler);
 
-  if (gateObserverIdentity) {
-    queueObserverPath = registerLocalQueueObserver({
-      directory: queueObserverDirectory,
-      identity: gateObserverIdentity,
-      branch,
-      sha,
-    }).path;
-  }
+  // Always register: the observer proves THIS PROCESS is alive, which is what
+  // lets a dead waiter be reconciled out of the queue. It records the lease's
+  // real owner session id so the reconciler can match without the lease having
+  // to encode the token/pid.
+  queueObserverPath = registerLocalQueueObserver({
+    directory: queueObserverDirectory,
+    identity: gateObserverIdentity,
+    ownerSessionId,
+    branch,
+    sha,
+  }).path;
 
   const releaseLeaseOnce = async () => {
     if (!leaseId || leaseReleased) return;

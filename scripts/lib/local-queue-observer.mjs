@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   mkdirSync,
+  readdirSync,
   readFileSync,
   unlinkSync,
   writeFileSync,
@@ -55,6 +56,10 @@ export function registerLocalQueueObserver({
   identity,
   branch,
   sha,
+  // BI-3A34D7A9: the session id the LEASE carries, which is the owning client
+  // thread and no longer encodes this observer's token/pid. Defaults to the
+  // observer's own id so pre-existing callers keep working unchanged.
+  ownerSessionId = identity.ownerSessionId,
   now = () => new Date(),
 }) {
   mkdirSync(directory, { recursive: true });
@@ -63,7 +68,7 @@ export function registerLocalQueueObserver({
     schema: OBSERVER_SCHEMA,
     observerToken: identity.token,
     pid: identity.pid,
-    ownerSessionId: identity.ownerSessionId,
+    ownerSessionId,
     branch,
     sha,
     registeredAt: now().toISOString(),
@@ -75,12 +80,57 @@ export function registerLocalQueueObserver({
   return { path, record };
 }
 
+/**
+ * Read every observer record in the directory, keyed by the owner session id it
+ * registered for.
+ *
+ * Enumerating the records is what lets a lease carry an HONEST owner session id
+ * (the client thread) instead of one that has to encode this liveness proof.
+ * The token stays the file name and the release credential; it is no longer
+ * required to be a substring of the lease's identity.
+ */
+function readObserversBySession(directory) {
+  let entries;
+  try {
+    entries = readdirSync(directory);
+  } catch {
+    return new Map();
+  }
+  const bySession = new Map();
+  for (const entry of entries) {
+    if (!entry.endsWith(".json")) continue;
+    const token = entry.slice(0, -".json".length);
+    const record = readObserver(observerPath(directory, token));
+    if (
+      record?.schema !== OBSERVER_SCHEMA
+      // The file name is the token: a record claiming a different one is not
+      // trustworthy liveness proof.
+      || record.observerToken !== token
+      || !Number.isInteger(record.pid)
+      || record.pid <= 0
+      || typeof record.ownerSessionId !== "string"
+      || typeof record.registeredAt !== "string"
+    ) {
+      continue;
+    }
+    // A duplicate session id would make "which process owns this?" ambiguous,
+    // so refuse to treat either as proof rather than guessing.
+    if (bySession.has(record.ownerSessionId)) {
+      bySession.set(record.ownerSessionId, null);
+      continue;
+    }
+    bySession.set(record.ownerSessionId, record);
+  }
+  return bySession;
+}
+
 export function findDeadLocalQueueObservers({
   directory,
   queuedLeases,
   processAlive = isProcessAlive,
 }) {
   const dead = [];
+  const bySession = readObserversBySession(directory);
   for (const lease of queuedLeases) {
     if (
       lease?.environmentKey !== "local-integration-ci"
@@ -89,29 +139,17 @@ export function findDeadLocalQueueObservers({
     ) {
       continue;
     }
-    const match = OWNER_PATTERN.exec(lease.ownerSessionId);
-    if (!match) continue;
-    const [, token, pidText] = match;
-    const pid = Number(pidText);
-    const record = readObserver(observerPath(directory, token));
-    if (
-      record?.schema !== OBSERVER_SCHEMA
-      || record.observerToken !== token
-      || record.pid !== pid
-      || record.ownerSessionId !== lease.ownerSessionId
-      || typeof record.registeredAt !== "string"
-    ) {
-      continue;
-    }
-    if (processAlive(pid)) continue;
+    const record = bySession.get(lease.ownerSessionId);
+    if (!record) continue;
+    if (processAlive(record.pid)) continue;
     dead.push({
       leaseId: lease.leaseId,
       ownerSessionId: lease.ownerSessionId,
       reason: "same_host_observer_process_not_running",
       livenessProof: {
         schema: OBSERVER_SCHEMA,
-        observerToken: token,
-        pid,
+        observerToken: record.observerToken,
+        pid: record.pid,
         registeredAt: record.registeredAt,
       },
     });
