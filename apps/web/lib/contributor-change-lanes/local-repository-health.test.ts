@@ -22,6 +22,8 @@ function lane(overrides: Partial<ContributorChangeLane> = {}): ContributorChange
     source: "git-branch",
     status: "claimed",
     owner: null,
+    ownerProvider: null,
+    pullRequestNumber: null,
     branch: "codex/example",
     worktreePath: null,
     commitSha: "abc1234abc1234abc1234abc1234abc1234abc1234",
