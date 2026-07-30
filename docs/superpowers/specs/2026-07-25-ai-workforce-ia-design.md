@@ -2,9 +2,12 @@
 
 ## Status
 
-Accepted design under `EP-UX-SYSTEM`. Availability and authority projections
-are merged; the four-area roster and coworker-record consumption are in
-delivery under `BI-C810CC5A` and Work Capsule `WC-D6E5F3F4`.
+Revised design under independent review in `EP-UX-SYSTEM`. Availability and
+authority projections are merged; declaration integrity is owned by
+`BI-97CD9E4B` and five-lens/surface consolidation by `BI-F2278856`.
+
+- Primary placement WWMD: `DI-D27A79E99964`
+- State/action WWMD: `DI-B17F4DE8FD51`
 
 ## Problem
 
@@ -20,13 +23,12 @@ The current shape exposes implementation machinery before the coworker/work mode
 
 ## Current Inventory
 
-Static route inventory found:
-
-- `/platform/ai`: 28 page routes.
-- `/coworker-decisions`: 13 page routes.
-- Additional coworker-adjacent routes under Build Studio, Admin/Agents, EA/Agents redirect, Finance AI, Customer/Marketing, Platform Identity, Providers, Tools, and embedded page panels.
-
-Inventory evidence was captured on 2026-07-25 from worktree SHA `555dcd8069`.
+The refreshed current-main inventory contains 33 canonical non-redirect Purpose
+routes under `/platform/ai` and `/coworker-decisions`, plus 8 compatibility
+redirects for 41 total AI routes. Adjacent surfaces remain under Build Studio,
+Admin/Agents, EA/Agents, Finance AI, Customer/Marketing, Platform Identity,
+Providers, Tools, and embedded page panels. The disposition registry below is
+exhaustive for both routes and launcher mounts.
 
 Commands:
 
@@ -118,41 +120,49 @@ This design does not add a new global product area. AI Workforce remains the dur
 
 Global navigation should keep **AI Workforce** as the durable destination.
 
-Inside AI Workforce, use five operator modes as lenses, not as another deep route tree:
+Inside AI Workforce, use five operator lenses, not another deep route tree:
 
 1. **Coworkers**
    - Default roster and discovery view.
    - Helps the operator find the right coworker.
 
-2. **Work Monitor**
-   - Active work, blocked work, failed work, assignments, recent activity, and review-needed items.
-   - Exception-first, not log-first.
+2. **Work**
+   - Read-only projection of active AI-linked work, recent outcomes, and the
+     canonical domain destination that owns each action.
+   - Needs you remains the only actionable attention/approval queue.
 
-3. **Capabilities**
-   - Work a coworker can do, connected tools, skills, prompts, model assignment, missing capability gaps, and offer readiness.
-   - This is where setup/configuration lives.
+3. **Decisions**
+   - Policy quality, recurring exceptions, doctrine/stance/craft gaps, evidence,
+     decision history, and post-decision learning.
+   - Human-required actions deep-link to their canonical Needs you record.
 
-4. **Decision Governance**
-   - Cross-coworker review queue, proactivity, authority, decision rules, founder review, stance/craft material.
-   - Replaces Coworker Decision Engine as a peer navigation destination over time.
+4. **Setup**
+   - Services, tools, skills, prompts, model/provider assignment, browser
+     provisioning, declaration gaps, and install/catalog blockers.
+   - Capability needs remain Backlog-owned.
 
-5. **Systems Health**
+5. **Health**
    - Providers, routing, browser sessions, runtime health, Build Studio runtime, infrastructure map.
    - Technical health is available, but not the front door.
 
-These modes should be implemented as shallow section lenses under `/platform/ai`, such as query-backed modes or a small number of shallow routes. They must not become a new third navigation layer.
+These lenses are shallow sections under `/platform/ai`. They must not become a
+new third navigation layer.
 
 ### Lens Routing Rules
 
-The five AI Workforce modes are bookmarkable section lenses, not a nested route family.
+The five AI Workforce lenses are bookmarkable sections, not a nested route
+family.
 
-Use canonical shallow routes for durable modes:
+Use canonical shallow routes for durable lenses:
 
-- `/platform/ai` or `/platform/ai/overview` -> **Coworkers**
-- `/platform/ai/work` -> **Work Monitor**
-- `/platform/ai/capabilities` -> **Capabilities**
-- `/platform/ai/governance` -> **Decision Governance**
-- `/platform/ai/health` -> **Systems Health**
+- `/platform/ai/coworkers` -> **Coworkers**
+- `/platform/ai/work` -> **Work**
+- `/platform/ai/decisions` -> **Decisions**
+- `/platform/ai/setup` -> **Setup**
+- `/platform/ai/health` -> **Health**
+
+`/platform/ai` and `/platform/ai/overview` remain compatibility entries to
+Coworkers until telemetry permits retirement.
 
 Use query parameters only for local view state inside a lens:
 
@@ -216,7 +226,9 @@ Each coworker card should show:
   - `Blocked`
   - `Provider degraded`
   - `Review needed`
-- Primary action: `View coworker`.
+- Primary action is state-specific: named Ask for ready/permitted work, typed
+  recovery for blocked/remediation work, or View when no work action exists.
+- `View coworker` is the consistent secondary route when another primary exists.
 
 The roster should support filters for business area, customer interaction, availability, setup state, approval level, and health. These filters should not replace the four visible groupings above.
 
@@ -224,52 +236,16 @@ The roster should support filters for business area, customer interaction, avail
 
 The selected coworker record remains the deep management home. It should not recreate the platform-wide sprawl inside one detail page.
 
-Recommended primary tabs:
+The first viewport shows identity, plain job, primary business area, default
+action service, derived availability/action, and one short reason. The default
+action service appears first; aggregate summary appears second when different;
+sibling services follow.
 
-1. **Overview**
-   - Who this coworker is.
-   - What it helps with.
-   - Whether it can work for this business.
-   - Whether it needs attention.
-   - Current approval/autonomy posture.
-
-2. **Work Offered**
-   - Services or work this coworker can do.
-   - Inputs needed.
-   - Outputs produced.
-   - Who it helps.
-   - Where the work appears in the product.
-   - Customer/partner/internal exposure.
-
-3. **Availability**
-   - Current business type first.
-   - Setup dependencies.
-   - Supported archetype categories and leaf archetypes.
-   - Not-yet-supported business types.
-   - Plain explanation of gaps.
-
-4. **Capabilities**
-   - Connected tools.
-   - Skills.
-   - Prompt/corpus readiness.
-   - Model routing summary.
-   - Missing capability needs.
-
-5. **Autonomy & Governance**
-   - Approval level.
-   - Proactivity.
-   - Authority boundary.
-   - Decision discipline.
-   - Escalation rules.
-
-6. **Activity**
-   - Recent work.
-   - Decisions.
-   - Review-needed items.
-   - Performance and reliability summary.
-   - Links to raw history/logs only when needed.
-
-Technical details such as prompts, memory, provider routing, browser sessions, raw decision rows, raw logs, and runtime traces should appear as contextual panels or advanced disclosures inside these tabs.
+Owner-readable sections cover Work offered, Availability and recovery,
+Governance posture, and recent Activity. Technical details such as prompts,
+memory, tool/grant bindings, provider routing, browser sessions, raw decision
+rows, logs, and runtime traces remain under `OwnerFirstDisclosure`. Do not
+recreate the route sprawl as six peer record tabs.
 
 ## Archetype Availability
 
@@ -388,13 +364,13 @@ Each displayed work item should resolve to a normalized offer card with:
 
 The offer card reads from the coworker offer/service catalog, coworker record, setup state, and governance/authority state. It must not duplicate prompt, skill, or provider configuration data. Those remain supporting records linked through the offer or coworker.
 
-## Decision Governance Migration
+## Decisions Migration
 
 Coworker Decision Engine should stop being a peer product destination over time.
 
 Target placement:
 
-- Cross-coworker decision review lives under **AI Workforce > Decision Governance**.
+- Cross-coworker decision evidence lives under **AI Workforce > Decisions**.
 - Per-coworker decision behavior lives in the coworker record under **Autonomy & Governance** and **Activity**.
 - Old `/coworker-decisions/*` routes remain as compatibility redirects during migration.
 - Decision data remains owned by the governance/decision model, but indexed by coworker, offer, domain, and discipline.
@@ -423,14 +399,14 @@ Per-coworker governance includes:
 Compatibility rule:
 
 - Existing `/coworker-decisions/*` routes remain readable during migration.
-- Visible navigation moves to AI Workforce > Decision Governance.
+- Visible navigation moves to AI Workforce > Decisions.
 - Old routes redirect only after equivalent AI Workforce destinations exist and deep-link tests pass.
 
-## Systems Health Placement
+## Health Placement
 
 Provider/model/runtime infrastructure should be available, but it should not define the primary IA.
 
-Systems Health contains:
+Health contains:
 
 - provider status
 - model availability
@@ -460,8 +436,8 @@ AI Workforce represents the coworkers and services that participate in Build Stu
 - Platform Engineer coworker record.
 - UX Design Critic coworker record.
 - Build-sensitive requirements offer.
-- Build runtime health inside Systems Health.
-- Build-related decisions inside Decision Governance.
+- Build runtime health inside Health.
+- Build-related decisions inside Decisions.
 
 Visible rule:
 
@@ -473,9 +449,10 @@ Visible rule:
 
 Phase 1: Introduce the new AI Workforce IA without removing old routes.
 
-- Keep `/platform/ai/overview` as the roster front door.
+- Add `/platform/ai/coworkers` as the new roster front door while
+  `/platform/ai/overview` remains a page until the redirect phase.
 - Keep `/platform/ai/agent/[agentId]` as the coworker record.
-- Add the five modes as shallow lenses.
+- Add the five lenses as shallow sections.
 - Add customer-facing grouping and availability badges to the roster.
 
 Phase 2: Contextualize management surfaces.
@@ -494,33 +471,164 @@ Phase 4: Retire redirect-only and low-value peer destinations.
 - Use telemetry or access logs before removal.
 - Do not remove routes that are still used by embedded links, artifacts, or user guides.
 
-### Route Disposition Table
+### Canonical Route Disposition Registry
 
-| Current surface | Target home | Disposition |
-| --- | --- | --- |
-| `/platform/ai`, `/platform/ai/overview` | AI Workforce > Coworkers | Primary home |
-| `/platform/ai/agent/[agentId]` | Coworker record | Primary detail home |
-| `/platform/ai/assignments`, `/platform/ai/model-assignment`, `/platform/ai/priority` | AI Workforce > Capabilities; coworker record > Capabilities / Autonomy | Contextualize, then hide from primary nav |
-| `/platform/ai/prompts` | AI Workforce > Capabilities; coworker record advanced prompt panel | Contextualize |
-| `/platform/ai/skills` | AI Workforce > Capabilities; coworker record > Capabilities | Contextualize |
-| `/platform/ai/memory` | Coworker record advanced memory panel; Systems Health for fleet memory issues | Contextualize |
-| `/platform/ai/providers`, `/platform/ai/providers/[providerId]` | AI Workforce > Systems Health | Keep as advanced deep link |
-| `/platform/ai/routing`, `/platform/ai/runtime-health`, `/platform/ai/operations`, `/platform/ai/operations-map` | AI Workforce > Systems Health | Consolidate as health lens panels/deep links |
-| `/platform/ai/browser-sessions`, `/platform/ai/browser-sessions/setup` | AI Workforce > Systems Health | Keep as setup/deep-link panels |
-| `/platform/ai/history` | AI Workforce > Work Monitor; coworker record > Activity | Contextualize |
-| `/platform/ai/decisions/[interactionId]`, `/platform/ai/founder-review` | AI Workforce > Decision Governance | Primary governance detail |
-| `/platform/ai/capability-needs` | AI Workforce > Capabilities; Backlog where promoted | Compatibility redirect or contextual panel |
-| `/platform/ai/build-studio` | Build Studio configuration; AI Workforce > Systems Health for runtime | Contextual link, not primary AI Workforce peer |
-| `/platform/ai/catalog` | AI Workforce > Capabilities | Contextualize |
-| `/platform/ai/authority` | AI Workforce > Decision Governance / coworker record > Autonomy & Governance | Compatibility redirect |
-| `/coworker-decisions` | AI Workforce > Decision Governance | Compatibility route during migration |
-| `/coworker-decisions/review` | AI Workforce > Decision Governance review queue | Migrate then redirect |
-| `/coworker-decisions/proactivity` | AI Workforce > Decision Governance / coworker record > Autonomy & Governance | Migrate then redirect |
-| `/coworker-decisions/perspectives`, `/stance`, `/craft`, `/matrix` | AI Workforce > Decision Governance advanced panels | Migrate then redirect |
-| `/coworker-decisions/decisions/*` | AI Workforce > Decision Governance decision detail | Migrate then redirect |
-| `/admin/agents`, `/ea/agents` | AI Workforce > Coworkers or Platform Identity > Agents, depending user intent | Remove as ordinary coworker entry; keep admin/identity deep link |
-| Domain AI pages such as `/finance/spend/ai` | Domain workflow with contextual coworker link | Keep domain workflow; link to coworker record |
-| Customer/marketing AI pages | Domain/customer workflows plus `Customers and sales` roster area | Keep workflow; cross-link |
+Classes are closed: `canonical-home`, `contextual-deep-link`,
+`advanced-deep-link`, `compatibility-redirect`, and `retirement-candidate`.
+Needs you remains the only owner of human-required actions; Backlog owns
+capability gaps; Audit Ledger owns immutable history; Build Studio owns product
+build execution; Platform Identity owns principals.
+
+The source registry is machine-readable and separates observed state from the
+target IA:
+
+```ts
+type AiRouteLifecycleDisposition = {
+  routeId: string;
+  sourcePath: string | null;
+  currentDisposition: "absent" | "page" | "redirect";
+  targetRouteId: string | null;
+  contextMapping: {
+    schemaVersion: "ai-route-context-mapping.v1";
+    query: Array<{ sourceKey: string; targetKey: string; required: boolean }>;
+    pathParams: Array<{ sourceKey: string; targetKey: string; required: boolean }>;
+    entityRefs: Array<{ kind: string; sourceKey: string; targetKey: string }>;
+    focus: { sourceKey: string; targetKey: string } | null;
+    returnTo: { mode: "preserve" } | { mode: "set"; targetRouteId: string };
+  } | null;
+  targetDisposition:
+    | "canonical-home"
+    | "contextual-deep-link"
+    | "advanced-deep-link"
+    | "compatibility-redirect"
+    | "retirement-candidate";
+  lifecyclePhase: "add-target" | "retain" | "redirect-after-target" | "observe-for-retirement" | "retire";
+  activationPrerequisites: string[];
+  retirementEvidenceRefs: string[];
+};
+```
+
+The five new lens rows begin `absent/add-target`. Existing page rows begin
+`page`; the eight existing redirects begin `redirect`. A target redirect cannot
+activate until `targetRouteId` names a registry row whose route exists and whose
+activation prerequisites have passed. Retained/canonical rows point to
+themselves. A retirement row may clear `targetRouteId` only in the terminal
+`retire` phase after its retirement evidence passes. Redirect validation also
+proves the declared query, entity, focus, and return-context mapping rather than
+accepting destination prose as evidence.
+Redirect and context-changing rows require `contextMapping`; a self-retained
+row may use null only when no context transform occurs. Unknown source/target
+keys, duplicate target keys, missing required inputs, or a `returnTo.targetRouteId`
+that does not resolve fail the transition.
+Retirement cannot activate until telemetry, embedded-link, artifact, and
+user-guide evidence is attached. The table below is the owner-readable
+projection of that source registry; its Class column is the **target**
+disposition, not an assertion that the transition already happened.
+
+| Current route | Operator job | Class | Destination / action owner | Migration and acceptance |
+| --- | --- | --- | --- | --- |
+| `/platform/ai/coworkers` | Find a coworker by work | canonical-home | Coworkers | New route; directory Purpose and browser tests |
+| `/platform/ai/work` | See AI-linked work and owning destinations | canonical-home | Work projects canonical work; owning domains keep actions | New route; projection/ownership parity |
+| `/platform/ai/decisions` | Review decision evidence and policy quality | canonical-home | Decisions; Needs you keeps human actions | New route; no queue/count duplication |
+| `/platform/ai/setup` | Resolve fleet/coworker setup | canonical-home | Setup; Backlog keeps capability gaps | New route; permission/recovery fixtures |
+| `/platform/ai/health` | Diagnose AI operational health | canonical-home | Health | New route; symptom/action/evidence fixtures |
+| `/platform/ai` | Enter AI Workforce | compatibility-redirect | Coworkers | Preserve query/return context; redirect test |
+| `/platform/ai/overview` | Find a coworker by work | compatibility-redirect | Coworkers | Redirect after `/coworkers` exists; preserve filters |
+| `/platform/ai/agent/[agentId]` | Understand/manage one coworker | canonical-home | Coworker record | Preserve Agent id; dynamic record fixture |
+| `/platform/ai/assignments` | Configure priority/models | advanced-deep-link | Setup | Bookmark and permission fixture |
+| `/platform/ai/assignments/bindings/[bindingId]` | Inspect one model/resource binding | advanced-deep-link | Setup | Preserve binding id and return route |
+| `/platform/ai/authority` | Understand coworker authority | compatibility-redirect | Coworker record / Decisions | Preserve selected Agent and focus |
+| `/platform/ai/browser-sessions` | Diagnose browser capacity | advanced-deep-link | Health | Symptom-first Health link |
+| `/platform/ai/browser-sessions/setup` | Provision browser profile | contextual-deep-link | Setup | Preserve profile/service context |
+| `/platform/ai/build-studio` | Configure build runtime | contextual-deep-link | Build Studio owns execution; Health owns runtime status | No peer nav; canonical-owner link test |
+| `/platform/ai/capability-needs` | Review missing capability | compatibility-redirect | Backlog | Preserve need id/origin |
+| `/platform/ai/capacity-continuity` | Understand capacity policy | advanced-deep-link | Health | Progressive guidance, not peer nav |
+| `/platform/ai/catalog` | Manage service declarations | advanced-deep-link | Setup | Declaration permission/recovery fixture |
+| `/platform/ai/decisions/[interactionId]` | Inspect one decision | canonical-home | Decisions | Preserve interaction id and Needs you link |
+| `/platform/ai/founder-review` | Review doctrine exceptions | contextual-deep-link | Decisions; Needs you owns actions | No local queue/count |
+| `/platform/ai/history` | Inspect immutable AI activity | compatibility-redirect | Audit Ledger | Preserve filters and entity refs |
+| `/platform/ai/memory` | Inspect coworker/fleet memory | advanced-deep-link | Coworker record; Health for fleet faults | No peer nav; selected Agent fixture |
+| `/platform/ai/model-assignment` | Configure models | compatibility-redirect | Setup assignments | Preserve Agent/filter context |
+| `/platform/ai/operations` | Enter build operations | compatibility-redirect | Build Studio | Preserve build/work refs |
+| `/platform/ai/operations-map` | Diagnose AI work topology | advanced-deep-link | Health | Owner summary first; topology disclosed |
+| `/platform/ai/priority` | Configure model priority | compatibility-redirect | Setup assignments | Preserve selected Agent |
+| `/platform/ai/priority/outcomes` | Review routing outcomes | contextual-deep-link | Work; Health for failure | Link to owning work receipt |
+| `/platform/ai/prompts` | Manage prompt assets | advanced-deep-link | Setup | Selected coworker/filter context |
+| `/platform/ai/providers` | Configure/diagnose providers | advanced-deep-link | Setup for config; Health for incidents | Split actions by owner |
+| `/platform/ai/providers/[providerId]` | Inspect one provider | advanced-deep-link | Setup / Health | Preserve provider id |
+| `/platform/ai/readiness` | Resolve fleet setup blockers | contextual-deep-link | Setup | No Available without current evidence |
+| `/platform/ai/routing` | Configure providers/routing | compatibility-redirect | Setup providers | Preserve filters/context |
+| `/platform/ai/runtime-health` | Diagnose runtime | contextual-deep-link | Health | Symptom/action/evidence fixture |
+| `/platform/ai/skills` | Manage skill assets | advanced-deep-link | Setup | Selected coworker/filter context |
+| `/coworker-decisions` | Enter decision governance | compatibility-redirect | Decisions | Remove global peer after target exists |
+| `/coworker-decisions/[...slug]` | Read decision doctrine | advanced-deep-link | Decisions knowledge | Preserve slug/anchors |
+| `/coworker-decisions/craft` | Browse craft corpus | advanced-deep-link | Decisions | Profession filter fixture |
+| `/coworker-decisions/craft/[professionKey]` | Read profession corpus | advanced-deep-link | Decisions | Preserve profession key |
+| `/coworker-decisions/decisions` | Review decision history | compatibility-redirect | Decisions | No duplicate action queue |
+| `/coworker-decisions/decisions/[interactionId]` | Inspect decision | compatibility-redirect | Decisions detail | Preserve interaction id |
+| `/coworker-decisions/edit/[...slug]` | Edit governed knowledge | advanced-deep-link | Decisions | Permission/slug fixture |
+| `/coworker-decisions/matrix` | Inspect principle matrix | advanced-deep-link | Decisions | Progressive disclosure |
+| `/coworker-decisions/perspectives` | Manage perspectives | advanced-deep-link | Decisions / coworker record | Selected profile context |
+| `/coworker-decisions/perspectives/[profileId]/voice` | Configure profile voice | advanced-deep-link | Coworker record / Decisions | Preserve profile id |
+| `/coworker-decisions/proactivity` | Set fleet/coworker proactivity | contextual-deep-link | Decisions / coworker record | Authority warning; selected Agent |
+| `/coworker-decisions/review` | See unresolved decisions | compatibility-redirect | Decisions projects evidence; Needs you owns actions | Count/action parity test |
+| `/coworker-decisions/stance` | Manage business stance | advanced-deep-link | Decisions | Organization/profile permission fixture |
+
+Adjacent canonical owners:
+
+| Surface | Disposition |
+| --- | --- |
+| `/admin/agents`, `/ea/agents` | Platform Identity for principals; compatibility link to Coworkers for team discovery |
+| `/finance/spend/ai` | Finance-owned spend workflow with contextual coworker links |
+| Customer/Marketing pages | Domain workflows with typed named-work launchers and Coworkers cross-links |
+| Build Studio | Build-owned workflow with contextual coworker launchers |
+
+### Canonical Launcher Disposition Registry
+
+Launcher classes are `generic-context`, `named-coworker`, `named-service`,
+`support`, and `compatibility`. All classes open the one shared
+`AgentCoworkerShell`; none creates another conversation product.
+
+Every source row uses an exact file path plus export/caller identifier. Grouping
+below is presentation only; the guard expands each path/export into its own row.
+
+| Exact current caller/mount | Class | Contract and action boundary | Acceptance |
+| --- | --- | --- | --- |
+| `apps/web/components/agent/AgentCoworkerShell.tsx#AgentFAB` | generic-context | Route context + return destination; no invented service claim | One global launcher, selected-context preview |
+| `apps/web/components/platform/coworker-record/RosterView.tsx#RosterView` | named-service | Canonical/provider Agent + selected service/offer + revision | Same service owns placement and Ask |
+| `apps/web/app/(shell)/platform/ai/agent/[agentId]/page.tsx#default` | named-service | Selected record service/offer | Service mismatch fails closed |
+| `apps/web/app/(shell)/platform/ai/providers/page.tsx#default`; `apps/web/components/platform/ProviderSuitabilityGuide.tsx#ProviderSuitabilityGuide` | support | Platform-support context; configuration remains Setup-owned | No provider mutation on open |
+| `apps/web/app/(shell)/platform/ai/runtime-health/page.tsx#default`; `apps/web/components/monitoring/LogIssuesPanel.tsx#LogIssuesPanel` | support | Health symptom/evidence context | No incident resolution on open |
+| `apps/web/components/product/direction/ProductRoadmap.tsx#ProductRoadmap` | named-coworker or named-service when declared | Product/work ref + return route | Durable work receipt |
+| `apps/web/app/(shell)/customer/marketing/page.tsx#default`; `apps/web/app/(shell)/customer/marketing/strategy/page.tsx#default` | named-service | Marketing offer + customer work context | Campaign service preserved |
+| `apps/web/components/customer/PipelineStageInspector.tsx#PipelineStageInspector`; `apps/web/components/customer/EmptyPipelineGuidance.tsx#EmptyPipelineGuidance` | named-service | Customer-stage offer + work ref | Customer context preserved |
+| `apps/web/components/compliance/licensing/LicensingWorkspacePanel.tsx#LicensingWorkspacePanel` | named-service | Compliance offer + license ref | Authority rechecked on submit |
+| `apps/web/components/finance/AiSpendWorkspace.tsx#AiSpendWorkspace` | named-service | Finance offer + spend context | Finance remains canonical owner |
+| `apps/web/components/finance/OwnerFirstFinanceView.tsx#OwnerFirstFinanceView`; `apps/web/components/finance/AiFinanceCoworkerAskButton.tsx#AiFinanceCoworkerAskButton` | named-service | Finance offer + owner-view context; dispatches through the shared named-work target | Both Finance mounts preserve the same service, permission, and return context |
+| `apps/web/components/build/BuildStudio.tsx#BuildStudio` | generic-context | Active build/work ref | Build Studio remains action owner |
+| `apps/web/components/build/BuildStudioWorkflowActionCard.tsx#BuildStudioWorkflowActionCard` | named-service when action declares service; otherwise generic-context | Phase/action + build ref | No generic prompt presented as named work |
+| `apps/web/components/build/ReleaseDecisionPanel.tsx#ReleaseDecisionPanel` | named-service when declared | Release-governance offer + build ref | Consequential action still approval-gated |
+| `apps/web/components/admin/IssueReportPanel.tsx#IssueReportPanel` | support | Issue evidence + return route | No issue mutation on open |
+| `apps/web/components/setup/SetupOverlay.tsx#SetupOverlay` | support | Setup step/recovery context | Explicit auto-open exception; no auto-send |
+| `apps/web/components/portal-context/HiveMindCandidateList.tsx#HiveMindCandidateList` | named-coworker | Candidate/work context | Identity visible before send |
+| `apps/web/components/monitoring/AlertBanner.tsx#AlertBanner`; `apps/web/components/monitoring/PlatformHealthIndicator.tsx#PlatformHealthIndicator` | support | Alert/symptom evidence | Health action owner preserved |
+
+The source registry contains every table row as structured data. Its guard:
+
+1. compares `/platform/ai` and `/coworker-decisions` routes from
+   `route-purpose.generated.json` plus the compatibility redirect registry;
+2. scans imports and mounts of `AskCoworkerButton`, `AgentWorkLauncher`,
+   `AgentFAB`, and launcher wrappers, plus every call or import of
+   `dispatchAgentPrompt` and every direct `open-agent-panel` emitter;
+3. fails CI for missing, duplicate, stale, or ownerless dispositions;
+4. validates observed page/redirect state against `currentDisposition` and
+   refuses a lifecycle phase whose activation prerequisites/evidence are absent;
+   every non-null `targetRouteId` must resolve to an activated registry route,
+   redirect rows require one, and context-preservation fixtures must match the
+   structured `contextMapping`; the guard rejects missing mappings, duplicate
+   target keys, unknown keys, and unresolved return destinations;
+5. requires Purpose, deep-link, permission, and return-context fixtures for
+   every new route or launcher.
 
 ## Guardrails
 
@@ -529,7 +637,8 @@ Phase 4: Retire redirect-only and low-value peer destinations.
 - No schema-shaped IA: providers, prompts, skills, memory, and browser sessions are support objects, not primary operator destinations unless they are cross-coworker operational work.
 - Customer-facing coworkers are prioritized by roster grouping, badges, and sort order, not by creating another route hierarchy.
 - The coworker record is the durable management home.
-- Fleet modes are for cross-coworker comparison, exception handling, and setup workflows.
+- Fleet lenses are for cross-coworker comparison, evidence, setup, and health
+  projection.
 - Technical raw detail must use progressive disclosure.
 - On phone-width viewports, global and Platform navigation collapse to compact,
   route-aware controls. Their full option sets remain one deliberate action
@@ -542,8 +651,11 @@ Phase 4: Retire redirect-only and low-value peer destinations.
 - Given a restaurant-like current archetype, an owner can identify coworkers that `Talk to customers`, `Work with partners`, and are `Internal only` from the AI Workforce first viewport without opening provider/admin pages.
 - Given coworkers in available, setup-needed, not-available, and coverage-not-defined states, the roster shows one owner-readable availability badge per coworker or offer.
 - Given a customer-facing coworker with missing setup dependencies, the roster shows `Setup needed` and the coworker detail explains the missing prerequisite before technical capability data.
-- Given a governance user looking for unresolved AI decisions, they can reach the cross-coworker review queue from AI Workforce > Decision Governance without using `/coworker-decisions`.
-- Given an operator troubleshooting degraded AI work, Systems Health gives a symptom-oriented entry before raw provider/model/routing tables.
+- Given a governance user looking for unresolved AI decisions, they can reach
+  Decisions evidence and the canonical Needs you action without using
+  `/coworker-decisions`.
+- Given an operator troubleshooting degraded AI work, Health gives a
+  symptom-oriented entry before raw provider/model/routing tables.
 - Given a deep link to an existing `/coworker-decisions/*` route, the route remains readable or redirects to an equivalent AI Workforce governance destination during the compatibility window.
 - Given a redirect-only or compatibility route, it does not appear as a visible primary nav destination.
 - Given a selected coworker record, the first viewport shows identity, work offered, current-business availability, attention state, and approval/autonomy posture without requiring the operator to inspect prompts, models, or provider routes.
@@ -569,7 +681,7 @@ Accepted critique:
 - Customer-facing coworkers need a first-class `Customers and sales` area.
 - Decision governance needs a stable fleet-level review queue.
 - The old Coworker Decision Engine should migrate under AI Workforce.
-- Five modes should be shallow lenses, not another route tree.
+- Five lenses should be shallow sections, not another route tree.
 - The coworker record should reduce primary tabs and push raw technical detail into contextual advanced panels.
 - Operator copy should avoid `external exposure`, `personas`, and `archetype availability` where plainer terms work.
 
@@ -578,13 +690,15 @@ Accepted critique:
 These are non-blocking defaults for implementation planning:
 
 - Use the four owner-facing roster areas confirmed by the live audit: `Customers and sales`, `Your team`, `Operations and delivery`, and `Platform and back office`.
-- Active service portfolio assignments determine the owner-facing area;
-  unassigned work remains in `Other`. Agent workforce placement is not a
-  substitute.
+- The deterministic applicable, ready, permitted default action service owns
+  primary business-area placement. Every service portfolio remains a filter
+  membership; Agent workforce placement is not a substitute. When no service
+  is actionable, the deterministic recovery service owns placement.
 - Seeded service applicability determines whether a coworker can support an
   archetype/category. Explicit readiness evidence determines whether matching
-  work is available now, setup-needed, or blocked. Unevaluated readiness stays
-  `Coverage not defined`.
+  work is available now, setup-needed, or blocked. Unevaluated/stale readiness
+  is `Readiness not checked`; undeclared applicability is `Coverage not
+  defined`.
 - If telemetry is unavailable, no route is retired. Routes may be hidden from visible nav only when the new AI Workforce destination exists and compatibility links remain readable.
 
 ## Telemetry for Route Retirement
@@ -618,7 +732,8 @@ To align the Information Architecture with foundational DPF governance, coworker
 
 ### 2. Specialization & Tool Bloat Guardrails
 * **Principle 1 Alignment (Specialization Over Generalization)**: Coworkers are most effective when limited to `< 10` tools (see `docs/architecture/ai-coworker-development-principles.md`).
-* **UI Refinement**: Under the **Capabilities** lens and the coworker's **Capabilities** detail tab:
+* **UI Refinement**: Under **Setup** and the coworker record's advanced
+  Capabilities disclosure:
   - Display a count of assigned tools (`backingToolNames`) and skills (`backingSkillIds`).
   - Flag an operational warning/technical-debt indicator if the assigned tool count exceeds **10** (amber warning) or **15** (red alert), suggesting that the coworker should be refactored or decomposed.
 
@@ -628,14 +743,17 @@ To align the Information Architecture with foundational DPF governance, coworker
 
 ### 4. Autonomy, Governance, and HITL Boundaries
 * **Principle 7 Alignment (Human-in-the-Loop at Phase Boundaries)**: Distinguish between broad workflow gates and tactical execution blockages.
-* **UI Refinement**: Under the **Decision Governance** lens and the coworker's **Autonomy & Governance** tab, split controls and lists into:
+* **UI Refinement**: Under the **Decisions** lens and the coworker's Governance section, split controls and lists into:
   - **Phase-Boundary Approvals**: For workflow transitions (e.g., approving a plan to proceed to build).
   - **Consequential Side-Effect Approvals**: For proposal tools (e.g., executing schema migrations, deploying to staging).
   - Provide direct link navigation from decision rows to the global **Paused-Work surface** or cross-process inbox.
 
 ### 5. Memory Compaction & Looping Diagnostics
 * **Principle 5 Alignment (Selective Memory)**: Surface the efficiency of the vector storage (Qdrant) by showing a breakdown of "Salient Context" (durable decisions, user choices, constraints) vs. transient notes. Provide a compaction/pruning trigger.
-* **Principle 8 Alignment (Fail Fast, Explain Clearly)**: In both the **Work Monitor** and **Systems Health** lenses, bubble up active tool repetition looping alerts (e.g. when a coworker hits the 3–5 repetition limit) as high-priority operational exceptions rather than burying them in logs.
+* **Principle 8 Alignment (Fail Fast, Explain Clearly)**: In both **Work** and
+  **Health**, bubble up active tool-repetition alerts (for example the 3-5
+  repetition limit) as high-priority operational exceptions instead of burying
+  them in logs.
 
 ### 6. Workspace vs. Configuration Separation
 * **Navigation Audit Alignment**: Keep "where to go" controls separated from "what to do" controls.
@@ -650,7 +768,7 @@ This design should be implemented as a sequence of small slices:
 2. Availability badges and offer summary data.
 3. Coworker record tab simplification.
 4. Five AI Workforce lenses.
-5. Decision Governance migration.
+5. Decisions migration.
 6. Route/nav cleanup and redirects.
 
 Each slice should include static-render tests for navigation and copy, plus browser verification for the roster and one selected coworker record.
