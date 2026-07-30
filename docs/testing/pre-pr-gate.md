@@ -208,20 +208,31 @@ either without caring which one ran. Force a specific path for
 testing/debugging with `DPF_PREGATE_FORCE_SH=1` or `DPF_PREGATE_FORCE_NODE=1`.
 
 The gate claims a `local-integration-ci` lease (waiting if the sandbox is
-already leased), heartbeats at no more than one third of the effective lease
-TTL, runs the gate command, releases the runtime slot, records a
+already leased). A canonical waiter refreshes its idempotent claim well inside
+its liveness window, while an admitted owner receives a two-minute authority
+window and heartbeats at no more than one third of that effective TTL. This
+bounds recovery when the supervisor disappears without shortening the maximum
+queue wait. The gate runs the command, releases the runtime slot, records a
 local-integration evidence record with the lease id and `gatePassed`, and
 writes the latest gate result to Git-local state
 (`.git/dpf-local-ci-gate.json`). Renewal loss is
 fail-closed: before further sandbox mutation the gate terminates its complete
 child process tree, records a fenced outcome, and releases idempotently.
+Transport failure is uncertainty rather than proof of ownership loss: the gate
+records the failure and retries only inside its last known authority window. A
+separate deadline terminates the child tree before that window expires if no
+successful renewal advances it. MCP requests have their own bounded transport
+deadline, so a hung heartbeat cannot outlive the lease silently.
 Admission also takes an atomic slot-local owner fence in the shared Git
 directory. A competing claimant for that slot waits while the fence's PID is alive even if
 an older database TTL has elapsed; a dead PID is reaped as an orphan. The
-database lease remains the governed cross-process record, while this local
+admitted waiter renews its database authority while it waits for that host
+fence and refuses to acquire the fence near its last known expiry. The database
+lease remains the governed cross-process record, while this local
 fence closes the host process-liveness gap the database cannot observe.
-The requested expiry is calculated for each claim attempt, after queue
-admission, so time spent waiting never consumes the acquired owner's TTL.
+The requested expiry is calculated afresh for every claim observation, and the
+service grants a fresh admitted-owner window at promotion, so time spent
+waiting never consumes the acquired owner's TTL.
 Claim, heartbeat, signal/fence, and release timestamps are included in the
 evidence and Git-local state. An expired TTL is never permission for the old
 owner to continue working. The gate does

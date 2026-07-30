@@ -16,7 +16,10 @@ import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
 import { summarizeLocalCiOutput } from "./lib/local-ci-failure-summary.mjs";
 import { classifyGateOutcome } from "./lib/sandbox-freshness.mjs";
-import { superviseLeaseRun } from "./lib/lease-supervisor.mjs";
+import {
+  authoritySafetyMarginMs,
+  superviseLeaseRun,
+} from "./lib/lease-supervisor.mjs";
 import {
   acquireLocalSandboxFence,
   heartbeatLocalSandboxFence,
@@ -35,6 +38,7 @@ import {
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
+const LOCAL_CI_ACTIVE_LEASE_TTL_MS = 2 * 60_000;
 
 function die(message) {
   process.stderr.write(`gate-worktree: ${message}\n`);
@@ -101,7 +105,7 @@ Options:
   --mcp-url URL                MCP endpoint (default: DPF_MCP_URL or local portal)
   --lease-wait-seconds N       Max time to wait for admission (default: 7200)
   --poll-seconds N             Initial queue-observation backoff (default: 10)
-  --expires-minutes N          Lease expiry window (default: 60)
+  --expires-minutes N          Lease expiry window (default: 2; local-CI cap: 2)
   --push                       Push before claiming the lease (legacy/explicit publication mode)
   --no-push                    Do not push before claiming the lease (default)
   --dry-run                    Print planned actions; skip git push and MCP calls
@@ -126,7 +130,7 @@ function parseArgs(argv) {
     mcpUrl: process.env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1",
     leaseWaitSeconds: Number(process.env.DPF_GATE_LEASE_WAIT_SECONDS || 7200),
     pollSeconds: Number(process.env.DPF_GATE_POLL_SECONDS || 10),
-    expiresMinutes: Number(process.env.DPF_GATE_EXPIRES_MINUTES || 60),
+    expiresMinutes: Number(process.env.DPF_GATE_EXPIRES_MINUTES || 2),
     pushBranch: false,
     dryRun: false,
     finalizeEvidence: false,
@@ -491,7 +495,10 @@ async function main() {
     if (push.status !== 0) die(`push failed: ${push.stderr || push.stdout}`);
   }
 
-  const leaseTtlMs = Math.min(options.expiresMinutes * 60000, 20 * 60_000);
+  const leaseTtlMs = Math.min(
+    options.expiresMinutes * 60_000,
+    LOCAL_CI_ACTIVE_LEASE_TTL_MS,
+  );
   let expiresAt = "";
   let url = slotManifest.portal.url;
 
@@ -578,6 +585,13 @@ async function main() {
     leaseId = claimResponse?.entityId || claimResponse?.data?.lease?.leaseId || leaseId;
     const admission = claimResponse?.data?.admission;
     if (claimResponse?.success === true && admission?.status !== "queued") {
+      const admittedExpiresAt = claimResponse?.data?.lease?.expiresAt;
+      if (
+        typeof admittedExpiresAt === "string"
+        && Number.isFinite(Date.parse(admittedExpiresAt))
+      ) {
+        expiresAt = admittedExpiresAt;
+      }
       const admittedSlotKey = admission?.slotKey || "slot-0";
       slotManifest = createLocalCiSlotManifest({
         slotKey: admittedSlotKey,
@@ -649,12 +663,37 @@ async function main() {
     die(`failed to claim local-CI lease: ${JSON.stringify(claimResponse)}`);
   }
 
+  const renewLeaseAuthority = async () => {
+    const response = await mcpCall("renew_nonprod_environment_lease", {
+      leaseId,
+      ownerSessionId,
+      ttlMinutes: LOCAL_CI_ACTIVE_LEASE_TTL_MS / 60_000,
+    }, { mcpUrl: options.mcpUrl, bearerToken });
+    const renewedExpiresAt = response?.data?.lease?.expiresAt;
+    if (
+      response?.success === true
+      && typeof renewedExpiresAt === "string"
+      && Number.isFinite(Date.parse(renewedExpiresAt))
+    ) {
+      expiresAt = renewedExpiresAt;
+    } else if (response?.success === true) {
+      // Rolling-upgrade compatibility for a portal that renews successfully
+      // but does not yet return the authoritative expiry.
+      expiresAt = new Date(Date.now() + leaseTtlMs).toISOString();
+    }
+    return response;
+  };
+
   // Durable remote admission is authoritative. The host-process fence is a
   // second, local safety belt acquired only after this waiter owns slot-0.
   for (;;) {
     if (receivedSignal) {
       await releaseLeaseOnce();
       process.exit(130);
+    }
+    if (Date.now() >= Date.parse(expiresAt) - authoritySafetyMarginMs(leaseTtlMs)) {
+      await releaseLeaseOnce();
+      die("local-CI lease authority expired while waiting for the host process fence");
     }
     const localFence = acquireLocalSandboxFence({
       path: localFencePath,
@@ -669,6 +708,31 @@ async function main() {
       await releaseLeaseOnce();
       die("local-CI sandbox owner process is still live; timed out waiting");
     }
+    let renewal;
+    try {
+      renewal = await renewLeaseAuthority();
+    } catch (error) {
+      leaseEvents.push({
+        type: "pre_run_heartbeat_uncertain",
+        at: new Date().toISOString(),
+        reason: error?.message || String(error),
+        expiresAt,
+      });
+      process.stderr.write(
+        `gate-worktree: lease heartbeat uncertain while waiting for the host fence (${error.message}); retrying within known authority\n`,
+      );
+      await sleep(Math.min(options.pollSeconds * 1000, Math.max(10, deadline - Date.now())));
+      continue;
+    }
+    if (renewal?.success !== true) {
+      await releaseLeaseOnce();
+      die(`local-CI lease authority lost while waiting for the host process fence: ${JSON.stringify(renewal)}`);
+    }
+    leaseEvents.push({
+      type: "pre_run_heartbeat_renewed",
+      at: new Date().toISOString(),
+      expiresAt,
+    });
     process.stdout.write(`local-CI sandbox process fence held by ${localFence.active?.ownerSessionId || "unknown"}; retrying after admission...\n`);
     await sleep(Math.min(options.pollSeconds * 1000, Math.max(10, deadline - Date.now())));
   }
@@ -720,8 +784,14 @@ async function main() {
   for (const [signal, handler] of Object.entries(runSignalHandlers)) process.once(signal, handler);
   let supervised;
   try {
+    const admittedTtlMs = Math.max(
+      1,
+      (Number.isFinite(Date.parse(expiresAt)) ? Date.parse(expiresAt) : Date.now() + leaseTtlMs)
+        - Date.now(),
+    );
     supervised = await superviseLeaseRun({
-      ttlMs: leaseTtlMs,
+      ttlMs: admittedTtlMs,
+      expiresAt,
       run: gateCommand.run,
       terminate: gateCommand.terminate,
       renew: async () => {
@@ -732,10 +802,7 @@ async function main() {
         if (localHeartbeat.status !== "renewed") {
           return { success: false, error: "local-process-fence-lost" };
         }
-        return mcpCall("renew_nonprod_environment_lease", {
-          leaseId,
-          ownerSessionId,
-        }, { mcpUrl: options.mcpUrl, bearerToken });
+        return renewLeaseAuthority();
       },
       release: async () => {
         try {

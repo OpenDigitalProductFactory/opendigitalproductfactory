@@ -11,8 +11,10 @@ import {
   releaseNonprodEnvironmentLease,
   renewNonprodEnvironmentLease,
   reapExpiredNonprodEnvironmentLeases,
+  admittedLeaseTtlMs,
   MAX_LEASE_TTL_MS,
   DEFAULT_LEASE_TTL_MS,
+  LOCAL_CI_ACTIVE_LEASE_TTL_MS,
   NONPROD_OWNER_PROVIDERS,
 } from "./environment-lease";
 
@@ -308,6 +310,13 @@ describe("durable nonproduction admission", () => {
 });
 
 describe("lease liveness windows", () => {
+  it("rejects an invalid admitted-owner TTL instead of writing an unusable expiry", () => {
+    expect(() => admittedLeaseTtlMs("local-integration-ci", Number.NaN))
+      .toThrow("nonprod_lease_ttl_must_be_positive");
+    expect(() => admittedLeaseTtlMs("local-integration-ci", 0))
+      .toThrow("nonprod_lease_ttl_must_be_positive");
+  });
+
   it("clamps requested holds to the maximum window", () => {
     const requested = new Date(NOW.getTime() + 8 * 60 * 60_000);
     expect(clampLeaseExpiry(NOW, requested).getTime())
@@ -338,6 +347,38 @@ describe("lease liveness windows", () => {
     });
   });
 
+  it("caps an admitted local-CI owner independently of its longer queue TTL", async () => {
+    const mockDb = db();
+    const queued = lease({
+      requestedTtlMs: MAX_LEASE_TTL_MS,
+      expiresAt: new Date(NOW.getTime() + MAX_LEASE_TTL_MS),
+    });
+    mockDb.nonProductionEnvironmentLease.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(admitted({
+        expiresAt: new Date(NOW.getTime() + LOCAL_CI_ACTIVE_LEASE_TTL_MS),
+      }));
+    mockDb.nonProductionEnvironmentLease.create.mockResolvedValue(queued);
+    mockDb.nonProductionEnvironmentLease.findMany.mockResolvedValueOnce([queued]);
+
+    await claim(mockDb, {
+      expiresAt: new Date(NOW.getTime() + MAX_LEASE_TTL_MS),
+    });
+
+    expect(mockDb.nonProductionEnvironmentLease.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        requestedTtlMs: MAX_LEASE_TTL_MS,
+        expiresAt: new Date(NOW.getTime() + MAX_LEASE_TTL_MS),
+      }),
+    });
+    expect(mockDb.nonProductionEnvironmentLease.update).toHaveBeenCalledWith({
+      where: { id: "row-1" },
+      data: expect.objectContaining({
+        expiresAt: new Date(NOW.getTime() + LOCAL_CI_ACTIVE_LEASE_TTL_MS),
+      }),
+    });
+  });
+
   it("renews only an active owned unexpired lease and stamps heartbeat", async () => {
     const mockDb = db();
     mockDb.nonProductionEnvironmentLease.findUnique.mockResolvedValue(
@@ -356,9 +397,36 @@ describe("lease liveness windows", () => {
     expect(mockDb.nonProductionEnvironmentLease.update).toHaveBeenCalledWith({
       where: { leaseId: "NPEL-1" },
       data: expect.objectContaining({
-        expiresAt: new Date(NOW.getTime() + DEFAULT_LEASE_TTL_MS),
+        expiresAt: new Date(NOW.getTime() + LOCAL_CI_ACTIVE_LEASE_TTL_MS),
         heartbeatAt: NOW,
         phase: "running",
+      }),
+    });
+  });
+
+  it("keeps the existing renewal window for non-local-CI environments", async () => {
+    const mockDb = db();
+    mockDb.nonProductionEnvironmentLease.findUnique.mockResolvedValue(
+      admitted({
+        environmentKey: "active-candidate",
+        activeKey: "active-candidate:slot-0",
+        expiresAt: new Date(NOW.getTime() + 60_000),
+      }),
+    );
+    mockDb.nonProductionEnvironmentLease.update.mockResolvedValue(admitted());
+
+    const result = await renewNonprodEnvironmentLease({
+      db: mockDb as never,
+      leaseId: "NPEL-1",
+      ownerSessionId: "session-1",
+      now: NOW,
+    });
+
+    expect(result.status).toBe("renewed");
+    expect(mockDb.nonProductionEnvironmentLease.update).toHaveBeenCalledWith({
+      where: { leaseId: "NPEL-1" },
+      data: expect.objectContaining({
+        expiresAt: new Date(NOW.getTime() + DEFAULT_LEASE_TTL_MS),
       }),
     });
   });

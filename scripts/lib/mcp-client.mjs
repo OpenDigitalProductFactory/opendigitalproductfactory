@@ -30,9 +30,16 @@ let callId = 0;
  * JSON and holds the actual `{ success, entityId, error, ... }` payload.
  * Falls back to `result.structuredContent` or `result` for other transports.
  */
-export async function mcpCall(toolName, args, { mcpUrl, bearerToken } = {}) {
+export async function mcpCall(toolName, args, {
+  mcpUrl,
+  bearerToken,
+  timeoutMs = 10_000,
+} = {}) {
   if (!mcpUrl) throw new Error("mcpCall: mcpUrl is required");
   if (!bearerToken) throw new Error("mcpCall: bearerToken is required");
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new Error("mcpCall: timeoutMs must be a positive number");
+  }
 
   callId += 1;
   const body = JSON.stringify({
@@ -52,6 +59,7 @@ export async function mcpCall(toolName, args, { mcpUrl, bearerToken } = {}) {
       mcpUrl,
       bearerToken,
       body,
+      timeoutMs,
     })
     : await new Promise((resolve, reject) => {
     const req = requestFn(url, {
@@ -75,6 +83,9 @@ export async function mcpCall(toolName, args, { mcpUrl, bearerToken } = {}) {
         }
       });
     });
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error(`mcpCall: ${toolName} timed out after ${timeoutMs}ms`));
+    });
     req.on("error", reject);
     req.write(body);
     req.end();
@@ -86,9 +97,17 @@ export async function mcpCall(toolName, args, { mcpUrl, bearerToken } = {}) {
 // Contract-test seam retained while the POSIX gate converges on this canonical
 // Node client. Production has no curl dependency; an explicitly injected
 // executable receives the former curl-compatible argv without a command shell.
-async function callInjectedCurlTransport({ command, mcpUrl, bearerToken, body }) {
+async function callInjectedCurlTransport({
+  command,
+  mcpUrl,
+  bearerToken,
+  body,
+  timeoutMs,
+}) {
   const args = [
     "-sS",
+    "--max-time",
+    String(Math.max(0.001, timeoutMs / 1_000)),
     "-X",
     "POST",
     mcpUrl,

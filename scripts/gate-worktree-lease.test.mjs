@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -11,10 +11,23 @@ function run(command, args, options) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, options);
     let output = "";
+    const timeout = setTimeout(() => {
+      child.kill();
+      resolve({
+        code: -1,
+        output: `${output}\n[test harness] gate child timed out after 20s`,
+      });
+    }, 20_000);
     child.stdout.on("data", (chunk) => { output += chunk; });
     child.stderr.on("data", (chunk) => { output += chunk; });
-    child.once("error", reject);
-    child.once("close", (code) => resolve({ code, output }));
+    child.once("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.once("close", (code) => {
+      clearTimeout(timeout);
+      resolve({ code, output });
+    });
   });
 }
 
@@ -149,6 +162,163 @@ test("durable queue observation reuses claimKey and grants a fresh admitted TTL"
     assert.ok(grantedMs >= 2_800, `expected a fresh ~3s TTL, got ${grantedMs}ms`);
     assert.match(result.output, /queued at position 2/);
   } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("canonical local-CI claims request no more than the admitted-owner recovery TTL", async () => {
+  const claims = [];
+  const server = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      const payload = JSON.parse(body);
+      const tool = payload.params.name;
+      if (tool === "claim_nonprod_environment_lease") {
+        claims.push({ receivedAt: Date.now(), args: payload.params.arguments });
+      }
+      const result = tool === "claim_nonprod_environment_lease"
+        ? {
+          success: true,
+          entityId: "NPEL-SHORT-ACTIVE",
+          data: {
+            lease: {
+              leaseId: "NPEL-SHORT-ACTIVE",
+              expiresAt: payload.params.arguments.expiresAt,
+            },
+            admission: { status: "admitted", slotKey: "slot-0", waitAgeMs: 1 },
+          },
+        }
+        : tool === "record_local_integration_result"
+          ? { success: true, entityId: "EVIDENCE-SHORT-ACTIVE" }
+          : { success: true };
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({
+        jsonrpc: "2.0",
+        id: payload.id,
+        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+
+  try {
+    const result = await run(process.execPath, [
+      "scripts/gate-worktree.mjs",
+      "--branch", "fix/admitted-owner-recovery",
+      "--worktree", process.cwd(),
+      "--mcp-url", `http://127.0.0.1:${address.port}`,
+      "--no-push",
+    ], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        DPF_MCP_BEARER_TOKEN: "test-token",
+        DPF_ALLOW_LOCAL_CI_STUB: "1",
+        DPF_LOCAL_SANDBOX_FENCE_PATH: isolatedFencePath(),
+      },
+    });
+
+    assert.ok([0, 3].includes(result.code), result.output);
+    assert.equal(claims.length, 1);
+    const requestedMs =
+      Date.parse(claims[0].args.expiresAt) - claims[0].receivedAt;
+    assert.ok(requestedMs > 119_000, `expected about two minutes, got ${requestedMs}ms`);
+    assert.ok(requestedMs <= 120_000, `expected at most two minutes, got ${requestedMs}ms`);
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("an admitted owner renews authority while a live host fence delays the run", async () => {
+  const calls = [];
+  const fencePath = isolatedFencePath();
+  writeFileSync(fencePath, `${JSON.stringify({
+    schema: "dpf-local-sandbox-fence/v1",
+    token: "prior-live-owner",
+    pid: process.pid,
+    ownerSessionId: "prior-live-owner",
+    branch: "fix/prior-owner",
+    acquiredAt: new Date().toISOString(),
+    heartbeatAt: new Date().toISOString(),
+  })}\n`);
+
+  const server = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      const payload = JSON.parse(body);
+      const tool = payload.params.name;
+      calls.push(tool);
+      const result = tool === "claim_nonprod_environment_lease"
+        ? {
+          success: true,
+          entityId: "NPEL-HOST-FENCE-WAIT",
+          data: {
+            lease: {
+              leaseId: "NPEL-HOST-FENCE-WAIT",
+              expiresAt: new Date(Date.now() + 10_000).toISOString(),
+            },
+            admission: { status: "admitted", slotKey: "slot-0", waitAgeMs: 1 },
+          },
+        }
+        : tool === "renew_nonprod_environment_lease"
+          ? {
+            success: true,
+            entityId: "NPEL-HOST-FENCE-WAIT",
+            data: {
+              lease: {
+                leaseId: "NPEL-HOST-FENCE-WAIT",
+                expiresAt: new Date(Date.now() + 10_000).toISOString(),
+              },
+            },
+          }
+          : tool === "record_local_integration_result"
+            ? { success: true, entityId: "EVIDENCE-HOST-FENCE-WAIT" }
+            : { success: true };
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({
+        jsonrpc: "2.0",
+        id: payload.id,
+        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  const releasePriorFence = setTimeout(() => rmSync(fencePath, { force: true }), 150);
+
+  try {
+    const result = await run(process.execPath, [
+      "scripts/gate-worktree.mjs",
+      "--branch", "fix/admitted-owner-recovery",
+      "--worktree", process.cwd(),
+      "--expires-minutes", "0.05",
+      "--poll-seconds", "0.05",
+      "--mcp-url", `http://127.0.0.1:${address.port}`,
+      "--no-push",
+    ], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        DPF_MCP_BEARER_TOKEN: "test-token",
+        DPF_ALLOW_LOCAL_CI_STUB: "1",
+        DPF_LOCAL_SANDBOX_FENCE_PATH: fencePath,
+      },
+    });
+
+    assert.ok([0, 3].includes(result.code), result.output);
+    assert.ok(
+      calls.indexOf("renew_nonprod_environment_lease")
+        < calls.indexOf("record_local_integration_result"),
+      `${calls.join(", ")}\n${result.output}`,
+    );
+  } finally {
+    clearTimeout(releasePriorFence);
+    rmSync(fencePath, { force: true });
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
   }

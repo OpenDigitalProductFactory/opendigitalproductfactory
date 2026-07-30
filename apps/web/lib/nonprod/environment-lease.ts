@@ -39,6 +39,27 @@ type LeaseRow = NonNullable<Awaited<ReturnType<LeaseModel["findUnique"]>>>;
 // heartbeat; queued claim retries also refresh this bounded liveness window.
 export const MAX_LEASE_TTL_MS = 20 * 60_000;
 export const DEFAULT_LEASE_TTL_MS = 15 * 60_000;
+// A queued request can remain observable for the normal bounded window, but an
+// admitted singleton local-CI owner must prove liveness frequently. If its host
+// process disappears immediately after admission, FIFO reconciliation can
+// recover the slot within this bound instead of waiting 15-20 minutes.
+export const LOCAL_CI_ACTIVE_LEASE_TTL_MS = 2 * 60_000;
+
+export function admittedLeaseTtlMs(
+  environmentKey: string,
+  requestedMs: number,
+): number {
+  if (!Number.isFinite(requestedMs) || requestedMs <= 0) {
+    throw new Error("nonprod_lease_ttl_must_be_positive");
+  }
+  const boundedRequest = Math.min(
+    MAX_LEASE_TTL_MS,
+    requestedMs,
+  );
+  return environmentKey === "local-integration-ci"
+    ? Math.min(LOCAL_CI_ACTIVE_LEASE_TTL_MS, boundedRequest)
+    : boundedRequest;
+}
 
 export function clampLeaseExpiry(
   now: Date,
@@ -182,9 +203,9 @@ async function reconcileEnvironmentInTransaction(input: {
   const byId = new Map(rows.map((row) => [row.id, row]));
   for (const admission of plan.admissions) {
     const row = byId.get(admission.leaseId);
-    const ttlMs = Math.min(
-      MAX_LEASE_TTL_MS,
-      Math.max(1, Number(row?.requestedTtlMs ?? DEFAULT_LEASE_TTL_MS)),
+    const ttlMs = admittedLeaseTtlMs(
+      input.environmentKey,
+      Number(row?.requestedTtlMs ?? DEFAULT_LEASE_TTL_MS),
     );
     await input.tx.nonProductionEnvironmentLease.update({
       where: { id: admission.leaseId },
@@ -529,9 +550,9 @@ export async function renewNonprodEnvironmentLease(input: {
   if (lease.ownerSessionId !== input.ownerSessionId) return { status: "lost", reason: "not-owner" };
   if (lease.expiresAt.getTime() <= now.getTime()) return { status: "lost", reason: "expired" };
 
-  const ttlMs = Math.min(
-    MAX_LEASE_TTL_MS,
-    Math.max(1, input.ttlMs ?? DEFAULT_LEASE_TTL_MS),
+  const ttlMs = admittedLeaseTtlMs(
+    lease.environmentKey,
+    input.ttlMs ?? DEFAULT_LEASE_TTL_MS,
   );
   const updated = await db.nonProductionEnvironmentLease.update({
     where: { leaseId: input.leaseId },
