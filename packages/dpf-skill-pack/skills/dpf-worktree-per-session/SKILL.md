@@ -123,6 +123,17 @@ Before editing or reviewing from an existing worktree:
 4. If `source-only`, you may edit and commit, but final answers and PR/evidence notes must say local worktree gates were not run and must point to canonical-runtime/local-CI evidence for any verification claim.
 5. Commit or capture dirty work frequently. A dirty active worker worktree blocks upgrade apply because uncommitted output cannot be safely rebased, promoted, or abandoned by automation.
 
+## Confirm which worktree your command actually ran in
+
+With many sibling worktrees holding the same file paths, a command can succeed against the **wrong** copy and look entirely normal. The shell's working directory **persists between tool calls**: one `cd` into a sibling worktree silently retargets every later command that relies on a relative path.
+
+- **Use absolute paths** in shell commands that read, test, or build. Do not rely on the cwd left by an earlier call.
+- **Read the runner's own root banner.** Vitest prints `RUN v<version> <root>` — if that root is not your worktree, the results are another branch's. Pin it explicitly: `node <abs>/node_modules/vitest/vitest.mjs run --root <ABSOLUTE pkg dir> <files>`.
+- **Cross-check the count.** Compare `grep -c '  it(' <file>` against the reported test total. A passing run whose count doesn't match your file did not execute your file. The same logic applies to any "N passed" summary — reconcile N against something you can count in your own tree.
+- After `git reset --hard origin/main`, re-confirm `git log --oneline -1`; never assume the base you started from.
+
+This is a *false green*, not a flake: nothing errors, and the pass is real — for someone else's code.
+
 ## Output template
 
 ```
@@ -145,6 +156,7 @@ Before editing or reviewing from an existing worktree:
 - **Never modify or move the root clone for active feature work.** The root clone is the merge/release/install worktree per `keep-root-clone-as-merge-worktree`; raw `git switch`, `git checkout`, `git reset`, `git pull`, `git merge`, and `git rebase` in that clone are root mutations, not setup.
 - Don't treat the worktree as a runtime by default. Commit from the worktree, verify against the canonical install. 'Make the worktree runnable' is a dedicated platform task, not a side-effect of every feature thread.
 - **Never claim unrun gates passed.** A `source-only` worktree can hold correct code, but its local typecheck/build/test status is unknown until proven in that worktree or in canonical runtime/local-CI.
+- **Never accept a green test run without confirming it targeted your worktree.** A sibling worktree holds the same paths; the runner's root banner and the test count are the proof.
 
 ## Worked example (this session, 2026-05-24)
 
