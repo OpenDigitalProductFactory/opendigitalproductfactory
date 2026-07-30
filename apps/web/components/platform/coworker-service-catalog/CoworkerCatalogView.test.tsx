@@ -1,7 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { CoworkerCatalogView } from "./CoworkerCatalogView";
+import {
+  CoworkerCatalogView,
+  projectOfferPresentation,
+} from "./CoworkerCatalogView";
 import type { CoworkerCatalog } from "@/lib/coworker-service-catalog/catalog";
 
 const catalog: CoworkerCatalog = {
@@ -95,5 +98,37 @@ describe("CoworkerCatalogView", () => {
     expect(html).toContain('data-catalog-layout="desktop"');
     expect(html).toContain("lg:hidden");
     expect(html).toContain("lg:block");
+  });
+
+  it("shares one complete offer interpretation across desktop and mobile", () => {
+    const presentation = projectOfferPresentation(catalog.offers[0]);
+
+    expect(presentation).toMatchObject({
+      provider: {
+        primary: "Legal Operations Counsel",
+        secondary: "Arcamanus",
+      },
+      risk: {
+        primary: "high",
+      },
+      authority: {
+        primary: "proposal-only",
+        secondary: "Approval required",
+      },
+      availability: {
+        primary: "internal",
+        secondary: "Digital Product Factory",
+      },
+    });
+    expect(presentation.mobileFacts).toEqual(
+      expect.arrayContaining([
+        { label: "Version", value: "1.0.0" },
+        { label: "Provider organization", value: "Arcamanus" },
+        {
+          label: "Availability",
+          value: "internal; Digital Product Factory",
+        },
+      ]),
+    );
   });
 });

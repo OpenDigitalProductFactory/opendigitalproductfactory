@@ -3,6 +3,10 @@ import { oversightLabel } from "@/lib/workforce/oversight-copy";
 
 export function CoworkerCatalogView({ catalog }: { catalog: CoworkerCatalog }) {
   const activeOffers = catalog.offers.filter((offer) => offer.status === "active");
+  const activeOfferRows = activeOffers.map((offer) => ({
+    offer,
+    presentation: projectOfferPresentation(offer),
+  }));
   const highRisk = catalog.offers.filter((offer) => offer.riskTier === "high" || offer.riskTier === "critical").length;
   const external = catalog.offers.filter((offer) => offer.availabilityScope === "external").length;
 
@@ -33,8 +37,12 @@ export function CoworkerCatalogView({ catalog }: { catalog: CoworkerCatalog }) {
                 No active coworker offers are cataloged yet.
               </div>
             ) : (
-              activeOffers.map((offer) => (
-                <MobileOfferRow key={offer.offerId} offer={offer} />
+              activeOfferRows.map(({ offer, presentation }) => (
+                <MobileOfferRow
+                  key={offer.offerId}
+                  offer={offer}
+                  presentation={presentation}
+                />
               ))
             )}
           </div>
@@ -57,8 +65,12 @@ export function CoworkerCatalogView({ catalog }: { catalog: CoworkerCatalog }) {
                     No active coworker offers are cataloged yet.
                   </div>
                 ) : (
-                  activeOffers.map((offer) => (
-                    <OfferRow key={offer.offerId} offer={offer} />
+                  activeOfferRows.map(({ offer, presentation }) => (
+                    <OfferRow
+                      key={offer.offerId}
+                      offer={offer}
+                      presentation={presentation}
+                    />
                   ))
                 )}
               </div>
@@ -97,33 +109,112 @@ function Metric({ label, value }: { label: string; value: number }) {
   );
 }
 
-function OfferRow({ offer }: { offer: CoworkerOfferCatalogItem }) {
-  const legalRisk = typeof offer.metadata.legalRisk === "string" ? offer.metadata.legalRisk : null;
+type OfferPresentation = {
+  chips: Array<{ label: string; value: string }>;
+  provider: { primary: string; secondary: string };
+  risk: { primary: string; secondary: string };
+  authority: { primary: string; secondary: string };
+  availability: { primary: string; secondary: string };
+  mobileFacts: Array<{ label: string; value: string }>;
+};
+
+export function projectOfferPresentation(
+  offer: CoworkerOfferCatalogItem,
+): OfferPresentation {
+  const legalRisk =
+    typeof offer.metadata.legalRisk === "string"
+      ? offer.metadata.legalRisk
+      : null;
+  const engagement = offer.requiredApprovals.length
+    ? "Approval-aware"
+    : "Requestable";
+  const provider = {
+    primary: offer.provider.displayName,
+    secondary: offer.providerOrganization ?? offer.provider.kind,
+  };
+  const risk = {
+    primary: offer.riskTier,
+    secondary: oversightLabel(offer.service.hitlTier, { short: true }),
+  };
+  const authority = {
+    primary: offer.authorityBoundary,
+    secondary: offer.requiredApprovals.length
+      ? "Approval required"
+      : "No approval rule",
+  };
+  const availability = {
+    primary: offer.availabilityScope,
+    secondary: offer.digitalProduct?.name ?? "No product anchor",
+  };
+  const chips = [
+    { label: "Service", value: offer.serviceName },
+    { label: "Offer", value: offer.version },
+    { label: "Engagement", value: engagement },
+    ...(legalRisk ? [{ label: "Legal", value: legalRisk }] : []),
+  ];
+
+  return {
+    chips,
+    provider,
+    risk,
+    authority,
+    availability,
+    mobileFacts: [
+      { label: "Service", value: offer.serviceName },
+      { label: "Version", value: offer.version },
+      { label: "Provider", value: provider.primary },
+      { label: "Provider organization", value: provider.secondary },
+      {
+        label: "Risk",
+        value: `${risk.primary}; ${risk.secondary}`,
+      },
+      {
+        label: "Authority",
+        value: `${authority.primary}; ${authority.secondary}`,
+      },
+      {
+        label: "Availability",
+        value: `${availability.primary}; ${availability.secondary}`,
+      },
+      { label: "Engagement", value: engagement },
+      ...(legalRisk ? [{ label: "Legal", value: legalRisk }] : []),
+    ],
+  };
+}
+
+function OfferRow({
+  offer,
+  presentation,
+}: {
+  offer: CoworkerOfferCatalogItem;
+  presentation: OfferPresentation;
+}) {
   return (
     <div className="grid grid-cols-[minmax(220px,1.4fr)_minmax(160px,0.9fr)_110px_130px_120px] gap-0 border-b border-[var(--dpf-border)] px-3 py-3 text-xs last:border-b-0">
       <div className="min-w-0">
         <div className="font-semibold text-[var(--dpf-text)]">{offer.name}</div>
         <div className="mt-1 text-[var(--dpf-muted)]">{offer.summary}</div>
         <div className="mt-2 flex flex-wrap gap-1.5">
-          <Chip label="Service" value={offer.serviceName} />
-          <Chip label="Offer" value={offer.version} />
-          <Chip label="Engagement" value={offer.requiredApprovals.length ? "approval-aware" : "requestable"} />
-          {legalRisk ? <Chip label="Legal" value={legalRisk} /> : null}
+          {presentation.chips.map((chip) => (
+            <Chip key={chip.label} label={chip.label} value={chip.value} />
+          ))}
         </div>
       </div>
-      <Cell primary={offer.provider.displayName} secondary={offer.providerOrganization ?? offer.provider.kind} />
-      <Cell primary={offer.riskTier} secondary={oversightLabel(offer.service.hitlTier, { short: true })} />
-      <Cell primary={offer.authorityBoundary} secondary={offer.requiredApprovals.length ? "approval required" : "no approval rule"} />
-      <Cell primary={offer.availabilityScope} secondary={offer.digitalProduct?.name ?? "No product anchor"} />
+      <Cell {...presentation.provider} />
+      <Cell {...presentation.risk} />
+      <Cell {...presentation.authority} />
+      <Cell {...presentation.availability} />
     </div>
   );
 }
 
-function MobileOfferRow({ offer }: { offer: CoworkerOfferCatalogItem }) {
-  const legalRisk =
-    typeof offer.metadata.legalRisk === "string"
-      ? offer.metadata.legalRisk
-      : null;
+function MobileOfferRow({
+  offer,
+  presentation,
+}: {
+  offer: CoworkerOfferCatalogItem;
+  presentation: OfferPresentation;
+}) {
   return (
     <article className="min-w-0 py-4">
       <h2 className="text-sm font-semibold text-[var(--dpf-text)]">
@@ -133,23 +224,13 @@ function MobileOfferRow({ offer }: { offer: CoworkerOfferCatalogItem }) {
         {offer.summary}
       </p>
       <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
-        <MobileFact label="Service" value={offer.serviceName} />
-        <MobileFact label="Provider" value={offer.provider.displayName} />
-        <MobileFact
-          label="Risk"
-          value={`${offer.riskTier}; ${oversightLabel(offer.service.hitlTier, { short: true })}`}
-        />
-        <MobileFact label="Authority" value={offer.authorityBoundary} />
-        <MobileFact label="Availability" value={offer.availabilityScope} />
-        <MobileFact
-          label="Engagement"
-          value={
-            offer.requiredApprovals.length
-              ? "Approval required"
-              : "Requestable"
-          }
-        />
-        {legalRisk ? <MobileFact label="Legal" value={legalRisk} /> : null}
+        {presentation.mobileFacts.map((fact) => (
+          <MobileFact
+            key={fact.label}
+            label={fact.label}
+            value={fact.value}
+          />
+        ))}
       </dl>
     </article>
   );

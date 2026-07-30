@@ -171,6 +171,15 @@ actually complete.
 | The catalog clipped its fixed-width offer grid on mobile | Mobile renders a compact fact list; the dense grid is desktop-only |
 | The exact snapshot exposed an ambiguous multi-card test query | The assertion is scoped to the Marketing card and remains explicit about primary versus secondary action styling |
 
+A seventh architecture review rejected role-blind recovery and duplicated
+responsive interpretation. Both corrections move into shared typed
+projections.
+
+| Seventh critique | Correction |
+| --- | --- |
+| Workforce roles without Admin access received a lifecycle action that resolved to a 404 | Recovery targets carry their required capability and render only when the signed-in operator holds it |
+| Mobile and desktop catalog layouts interpreted offer metadata separately and exposed different facts | One offer-presentation projection supplies both layouts, including version, provider organization, authority, and product anchor, with parity-focused tests |
+
 ## Phase 1: Test-Drive Service-Scoped Readiness
 
 Add failing unit tests before implementation.

@@ -30,6 +30,7 @@ import type {
   RosterRow,
 } from "@/lib/coworker-record/roster";
 import { availabilityRecoveryTarget } from "@/lib/coworker-record/availability-recovery";
+import type { CapabilityKey } from "@/lib/permissions";
 import {
   OTHER_OWNER_FACING_AREA,
   OWNER_FACING_AREAS,
@@ -64,12 +65,18 @@ export function RosterView({
   rows,
   facets,
   initialQuery = "",
+  grantedCapabilities = [],
 }: {
   rows: RosterRow[];
   facets: RosterFacets;
   initialQuery?: string;
+  grantedCapabilities?: CapabilityKey[];
 }) {
   const kindOpts = useMemo(() => kindOptions(rows), [rows]);
+  const grantedCapabilitySet = useMemo(
+    () => new Set(grantedCapabilities),
+    [grantedCapabilities],
+  );
   const filterValueSets = useMemo<RosterFilterValueSets>(
     () => ({
       families: facets.families.map((family) => family.key),
@@ -365,6 +372,7 @@ export function RosterView({
                   key={row.agentId}
                   row={row}
                   returnHref={returnHref}
+                  grantedCapabilities={grantedCapabilitySet}
                 />
               ))}
             </div>
@@ -394,9 +402,11 @@ export function RosterView({
 function RosterRowCard({
   row,
   returnHref,
+  grantedCapabilities,
 }: {
   row: RosterRow;
   returnHref: string;
+  grantedCapabilities: ReadonlySet<CapabilityKey>;
 }) {
   const detailRoute = `/platform/ai/agent/${encodeURIComponent(row.agentId)}`;
   const detailHref = `${detailRoute}?returnTo=${encodeURIComponent(returnHref)}`;
@@ -408,6 +418,7 @@ function RosterRowCard({
   const recovery = availabilityRecoveryTarget(
     row.availability,
     detailHref,
+    grantedCapabilities,
   );
 
   return (

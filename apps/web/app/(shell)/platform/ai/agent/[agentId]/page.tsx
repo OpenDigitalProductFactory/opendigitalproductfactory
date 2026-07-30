@@ -10,7 +10,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { MessageSquare, Settings2 } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { can, getGrantedCapabilities } from "@/lib/permissions";
 import { AgentModelRoutingCard } from "@/components/platform/AgentModelRoutingCard";
 import { CapabilitiesEditor } from "@/components/platform/coworker-record/CapabilitiesEditor";
 import { RecordActionsMenu } from "@/components/platform/coworker-record/RecordActionsMenu";
@@ -321,6 +321,14 @@ export default async function AgentDetailPage({
   const recovery = availabilityRecoveryTarget(
     availability,
     `${detailRoute}?returnTo=${encodeURIComponent(returnTo)}`,
+    new Set(
+      session?.user
+        ? getGrantedCapabilities({
+            platformRole: session.user.platformRole,
+            isSuperuser: session.user.isSuperuser,
+          })
+        : [],
+    ),
   );
   const authority = projectCoworkerServiceAuthority({
     agent: {

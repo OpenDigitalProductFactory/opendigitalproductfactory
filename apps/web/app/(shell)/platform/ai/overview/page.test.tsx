@@ -10,6 +10,12 @@ vi.mock("@/lib/coworker-record/corpus-signals", () => ({
   loadProfessionCorpusSignals: vi.fn().mockResolvedValue([]),
 }));
 
+vi.mock("@/lib/auth", () => ({
+  auth: vi.fn().mockResolvedValue({
+    user: { platformRole: "HR-000", isSuperuser: false },
+  }),
+}));
+
 vi.mock("@/components/platform/coworker-record/ProfessionCorpusPanel", () => ({
   ProfessionCorpusPanel: () => <section>profession-corpus-panel</section>,
 }));
