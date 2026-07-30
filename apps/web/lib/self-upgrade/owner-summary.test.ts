@@ -176,6 +176,36 @@ describe("buildOwnerReleaseSummary", () => {
     expect(s.riskNotice).toBeNull();
   });
 
+  it("does not invent an update when the install is current but automatic updates are off", () => {
+    const s = buildOwnerReleaseSummary(
+      baseInput({
+        enabled: false,
+        isFresh: true,
+        targetSha: null,
+        blockerReason: "Automatic platform updates are disabled.",
+      }),
+      NO_LOCAL_CHANGES,
+    );
+
+    expect(s.state).toBe("up-to-date");
+    expect(s.availableVersion).toBeNull();
+  });
+
+  it("fails closed when status itself is unavailable", () => {
+    const s = buildOwnerReleaseSummary(
+      baseInput({
+        statusAvailable: false,
+        isFresh: true,
+        targetSha: null,
+        blockerReason: "Update status is temporarily unavailable.",
+      }),
+      NO_LOCAL_CHANGES,
+    );
+
+    expect(s.state).toBe("blocked");
+    expect(s.availableVersion).toBeNull();
+  });
+
   it("marks rollback unavailable (with a reassuring detail) when no governed recovery point exists", () => {
     const s = buildOwnerReleaseSummary(
       baseInput({ rollbackAvailable: false, latestRun: { status: "succeeded", reason: null, targetSha: null } }),

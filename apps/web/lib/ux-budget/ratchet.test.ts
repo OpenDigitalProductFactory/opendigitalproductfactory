@@ -186,6 +186,40 @@ describe("Purpose Contract report composition", () => {
 
     expect(evaluateSweep([m], baselineFrom(m), [purpose]).blocked).toBe(false);
   });
+
+  it("keeps a special-route purpose evaluation in the report without inventing measurements", () => {
+    const purpose: RoutePurposeEvaluation = {
+      routePath: "/ops/self-upgrade",
+      intentStatus: "intent-ratified",
+      structuralStatus: "conformant",
+      validation: {
+        overall: "not-validated",
+        classes: {},
+        receipts: [],
+      },
+      enforcement: "advisory",
+      findings: [],
+      blocking: false,
+    };
+
+    const sweep = evaluateSweep(
+      [measurement()],
+      baselineFrom(measurement()),
+      [purpose],
+    );
+
+    expect(sweep.purposeOnlyRoutes).toEqual([purpose]);
+    expect(
+      sweep.leagueTable.find(
+        (row) => row.routePath === "/ops/self-upgrade",
+      ),
+    ).toMatchObject({
+      purposeOnly: true,
+      words: null,
+      controls: null,
+      purposeStructure: "conformant",
+    });
+  });
 });
 
 describe("buried primary action is a ratchet regression (BI-D77BF495)", () => {

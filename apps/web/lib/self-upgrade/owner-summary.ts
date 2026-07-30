@@ -69,6 +69,7 @@ export interface OwnerReleaseSummary {
  * and assigns cleanly.
  */
 export interface OwnerReleaseInput {
+  statusAvailable?: boolean;
   enabled: boolean;
   isFresh: boolean;
   targetSha: string | null;
@@ -154,10 +155,12 @@ export function buildOwnerReleaseSummary(
     ? "in-progress"
     : failed
       ? "failed"
-      : input.blockerReason
+      : input.statusAvailable === false
         ? "blocked"
       : input.isFresh || !input.targetSha
         ? "up-to-date"
+        : input.blockerReason
+          ? "blocked"
         : "update-available";
 
   const tone: OwnerReleaseTone =
@@ -182,7 +185,7 @@ export function buildOwnerReleaseSummary(
   const targetShort = shortSha(input.targetSha);
   const targetDetail = input.availableMergePointLabel ?? targetShort;
   const availableVersion =
-    state === "update-available" || state === "blocked"
+    state === "update-available" || (state === "blocked" && targetDetail)
       ? input.latestRunImpact?.headline
         ? input.latestRunImpact.headline
         : targetDetail

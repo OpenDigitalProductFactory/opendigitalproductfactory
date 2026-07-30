@@ -29,6 +29,8 @@ The owner status card and the state-appropriate next step stay visible on
 arrival. An available update shows one install action. A current or running
 install shows status without a redundant start command. A failed or blocked
 install points to recovery instead of asking you to retry blindly. Open
+**Version, impact & recovery** for version detail, business impact, recovery
+facts, and the concise risk list. Open
 **Deploy controls & history** only when you need technical controls, run
 history, logs, or the local-changes ledger; a failed update opens that recovery
 detail automatically.

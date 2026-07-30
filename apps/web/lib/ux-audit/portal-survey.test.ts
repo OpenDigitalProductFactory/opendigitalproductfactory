@@ -223,6 +223,41 @@ describe("runSurvey + aggregateReport", () => {
       structurallyNonconformantCount: 1,
       taskValidatedCount: 0,
     });
-    expect(report.portalVerdict).toBe("pass");
+    expect(report.routes[0].verdict).toBe("concerns");
+    expect(report.evaluatedRouteCount).toBe(1);
+    expect(report.portalVerdict).toBe("concerns");
+  });
+
+  it("composes a special-route Purpose result into the canonical report", async () => {
+    const report = await runSurvey(
+      { entries: [], skipped: [] },
+      {
+        specialPurpose: async () => [
+          {
+            routePath: "/ops/self-upgrade",
+            intentStatus: "intent-ratified",
+            structuralStatus: "conformant",
+            validation: {
+              overall: "not-validated",
+              classes: {},
+              receipts: [],
+            },
+            enforcement: "advisory",
+            findings: [],
+            blocking: false,
+          },
+        ],
+      },
+      lensById,
+    );
+
+    expect(report.routes).toHaveLength(1);
+    expect(report.routes[0]).toMatchObject({
+      route: "/ops/self-upgrade",
+      verdict: "pass",
+      evaluated: { page: false, behavioral: false },
+    });
+    expect(report.evaluatedRouteCount).toBe(1);
+    expect(report.purposeCoverage.intentRatifiedCount).toBe(1);
   });
 });

@@ -38,21 +38,71 @@ decision:
 
 - one pure `purpose-evaluator.ts` owns deterministic structural checks,
   independent validation-receipt currentness, and purpose coverage;
-- `purpose-scenario.ts` is the route-owned Self-Upgrade oracle projection over
-  `getSelfUpgradeStatus()`, consumed separately from the rendered DOM;
+- `purpose-scenario.ts` owns the page projection while the separately
+  implemented `ux-budget/oracles/self-upgrade.ts` adapter owns the
+  contract-bound oracle over the same canonical status read model;
 - the existing UX sweep, route verdict, league table, and `UxAuditReport` carry
   additive intent, structure, and task-validation values; purpose defects are
   not translated into the accessibility-only `UxFinding.category` vocabulary;
 - `/ops/self-upgrade` is the first ratified source contract, with five states
   and a permission-protected read-only oracle endpoint;
 - semantic markers expose route/state, essential evidence, state-appropriate
-  commands/messages, completion/correction/recovery, consequential-action
-  context, and one technical disclosure;
+  commands/messages, keyed completion/correction/recovery, consequential-action
+  context, one owner-detail disclosure, and one technical disclosure;
 - the owner UI no longer offers a redundant update command while current,
   routes blocked/failed states to recovery, and opens technical recovery
   detail after a failed run;
 - every deterministic blocking check has a known-bad pure fixture, while
   enforcement remains advisory pending BI-B6935E5B and BI-232BA634.
+
+Two independent exact-SHA reviews then rejected the first implementation. The
+release-blocking corrections were incorporated before the gate:
+
+- the update action and compact consequence now precede secondary owner detail
+  at phone width;
+- current, blocked, failed, and status-unavailable states are mutually
+  exclusive, with combination-matrix fixtures;
+- the ratified path now matches Delivery > Track & release > Self-upgrade;
+- blocked states route to the owning timezone, platform-health, or recovery
+  surface, and failed state links to the latest-run recovery detail;
+- touch targets, wrapping, confirmation focus, accessible naming, and announced
+  action outcomes are explicit;
+- the oracle is independently implemented and contract-bound by `oracleKey`
+  and `sourceRef`;
+- keyed state signals replace generic completion/correction booleans;
+- latest-per-evidence-class receipt supersession prevents old failures or stale
+  evidence from being masked;
+- special-route results compose into the sweep, league table, and
+  `UxAuditReport`, while aggregate UX verdicts can no longer erase Purpose
+  nonconformance;
+- browser capture/evaluation moved into a focused adapter, keeping the sweep
+  orchestrator below its module-size ceiling.
+
+## Design grounding
+
+- Existing specs/plans reviewed:
+  - `docs/platform-usability-standards.md`
+  - `docs/superpowers/plans/2026-05-26-portal-ux-simplification-spine.md`
+  - this Page Purpose Contract plan and its Deliverable 1 implementation
+- Current code substrate reviewed:
+  - `apps/web/lib/ux-budget/page-purpose.ts`
+  - `apps/web/lib/ux-budget/route-policy.ts`
+  - `apps/web/scripts/ux-route-sweep.ts`
+  - `apps/web/lib/ux-budget/ratchet.ts`
+  - `apps/web/lib/ux-audit/portal-survey.ts`
+  - `apps/web/lib/actions/promotions.ts`
+  - `apps/web/lib/self-upgrade/owner-summary.ts`
+  - `apps/web/app/(shell)/ops/self-upgrade/page.tsx`
+- Source of truth:
+  - route identity and eligibility remain owned by the generated route manifest
+    and route policy;
+  - reviewed purpose remains owned by route-family Purpose Contract sources;
+  - Self-Upgrade raw state remains owned by `getSelfUpgradeStatus()`; page and
+    evaluator projections are independent consumers of that canonical read;
+  - the UX sweep, league table, and `UxAuditReport` remain the reporting owners.
+- Decision:
+  - WWMD `DI-F85F936AF3BF` selected `compose-existing-reports`; no parallel
+    dashboard, persistence model, route inventory, or DOM-self-attested oracle.
 
 ## Outcome
 
@@ -463,12 +513,12 @@ route-specific authoring.
 - Triggering need: an update is available, running, completed, or needs
   recovery.
 - Job: understand current update state and take the one safe next action.
-- Parent area: Platform operations.
-- Natural entry: the operator starts from the Platform/Operations navigation,
+- Parent area: Delivery.
+- Natural entry: the operator starts from Delivery > Track & release,
   not a supplied `/ops/self-upgrade` URL.
 - Discovery cue: `Self-Upgrade` or the ratified plain-language equivalent in
   one stable navigation layer.
-- Expected path: Platform/Operations -> Self-Upgrade -> state-appropriate
+- Expected path: Delivery -> Track & release -> Self-upgrade -> state-appropriate
   action; help/search is not required.
 - Success outcome: the install reaches the intended version and returns a
   healthy, operable portal, or the operator reaches a truthful recovery path.
@@ -487,9 +537,9 @@ Required state scenarios:
 | --- | --- | --- | --- |
 | `update-available` | One governed update command | Competing technical controls as peers | Start acknowledged, then transition to running |
 | `queued-or-running` | Informational wait/status; no command required | Duplicate update start | Progress/heartbeat plus honest reconnect expectation |
-| `current` | Informational no-action state | Disabled or misleading update command | Current version plus healthy runtime |
+| `current` | Informational no-action state when status is available and no newer target exists | Disabled or misleading update command | Current version plus healthy runtime |
 | `failed-recoverable` | One governed recovery or retry action | Raw logs as the first answer | Recovery state and owning diagnostic disclosure |
-| `blocked` | One truthful blocker resolution route | Generic “try again” without cause | Reach the owning prerequisite/recovery surface |
+| `blocked` | Status unavailable, or a pending target with one truthful blocker resolution route | Generic “try again” without cause | Reach the owning prerequisite/recovery surface |
 
 The Self-Upgrade state oracle is `getSelfUpgradeStatus()` in
 `apps/web/lib/actions/promotions.ts`, which composes the canonical

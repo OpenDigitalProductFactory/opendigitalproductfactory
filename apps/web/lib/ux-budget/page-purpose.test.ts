@@ -95,7 +95,9 @@ const ratifiedFixture: RatifiedPurposeContract = {
         actionKey: "start-task",
       },
       prohibitedActionKeys: [],
+      completionSignalKey: "task-started",
       completionSignal: "task-started",
+      correctionSignalKey: "error-recovery",
       errorCorrection: "Show the owning error",
       recovery: {
         actionKey: "return-to-workspace",

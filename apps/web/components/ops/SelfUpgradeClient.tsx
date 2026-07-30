@@ -819,7 +819,7 @@ export default function SelfUpgradeClient({
 
       {latestRun && (
         <div
-          className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] space-y-2"
+          id="self-upgrade-latest-run" className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] space-y-2"
           data-run-status={latestRun.status}
         >
           <div className="flex items-center gap-2">

@@ -25,6 +25,7 @@ const baseSummary: OwnerReleaseSummary = {
     consequence: "The portal restarts briefly.",
     reversibility: "Yes, via the recovery point.",
     duration: "Under five minutes.",
+    authority: "A platform administrator can start it.",
     recovery: "Restore the recovery point.",
   },
 };
@@ -50,6 +51,20 @@ describe("OwnerReleaseCard – primary action slot", () => {
     );
     expect(html.indexOf("Before you install")).toBeLessThan(
       html.indexOf('data-testid="the-trigger"'),
+    );
+  });
+
+  it("defers version, impact, recovery, and risk detail behind one disclosure", () => {
+    const html = renderToStaticMarkup(
+      <OwnerReleaseCard
+        summary={baseSummary}
+        primaryAction={<button data-testid="the-trigger">Upgrade now</button>}
+      />,
+    );
+    expect(html).toContain('data-dpf-purpose-disclosure-key="release-details"');
+    expect(html).toContain("Version, impact &amp; recovery");
+    expect(html.indexOf('data-testid="the-trigger"')).toBeLessThan(
+      html.indexOf("Version, impact &amp; recovery"),
     );
   });
 

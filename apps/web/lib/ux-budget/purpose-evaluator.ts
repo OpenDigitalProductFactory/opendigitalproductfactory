@@ -72,8 +72,8 @@ export type PurposeDomEvidence = {
   actions: PurposeActionEvidence[];
   messages: string[];
   prohibitedActionKeysPresent: string[];
-  completionSignalPresent: boolean;
-  correctionSignalPresent: boolean;
+  completionSignalKeys: string[];
+  correctionSignalKeys: string[];
   recoverySignal: {
     present: boolean;
     actionKey: string | null;
@@ -102,6 +102,7 @@ export type PurposeDomEvidence = {
 export type PurposeStateOracle = {
   routePath: string;
   stateKey: string;
+  oracleKey: string;
   sourceRef: string;
 };
 
@@ -166,7 +167,18 @@ function validationStatus(
     return { overall: "not-validated", classes: {}, receipts: [] };
   }
 
-  const receipts = contract.validationReceipts.map((receipt) => {
+  const latestByClass = new Map<
+    ValidationEvidenceClass,
+    TaskValidationReceipt
+  >();
+  for (const receipt of contract.validationReceipts) {
+    const current = latestByClass.get(receipt.evidenceClass);
+    if (!current || receipt.observedAt >= current.observedAt) {
+      latestByClass.set(receipt.evidenceClass, receipt);
+    }
+  }
+
+  const receipts = [...latestByClass.values()].map((receipt) => {
     const reasons: string[] = [];
     if (!context) {
       reasons.push("No validation context resolved.");
@@ -213,13 +225,6 @@ function validationStatus(
 
   const classes: PurposeValidationStatus["classes"] = {};
   for (const receipt of receipts) {
-    const current = classes[receipt.evidenceClass];
-    if (
-      current === "failed" ||
-      (current === "current" && receipt.status === "stale")
-    ) {
-      continue;
-    }
     classes[receipt.evidenceClass] = receipt.status;
   }
 
@@ -227,9 +232,9 @@ function validationStatus(
     (receipt) => receipt.status === "failed",
   )
     ? "failed"
-    : receipts.some((receipt) => receipt.status === "current")
-      ? "current"
-      : "stale";
+    : receipts.some((receipt) => receipt.status === "stale")
+      ? "stale"
+      : "current";
 
   return { overall, classes, receipts };
 }
@@ -365,6 +370,14 @@ export function evaluateRoutePurpose({
       "state-scenario",
       `Oracle state ${oracle.stateKey} has no ratified scenario.`,
     );
+  } else if (
+    oracle.oracleKey !== scenario.stateSource.oracleKey ||
+    oracle.sourceRef !== scenario.stateSource.sourceRef
+  ) {
+    add(
+      "state-oracle",
+      `Expected oracle ${scenario.stateSource.oracleKey} from ${scenario.stateSource.sourceRef}; received ${oracle.oracleKey} from ${oracle.sourceRef}.`,
+    );
   }
 
   if (evidence.h1Count !== 1) {
@@ -420,11 +433,21 @@ export function evaluateRoutePurpose({
         `Prohibited actions are present: ${[...prohibited].join(", ")}.`,
       );
     }
-    if (!evidence.completionSignalPresent) {
-      add("completion-signal", "The scenario has no completion signal.");
+    if (
+      !evidence.completionSignalKeys.includes(scenario.completionSignalKey)
+    ) {
+      add(
+        "completion-signal",
+        `Expected completion signal ${scenario.completionSignalKey}.`,
+      );
     }
-    if (!evidence.correctionSignalPresent) {
-      add("correction-signal", "The scenario has no correction signal.");
+    if (
+      !evidence.correctionSignalKeys.includes(scenario.correctionSignalKey)
+    ) {
+      add(
+        "correction-signal",
+        `Expected correction signal ${scenario.correctionSignalKey}.`,
+      );
     }
     if (
       !evidence.recoverySignal.present ||

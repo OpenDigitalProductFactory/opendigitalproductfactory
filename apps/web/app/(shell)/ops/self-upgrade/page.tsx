@@ -15,7 +15,9 @@ import { getLocalChangesLedger } from "@/lib/self-upgrade/local-changes-ledger";
 import { hasGovernedRecoveryPoint } from "@/lib/self-upgrade/rollback";
 import {
   resolveSelfUpgradePurposeBlocker,
+  resolveSelfUpgradePurposeRecovery,
   resolveSelfUpgradePurposeScenario,
+  resolveSelfUpgradePurposeSignals,
 } from "@/lib/self-upgrade/purpose-scenario";
 import { NAV_MODE_COOKIE, resolveNavModeFromCookie, isSimpleNavMode } from "@/lib/navigation/nav-mode";
 
@@ -60,6 +62,7 @@ export default async function SelfUpgradePage() {
     : { running: null, available: null };
 
   const fallbackStatus = {
+    statusAvailable: false,
     enabled: false,
     channel: "stable",
     inMaintenanceWindow: false,
@@ -102,9 +105,13 @@ export default async function SelfUpgradePage() {
     },
   };
 
-  const effectiveStatus = status ?? fallbackStatus;
+  const effectiveStatus = status
+    ? { ...status, statusAvailable: true }
+    : fallbackStatus;
   const purposeState = resolveSelfUpgradePurposeScenario(effectiveStatus);
+  const purposeSignals = resolveSelfUpgradePurposeSignals(purposeState);
   const purposeBlocker = resolveSelfUpgradePurposeBlocker(effectiveStatus);
+  const purposeRecovery = resolveSelfUpgradePurposeRecovery(effectiveStatus);
 
   const clientProps = JSON.parse(
     JSON.stringify({
@@ -124,6 +131,7 @@ export default async function SelfUpgradePage() {
   const ownerSummary = buildOwnerReleaseSummary(
     {
       enabled: effectiveStatus.enabled,
+      statusAvailable: effectiveStatus.statusAvailable,
       isFresh: effectiveStatus.isFresh,
       targetSha: effectiveStatus.targetSha,
       deployedSha: effectiveStatus.deployedSha,
@@ -159,6 +167,8 @@ export default async function SelfUpgradePage() {
     <div
       data-dpf-purpose-route="/ops/self-upgrade"
       data-dpf-purpose-state={purposeState}
+      data-dpf-purpose-completion-signal-key={purposeSignals.completion}
+      data-dpf-purpose-correction-signal-key={purposeSignals.correction}
     >
       <div className="mb-6">
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Self-Upgrade</h1>
@@ -181,6 +191,8 @@ export default async function SelfUpgradePage() {
               jobEngine={clientProps.jobEngine}
               purposeState={purposeState}
               blockerReason={purposeBlocker}
+              recoveryHref={purposeRecovery.href}
+              recoveryLabel={purposeRecovery.label}
             />
           }
         />

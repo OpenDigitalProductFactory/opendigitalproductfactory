@@ -39,8 +39,18 @@ describe("GET /api/ops/self-upgrade/purpose-state", () => {
       schemaVersion: 1,
       routePath: "/ops/self-upgrade",
       stateKey: "update-available",
-      sourceRef: "apps/web/lib/self-upgrade/purpose-scenario.ts",
+      oracleKey: "self-upgrade-status",
+      sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
     });
+  });
+
+  it("fails closed before querying status when unauthenticated", async () => {
+    mocks.auth.mockResolvedValue(null);
+
+    const response = await GET();
+
+    expect(response.status).toBe(401);
+    expect(mocks.getSelfUpgradeStatus).not.toHaveBeenCalled();
   });
 
   it("fails closed without operations permission", async () => {
@@ -49,5 +59,6 @@ describe("GET /api/ops/self-upgrade/purpose-state", () => {
     const response = await GET();
 
     expect(response.status).toBe(403);
+    expect(mocks.getSelfUpgradeStatus).not.toHaveBeenCalled();
   });
 });

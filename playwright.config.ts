@@ -35,8 +35,7 @@ export default defineConfig({
       testMatch:
         /.*(?:storefront-owner-mobile|coworker-catalog-mobile|self-upgrade-purpose)\.spec\.ts/,
       use: {
-        ...devices["Desktop Chrome"],
-        viewport: { width: 390, height: 844 },
+        ...devices["iPhone 13"],
         storageState: "e2e/.auth/state.json",
       },
     },

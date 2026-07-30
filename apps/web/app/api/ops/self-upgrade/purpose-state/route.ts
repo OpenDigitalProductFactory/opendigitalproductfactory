@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { getSelfUpgradeStatus } from "@/lib/actions/promotions";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
-import { resolveSelfUpgradePurposeScenario } from "@/lib/self-upgrade/purpose-scenario";
+import { resolveSelfUpgradePurposeOracle } from "@/lib/ux-budget/oracles/self-upgrade";
 
 export const dynamic = "force-dynamic";
 
@@ -27,8 +27,9 @@ export async function GET(): Promise<Response> {
     {
       schemaVersion: 1,
       routePath: "/ops/self-upgrade",
-      stateKey: resolveSelfUpgradePurposeScenario(status),
-      sourceRef: "apps/web/lib/self-upgrade/purpose-scenario.ts",
+      stateKey: resolveSelfUpgradePurposeOracle(status),
+      oracleKey: "self-upgrade-status",
+      sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
     },
     { headers: { "Cache-Control": "no-store, max-age=0" } },
   );

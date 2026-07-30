@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import type { RatifiedPurposeContract } from "./page-purpose";
+import type {
+  RatifiedPurposeContract,
+  TaskValidationReceipt,
+} from "./page-purpose";
 import {
   evaluateRoutePurpose,
   routeMatchesPurposeTemplate,
@@ -57,12 +60,14 @@ const contract: RatifiedPurposeContract = {
       statePredicate: "A newer target is available.",
       stateSource: {
         oracleKey: "self-upgrade-status",
-        sourceRef: "apps/web/lib/self-upgrade/purpose-scenario.ts",
+        sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
       },
       essentialEvidenceKeys: ["current-state", "impact-on-work", "next-action", "recovery-status"],
       primaryExperience: { kind: "command", actionKey: "start-upgrade" },
       prohibitedActionKeys: ["restore-previous-version"],
+      completionSignalKey: "upgrade-queue-acknowledgement",
       completionSignal: "The update request is acknowledged.",
+      correctionSignalKey: "upgrade-request-error",
       errorCorrection: "The trigger reports a recoverable error.",
       recovery: {
         actionKey: "open-recovery-guidance",
@@ -117,8 +122,8 @@ const evidence: PurposeDomEvidence = {
   ],
   messages: [],
   prohibitedActionKeysPresent: [],
-  completionSignalPresent: true,
-  correctionSignalPresent: true,
+  completionSignalKeys: ["upgrade-queue-acknowledgement"],
+  correctionSignalKeys: ["upgrade-request-error"],
   recoverySignal: {
     present: true,
     actionKey: "open-recovery-guidance",
@@ -151,6 +156,31 @@ const context: PurposeEvaluationContext = {
   resolvedArtifactIds: new Set(["artifact-1"]),
 };
 
+function functionalReceipt(
+  overrides: Partial<TaskValidationReceipt> = {},
+): TaskValidationReceipt {
+  return {
+    schemaVersion: 1,
+    evidenceClass: "automated-functional",
+    routePath: "/ops/self-upgrade",
+    contractHash: "contract-hash",
+    sourceSha: "provenance-sha",
+    fixtureVersion: "self-upgrade-v1",
+    viewport: "1280x900",
+    inputMode: "pointer",
+    interactionFingerprint: "interaction-v1",
+    relevantDependencyFingerprint: "dependencies-v1",
+    metrics: { completion: true },
+    thresholds: { completion: true },
+    reviewerRef: "VR-BI-D27323A0",
+    observedAt: "2026-07-30T00:00:00.000Z",
+    artifactIds: ["artifact-1"],
+    runnerRef: "playwright",
+    completionOracleResult: "passed",
+    ...overrides,
+  } as TaskValidationReceipt;
+}
+
 describe("evaluateRoutePurpose", () => {
   it("keeps intent, structural conformance, and task validation independent", () => {
     const result = evaluateRoutePurpose({
@@ -158,7 +188,8 @@ describe("evaluateRoutePurpose", () => {
       oracle: {
         routePath: "/ops/self-upgrade",
         stateKey: "update-available",
-        sourceRef: "apps/web/lib/self-upgrade/purpose-scenario.ts",
+        oracleKey: "self-upgrade-status",
+        sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
       },
       evidence,
       context,
@@ -169,6 +200,25 @@ describe("evaluateRoutePurpose", () => {
     expect(result.validation.overall).toBe("not-validated");
     expect(result.findings).toEqual([]);
     expect(result.blocking).toBe(false);
+  });
+
+  it("rejects an oracle whose identity does not match the state contract", () => {
+    const result = evaluateRoutePurpose({
+      contract,
+      oracle: {
+        routePath: "/ops/self-upgrade",
+        stateKey: "update-available",
+        oracleKey: "route-owned-read-model",
+        sourceRef: "wrong-source",
+      },
+      evidence,
+      context,
+    });
+
+    expect(result.structuralStatus).toBe("nonconformant");
+    expect(result.findings.map((finding) => finding.checkId)).toContain(
+      "state-oracle",
+    );
   });
 
   const structuralDefects: Array<{
@@ -221,13 +271,13 @@ describe("evaluateRoutePurpose", () => {
     {
       checkId: "completion-signal",
       mutate: (candidate) => {
-        candidate.completionSignalPresent = false;
+        candidate.completionSignalKeys = ["wrong-completion"];
       },
     },
     {
       checkId: "correction-signal",
       mutate: (candidate) => {
-        candidate.correctionSignalPresent = false;
+        candidate.correctionSignalKeys = ["wrong-correction"];
       },
     },
     {
@@ -260,7 +310,8 @@ describe("evaluateRoutePurpose", () => {
         oracle: {
           routePath: "/ops/self-upgrade",
           stateKey: "update-available",
-          sourceRef: "apps/web/lib/self-upgrade/purpose-scenario.ts",
+          oracleKey: "self-upgrade-status",
+          sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
         },
         evidence: candidate,
         context,
@@ -301,7 +352,8 @@ describe("evaluateRoutePurpose", () => {
       oracle: {
         routePath: "/ops/self-upgrade",
         stateKey: "update-available",
-        sourceRef: "apps/web/lib/self-upgrade/purpose-scenario.ts",
+        oracleKey: "self-upgrade-status",
+        sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
       },
       evidence,
       context,
@@ -340,7 +392,84 @@ describe("evaluateRoutePurpose", () => {
       oracle: {
         routePath: "/ops/self-upgrade",
         stateKey: "update-available",
-        sourceRef: "apps/web/lib/self-upgrade/purpose-scenario.ts",
+        oracleKey: "self-upgrade-status",
+        sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
+      },
+      evidence,
+      context,
+    });
+
+    expect(result.validation.overall).toBe("stale");
+  });
+
+  it("uses the latest receipt per evidence class so a later pass supersedes a failure", () => {
+    const result = evaluateRoutePurpose({
+      contract: {
+        ...contract,
+        validationReceipts: [
+          functionalReceipt({
+            reviewerRef: "VR-FAILED",
+            observedAt: "2026-07-29T00:00:00.000Z",
+            completionOracleResult: "failed",
+          }),
+          functionalReceipt({
+            reviewerRef: "VR-PASSED",
+            observedAt: "2026-07-30T00:00:00.000Z",
+          }),
+        ],
+      },
+      oracle: {
+        routePath: "/ops/self-upgrade",
+        stateKey: "update-available",
+        oracleKey: "self-upgrade-status",
+        sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
+      },
+      evidence,
+      context,
+    });
+
+    expect(result.validation.overall).toBe("current");
+    expect(result.validation.receipts).toHaveLength(1);
+    expect(result.validation.receipts[0].reviewerRef).toBe("VR-PASSED");
+  });
+
+  it("does not let another current class mask a newer stale class", () => {
+    const result = evaluateRoutePurpose({
+      contract: {
+        ...contract,
+        validationReceipts: [
+          functionalReceipt(),
+          {
+            schemaVersion: 1,
+            evidenceClass: "representative-user",
+            routePath: "/ops/self-upgrade",
+            contractHash: "old-contract",
+            sourceSha: "provenance-sha",
+            fixtureVersion: "self-upgrade-v1",
+            viewport: "390x844",
+            inputMode: "touch",
+            interactionFingerprint: "interaction-v1",
+            relevantDependencyFingerprint: "dependencies-v1",
+            metrics: { completion: true },
+            thresholds: { completion: true },
+            reviewerRef: "UR-STALE",
+            observedAt: "2026-07-30T01:00:00.000Z",
+            artifactIds: ["artifact-1"],
+            participantCohort: {
+              cohortId: "platform-operators",
+              recruitmentCriteria: ["Administers a DPF install"],
+              relevantExperience: "Maintains platform updates",
+              participantCount: 1,
+            },
+            participantAttestationRef: "attestation-1",
+          },
+        ],
+      },
+      oracle: {
+        routePath: "/ops/self-upgrade",
+        stateKey: "update-available",
+        oracleKey: "self-upgrade-status",
+        sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
       },
       evidence,
       context,
@@ -357,7 +486,8 @@ describe("summarisePurposeCoverage", () => {
       oracle: {
         routePath: "/ops/self-upgrade",
         stateKey: "update-available",
-        sourceRef: "apps/web/lib/self-upgrade/purpose-scenario.ts",
+        oracleKey: "self-upgrade-status",
+        sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
       },
       evidence,
       context,

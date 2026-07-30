@@ -109,9 +109,24 @@ describe("SelfUpgradeTriggerControl – enabled", () => {
     const html = renderToStaticMarkup(
       <SelfUpgradeTriggerControl {...baseProps} purposeState="blocked" />,
     );
+    expect(html).toContain('data-dpf-purpose-action-key="resolve-blocker"');
     expect(html).toContain('data-dpf-purpose-action-key="open-recovery-guidance"');
     expect(html).toContain("/docs/operations/self-upgrade");
     expect(html).not.toContain('aria-label="Upgrade now"');
+  });
+
+  it("routes a missing-timezone blocker directly to the owning setting", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeTriggerControl
+        {...baseProps}
+        purposeState="blocked"
+        blockerReason="Operating timezone is required."
+        recoveryHref="/storefront/settings/operations"
+        recoveryLabel="Set operating timezone"
+      />,
+    );
+    expect(html).toContain('href="/storefront/settings/operations"');
+    expect(html).toContain("Set operating timezone");
   });
 
   it("opens recovery controls instead of retrying blindly after a failed run", () => {
@@ -122,7 +137,7 @@ describe("SelfUpgradeTriggerControl – enabled", () => {
       />,
     );
     expect(html).toContain('data-dpf-purpose-action-key="open-recovery-controls"');
-    expect(html).toContain("#self-upgrade-recovery-controls");
+    expect(html).toContain("#self-upgrade-latest-run");
     expect(html).not.toContain('aria-label="Upgrade now"');
   });
 
@@ -256,6 +271,7 @@ describe("SelfUpgradeTriggerControl – success feedback", () => {
     shared.triggerResult = { queued: true };
     const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
     expect(html).toContain("Upgrade queued.");
+    expect(html).toContain('role="status"');
   });
 });
 
@@ -266,6 +282,7 @@ describe("SelfUpgradeTriggerControl – error feedback", () => {
     shared.triggerResult = { queued: false, reason: "disabled" };
     const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
     expect(html).toContain("Not queued:");
+    expect(html).toContain('role="status"');
   });
 
   it("shows the specific reason for not queuing", () => {

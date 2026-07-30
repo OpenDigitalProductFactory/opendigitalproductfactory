@@ -17,6 +17,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { TriangleAlert, Zap } from "lucide-react";
 import { triggerSelfUpgrade, forceActiveRun, abortActiveRun } from "@/lib/actions/promotions";
 import { isExpectedDuringSwap } from "@/lib/self-upgrade/is-expected-during-swap";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -35,6 +36,8 @@ type Props = {
   jobEngine?: JobEngineHealth;
   purposeState?: SelfUpgradePurposeState;
   blockerReason?: string | null;
+  recoveryHref?: string;
+  recoveryLabel?: string;
 };
 
 export default function SelfUpgradeTriggerControl({
@@ -45,6 +48,8 @@ export default function SelfUpgradeTriggerControl({
   jobEngine,
   purposeState = "update-available",
   blockerReason = null,
+  recoveryHref = "/docs/operations/self-upgrade",
+  recoveryLabel = "Open recovery guidance",
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -61,6 +66,8 @@ export default function SelfUpgradeTriggerControl({
   // poll alive) instead of letting the page paint the global crash screen.
   const [restarting, setRestarting] = useState(false);
   const restartBaselineRef = useRef<string | null>(null);
+  const forceConfirmRef = useRef<HTMLButtonElement | null>(null);
+  const abortConfirmRef = useRef<HTMLButtonElement | null>(null);
 
   const draining = !!quiescence && quiescence.level !== "normal";
   const queuedRun = latestRun?.status === "queued" || latestRun?.status === "pending";
@@ -121,6 +128,14 @@ export default function SelfUpgradeTriggerControl({
     }, 120_000);
     return () => clearTimeout(timeout);
   }, [restarting]);
+
+  useEffect(() => {
+    if (forceConfirm) forceConfirmRef.current?.focus();
+  }, [forceConfirm]);
+
+  useEffect(() => {
+    if (abortConfirm) abortConfirmRef.current?.focus();
+  }, [abortConfirm]);
 
   function enterRestarting() {
     restartBaselineRef.current = serverSignature();
@@ -200,7 +215,6 @@ export default function SelfUpgradeTriggerControl({
       <div
         className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-sm"
         data-dpf-purpose-message-key="current-status"
-        data-dpf-purpose-correction-signal="available"
       >
         <span className="text-[var(--dpf-text)]">No update action is needed.</span>
         <a
@@ -218,10 +232,9 @@ export default function SelfUpgradeTriggerControl({
     return (
       <div
         className="flex flex-wrap items-center justify-between gap-3"
-        data-dpf-purpose-correction-signal="available"
       >
         <a
-          href="#self-upgrade-recovery-controls"
+          href="#self-upgrade-latest-run"
           data-dpf-primary-action
           data-owner-first-next-action
           data-dpf-purpose-action-key="open-recovery-controls"
@@ -245,20 +258,26 @@ export default function SelfUpgradeTriggerControl({
       <div
         className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-sm"
         data-upgrade-status="disabled"
-        data-dpf-purpose-correction-signal="available"
       >
         <span className="text-[var(--dpf-muted)]">
           {blockerReason ??
             "Self-upgrade is disabled. Resolve the prerequisite before starting an update."}
         </span>
         <a
-          href="/docs/operations/self-upgrade"
+          href={recoveryHref}
           data-dpf-primary-action
           data-owner-first-next-action
-          data-dpf-purpose-action-key="open-recovery-guidance"
+          data-dpf-purpose-action-key="resolve-blocker"
           className="inline-flex min-h-11 items-center rounded-lg bg-[var(--dpf-accent)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
         >
-          Open recovery guidance
+          {recoveryLabel}
+        </a>
+        <a
+          href="/docs/operations/self-upgrade"
+          data-dpf-purpose-action-key="open-recovery-guidance"
+          className="inline-flex min-h-11 items-center text-sm text-[var(--dpf-accent)] underline-offset-2 hover:underline"
+        >
+          Recovery guidance
         </a>
       </div>
     );
@@ -271,7 +290,6 @@ export default function SelfUpgradeTriggerControl({
       data-dpf-purpose-message-key={
         purposeState === "queued-or-running" ? "upgrade-progress" : undefined
       }
-      data-dpf-purpose-correction-signal="available"
     >
       {restarting && (
         <div
@@ -289,7 +307,7 @@ export default function SelfUpgradeTriggerControl({
       <SelfUpgradeJobEngineHealthAlert jobEngine={jobEngine} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-[var(--dpf-success)]" />
           <span className="text-sm font-medium text-[var(--dpf-text)]">
             Self-Upgrade: <span data-upgrade-status="enabled">Enabled</span>
@@ -297,56 +315,59 @@ export default function SelfUpgradeTriggerControl({
           <span className="text-xs text-[var(--dpf-muted)]">({channel})</span>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
           {upgradeInFlight ? (
             // BI-4F3B2FA9: a run is in flight. Never a dead-end disabled
             // button — when the portal is draining, surface Force Now / Abort
             // so the operator's emergency lever actually works mid-flight.
             draining && quiescence?.run?.runId ? (
-              <div className="flex items-center gap-2" role="group" aria-label="In-flight upgrade controls">
+              <div className="flex min-w-0 flex-wrap items-center gap-2" role="group" aria-label="In-flight upgrade controls">
                 {inFlightError && (
-                  <span className="text-xs text-[var(--dpf-warning)]" role="status" aria-live="polite">
+                  <span className="text-xs text-[var(--dpf-warning)]" role="alert">
                     {inFlightError}
                   </span>
                 )}
                 {forceConfirm ? (
-                  <div role="alertdialog" aria-describedby="force-now-warning" className="flex items-center gap-2">
-                    <span id="force-now-warning" className="text-xs text-[var(--dpf-warning)]">
-                      ⚠ Bypass all in-flight work and swap now?
+                  <div role="group" aria-labelledby="force-now-warning" className="flex min-w-0 flex-wrap items-center gap-2">
+                    <span id="force-now-warning" className="inline-flex items-center gap-1 text-xs text-[var(--dpf-warning)]">
+                      <TriangleAlert aria-hidden="true" className="size-4 shrink-0" />
+                      Bypass all in-flight work and swap now?
                     </span>
                     <button
+                      ref={forceConfirmRef}
                       type="button"
                       onClick={handleForceNow}
                       disabled={isPending}
-                      className="px-2 py-1 text-xs rounded-lg bg-[var(--dpf-warning)]/20 text-[var(--dpf-warning)] border border-[var(--dpf-warning)]/40 disabled:opacity-50"
+                      className="min-h-11 rounded-lg border border-[var(--dpf-warning)]/40 bg-[var(--dpf-warning)]/20 px-3 py-2 text-xs text-[var(--dpf-warning)] disabled:opacity-50"
                     >
                       Confirm force
                     </button>
                     <button
                       type="button"
                       onClick={() => setForceConfirm(false)}
-                      className="px-2 py-1 text-xs rounded-lg border border-[var(--dpf-border)] text-[var(--dpf-muted)]"
+                      className="min-h-11 rounded-lg border border-[var(--dpf-border)] px-3 py-2 text-xs text-[var(--dpf-muted)]"
                     >
                       Cancel
                     </button>
                   </div>
                 ) : abortConfirm ? (
-                  <div role="alertdialog" aria-describedby="abort-warning" className="flex items-center gap-2">
+                  <div role="group" aria-labelledby="abort-warning" className="flex min-w-0 flex-wrap items-center gap-2">
                     <span id="abort-warning" className="text-xs text-[var(--dpf-muted)]">
                       Abort this drain?
                     </span>
                     <button
+                      ref={abortConfirmRef}
                       type="button"
                       onClick={handleAbortRun}
                       disabled={isPending}
-                      className="px-2 py-1 text-xs rounded-lg bg-[var(--dpf-warning)]/20 text-[var(--dpf-warning)] border border-[var(--dpf-warning)]/40 disabled:opacity-50"
+                      className="min-h-11 rounded-lg border border-[var(--dpf-warning)]/40 bg-[var(--dpf-warning)]/20 px-3 py-2 text-xs text-[var(--dpf-warning)] disabled:opacity-50"
                     >
                       Confirm abort
                     </button>
                     <button
                       type="button"
                       onClick={() => setAbortConfirm(false)}
-                      className="px-2 py-1 text-xs rounded-lg border border-[var(--dpf-border)] text-[var(--dpf-muted)]"
+                      className="min-h-11 rounded-lg border border-[var(--dpf-border)] px-3 py-2 text-xs text-[var(--dpf-muted)]"
                     >
                       Cancel
                     </button>
@@ -357,15 +378,16 @@ export default function SelfUpgradeTriggerControl({
                       type="button"
                       onClick={() => { setAbortConfirm(false); setForceConfirm(true); }}
                       aria-label={`Force upgrade run ${quiescence.run.runId} now`}
-                      className="px-3 py-1.5 text-xs rounded-lg bg-[var(--dpf-warning)]/20 text-[var(--dpf-warning)] border border-[var(--dpf-warning)]/40 hover:bg-[var(--dpf-warning)]/30 transition-colors"
+                      className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-[var(--dpf-warning)]/40 bg-[var(--dpf-warning)]/20 px-3 py-2 text-xs text-[var(--dpf-warning)] transition-colors hover:bg-[var(--dpf-warning)]/30"
                     >
-                      ⚡ Force now
+                      <Zap aria-hidden="true" className="size-4" />
+                      Force now
                     </button>
                     <button
                       type="button"
                       onClick={() => { setForceConfirm(false); setAbortConfirm(true); }}
                       aria-label={`Abort upgrade run ${quiescence.run.runId}`}
-                      className="px-3 py-1.5 text-xs rounded-lg border border-[var(--dpf-border)] text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)] transition-colors"
+                      className="min-h-11 rounded-lg border border-[var(--dpf-border)] px-3 py-2 text-xs text-[var(--dpf-text)] transition-colors hover:bg-[var(--dpf-surface-2)]"
                     >
                       Abort
                     </button>
@@ -407,7 +429,7 @@ export default function SelfUpgradeTriggerControl({
                 data-dpf-primary-action
                 data-dpf-purpose-action-key="start-upgrade"
                 data-dpf-purpose-confirmation="explicit"
-                className="px-4 py-2 text-sm font-semibold rounded-lg bg-[var(--dpf-accent)] text-white border border-[var(--dpf-accent)] shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50"
+                className="min-h-11 rounded-lg border border-[var(--dpf-accent)] bg-[var(--dpf-accent)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
               >
                 {isPending
                   ? "Upgrading..."
@@ -417,10 +439,27 @@ export default function SelfUpgradeTriggerControl({
                       ? "Force upgrade now"
                       : "Upgrade now"}
               </button>
+              <a
+                href="/docs/operations/self-upgrade"
+                data-dpf-purpose-action-key="open-recovery-guidance"
+                className="inline-flex min-h-11 items-center text-sm text-[var(--dpf-accent)] underline-offset-2 hover:underline"
+              >
+                Recovery guidance
+              </a>
             </>
           )}
         </div>
       </div>
+
+      {upgradeInFlight && (
+        <a
+          href="/docs/operations/self-upgrade"
+          data-dpf-purpose-action-key="open-recovery-guidance"
+          className="inline-flex min-h-11 items-center text-sm text-[var(--dpf-accent)] underline-offset-2 hover:underline"
+        >
+          Recovery guidance
+        </a>
+      )}
 
       {triggerBusy && latestRun?.status !== "running" && !queuedRun && (
         <div
@@ -435,6 +474,8 @@ export default function SelfUpgradeTriggerControl({
 
       {triggerResult && (
         <div
+          role="status"
+          aria-live="polite"
           className={`p-3 rounded-lg text-sm ${
             triggerResult.queued
               ? "bg-[var(--dpf-success)]/10 text-[var(--dpf-success)] border border-[var(--dpf-success)]/30"

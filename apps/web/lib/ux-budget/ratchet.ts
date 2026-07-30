@@ -433,13 +433,16 @@ export type SweepVerdict = {
   /** §7.1 league table: worst offenders first, by words then controls. */
   leagueTable: {
     routePath: string;
-    shell: UxShell;
-    words: number;
-    controls: number;
+    shell: UxShell | null;
+    words: number | null;
+    controls: number | null;
+    purposeOnly?: boolean;
     purposeIntent?: RoutePurposeEvaluation["intentStatus"];
     purposeStructure?: RoutePurposeEvaluation["structuralStatus"];
     taskValidation?: RoutePurposeEvaluation["validation"]["overall"];
   }[];
+  /** Ratified/special routes evaluated without a stable wall-clock measurement. */
+  purposeOnlyRoutes: RoutePurposeEvaluation[];
   purposeCoverage: PurposeCoverageSummary;
 };
 
@@ -458,7 +461,14 @@ export function evaluateSweep(
       : {}),
   }));
 
-  const leagueTable = measurements
+  const measuredRoutePaths = new Set(
+    measurements.map((measurement) => measurement.routePath),
+  );
+  const purposeOnlyRoutes = purposeEvaluations.filter(
+    (evaluation) => !measuredRoutePaths.has(evaluation.routePath),
+  );
+  const leagueTable = [
+    ...measurements
     .map((m) => ({
       routePath: m.routePath,
       shell: m.shell,
@@ -473,8 +483,22 @@ export function evaluateSweep(
               purposeByRoute.get(m.routePath)!.validation.overall,
           }
         : {}),
-    }))
-    .sort((a, b) => b.words - a.words || b.controls - a.controls);
+    })),
+    ...purposeOnlyRoutes.map((purpose) => ({
+      routePath: purpose.routePath,
+      shell: null,
+      words: null,
+      controls: null,
+      purposeOnly: true,
+      purposeIntent: purpose.intentStatus,
+      purposeStructure: purpose.structuralStatus,
+      taskValidation: purpose.validation.overall,
+    })),
+  ].sort(
+    (a, b) =>
+      (b.words ?? -1) - (a.words ?? -1) ||
+      (b.controls ?? -1) - (a.controls ?? -1),
+  );
 
   return {
     bootstrapped: baselineFile.bootstrapped,
@@ -488,6 +512,7 @@ export function evaluateSweep(
     netNewRoutes: verdicts.filter((v) => v.routeStatus === "net-new").map((v) => v.routePath),
     regressedRoutes: verdicts.filter((v) => v.regressions.length > 0).map((v) => v.routePath),
     leagueTable,
+    purposeOnlyRoutes,
     purposeCoverage: summarisePurposeCoverage(purposeEvaluations),
   };
 }
@@ -636,7 +661,11 @@ export function formatSweepReport(sweep: SweepVerdict): string {
 
   lines.push("Worst surfaces by words visible on arrival (§7.1 league table):");
   for (const row of sweep.leagueTable.slice(0, 15)) {
-    lines.push(`  ${String(row.words).padStart(5)}w  ${row.routePath}  [${row.shell}]`);
+    lines.push(
+      row.purposeOnly
+        ? `  purpose  ${row.routePath}  [special-route evaluation]`
+        : `  ${String(row.words).padStart(5)}w  ${row.routePath}  [${row.shell}]`,
+    );
   }
   lines.push(
     "",

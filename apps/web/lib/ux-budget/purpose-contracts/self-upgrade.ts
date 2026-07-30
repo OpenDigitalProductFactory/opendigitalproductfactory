@@ -18,20 +18,20 @@ export const SELF_UPGRADE_PURPOSE_CONTRACT = {
     successOutcome:
       "The install reaches the intended version and returns healthy, or the operator reaches a truthful governed recovery path.",
     findability: {
-      parentArea: "Platform operations",
-      entryPoints: ["Platform navigation", "Operations navigation"],
+      parentArea: "Delivery",
+      entryPoints: ["Delivery home", "Runtime & Releases tabs"],
       navigationLayer: "section",
       discoveryCue: "Self-Upgrade",
-      expectedPath: ["Platform", "Self-Upgrade"],
+      expectedPath: ["Delivery", "Track & release", "Self-upgrade"],
     },
     contentRoles: {
-      defaultVisibleKeys: [
-        "current-state",
-        "impact-on-work",
-        "next-action",
-        "recovery-status",
-      ],
+      defaultVisibleKeys: ["current-state", "next-action"],
       deferredRegions: [
+        {
+          key: "release-details",
+          role: "Version detail, business impact, recovery facts, and concise risks",
+          trigger: "Version, impact & recovery",
+        },
         {
           key: "deploy-controls-history",
           role: "Technical deploy controls, run history, local-change ledger, and diagnostics",
@@ -54,7 +54,7 @@ export const SELF_UPGRADE_PURPOSE_CONTRACT = {
         "The target lineage is newer than the deployed lineage and no run is active.",
       stateSource: {
         oracleKey: "self-upgrade-status",
-        sourceRef: "apps/web/lib/self-upgrade/purpose-scenario.ts",
+        sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
       },
       essentialEvidenceKeys: [
         "current-state",
@@ -64,8 +64,10 @@ export const SELF_UPGRADE_PURPOSE_CONTRACT = {
       ],
       primaryExperience: { kind: "command", actionKey: "start-upgrade" },
       prohibitedActionKeys: ["restore-previous-version"],
+      completionSignalKey: "upgrade-queue-acknowledgement",
       completionSignal:
         "The request is acknowledged and the state advances to queued or running.",
+      correctionSignalKey: "upgrade-request-error",
       errorCorrection:
         "A failed request is announced beside the action with a recovery route.",
       recovery: {
@@ -78,7 +80,7 @@ export const SELF_UPGRADE_PURPOSE_CONTRACT = {
         "The latest run is queued, pending, running, or completing.",
       stateSource: {
         oracleKey: "self-upgrade-status",
-        sourceRef: "apps/web/lib/self-upgrade/purpose-scenario.ts",
+        sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
       },
       essentialEvidenceKeys: [
         "current-state",
@@ -91,8 +93,10 @@ export const SELF_UPGRADE_PURPOSE_CONTRACT = {
         messageKey: "upgrade-progress",
       },
       prohibitedActionKeys: ["start-upgrade"],
+      completionSignalKey: "upgrade-progress-visible",
       completionSignal:
         "A terminal run state and healthy served lineage replace progress.",
+      correctionSignalKey: "stalled-run-recovery",
       errorCorrection:
         "A stalled or failed run exposes governed recovery without a duplicate start.",
       recovery: {
@@ -102,10 +106,10 @@ export const SELF_UPGRADE_PURPOSE_CONTRACT = {
     },
     current: {
       statePredicate:
-        "The deployed lineage is fresh or there is no newer target lineage.",
+        "Status is available, no run is active or failed, and the deployed lineage is fresh or there is no newer target lineage.",
       stateSource: {
         oracleKey: "self-upgrade-status",
-        sourceRef: "apps/web/lib/self-upgrade/purpose-scenario.ts",
+        sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
       },
       essentialEvidenceKeys: [
         "current-state",
@@ -118,7 +122,9 @@ export const SELF_UPGRADE_PURPOSE_CONTRACT = {
         messageKey: "current-status",
       },
       prohibitedActionKeys: ["start-upgrade"],
+      completionSignalKey: "current-version-visible",
       completionSignal: "The running version and healthy state are visible.",
+      correctionSignalKey: "status-refresh",
       errorCorrection:
         "A contradictory target or health signal advances to the matching scenario.",
       recovery: {
@@ -131,7 +137,7 @@ export const SELF_UPGRADE_PURPOSE_CONTRACT = {
         "The latest governed run failed and the portal remains available.",
       stateSource: {
         oracleKey: "self-upgrade-status",
-        sourceRef: "apps/web/lib/self-upgrade/purpose-scenario.ts",
+        sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
       },
       essentialEvidenceKeys: [
         "current-state",
@@ -144,8 +150,10 @@ export const SELF_UPGRADE_PURPOSE_CONTRACT = {
         actionKey: "open-recovery-controls",
       },
       prohibitedActionKeys: ["start-upgrade"],
+      completionSignalKey: "recovery-controls-reachable",
       completionSignal:
         "The operator reaches the governed recovery controls and diagnostic evidence.",
+      correctionSignalKey: "failure-reason-visible",
       errorCorrection:
         "The failure reason and recovery guidance remain available without hiding the running version.",
       recovery: {
@@ -155,10 +163,10 @@ export const SELF_UPGRADE_PURPOSE_CONTRACT = {
     },
     blocked: {
       statePredicate:
-        "Self-Upgrade is disabled, the job engine is unhealthy, or required scheduling context is missing.",
+        "Status is unavailable, or a newer target exists and Self-Upgrade is disabled, the job engine is unhealthy, or required scheduling context is missing.",
       stateSource: {
         oracleKey: "self-upgrade-status",
-        sourceRef: "apps/web/lib/self-upgrade/purpose-scenario.ts",
+        sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
       },
       essentialEvidenceKeys: [
         "current-state",
@@ -168,11 +176,13 @@ export const SELF_UPGRADE_PURPOSE_CONTRACT = {
       ],
       primaryExperience: {
         kind: "command",
-        actionKey: "open-recovery-guidance",
+        actionKey: "resolve-blocker",
       },
       prohibitedActionKeys: ["start-upgrade"],
+      completionSignalKey: "blocker-route-reachable",
       completionSignal:
         "The operator reaches the owning prerequisite or recovery guidance.",
+      correctionSignalKey: "blocker-reason-visible",
       errorCorrection:
         "The blocker names the missing prerequisite instead of offering a blind retry.",
       recovery: {
@@ -193,7 +203,7 @@ export const SELF_UPGRADE_PURPOSE_CONTRACT = {
       "The operator opens raw logs without reaching the state-appropriate action or recovery.",
     ],
     acceptanceThresholds: [
-      "The operator finds Self-Upgrade from the natural Platform entry without search or a supplied URL.",
+      "The operator finds Self-Upgrade from Delivery > Track & release without search or a supplied URL.",
       "The state-appropriate action or message is fully visible in the first viewport.",
       "Desktop pointer, keyboard, 390 touch, mobile landscape, and 320 CSS-pixel reflow reach the same outcome.",
     ],

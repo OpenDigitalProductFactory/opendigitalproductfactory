@@ -113,7 +113,9 @@ const purposeStateScenarioSchema = z
     essentialEvidenceKeys: nonEmptyStrings,
     primaryExperience: primaryExperienceSchema,
     prohibitedActionKeys: z.array(nonEmptyString),
+    completionSignalKey: identityKey,
     completionSignal: nonEmptyString,
+    correctionSignalKey: identityKey,
     errorCorrection: nonEmptyString,
     recovery: z
       .object({

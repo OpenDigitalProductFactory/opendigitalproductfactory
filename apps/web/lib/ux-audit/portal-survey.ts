@@ -136,11 +136,15 @@ export type BehavioralLensEvaluator = (
 export type PurposeLensEvaluator = (
   route: string,
 ) => Promise<RoutePurposeEvaluation | undefined>;
+export type SpecialPurposeEvaluator = () => Promise<
+  RoutePurposeEvaluation[]
+>;
 
 export type SurveyEvaluators = {
   page?: PageLensEvaluator;
   behavioral?: BehavioralLensEvaluator;
   purpose?: PurposeLensEvaluator;
+  specialPurpose?: SpecialPurposeEvaluator;
 };
 
 const VERDICT_ORDER: SurveyVerdict[] = ["pass", "pass-with-minor", "concerns", "fail"];
@@ -173,6 +177,22 @@ export function verdictForFindings(findings: Pick<UxFinding, "severity">[]): Sur
 
 function maxVerdict(a: SurveyVerdict, b: SurveyVerdict): SurveyVerdict {
   return VERDICT_ORDER.indexOf(a) >= VERDICT_ORDER.indexOf(b) ? a : b;
+}
+
+function verdictForPurpose(
+  purpose: RoutePurposeEvaluation | undefined,
+): SurveyVerdict {
+  if (!purpose) return "pass";
+  if (purpose.validation.overall === "failed") return "fail";
+  if (purpose.structuralStatus === "nonconformant") return "concerns";
+  if (
+    purpose.intentStatus !== "intent-ratified" ||
+    purpose.structuralStatus === "not-evaluated" ||
+    purpose.validation.overall === "stale"
+  ) {
+    return "pass-with-minor";
+  }
+  return "pass";
 }
 
 /**
@@ -252,7 +272,9 @@ export function aggregateReport(routes: RouteSurveyResult[]): UxAuditReport {
   for (const r of routes) {
     verdictCounts[r.verdict] += 1;
     portalVerdict = maxVerdict(portalVerdict, r.verdict);
-    if (r.evaluated.page || r.evaluated.behavioral) evaluatedRouteCount += 1;
+    if (r.evaluated.page || r.evaluated.behavioral || r.purpose) {
+      evaluatedRouteCount += 1;
+    }
     for (const f of r.findings) findingCounts[f.severity] += 1;
   }
 
@@ -317,12 +339,32 @@ export async function runSurvey(
     const deduped = dedupeFindings(findings);
     results.push({
       route: entry.route,
-      verdict: error ? "concerns" : verdictForFindings(deduped),
+      verdict: error
+        ? "concerns"
+        : maxVerdict(
+            verdictForFindings(deduped),
+            verdictForPurpose(purpose),
+          ),
       findings: deduped,
       evaluated,
       ...(purpose ? { purpose } : {}),
       ...(error ? { error } : {}),
     });
+  }
+
+  if (evaluators.specialPurpose) {
+    const existingRoutes = new Set(results.map((result) => result.route));
+    for (const purpose of await evaluators.specialPurpose()) {
+      if (existingRoutes.has(purpose.routePath)) continue;
+      results.push({
+        route: purpose.routePath,
+        verdict: verdictForPurpose(purpose),
+        findings: [],
+        evaluated: { page: false, behavioral: false },
+        purpose,
+      });
+      existingRoutes.add(purpose.routePath);
+    }
   }
 
   return aggregateReport(results);

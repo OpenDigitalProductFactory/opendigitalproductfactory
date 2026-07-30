@@ -9,7 +9,34 @@ export const SELF_UPGRADE_PURPOSE_STATES = [
 export type SelfUpgradePurposeState =
   (typeof SELF_UPGRADE_PURPOSE_STATES)[number];
 
+const PURPOSE_SIGNALS: Record<
+  SelfUpgradePurposeState,
+  { completion: string; correction: string }
+> = {
+  "update-available": {
+    completion: "upgrade-queue-acknowledgement",
+    correction: "upgrade-request-error",
+  },
+  "queued-or-running": {
+    completion: "upgrade-progress-visible",
+    correction: "stalled-run-recovery",
+  },
+  current: {
+    completion: "current-version-visible",
+    correction: "status-refresh",
+  },
+  "failed-recoverable": {
+    completion: "recovery-controls-reachable",
+    correction: "failure-reason-visible",
+  },
+  blocked: {
+    completion: "blocker-route-reachable",
+    correction: "blocker-reason-visible",
+  },
+};
+
 export type SelfUpgradePurposeStatus = {
+  statusAvailable?: boolean;
   enabled: boolean;
   isFresh: boolean;
   targetSha: string | null;
@@ -20,6 +47,12 @@ export type SelfUpgradePurposeStatus = {
 };
 
 const IN_FLIGHT = new Set(["queued", "pending", "running", "completing"]);
+
+export function resolveSelfUpgradePurposeSignals(
+  state: SelfUpgradePurposeState,
+): { completion: string; correction: string } {
+  return PURPOSE_SIGNALS[state];
+}
 
 /**
  * Route-owned state oracle for Purpose evaluation.
@@ -33,6 +66,8 @@ export function resolveSelfUpgradePurposeScenario(
   const runStatus = status.latestRun?.status ?? null;
   if (runStatus && IN_FLIGHT.has(runStatus)) return "queued-or-running";
   if (runStatus === "failed") return "failed-recoverable";
+  if (status.statusAvailable === false) return "blocked";
+  if (status.isFresh || !status.targetSha) return "current";
   if (
     !status.enabled ||
     status.jobEngine?.healthy === false ||
@@ -40,13 +75,15 @@ export function resolveSelfUpgradePurposeScenario(
   ) {
     return "blocked";
   }
-  if (status.isFresh || !status.targetSha) return "current";
   return "update-available";
 }
 
 export function resolveSelfUpgradePurposeBlocker(
   status: SelfUpgradePurposeStatus,
 ): string | null {
+  if (status.statusAvailable === false) {
+    return "Update status is temporarily unavailable.";
+  }
   if (!status.enabled) return "Automatic platform updates are disabled.";
   if (status.jobEngine?.healthy === false) {
     return "The update worker is unavailable.";
@@ -55,4 +92,25 @@ export function resolveSelfUpgradePurposeBlocker(
     return "Operating timezone is required before updates can be scheduled safely.";
   }
   return null;
+}
+
+export function resolveSelfUpgradePurposeRecovery(
+  status: SelfUpgradePurposeStatus,
+): { href: string; label: string } {
+  if (status.windowSource === "needs-timezone") {
+    return {
+      href: "/storefront/settings/operations",
+      label: "Set operating timezone",
+    };
+  }
+  if (status.jobEngine?.healthy === false && status.statusAvailable !== false) {
+    return { href: "/ops/health", label: "Open platform health" };
+  }
+  return {
+    href: "/docs/operations/self-upgrade",
+    label:
+      status.statusAvailable === false
+        ? "Open status recovery"
+        : "Open recovery guidance",
+  };
 }

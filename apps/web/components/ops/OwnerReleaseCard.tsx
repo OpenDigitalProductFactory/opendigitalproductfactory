@@ -55,122 +55,112 @@ export function OwnerReleaseCard({
       data-component="owner-release-card"
       data-release-state={summary.state}
       data-dpf-purpose-key="current-state"
-      className="space-y-4 rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
+      className="space-y-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
     >
-      {/* The single-sentence answer + the one action, at the top. */}
-      <div data-dpf-purpose-message-key={STATE_MESSAGE_KEY[summary.state]}>
+      <div
+        data-dpf-purpose-message-key={STATE_MESSAGE_KEY[summary.state]}
+      >
         <Notice variant={TONE_VARIANT[summary.tone]} title={summary.headline}>
           <p className="font-medium text-[var(--dpf-text)]">{summary.recommendedAction.label}</p>
           <p className="text-[var(--dpf-muted)]">{summary.recommendedAction.detail}</p>
+          <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+            Running {summary.currentVersion}
+            {summary.availableVersion ? `; ready: ${summary.availableVersion}` : ""}
+          </p>
         </Notice>
       </div>
 
-      {/* Version at-a-glance. */}
-      <div
-        className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-        data-dpf-purpose-completion-signal="version-and-health"
-      >
-        <StatCard
-          label="Running now"
-          value={<span className="text-base font-semibold">{summary.currentVersion}</span>}
-          intent="neutral"
-        />
-        <StatCard
-          label="Update ready"
-          value={
-            <span className="text-base font-semibold">{summary.availableVersion ?? "You're current"}</span>
-          }
-          intent={summary.state === "update-available" ? TONE_INTENT.info : "success"}
-        />
-      </div>
-
-      {/* The questions an owner actually has, answered in plain words. */}
-      <dl
-        className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3"
-        data-dpf-purpose-key="impact-on-work"
-      >
-        <QuestionRow q="Can the business keep working?" a={summary.canKeepWorking.detail} />
-        <QuestionRow q="What's kept on your system?" a={summary.keptLocally.detail} />
-        <div
-          data-dpf-purpose-key="recovery-status"
-          data-dpf-purpose-correction-signal="available"
-          data-dpf-purpose-recovery-signal
-        >
-          <QuestionRow
-            q="Can this be undone?"
-            a={
-              <>
-                {summary.rollback.detail}{" "}
-                <a
-                  href="/docs/operations/self-upgrade"
-                  data-dpf-purpose-action-key="open-recovery-guidance"
-                  className="inline-flex min-h-11 items-center text-[var(--dpf-accent)] underline-offset-2 hover:underline"
-                >
-                  Recovery guidance
-                </a>
-              </>
-            }
-          />
-        </div>
-        <QuestionRow q="If you do nothing" a={summary.ifYouDoNothing} />
-      </dl>
-
-      {/* Honest, short risk list. */}
-      {summary.whatCouldGoWrong.length > 0 && (
-        <div className="space-y-1">
-          <p className="text-xs font-medium uppercase tracking-[0.14em] text-[var(--dpf-muted)]">
-            What could go wrong
-          </p>
-          <ul className="list-disc space-y-1 pl-5 text-sm text-[var(--dpf-text)]">
-            {summary.whatCouldGoWrong.map((risk, i) => (
-              <li key={i}>{risk}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Consequence / reversibility / duration / recovery BEFORE the install action. */}
       {summary.riskNotice && (
         <div
+          className="rounded-lg border border-[var(--dpf-warning)]/35 bg-[var(--dpf-warning)]/10 px-3 py-2 text-sm text-[var(--dpf-text)]"
+          data-dpf-purpose-key="impact-on-work"
           data-dpf-purpose-consequence
           data-dpf-purpose-reversibility
           data-dpf-purpose-authority
           data-dpf-purpose-recovery-context
         >
-          <Notice variant="warn" title="Before you install">
-            <ul className="space-y-0.5">
-              <li>
-                <span className="font-medium">What happens:</span> {summary.riskNotice.consequence}
-              </li>
-              <li>
-                <span className="font-medium">Can it be undone:</span> {summary.riskNotice.reversibility}
-              </li>
-              <li>
-                <span className="font-medium">How long:</span> {summary.riskNotice.duration}
-              </li>
-              <li>
-                <span className="font-medium">Who can do it:</span> {summary.riskNotice.authority}
-              </li>
-              <li>
-                <span className="font-medium">If it fails:</span> {summary.riskNotice.recovery}
-              </li>
-            </ul>
-          </Notice>
+          <p>
+            <span className="font-medium">Before you install:</span>{" "}
+            {summary.riskNotice.consequence} {summary.riskNotice.duration}{" "}
+            {summary.riskNotice.reversibility}
+          </p>
+          <p className="mt-1 text-xs text-[var(--dpf-muted)]">
+            {summary.riskNotice.authority} {summary.riskNotice.recovery}
+          </p>
         </div>
       )}
 
-      {/* BI-D77BF495: the live trigger, directly below the risk notice it
-          answers to — visible on arrival, not buried behind the Advanced
-          disclosure (run history / ledgers / logs stay there). */}
       {primaryAction && (
         <div
           data-component="owner-release-primary-action"
           data-dpf-purpose-key="next-action"
+          data-dpf-purpose-recovery-signal
         >
           {primaryAction}
         </div>
       )}
 
+      <details
+        data-dpf-purpose-disclosure-key="release-details"
+        className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+      >
+        <summary
+          aria-controls="self-upgrade-release-details"
+          data-dpf-purpose-disclosure-trigger
+          className="min-h-11 cursor-pointer select-none px-3 py-3 text-sm font-medium text-[var(--dpf-text)] marker:text-[var(--dpf-muted)]"
+        >
+          Version, impact &amp; recovery
+        </summary>
+        <div
+          id="self-upgrade-release-details"
+          data-dpf-purpose-disclosure-region
+          className="space-y-4 border-t border-[var(--dpf-border)] p-3"
+        >
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <StatCard
+              label="Running now"
+              value={<span className="text-base font-semibold">{summary.currentVersion}</span>}
+              intent="neutral"
+            />
+            <StatCard
+              label="Update ready"
+              value={
+                <span className="text-base font-semibold">
+                  {summary.availableVersion ?? "You're current"}
+                </span>
+              }
+              intent={summary.state === "update-available" ? TONE_INTENT.info : "success"}
+            />
+          </div>
+
+          <dl
+            className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3"
+            data-dpf-purpose-key="impact-on-work"
+          >
+            <QuestionRow q="Can the business keep working?" a={summary.canKeepWorking.detail} />
+            <QuestionRow q="What's kept on your system?" a={summary.keptLocally.detail} />
+            <div
+              data-dpf-purpose-key="recovery-status"
+            >
+              <QuestionRow q="Can this be undone?" a={summary.rollback.detail} />
+            </div>
+            <QuestionRow q="If you do nothing" a={summary.ifYouDoNothing} />
+          </dl>
+
+          {summary.whatCouldGoWrong.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-[var(--dpf-muted)]">
+                What could go wrong
+              </p>
+              <ul className="list-disc space-y-1 pl-5 text-sm text-[var(--dpf-text)]">
+                {summary.whatCouldGoWrong.map((risk, i) => (
+                  <li key={i}>{risk}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </details>
     </section>
   );
 }
