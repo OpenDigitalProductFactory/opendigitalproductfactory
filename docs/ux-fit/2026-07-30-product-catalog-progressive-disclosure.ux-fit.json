@@ -11,6 +11,10 @@
       "apps/web/app/(shell)/portfolio/product/[id]/direction/roadmap/page.tsx",
       "apps/web/app/(shell)/storefront/items/[id]/catalog/page.tsx",
       "apps/web/app/(shell)/storefront/items/[id]/purchases/page.tsx",
+      "apps/web/components/ops/DemandBoard.tsx",
+      "apps/web/components/product/direction/ProductManagementPlaybooks.tsx",
+      "apps/web/components/product/direction/ProductOutcomeEvidenceForms.tsx",
+      "apps/web/components/product/direction/ProductOutcomes.tsx",
       "apps/web/components/product/intelligence/ProductIntelligenceControls.tsx",
       "apps/web/components/storefront-admin/CatalogBuilderPanel.tsx",
       "apps/web/components/storefront-admin/ItemFormDialog.tsx"

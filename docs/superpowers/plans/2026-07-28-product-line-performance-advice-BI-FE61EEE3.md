@@ -113,6 +113,22 @@ Decision:
   color, and an accessible table over radar/treemap visualizations for this
   sparse heterogeneous comparison.
 
+## Backlog coverage
+
+- Decision: atomic
+- Receipt: `cms71syir0f2201ogk6j06ja4`
+- Parent: `BI-FE61EEE3`
+- Dependencies: `none`
+- Rationale: the typed performance projection, attribution-safe aggregation,
+  contextual advice experience, and evidence are one read-only
+  decision-support boundary. Shipping projection or UI alone would be
+  incomplete and misleading.
+- Internal deliverables:
+  - `performance-contract-tests`
+  - `performance-projection-refactor` → `performance-contract-tests`
+  - `product-line-direction-ux` → `performance-projection-refactor`
+  - `performance-docs-evidence` → `product-line-direction-ux`
+
 ## Implementation sequence
 
 Backlog coverage receipt: `cms5bubxl08dv01qwr6jv8c3l` (`atomic`).

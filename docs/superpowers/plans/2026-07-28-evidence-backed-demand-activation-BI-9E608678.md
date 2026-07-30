@@ -22,16 +22,20 @@ This child does not add product objectives, roadmap records, product-line analyt
 
 ## Backlog coverage
 
-- **Receipt:** `cms58kaxb04jm01qwj6hq382c`
-- **Decision:** atomic
-- **Parent BI:** `BI-9E608678`
-- **Mapped child BIs:** none
+- Decision: atomic
+- Receipt: `cms71snak0f1t01ogtvxss8zw`
+- Parent: `BI-9E608678`
+- Dependencies: `none`
+- Mapped child BIs: none
+- Rationale: the lifecycle contract, additive scope and evidence schema,
+  governed transitions, canonical read model, progressive UI, and verification
+  form one usable activation boundary.
 
 The Phase 8 outcome is one governed demand lifecycle over the existing `BacklogItem` authority. The additive scope/evidence schema has no safe standalone user outcome; classification without scoring/funding controls leaves ambiguous rows misrepresented; UI without guarded write doors recreates bypasses; and telemetry/docs must describe the same transition contract. These are internal sequencing slices of one reviewable BI, while Phases 9–12 remain separately filed and excluded.
 
 | Deliverable | Depends on | Independently shippable |
 | --- | --- | --- |
-| Closed demand classification, readiness, transition, and explanation contract | — | No |
+| Closed demand classification, readiness, transition, and explanation contract | none | No |
 | Additive product scope and normalized reviewed-evidence links | activation contract | No |
 | Explicit unclassified queue, new-write invariant, and fleet-safe audit | activation contract, scope and evidence | No |
 | Canonical classify, evidence, score, and funding actions with append-only history | activation contract, scope and evidence | No |

@@ -125,7 +125,13 @@ Decision:
 
 ## Backlog coverage
 
-Coverage receipt: `cms5aikvp070d01qwhahhj452` (`atomic`).
+- Decision: atomic
+- Receipt: `cms71st850f1y01og510bh5u4`
+- Parent: `BI-162FBDCC`
+- Dependencies: `none`
+- Rationale: the schema, objective service and governed tools, canonical
+  projection, Outcomes experience, and evidence form the minimum truthful
+  learning loop.
 
 The BI is atomic. The schema, services/tools, projection, and Outcomes page
 together form the minimum usable learning loop; none is independently useful
