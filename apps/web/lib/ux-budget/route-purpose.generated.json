@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "generator": "apps/web/scripts/build-page-purpose.ts",
-  "pageRouteCount": 310,
-  "draftCount": 310,
+  "pageRouteCount": 317,
+  "draftCount": 317,
   "ratifiedCount": 0,
   "quarantinedCount": 0,
   "routes": [
@@ -3037,6 +3037,19 @@
     {
       "schemaVersion": 1,
       "status": "draft",
+      "routePath": "/portfolio/product-line/[id]/direction",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
       "routePath": "/portfolio/product/[id]",
       "derived": {
         "audience": "owner",
@@ -3077,6 +3090,58 @@
       "schemaVersion": 1,
       "status": "draft",
       "routePath": "/portfolio/product/[id]/changes",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portfolio/product/[id]/direction",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portfolio/product/[id]/direction/intelligence",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portfolio/product/[id]/direction/outcomes",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portfolio/product/[id]/direction/roadmap",
       "derived": {
         "audience": "owner",
         "destinationKind": "detail",
@@ -3573,6 +3638,32 @@
         "confidence": "high",
         "sweepEligible": false,
         "sweepExclusionReason": "storefront-setup-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/storefront/items/[id]/catalog",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/storefront/items/[id]/purchases",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
       }
     },
     {
