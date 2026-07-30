@@ -63,6 +63,19 @@ test("a net-new page requires UX-Fit; an edited component gets the conditional f
   assert.ok(!testFile.trailers.some((t) => t.gate === "UX-Fit"));
 });
 
+// BI-D967DEE0. This pack is injected into agent context BEFORE generation, so if it
+// still advertised the retired trailer every agent would be pre-instructed to satisfy a
+// dead mechanism — the exact prose/code drift the gate-context pack exists to prevent.
+test("the UX-Fit constraint names the measured manifest, never the retired trailer", () => {
+  const ctx = build([{ path: "apps/web/app/things/page.tsx", status: "A" }]);
+  const uxFit = ctx.trailers.find((t) => t.gate === "UX-Fit");
+  assert.ok(uxFit, "a net-new page must still carry a UX-Fit constraint");
+  assert.match(uxFit.trailer, /\.ux-fit\.json$/);
+  assert.doesNotMatch(uxFit.trailer, /UX-Fit-Decision:/);
+  assert.match(uxFit.alternative, /sweep-measurement/);
+  assert.match(uxFit.alternative, /RETIRED/);
+});
+
 test("schema changes surface the Data-Impact requirement", () => {
   const ctx = build([{ path: "packages/db/prisma/schema.prisma", status: "M" }]);
   assert.ok(ctx.trailers.some((t) => t.gate === "Data-Impact"));

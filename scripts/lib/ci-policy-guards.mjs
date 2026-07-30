@@ -155,6 +155,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
   "pull-request": Object.freeze([
     guard("ux-fit-gate", "UX-Fit Gate", [
       node("--test", "packages/dpf-skill-pack/hooks/ux-fit-precheck.test.mjs"),
+      // BI-D967DEE0: the gate's own red/green fixtures run before the gate, so a
+      // validator that stopped rejecting attestation theater fails loudly here rather
+      // than silently passing every UI PR.
+      node("--test", "scripts/check-ux-fit-decision.test.mjs"),
       node("scripts/check-ux-fit-decision.mjs"),
     ]),
     guard("docs-impact-gate", "Docs Impact Gate", [

@@ -54,7 +54,7 @@ This design is accountable to the following kernel principles and gates. Paths a
 - `learnings-belong-in-the-shared-commons` — the counter-pressure that legitimizes the hive; resolved against sovereignty in §10.
 - `architecture-over-shortcuts`, `single-source-of-truth`, `schema-audit-before-features` / `verify-substrate-before-proposing-new` — reuse existing substrate; no parallel registries or ledgers (§0, §4, §8).
 - `compose-report-kit-for-reporting-ux` (core) — all reporting/data-display UI composes the shared report-kit (§6, §11).
-- **AGENTS.md gates.** This is an operator-configurable control, so it must carry a `UX-Fit-Decision:` attestation (UX-Fit Gate, CI-enforced by `scripts/check-ux-fit-decision.mjs`) and pass the Spec/Plan/Doc gate. **Known gap:** `human_cognitive_load` has no carrying kernel principle today, so `principle_decide` scores that mandated axis degenerately; until the gap is closed, record the attestation on merits and flag it (this exact degeneracy was hit by the nav-coherence work, 2026-06-21).
+- **AGENTS.md gates.** This is an operator-configurable control, so it must carry a measured UX-fit manifest at `docs/ux-fit/<date>-<slug>.ux-fit.json` (UX-Fit Gate, CI-enforced by `scripts/check-ux-fit-decision.mjs`) and pass the Spec/Plan/Doc gate. The `UX-Fit-Decision:` attestation trailer was retired by BI-D967DEE0 — an acknowledgement no longer qualifies; supply `evidence.kind` `sweep-measurement` (adjudicated against the committed route-budget baseline) or `propose-n-pick`. **Historical note:** through 2026-06 `human_cognitive_load` had no carrying kernel principle, so `principle_decide` scored that mandated axis degenerately (hit by the nav-coherence work, 2026-06-21). That gap is now closed — `disclose-before-you-add-a-surface` carries it at −0.9, among others.
 
 Candidate principle: the cognitive-load migration audit flags `migrate-to-the-right-tier` as a not-yet-existing kernel principle, and `human_cognitive_load` lacks a carrying principle. The triangle — a literal load-migration control — is a strong proving ground to promote a principle that carries that axis (and its learned-default arc, §9).
 
@@ -654,7 +654,7 @@ Use the requested 20 percent refactor budget here. This is not cosmetic cleanup;
 
 - Verify exact existing fields and gaps across `ModelProfile`, `AgentModelConfig`, `RequestContract`, `TaskRequirement`, the `effort` lever, the deliberation engine, route receipts, telemetry, and decision records.
 - Normalize names and type boundaries around preference snapshot, decoded policy, orchestration budget, receipt view, and feedback verdict before adding UI.
-- Map each triangle axis to its `PRINCIPLE_DIMENSIONS` member(s) and record a `UX-Fit-Decision:` attestation (AGENTS.md §12 — mandatory, CI-enforced). Note: `human_cognitive_load` has no carrying kernel principle today, so its `principle_decide` score is degenerate — record on merits and flag the kernel gap (§0.1).
+- Map each triangle axis to its `PRINCIPLE_DIMENSIONS` member(s) and commit a measured UX-fit manifest (`docs/ux-fit/<date>-<slug>.ux-fit.json`; AGENTS.md §12 — mandatory, CI-enforced). The attestation trailer is retired (BI-D967DEE0); `human_cognitive_load` now has carrying principles, so its `principle_decide` score is no longer degenerate (§0.1).
 - **✓ Saved-defaults home found.** `DecisionInteraction.profileId` → `DecisionPerspectiveProfile` (org/principal-scoped, versioned, already carries `autonomyPolicy`). **Extend it** with a typed `goldenTriangle` field; do not add a new `DecisionPreferenceProfile` table (resolves Open Decision 1).
 - Confirm whether benchmark records should be materialized or initially projected as a read model; align the shape to GearInterface.
 - **✓ Orchestration-budget go/no-go — GO.** Confirmed no posture-driven orchestration budget exists today (`agentic-loop.ts` uses the `MAX_ITERATIONS = 200` *safety* ceiling plus phase-aware `MAX_DURATION_*`, a spin guard, a one-nudge cap, and a repetition detector — none posture-driven). Resolution: the orchestration budget (duration ceiling, retry budget, verification depth, deliberation pattern) is a **typed object persisted as JSON on the receipt / `DecisionInteraction.outcomePayload` path** — not columns on `AgentModelConfig` (a per-agent floor) and not a new table; it biases the existing governors. Caveat: `verificationDepth` has no consuming governor yet, so a `deep` value is inert until a verify step is wired. Slices 2–3 build on this shape.
@@ -724,7 +724,7 @@ The design is ready for implementation when:
 - A benchmark row/view joins intended posture to actual model/cost/outcome under one correlation id.
 - Calibration is driven by realized-quality signals, not posture-selection frequency.
 - Hive contribution has an explicit payload schema and exclusion list.
-- Slice 0 records a `UX-Fit-Decision:` attestation and a substrate delta naming reused tables, new fields, rejected duplicate surfaces, and the 20% refactor work completed or intentionally deferred.
+- Slice 0 commits a measured UX-fit manifest (`*.ux-fit.json`) and a substrate delta naming reused tables, new fields, rejected duplicate surfaces, and the 20% refactor work completed or intentionally deferred.
 
 ### 14.1 Success Metrics (does the shipped feature work?)
 

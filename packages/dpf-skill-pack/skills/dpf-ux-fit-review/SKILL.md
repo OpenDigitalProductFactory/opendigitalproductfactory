@@ -130,6 +130,26 @@ This is a fit review, not a visual taste review. Decide where the feature belong
 - Captured in: <plan/audit/spec/PR path or section>
 ```
 
+## Committing the gate evidence (BI-D967DEE0)
+
+A UI-impacting change must land with a **measured** UX-fit manifest at
+`docs/ux-fit/<date>-<slug>.ux-fit.json`. The `UX-Fit-Decision:` trailer is retired, and an
+acknowledgement (`evidence.kind: "budgets-acknowledged"`) is rejected by name — it is
+attestation theater with one extra row. Two kinds qualify:
+
+- **`sweep-measurement`** — the route's real budget axes (`defaultVisibleWords`,
+  `leadBandWords`, `primaryActions`, `visibleFields`, `maxChoicesPerControl`,
+  `subLegibleControls`, `buriedPrimaryAction`, `axeViolations`). The gate adjudicates these
+  against the *committed* `apps/web/lib/ux-budget/route-budget-baseline.json`, so a claimed
+  improvement that actually regresses an axis fails. Set
+  `evidence.baselineComparison: "new-route"` only for a route genuinely absent from it.
+- **`propose-n-pick`** — a real recorded choice: `decisionInteractionId` plus
+  `evidence.consideredOptions` with at least two entries, one of which is `decidedOption`.
+
+`scope.files` must list exactly the UI-impacting files in the diff — an uncovered file
+fails, and so does a stale or over-broad one. Measure with the UX route sweep, or
+`auditUxBudget` from `lib/ux-budget` against the served DOM.
+
 ## Worked Example
 
 The Pipedrive CRM Marketing Slice 1 plan proposed a scan-first revenue band on `/customer`, reusable metric/status components, and marketing tab cleanup.

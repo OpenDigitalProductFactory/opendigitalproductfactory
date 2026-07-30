@@ -32,6 +32,12 @@ export const DOC_ARTIFACT_RE =
 
 // ── UX-Fit gate (scripts/check-ux-fit-decision.mjs) ──────────────────────────
 
+/**
+ * RETIRED by BI-D967DEE0. The UX-Fit gate no longer reads any trailer — it requires a
+ * measured manifest (`docs/ux-fit/<date>-<slug>.ux-fit.json`). This pattern is kept ONLY
+ * so tooling can still RECOGNISE the dead trailer in order to warn about it (see
+ * RETIRED_TRAILERS in scripts/pr-readiness/core.mjs). Do not gate on it.
+ */
 export const UX_FIT_ATTESTATION_RE = /UX-Fit-Decision:/i;
 
 // Added lines that introduce a user-facing control the operator must understand.

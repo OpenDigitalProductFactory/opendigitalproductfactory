@@ -122,3 +122,19 @@ test("formatReadinessReport uses plain-language headings and changed-file summar
   assert.match(report, /What passed/);
   assert.match(report, /Safe to open or queue the PR/);
 });
+
+// BI-D967DEE0: the UX-Fit trailer is retired. pr-readiness still PARSES it so the author
+// is told it is inert — silently ignoring it would let people keep adding a dead trailer
+// and believe it satisfied the gate.
+test("a retired UX-Fit-Decision trailer warns instead of passing silently", () => {
+  const result = validatePrBodyTrailers("UX-Fit-Decision: progressive-disclosure\n");
+  assert.equal(result.ok, true, "retirement is a warning, not a blocker");
+  assert.ok(
+    result.warnings.some((w) => /UX-Fit-Decision.*retired by BI-D967DEE0/.test(w)),
+    `expected a retirement warning, got: ${result.warnings.join(" | ")}`,
+  );
+  assert.ok(
+    result.warnings.some((w) => /docs\/ux-fit\/.*ux-fit\.json/.test(w)),
+    "the warning must name the replacement",
+  );
+});

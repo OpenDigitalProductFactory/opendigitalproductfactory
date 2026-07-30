@@ -1,0 +1,23 @@
+{
+  "version": "1",
+  "decidedOption": "progressive-disclosure",
+  "scope": {
+    "files": ["apps/web/app/(shell)/example/page.tsx"]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "improved",
+    "measured": {
+      "/example": {
+        "defaultVisibleWords": 150,
+        "leadBandWords": 40,
+        "primaryActions": 2,
+        "visibleFields": 4,
+        "maxChoicesPerControl": 6,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 0
+      }
+    }
+  }
+}

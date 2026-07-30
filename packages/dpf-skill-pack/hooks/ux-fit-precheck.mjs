@@ -30,8 +30,11 @@ const GUIDANCE =
   "Before committing, design for cognitive load: run the dpf-ux-fit-review skill and score the options with " +
   "principle_decide on the human_cognitive_load axis. Prefer progressive disclosure — auto-derive what the " +
   "platform can compute (model context, hardware limits), keep the default view to 3-5 plain choices, and " +
-  "never ask a layman to type a token count or raw endpoint (AGENTS.md §12/§17). Then attest with a " +
-  "'UX-Fit-Decision:' trailer in a commit message or the PR body — the UX-Fit Gate CI check requires it.";
+  "never ask a layman to type a token count or raw endpoint (AGENTS.md §12/§17). Then commit MEASURED " +
+  "evidence at docs/ux-fit/<date>-<slug>.ux-fit.json: evidence.kind 'sweep-measurement' (the route's real " +
+  "budget axes, which the gate adjudicates against the committed route-budget baseline) or 'propose-n-pick' " +
+  "(decisionInteractionId + >=2 consideredOptions). An acknowledgement does not qualify and the " +
+  "'UX-Fit-Decision:' trailer is retired (BI-D967DEE0) — the UX-Fit Gate CI check requires the manifest.";
 
 /**
  * Pure decision: does this tool call add a user-facing control to a UI file?
