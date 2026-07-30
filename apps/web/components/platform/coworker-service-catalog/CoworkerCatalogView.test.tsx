@@ -107,6 +107,7 @@ describe("CoworkerCatalogView", () => {
       provider: {
         primary: "Legal Operations Counsel",
         secondary: "Arcamanus",
+        secondaryLabel: "Provider organization",
       },
       risk: {
         primary: "high",
@@ -130,5 +131,26 @@ describe("CoworkerCatalogView", () => {
         },
       ]),
     );
+  });
+
+  it("does not present a provider type as an organization", () => {
+    const presentation = projectOfferPresentation({
+      ...catalog.offers[0],
+      providerOrganization: null,
+    });
+
+    expect(presentation.provider).toEqual({
+      primary: "Legal Operations Counsel",
+      secondary: "specialist",
+      secondaryLabel: "Provider type",
+    });
+    expect(presentation.mobileFacts).toContainEqual({
+      label: "Provider type",
+      value: "specialist",
+    });
+    expect(presentation.mobileFacts).not.toContainEqual({
+      label: "Provider organization",
+      value: "specialist",
+    });
   });
 });

@@ -180,6 +180,14 @@ projections.
 | Workforce roles without Admin access received a lifecycle action that resolved to a 404 | Recovery targets carry their required capability and render only when the signed-in operator holds it |
 | Mobile and desktop catalog layouts interpreted offer metadata separately and exposed different facts | One offer-presentation projection supplies both layouts, including version, provider organization, authority, and product anchor, with parity-focused tests |
 
+An eighth architecture pass applied the same truth test to every recovery route
+and to nullable provider metadata.
+
+| Eighth critique | Correction |
+| --- | --- |
+| Capability-need recovery could still send workforce-only roles to an Operations 404 | Every recovery destination now declares its route capability, and one generic authorization check suppresses inaccessible actions |
+| A missing provider organization made mobile label the provider kind as an organization | The shared projection preserves the secondary provider fact's semantic label and tests both organization and provider-type cases |
+
 ## Phase 1: Test-Drive Service-Scoped Readiness
 
 Add failing unit tests before implementation.

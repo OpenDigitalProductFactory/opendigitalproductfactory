@@ -111,7 +111,11 @@ function Metric({ label, value }: { label: string; value: number }) {
 
 type OfferPresentation = {
   chips: Array<{ label: string; value: string }>;
-  provider: { primary: string; secondary: string };
+  provider: {
+    primary: string;
+    secondary: string;
+    secondaryLabel: "Provider organization" | "Provider type";
+  };
   risk: { primary: string; secondary: string };
   authority: { primary: string; secondary: string };
   availability: { primary: string; secondary: string };
@@ -131,6 +135,9 @@ export function projectOfferPresentation(
   const provider = {
     primary: offer.provider.displayName,
     secondary: offer.providerOrganization ?? offer.provider.kind,
+    secondaryLabel: offer.providerOrganization
+      ? "Provider organization" as const
+      : "Provider type" as const,
   };
   const risk = {
     primary: offer.riskTier,
@@ -163,7 +170,7 @@ export function projectOfferPresentation(
       { label: "Service", value: offer.serviceName },
       { label: "Version", value: offer.version },
       { label: "Provider", value: provider.primary },
-      { label: "Provider organization", value: provider.secondary },
+      { label: provider.secondaryLabel, value: provider.secondary },
       {
         label: "Risk",
         value: `${risk.primary}; ${risk.secondary}`,
@@ -200,7 +207,10 @@ function OfferRow({
           ))}
         </div>
       </div>
-      <Cell {...presentation.provider} />
+      <Cell
+        primary={presentation.provider.primary}
+        secondary={presentation.provider.secondary}
+      />
       <Cell {...presentation.risk} />
       <Cell {...presentation.authority} />
       <Cell {...presentation.availability} />

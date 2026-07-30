@@ -15,28 +15,41 @@ export function availabilityRecoveryTarget(
   const recovery = availability.recovery;
   if (!recovery) return null;
   if (recovery.kind === "catalog") return null;
-  if (
-    recovery.kind === "lifecycle" &&
-    !grantedCapabilities.has("view_admin")
-  ) {
-    return null;
-  }
 
   const targetByKind: Record<
     Exclude<typeof recovery.kind, "catalog">,
     Omit<CoworkerAvailabilityRecoveryTarget, "label">
   > = {
-    "business-type": { href: "/storefront/settings/business" },
-    capabilities: { href: `${detailHref}#capabilities` },
-    "capability-needs": { href: "/ops?origin=capability-need" },
+    "business-type": {
+      href: "/storefront/settings/business",
+      requiredCapability: "view_storefront",
+    },
+    capabilities: {
+      href: `${detailHref}#capabilities`,
+      requiredCapability: "view_platform",
+    },
+    "capability-needs": {
+      href: "/ops?origin=capability-need",
+      requiredCapability: "view_operations",
+    },
     lifecycle: {
       href: "/admin/scheduled-jobs#scheduled-job-coworker-certification",
       requiredCapability: "view_admin",
     },
-    routing: { href: "/platform/ai/readiness" },
+    routing: {
+      href: "/platform/ai/readiness",
+      requiredCapability: "view_platform",
+    },
   };
+  const target = targetByKind[recovery.kind];
+  if (
+    target.requiredCapability &&
+    !grantedCapabilities.has(target.requiredCapability)
+  ) {
+    return null;
+  }
   return {
-    ...targetByKind[recovery.kind],
+    ...target,
     label: recovery.label,
   };
 }

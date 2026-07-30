@@ -50,6 +50,32 @@ describe("availabilityRecoveryTarget", () => {
     ).toBeNull();
   });
 
+  it("applies target capability checks generically", () => {
+    const availability = blockedAvailability({
+      kind: "capability-needs",
+      label: "Review capability needs",
+    });
+
+    expect(
+      availabilityRecoveryTarget(
+        availability,
+        "/platform/ai/agent/marketing-specialist",
+        new Set(["view_platform"]),
+      ),
+    ).toBeNull();
+    expect(
+      availabilityRecoveryTarget(
+        availability,
+        "/platform/ai/agent/marketing-specialist",
+        new Set(["view_operations"]),
+      ),
+    ).toEqual({
+      href: "/ops?origin=capability-need",
+      label: "Review capability needs",
+      requiredCapability: "view_operations",
+    });
+  });
+
   it("does not offer a misleading action for platform-managed catalog defects", () => {
     expect(
       availabilityRecoveryTarget(
