@@ -105,6 +105,7 @@ describe("coworker certification runner (EP-COWORKER-LIFECYCLE Phase 2)", () => 
 
     const loopCall = (deps.runLoop as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(loopCall.tools.map((t: { name: string }) => t.name)).toEqual(["query_backlog"]);
+    expect(loopCall.requireTools).toBe(true);
   });
 
   it("a failed oracle produces a failed run plus an open finding keyed to the oracle", async () => {

@@ -88,13 +88,6 @@ describe("shouldNudge", () => {
     })).toBe(true);
   });
 
-  // Regression for the setup-tour /workspace COO contradiction: route persona
-  // says "no tool calls, 2-3 sentences", coworker complies, but nudge fires
-  // "use a tool now" → coworker surfaces the contradiction to the user.
-  // Companion guard to c70a7db6 (which fixed the fabrication-detection arm
-  // of the same problem). Narrowed to the setup-tour signal so non-setup
-  // advise routes (e.g. /finance) still nudge + surface the local-model
-  // diagnostic.
   it("does not nudge on a setup-tour turn (route persona says 'no tool calls')", () => {
     expect(shouldNudge({
       continuationNudges: 0, iteration: 0, maxIterations: 40,
@@ -106,7 +99,6 @@ describe("shouldNudge", () => {
   });
 
   it("does not nudge when response is a short clarifying question", () => {
-    // HR case: "add John as employee" → agent correctly asks for last name
     expect(shouldNudge({
       continuationNudges: 0, iteration: 0, maxIterations: 40,
       hasTools: true, executedToolCount: 0, responseLength: 35,
@@ -187,13 +179,6 @@ describe("shouldNudge", () => {
       hasTools: true, executedToolCount: 0, responseLength: 44,
     })).toBe(false);
   });
-
-  // BI-C145F650 defect A — the exact /workspace COO "where are the archetypes?"
-  // failure. After tools have run, a substantive conversational answer that
-  // merely ENDS with a helpful offer ("…would you like me to…?") must be
-  // accepted as final. Before the fix it fell through to the permission-seeking
-  // catch-all and was nudged away, then the local-spinning guard surfaced the
-  // misleading "not strong enough" diagnostic while a correct answer was in hand.
   it("does not nudge a substantive conversational answer that ends with a helpful offer (post-tool-call)", () => {
     expect(shouldNudge({
       continuationNudges: 0, iteration: 4, maxIterations: 200,
@@ -1172,6 +1157,21 @@ describe("runAgenticLoop", () => {
     expect(result.content).toBe("Hello! How can I help?");
     expect(result.executedTools).toHaveLength(0);
     expect(result.proposal).toBeNull();
+  });
+
+  it("bounds a tool-required text-only turn to one corrective nudge", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    mockRoute
+      .mockResolvedValueOnce(mockResult({
+        content: "I reviewed the source and related test and found no material defect. More evidence would be needed before blocking the change.",
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content: "I still cannot ground a finding in a successful read, so the review remains unsupported.",
+      }));
+    const result = await runAgenticLoop({ ...baseParams, requireTools: true, interactionMode: "chat" });
+    expect(mockRoute).toHaveBeenCalledTimes(2);
+    expect(result.content).toContain("review remains unsupported");
+    expect(result.executedTools).toHaveLength(0);
   });
 
   it("handles multiple tool calls in one iteration", async () => {

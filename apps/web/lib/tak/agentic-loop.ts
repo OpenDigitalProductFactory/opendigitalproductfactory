@@ -686,6 +686,8 @@ export function shouldNudge(params: {
   responseLength: number;
   responseText?: string;
   hasAuthoritativeToolExecution?: boolean;
+  /** True when text alone cannot satisfy the caller's contract. */
+  requireToolExecution?: boolean;
   /**
    * True when this turn is part of the setup tour. SetupOverlay sends an
    * auto-message prefixed "[Setup step: …]" whose route persona explicitly
@@ -720,13 +722,8 @@ export function shouldNudge(params: {
   if (params.continuationNudges >= maxNudges) return false;
   if (params.iteration >= params.maxIterations - 1) return false;
   if (!params.hasTools) return false;
+  const permitsTextCompletion = !params.requireToolExecution;
 
-  // Setup-tour turns (SetupOverlay's "[Setup step: …]" auto-message) ask the
-  // coworker for a brief text-only welcome with no tool calls. Nudging there
-  // injects a contradiction the coworker reconciles out loud. Skip the
-  // iteration-0 nudge on those turns only — NOT on every no-authoritative-tool
-  // route, so routes like /finance still nudge a weak local model (and surface
-  // the local-model diagnostic) when it should have queried a tool.
   if (
     params.executedToolCount === 0
     && params.iteration === 0
@@ -748,7 +745,7 @@ export function shouldNudge(params: {
     const isSubstantiveReply = text.length >= 100
       && !COMPLETION_CLAIM_PATTERN.test(text)
       && !NARRATION_PATTERN.test(text);
-    if (isSubstantiveReply) return false;
+    if (permitsTextCompletion && isSubstantiveReply) return false;
   }
 
   // First iteration with no tools called — nudge UNLESS the response is a
@@ -760,8 +757,10 @@ export function shouldNudge(params: {
   if (params.executedToolCount === 0 && params.iteration === 0) {
     const text = params.responseText?.trim() ?? "";
     const isAskingClarification = text.length < 250 && CLARIFYING_QUESTION_PATTERN.test(text);
-    const isSubstantiveReply = text.length >= 100 && !COMPLETION_CLAIM_PATTERN.test(text) && !NARRATION_PATTERN.test(text);
-    const isAllowedDirectReply = !!params.allowFirstTurnTextOnlyReply
+    const isSubstantiveReply = permitsTextCompletion && text.length >= 100
+      && !COMPLETION_CLAIM_PATTERN.test(text) && !NARRATION_PATTERN.test(text);
+    const isAllowedDirectReply = permitsTextCompletion
+      && !!params.allowFirstTurnTextOnlyReply
       && text.length > 0
       && !COMPLETION_CLAIM_PATTERN.test(text)
       && !NARRATION_PATTERN.test(text)
@@ -2165,6 +2164,7 @@ export async function runAgenticLoop(params: {
           messages,
           responseText: trimmed,
         }),
+        requireToolExecution: requireTools,
       });
 
         // Local model produced text-only on iteration 0 of a tool-backed turn:
