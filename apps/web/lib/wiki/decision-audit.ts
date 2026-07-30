@@ -4,6 +4,8 @@
 // Pure mapping/summarization lives here (unit-testable); the pages do the
 // Prisma I/O and pass rows in, mirroring decision-governance-hub.ts.
 
+import { isWithdrawnHumanOutcome } from "@/lib/quality/decision-residue-staleness";
+
 export const DECISION_AUDIT_TIERS = ["wwmd", "wwwd", "wsid"] as const;
 export type DecisionAuditTier = (typeof DECISION_AUDIT_TIERS)[number];
 
@@ -138,8 +140,19 @@ export type DecisionAuditRow = {
   optionCount: number;
   recommendedOptionId: string | null;
   outcomeType: string;
-  /** True for defer/escalate rows with no human resolution yet. */
+  /**
+   * True for defer/escalate rows with no human resolution yet. False once a
+   * human answered AND false once the question evaporated (see `withdrawn`) —
+   * a withdrawn row is no longer waiting on anyone.
+   */
   awaitingHuman: boolean;
+  /**
+   * True when the decision-residue hygiene sweep retired this row because the
+   * build it gated was abandoned/finished/superseded (BI-FE034C1E). Kept
+   * distinct from a human resolution: nobody answered the question, it stopped
+   * being asked.
+   */
+  withdrawn: boolean;
   riskTier: string;
   principleConflict: boolean;
   domainClass: string;
@@ -223,7 +236,12 @@ export function toAuditRow(row: DecisionAuditRowInput): DecisionAuditRow {
   const tier = tierForRow(row);
   const payload = asRecord(row.outcomePayload);
   const human = asRecord(row.humanOutcome);
-  const resolvedByHuman = Boolean(row.escalationCapture) || Object.keys(human).length > 0;
+  // A hygiene withdrawal writes humanOutcome without anyone answering
+  // (BI-FE034C1E), so a non-empty humanOutcome alone no longer proves a human
+  // resolved the row — check the marker before crediting one.
+  const withdrawn = isWithdrawnHumanOutcome(row.humanOutcome);
+  const resolvedByHuman =
+    !withdrawn && (Boolean(row.escalationCapture) || Object.keys(human).length > 0);
   const caller = callerForRow(payload);
   return {
     callerLabel: caller.label,
@@ -238,7 +256,8 @@ export function toAuditRow(row: DecisionAuditRowInput): DecisionAuditRow {
     recommendedOptionId:
       typeof payload.recommendedOptionId === "string" ? payload.recommendedOptionId : null,
     outcomeType: row.outcomeType,
-    awaitingHuman: UNRESOLVED_OUTCOMES.has(row.outcomeType) && !resolvedByHuman,
+    awaitingHuman: UNRESOLVED_OUTCOMES.has(row.outcomeType) && !resolvedByHuman && !withdrawn,
+    withdrawn,
     riskTier: row.riskTier,
     principleConflict: row.principleConflict,
     domainClass: row.domainClass,

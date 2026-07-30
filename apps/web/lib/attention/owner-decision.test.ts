@@ -87,7 +87,34 @@ describe("translateAttentionToOwnerDecision", () => {
     expect(card.technical.builderActions).toContainEqual(
       expect.objectContaining({ label: "Open in Operations", href: "/ops" }),
     );
-    expect(card.choices).not.toContainEqual(expect.objectContaining({ href: "/build?buildId=FB-VOICE-16" }));
+  });
+
+  it("keeps a builder route out of Simple-view owner buttons", () => {
+    const card = translateAttentionToOwnerDecision(
+      item(),
+      Date.parse("2026-07-17T18:00:00Z"),
+      "worker",
+    );
+
+    expect(card.choices).toEqual([]);
+    expect(card.technical.builderActions).toContainEqual(
+      expect.objectContaining({ href: "/build?buildId=FB-VOICE-16" }),
+    );
+  });
+
+  it("makes the builder route the primary action in Full view", () => {
+    // Full view says "showing everything, including builder and platform tools",
+    // so routing the reader to the surface that holds the record is honest.
+    const card = translateAttentionToOwnerDecision(
+      item(),
+      Date.parse("2026-07-17T18:00:00Z"),
+      "operator",
+    );
+
+    expect(card.choices).toContainEqual(
+      expect.objectContaining({ href: "/build?buildId=FB-VOICE-16" }),
+    );
+    expect(card.handoff).toBeUndefined();
   });
 
   it.each<{
@@ -139,7 +166,7 @@ describe("translateAttentionToOwnerDecision", () => {
     expect(card.technical.fields).toContainEqual({ label: "Original title", value: raw });
   });
 
-  it("keeps builder, platform, and admin routes below technical detail", () => {
+  it("keeps builder, platform, and admin routes below technical detail in Simple view", () => {
     const card = translateAttentionToOwnerDecision(
       item({
         id: "research-proposal:1",
@@ -148,13 +175,122 @@ describe("translateAttentionToOwnerDecision", () => {
         deepLink: "/admin/research",
       }),
       Date.now(),
+      "worker",
     );
 
-    expect(card.choices.map((choice) => choice.href)).toEqual([
-      "/workspace/inbox?attentionId=research-proposal%3A1",
-    ]);
+    // No owner button at all — and specifically NOT the old self-link fallback,
+    // which pointed at the page the card renders on and never did anything.
+    expect(card.choices).toEqual([]);
+    expect(card.handoff).toMatch(/technical detail/i);
     expect(card.technical.builderActions).toContainEqual(
       expect.objectContaining({ label: "Review proposal", href: "/admin/research" }),
+    );
+  });
+
+  it("never offers a choice that links back to the surface the card renders on", () => {
+    // The BI-90B6D8C5 regression guard, held for EVERY source and both views: the
+    // old fallback was `/workspace/inbox?attentionId=<id>` on a card rendered at
+    // /workspace/inbox, with no reader for the param anywhere — a guaranteed no-op.
+    const sources: AttentionSource[] = [
+      "escalation",
+      "ai-decision",
+      "business-journey",
+      "paused-ai",
+      "scheduled-task",
+      "agent-proposal",
+      "approval-outbound",
+      "approval-bill",
+      "approval-expense",
+      "compliance-submission",
+      "research-proposal",
+      "coworker-memory",
+      "ai-readiness-blocker",
+      "platform-health",
+      "provider-credential",
+      "reservation-exception",
+      "storefront-inquiry",
+    ];
+    const builderRailHrefs = [
+      "/platform/ai/decisions/DI-1",
+      "/ops/journeys?journey=storefront-booking",
+      "/build?buildId=FB-1",
+      "/admin/research",
+    ];
+
+    for (const source of sources) {
+      for (const href of builderRailHrefs) {
+        for (const audience of ["worker", "operator"] as const) {
+          const card = translateAttentionToOwnerDecision(
+            item({
+              id: `${source}:no-op-guard`,
+              source,
+              actions: [{ kind: "open-in-context", label: "Open record", href }],
+              deepLink: href,
+            }),
+            Date.parse("2026-07-29T12:00:00Z"),
+            audience,
+          );
+
+          for (const choice of card.choices) {
+            expect(choice.href).not.toMatch(/^\/workspace\/inbox\b/);
+            expect(choice.href).not.toMatch(/\battentionId=/);
+          }
+          // A card with no button always explains itself instead.
+          if (card.choices.length === 0) expect(card.handoff).toBeTruthy();
+        }
+      }
+    }
+  });
+
+  it("names the build in the handoff when the blast radius carries one", () => {
+    const card = translateAttentionToOwnerDecision(
+      item({
+        source: "ai-decision",
+        actions: [{ kind: "open-in-context", label: "Review evidence", href: "/platform/ai/decisions/DI-1" }],
+        deepLink: "/platform/ai/decisions/DI-1",
+        triage: {
+          timeToAct: "none",
+          residueReason: "high-risk-gate",
+          blastRadius: "build FB-1DB2A3B5",
+          decideEffort: "judgment",
+          irreversible: false,
+        },
+      }),
+      Date.parse("2026-07-29T12:00:00Z"),
+      "worker",
+    );
+
+    expect(card.handoff).toMatch(/build record/i);
+    // The raw id stays below the fold, never in owner copy.
+    expect(card.handoff).not.toMatch(/FB-1DB2A3B5/);
+  });
+
+  it("recovers the feature build id from the blast radius when the deep link has no query", () => {
+    // An ai-decision deep link is /platform/ai/decisions/DI-… with no buildId
+    // param, so query-only parsing reported "Not attached" on a card whose own
+    // consequence line named the build (BI-90B6D8C5).
+    const card = translateAttentionToOwnerDecision(
+      item({
+        source: "ai-decision",
+        actions: [{ kind: "open-in-context", label: "Review evidence", href: "/platform/ai/decisions/DI-1" }],
+        deepLink: "/platform/ai/decisions/DI-1",
+        triage: {
+          timeToAct: "none",
+          residueReason: "high-risk-gate",
+          blastRadius: "build FB-1DB2A3B5",
+          decideEffort: "judgment",
+          irreversible: false,
+        },
+      }),
+      Date.parse("2026-07-29T12:00:00Z"),
+    );
+    const details = Object.fromEntries(
+      card.technical.fields.map((field) => [field.label, field.value]),
+    );
+
+    expect(details["Feature build"]).toBe("FB-1DB2A3B5");
+    expect(card.technical.builderActions).toContainEqual(
+      expect.objectContaining({ label: "Resume build", href: "/build?buildId=FB-1DB2A3B5" }),
     );
   });
 

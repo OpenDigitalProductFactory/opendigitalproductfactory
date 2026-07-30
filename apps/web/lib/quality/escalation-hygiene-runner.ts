@@ -17,17 +17,37 @@
 // Wired into the 15-minute issue-report-triage cron AND invoked best-effort at
 // /ops render, so ghosts clear without waiting for the cron. Idempotent: zero
 // writes once converged.
+//
+// BI-FE034C1E extends the same sweep to the OTHER table with a create path and
+// no clear path: build-linked `DecisionInteraction` escalate/defer residue whose
+// build has since been abandoned/finished/superseded. Those rows kept telling the
+// owner "build FB-XXXXXXXX stays blocked" about dead builds on /workspace/inbox.
+// See sweepDecisionResidue below and decision-residue-staleness.ts for the rule.
 
-import { prisma } from "@dpf/db";
+import { Prisma, prisma } from "@dpf/db";
 import { ISSUE_REPORT_STATUS } from "@/lib/quality/issue-report-status";
 import {
   selectResolvableEscalations,
   type EscalationStalenessRow,
 } from "@/lib/quality/escalation-staleness";
+import {
+  buildWithdrawnHumanOutcome,
+  selectWithdrawableDecisions,
+  type DecisionResidueRow,
+} from "@/lib/quality/decision-residue-staleness";
 
 const SWEEP_LIMIT = 200;
 
-export async function runEscalationHygiene(): Promise<{ scanned: number; resolved: number }> {
+export type EscalationHygieneResult = {
+  scanned: number;
+  resolved: number;
+  /** Build-linked DecisionInteraction residue rows examined (BI-FE034C1E). */
+  decisionsScanned: number;
+  /** Residue rows auto-withdrawn because their build's life is over. */
+  decisionsWithdrawn: number;
+};
+
+export async function runEscalationHygiene(): Promise<EscalationHygieneResult> {
   const reports = await prisma.platformIssueReport.findMany({
     where: {
       status: {
@@ -93,5 +113,94 @@ export async function runEscalationHygiene(): Promise<{ scanned: number; resolve
     }
   }
 
-  return { scanned: rows.length, resolved: resolvable.length };
+  const decisions = await sweepDecisionResidue();
+
+  return {
+    scanned: rows.length,
+    resolved: resolvable.length,
+    decisionsScanned: decisions.scanned,
+    decisionsWithdrawn: decisions.withdrawn,
+  };
+}
+
+/**
+ * Withdraw build-linked decision residue whose build's life is over
+ * (BI-FE034C1E). Runs in the same sweep as the escalation reconcile because it
+ * closes the identical create-path-without-clear-path gap on a different table,
+ * and shares its callers: /workspace/inbox render, /ops render, and the 15-min
+ * issue-report-triage cron. Idempotent — once withdrawn, `humanOutcome` is no
+ * longer null, so the row leaves this query permanently.
+ */
+async function sweepDecisionResidue(): Promise<{ scanned: number; withdrawn: number }> {
+  const rows = await prisma.decisionInteraction.findMany({
+    where: {
+      outcomeType: { in: ["escalate", "defer"] },
+      humanOutcome: { equals: Prisma.DbNull },
+      // Only build-linked rows are sweepable; the org-business and profession
+      // gates write buildId-null rows that a human answers by hand.
+      buildId: { not: null },
+    },
+    orderBy: { createdAt: "desc" },
+    take: SWEEP_LIMIT,
+    select: {
+      interactionId: true,
+      outcomeType: true,
+      buildId: true,
+      build: {
+        select: { phase: true, supersededByEpicId: true, originatingBacklogItemId: true },
+      },
+    },
+  });
+
+  // Resolve the originating BacklogItem status/outcome for the linked builds in
+  // one query (FeatureBuild.originatingBacklogItemId is the BacklogItem cuid).
+  const itemPks = Array.from(
+    new Set(
+      rows
+        .map((row) => row.build?.originatingBacklogItemId)
+        .filter((x): x is string => Boolean(x)),
+    ),
+  );
+  const items = itemPks.length
+    ? await prisma.backlogItem.findMany({
+        where: { id: { in: itemPks } },
+        select: { id: true, status: true, triageOutcome: true },
+      })
+    : [];
+  const itemByPk = new Map(items.map((i) => [i.id, i]));
+
+  const residue: DecisionResidueRow[] = rows.map((row) => {
+    const itemPk = row.build?.originatingBacklogItemId ?? null;
+    const item = itemPk ? itemByPk.get(itemPk) : null;
+    return {
+      interactionId: row.interactionId,
+      outcomeType: row.outcomeType,
+      buildId: row.buildId,
+      buildPhase: row.build?.phase ?? null,
+      buildSupersededByEpicId: row.build?.supersededByEpicId ?? null,
+      backlogItemStatus: item?.status ?? null,
+      backlogItemTriageOutcome: item?.triageOutcome ?? null,
+    };
+  });
+
+  const withdrawable = selectWithdrawableDecisions(residue);
+  const withdrawnAtIso = new Date().toISOString();
+  let withdrawn = 0;
+  for (const { interactionId, reason } of withdrawable) {
+    try {
+      await prisma.decisionInteraction.update({
+        where: { interactionId },
+        data: { humanOutcome: buildWithdrawnHumanOutcome({ reason, withdrawnAtIso }) },
+      });
+    } catch {
+      // Best-effort per row — a single failure must not stop the rest of the sweep.
+      continue;
+    }
+    withdrawn += 1;
+    if (process.env.NODE_ENV !== "test") {
+      console.log(`[escalation-hygiene] withdrew ${interactionId} (${reason})`);
+    }
+  }
+
+  return { scanned: residue.length, withdrawn };
 }

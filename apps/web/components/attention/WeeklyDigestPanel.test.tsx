@@ -55,8 +55,8 @@ const entry = {
     choices: [
       {
         kind: "open-in-context",
-        label: "Review",
-        href: "/workspace/inbox?attentionId=research-proposal%3A1",
+        label: "Review proposal",
+        href: "/admin/research",
       },
     ],
     tags: [{ label: "Reversible", kind: "reversible" }],

@@ -1,5 +1,9 @@
 import type { ProactivityLevel } from "@/lib/proactivity/proactivity-types";
-import { translateAttentionToOwnerDecision, type OwnerDecisionCard } from "./owner-decision";
+import {
+  translateAttentionToOwnerDecision,
+  type OwnerDecisionAudience,
+  type OwnerDecisionCard,
+} from "./owner-decision";
 import {
   classifyOwnerAttentionLane,
   type OwnerAttentionLaneDecision,
@@ -23,9 +27,19 @@ export type OwnerAttentionProjection = {
 
 export function buildOwnerAttentionProjection(
   items: AttentionItem[],
-  options: { fallbackLevel?: ProactivityLevel; nowMs: number },
+  options: {
+    fallbackLevel?: ProactivityLevel;
+    nowMs: number;
+    /**
+     * Which rails the reader asked to see (Simple/Full toggle). Decides whether a
+     * builder-rail action can be an owner button; defaults to `operator` (Full),
+     * matching resolveNavModeFromCookie's own default.
+     */
+    audience?: OwnerDecisionAudience;
+  },
 ): OwnerAttentionProjection {
   const fallbackLevel = options.fallbackLevel ?? "balanced";
+  const audience = options.audience ?? "operator";
   const needsYouNow: OwnerAttentionEntry[] = [];
   const weeklyDigest: OwnerAttentionEntry[] = [];
   const custodian: OwnerAttentionEntry[] = [];
@@ -35,7 +49,7 @@ export function buildOwnerAttentionProjection(
     const entry = {
       item,
       routing,
-      card: translateAttentionToOwnerDecision(item, options.nowMs),
+      card: translateAttentionToOwnerDecision(item, options.nowMs, audience),
     };
     if (routing.lane === "needs-you-now") needsYouNow.push(entry);
     else if (routing.lane === "weekly-digest") weeklyDigest.push(entry);

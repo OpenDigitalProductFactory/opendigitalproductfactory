@@ -11,6 +11,7 @@ import { StatusBadge } from "@/components/ui/report-kit";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { TIER_LABELS, tierForRow } from "@/lib/wiki/decision-audit";
 import { buildDecisionHelp } from "@/lib/wiki/decision-help";
+import { isWithdrawnHumanOutcome } from "@/lib/quality/decision-residue-staleness";
 
 export const dynamic = "force-dynamic";
 
@@ -251,6 +252,7 @@ export default async function DecisionRecordPage({ params }: { params: Params })
               insufficientSignal,
               hasBuild: Boolean(row.buildId),
               resolved: row.humanOutcome !== null,
+              withdrawn: isWithdrawnHumanOutcome(row.humanOutcome),
             });
             const needsAction = help.steps.length > 0;
             return (

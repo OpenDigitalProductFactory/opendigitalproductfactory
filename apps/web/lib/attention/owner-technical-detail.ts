@@ -8,10 +8,7 @@ export function technicalFields(item: AttentionItem): OwnerTechnicalField[] {
   const backlogItemId =
     item.technical?.backlogItemId ??
     (item.triage.blastRadius?.match(/\bBI-[A-Z0-9-]+\b/i)?.[0] ?? "Not attached");
-  const featureBuildId =
-    item.technical?.featureBuildId ??
-    readQueryId(item.deepLink, "buildId", /\bFB-[A-Z0-9-]+\b/i) ??
-    "Not attached";
+  const featureBuildId = item.technical?.featureBuildId ?? readFeatureBuildId(item) ?? "Not attached";
   return [
     { label: "Original title", value: item.title },
     { label: "Source", value: item.source },
@@ -35,9 +32,7 @@ export function technicalFields(item: AttentionItem): OwnerTechnicalField[] {
 export function builderActions(item: AttentionItem): OwnerDecisionChoice[] {
   const backlogItemId =
     item.technical?.backlogItemId ?? item.triage.blastRadius?.match(/\bBI-[A-Z0-9-]+\b/i)?.[0];
-  const featureBuildId =
-    item.technical?.featureBuildId ??
-    readQueryId(item.deepLink, "buildId", /\bFB-[A-Z0-9-]+\b/i);
+  const featureBuildId = item.technical?.featureBuildId ?? readFeatureBuildId(item);
   const actions: OwnerDecisionChoice[] = [
     { kind: "open-in-context", label: "Open in Operations", href: "/ops" },
   ];
@@ -60,6 +55,26 @@ export function builderActions(item: AttentionItem): OwnerDecisionChoice[] {
     actions.push({ ...action, href: action.href });
   }
   return actions;
+}
+
+const FEATURE_BUILD_PATTERN = /\bFB-[A-Z0-9-]+\b/i;
+
+/**
+ * The feature build this item is about, from the deep link's `buildId` query
+ * param OR from the blast radius prose.
+ *
+ * The blast-radius fallback matters (BI-90B6D8C5): an `ai-decision` item's deep
+ * link is `/platform/ai/decisions/DI-…` with no query string, so query-only
+ * parsing reported "Not attached" for cards whose own consequence line reads
+ * "build FB-1DB2A3B5 stays blocked" — and suppressed the `Resume build` action
+ * that is the one route to the surface where the gate can actually be answered.
+ */
+function readFeatureBuildId(item: AttentionItem): string | null {
+  return (
+    readQueryId(item.deepLink, "buildId", FEATURE_BUILD_PATTERN)
+    ?? item.triage.blastRadius?.match(FEATURE_BUILD_PATTERN)?.[0]
+    ?? null
+  );
 }
 
 function readQueryId(href: string, key: string, pattern: RegExp): string | null {

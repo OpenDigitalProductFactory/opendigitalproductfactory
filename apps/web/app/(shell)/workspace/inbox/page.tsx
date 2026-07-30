@@ -2,8 +2,10 @@
 // EP-ATTENTION-SURFACE keystone (BI-D39484E7). A workspace-section sibling, so no
 // cross-rail teleport (EP-NAV-COHERENCE). Spec §6.
 import { prisma } from "@dpf/db";
+import { cookies } from "next/headers";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { NAV_MODE_COOKIE, resolveNavModeFromCookie } from "@/lib/navigation/nav-mode";
 import { loadAttentionItems, filterAttentionForAudience } from "@/lib/attention/aggregate";
 import { buildOwnerAttentionProjection } from "@/lib/attention/owner-projection";
 import { buildWeeklyDigest } from "@/lib/attention/weekly-digest";
@@ -28,9 +30,14 @@ export default async function WorkspaceInboxPage() {
   // V1 operator-view; worker scoping (own approvals only) is BI-AS-4.
   const visible = filterAttentionForAudience(items, { operator: true });
   const nowMs = Date.now();
+  // Simple/Full decides whether a card's real action can be its own button: in
+  // Full the reader asked to see builder and platform tools, so a builder-rail
+  // action IS the honest primary action (BI-90B6D8C5).
+  const audience = resolveNavModeFromCookie((await cookies()).get(NAV_MODE_COOKIE)?.value);
   const projection = buildOwnerAttentionProjection(visible, {
     fallbackLevel: "balanced",
     nowMs,
+    audience: audience === "worker" ? "worker" : "operator",
   });
   const digest = buildWeeklyDigest(projection.weeklyDigest, nowMs);
   const digestDisposition =

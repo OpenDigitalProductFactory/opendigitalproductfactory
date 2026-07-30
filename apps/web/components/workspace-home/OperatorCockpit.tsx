@@ -6,6 +6,7 @@ import { prisma } from "@dpf/db";
 
 import { loadAttentionItems, filterAttentionForAudience } from "@/lib/attention/aggregate";
 import { buildOwnerAttentionProjection, type OwnerAttentionProjection } from "@/lib/attention/owner-projection";
+import type { OwnerDecisionAudience } from "@/lib/attention/owner-decision";
 import type { AttentionSource } from "@/lib/attention/types";
 import { OwnerDecisionCards } from "@/components/attention/OwnerDecisionCards";
 import {
@@ -84,7 +85,14 @@ export function OperatorCockpitView({
   );
 }
 
-export async function OperatorCockpit({ userId }: { userId?: string }) {
+export async function OperatorCockpit({
+  userId,
+  audience = "operator",
+}: {
+  userId?: string;
+  /** Simple/Full rail mode — see OwnerDecisionAudience (BI-90B6D8C5). */
+  audience?: OwnerDecisionAudience;
+}) {
   const { items, failedSources } = await loadAttentionItems(prisma, {
     aiReadinessUserId: userId,
   });
@@ -92,6 +100,7 @@ export async function OperatorCockpit({ userId }: { userId?: string }) {
   const projection = buildOwnerAttentionProjection(visible, {
     fallbackLevel: "balanced",
     nowMs: Date.now(),
+    audience,
   });
   return <OperatorCockpitView projection={projection} failedSources={failedSources} />;
 }
