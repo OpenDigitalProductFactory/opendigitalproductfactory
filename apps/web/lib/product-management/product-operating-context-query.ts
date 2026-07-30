@@ -3,8 +3,6 @@ import {
   assembleProductOperatingContext,
   collectProductLineSubtreeIds,
   createContextSlice,
-  type BusinessProductContextItem,
-  type ConsumerEvidenceContextItem,
   type EnablingDigitalProductContextItem,
   type IntelligenceContextItem,
   type ProductOperatingContext,
@@ -15,413 +13,40 @@ import {
 import {
   buildProductIntelligenceProjectionWhere,
   buildScheduledProductIntelligenceVisibilityWhere,
-  normalizeProductIntelligenceScope,
 } from "./product-intelligence-scope";
 import { SCHEDULED_AGENT_TASK_KINDS } from "@/lib/operate/scheduled-jobs/agent-task-kind";
-
-type QueryDelegate<T> = {
-  findMany(args: unknown): Promise<T[]>;
-};
-
-type OptionalQueryDelegate<T> = QueryDelegate<T> & {
-  findFirst(args: unknown): Promise<T | null>;
-};
-
-type OrganizationRow = { id: string; name: string; updatedAt: Date };
-type ProductLineRow = {
-  id: string;
-  name: string;
-  parentId: string | null;
-  updatedAt: Date;
-};
-type ProductRow = {
-  id: string;
-  productId: string;
-  productLineId: string;
-  name: string;
-  updatedAt: Date;
-};
-type DigitalProductRow = {
-  id: string;
-  productId: string;
-  name: string;
-  updatedAt: Date;
-};
-type OfferingRow = {
-  id: string;
-  productId: string;
-  providerOrganizationId: string;
-  name: string;
-  status: string;
-  updatedAt: Date;
-  catalogItems: Array<{
-    id: string;
-    name: string;
-    status: string;
-    updatedAt: Date;
-  }>;
-  operationalServiceOffering: {
-    digitalProduct: DigitalProductRow;
-  } | null;
-};
-type NumberLike = number | { toNumber(): number };
-type ProductSoldRow = {
-  id: string;
-  productId: string;
-  status: string;
-  quantity: NumberLike;
-  totalAmount: NumberLike;
-  currency: string;
-  purchasedAt: Date;
-  parties: Array<{
-    id: string;
-    role: string;
-    observedAt: Date;
-    displaySnapshot: unknown;
-  }>;
-  evidence: Array<{
-    id: string;
-    evidenceKind: string;
-    observedAt: Date;
-    evidenceSnapshot: unknown;
-  }>;
-  componentAllocations: Array<{
-    componentCatalogItemId: string;
-    allocatedAmount: NumberLike | null;
-    allocationMode: string;
-  }>;
-};
-type ResearchProposalRow = {
-  proposalId: string;
-  digitalProductId: string | null;
-  productLineId: string | null;
-  businessProductId: string | null;
-  topic: string;
-  query: string;
-  status: string;
-  resultSummary: string | null;
-  metadata: unknown;
-  updatedAt: Date;
-};
-type BattlecardRow = {
-  battlecardId: string;
-  digitalProductId: string | null;
-  productLineId: string | null;
-  businessProductId: string | null;
-  competitorName: string;
-  status: string;
-  updatedAt: Date;
-};
-type ScheduledAgentTaskRow = {
-  taskId: string;
-  title: string;
-  productLineId: string | null;
-  businessProductId: string | null;
-  schedule: string;
-  isActive: boolean;
-  nextRunAt: Date | null;
-  lastRunAt: Date | null;
-  lastStatus: string | null;
-  updatedAt: Date;
-};
-type KnowledgeArticleRow = {
-  articleId: string;
-  title: string;
-  status: string;
-  updatedAt: Date;
-  products: Array<{ digitalProductId: string }>;
-};
-type ReviewedResearchSourceRow = {
-  sourceKey: string;
-  locator: unknown;
-  retrievedAt: Date | null;
-  pageSources: Array<{
-    page: {
-      id: string;
-      title: string;
-      abstract: string | null;
-      status: string;
-      lastReviewedAt: Date | null;
-      updatedAt: Date;
-    };
-  }>;
-};
-type BacklogRow = {
-  itemId: string;
-  title: string;
-  status: string;
-  demandStage: string | null;
-  demandScore: number | null;
-  updatedAt: Date;
-  epic: { epicId: string; title: string; status: string; updatedAt: Date } | null;
-};
-type ChangeRow = {
-  id: string;
-  title: string;
-  status: string;
-  updatedAt: Date;
-};
-type EaElementRow = {
-  id: string;
-  name: string;
-  lifecycleStatus: string | null;
-  updatedAt: Date;
-};
-type DependencyRow = {
-  id: string;
-  relationType: string;
-  createdAt: Date;
-  fromProduct: { name: string };
-  toProduct: { name: string };
-};
-
-export type ProductOperatingContextQueryClient = {
-  organization: {
-    findFirst(args: unknown): Promise<OrganizationRow | null>;
-  };
-  productLine: OptionalQueryDelegate<ProductLineRow>;
-  product: OptionalQueryDelegate<ProductRow>;
-  productOffering: QueryDelegate<OfferingRow>;
-  productSold: QueryDelegate<ProductSoldRow>;
-  researchProposal: QueryDelegate<ResearchProposalRow>;
-  marketingBattlecard: QueryDelegate<BattlecardRow>;
-  knowledgeArticle: QueryDelegate<KnowledgeArticleRow>;
-  rawSource: QueryDelegate<ReviewedResearchSourceRow>;
-  backlogItem: QueryDelegate<BacklogRow>;
-  changeItem: QueryDelegate<ChangeRow>;
-  eaElement: QueryDelegate<EaElementRow>;
-  productDependency: QueryDelegate<DependencyRow>;
-  scheduledAgentTask: QueryDelegate<ScheduledAgentTaskRow>;
-};
-
-export class ProductOperatingContextNotFoundError extends Error {
-  constructor(scope: ProductOperatingScope) {
-    super(`No ${scope.kind} ${scope.id} exists in the authorized organization`);
-    this.name = "ProductOperatingContextNotFoundError";
-  }
-}
-
-export type ProductOperatingContextQueryProfile =
-  | "full"
-  | "commercial-summary";
-
-function numberOf(value: NumberLike | null): number {
-  if (value == null) return 0;
-  return typeof value === "number" ? value : value.toNumber();
-}
-
-function recordOf(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-function stringOf(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value : null;
-}
-
-function dateOf(value: unknown): Date | null {
-  if (value instanceof Date) return value;
-  if (typeof value !== "string") return null;
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
-}
-
-function researchEvidenceOf(metadata: unknown): {
-  confidence: "low" | "medium" | "high" | null;
-  comparisonKind: "first-run" | "changed-since" | null;
-  emptyReason:
-    | "no-results"
-    | "provider-unavailable"
-    | "synthesis-empty"
-    | null;
-  retrievedAt: Date | null;
-  sourceUrls: string[];
-} {
-  const evidence = recordOf(recordOf(metadata)["evidence"]);
-  const confidence =
-    evidence["confidence"] === "low" ||
-    evidence["confidence"] === "medium" ||
-    evidence["confidence"] === "high"
-      ? evidence["confidence"]
-      : null;
-  const comparisonKind =
-    evidence["comparisonKind"] === "first-run" ||
-    evidence["comparisonKind"] === "changed-since"
-      ? evidence["comparisonKind"]
-      : null;
-  const emptyReason =
-    evidence["emptyReason"] === "no-results" ||
-    evidence["emptyReason"] === "provider-unavailable" ||
-    evidence["emptyReason"] === "synthesis-empty"
-      ? evidence["emptyReason"]
-      : null;
-  const sourceUrls = Array.isArray(evidence["sourceUrls"])
-    ? evidence["sourceUrls"].filter(
-        (url): url is string => typeof url === "string" && url.length > 0,
-      )
-    : [];
-  return {
-    confidence,
-    comparisonKind,
-    emptyReason,
-    retrievedAt: dateOf(evidence["retrievedAt"]),
-    sourceUrls,
-  };
-}
-
-function researchLocatorEvidenceOf(locatorValue: unknown): {
-  confidence: "low" | "medium" | "high" | null;
-  comparisonKind: "first-run" | "changed-since" | null;
-  sourceUrls: string[];
-} {
-  const locator = recordOf(locatorValue);
-  const confidence =
-    locator["confidence"] === "low" ||
-    locator["confidence"] === "medium" ||
-    locator["confidence"] === "high"
-      ? locator["confidence"]
-      : null;
-  const comparisonKind =
-    locator["comparisonKind"] === "first-run" ||
-    locator["comparisonKind"] === "changed-since"
-      ? locator["comparisonKind"]
-      : null;
-  const sourceUrls = Array.isArray(locator["urls"])
-    ? locator["urls"].filter(
-        (url): url is string => typeof url === "string" && url.trim().length > 0,
-      )
-    : [];
-  return { confidence, comparisonKind, sourceUrls };
-}
-
-function reviewedResearchScopeOf(
-  locatorValue: unknown,
-  organizationId: string,
-) {
-  const locator = recordOf(locatorValue);
-  if (stringOf(locator["sourceType"]) !== "research") return null;
-  try {
-    return normalizeProductIntelligenceScope({
-      organizationId,
-      productLineId: stringOf(locator["productLineId"]),
-      businessProductId: stringOf(locator["businessProductId"]),
-      digitalProductId: stringOf(locator["digitalProductId"]),
-    });
-  } catch {
-    return null;
-  }
-}
-
-function scopeIsVisible(
-  scope: ReturnType<typeof normalizeProductIntelligenceScope>,
-  visible: {
-    productLineIds: string[];
-    productIds: string[];
-    digitalProductIds: string[];
-  },
-): boolean {
-  if (scope.kind === "organization") return true;
-  if (scope.kind === "product-line") {
-    return visible.productLineIds.includes(scope.productLineId!);
-  }
-  if (scope.kind === "business-product") {
-    return visible.productIds.includes(scope.businessProductId!);
-  }
-  return visible.digitalProductIds.includes(scope.digitalProductId!);
-}
-
-function dedupeIntelligenceItems(
-  items: IntelligenceContextItem[],
-): IntelligenceContextItem[] {
-  const byCanonicalSource = new Map<string, IntelligenceContextItem>();
-  for (const item of items) {
-    const key = `${item.sourceKind}:${item.id}`;
-    const existing = byCanonicalSource.get(key);
-    if (!existing) {
-      byCanonicalSource.set(key, item);
-      continue;
-    }
-    byCanonicalSource.set(key, {
-      ...existing,
-      asOf:
-        existing.asOf.getTime() >= item.asOf.getTime()
-          ? existing.asOf
-          : item.asOf,
-      retrievedAt:
-        !existing.retrievedAt ||
-        (item.retrievedAt &&
-          item.retrievedAt.getTime() > existing.retrievedAt.getTime())
-          ? item.retrievedAt
-          : existing.retrievedAt,
-      sourceUrls: Array.from(
-        new Set([...(existing.sourceUrls ?? []), ...(item.sourceUrls ?? [])]),
-      ).sort(),
-    });
-  }
-  return [...byCanonicalSource.values()];
-}
-
-function intelligenceScopeOf(row: {
-  productLineId: string | null;
-  businessProductId: string | null;
-  digitalProductId: string | null;
-}, organizationId: string) {
-  return normalizeProductIntelligenceScope({
-    organizationId,
-    productLineId: row.productLineId,
-    businessProductId: row.businessProductId,
-    digitalProductId: row.digitalProductId,
-  }).kind;
-}
-
-function productSoldConsumers(row: ProductSoldRow): ConsumerEvidenceContextItem[] {
-  const fromParties = row.parties.flatMap((party) => {
-    if (
-      party.role !== "account" &&
-      party.role !== "consumer" &&
-      party.role !== "subscriber"
-    ) {
-      return [];
-    }
-    const snapshot = recordOf(party.displaySnapshot);
-    const label =
-      stringOf(snapshot["name"]) ??
-      stringOf(snapshot["email"]) ??
-      stringOf(snapshot["accountId"]);
-    if (!label) return [];
-    return [
-      {
-        id: party.id,
-        sourceKind: "product-sold-party",
-        asOf: party.observedAt,
-        role: party.role,
-        label,
-        canonicalLinkEstablished: true,
-      } satisfies ConsumerEvidenceContextItem,
-    ];
-  });
-  if (fromParties.length > 0) return fromParties;
-
-  return row.evidence.flatMap((evidence) => {
-    const snapshot = recordOf(evidence.evidenceSnapshot);
-    const label =
-      stringOf(snapshot["customerName"]) ??
-      stringOf(snapshot["customerEmail"]);
-    if (!label) return [];
-    return [
-      {
-        id: evidence.id,
-        sourceKind: evidence.evidenceKind,
-        asOf: evidence.observedAt,
-        role: "consumer",
-        label,
-        canonicalLinkEstablished: false,
-      } satisfies ConsumerEvidenceContextItem,
-    ];
-  });
-}
-
+import {
+  ProductOperatingContextNotFoundError,
+  numberOf,
+  productScopeRows,
+  recordOf,
+  stringOf,
+  type BattlecardRow,
+  type DependencyRow,
+  type EaElementRow,
+  type KnowledgeArticleRow,
+  type ProductLineRow,
+  type ProductOperatingContextQueryClient,
+  type ProductOperatingContextQueryProfile,
+  type ProductRow,
+  type ResearchProposalRow,
+  type ReviewedResearchSourceRow,
+  type ScheduledAgentTaskRow,
+} from "./product-operating-context-query-types";
+import {
+  dedupeIntelligenceItems,
+  intelligenceScopeOf,
+  productSoldConsumers,
+  researchEvidenceOf,
+  researchLocatorEvidenceOf,
+  reviewedResearchScopeOf,
+  scopeIsVisible,
+} from "./product-operating-context-query-evidence";
+export {
+  ProductOperatingContextNotFoundError,
+  type ProductOperatingContextQueryClient,
+  type ProductOperatingContextQueryProfile,
+} from "./product-operating-context-query-types";
 async function resolveBusinessScope(input: {
   db: ProductOperatingContextQueryClient;
   organizationId: string;
@@ -445,7 +70,6 @@ async function resolveBusinessScope(input: {
     }),
   ]);
   if (!organization) throw new ProductOperatingContextNotFoundError(input.scope);
-
   let products: ProductRow[];
   let selectedProductLine: ProductLineRow | null = null;
   if (input.scope.kind === "product") {
@@ -524,18 +148,6 @@ async function resolveBusinessScope(input: {
   }
   return { organization, productLines, selectedProductLine, products };
 }
-
-function productScopeRows(rows: ProductRow[]): BusinessProductContextItem[] {
-  return rows.map((product) => ({
-    id: product.id,
-    productId: product.productId,
-    productLineId: product.productLineId,
-    name: product.name,
-    sourceKind: "product",
-    asOf: product.updatedAt,
-  }));
-}
-
 export async function loadProductOperatingContext(input: {
   db?: ProductOperatingContextQueryClient;
   organizationId: string;
@@ -549,7 +161,6 @@ export async function loadProductOperatingContext(input: {
     (prisma as unknown as ProductOperatingContextQueryClient);
   const requestedAt = input.requestedAt ?? new Date();
   const fullProfile = (input.profile ?? "full") === "full";
-
   // Authorization is deliberately resolved once at the boundary. Every query
   // still carries the organization predicate as defense in depth.
   await input.authorize({ organizationId: input.organizationId });
@@ -559,7 +170,6 @@ export async function loadProductOperatingContext(input: {
     scope: input.scope,
   });
   const productIds = identity.products.map((product) => product.id);
-
   const [offerings, soldRows] = await Promise.all([
     fullProfile
       ? db.productOffering.findMany({
