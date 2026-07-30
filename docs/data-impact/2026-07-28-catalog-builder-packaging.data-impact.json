@@ -1,0 +1,102 @@
+{
+  "version": "1",
+  "accountableOwner": "goods-and-services-for-sale",
+  "affectedCopies": [
+    "Catalog Builder edits the canonical CatalogItem packaging contract",
+    "QuoteLineItem may reference a real CatalogSku",
+    "Reusable quote configurations preserve promotion provenance",
+    "Storefront channels consume eligibility and promotion projections"
+  ],
+  "migration": {
+    "name": "20260728180000_add_catalog_builder_packaging",
+    "backfill": "None. New packaging tables begin empty and all added compatibility fields are nullable; no bundle, price list, promotion, eligibility, configuration, or SKU is inferred."
+  },
+  "tests": [
+    "packages/db/src/catalog-builder-schema.test.ts",
+    "apps/web/lib/products/catalog-builder.test.ts",
+    "apps/web/lib/products/catalog-builder-commands.test.ts",
+    "apps/web/app/api/storefront/admin/catalog/[catalogItemId]/route.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:catalog-bundle-component",
+      "prismaModel": "CatalogBundleComponent",
+      "lifecycleDisposition": "Bundle composition follows the parent CatalogItem lifecycle and is retained as effective catalog structure until deliberately changed.",
+      "fields": [
+        {
+          "fieldId": "data:catalog-bundle-component#parent-component-quantity",
+          "resolution": "governed",
+          "reason": "Represents an explicit component relationship instead of inferring bundles from names or archetypes.",
+          "provenance": "BI-83C7D9EE catalog packaging contract",
+          "flags": ["organization"],
+          "fieldPolicy": "Parent and component must belong to the same organization; self-reference is rejected."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:catalog-price-list",
+      "prismaModel": "CatalogPriceList and CatalogPriceListEntry",
+      "lifecycleDisposition": "Price lists and entries are effective-dated commercial definitions retained for traceability; no historical order price is rewritten.",
+      "fields": [
+        {
+          "fieldId": "data:catalog-price-list#entries",
+          "resolution": "governed",
+          "reason": "Provides deliberate organization-scoped pricing packages for canonical catalog items and optional SKUs.",
+          "provenance": "BI-83C7D9EE pricing option",
+          "flags": ["organization"],
+          "fieldPolicy": "Entries require canonical catalog references; absent price evidence remains absent."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:catalog-promotion",
+      "prismaModel": "CatalogPromotion and CatalogPromotionItem",
+      "lifecycleDisposition": "Promotions are effective-dated and retained with their explicit item scope; expiration changes availability rather than deleting provenance.",
+      "fields": [
+        {
+          "fieldId": "data:catalog-promotion#item-scope-adjustment",
+          "resolution": "governed",
+          "reason": "Keeps promotions explicit and traceable instead of changing canonical item identity.",
+          "provenance": "BI-83C7D9EE promotion contract",
+          "flags": ["organization"],
+          "fieldPolicy": "Promotion items remain within the promotion organization and use declared adjustment terms."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:catalog-channel-eligibility",
+      "prismaModel": "CatalogChannelEligibility",
+      "lifecycleDisposition": "Channel eligibility follows the catalog item and records deliberate publication scope; removing a channel does not delete the catalog item.",
+      "fields": [
+        {
+          "fieldId": "data:catalog-channel-eligibility#catalog-channel",
+          "resolution": "governed",
+          "reason": "Projects canonical items through existing channels without making the channel a product authority.",
+          "provenance": "BI-83C7D9EE channel packaging boundary",
+          "flags": ["organization"],
+          "fieldPolicy": "Eligibility is explicit per channel; no storefront exposure is inferred."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:catalog-builder-compatibility-fields",
+      "prismaModel": "CatalogItem, ProductConfiguration, QuoteLineItem",
+      "lifecycleDisposition": "Nullable packaging and provenance fields follow their owning records and preserve legacy rows unchanged.",
+      "fields": [
+        {
+          "fieldId": "data:catalog-builder-compatibility-fields#route-promotion-sku",
+          "resolution": "governed",
+          "reason": "Adds fulfillment routing, reusable-configuration promotion provenance, and SKU traceability through existing authorities.",
+          "provenance": "BI-83C7D9EE expand-first migration",
+          "flags": [],
+          "fieldPolicy": "All new fields are nullable; no legacy row is classified or promoted."
+        }
+      ]
+    }
+  ]
+}
