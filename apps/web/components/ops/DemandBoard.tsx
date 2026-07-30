@@ -748,7 +748,7 @@ export function DemandBoard({
       <div className="rounded-lg border border-dashed border-[var(--dpf-border)] p-6 text-center">
         <p className="text-sm text-[var(--dpf-text)]">No demand in the funnel yet.</p>
         <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-          Classify product demand, link evidence, then score value and effort to rank it here.
+          Classify demand, link evidence, then score value and effort for ranking.
         </p>
       </div>
     );
