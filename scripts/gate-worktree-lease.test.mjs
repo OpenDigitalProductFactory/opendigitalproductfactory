@@ -141,11 +141,111 @@ test("durable queue observation reuses claimKey and grants a fresh admitted TTL"
     assert.ok([0, 3].includes(result.code), result.output);
     assert.equal(claims.length, 2);
     assert.equal(claims[0].args.claimKey, claims[1].args.claimKey);
-    assert.match(claims[0].args.claimKey, /^local-ci:gate-\d+:/);
+    assert.match(
+      claims[0].args.claimKey,
+      /^local-ci:gate-v2-[0-9a-f-]{36}-\d+:/,
+    );
     const grantedMs = Date.parse(claims[1].args.expiresAt) - claims[1].receivedAt;
     assert.ok(grantedMs >= 2_800, `expected a fresh ~3s TTL, got ${grantedMs}ms`);
     assert.match(result.output, /queued at position 2/);
   } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("a same-host dead queued observer is cancelled before the live waiter claims", async () => {
+  const calls = [];
+  const observerDirectory = mkdtempSync(join(tmpdir(), "dpf-gate-observers-"));
+  const deadToken = "77777777-7777-4777-8777-777777777777";
+  const deadPid = 2_147_483_000;
+  const deadOwner = `gate-v2-${deadToken}-${deadPid}`;
+  writeFileSync(
+    join(observerDirectory, `${deadToken}.json`),
+    JSON.stringify({
+      schema: "dpf-local-ci-queue-observer/v1",
+      observerToken: deadToken,
+      pid: deadPid,
+      ownerSessionId: deadOwner,
+      branch: "fix/dead",
+      sha: "d".repeat(40),
+      registeredAt: "2026-07-29T20:00:00.000Z",
+    }),
+  );
+  const server = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      const payload = JSON.parse(body);
+      const tool = payload.params.name;
+      calls.push({ tool, args: payload.params.arguments });
+      const result = tool === "list_nonprod_environment_leases"
+        ? {
+          success: true,
+          data: {
+            leases: [],
+            queued: [{
+              leaseId: "NPEL-DEAD-OBSERVER",
+              environmentKey: "local-integration-ci",
+              status: "queued",
+              ownerSessionId: deadOwner,
+            }],
+          },
+        }
+        : tool === "claim_nonprod_environment_lease"
+          ? {
+            success: true,
+            entityId: "NPEL-LIVE-OBSERVER",
+            data: {
+              lease: { leaseId: "NPEL-LIVE-OBSERVER" },
+              admission: { status: "admitted", slotKey: "slot-0", waitAgeMs: 1 },
+            },
+          }
+          : tool === "record_local_integration_result"
+            ? { success: true, entityId: "EVIDENCE-DEAD-OBSERVER" }
+            : { success: true };
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({
+        jsonrpc: "2.0",
+        id: payload.id,
+        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+
+  try {
+    const result = await run(process.execPath, [
+      "scripts/gate-worktree.mjs",
+      "--branch", "fix/dead-waiter-reconciliation",
+      "--worktree", process.cwd(),
+      "--owner-session-id", "integration-test-live-owner",
+      "--expires-minutes", "0.05",
+      "--mcp-url", `http://127.0.0.1:${address.port}`,
+      "--no-push",
+    ], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        DPF_MCP_BEARER_TOKEN: "test-token",
+        DPF_ALLOW_LOCAL_CI_STUB: "1",
+        DPF_LOCAL_QUEUE_OBSERVER_DIR: observerDirectory,
+        DPF_LOCAL_SANDBOX_FENCE_PATH: isolatedFencePath(),
+      },
+    });
+
+    assert.ok([0, 3].includes(result.code), result.output);
+    const deadRelease = calls.findIndex(
+      (call) => call.tool === "release_nonprod_environment_lease"
+        && call.args.leaseId === "NPEL-DEAD-OBSERVER",
+    );
+    const claim = calls.findIndex((call) => call.tool === "claim_nonprod_environment_lease");
+    assert.ok(deadRelease >= 0, result.output);
+    assert.ok(deadRelease < claim, JSON.stringify(calls));
+    assert.match(result.output, /cancelled dead same-host queue observer NPEL-DEAD-OBSERVER/);
+  } finally {
+    server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
   }
 });

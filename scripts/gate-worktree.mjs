@@ -23,6 +23,12 @@ import {
   releaseLocalSandboxFence,
 } from "./lib/local-sandbox-fence.mjs";
 import {
+  createGateObserverIdentity,
+  findDeadLocalQueueObservers,
+  registerLocalQueueObserver,
+  releaseLocalQueueObserver,
+} from "./lib/local-queue-observer.mjs";
+import {
   createLocalCiSlotManifest,
   localCiSlotEnvironment,
 } from "./lib/local-ci-slot-manifest.mjs";
@@ -91,7 +97,7 @@ Options:
   --worktree PATH            Worktree path (default: git rev-parse --show-toplevel)
   --remote NAME               Remote used only with --push (default: origin)
   --owner-provider NAME       build-studio|claude|codex|coworker (default: codex)
-  --owner-session-id ID       External session id (default: gate-<pid>)
+  --owner-session-id ID       External session id (default: host-local gate observer)
   --mcp-url URL                MCP endpoint (default: DPF_MCP_URL or local portal)
   --lease-wait-seconds N       Max time to wait for admission (default: 7200)
   --poll-seconds N             Initial queue-observation backoff (default: 10)
@@ -251,19 +257,78 @@ function quiescenceBlocksWrites(status) {
     && ((status.level && status.level !== "normal") || status.writesRefused === true);
 }
 
-async function warnAboutActiveLease({ mcpUrl, bearerToken }) {
+async function cancelDeadLocalQueueObservers({
+  directory,
+  mcpUrl,
+  bearerToken,
+  leaseEvents,
+  reportActive = false,
+}) {
+  let response;
   try {
-    const response = await mcpCall("list_nonprod_environment_leases", {}, { mcpUrl, bearerToken });
-    if (response?.success !== true) return;
-    const data = responseData(response);
+    response = await mcpCall(
+      "list_nonprod_environment_leases",
+      {},
+      { mcpUrl, bearerToken },
+    );
+  } catch (error) {
+    process.stderr.write(
+      `gate-worktree: dead-waiter reconciliation unavailable (${error.message}); queue remains fail-closed\n`,
+    );
+    return;
+  }
+  if (response?.success !== true) return;
+  const data = responseData(response);
+  if (reportActive) {
     const leases = Array.isArray(data.leases) ? data.leases : [];
     const active = leases.filter((lease) =>
       (lease.environmentKey || lease.environment || lease.key) === "local-integration-ci");
     if (active.length > 0) {
-      process.stderr.write(`gate-worktree: preflight sees ${active.length} active local-integration-ci lease(s); claim will queue if busy.\n`);
+      process.stderr.write(
+        `gate-worktree: preflight sees ${active.length} active local-integration-ci lease(s); claim will queue if busy.\n`,
+      );
     }
-  } catch (error) {
-    process.stderr.write(`gate-worktree: lease-list preflight unavailable (${error.message}); claim remains authoritative\n`);
+  }
+  const queued = Array.isArray(data.queued) ? data.queued : [];
+  const dead = findDeadLocalQueueObservers({
+    directory,
+    queuedLeases: queued,
+  });
+  for (const candidate of dead) {
+    let released;
+    try {
+      released = await mcpCall(
+        "release_nonprod_environment_lease",
+        { leaseId: candidate.leaseId },
+        { mcpUrl, bearerToken },
+      );
+    } catch (error) {
+      process.stderr.write(
+        `gate-worktree: proven-dead queue observer ${candidate.leaseId} could not be cancelled (${error.message}); queue remains authoritative\n`,
+      );
+      continue;
+    }
+    if (released?.success !== true) {
+      process.stderr.write(
+        `gate-worktree: could not cancel proven-dead queue observer ${candidate.leaseId}; queue remains authoritative\n`,
+      );
+      continue;
+    }
+    releaseLocalQueueObserver({
+      path: resolvePath(directory, `${candidate.livenessProof.observerToken}.json`),
+      token: candidate.livenessProof.observerToken,
+    });
+    const event = {
+      type: "dead_queue_observer_cancelled",
+      leaseId: candidate.leaseId,
+      reason: candidate.reason,
+      livenessProof: candidate.livenessProof,
+      at: new Date().toISOString(),
+    };
+    leaseEvents.push(event);
+    process.stdout.write(
+      `cancelled dead same-host queue observer ${candidate.leaseId} (${candidate.reason}; pid ${candidate.livenessProof.pid})\n`,
+    );
   }
 }
 
@@ -299,7 +364,10 @@ async function main() {
   if (branch === "HEAD") die("cannot gate detached HEAD");
   const sha = options.sha || gitOrEmpty(gitBin, ["rev-parse", "HEAD"]);
   const worktreePath = options.worktree || gitOrEmpty(gitBin, ["rev-parse", "--show-toplevel"]);
-  const ownerSessionId = options.ownerSessionId || `gate-${process.pid}`;
+  const gateObserverIdentity = options.ownerSessionId
+    ? null
+    : createGateObserverIdentity();
+  const ownerSessionId = options.ownerSessionId || gateObserverIdentity.ownerSessionId;
   const claimKey = `local-ci:${ownerSessionId}:${sha}`;
   const deadline = Date.now() + options.leaseWaitSeconds * 1000;
   const commandSpec = resolveGateCommand({ branch, allowStub, gitBin });
@@ -332,6 +400,8 @@ async function main() {
     gitOrEmpty(gitBin, ["rev-parse", "--git-common-dir"], worktreePath),
   );
   const rootClone = dirname(gitCommonDir);
+  const queueObserverDirectory = process.env.DPF_LOCAL_QUEUE_OBSERVER_DIR
+    || resolvePath(gitCommonDir, "dpf-local-ci-queue-observers");
   let slotManifest = createLocalCiSlotManifest({
     slotKey: process.env.DPF_LOCAL_CI_SLOT_KEY || "slot-0",
     rootClone,
@@ -414,7 +484,6 @@ async function main() {
     process.exit(0);
   }
 
-  await warnAboutActiveLease({ mcpUrl: options.mcpUrl, bearerToken });
   warnAboutMainFreshness({ gitBin, worktreePath });
 
   if (options.pushBranch) {
@@ -428,6 +497,7 @@ async function main() {
 
   let leaseId = "";
   let localFenceToken = "";
+  let queueObserverPath = "";
   let leaseReleased = false;
   let receivedSignal = "";
   const leaseEvents = [];
@@ -440,6 +510,15 @@ async function main() {
   ]));
   for (const [signal, handler] of Object.entries(signalHandlers)) process.once(signal, handler);
 
+  if (gateObserverIdentity) {
+    queueObserverPath = registerLocalQueueObserver({
+      directory: queueObserverDirectory,
+      identity: gateObserverIdentity,
+      branch,
+      sha,
+    }).path;
+  }
+
   const releaseLeaseOnce = async () => {
     if (!leaseId || leaseReleased) return;
     leaseReleased = true;
@@ -449,6 +528,13 @@ async function main() {
     if (response?.success !== true) {
       throw new Error(`failed to release local-CI lease: ${JSON.stringify(response)}`);
     }
+    if (queueObserverPath) {
+      releaseLocalQueueObserver({
+        path: queueObserverPath,
+        token: gateObserverIdentity.token,
+      });
+      queueObserverPath = "";
+    }
   };
 
   let claimAttempt = 0;
@@ -457,6 +543,13 @@ async function main() {
       await releaseLeaseOnce();
       process.exit(130);
     }
+    await cancelDeadLocalQueueObservers({
+      directory: queueObserverDirectory,
+      mcpUrl: options.mcpUrl,
+      bearerToken,
+      leaseEvents,
+      reportActive: claimAttempt === 0,
+    });
     expiresAt = new Date(Date.now() + leaseTtlMs).toISOString();
     let claimResponse;
     try {
