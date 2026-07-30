@@ -1,5 +1,16 @@
+"use client";
+
 import type { CoworkerCatalog, CoworkerOfferCatalogItem } from "@/lib/coworker-service-catalog/catalog";
 import { oversightLabel } from "@/lib/workforce/oversight-copy";
+import {
+  DataTable,
+  type Column,
+} from "@/components/ui/report-kit";
+
+type OfferRowModel = {
+  offer: CoworkerOfferCatalogItem;
+  presentation: OfferPresentation;
+};
 
 export function CoworkerCatalogView({ catalog }: { catalog: CoworkerCatalog }) {
   const activeOffers = catalog.offers.filter((offer) => offer.status === "active");
@@ -7,6 +18,45 @@ export function CoworkerCatalogView({ catalog }: { catalog: CoworkerCatalog }) {
     offer,
     presentation: projectOfferPresentation(offer),
   }));
+  const columns: Column<OfferRowModel>[] = [
+    {
+      key: "offer",
+      header: "Offer",
+      width: "31%",
+      cell: ({ offer, presentation }) => (
+        <OfferCell offer={offer} presentation={presentation} />
+      ),
+      sortAccessor: ({ offer }) => offer.name,
+    },
+    {
+      key: "provider",
+      header: "Provider",
+      width: "22%",
+      cell: ({ presentation }) => <DetailCell {...presentation.provider} />,
+      sortAccessor: ({ presentation }) => presentation.provider.primary,
+    },
+    {
+      key: "risk",
+      header: "Risk",
+      width: "14%",
+      cell: ({ presentation }) => <DetailCell {...presentation.risk} />,
+      sortAccessor: ({ presentation }) => presentation.risk.primary,
+    },
+    {
+      key: "authority",
+      header: "Authority",
+      width: "18%",
+      cell: ({ presentation }) => <DetailCell {...presentation.authority} />,
+      sortAccessor: ({ presentation }) => presentation.authority.primary,
+    },
+    {
+      key: "availability",
+      header: "Availability",
+      width: "15%",
+      cell: ({ presentation }) => <DetailCell {...presentation.availability} />,
+      sortAccessor: ({ presentation }) => presentation.availability.primary,
+    },
+  ];
   const highRisk = catalog.offers.filter((offer) => offer.riskTier === "high" || offer.riskTier === "critical").length;
   const external = catalog.offers.filter((offer) => offer.availabilityScope === "external").length;
 
@@ -51,41 +101,14 @@ export function CoworkerCatalogView({ catalog }: { catalog: CoworkerCatalog }) {
             data-catalog-layout="desktop"
             className="hidden overflow-x-auto rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] lg:block"
           >
-            <table className="w-full min-w-[740px] table-fixed border-collapse text-left">
-              <colgroup>
-                <col className="w-[31%]" />
-                <col className="w-[22%]" />
-                <col className="w-[14%]" />
-                <col className="w-[18%]" />
-                <col className="w-[15%]" />
-              </colgroup>
-              <thead>
-                <tr className="border-b border-[var(--dpf-border)] text-[11px] font-semibold uppercase text-[var(--dpf-muted)]">
-                  <th className="px-3 py-2" scope="col">Offer</th>
-                  <th className="px-2 py-2" scope="col">Provider</th>
-                  <th className="px-2 py-2" scope="col">Risk</th>
-                  <th className="px-2 py-2" scope="col">Authority</th>
-                  <th className="px-2 py-2" scope="col">Availability</th>
-                </tr>
-              </thead>
-              <tbody>
-                {activeOffers.length === 0 ? (
-                  <tr>
-                    <td className="px-3 py-8 text-sm text-[var(--dpf-muted)]" colSpan={5}>
-                      No active coworker offers are cataloged yet.
-                    </td>
-                  </tr>
-                ) : (
-                  activeOfferRows.map(({ offer, presentation }) => (
-                    <OfferRow
-                      key={offer.offerId}
-                      offer={offer}
-                      presentation={presentation}
-                    />
-                  ))
-                )}
-              </tbody>
-            </table>
+            <DataTable
+              className="min-w-[740px]"
+              columns={columns}
+              rows={activeOfferRows}
+              getRowKey={({ offer }) => offer.offerId}
+              initialSort={{ key: "offer", dir: "asc" }}
+              empty="No active coworker offers are cataloged yet."
+            />
           </div>
         </div>
 
@@ -200,7 +223,7 @@ export function projectOfferPresentation(
   };
 }
 
-function OfferRow({
+function OfferCell({
   offer,
   presentation,
 }: {
@@ -208,21 +231,15 @@ function OfferRow({
   presentation: OfferPresentation;
 }) {
   return (
-    <tr className="border-b border-[var(--dpf-border)] text-xs last:border-b-0">
-      <td className="min-w-0 px-3 py-3 align-top">
-        <div className="font-semibold text-[var(--dpf-text)]">{offer.name}</div>
-        <div className="mt-1 text-[var(--dpf-muted)]">{offer.summary}</div>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {presentation.chips.map((chip) => (
-            <Chip key={chip.label} label={chip.label} value={chip.value} />
-          ))}
-        </div>
-      </td>
-      <Cell {...presentation.provider} />
-      <Cell {...presentation.risk} />
-      <Cell {...presentation.authority} />
-      <Cell {...presentation.availability} />
-    </tr>
+    <div className="min-w-0 py-1">
+      <div className="font-semibold text-[var(--dpf-text)]">{offer.name}</div>
+      <div className="mt-1 text-[var(--dpf-muted)]">{offer.summary}</div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {presentation.chips.map((chip) => (
+          <Chip key={chip.label} label={chip.label} value={chip.value} />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -263,7 +280,7 @@ function MobileFact({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Cell({
+function DetailCell({
   primary,
   secondary,
   secondaryLabel,
@@ -273,13 +290,13 @@ function Cell({
   secondaryLabel?: string;
 }) {
   return (
-    <td className="min-w-0 px-2 py-3 align-top">
+    <div className="min-w-0 py-1">
       <div className="truncate font-medium text-[var(--dpf-text)]">{primary}</div>
       <div className="mt-1 truncate text-[var(--dpf-muted)]">
         {secondaryLabel ? `${secondaryLabel}: ` : ""}
         {secondary}
       </div>
-    </td>
+    </div>
   );
 }
 

@@ -59,6 +59,35 @@ all four, the live directory either remains unusable or overstates capability.
 No new table, availability store, wildcard archetype meaning, or UI-local
 inference is introduced.
 
+## Design grounding
+
+- Existing specs/plans reviewed:
+  - `docs/superpowers/specs/2026-07-25-ai-workforce-ia-design.md`
+  - `docs/platform-usability-standards.md`
+  - this Marketing Coworker Readiness plan and the live failure evidence above
+- Current code substrate reviewed:
+  - `apps/web/lib/coworker-record/roster.ts`
+  - `apps/web/lib/coworker-service-catalog/catalog.ts`
+  - `apps/web/lib/coworker-service-catalog/availability-projection.ts`
+  - `apps/web/lib/routing/pipeline-v2.ts`
+  - `apps/web/lib/routing/fallback.ts`
+  - `apps/web/components/platform/coworker-record/RosterView.tsx`
+  - `apps/web/app/(shell)/platform/ai/agent/[agentId]/page.tsx`
+  - `apps/web/components/ui/report-kit/DataTable.tsx`
+- Source of truth:
+  - service applicability and executable backing remain in
+    `CoworkerService`;
+  - canonical route eligibility and preference resolution remain in
+    `routeEndpointV2`;
+  - effective skills, grants, lifecycle certification, provider capacity, and
+    capability blockers remain in their existing governed stores;
+  - the winning service projection owns first-view area, job, interaction,
+    availability, and action semantics.
+- Decision:
+  - WWMD `DI-865698390724` selected a truthful vertical slice and
+    `DI-999249BFE2E8` selected one bulk canonical projection; no parallel
+    readiness store, UI-local inference, or synthetic dispatch path is added.
+
 ## UX Fit Review
 
 - **Verdict:** fits with guardrails.
@@ -203,9 +232,14 @@ whether the responsive contract was proven in a browser.
 | Tenth critique | Correction |
 | --- | --- |
 | Positive recovery fixtures omitted the capabilities required by their destinations | Fixtures now grant the destination capability explicitly and prove the recovery action is hidden from roles without it |
-| The desktop catalog looked tabular but exposed only generic layout containers | The dense projection now uses a native table with scoped column headers, rows, and cells |
+| The desktop catalog looked tabular but exposed only generic layout containers | The dense projection now composes the shared `DataTable`, preserving native table headers, rows, cells, sorting, and an explicit empty state |
 | Mobile behavior was inferred from CSS classes rather than a rendered route | A dedicated 390x844 Playwright contract proves one visible layout, fact parity, no catalog action, no horizontal overflow, no serious/critical Axe findings, and no console errors |
 | The root E2E spec relied on Axe being hoisted from the web workspace | The root Playwright runner now declares its own Axe dependency; the web declaration remains for the web-owned route sweep |
+
+The final preflight also applied the platform-wide composition and module-size
+ratchets: the catalog moved from local table markup to the report-kit
+`DataTable`, and preference-boundary/fallback fixtures moved into focused test
+modules so the canonical routing suites returned to their prior size.
 
 ## Phase 1: Test-Drive Service-Scoped Readiness
 
