@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 590,
+  "routeCount": 595,
   "routes": [
     {
       "routePath": "/",
@@ -6208,6 +6208,20 @@
       "redirectTo": "/ea/capabilities"
     },
     {
+      "routePath": "/portfolio/product-line/[id]/direction",
+      "kind": "page",
+      "segments": [
+        "portfolio",
+        "product-line",
+        "[id]",
+        "direction"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/portfolio/product-line/[id]/direction/page.tsx"
+    },
+    {
       "routePath": "/portfolio/product/[id]",
       "kind": "page",
       "segments": [
@@ -6261,6 +6275,65 @@
         "id"
       ],
       "file": "apps/web/app/(shell)/portfolio/product/[id]/changes/page.tsx"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/direction",
+      "kind": "page",
+      "segments": [
+        "portfolio",
+        "product",
+        "[id]",
+        "direction"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/portfolio/product/[id]/direction/page.tsx"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/direction/intelligence",
+      "kind": "page",
+      "segments": [
+        "portfolio",
+        "product",
+        "[id]",
+        "direction",
+        "intelligence"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/portfolio/product/[id]/direction/intelligence/page.tsx"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/direction/outcomes",
+      "kind": "page",
+      "segments": [
+        "portfolio",
+        "product",
+        "[id]",
+        "direction",
+        "outcomes"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/portfolio/product/[id]/direction/outcomes/page.tsx"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/direction/roadmap",
+      "kind": "page",
+      "segments": [
+        "portfolio",
+        "product",
+        "[id]",
+        "direction",
+        "roadmap"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/portfolio/product/[id]/direction/roadmap/page.tsx"
     },
     {
       "routePath": "/portfolio/product/[id]/health",
