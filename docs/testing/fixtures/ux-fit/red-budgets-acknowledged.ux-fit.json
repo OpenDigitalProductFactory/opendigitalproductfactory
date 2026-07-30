@@ -1,0 +1,11 @@
+{
+  "version": "1",
+  "decidedOption": "progressive-disclosure",
+  "scope": {
+    "files": ["apps/web/app/(shell)/example/page.tsx"]
+  },
+  "evidence": {
+    "kind": "budgets-acknowledged",
+    "note": "Reviewed the UX budgets and confirmed the screen is fine."
+  }
+}

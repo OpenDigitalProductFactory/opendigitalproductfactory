@@ -1,0 +1,17 @@
+{
+  "version": "1",
+  "decidedOption": "progressive-disclosure",
+  "scope": {
+    "files": ["apps/web/app/(shell)/example/page.tsx"]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "improved",
+    "measured": {
+      "/example": {
+        "defaultVisibleWords": 150,
+        "primaryActions": 2
+      }
+    }
+  }
+}

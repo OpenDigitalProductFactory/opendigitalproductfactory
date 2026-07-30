@@ -12,6 +12,18 @@ const SUPPORTED_TRAILERS = new Set([
   "Local-CI-Override",
 ]);
 
+/**
+ * Trailers that are still PARSED so the author gets told they are inert, rather than
+ * having them silently ignored and assuming they still gate something.
+ * Map: trailer -> what replaced it.
+ */
+const RETIRED_TRAILERS = new Map([
+  [
+    "UX-Fit-Decision",
+    'retired by BI-D967DEE0 — the UX-Fit Gate now requires a measured manifest at docs/ux-fit/<date>-<slug>.ux-fit.json (evidence.kind "sweep-measurement" or "propose-n-pick"). This trailer no longer satisfies any gate.',
+  ],
+]);
+
 const REQUIRED_GATE_SCRIPTS = [
   ["Spec/Plan/Doc Gate", "scripts/check-spec-plan-doc.mjs"],
   ["Plan Backlog Coverage Gate", "scripts/check-plan-backlog-coverage.mjs"],
@@ -57,6 +69,10 @@ export function validatePrBodyTrailers(prBody = "") {
   for (const trailer of trailers) {
     if (!trailer.value) {
       blockers.push(`${trailer.name} on line ${trailer.line} has no value.`);
+    }
+    const retirement = RETIRED_TRAILERS.get(trailer.name);
+    if (retirement) {
+      warnings.push(`${trailer.name} on line ${trailer.line} is ${retirement}`);
     }
     byName.set(trailer.name, [...(byName.get(trailer.name) ?? []), trailer]);
   }

@@ -1,0 +1,16 @@
+{
+  "version": "1",
+  "decidedOption": "defer-advanced-behind-disclosure",
+  "decisionInteractionId": "di_01JCEXAMPLE0000000000000",
+  "scope": {
+    "files": ["apps/web/app/(shell)/example/page.tsx"]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "defer-advanced-behind-disclosure",
+      "separate-advanced-route",
+      "show-everything-inline"
+    ]
+  }
+}

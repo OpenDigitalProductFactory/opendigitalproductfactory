@@ -125,17 +125,28 @@ function trailerConstraints(files, addedLinesByFile) {
   const editedUi = files.filter(
     (f) => /apps\/web\/.*\.tsx$/.test(f.path) && !UX_EXCLUDE_RE.test(f.path),
   );
+  // BI-D967DEE0: the UX-Fit gate takes a committed MEASURED manifest, not a trailer.
+  // This pack is injected into agent context BEFORE generation, so advertising the
+  // retired trailer here would pre-instruct every agent to satisfy a dead mechanism.
+  const UX_FIT_MANIFEST = "docs/ux-fit/<date>-<slug>.ux-fit.json";
+  const UX_FIT_ALTERNATIVE =
+    'evidence.kind "sweep-measurement" (the route\'s real budget axes, adjudicated against ' +
+    'apps/web/lib/ux-budget/route-budget-baseline.json) or "propose-n-pick" ' +
+    "(decisionInteractionId + >=2 consideredOptions). An acknowledgement does NOT qualify, " +
+    "and the UX-Fit-Decision: trailer is RETIRED.";
   if (newRoutes.length > 0) {
     trailers.push({
       gate: "UX-Fit",
-      trailer: "UX-Fit-Decision:",
+      trailer: UX_FIT_MANIFEST,
+      alternative: UX_FIT_ALTERNATIVE,
       level: "required",
       because: `net-new route page(s): ${newRoutes.map((f) => f.path).join(", ")}`,
     });
   } else if (editedUi.length > 0) {
     trailers.push({
       gate: "UX-Fit",
-      trailer: "UX-Fit-Decision:",
+      trailer: UX_FIT_MANIFEST,
+      alternative: UX_FIT_ALTERNATIVE,
       level: "conditional",
       because: "apps/web .tsx changed — required if the diff ADDS a user-facing control (<input>, <select>, <textarea>, type=number|range, <form>)",
     });

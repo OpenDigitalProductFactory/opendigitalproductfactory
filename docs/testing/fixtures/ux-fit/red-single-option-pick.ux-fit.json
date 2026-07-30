@@ -1,0 +1,11 @@
+{
+  "version": "1",
+  "decidedOption": "show-everything-inline",
+  "scope": {
+    "files": ["apps/web/app/(shell)/example/page.tsx"]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": ["show-everything-inline"]
+  }
+}
