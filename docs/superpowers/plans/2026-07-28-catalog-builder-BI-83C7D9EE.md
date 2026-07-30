@@ -18,11 +18,11 @@ This plan does not implement Product Sold, consumer/subscriber projections, Prod
 
 ## Backlog coverage
 
-- Decision: `atomic`
-- Coverage receipt: `cms6zoipy09z601ogt2apixla`
-- Parent BI: `BI-83C7D9EE`
+- Decision: atomic
+- Receipt: `cms6zoipy09z601ogt2apixla`
+- Parent: `BI-83C7D9EE`
 - Dependencies: `none` within this atomic plan; external sequencing dependency `BI-6C5C648B`
-- Rationale: the additive schema, canonical domain service, storefront compatibility adapter, progressive editor, immutable selection snapshots, and attribution invariants are one reviewable capability. None is independently safe or useful without the others.
+- Rationale: The additive schema, canonical domain service, storefront compatibility adapter, progressive editor, immutable selection snapshots, and attribution invariants are one reviewable capability. None is independently safe or useful without the others.
 - Internal deliverables:
   - `catalog-packaging-schema`
   - `catalog-builder-domain` → `catalog-packaging-schema`
