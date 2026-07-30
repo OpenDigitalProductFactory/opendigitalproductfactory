@@ -8634,6 +8634,7 @@
         "why-it-exists",
         "what-it-asserts-ready-iff-all-hold",
         "observation-versus-merge-authority",
+        "know-the-constraints-before-you-write-pnpm-gatecontext",
         "tests-ci"
       ]
     },

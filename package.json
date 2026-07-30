@@ -12,6 +12,7 @@
     "dev:sandbox": "docker compose up -d sandbox",
     "pregate": "node scripts/pregate.mjs",
     "pregate:preflight": "node scripts/pregate-preflight.mjs",
+    "gate:context": "node scripts/gate-context.mjs",
     "build": "pnpm --filter web build",
     "test": "pnpm -r --if-present --workspace-concurrency=1 --no-bail test",
     "test:e2e": "playwright test",

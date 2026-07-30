@@ -25,14 +25,14 @@
 import { execFileSync } from "node:child_process";
 import { fetchOriginMainSharedSafe } from "./lib/git-fetch-shared-safe.mjs";
 
-const ATTESTATION_RE = /UX-Fit-Decision:/i;
-
-// Added lines that introduce a user-facing control the operator must understand.
-const UI_CONTROL_RE = /<input\b|<select\b|<textarea\b|type=["'](?:number|range)["']|<form\b/i;
-// A newly-added route is a new surface that deserves a fit review.
-const ROUTE_FILE_RE = /app\/.*\/page\.tsx$/;
-// Don't gate test/story scaffolding — those controls aren't user-facing.
-const EXCLUDE_RE = /\.(test|spec|stories)\.tsx$/;
+// Canonical sensitivity constants (single source, shared with the gate-context
+// pack; the dpf-skill-pack precheck hook keeps a drift-guard-pinned copy).
+import {
+  UI_CONTROL_RE,
+  UX_EXCLUDE_RE as EXCLUDE_RE,
+  UX_FIT_ATTESTATION_RE as ATTESTATION_RE,
+  UX_ROUTE_FILE_RE as ROUTE_FILE_RE,
+} from "./lib/gate-sensitivity.mjs";
 
 // Refs reach us from CI env vars (BASE_SHA) and from git's own output. Pin the
 // set of characters we accept so a forged value cannot smuggle shell metachars

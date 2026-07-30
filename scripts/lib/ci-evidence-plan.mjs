@@ -88,7 +88,7 @@ function normalizeRecommendationPaths(value) {
   )).filter(Boolean);
 }
 
-function deriveRoute(path) {
+export function deriveRoute(path) {
   const appPrefix = "apps/web/app/";
   if (!path.startsWith(appPrefix)) return null;
   const relative = path.slice(appPrefix.length);
