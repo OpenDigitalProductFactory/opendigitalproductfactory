@@ -36,13 +36,13 @@ const draftFixture = {
 } as const;
 
 const validationReceiptBase = {
-  schemaVersion: 1,
+  schemaVersion: 1 as const,
   routePath: "/workspace",
   contractHash: "contract-hash",
   sourceSha: "source-sha",
   fixtureVersion: "fixture-1",
   viewport: "1440x900",
-  inputMode: "pointer",
+  inputMode: "pointer" as const,
   interactionFingerprint: "interaction-1",
   relevantDependencyFingerprint: "dependencies-1",
   metrics: {},
@@ -50,7 +50,7 @@ const validationReceiptBase = {
   reviewerRef: "reviewer",
   observedAt: "2026-07-29T00:00:00.000Z",
   artifactIds: ["artifact-1"],
-} as const;
+};
 
 const ratifiedFixture: RatifiedPurposeContract = {
   schemaVersion: 1,
