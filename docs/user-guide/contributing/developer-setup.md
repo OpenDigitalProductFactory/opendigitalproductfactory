@@ -48,6 +48,8 @@ cd opendigitalproductfactory
 pnpm install
 ```
 
+> **Note:** the repo `.npmrc` sets `package-import-method=copy`, so installs copy files out of the pnpm store instead of hardlinking. This is deliberate: with many concurrent git worktrees sharing one store on the same volume, hardlinks let a single mutated `node_modules` file corrupt the store and every sibling worktree. Copies cost more disk and install time per worktree — don't revert this to speed up an install.
+
 **Create environment files:**
 
 ```bash
