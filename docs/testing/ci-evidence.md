@@ -252,6 +252,24 @@ The retained cross-run locator is not used by the blocking PR, merge-group, or
 push path; cross-lifecycle merge-group-to-push reuse remains owned by
 `BI-9585E580`.
 
+**Non-portal skip acceptance measurement.**
+
+Measure the optimization on a real docs-only or `apps/mobile`-only pull request
+whose base contains #3782. Record all four signals together:
+
+1. the planner output is exactly `portal_ux_required=false`;
+2. `UX Route Sweep Runtime` concludes `skipped`, so no sweep runner or Postgres
+   service is allocated;
+3. the stable `UX Route Budget Sweep` aggregate succeeds; and
+4. the merge-group run executes and passes the exhaustive route sweep.
+
+PR #3735 is the before baseline: its one-file docs-only change allocated the
+portal UX runtime for 585 seconds. The first post-policy attestation should
+therefore avoid roughly 9.75 runner-minutes on the pull-request head without
+changing merge-group route coverage. Do not infer savings from a skipped
+required context alone; retain the planner, runtime, aggregate, and
+merge-group evidence as one receipt.
+
 The CI and UX job summaries report payload bytes and packaging or
 download/validation/extraction duration. Compare those transfer measurements
 with the avoided UX build duration before retaining or tuning the artifact.

@@ -1,7 +1,7 @@
 ---
 title: Non-portal UX sweep short-circuit
 date: 2026-07-30
-status: implementation
+status: verification
 backlog_item: BI-B374EF2B
 epic: EP-0DFF753B
 spec: docs/superpowers/specs/2026-07-26-ci-evidence-efficiency-design.md
@@ -66,6 +66,23 @@ aggregate, and workflow contract tests are unsafe to ship separately.
   from file scope alone. PR #3793 was dequeued before merge. The corrective
   contract makes every non-PR or escalated lifecycle exhaustive and keeps
   missing event identity fail-closed.
+
+## Shipped policy evidence
+
+PR #3782 merged through the governed queue at
+`a022f2d990439c29489e209aecffac4a425a5bc8`. Its exact local-CI candidate
+passed 2,416 test files / 20,721 tests, typecheck, migrations, guards, and the
+production Docker build under lease `NPEL-FD360038A1` (evidence
+`cms7wrg4u01pk01posaf3qgik`). Both the PR-head run and merge-group run executed
+the exhaustive UX sweep successfully because workflow-policy changes and
+merge-group lifecycles fail closed to full coverage.
+
+The remaining verification is deliberately carried by a substantive
+documentation-only CI evidence update after that merge. Acceptance requires
+the pull-request planner to emit `portal_ux_required=false`, the reusable
+portal runtime job to conclude `skipped` without allocating its runner or
+Postgres service, and the stable `UX Route Budget Sweep` aggregate to pass.
+The merge group for that same change must still execute the exhaustive sweep.
 
 ## Risks and rollback
 
