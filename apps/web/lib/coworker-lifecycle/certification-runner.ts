@@ -98,6 +98,7 @@ export type CertificationDeps = {
     toolsForProvider: Array<Record<string, unknown>>;
     userId: string;
     routeContext: string;
+    requireTools: boolean;
     modelRequirements?: Record<string, unknown>;
   }) => Promise<LoopResult>;
   db: typeof prisma;
@@ -118,6 +119,7 @@ async function defaultRunLoop(
     agentId: params.journey.agentId,
     threadId: `certification:${params.journey.journeyId}`,
     interactionMode: "chat",
+    requireTools: params.requireTools,
     ...(params.modelRequirements && Object.keys(params.modelRequirements).length > 0
       ? { modelRequirements: params.modelRequirements }
       : {}),
@@ -199,6 +201,7 @@ async function executeJourney(
       toolsForProvider,
       userId: userContext.userId,
       routeContext,
+      requireTools: true,
       modelRequirements,
     });
 

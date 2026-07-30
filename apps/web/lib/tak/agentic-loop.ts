@@ -687,6 +687,12 @@ export function shouldNudge(params: {
   responseText?: string;
   hasAuthoritativeToolExecution?: boolean;
   /**
+   * The caller's contract cannot be satisfied without at least one tool call.
+   * In that case, a fluent text-only answer is not a valid completion signal;
+   * spend the existing one-nudge budget before accepting the stop.
+   */
+  requireToolExecution?: boolean;
+  /**
    * True when this turn is part of the setup tour. SetupOverlay sends an
    * auto-message prefixed "[Setup step: …]" whose route persona explicitly
    * instructs a brief text-only reply ("no tool calls"). On such turns a
@@ -748,7 +754,7 @@ export function shouldNudge(params: {
     const isSubstantiveReply = text.length >= 100
       && !COMPLETION_CLAIM_PATTERN.test(text)
       && !NARRATION_PATTERN.test(text);
-    if (isSubstantiveReply) return false;
+    if (isSubstantiveReply && !params.requireToolExecution) return false;
   }
 
   // First iteration with no tools called — nudge UNLESS the response is a
@@ -760,8 +766,12 @@ export function shouldNudge(params: {
   if (params.executedToolCount === 0 && params.iteration === 0) {
     const text = params.responseText?.trim() ?? "";
     const isAskingClarification = text.length < 250 && CLARIFYING_QUESTION_PATTERN.test(text);
-    const isSubstantiveReply = text.length >= 100 && !COMPLETION_CLAIM_PATTERN.test(text) && !NARRATION_PATTERN.test(text);
-    const isAllowedDirectReply = !!params.allowFirstTurnTextOnlyReply
+    const isSubstantiveReply = !params.requireToolExecution
+      && text.length >= 100
+      && !COMPLETION_CLAIM_PATTERN.test(text)
+      && !NARRATION_PATTERN.test(text);
+    const isAllowedDirectReply = !params.requireToolExecution
+      && !!params.allowFirstTurnTextOnlyReply
       && text.length > 0
       && !COMPLETION_CLAIM_PATTERN.test(text)
       && !NARRATION_PATTERN.test(text)
@@ -2165,6 +2175,7 @@ export async function runAgenticLoop(params: {
           messages,
           responseText: trimmed,
         }),
+        requireToolExecution: requireTools,
       });
 
         // Local model produced text-only on iteration 0 of a tool-backed turn:

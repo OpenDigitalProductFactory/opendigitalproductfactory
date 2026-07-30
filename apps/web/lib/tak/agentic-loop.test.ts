@@ -130,6 +130,17 @@ describe("shouldNudge", () => {
     })).toBe(false);
   });
 
+  it("nudges a substantive first reply when the caller requires tool execution", () => {
+    expect(shouldNudge({
+      continuationNudges: 0, iteration: 0, maxIterations: 40,
+      hasTools: true, executedToolCount: 0, responseLength: 180,
+      responseText:
+        "I reviewed the current source and its related test. The implementation appears consistent, and I would need a failing case before calling it a defect.",
+      requireToolExecution: true,
+      allowFirstTurnTextOnlyReply: true,
+    })).toBe(true);
+  });
+
   it("does not nudge when no tools available", () => {
     expect(shouldNudge({
       continuationNudges: 0, iteration: 0, maxIterations: 40,
@@ -1172,6 +1183,29 @@ describe("runAgenticLoop", () => {
     expect(result.content).toBe("Hello! How can I help?");
     expect(result.executedTools).toHaveLength(0);
     expect(result.proposal).toBeNull();
+  });
+
+  it("bounds a tool-required text-only turn to one corrective nudge", async () => {
+    const mockRoute = vi.mocked(routeAndCall);
+    mockRoute
+      .mockResolvedValueOnce(mockResult({
+        content:
+          "I reviewed the source and related test and found no material defect. More evidence would be needed before blocking the change.",
+      }))
+      .mockResolvedValueOnce(mockResult({
+        content:
+          "I still cannot ground a finding in a successful read, so the review remains unsupported.",
+      }));
+
+    const result = await runAgenticLoop({
+      ...baseParams,
+      requireTools: true,
+      interactionMode: "chat",
+    });
+
+    expect(mockRoute).toHaveBeenCalledTimes(2);
+    expect(result.content).toContain("review remains unsupported");
+    expect(result.executedTools).toHaveLength(0);
   });
 
   it("handles multiple tool calls in one iteration", async () => {
