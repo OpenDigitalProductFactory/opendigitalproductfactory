@@ -160,6 +160,17 @@ because its visible promise could still diverge from real dispatch.
 | The roster would evaluate lifecycle once per coworker | A batch lifecycle projection reads agents, strict mode, and certification evidence once for the roster |
 | The seed test recorded calls without proving repeatability or preservation | A stateful test runs the seed twice, proves the empty Marketing declaration backfills once, and proves an operator-authored declaration survives |
 
+A sixth UX review rejected the remaining first-view and recovery behavior. The
+correction keeps every visible promise tied to an action the destination can
+actually complete.
+
+| Sixth critique | Correction |
+| --- | --- |
+| Area filtering matched hidden sibling services while the card stayed grouped under its winning service | The area facet now filters on the same winning area shown on the card |
+| Catalog and lifecycle recovery links did not reach owner-capable repair controls | Lifecycle opens the runnable certification job; platform-owned catalog defects fail closed without a misleading operator action |
+| The catalog clipped its fixed-width offer grid on mobile | Mobile renders a compact fact list; the dense grid is desktop-only |
+| The exact snapshot exposed an ambiguous multi-card test query | The assertion is scoped to the Marketing card and remains explicit about primary versus secondary action styling |
+
 ## Phase 1: Test-Drive Service-Scoped Readiness
 
 Add failing unit tests before implementation.

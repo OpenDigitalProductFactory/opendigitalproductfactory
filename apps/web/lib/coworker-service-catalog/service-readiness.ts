@@ -47,7 +47,7 @@ export function evaluateCoworkerServiceReadiness(
     details.push("One or more backing declarations are not valid string arrays.");
     setupRecovery = {
       kind: "catalog",
-      label: "Review coworker catalog",
+      label: "Platform update required",
     };
   }
   if (
@@ -59,7 +59,7 @@ export function evaluateCoworkerServiceReadiness(
     details.push("No backing skill, tool, or permission is declared.");
     setupRecovery = {
       kind: "catalog",
-      label: "Review coworker catalog",
+      label: "Platform update required",
     };
   }
   if (evidence.probeDefined === false) {
@@ -67,7 +67,7 @@ export function evaluateCoworkerServiceReadiness(
     details.push("No representative service task is declared for readiness.");
     setupRecovery = {
       kind: "catalog",
-      label: "Review coworker catalog",
+      label: "Platform update required",
     };
   }
 
@@ -88,7 +88,7 @@ export function evaluateCoworkerServiceReadiness(
       details.push(`Unregistered tool: ${toolName}`);
       setupRecovery = {
         kind: "catalog",
-        label: "Review coworker catalog",
+        label: "Platform update required",
       };
       continue;
     }

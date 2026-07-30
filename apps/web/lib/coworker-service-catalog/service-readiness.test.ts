@@ -109,7 +109,7 @@ describe("evaluateCoworkerServiceReadiness", () => {
       ],
       recovery: {
         kind: "catalog",
-        label: "Review coworker catalog",
+        label: "Platform update required",
       },
     });
   });

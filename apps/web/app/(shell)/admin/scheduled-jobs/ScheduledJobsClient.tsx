@@ -191,7 +191,12 @@ export function ScheduledJobsClient({ initialJobs }: { initialJobs: ScheduledJob
             {jobs.map((job) => {
               const busy = pendingJob === job.jobId;
               return (
-                <tr key={job.jobId} style={{ borderTop: "1px solid var(--dpf-border)" }}>
+                <tr
+                  key={job.jobId}
+                  id={`scheduled-job-${job.jobId}`}
+                  className="scroll-mt-24"
+                  style={{ borderTop: "1px solid var(--dpf-border)" }}
+                >
                   <Td>
                     <div className="font-medium flex items-center gap-2">
                       {job.name}

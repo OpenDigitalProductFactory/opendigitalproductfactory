@@ -91,5 +91,9 @@ describe("CoworkerCatalogView", () => {
     expect(html).toContain("Engagement");
     expect(html).toContain("proposal-only");
     expect(html).toContain("attorney-review-required");
+    expect(html).toContain('data-catalog-layout="mobile"');
+    expect(html).toContain('data-catalog-layout="desktop"');
+    expect(html).toContain("lg:hidden");
+    expect(html).toContain("lg:block");
   });
 });

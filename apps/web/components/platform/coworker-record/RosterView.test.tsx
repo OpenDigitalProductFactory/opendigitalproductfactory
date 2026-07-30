@@ -159,8 +159,12 @@ describe("RosterView", () => {
         .getByRole("button", { name: "Ask Marketing Specialist" })
         .getAttribute("class"),
     ).toContain("bg-[var(--dpf-accent)]");
+    const marketingCard = document.querySelector(
+      '[data-coworker-card="marketing-specialist"]',
+    );
+    expect(marketingCard).not.toBeNull();
     expect(
-      screen
+      within(marketingCard as HTMLElement)
         .getByRole("link", { name: /View coworker/ })
         .getAttribute("class"),
     ).not.toContain("bg-[var(--dpf-accent)]");

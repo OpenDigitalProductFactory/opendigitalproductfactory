@@ -23,20 +23,46 @@ export function CoworkerCatalogView({ catalog }: { catalog: CoworkerCatalog }) {
       </header>
 
       <section className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="overflow-hidden rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
-          <div className="grid grid-cols-[minmax(220px,1.4fr)_minmax(160px,0.9fr)_110px_130px_120px] border-b border-[var(--dpf-border)] px-3 py-2 text-[11px] font-semibold uppercase text-[var(--dpf-muted)]">
-            <span>Offer</span>
-            <span>Provider</span>
-            <span>Risk</span>
-            <span>Authority</span>
-            <span>Availability</span>
-          </div>
-          <div>
+        <div className="min-w-0">
+          <div
+            data-catalog-layout="mobile"
+            className="divide-y divide-[var(--dpf-border)] border-y border-[var(--dpf-border)] lg:hidden"
+          >
             {activeOffers.length === 0 ? (
-              <div className="px-3 py-8 text-sm text-[var(--dpf-muted)]">No active coworker offers are cataloged yet.</div>
+              <div className="py-8 text-sm text-[var(--dpf-muted)]">
+                No active coworker offers are cataloged yet.
+              </div>
             ) : (
-              activeOffers.map((offer) => <OfferRow key={offer.offerId} offer={offer} />)
+              activeOffers.map((offer) => (
+                <MobileOfferRow key={offer.offerId} offer={offer} />
+              ))
             )}
+          </div>
+
+          <div
+            data-catalog-layout="desktop"
+            className="hidden overflow-x-auto rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] lg:block"
+          >
+            <div className="min-w-[740px]">
+              <div className="grid grid-cols-[minmax(220px,1.4fr)_minmax(160px,0.9fr)_110px_130px_120px] border-b border-[var(--dpf-border)] px-3 py-2 text-[11px] font-semibold uppercase text-[var(--dpf-muted)]">
+                <span>Offer</span>
+                <span>Provider</span>
+                <span>Risk</span>
+                <span>Authority</span>
+                <span>Availability</span>
+              </div>
+              <div>
+                {activeOffers.length === 0 ? (
+                  <div className="px-3 py-8 text-sm text-[var(--dpf-muted)]">
+                    No active coworker offers are cataloged yet.
+                  </div>
+                ) : (
+                  activeOffers.map((offer) => (
+                    <OfferRow key={offer.offerId} offer={offer} />
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -93,6 +119,51 @@ function OfferRow({ offer }: { offer: CoworkerOfferCatalogItem }) {
   );
 }
 
+function MobileOfferRow({ offer }: { offer: CoworkerOfferCatalogItem }) {
+  const legalRisk =
+    typeof offer.metadata.legalRisk === "string"
+      ? offer.metadata.legalRisk
+      : null;
+  return (
+    <article className="min-w-0 py-4">
+      <h2 className="text-sm font-semibold text-[var(--dpf-text)]">
+        {offer.name}
+      </h2>
+      <p className="mt-1 text-xs leading-5 text-[var(--dpf-muted)]">
+        {offer.summary}
+      </p>
+      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
+        <MobileFact label="Service" value={offer.serviceName} />
+        <MobileFact label="Provider" value={offer.provider.displayName} />
+        <MobileFact
+          label="Risk"
+          value={`${offer.riskTier}; ${oversightLabel(offer.service.hitlTier, { short: true })}`}
+        />
+        <MobileFact label="Authority" value={offer.authorityBoundary} />
+        <MobileFact label="Availability" value={offer.availabilityScope} />
+        <MobileFact
+          label="Engagement"
+          value={
+            offer.requiredApprovals.length
+              ? "Approval required"
+              : "Requestable"
+          }
+        />
+        {legalRisk ? <MobileFact label="Legal" value={legalRisk} /> : null}
+      </dl>
+    </article>
+  );
+}
+
+function MobileFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="font-semibold text-[var(--dpf-muted)]">{label}</dt>
+      <dd className="mt-1 break-words text-[var(--dpf-text)]">{value}</dd>
+    </div>
+  );
+}
+
 function Cell({ primary, secondary }: { primary: string; secondary: string }) {
   return (
     <div className="min-w-0 px-2">
@@ -110,4 +181,3 @@ function Chip({ label, value }: { label: string; value: string }) {
     </span>
   );
 }
-

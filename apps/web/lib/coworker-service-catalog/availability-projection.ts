@@ -377,7 +377,7 @@ function coverageNotDefined(
       label:
         recoveryKind === "business-type"
           ? "Review business type"
-          : "Review coworker catalog",
+          : "Platform update required",
     },
   };
 }

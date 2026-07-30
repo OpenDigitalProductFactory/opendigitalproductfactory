@@ -11,13 +11,14 @@ export function availabilityRecoveryTarget(
 ): CoworkerAvailabilityRecoveryTarget | null {
   const recovery = availability.recovery;
   if (!recovery) return null;
+  if (recovery.kind === "catalog") return null;
 
-  const hrefByKind: Record<typeof recovery.kind, string> = {
+  const hrefByKind: Record<Exclude<typeof recovery.kind, "catalog">, string> = {
     "business-type": "/storefront/settings/business",
-    catalog: "/platform/ai/catalog",
     capabilities: `${detailHref}#capabilities`,
     "capability-needs": "/ops?origin=capability-need",
-    lifecycle: "/platform/ai/readiness",
+    lifecycle:
+      "/admin/scheduled-jobs#scheduled-job-coworker-certification",
     routing: "/platform/ai/readiness",
   };
   return {
