@@ -27,7 +27,7 @@ describe("Catalog Builder route adapter", () => {
   });
 
   it("requires an authenticated admin before reading catalog state", async () => {
-    vi.mocked(auth).mockResolvedValue(null);
+    vi.mocked(auth).mockResolvedValue(null as never);
 
     const response = await PATCH(request({ operation: "replace-bundle" }), {
       params: Promise.resolve({ catalogItemId: "catalog-row" }),

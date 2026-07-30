@@ -14,7 +14,7 @@ const tableClassification = readFileSync(
 const migration = readFileSync(
   resolve(
     import.meta.dirname,
-    "../prisma/migrations/20260728170000_add_catalog_builder_packaging/migration.sql",
+    "../prisma/migrations/20260728180000_add_catalog_builder_packaging/migration.sql",
   ),
   "utf8",
 );

@@ -5,7 +5,6 @@ import { envFlagEnabled } from "@/lib/runtime/env-flags";
 import { isMeasurementRuntime, settleBootSync } from "@/lib/runtime/measurement-runtime";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { sweepOrphanedPromoterContainers } from "@/lib/self-upgrade/promoter-sweep";
-
 /**
  * Logs a deprecation notice when HIVE_CONTRIBUTION_TOKEN is set in the
  * environment. Exported so the instrumentation module's startup behavior
@@ -1160,17 +1159,7 @@ export async function register() {
       await backfillOrgWwwdOnBoot();
     });
 
-    // Expand-release reconciliation for storefronts created before the
-    // business commercial catalog existed. It delegates to the same idempotent
-    // setup seed authority and leaves rows unresolved when product-line
-    // evidence is absent.
-    void (async () => {
-      const { backfillCommercialCatalogOnBoot } = await import(
-        "@/lib/onboarding/backfill-commercial-catalog-on-boot"
-      );
-      await backfillCommercialCatalogOnBoot();
-    })();
-
+    void import("@/lib/onboarding/backfill-commercial-catalog-on-boot").then(({ backfillCommercialCatalogOnBoot }) => backfillCommercialCatalogOnBoot());
     // Build Studio engine reliability (spec §3.1 engine-first / FB-78E967D4).
     // These are correctness reconcilers, not optional maintenance — skipped
     // only under measurement runtime (an ephemeral sweep portal runs no

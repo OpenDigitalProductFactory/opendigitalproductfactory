@@ -501,7 +501,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 91
+    "textMass": 72
   },
   "apps/web/app/(shell)/coworker-decisions/decisions/page.tsx": {
     "vocabulary": 0,
@@ -1250,7 +1250,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 29
+    "textMass": 8
   },
   "apps/web/app/(shell)/performance/loading.tsx": {
     "vocabulary": 0,
@@ -1264,7 +1264,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 48
+    "textMass": 37
   },
   "apps/web/app/(shell)/platform/ai/agent/[agentId]/page.tsx": {
     "vocabulary": 0,
@@ -1418,7 +1418,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 93
+    "textMass": 78
   },
   "apps/web/app/(shell)/platform/audit/journal/page.tsx": {
     "vocabulary": 0,
@@ -1782,7 +1782,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 23
+    "textMass": 24
   },
   "apps/web/app/(shell)/portfolio/product/[id]/page.tsx": {
     "vocabulary": 0,
@@ -2238,6 +2238,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 6
+  },
+  "apps/web/app/api/storefront/admin/catalog/[catalogItemId]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
   },
   "apps/web/app/api/storefront/admin/items/[id]/route.ts": {
     "vocabulary": 0,
@@ -3077,7 +3084,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 96
+    "textMass": 94
   },
   "apps/web/components/admin/CityPanel.tsx": {
     "vocabulary": 0,
@@ -3182,7 +3189,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 1,
-    "textMass": 411
+    "textMass": 374
   },
   "apps/web/components/admin/OAuthPortMismatchBanner.tsx": {
     "vocabulary": 0,
@@ -3741,8 +3748,8 @@
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
-    "longSentences": 2,
-    "textMass": 508
+    "longSentences": 1,
+    "textMass": 395
   },
   "apps/web/components/build/BuildStudioCustodianCallout.tsx": {
     "vocabulary": 0,
@@ -4423,6 +4430,13 @@
     "longSentences": 0,
     "textMass": 53
   },
+  "apps/web/components/customer/EditCustomerSiteButton.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 72
+  },
   "apps/web/components/customer/EmptyPipelineGuidance.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -4528,6 +4542,13 @@
     "longSentences": 0,
     "textMass": 2
   },
+  "apps/web/components/customer/ValidatedSiteAddressField.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 16
+  },
   "apps/web/components/decision-perspective/DecisionCanvas.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -4596,7 +4617,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 10
+    "textMass": 8
   },
   "apps/web/components/ea/ArchitectureDrillthroughPanel.tsx": {
     "vocabulary": 0,
@@ -5690,13 +5711,6 @@
     "longSentences": 0,
     "textMass": 27
   },
-  "apps/web/components/ops/JourneyHealthCard.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 40
-  },
   "apps/web/components/ops/EpicPanel.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -5731,6 +5745,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 21
+  },
+  "apps/web/components/ops/JourneyHealthCard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 40
   },
   "apps/web/components/ops/LocalChangesLedger.tsx": {
     "vocabulary": 0,
@@ -5877,7 +5898,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 19
+    "textMass": 15
   },
   "apps/web/components/platform/AgentBudgetEventsPanel.tsx": {
     "vocabulary": 0,
@@ -6332,7 +6353,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 61
+    "textMass": 60
   },
   "apps/web/components/platform/TokenSpendPanel.tsx": {
     "vocabulary": 0,
@@ -6871,7 +6892,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 34
+    "textMass": 32
   },
   "apps/web/components/product/BusinessModelSelector.tsx": {
     "vocabulary": 0,
@@ -7055,6 +7076,13 @@
     "longSentences": 0,
     "textMass": 19
   },
+  "apps/web/components/storefront-admin/CatalogBuilderPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 286
+  },
   "apps/web/components/storefront-admin/FinancialSetupStep.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -7067,14 +7095,14 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 109
+    "textMass": 134
   },
   "apps/web/components/storefront-admin/ItemsManager.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 30
+    "textMass": 46
   },
   "apps/web/components/storefront-admin/MediaUploader.tsx": {
     "vocabulary": 0,
@@ -7089,6 +7117,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 46
+  },
+  "apps/web/components/storefront-admin/ProductSoldTracePanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 83
   },
   "apps/web/components/storefront-admin/ScheduleEditor.tsx": {
     "vocabulary": 0,
@@ -7130,7 +7165,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 1,
-    "textMass": 124
+    "textMass": 119
   },
   "apps/web/components/storefront-admin/StorefrontSetupPanel.tsx": {
     "vocabulary": 0,
@@ -7380,6 +7415,7 @@
   "apps/web/components/ui/form-kit/RecordForm.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
+    "readability": 0,
     "longSentences": 0,
     "textMass": 32
   },
@@ -7591,7 +7627,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 33
+    "textMass": 14
   },
   "apps/web/components/workbooks/cell-editors.tsx": {
     "vocabulary": 0,
@@ -7788,19 +7824,5 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 39
-  },
-  "apps/web/components/customer/EditCustomerSiteButton.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 72
-  },
-  "apps/web/components/customer/ValidatedSiteAddressField.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 16
   }
 }
