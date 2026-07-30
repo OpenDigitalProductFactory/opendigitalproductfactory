@@ -86,7 +86,7 @@ export function ChangeLaneTable({
                 ) : null}
                 {lane.owner ? (
                   <div
-                    className="font-mono text-[10px] text-[var(--dpf-muted)] break-all"
+                    className="font-mono text-dpf-caption text-[var(--dpf-muted)] break-all"
                     title={lane.owner}
                   >
                     {lane.owner}

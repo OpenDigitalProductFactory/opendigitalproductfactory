@@ -12,6 +12,7 @@ import { describeSkipReason } from "@/lib/self-upgrade/skip-reason";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { isExpectedDuringSwap } from "@/lib/self-upgrade/is-expected-during-swap";
 import { SelfUpgradeReadiness } from "@/components/ops/SelfUpgradeReadiness";
+import { BuildDetailsDisclosure } from "@/components/ops/BuildDetailsDisclosure";
 import type { LatestRun, QuiescenceActivity } from "@/lib/self-upgrade/run-types";
 
 type RecoveryPointSummary = {
@@ -97,17 +98,6 @@ type Props = {
 function shortSha(value: string | null | undefined): string {
   if (!value) return "";
   return value.length > 12 ? `${value.slice(0, 12)}…` : value;
-}
-
-function sourceLabel(source: ImageVersionSource | undefined): string {
-  switch (source) {
-    case "git-sha":
-      return "commit";
-    case "content-hash":
-      return "image hash";
-    default:
-      return "image";
-  }
 }
 
 function statusLabel(value: string): string {
@@ -725,66 +715,14 @@ export default function SelfUpgradeClient({
               )}
           </>
         )}
-        {/* Build stamps stay available but stop competing with the identity
-            above: an operator needs "which PR am I on"; a contributor
-            diagnosing an image/bytes mismatch needs the hex. Progressive
-            disclosure keeps both without making the first read technical. */}
-        <details className="text-[11px] text-[var(--dpf-muted)]" data-build-details="true">
-          <summary className="cursor-pointer">Build details</summary>
-          <div className="mt-1 space-y-0.5">
-            <div>
-              <span className="font-medium text-[var(--dpf-text)]">Platform version:</span>{" "}
-              <span className="font-mono">v{platformVersion.version}</span>
-            </div>
-            <div>
-              build{" "}
-              {platformVersion.gitSha || platformVersion.imageVersion?.raw ? (
-                <span className="font-mono">
-                  {shortSha(platformVersion.gitSha ?? platformVersion.imageVersion?.raw ?? null)}
-                </span>
-              ) : (
-                <span className="font-mono">dev (unbuilt)</span>
-              )}
-              {platformVersion.imageVersion?.source && (
-                <span className="ml-1">
-                  ({sourceLabel(platformVersion.imageVersion.source)})
-                </span>
-              )}
-              {platformVersion.buildDate && (
-                <span className="ml-1">
-                  · built <LocalTime value={platformVersion.buildDate} />
-                </span>
-              )}
-            </div>
-            {enabled && (
-              <>
-                <div>
-                  <span className="font-medium text-[var(--dpf-text)]">Deployed:</span>{" "}
-                  {deployedSha ? (
-                    <>
-                      <span className="font-mono">{deployedSha}</span>
-                      {deployedShaSource && deployedShaSource !== "unknown" && (
-                        <span className="ml-2">({sourceLabel(deployedShaSource)})</span>
-                      )}
-                    </>
-                  ) : (
-                    <span className="font-mono">unknown</span>
-                  )}
-                </div>
-                <div>
-                  <span className="font-medium text-[var(--dpf-text)]">Target:</span>{" "}
-                  <span className="font-mono">{targetSha ?? "unknown"}</span>
-                </div>
-                {mergePoints?.running?.sha && (
-                  <div>
-                    <span className="font-medium text-[var(--dpf-text)]">Upstream lineage:</span>{" "}
-                    <span className="font-mono">{mergePoints.running.sha}</span>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </details>
+        <BuildDetailsDisclosure
+          enabled={enabled}
+          deployedSha={deployedSha}
+          deployedShaSource={deployedShaSource}
+          targetSha={targetSha}
+          lineageSha={mergePoints?.running?.sha ?? null}
+          platformVersion={platformVersion}
+        />
       </div>
 
       {enabled && (
