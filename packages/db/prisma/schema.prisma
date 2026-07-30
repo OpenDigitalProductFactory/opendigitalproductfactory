@@ -834,6 +834,9 @@ model ProductLine {
   parent                ProductLine?                    @relation("ProductLineHierarchy", fields: [parentId, organizationId], references: [id, organizationId], onDelete: Restrict)
   children              ProductLine[]                   @relation("ProductLineHierarchy")
   products              Product[]
+  researchProposals     ResearchProposal[]              @relation("ResearchProposalProductLine")
+  marketingBattlecards  MarketingBattlecard[]           @relation("MarketingBattlecardProductLine")
+  scheduledAgentTasks   ScheduledAgentTask[]            @relation("ScheduledAgentTaskProductLine")
   storefrontComposition StorefrontArchetypeComposition?
 
   @@unique([organizationId, key])
@@ -844,24 +847,27 @@ model ProductLine {
 }
 
 model Product {
-  id             String            @id @default(cuid())
-  productId      String            @unique
-  organizationId String
-  productLineId  String
-  key            String
-  name           String
-  description    String?
-  sortOrder      Int               @default(0)
-  sourceKind     String?
-  sourceRef      String?
-  effectiveFrom  DateTime          @default(now())
-  effectiveTo    DateTime?
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  productLine    ProductLine       @relation(fields: [productLineId, organizationId], references: [id, organizationId], onDelete: Cascade)
-  offerings      ProductOffering[]
-  productSolds   ProductSold[]
+  id                   String                @id @default(cuid())
+  productId            String                @unique
+  organizationId       String
+  productLineId        String
+  key                  String
+  name                 String
+  description          String?
+  sortOrder            Int                   @default(0)
+  sourceKind           String?
+  sourceRef            String?
+  effectiveFrom        DateTime              @default(now())
+  effectiveTo          DateTime?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  productLine          ProductLine           @relation(fields: [productLineId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  offerings            ProductOffering[]
+  productSolds         ProductSold[]
+  researchProposals    ResearchProposal[]    @relation("ResearchProposalBusinessProduct")
+  marketingBattlecards MarketingBattlecard[] @relation("MarketingBattlecardBusinessProduct")
+  scheduledAgentTasks  ScheduledAgentTask[]  @relation("ScheduledAgentTaskBusinessProduct")
 
   @@unique([productLineId, key])
   @@unique([id, organizationId])
@@ -4495,102 +4501,103 @@ model Activity {
 }
 
 model Organization {
-  id                              String                             @id @default(cuid())
-  orgId                           String                             @unique
-  name                            String
-  legalName                       String?
-  slug                            String                             @unique
-  industry                        String?
-  website                         String?
-  email                           String?
-  phone                           String?
-  address                         Json?
-  logoUrl                         String?
-  designSystem                    Json?
+  id                                String                             @id @default(cuid())
+  orgId                             String                             @unique
+  name                              String
+  legalName                         String?
+  slug                              String                             @unique
+  industry                          String?
+  website                           String?
+  email                             String?
+  phone                             String?
+  address                           Json?
+  logoUrl                           String?
+  designSystem                      Json?
   // Optional organization-facing address for the standing AGT-ORCH-000 coworker.
   // Canonical identity, routing, authority, and attribution remain Agent.displayName="COO".
-  cooConversationalName           String?
+  cooConversationalName             String?
   // EP-WIKI-004: per-org retrieval mode for wiki search.
   // "vector" = the EP-WIKI-001 default (Qdrant cosine similarity only).
   // "ppr"    = vector seeds → Personalized PageRank over the per-org
   //            WikiPageLink subgraph → combined ranking. Drop-in
   //            replacement; falls back to "vector" when the subgraph
   //            is sparse or PPR fails.
-  wikiRetrievalMode               String                             @default("vector")
-  createdAt                       DateTime                           @default(now())
-  updatedAt                       DateTime                           @updatedAt
-  brandingConfig                  BrandingConfig?
-  storefrontConfig                StorefrontConfig?
-  operationalSceneLayouts         OperationalSceneLayout[]
-  businessContext                 BusinessContext?
-  marketingStrategy               MarketingStrategy?
-  marketingReviews                MarketingReview[]
-  marketingCampaigns              MarketingCampaign[]
-  marketingCampaignBriefs         MarketingCampaignBrief[]
-  marketingAssetTasks             MarketingAssetTask[]
-  marketingAssetVariants          MarketingAssetVariant[]
-  marketingBattlecards            MarketingBattlecard[]
-  workEngagements                 WorkEngagement[]
-  marketingKpiCheckpoints         MarketingKpiCheckpoint[]
-  marketingAutomationCandidates   MarketingAutomationCandidate[]
-  taxProfile                      OrganizationTaxProfile?
-  licenseProfile                  OrganizationLicenseProfile?
-  personLicenseRecords            PersonLicenseRecord[]
-  platformSetupProgress           PlatformSetupProgress?             @relation("OrgSetupProgress")
-  wikiPages                       WikiPage[]
-  wikiRawSources                  RawSource[]
-  wikiIngestEvents                WikiIngestEvent[]
-  wikiLintFindings                WikiLintFinding[]
-  documents                       Document[]
-  decisionPerspectiveProfiles     DecisionPerspectiveProfile[]
-  researchProposals               ResearchProposal[]
-  integrationCoverageProviders    IntegrationCoverageProvider[]      @relation("OrgToCoverageProviders")
-  integrationRoleCoverages        IntegrationRoleCoverage[]          @relation("OrgToCoverageCells")
-  capabilityActivations           OrganizationCapabilityActivation[]
-  governanceMeetings              GovernanceMeeting[]
-  recordsRequests                 RecordsRequest[]
-  fundBudgetLines                 FundBudgetLine[]
-  memberEquityEntries             MemberEquityEntry[]
-  mediaAssets                     MediaAsset[]
-  ledgerAccounts                  LedgerAccount[]
-  journalEntries                  JournalEntry[]
-  patientProfiles                 PatientProfile[]
-  patientAuthorizationDecisions   AuthorizationDecisionLog[]
-  storefrontBookings              StorefrontBooking[]                @relation("StorefrontBookingOrganization")
-  productLines                    ProductLine[]
-  businessProducts                Product[]
-  productOfferings                ProductOffering[]                  @relation("ProductOfferingOrganization")
-  providedProductOfferings        ProductOffering[]                  @relation("ProductOfferingProviderOrganization")
-  catalogItems                    CatalogItem[]
-  productConfigurations           ProductConfiguration[]
-  catalogSkus                     CatalogSku[]
-  catalogBundleComponents         CatalogBundleComponent[]
-  catalogPriceLists               CatalogPriceList[]
-  catalogPriceListEntries         CatalogPriceListEntry[]
-  catalogPromotions               CatalogPromotion[]
-  catalogPromotionItems           CatalogPromotionItem[]
-  catalogChannelEligibility       CatalogChannelEligibility[]
-  storefrontOrders                StorefrontOrder[]                  @relation("StorefrontOrderOrganization")
-  storefrontOrderLineItems        StorefrontOrderLineItem[]
-  productSolds                    ProductSold[]                      @relation("ProductSoldOrganization")
-  providedProductSolds            ProductSold[]                      @relation("ProductSoldProviderOrganization")
-  productSoldEvidence             ProductSoldEvidence[]
-  productSoldParties              ProductSoldParty[]
-  productSoldEntitlements         ProductSoldEntitlement[]
-  productFulfillmentInstances     ProductFulfillmentInstance[]
-  productSoldComponentAllocations ProductSoldComponentAllocation[]
-  careVisitTypes                  CareVisitType[]
-  careLocations                   CareLocation[]
-  careResources                   CareResource[]
-  careSchedulingPolicies          CareSchedulingPolicy[]
-  careAppointments                CareAppointment[]
-  careIntakePackets               CareIntakePacket[]
-  aiProviderConnections           AiProviderConnection[]
-  partnerAccounts                 PartnerAccount[]
-  founderDemandClusters           FounderDemandCluster[]
-  dataProcessingActivities        DataProcessingActivity[]
-  dataPolicyExceptions            DataPolicyException[]
-  dataControlOperations           DataControlOperation[]
+  wikiRetrievalMode                 String                             @default("vector")
+  createdAt                         DateTime                           @default(now())
+  updatedAt                         DateTime                           @updatedAt
+  brandingConfig                    BrandingConfig?
+  storefrontConfig                  StorefrontConfig?
+  operationalSceneLayouts           OperationalSceneLayout[]
+  businessContext                   BusinessContext?
+  marketingStrategy                 MarketingStrategy?
+  marketingReviews                  MarketingReview[]
+  marketingCampaigns                MarketingCampaign[]
+  marketingCampaignBriefs           MarketingCampaignBrief[]
+  marketingAssetTasks               MarketingAssetTask[]
+  marketingAssetVariants            MarketingAssetVariant[]
+  marketingBattlecards              MarketingBattlecard[]
+  workEngagements                   WorkEngagement[]
+  marketingKpiCheckpoints           MarketingKpiCheckpoint[]
+  marketingAutomationCandidates     MarketingAutomationCandidate[]
+  taxProfile                        OrganizationTaxProfile?
+  licenseProfile                    OrganizationLicenseProfile?
+  personLicenseRecords              PersonLicenseRecord[]
+  platformSetupProgress             PlatformSetupProgress?             @relation("OrgSetupProgress")
+  wikiPages                         WikiPage[]
+  wikiRawSources                    RawSource[]
+  wikiIngestEvents                  WikiIngestEvent[]
+  wikiLintFindings                  WikiLintFinding[]
+  documents                         Document[]
+  decisionPerspectiveProfiles       DecisionPerspectiveProfile[]
+  researchProposals                 ResearchProposal[]
+  scheduledProductIntelligenceTasks ScheduledAgentTask[]               @relation("ScheduledAgentTaskOrganization")
+  integrationCoverageProviders      IntegrationCoverageProvider[]      @relation("OrgToCoverageProviders")
+  integrationRoleCoverages          IntegrationRoleCoverage[]          @relation("OrgToCoverageCells")
+  capabilityActivations             OrganizationCapabilityActivation[]
+  governanceMeetings                GovernanceMeeting[]
+  recordsRequests                   RecordsRequest[]
+  fundBudgetLines                   FundBudgetLine[]
+  memberEquityEntries               MemberEquityEntry[]
+  mediaAssets                       MediaAsset[]
+  ledgerAccounts                    LedgerAccount[]
+  journalEntries                    JournalEntry[]
+  patientProfiles                   PatientProfile[]
+  patientAuthorizationDecisions     AuthorizationDecisionLog[]
+  storefrontBookings                StorefrontBooking[]                @relation("StorefrontBookingOrganization")
+  productLines                      ProductLine[]
+  businessProducts                  Product[]
+  productOfferings                  ProductOffering[]                  @relation("ProductOfferingOrganization")
+  providedProductOfferings          ProductOffering[]                  @relation("ProductOfferingProviderOrganization")
+  catalogItems                      CatalogItem[]
+  productConfigurations             ProductConfiguration[]
+  catalogSkus                       CatalogSku[]
+  catalogBundleComponents           CatalogBundleComponent[]
+  catalogPriceLists                 CatalogPriceList[]
+  catalogPriceListEntries           CatalogPriceListEntry[]
+  catalogPromotions                 CatalogPromotion[]
+  catalogPromotionItems             CatalogPromotionItem[]
+  catalogChannelEligibility         CatalogChannelEligibility[]
+  storefrontOrders                  StorefrontOrder[]                  @relation("StorefrontOrderOrganization")
+  storefrontOrderLineItems          StorefrontOrderLineItem[]
+  productSolds                      ProductSold[]                      @relation("ProductSoldOrganization")
+  providedProductSolds              ProductSold[]                      @relation("ProductSoldProviderOrganization")
+  productSoldEvidence               ProductSoldEvidence[]
+  productSoldParties                ProductSoldParty[]
+  productSoldEntitlements           ProductSoldEntitlement[]
+  productFulfillmentInstances       ProductFulfillmentInstance[]
+  productSoldComponentAllocations   ProductSoldComponentAllocation[]
+  careVisitTypes                    CareVisitType[]
+  careLocations                     CareLocation[]
+  careResources                     CareResource[]
+  careSchedulingPolicies            CareSchedulingPolicy[]
+  careAppointments                  CareAppointment[]
+  careIntakePackets                 CareIntakePacket[]
+  aiProviderConnections             AiProviderConnection[]
+  partnerAccounts                   PartnerAccount[]
+  founderDemandClusters             FounderDemandCluster[]
+  dataProcessingActivities          DataProcessingActivity[]
+  dataPolicyExceptions              DataPolicyException[]
+  dataControlOperations             DataControlOperation[]
 }
 
 // Founder Hub's shared-portfolio curation layer. FederatedRecordMirror remains
@@ -8785,35 +8792,50 @@ model CalendarEvent {
 }
 
 model ScheduledAgentTask {
-  id           String    @id @default(cuid())
-  taskId       String    @unique
-  agentId      String
-  title        String
-  prompt       String
-  routeContext String
-  schedule     String // cron expression: "0 9 * * 1" (Mon 9am), "0 8 * * *" (daily 8am)
-  timezone     String    @default("UTC")
-  isActive     Boolean   @default(true)
-  ownerUserId  String
-  lastRunAt    DateTime?
-  nextRunAt    DateTime?
-  lastStatus   String? // ok | error
-  lastError    String?
-  lastThreadId String?
+  id                String    @id @default(cuid())
+  taskId            String    @unique
+  agentId           String
+  title             String
+  prompt            String
+  routeContext      String
+  schedule          String // cron expression: "0 9 * * 1" (Mon 9am), "0 8 * * *" (daily 8am)
+  timezone          String    @default("UTC")
+  isActive          Boolean   @default(true)
+  ownerUserId       String
+  // Optional business scope for product-management watches. Null means the
+  // generic user-owned task remains outside product-management projection.
+  // ProductLine and Product are mutually exclusive and organization-consistent.
+  organizationId    String?
+  productLineId     String?
+  businessProductId String?
+  taskKind          String?
+  taskConfig        Json?
+  lastRunAt         DateTime?
+  nextRunAt         DateTime?
+  lastStatus        String? // ok | error
+  lastError         String?
+  lastThreadId      String?
   // Autonomous coworker runtime Slice 1: latest TaskRun spawned by this schedule.
-  taskRunId    String?
+  taskRunId         String?
   // BI-754C9E82: consecutive failed attempts in the CURRENT retry cycle. The
   // proactivity plan's followUpCadenceMinutes/maxAttempts drive short-cadence
   // retries after a failure; reset on success or when the budget is exhausted
   // (each cron cycle gets a fresh budget).
-  attempts     Int       @default(0)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  attempts          Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  owner User @relation("ScheduledAgentTaskOwner", fields: [ownerUserId], references: [id])
+  owner           User          @relation("ScheduledAgentTaskOwner", fields: [ownerUserId], references: [id])
+  organization    Organization? @relation("ScheduledAgentTaskOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
+  productLine     ProductLine?  @relation("ScheduledAgentTaskProductLine", fields: [productLineId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  businessProduct Product?      @relation("ScheduledAgentTaskBusinessProduct", fields: [businessProductId, organizationId], references: [id, organizationId], onDelete: Restrict)
 
   @@index([agentId])
   @@index([ownerUserId])
+  @@index([organizationId])
+  @@index([productLineId])
+  @@index([businessProductId])
+  @@index([taskKind, isActive, nextRunAt])
   @@index([isActive, nextRunAt])
   @@index([taskRunId])
 }
@@ -9942,6 +9964,8 @@ model MarketingBattlecard {
   battlecardId       String   @id @default(cuid())
   organizationId     String
   digitalProductId   String?
+  productLineId      String?
+  businessProductId  String?
   competitorName     String
   positioning        String?
   theirStrengths     String[] @default([])
@@ -9955,11 +9979,15 @@ model MarketingBattlecard {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  digitalProduct DigitalProduct? @relation(fields: [digitalProductId], references: [id], onDelete: Restrict)
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  digitalProduct  DigitalProduct? @relation(fields: [digitalProductId], references: [id], onDelete: Restrict)
+  productLine     ProductLine?    @relation("MarketingBattlecardProductLine", fields: [productLineId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  businessProduct Product?        @relation("MarketingBattlecardBusinessProduct", fields: [businessProductId, organizationId], references: [id, organizationId], onDelete: Restrict)
 
   @@index([organizationId, createdAt])
   @@index([digitalProductId])
+  @@index([productLineId])
+  @@index([businessProductId])
   @@index([status])
 }
 
@@ -14677,27 +14705,33 @@ model GearInterface {
 // execution slice runs runMarketResearch() → enrichOrgCorpus(research→draft).
 // Nothing executes or publishes without human approval + draft review (BI-1378).
 model ResearchProposal {
-  id               String          @id @default(cuid())
-  proposalId       String          @unique @default(cuid())
-  organizationId   String
-  digitalProductId String?
-  topic            String // short topic key, e.g. "competitive-landscape"
-  query            String          @db.Text // the research query/prompt
-  status           String          @default("pending") // pending | approved | declined | executed | failed
-  proposedBy       String          @default("schedule") // schedule | gap-detection | user
-  proposedAt       DateTime        @default(now())
-  decidedByUserId  String?
-  decidedAt        DateTime?
-  executedAt       DateTime?
-  resultSummary    String?         @db.Text
-  metadata         Json?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-  organization     Organization    @relation(fields: [organizationId], references: [id])
-  digitalProduct   DigitalProduct? @relation(fields: [digitalProductId], references: [id], onDelete: Restrict)
+  id                String          @id @default(cuid())
+  proposalId        String          @unique @default(cuid())
+  organizationId    String
+  digitalProductId  String?
+  productLineId     String?
+  businessProductId String?
+  topic             String // short topic key, e.g. "competitive-landscape"
+  query             String          @db.Text // the research query/prompt
+  status            String          @default("pending") // pending | approved | declined | executed | failed
+  proposedBy        String          @default("schedule") // schedule | gap-detection | user
+  proposedAt        DateTime        @default(now())
+  decidedByUserId   String?
+  decidedAt         DateTime?
+  executedAt        DateTime?
+  resultSummary     String?         @db.Text
+  metadata          Json?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  organization      Organization    @relation(fields: [organizationId], references: [id])
+  digitalProduct    DigitalProduct? @relation(fields: [digitalProductId], references: [id], onDelete: Restrict)
+  productLine       ProductLine?    @relation("ResearchProposalProductLine", fields: [productLineId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  businessProduct   Product?        @relation("ResearchProposalBusinessProduct", fields: [businessProductId, organizationId], references: [id, organizationId], onDelete: Restrict)
 
   @@index([organizationId, status])
   @@index([digitalProductId])
+  @@index([productLineId])
+  @@index([businessProductId])
   @@index([status])
 }
 
