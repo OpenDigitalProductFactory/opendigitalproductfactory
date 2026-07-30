@@ -28,6 +28,7 @@ type Props = {
 };
 
 type TabId = "catalog" | "passes" | "executions" | "telemetry";
+const INITIAL_ROUTE_SKILL_COUNT = 12;
 
 const AUDIENCE_STYLES: Record<string, { bg: string; text: string; label: string }> = {
   user: { bg: "color-mix(in srgb, var(--dpf-success) 12%, transparent)", text: "var(--dpf-success)", label: "User-Facing" },
@@ -45,6 +46,8 @@ export function SkillsObservatoryPanel({
   const [tab, setTab] = useState<TabId>("catalog");
   const [audienceFilter, setAudienceFilter] = useState<string | null>(null);
   const [routeFilter, setRouteFilter] = useState<string | null>(null);
+  const [showRouteFilter, setShowRouteFilter] = useState(false);
+  const [visibleSkillCount, setVisibleSkillCount] = useState(INITIAL_ROUTE_SKILL_COUNT);
 
   const routes = [...new Set(skills.map((s) => s.route))].sort();
   const filtered = skills.filter((s) => {
@@ -52,6 +55,8 @@ export function SkillsObservatoryPanel({
     if (routeFilter && s.route !== routeFilter) return false;
     return true;
   });
+  const visibleSkills = filtered.slice(0, visibleSkillCount);
+  const remainingSkills = filtered.length - visibleSkills.length;
 
   const tabs: { id: TabId; label: string; count: number }[] = [
     { id: "catalog", label: "Skills Catalog", count: skills.length },
@@ -99,22 +104,36 @@ export function SkillsObservatoryPanel({
       {tab === "catalog" && (
         <div className="space-y-3 animate-dpf-fade-in">
           <div className="flex gap-2 flex-wrap">
-            <FilterButton label="All" active={!audienceFilter} onClick={() => setAudienceFilter(null)} />
-            <FilterButton label="User-Facing" active={audienceFilter === "user"} onClick={() => setAudienceFilter("user")} />
-            <FilterButton label="Universal" active={audienceFilter === "universal"} onClick={() => setAudienceFilter("universal")} />
-            <FilterButton label="Specialist" active={audienceFilter === "specialist-internal"} onClick={() => setAudienceFilter("specialist-internal")} />
-            <select
-              value={routeFilter ?? ""}
-              onChange={(e) => setRouteFilter(e.target.value || null)}
-              className="text-xs px-2 py-1 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[var(--dpf-text)]"
+            <FilterButton label="All" active={!audienceFilter} onClick={() => { setAudienceFilter(null); setVisibleSkillCount(INITIAL_ROUTE_SKILL_COUNT); }} />
+            <FilterButton label="User-Facing" active={audienceFilter === "user"} onClick={() => { setAudienceFilter("user"); setVisibleSkillCount(INITIAL_ROUTE_SKILL_COUNT); }} />
+            <FilterButton label="Universal" active={audienceFilter === "universal"} onClick={() => { setAudienceFilter("universal"); setVisibleSkillCount(INITIAL_ROUTE_SKILL_COUNT); }} />
+            <FilterButton label="Specialist" active={audienceFilter === "specialist-internal"} onClick={() => { setAudienceFilter("specialist-internal"); setVisibleSkillCount(INITIAL_ROUTE_SKILL_COUNT); }} />
+            <button
+              type="button"
+              onClick={() => setShowRouteFilter((shown) => !shown)}
+              className="rounded border border-[var(--dpf-border)] px-2.5 py-1 text-xs text-[var(--dpf-muted)]"
+              aria-expanded={showRouteFilter}
               aria-label="Filter by route"
             >
-              <option value="">All routes</option>
-              {routes.map((r) => <option key={r} value={r}>{r}</option>)}
-            </select>
+              Route
+            </button>
+            {showRouteFilter && (
+              <select
+                value={routeFilter ?? ""}
+                onChange={(e) => {
+                  setRouteFilter(e.target.value || null);
+                  setVisibleSkillCount(INITIAL_ROUTE_SKILL_COUNT);
+                }}
+                className="text-xs px-2 py-1 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[var(--dpf-text)]"
+                aria-label="Filter by route"
+              >
+                <option value="">All routes</option>
+                {routes.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            )}
           </div>
 
-          {filtered.map((skill, i) => (
+          {visibleSkills.map((skill, i) => (
             <SkillRow
               key={`${skill.route}-${skill.label}-${i}`}
               skill={skill}
@@ -123,6 +142,15 @@ export function SkillsObservatoryPanel({
           ))}
           {filtered.length === 0 && (
             <p className="text-sm text-[var(--dpf-muted)] text-center py-8">No skills match the current filters.</p>
+          )}
+          {remainingSkills > 0 && (
+            <button
+              type="button"
+              onClick={() => setVisibleSkillCount((count) => count + INITIAL_ROUTE_SKILL_COUNT)}
+              className="rounded border border-[var(--dpf-border)] px-3 py-1.5 text-xs text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
+            >
+              Show {remainingSkills} more
+            </button>
           )}
         </div>
       )}

@@ -2,6 +2,8 @@
 
 import { useState, useMemo } from "react";
 
+const INITIAL_SKILL_COUNT = 12;
+
 // ---------------------------------------------------------------------------
 // Types matching the server query shape
 // ---------------------------------------------------------------------------
@@ -68,6 +70,7 @@ export function SkillsCatalogView({
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
+  const [visibleCount, setVisibleCount] = useState(INITIAL_SKILL_COUNT);
 
   // Derive unique values for filter dropdowns
   const statuses = useMemo(
@@ -96,6 +99,8 @@ export function SkillsCatalogView({
     }
     return list;
   }, [skills, search, statusFilter, sourceFilter]);
+  const visible = filtered.slice(0, visibleCount);
+  const remaining = filtered.length - visible.length;
 
   return (
     <div>
@@ -121,12 +126,18 @@ export function SkillsCatalogView({
           type="text"
           placeholder="Search skills..."
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setVisibleCount(INITIAL_SKILL_COUNT);
+          }}
           className="px-3 py-1.5 rounded-md text-xs bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] border border-[var(--dpf-border)] focus:outline-none focus:ring-1 focus:ring-[var(--dpf-accent)] w-56"
         />
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) => {
+            setStatusFilter(e.target.value);
+            setVisibleCount(INITIAL_SKILL_COUNT);
+          }}
           className="px-3 py-1.5 rounded-md text-xs bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] border border-[var(--dpf-border)]"
         >
           <option value="">All statuses</option>
@@ -138,7 +149,10 @@ export function SkillsCatalogView({
         </select>
         <select
           value={sourceFilter}
-          onChange={(e) => setSourceFilter(e.target.value)}
+          onChange={(e) => {
+            setSourceFilter(e.target.value);
+            setVisibleCount(INITIAL_SKILL_COUNT);
+          }}
           className="px-3 py-1.5 rounded-md text-xs bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] border border-[var(--dpf-border)]"
         >
           <option value="">All sources</option>
@@ -162,7 +176,7 @@ export function SkillsCatalogView({
         </p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {filtered.map((skill) => (
+          {visible.map((skill) => (
             <div
               key={skill.id}
               className="p-4 rounded-lg bg-[var(--dpf-surface-1)] border-l-4"
@@ -256,6 +270,15 @@ export function SkillsCatalogView({
             </div>
           ))}
         </div>
+      )}
+      {remaining > 0 && (
+        <button
+          type="button"
+          onClick={() => setVisibleCount((count) => count + INITIAL_SKILL_COUNT)}
+          className="mt-4 rounded border border-[var(--dpf-border)] px-3 py-1.5 text-xs text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
+        >
+          Show {remaining} more
+        </button>
       )}
     </div>
   );

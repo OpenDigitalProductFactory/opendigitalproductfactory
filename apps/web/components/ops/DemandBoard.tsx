@@ -24,7 +24,10 @@ import {
 } from "@/lib/actions/demand-activation";
 import { DEMAND_EVIDENCE_KINDS } from "@/lib/demand/evidence";
 import { computeDemandActivationTelemetry } from "@/lib/demand/activation-telemetry";
-import { DemandMiniButton as MiniButton } from "./DemandMiniButton";
+import {
+  DemandEvidenceCount,
+  DemandMiniButton as MiniButton,
+} from "./DemandMiniButton";
 
 const VALUE_BAND_LABEL: Record<ReturnType<typeof valueBand>, string> = {
   high: "High value",
@@ -269,13 +272,11 @@ export function DemandActivationControls({ item }: { item: DemandItemView }) {
           disabled={pending}
           tone="muted"
           title="Link reviewed evidence without copying the source fact"
+          ariaLabel={showEvidence ? "Cancel evidence" : "Link evidence"}
         >
-          {showEvidence ? "Cancel evidence" : "Link evidence"}
+          {showEvidence ? "Cancel" : "Evidence"}
         </MiniButton>
-        <span className="text-dpf-caption text-[var(--dpf-muted)]">
-          {item.evidenceLinks?.length ?? 0} evidence source
-          {(item.evidenceLinks?.length ?? 0) === 1 ? "" : "s"}
-        </span>
+        <DemandEvidenceCount count={item.evidenceLinks?.length ?? 0} />
       </div>
       {showEvidence && (
         <div className="grid gap-2 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-2 sm:grid-cols-2">

@@ -3259,7 +3259,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 1,
-    "textMass": 52
+    "textMass": 60
   },
   "apps/web/components/admin/ReadabilityPolicyPanel.tsx": {
     "vocabulary": 0,
@@ -6367,7 +6367,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 95
+    "textMass": 98
   },
   "apps/web/components/platform/StalledTaskRecoveryActions.tsx": {
     "vocabulary": 0,

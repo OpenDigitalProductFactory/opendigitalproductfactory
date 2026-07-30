@@ -4,10 +4,13 @@
   "decisionInteractionId": "DI-26D56D03E6BD",
   "scope": {
     "files": [
+      "apps/web/components/admin/PromptManager.tsx",
+      "apps/web/components/admin/SkillsCatalogView.tsx",
       "apps/web/components/ops/DemandBoard.tsx",
       "apps/web/components/product/direction/ProductManagementPlaybooks.tsx",
       "apps/web/components/product/direction/ProductOutcomeEvidenceForms.tsx",
-      "apps/web/components/product/direction/ProductOutcomes.tsx"
+      "apps/web/components/product/direction/ProductOutcomes.tsx",
+      "apps/web/components/platform/SkillsObservatoryPanel.tsx"
     ]
   },
   "evidence": {
