@@ -99,6 +99,19 @@ docker exec dpf-postgres-1 psql -U postgres -d dpf -c "select ... from \"<Table>
 
 Only after the DB/log confirms the row/state changed do you report the action as done.
 
+### A7. NEVER submit a form by DOM index — forms[0] on every shell page is Sign out
+
+The shell header renders an invisible `<form action={signOutAction}>` (the Sign out button) on **every** authenticated shell page, so `document.querySelector('form')` / `document.forms[0]` is the **sign-out server action**, not the page's editor form. Submitting it deliberately expires the session cookie and redirects to `/login` — with **zero errors in the portal logs**, because it is a clean sign-out. Editor forms (e.g. the wiki page editor) often have **no `action` attribute at all** (React `onSubmit`), making them look *less* like "the form" to naive selectors. This produced a false P1 outage report ("every server-action POST invalidates the session", BI-FFF8F0DA): deterministic, reproduced across fresh logins, and entirely an artifact of the repro method.
+
+**Do this instead:** locate the form via its visible submit button, never by index:
+
+```js
+const save = [...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'Save');
+save.closest('form').requestSubmit(save);   // or simply click the button
+```
+
+If a session unexpectedly lands on `/login` with the cookie gone and no auth errors logged, suspect an accidental sign-out submit before suspecting the auth stack.
+
 ---
 
 ## Part B — Observing build & inference architecture (where the truth lives)
@@ -183,6 +196,7 @@ nvidia-smi dmon -c 5                                              # live GPU uti
 - **Never claim a portal action succeeded from the UI alone.** Confirm in the DB/log (A6, `structural-verification-is-not-functional`).
 - **Never blame the model before reading the tool/inference logs.** The failure is usually tool/timeout/config (B2, `check-tool-signals-first`).
 - **Never hand the click to the operator** to work around a driving difficulty — that violates `never-ask-user-to-run-commands`. Solve the driving problem or file a BI for the missing in-app surface.
+- **Never submit a form by DOM index.** `forms[0]` on every shell page is the header's Sign out server action — submitting it kills the session with no logged error (A7). Select the form via its visible submit button.
 
 ## Worked example
 
