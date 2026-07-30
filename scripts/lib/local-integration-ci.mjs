@@ -27,6 +27,7 @@ export function dockerBuildTag(candidateBranch, slotKey = "") {
 // did (and the freshness gate correctly stays green, so nothing else catches
 // it). Verified 2026-07-05: default heap SIGABRT; 8 GiB completes cleanly.
 export const HOST_BUILD_NODE_OPTIONS = "NODE_OPTIONS=--max-old-space-size=8192";
+export const HOST_BUILD_NODE_ENV = "NODE_ENV=production";
 
 // Node 26 exposes experimental host localStorage/sessionStorage accessors even
 // when no backing file is configured. Those undefined host values shadow the
@@ -91,6 +92,7 @@ export function createToolchainFingerprint(input) {
     platform: input.platform ?? "unknown",
     arch: input.arch ?? "unknown",
     lockfileSha256: input.lockfileSha256 ?? "unknown",
+    nodeEnv: input.nodeEnv ?? "",
     nodeOptions: input.nodeOptions ?? "",
     testNodeOptions: input.testNodeOptions ?? "",
   };
@@ -143,6 +145,7 @@ export function collectToolchainFingerprint({ buildStrategy, cwd = process.cwd()
     platform: process.platform,
     arch: process.arch,
     lockfileSha256: fileSha256(`${cwd}/pnpm-lock.yaml`),
+    nodeEnv: HOST_BUILD_NODE_ENV,
     nodeOptions: HOST_BUILD_NODE_OPTIONS,
     testNodeOptions: HOST_TEST_NODE_OPTIONS,
   });
@@ -156,7 +159,10 @@ export function createLocalIntegrationPlan(input) {
     ? ["docker", "build", "--target", "build", "-t", dockerBuildTag(input.candidateBranch, input.slotKey), "."]
     // `env VAR=… cmd` keeps the plan a plain argv (no shell) — host-next is
     // POSIX-only by construction (Windows defaults to docker-build above).
-    : ["env", HOST_BUILD_NODE_OPTIONS, "pnpm", "--filter", "web", "exec", "next", "build"];
+    // The shared sandbox can inherit NODE_ENV from a prior test/dev process.
+    // Next requires a production build to run with the canonical production
+    // environment; otherwise the same source can fail in framework internals.
+    : ["env", HOST_BUILD_NODE_ENV, HOST_BUILD_NODE_OPTIONS, "pnpm", "--filter", "web", "exec", "next", "build"];
   const evidencePlanCommand = [
     "node",
     "scripts/ci-evidence-plan.mjs",

@@ -45,6 +45,7 @@ describe("createLocalIntegrationPlan", () => {
       platform: "linux",
       arch: "arm64",
       lockfileSha256: "lock-sha",
+      nodeEnv: "NODE_ENV=production",
       nodeOptions: "NODE_OPTIONS=--max-old-space-size=8192",
       testNodeOptions: "NODE_OPTIONS=--no-experimental-webstorage",
     });
@@ -58,6 +59,7 @@ describe("createLocalIntegrationPlan", () => {
       platform: "linux",
       arch: "arm64",
       lockfileSha256: "lock-sha",
+      nodeEnv: "NODE_ENV=production",
       nodeOptions: "NODE_OPTIONS=--max-old-space-size=8192",
       testNodeOptions: "NODE_OPTIONS=--no-experimental-webstorage",
     });
@@ -66,6 +68,7 @@ describe("createLocalIntegrationPlan", () => {
       buildStrategy: "host-next",
       gitVersion: "git version 2.50.1",
       lockfileSha256: "lock-sha",
+      nodeEnv: "NODE_ENV=production",
       nodeOptions: "NODE_OPTIONS=--max-old-space-size=8192",
       testNodeOptions: "NODE_OPTIONS=--no-experimental-webstorage",
       nodeVersion: "v24.0.0",
@@ -93,7 +96,7 @@ describe("createLocalIntegrationPlan", () => {
       "node scripts/check-guards.mjs",
       "env NODE_OPTIONS=--no-experimental-webstorage pnpm --filter web exec vitest run --maxWorkers=4",
       "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web typecheck",
-      "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web exec next build",
+      "env NODE_ENV=production NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web exec next build",
     ]);
   });
 
