@@ -94,6 +94,14 @@ export interface OwnerReleaseInput {
     };
     headline: string | null;
   } | null;
+  /**
+   * BI-5B1FDA09: operator-facing identity for the running / available build,
+   * as the last merged PR each contains (`PR #3747`). Optional and nullable:
+   * a shallow clone, an unfetched commit, or a direct push with no `(#N)` in
+   * its subject leaves these null and the short-SHA labelling below stands.
+   */
+  runningMergePointLabel?: string | null;
+  availableMergePointLabel?: string | null;
 }
 
 const IN_FLIGHT: ReadonlySet<string> = new Set(["queued", "pending", "running", "completing"]);
@@ -152,18 +160,22 @@ export function buildOwnerReleaseSummary(
           ? "info"
           : "info";
 
+  // Prefer the merged-PR label over hex. A SHA tells an operator nothing and
+  // cannot be looked up; `PR #3747` is a thing they can open, quote, and trace.
   const currentShort = shortSha(input.deployedSha) ?? shortSha(input.platformVersion.gitSha);
-  const currentVersion = currentShort
-    ? `${input.platformVersion.version} (${currentShort})`
+  const currentDetail = input.runningMergePointLabel ?? currentShort;
+  const currentVersion = currentDetail
+    ? `${input.platformVersion.version} (${currentDetail})`
     : input.platformVersion.version;
 
   const targetShort = shortSha(input.targetSha);
+  const targetDetail = input.availableMergePointLabel ?? targetShort;
   const availableVersion =
     state === "update-available"
       ? input.latestRunImpact?.headline
         ? input.latestRunImpact.headline
-        : targetShort
-          ? `Latest build (${targetShort})`
+        : targetDetail
+          ? `Latest build (${targetDetail})`
           : "Latest build"
       : null;
 

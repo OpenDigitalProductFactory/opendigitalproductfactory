@@ -183,6 +183,7 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/sandbox-freshness-preflight.test.mjs",
         "scripts/release/re-resolve-stt-digest.test.mjs",
         "scripts/lib/ensure-pre-push-hook.test.mjs",
+        "scripts/lib/agent-identity.test.mjs",
         "tests/release/local-ci-gate-contract.test.mjs",
         "tests/release/pregate-node-gate-contract.test.mjs",
       ),

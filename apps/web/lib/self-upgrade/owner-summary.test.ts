@@ -67,6 +67,32 @@ describe("buildOwnerReleaseSummary", () => {
     expect(s.riskNotice?.recovery.length).toBeGreaterThan(0);
   });
 
+  it("prefers the merged-PR label over hex in both version labels (BI-5B1FDA09)", () => {
+    const s = buildOwnerReleaseSummary(
+      baseInput({
+        isFresh: false,
+        targetSha: "f".repeat(40),
+        runningMergePointLabel: "PR #3746",
+        availableMergePointLabel: "PR #3747",
+      }),
+      NO_LOCAL_CHANGES,
+    );
+    expect(s.currentVersion).toContain("PR #3746");
+    expect(s.currentVersion).not.toContain("abc1234");
+    expect(s.availableVersion).toContain("PR #3747");
+    expect(s.availableVersion).not.toContain("fffffff");
+  });
+
+  it("falls back to the short SHA when no merged PR could be resolved", () => {
+    // A direct push, a shallow clone, or a missing host mount: the label is
+    // absent and the previous hex identity must still render.
+    const s = buildOwnerReleaseSummary(
+      baseInput({ isFresh: false, targetSha: "f".repeat(40) }),
+      NO_LOCAL_CHANGES,
+    );
+    expect(s.availableVersion).toContain("fffffff");
+  });
+
   it("uses the impact headline as the available version when present", () => {
     const s = buildOwnerReleaseSummary(
       baseInput({

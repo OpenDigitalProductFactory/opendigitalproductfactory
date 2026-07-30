@@ -413,6 +413,51 @@ recorded push-time override, or an explicit `Local-CI-Override: <reason>` /
 `Local-CI-Evidence: <record-id>` trailer in the PR body. Docs-only PRs are
 exempt automatically.
 
+### Keep internal identifiers out of the PR body
+
+The trailers above are a **fallback**, not the normal path: a branch gated
+through `pnpm run pregate` satisfies the guard from its own push-time record, so
+a normally-gated PR needs **nothing** in the body. Do not paste lease ids,
+evidence record ids, candidate/base SHAs, session ids, or worktree paths into a
+PR — a PR is public, and none of it is contract. One line is enough:
+
+> Verified via the governed local-CI gate (exact-tree, merged against main).
+
+The detail stays queryable on the install, keyed off the number a human actually
+uses:
+
+```bash
+pnpm pr:origin 3748
+```
+
+That resolves the PR to its head plus every commit SHA and matches those
+against this install's own gate records, reporting which client and which
+client thread produced the change (and the parent thread, for a sub-thread).
+Matching is by **SHA, not branch**: branch names get reused across threads and
+deleted on merge, while commits are permanent. A PR with no local gate record —
+an outside contribution — correctly reports no origin rather than a guess.
+
+### Identify your client and thread
+
+The gate records **who** ran it. It no longer defaults the provider (it used to
+default to `codex`, so every client of every kind was recorded as Codex), and it
+no longer derives the session from a pid (`gate-<pid>` changed on every re-gate,
+so one thread looked like many contributors).
+
+Identity is detected from the calling client's environment where possible.
+When it cannot be, pass it:
+
+```bash
+node scripts/gate-worktree.mjs --owner-provider claude --owner-session-id "$CLAUDE_CODE_SESSION_ID"
+```
+
+or set `DPF_GATE_OWNER_PROVIDER` / `DPF_GATE_OWNER_SESSION_ID`. An unresolvable
+**provider** stops the gate with a message naming the flag — the provider
+vocabulary is a closed enum (`build-studio | claude | codex | grok | antigravity
+| coworker`), so there is no honest value to fall back to. An unresolvable
+**thread** does not stop the gate; it records `unattributed-<pid>` so the run is
+visibly unattributed rather than falsely attributed.
+
 **Pre-PR vs post-merge (do not confuse the runtimes).** "Pre-PR test" means
 this sandbox lane — the lease + the runner above. "Test on :3000" (the
 canonical install) is only meaningful **after** PR/merge/self-upgrade, because

@@ -209,6 +209,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   release_runtime_target: ["work_capsule_write"],
   record_runtime_verification: ["work_capsule_write"],
   list_nonprod_environment_leases: ["work_capsule_read"],
+  lookup_change_origin: ["work_capsule_read"],
   claim_nonprod_environment_lease: ["work_capsule_write"],
   release_nonprod_environment_lease: ["work_capsule_write"],
   renew_nonprod_environment_lease: ["work_capsule_write"],

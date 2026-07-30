@@ -41,6 +41,7 @@ import {
   sampleLocalCiHostPressure,
   summarizeLocalCiPressureSamples,
 } from "./lib/local-ci-host-pressure.mjs";
+import { buildAttributionEvidence, resolveAgentIdentity } from "./lib/agent-identity.mjs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
@@ -142,8 +143,11 @@ Options:
   --sha SHA                  Commit SHA to gate (default: HEAD)
   --worktree PATH            Worktree path (default: git rev-parse --show-toplevel)
   --remote NAME               Remote used only with --push (default: origin)
-  --owner-provider NAME       build-studio|claude|codex|coworker (default: codex)
-  --owner-session-id ID       External session id (default: host-local gate observer)
+  --owner-provider NAME       build-studio|claude|codex|grok|antigravity|coworker
+                              (default: detected from the client environment)
+  --owner-session-id ID       Client THREAD id, so repeated gates from one
+                              thread roll up (default: detected from the client
+                              environment)
   --mcp-url URL                MCP endpoint (default: DPF_MCP_URL or local portal)
   --lease-wait-seconds N       Max time to wait for admission (default: 7200)
   --poll-seconds N             Initial queue-observation backoff (default: 10)
@@ -167,7 +171,11 @@ function parseArgs(argv) {
     sha: "",
     worktree: "",
     remote: "origin",
-    ownerProvider: process.env.DPF_GATE_OWNER_PROVIDER || "codex",
+    // BI-3A34D7A9: no provider default. Defaulting to "codex" made every
+    // client of every kind record itself as Codex; the identity is resolved
+    // from the calling client's own environment below (resolveIdentity), and
+    // an unresolvable one is recorded as unattributed rather than guessed.
+    ownerProvider: process.env.DPF_GATE_OWNER_PROVIDER || "",
     ownerSessionId: process.env.DPF_GATE_OWNER_SESSION_ID || "",
     mcpUrl: process.env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1",
     leaseWaitSeconds: Number(process.env.DPF_GATE_LEASE_WAIT_SECONDS || 7200),
@@ -611,10 +619,30 @@ async function main() {
   if (branch === "HEAD") die("cannot gate detached HEAD");
   const sha = options.sha || gitOrEmpty(gitBin, ["rev-parse", "HEAD"]);
   const worktreePath = options.worktree || gitOrEmpty(gitBin, ["rev-parse", "--show-toplevel"]);
-  const gateObserverIdentity = options.ownerSessionId
-    ? null
-    : createGateObserverIdentity();
-  const ownerSessionId = options.ownerSessionId || gateObserverIdentity.ownerSessionId;
+  // BI-3A34D7A9: resolve WHO is gating from the calling client's own
+  // environment. The provider is NOT required here — a dry run records nothing,
+  // and demanding attribution before any side effect would break every
+  // contract test and any bare shell. The requirement lands at the lease claim,
+  // which is the first moment a provider is actually written.
+  const identity = resolveAgentIdentity({
+    env: process.env,
+    providerOverride: options.ownerProvider,
+    sessionOverride: options.ownerSessionId,
+    pid: process.pid,
+  });
+  for (const warning of identity.warnings) {
+    process.stderr.write(`gate-worktree: ${warning}
+`);
+  }
+  const ownerProvider = identity.provider;
+  const ownerSessionId = identity.sessionId;
+  // Liveness is a SEPARATE concern from identity (#3750 + BI-3A34D7A9). The
+  // observer token/pid proves "this waiting process is alive" so a dead waiter
+  // can be reconciled out of the queue; the session id says "which thread owns
+  // this work". They used to share one field, so the observer was registered
+  // only when no session id was supplied — under honest attribution that is
+  // almost never, hence unconditional.
+  const gateObserverIdentity = createGateObserverIdentity();
   const baseClaimKey = `local-ci:${ownerSessionId}:${sha}`;
   let claimKey = baseClaimKey;
   const deadline = Date.now() + options.leaseWaitSeconds * 1000;
@@ -624,6 +652,14 @@ async function main() {
     process.stdout.write("gate-worktree dry-run\n");
     process.stdout.write(`branch=${branch}\nsha=${sha}\nworktree=${worktreePath}\nremote=${options.remote}\nmcpUrl=${options.mcpUrl}\n`);
     process.stdout.write(`pushBeforeLease=${options.pushBranch}\n`);
+    // A dry run should answer "will this be attributable, and to whom?" before
+    // the lease is taken, not after the evidence is written.
+    process.stdout.write(
+      `ownerProvider=${ownerProvider ?? "unresolved"} (${identity.providerSource})\n`
+        + `ownerSessionId=${ownerSessionId} (${identity.sessionSource})\n`
+        + `rootSessionId=${identity.rootSessionId ?? "none"}\n`
+        + `attribution=${identity.attribution}\n`,
+    );
     if (commandSpec) {
       process.stdout.write(`localCiCommand=${commandSpec.label}\n`);
     } else if (allowStub) {
@@ -633,6 +669,20 @@ async function main() {
     }
     process.stdout.write("would call claim_nonprod_environment_lease and record_local_integration_result only when a real command or explicit stub is configured\n");
     process.exit(0);
+  }
+
+  // BI-3A34D7A9: from here on the run can claim a lease and write evidence, and
+  // both carry a CLOSED provider vocabulary with no "unknown" member — so there
+  // is no honest value to fall back to. Refuse rather than attribute this run to
+  // whichever client happens to be most common. Everything above (including
+  // --dry-run) is side-effect-free and stays runnable without attribution.
+  if (!ownerProvider) {
+    die(
+      "cannot attribute this gate to a client. Pass --owner-provider "
+        + "<build-studio|claude|codex|grok|antigravity|coworker> or set "
+        + "DPF_GATE_OWNER_PROVIDER. (The lease and the evidence record use a "
+        + "closed provider vocabulary, so there is no honest default.)",
+    );
   }
 
   if (!options.finalizeEvidence && !commandSpec && !allowStub) {
@@ -817,7 +867,7 @@ async function main() {
     try {
       claimResponse = await mcpCall("claim_nonprod_environment_lease", {
         environmentKey: "local-integration-ci",
-        ownerProvider: options.ownerProvider,
+        ownerProvider,
         ownerSessionId,
         claimKey,
         purpose: `Pre-PR local-CI gate for ${branch} @ ${sha}`,
@@ -1238,7 +1288,7 @@ async function main() {
 
   const commandLabel = commandSpec ? commandSpec.label : "sandbox checkout/build stub";
   let evidenceArgs = {
-    provider: options.ownerProvider,
+    provider: ownerProvider,
     externalSessionId: ownerSessionId,
     routeContext: "/build",
     candidateBranch: branch,
@@ -1253,6 +1303,12 @@ async function main() {
       phase: 3,
       slotIsolationBi: "BI-4BE30454",
       poolPilotBi: "BI-A4427AB8",
+      // BI-3A34D7A9: how this run's client/thread identity was resolved, and
+      // the parent thread when the client exposes one. Lives in free-form
+      // evidence rather than a lease column: it is descriptive provenance, so
+      // it needs no migration and can grow without touching the lease contract.
+      originBi: "BI-3A34D7A9",
+      origin: buildAttributionEvidence(identity),
       slotManifest: {
         schemaVersion: slotManifest.schemaVersion,
         slotKey: slotManifest.slotKey,

@@ -1,7 +1,9 @@
 import { cookies } from "next/headers";
 import { getSelfUpgradeStatus, listSelfUpgradeRuns } from "@/lib/actions/promotions";
 import { getPlatformDevConfig } from "@/lib/actions/platform-dev-config";
-import { loadPersistedImpactSummary } from "@/lib/self-upgrade/impact";
+import { loadPersistedImpactSummary, resolveCurrentLineageSha } from "@/lib/self-upgrade/impact";
+import { getSelfUpgradeConfig } from "@/lib/self-upgrade/config";
+import { resolveUpgradeMergePoints } from "@/lib/self-upgrade/merge-point";
 import { buildOwnerReleaseSummary } from "@/lib/self-upgrade/owner-summary";
 import SelfUpgradeClient from "@/components/ops/SelfUpgradeClient";
 import SelfUpgradeTriggerControl from "@/components/ops/SelfUpgradeTriggerControl";
@@ -32,6 +34,26 @@ export default async function SelfUpgradePage() {
   const initialImpactSummary = status?.targetSha
     ? await loadPersistedImpactSummary(status.targetSha).catch(() => null)
     : null;
+
+  // BI-5B1FDA09: label both ends of the comparison by the last merged PR they
+  // contain. DPF does not tag releases, so a SHA pair is the only identity the
+  // banner ever had — and it is an actively misleading one, because the
+  // deployed id is a local merge commit that can never equal the upstream
+  // target. The running end resolves from the upstream LINEAGE marker (not
+  // deployedSha) so its subject actually carries a `(#N)`.
+  const mergePoints = status?.targetSha
+    ? await (async () => {
+        const [config, runningSha] = await Promise.all([
+          getSelfUpgradeConfig().catch(() => null),
+          resolveCurrentLineageSha().catch(() => null),
+        ]);
+        return resolveUpgradeMergePoints({
+          runningSha,
+          targetSha: status.targetSha,
+          config: { hostSourcePath: config?.hostSourceMountPath },
+        }).catch(() => ({ running: null, available: null }));
+      })()
+    : { running: null, available: null };
 
   const fallbackStatus = {
     enabled: false,
@@ -84,6 +106,7 @@ export default async function SelfUpgradePage() {
       history: runs,
       historyNextCursor: nextCursor,
       initialImpactSummary,
+      mergePoints,
     }),
   );
 
@@ -114,6 +137,11 @@ export default async function SelfUpgradePage() {
           }
         : null,
       latestRunImpact: effectiveStatus.latestRunImpact,
+      // BI-5B1FDA09: prefer merged-PR labels over hex in the plain-language
+      // card too — "PR #3747" is the only build identity a non-technical
+      // operator can act on or quote back to us.
+      runningMergePointLabel: mergePoints.running?.label ?? null,
+      availableMergePointLabel: mergePoints.available?.label ?? null,
     },
     localChanges,
   );
