@@ -59,6 +59,9 @@ function resolveMockHandler(handlers, toolName) {
       return handlers.list_nonprod_environment_leases
         ?? (() => ({ success: true, data: { leases: [] } }));
     case "claim_nonprod_environment_lease": return handlers.claim_nonprod_environment_lease;
+    case "renew_nonprod_environment_lease":
+      return handlers.renew_nonprod_environment_lease
+        ?? (() => ({ success: true }));
     case "record_local_integration_result": return handlers.record_local_integration_result;
     case "release_nonprod_environment_lease": return handlers.release_nonprod_environment_lease;
     default: return undefined;
@@ -188,6 +191,7 @@ test("gate-worktree.mjs exits non-zero when DPF_MCP_BEARER_TOKEN is missing", ()
 test("gate-worktree.mjs refuses to run when neither an explicit command, the stub, nor the checked-in Node runner exists", () => {
   const temp = mkdtempSync(join(tmpdir(), "dpf-node-gate-noscript-"));
   mkdirSync(join(temp, "scripts", "lib"), { recursive: true });
+  mkdirSync(join(temp, "apps", "web", "lib", "nonprod"), { recursive: true });
   cpSync(gateScript, join(temp, "scripts", "gate-worktree.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "mcp-client.mjs"), join(temp, "scripts", "lib", "mcp-client.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-failure-summary.mjs"), join(temp, "scripts", "lib", "local-ci-failure-summary.mjs"));
@@ -200,6 +204,11 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   cpSync(join(repoRoot, "scripts", "lib", "local-queue-observer.mjs"), join(temp, "scripts", "lib", "local-queue-observer.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-slot-manifest.mjs"), join(temp, "scripts", "lib", "local-ci-slot-manifest.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-gate-state.mjs"), join(temp, "scripts", "lib", "local-ci-gate-state.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "local-ci-host-pressure.mjs"), join(temp, "scripts", "lib", "local-ci-host-pressure.mjs"));
+  cpSync(
+    join(repoRoot, "apps", "web", "lib", "nonprod", "local-ci-slot-resources.json"),
+    join(temp, "apps", "web", "lib", "nonprod", "local-ci-slot-resources.json"),
+  );
 
   const { dir } = makeTempRepo();
   const env = { ...process.env, DPF_MCP_BEARER_TOKEN: "dpfmcp_test" };
@@ -235,6 +244,7 @@ test("gate-worktree.mjs claims, records, and releases in order, and carries evid
       "get_quiescence_status",
       "list_nonprod_environment_leases",
       "claim_nonprod_environment_lease",
+      "renew_nonprod_environment_lease",
       "release_nonprod_environment_lease",
       "record_local_integration_result",
     ]);
@@ -328,6 +338,7 @@ test("gate-worktree.mjs retries transient quiescence before durable admission", 
       "get_quiescence_status",
       "list_nonprod_environment_leases",
       "claim_nonprod_environment_lease",
+      "renew_nonprod_environment_lease",
       "release_nonprod_environment_lease",
       "record_local_integration_result",
     ]);

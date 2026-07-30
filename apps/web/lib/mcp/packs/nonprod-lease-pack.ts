@@ -12,6 +12,7 @@
 // mirror agent-grants.ts TOOL_TO_GRANTS, which stays the gating source.
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
+import type { LocalCiHostPressure } from "@/lib/nonprod/local-ci-pool-policy";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
 
 // Per-key trimmed string coercer — a copy of the inline helper the former switch
@@ -20,6 +21,74 @@ import type { ToolPack, ToolPackHandler } from "../tool-pack";
 function stringValueFor(params: Record<string, unknown>) {
   return (key: string) => (typeof params[key] === "string" ? String(params[key]).trim() : "");
 }
+
+function objectValue(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+function positivePorts(value: unknown): number[] {
+  return Array.isArray(value)
+    ? value
+      .map((entry) => typeof entry === "number" ? entry : Number(entry))
+      .filter((entry) => Number.isInteger(entry) && entry > 0)
+    : [];
+}
+
+function normalizedSlotBinding(value: unknown): {
+  manifestVersion: 1;
+  slotKey: "slot-0" | "slot-1";
+  url: string;
+  ports: number[];
+  cleanupCommand: string;
+} | undefined {
+  const binding = objectValue(value);
+  if (!binding) return undefined;
+  const ports = positivePorts(binding.ports);
+  if (
+    binding.manifestVersion !== 1
+    || (binding.slotKey !== "slot-0" && binding.slotKey !== "slot-1")
+    || typeof binding.url !== "string"
+    || binding.url.trim().length === 0
+    || ports.length === 0
+    || typeof binding.cleanupCommand !== "string"
+    || binding.cleanupCommand.trim().length === 0
+  ) {
+    return undefined;
+  }
+  return {
+    manifestVersion: 1,
+    slotKey: binding.slotKey,
+    url: binding.url.trim(),
+    ports,
+    cleanupCommand: binding.cleanupCommand.trim(),
+  };
+}
+
+const hostPressureSchema = {
+  type: "object",
+  properties: {
+    observedAt: { type: "string" },
+    availableMemoryBytes: { type: "number" },
+    sustainedCpuPercent: { type: "number" },
+    diskFreeBytes: { type: "number" },
+    dockerHealthy: { type: "boolean" },
+    convergenceActive: { type: "boolean" },
+    fencesHealthy: { type: "boolean" },
+    evidenceIsolationHealthy: { type: "boolean" },
+  },
+  required: [
+    "observedAt",
+    "availableMemoryBytes",
+    "sustainedCpuPercent",
+    "diskFreeBytes",
+    "dockerHealthy",
+    "convergenceActive",
+    "fencesHealthy",
+    "evidenceIsolationHealthy",
+  ],
+} as const;
 
 const definitions: ToolDefinition[] = [
   {
@@ -58,6 +127,15 @@ const definitions: ToolDefinition[] = [
         buildId: { type: "string" },
         taskRunId: { type: "string" },
         cleanupCommand: { type: "string" },
+        slotManifestVersion: {
+          type: "number",
+          enum: [1],
+          description: "Versioned local-CI slot capability. Omit for legacy singleton-only admission.",
+        },
+        hostPressure: {
+          ...hostPressureSchema,
+          description: "Recent fail-closed host observation used only to decide whether slot-1 may admit.",
+        },
       },
       required: ["environmentKey", "ownerProvider", "ownerSessionId", "purpose", "url", "ports", "expiresAt"],
     },
@@ -83,13 +161,29 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "renew_nonprod_environment_lease",
-    description: "Heartbeat an active shared nonproduction environment lease to extend its hold window so a still-active session keeps it. Only the owning session can renew, and a lapsed lease is NOT revivable (re-claim instead). The window is capped — long-running work should run on an isolated runtime, not hold the single shared lease.",
+    description: "Heartbeat an active shared nonproduction environment lease, optionally binding its assigned slot before host mutation. Only the owning session can renew, and a lapsed lease is not revivable.",
     inputSchema: {
       type: "object",
       properties: {
         leaseId: { type: "string" },
         ownerSessionId: { type: "string" },
         ttlMinutes: { type: "number", description: "Optional renewal window in minutes; clamped to the max hold window." },
+        slotBinding: {
+          type: "object",
+          description: "Bind the server-assigned slot manifest before the runner mutates host state.",
+          properties: {
+            manifestVersion: { type: "number", enum: [1] },
+            slotKey: { type: "string", enum: ["slot-0", "slot-1"] },
+            url: { type: "string" },
+            ports: { type: "array", items: { type: "number" } },
+            cleanupCommand: { type: "string" },
+          },
+          required: ["manifestVersion", "slotKey", "url", "ports", "cleanupCommand"],
+        },
+        hostPressure: {
+          ...hostPressureSchema,
+          description: "Optional fresh host observation recorded with the renewal for capacity contraction evidence.",
+        },
       },
       required: ["leaseId", "ownerSessionId"],
     },
@@ -125,11 +219,7 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
   const purpose = stringValue("purpose");
   const url = stringValue("url");
   const expiresAtText = stringValue("expiresAt");
-  const ports = Array.isArray(params["ports"])
-    ? (params["ports"] as unknown[])
-      .map((value) => typeof value === "number" ? value : Number(value))
-      .filter((value) => Number.isInteger(value) && value > 0)
-    : [];
+  const ports = positivePorts(params["ports"]);
   const missing = [
     ["environmentKey", environmentKey],
     ["ownerProvider", ownerProvider],
@@ -157,6 +247,25 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
   if (Number.isNaN(expiresAt.getTime())) {
     return { success: false, error: "invalid_expires_at", message: "expiresAt must be a valid ISO timestamp" };
   }
+  const slotManifestVersion = params["slotManifestVersion"];
+  if (
+    slotManifestVersion !== undefined
+    && slotManifestVersion !== 1
+  ) {
+    return {
+      success: false,
+      error: "invalid_slot_manifest_version",
+      message: "slotManifestVersion must be 1 when supplied",
+    };
+  }
+  const hostPressure = objectValue(params["hostPressure"]);
+  if (params["hostPressure"] !== undefined && !hostPressure) {
+    return {
+      success: false,
+      error: "invalid_host_pressure",
+      message: "hostPressure must be an object",
+    };
+  }
 
   const result = await claimNonprodEnvironmentLease({
     environmentKey: environmentKey as "active-candidate" | "local-integration-ci",
@@ -172,6 +281,8 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
     buildId: stringValue("buildId") || undefined,
     taskRunId: stringValue("taskRunId") || undefined,
     cleanupCommand: stringValue("cleanupCommand") || undefined,
+    slotManifestVersion: slotManifestVersion as 1 | undefined,
+    hostPressure: hostPressure as LocalCiHostPressure | undefined,
   });
   if (result.status === "terminal") {
     return {
@@ -179,7 +290,7 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
       entityId: result.lease.leaseId,
       error: "lease_terminal",
       message: `Nonproduction lease request is already ${result.reason}; create a new claimKey to request admission again.`,
-      data: { lease: result.lease, reason: result.reason },
+      data: { lease: result.lease, reason: result.reason, poolPolicy: result.poolPolicy },
     };
   }
   if (result.status === "queued") {
@@ -194,6 +305,7 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
           queuePosition: result.queuePosition,
           waitAgeMs: result.waitAgeMs,
         },
+        poolPolicy: result.poolPolicy,
       },
     };
   }
@@ -208,6 +320,7 @@ async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknow
         slotKey: result.slotKey,
         waitAgeMs: result.waitAgeMs,
       },
+      poolPolicy: result.poolPolicy,
     },
   };
 }
@@ -248,10 +361,28 @@ async function renewNonprodEnvironmentLeaseHandler(params: Record<string, unknow
     typeof params["ttlMinutes"] === "number" && params["ttlMinutes"] > 0
       ? params["ttlMinutes"]
       : undefined;
+  const slotBinding = normalizedSlotBinding(params["slotBinding"]);
+  if (params["slotBinding"] !== undefined && !slotBinding) {
+    return {
+      success: false,
+      error: "invalid_slot_binding",
+      message: "slotBinding must be an object",
+    };
+  }
+  const hostPressure = objectValue(params["hostPressure"]);
+  if (params["hostPressure"] !== undefined && !hostPressure) {
+    return {
+      success: false,
+      error: "invalid_host_pressure",
+      message: "hostPressure must be an object",
+    };
+  }
   const result = await renewNonprodEnvironmentLease({
     leaseId,
     ownerSessionId,
     ttlMs: ttlMinutes ? ttlMinutes * 60_000 : undefined,
+    slotBinding,
+    hostPressure: hostPressure as LocalCiHostPressure | undefined,
   });
   if (result.status === "lost") {
     return {
@@ -265,7 +396,7 @@ async function renewNonprodEnvironmentLeaseHandler(params: Record<string, unknow
     success: true,
     entityId: result.lease.leaseId,
     message: `Renewed nonproduction environment lease ${result.lease.leaseId}.`,
-    data: { lease: result.lease },
+    data: { lease: result.lease, poolPolicy: result.poolPolicy },
   };
 }
 

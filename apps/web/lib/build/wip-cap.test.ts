@@ -98,6 +98,20 @@ describe("decideUnifiedWip (BI-937128F6)", () => {
     expect(decideUnifiedWip("shared-lease", 1).admitted).toBe(false);
   });
 
+  it("reports the same resolved local-CI capacity that durable admission uses", () => {
+    const pilot = { sharedLeaseCapacity: 2 };
+    expect(decideUnifiedWip("shared-lease", 1, pilot)).toEqual({
+      pool: "shared-lease",
+      pressure: 1,
+      capacity: 2,
+      admitted: true,
+    });
+    expect(decideUnifiedWip("shared-lease", 2, pilot).admitted).toBe(false);
+
+    const rolledBack = { sharedLeaseCapacity: 1 };
+    expect(decideUnifiedWip("shared-lease", 1, rolledBack).admitted).toBe(false);
+  });
+
   it("never blocks unbounded pools (host-worktree / none) no matter the pressure", () => {
     expect(decideUnifiedWip("host-worktree", 999).admitted).toBe(true);
     expect(decideUnifiedWip("none", 999).admitted).toBe(true);

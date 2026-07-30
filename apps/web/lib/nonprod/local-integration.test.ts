@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockRecordExternalEvidence } = vi.hoisted(() => ({
   mockRecordExternalEvidence: vi.fn().mockResolvedValue({ id: "external-1" }),
@@ -11,6 +11,15 @@ vi.mock("@/lib/actions/external-evidence", () => ({
 import { recordLocalIntegrationResult } from "./local-integration";
 
 describe("recordLocalIntegrationResult", () => {
+  const platformConfig = {
+    findUnique: vi.fn(),
+    updateMany: vi.fn(),
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("records local integration output as external evidence", async () => {
     await recordLocalIntegrationResult({
       actorUserId: "user-1",
@@ -24,7 +33,7 @@ describe("recordLocalIntegrationResult", () => {
       status: "passed",
       summary: "Merged-code gate passed.",
       evidence: { commands: ["pnpm --filter web typecheck"] },
-    });
+    }, { platformConfig });
 
     expect(mockRecordExternalEvidence).toHaveBeenCalledWith({
       actorUserId: "user-1",
@@ -39,6 +48,7 @@ describe("recordLocalIntegrationResult", () => {
         externalSessionId: "codex-session-1",
         mode: "single-branch",
         status: "passed",
+        capacityCircuitBreaker: "not-applicable",
         evidence: { commands: ["pnpm --filter web typecheck"] },
       },
     });
@@ -68,5 +78,95 @@ describe("recordLocalIntegrationResult", () => {
         details: expect.objectContaining({ status: "blocked_sandbox_drift" }),
       }),
     );
+  });
+
+  it("contracts the pool before recording a failed slot-1 result", async () => {
+    const updatedAt = new Date("2026-07-30T12:00:00.000Z");
+    platformConfig.findUnique.mockResolvedValueOnce({
+      value: {
+        version: 1,
+        requestedCapacity: 2,
+        ceilings: {
+          minAvailableMemoryBytes: 8 * 1024 ** 3,
+          maxSustainedCpuPercent: 75,
+          minDiskFreeBytes: 100 * 1024 ** 3,
+        },
+        rollback: {
+          maxServiceDurationRegressionPercent: 15,
+          maxInfrastructureFailureRatePercent: 5,
+          evidenceMismatchTolerance: 0,
+        },
+      },
+      updatedAt,
+    });
+    platformConfig.updateMany.mockResolvedValueOnce({ count: 1 });
+
+    await recordLocalIntegrationResult({
+      actorUserId: "user-1",
+      provider: "antigravity",
+      externalSessionId: "agy-1",
+      routeContext: "/build",
+      candidateBranch: "feat/slot-one-failure",
+      mode: "single-branch",
+      status: "failed",
+      summary: "Slot 1 failed.",
+      evidence: {
+        slotManifest: { slotKey: "slot-1" },
+      },
+    }, { platformConfig });
+
+    expect(platformConfig.updateMany).toHaveBeenCalledWith({
+      where: {
+        key: "local_ci.sandbox_pool",
+        updatedAt: { equals: updatedAt },
+      },
+      data: {
+        value: expect.objectContaining({ requestedCapacity: 1 }),
+      },
+    });
+    expect(mockRecordExternalEvidence).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        details: expect.objectContaining({
+          capacityCircuitBreaker: "contracted",
+        }),
+      }),
+    );
+  });
+
+  it("does not record evidence when safe contraction loses every concurrency race", async () => {
+    platformConfig.findUnique.mockResolvedValue({
+      value: {
+        version: 1,
+        requestedCapacity: 2,
+        ceilings: {
+          minAvailableMemoryBytes: 8 * 1024 ** 3,
+          maxSustainedCpuPercent: 75,
+          minDiskFreeBytes: 100 * 1024 ** 3,
+        },
+        rollback: {
+          maxServiceDurationRegressionPercent: 15,
+          maxInfrastructureFailureRatePercent: 5,
+          evidenceMismatchTolerance: 0,
+        },
+      },
+      updatedAt: new Date("2026-07-30T12:00:00.000Z"),
+    });
+    platformConfig.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(recordLocalIntegrationResult({
+      actorUserId: "user-1",
+      provider: "codex",
+      externalSessionId: "codex-2",
+      routeContext: "/build",
+      candidateBranch: "feat/slot-one-race",
+      mode: "single-branch",
+      status: "failed",
+      summary: "Slot 1 failed.",
+      evidence: {
+        slotManifest: { slotKey: "slot-1" },
+      },
+    }, { platformConfig })).rejects.toThrow("could not persist");
+
+    expect(mockRecordExternalEvidence).not.toHaveBeenCalled();
   });
 });

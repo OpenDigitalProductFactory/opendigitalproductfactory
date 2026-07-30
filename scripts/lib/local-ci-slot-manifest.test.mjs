@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
-  LOCAL_CI_AUTOMATIC_CAPACITY,
+  LOCAL_CI_DECLARED_CAPACITY,
   LOCAL_CI_SLOT_KEYS,
   assertLocalCiCleanupTarget,
   createLocalCiSlotManifest,
@@ -20,9 +20,9 @@ function fixture() {
   return { rootClone, gitCommonDir, candidateGitDir };
 }
 
-test("declares two physical slots while automatic admission remains singleton", () => {
+test("derives declared capacity from the closed physical slot manifest", () => {
   assert.deepEqual(LOCAL_CI_SLOT_KEYS, ["slot-0", "slot-1"]);
-  assert.equal(LOCAL_CI_AUTOMATIC_CAPACITY, 1);
+  assert.equal(LOCAL_CI_DECLARED_CAPACITY, 2);
 });
 
 test("slot manifests are versioned and every mutable identity is isolated", () => {
@@ -76,6 +76,29 @@ test("slot-0 preserves the proven singleton external ports", () => {
   assert.equal(manifest.portal.port, 3010);
   assert.equal(manifest.portal.url, "http://localhost:3010");
   assert.equal(manifest.postgres.hostPort, 54329);
+});
+
+test("the shared resource contract drives the server-visible slot binding", () => {
+  const slot1 = createLocalCiSlotManifest({ ...fixture(), slotKey: "slot-1" });
+
+  assert.deepEqual(
+    {
+      manifestVersion: slot1.schemaVersion,
+      slotKey: slot1.slotKey,
+      url: slot1.portal.url,
+      ports: [slot1.portal.port, slot1.postgres.hostPort],
+      cleanupCommand:
+        `node scripts/local-ci-slot-cleanup.mjs --slot-key ${slot1.slotKey}`,
+    },
+    {
+      manifestVersion: 1,
+      slotKey: "slot-1",
+      url: "http://localhost:3011",
+      ports: [3011, 54330],
+      cleanupCommand:
+        "node scripts/local-ci-slot-cleanup.mjs --slot-key slot-1",
+    },
+  );
 });
 
 test("slot environment is derived from the manifest without hidden arithmetic", () => {

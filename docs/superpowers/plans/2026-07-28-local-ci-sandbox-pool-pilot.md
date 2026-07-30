@@ -18,6 +18,27 @@ headroom. Admission becomes durable FIFO instead of a one-second polling race;
 each admitted gate receives a complete, typed slot identity; and one setting
 returns the system to the proven singleton behavior.
 
+## Design grounding
+
+- Existing specs/plans reviewed:
+  `docs/superpowers/specs/2026-07-26-sandbox-lease-fencing.md`,
+  `docs/superpowers/specs/2026-07-06-reusable-queueing-substrate-design.md`,
+  `docs/superpowers/specs/2026-07-26-ci-evidence-efficiency-design.md`, and this
+  phased pilot plan.
+- Current code substrate reviewed:
+  `NonProductionEnvironmentLease`, the nonproduction lease MCP pack,
+  `scripts/gate-worktree.mjs`, the local-integration runner, the shared WIP
+  controls, and queue telemetry.
+- Source of truth:
+  PostgreSQL owns durable admission and slot fencing; the versioned slot
+  resource manifest owns runtime identity; `PlatformConfig` owns requested
+  pilot capacity; server-observed host pressure can only contract it.
+- Decision:
+  extend the existing lease lifecycle with manifest-aware admission and a
+  fail-closed capacity broker, keeping singleton behavior as the default and
+  automatic rollback target. Do not create a parallel queue or trust
+  client-supplied capacity evidence.
+
 This plan addresses local gate contention independently of the GitHub UX route
 sweep. The sweep now crawls 201 routes with the same axe/WCAG assertions in
 about 3m08, down from about 11 minutes, but its merge-group job still spends
@@ -300,6 +321,48 @@ Any isolation defect is an immediate capacity-one rollback regardless of speed.
   integration evidence.
 - Run targeted tests, full exact-tree pregate, production build, and the pilot
   comparison report before a retain/tune decision.
+
+### Phase 3 trust-boundary amendment (2026-07-30)
+
+Architecture review of the implementation found two gaps before slot 1 can be
+enabled:
+
+1. admission treated host-pressure fields supplied by the claiming client as
+   the capacity authority; and
+2. the configured rollback thresholds were validated but were not yet consumed
+   by admission or the pilot decision report.
+
+WWMD decision `DI-0BD123ECE81A` selected **block and add the broker now** with
+high confidence (composite 6.579, margin 0.386, no commandment conflict). The
+alternative of accepting client-attested pressure for a reversible pilot was
+rejected. Capacity remains one until all steps below pass.
+
+1. Add a server-owned local-CI capacity broker in the canonical portal. It
+   samples the runtime/Docker/filesystem signals that the portal can observe
+   and pessimistically combines them with the host client sample: minimum
+   available memory and disk, maximum CPU, and fail-closed health booleans. A
+   client may make admission stricter; it cannot report the host safer than the
+   canonical broker observes.
+2. Keep the client sample as evidence because the host process can observe
+   native test/build load that Docker cannot. Slot 1 requires both samples to
+   be fresh and safe. Missing or unmeasurable broker evidence resolves to
+   capacity one.
+3. Move the platform-owned pilot guardrails to one dependency-free JSON
+   contract consumed by the TypeScript policy and Node report. A configured
+   rollback value may be stricter than the platform maximum but can never
+   relax it.
+4. Add a server-side circuit breaker: a failed or drift-blocked slot-1 exact
+   gate contracts `local_ci.sandbox_pool.requestedCapacity` to one while
+   preserving the recorded ceilings and rollback values. This is a safe
+   pessimistic trigger; product and infrastructure failures may both reduce
+   capacity, but neither can leave a suspect second slot admitting work.
+5. Test-drive broker/client pessimistic merging, unmeasurable server evidence,
+   guardrail clamping, and slot-1 failure contraction. Re-run the exact-tree
+   merged-code gate only after this amendment is green.
+
+This amendment extends the existing `PlatformConfig`,
+`NonProductionEnvironmentLease`, and `record_local_integration_result`
+substrates. It adds no queue model, MCP tool family, role, or operator UI.
 
 ## Expected files
 

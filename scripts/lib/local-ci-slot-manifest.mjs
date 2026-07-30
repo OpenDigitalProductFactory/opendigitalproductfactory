@@ -1,24 +1,24 @@
+import { createRequire } from "node:module";
 import { dirname, basename, isAbsolute, join, relative, resolve } from "node:path";
 
-export const LOCAL_CI_SLOT_MANIFEST_SCHEMA_VERSION = 1;
-export const LOCAL_CI_SLOT_KEYS = Object.freeze(["slot-0", "slot-1"]);
+const require = createRequire(import.meta.url);
+const SLOT_RESOURCE_MANIFEST = require(
+  "../../apps/web/lib/nonprod/local-ci-slot-resources.json",
+);
 
-// Phase 2 declares and proves both physical identities, but admission remains
-// on the proven singleton until BI-A4427AB8 explicitly enables the pilot.
-export const LOCAL_CI_AUTOMATIC_CAPACITY = 1;
+export const LOCAL_CI_SLOT_MANIFEST_SCHEMA_VERSION =
+  SLOT_RESOURCE_MANIFEST.schemaVersion;
+export const LOCAL_CI_SLOT_KEYS = Object.freeze(
+  Object.keys(SLOT_RESOURCE_MANIFEST.slots),
+);
+export const LOCAL_CI_DECLARED_CAPACITY = LOCAL_CI_SLOT_KEYS.length;
 
-const SLOT_RESOURCES = Object.freeze({
-  "slot-0": Object.freeze({
-    ordinal: 0,
-    portalPort: 3010,
-    postgresPort: 54329,
-  }),
-  "slot-1": Object.freeze({
-    ordinal: 1,
-    portalPort: 3011,
-    postgresPort: 54330,
-  }),
-});
+const SLOT_RESOURCES = Object.freeze(
+  Object.fromEntries(
+    Object.entries(SLOT_RESOURCE_MANIFEST.slots)
+      .map(([slotKey, resources]) => [slotKey, Object.freeze(resources)]),
+  ),
+);
 
 function requireAbsolutePath(name, value) {
   if (!value || !isAbsolute(value)) {

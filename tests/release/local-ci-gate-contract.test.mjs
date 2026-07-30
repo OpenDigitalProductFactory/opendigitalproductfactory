@@ -294,6 +294,7 @@ esac
     "get_quiescence_status",
     "list_nonprod_environment_leases",
     "claim_nonprod_environment_lease",
+    "renew_nonprod_environment_lease",
     "release_nonprod_environment_lease",
     "record_local_integration_result",
   ]);
@@ -381,6 +382,7 @@ esac
     "get_quiescence_status",
     "list_nonprod_environment_leases",
     "claim_nonprod_environment_lease",
+    "renew_nonprod_environment_lease",
     "release_nonprod_environment_lease",
     "record_local_integration_result",
   ]);
@@ -427,6 +429,9 @@ case "$tool" in
   claim_nonprod_environment_lease)
     printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-Q\\"}"}]}}'
     ;;
+  renew_nonprod_environment_lease)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-Q\\"}"}]}}'
+    ;;
   record_local_integration_result)
     printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":false,\\"error\\":\\"portal_quiescing\\",\\"message\\":\\"Mutating MCP write refused during draining.\\",\\"data\\":{\\"level\\":\\"draining\\",\\"runId\\":\\"QR-Q\\",\\"retryAfterSeconds\\":30,\\"writesRefused\\":true}}"}],"structuredContent":{"error":"portal_quiescing","level":"draining","runId":"QR-Q","retryAfterSeconds":30,"writesRefused":true},"isError":true}}'
     ;;
@@ -468,6 +473,7 @@ esac
     "get_quiescence_status",
     "list_nonprod_environment_leases",
     "claim_nonprod_environment_lease",
+    "renew_nonprod_environment_lease",
     "release_nonprod_environment_lease",
     "record_local_integration_result",
   ]);
@@ -736,6 +742,9 @@ EOF
 )"
 case "$tool" in
   claim_nonprod_environment_lease)
+    printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-OFFLINE\\"}"}]}}'
+    ;;
+  renew_nonprod_environment_lease)
     printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\"success\\":true,\\"entityId\\":\\"NPEL-OFFLINE\\"}"}]}}'
     ;;
   record_local_integration_result)
