@@ -68,3 +68,8 @@ automation tracked as BI-0AA828E3).
   the gap rather than submitting orders.
 - Observation hooks (attention counts, coworker proposals, decision-ledger
   reads) are manual follow-ups today; candidates for a `--observe` pass.
+- Coworkers read the demand signal the harness generates through the
+  `list_storefront_activity` tool (orders with an item-quantity rollup,
+  reservations, inquiries; `storefront_read` grant) — the read side of the
+  proactive restocking loop. Acting on it (draft purchase orders) still awaits
+  the ingredient-stock substrate (BI-SPEND-003).

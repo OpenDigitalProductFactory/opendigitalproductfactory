@@ -688,7 +688,7 @@
     },
     {
       "key": "enrichment_write",
-      "description": "Run software/asset enrichment on demand — resolve a product's CatalogIdentity CPE + endoflife.date support-lifecycle and flag items for re-enrichment (EP-ASSET-INTELLIGENCE). Scoped finer than registry_write so enrichment mutation is separately auditable.",
+      "description": "Run software/asset enrichment on demand \u2014 resolve a product's CatalogIdentity CPE + endoflife.date support-lifecycle and flag items for re-enrichment (EP-ASSET-INTELLIGENCE). Scoped finer than registry_write so enrichment mutation is separately auditable.",
       "category": "explore",
       "sensitivity": "internal",
       "honored_by_tools": [
@@ -944,6 +944,16 @@
       "implies": [
         "marketing_read"
       ]
+    },
+    {
+      "key": "storefront_read",
+      "description": "Read guest-facing storefront activity: orders (with item-quantity rollups), reservations, and inquiries.",
+      "category": "consume",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "list_storefront_activity"
+      ],
+      "implies": []
     },
     {
       "key": "order_create",
