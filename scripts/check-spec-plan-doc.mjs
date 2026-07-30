@@ -37,26 +37,15 @@
 
 import { execFileSync } from "node:child_process";
 import { fetchOriginMainSharedSafe } from "./lib/git-fetch-shared-safe.mjs";
-
-const ATTESTATION_RE = /Process-Spine-Decision:/i;
-
-// ── What COUNTS as a substantial implementation surface (triggers the gate) ──
-// New source modules and routes are a high-signal, low-false-positive marker of
-// a new capability/contract that deserves a spec/plan/doc touch. We trigger on
-// NEW files under these roots, never on edits to existing ones (those are
-// covered by the large-rewrite threshold below).
-const NEW_SOURCE_FILE_RE =
-  /^(apps\/web\/lib\/.*\.(ts|tsx)|apps\/web\/app\/.*\/(page|route)\.(ts|tsx)|packages\/[^/]+\/src\/.*\.(ts|tsx)|packages\/db\/prisma\/migrations\/.*\/migration\.sql)$/;
-
-// A large in-place rewrite of existing source is also a substantial change even
-// with no new file. Count added non-test source lines across the diff; over the
-// threshold the gate fires. Tuned conservatively to avoid noise on small fixes.
-const ADDED_SOURCE_LINE_THRESHOLD = 120;
-const SOURCE_LINE_FILE_RE = /^(apps\/web|packages\/[^/]+\/src)\/.*\.(ts|tsx)$/;
-
-// ── What SATISFIES the gate (durable-knowledge artifact touched) ─────────────
-const DOC_ARTIFACT_RE =
-  /^(docs\/.*\.(md|html)|AGENTS\.md|.*\/AGENTS\.md|docs\/founder-kernel\/wiki\/principles\/.*\.md|packages\/dpf-skill-pack\/skills\/.*\/SKILL\.md|skills\/.*\.skill\.md)$/;
+// Canonical sensitivity constants (single source, shared with the gate-context
+// pack; the dpf-skill-pack precheck hook keeps a drift-guard-pinned copy).
+import {
+  ADDED_SOURCE_LINE_THRESHOLD,
+  DOC_ARTIFACT_RE,
+  NEW_SOURCE_FILE_RE,
+  PROCESS_SPINE_ATTESTATION_RE as ATTESTATION_RE,
+  SOURCE_LINE_FILE_RE,
+} from "./lib/gate-sensitivity.mjs";
 
 // Test/story/generated scaffolding is never "implementation surface" for this
 // gate (its own tests, fixtures, snapshots don't imply a missing spec/doc).

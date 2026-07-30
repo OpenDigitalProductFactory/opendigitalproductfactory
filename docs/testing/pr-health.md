@@ -47,6 +47,28 @@ coverage, or the UX workflow loses its callable contract. Use
 manifest with live `main` protection. `pnpm merge-policy:apply` changes only required status
 checks; use it after new contexts have proven green on `main`, never before.
 
+## Know the constraints before you write: `pnpm gate:context`
+
+`pr:health` and CI tell you what already failed; the **gate-context pack**
+(BI-2677A465) tells you what will be enforced, before generation or push. It
+derives — from the same registries CI runs, never a hand-written list — the
+constraints that apply to the current worktree diff (committed + staged +
+unstaged + untracked, vs the `origin/main` merge base):
+
+- required attestation trailers for this diff shape (Process-Spine, Design
+  Grounding, UX-Fit, Seed-Fit body line, Data-Impact manifest);
+- module-size caps for touched baselined files and budgets for new modules;
+- shrink-only prose/style ratchet values frozen for touched files;
+- derived artifacts to regenerate in the same change;
+- route budgets: absolute budgets + the four generated companions for
+  net-new routes, frozen word/structure budgets for pre-existing ones;
+- migration immutability and safety-attestation contracts.
+
+Run it before writing code and again before pushing; `--json` emits the
+machine-readable pack (`scripts/lib/gate-context.mjs` is the single source —
+the Build Studio prompt section and MCP tool consume the same module). The
+pack is advisory context: CI gates remain the only authority.
+
 ## Tests & CI
 
 The pure verdict (`evaluatePrHealth()`) is unit-tested in [`scripts/pr-health.test.mjs`](../../scripts/pr-health.test.mjs) and runs in CI as the **PR Health Logic** job (`node --test`). The script's GitHub I/O is exercised by running it against live PRs; it is not run in CI (it would be circular).

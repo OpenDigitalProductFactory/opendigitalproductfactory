@@ -22,9 +22,12 @@
 import { readFileSync } from "node:fs";
 
 // A NEW file under these roots is a new capability/contract worth documenting.
-// Mirrors NEW_SOURCE_FILE_RE in scripts/check-spec-plan-doc.mjs.
+// Mirrors NEW_SOURCE_FILE_RE in scripts/lib/gate-sensitivity.mjs (the pack is
+// distributed outside the repo, so this stays a dependency-free copy) —
+// scripts/gate-context.test.mjs drift-guards pin this mirror's behavior to
+// the canonical export; change them together.
 const NEW_SOURCE_FILE_RE =
-  /^(apps\/web\/lib\/.*\.(ts|tsx)|apps\/web\/app\/.*\/(page|route)\.(ts|tsx)|packages\/[^/]+\/src\/.*\.(ts|tsx))$/;
+  /^(apps\/web\/lib\/.*\.(ts|tsx)|apps\/web\/app\/.*\/(page|route)\.(ts|tsx)|packages\/[^/]+\/src\/.*\.(ts|tsx)|packages\/db\/prisma\/migrations\/.*\/migration\.sql)$/;
 const EXCLUDE_RE = /(\.(test|spec|stories)\.(ts|tsx)$|__tests__\/|\.d\.ts$|\/generated\/)/;
 
 const GUIDANCE =

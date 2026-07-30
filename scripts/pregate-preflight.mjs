@@ -67,6 +67,7 @@ export async function main() {
       process.stderr.write(`  - ${entry.name}: ${entry.failedCommand}\n`);
     }
     process.stderr.write(
+      `[pregate-preflight] see every constraint that applies to this diff: pnpm gate:context\n` +
       `[pregate-preflight] emergency skip (recorded honesty, CI still enforces): set ${PREFLIGHT_SKIP_ENV}="<why>"\n`,
     );
     process.exitCode = 1;
