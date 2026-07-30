@@ -54,15 +54,15 @@ const catalog: CoworkerCatalog = {
 
 catalog.offers = [
   {
-    offerId: "offer-arcamanus-legal-packet",
+    offerId: "offer-example-works-legal-packet",
     serviceId: "svc-legal-packets",
     serviceName: "Prepare attorney-review packet",
-    name: "Arcamanus/DPF legal packet review",
+    name: "Example Works legal packet review",
     summary: "Internal, high-risk, attorney-review-required offer.",
     description: null,
     status: "active",
     version: "1.0.0",
-    providerOrganization: "Arcamanus",
+    providerOrganization: "Example Works",
     availabilityScope: "internal",
     riskTier: "high",
     authorityBoundary: "proposal-only",
@@ -87,7 +87,7 @@ describe("CoworkerCatalogView", () => {
     const html = renderToStaticMarkup(<CoworkerCatalogView catalog={catalog} />);
 
     expect(html).toContain("Coworker Service Catalog");
-    expect(html).toContain("Arcamanus/DPF legal packet review");
+    expect(html).toContain("Example Works legal packet review");
     expect(html).toContain("Legal Operations Counsel");
     expect(html).toContain("Service");
     expect(html).toContain("Offer");
@@ -111,7 +111,7 @@ describe("CoworkerCatalogView", () => {
     expect(presentation).toMatchObject({
       provider: {
         primary: "Legal Operations Counsel",
-        secondary: "Arcamanus",
+        secondary: "Example Works",
         secondaryLabel: "Provider organization",
       },
       risk: {
@@ -129,7 +129,7 @@ describe("CoworkerCatalogView", () => {
     expect(presentation.mobileFacts).toEqual(
       expect.arrayContaining([
         { label: "Version", value: "1.0.0" },
-        { label: "Provider organization", value: "Arcamanus" },
+        { label: "Provider organization", value: "Example Works" },
         {
           label: "Availability",
           value: "internal; Digital Product Factory",
