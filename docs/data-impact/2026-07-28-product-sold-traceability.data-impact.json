@@ -1,0 +1,134 @@
+{
+  "version": "1",
+  "accountableOwner": "goods-and-services-for-sale",
+  "affectedCopies": [
+    "StorefrontOrder and line items remain transaction authorities",
+    "ProductSold is the canonical commercial occurrence projection",
+    "Consumers, entitlements, and fulfillment appear only when source evidence exists",
+    "Product Direction consumes traceable aggregate evidence rather than invented demand"
+  ],
+  "migration": {
+    "name": "20260728190000_add_product_sold_traceability",
+    "backfill": "Only StorefrontOrder.organizationId is derived from its existing StorefrontConfig relation. New sold-product tables begin empty; no sale, party, subscriber, entitlement, component allocation, or fulfillment instance is inferred."
+  },
+  "tests": [
+    "packages/db/src/product-sold-traceability-schema.test.ts",
+    "apps/web/lib/products/product-sold.test.ts",
+    "apps/web/lib/products/product-sold-query.test.ts",
+    "apps/web/components/storefront-admin/ProductSoldTracePanel.test.tsx"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:product-sold",
+      "prismaModel": "ProductSold",
+      "lifecycleDisposition": "Commercial occurrences are retained as traceability records and follow the owning organization/product data lifecycle; corrections preserve source provenance rather than inventing replacements.",
+      "fields": [
+        {
+          "fieldId": "data:product-sold#organization-product-catalog-source",
+          "resolution": "governed",
+          "reason": "Anchors each occurrence to canonical business Product/catalog identity and a real source event.",
+          "provenance": "BI-574638B7; Product Management Operating Loop design section 7",
+          "flags": ["organization"],
+          "fieldPolicy": "Organization-scoped canonical relations and typed source references are required; absence of a source means no ProductSold row."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:product-sold-evidence",
+      "prismaModel": "ProductSoldEvidence",
+      "lifecycleDisposition": "Evidence links are retained with the ProductSold occurrence and remain source-addressable for reconciliation.",
+      "fields": [
+        {
+          "fieldId": "data:product-sold-evidence#source-kind-reference",
+          "resolution": "governed",
+          "reason": "Makes customer, booking, order, subscription, and fulfillment evidence explicit and auditable.",
+          "provenance": "BI-574638B7 evidence boundary",
+          "flags": [],
+          "fieldPolicy": "Typed source kind plus stable reference; no placeholder evidence."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:product-sold-party",
+      "prismaModel": "ProductSoldParty",
+      "lifecycleDisposition": "Party links are retained only with their source-backed occurrence and follow canonical party retention policy.",
+      "fields": [
+        {
+          "fieldId": "data:product-sold-party#party-role-reference",
+          "resolution": "governed",
+          "reason": "Represents a real consumer or related party without fabricating subscriber or customer identity.",
+          "provenance": "BI-574638B7 provider-consumer invariant",
+          "flags": ["subject"],
+          "fieldPolicy": "Optional canonical party/reference only; unknown consumers remain absent."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:product-sold-entitlement",
+      "prismaModel": "ProductSoldEntitlement",
+      "lifecycleDisposition": "Entitlements are effective-dated evidence retained with the commercial occurrence; expiration does not erase history.",
+      "fields": [
+        {
+          "fieldId": "data:product-sold-entitlement#kind-reference-period",
+          "resolution": "governed",
+          "reason": "Records only a real entitlement created by a source transaction or subscription.",
+          "provenance": "BI-574638B7 entitlement invariant",
+          "flags": ["subject"],
+          "fieldPolicy": "No entitlement row is created from catalog availability or assumed consumer need."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:product-fulfillment-instance",
+      "prismaModel": "ProductFulfillmentInstance",
+      "lifecycleDisposition": "Fulfillment instances retain operational evidence and status history with the sold-product occurrence.",
+      "fields": [
+        {
+          "fieldId": "data:product-fulfillment-instance#source-status-period",
+          "resolution": "governed",
+          "reason": "Separates the commercial promise from an observed delivery instance.",
+          "provenance": "BI-574638B7 fulfillment boundary",
+          "flags": [],
+          "fieldPolicy": "Created only from real booking, order, rental, subscription, or fulfillment evidence."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:product-sold-component-allocation",
+      "prismaModel": "ProductSoldComponentAllocation",
+      "lifecycleDisposition": "Component allocations follow their ProductSold occurrence and preserve the explicitly sold bundle decomposition.",
+      "fields": [
+        {
+          "fieldId": "data:product-sold-component-allocation#component-quantity",
+          "resolution": "governed",
+          "reason": "Traces deliberately sold package components without generating independent sales.",
+          "provenance": "BI-574638B7 bundle traceability",
+          "flags": [],
+          "fieldPolicy": "Allocation requires canonical component identity and explicit source-backed quantity."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:storefront-order-product-sold-links",
+      "prismaModel": "StorefrontOrder and StorefrontOrderLineItem",
+      "lifecycleDisposition": "Compatibility scope and trace links follow existing order retention and do not replace transaction authority.",
+      "fields": [
+        {
+          "fieldId": "data:storefront-order-product-sold-links#organization-catalog",
+          "resolution": "governed",
+          "reason": "Connects existing transaction rows to the organization and catalog identities they already evidence.",
+          "provenance": "BI-574638B7 expand-first migration",
+          "flags": ["organization"],
+          "fieldPolicy": "Organization is derived only from the existing storefront relation; all other new links are nullable."
+        }
+      ]
+    }
+  ]
+}
