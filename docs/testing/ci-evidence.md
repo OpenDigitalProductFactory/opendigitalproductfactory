@@ -184,11 +184,16 @@ above the policy threshold; and every `merge_group`, `push`,
 `workflow_dispatch`, or scheduled event. The docs-only compatibility exemption
 remains unchanged because it does not narrow runtime evidence.
 
-This is observation only. The planner continues to emit the existing `heavy`
-and `mobile` compatibility outputs, but it does not skip any test, typecheck,
-build, migration, guard, or merge-queue proof. Activation is owned by
-`BI-4527C1DA` and still requires the calibration and 100% observed-failure
-recall conditions above.
+Affected-test and affected-route selection remain observation only. The planner
+continues to emit the existing `heavy` and `mobile` compatibility outputs.
+The planner also emits a dedicated `portal_ux_required` workflow output. It is
+`false` only for docs-only and `apps/mobile`-only pull requests, the two audited
+scopes that cannot alter the rendered web portal. Those changes short-circuit
+the reusable UX sweep before runner and Postgres allocation. This output is
+deliberately separate from `heavy` so future build/test scope changes cannot
+silently weaken portal evidence. Activation of broader source selection is
+owned by `BI-4527C1DA` and still requires the calibration and 100% observed-
+failure recall conditions above.
 
 ## Exact-tree production-build reuse
 
@@ -231,10 +236,14 @@ about one minute to PR feedback by serializing setup behind the build. The
 workflow retains only `actions: read` plus `contents: read`. See
 [Store and share data with workflow artifacts](https://docs.github.com/en/actions/tutorials/store-and-share-data).
 
-Reuse is an optimization, never an exemption. On `heavy=false` changes, or
-when packaging/upload does not produce a usable artifact, the reusable runtime
-starts the normal local production build immediately. Missing, expired,
-incomplete, corrupt, or identity-mismatched
+Reuse is an optimization, never an exemption. On an explicitly classified
+non-portal pull request (`portal_ux_required=false`), CI skips the reusable
+sweep job before runner and Postgres allocation; the stable `UX Route Budget
+Sweep` aggregate accepts that skip only for the exact planner signal.
+`merge_group`, push, workflow dispatch, missing/malformed scope, and all portal
+changes remain exhaustive. When packaging/upload does not produce a usable
+artifact, the reusable runtime starts the normal local production build
+immediately. Missing, expired, incomplete, corrupt, or identity-mismatched
 evidence removes any partial `.next` output and runs the normal local production
 build. Packaging or upload failure is also non-authoritative: `Production Build`
 retains its successful result and UX rebuilds locally. Manual baseline

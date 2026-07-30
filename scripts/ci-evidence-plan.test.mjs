@@ -12,6 +12,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { after, before, describe, it } from "node:test";
 
+import { githubOutputsForPlan } from "./ci-evidence-plan.mjs";
+
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const cliPath = join(repoRoot, "scripts", "ci-evidence-plan.mjs");
 let fixture;
@@ -100,9 +102,35 @@ describe("ci-evidence-plan CLI", () => {
     assert.equal(result.status, 0, result.stderr);
     const output = readFileSync(githubOutput, "utf8");
     assert.match(output, /^heavy=true$/m);
+    assert.match(output, /^portal_ux_required=true$/m);
     assert.match(output, /^mobile=false$/m);
     assert.match(output, /^evidence_tier=exhaustive$/m);
     assert.match(output, /^evidence_plan_digest=[a-f0-9]{64}$/m);
+  });
+
+  it("keeps portal UX scope independent from the broad heavy-CI switch", () => {
+    const runtime = githubOutputsForPlan({
+      scope: { docsOnly: false, mobileOnly: false, heavy: true, mobile: false },
+      evidenceTier: "exhaustive",
+      digest: "a".repeat(64),
+      selection: { selectedPercentage: 100 },
+    });
+    const docs = githubOutputsForPlan({
+      scope: { docsOnly: true, mobileOnly: false, heavy: false, mobile: false },
+      evidenceTier: "affected",
+      digest: "b".repeat(64),
+      selection: { selectedPercentage: 0 },
+    });
+    const mobile = githubOutputsForPlan({
+      scope: { docsOnly: false, mobileOnly: true, heavy: false, mobile: true },
+      evidenceTier: "affected",
+      digest: "c".repeat(64),
+      selection: { selectedPercentage: 0 },
+    });
+
+    assert.match(runtime, /^portal_ux_required=true$/m);
+    assert.match(docs, /^portal_ux_required=false$/m);
+    assert.match(mobile, /^portal_ux_required=false$/m);
   });
 
   it("turns malformed optional advice into exhaustive evidence instead of aborting", () => {

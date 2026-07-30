@@ -39,6 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       heavy: ${{ steps.decide.outputs.heavy }}
+      portal_ux_required: ${{ steps.decide.outputs.portal_ux_required }}
       evidence_plan_digest: ${{ steps.decide.outputs.evidence_plan_digest }}
       evidence_tier: ${{ steps.decide.outputs.evidence_tier }}
     steps:
@@ -413,22 +414,36 @@ jobs:
       actions: read
       contents: read
     with:
+      # The evidence planner is authoritative. Only its exact non-portal value
+      # (docs-only or app-mobile-only) suppresses the runtime; missing,
+      # malformed, or unknown values fail safe to the exhaustive sweep.
+      run_sweep: ${{ needs.changes.outputs.portal_ux_required != 'false' }}
       reuse_current_run_build: ${{ needs.changes.outputs.heavy == 'true' }}
       workers: "2"
 
   # Preserve the stable branch-protection context even though the runtime now
-  # lives in a reusable workflow. `always()` converts dependency skip/failure
-  # into an explicit red check instead of leaving merge queue status ambiguous.
+  # lives in a reusable workflow. An explicit non-portal classification may skip
+  # the runtime before runner allocation; every other skip/failure is red.
   ux-route-sweep:
     name: UX Route Budget Sweep
     runs-on: ubuntu-latest
     if: always()
-    needs: ux-route-sweep-runtime
+    needs: [changes, ux-route-sweep-runtime]
     steps:
-      - name: Assert the route runtime passed
+      - name: Assert the planned route evidence completed
         env:
+          PORTAL_UX_REQUIRED: ${{ needs.changes.outputs.portal_ux_required }}
           RUNTIME_RESULT: ${{ needs.ux-route-sweep-runtime.result }}
         run: |
+          if [ "$PORTAL_UX_REQUIRED" = "false" ]; then
+            if [ "$RUNTIME_RESULT" != "skipped" ]; then
+              echo "::error::Non-portal UX runtime concluded $RUNTIME_RESULT instead of skipped"
+              exit 1
+            fi
+            echo "Non-portal PR: UX runtime allocation was correctly skipped"
+            exit 0
+          fi
+
           if [ "$RUNTIME_RESULT" != "success" ]; then
             echo "::error::UX Route Sweep Runtime concluded $RUNTIME_RESULT"
             exit 1

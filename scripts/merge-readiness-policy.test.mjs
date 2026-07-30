@@ -14,8 +14,10 @@ const manifest = {
   workflows: { ci: "ci.yml", ux: "ux.yml" },
   aggregateJobId: "merge-readiness",
   aggregateJobName: "Merge Readiness",
-  uxJobId: "sweep",
+  uxJobId: "ux-route-sweep",
   uxJobName: "UX Route Budget Sweep",
+  uxRuntimeJobId: "sweep",
+  uxRuntimeJobName: "UX Route Sweep Runtime",
 };
 
 test("dependency evaluator accepts only success and intentional skips", () => {
@@ -36,9 +38,15 @@ test("dependency evaluator accepts only success and intentional skips", () => {
 });
 
 test("workflow conformance requires complete aggregate coverage and merge-group triggers", () => {
-  const ci = `on:\n  merge_group:\njobs:\n  build:\n    name: Build\n  lint:\n    name: Lint\n  merge-readiness:\n    name: Merge Readiness\n    needs:\n      - build\n`;
-  const ux = `on:\n  merge_group:\njobs:\n  sweep:\n    name: UX Route Budget Sweep\n`;
-  assert.deepEqual(parseWorkflowJobIds(ci), ["build", "lint", "merge-readiness"]);
+  const ci = `on:\n  merge_group:\njobs:\n  build:\n    name: Build\n  lint:\n    name: Lint\n  ux-route-sweep-runtime:\n    name: UX Route Sweep Runtime\n  ux-route-sweep:\n    name: UX Route Budget Sweep\n  merge-readiness:\n    name: Merge Readiness\n    needs:\n      - build\n      - ux-route-sweep-runtime\n      - ux-route-sweep\n`;
+  const ux = `on:\n  workflow_call:\njobs:\n  sweep:\n    name: UX Route Sweep Runtime\n`;
+  assert.deepEqual(parseWorkflowJobIds(ci), [
+    "build",
+    "lint",
+    "ux-route-sweep-runtime",
+    "ux-route-sweep",
+    "merge-readiness",
+  ]);
   assert.deepEqual(validateWorkflowConformance({ manifest, ciSource: ci, uxSource: ux }), [
     "aggregate is missing CI jobs: lint",
   ]);

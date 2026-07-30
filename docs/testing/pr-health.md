@@ -36,7 +36,11 @@ Branch protection uses the smaller, versioned contract in
 
 - **Merge Readiness** aggregates every job in `.github/workflows/ci.yml`;
 - **UX Route Budget Sweep** is the stable aggregate for the reusable
-  browser/Postgres runtime called by CI; and
+  browser/Postgres runtime called by CI. It accepts a skipped runtime only when
+  the authoritative planner says the change is non-portal
+  (`portal_ux_required=false`, limited to docs-only and `apps/mobile`-only);
+  all unknown, portal, and merge-group scopes require a successful exhaustive
+  run; and
 - **DCO** proves commit sign-off.
 
 CI runs for `pull_request` and `merge_group`, while the UX implementation is a

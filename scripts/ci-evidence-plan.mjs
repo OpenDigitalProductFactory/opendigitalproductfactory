@@ -136,16 +136,26 @@ function writeText(path, contents) {
   writeFileSync(path, contents);
 }
 
-function writeGitHubOutputs(path, plan) {
-  if (!path) return;
-  appendFileSync(path, [
+export function githubOutputsForPlan(plan) {
+  // Keep the portal UX decision independent from the broader heavy-CI switch.
+  // Today docs-only and app-mobile-only changes are the two scopes that cannot
+  // alter the rendered web portal. Deriving the dedicated output from those
+  // existing audited scope fields preserves the calibrated plan digest.
+  const portalUxRequired = !plan.scope.docsOnly && !plan.scope.mobileOnly;
+  return [
     `heavy=${plan.scope.heavy}`,
+    `portal_ux_required=${portalUxRequired}`,
     `mobile=${plan.scope.mobile}`,
     `evidence_tier=${plan.evidenceTier}`,
     `evidence_plan_digest=${plan.digest}`,
     `evidence_selected_percentage=${plan.selection.selectedPercentage}`,
     "",
-  ].join("\n"));
+  ].join("\n");
+}
+
+function writeGitHubOutputs(path, plan) {
+  if (!path) return;
+  appendFileSync(path, githubOutputsForPlan(plan));
 }
 
 export function runEvidencePlannerCli(args = process.argv.slice(2)) {
