@@ -128,6 +128,16 @@ export const ROUTE_SWEEP_EXCLUSIONS = {
   "/platform/schedule": "wall-clock-collection",
   "/workspace/calendar": "wall-clock-collection",
   "/platform/development/change-lanes": "wall-clock-collection",
+  // Workspace HOME has the same defect as its /workspace/calendar child, which was
+  // already excluded: loadPlatformWorkspaceHomeData derives a calendar window from
+  // the wall clock — `new Date(now.getFullYear(), now.getMonth(), -7)` through
+  // `new Date(now.getFullYear(), now.getMonth() + 1, 7)` — so which calendar
+  // entities are visible on arrival moves with the date, and the frozen word
+  // baseline drifts on untouched code (measured: 199→211 words on a run of
+  // BI-F2EC4699, whose diff touches this route only for net-zero copy). Same
+  // signature and magnitude as the /platform/schedule 331→342 case above. Remove
+  // once the fixture can pin the app-visible clock (BI-0C6C2153).
+  "/workspace": "wall-clock-collection",
 } as const satisfies Record<string, RouteSweepExclusionReason>;
 
 export type RouteShellPolicy = {
