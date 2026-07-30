@@ -39,7 +39,11 @@ export function DemandMiniButton({
 export function DemandEvidenceCount({ count }: { count: number }) {
   const label = `${count} linked evidence source${count === 1 ? "" : "s"}`;
   return (
-    <span className="text-dpf-caption text-[var(--dpf-muted)]" title={label} aria-label={label}>
+    <span
+      className="text-dpf-caption text-[var(--dpf-muted)]"
+      title={label}
+      aria-label={`Evidence: ${count}`}
+    >
       ({count})
     </span>
   );

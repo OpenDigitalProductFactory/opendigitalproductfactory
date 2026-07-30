@@ -272,7 +272,7 @@ export function DemandActivationControls({ item }: { item: DemandItemView }) {
           disabled={pending}
           tone="muted"
           title="Link reviewed evidence without copying the source fact"
-          ariaLabel={showEvidence ? "Cancel evidence" : "Link evidence"}
+          ariaLabel={showEvidence ? "Cancel" : "Evidence"}
         >
           {showEvidence ? "Cancel" : "Evidence"}
         </MiniButton>

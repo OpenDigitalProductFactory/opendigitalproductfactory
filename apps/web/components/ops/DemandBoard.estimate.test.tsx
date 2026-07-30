@@ -176,7 +176,8 @@ describe("DemandActivationControls", () => {
         })}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /Link evidence/i }));
+    expect(screen.getByLabelText("Evidence: 0")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^Evidence$/i }));
     fireEvent.change(screen.getByLabelText(/Stable reference/i), {
       target: { value: "booking-42" },
     });
