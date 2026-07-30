@@ -72,7 +72,9 @@ export async function proposeProductResearchAction(
 ): Promise<ProductIntelligenceActionResult> {
   try {
     const authorized = await resolveAuthorizedProduct(input.productId);
-    if ("error" in authorized) return { ok: false, error: authorized.error };
+    if ("error" in authorized) {
+      return { ok: false, error: authorized.error ?? "Not authenticated" };
+    }
     const result = await proposeResearch({
       organizationId: authorized.context.provider.id,
       productLineId: authorized.product.productLineId,
@@ -98,7 +100,9 @@ export async function createProductIntelligenceWatchAction(
 ): Promise<ProductIntelligenceActionResult> {
   try {
     const authorized = await resolveAuthorizedProduct(input.productId);
-    if ("error" in authorized) return { ok: false, error: authorized.error };
+    if ("error" in authorized) {
+      return { ok: false, error: authorized.error ?? "Not authenticated" };
+    }
     const result = await createProductIntelligenceWatch({
       ownerUserId: authorized.userId,
       organizationId: authorized.context.provider.id,

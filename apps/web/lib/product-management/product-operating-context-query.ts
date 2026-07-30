@@ -22,7 +22,7 @@ import {
   recordOf,
   stringOf,
   type BattlecardRow,
-  type DependencyRow,
+  type DependencyRow, type DigitalProductRow,
   type EaElementRow,
   type KnowledgeArticleRow,
   type ProductLineRow,

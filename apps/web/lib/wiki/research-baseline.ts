@@ -27,7 +27,7 @@ type BaselineRow = {
 
 export type ResearchBaselineClient = {
   rawSource: {
-    findMany: (args: unknown) => Promise<unknown>;
+    findMany: (args: any) => Promise<unknown>;
   };
 };
 

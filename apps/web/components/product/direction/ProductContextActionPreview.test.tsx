@@ -31,8 +31,10 @@ describe("ProductContextActionPreview", () => {
     expect(screen.getByText("backlog-item, research-proposal")).toBeTruthy();
     expect(screen.getByText(/None from this page/)).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: "Continue to Delivery" }),
-    ).toHaveAttribute("href", "/delivery?view=flow");
+      screen
+        .getByRole("link", { name: "Continue to Delivery" })
+        .getAttribute("href"),
+    ).toBe("/delivery?view=flow");
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(

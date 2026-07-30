@@ -25,9 +25,9 @@ function makeFakeDb(seed: Row[] = []) {
             (r) =>
               (w.proposalId === undefined || r.proposalId === w.proposalId) &&
               (w.organizationId === undefined || r.organizationId === w.organizationId) &&
-              (w.digitalProductId === undefined || r.digitalProductId === w.digitalProductId) &&
-              (w.productLineId === undefined || r.productLineId === w.productLineId) &&
-              (w.businessProductId === undefined || r.businessProductId === w.businessProductId) &&
+              (w.digitalProductId === undefined || (r.digitalProductId ?? null) === w.digitalProductId) &&
+              (w.productLineId === undefined || (r.productLineId ?? null) === w.productLineId) &&
+              (w.businessProductId === undefined || (r.businessProductId ?? null) === w.businessProductId) &&
               (w.topic === undefined || r.topic === w.topic) &&
               (w.status === undefined || r.status === w.status),
           ) ?? null

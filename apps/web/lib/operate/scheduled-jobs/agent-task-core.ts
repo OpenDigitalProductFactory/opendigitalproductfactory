@@ -11,7 +11,7 @@
 // A "use server" file exports only client-callable actions, so a userId
 // parameter there would be client-spoofable — hence this separate core.
 
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { randomUUID } from "crypto";
 import { SCHEDULING_MAP } from "@/lib/operate/scheduled-jobs/scheduling-map";
 import { occupiedTicks, deconflictCron } from "@/lib/operate/scheduled-jobs/scheduling-allocator";
@@ -168,7 +168,7 @@ export async function scheduleAgentTaskFor(
       productLineId: productScope?.productLineId ?? null,
       businessProductId: productScope?.businessProductId ?? null,
       taskKind: input.taskKind ?? null,
-      taskConfig: input.taskConfig ?? undefined,
+      taskConfig: input.taskConfig as Prisma.InputJsonValue | undefined,
       nextRunAt,
     },
   });

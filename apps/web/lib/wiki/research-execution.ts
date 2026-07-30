@@ -29,7 +29,7 @@ export type RunResearchExecutionInput = {
   query: string;
 };
 
-type ResearchOutcome = {
+export type ResearchOutcome = {
   text: string;
   sources: { title: string; url: string; retrievedAt: Date }[];
   empty: boolean;

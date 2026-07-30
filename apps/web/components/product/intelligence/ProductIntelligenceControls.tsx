@@ -27,7 +27,7 @@ export function ProductIntelligenceControls({
   const [stage, setStage] = useState<Stage>("edit");
   const [topic, setTopic] = useState("");
   const [query, setQuery] = useState("");
-  const [schedule, setSchedule] = useState(CADENCES[0].value);
+  const [schedule, setSchedule] = useState<string>(CADENCES[0].value);
   const [result, setResult] = useState<ProductIntelligenceActionResult | null>(
     null,
   );

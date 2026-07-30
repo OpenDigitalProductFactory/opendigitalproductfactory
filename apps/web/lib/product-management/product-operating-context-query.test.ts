@@ -217,13 +217,13 @@ describe("loadProductOperatingContext", () => {
     expect(context.intelligence).toMatchObject({
       availability: "unavailable",
       items: [],
-      unavailableReason:
+      reason:
         "Intelligence is outside the commercial-summary query profile.",
     });
     expect(context.architecture).toMatchObject({
       availability: "unavailable",
       items: [],
-      unavailableReason:
+      reason:
         "Architecture is outside the commercial-summary query profile.",
     });
   });

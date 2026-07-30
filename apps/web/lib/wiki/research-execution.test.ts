@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   runResearchExecution,
+  type ResearchOutcome,
   type ResearchExecutionDeps,
 } from "./research-execution";
 
@@ -20,7 +21,7 @@ function makeDeps(over: Partial<ResearchExecutionDeps> = {}): {
         }),
       },
     },
-    research: vi.fn(async () => ({
+    research: vi.fn(async (): Promise<ResearchOutcome> => ({
       text: "Findings: the market is fragmented.\n\n## Sources\n- [a](https://ex.com/a)",
       sources: [
         {
@@ -86,7 +87,7 @@ describe("runResearchExecution", () => {
 
   it("marks executed with no corpus write when research finds nothing", async () => {
     const { deps, updates } = makeDeps({
-      research: vi.fn(async () => ({
+      research: vi.fn(async (): Promise<ResearchOutcome> => ({
         text: "",
         sources: [],
         empty: true,
@@ -154,7 +155,7 @@ describe("runResearchExecution", () => {
 
   it("records provider unavailability distinctly from a valid empty search", async () => {
     const { deps, updates } = makeDeps({
-      research: vi.fn(async () => ({
+      research: vi.fn(async (): Promise<ResearchOutcome> => ({
         text: "",
         sources: [],
         empty: true,

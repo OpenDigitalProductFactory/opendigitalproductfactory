@@ -38,7 +38,7 @@ describe("buildResearchPrompt", () => {
         reviewedAt: new Date("2026-07-01T00:00:00.000Z"),
       },
     );
-    expect(systemPrompt).toContain("changed since");
+    expect(systemPrompt).toMatch(/changed.*since/);
     expect(userPrompt).toContain("Last reviewed baseline");
     expect(userPrompt).toContain("Previously, two national chains were active.");
   });

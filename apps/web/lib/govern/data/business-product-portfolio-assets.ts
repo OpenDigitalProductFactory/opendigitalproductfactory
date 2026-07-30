@@ -94,7 +94,7 @@ export const BUSINESS_PRODUCT_PORTFOLIO_ASSETS: readonly DataAssetDefinition[] =
       ],
     ],
     {
-      categories: ["customer", "operational"],
+      categories: ["identity", "operational"],
       sensitivity: "confidential",
       projectionClass: "masked-content",
     },

@@ -236,16 +236,16 @@ export function buildScheduledProductIntelligenceVisibilityWhere(input: {
 
 export type ProductIntelligenceScopeClient = {
   organization: {
-    findFirst: (args: unknown) => Promise<unknown>;
+    findFirst: (args: any) => Promise<unknown>;
   };
   productLine: {
-    findFirst: (args: unknown) => Promise<unknown>;
+    findFirst: (args: any) => Promise<unknown>;
   };
   product: {
-    findFirst: (args: unknown) => Promise<unknown>;
+    findFirst: (args: any) => Promise<unknown>;
   };
   digitalProduct: {
-    findFirst: (args: unknown) => Promise<unknown>;
+    findFirst: (args: any) => Promise<unknown>;
   };
 };
 
