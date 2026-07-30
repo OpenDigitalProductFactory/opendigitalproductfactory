@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { ScheduleEditor } from "./ScheduleEditor";
 
 export interface HospitalityResourceManagerRow {
@@ -33,10 +34,12 @@ function statusLabel(status: HospitalityResourceManagerRow["status"]) {
 
 function ResourceEditor({
   resource,
-  onSaved,
+  onResourceSaved,
+  onAvailabilitySaved,
 }: {
   resource: HospitalityResourceManagerRow;
-  onSaved(resource: HospitalityResourceManagerRow): void;
+  onResourceSaved(resource: HospitalityResourceManagerRow): void;
+  onAvailabilitySaved(): void;
 }) {
   const [label, setLabel] = useState(resource.label);
   const [capacity, setCapacity] = useState(resource.capacity);
@@ -77,7 +80,7 @@ function ResourceEditor({
         setError(body.message ?? body.error ?? "Table could not be saved");
         return;
       }
-      onSaved(body.resource);
+      onResourceSaved(body.resource);
     } catch {
       setError("Network error");
     } finally {
@@ -194,6 +197,7 @@ function ResourceEditor({
             saveEndpoint={`/api/storefront/admin/hospitality-resources/${resource.id}`}
             availability={resource.availability}
             heading="Table availability"
+            onSaved={onAvailabilitySaved}
           />
         </div>
       </div>
@@ -208,6 +212,7 @@ export function HospitalityResourceManager({
   storefrontId: string;
   resources: HospitalityResourceManagerRow[];
 }) {
+  const router = useRouter();
   const [resources, setResources] = useState(initialResources);
   const [adding, setAdding] = useState(false);
   const [label, setLabel] = useState("");
@@ -215,6 +220,10 @@ export function HospitalityResourceManager({
   const [serviceArea, setServiceArea] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function refreshOperationalView() {
+    router.refresh();
+  }
 
   async function addTable() {
     setSaving(true);
@@ -247,6 +256,7 @@ export function HospitalityResourceManager({
       setCapacity(4);
       setServiceArea("");
       setAdding(false);
+      refreshOperationalView();
     } catch {
       setError("Network error");
     } finally {
@@ -256,7 +266,7 @@ export function HospitalityResourceManager({
 
   return (
     <section aria-labelledby="table-management-heading" className="grid gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-end gap-3">
         <div>
           <h2 id="table-management-heading" className="text-base font-semibold">
             Table management
@@ -335,11 +345,13 @@ export function HospitalityResourceManager({
             <ResourceEditor
               key={resource.id}
               resource={resource}
-              onSaved={(saved) =>
+              onResourceSaved={(saved) => {
                 setResources((current) =>
                   current.map((row) => (row.id === saved.id ? saved : row)),
-                )
-              }
+                );
+                refreshOperationalView();
+              }}
+              onAvailabilitySaved={refreshOperationalView}
             />
           ))}
         </div>

@@ -55,10 +55,12 @@ export function ScheduleEditor({
   saveEndpoint,
   availability,
   heading = "Weekly schedule",
+  onSaved,
 }: {
   saveEndpoint: string;
   availability: AvailabilityRow[];
   heading?: string;
+  onSaved?: () => void;
 }) {
   const [dayStates, setDayStates] = useState<DayState[]>(() => buildDayStates(availability));
   const [exceptions, setExceptions] = useState(() => buildExceptions(availability));
@@ -133,6 +135,7 @@ export function ScheduleEditor({
         setError(data.message ?? data.error ?? "Save failed");
       } else {
         setSaved(true);
+        onSaved?.();
         setTimeout(() => setSaved(false), 2000);
       }
     } catch {

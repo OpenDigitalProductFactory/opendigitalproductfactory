@@ -25,6 +25,34 @@ The selected option won by 2.879 with strong structured coverage and no
 commandment conflict. It best satisfies architecture over shortcuts, grounding
 in existing platform work, single source of truth, and fleet-safe evolution.
 
+## UX fit review
+
+- **Decision:** fits with guardrails.
+- **Owning area:** internal Storefront management.
+- **Route family:** `/storefront/tables` is the physical-capacity home;
+  `/storefront/team` remains the human-staff home.
+- **Primary persona:** host or venue manager making an immediate seating
+  decision while a guest is waiting.
+- **Navigation layer:** existing Storefront section navigation and contextual
+  table-management actions only.
+- **Reuse/convergence:** the restaurant floor composes the shared Cartesian
+  scene canvas, with an accessible list alternative; staff continues to use the
+  existing team manager.
+- **Source truth:** `HospitalityResource`, `HospitalityAvailability`, and the
+  restaurant capacity read model own table state and counts. `ServiceProvider`
+  continues to own people.
+- **Empty/failure behavior:** an empty venue explains how to add its first
+  physical table; mutation failures stay adjacent to the attempted action.
+- **AI boundary:** the floor, list, and management controls do not send prompts.
+- **Guardrails:** table mutations refresh the server-owned readiness/floor read
+  model; the primary table action must remain clear of the global AI Coworker
+  launcher; state is legible without color.
+- **Evidence before merge:** mutation regression tests, governed browser
+  exercise at 1280x720, floor/list state comparison, and action-latency
+  measurements.
+- **Captured in:** this specification and
+  `docs/ux-fit/2026-07-30-food-hospitality-resource-capacity.ux-fit.json`.
+
 ## Problem
 
 Restaurant tables are currently stored as `ServiceProvider` rows and discovered

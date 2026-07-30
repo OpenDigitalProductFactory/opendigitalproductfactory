@@ -1,8 +1,31 @@
+// @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+
+const refresh = vi.hoisted(() => vi.fn());
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh }),
+}));
 
 import { HospitalityResourceManager } from "./HospitalityResourceManager";
+
+beforeEach(() => {
+  refresh.mockReset();
+});
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe("HospitalityResourceManager", () => {
   it("renders business-legible table capacity without provider vocabulary", () => {
@@ -70,5 +93,107 @@ describe("HospitalityResourceManager", () => {
     expect(html).toContain("Table management");
     expect(html).toContain("No tables yet");
     expect(html).toContain('aria-label="Add table"');
+  });
+
+  it("refreshes the operational floor and readiness counts after adding a table", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          resource: {
+            id: "table-1",
+            resourceId: "HR-T1",
+            label: "Aster 12",
+            kind: "table",
+            status: "active",
+            capacity: 4,
+            capacityUnit: "seats",
+            serviceArea: "Dining room",
+            blockedReason: null,
+            version: 1,
+            availability: [],
+          },
+        }),
+      }),
+    );
+
+    render(
+      <HospitalityResourceManager
+        storefrontId="storefront-1"
+        resources={[]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Add table" }));
+    fireEvent.change(screen.getByLabelText("Table label"), {
+      target: { value: "Aster 12" },
+    });
+    fireEvent.change(screen.getByLabelText("Service area"), {
+      target: { value: "Dining room" },
+    });
+    fireEvent.click(
+      screen.getByText("Add table", {
+        selector: "button:not([aria-label])",
+      }),
+    );
+
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+  });
+
+  it("refreshes the operational floor after changing a table status", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          resource: {
+            id: "table-1",
+            resourceId: "HR-T1",
+            label: "Aster 12",
+            kind: "table",
+            status: "blocked",
+            capacity: 4,
+            capacityUnit: "seats",
+            serviceArea: "Dining room",
+            blockedReason: "Maintenance",
+            version: 2,
+            availability: [],
+          },
+        }),
+      }),
+    );
+
+    render(
+      <HospitalityResourceManager
+        storefrontId="storefront-1"
+        resources={[
+          {
+            id: "table-1",
+            resourceId: "HR-T1",
+            label: "Aster 12",
+            kind: "table",
+            status: "active",
+            capacity: 4,
+            capacityUnit: "seats",
+            serviceArea: "Dining room",
+            blockedReason: null,
+            version: 1,
+            availability: [],
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Aster 12"));
+    fireEvent.change(screen.getByLabelText("Status"), {
+      target: { value: "blocked" },
+    });
+    fireEvent.change(screen.getByLabelText("Why is it blocked?"), {
+      target: { value: "Maintenance" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save table" }));
+
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
   });
 });
