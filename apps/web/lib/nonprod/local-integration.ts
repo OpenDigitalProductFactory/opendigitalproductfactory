@@ -1,9 +1,14 @@
-import type { Prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { recordExternalEvidence } from "@/lib/actions/external-evidence";
+import {
+  contractLocalCiPoolAfterGateResult,
+  type PlatformConfigCircuitBreakerStore,
+} from "./local-ci-pool-circuit-breaker";
+import type { NonprodOwnerProvider } from "./nonprod-owner-provider";
 
 export type LocalIntegrationResultInput = {
   actorUserId: string;
-  provider: "build-studio" | "claude" | "codex" | "grok" | "antigravity" | "coworker";
+  provider: NonprodOwnerProvider;
   externalSessionId: string;
   routeContext: string;
   buildId?: string;
@@ -18,7 +23,27 @@ export type LocalIntegrationResultInput = {
   evidence: Prisma.InputJsonValue;
 };
 
-export async function recordLocalIntegrationResult(input: LocalIntegrationResultInput) {
+type LocalIntegrationDependencies = {
+  platformConfig: PlatformConfigCircuitBreakerStore;
+};
+
+export async function recordLocalIntegrationResult(
+  input: LocalIntegrationResultInput,
+  dependencies: LocalIntegrationDependencies = {
+    platformConfig: prisma.platformConfig,
+  },
+) {
+  const circuitBreaker = await contractLocalCiPoolAfterGateResult({
+    platformConfig: dependencies.platformConfig,
+    status: input.status,
+    evidence: input.evidence,
+  });
+  if (circuitBreaker.status === "concurrent-update-exhausted") {
+    throw new Error(
+      "Local-CI capacity circuit breaker could not persist a safe singleton policy",
+    );
+  }
+
   return recordExternalEvidence({
     actorUserId: input.actorUserId,
     routeContext: input.routeContext,
@@ -32,6 +57,7 @@ export async function recordLocalIntegrationResult(input: LocalIntegrationResult
       externalSessionId: input.externalSessionId,
       mode: input.mode,
       status: input.status,
+      capacityCircuitBreaker: circuitBreaker.status,
       evidence: input.evidence,
     } as Prisma.InputJsonValue,
   });

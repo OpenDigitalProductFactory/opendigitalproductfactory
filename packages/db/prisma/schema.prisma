@@ -6985,6 +6985,9 @@ model NonProductionEnvironmentLease {
   branchName       String?
   buildId          String?
   taskRunId        String?
+  // Null means a legacy singleton-only claimant. Version 1 proves the runner
+  // can bind the server-assigned slot manifest before any host mutation.
+  slotManifestVersion Int?
   url              String
   ports            Int[]     @default([])
   cleanupCommand   String?

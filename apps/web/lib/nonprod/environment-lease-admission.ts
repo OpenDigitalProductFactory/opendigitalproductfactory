@@ -4,6 +4,7 @@ export type AdmissionLease = {
   slotKey: string | null;
   queuedAt: Date | null;
   expiresAt: Date;
+  supportedSlotKeys?: string[];
 };
 
 export type EnvironmentAdmissionPlan = {
@@ -55,12 +56,16 @@ export function planEnvironmentAdmission(input: {
   const waiting = input.leases
     .filter((lease) => lease.status === "queued" && !expired.has(lease.id))
     .sort(compareQueued);
-  const admissions = waiting
-    .slice(0, freeSlots.length)
-    .map((lease, index) => ({
-      leaseId: lease.id,
-      slotKey: freeSlots[index],
-    }));
+  const admissions: Array<{ leaseId: string; slotKey: string }> = [];
+  for (const lease of waiting) {
+    const supported = new Set(lease.supportedSlotKeys ?? slotKeys);
+    const slotIndex = freeSlots.findIndex((slotKey) => supported.has(slotKey));
+    // Preserve global FIFO. A later slot-aware waiter may not bypass an older
+    // legacy waiter merely because the older client cannot consume slot-1.
+    if (slotIndex < 0) break;
+    const [slotKey] = freeSlots.splice(slotIndex, 1);
+    admissions.push({ leaseId: lease.id, slotKey });
+  }
   const admittedIds = new Set(admissions.map((entry) => entry.leaseId));
   const queuePositions = waiting
     .filter((lease) => !admittedIds.has(lease.id))

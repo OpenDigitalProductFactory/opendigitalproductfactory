@@ -44,6 +44,15 @@ describe("nonprod-lease pack — registration", () => {
     }
     expect(isToolAllowedByGrants("list_nonprod_environment_leases", ["work_capsule_read"])).toBe(true);
   });
+
+  it("declares slot capability, host pressure, and assigned-slot binding in the existing tools", () => {
+    const claim = nonprodLeasePack.definitions.find((d) => d.name === "claim_nonprod_environment_lease");
+    const renew = nonprodLeasePack.definitions.find((d) => d.name === "renew_nonprod_environment_lease");
+    expect(claim?.inputSchema.properties).toHaveProperty("slotManifestVersion");
+    expect(claim?.inputSchema.properties).toHaveProperty("hostPressure");
+    expect(renew?.inputSchema.properties).toHaveProperty("slotBinding");
+    expect(renew?.inputSchema.properties).toHaveProperty("hostPressure");
+  });
 });
 
 describe("nonprod-lease pack — handler behavior (delegation preserved)", () => {
@@ -128,6 +137,68 @@ describe("nonprod-lease pack — handler behavior (delegation preserved)", () =>
         },
       },
     });
+  });
+
+  it("passes a slot-aware claim and recent host observation to durable admission", async () => {
+    lease.claimNonprodEnvironmentLease.mockResolvedValue({
+      status: "queued",
+      lease: { leaseId: "NPEL-Q2" },
+      queuePosition: 1,
+      waitAgeMs: 50,
+      poolPolicy: { effectiveCapacity: 2 },
+    });
+    const hostPressure = {
+      observedAt: "2026-07-30T05:00:00.000Z",
+      availableMemoryBytes: 12_000_000_000,
+      sustainedCpuPercent: 20,
+      diskFreeBytes: 100_000_000_000,
+      dockerHealthy: true,
+      convergenceActive: false,
+      fencesHealthy: true,
+      evidenceIsolationHealthy: true,
+    };
+
+    await nonprodLeasePack.handlers.claim_nonprod_environment_lease({
+      environmentKey: "local-integration-ci",
+      ownerProvider: "codex",
+      ownerSessionId: "s2",
+      purpose: "pilot",
+      url: "http://localhost:3010",
+      ports: [3010, 54329],
+      expiresAt: new Date("2026-07-30T05:02:00Z").toISOString(),
+      slotManifestVersion: 1,
+      hostPressure,
+    }, "u1");
+
+    expect(lease.claimNonprodEnvironmentLease).toHaveBeenCalledWith(
+      expect.objectContaining({ slotManifestVersion: 1, hostPressure }),
+    );
+  });
+
+  it("binds only the server-assigned slot through the existing renewal tool", async () => {
+    lease.renewNonprodEnvironmentLease.mockResolvedValue({
+      status: "renewed",
+      lease: { leaseId: "NPEL-A2", slotKey: "slot-1", phase: "running" },
+    });
+    const slotBinding = {
+      manifestVersion: 1,
+      slotKey: "slot-1",
+      url: "http://localhost:3011",
+      ports: [3011, 54330],
+      cleanupCommand: "node scripts/local-ci-slot-cleanup.mjs --slot-key slot-1",
+    };
+
+    const result = await nonprodLeasePack.handlers.renew_nonprod_environment_lease({
+      leaseId: "NPEL-A2",
+      ownerSessionId: "s2",
+      ttlMinutes: 2,
+      slotBinding,
+    }, "u1");
+
+    expect(result.success).toBe(true);
+    expect(lease.renewNonprodEnvironmentLease).toHaveBeenCalledWith(
+      expect.objectContaining({ slotBinding }),
+    );
   });
 
   it("claim rejects an unsupported environmentKey without calling the service", async () => {

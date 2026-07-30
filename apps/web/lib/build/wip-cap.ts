@@ -125,13 +125,33 @@ export interface UnifiedWipDecision {
   readonly admitted: boolean;
 }
 
+export interface UnifiedWipCapacityContext {
+  /**
+   * Effective local-CI capacity resolved from the versioned pool policy.
+   * Invalid or absent values retain the proven singleton.
+   */
+  readonly sharedLeaseCapacity?: number;
+}
+
+export function effectiveWipPoolCapacity(
+  pool: WipPool,
+  context: UnifiedWipCapacityContext = {},
+): number {
+  if (pool !== "shared-lease") return WIP_POOL_CAPACITY[pool];
+  return context.sharedLeaseCapacity === 2 ? 2 : SHARED_LEASE_WIP_CAP;
+}
+
 /**
  * Decide whether a new unit contending on `pool` can be admitted, given the
  * unified per-pool `pressure` across all surfaces. An unbounded pool always
  * admits. This is the derivation that replaces the BS-only hardcoded cap check.
  */
-export function decideUnifiedWip(pool: WipPool, pressure: number): UnifiedWipDecision {
-  const capacity = WIP_POOL_CAPACITY[pool];
+export function decideUnifiedWip(
+  pool: WipPool,
+  pressure: number,
+  context: UnifiedWipCapacityContext = {},
+): UnifiedWipDecision {
+  const capacity = effectiveWipPoolCapacity(pool, context);
   const admitted = !Number.isFinite(capacity) || !wipCapReached(pressure, capacity);
   return { pool, pressure, capacity, admitted };
 }
@@ -141,7 +161,11 @@ export function decideUnifiedWip(pool: WipPool, pressure: number): UnifiedWipDec
  * Mirrors assertWipCapacity's throw shape so existing call sites keep the same
  * error contract; an unbounded pool never throws.
  */
-export function assertUnifiedWipCapacity(pool: WipPool, pressure: number): void {
-  const decision = decideUnifiedWip(pool, pressure);
+export function assertUnifiedWipCapacity(
+  pool: WipPool,
+  pressure: number,
+  context: UnifiedWipCapacityContext = {},
+): void {
+  const decision = decideUnifiedWip(pool, pressure, context);
   if (!decision.admitted) throw new BuildWipCapError(decision.pressure, decision.capacity);
 }

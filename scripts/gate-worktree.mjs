@@ -32,10 +32,15 @@ import {
   releaseLocalQueueObserver,
 } from "./lib/local-queue-observer.mjs";
 import {
+  LOCAL_CI_SLOT_KEYS,
   createLocalCiSlotManifest,
   localCiSlotEnvironment,
 } from "./lib/local-ci-slot-manifest.mjs";
 import { writeLocalCiGateState } from "./lib/local-ci-gate-state.mjs";
+import {
+  sampleLocalCiHostPressure,
+  summarizeLocalCiPressureSamples,
+} from "./lib/local-ci-host-pressure.mjs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
@@ -48,6 +53,29 @@ function die(message) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function observeLocalCiHostPressure(input) {
+  if (
+    process.env.NODE_ENV === "test"
+    && process.env.DPF_LOCAL_CI_HOST_PRESSURE_JSON
+  ) {
+    return JSON.parse(process.env.DPF_LOCAL_CI_HOST_PRESSURE_JSON);
+  }
+  const manifests = LOCAL_CI_SLOT_KEYS.map((slotKey) =>
+    createLocalCiSlotManifest({ ...input, slotKey }));
+  return sampleLocalCiHostPressure({
+    rootPath: input.rootClone,
+    convergenceLockPaths: manifests.map(
+      (manifest) => manifest.dependencies.convergenceLock,
+    ),
+    fencePaths: manifests.map((manifest) => manifest.fence.path),
+    // Phase 2's manifest/cleanup/evidence contract is mechanically tested.
+    // A later schema version must earn this assertion again.
+    evidenceIsolationHealthy: manifests.every(
+      (manifest) => manifest.schemaVersion === 1,
+    ),
+  });
 }
 
 function retryDelayMs({ attempt, pollSeconds, retryAfterSeconds = 0 }) {
@@ -587,7 +615,8 @@ async function main() {
     ? null
     : createGateObserverIdentity();
   const ownerSessionId = options.ownerSessionId || gateObserverIdentity.ownerSessionId;
-  const claimKey = `local-ci:${ownerSessionId}:${sha}`;
+  const baseClaimKey = `local-ci:${ownerSessionId}:${sha}`;
+  let claimKey = baseClaimKey;
   const deadline = Date.now() + options.leaseWaitSeconds * 1000;
   const commandSpec = resolveGateCommand({ branch, allowStub, gitBin });
 
@@ -723,7 +752,11 @@ async function main() {
   let queueObserverPath = "";
   let leaseReleased = false;
   let receivedSignal = "";
+  let queuedClaimInterruptedByQuiescence = false;
+  let claimRecoverySequence = 0;
   const leaseEvents = [];
+  const hostPressureSamples = [];
+  let admissionPoolPolicy = null;
   const signalHandlers = Object.fromEntries(["SIGINT", "SIGTERM"].map((signal) => [
     signal,
     () => {
@@ -774,6 +807,12 @@ async function main() {
       reportActive: claimAttempt === 0,
     });
     expiresAt = new Date(Date.now() + leaseTtlMs).toISOString();
+    const hostPressure = await observeLocalCiHostPressure({
+      rootClone,
+      gitCommonDir,
+      candidateGitDir,
+    });
+    hostPressureSamples.push(hostPressure);
     let claimResponse;
     try {
       claimResponse = await mcpCall("claim_nonprod_environment_lease", {
@@ -787,7 +826,8 @@ async function main() {
         expiresAt,
         worktreePath,
         branchName: branch,
-        cleanupCommand: `node scripts/local-ci-slot-cleanup.mjs --slot-key ${slotManifest.slotKey}`,
+        slotManifestVersion: slotManifest.schemaVersion,
+        hostPressure,
       }, { mcpUrl: options.mcpUrl, bearerToken });
     } catch (error) {
       if (!isTransientMcpError(error) || Date.now() >= deadline) throw error;
@@ -800,6 +840,7 @@ async function main() {
 
     leaseId = claimResponse?.entityId || claimResponse?.data?.lease?.leaseId || leaseId;
     const admission = claimResponse?.data?.admission;
+    admissionPoolPolicy = claimResponse?.data?.poolPolicy ?? admissionPoolPolicy;
     if (claimResponse?.success === true && admission?.status !== "queued") {
       const admittedExpiresAt = claimResponse?.data?.lease?.expiresAt;
       if (
@@ -845,6 +886,7 @@ async function main() {
       break;
     }
     if (claimResponse?.success === true && admission?.status === "queued") {
+      queuedClaimInterruptedByQuiescence = false;
       if (Date.now() >= deadline) {
         await releaseLeaseOnce();
         die("local-CI admission queue wait timed out");
@@ -873,6 +915,7 @@ async function main() {
       continue;
     }
     if (claimResponse?.error === "portal_quiescing") {
+      if (leaseId) queuedClaimInterruptedByQuiescence = true;
       if (Date.now() >= deadline) die("portal remained quiescing through the local-CI admission deadline");
       const retryAfterSeconds = Number(
         claimResponse?.data?.retryAfterSeconds
@@ -889,14 +932,61 @@ async function main() {
       await sleep(Math.min(delayMs, Math.max(10, deadline - Date.now())));
       continue;
     }
+    const terminalReason = claimResponse?.data?.reason
+      ?? claimResponse?.data?.lease?.reason;
+    if (
+      claimResponse?.error === "lease_terminal"
+      && terminalReason === "expired"
+      && queuedClaimInterruptedByQuiescence
+    ) {
+      if (Date.now() >= deadline) {
+        die("local-CI queue claim expired during quiescence at the admission deadline");
+      }
+      claimRecoverySequence += 1;
+      claimKey = `${baseClaimKey}:recovery-${claimRecoverySequence}`;
+      leaseEvents.push({
+        type: "queue-intent-reestablished",
+        at: new Date().toISOString(),
+        priorLeaseId: leaseId,
+        recoverySequence: claimRecoverySequence,
+      });
+      leaseId = "";
+      queuedClaimInterruptedByQuiescence = false;
+      process.stdout.write(
+        `queued claim expired during portal quiescence; re-establishing queue intent with recovery ${claimRecoverySequence}...\n`,
+      );
+      continue;
+    }
     die(`failed to claim local-CI lease: ${JSON.stringify(claimResponse)}`);
   }
 
-  const renewLeaseAuthority = async () => {
+  const renewLeaseAuthority = async ({ bindSlot = false } = {}) => {
+    const hostPressure = await observeLocalCiHostPressure({
+      rootClone,
+      gitCommonDir,
+      candidateGitDir,
+    });
+    hostPressureSamples.push(hostPressure);
     const response = await mcpCall("renew_nonprod_environment_lease", {
       leaseId,
       ownerSessionId,
       ttlMinutes: LOCAL_CI_ACTIVE_LEASE_TTL_MS / 60_000,
+      hostPressure,
+      ...(bindSlot
+        ? {
+          slotBinding: {
+            manifestVersion: slotManifest.schemaVersion,
+            slotKey: slotManifest.slotKey,
+            url: slotManifest.portal.url,
+            ports: [
+              slotManifest.portal.port,
+              slotManifest.postgres.hostPort,
+            ],
+            cleanupCommand:
+              `node scripts/local-ci-slot-cleanup.mjs --slot-key ${slotManifest.slotKey}`,
+          },
+        }
+        : {}),
     }, { mcpUrl: options.mcpUrl, bearerToken });
     const renewedExpiresAt = response?.data?.lease?.expiresAt;
     if (
@@ -913,8 +1003,22 @@ async function main() {
     return response;
   };
 
+  const binding = await renewLeaseAuthority({ bindSlot: true });
+  if (binding?.success !== true) {
+    await releaseLeaseOnce();
+    die(`failed to bind admitted local-CI slot before mutation: ${JSON.stringify(binding)}`);
+  }
+  leaseEvents.push({
+    type: "slot_bound",
+    at: new Date().toISOString(),
+    slotKey: slotManifest.slotKey,
+    manifestVersion: slotManifest.schemaVersion,
+    expiresAt,
+  });
+
   // Durable remote admission is authoritative. The host-process fence is a
-  // second, local safety belt acquired only after this waiter owns slot-0.
+  // second, local safety belt acquired only after this waiter owns and has
+  // bound the server-assigned slot.
   for (;;) {
     if (receivedSignal) {
       await releaseLeaseOnce();
@@ -1146,8 +1250,9 @@ async function main() {
       resilienceBi: "BI-76551B2D",
       freshnessBi: "BI-ECDF9520",
       impactedTestRecommendationBi: "BI-A4EC0EA6",
-      phase: 2,
+      phase: 3,
       slotIsolationBi: "BI-4BE30454",
+      poolPilotBi: "BI-A4427AB8",
       slotManifest: {
         schemaVersion: slotManifest.schemaVersion,
         slotKey: slotManifest.slotKey,
@@ -1167,6 +1272,8 @@ async function main() {
       leaseId,
       leaseEvents,
       leaseSupervisionStatus: supervised.status,
+      admissionPoolPolicy,
+      hostPressure: summarizeLocalCiPressureSamples(hostPressureSamples),
       branch,
       sha,
       expiresAt,

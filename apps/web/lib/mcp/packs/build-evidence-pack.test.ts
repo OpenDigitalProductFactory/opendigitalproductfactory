@@ -138,6 +138,23 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
     expect(properties?.kind.enum).toContain("source_verified");
   });
 
+  it("exposes every governed coding surface for local-integration evidence", () => {
+    const definition = buildEvidencePack.definitions.find(
+      (entry) => entry.name === "record_local_integration_result",
+    );
+    const properties = definition?.inputSchema.properties as
+      | Record<string, { enum?: unknown[] }>
+      | undefined;
+    expect(properties?.provider.enum).toEqual([
+      "build-studio",
+      "claude",
+      "codex",
+      "grok",
+      "antigravity",
+      "coworker",
+    ]);
+  });
+
   it("record_execution_evidence surfaces not_found for an unknown item", async () => {
     db.backlogItemFindUnique.mockResolvedValue(null);
     const res = await buildEvidencePack.handlers.record_execution_evidence(

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "slots": {
+    "slot-0": {
+      "ordinal": 0,
+      "portalPort": 3010,
+      "postgresPort": 54329
+    },
+    "slot-1": {
+      "ordinal": 1,
+      "portalPort": 3011,
+      "postgresPort": 54330
+    }
+  }
+}

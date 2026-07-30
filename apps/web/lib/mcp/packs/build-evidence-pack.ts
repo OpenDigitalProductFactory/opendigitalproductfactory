@@ -22,6 +22,10 @@ import {
   validateExecutionEvidenceStructure,
 } from "@/lib/backlog/execution-evidence";
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
+import {
+  isNonprodOwnerProvider,
+  NONPROD_OWNER_PROVIDERS,
+} from "@/lib/nonprod/nonprod-owner-provider";
 
 /** Strip bearer tokens / MCP tokens / Anthropic keys out of operator-supplied failure text. */
 function redactFunctionalFailureText(text: string): string {
@@ -66,7 +70,7 @@ const definitions: ToolDefinition[] = [
     inputSchema: {
       type: "object",
       properties: {
-        provider: { type: "string", enum: ["build-studio", "claude", "codex", "grok", "coworker"] },
+        provider: { type: "string", enum: [...NONPROD_OWNER_PROVIDERS] },
         externalSessionId: { type: "string" },
         routeContext: { type: "string" },
         buildId: { type: "string" },
@@ -223,7 +227,7 @@ async function recordLocalIntegrationResultHandler(
       message: `Missing required local integration result field(s): ${missing.join(", ")}`,
     };
   }
-  if (!["build-studio", "claude", "codex", "coworker"].includes(provider)) {
+  if (!isNonprodOwnerProvider(provider)) {
     return { success: false, error: "invalid_provider", message: `Unsupported provider: ${provider}` };
   }
   if (!["single-branch", "sibling-set", "post-merge-main"].includes(mode)) {
@@ -235,7 +239,7 @@ async function recordLocalIntegrationResultHandler(
 
   const result = await recordLocalIntegrationResult({
     actorUserId: userId,
-    provider: provider as "build-studio" | "claude" | "codex" | "coworker",
+    provider,
     externalSessionId,
     routeContext,
     buildId: stringValue("buildId") || undefined,

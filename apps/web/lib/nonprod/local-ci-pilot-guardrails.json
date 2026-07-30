@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "minimumSamplesPerWindow": 10,
+  "minimumP95QueueWaitImprovementPercent": 20,
+  "maximumMedianServiceDurationRegressionPercent": 15,
+  "maximumInfrastructureFailureRatePercent": 5,
+  "minimumComparableSampleRatio": 0.67,
+  "maximumComparableSampleRatio": 1.5,
+  "evidenceMismatchTolerance": 0
+}

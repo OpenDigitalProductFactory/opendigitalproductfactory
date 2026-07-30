@@ -13,6 +13,7 @@
 //
 // Pure functions only (no Prisma / server-only / React imports) so every layer
 // can import it.
+import { isRecord as isRecordRuntime } from "./is-record.mjs";
 
 /**
  * True when `v` is a plain (non-array, non-null) object usable as a string-keyed
@@ -20,7 +21,7 @@
  * `Prisma.JsonValue` / `unknown` typechecks.
  */
 export function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
+  return isRecordRuntime(v);
 }
 
 /**
