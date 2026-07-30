@@ -29,6 +29,7 @@ import {
 import { extractWikilinks } from "@dpf/db/wiki-frontmatter";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/actions/shared/guards";
+import { promoteCraftOverrideOnPublish } from "@/lib/wiki/craft-override-promotion";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -172,6 +173,11 @@ export async function saveWikiOverlayEdit(
       return { ok: false, error: "Body is required." };
     }
 
+    // Status this page held BEFORE this save, so a draft -> published
+    // transition can be detected below (BI-8AC24F3D). Null when creating a new
+    // row, which counts as "was not published".
+    let previousStatus: WikiPageStatus | null = null;
+
     // If pageId supplied: load + verify scope.
     if (input.pageId) {
       const existing = (await prisma.wikiPage.findFirst({
@@ -182,6 +188,7 @@ export async function saveWikiOverlayEdit(
           isKernel: true,
           organizationId: true,
           pageKind: true,
+          status: true,
         },
       })) as
         | {
@@ -190,6 +197,7 @@ export async function saveWikiOverlayEdit(
             isKernel: boolean;
             organizationId: string | null;
             pageKind: string;
+            status: WikiPageStatus;
           }
         | null;
       if (!existing) {
@@ -217,6 +225,7 @@ export async function saveWikiOverlayEdit(
             "Slug changes are not supported in the v1 editor — delete and recreate, or open a PR.",
         };
       }
+      previousStatus = existing.status;
     } else if (input.overridesKernelPageId) {
       // Creating a new overlay that overrides a kernel page.
       const kernel = (await prisma.wikiPage.findFirst({
@@ -269,6 +278,28 @@ export async function saveWikiOverlayEdit(
     });
 
     await syncOutLinks(saved.id, input.body, org.id);
+
+    // BI-8AC24F3D: this action is what the portal Edit page calls, so flipping
+    // Status to `published` here IS how an operator publishes a craft override.
+    // Until this hook existed the flip wrote status and nothing else — the page
+    // went live, no PerspectiveMaterial was written, and the profession gate
+    // kept deferring while the UI claimed the doctrine now counted. Same shared
+    // helper as publishWikiOverlayPages so the two paths cannot diverge.
+    // Guarded on the TRANSITION, not on the target status, so re-saving an
+    // already-published page does not re-promote on every keystroke-level edit.
+    if (saved.status === "published" && previousStatus !== "published") {
+      await promoteCraftOverrideOnPublish({
+        db: prisma,
+        page: {
+          id: saved.id,
+          slug: saved.slug,
+          title: input.title.trim(),
+          pageKind: input.pageKind,
+          abstract: input.abstract ?? null,
+        },
+        origin: "wiki-edit",
+      });
+    }
 
     revalidatePath(`/coworker-decisions/${input.slug}`);
     revalidatePath("/coworker-decisions");

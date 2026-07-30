@@ -21,13 +21,9 @@ import {
   appendRevision,
   type WikiPageStatus,
 } from "@dpf/db/wiki-store";
-import {
-  parseProfessionPageSlug,
-  promoteProfessionPageMaterial,
-} from "@dpf/db/profession-material-promotion";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/actions/shared/guards";
-import { PROFESSION_REGISTRY } from "@/lib/decision-perspective/resolve-profession-profile";
+import { promoteCraftOverrideOnPublish } from "@/lib/wiki/craft-override-promotion";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -191,44 +187,24 @@ export async function publishWikiOverlayPages(
       // publishBusinessStance's promoteStanceMaterial call. Promotion failure
       // never rolls back the page publish: the page flip already happened and
       // the seed backfill converges any missed material on its next run.
-      const slugInfo =
-        targetStatus === "published" ? parseProfessionPageSlug(row.slug) : null;
-      if (slugInfo?.corpus === "org-override") {
-        try {
-          const family = PROFESSION_REGISTRY.families.find(
-            (f) => f.professionKey === slugInfo.professionKey,
-          );
-          const promoted = await promoteProfessionPageMaterial({
-            db: prisma,
-            professionKey: slugInfo.professionKey,
-            contextSlugs: family?.contextSlugs ?? [],
-            page: {
-              id: row.id,
-              slug: row.slug,
-              title: row.title,
-              pageKind: row.pageKind,
-              abstract: row.abstract,
-            },
-            tier: "confirmed",
-          });
-          if (promoted.ok) {
-            craftPromotions.push({
-              pageId: row.id,
-              slug: row.slug,
-              professionKey: slugInfo.professionKey,
-              gateLive: promoted.gateLive,
-              materialIds: promoted.materialIds,
-            });
-          } else {
-            console.warn(
-              `[wiki-publish] craft promotion skipped for ${row.slug}: ${promoted.error}`,
-            );
-          }
-        } catch (promotionError) {
-          console.warn(
-            `[wiki-publish] craft promotion failed for ${row.slug}: ${(promotionError as Error).message}`,
-          );
-        }
+      //
+      // BI-8AC24F3D: the promotion body moved to the shared helper so this path
+      // and saveWikiOverlayEdit (the action the portal Edit page calls) cannot
+      // diverge again — publishing here and publishing there must mean the
+      // same thing.
+      if (targetStatus === "published") {
+        const promotion = await promoteCraftOverrideOnPublish({
+          db: prisma,
+          page: {
+            id: row.id,
+            slug: row.slug,
+            title: row.title,
+            pageKind: row.pageKind,
+            abstract: row.abstract,
+          },
+          origin: "wiki-publish",
+        });
+        if (promotion) craftPromotions.push(promotion);
       }
       revalidatePath(`/coworker-decisions/${row.slug}`);
     }
