@@ -44,6 +44,12 @@ export function isSelfUpgradePurposeReviewState(
   return SELF_UPGRADE_PURPOSE_STATES.some((state) => state === value);
 }
 
+export function isSelfUpgradePurposeReviewEnabled(
+  environment: Readonly<Record<string, string | undefined>>,
+): boolean {
+  return environment.DPF_PURPOSE_REVIEW_FIXTURES === "1";
+}
+
 export function buildSelfUpgradePurposeReviewStatus(
   state: SelfUpgradePurposeReviewState,
 ): SelfUpgradePurposeReviewStatus {

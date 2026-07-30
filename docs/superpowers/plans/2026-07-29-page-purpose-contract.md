@@ -78,6 +78,22 @@ release-blocking corrections were incorporated before the gate:
 - browser capture/evaluation moved into a focused adapter, keeping the sweep
   orchestrator below its module-size ceiling.
 
+A later exact-SHA review found that the five-state browser fixture was
+incorrectly promoting structural marker visibility into a completed-task
+receipt. The corrected evidence boundary is:
+
+- review fixtures are default-off and available only when a governed preview
+  explicitly sets `DPF_PURPOSE_REVIEW_FIXTURES=1`;
+- fixture automation proves state projection, structure, interaction
+  reachability, accessibility, and responsive behavior, and remains
+  `not-validated`;
+- fixture-local files and self-resolved paths cannot become canonical
+  `TaskValidationReceipt` artifacts;
+- task validation becomes current only after a governed run reaches the
+  contract's terminal healthy lineage or the operator actually reaches the
+  owning recovery destination, and the resulting evidence is resolved from
+  the DPF audit evidence store.
+
 ## Design grounding
 
 - Existing specs/plans reviewed:

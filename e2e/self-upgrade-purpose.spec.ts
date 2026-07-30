@@ -1,12 +1,8 @@
 import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { writeFile } from "node:fs/promises";
 
 import purposeRegistryJson from "../apps/web/lib/ux-budget/route-purpose.generated.json";
-import {
-  parsePagePurposeRegistry,
-  type TaskValidationReceipt,
-} from "../apps/web/lib/ux-budget/page-purpose";
+import { parsePagePurposeRegistry } from "../apps/web/lib/ux-budget/page-purpose";
 import {
   capturePurposeEvidence,
   evaluateCurrentPurposePage,
@@ -90,19 +86,18 @@ test("Self-Upgrade is findable and its served DOM matches the state oracle", asy
   expect(errors).toEqual([]);
 });
 
-test("Self-Upgrade review fixtures prove every state outcome and correction path", async ({
+test("Self-Upgrade review fixtures expose every state and correction path without certifying task completion", async ({
   page,
-}, testInfo) => {
+}) => {
+  test.skip(
+    process.env.DPF_PURPOSE_REVIEW_FIXTURES !== "1",
+    "Review fixtures are available only in an explicitly enabled governed preview.",
+  );
   const contract = parsePagePurposeRegistry(purposeRegistryJson).routes.find(
     (candidate) => candidate.routePath === "/ops/self-upgrade",
   );
   expect(contract?.status).toBe("intent-ratified");
   if (!contract || contract.status !== "intent-ratified") return;
-
-  const metrics: Record<string, string | number | boolean> = {};
-  let finalEvidence = null as Awaited<
-    ReturnType<typeof capturePurposeEvidence>
-  >;
 
   for (const state of SELF_UPGRADE_PURPOSE_STATES) {
     const scenario = contract.stateScenarios[state];
@@ -128,21 +123,23 @@ test("Self-Upgrade review fixtures prove every state outcome and correction path
           `[data-dpf-purpose-correction-signal-key='${scenario.correctionSignalKey}']`,
         ),
       ).toBeVisible();
-      await page.goto(`/ops/self-upgrade?purposeReview=${state}`);
-      await page.getByRole("button", { name: "Upgrade now" }).click();
     } else if (state === "failed-recoverable") {
       await page.getByRole("link", { name: "Review recovery controls" }).click();
       await expect(page.locator("#self-upgrade-latest-run")).toBeInViewport();
+      await expect(
+        page.locator(
+          `[data-dpf-purpose-correction-signal-key='${scenario.correctionSignalKey}']`,
+        ),
+      ).toBeVisible();
+    } else if (state === "blocked") {
+      const recovery = page.getByRole("link", {
+        name: "How to enable self-upgrade",
+      });
+      await expect(recovery).toHaveAttribute(
+        "href",
+        "/docs/operations/self-upgrade#enable-self-upgrade",
+      );
     }
-
-    const completion = page.locator(
-      `[data-dpf-purpose-completion-signal-key='${scenario.completionSignalKey}']`,
-    );
-    const correction = page.locator(
-      `[data-dpf-purpose-correction-signal-key='${scenario.correctionSignalKey}']`,
-    );
-    await expect(completion).toBeVisible();
-    await expect(correction).toBeVisible();
 
     const evidence = await capturePurposeEvidence(page);
     expect(evidence).not.toBeNull();
@@ -162,59 +159,6 @@ test("Self-Upgrade review fixtures prove every state outcome and correction path
       structural.structuralStatus,
       structural.findings.map((finding) => finding.message).join("\n"),
     ).toBe("conformant");
-    metrics[`state.${state}.completionSignalKey`] =
-      scenario.completionSignalKey;
-    metrics[`state.${state}.completionObserved`] = true;
-    metrics[`state.${state}.correctionSignalKey`] =
-      scenario.correctionSignalKey;
-    metrics[`state.${state}.correctionObserved`] = true;
-    finalEvidence = evidence;
+    expect(structural.validation.overall).toBe("not-validated");
   }
-
-  expect(finalEvidence).not.toBeNull();
-  if (!finalEvidence) return;
-  const artifactPath = testInfo.outputPath("purpose-validation-receipt.json");
-  const receipt: TaskValidationReceipt = {
-    schemaVersion: 1,
-    evidenceClass: "automated-functional",
-    routePath: "/ops/self-upgrade",
-    contractHash: "self-upgrade-purpose-contract-v1",
-    sourceSha: process.env.GITHUB_SHA ?? "local-purpose-review",
-    fixtureVersion: "self-upgrade-v1",
-    viewport: `${page.viewportSize()?.width ?? 0}x${page.viewportSize()?.height ?? 0}`,
-    inputMode: testInfo.project.use.hasTouch ? "touch" : "pointer",
-    interactionFingerprint: "self-upgrade-five-state-review-v1",
-    relevantDependencyFingerprint: "self-upgrade-purpose-ui-v1",
-    metrics,
-    thresholds: { allFiveStates: true, completionAndCorrection: true },
-    reviewerRef: `playwright:${testInfo.project.name}`,
-    observedAt: new Date().toISOString(),
-    artifactIds: [artifactPath],
-    runnerRef: "@playwright/test",
-    completionOracleResult: "passed",
-  };
-  await writeFile(artifactPath, `${JSON.stringify(receipt, null, 2)}\n`);
-
-  const finalState = "blocked";
-  const finalScenario = contract.stateScenarios[finalState];
-  const validated = evaluateRoutePurpose({
-    contract: { ...contract, validationReceipts: [receipt] },
-    oracle: {
-      routePath: "/ops/self-upgrade",
-      stateKey: finalState,
-      oracleKey: finalScenario.stateSource.oracleKey,
-      sourceRef: finalScenario.stateSource.sourceRef,
-    },
-    evidence: finalEvidence,
-    context: {
-      contractHash: receipt.contractHash,
-      fixtureVersion: receipt.fixtureVersion,
-      interactionFingerprint: receipt.interactionFingerprint,
-      relevantDependencyFingerprint:
-        receipt.relevantDependencyFingerprint,
-      resolvedArtifactIds: new Set([artifactPath]),
-    },
-    enforcement: "advisory",
-  });
-  expect(validated.validation.overall).toBe("current");
 });

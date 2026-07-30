@@ -20,7 +20,10 @@ import {
   resolveSelfUpgradePurposeScenario,
 } from "@/lib/self-upgrade/purpose-scenario";
 import { NAV_MODE_COOKIE, resolveNavModeFromCookie, isSimpleNavMode } from "@/lib/navigation/nav-mode";
-import { isSelfUpgradePurposeReviewState } from "@/lib/ux-budget/self-upgrade-purpose-review";
+import {
+  isSelfUpgradePurposeReviewEnabled,
+  isSelfUpgradePurposeReviewState,
+} from "@/lib/ux-budget/self-upgrade-purpose-review";
 
 export default async function SelfUpgradePage({
   searchParams = Promise.resolve({}),
@@ -29,7 +32,10 @@ export default async function SelfUpgradePage({
 } = {}) {
   const reviewParams = await searchParams;
   const reviewState = reviewParams.purposeReview ?? "";
-  if (isSelfUpgradePurposeReviewState(reviewState)) {
+  if (
+    isSelfUpgradePurposeReviewEnabled(process.env) &&
+    isSelfUpgradePurposeReviewState(reviewState)
+  ) {
     return (
       <SelfUpgradePurposeReview
         state={reviewState}
