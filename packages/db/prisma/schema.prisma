@@ -382,6 +382,8 @@ model Principal {
   careIntakeExceptionsAssigned        CareIntakeException[]               @relation("CareIntakeExceptionAssignee")
   careIntakeExceptionsResolved        CareIntakeException[]               @relation("CareIntakeExceptionResolver")
   careIntakeStatusEvents              CareIntakeStatusEvent[]             @relation("CareIntakeStatusActor")
+  ownedProductObjectives              ProductObjective[]                  @relation("ProductObjectiveOwner")
+  recordedProductOutcomeObservations  ProductOutcomeObservation[]         @relation("ProductOutcomeObservationRecorder")
   createdAt                           DateTime                            @default(now())
   updatedAt                           DateTime                            @updatedAt
 
@@ -837,6 +839,7 @@ model ProductLine {
   researchProposals     ResearchProposal[]              @relation("ResearchProposalProductLine")
   marketingBattlecards  MarketingBattlecard[]           @relation("MarketingBattlecardProductLine")
   scheduledAgentTasks   ScheduledAgentTask[]            @relation("ScheduledAgentTaskProductLine")
+  backlogItems          BacklogItem[]                   @relation("BacklogItemProductLine")
   storefrontComposition StorefrontArchetypeComposition?
 
   @@unique([organizationId, key])
@@ -868,12 +871,99 @@ model Product {
   researchProposals    ResearchProposal[]    @relation("ResearchProposalBusinessProduct")
   marketingBattlecards MarketingBattlecard[] @relation("MarketingBattlecardBusinessProduct")
   scheduledAgentTasks  ScheduledAgentTask[]  @relation("ScheduledAgentTaskBusinessProduct")
+  backlogItems         BacklogItem[]         @relation("BacklogItemBusinessProduct")
+  objectives           ProductObjective[]
 
   @@unique([productLineId, key])
   @@unique([id, organizationId])
   @@index([organizationId, sortOrder])
   @@index([productLineId, sortOrder])
   @@index([effectiveTo])
+}
+
+// Minimum product objective and outcome-learning contract
+// (EP-ED496EB0 Phase 9 / BI-162FBDCC). Business Product owns the objective;
+// DigitalProduct remains an architecture/delivery authority. Product-line
+// posture is derived through Product rather than persisted as a second ledger.
+model ProductObjective {
+  id                String                      @id @default(cuid())
+  objectiveId       String                      @unique
+  organizationId    String
+  productId         String
+  title             String
+  problemStatement  String?                     @db.Text
+  outcomeHypothesis String                      @db.Text
+  ownerPrincipalId  String?
+  measureKind       String
+  measureDefinition String                      @db.Text
+  measureUnit       String?
+  baselineValue     Decimal?                    @db.Decimal(20, 6)
+  targetValue       Decimal?                    @db.Decimal(20, 6)
+  baselineNarrative String?                     @db.Text
+  targetNarrative   String?                     @db.Text
+  status            String                      @default("draft")
+  reviewCadence     String?
+  reviewAt          DateTime?
+  reviewedAt        DateTime?
+  activatedAt       DateTime?
+  closedAt          DateTime?
+  archivedAt        DateTime?
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
+  organization      Organization                @relation("ProductObjectiveOrganization", fields: [organizationId], references: [id], onDelete: Cascade)
+  product           Product                     @relation(fields: [productId, organizationId], references: [id, organizationId], onDelete: Cascade)
+  ownerPrincipal    Principal?                  @relation("ProductObjectiveOwner", fields: [ownerPrincipalId], references: [id], onDelete: SetNull)
+  contributingWork  ProductObjectiveWork[]
+  observations      ProductOutcomeObservation[]
+
+  @@unique([id, organizationId])
+  @@index([organizationId, status, reviewAt])
+  @@index([productId, status])
+  @@index([ownerPrincipalId])
+}
+
+// Link only: canonical demand and delivery state remains on BacklogItem.
+model ProductObjectiveWork {
+  id               String           @id @default(cuid())
+  objectiveId      String
+  backlogItemId    String
+  contributionKind String
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  objective        ProductObjective @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  backlogItem      BacklogItem      @relation(fields: [backlogItemId], references: [id], onDelete: Cascade)
+
+  @@unique([objectiveId, backlogItemId])
+  @@index([backlogItemId])
+  @@index([contributionKind])
+}
+
+// Append-only learned evidence. Corrections create a new observation that
+// supersedes one current row; there is deliberately no mutable "current value".
+model ProductOutcomeObservation {
+  id                      String                     @id @default(cuid())
+  observationId           String                     @unique
+  objectiveId             String
+  observedAt              DateTime
+  numericValue            Decimal?                   @db.Decimal(20, 6)
+  narrative               String?                    @db.Text
+  measureKind             String
+  measureUnit             String?
+  sourceKind              String
+  sourceRef               String?
+  confidence              Float?
+  provenance              Json?
+  recordedByPrincipalId   String?
+  supersedesObservationId String?                    @unique
+  createdAt               DateTime                   @default(now())
+  objective               ProductObjective           @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  recordedByPrincipal     Principal?                 @relation("ProductOutcomeObservationRecorder", fields: [recordedByPrincipalId], references: [id], onDelete: SetNull)
+  supersedes              ProductOutcomeObservation? @relation("ProductOutcomeObservationCorrection", fields: [supersedesObservationId], references: [id], onDelete: Restrict)
+  supersededBy            ProductOutcomeObservation? @relation("ProductOutcomeObservationCorrection")
+
+  @@index([objectiveId, observedAt])
+  @@index([sourceKind, sourceRef])
+  @@index([recordedByPrincipalId])
 }
 
 // Organization-owned commercial promise for a business Product
@@ -2007,6 +2097,13 @@ model BacklogItem {
   updatedAt               DateTime                      @updatedAt
   priority                Int?
   digitalProductId        String?
+  // Product-management demand scope (EP-ED496EB0 Phase 8). Business Product
+  // and EEMD DigitalProduct remain separate targets; application invariants
+  // require organization context and at most one narrower target. Nullable
+  // expand-first columns preserve historical rows as explicitly unclassified.
+  organizationId          String?
+  productLineId           String?
+  businessProductId       String?
   taxonomyNodeId          String?
   epicId                  String?
   portfolioId             String?
@@ -2087,6 +2184,9 @@ model BacklogItem {
   activeEpic              Epic?                         @relation("BacklogItemActiveEpic", fields: [activeEpicId], references: [id])
   originatingEpic         Epic?                         @relation("EpicOriginatingItem")
   digitalProduct          DigitalProduct?               @relation(fields: [digitalProductId], references: [id])
+  organization            Organization?                 @relation("BacklogItemOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  productLine             ProductLine?                  @relation("BacklogItemProductLine", fields: [productLineId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  businessProduct         Product?                      @relation("BacklogItemBusinessProduct", fields: [businessProductId, organizationId], references: [id, organizationId], onDelete: Restrict)
   duplicateOf             BacklogItem?                  @relation("BacklogItemDuplicates", fields: [duplicateOfId], references: [id])
   duplicates              BacklogItem[]                 @relation("BacklogItemDuplicates")
   epic                    Epic?                         @relation(fields: [epicId], references: [id])
@@ -2094,16 +2194,50 @@ model BacklogItem {
   submittedBy             User?                         @relation("BacklogSubmissions", fields: [submittedById], references: [id])
   taxonomyNode            TaxonomyNode?                 @relation(fields: [taxonomyNodeId], references: [id])
   activities              BacklogItemActivity[]
+  demandEvidenceLinks     DemandEvidenceLink[]
   coworkerNeeds           CoworkerCapabilityNeed[]      @relation("BacklogItemCoworkerCapabilityNeeds")
   businessCapabilityLinks BusinessCapabilityTraceLink[] @relation("BusinessCapabilityBacklogLinks")
   founderDemandClusters   FounderDemandCluster[]
+  productObjectiveWork    ProductObjectiveWork[]
 
   @@index([portfolioId])
+  @@index([organizationId])
+  @@index([productLineId])
+  @@index([businessProductId])
   @@index([status])
   @@index([status, updatedAt])
   @@index([portfolioId, demandScore])
   @@index([demandStage])
   @@index([scopeKind])
+}
+
+// Direct, queryable evidence linked to the canonical BacklogItem demand record.
+// The source remains authoritative in its own domain. This child owns only the
+// reviewed link, evidence-at-link snapshot, and provenance used to explain an
+// investment score without hiding current references in activity JSON.
+model DemandEvidenceLink {
+  id                  String      @id @default(cuid())
+  evidenceLinkId      String      @unique
+  backlogItemId       String
+  sourceKind          String
+  sourceRef           String
+  wikiPageId          String?
+  title               String
+  summary             String?     @db.Text
+  confidence          Float?
+  reviewedAt          DateTime?
+  status              String      @default("active")
+  provenance          Json?
+  linkedByPrincipalId String?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  backlogItem         BacklogItem @relation(fields: [backlogItemId], references: [id], onDelete: Cascade)
+  wikiPage            WikiPage?   @relation(fields: [wikiPageId], references: [id], onDelete: SetNull)
+
+  @@unique([backlogItemId, sourceKind, sourceRef])
+  @@index([backlogItemId, status])
+  @@index([sourceKind, sourceRef])
+  @@index([wikiPageId])
 }
 
 // Per-item timeline. Cross-cutting tool audit lives in ToolExecution; this is
@@ -4550,6 +4684,7 @@ model Organization {
   documents                         Document[]
   decisionPerspectiveProfiles       DecisionPerspectiveProfile[]
   researchProposals                 ResearchProposal[]
+  backlogItems                      BacklogItem[]                      @relation("BacklogItemOrganization")
   scheduledProductIntelligenceTasks ScheduledAgentTask[]               @relation("ScheduledAgentTaskOrganization")
   integrationCoverageProviders      IntegrationCoverageProvider[]      @relation("OrgToCoverageProviders")
   integrationRoleCoverages          IntegrationRoleCoverage[]          @relation("OrgToCoverageCells")
@@ -4566,6 +4701,7 @@ model Organization {
   storefrontBookings                StorefrontBooking[]                @relation("StorefrontBookingOrganization")
   productLines                      ProductLine[]
   businessProducts                  Product[]
+  productObjectives                 ProductObjective[]                 @relation("ProductObjectiveOrganization")
   productOfferings                  ProductOffering[]                  @relation("ProductOfferingOrganization")
   providedProductOfferings          ProductOffering[]                  @relation("ProductOfferingProviderOrganization")
   catalogItems                      CatalogItem[]
@@ -12502,33 +12638,34 @@ model RawSource {
 }
 
 model WikiPage {
-  id                       String             @id @default(cuid())
+  id                       String               @id @default(cuid())
   slug                     String
   title                    String
-  body                     String             @db.Text
+  body                     String               @db.Text
   pageKind                 String // entity | summary | decision | runbook | index | stance | heuristic | principle
-  status                   String             @default("draft") // draft | published | review-needed | archived
-  isKernel                 Boolean            @default(false)
+  status                   String               @default("draft") // draft | published | review-needed | archived
+  isKernel                 Boolean              @default(false)
   kernelVersion            String?
   organizationId           String?
-  organization             Organization?      @relation(fields: [organizationId], references: [id])
+  organization             Organization?        @relation(fields: [organizationId], references: [id])
   kernelPageId             String?
-  kernelPage               WikiPage?          @relation("WikiPageOverride", fields: [kernelPageId], references: [id])
-  overrides                WikiPage[]         @relation("WikiPageOverride")
+  kernelPage               WikiPage?            @relation("WikiPageOverride", fields: [kernelPageId], references: [id])
+  overrides                WikiPage[]           @relation("WikiPageOverride")
   derivedFromKernelVersion String?
-  abstract                 String?            @db.Text
+  abstract                 String?              @db.Text
   // Free-form frontmatter bag (mirrors PromptTemplate.metadata = "all other
   // frontmatter"). Profession-corpus pages carry the WSID variant axes here
   // (professionJurisdiction / professionCompetencyLevel) so coverage is
   // queryable at runtime without typed/indexed columns (variants spec §3).
   metadata                 Json?
   lastReviewedAt           DateTime?
-  createdAt                DateTime           @default(now())
-  updatedAt                DateTime           @updatedAt
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
   revisions                WikiPageRevision[]
-  outLinks                 WikiPageLink[]     @relation("WikiOutLinks")
-  inLinks                  WikiPageLink[]     @relation("WikiInLinks")
+  outLinks                 WikiPageLink[]       @relation("WikiOutLinks")
+  inLinks                  WikiPageLink[]       @relation("WikiInLinks")
   sources                  WikiPageSource[]
+  demandEvidenceLinks      DemandEvidenceLink[]
 
   // ─── Principle-only fields ──────────────────────────────────────────────
   // Nullable or defaulted; only populated when pageKind = "principle". See
