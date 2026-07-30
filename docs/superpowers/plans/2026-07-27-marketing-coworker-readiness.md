@@ -148,6 +148,18 @@ against live dispatch rather than accepting route construction alone.
 | Downgrade behavior parsed human-readable reason text | `RouteDecision.preferenceResolution` is the structured source for applied and unavailable preferences and the user-facing downgrade message |
 | A model preference could escape its selected provider | Provider and model are finalized as one pair; a stale or duplicate model id is resolved only within the selected provider and otherwise reported unavailable |
 
+A fifth independent architecture and UX review rejected the gate-passing patch
+because its visible promise could still diverge from real dispatch.
+
+| Fifth critique | Correction |
+| --- | --- |
+| Generic conversation readiness did not prove the advertised campaign work | Each service declares a validated representative task type, prompt, and tool-use requirement; readiness evaluates that exact task through task-specific requirements and overrides |
+| Strict lifecycle certification could reject a coworker still shown as Available | Roster and record include the canonical lifecycle gate verdict; draft, retired, or strict failed-certification coworkers lose Ask and receive typed recovery |
+| Area, job, interaction, availability, and actions could come from different sibling services | One deterministic winning service now owns every first-view claim; all sibling services remain available under progressive disclosure |
+| Recovery destinations were inferred from English reason text | Readiness emits a closed recovery kind mapped centrally to business type, catalog, capabilities, capability needs, lifecycle, or routing |
+| The roster would evaluate lifecycle once per coworker | A batch lifecycle projection reads agents, strict mode, and certification evidence once for the roster |
+| The seed test recorded calls without proving repeatability or preservation | A stateful test runs the seed twice, proves the empty Marketing declaration backfills once, and proves an operator-authored declaration survives |
+
 ## Phase 1: Test-Drive Service-Scoped Readiness
 
 Add failing unit tests before implementation.
@@ -160,7 +172,8 @@ service plus already-loaded evidence:
 - registered tool names;
 - enabled assigned skill ids;
 - effective held grants;
-- canonical conversation-route readiness;
+- representative service-task route readiness;
+- canonical lifecycle and certification readiness;
 - active blocking capability-need count.
 
 Return the existing `CoworkerAvailabilityReadiness` shape:
@@ -292,6 +305,8 @@ Reserve roughly one fifth of the implementation effort for direct convergence:
 - one canonical identity-folding helper for skills and grants;
 - one service-id-keyed readiness contract shared by roster and record;
 - one bulk canonical route-readiness snapshot shared by roster and record;
+- one batched lifecycle projection for the roster;
+- one typed availability-recovery mapper shared by roster and record;
 - projection-owned readiness reasons and evidence, not page-owned wording.
 
 This allowance excludes unrelated catalog cleanup and new administration UI.
@@ -324,12 +339,13 @@ Update `docs/user-guide/ai-workforce/index.md` to explain:
    classify them as unrun and use the shared local-CI gate.
 5. Run the production build, migration check, and merged-tree gate through
    `pnpm run pregate`.
-6. Verify desktop and 390x844 mobile behavior in the shared sandbox.
-7. After merge and governed self-upgrade, run canonical live acceptance:
+6. Obtain independent architecture and UX `fit` verdicts on the exact patch.
+7. Verify desktop and 390x844 mobile behavior in the shared sandbox.
+8. After merge and governed self-upgrade, run canonical live acceptance:
    - Availability=Available returns Marketing.
    - the Customers and sales card says `Available for your business type`;
    - `Ask Marketing` opens Marketing;
    - a harmless campaign-planning message receives a Marketing response;
    - Customer Advisor remains fail-closed;
    - no horizontal overflow or browser errors occur.
-8. Record evidence against `BI-C1943813` and only then mark it done.
+9. Record evidence against `BI-C1943813` and only then mark it done.

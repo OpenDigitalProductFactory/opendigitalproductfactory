@@ -82,6 +82,10 @@ export type CoworkerDiscoveryProjection = {
   serviceAvailability: CoworkerServiceAvailability[];
   canStartConversation: boolean;
   workSearchText: string;
+  primaryService: {
+    serviceId: string;
+    name: string;
+  } | null;
 };
 
 export type CoworkerServiceAvailability = {
@@ -318,33 +322,37 @@ export function projectCoworkerDiscovery(input: {
     projectRosterServiceAvailability(availabilityInput);
   const primaryService =
     primaryRosterServiceAvailability(serviceAvailability);
+  const primaryServiceEvidence = primaryService
+    ? input.services.find(
+        (service) => service.serviceId === primaryService.serviceId,
+      ) ?? null
+    : null;
   const availability = primaryService?.availability ??
     projectRosterAvailability(availabilityInput);
-  const interactionServiceIds = new Set(
-    primaryService
-      ? serviceAvailability
-          .filter(
-            (service) =>
-              AVAILABILITY_PRIORITY[service.availability.state] ===
-              AVAILABILITY_PRIORITY[primaryService.availability.state],
-          )
-          .map((service) => service.serviceId)
-      : [],
-  );
-  const interactionServices = input.services.filter((service) =>
-    interactionServiceIds.has(service.serviceId),
-  );
+  const primaryArea = primaryServiceEvidence
+    ? projectCoworkerOwnerAreas([primaryServiceEvidence]).primary
+    : ownerAreas.primary;
+  const primarySummary = primaryServiceEvidence?.summary?.trim();
   return {
-    area: ownerAreas.primary,
+    area: primaryArea,
     areas: ownerAreas.all,
-    plainJob: rosterPlainJob(input.agentDescription, input.services),
+    plainJob:
+      primarySummary ||
+      primaryServiceEvidence?.name ||
+      rosterPlainJob(input.agentDescription, input.services),
     workSearchText: rosterWorkSearchText(input.services),
     interaction: projectCoworkerInteraction(
-      interactionServices.length > 0 ? interactionServices : input.services,
+      primaryServiceEvidence ? [primaryServiceEvidence] : input.services,
     ),
     availability,
     serviceAvailability,
     canStartConversation: canStartCoworkerConversation(availability),
+    primaryService: primaryService
+      ? {
+          serviceId: primaryService.serviceId,
+          name: primaryService.serviceName,
+        }
+      : null,
   };
 }
 

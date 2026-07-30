@@ -29,6 +29,7 @@ import type {
   RosterFacets,
   RosterRow,
 } from "@/lib/coworker-record/roster";
+import { availabilityRecoveryTarget } from "@/lib/coworker-record/availability-recovery";
 import {
   OTHER_OWNER_FACING_AREA,
   OWNER_FACING_AREAS,
@@ -190,7 +191,7 @@ export function RosterView({
           />
           <button
             type="button"
-            aria-controls="coworker-secondary-filters"
+            aria-controls="coworker-core-filters coworker-secondary-filters"
             aria-expanded={mobileFiltersOpen}
             onClick={() => setMobileFiltersOpen((open) => !open)}
             className="inline-flex min-h-11 items-center justify-between gap-2 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 text-sm font-medium text-[var(--dpf-text)] lg:hidden"
@@ -206,6 +207,7 @@ export function RosterView({
             )}
           </button>
           <div
+            id="coworker-core-filters"
             className={
               mobileFiltersOpen
                 ? "grid gap-3 sm:grid-cols-2 lg:contents"
@@ -398,20 +400,15 @@ function RosterRowCard({
 }) {
   const detailRoute = `/platform/ai/agent/${encodeURIComponent(row.agentId)}`;
   const detailHref = `${detailRoute}?returnTo=${encodeURIComponent(returnHref)}`;
-  const setupHref = `${detailHref}#availability`;
   const canStartConversation = row.canStartConversation;
-  const setupNeeded = row.availability.state === "setup-needed";
   const attention = needsAttention(row);
   const availabilityOwnsAttention =
     row.availability.state === "setup-needed" ||
     row.availability.state === "needs-attention";
-  const coverageNeedsReview =
-    row.availability.state === "coverage-not-defined";
-  const coverageSetupHref = row.availability.reason
-    .toLowerCase()
-    .includes("business type")
-    ? "/storefront/settings/business"
-    : "/platform/ai/readiness";
+  const recovery = availabilityRecoveryTarget(
+    row.availability,
+    detailHref,
+  );
 
   return (
     <article
@@ -434,6 +431,11 @@ function RosterRowCard({
         <p className="mt-1 max-w-3xl text-sm leading-5 text-[var(--dpf-text-secondary)]">
           {row.plainJob}
         </p>
+        {row.primaryService && (
+          <p className="mt-1 text-xs font-medium text-[var(--dpf-muted)]">
+            Ready work: {row.primaryService.name}
+          </p>
+        )}
         <div className="mt-3 flex min-w-0 flex-wrap gap-2">
           <span className="self-center text-xs font-medium text-[var(--dpf-muted)]">
             Work includes
@@ -464,33 +466,24 @@ function RosterRowCard({
           <AskCoworkerButton
             routeContext={detailRoute}
             label={`Ask ${row.displayName}`}
-            className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--dpf-accent)] px-3 text-sm font-medium text-[var(--dpf-accent)] hover:bg-[var(--dpf-surface-2)]"
+            className="inline-flex min-h-11 items-center gap-2 rounded-md bg-[var(--dpf-accent)] px-3 text-sm font-semibold text-[var(--dpf-on-accent,var(--dpf-surface-1))] hover:opacity-90"
           >
             <MessageSquare aria-hidden className="h-4 w-4" />
             <span>{`Ask ${row.displayName}`}</span>
           </AskCoworkerButton>
         )}
-        {setupNeeded && (
+        {!canStartConversation && recovery && (
           <Link
-            href={setupHref}
+            href={recovery.href}
             className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--dpf-border)] px-3 text-sm font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
           >
             <Settings2 aria-hidden className="h-4 w-4" />
-            Review setup
-          </Link>
-        )}
-        {coverageNeedsReview && (
-          <Link
-            href={coverageSetupHref}
-            className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--dpf-border)] px-3 text-sm font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
-          >
-            <Settings2 aria-hidden className="h-4 w-4" />
-            Review availability
+            {recovery.label}
           </Link>
         )}
         <Link
           href={detailHref}
-          className="inline-flex min-h-11 items-center gap-1 rounded-md bg-[var(--dpf-accent)] px-3 text-sm font-semibold text-[var(--dpf-on-accent,var(--dpf-surface-1))] hover:opacity-90"
+          className="inline-flex min-h-11 items-center gap-1 rounded-md px-2 text-sm font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
         >
           View coworker
           <ChevronRight aria-hidden className="h-4 w-4" />

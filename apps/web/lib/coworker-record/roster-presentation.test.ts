@@ -241,7 +241,9 @@ describe("projectCoworkerDiscovery", () => {
     });
 
     expect(projection.area.key).toBe("products_and_services_sold");
-    expect(projection.plainJob).toBe("Authored work description.");
+    expect(projection.plainJob).toBe(
+      "Handles customer intake and follow-up.",
+    );
     expect(projection.interaction.scopes).toContain("talks-to-customers");
     expect(projection.availability.state).toBe("coverage-not-defined");
     expect(projection.availability.matchLevel).toBe("leaf");
@@ -264,9 +266,11 @@ describe("projectCoworkerDiscovery", () => {
     const readyInternal = service({
       serviceId: "svc-marketing-campaign-execution",
       name: "Marketing campaign execution",
+      summary: "Runs approved campaigns and measures results.",
       availabilityScope: "internal",
       personas: ["operator"],
       archetypes: ["food-hospitality"],
+      portfolio: { slug: "foundational", name: "Foundational" },
     });
     const unavailableCustomer = service({
       serviceId: "svc-marketing-customer-outreach",
@@ -293,13 +297,21 @@ describe("projectCoworkerDiscovery", () => {
     });
 
     expect(projection.availability.state).toBe("available");
+    expect(projection.primaryService).toEqual({
+      serviceId: "svc-marketing-campaign-execution",
+      name: "Marketing campaign execution",
+    });
+    expect(projection.area.key).toBe("foundational");
+    expect(projection.plainJob).toBe(
+      "Runs approved campaigns and measures results.",
+    );
     expect(projection.interaction).toEqual({
       scopes: ["internal-only"],
       labels: ["Internal only"],
     });
   });
 
-  it("retains interaction from every service tied for the winning availability state", () => {
+  it("uses one deterministic service when multiple services share the winning state", () => {
     const readyInternal = service({
       serviceId: "svc-marketing-campaign-execution",
       availabilityScope: "internal",
@@ -328,10 +340,10 @@ describe("projectCoworkerDiscovery", () => {
       ]),
     });
 
-    expect(projection.interaction.scopes).toEqual([
-      "talks-to-customers",
-      "internal-only",
-    ]);
+    expect(projection.primaryService?.serviceId).toBe(
+      "svc-marketing-campaign-execution",
+    );
+    expect(projection.interaction.scopes).toEqual(["internal-only"]);
   });
 });
 

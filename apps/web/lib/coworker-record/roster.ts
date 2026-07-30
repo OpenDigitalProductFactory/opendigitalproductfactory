@@ -27,12 +27,14 @@ import {
 } from "@/lib/coworker-service-catalog/availability-projection";
 import { loadCoworkerDiscoveryServices } from "@/lib/coworker-service-catalog/catalog";
 import {
-  evaluateCoworkerServicesReadiness,
+  evaluateCoworkerServiceReadiness,
 } from "@/lib/coworker-service-catalog/service-readiness";
 import {
   loadCoworkerRoutingReadinessSnapshot,
+  parseCoworkerServiceReadinessProbe,
   projectCoworkerRouteReadiness,
 } from "@/lib/coworker-service-catalog/route-readiness";
+import { evaluateLifecycleGates } from "@/lib/coworker-lifecycle/lifecycle-gate";
 import { VERIFIED_COWORKER_SERVICE_TOOL_NAMES } from "@/lib/coworker-service-catalog/registered-service-tools";
 import { normalizeVariantAxes } from "./variant-axes";
 import { loadInstallAvailabilityContext } from "./availability-context";
@@ -68,6 +70,10 @@ export type RosterRow = {
   areas: OwnerFacingArea[];
   interaction: CoworkerInteractionProjection;
   availability: CoworkerAvailabilityProjection;
+  primaryService?: {
+    serviceId: string;
+    name: string;
+  } | null;
   authority: CoworkerAuthorityProjection;
   familyKey: string | null;
   familyLabel: string | null;
@@ -278,12 +284,23 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
 
   // Belt-and-suspenders: drop any residual dual-seed alias twin still active.
   const agents = dropDualSeedAliasAgents(agentsRaw);
+  const runtimeAgentIds = agents.map(
+    (agent) =>
+      selectableCoworkerIdentityRefs(agent.agentId).runtimeAgentId,
+  );
   const routingReadinessSnapshot =
     await loadCoworkerRoutingReadinessSnapshot(
-      agents.map(
-        (agent) => selectableCoworkerIdentityRefs(agent.agentId).runtimeAgentId,
-      ),
+      runtimeAgentIds,
+      services
+        .map((service) =>
+          parseCoworkerServiceReadinessProbe(service.metadata),
+        )
+        .filter((probe) => probe !== null)
+        .map((probe) => probe.taskType),
     );
+  const lifecycleVerdicts = await evaluateLifecycleGates(runtimeAgentIds, {
+    purpose: "chat",
+  });
   const assignedSkillsByAgent = new Map<string, string[]>();
   for (const assignment of skillAssignments) {
     const current = assignedSkillsByAgent.get(assignment.agentId) ?? [];
@@ -344,8 +361,7 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
     const canonicalId = resolveCanonicalAgentId(agent.agentId);
     const { runtimeAgentId } = selectableCoworkerIdentityRefs(agent.agentId);
     const modelConfig = modelConfigByAgent.get(runtimeAgentId);
-    const routeReadiness = await projectCoworkerRouteReadiness(
-      {
+    const routeConfiguration = {
         agentId: runtimeAgentId,
         sensitivity: agent.sensitivity,
         minimumTier: modelConfig?.minimumTier ?? "adequate",
@@ -354,30 +370,65 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
         budgetClass: modelConfig?.budgetClass ?? "balanced",
         minimumCapabilities: modelConfig?.minimumCapabilities ?? null,
         minimumContextTokens: modelConfig?.minimumContextTokens ?? null,
-      },
-      routingReadinessSnapshot,
-    );
+      };
     const profileId = fam ? professionProfileId(fam.professionKey) : null;
     const openBlockers = blockersByAgent.get(runtimeAgentId) ?? 0;
     const agentServices = servicesByAgent.get(canonicalId) ?? [];
+    const lifecycleVerdict =
+      lifecycleVerdicts.get(runtimeAgentId) ?? { allowed: true as const };
+    const routeReadinessByServiceId = new Map(
+      await Promise.all(
+        agentServices.map(async (service) => {
+          const probe = parseCoworkerServiceReadinessProbe(service.metadata);
+          const readiness = probe
+            ? await projectCoworkerRouteReadiness(
+                routeConfiguration,
+                routingReadinessSnapshot,
+                probe,
+              )
+            : {
+                ready: false,
+                reason:
+                  "No representative service task is declared for readiness.",
+              };
+          return [service.serviceId, readiness] as const;
+        }),
+      ),
+    );
     const discovery = projectCoworkerDiscovery({
       agentDescription: agent.description,
       services: agentServices,
       install: installAvailability,
-      readinessByServiceId: evaluateCoworkerServicesReadiness(agentServices, {
-        assignedSkillIds: [
-          ...new Set(assignedSkillsByAgent.get(runtimeAgentId) ?? []),
-        ],
-        registeredToolNames: VERIFIED_COWORKER_SERVICE_TOOL_NAMES,
-        heldGrantKeys: [
-          ...new Set(heldGrantsByAgent.get(runtimeAgentId) ?? []),
-        ],
-        routeReady: routeReadiness.ready,
-        routeBlockerReason: routeReadiness.ready
-          ? undefined
-          : routeReadiness.reason,
-        blockingCapabilityNeedCount: openBlockers,
-      }),
+      readinessByServiceId: new Map(
+        agentServices.map((service) => {
+          const routeReadiness = routeReadinessByServiceId.get(
+            service.serviceId,
+          )!;
+          return [
+            service.serviceId,
+            evaluateCoworkerServiceReadiness(service, {
+              assignedSkillIds: [
+                ...new Set(assignedSkillsByAgent.get(runtimeAgentId) ?? []),
+              ],
+              registeredToolNames: VERIFIED_COWORKER_SERVICE_TOOL_NAMES,
+              heldGrantKeys: [
+                ...new Set(heldGrantsByAgent.get(runtimeAgentId) ?? []),
+              ],
+              probeDefined:
+                parseCoworkerServiceReadinessProbe(service.metadata) !== null,
+              lifecycleReady: lifecycleVerdict.allowed,
+              lifecycleBlockerReason: lifecycleVerdict.allowed
+                ? undefined
+                : lifecycleVerdict.reason,
+              routeReady: routeReadiness.ready,
+              routeBlockerReason: routeReadiness.ready
+                ? undefined
+                : routeReadiness.reason,
+              blockingCapabilityNeedCount: openBlockers,
+            }),
+          ] as const;
+        }),
+      ),
     });
 
     return {
@@ -410,6 +461,7 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
       areas: discovery.areas,
       interaction: discovery.interaction,
       availability: discovery.availability,
+      primaryService: discovery.primaryService,
       authority: projectCoworkerServiceAuthority({
         agent: {
           agentId: agent.agentId,

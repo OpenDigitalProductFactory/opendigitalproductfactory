@@ -2,7 +2,10 @@ import {
   expandGrants,
   isToolAllowedByGrants,
 } from "@/lib/tak/agent-grants";
-import type { CoworkerAvailabilityReadiness } from "./availability-projection";
+import type {
+  CoworkerAvailabilityReadiness,
+  CoworkerAvailabilityRecovery,
+} from "./availability-projection";
 
 export type CoworkerServiceBacking = {
   serviceId: string;
@@ -10,6 +13,7 @@ export type CoworkerServiceBacking = {
   backingSkillIds: unknown;
   backingToolNames: unknown;
   backingGrantKeys: unknown;
+  metadata?: unknown;
 };
 
 export type CoworkerServiceReadinessEvidence = {
@@ -19,6 +23,9 @@ export type CoworkerServiceReadinessEvidence = {
   routeReady: boolean;
   routeBlockerReason?: string;
   blockingCapabilityNeedCount: number;
+  probeDefined?: boolean;
+  lifecycleReady?: boolean;
+  lifecycleBlockerReason?: string;
 };
 
 export function evaluateCoworkerServiceReadiness(
@@ -33,10 +40,15 @@ export function evaluateCoworkerServiceReadiness(
   const effectiveGrants = new Set(expandGrants(evidence.heldGrantKeys));
   const missingKinds = new Set<string>();
   const details: string[] = [];
+  let setupRecovery: CoworkerAvailabilityRecovery | undefined;
 
   if (!backingSkills.valid || !backingTools.valid || !backingGrants.valid) {
     missingKinds.add(`Repair the advertised backing for ${service.name}`);
     details.push("One or more backing declarations are not valid string arrays.");
+    setupRecovery = {
+      kind: "catalog",
+      label: "Review coworker catalog",
+    };
   }
   if (
     backingSkills.values.length === 0 &&
@@ -45,12 +57,28 @@ export function evaluateCoworkerServiceReadiness(
   ) {
     missingKinds.add(`Define executable backing for ${service.name}`);
     details.push("No backing skill, tool, or permission is declared.");
+    setupRecovery = {
+      kind: "catalog",
+      label: "Review coworker catalog",
+    };
+  }
+  if (evidence.probeDefined === false) {
+    missingKinds.add(`Define a readiness probe for ${service.name}`);
+    details.push("No representative service task is declared for readiness.");
+    setupRecovery = {
+      kind: "catalog",
+      label: "Review coworker catalog",
+    };
   }
 
   for (const skillId of backingSkills.values) {
     if (!assignedSkills.has(skillId)) {
       missingKinds.add(`Assign the advertised skills for ${service.name}`);
       details.push(`Missing skill: ${skillId}`);
+      setupRecovery ??= {
+        kind: "capabilities",
+        label: "Review capabilities",
+      };
     }
   }
 
@@ -58,11 +86,19 @@ export function evaluateCoworkerServiceReadiness(
     if (!registeredTools.has(toolName)) {
       missingKinds.add(`Register the advertised tools for ${service.name}`);
       details.push(`Unregistered tool: ${toolName}`);
+      setupRecovery = {
+        kind: "catalog",
+        label: "Review coworker catalog",
+      };
       continue;
     }
     if (!isToolAllowedByGrants(toolName, [...evidence.heldGrantKeys])) {
       missingKinds.add(`Grant the advertised permissions for ${service.name}`);
       details.push(`Tool permission denied: ${toolName}`);
+      setupRecovery ??= {
+        kind: "capabilities",
+        label: "Review capabilities",
+      };
     }
   }
 
@@ -70,21 +106,46 @@ export function evaluateCoworkerServiceReadiness(
     if (!effectiveGrants.has(grantKey)) {
       missingKinds.add(`Grant the advertised permissions for ${service.name}`);
       details.push(`Missing permission: ${grantKey}`);
+      setupRecovery ??= {
+        kind: "capabilities",
+        label: "Review capabilities",
+      };
     }
   }
 
   const blockers: string[] = [];
+  let blockerRecovery: CoworkerAvailabilityRecovery | undefined;
+  if (evidence.lifecycleReady === false) {
+    blockers.push(
+      evidence.lifecycleBlockerReason ??
+        "This coworker is blocked by its lifecycle or certification state.",
+    );
+    blockerRecovery = {
+      kind: "lifecycle",
+      label: "Review certification",
+    };
+  }
   if (!evidence.routeReady) {
     blockers.push(
       evidence.routeBlockerReason ??
         "No configured model satisfies this coworker's routing requirements.",
     );
+    blockerRecovery ??= {
+      kind: "routing",
+      label: "Review AI readiness",
+    };
   }
   if (evidence.blockingCapabilityNeedCount > 0) {
     const count = evidence.blockingCapabilityNeedCount;
     blockers.push(
       `${count} blocking capability ${count === 1 ? "need requires" : "needs require"} review.`,
     );
+    if (blockerRecovery?.kind !== "lifecycle") {
+      blockerRecovery = {
+        kind: "capability-needs",
+        label: "Review capability needs",
+      };
+    }
   }
 
   return {
@@ -92,6 +153,9 @@ export function evaluateCoworkerServiceReadiness(
     blockers,
     missingPrerequisites: [...missingKinds],
     ...(details.length > 0 ? { details: [...new Set(details)] } : {}),
+    ...(blockerRecovery ?? setupRecovery
+      ? { recovery: blockerRecovery ?? setupRecovery }
+      : {}),
   };
 }
 

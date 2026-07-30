@@ -38,6 +38,7 @@ import type {
   PolicyRuleEval,
   SensitivityLevel,
 } from "@/lib/routing/types";
+import { TASK_TYPES } from "@/lib/task-types";
 
 export type CoworkerRouteConfiguration = {
   agentId: string;
@@ -58,7 +59,15 @@ export type CoworkerRoutingReadinessSnapshot = {
   localOnlyInference: boolean;
   postureByAgent?: ReadonlyMap<string, DispatchPosture | null>;
   taskRequirement?: TaskRequirement | null;
+  overridesByTaskType?: ReadonlyMap<string, EndpointOverride[]>;
+  taskRequirementByTaskType?: ReadonlyMap<string, TaskRequirement | null>;
   loadError?: string;
+};
+
+export type CoworkerServiceReadinessProbe = {
+  taskType: string;
+  prompt: string;
+  requiresToolUse: boolean;
 };
 
 export type CoworkerRouteReadiness = {
@@ -80,36 +89,52 @@ const BUDGET_CLASSES = new Set<RequestContract["budgetClass"]>([
   "balanced",
   "quality_first",
 ]);
+const REGISTERED_TASK_TYPES = new Set(
+  TASK_TYPES.map((taskType) => taskType.id),
+);
 
 export async function loadCoworkerRoutingReadinessSnapshot(
   agentIds: readonly string[] = [],
+  taskTypes: readonly string[] = ["conversation"],
 ): Promise<CoworkerRoutingReadinessSnapshot> {
   try {
+    const requestedTaskTypes = [...new Set(["conversation", ...taskTypes])];
     const [
       endpoints,
       policyRules,
-      overrides,
       capacityRows,
       localOnlyInference,
       postureByAgent,
-      taskRequirement,
     ] = await Promise.all([
       loadEndpointManifests(),
       loadPolicyRules(),
-      loadOverrides("conversation"),
       prisma.providerCapacityStatus
         .findMany({
           select: { providerId: true, state: true, retryAt: true },
         }),
       getLocalOnlyInference(),
       resolveDispatchPostures(agentIds),
-      getTaskRequirement("conversation"),
     ]);
+    const taskInputs = await Promise.all(
+      requestedTaskTypes.map(async (taskType) => {
+        const [overrides, taskRequirement] = await Promise.all([
+          loadOverrides(taskType),
+          getTaskRequirement(taskType),
+        ]);
+        return [taskType, overrides, taskRequirement ?? null] as const;
+      }),
+    );
+    const overridesByTaskType = new Map(
+      taskInputs.map(([taskType, overrides]) => [taskType, overrides]),
+    );
+    const taskRequirementByTaskType = new Map(
+      taskInputs.map(([taskType, , requirement]) => [taskType, requirement]),
+    );
 
     return {
       endpoints,
       policyRules,
-      overrides,
+      overrides: overridesByTaskType.get("conversation") ?? [],
       capacityByProvider: new Map(
         capacityRows.map(
           (row: {
@@ -126,7 +151,10 @@ export async function loadCoworkerRoutingReadinessSnapshot(
       ),
       localOnlyInference,
       postureByAgent,
-      taskRequirement: taskRequirement ?? null,
+      taskRequirement:
+        taskRequirementByTaskType.get("conversation") ?? null,
+      overridesByTaskType,
+      taskRequirementByTaskType,
     };
   } catch {
     return {
@@ -145,6 +173,11 @@ export async function loadCoworkerRoutingReadinessSnapshot(
 export async function projectCoworkerRouteReadiness(
   config: CoworkerRouteConfiguration,
   snapshot: CoworkerRoutingReadinessSnapshot,
+  probe: CoworkerServiceReadinessProbe = {
+    taskType: "conversation",
+    prompt: "Start a conversation.",
+    requiresToolUse: false,
+  },
 ): Promise<CoworkerRouteReadiness> {
   if (snapshot.loadError) {
     return blockedReadiness(snapshot.loadError);
@@ -167,7 +200,7 @@ export async function projectCoworkerRouteReadiness(
     ? (config.budgetClass as RequestContract["budgetClass"])
     : "balanced";
   const options = {
-    taskType: "conversation",
+    taskType: probe.taskType,
     budgetClass,
     minimumDimensions,
     minimumCapabilities,
@@ -190,18 +223,21 @@ export async function projectCoworkerRouteReadiness(
     localOnlyInference: snapshot.localOnlyInference,
   });
   const contract = await buildEffectiveRequestContract({
-    taskType: "conversation",
-    messages: [{ role: "user", content: "Start a conversation." }],
-    tools: [{}],
+    taskType: probe.taskType,
+    messages: [{ role: "user", content: probe.prompt }],
+    tools: probe.requiresToolUse ? [{}] : [],
     routeContext,
     options,
-    taskRequirement: snapshot.taskRequirement,
+    taskRequirement:
+      snapshot.taskRequirementByTaskType?.get(probe.taskType) ??
+      (probe.taskType === "conversation" ? snapshot.taskRequirement : null),
   });
   const decision = await routeEndpointV2(
     snapshot.endpoints,
     contract,
     snapshot.policyRules,
-    snapshot.overrides,
+    snapshot.overridesByTaskType?.get(probe.taskType) ??
+      (probe.taskType === "conversation" ? snapshot.overrides : []),
     {
       skipRecipe: true,
       capacityByProvider: snapshot.capacityByProvider,
@@ -249,6 +285,34 @@ export async function projectCoworkerRouteReadiness(
     reason: "A configured route satisfies this coworker's requirements.",
     providerId: selected.providerId,
     modelId: selected.modelId,
+  };
+}
+
+export function parseCoworkerServiceReadinessProbe(
+  metadata: unknown,
+): CoworkerServiceReadinessProbe | null {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return null;
+  }
+  const probe = (metadata as Record<string, unknown>).readinessProbe;
+  if (!probe || typeof probe !== "object" || Array.isArray(probe)) {
+    return null;
+  }
+  const value = probe as Record<string, unknown>;
+  if (
+    typeof value.taskType !== "string" ||
+    value.taskType.trim().length === 0 ||
+    !REGISTERED_TASK_TYPES.has(value.taskType.trim()) ||
+    typeof value.prompt !== "string" ||
+    value.prompt.trim().length === 0 ||
+    typeof value.requiresToolUse !== "boolean"
+  ) {
+    return null;
+  }
+  return {
+    taskType: value.taskType.trim(),
+    prompt: value.prompt.trim(),
+    requiresToolUse: value.requiresToolUse,
   };
 }
 

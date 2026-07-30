@@ -68,6 +68,14 @@ vi.mock("@/lib/coworker-service-catalog/route-readiness", () => ({
     providerId: "openai",
     modelId: "gpt-ready",
   }),
+  parseCoworkerServiceReadinessProbe: vi.fn().mockReturnValue(null),
+}));
+
+vi.mock("@/lib/coworker-lifecycle/lifecycle-gate", () => ({
+  evaluateLifecycleGate: vi.fn().mockResolvedValue({
+    allowed: true,
+    reason: "Lifecycle policy allows dispatch.",
+  }),
 }));
 
 vi.mock("@/components/platform/AgentModelRoutingCard", () => ({

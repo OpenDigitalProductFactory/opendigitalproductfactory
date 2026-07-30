@@ -226,7 +226,16 @@ export const COWORKER_SERVICE_CATALOG_SERVICE_SEEDS: readonly CoworkerServiceSee
     costModel: { pricing: "internal", metering: "per-campaign" },
     contractTerms: { posture: "internal", approvalGate: "human-approval-before-external-publish" },
     dataBoundary: { sensitivity: "internal" },
-    metadata: { aggregate: true, family: "marketing-execution" },
+    metadata: {
+      aggregate: true,
+      family: "marketing-execution",
+      readinessProbe: {
+        taskType: "tool-action",
+        prompt:
+          "Create a draft marketing campaign for a restaurant promotion using the campaign tools.",
+        requiresToolUse: true,
+      },
+    },
   }),
   serviceSeed("svc-marketing-ab-testing", "marketing-specialist", {
     ownerAreaSlug: "products_and_services_sold",

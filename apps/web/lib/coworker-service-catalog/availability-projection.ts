@@ -28,10 +28,24 @@ export type CoworkerAvailabilityEvidence = {
   values: string[];
 };
 
+export type CoworkerAvailabilityRecoveryKind =
+  | "business-type"
+  | "catalog"
+  | "capabilities"
+  | "capability-needs"
+  | "lifecycle"
+  | "routing";
+
+export type CoworkerAvailabilityRecovery = {
+  kind: CoworkerAvailabilityRecoveryKind;
+  label: string;
+};
+
 type ApplicableProjection = {
   matchLevel: Exclude<CoworkerAvailabilityMatchLevel, null>;
   reason: string;
   evidence: CoworkerAvailabilityEvidence[];
+  recovery?: CoworkerAvailabilityRecovery;
 };
 
 export type CoworkerAvailabilityProjection =
@@ -53,6 +67,7 @@ export type CoworkerAvailabilityProjection =
       reason: string;
       matchLevel: null;
       evidence: CoworkerAvailabilityEvidence[];
+      recovery?: CoworkerAvailabilityRecovery;
     }
   | {
       state: "coverage-not-defined";
@@ -60,6 +75,7 @@ export type CoworkerAvailabilityProjection =
       reason: string;
       matchLevel: CoworkerAvailabilityMatchLevel;
       evidence: CoworkerAvailabilityEvidence[];
+      recovery?: CoworkerAvailabilityRecovery;
     };
 
 export type CoworkerAvailabilityReadiness =
@@ -68,6 +84,7 @@ export type CoworkerAvailabilityReadiness =
       blockers: readonly string[];
       missingPrerequisites: readonly string[];
       details?: readonly string[];
+      recovery?: CoworkerAvailabilityRecovery;
     }
   | {
       status: "not-evaluated";
@@ -154,6 +171,8 @@ export function projectCoworkerAvailability(
       input.installResolutionReason ??
         "Your business type could not be resolved from the storefront configuration.",
       installEvidence(input.install, input.installResolutionReason),
+      null,
+      "business-type",
     );
   }
 
@@ -231,6 +250,9 @@ export function projectCoworkerAvailability(
           values: blockers,
         },
       ],
+      ...(input.readiness.recovery
+        ? { recovery: input.readiness.recovery }
+        : {}),
     };
   }
 
@@ -250,6 +272,9 @@ export function projectCoworkerAvailability(
           values: missingPrerequisites,
         },
       ],
+      ...(input.readiness.recovery
+        ? { recovery: input.readiness.recovery }
+        : {}),
     };
   }
 
@@ -339,6 +364,7 @@ function coverageNotDefined(
   reason: string,
   evidence: CoworkerAvailabilityEvidence[],
   matchLevel: CoworkerAvailabilityMatchLevel = null,
+  recoveryKind: "business-type" | "catalog" = "catalog",
 ): CoworkerAvailabilityProjection {
   return {
     state: "coverage-not-defined",
@@ -346,6 +372,13 @@ function coverageNotDefined(
     reason,
     matchLevel,
     evidence,
+    recovery: {
+      kind: recoveryKind,
+      label:
+        recoveryKind === "business-type"
+          ? "Review business type"
+          : "Review coworker catalog",
+    },
   };
 }
 

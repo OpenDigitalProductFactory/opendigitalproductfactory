@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { EMPTY_CAPABILITIES, EMPTY_PRICING } from "@/lib/routing/model-card-types";
 import type { EndpointManifest } from "@/lib/routing/types";
 import {
+  parseCoworkerServiceReadinessProbe,
   projectCoworkerRouteReadiness,
   type CoworkerRoutingReadinessSnapshot,
 } from "./route-readiness";
@@ -248,6 +249,71 @@ describe("projectCoworkerRouteReadiness", () => {
         },
       }),
     ).resolves.toMatchObject({ ready: false });
+  });
+
+  it("evaluates the representative service task with its task-specific policy", async () => {
+    await expect(
+      projectCoworkerRouteReadiness(
+        config,
+        {
+          ...snapshot([endpoint()]),
+          taskRequirementByTaskType: new Map([
+            [
+              "tool-action",
+              {
+                taskType: "tool-action",
+                description: "Campaign execution floor.",
+                selectionRationale: "Verified campaign work.",
+                requiredCapabilities: { toolUse: true },
+                preferredMinScores: {},
+                minimumTier: "frontier",
+                preferCheap: false,
+                origin: "user",
+              },
+            ],
+          ]),
+        },
+        {
+          taskType: "tool-action",
+          prompt: "Create a draft restaurant promotion campaign.",
+          requiresToolUse: true,
+        },
+      ),
+    ).resolves.toMatchObject({ ready: false });
+  });
+
+  it("parses only complete representative service probes", () => {
+    expect(
+      parseCoworkerServiceReadinessProbe({
+        readinessProbe: {
+          taskType: " tool-action ",
+          prompt: " Draft a campaign. ",
+          requiresToolUse: true,
+        },
+      }),
+    ).toEqual({
+      taskType: "tool-action",
+      prompt: "Draft a campaign.",
+      requiresToolUse: true,
+    });
+    expect(
+      parseCoworkerServiceReadinessProbe({
+        readinessProbe: {
+          taskType: "tool-action",
+          prompt: "",
+          requiresToolUse: true,
+        },
+      }),
+    ).toBeNull();
+    expect(
+      parseCoworkerServiceReadinessProbe({
+        readinessProbe: {
+          taskType: "invented-task",
+          prompt: "Draft a campaign.",
+          requiresToolUse: true,
+        },
+      }),
+    ).toBeNull();
   });
 
   it("fails closed when the selected sole provider has a known repair state", async () => {

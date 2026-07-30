@@ -56,6 +56,10 @@ function row(over: Partial<RosterRow> = {}): RosterRow {
     plainJob: "Plans and runs measured marketing campaigns.",
     workSearchText: "Campaign planning Campaign measurement",
     canStartConversation: true,
+    primaryService: {
+      serviceId: "svc-marketing-campaign-execution",
+      name: "Marketing campaign execution",
+    },
     area: {
       key: "products_and_services_sold",
       label: "Customers and sales",
@@ -149,6 +153,17 @@ describe("RosterView", () => {
     expect(headings[0]?.textContent).toBe("Customers and sales");
     expect(headings[1]?.textContent).toBe("Platform and back office");
     expect(screen.getAllByRole("button", { name: "Ask Marketing Specialist" })).toHaveLength(1);
+    expect(screen.getByText("Ready work: Marketing campaign execution")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "Ask Marketing Specialist" })
+        .getAttribute("class"),
+    ).toContain("bg-[var(--dpf-accent)]");
+    expect(
+      screen
+        .getByRole("link", { name: /View coworker/ })
+        .getAttribute("class"),
+    ).not.toContain("bg-[var(--dpf-accent)]");
 
     fireEvent.click(
       screen.getByRole("button", { name: "Ask Marketing Specialist" }),
@@ -192,6 +207,9 @@ describe("RosterView", () => {
     const filtersButton = screen.getByRole("button", { name: "Filters" });
     const filterRegion = document.getElementById("coworker-secondary-filters");
     expect(filtersButton.getAttribute("aria-expanded")).toBe("false");
+    expect(filtersButton.getAttribute("aria-controls")).toBe(
+      "coworker-core-filters coworker-secondary-filters",
+    );
     expect(filterRegion?.classList.contains("hidden")).toBe(true);
     expect(screen.getAllByLabelText("Interaction")).toHaveLength(1);
 
@@ -221,6 +239,10 @@ describe("RosterView", () => {
               reason: "No storefront business type is configured.",
               matchLevel: null,
               evidence: [],
+              recovery: {
+                kind: "business-type",
+                label: "Review business type",
+              },
             },
             canStartConversation: false,
           }),
@@ -236,7 +258,7 @@ describe("RosterView", () => {
     expect(cardView.queryByText("Needs attention")).toBeNull();
     expect(
       cardView
-        .getByRole("link", { name: "Review availability" })
+        .getByRole("link", { name: "Review business type" })
         .getAttribute("href"),
     ).toBe("/storefront/settings/business");
   });
@@ -266,6 +288,10 @@ describe("RosterView", () => {
               reason: "Assign the advertised skills.",
               matchLevel: "leaf",
               evidence: [],
+              recovery: {
+                kind: "capabilities",
+                label: "Review capabilities",
+              },
             },
             canStartConversation: false,
           }),
@@ -276,13 +302,13 @@ describe("RosterView", () => {
     );
 
     const href = screen
-      .getByRole("link", { name: "Review setup" })
+      .getByRole("link", { name: "Review capabilities" })
       .getAttribute("href");
     expect(
       screen.queryByRole("button", { name: "Ask Customer Advisor" }),
     ).toBeNull();
     expect(href).toContain("/platform/ai/agent/customer-advisor?");
     expect(href).toContain("returnTo=");
-    expect(href?.endsWith("#availability")).toBe(true);
+    expect(href?.endsWith("#capabilities")).toBe(true);
   });
 });

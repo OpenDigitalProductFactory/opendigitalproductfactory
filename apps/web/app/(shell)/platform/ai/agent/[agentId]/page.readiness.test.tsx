@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { loadCoworkerRecord } from "@/lib/coworker-record/load-record";
+import { evaluateLifecycleGate } from "@/lib/coworker-lifecycle/lifecycle-gate";
 
 const prismaMocks = vi.hoisted(() => ({
   agentModelConfig: { findUnique: vi.fn().mockResolvedValue(null) },
@@ -116,6 +117,13 @@ vi.mock("@/lib/coworker-service-catalog/route-readiness", () => ({
     providerId: "openai",
     modelId: "gpt-ready",
   }),
+  parseCoworkerServiceReadinessProbe: (
+    metadata: Record<string, unknown> | null,
+  ) => metadata?.readinessProbe ?? null,
+}));
+
+vi.mock("@/lib/coworker-lifecycle/lifecycle-gate", () => ({
+  evaluateLifecycleGate: vi.fn(),
 }));
 
 vi.mock("@/lib/tak/agent-grants", async (importOriginal) => ({
@@ -217,7 +225,14 @@ const marketingService = {
   backingSkillIds: [],
   backingToolNames: ["create_marketing_campaign", "get_campaign_plan"],
   backingGrantKeys: ["marketing_read", "marketing_write"],
-  metadata: { aggregate: true },
+  metadata: {
+    aggregate: true,
+    readinessProbe: {
+      taskType: "tool-action",
+      prompt: "Create a draft restaurant promotion campaign.",
+      requiresToolUse: true,
+    },
+  },
   portfolio: {
     slug: "products_and_services_sold",
     name: "Products and services sold",
@@ -284,6 +299,10 @@ function coworkerRecord({
 describe("AgentDetailPage readiness actions", () => {
   beforeEach(() => {
     vi.mocked(loadCoworkerRecord).mockReset();
+    vi.mocked(evaluateLifecycleGate).mockResolvedValue({
+      allowed: true,
+      reason: "Lifecycle policy allows dispatch.",
+    } as never);
   });
 
   it("shows a named Ask Marketing action when a campaign service is ready", async () => {
@@ -309,8 +328,14 @@ describe("AgentDetailPage readiness actions", () => {
 
     expect(html).toContain("Available for your business type");
     expect(html).toContain("Ask Marketing");
+    expect(html).toContain("Ready work: Marketing campaign execution");
     expect(html).toContain("Interaction for currently available work.");
     expect(html).not.toContain("Ask this coworker");
+    expect(
+      prismaMocks.$queryRaw.mock.calls.some((call) =>
+        call.includes("marketing-specialist"),
+      ),
+    ).toBe(true);
   });
 
   it("withholds Ask Customer Advisor while its declaration is incomplete", async () => {
@@ -390,5 +415,37 @@ describe("AgentDetailPage readiness actions", () => {
     expect(html).toContain(
       `/platform/ai/agent/AGT-WS-MARKETING?returnTo=${encodeURIComponent(returnTo)}#capabilities`,
     );
+  });
+
+  it("withholds Ask when strict lifecycle certification blocks dispatch", async () => {
+    vi.mocked(evaluateLifecycleGate).mockResolvedValue({
+      allowed: false,
+      reason: "Certification failed in strict lifecycle mode.",
+    } as never);
+    vi.mocked(loadCoworkerRecord).mockResolvedValue(
+      coworkerRecord({
+        agentId: "AGT-WS-MARKETING",
+        displayName: "Marketing",
+        kind: "specialist",
+        description: "Plans and runs customer-facing campaigns.",
+        hitlTier: 2,
+        sensitivity: "internal",
+        services: [marketingService],
+        grants: ["marketing_read", "marketing_write"],
+      }),
+    );
+
+    const { default: AgentDetailPage } = await import("./page");
+    const html = renderToStaticMarkup(
+      await AgentDetailPage({
+        params: Promise.resolve({ agentId: "AGT-WS-MARKETING" }),
+      }),
+    );
+
+    expect(html).toContain("Needs attention");
+    expect(html).toContain("Certification failed in strict lifecycle mode.");
+    expect(html).toContain("Review certification");
+    expect(html).toContain('href="/platform/ai/readiness"');
+    expect(html).not.toContain("Ask Marketing");
   });
 });

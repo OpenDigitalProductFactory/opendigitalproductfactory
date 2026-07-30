@@ -89,6 +89,52 @@ describe("evaluateCoworkerServiceReadiness", () => {
         "2 blocking capability needs require review.",
       ],
       missingPrerequisites: [],
+      recovery: {
+        kind: "capability-needs",
+        label: "Review capability needs",
+      },
+    });
+  });
+
+  it("fails closed when the advertised service has no representative task", () => {
+    expect(
+      evaluateCoworkerServiceReadiness(service, {
+        ...readyEvidence,
+        probeDefined: false,
+      }),
+    ).toMatchObject({
+      status: "evaluated",
+      missingPrerequisites: [
+        "Define a readiness probe for Marketing campaign execution",
+      ],
+      recovery: {
+        kind: "catalog",
+        label: "Review coworker catalog",
+      },
+    });
+  });
+
+  it("blocks availability when lifecycle certification would reject dispatch", () => {
+    expect(
+      evaluateCoworkerServiceReadiness(service, {
+        ...readyEvidence,
+        probeDefined: true,
+        lifecycleReady: false,
+        lifecycleBlockerReason:
+          "Certification failed in strict lifecycle mode.",
+        blockingCapabilityNeedCount: 1,
+      }),
+    ).toEqual({
+      status: "evaluated",
+      blockers: [
+        "Certification failed in strict lifecycle mode.",
+        "1 blocking capability need requires review.",
+      ],
+      missingPrerequisites: [],
+      recovery: {
+        kind: "lifecycle",
+        label: "Review certification",
+      },
     });
   });
 
