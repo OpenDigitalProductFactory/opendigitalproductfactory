@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
 import {
@@ -6,8 +7,10 @@ import {
   evaluateReadiness,
   formatReadinessReport,
   parsePrBodyTrailers,
+  SUPPORTED_TRAILERS,
   validatePrBodyTrailers,
 } from "./pr-readiness/core.mjs";
+import { PR_TRAILER_NAMES } from "./lib/pr-trailer-contract.mjs";
 
 const cleanRepo = {
   branch: "feat/example",
@@ -28,26 +31,65 @@ const cleanRepo = {
   ],
 };
 
-test("buildGatePlan mirrors pre-PR governance gates that CI owns", () => {
-  const plan = buildGatePlan({ prBody: "UX-Fit-Decision: no-ui-change", prLabelsJson: "[]" });
+test("buildGatePlan derives runnable checks from the canonical policy profiles", () => {
+  const profiles = {
+    source: [
+      {
+        id: "source-a",
+        name: "Source A",
+        commands: [
+          ["node", ["--test", "source-a.test.mjs"]],
+          ["node", ["scripts/source-a.mjs"]],
+        ],
+      },
+    ],
+    "pull-request": [
+      {
+        id: "pr-a",
+        name: "PR A",
+        commands: [["node", ["scripts/pr-a.mjs"]]],
+      },
+      {
+        id: "mutating",
+        name: "Mutating",
+        commands: [
+          ["git", ["merge", "origin/main"]],
+          ["node", ["scripts/after-merge.mjs"]],
+        ],
+      },
+    ],
+  };
+  const plan = buildGatePlan({
+    prBody: "Seed-Fit-Decision: global-default",
+    prLabelsJson: "[]",
+    profiles,
+  });
   assert.deepEqual(
-    plan.map((gate) => gate.name),
+    plan.map((gate) => [gate.name, gate.command]),
     [
-      "Spec/Plan/Doc Gate",
-      "Plan Backlog Coverage Gate",
-      "Seed Contribution Fit Gate",
-      "UX-Fit Gate",
-      "Design Grounding Gate",
-      "Data-Impact Gate",
-      "Docs Impact Gate",
-      "Doc Link Integrity",
-      "Doc Reference Integrity",
-      "Retired Superpowers Skill Guard",
+      ["Source A", ["node", ["scripts/source-a.mjs"]]],
+      ["PR A", ["node", ["scripts/pr-a.mjs"]]],
     ],
   );
   assert.equal(plan[0].env.BASE_SHA, "origin/main");
-  assert.equal(plan[2].env.GITHUB_EVENT_NAME, "pull_request");
-  assert.equal(plan[2].env.PR_LABELS_JSON, "[]");
+  assert.equal(plan[1].env.GITHUB_EVENT_NAME, "pull_request");
+  assert.equal(plan[1].env.PR_LABELS_JSON, "[]");
+});
+
+test("buildGatePlan changes when the canonical profile changes", () => {
+  const guard = {
+    id: "only-guard",
+    name: "Only Guard",
+    commands: [["node", ["scripts/only-guard.mjs"]]],
+  };
+  const populated = buildGatePlan({
+    profiles: { source: [guard], "pull-request": [] },
+  });
+  const deleted = buildGatePlan({
+    profiles: { source: [], "pull-request": [] },
+  });
+  assert.deepEqual(populated.map((entry) => entry.name), ["Only Guard"]);
+  assert.deepEqual(deleted, []);
 });
 
 test("parsePrBodyTrailers extracts supported trailers with line numbers", () => {
@@ -110,17 +152,81 @@ test("evaluateReadiness folds failed local gates into one pre-PR verdict", () =>
   assert.match(result.warnings.join("\n"), /editing the PR body after a workflow run has started/);
 });
 
+test("evaluateReadiness reports a missing host runtime honestly without treating it as a product failure", () => {
+  const result = evaluateReadiness({
+    repo: cleanRepo,
+    gateResults: [
+      {
+        name: "Repo Guard Loop",
+        ok: false,
+        skippedEnvironment: true,
+        exitCode: 1,
+        output: "GuardRuntimeEnvironmentError: pinned TypeScript missing",
+      },
+    ],
+    prBody: "",
+  });
+  assert.equal(result.ready, true);
+  assert.equal(result.blockers.length, 0);
+  assert.match(result.warnings.join("\n"), /source-only host/);
+  assert.match(result.warnings.join("\n"), /CI still enforces it/);
+});
+
 test("formatReadinessReport uses plain-language headings and changed-file summary", () => {
   const result = evaluateReadiness({
     repo: { ...cleanRepo, changedFiles: ["a.ts", "b.ts"] },
     gateResults: [],
     prBody: "",
+    gateContext: {
+      trailers: [
+        {
+          gate: "Design Grounding",
+          trailer: `${PR_TRAILER_NAMES.designGrounding}:`,
+          level: "required",
+          because: "design-sensitive file changed",
+        },
+      ],
+      moduleSize: [],
+      ratchets: [],
+      derivedArtifacts: [],
+      routes: [],
+      migrations: [],
+      verification: ["run the readiness command"],
+    },
   });
   const report = formatReadinessReport(result);
+  assert.ok(
+    report.indexOf("# Gate context") < report.indexOf("PR readiness: READY"),
+    "the prospective checklist must lead the pass/fail verdict",
+  );
+  assert.match(report, /Design-Grounding-Decision:/);
   assert.match(report, /PR readiness: READY/);
   assert.match(report, /Changed files: 2/);
   assert.match(report, /What passed/);
   assert.match(report, /Safe to open or queue the PR/);
+});
+
+test("one trailer contract feeds readiness parsing and gate-context names", () => {
+  assert.ok(SUPPORTED_TRAILERS.has(PR_TRAILER_NAMES.processSpine));
+  assert.ok(SUPPORTED_TRAILERS.has(PR_TRAILER_NAMES.designGrounding));
+  assert.ok(SUPPORTED_TRAILERS.has(PR_TRAILER_NAMES.seedFit));
+  assert.ok(SUPPORTED_TRAILERS.has(PR_TRAILER_NAMES.docsImpact));
+  assert.ok(SUPPORTED_TRAILERS.has(PR_TRAILER_NAMES.localCiEvidence));
+  assert.ok(SUPPORTED_TRAILERS.has(PR_TRAILER_NAMES.localCiOverride));
+});
+
+test("shared PR skill and GitHub template require the mechanical readiness checklist", () => {
+  const skill = readFileSync(
+    new URL("../packages/dpf-skill-pack/skills/dpf-pr-with-dco/SKILL.md", import.meta.url),
+    "utf8",
+  );
+  const template = readFileSync(
+    new URL("../.github/PULL_REQUEST_TEMPLATE.md", import.meta.url),
+    "utf8",
+  );
+  assert.match(skill, /pnpm pr:ready -- --pr-body-file/);
+  assert.match(template, /## Pre-PR readiness/);
+  assert.match(template, /pnpm pr:ready -- --pr-body-file/);
 });
 
 // BI-D967DEE0: the UX-Fit trailer is retired. pr-readiness still PARSES it so the author

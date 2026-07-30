@@ -11,9 +11,11 @@
 // skill-pack hooks' local mirrors to it (the hooks keep dependency-free copies
 // because the pack is distributed outside this repo).
 
+import { PR_TRAILER_NAMES } from "./pr-trailer-contract.mjs";
+
 // ── Spec/Plan/Doc gate (scripts/check-spec-plan-doc.mjs) ─────────────────────
 
-export const PROCESS_SPINE_ATTESTATION_RE = /Process-Spine-Decision:/i;
+export const PROCESS_SPINE_ATTESTATION_RE = new RegExp(`${PR_TRAILER_NAMES.processSpine}:`, "i");
 
 // What COUNTS as a substantial implementation surface (triggers the gate):
 // NEW source modules and routes are a high-signal, low-false-positive marker
@@ -38,7 +40,7 @@ export const DOC_ARTIFACT_RE =
  * so tooling can still RECOGNISE the dead trailer in order to warn about it (see
  * RETIRED_TRAILERS in scripts/pr-readiness/core.mjs). Do not gate on it.
  */
-export const UX_FIT_ATTESTATION_RE = /UX-Fit-Decision:/i;
+export const UX_FIT_ATTESTATION_RE = new RegExp(`${PR_TRAILER_NAMES.uxFitRetired}:`, "i");
 
 // Added lines that introduce a user-facing control the operator must understand.
 export const UI_CONTROL_RE = /<input\b|<select\b|<textarea\b|type=["'](?:number|range)["']|<form\b/i;

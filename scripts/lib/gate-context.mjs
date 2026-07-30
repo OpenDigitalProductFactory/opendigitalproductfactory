@@ -45,6 +45,7 @@ import {
   UX_ROUTE_FILE_RE,
 } from "./gate-sensitivity.mjs";
 import { findCanonicalSeedContentPaths } from "./seed-fit-gate.mjs";
+import { PR_TRAILER_NAMES } from "./pr-trailer-contract.mjs";
 import {
   MODULE_SIZE_HARD_CAP,
   MODULE_SIZE_SOFT_CEILING,
@@ -99,7 +100,7 @@ function trailerConstraints(files, addedLinesByFile) {
   if ((newSubstantial.length > 0 || addedSourceLines > ADDED_SOURCE_LINE_THRESHOLD) && !docsTouched) {
     trailers.push({
       gate: "Spec/Plan/Doc",
-      trailer: "Process-Spine-Decision:",
+      trailer: `${PR_TRAILER_NAMES.processSpine}:`,
       level: "required",
       because: newSubstantial.length > 0
         ? `new source module(s)/route(s): ${newSubstantial.slice(0, 5).map((f) => f.path).join(", ")}`
@@ -112,7 +113,7 @@ function trailerConstraints(files, addedLinesByFile) {
   if (designSensitive.length > 0) {
     trailers.push({
       gate: "Design Grounding",
-      trailer: "Design-Grounding-Decision:",
+      trailer: `${PR_TRAILER_NAMES.designGrounding}:`,
       level: "required",
       because: `design-sensitive file(s): ${designSensitive.slice(0, 5).join(", ")}`,
       alternative: "a '## Design grounding' section in the PR body (specs/plans reviewed + code substrate reviewed + source of truth + decision)",
@@ -156,7 +157,7 @@ function trailerConstraints(files, addedLinesByFile) {
   if (seedPaths.length > 0) {
     trailers.push({
       gate: "Seed Contribution Fit",
-      trailer: "Seed-Fit-Decision:",
+      trailer: `${PR_TRAILER_NAMES.seedFit}:`,
       level: "required",
       because: `canonical seed content changed: ${seedPaths.slice(0, 5).join(", ")}`,
       note: "this one goes in the PR BODY (the gate reads the push-event body, not commit trailers)",
