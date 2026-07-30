@@ -9,8 +9,14 @@
 // unstaged changes plus untracked files — measured against the merge base
 // with `--base` (default origin/main). Run it BEFORE writing code (empty diff
 // still prints the verification path) and again before pushing.
+//
+// `--stdin-json` bypasses git entirely: read `{"changedFiles":[{"path","status"}]}`
+// from stdin and emit the pack for those PLANNED changes. This is how Build
+// Studio injects prospective constraints at prompt-assembly time, before any
+// code exists (the plan's fileStructure is the intended diff).
 
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { buildGateContext, formatGateContextMarkdown } from "./lib/gate-context.mjs";
@@ -71,19 +77,39 @@ export function collectWorktreeDiff({ base = "origin/main", cwd = process.cwd() 
   return { base, mergeBase, changedFiles, addedLinesByFile };
 }
 
+export function parseStdinChanges(text) {
+  const payload = JSON.parse(text);
+  const entries = Array.isArray(payload?.changedFiles) ? payload.changedFiles : [];
+  return entries
+    .map((entry) => ({
+      path: safePath(entry?.path),
+      status: entry?.status === "A" || entry?.status === "D" ? entry.status : "M",
+    }))
+    .filter((entry) => entry.path);
+}
+
 export async function main() {
   const args = process.argv.slice(2);
   const baseIndex = args.indexOf("--base");
   const base = baseIndex >= 0 ? args[baseIndex + 1] : "origin/main";
 
-  const diff = collectWorktreeDiff({ base });
-  const context = buildGateContext({
-    changedFiles: diff.changedFiles,
-    addedLinesByFile: diff.addedLinesByFile,
-  });
+  let changedFiles;
+  let addedLinesByFile = new Map();
+  let provenance = {};
+  if (args.includes("--stdin-json")) {
+    changedFiles = parseStdinChanges(readFileSync(0, "utf8"));
+    provenance = { source: "stdin-json" };
+  } else {
+    const diff = collectWorktreeDiff({ base });
+    changedFiles = diff.changedFiles;
+    addedLinesByFile = diff.addedLinesByFile;
+    provenance = { base: diff.base, mergeBase: diff.mergeBase };
+  }
+
+  const context = buildGateContext({ changedFiles, addedLinesByFile });
 
   if (args.includes("--json")) {
-    process.stdout.write(`${JSON.stringify({ base: diff.base, mergeBase: diff.mergeBase, ...context }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify({ ...provenance, ...context }, null, 2)}\n`);
     return;
   }
   process.stdout.write(`${formatGateContextMarkdown(context)}\n`);

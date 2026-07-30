@@ -89,6 +89,7 @@ import { grokSigninPack } from "./packs/grok-signin-pack";
 import { releasePack } from "./packs/release-pack";
 import { buildLifecyclePack } from "./packs/build-lifecycle-pack";
 import { buildChangePack } from "./packs/build-change-pack";
+import { gateContextPack } from "./packs/gate-context-pack";
 
 export const TOOL_PACK_REGISTRY = composeToolPacks([
   deliberationSiemPack,
@@ -153,6 +154,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   releasePack,
   buildLifecyclePack,
   buildChangePack,
+  gateContextPack,
   adminPack,
   buildEnginePack,
   buildEvidencePack,

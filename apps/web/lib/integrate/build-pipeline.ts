@@ -428,6 +428,16 @@ async function stepGenerateCode(
   // promoted before plan.processSize existed.
   const processSize = (plan["processSize"] as string | undefined) ?? "medium";
 
+  // Prospective CI gate constraints for the plan's intended files
+  // (BI-121DC3A3): derived from the same registries CI enforces, injected
+  // BEFORE generation so the agent designs within the ratchets/trailers
+  // instead of discovering them at push time. Advisory and non-fatal.
+  let gateContext: string | undefined;
+  try {
+    const { plannedChangesFromPlan, computeGateContextMarkdown } = await import("./gate-context-bridge");
+    gateContext = (await computeGateContextMarkdown(plannedChangesFromPlan(plan))) ?? undefined;
+  } catch { /* advisory — never block the build phase */ }
+
   // Build the system prompt with build context (same as the coworker uses)
   const buildContext = await getBuildContextSection({
     buildId,
@@ -439,6 +449,7 @@ async function stepGenerateCode(
     portfolioId: build.portfolioId,
     plan,
     designSystem,
+    gateContext,
   });
   const systemPrompt = `You are an AI coworker building a feature in the sandbox.\n${buildContext}`;
 

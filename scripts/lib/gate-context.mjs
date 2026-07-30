@@ -170,7 +170,7 @@ function trailerConstraints(files, addedLinesByFile) {
       gate: "Data-Impact",
       trailer: "Data-Impact manifest",
       level: "required",
-      because: `persistent data surface(s) changed: ${[...new Set(dataSurfaces.map((s) => s.kind))].join(", ")}`,
+      because: `persistent data surface(s) changed: ${dataSurfaces.join(", ")}`,
       alternative: "a data-impact manifest (or registered exception) covering migration/backfill/rollback disposition",
     });
   }

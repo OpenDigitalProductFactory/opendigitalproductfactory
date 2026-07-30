@@ -33,7 +33,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "set_change_disposition",
-    description: "Record the human's final call on whether the current change is kept private (on the user's own system) or shared with the community. Use after presenting the Keep/Share suggestion at ship time. A change must be 'shareable' before contribute_to_hive or a public-hive PR will share it; the default is 'private' (fail-closed), so inaction never shares.",
+    description: "Record the human's Keep/Share call on the current change at ship time. A change must be 'shareable' before contribute_to_hive or a public-hive PR will share it; the default 'private' is fail-closed — inaction never shares.",
     inputSchema: {
       type: "object",
       properties: {
