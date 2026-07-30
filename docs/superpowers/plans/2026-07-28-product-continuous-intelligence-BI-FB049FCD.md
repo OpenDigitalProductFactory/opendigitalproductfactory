@@ -330,7 +330,15 @@ No PR opens until the integrated stack passes these gates.
 
 ## Backlog coverage
 
-Coverage receipt: `cms56tjgr02f401qwuxhcozzu` (`atomic`, recorded against `BI-FB049FCD`).
+- Decision: atomic
+- Receipt: `cms71pvul0ek901og5f315zyz`
+- Parent: `BI-FB049FCD`
+- Dependencies: `none`
+- Rationale: the proposal and research refactor, scheduler extension,
+  competitive convergence, ProductOperatingContext projection, and
+  intelligence route form one governed behavior boundary. Splitting them
+  would expose execution without reviewable context or UI without governed
+  execution.
 
 Deliverable graph:
 

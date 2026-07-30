@@ -212,7 +212,14 @@ Combined shared-sandbox gate after Phases 6-12 are stacked:
 
 ## Backlog coverage
 
-Governed receipt: `cms54w8hf019201qw57ucob1r` (`atomic`).
+- Decision: atomic
+- Receipt: `cms71pp520ek501ogh64htmdg`
+- Parent: `BI-C2C08E30`
+- Dependencies: `none`
+- Rationale: the route boundary, shared projection, product and product-line
+  presentations, preview boundary, tests, and documentation are not
+  independently valuable releases because each is required to make the same
+  workspace truthful and navigable.
 
 This child plan is atomic to `BI-C2C08E30`: the route boundary, shared
 projection, product and product-line presentations, preview boundary, tests,
@@ -233,7 +240,7 @@ Dependency mapping:
 
 Recorded before the stacked runtime gate:
 
-- backlog coverage receipt `cms54w8hf019201qw57ucob1r` revalidated
+- backlog coverage receipt `cms71pp520ek501ogh64htmdg` revalidated
   `ok: true`;
 - strict TypeScript compilation passed for the operating-context query,
   route-authority, product-direction, and product-line projection boundaries;

@@ -117,17 +117,18 @@ Never Assume — Verify and Architecture Over Shortcuts.
 
 ## Backlog coverage
 
-- **Receipt:** `cms5304ab076001mx2v6kadza`
-- **Decision:** `atomic`
-- **Parent BI:** `BI-AE062121`
-- **Mapped item IDs:** none; all deliverables are internal slices of this BI.
-- **Rationale:** the typed contract, intelligence scope, authorized query, and
+- Decision: atomic
+- Receipt: `cms71pja20ek001og9x1vyta2`
+- Parent: `BI-AE062121`
+- Dependencies: `none`
+- Mapped item IDs: none; all deliverables are internal slices of this BI.
+- Rationale: the typed contract, intelligence scope, authorized query, and
   compatibility/invariant refactor jointly establish one truthful read boundary.
   Shipping any slice alone would expose an incomplete or misleading contract.
 
 | Deliverable | Independently shippable | Depends on |
 | --- | --- | --- |
-| `operating-context-contract` | No | — |
+| `operating-context-contract` | No | none |
 | `product-intelligence-scope` | No | `operating-context-contract` |
 | `bounded-query-boundary` | No | contract, intelligence scope |
 | `compatibility-refactor` | No | contract, query boundary |
