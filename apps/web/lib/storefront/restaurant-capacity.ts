@@ -20,6 +20,15 @@
 // Design: docs/superpowers/specs/2026-07-22-restaurant-capacity-legibility-design.md
 
 import { resolveIntent, type Intent } from "@/components/ui/report-kit/statusColors";
+import {
+  classifyStorefrontResource,
+  type StorefrontResourceKind,
+} from "./storefront-resource-kind";
+
+export {
+  classifyStorefrontResource,
+  type StorefrontResourceKind,
+} from "./storefront-resource-kind";
 
 // ── Canonical capacity vocabulary ───────────────────────────────────────────
 
@@ -106,30 +115,7 @@ export interface CapacityHoldInput {
 
 // ── Classification: table/capacity resource vs person/staff ──────────────────
 
-const TABLE_NAME_RX =
-  /\b(table|booth|window\s*seat|bar\s*seat|counter\s*seat|patio|terrace|banquette)\b/i;
 const SEAT_IN_NAME_RX = /(?:for|seats?|covers?|pax)\s*(\d{1,2})/i;
-const IDENTIFIER_TABLE_RX = /^\s*t(?:able)?\s*[-#]?\s*\d{1,3}\s*$/i; // "Table 4", "T4", "T-12"
-
-export type StorefrontResourceKind = "table" | "staff";
-
-/**
- * Decide whether a storefront "provider" row is a physical table / seating
- * resource or a person on staff. Restaurants have no structured discriminator
- * today, so a table leaks in as a `ServiceProvider` named like a table
- * ("Table 4"). Centralized here so BI-57F34A00 can swap the heuristic for a real
- * `resourceKind` column without touching any surface. An explicit `resourceKind`
- * hint always wins over the heuristic.
- */
-export function classifyStorefrontResource(
-  row: Pick<CapacityResourceInput, "name" | "resourceKind">,
-): StorefrontResourceKind {
-  if (row.resourceKind === "table" || row.resourceKind === "staff") return row.resourceKind;
-  const name = row.name ?? "";
-  if (IDENTIFIER_TABLE_RX.test(name)) return "table";
-  if (TABLE_NAME_RX.test(name)) return "table";
-  return "staff";
-}
 
 /** Best-effort seat count from a resource label ("Table for 4" → 4). */
 export function seatsFromName(name: string): number | null {

@@ -62,3 +62,4 @@ AbsorptionPosture  reference-data  # Authored absorption classification (BI-ECO-
 EdgeNodeCertificate  domain-lifecycle-managed  # Certificate records follow the Edge Node enrollment, rotation, revocation, and cascade-delete lifecycle; an age-based purge could remove an active authorization binding.
 ProductLine  domain-lifecycle-managed  # Organization-owned hierarchy changes through explicit business-product lifecycle actions and organization cascade, never an age-based sweep.
 Product      domain-lifecycle-managed  # Organization-owned product definitions change through explicit business-product lifecycle actions and product-line cascade, never an age-based sweep.
+OperationalSceneLayout  domain-lifecycle-managed  # Operator-authored geometry follows the owning organization's explicit layout lifecycle and cascades with the organization; an age-based sweep could delete an active floor plan.

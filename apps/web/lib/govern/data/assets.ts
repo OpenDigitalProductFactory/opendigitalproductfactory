@@ -170,6 +170,86 @@ export function resolveField(
 
 const SEED_ASSETS: readonly DataAssetDefinition[] = [
   {
+    // BI-CD99DC3F: operator-authored physical geometry is durable business
+    // configuration. It can expose room, equipment, table, or site structure and
+    // typed pointers to operational entities, so it stays confidential and local.
+    id: "data:operational-scene-layout",
+    physical: { prismaModel: "OperationalSceneLayout" },
+    domain: "business-operations",
+    ownerRole: "business-operator",
+    stewardRole: "data-steward",
+    categories: ["configuration", "operational", "content"],
+    sensitivity: "confidential",
+    criticality: "high",
+    subjectLocators: [],
+    lifecycleClass: "operational",
+    purposeCapabilities: ["service-delivery", "platform-operations"],
+    residencyClass: "local-only",
+    projectionClass: "structure",
+    classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-07-29" },
+    fields: [
+      ...["layoutState", "underlayRef"].map((physicalName) => ({
+        id: `data:operational-scene-layout#${physicalName}` as DataFieldId,
+        physicalName,
+        resolution: "governed" as const,
+        resolutionReason:
+          "Physical-space geometry and its floor-plan reference can reveal the operator's internal layout and links to live operational entities; retain locally and omit from unapproved projections.",
+        categories: ["configuration", "operational"] as DataCategory[],
+        sensitivity: "confidential" as DataSensitivity,
+        collectionRule: "minimize" as const,
+        protection: "mask-on-read" as ProtectionProfileKey,
+        projectionOverride: "structure" as ProjectionClass,
+        provenance: {
+          source: "manual" as const,
+          state: "confirmed" as const,
+          assertedBy: "data-steward",
+          effectiveFrom: "2026-07-29",
+        },
+      })),
+      {
+        id: "data:operational-scene-layout#label",
+        physicalName: "label",
+        resolution: "governed",
+        resolutionReason:
+          "Operator-authored room or area name is bounded business content and inherits the layout's confidential tenant scope.",
+        categories: ["content", "configuration"],
+        sensitivity: "confidential",
+        collectionRule: "minimize",
+        protection: "mask-on-read",
+        projectionOverride: "structure",
+        provenance: {
+          source: "manual",
+          state: "confirmed",
+          assertedBy: "data-steward",
+          effectiveFrom: "2026-07-29",
+        },
+      },
+      ...[
+        "id",
+        "orgId",
+        "twinTemplate",
+        "spaceKind",
+        "locationId",
+        "version",
+        "updatedAt",
+        "createdAt",
+        "organization",
+      ].map((physicalName) => ({
+        id: `data:operational-scene-layout#${physicalName}` as DataFieldId,
+        physicalName,
+        resolution: "inherited" as const,
+        resolutionReason:
+          "Tenant binding, scene classification, optional location pointer, versioning, persistence metadata, or relation governed by the confidential operational-scene asset.",
+        provenance: {
+          source: "manual" as const,
+          state: "confirmed" as const,
+          assertedBy: "data-steward",
+          effectiveFrom: "2026-07-29",
+        },
+      })),
+    ],
+  },
+  {
     // BI-F12A8D0D: machine-bound X.509 lifecycle metadata for an Edge Node.
     // The device private key and CA private key never enter this asset.
     id: "data:edge-node-certificate",
