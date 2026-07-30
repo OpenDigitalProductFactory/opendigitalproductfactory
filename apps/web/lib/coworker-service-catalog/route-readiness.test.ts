@@ -264,7 +264,7 @@ describe("projectCoworkerRouteReadiness", () => {
                 taskType: "tool-action",
                 description: "Campaign execution floor.",
                 selectionRationale: "Verified campaign work.",
-                requiredCapabilities: { toolUse: true },
+                requiredCapabilities: { supportsToolUse: true },
                 preferredMinScores: {},
                 minimumTier: "frontier",
                 preferCheap: false,
