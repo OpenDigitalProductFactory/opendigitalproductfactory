@@ -231,6 +231,29 @@ is available only as an explicit `scripts/gate-worktree.sh --push` (or
 `scripts/gate-worktree.mjs --push`) operation for recovery/transition cases
 that intentionally need it.
 
+### Reading the result — a queued run can exit 0
+
+Admission is queued (one slot until BI-A4427AB8). While waiting, the run prints
+`local-CI admission queued at position N`. **A run that never reaches admission
+can still terminate with exit code 0**, so exit status alone does not
+distinguish "gate passed" from "gate never ran". Confirm by artifact:
+
+1. The run ends with the literal line `gate passed`.
+2. It wrote the metadata record (the path is echoed as
+   `[local-integration-ci] metadata …`), and in that record **`candidateSha` is
+   the commit you are about to push**, with `baseSha` the base it merged
+   against. Check `evidencePlan.evidenceTier` / `fullSuite` describe the
+   coverage you expected.
+3. `grep -v "admission queued"` over the log. If only queue polling remains,
+   nothing ran.
+
+**Never wrap `pregate` in `timeout`.** Killing it mid-queue is what produces the
+false green above; run it unbounded. Queue contention is not a reason to reach
+for `DPF_SKIP_PREPUSH_GATE` — with a valid record for the head SHA the push is
+admitted normally. Cancelling a run can also leave a stale queued lease pinned
+to the **old** SHA; release it, or the next run queues behind your own
+abandoned entry.
+
 **The gate command has a checked-in default (BI-157DC9B2, BI-4BE30454):**
 [`scripts/local-ci-runner.mjs`](../../scripts/local-ci-runner.mjs) runs the
 canonical merged-code plan (`scripts/lib/local-integration-ci.mjs`: checkout
@@ -420,6 +443,9 @@ Name them so you catch yourself.
 | Reaching for `DPF_SKIP_*` to get past a hook | Bypasses are for verified false positives only | Fix the underlying error; CI gates it anyway |
 | Verifying UX against worktree `next dev` | Not the production-bundled runtime | Use the canonical install or sandbox lease (AGENTS.md §13) |
 | Treating a local green as the merge gate | The binding gate is the CI **Unit Tests** check | Local pass = evidence; CI pass = the gate |
+| Reading a `pregate` exit code as the verdict | A run killed while queued exits 0 without running | Require `gate passed` + a metadata record whose `candidateSha` is yours |
+| Wrapping `pregate` in `timeout` | Cuts it off mid-queue and manufactures a false green | Run it unbounded; background it and wait |
+| Trusting a green test run without naming the tree | Sibling worktrees hold identical paths; shell cwd persists between calls | Check the runner's root banner; reconcile the test count against your file |
 
 ## What this gate is NOT
 

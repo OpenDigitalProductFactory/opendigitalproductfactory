@@ -57,9 +57,26 @@ If a gate cannot run in the worktree because pnpm/corepack is missing, workspace
 6. Record the local integration result through MCP — `passed`, `failed`, `conflict`, or `blocked_sandbox_drift` (stale sandbox; carries the freshness verdict and resolved `next`/`react`/`react-dom` versions in evidence).
 7. Push only when the merged-code gate is green. If it is red, report the failure and next fix; if it is blocked on sandbox drift, converge and re-run — do not report a product failure.
 
+## Reading a pregate result — a queued run can exit 0
+
+`pregate` first waits for admission to the shared `local-integration-ci` lease. While it waits it prints `local-CI admission queued at position N`. **A run that never gets admitted can still terminate with exit code 0**, so the exit status alone does not distinguish "gate passed" from "gate never ran".
+
+Confirm a real pass by the artifacts, not the exit code:
+
+1. The run ends with the literal line `gate passed`.
+2. It wrote `.git/worktrees/<name>/dpf-local-ci-metadata.json` (path is echoed as `[local-integration-ci] metadata …`), and in that record **`candidateSha` is the commit you are about to push** and `baseSha` is the `origin/main` it merged against. Also check `evidencePlan.evidenceTier` / `fullSuite` describe the coverage you expected.
+3. Sanity-check the log actually contains gate work. `grep -v "admission queued"` — if nothing but queue polling remains, nothing ran.
+
+Then push normally: with a valid record for the head SHA the pre-push hook admits the push, and `DPF_SKIP_PREPUSH_GATE` is **not** needed.
+
+- **Never wrap `pregate` in `timeout`.** Killing it mid-queue is what produces the false green above. Run it unbounded (background it and wait for completion).
+- Queue contention is not a reason to override the gate. Waiting is correct; `DPF_SKIP_PREPUSH_GATE` is for a verified-clean push the gate structurally cannot cover, and it is recorded either way.
+- Cancelling a pregate can leave a stale queued lease pinned to the **old** SHA — release it before re-running, or the next run queues behind your own abandoned entry.
+
 ## Guardrails
 
 - Do not treat "passed in my worktree" as merge readiness.
+- Do not treat a pregate exit code as the verdict. The verdict is `gate passed` plus a metadata record whose `candidateSha` matches your commit.
 - A stale sandbox is not a product failure. Never record a red build as product evidence while the freshness preflight is red or unrun — classify it `blocked_sandbox_drift` and converge first.
 - Never start a second dependency install while one is running, and never "fix" a stale sandbox by installing dependencies inside a topic worktree.
 - Do not run destructive Compose cleanup against the root `dpf` project.

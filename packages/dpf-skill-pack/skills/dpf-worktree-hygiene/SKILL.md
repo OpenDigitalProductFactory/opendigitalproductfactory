@@ -116,6 +116,31 @@ Prefer flag-enabled scheduled GC. Manual one-shot only with go:
 - Keep currently checked-out / non-terminal (`review`, `building`, …) branches.
 - `git worktree prune` inside sandbox if a dir was deleted out from under git.
 
+## Per-worktree caches and links that make a fresh worktree look broken
+
+A new worktree does not inherit the root clone's tool caches or generated artifacts. Each of these presents as a hang or a scary failure and is really just an unseeded worktree.
+
+**gitleaks re-downloads per worktree.** The pre-commit scan caches under the *worktree's* git dir, not the root clone's. A cancelled download leaves a half-written zip that makes the next commit appear to hang. Seed it from the root clone:
+
+```bash
+V=<version>; T="$(git rev-parse --git-path dpf-tools/gitleaks/$V)"
+mkdir -p "$T" && cp "<root-clone>/.git/dpf-tools/gitleaks/$V/gitleaks.exe" "$T/"
+```
+
+**`packages/db` tests need the generated Prisma client.** Junction it rather than regenerating per worktree — on Windows the link name must be *relative* (an absolute target path errors with "Parameter format not correct"):
+
+```bash
+cd packages/db && MSYS_NO_PATHCONV=1 cmd /c "mklink /J generated <root-clone>\packages\db\generated"
+```
+
+Remove that junction with `cmd /c rmdir generated` — **never `rm -rf`**, which follows the link and eats the target's contents.
+
+**The junction then trips the pre-commit Prisma staleness guard**, which compares mtimes (`schema.prisma` newer than `generated/client/client.ts`) and tries to regenerate. In a fresh worktree the schema is simply newer than the borrowed artifact. Confirm the schemas are identical (`md5sum` both), then remove the junction, commit, and recreate it — do **not** regenerate through the junction, which writes into the root clone.
+
+**A stale `index.lock` after a killed commit.** Check the holder before removing anything: `wmic process where processid=<pid> get commandline`. With many concurrent sessions, a live `git.exe` usually belongs to **another** worktree and does not hold your lock. Only then remove `.git/worktrees/<name>/index.lock`.
+
+**Commit messages: use `git commit -F <file>`.** PowerShell here-strings (`@'…'@`) are not parsed by the Bash tool and leak a literal `@` into the subject line. Verify with `git log -1 --format=%s`.
+
 ## Guardrails
 
 - **Dry-run default.** Live reap is never the default agent action.
