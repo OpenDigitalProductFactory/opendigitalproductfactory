@@ -1,11 +1,11 @@
 {
   "generator": "apps/web/scripts/build-route-shells.ts",
-  "pageRouteCount": 310,
+  "pageRouteCount": 312,
   "migratedCount": 0,
   "summary": {
     "cockpit": 16,
     "list": 6,
-    "detail": 237,
+    "detail": 239,
     "settings": 12,
     "form": 18,
     "public": 21,
@@ -3290,6 +3290,30 @@
       ],
       "sweepEligible": false,
       "sweepExclusionReason": "storefront-setup-required",
+      "confidence": "high"
+    },
+    {
+      "routePath": "/storefront/items/[id]/catalog",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
+      "confidence": "high"
+    },
+    {
+      "routePath": "/storefront/items/[id]/purchases",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {
