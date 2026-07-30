@@ -57,7 +57,7 @@ describe("production-build artifact workflow wiring", () => {
   it("preserves the stable required check and manual calibration path", () => {
     assert.match(
       ci,
-      /ux-route-sweep:\s*\n\s+name: UX Route Budget Sweep\s*\n\s+runs-on: ubuntu-latest\s*\n\s+if: always\(\)\s*\n\s+needs: ux-route-sweep-runtime/,
+      /ux-route-sweep:\s*\n\s+name: UX Route Budget Sweep\s*\n\s+runs-on: ubuntu-latest\s*\n\s+if: always\(\)\s*\n\s+needs: \[changes, ux-route-sweep-runtime\]/,
     );
     assert.match(ci, /needs\.ux-route-sweep-runtime\.result/);
     assert.match(ci, /merge_group:/);
@@ -65,6 +65,40 @@ describe("production-build artifact workflow wiring", () => {
     assert.doesNotMatch(ux, /^\s{2}push:/m);
     assert.match(ux, /update_baseline:/);
     assert.match(ux, /--update-baseline/);
+  });
+
+  it("skips runner allocation only for an explicit non-portal PR scope", () => {
+    assert.match(
+      ux,
+      /run_sweep:\s*\n\s+description:[^\n]*\n\s+required: false\s*\n\s+type: boolean\s*\n\s+default: true/,
+    );
+    assert.match(
+      ux,
+      /sweep:\s*\n\s+name: UX Route Sweep Runtime[\s\S]*?if: \$\{\{ github\.event_name == 'workflow_dispatch' \|\| inputs\.run_sweep == true \}\}\s*\n\s+runs-on:/,
+    );
+    assert.match(
+      ci,
+      /run_sweep: \$\{\{ needs\.changes\.outputs\.portal_ux_required != 'false' \}\}/,
+      "only the planner's exact non-portal signal may suppress exhaustive UX evidence",
+    );
+    assert.match(
+      ci,
+      /ux-route-sweep:\s*\n\s+name: UX Route Budget Sweep[\s\S]*?needs: \[changes, ux-route-sweep-runtime\]/,
+    );
+    assert.match(
+      ci,
+      /PORTAL_UX_REQUIRED: \$\{\{ needs\.changes\.outputs\.portal_ux_required \}\}/,
+    );
+    assert.match(
+      ci,
+      /if \[ "\$PORTAL_UX_REQUIRED" = "false" \]; then[\s\S]*?\[ "\$RUNTIME_RESULT" != "skipped" \][\s\S]*?exit 1[\s\S]*?exit 0/,
+      "the stable aggregate must accept a skip only for the authoritative non-portal scope",
+    );
+    assert.match(
+      ci,
+      /if \[ "\$RUNTIME_RESULT" != "success" \]; then[\s\S]*?exit 1/,
+      "all non-docs and unknown scopes must fail closed unless the sweep succeeds",
+    );
   });
 
   it("grants only read access to workflow artifacts", () => {

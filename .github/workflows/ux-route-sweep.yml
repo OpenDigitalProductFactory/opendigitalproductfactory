@@ -18,6 +18,11 @@ on:
         required: false
         type: boolean
         default: false
+      run_sweep:
+        description: "Allocate the UX runtime and execute the exhaustive route sweep"
+        required: false
+        type: boolean
+        default: true
       workers:
         description: "Bounded route workers"
         required: false
@@ -72,6 +77,10 @@ concurrency:
 jobs:
   sweep:
     name: UX Route Sweep Runtime
+    # Skip before GitHub allocates a runner or starts Postgres. The reusable
+    # workflow defaults to exhaustive execution; only an explicit caller input
+    # may suppress it. Manual calibration is always exhaustive.
+    if: ${{ github.event_name == 'workflow_dispatch' || inputs.run_sweep == true }}
     runs-on: ubuntu-latest
     services:
       postgres:
