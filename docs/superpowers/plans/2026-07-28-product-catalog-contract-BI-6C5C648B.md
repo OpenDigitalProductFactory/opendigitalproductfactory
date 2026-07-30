@@ -172,7 +172,11 @@ Each child BI receives acceptance-specific evidence from that run. Every PR stil
 
 This plan is deliberately atomic for `BI-6C5C648B`. The schema, canonical service, compatibility adapters, Storefront projection, quote seam, UX, migration, and documentation are not independently useful: splitting them would expose a second authority or a model with no safe reader/writer. Later catalog packaging, Product Sold, intelligence, demand, objective, roadmap, and playbook outcomes remain owned by their existing Phase 3–12 backlog items.
 
-**Governed coverage receipt:** `cms4uc61g0y0001run2v0ttgx`
+- Decision: `atomic`
+- Parent BI: `BI-6C5C648B`
+- Coverage receipt: `cms6zoaxi09ys01og23by3zzf`
+- Dependencies: `none`
+- Deliverable: `product-catalog-contract` (not independently shippable)
 
 **Source evidence activity:** `cms4xetgv05cq01npasm7qxbv`
 
