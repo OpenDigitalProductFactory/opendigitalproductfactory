@@ -1,5 +1,4 @@
 import {
-  existsSync,
   readFileSync,
   writeFileSync,
 } from "node:fs";
@@ -335,26 +334,32 @@ function main(): void {
   const registry = buildPagePurposeRegistry();
 
   if (bootstrapBaseline) {
-    if (existsSync(baselinePath)) {
+    try {
+      const baseline = createBootstrapBaseline(registry);
+      writeFileSync(
+        baselinePath,
+        serializeStableJson(baseline),
+        { encoding: "utf8", flag: "wx" },
+      );
+    } catch (error) {
+      if (!hasErrorCode(error, "EEXIST")) throw error;
       throw new Error(
         `[page-purpose] ${BASELINE_REL} already exists; bootstrap is first-use only.`,
       );
     }
-    const baseline = createBootstrapBaseline(registry);
-    writeFileSync(
-      baselinePath,
-      serializeStableJson(baseline),
-      "utf8",
-    );
   }
 
-  if (!existsSync(baselinePath)) {
+  let baselineText: string;
+  try {
+    baselineText = readFileSync(baselinePath, "utf8");
+  } catch (error) {
+    if (!hasErrorCode(error, "ENOENT")) throw error;
     throw new Error(
       `[page-purpose] Missing ${BASELINE_REL}. Run the reviewed first-use bootstrap.`,
     );
   }
   const baseline = parsePurposeIdentityBaseline(
-    JSON.parse(readFileSync(baselinePath, "utf8")),
+    JSON.parse(baselineText),
   );
   const ratchetIssues = validatePurposeIdentityRatchet(registry, baseline);
   if (baseRef) {
@@ -418,6 +423,14 @@ function main(): void {
   });
   console.error(
     `[page-purpose] wrote ${OUT_REL} (${registry.pageRouteCount} page routes, ${registry.ratifiedCount} ratified, ${registry.quarantinedCount} quarantined)`,
+  );
+}
+
+function hasErrorCode(error: unknown, code: string): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error as NodeJS.ErrnoException).code === code
   );
 }
 
