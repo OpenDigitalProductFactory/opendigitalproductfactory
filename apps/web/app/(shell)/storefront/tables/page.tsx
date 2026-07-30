@@ -5,14 +5,16 @@ import { redirect } from "next/navigation";
 import { StatCard } from "@/components/ui/report-kit";
 import { intentStyle } from "@/components/ui/report-kit/statusColors";
 import { TablesNowView } from "@/components/storefront-admin/TablesNowView";
-import { TeamManager } from "@/components/storefront-admin/TeamManager";
+import {
+  HospitalityResourceManager,
+  type HospitalityResourceManagerRow,
+} from "@/components/storefront-admin/HospitalityResourceManager";
 import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
 import { resolveResourceVocabulary } from "@/lib/storefront/resource-vocabulary";
 import { loadRestaurantCapacitySnapshot } from "@/lib/storefront/restaurant-capacity-loader";
 import {
   capacityStateIntent,
   capacityStateLabel,
-  classifyStorefrontResource,
   readinessHeadline,
   readinessIntent,
   TABLE_CAPACITY_STATES,
@@ -23,17 +25,33 @@ export default async function TablesCapacityPage() {
     select: {
       id: true,
       archetype: { select: { archetypeId: true, category: true, customVocabulary: true } },
-      providers: {
-        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-        include: {
-          services: { include: { item: { select: { id: true, name: true, ctaType: true } } } },
-          availability: { orderBy: { createdAt: "asc" } },
+      hospitalityResources: {
+        where: { kind: "table" },
+        orderBy: [{ serviceArea: "asc" }, { label: "asc" }],
+        select: {
+          id: true,
+          resourceId: true,
+          label: true,
+          kind: true,
+          status: true,
+          capacity: true,
+          capacityUnit: true,
+          serviceArea: true,
+          blockedReason: true,
+          version: true,
+          availability: {
+            orderBy: { createdAt: "asc" },
+            select: {
+              id: true,
+              days: true,
+              startTime: true,
+              endTime: true,
+              date: true,
+              kind: true,
+              reason: true,
+            },
+          },
         },
-      },
-      items: {
-        where: { isActive: true },
-        select: { id: true, name: true, ctaType: true },
-        orderBy: { sortOrder: "asc" },
       },
     },
   });
@@ -55,21 +73,20 @@ export default async function TablesCapacityPage() {
   const loaded = await loadRestaurantCapacitySnapshot();
   const snapshot = loaded?.snapshot ?? null;
 
-  // Table-classified providers become the managed inventory below.
-  const tableProviders = config.providers
-    .filter((p) => classifyStorefrontResource(p) === "table")
-    .map((provider) => ({
-      ...provider,
-      createdAt: undefined,
-      updatedAt: undefined,
-      availability: provider.availability.map((a) => ({
-        id: a.id,
-        days: a.days,
-        startTime: a.startTime,
-        endTime: a.endTime,
-        date: a.date ? a.date.toISOString() : null,
-        isBlocked: a.isBlocked,
-        reason: a.reason,
+  const tableResources: HospitalityResourceManagerRow[] =
+    config.hospitalityResources.map((resource) => ({
+      ...resource,
+      kind: "table",
+      capacityUnit: "seats",
+      status: resource.status as HospitalityResourceManagerRow["status"],
+      availability: resource.availability.map((row) => ({
+        id: row.id,
+        days: row.days,
+        startTime: row.startTime ?? "00:00",
+        endTime: row.endTime ?? "23:59",
+        date: row.date?.toISOString() ?? null,
+        isBlocked: row.kind === "blocked",
+        reason: row.reason,
       })),
     }));
 
@@ -134,13 +151,9 @@ export default async function TablesCapacityPage() {
       {/* Manage the physical tables (add / edit / block). */}
       <div style={{ marginTop: 4 }}>
         <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Manage {resourceVocab.resourcePlural}</div>
-        <TeamManager
-          providers={tableProviders}
+        <HospitalityResourceManager
+          resources={tableResources}
           storefrontId={config.id}
-          items={config.items}
-          teamLabel={resourceVocab.resourceLabel}
-          singularNoun={resourceVocab.resourceSingular}
-          mode="table"
         />
       </div>
     </div>

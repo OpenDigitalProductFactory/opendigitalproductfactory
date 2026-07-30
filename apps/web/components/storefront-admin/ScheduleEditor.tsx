@@ -52,11 +52,13 @@ function buildExceptions(availability: AvailabilityRow[]) {
 }
 
 export function ScheduleEditor({
-  providerId,
+  saveEndpoint,
   availability,
+  heading = "Weekly schedule",
 }: {
-  providerId: string;
+  saveEndpoint: string;
   availability: AvailabilityRow[];
+  heading?: string;
 }) {
   const [dayStates, setDayStates] = useState<DayState[]>(() => buildDayStates(availability));
   const [exceptions, setExceptions] = useState(() => buildExceptions(availability));
@@ -118,14 +120,17 @@ export function ScheduleEditor({
     }));
 
     try {
-      const res = await fetch(`/api/storefront/admin/providers/${providerId}`, {
+      const res = await fetch(saveEndpoint, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ availability: availabilityPayload, exceptions: exceptionsPayload }),
       });
       if (!res.ok) {
-        const data = (await res.json()) as { error?: string };
-        setError(data.error ?? "Save failed");
+        const data = (await res.json()) as {
+          error?: string;
+          message?: string;
+        };
+        setError(data.message ?? data.error ?? "Save failed");
       } else {
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
@@ -140,7 +145,7 @@ export function ScheduleEditor({
   return (
     <div style={{ marginTop: 12 }}>
       <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.05em" }}>
-        Weekly Schedule
+        {heading}
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {DAY_NAMES.map((name, i) => {

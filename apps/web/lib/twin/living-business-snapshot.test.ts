@@ -265,6 +265,8 @@ describe("loadLivingBusinessSnapshot — loader", () => {
       invoice: { findMany: async () => [] },
       storefrontBooking: { findMany: async () => [] },
       serviceProvider: { findMany: async () => [] },
+      hospitalityResource: { findMany: async () => [] },
+      hospitalityCapacityAllocation: { findMany: async () => [] },
     } as unknown as LivingBusinessClient;
     expect(await loadLivingBusinessSnapshot({ db, now: NOW })).toBeNull();
   });
@@ -321,6 +323,8 @@ describe("loadLivingBusinessSnapshot — loader", () => {
         ],
       },
       serviceProvider: { findMany: async () => [] },
+      hospitalityResource: { findMany: async () => [] },
+      hospitalityCapacityAllocation: { findMany: async () => [] },
     } as unknown as LivingBusinessClient;
 
     const snap = await loadLivingBusinessSnapshot({ db, now: NOW });
@@ -350,7 +354,7 @@ describe("loadLivingBusinessSnapshot — loader", () => {
     });
     expect(operations).not.toBeNull();
     expect(operations!.identity).toMatchObject({ archetypeId: "restaurant", template: "FLOOR" });
-    expect(operations!.telemetry).toMatchObject({ durationMs: 42, queryCount: 10 });
+    expect(operations!.telemetry).toMatchObject({ durationMs: 42, queryCount: 12 });
     expect(operations!.telemetry.payloadBytes).toBe(
       new TextEncoder().encode(JSON.stringify(operations)).byteLength,
     );
@@ -378,15 +382,20 @@ describe("loadLivingBusinessSnapshot — loader", () => {
     const bookings = Array.from({ length: 24 }, (_, index) => ({
       id: `booking-${index + 1}`,
       providerId: index < 12 ? `table-${(index % 12) + 1}` : null,
+      hospitalityResourceId:
+        index < 12 ? `table-${(index % 12) + 1}` : null,
       scheduledAt: new Date(NOW.getTime() + index * 5 * 60_000),
       createdAt: new Date(NOW.getTime() - (index + 1) * 60_000),
       status: index < 12 ? "confirmed" : "pending",
       provider: index < 12 ? { name: `Table ${(index % 12) + 1}` } : null,
     }));
-    const providers = Array.from({ length: 12 }, (_, index) => ({
+    const resources = Array.from({ length: 12 }, (_, index) => ({
       id: `table-${index + 1}`,
-      name: `Table ${index + 1}`,
-      isActive: true,
+      label: `Table ${index + 1}`,
+      kind: "table",
+      status: "active",
+      capacity: 4,
+      capacityUnit: "seats",
     }));
     const db = {
       ...emptyRoster,
@@ -407,7 +416,18 @@ describe("loadLivingBusinessSnapshot — loader", () => {
       obligation: { findMany: async () => [] },
       invoice: { findMany: async () => [] },
       storefrontBooking: { findMany: async () => bookings },
-      serviceProvider: { findMany: async () => providers },
+      serviceProvider: { findMany: async () => [] },
+      hospitalityResource: { findMany: async () => resources },
+      hospitalityCapacityAllocation: {
+        findMany: async () =>
+          bookings.slice(0, 12).map((booking) => ({
+            id: `allocation-${booking.id}`,
+            resourceId: booking.hospitalityResourceId,
+            startsAt: booking.scheduledAt,
+            endsAt: new Date(booking.scheduledAt.getTime() + 90 * 60_000),
+            lifecycle: "active",
+          })),
+      },
     } as unknown as LivingBusinessClient;
 
     const operations = await loadVersionedOperationsSnapshot({ db, now: NOW });
@@ -419,7 +439,7 @@ describe("loadLivingBusinessSnapshot — loader", () => {
     // intentionally bounded for decision-speed and payload stability.
     expect(operations!.scene.workItems).toHaveLength(5);
     expect(operations!.queue.queues.flatMap((queue) => queue.items)).toHaveLength(6);
-    expect(operations!.telemetry.queryCount).toBe(10);
+    expect(operations!.telemetry.queryCount).toBe(12);
     expect(operations!.telemetry.payloadBytes).toBeLessThan(100_000);
   });
 });

@@ -43,6 +43,7 @@ import {
   resolveServicePeriod,
   readinessHeadline,
   type CapacityBookingInput,
+  type CapacityAllocationInput,
   type CapacityResourceInput,
   type OperatingWindow,
   type RestaurantCapacitySnapshot,
@@ -86,6 +87,8 @@ export type LivingBusinessClient = WorkforceRosterClient & OrgLocaleClient & {
   obligation: { findMany: FindMany };
   storefrontBooking: { findMany: FindMany };
   serviceProvider: { findMany: FindMany };
+  hospitalityResource: { findMany: FindMany };
+  hospitalityCapacityAllocation: { findMany: FindMany };
 };
 
 // ── Row shapes we select (kept narrow; amounts may arrive as Prisma.Decimal) ──
@@ -110,6 +113,7 @@ interface BookingRow {
   /** Present on the live query (selected); optional so pure-helper test fixtures
    *  that exercise only provider-name behaviour need not supply it. */
   providerId?: string | null;
+  hospitalityResourceId?: string | null;
   scheduledAt: Date | null;
   createdAt: Date | null;
   status: string;
@@ -119,6 +123,22 @@ interface ProviderRow {
   id: string;
   name: string;
   isActive: boolean;
+}
+interface HospitalityResourceRow {
+  id: string;
+  label: string;
+  kind: CapacityResourceInput["kind"];
+  status: CapacityResourceInput["status"];
+  capacity: number;
+  capacityUnit: CapacityResourceInput["capacityUnit"];
+  availability: NonNullable<CapacityResourceInput["availability"]>;
+}
+interface HospitalityAllocationRow {
+  id: string;
+  resourceId: string | null;
+  startsAt: Date;
+  endsAt: Date;
+  lifecycle: CapacityAllocationInput["lifecycle"];
 }
 interface InvoiceRow {
   totalAmount: Money;
@@ -172,6 +192,18 @@ export function resourceUnits(
       intent: statusIntent(m.status),
       owner: m.kind === "agent" ? { name: m.displayName, kind: "ai" } : undefined,
     }));
+}
+
+function hospitalityResourceUnits(
+  resources: HospitalityResourceRow[],
+  limit = 12,
+): ResourceUnitData[] {
+  return resources.slice(0, limit).map((resource) => ({
+    key: resource.id,
+    label: resource.label,
+    state: resource.status === "active" ? "Available" : "Off",
+    intent: resource.status === "active" ? "success" : "neutral",
+  }));
 }
 
 /** Pending, unstarted demand → queue items with a REAL wait time (age in the
@@ -518,8 +550,14 @@ export async function loadLivingBusinessProjection(
   const in7 = new Date(now.getTime() + 7 * 86_400_000);
 
   const config = (await db.storefrontConfig.findFirst({
-    select: { archetype: { select: { archetypeId: true, name: true } } },
-  })) as { archetype: { archetypeId: string; name: string } | null } | null;
+    select: {
+      timezone: true,
+      archetype: { select: { archetypeId: true, name: true } },
+    },
+  })) as {
+    timezone: string;
+    archetype: { archetypeId: string; name: string } | null;
+  } | null;
   runtime.observe("configuration");
 
   const archetypeId = config?.archetype?.archetypeId;
@@ -531,7 +569,18 @@ export async function loadLivingBusinessProjection(
 
   const in90 = new Date(now.getTime() - 90 * 86_400_000);
   let localeReadFailed = false;
-  const [roster, bills, taxPeriods, obligations, bookings, providers, paidInvoices, orgLocale] = await Promise.all([
+  const [
+    roster,
+    bills,
+    taxPeriods,
+    obligations,
+    bookings,
+    providers,
+    hospitalityResources,
+    hospitalityAllocations,
+    paidInvoices,
+    orgLocale,
+  ] = await Promise.all([
     runtime.read(
       "workforce",
       loadWorkforceRoster({ db }),
@@ -572,6 +621,7 @@ export async function loadLivingBusinessProjection(
         select: {
           id: true,
           providerId: true,
+          hospitalityResourceId: true,
           scheduledAt: true,
           createdAt: true,
           status: true,
@@ -587,6 +637,51 @@ export async function loadLivingBusinessProjection(
         take: 12,
         select: { id: true, name: true, isActive: true },
       }) as Promise<ProviderRow[]>,
+      [],
+    ),
+    runtime.read(
+      "hospitality-capacity",
+      db.hospitalityResource.findMany({
+        where: { kind: "table" },
+        take: 12,
+        select: {
+          id: true,
+          label: true,
+          kind: true,
+          status: true,
+          capacity: true,
+          capacityUnit: true,
+          availability: {
+            select: {
+              kind: true,
+              days: true,
+              startTime: true,
+              endTime: true,
+              date: true,
+            },
+          },
+        },
+      }) as Promise<HospitalityResourceRow[]>,
+      [],
+    ),
+    runtime.read(
+      "hospitality-allocations",
+      db.hospitalityCapacityAllocation.findMany({
+        where: {
+          resourceId: { not: null },
+          lifecycle: { in: ["reserved", "active"] },
+          startsAt: { lte: now },
+          endsAt: { gt: now },
+        },
+        take: 48,
+        select: {
+          id: true,
+          resourceId: true,
+          startsAt: true,
+          endsAt: true,
+          lifecycle: true,
+        },
+      }) as Promise<HospitalityAllocationRow[]>,
       [],
     ),
     db.invoice?.findMany
@@ -628,33 +723,36 @@ export async function loadLivingBusinessProjection(
   const zones: TwinZoneSnapshot[] = [
     {
       key: profile.capacityZoneKey ?? profile.zones[0]?.key ?? "board",
-      units: resourceUnits(providers, members),
+      units:
+        profile.template === "FLOOR"
+          ? hospitalityResourceUnits(hospitalityResources)
+          : resourceUnits(providers, members),
     },
   ];
 
-  // FLOOR (Restaurant) capacity: derive one snapshot from the SAME providers +
+  // FLOOR (Restaurant) capacity: derive one snapshot from the SAME structured
+  // hospitality resources +
   // bookings this projection already loaded, so the Workspace capacity chips,
   // reservations queue, and readiness answer reconcile with the Storefront
   // Tables & Capacity page and inbox (BI-7C95A586 / BI-348766E5). The workspace
-  // reads only active providers, so `blocked` is not a workspace headline — the
-  // Tables page owns the authoritative blocked count.
+  // capacity facts used by the Tables page.
   const floorSnapshot: RestaurantCapacitySnapshot | null =
     profile.template === "FLOOR"
       ? deriveRestaurantCapacity({
-          resources: providers.map(
-            (p): CapacityResourceInput => ({ id: p.id, name: p.name, isActive: p.isActive }),
-          ),
+          resources: hospitalityResources,
           bookings: bookings.map(
             (b): CapacityBookingInput => ({
               id: b.id,
-              providerId: b.providerId ?? null,
+              hospitalityResourceId: b.hospitalityResourceId ?? null,
               scheduledAt: b.scheduledAt,
               durationMinutes: null, // default turn (90m) applied by the projection
               status: b.status,
             }),
           ),
+          allocations: hospitalityAllocations,
           now,
           nextPeriod: resolveServicePeriod(floorWindows(def), now),
+          timeZone: config.timezone,
         })
       : null;
 

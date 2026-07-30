@@ -68,6 +68,7 @@ const SOURCE_PORTFOLIO: Record<AttentionSource, AttentionPortfolio> = {
   // Customer-facing revenue surface.
   "approval-outbound": "products-and-services-sold", // marketing/sales drafts to customers
   "reservation-exception": "products-and-services-sold", // a guest awaiting an owner reservation decision
+  "hospitality-capacity": "products-and-services-sold", // capacity that blocks a reservation, event, production order, or delivery
   "storefront-inquiry": "products-and-services-sold", // a customer enquiry awaiting the owner's first reply
   "business-journey": "products-and-services-sold", // a customer-facing journey (find/enquire/book/pay) failed its watchdog run
   // The workforce — people + AI coworkers needing a human.

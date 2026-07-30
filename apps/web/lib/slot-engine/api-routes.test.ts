@@ -4,15 +4,28 @@ import { NextRequest } from "next/server";
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
 vi.mock("@dpf/db", () => ({
-  prisma: {
-    storefrontItem: { findFirst: vi.fn() },
-    storefrontConfig: { findFirst: vi.fn() },
-    bookingHold: {
-      count: vi.fn(),
-      findFirst: vi.fn(),
-      create: vi.fn(),
-    },
-  },
+  prisma: (() => {
+    const prisma = {
+      storefrontItem: { findFirst: vi.fn() },
+      storefrontConfig: { findFirst: vi.fn() },
+      bookingHold: {
+        count: vi.fn(),
+        findFirst: vi.fn(),
+        create: vi.fn(),
+      },
+      $transaction: vi.fn(),
+    };
+    prisma.$transaction.mockImplementation(
+      async (callback: (tx: typeof prisma) => Promise<unknown>) =>
+        callback(prisma),
+    );
+    return prisma;
+  })(),
+}));
+
+vi.mock("@/lib/storefront/hospitality-capacity-repository.server", () => ({
+  allocateHospitalityCapacity: vi.fn(),
+  resolveHospitalityResourceForProvider: vi.fn(async () => null),
 }));
 
 vi.mock("@/lib/slot-engine", () => ({
@@ -182,7 +195,12 @@ describe("POST /api/storefront/[slug]/hold", () => {
     );
   }
 
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(prisma.storefrontItem.findFirst).mockResolvedValue({
+      id: "itm-1",
+    } as never);
+  });
 
   it("returns 400 when required fields are missing", async () => {
     const req = makeHoldRequest({ itemId: "itm-1" });
@@ -190,7 +208,7 @@ describe("POST /api/storefront/[slug]/hold", () => {
     const data = await res.json();
 
     expect(res.status).toBe(400);
-    expect(data.error).toMatch(/required/i);
+    expect(data.message).toMatch(/required/i);
   });
 
   it("returns 404 when storefront is not found", async () => {
@@ -213,7 +231,7 @@ describe("POST /api/storefront/[slug]/hold", () => {
 
     expect(res.status).toBe(429);
     expect(res.headers.get("Retry-After")).toBe("60");
-    expect(data.error).toMatch(/too many/i);
+    expect(data.message).toMatch(/too many/i);
   });
 
   it("returns 429 when per-IP hold limit is exceeded", async () => {
@@ -228,7 +246,7 @@ describe("POST /api/storefront/[slug]/hold", () => {
     const data = await res.json();
 
     expect(res.status).toBe(429);
-    expect(data.error).toMatch(/client/i);
+    expect(data.message).toMatch(/client/i);
   });
 
   it("returns 409 when slot is already held by another token", async () => {
@@ -243,7 +261,7 @@ describe("POST /api/storefront/[slug]/hold", () => {
     const data = await res.json();
 
     expect(res.status).toBe(409);
-    expect(data.error).toMatch(/already held/i);
+    expect(data.message).toMatch(/already held/i);
   });
 
   it("returns 201 with holderToken and expiresAt on success", async () => {

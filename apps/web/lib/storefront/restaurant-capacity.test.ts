@@ -1,13 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  classifyStorefrontResource,
-  seatsFromName,
+  capacityStateIntent,
   deriveRestaurantCapacity,
   readinessHeadline,
-  capacityStateIntent,
-  type CapacityResourceInput,
   type CapacityBookingInput,
+  type CapacityResourceInput,
   type ServicePeriod,
 } from "./restaurant-capacity";
 
@@ -20,43 +18,34 @@ const DINNER: ServicePeriod = {
   endsAt: new Date("2026-07-22T22:00:00.000Z"),
 };
 
-function resource(over: Partial<CapacityResourceInput> & { id: string; name: string }): CapacityResourceInput {
-  return { isActive: true, ...over };
+function resource(
+  over: Partial<CapacityResourceInput> & { id: string; label: string },
+): CapacityResourceInput {
+  return {
+    kind: "table",
+    status: "active",
+    capacity: 4,
+    capacityUnit: "seats",
+    ...over,
+  };
 }
-function booking(over: Partial<CapacityBookingInput> & { id: string }): CapacityBookingInput {
-  return { providerId: null, scheduledAt: null, durationMinutes: 90, status: "confirmed", ...over };
+
+function booking(
+  over: Partial<CapacityBookingInput> & { id: string },
+): CapacityBookingInput {
+  return {
+    hospitalityResourceId: null,
+    scheduledAt: null,
+    durationMinutes: 90,
+    status: "confirmed",
+    ...over,
+  };
 }
-
-describe("classifyStorefrontResource", () => {
-  it("classifies table-shaped provider names as tables, people as staff", () => {
-    expect(classifyStorefrontResource({ name: "Table 4" })).toBe("table");
-    expect(classifyStorefrontResource({ name: "T-12" })).toBe("table");
-    expect(classifyStorefrontResource({ name: "Window Seat 2" })).toBe("table");
-    expect(classifyStorefrontResource({ name: "Table for 6" })).toBe("table");
-    expect(classifyStorefrontResource({ name: "Patio 3" })).toBe("table");
-    expect(classifyStorefrontResource({ name: "Alex Rivera" })).toBe("staff");
-    expect(classifyStorefrontResource({ name: "Digital Product Factory" })).toBe("staff");
-  });
-
-  it("honors an explicit resourceKind hint over the heuristic", () => {
-    expect(classifyStorefrontResource({ name: "Alex Rivera", resourceKind: "table" })).toBe("table");
-    expect(classifyStorefrontResource({ name: "Table 4", resourceKind: "staff" })).toBe("staff");
-  });
-});
-
-describe("seatsFromName", () => {
-  it("extracts seat counts where the label exposes them", () => {
-    expect(seatsFromName("Table for 4")).toBe(4);
-    expect(seatsFromName("Booth (seats 6)")).toBe(6);
-    expect(seatsFromName("Table 4")).toBeNull(); // an identifier, not a seat count
-    expect(seatsFromName("Alex")).toBeNull();
-  });
-});
 
 describe("deriveRestaurantCapacity", () => {
   it("yields a coherent empty snapshot with a setup next-action when no tables exist", () => {
     const snap = deriveRestaurantCapacity({
-      resources: [resource({ id: "sp1", name: "Digital Product Factory" })],
+      resources: [],
       bookings: [],
       now: NOW,
       nextPeriod: DINNER,
@@ -67,54 +56,82 @@ describe("deriveRestaurantCapacity", () => {
     expect(readinessHeadline(snap)).toMatch(/no tables/i);
   });
 
-  it("folds seated bookings into occupied / turning-soon and counts availability", () => {
+  it("uses structured resource kind, status, and capacity without label inference", () => {
     const tables = [
-      resource({ id: "t1", name: "Table 1" }),
-      resource({ id: "t2", name: "Table 2" }),
-      resource({ id: "t3", name: "Table 3" }),
-      resource({ id: "t4", name: "Table 4", isActive: false }), // blocked
-      resource({ id: "alex", name: "Alex Rivera" }), // staff — not a table
+      resource({ id: "t1", label: "Aster" }),
+      resource({ id: "t2", label: "Birch" }),
+      resource({ id: "t3", label: "Cedar" }),
+      resource({ id: "t4", label: "Dogwood", status: "blocked" }),
+      resource({
+        id: "oven-1",
+        label: "Oven 1",
+        kind: "oven",
+        capacityUnit: "batches",
+      }),
     ];
     const bookings = [
-      // seated now, frees in 60m → occupied
-      booking({ id: "b1", providerId: "t1", scheduledAt: new Date("2026-07-22T18:30:00.000Z"), durationMinutes: 90 }),
-      // seated now, frees in 10m → turning-soon
-      booking({ id: "b2", providerId: "t2", scheduledAt: new Date("2026-07-22T18:00:00.000Z"), durationMinutes: 70 }),
-      // future reservation → does not seat t3 now, counts as upcoming
-      booking({ id: "b3", providerId: "t3", scheduledAt: new Date("2026-07-22T20:30:00.000Z"), durationMinutes: 90 }),
+      booking({
+        id: "b1",
+        hospitalityResourceId: "t1",
+        scheduledAt: new Date("2026-07-22T18:30:00.000Z"),
+      }),
+      booking({
+        id: "b2",
+        hospitalityResourceId: "t2",
+        scheduledAt: new Date("2026-07-22T18:00:00.000Z"),
+        durationMinutes: 70,
+      }),
+      booking({
+        id: "b3",
+        hospitalityResourceId: "t3",
+        scheduledAt: new Date("2026-07-22T20:30:00.000Z"),
+      }),
     ];
-    const snap = deriveRestaurantCapacity({ resources: tables, bookings, now: NOW, nextPeriod: DINNER });
+    const snap = deriveRestaurantCapacity({
+      resources: tables,
+      bookings,
+      now: NOW,
+      nextPeriod: DINNER,
+    });
 
-    expect(snap.totalTables).toBe(4); // Alex excluded
+    expect(snap.totalTables).toBe(4);
     expect(snap.counts.occupied).toBe(1);
     expect(snap.counts["turning-soon"]).toBe(1);
     expect(snap.counts.blocked).toBe(1);
-    expect(snap.counts.available).toBe(1); // t3 free now
+    expect(snap.counts.available).toBe(1);
     expect(snap.upcomingReservations).toBe(1);
-    expect(snap.tables.find((t) => t.key === "t2")?.freeInMinutes).toBe(10);
+    expect(snap.tables.find((table) => table.key === "t2")?.freeInMinutes).toBe(10);
+    expect(snap.tables.map((table) => table.label)).toEqual([
+      "Aster",
+      "Birch",
+      "Cedar",
+      "Dogwood",
+    ]);
   });
 
-  it("counts walk-in waitlist parties and surfaces a seat next-action", () => {
+  it("counts waitlist parties and prioritizes pending reservation action", () => {
     const snap = deriveRestaurantCapacity({
-      resources: [resource({ id: "t1", name: "Table 1" })],
+      resources: [resource({ id: "t1", label: "Aster" })],
       bookings: [
-        booking({ id: "w1", providerId: null, scheduledAt: null, status: "pending" }),
-        booking({ id: "w2", providerId: null, scheduledAt: null, status: "pending" }),
+        booking({ id: "w1", status: "pending" }),
+        booking({ id: "w2", status: "pending" }),
       ],
       now: NOW,
       nextPeriod: DINNER,
     });
     expect(snap.waitlistParties).toBe(2);
     expect(snap.pendingReservations).toBe(2);
-    // pending reservations take priority in the next action
     expect(snap.nextAction?.label).toMatch(/confirm 2 reservations/i);
     expect(snap.nextAction?.href).toBe("/storefront/inbox");
     expect(snap.readiness).toBe("attention");
   });
 
-  it("reports ready when tables are open and nothing needs the owner", () => {
+  it("uses structured seat capacity rather than parsing the label", () => {
     const snap = deriveRestaurantCapacity({
-      resources: [resource({ id: "t1", name: "Table for 2" }), resource({ id: "t2", name: "Table for 4" })],
+      resources: [
+        resource({ id: "t1", label: "Aster", capacity: 2 }),
+        resource({ id: "t2", label: "Birch", capacity: 4 }),
+      ],
       bookings: [],
       now: NOW,
       nextPeriod: DINNER,
@@ -125,9 +142,75 @@ describe("deriveRestaurantCapacity", () => {
     expect(readinessHeadline(snap)).toMatch(/ready for dinner service/i);
   });
 
+  it("uses the structured allocation ledger as capacity-consumption authority", () => {
+    const snap = deriveRestaurantCapacity({
+      resources: [resource({ id: "t1", label: "Aster" })],
+      bookings: [],
+      allocations: [
+        {
+          id: "allocation-1",
+          resourceId: "t1",
+          startsAt: new Date("2026-07-22T18:00:00.000Z"),
+          endsAt: new Date("2026-07-22T19:30:00.000Z"),
+          lifecycle: "active",
+        },
+      ],
+      now: NOW,
+      nextPeriod: DINNER,
+    });
+
+    expect(snap.tables[0]).toMatchObject({
+      label: "Aster",
+      state: "occupied",
+    });
+  });
+
+  it("honors structured recurring availability and dated blocks", () => {
+    const snap = deriveRestaurantCapacity({
+      resources: [
+        resource({
+          id: "t1",
+          label: "Aster",
+          availability: [
+            {
+              kind: "available",
+              days: [3],
+              startTime: "17:00",
+              endTime: "22:00",
+              date: null,
+            },
+          ],
+        }),
+        resource({
+          id: "t2",
+          label: "Birch",
+          availability: [
+            {
+              kind: "blocked",
+              days: [],
+              startTime: "18:00",
+              endTime: "20:00",
+              date: new Date("2026-07-22T00:00:00.000Z"),
+            },
+          ],
+        }),
+      ],
+      bookings: [],
+      now: NOW,
+      nextPeriod: DINNER,
+    });
+
+    expect(snap.tables.find((table) => table.key === "t1")?.state).toBe(
+      "available",
+    );
+    expect(snap.tables.find((table) => table.key === "t2")?.state).toBe(
+      "blocked",
+    );
+  });
+
   it("reports closed when there is no service period", () => {
     const snap = deriveRestaurantCapacity({
-      resources: [resource({ id: "t1", name: "Table 1" })],
+      resources: [resource({ id: "t1", label: "Aster" })],
       bookings: [],
       now: NOW,
       nextPeriod: null,
@@ -136,7 +219,11 @@ describe("deriveRestaurantCapacity", () => {
   });
 
   it("never throws on an empty install", () => {
-    const snap = deriveRestaurantCapacity({ resources: [], bookings: [], now: NOW });
+    const snap = deriveRestaurantCapacity({
+      resources: [],
+      bookings: [],
+      now: NOW,
+    });
     expect(snap.totalTables).toBe(0);
     expect(snap.tables).toEqual([]);
   });

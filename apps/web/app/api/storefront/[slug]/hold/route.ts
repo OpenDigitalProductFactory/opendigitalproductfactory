@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@dpf/db";
 import crypto from "crypto";
+import { apiErrorResponse } from "@/lib/api/error";
+import { isExclusionViolation } from "@/lib/db/exclusion-violation";
+import {
+  allocateHospitalityCapacity,
+  resolveHospitalityResourceForProvider,
+} from "@/lib/storefront/hospitality-capacity-repository.server";
+import { HospitalityCapacityConflictError } from "@/lib/storefront/hospitality-capacity";
 
 export async function POST(
   req: NextRequest,
@@ -16,19 +23,20 @@ export async function POST(
   };
 
   if (!itemId || !slotStart || !slotEnd) {
-    return NextResponse.json(
-      { error: "itemId, slotStart, and slotEnd are required" },
-      { status: 400 }
+    return apiErrorResponse(
+      "INVALID_ARGUMENT",
+      "itemId, slotStart, and slotEnd are required",
+      400,
     );
   }
 
   // Find storefront
   const storefront = await prisma.storefrontConfig.findFirst({
     where: { organization: { slug }, isPublished: true },
-    select: { id: true },
+    select: { id: true, organizationId: true },
   });
   if (!storefront) {
-    return NextResponse.json({ error: "Storefront not found" }, { status: 404 });
+    return apiErrorResponse("NOT_FOUND", "Storefront not found", 404);
   }
 
   const now = new Date();
@@ -42,10 +50,13 @@ export async function POST(
     where: { storefrontId: storefront.id, expiresAt: { gt: now } },
   });
   if (globalCount >= 50) {
-    return NextResponse.json(
-      { error: "Too many active holds" },
-      { status: 429, headers: { "Retry-After": "60" } }
+    const response = apiErrorResponse(
+      "RATE_LIMITED",
+      "Too many active holds",
+      429,
     );
+    response.headers.set("Retry-After", "60");
+    return response;
   }
 
   // Rate limit: max 3 active holds per IP per storefront
@@ -57,48 +68,124 @@ export async function POST(
     },
   });
   if (ipCount >= 3) {
-    return NextResponse.json(
-      { error: "Too many active holds from this client" },
-      { status: 429, headers: { "Retry-After": "60" } }
+    const response = apiErrorResponse(
+      "RATE_LIMITED",
+      "Too many active holds from this client",
+      429,
     );
+    response.headers.set("Retry-After", "60");
+    return response;
   }
 
   const slotStartDate = new Date(slotStart);
   const slotEndDate = new Date(slotEnd);
-
-  // Check for conflicting holds on the same provider + slot
-  if (providerId) {
-    const conflict = await prisma.bookingHold.findFirst({
-      where: {
-        storefrontId: storefront.id,
-        providerId,
-        expiresAt: { gt: now },
-        slotStart: { lt: slotEndDate },
-        slotEnd: { gt: slotStartDate },
-      },
-    });
-    if (conflict) {
-      return NextResponse.json(
-        { error: "Slot is already held" },
-        { status: 409 }
-      );
-    }
+  if (
+    !Number.isFinite(slotStartDate.getTime()) ||
+    !Number.isFinite(slotEndDate.getTime()) ||
+    slotEndDate <= slotStartDate
+  ) {
+    return apiErrorResponse(
+      "INVALID_ARGUMENT",
+      "slotEnd must be after a valid slotStart",
+      400,
+    );
   }
 
   const expiresAt = new Date(now.getTime() + 10 * 60 * 1000);
-  const hold = await prisma.bookingHold.create({
-    data: {
-      storefrontId: storefront.id,
-      itemId,
-      providerId: providerId ?? null,
-      slotStart: slotStartDate,
-      slotEnd: slotEndDate,
-      holderToken: crypto.randomUUID(),
-      holderIp: clientIp,
-      expiresAt,
-    },
-    select: { holderToken: true, expiresAt: true },
-  });
+  try {
+    const hold = await prisma.$transaction(async (tx) => {
+      const item = await tx.storefrontItem.findFirst({
+        where: { id: itemId, storefrontId: storefront.id, isActive: true },
+        select: { id: true },
+      });
+      if (!item) throw new Error("STOREFRONT_ITEM_NOT_FOUND");
 
-  return NextResponse.json(hold, { status: 201 });
+      const resource = providerId
+        ? await resolveHospitalityResourceForProvider(tx as never, {
+            organizationId: storefront.organizationId,
+            storefrontId: storefront.id,
+            providerId,
+          })
+        : null;
+
+      // Non-hospitality providers retain the compatibility hold check. A
+      // structured resource skips this raceable preflight: its allocation
+      // exclusion constraint is the atomic arbiter.
+      if (providerId && !resource) {
+        const conflict = await tx.bookingHold.findFirst({
+          where: {
+            storefrontId: storefront.id,
+            providerId,
+            expiresAt: { gt: now },
+            slotStart: { lt: slotEndDate },
+            slotEnd: { gt: slotStartDate },
+          },
+        });
+        if (conflict) throw new Error("LEGACY_HOLD_CONFLICT");
+      }
+
+      const holderToken = crypto.randomUUID();
+      const created = await tx.bookingHold.create({
+        data: {
+          organizationId: storefront.organizationId,
+          storefrontId: storefront.id,
+          itemId,
+          providerId: providerId ?? null,
+          hospitalityResourceId: resource?.id ?? null,
+          slotStart: slotStartDate,
+          slotEnd: slotEndDate,
+          holderToken,
+          holderIp: clientIp,
+          expiresAt,
+        },
+        select: { id: true, holderToken: true, expiresAt: true },
+      });
+
+      if (resource) {
+        await allocateHospitalityCapacity(tx as never, {
+          organizationId: storefront.organizationId,
+          storefrontId: storefront.id,
+          resourceId: resource.id,
+          poolId: null,
+          demandType: "hold",
+          demandRef: created.holderToken,
+          bookingId: null,
+          bookingHoldId: created.id,
+          startsAt: slotStartDate,
+          endsAt: slotEndDate,
+          quantity: 1,
+          idempotencyKey: `hold:${created.id}`,
+        });
+      }
+      return created;
+    });
+
+    return NextResponse.json(
+      { holderToken: hold.holderToken, expiresAt: hold.expiresAt },
+      { status: 201 },
+    );
+  } catch (error) {
+    if (
+      error instanceof HospitalityCapacityConflictError ||
+      isExclusionViolation(error) ||
+      (error instanceof Error && error.message === "LEGACY_HOLD_CONFLICT")
+    ) {
+      return apiErrorResponse(
+        "CAPACITY_CONFLICT",
+        "Slot is already held",
+        409,
+      );
+    }
+    if (
+      error instanceof Error &&
+      error.message === "STOREFRONT_ITEM_NOT_FOUND"
+    ) {
+      return apiErrorResponse(
+        "NOT_FOUND",
+        "Storefront item not found",
+        404,
+      );
+    }
+    throw error;
+  }
 }

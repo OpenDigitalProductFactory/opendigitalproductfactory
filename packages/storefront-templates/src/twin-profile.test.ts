@@ -168,11 +168,59 @@ describe("deriveTwinProfile — signature mappings", () => {
     };
     expectAll("banking-financial-services", (t) => t.template === "TENANTS" && t.variant === "portfolio");
     expectAll("media-production", (t) => t.template === "PIPELINE" && t.variant === "timeline");
-    expectAll("food-hospitality", (t) => t.template === "FLOOR");
+    expectAll(
+      "food-hospitality",
+      (t) => ["FLOOR", "VENUE", "BAYS"].includes(t.template),
+    );
     expectAll("retail-goods", (t) => t.template === "STORE" || t.template === "TERRITORY");
     expectAll("hoa-property-management", (t) => t.template === "TERRITORY" && t.variant === "unit-portfolio");
     expectAll("real-estate-construction", (t) => t.template === "TERRITORY" && t.variant === "job-sites");
     expectAll("live-events-venues", (t) => t.template === "VENUE");
+  });
+
+  it("does not flatten catering or bakery into restaurant table-turning", () => {
+    const byId = (id: string) =>
+      deriveTwinProfile(
+        ALL_ARCHETYPES.find((archetype) => archetype.archetypeId === id)!,
+      );
+
+    const catering = byId("catering");
+    expect(catering).toMatchObject({
+      template: "VENUE",
+      capacityZoneKey: "prep",
+      resourceNoun: { singular: "event crew" },
+      workItemNoun: { singular: "event" },
+    });
+    expect(catering.capacityChips).toEqual(
+      expect.arrayContaining([
+        "guests committed",
+        "kitchen prep capacity",
+        "delivery/setup readiness",
+        "deposit status",
+      ]),
+    );
+
+    const bakery = byId("bakery");
+    expect(bakery).toMatchObject({
+      template: "BAYS",
+      capacityZoneKey: "production",
+      resourceNoun: { singular: "oven" },
+      workItemNoun: { singular: "production order" },
+    });
+    expect(bakery.queues.map((queue) => queue.label)).toEqual(
+      expect.arrayContaining([
+        "Production queue",
+        "Pickup & delivery",
+        "Allergen review",
+        "Balance due",
+      ]),
+    );
+
+    const nonRestaurantText = JSON.stringify({ catering, bakery }).toLowerCase();
+    expect(nonRestaurantText).not.toContain("table");
+    expect(nonRestaurantText).not.toContain("waitlist");
+    expect(nonRestaurantText).not.toContain("dwell-time");
+    expect(nonRestaurantText).not.toContain("turn-time");
   });
 });
 

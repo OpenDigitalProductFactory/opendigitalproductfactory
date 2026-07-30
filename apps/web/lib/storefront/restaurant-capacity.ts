@@ -1,17 +1,9 @@
 // apps/web/lib/storefront/restaurant-capacity.ts
 //
 // The single source of truth for a Restaurant install's capacity state — a pure,
-// DB-free projection over the substrate that already exists (service providers,
-// bookings, holds, booking items). Every owner and customer surface renders from
-// this one shape so they reconcile: the Tables & Capacity page, the Workspace
-// readiness answer, and public booking availability all speak the same table /
-// capacity language.
-//
-// Why a projection (not a new persistent Table model): BI-7C95A586 is a
-// legibility bug — make the existing signals coherent. The persistent
-// table/seat/covers resource-pool engine is the separate large item BI-57F34A00,
-// which can later back these same types with real storage without touching a
-// single call site. `classifyStorefrontResource` is the seam it will replace.
+// DB-free projection over the structured Food & Hospitality resource/capacity
+// substrate. Every owner and customer surface renders from this one shape so
+// Tables & Capacity, Operations, and booking availability reconcile.
 //
 // Nouns (table/tables, waitlist, reservations) come from the FLOOR twin profile
 // (`deriveTwinProfile`) — the operational-twin framework is the noun SSOT; this
@@ -21,14 +13,13 @@
 
 import { resolveIntent, type Intent } from "@/components/ui/report-kit/statusColors";
 import {
-  classifyStorefrontResource,
-  type StorefrontResourceKind,
-} from "./storefront-resource-kind";
-
-export {
-  classifyStorefrontResource,
-  type StorefrontResourceKind,
-} from "./storefront-resource-kind";
+  isHospitalityResourceAvailableForInterval,
+  type HospitalityAvailabilityWindow,
+  type HospitalityAllocationLifecycle,
+  type HospitalityCapacityUnit,
+  type HospitalityResourceKind,
+  type HospitalityResourceStatus,
+} from "./hospitality-capacity";
 
 // ── Canonical capacity vocabulary ───────────────────────────────────────────
 
@@ -91,38 +82,36 @@ export interface RestaurantCapacitySnapshot {
 
 export interface CapacityResourceInput {
   id: string;
-  name: string;
-  isActive: boolean;
-  /** Optional forward-compat hint; BI-57F34A00 will populate a real field. */
-  resourceKind?: "table" | "staff" | null;
-  /** Optional: seat capacity when a structured field exists. */
-  seats?: number | null;
+  label: string;
+  kind: HospitalityResourceKind;
+  status: HospitalityResourceStatus;
+  capacity: number;
+  capacityUnit: HospitalityCapacityUnit;
+  availability?: CapacityAvailabilityInput[];
 }
+
+export type CapacityAvailabilityInput = HospitalityAvailabilityWindow;
 
 export interface CapacityBookingInput {
   id: string;
-  providerId: string | null;
+  hospitalityResourceId: string | null;
   scheduledAt: Date | null;
   durationMinutes: number | null;
   status: string;
 }
 
 export interface CapacityHoldInput {
-  providerId?: string | null;
+  hospitalityResourceId?: string | null;
   slotStart: Date | null;
   slotEnd: Date | null;
 }
 
-// ── Classification: table/capacity resource vs person/staff ──────────────────
-
-const SEAT_IN_NAME_RX = /(?:for|seats?|covers?|pax)\s*(\d{1,2})/i;
-
-/** Best-effort seat count from a resource label ("Table for 4" → 4). */
-export function seatsFromName(name: string): number | null {
-  const m = SEAT_IN_NAME_RX.exec(name ?? "");
-  if (!m) return null;
-  const n = Number(m[1]);
-  return Number.isFinite(n) && n > 0 ? n : null;
+export interface CapacityAllocationInput {
+  id: string;
+  resourceId: string | null;
+  startsAt: Date;
+  endsAt: Date;
+  lifecycle: HospitalityAllocationLifecycle;
 }
 
 // ── State + intent mapping ───────────────────────────────────────────────────
@@ -238,11 +227,25 @@ function spansNow(b: CapacityBookingInput, now: Date): { seated: boolean; freeIn
   return { seated: true, freeInMinutes: Math.max(0, Math.round((end - t) / 60_000)) };
 }
 
+function resourceAvailableAt(
+  resource: CapacityResourceInput,
+  now: Date,
+  timeZone: string,
+): boolean {
+  return isHospitalityResourceAvailableForInterval({
+    availability: resource.availability ?? [],
+    startsAt: now,
+    endsAt: new Date(now.getTime() + 60_000),
+    timeZone,
+  });
+}
+
 // ── The projection ───────────────────────────────────────────────────────────
 
 export interface DeriveCapacityInput {
   resources: CapacityResourceInput[];
   bookings: CapacityBookingInput[];
+  allocations?: CapacityAllocationInput[];
   holds?: CapacityHoldInput[];
   now: Date;
   nextPeriod?: ServicePeriod | null;
@@ -250,6 +253,8 @@ export interface DeriveCapacityInput {
   turnWindowMinutes?: number;
   /** Base path for the owner next-action links. */
   ownerBasePath?: string;
+  /** IANA timezone used to interpret recurring hours and dated exceptions. */
+  timeZone?: string;
 }
 
 /**
@@ -261,31 +266,56 @@ export function deriveRestaurantCapacity(input: DeriveCapacityInput): Restaurant
   const {
     resources,
     bookings,
+    allocations = [],
     holds = [],
     now,
     nextPeriod = null,
     turnWindowMinutes = 20,
     ownerBasePath = "/storefront",
+    timeZone = "UTC",
   } = input;
 
-  const tableRows = resources.filter((r) => classifyStorefrontResource(r) === "table");
+  const tableRows = resources.filter((resource) => resource.kind === "table");
   const openBookings = bookings.filter(isOpenBooking);
 
   // Index active/seated bookings + holds by the table they consume.
   const seatedByTable = new Map<string, number>(); // freeInMinutes (0 = not turning)
+  for (const allocation of allocations) {
+    if (
+      !allocation.resourceId ||
+      (allocation.lifecycle !== "reserved" &&
+        allocation.lifecycle !== "active") ||
+      allocation.startsAt.getTime() > now.getTime() ||
+      allocation.endsAt.getTime() <= now.getTime()
+    ) {
+      continue;
+    }
+    const freeInMinutes = Math.max(
+      0,
+      Math.round(
+        (allocation.endsAt.getTime() - now.getTime()) / 60_000,
+      ),
+    );
+    const previous = seatedByTable.get(allocation.resourceId);
+    if (previous === undefined || freeInMinutes > previous) {
+      seatedByTable.set(allocation.resourceId, freeInMinutes);
+    }
+  }
   for (const b of openBookings) {
-    if (!b.providerId || !isActiveBooking(b)) continue;
+    if (!b.hospitalityResourceId || !isActiveBooking(b)) continue;
     const { seated, freeInMinutes } = spansNow(b, now);
     if (!seated) continue;
-    const prev = seatedByTable.get(b.providerId);
+    const prev = seatedByTable.get(b.hospitalityResourceId);
     // Keep the sitting that frees latest (the table stays occupied until then).
-    if (prev === undefined || freeInMinutes > prev) seatedByTable.set(b.providerId, freeInMinutes);
+    if (prev === undefined || freeInMinutes > prev) {
+      seatedByTable.set(b.hospitalityResourceId, freeInMinutes);
+    }
   }
   const heldTables = new Set<string>();
   for (const h of holds) {
-    if (!h.providerId || !h.slotStart || !h.slotEnd) continue;
+    if (!h.hospitalityResourceId || !h.slotStart || !h.slotEnd) continue;
     if (h.slotStart.getTime() <= now.getTime() && now.getTime() < h.slotEnd.getTime()) {
-      heldTables.add(h.providerId);
+      heldTables.add(h.hospitalityResourceId);
     }
   }
 
@@ -299,14 +329,14 @@ export function deriveRestaurantCapacity(input: DeriveCapacityInput): Restaurant
   let seatsTotal = 0;
 
   const tables: RestaurantTable[] = tableRows.map((r) => {
-    const seats = r.seats ?? seatsFromName(r.name);
+    const seats = r.capacityUnit === "seats" ? r.capacity : null;
     if (seats != null) {
       seatsKnown = true;
       seatsTotal += seats;
     }
     let state: TableCapacityState;
     let freeInMinutes: number | null = null;
-    if (!r.isActive) {
+    if (r.status !== "active" || !resourceAvailableAt(r, now, timeZone)) {
       state = "blocked";
     } else if (seatedByTable.has(r.id)) {
       const remaining = seatedByTable.get(r.id)!;
@@ -322,12 +352,14 @@ export function deriveRestaurantCapacity(input: DeriveCapacityInput): Restaurant
       state = "available";
     }
     counts[state] += 1;
-    return { key: r.id, label: r.name, seats, state, freeInMinutes };
+    return { key: r.id, label: r.label, seats, state, freeInMinutes };
   });
 
   // Demand signals.
   const waitlistParties = openBookings.filter(
-    (b) => (isPendingBooking(b) || b.providerId == null) && b.scheduledAt == null,
+    (b) =>
+      (isPendingBooking(b) || b.hospitalityResourceId == null) &&
+      b.scheduledAt == null,
   ).length;
   const ticketsOpen = openBookings.filter(isActiveBooking).length;
   const pendingReservations = openBookings.filter(isPendingBooking).length;

@@ -3,7 +3,6 @@ import { prisma } from "@dpf/db";
 import { TeamManager } from "@/components/storefront-admin/TeamManager";
 import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
 import { resolveResourceVocabulary } from "@/lib/storefront/resource-vocabulary";
-import { classifyStorefrontResource } from "@/lib/storefront/restaurant-capacity";
 
 export default async function TeamPage() {
   const config = await prisma.storefrontConfig.findFirst({
@@ -19,6 +18,7 @@ export default async function TeamPage() {
             },
           },
           availability: { orderBy: { createdAt: "asc" } },
+          hospitalityResource: { select: { id: true } },
         },
       },
       items: {
@@ -69,7 +69,7 @@ export default async function TeamPage() {
   // the dedicated Tables & Capacity surface — the Team page is people only, so
   // tables never appear here under "Staff" as "providers" (BI-7C95A586).
   const staff = resourceVocab.hasCapacityResources
-    ? providers.filter((p) => classifyStorefrontResource(p) === "staff")
+    ? providers.filter((provider) => provider.hospitalityResource == null)
     : providers;
 
   return (
@@ -88,7 +88,6 @@ export default async function TeamPage() {
         storefrontId={config.id}
         items={config.items}
         teamLabel={resourceVocab.staffLabel}
-        mode="staff"
       />
     </div>
   );
