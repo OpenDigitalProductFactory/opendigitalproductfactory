@@ -52,7 +52,7 @@ export function BuildDetailsDisclosure({
 }: BuildDetailsDisclosureProps) {
   const buildStamp = platformVersion.gitSha ?? platformVersion.imageVersion?.raw ?? null;
   return (
-    <details className="text-[11px] text-[var(--dpf-muted)]" data-build-details="true">
+    <details className="text-dpf-caption text-[var(--dpf-muted)]" data-build-details="true">
       <summary className="cursor-pointer">Build details</summary>
       <div className="mt-1 space-y-0.5">
         <div>
