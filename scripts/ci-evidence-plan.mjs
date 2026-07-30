@@ -137,6 +137,11 @@ function writeText(path, contents) {
 }
 
 export function githubOutputsForPlan(plan) {
+  // `fullSuite` is the planner's authoritative fail-safe/lifecycle decision.
+  // File scope may keep a clean docs/mobile pull request light, but it must not
+  // suppress Typecheck, Vitest, or Production Build after the planner expands
+  // a merge group, push, or unsafe input to exhaustive evidence.
+  const heavy = plan.fullSuite === true || plan.scope.heavy === true;
   // Keep the portal UX decision independent from the broader heavy-CI switch.
   // A clean pull_request is the only lifecycle allowed to omit runtime proof:
   // merge_group, push, dispatch, schedule, local-CI, missing event identity,
@@ -148,7 +153,7 @@ export function githubOutputsForPlan(plan) {
     && (plan.scope.docsOnly || plan.scope.mobileOnly);
   const portalUxRequired = !nonPortalPullRequest;
   return [
-    `heavy=${plan.scope.heavy}`,
+    `heavy=${heavy}`,
     `portal_ux_required=${portalUxRequired}`,
     `mobile=${plan.scope.mobile}`,
     `evidence_tier=${plan.evidenceTier}`,
