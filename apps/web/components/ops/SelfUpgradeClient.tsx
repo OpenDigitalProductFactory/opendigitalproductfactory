@@ -14,7 +14,7 @@ import { isExpectedDuringSwap } from "@/lib/self-upgrade/is-expected-during-swap
 import { SelfUpgradeReadiness } from "@/components/ops/SelfUpgradeReadiness";
 import { BuildStamps } from "@/components/ops/BuildStamps";
 import type { LatestRun, QuiescenceActivity } from "@/lib/self-upgrade/run-types";
-
+import { RECOVERY_ACTION_CLASS, RECOVERY_CONFIRMATION_CLASS } from "@/components/ops/self-upgrade-recovery-control-styles";
 type RecoveryPointSummary = {
   status: string;
   members: Array<{ target: string; runId: string | null; status: string }>;
@@ -940,7 +940,7 @@ export default function SelfUpgradeClient({
                         type="button"
                         onClick={handleRepairPromoter}
                         disabled={isRepairPending}
-                        className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface)] px-2 py-1 text-xs font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)] disabled:opacity-60"
+                        className="min-h-11 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface)] px-3 py-2 text-xs font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)] disabled:opacity-60"
                         data-testid="repair-promoter-button"
                       >
                         {isRepairPending ? "Building engine…" : "Build engine now"}
@@ -992,7 +992,7 @@ export default function SelfUpgradeClient({
                     onChange={(event) => setRollbackConfirmation(event.target.value)}
                     aria-label="Rollback confirmation"
                     placeholder="Type ROLLBACK"
-                    className="w-full sm:w-44 rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-2 py-1 text-xs text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)]"
+                    className={RECOVERY_CONFIRMATION_CLASS}
                   />
                   <button
                     type="button"
@@ -1002,7 +1002,7 @@ export default function SelfUpgradeClient({
                       rollbackConfirmation !== "ROLLBACK"
                     }
                     aria-busy={isRollbackPending}
-                    className="rounded-md border border-[var(--dpf-destructive)]/40 bg-[var(--dpf-destructive)]/10 px-3 py-1 text-xs font-medium text-[var(--dpf-destructive)] transition-colors hover:bg-[var(--dpf-destructive)]/20 disabled:opacity-50"
+                    className={RECOVERY_ACTION_CLASS}
                   >
                     {isRollbackPending ? "Restoring..." : "Restore recovery point"}
                   </button>

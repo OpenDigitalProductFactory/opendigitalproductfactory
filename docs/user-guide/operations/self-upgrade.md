@@ -67,10 +67,23 @@ Nothing is lost by waiting.
 - If an upgrade fails, use **Review recovery controls**. Restore the governed
   recovery point when needed, read the retryable diagnosis, and only then
   decide whether to run the update again.
+- If the page cannot read update status, use **Retry status check**. If the
+  status remains unavailable, open **Platform health** from Operations to
+  identify the unhealthy service before attempting an update.
 - Operators on unusually slow hosts can raise the shared build budget by setting
   `DPF_PROMOTER_TIMEOUT_MS` (milliseconds) in the environment.
 - Deployment windows and change-request lifecycle are managed from the wider
   Operations area.
+
+## Enable Self-Upgrade
+
+Self-upgrade can be disabled deliberately at the install level. In that state
+the page does not offer an update command. A platform administrator must enable
+the `self_upgrade` platform configuration and confirm that its source, host
+paths, and promoter settings are correct. After the administrator enables it,
+return to **Self-Upgrade** and confirm the page reports **Enabled** before
+starting an update. Do not bypass this prerequisite with a direct Compose
+rebuild; that path does not create the governed recovery evidence.
 
 ## What To Watch
 

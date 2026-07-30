@@ -97,6 +97,12 @@ export function resolveSelfUpgradePurposeBlocker(
 export function resolveSelfUpgradePurposeRecovery(
   status: SelfUpgradePurposeStatus,
 ): { href: string; label: string } {
+  if (status.statusAvailable === false) {
+    return {
+      href: "/ops/self-upgrade",
+      label: "Retry status check",
+    };
+  }
   if (status.windowSource === "needs-timezone") {
     return {
       href: "/storefront/settings/operations",
@@ -106,11 +112,14 @@ export function resolveSelfUpgradePurposeRecovery(
   if (status.jobEngine?.healthy === false && status.statusAvailable !== false) {
     return { href: "/ops/health", label: "Open platform health" };
   }
+  if (!status.enabled) {
+    return {
+      href: "/docs/operations/self-upgrade#enable-self-upgrade",
+      label: "How to enable self-upgrade",
+    };
+  }
   return {
     href: "/docs/operations/self-upgrade",
-    label:
-      status.statusAvailable === false
-        ? "Open status recovery"
-        : "Open recovery guidance",
+    label: "Open recovery guidance",
   };
 }

@@ -82,14 +82,27 @@ describe("resolveSelfUpgradePurposeScenario", () => {
   });
 
   it.each([
+    [{ statusAvailable: false }, "/ops/self-upgrade"],
     [
       { windowSource: "needs-timezone" },
       "/storefront/settings/operations",
     ],
     [{ jobEngine: { healthy: false } }, "/ops/health"],
-    [{ enabled: false }, "/docs/operations/self-upgrade"],
+    [
+      { enabled: false },
+      "/docs/operations/self-upgrade#enable-self-upgrade",
+    ],
   ])("routes blocker %j to its owning recovery surface", (overrides, href) => {
     expect(resolveSelfUpgradePurposeRecovery(status(overrides)).href).toBe(href);
+  });
+
+  it("gives a failed status read an explicit retry label", () => {
+    expect(
+      resolveSelfUpgradePurposeRecovery(status({ statusAvailable: false })),
+    ).toEqual({
+      href: "/ops/self-upgrade",
+      label: "Retry status check",
+    });
   });
 
   it.each([
