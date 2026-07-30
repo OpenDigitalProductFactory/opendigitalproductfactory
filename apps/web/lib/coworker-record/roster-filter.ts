@@ -127,7 +127,6 @@ export function needsAttention(row: RosterRow): boolean {
     row.availability.state === "setup-needed" ||
     row.availability.state === "needs-attention" ||
     row.authority.state === "review-needed" ||
-    !row.providerHealthy ||
     row.openBlockers > 0
   );
 }

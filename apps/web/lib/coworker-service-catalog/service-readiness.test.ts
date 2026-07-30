@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
+import { COWORKER_SERVICE_CATALOG_SERVICE_SEEDS } from "@dpf/db/coworker-service-catalog-seed";
 
 import {
   evaluateCoworkerServiceReadiness,
-  hasHealthyCoworkerProvider,
 } from "./service-readiness";
+import { VERIFIED_COWORKER_SERVICE_TOOL_NAMES } from "./registered-service-tools";
+import { projectCoworkerDiscovery } from "@/lib/coworker-record/roster-presentation";
 
 const service = {
   serviceId: "svc-marketing-campaign-execution",
@@ -17,7 +19,7 @@ const readyEvidence = {
   assignedSkillIds: [],
   registeredToolNames: ["create_marketing_campaign"],
   heldGrantKeys: ["marketing_write"],
-  providerHealthy: true,
+  routeReady: true,
   blockingCapabilityNeedCount: 0,
 };
 
@@ -74,14 +76,16 @@ describe("evaluateCoworkerServiceReadiness", () => {
   it("reports provider and governed capability blockers separately from setup", () => {
     const result = evaluateCoworkerServiceReadiness(service, {
       ...readyEvidence,
-      providerHealthy: false,
+      routeReady: false,
+      routeBlockerReason:
+        "No configured model satisfies this coworker's routing requirements.",
       blockingCapabilityNeedCount: 2,
     });
 
     expect(result).toEqual({
       status: "evaluated",
       blockers: [
-        "No active tool-capable AI provider is available.",
+        "No configured model satisfies this coworker's routing requirements.",
         "2 blocking capability needs require review.",
       ],
       missingPrerequisites: [],
@@ -115,6 +119,57 @@ describe("evaluateCoworkerServiceReadiness", () => {
     }
   });
 
+  it("keeps the canonical Customer Advisor declaration non-conversational with its real missing backing", () => {
+    const canonical = COWORKER_SERVICE_CATALOG_SERVICE_SEEDS.find(
+      (candidate) =>
+        candidate.serviceId === "svc-customer-sales-intake",
+    );
+    expect(canonical).toBeDefined();
+    if (!canonical) return;
+
+    const readiness = evaluateCoworkerServiceReadiness(canonical, {
+      assignedSkillIds: [],
+      registeredToolNames: VERIFIED_COWORKER_SERVICE_TOOL_NAMES,
+      heldGrantKeys: [],
+      routeReady: true,
+      blockingCapabilityNeedCount: 0,
+    });
+    expect(readiness.status).toBe("evaluated");
+    if (readiness.status === "evaluated") {
+      expect(readiness.missingPrerequisites).toEqual(
+        expect.arrayContaining([
+          `Assign the advertised skills for ${canonical.name}`,
+          `Register the advertised tools for ${canonical.name}`,
+          `Grant the advertised permissions for ${canonical.name}`,
+        ]),
+      );
+    }
+
+    const discovery = projectCoworkerDiscovery({
+      agentDescription: "Handles customer requests.",
+      services: [
+        {
+          ...canonical,
+          portfolio: {
+            slug: "products_and_services_sold",
+            name: "Products and services sold",
+          },
+        },
+      ],
+      install: {
+        install: {
+          archetypeId: "restaurant",
+          category: "food-hospitality",
+        },
+        installResolutionReason: "The storefront business type was resolved.",
+      },
+      readinessByServiceId: new Map([[canonical.serviceId, readiness]]),
+    });
+
+    expect(discovery.availability.state).toBe("coverage-not-defined");
+    expect(discovery.canStartConversation).toBe(false);
+  });
+
   it("fails closed when backing declarations are malformed or empty", () => {
     const malformed = evaluateCoworkerServiceReadiness(
       {
@@ -145,40 +200,5 @@ describe("evaluateCoworkerServiceReadiness", () => {
         "Define executable backing for Marketing campaign execution",
       );
     }
-  });
-});
-
-describe("hasHealthyCoworkerProvider", () => {
-  const providers = [
-    {
-      providerId: "openai",
-      status: "active",
-      activeToolModelCount: 1,
-    },
-    {
-      providerId: "degraded",
-      status: "degraded",
-      activeToolModelCount: 1,
-    },
-  ];
-
-  it("requires positive active tool-capable routing evidence", () => {
-    expect(hasHealthyCoworkerProvider(null, [])).toBe(false);
-    expect(
-      hasHealthyCoworkerProvider(null, [
-        {
-          providerId: "openai",
-          status: "active",
-          activeToolModelCount: 0,
-        },
-      ]),
-    ).toBe(false);
-    expect(hasHealthyCoworkerProvider(null, providers)).toBe(true);
-  });
-
-  it("requires the pinned provider itself to be eligible", () => {
-    expect(hasHealthyCoworkerProvider("openai", providers)).toBe(true);
-    expect(hasHealthyCoworkerProvider("degraded", providers)).toBe(false);
-    expect(hasHealthyCoworkerProvider("missing", providers)).toBe(false);
   });
 });

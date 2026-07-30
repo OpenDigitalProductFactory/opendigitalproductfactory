@@ -30,8 +30,11 @@ import { resolveInstallVariantContext } from "@/lib/decision-perspective/install
 import { knownGrantKeys } from "@/lib/tak/agent-grants";
 import {
   evaluateCoworkerServicesReadiness,
-  hasHealthyCoworkerProvider,
 } from "@/lib/coworker-service-catalog/service-readiness";
+import {
+  loadCoworkerRoutingReadinessSnapshot,
+  projectCoworkerRouteReadiness,
+} from "@/lib/coworker-service-catalog/route-readiness";
 import { VERIFIED_COWORKER_SERVICE_TOOL_NAMES } from "@/lib/coworker-service-catalog/registered-service-tools";
 import {
   getWorkPatternReadModel,
@@ -151,7 +154,7 @@ export default async function AgentDetailPage({
     activeProviders,
     assignedSkillRows,
     catalogSkillRows,
-    allProviderStatuses,
+    routingReadinessSnapshot,
     capabilityNeedReview,
     workPatternReadModel,
   ] =
@@ -192,17 +195,7 @@ export default async function AgentDetailPage({
           select: { skillId: true, name: true, category: true, riskBand: true },
         })
         .catch(() => [] as Array<{ skillId: string; name: string; category: string; riskBand: string }>),
-      // Provider statuses for the summary health chip (mirrors roster.ts logic).
-      prisma.modelProvider.findMany({
-        select: {
-          providerId: true,
-          status: true,
-          modelProfiles: {
-            where: { modelStatus: "active", supportsToolUse: true },
-            select: { modelId: true },
-          },
-        },
-      }).catch(() => []),
+      loadCoworkerRoutingReadinessSnapshot([record.runtime.agentId]),
       getCoworkerCapabilityNeedReview({ agentId: record.runtime.agentId }).catch(() => emptyNeedReview()),
       getWorkPatternReadModel({ agentId: record.runtime.agentId }).catch(() => emptyWorkPatternReadModel()),
     ]);
@@ -231,24 +224,19 @@ export default async function AgentDetailPage({
         (modelConfig?.minimumTier as keyof typeof QUALITY_TIER_LABELS) ?? "adequate"
       ] ?? "Adequate";
   const priorityLabel = BUDGET_CLASS_LABELS[modelConfig?.budgetClass ?? "balanced"] ?? "Balanced";
-  const pinnedProvider = modelConfig?.pinnedProviderId ?? null;
-  const providerHealthy = hasHealthyCoworkerProvider(
-    pinnedProvider,
-    allProviderStatuses.map((provider) => ({
-      providerId: provider.providerId,
-      status: provider.status,
-      activeToolModelCount: provider.modelProfiles.length,
-    })),
+  const routeReadiness = await projectCoworkerRouteReadiness(
+    {
+      agentId: record.runtime.agentId,
+      sensitivity: agent.sensitivity,
+      minimumTier: modelConfig?.minimumTier ?? "adequate",
+      pinnedProviderId: modelConfig?.pinnedProviderId ?? null,
+      pinnedModelId: modelConfig?.pinnedModelId ?? null,
+      budgetClass: modelConfig?.budgetClass ?? "balanced",
+      minimumCapabilities: modelConfig?.minimumCapabilities ?? null,
+      minimumContextTokens: modelConfig?.minimumContextTokens ?? null,
+    },
+    routingReadinessSnapshot,
   );
-
-  const summary = {
-    modelTier,
-    priority: priorityLabel,
-    skillCount: assignedSkills.length,
-    toolCount: record.runtime.heldGrantKeys.length,
-    hitlTier: agent.hitlTierDefault,
-    providerHealthy,
-  };
   const discovery = projectCoworkerDiscovery({
     agentDescription: agent.description,
     services: record.services,
@@ -257,7 +245,10 @@ export default async function AgentDetailPage({
       assignedSkillIds: record.runtime.assignedSkillIds,
       registeredToolNames: VERIFIED_COWORKER_SERVICE_TOOL_NAMES,
       heldGrantKeys: record.runtime.heldGrantKeys,
-      providerHealthy,
+      routeReady: routeReadiness.ready,
+      routeBlockerReason: routeReadiness.ready
+        ? undefined
+        : routeReadiness.reason,
       blockingCapabilityNeedCount:
         capabilityNeedReview.summary.byStatus["blocked"] ?? 0,
     }),
@@ -269,6 +260,14 @@ export default async function AgentDetailPage({
     canStartConversation,
     plainJob,
   } = discovery;
+  const summary = {
+    modelTier,
+    priority: priorityLabel,
+    skillCount: assignedSkills.length,
+    toolCount: record.runtime.heldGrantKeys.length,
+    hitlTier: agent.hitlTierDefault,
+    conversationReady: canStartConversation,
+  };
   const interactionLabel = interaction.labels.join(", ");
   const coverageSetupHref = availability.reason
     .toLowerCase()
@@ -411,7 +410,7 @@ export default async function AgentDetailPage({
             )}
             {availability.state === "setup-needed" && (
               <Link
-                href={`${detailRoute}#capabilities`}
+                href={`${detailRoute}?returnTo=${encodeURIComponent(returnTo)}#capabilities`}
                 className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--dpf-border)] px-3 text-sm font-semibold text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
               >
                 <Settings2 aria-hidden className="h-4 w-4" />
@@ -457,7 +456,11 @@ export default async function AgentDetailPage({
           <OwnerStatus
             label="Work includes"
             value={interactionLabel}
-            detail="Interaction across this coworker's declared services."
+            detail={
+              canStartConversation
+                ? "Interaction for currently available work."
+                : "Interaction declared for this coworker's best-matching work."
+            }
           />
           <OwnerStatus
             label="Availability"

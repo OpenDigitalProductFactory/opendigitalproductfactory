@@ -16,28 +16,10 @@ export type CoworkerServiceReadinessEvidence = {
   assignedSkillIds: readonly string[];
   registeredToolNames: readonly string[];
   heldGrantKeys: readonly string[];
-  providerHealthy: boolean;
+  routeReady: boolean;
+  routeBlockerReason?: string;
   blockingCapabilityNeedCount: number;
 };
-
-export type CoworkerProviderReadiness = {
-  providerId: string;
-  status: string;
-  activeToolModelCount: number;
-};
-
-export function hasHealthyCoworkerProvider(
-  pinnedProviderId: string | null,
-  providers: readonly CoworkerProviderReadiness[],
-): boolean {
-  const eligible = providers.filter(
-    (provider) =>
-      provider.status === "active" && provider.activeToolModelCount > 0,
-  );
-  return pinnedProviderId
-    ? eligible.some((provider) => provider.providerId === pinnedProviderId)
-    : eligible.length > 0;
-}
 
 export function evaluateCoworkerServiceReadiness(
   service: CoworkerServiceBacking,
@@ -92,8 +74,11 @@ export function evaluateCoworkerServiceReadiness(
   }
 
   const blockers: string[] = [];
-  if (!evidence.providerHealthy) {
-    blockers.push("No active tool-capable AI provider is available.");
+  if (!evidence.routeReady) {
+    blockers.push(
+      evidence.routeBlockerReason ??
+        "No configured model satisfies this coworker's routing requirements.",
+    );
   }
   if (evidence.blockingCapabilityNeedCount > 0) {
     const count = evidence.blockingCapabilityNeedCount;

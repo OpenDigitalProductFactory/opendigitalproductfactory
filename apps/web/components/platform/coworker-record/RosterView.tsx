@@ -14,7 +14,7 @@ import {
 
 import { AskCoworkerButton } from "@/components/agent/AskCoworkerButton";
 import { OwnerFirstDisclosure } from "@/components/owner-first/OwnerFirstDisclosure";
-import { StatusBadge } from "@/components/ui/report-kit";
+import { StatusBadge } from "@/components/ui/report-kit/StatusBadge";
 import {
   filtersFromSearchParams,
   filtersToSearchParams,
@@ -398,6 +398,7 @@ function RosterRowCard({
 }) {
   const detailRoute = `/platform/ai/agent/${encodeURIComponent(row.agentId)}`;
   const detailHref = `${detailRoute}?returnTo=${encodeURIComponent(returnHref)}`;
+  const setupHref = `${detailHref}#availability`;
   const canStartConversation = row.canStartConversation;
   const setupNeeded = row.availability.state === "setup-needed";
   const attention = needsAttention(row);
@@ -471,11 +472,11 @@ function RosterRowCard({
         )}
         {setupNeeded && (
           <Link
-            href="/setup"
+            href={setupHref}
             className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--dpf-border)] px-3 text-sm font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
           >
             <Settings2 aria-hidden className="h-4 w-4" />
-            Finish setup
+            Review setup
           </Link>
         )}
         {coverageNeedsReview && (

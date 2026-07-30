@@ -12,6 +12,7 @@ import {
   estimateSuccessProbability,
   averageRelevantDimensions,
   rankByCostPerSuccess,
+  satisfiesMinimumDimensions,
 } from "./cost-ranking";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -304,6 +305,28 @@ describe("estimateSuccessProbability", () => {
     });
     expect(estimateSuccessProbability(seedAbove, easyWork))
       .toBeLessThan(estimateSuccessProbability(provenAbove, easyWork));
+  });
+});
+
+describe("satisfiesMinimumDimensions", () => {
+  it("reuses the ranker's dimension floor without applying unrelated probability checks", () => {
+    const endpoint = makeEndpoint({
+      reasoning: 75,
+      codegen: 75,
+      toolFidelity: 75,
+      capabilities: { ...EMPTY_CAPABILITIES, toolUse: null },
+    });
+
+    expect(
+      satisfiesMinimumDimensions(endpoint, {
+        reasoning: 70,
+        codegen: 70,
+        toolFidelity: 70,
+      }),
+    ).toBe(true);
+    expect(
+      satisfiesMinimumDimensions(endpoint, { reasoning: 80 }),
+    ).toBe(false);
   });
 });
 

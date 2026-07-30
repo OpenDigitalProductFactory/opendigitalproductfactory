@@ -28,8 +28,11 @@ import {
 import { loadCoworkerDiscoveryServices } from "@/lib/coworker-service-catalog/catalog";
 import {
   evaluateCoworkerServicesReadiness,
-  hasHealthyCoworkerProvider,
 } from "@/lib/coworker-service-catalog/service-readiness";
+import {
+  loadCoworkerRoutingReadinessSnapshot,
+  projectCoworkerRouteReadiness,
+} from "@/lib/coworker-service-catalog/route-readiness";
 import { VERIFIED_COWORKER_SERVICE_TOOL_NAMES } from "@/lib/coworker-service-catalog/registered-service-tools";
 import { normalizeVariantAxes } from "./variant-axes";
 import { loadInstallAvailabilityContext } from "./availability-context";
@@ -74,7 +77,6 @@ export type RosterRow = {
   competencies: string[];
   profileBound: boolean;
   emptyCorpus: boolean;
-  providerHealthy: boolean;
   openBlockers: number;
   deferRate: number;
   /** True when the role binds to no profession family (registry-lint gap). */
@@ -219,7 +221,6 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
     agentsRaw,
     coverage,
     modelConfigs,
-    providers,
     blockerRows,
     lastActivity,
     services,
@@ -239,21 +240,22 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
         tier: true,
         valueStream: true,
         lifecycleStage: true,
+        sensitivity: true,
         hitlTierDefault: true,
         governanceProfile: { select: { id: true, hitlPolicy: true } },
         toolGrants: { select: { grantKey: true } },
       },
     }),
     loadAllCoverage(),
-    prisma.agentModelConfig.findMany({ select: { agentId: true, pinnedProviderId: true } }),
-    prisma.modelProvider.findMany({
+    prisma.agentModelConfig.findMany({
       select: {
-        providerId: true,
-        status: true,
-        modelProfiles: {
-          where: { modelStatus: "active", supportsToolUse: true },
-          select: { modelId: true },
-        },
+        agentId: true,
+        minimumTier: true,
+        pinnedProviderId: true,
+        pinnedModelId: true,
+        budgetClass: true,
+        minimumCapabilities: true,
+        minimumContextTokens: true,
       },
     }),
     prisma.coworkerCapabilityNeed
@@ -276,6 +278,12 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
 
   // Belt-and-suspenders: drop any residual dual-seed alias twin still active.
   const agents = dropDualSeedAliasAgents(agentsRaw);
+  const routingReadinessSnapshot =
+    await loadCoworkerRoutingReadinessSnapshot(
+      agents.map(
+        (agent) => selectableCoworkerIdentityRefs(agent.agentId).runtimeAgentId,
+      ),
+    );
   const assignedSkillsByAgent = new Map<string, string[]>();
   for (const assignment of skillAssignments) {
     const current = assignedSkillsByAgent.get(assignment.agentId) ?? [];
@@ -288,10 +296,9 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
       agent.toolGrants.map((grant) => grant.grantKey),
     ]),
   );
-  const pinnedByAgent = new Map<string, string | null>();
-  for (const config of modelConfigs) {
-    pinnedByAgent.set(config.agentId, config.pinnedProviderId);
-  }
+  const modelConfigByAgent = new Map(
+    modelConfigs.map((config) => [config.agentId, config]),
+  );
   const blockersByAgent = new Map<string, number>();
   for (const blocker of blockerRows) {
     blockersByAgent.set(
@@ -324,7 +331,7 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
   }
   const deferRates = await loadDeferRates([...presentFamilies].map(professionProfileId));
 
-  const rows: RosterRow[] = agents.map((agent) => {
+  const rows: RosterRow[] = await Promise.all(agents.map(async (agent) => {
     const fam = findProfessionFamilyForAgentIdentity(agent);
     const cov = fam ? coverage.get(fam.professionKey) : undefined;
     const checklistSize = fam?.coverageChecklist.length ?? 0;
@@ -336,14 +343,19 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
           : null;
     const canonicalId = resolveCanonicalAgentId(agent.agentId);
     const { runtimeAgentId } = selectableCoworkerIdentityRefs(agent.agentId);
-    const pinned = pinnedByAgent.get(runtimeAgentId) ?? null;
-    const providerHealthy = hasHealthyCoworkerProvider(
-      pinned,
-      providers.map((provider) => ({
-        providerId: provider.providerId,
-        status: provider.status,
-        activeToolModelCount: provider.modelProfiles.length,
-      })),
+    const modelConfig = modelConfigByAgent.get(runtimeAgentId);
+    const routeReadiness = await projectCoworkerRouteReadiness(
+      {
+        agentId: runtimeAgentId,
+        sensitivity: agent.sensitivity,
+        minimumTier: modelConfig?.minimumTier ?? "adequate",
+        pinnedProviderId: modelConfig?.pinnedProviderId ?? null,
+        pinnedModelId: modelConfig?.pinnedModelId ?? null,
+        budgetClass: modelConfig?.budgetClass ?? "balanced",
+        minimumCapabilities: modelConfig?.minimumCapabilities ?? null,
+        minimumContextTokens: modelConfig?.minimumContextTokens ?? null,
+      },
+      routingReadinessSnapshot,
     );
     const profileId = fam ? professionProfileId(fam.professionKey) : null;
     const openBlockers = blockersByAgent.get(runtimeAgentId) ?? 0;
@@ -360,7 +372,10 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
         heldGrantKeys: [
           ...new Set(heldGrantsByAgent.get(runtimeAgentId) ?? []),
         ],
-        providerHealthy,
+        routeReady: routeReadiness.ready,
+        routeBlockerReason: routeReadiness.ready
+          ? undefined
+          : routeReadiness.reason,
         blockingCapabilityNeedCount: openBlockers,
       }),
     });
@@ -416,7 +431,6 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
       competencies: cov ? [...cov.competencies] : [],
       profileBound: !!fam, // a registered family => a seeded WSID profile id exists by convention
       emptyCorpus: !cov || cov.pageCount === 0,
-      providerHealthy,
       openBlockers,
       deferRate: profileId ? (deferRates.get(profileId) ?? 0) : 0,
       unmapped: !fam,
@@ -425,7 +439,7 @@ export async function loadRoster(): Promise<{ rows: RosterRow[]; facets: RosterF
           activityByAgent.get(canonicalId)
         )?.toISOString() ?? null,
     };
-  });
+  }));
 
   const facets: RosterFacets = {
     families: PROFESSION_REGISTRY.families

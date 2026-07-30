@@ -176,13 +176,7 @@ export function projectRosterAvailability(
     });
   }
 
-  return serviceAvailability
-    .map((service) => service.availability)
-    .sort(
-      (left, right) =>
-        AVAILABILITY_PRIORITY[left.state] -
-        AVAILABILITY_PRIORITY[right.state],
-    )[0]!;
+  return primaryRosterServiceAvailability(serviceAvailability)!.availability;
 }
 
 export function projectRosterServiceAvailability(
@@ -320,18 +314,49 @@ export function projectCoworkerDiscovery(input: {
     readiness: input.readiness,
     readinessByServiceId: input.readinessByServiceId,
   };
-  const availability = projectRosterAvailability(availabilityInput);
+  const serviceAvailability =
+    projectRosterServiceAvailability(availabilityInput);
+  const primaryService =
+    primaryRosterServiceAvailability(serviceAvailability);
+  const availability = primaryService?.availability ??
+    projectRosterAvailability(availabilityInput);
+  const interactionServiceIds = new Set(
+    primaryService
+      ? serviceAvailability
+          .filter(
+            (service) =>
+              AVAILABILITY_PRIORITY[service.availability.state] ===
+              AVAILABILITY_PRIORITY[primaryService.availability.state],
+          )
+          .map((service) => service.serviceId)
+      : [],
+  );
+  const interactionServices = input.services.filter((service) =>
+    interactionServiceIds.has(service.serviceId),
+  );
   return {
     area: ownerAreas.primary,
     areas: ownerAreas.all,
     plainJob: rosterPlainJob(input.agentDescription, input.services),
     workSearchText: rosterWorkSearchText(input.services),
-    interaction: projectCoworkerInteraction(input.services),
+    interaction: projectCoworkerInteraction(
+      interactionServices.length > 0 ? interactionServices : input.services,
+    ),
     availability,
-    serviceAvailability:
-      projectRosterServiceAvailability(availabilityInput),
+    serviceAvailability,
     canStartConversation: canStartCoworkerConversation(availability),
   };
+}
+
+function primaryRosterServiceAvailability(
+  services: readonly CoworkerServiceAvailability[],
+): CoworkerServiceAvailability | null {
+  return [...services].sort(
+    (left, right) =>
+      AVAILABILITY_PRIORITY[left.availability.state] -
+        AVAILABILITY_PRIORITY[right.availability.state] ||
+      left.serviceId.localeCompare(right.serviceId),
+  )[0] ?? null;
 }
 
 function isAggregate(value: unknown): boolean {

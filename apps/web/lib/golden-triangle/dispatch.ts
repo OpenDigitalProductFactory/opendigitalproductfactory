@@ -14,6 +14,7 @@ import { compileGoldenTrianglePolicy } from "./compile";
 import { applyPostureToRouteContext, type AppliedPosture } from "./compose";
 import { getEffectivePostureForAgent, type GoldenTrianglePersistenceClient } from "./persistence";
 import type { GoldenTrianglePreset } from "./types";
+import { prisma } from "@dpf/db";
 
 export interface DispatchPosture extends AppliedPosture {
   preset: GoldenTrianglePreset;
@@ -49,4 +50,50 @@ export async function resolveDispatchPosture(
   } catch {
     return null;
   }
+}
+
+/**
+ * Resolve many coworker postures from one platform-profile read. The roster
+ * needs the same effective posture as live dispatch, but must not issue one
+ * identical profile query per coworker.
+ */
+export async function resolveDispatchPostures(
+  agentIds: readonly string[],
+  taskClass = "conversation",
+  db?: GoldenTrianglePersistenceClient,
+): Promise<Map<string, DispatchPosture | null>> {
+  const client =
+    db ?? (prisma as unknown as GoldenTrianglePersistenceClient);
+  let platformProfilePromise:
+    | ReturnType<
+        GoldenTrianglePersistenceClient["decisionPerspectiveProfile"]["findFirst"]
+      >
+    | undefined;
+  const cachedClient: GoldenTrianglePersistenceClient = {
+    decisionPerspectiveProfile: {
+      findFirst: async (args) => {
+        if (!platformProfilePromise) {
+          platformProfilePromise =
+            client.decisionPerspectiveProfile.findFirst(args);
+        }
+        return platformProfilePromise;
+      },
+      updateMany: (args) =>
+        client.decisionPerspectiveProfile.updateMany(args),
+    },
+  };
+
+  return new Map(
+    await Promise.all(
+      [...new Set(agentIds)].map(async (agentId) => [
+        agentId,
+        await resolveDispatchPosture(
+          agentId,
+          taskClass,
+          null,
+          cachedClient,
+        ),
+      ] as const),
+    ),
+  );
 }

@@ -69,7 +69,6 @@ function row(over: Partial<RosterRow> = {}): RosterRow {
     competencies: ["practitioner"],
     profileBound: true,
     emptyCorpus: false,
-    providerHealthy: true,
     openBlockers: 0,
     deferRate: 0,
     unmapped: false,

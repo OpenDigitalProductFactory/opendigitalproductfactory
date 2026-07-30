@@ -259,6 +259,80 @@ describe("projectCoworkerDiscovery", () => {
     expect(projection.availability.state).toBe("not-available");
     expect(projection.canStartConversation).toBe(false);
   });
+
+  it("describes interaction for the service that actually makes the coworker available", () => {
+    const readyInternal = service({
+      serviceId: "svc-marketing-campaign-execution",
+      name: "Marketing campaign execution",
+      availabilityScope: "internal",
+      personas: ["operator"],
+      archetypes: ["food-hospitality"],
+    });
+    const unavailableCustomer = service({
+      serviceId: "svc-marketing-customer-outreach",
+      name: "Marketing customer outreach",
+      availabilityScope: "external",
+      personas: ["customer"],
+      archetypes: ["software-platform"],
+    });
+
+    const projection = projectCoworkerDiscovery({
+      agentDescription: "Plans and runs marketing campaigns.",
+      services: [unavailableCustomer, readyInternal],
+      install: restaurantInstall,
+      readinessByServiceId: new Map([
+        [
+          readyInternal.serviceId,
+          {
+            status: "evaluated",
+            blockers: [],
+            missingPrerequisites: [],
+          },
+        ],
+      ]),
+    });
+
+    expect(projection.availability.state).toBe("available");
+    expect(projection.interaction).toEqual({
+      scopes: ["internal-only"],
+      labels: ["Internal only"],
+    });
+  });
+
+  it("retains interaction from every service tied for the winning availability state", () => {
+    const readyInternal = service({
+      serviceId: "svc-marketing-campaign-execution",
+      availabilityScope: "internal",
+      personas: ["operator"],
+      archetypes: ["food-hospitality"],
+    });
+    const readyCustomer = service({
+      serviceId: "svc-marketing-customer-outreach",
+      availabilityScope: "external",
+      personas: ["customer"],
+      archetypes: ["food-hospitality"],
+    });
+    const ready = {
+      status: "evaluated" as const,
+      blockers: [],
+      missingPrerequisites: [],
+    };
+
+    const projection = projectCoworkerDiscovery({
+      agentDescription: "Plans and runs marketing campaigns.",
+      services: [readyInternal, readyCustomer],
+      install: restaurantInstall,
+      readinessByServiceId: new Map([
+        [readyInternal.serviceId, ready],
+        [readyCustomer.serviceId, ready],
+      ]),
+    });
+
+    expect(projection.interaction.scopes).toEqual([
+      "talks-to-customers",
+      "internal-only",
+    ]);
+  });
 });
 
 describe("rosterPlainJob", () => {

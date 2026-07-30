@@ -45,16 +45,16 @@ const facets: RosterFacets = {
 
 function row(over: Partial<RosterRow> = {}): RosterRow {
   return {
-    agentId: "customer-advisor",
-    slugId: "customer-advisor",
-    name: "Customer Advisor",
-    displayName: "Customer Advisor",
-    kind: "advisor",
+    agentId: "marketing-specialist",
+    slugId: "marketing-specialist",
+    name: "Marketing Specialist",
+    displayName: "Marketing Specialist",
+    kind: "specialist",
     tier: 2,
     valueStream: "consume",
     lifecycleStage: "production",
-    plainJob: "Handles customer intake and follow-up.",
-    workSearchText: "Customer intake Customer follow-up",
+    plainJob: "Plans and runs measured marketing campaigns.",
+    workSearchText: "Campaign planning Campaign measurement",
     canStartConversation: true,
     area: {
       key: "products_and_services_sold",
@@ -69,8 +69,8 @@ function row(over: Partial<RosterRow> = {}): RosterRow {
       },
     ],
     interaction: {
-      scopes: ["talks-to-customers"],
-      labels: ["Talks to customers"],
+      scopes: ["internal-only"],
+      labels: ["Internal only"],
     },
     availability: {
       state: "available",
@@ -89,7 +89,7 @@ function row(over: Partial<RosterRow> = {}): RosterRow {
       ownerAction: "Approve the action before it runs.",
       winner: {
         source: "agent",
-        ref: "customer-advisor",
+        ref: "marketing-specialist",
         field: "hitlTierDefault",
         role: "selected-base",
         observedValue: "1",
@@ -105,7 +105,6 @@ function row(over: Partial<RosterRow> = {}): RosterRow {
     competencies: [],
     profileBound: false,
     emptyCorpus: true,
-    providerHealthy: true,
     openBlockers: 0,
     deferRate: 0,
     unmapped: true,
@@ -149,14 +148,14 @@ describe("RosterView", () => {
     const headings = screen.getAllByRole("heading", { level: 2 });
     expect(headings[0]?.textContent).toBe("Customers and sales");
     expect(headings[1]?.textContent).toBe("Platform and back office");
-    expect(screen.getAllByRole("button", { name: "Ask Customer Advisor" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Ask Marketing Specialist" })).toHaveLength(1);
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Ask Customer Advisor" }),
+      screen.getByRole("button", { name: "Ask Marketing Specialist" }),
     );
     document.removeEventListener("open-agent-panel", handler);
     expect(events[0]?.detail).toEqual({
-      routeContext: "/platform/ai/agent/customer-advisor",
+      routeContext: "/platform/ai/agent/marketing-specialist",
     });
   });
 
@@ -175,11 +174,11 @@ describe("RosterView", () => {
     );
 
     fireEvent.change(screen.getByLabelText("Interaction"), {
-      target: { value: "talks-to-customers" },
+      target: { value: "internal-only" },
     });
 
     expect(window.location.search).toContain(
-      "interaction=talks-to-customers",
+      "interaction=internal-only",
     );
     expect(window.location.search).toContain("tab=coworkers");
     expect(
@@ -207,6 +206,15 @@ describe("RosterView", () => {
       <RosterView
         rows={[
           row({
+            agentId: "customer-advisor",
+            slugId: "customer-advisor",
+            name: "Customer Advisor",
+            displayName: "Customer Advisor",
+            kind: "advisor",
+            interaction: {
+              scopes: ["talks-to-customers"],
+              labels: ["Talks to customers"],
+            },
             availability: {
               state: "coverage-not-defined",
               label: "Coverage not defined",
@@ -231,5 +239,50 @@ describe("RosterView", () => {
         .getByRole("link", { name: "Review availability" })
         .getAttribute("href"),
     ).toBe("/storefront/settings/business");
+  });
+
+  it("keeps setup recovery in the coworker record and preserves roster context", () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/platform/ai/overview?tab=coworkers&interaction=talks-to-customers",
+    );
+    render(
+      <RosterView
+        rows={[
+          row({
+            agentId: "customer-advisor",
+            slugId: "customer-advisor",
+            name: "Customer Advisor",
+            displayName: "Customer Advisor",
+            kind: "advisor",
+            interaction: {
+              scopes: ["talks-to-customers"],
+              labels: ["Talks to customers"],
+            },
+            availability: {
+              state: "setup-needed",
+              label: "Setup needed",
+              reason: "Assign the advertised skills.",
+              matchLevel: "leaf",
+              evidence: [],
+            },
+            canStartConversation: false,
+          }),
+        ]}
+        facets={facets}
+        initialQuery="tab=coworkers&interaction=talks-to-customers"
+      />,
+    );
+
+    const href = screen
+      .getByRole("link", { name: "Review setup" })
+      .getAttribute("href");
+    expect(
+      screen.queryByRole("button", { name: "Ask Customer Advisor" }),
+    ).toBeNull();
+    expect(href).toContain("/platform/ai/agent/customer-advisor?");
+    expect(href).toContain("returnTo=");
+    expect(href?.endsWith("#availability")).toBe(true);
   });
 });

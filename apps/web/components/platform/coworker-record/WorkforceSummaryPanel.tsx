@@ -47,10 +47,10 @@ export function WorkforceSummaryPanel({ summary }: { summary: WorkforceSummary }
           intent="accent"
         />
         <StatCard
-          label="Provider health"
-          value={`${health.providerHealthy}/${summary.total}`}
-          hint={health.providerDegraded > 0 ? `${health.providerDegraded} on auto-routing fallback` : "all pinned providers active"}
-          intent={health.providerDegraded > 0 ? "warning" : "success"}
+          label="Conversation readiness"
+          value={`${health.conversationReady}/${summary.total}`}
+          hint={health.conversationUnavailable > 0 ? `${health.conversationUnavailable} cannot start advertised work` : "every coworker can start advertised work"}
+          intent={health.conversationUnavailable > 0 ? "warning" : "success"}
         />
         <StatCard
           label="Open blockers"

@@ -77,7 +77,6 @@ function row(over: Partial<RosterRow> = {}): RosterRow {
     competencies: ["practitioner"],
     profileBound: true,
     emptyCorpus: false,
-    providerHealthy: true,
     openBlockers: 0,
     deferRate: 0,
     unmapped: false,
@@ -234,7 +233,6 @@ describe("attention and URL state", () => {
         }),
       ),
     ).toBe(true);
-    expect(needsAttention(row({ providerHealthy: false }))).toBe(true);
     expect(needsAttention(row({ openBlockers: 1 }))).toBe(true);
     expect(needsAttention(row({ coveragePct: 40 }))).toBe(false);
   });

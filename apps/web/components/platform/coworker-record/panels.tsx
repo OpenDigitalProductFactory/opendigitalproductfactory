@@ -143,7 +143,7 @@ export type CoworkerSummary = {
   toolCount: number;
   /** agent.hitlTierDefault (0=human-only,1=approve,2=review,3=autonomous). */
   hitlTier: number;
-  providerHealthy: boolean;
+  conversationReady: boolean;
 };
 
 function SummaryChipRow({ summary }: { summary: CoworkerSummary }) {
@@ -156,8 +156,10 @@ function SummaryChipRow({ summary }: { summary: CoworkerSummary }) {
       <Chip tone={summary.hitlTier === 3 ? "warning" : summary.hitlTier === 0 ? "muted" : "accent"}>
         oversight: {oversightLabel(summary.hitlTier, { short: true })}
       </Chip>
-      <Chip tone={summary.providerHealthy ? "success" : "error"}>
-        {summary.providerHealthy ? "provider healthy" : "provider degraded"}
+      <Chip tone={summary.conversationReady ? "success" : "error"}>
+        {summary.conversationReady
+          ? "conversation ready"
+          : "conversation unavailable"}
       </Chip>
     </div>
   );

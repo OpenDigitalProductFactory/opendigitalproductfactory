@@ -15,6 +15,8 @@ skill and tool do not exist.
 - Design: `docs/superpowers/specs/2026-07-25-ai-workforce-ia-design.md`
 - Live failure: `VR-AI-WORKFORCE-LIVE-20260727`
 - WWMD decision: `DI-865698390724` (`vertical-slice-first`, high confidence)
+- Readiness architecture decision: `DI-999249BFE2E8`
+  (`bulk-canonical-projection`, high confidence)
 
 ## Backlog Coverage
 
@@ -48,8 +50,9 @@ all four, the live directory either remains unusable or overstates capability.
 - `TOOL_TO_GRANTS`, `expandGrants`, and the persisted `AgentToolGrant` rows own
   effective tool authority.
 - `SkillAssignment` owns enabled catalog-skill assignment.
-- active `CoworkerCapabilityNeed` blockers and provider status already load with
-  the roster.
+- active `CoworkerCapabilityNeed` blockers already load with the roster.
+- `loadEndpointManifests`, routing policy and overrides, persisted provider
+  capacity, and `routeEndpointV2` own executable model eligibility.
 - `AskCoworkerButton` and selected-coworker route resolution own the shared
   conversation entry.
 
@@ -97,11 +100,53 @@ are:
 | Critique | Correction |
 | --- | --- |
 | Roster folded canonical and slug evidence while the record read only the canonical row | Both surfaces now resolve the same executable runtime slug; grants, skills, model routing, and blockers come from that identity |
-| An unpinned coworker passed provider health without any provider | Readiness now requires positive evidence of an active provider with an active tool-capable model; a pin must identify that eligible provider |
+| An unpinned coworker passed provider health without any provider | Readiness now requires an eligible canonical conversation route; provider and model pins remain preferences, so an eligible fallback can keep the coworker available |
 | One ready service hid unresolved siblings while all services appeared as work offered now | Discovery retains every service projection; the first view shows only `Ready work`, while Work Offered and Availability preserve individual sibling states |
 | Malformed or empty backing arrays passed as clear | Invalid or absent executable backing fails closed to owner-readable setup work |
 | Raw skill/tool identifiers leaked into the lead explanation | First-view reasons use owner language; raw dependency facts appear only under Availability evidence |
 | Page-load code imported the full MCP execution graph | A lightweight verified service-tool constant is shared with the seed and protected by a `PLATFORM_TOOLS` parity test |
+
+A second independent UX/implementation review rejected the rebased patch before
+its exact-SHA gate. WWMD compared a local provider heuristic, one `previewRoute`
+call per coworker, and one bulk canonical projection. The kernel selected the
+bulk projection because it best satisfies Ship Real Functionality and Never
+Fabricate without adding 77 repeated setup calls.
+
+| Second critique | Correction |
+| --- | --- |
+| `Available` ignored sensitivity, capability/context floors, model tier, policy, capacity, local-only mode, and model pins | Roster and record load canonical routing inputs once and evaluate each coworker through `routeEndpointV2`; the selected route must also clear canonical hard constraints and success floors |
+| Interaction badges aggregated every active service, even when a different service drove availability | Interaction now resolves only from services tied for the winning availability state; all sibling states remain under progressive disclosure |
+| `Finish setup` linked to `/setup`, which redirects configured installs away from the problem | `Review setup` deep-links to the coworker's Availability tab and preserves the filtered roster return URL |
+| Component fixtures made Customer Advisor appear available without real backing | Marketing is the positive fixture; Customer Advisor is explicitly setup-blocked and has no Ask action |
+
+A third architecture and UX critique found that the second implementation still
+reported a lower-level route as if it were a usable conversation. The revised
+contract now shares composition code with live dispatch rather than maintaining
+a synthetic parallel request.
+
+| Third critique | Correction |
+| --- | --- |
+| Golden Triangle posture and DB-backed conversation requirements could diverge from readiness | Live dispatch and readiness now share initial-route and effective-request-contract builders; dimension floors merge with stricter-wins semantics |
+| A configured pin was treated as a hard boundary even though dispatch falls back | Pins remain preferences; readiness evaluates the same eligible fallback pool |
+| A sole provider in `reauth_required` or billing repair could still be advertised | The directory makes the stronger owner promise and blocks conversation entry for a selected provider with a known repair state |
+| Workforce and record health counted raw route eligibility | Owner-facing health is derived from the full service availability projection and `canStartConversation` |
+| Routing metadata failure could break the entire coworker record | Snapshot failure projects a recoverable needs-attention reason and keeps the record reachable |
+| Capacity-store read failure could silently erase known provider repair evidence | Capacity evidence now fails through the same blocked snapshot path and has a loader-level rejection test |
+| Customer Advisor could fail closed only because coverage was undefined | An integrated test evaluates the canonical seed backing, proves the missing skill/tool/grants, and verifies the rendered record has no Ask action |
+| Moving from Availability to Capabilities dropped roster context | The Capabilities setup action preserves the validated `returnTo` query and restores the filtered roster |
+| Fail-closed records still described interaction as “currently available” | The record says “currently available” only when Ask is possible; otherwise it labels the best-matching declared work |
+
+A fourth architecture re-review tested the remaining selection boundaries
+against live dispatch rather than accepting route construction alone.
+
+| Fourth critique | Correction |
+| --- | --- |
+| Readiness stopped before the provider/model preference finalization used by live dispatch, so a below-floor preference could disagree with the advertised fallback | Both paths now call one pure preference finalizer over the canonically eligible candidate set; an excluded preference cannot replace the eligible winner |
+| A persisted endpoint pin returned before explicit blocks, policy, sensitivity, residency, capability, context, quality, runtime cooldown, and persisted capacity checks | The pin fast path was removed. Pins now select only from candidates that cleared the complete canonical pipeline; direct tests cover every fence and preserve the eligible fallback |
+| Provider/model finalization happened after the execution plan was built | Preference finalization now precedes recipe selection and plan construction, so provider, model, adapter, recipe, and settings describe one winner |
+| Preview and live dispatch applied preferences in different stages | Both pass the same preferences into `routeEndpointV2`; parity tests cover provider and model preferences |
+| Downgrade behavior parsed human-readable reason text | `RouteDecision.preferenceResolution` is the structured source for applied and unavailable preferences and the user-facing downgrade message |
+| A model preference could escape its selected provider | Provider and model are finalized as one pair; a stale or duplicate model id is resolved only within the selected provider and otherwise reported unavailable |
 
 ## Phase 1: Test-Drive Service-Scoped Readiness
 
@@ -115,12 +160,12 @@ service plus already-loaded evidence:
 - registered tool names;
 - enabled assigned skill ids;
 - effective held grants;
-- provider health;
+- canonical conversation-route readiness;
 - active blocking capability-need count.
 
 Return the existing `CoworkerAvailabilityReadiness` shape:
 
-- blockers for unhealthy provider state or active governed blockers;
+- blockers for unavailable canonical routing or active governed blockers;
 - missing prerequisites for missing skills, unregistered tools, missing declared
   grants, or tool-specific grant denial;
 - evaluated and clear only when all declared backing is real and usable.
@@ -149,7 +194,8 @@ must retain their own evidence and must not be represented as ready.
 - An unregistered tool returns setup-needed evidence.
 - A registered tool denied by effective grants returns setup-needed evidence.
 - A missing declared grant returns setup-needed evidence.
-- An unhealthy provider returns needs-attention evidence.
+- No endpoint satisfying the coworker's canonical routing contract returns
+  needs-attention evidence.
 - A blocking capability need returns needs-attention evidence.
 - Marketing can be available from one ready applicable service while an
   unresolved sibling service remains non-ready.
@@ -166,10 +212,15 @@ queries.
   coworkers in bulk.
 - Resolve slug and canonical coworker identities into one effective evidence
   set.
-- Use the existing provider and blocker reads.
+- Load endpoint manifests, policy, overrides, capacity, local-only mode,
+  DB-backed conversation requirements, and effective Golden Triangle postures
+  once; project each coworker through the shared canonical request-contract
+  builder and routing pipeline without per-card database calls.
 - Use the lightweight verified service-tool list, with test-only parity against
   `PLATFORM_TOOLS`.
 - Pass service-id-keyed readiness into the shared discovery projection.
+- Make the service that wins availability also own the first-view interaction
+  label; preserve every sibling under Availability evidence.
 
 ### Files
 
@@ -240,10 +291,10 @@ Reserve roughly one fifth of the implementation effort for direct convergence:
 - one pure service-readiness evaluator;
 - one canonical identity-folding helper for skills and grants;
 - one service-id-keyed readiness contract shared by roster and record;
+- one bulk canonical route-readiness snapshot shared by roster and record;
 - projection-owned readiness reasons and evidence, not page-owned wording.
 
-This allowance excludes route consolidation, unrelated catalog cleanup, and new
-administration UI.
+This allowance excludes unrelated catalog cleanup and new administration UI.
 
 ## Documentation
 

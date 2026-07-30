@@ -239,6 +239,39 @@ describe("callWithFallbackChain — EP-INF-004 error handling", () => {
       expect(mockRecordRequest).toHaveBeenCalledWith("prov1", "model1", 150);
     });
 
+    it("reports an unavailable configured preference from structured routing metadata", async () => {
+      mockCallProvider.mockResolvedValue({
+        content: "hello",
+        inputTokens: 100,
+        outputTokens: 50,
+        inferenceMs: 200,
+      });
+      const decision: RouteDecision = {
+        ...makeDecision("prov1", "model1"),
+        preferenceResolution: {
+          requested: [{ kind: "provider", value: "preferred-provider" }],
+          applied: [],
+          unavailable: [
+            { kind: "provider", value: "preferred-provider" },
+          ],
+          fallbackUsed: true,
+        },
+      };
+
+      await expect(
+        callWithFallbackChain(
+          decision,
+          [{ role: "user", content: "hi" }],
+          "system",
+        ),
+      ).resolves.toMatchObject({
+        downgraded: true,
+        downgradeMessage: expect.stringContaining(
+          'Preferred provider "preferred-provider" is unavailable',
+        ),
+      });
+    });
+
     it("closes the runtime circuit (clearEndpointUnavailable) on success", async () => {
       mockCallProvider.mockResolvedValue({
         content: "hello",

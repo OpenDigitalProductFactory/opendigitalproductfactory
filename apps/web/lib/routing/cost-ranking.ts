@@ -32,6 +32,17 @@ function getDimensionScore(ep: EndpointManifest, dim: string): number {
   return scores[dim] ?? 50;
 }
 
+export function satisfiesMinimumDimensions(
+  endpoint: EndpointManifest,
+  minimumDimensions: Readonly<Record<string, number>> | undefined,
+): boolean {
+  if (!minimumDimensions) return true;
+  return Object.entries(minimumDimensions).every(
+    ([dimension, minimum]) =>
+      getDimensionScore(endpoint, dimension) >= minimum,
+  );
+}
+
 // ── Average Relevant Dimensions ─────────────────────────────────────────────
 
 /**
@@ -91,10 +102,8 @@ export function estimateSuccessProbability(
   if (contract.requiresStreaming && endpoint.capabilities.streaming !== true) return 0;
 
   // Per-dimension minimum thresholds — hard exclude models below any threshold
-  if (contract.minimumDimensions) {
-    for (const [dim, min] of Object.entries(contract.minimumDimensions)) {
-      if (getDimensionScore(endpoint, dim) < min) return 0;
-    }
+  if (!satisfiesMinimumDimensions(endpoint, contract.minimumDimensions)) {
+    return 0;
   }
 
   // Quality floor based on reasoning depth

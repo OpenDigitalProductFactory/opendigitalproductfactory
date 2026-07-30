@@ -16,7 +16,6 @@ import type {
   EndpointOverride,
 } from "@/lib/routing/types";
 import type { RouteSensitivity } from "@/lib/agent-sensitivity";
-import { inferContract } from "@/lib/routing/request-contract";
 import type { RequestContract } from "@/lib/routing/request-contract";
 import {
   loadEndpointManifests,
@@ -34,6 +33,10 @@ import { callWithFallbackChain } from "@/lib/routing/fallback";
 import { prisma } from "@dpf/db";
 import { getLocalOnlyInference } from "@/lib/inference/local-only";
 import { resolveDispatchPosture, type DispatchPosture } from "@/lib/golden-triangle/dispatch";
+import {
+  buildEffectiveRequestContract,
+  buildInitialRouteContext,
+} from "@/lib/inference/route-contract-builder";
 import { logTokenUsage } from "@/lib/ai-inference";
 import type { RouteAndCallOptions } from "./routed-inference-options";
 import {
@@ -53,6 +56,7 @@ import { screenedLocalOnlyBlockReason } from "@/lib/inference/data-screening/blo
 import { soleCapabilityFloorFailure } from "@/lib/inference/routing-exclusion-attribution";
 import { createRoutingTraceId } from "@/lib/routing/routing-trace";
 import { AI_ROUTING_ARCHITECTURE_VERSION } from "@/lib/routing/routing-architecture-version";
+import type { EndpointPreferences } from "@/lib/routing/preference-finalization";
 import { buildLocalFallbackBanner, extractLocalFallbackFacts } from "./downgrade-explanation";
 export type { RouteAndCallOptions } from "./routed-inference-options";
 // ─── Result type ────────────────────────────────────────────────────────────
@@ -128,6 +132,19 @@ interface PreparedRoute {
   suitability: ProviderSuitabilityRuntime | null;
 }
 
+function endpointPreferencesFromOptions(
+  options: RouteAndCallOptions | undefined,
+): EndpointPreferences {
+  return {
+    ...(options?.preferredProviderId
+      ? { preferredProviderId: options.preferredProviderId }
+      : {}),
+    ...(options?.preferredModelId
+      ? { preferredModelId: options.preferredModelId }
+      : {}),
+  };
+}
+
 /**
  * The routing half of routeAndCall: contract inference → routing-data load →
  * V2 endpoint selection. Produces the RouteDecision WITHOUT dispatching. Both
@@ -163,24 +180,12 @@ async function prepareRoute(
   // per-coworker priority actually tunes that coworker's runs. Single-org install
   // → null org id; non-coworker runs pass null agentId (platform default).
   const posture = await resolveDispatchPosture(options?.agentId ?? null, taskType);
-  const initialRouteContext = {
-    // Posture defaults first — every explicit caller field and the local-only
-    // switch below override them (spread/assignment order = precedence).
-    ...(posture?.routeContext ?? {}),
+  const initialRouteContext = buildInitialRouteContext({
     sensitivity,
-    interactionMode: options?.interactionMode,
-    requiresCodeExecution: options?.requiresCodeExecution,
-    requiresWebSearch: options?.requiresWebSearch,
-    requiresComputerUse: options?.requiresComputerUse,
-    budgetClass: posture?.routeContext.budgetClass ?? options?.budgetClass,
-    allowedProviders: options?.allowedProviders,
-    deniedProviders: options?.deniedProviders,
-    residencyPolicy:
-      options?.modelTier === "local" || localOnlyInference
-        ? "local_only"
-        : options?.residencyPolicy,
-    requiredModelClass: options?.requiredModelClass,
-  };
+    options,
+    posture,
+    localOnlyInference,
+  });
   const { screenInput, screen, rehydrationHandle } = createRoutedInferenceScreen({
     messages,
     systemPrompt,
@@ -194,12 +199,12 @@ async function prepareRoute(
   });
 
   // 1. Infer contract
-  let contract = await inferContract(
+  let contract = await buildEffectiveRequestContract({
     taskType,
-    screenInput.messages,
-    screenInput.tools,
-    undefined, // outputSchema
-    {
+    messages: screenInput.messages,
+    tools: screenInput.tools,
+    options,
+    routeContext: {
       ...initialRouteContext,
       sensitivity: screen.routeContext.sensitivity,
       // EP-GOLDEN-TRIANGLE reconciliation: the posture (the everyday Cost/Quality
@@ -218,24 +223,7 @@ async function prepareRoute(
       // leaves routing free to prefer a frontier endpoint. The global local-only
       // switch still wins for every call (the sovereign master toggle).
     },
-  );
-
-  // Inject minimum dimension thresholds into contract
-  if (options?.minimumDimensions) {
-    contract.minimumDimensions = options.minimumDimensions;
-  }
-
-  // EP-AGENT-CAP-002: Inject agent capability floor into contract
-  if (options?.minimumCapabilities !== undefined) {
-    contract.minimumCapabilities = options.minimumCapabilities;
-  }
-  if (options?.agentMinimumContextTokens !== undefined) {
-    // Use the stricter of task-level and agent-level context minimums
-    const agentMin = options.agentMinimumContextTokens;
-    if (contract.minContextTokens === undefined || agentMin > (contract.minContextTokens ?? 0)) {
-      contract.minContextTokens = agentMin;
-    }
-  }
+  });
 
   const [manifests, policies, overrides] = await Promise.all([
     loadEndpointManifests(),
@@ -288,6 +276,7 @@ async function prepareRoute(
     skipRecipe: prep?.skipRecipe,
     activityContract: options?.activityContract,
     activityHarnessConfidenceOverrides,
+    preferences: endpointPreferencesFromOptions(options),
   });
   decision.inferenceDataScreenReceipt = screen.receipt;
   if (!decision.policyRulesApplied.includes("inference-dispatch")) {
@@ -456,7 +445,13 @@ export async function routeAndCall(
     if (allToolExclusions || decision.candidates.some(c => c.excludedReason?.includes("toolUse"))) {
       console.log(`[routing] Retrying without tools requirement for '${taskType}'`);
       const relaxedContract = { ...contract, requiresTools: false };
-      decision = await routeEndpointV2(manifests, relaxedContract, policies, overrides);
+      decision = await routeEndpointV2(
+        manifests,
+        relaxedContract,
+        policies,
+        overrides,
+        { preferences: endpointPreferencesFromOptions(options) },
+      );
       const strippedScreen = rescreenRoutedInferenceWithoutTools(prepared.screenInput);
       dispatchScreenInput = strippedScreen.screenInput;
       decision.inferenceDataScreenReceipt = strippedScreen.receipt;
@@ -555,60 +550,6 @@ export async function routeAndCall(
     decision.inferenceDataScreenReceipt = degradedScreen.receipt;
 
     console.log(`[routing] Tools stripped for ${name} — using degraded identity prompt`);
-  }
-
-  // 3b. If a preferred provider was requested, force it as the selected endpoint.
-  // This is a hard override — agents and admin-configured preferences always win
-  // over cost-per-success ranking. The V2-selected endpoint becomes first fallback.
-  if (options?.preferredProviderId && decision.selectedEndpoint !== options.preferredProviderId) {
-    // Match by endpointId (CUID) OR providerId (slug like "gemini", "chatgpt")
-    const preferredCandidate = decision.candidates.find(
-      c => (c.endpointId === options.preferredProviderId || c.providerId === options.preferredProviderId) && !c.excluded,
-    );
-    const excludedForProvider = decision.candidates.filter(c => c.providerId === options.preferredProviderId && c.excluded);
-    const allProviderIds = [...new Set(decision.candidates.filter(c => !c.excluded).map(c => c.providerId))];
-    if (!preferredCandidate) {
-      const excludeDetail = excludedForProvider.length > 0
-        ? `(excluded: ${excludedForProvider.map(c => `${c.modelId}: ${c.excludedReason}`).slice(0, 3).join("; ")})`
-        : "(no models from this provider in candidate pool — is it active?)";
-      console.warn(
-        `[routing] Pinned provider "${options.preferredProviderId}" not available ${excludeDetail}. ` +
-        `Falling back to V2-selected: ${decision.selectedEndpoint}/${decision.selectedModelId}. ` +
-        `Active providers: [${allProviderIds.join(", ")}]`,
-      );
-      // Annotate the decision so the caller can surface this to the user
-      decision.reason = `WARNING: Pinned provider "${options.preferredProviderId}" not available ${excludeDetail}. ` +
-        `Fell back to ${decision.selectedEndpoint}/${decision.selectedModelId}. ${decision.reason}`;
-    }
-    if (preferredCandidate) {
-      const origSelected = decision.selectedEndpoint;
-      decision.selectedEndpoint = preferredCandidate.endpointId;
-      decision.selectedModelId = preferredCandidate.modelId;
-      decision.reason = `Agent preference override: ${options.preferredProviderId} (was: ${origSelected}). ${decision.reason}`;
-      // Keep original + existing chain as fallbacks, excluding the preferred provider's
-      // endpoints so the chain has provider diversity (different providers as fallbacks).
-      const preferredEndpointIds = new Set(
-        decision.candidates
-          .filter(c => c.providerId === options.preferredProviderId && !c.excluded)
-          .map(c => c.endpointId),
-      );
-      decision.fallbackChain = [
-        ...(origSelected ? [origSelected] : []),
-        ...decision.fallbackChain.filter(id => !preferredEndpointIds.has(id) && id !== origSelected),
-      ];
-    }
-  }
-
-  // 3c. If a preferred model was requested, swap within the selected provider's candidates.
-  if (options?.preferredModelId && decision.selectedModelId !== options.preferredModelId) {
-    const modelCandidate = decision.candidates.find(
-      c => c.modelId === options.preferredModelId && !c.excluded,
-    );
-    if (modelCandidate) {
-      decision.selectedEndpoint = modelCandidate.endpointId;
-      decision.selectedModelId = options.preferredModelId;
-      decision.reason = `Model preference override: ${options.preferredModelId}. ${decision.reason}`;
-    }
   }
 
   if (prepared.suitability) {

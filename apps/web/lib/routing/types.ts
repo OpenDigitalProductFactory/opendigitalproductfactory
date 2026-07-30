@@ -160,6 +160,8 @@ export interface RouteDecision {
   excludedCount: number;
   excludedReasons: string[];
   policyRulesApplied: string[];
+  /** Structured preference outcome; avoids coupling behavior to reason text. */
+  preferenceResolution?: RoutePreferenceResolution;
   taskType: string;
   sensitivity: SensitivityLevel;
   timestamp: Date;
@@ -176,6 +178,19 @@ export interface RouteDecision {
   // EP-INF-006: Exploration fields
   explorationMode?: "champion" | "challenger";
   challengerRecipeId?: string;
+}
+
+export type RoutePreferenceKind = "endpoint" | "provider" | "model";
+
+export interface RoutePreferenceResolution {
+  requested: Array<{ kind: RoutePreferenceKind; value: string }>;
+  applied: Array<{
+    kind: RoutePreferenceKind;
+    value: string;
+    endpointId: string;
+  }>;
+  unavailable: Array<{ kind: RoutePreferenceKind; value: string }>;
+  fallbackUsed: boolean;
 }
 
 // ── Pinned / Blocked overrides ──

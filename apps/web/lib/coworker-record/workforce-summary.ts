@@ -22,10 +22,10 @@ export type WorkforceSummary = {
   familiesRepresented: number;
   /** Fitness/health rollup — the at-a-glance "is my workforce OK" numbers. */
   health: {
-    /** Coworkers whose pinned provider is healthy (or who are unpinned → router picks). */
-    providerHealthy: number;
-    /** Coworkers with an inactive pinned provider (falling back to auto-routing). */
-    providerDegraded: number;
+    /** Coworkers whose advertised work can start a conversation now. */
+    conversationReady: number;
+    /** Coworkers whose advertised work cannot start a conversation now. */
+    conversationUnavailable: number;
     /** Coworkers not bound to any profession family (registry-lint gap). */
     unmappedRole: number;
     /** Coworkers with ≥1 open capability blocker. */
@@ -87,8 +87,10 @@ export function computeWorkforceSummary(rows: RosterRow[]): WorkforceSummary {
   ).size;
 
   const health = {
-    providerHealthy: rows.filter((r) => r.providerHealthy).length,
-    providerDegraded: rows.filter((r) => !r.providerHealthy).length,
+    conversationReady: rows.filter((r) => r.canStartConversation).length,
+    conversationUnavailable: rows.filter(
+      (r) => !r.canStartConversation,
+    ).length,
     unmappedRole: rows.filter((r) => r.unmapped).length,
     withOpenBlockers: rows.filter((r) => r.openBlockers > 0).length,
     openBlockersTotal: rows.reduce((sum, r) => sum + r.openBlockers, 0),
