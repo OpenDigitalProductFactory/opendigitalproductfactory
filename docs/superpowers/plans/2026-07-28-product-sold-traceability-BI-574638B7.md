@@ -21,9 +21,9 @@ This branch does not turn `DigitalProduct` into a business product, broaden the 
 ## Backlog coverage
 
 - Decision: `atomic`
-- Coverage receipt: `cms50s0zr022r01mx5ff7uqwk`
+- Coverage receipt: `cms6zoirc09z801ogdemp60yu`
 - Parent BI: `BI-574638B7`
-- External dependency: `BI-83C7D9EE`
+- Dependencies: `none` within this atomic plan; external sequencing dependency `BI-83C7D9EE`
 - Rationale: the sale ledger, normalized transaction-line evidence, materialization adapters, trace query boundary, contextual UX, and lifecycle/reporting invariants form one safe capability. A ledger without reliable writers is empty substrate; writers without an immutable ledger or duplicate guards are unsafe; and a trace UI without the canonical query boundary would create a competing authority.
 - Internal deliverables:
   - `product-sold-ledger-schema`
