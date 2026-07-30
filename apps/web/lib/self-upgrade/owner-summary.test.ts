@@ -64,6 +64,7 @@ describe("buildOwnerReleaseSummary", () => {
     expect(s.riskNotice?.consequence.length).toBeGreaterThan(0);
     expect(s.riskNotice?.reversibility.length).toBeGreaterThan(0);
     expect(s.riskNotice?.duration.length).toBeGreaterThan(0);
+    expect(s.riskNotice?.authority.length).toBeGreaterThan(0);
     expect(s.riskNotice?.recovery.length).toBeGreaterThan(0);
   });
 
@@ -156,6 +157,23 @@ describe("buildOwnerReleaseSummary", () => {
     expect(s.tone).toBe("danger");
     expect(s.rollback.available).toBe(true);
     expect(s.recommendedAction.detail).toContain("Restore the previous version");
+  });
+
+  it("reports a truthful blocked state instead of contradicting the unavailable control", () => {
+    const s = buildOwnerReleaseSummary(
+      baseInput({
+        isFresh: false,
+        targetSha: "f".repeat(40),
+        blockerReason: "The update worker is unavailable.",
+      }),
+      NO_LOCAL_CHANGES,
+    );
+
+    expect(s.state).toBe("blocked");
+    expect(s.tone).toBe("warning");
+    expect(s.headline).toContain("needs attention");
+    expect(s.recommendedAction.detail).toContain("worker is unavailable");
+    expect(s.riskNotice).toBeNull();
   });
 
   it("marks rollback unavailable (with a reassuring detail) when no governed recovery point exists", () => {

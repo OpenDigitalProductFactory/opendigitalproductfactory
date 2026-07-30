@@ -186,4 +186,43 @@ describe("runSurvey + aggregateReport", () => {
     expect(report.routes[0]!.evaluated).toEqual({ page: true, behavioral: false });
     expect(report.routes[0]!.verdict).toBe("pass");
   });
+
+  it("projects purpose status without translating it into accessibility findings", async () => {
+    const report = await runSurvey(
+      { entries: [{ route: "/workspace", lenses: ["accessibility"] }], skipped: [] },
+      {
+        page: async () => [],
+        purpose: async (route) => ({
+          routePath: route,
+          intentStatus: "intent-ratified",
+          structuralStatus: "nonconformant",
+          validation: {
+            overall: "not-validated",
+            classes: {},
+            receipts: [],
+          },
+          enforcement: "advisory",
+          findings: [
+            {
+              checkId: "state-oracle",
+              severity: "blocking",
+              message: "The state marker did not match.",
+            },
+          ],
+          blocking: false,
+        }),
+      },
+      lensById,
+    );
+
+    expect(report.routes[0].findings).toEqual([]);
+    expect(report.routes[0].purpose?.structuralStatus).toBe("nonconformant");
+    expect(report.purposeCoverage).toMatchObject({
+      routeCount: 1,
+      intentRatifiedCount: 1,
+      structurallyNonconformantCount: 1,
+      taskValidatedCount: 0,
+    });
+    expect(report.portalVerdict).toBe("pass");
+  });
 });

@@ -18,6 +18,7 @@ import {
   type RouteMeasurement,
 } from "./ratchet";
 import { measureUxBudget } from "./measure";
+import type { RoutePurposeEvaluation } from "./purpose-evaluator";
 
 const SNAPSHOT = "- banner\n- main:\n  - heading \"Your day\" [level=1]\n";
 
@@ -125,6 +126,65 @@ describe("net-new routes cannot be born ugly (rev 2 D1)", () => {
       undefined,
     );
     expect(v.ok, v.blockingBudgetFailures.join("; ")).toBe(true);
+  });
+});
+
+describe("Purpose Contract report composition", () => {
+  it("adds independent purpose statuses to the existing verdict and league table", () => {
+    const m = measurement();
+    const purpose: RoutePurposeEvaluation = {
+      routePath: "/workspace",
+      intentStatus: "intent-ratified",
+      structuralStatus: "conformant",
+      validation: {
+        overall: "current",
+        classes: { "automated-functional": "current" },
+        receipts: [],
+      },
+      enforcement: "advisory",
+      findings: [],
+      blocking: false,
+    };
+
+    const sweep = evaluateSweep([m], baselineFrom(m), [purpose]);
+
+    expect(sweep.verdicts[0].purpose).toEqual(purpose);
+    expect(sweep.leagueTable[0]).toMatchObject({
+      purposeIntent: "intent-ratified",
+      purposeStructure: "conformant",
+      taskValidation: "current",
+    });
+    expect(sweep.purposeCoverage).toMatchObject({
+      intentRatifiedCount: 1,
+      structurallyConformantCount: 1,
+      taskValidatedCount: 1,
+    });
+    expect(sweep.blocked).toBe(false);
+  });
+
+  it("keeps advisory purpose findings non-blocking", () => {
+    const m = measurement();
+    const purpose: RoutePurposeEvaluation = {
+      routePath: "/workspace",
+      intentStatus: "intent-ratified",
+      structuralStatus: "nonconformant",
+      validation: {
+        overall: "not-validated",
+        classes: {},
+        receipts: [],
+      },
+      enforcement: "advisory",
+      findings: [
+        {
+          checkId: "state-oracle",
+          severity: "blocking",
+          message: "Mismatch.",
+        },
+      ],
+      blocking: false,
+    };
+
+    expect(evaluateSweep([m], baselineFrom(m), [purpose]).blocked).toBe(false);
   });
 });
 

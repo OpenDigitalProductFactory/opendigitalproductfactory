@@ -3,7 +3,7 @@
 **Backlog:** BI-939E57D0 (umbrella), BI-B4A4C76E (typed registry), BI-D27323A0 (evaluator and Self-Upgrade pilot), BI-B6935E5B (enforcement activation)
 **Epic:** EP-UX-SYSTEM
 **Work Capsule:** WC-102F00C8
-**Status:** In progress; Deliverable 1 implementation complete, merged-code verification pending
+**Status:** In progress; Deliverable 1 merged and live, Deliverable 2 implementation in verification
 
 > **For agentic workers:** execute this plan one independently reviewable backlog item at a time - one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff.
 
@@ -27,6 +27,32 @@ were treated as contract defects and resolved in the implementation:
   deterministic serialization, and check/write behavior.
 - The workflow watches its package-script owner and fetches the base history
   required for transition validation.
+
+### Deliverable 2 implementation record (2026-07-30)
+
+WWMD decision `DI-F85F936AF3BF` compared three concrete shapes:
+`compose-existing-reports`, `parallel-purpose-dashboard`, and
+`dom-markers-only`. The kernel recommended `compose-existing-reports` with high
+confidence (composite 3.962, margin 3.116). The implementation follows that
+decision:
+
+- one pure `purpose-evaluator.ts` owns deterministic structural checks,
+  independent validation-receipt currentness, and purpose coverage;
+- `purpose-scenario.ts` is the route-owned Self-Upgrade oracle projection over
+  `getSelfUpgradeStatus()`, consumed separately from the rendered DOM;
+- the existing UX sweep, route verdict, league table, and `UxAuditReport` carry
+  additive intent, structure, and task-validation values; purpose defects are
+  not translated into the accessibility-only `UxFinding.category` vocabulary;
+- `/ops/self-upgrade` is the first ratified source contract, with five states
+  and a permission-protected read-only oracle endpoint;
+- semantic markers expose route/state, essential evidence, state-appropriate
+  commands/messages, completion/correction/recovery, consequential-action
+  context, and one technical disclosure;
+- the owner UI no longer offers a redundant update command while current,
+  routes blocked/failed states to recovery, and opens technical recovery
+  detail after a failed run;
+- every deterministic blocking check has a known-bad pure fixture, while
+  enforcement remains advisory pending BI-B6935E5B and BI-232BA634.
 
 ## Outcome
 

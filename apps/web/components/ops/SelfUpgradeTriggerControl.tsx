@@ -21,6 +21,7 @@ import { triggerSelfUpgrade, forceActiveRun, abortActiveRun } from "@/lib/action
 import { isExpectedDuringSwap } from "@/lib/self-upgrade/is-expected-during-swap";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { LatestRun, QuiescenceActivity } from "@/lib/self-upgrade/run-types";
+import type { SelfUpgradePurposeState } from "@/lib/self-upgrade/purpose-scenario";
 import SelfUpgradeJobEngineHealthAlert, {
   shouldPollForJobEngineRecovery,
   type JobEngineHealth,
@@ -32,6 +33,8 @@ type Props = {
   latestRun: LatestRun | null;
   quiescence?: QuiescenceActivity | null;
   jobEngine?: JobEngineHealth;
+  purposeState?: SelfUpgradePurposeState;
+  blockerReason?: string | null;
 };
 
 export default function SelfUpgradeTriggerControl({
@@ -40,6 +43,8 @@ export default function SelfUpgradeTriggerControl({
   latestRun,
   quiescence,
   jobEngine,
+  purposeState = "update-available",
+  blockerReason = null,
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -190,19 +195,84 @@ export default function SelfUpgradeTriggerControl({
     });
   }
 
-  if (!enabled) {
+  if (purposeState === "current") {
     return (
       <div
-        className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-sm text-[var(--dpf-muted)]"
-        data-upgrade-status="disabled"
+        className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-sm"
+        data-dpf-purpose-message-key="current-status"
+        data-dpf-purpose-correction-signal="available"
       >
-        Self-upgrade is disabled. Enable it in settings to allow automated upgrades.
+        <span className="text-[var(--dpf-text)]">No update action is needed.</span>
+        <a
+          href="/docs/operations/self-upgrade"
+          data-dpf-purpose-action-key="open-recovery-guidance"
+          className="inline-flex min-h-11 items-center text-[var(--dpf-accent)] underline-offset-2 hover:underline"
+        >
+          Recovery guidance
+        </a>
+      </div>
+    );
+  }
+
+  if (purposeState === "failed-recoverable") {
+    return (
+      <div
+        className="flex flex-wrap items-center justify-between gap-3"
+        data-dpf-purpose-correction-signal="available"
+      >
+        <a
+          href="#self-upgrade-recovery-controls"
+          data-dpf-primary-action
+          data-owner-first-next-action
+          data-dpf-purpose-action-key="open-recovery-controls"
+          className="inline-flex min-h-11 items-center rounded-lg bg-[var(--dpf-accent)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+        >
+          Review recovery controls
+        </a>
+        <a
+          href="/docs/operations/self-upgrade"
+          data-dpf-purpose-action-key="open-recovery-guidance"
+          className="inline-flex min-h-11 items-center text-sm text-[var(--dpf-accent)] underline-offset-2 hover:underline"
+        >
+          Recovery guidance
+        </a>
+      </div>
+    );
+  }
+
+  if (!enabled || purposeState === "blocked") {
+    return (
+      <div
+        className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-sm"
+        data-upgrade-status="disabled"
+        data-dpf-purpose-correction-signal="available"
+      >
+        <span className="text-[var(--dpf-muted)]">
+          {blockerReason ??
+            "Self-upgrade is disabled. Resolve the prerequisite before starting an update."}
+        </span>
+        <a
+          href="/docs/operations/self-upgrade"
+          data-dpf-primary-action
+          data-owner-first-next-action
+          data-dpf-purpose-action-key="open-recovery-guidance"
+          className="inline-flex min-h-11 items-center rounded-lg bg-[var(--dpf-accent)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+        >
+          Open recovery guidance
+        </a>
       </div>
     );
   }
 
   return (
-    <div className="space-y-2" data-component="self-upgrade-trigger-control">
+    <div
+      className="space-y-2"
+      data-component="self-upgrade-trigger-control"
+      data-dpf-purpose-message-key={
+        purposeState === "queued-or-running" ? "upgrade-progress" : undefined
+      }
+      data-dpf-purpose-correction-signal="available"
+    >
       {restarting && (
         <div
           className="p-3 rounded-lg bg-[var(--dpf-info)]/10 border border-[var(--dpf-info)]/30 text-sm text-[var(--dpf-text)]"
@@ -335,6 +405,8 @@ export default function SelfUpgradeTriggerControl({
                 data-override={override ? "true" : "false"}
                 data-owner-first-next-action
                 data-dpf-primary-action
+                data-dpf-purpose-action-key="start-upgrade"
+                data-dpf-purpose-confirmation="explicit"
                 className="px-4 py-2 text-sm font-semibold rounded-lg bg-[var(--dpf-accent)] text-white border border-[var(--dpf-accent)] shadow-sm hover:opacity-90 transition-opacity disabled:opacity-50"
               >
                 {isPending

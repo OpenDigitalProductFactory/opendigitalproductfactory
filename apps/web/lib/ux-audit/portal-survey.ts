@@ -18,6 +18,11 @@
 
 import type { UxFinding } from "@/lib/tak/page-evaluator";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import {
+  summarisePurposeCoverage,
+  type PurposeCoverageSummary,
+  type RoutePurposeEvaluation,
+} from "@/lib/ux-budget/purpose-evaluator";
 
 // Re-exported so consumers (and tests) can take the finding shape from the
 // survey module without reaching into page-evaluator directly.
@@ -105,6 +110,7 @@ export type RouteSurveyResult = {
   findings: AuditFinding[];
   /** Which lens modes actually ran (an evaluator may be absent). */
   evaluated: { page: boolean; behavioral: boolean };
+  purpose?: RoutePurposeEvaluation;
   /** Present when an evaluator threw — the route is reported, not silently dropped. */
   error?: string;
 };
@@ -117,6 +123,7 @@ export type UxAuditReport = {
   portalVerdict: SurveyVerdict;
   verdictCounts: Record<SurveyVerdict, number>;
   findingCounts: FindingCounts;
+  purposeCoverage: PurposeCoverageSummary;
   routes: RouteSurveyResult[];
 };
 
@@ -126,10 +133,14 @@ export type BehavioralLensEvaluator = (
   route: string,
   lens: LensSpec,
 ) => Promise<UxFinding[]>;
+export type PurposeLensEvaluator = (
+  route: string,
+) => Promise<RoutePurposeEvaluation | undefined>;
 
 export type SurveyEvaluators = {
   page?: PageLensEvaluator;
   behavioral?: BehavioralLensEvaluator;
+  purpose?: PurposeLensEvaluator;
 };
 
 const VERDICT_ORDER: SurveyVerdict[] = ["pass", "pass-with-minor", "concerns", "fail"];
@@ -251,6 +262,9 @@ export function aggregateReport(routes: RouteSurveyResult[]): UxAuditReport {
     portalVerdict,
     verdictCounts,
     findingCounts,
+    purposeCoverage: summarisePurposeCoverage(
+      routes.flatMap((route) => (route.purpose ? [route.purpose] : [])),
+    ),
     routes,
   };
 }
@@ -272,6 +286,7 @@ export async function runSurvey(
     const findings: AuditFinding[] = [];
     const evaluated = { page: false, behavioral: false };
     let error: string | undefined;
+    let purpose: RoutePurposeEvaluation | undefined;
 
     const hasPageLens = entry.lenses.some((id) => lensById.get(id)?.mode === "page");
     const behavioralLenses = entry.lenses
@@ -292,6 +307,9 @@ export async function runSurvey(
         }
         evaluated.behavioral = true;
       }
+      if (evaluators.purpose) {
+        purpose = await evaluators.purpose(entry.route);
+      }
     } catch (e) {
       error = getErrorMessage(e);
     }
@@ -302,6 +320,7 @@ export async function runSurvey(
       verdict: error ? "concerns" : verdictForFindings(deduped),
       findings: deduped,
       evaluated,
+      ...(purpose ? { purpose } : {}),
       ...(error ? { error } : {}),
     });
   }

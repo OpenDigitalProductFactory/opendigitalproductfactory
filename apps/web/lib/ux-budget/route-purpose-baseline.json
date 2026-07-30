@@ -163,7 +163,6 @@
     "/ops/patches",
     "/ops/promotions",
     "/ops/security",
-    "/ops/self-upgrade",
     "/performance",
     "/platform",
     "/platform/ai/agent/[agentId]",

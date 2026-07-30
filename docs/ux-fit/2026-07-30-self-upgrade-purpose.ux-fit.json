@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "compose-existing-reports",
+  "decisionInteractionId": "DI-F85F936AF3BF",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/ops/self-upgrade/page.tsx",
+      "apps/web/components/ops/OwnerReleaseCard.tsx",
+      "apps/web/components/ops/SelfUpgradeTriggerControl.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "compose-existing-reports",
+      "parallel-purpose-dashboard",
+      "dom-markers-only"
+    ]
+  }
+}

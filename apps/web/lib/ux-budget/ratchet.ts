@@ -34,6 +34,12 @@ import type { UxBudgetMetrics } from "./measure";
 import type { UxShell } from "./budgets";
 import type { ExemptCheck } from "./route-shells";
 import type { RouteAudience } from "../navigation/route-audience";
+import {
+  summarisePurposeCoverage,
+  type PurposeCoverageSummary,
+  type PurposeDomEvidence,
+  type RoutePurposeEvaluation,
+} from "./purpose-evaluator";
 
 /** What the sweep measured for one route. */
 export type RouteMeasurement = {
@@ -47,6 +53,7 @@ export type RouteMeasurement = {
   exemptChecks?: readonly ExemptCheck[];
   /** Route audience — sets the reading tier for operator surfaces (BI-1DE6F69E). */
   audience?: RouteAudience;
+  purposeEvidence?: PurposeDomEvidence | null;
 };
 
 /** The frozen per-route baseline a changed route is measured against. */
@@ -132,6 +139,7 @@ export type RouteVerdict = {
   ok: boolean;
   findings: BudgetFinding[];
   metrics: UxBudgetMetrics;
+  purpose?: RoutePurposeEvaluation;
 };
 
 function measurementValue(m: RouteMeasurement, axis: RatchetAxis): number {
@@ -423,14 +431,32 @@ export type SweepVerdict = {
   netNewRoutes: string[];
   regressedRoutes: string[];
   /** §7.1 league table: worst offenders first, by words then controls. */
-  leagueTable: { routePath: string; shell: UxShell; words: number; controls: number }[];
+  leagueTable: {
+    routePath: string;
+    shell: UxShell;
+    words: number;
+    controls: number;
+    purposeIntent?: RoutePurposeEvaluation["intentStatus"];
+    purposeStructure?: RoutePurposeEvaluation["structuralStatus"];
+    taskValidation?: RoutePurposeEvaluation["validation"]["overall"];
+  }[];
+  purposeCoverage: PurposeCoverageSummary;
 };
 
 export function evaluateSweep(
   measurements: RouteMeasurement[],
   baselineFile: BaselineFile,
+  purposeEvaluations: readonly RoutePurposeEvaluation[] = [],
 ): SweepVerdict {
-  const verdicts = measurements.map((m) => verdictForRoute(m, baselineFile.routes[m.routePath]));
+  const purposeByRoute = new Map(
+    purposeEvaluations.map((evaluation) => [evaluation.routePath, evaluation]),
+  );
+  const verdicts = measurements.map((m) => ({
+    ...verdictForRoute(m, baselineFile.routes[m.routePath]),
+    ...(purposeByRoute.has(m.routePath)
+      ? { purpose: purposeByRoute.get(m.routePath) }
+      : {}),
+  }));
 
   const leagueTable = measurements
     .map((m) => ({
@@ -438,6 +464,15 @@ export function evaluateSweep(
       shell: m.shell,
       words: m.metrics.defaultVisibleWords,
       controls: m.metrics.primaryActions + m.metrics.visibleFields,
+      ...(purposeByRoute.has(m.routePath)
+        ? {
+            purposeIntent: purposeByRoute.get(m.routePath)!.intentStatus,
+            purposeStructure:
+              purposeByRoute.get(m.routePath)!.structuralStatus,
+            taskValidation:
+              purposeByRoute.get(m.routePath)!.validation.overall,
+          }
+        : {}),
     }))
     .sort((a, b) => b.words - a.words || b.controls - a.controls);
 
@@ -445,11 +480,15 @@ export function evaluateSweep(
     bootstrapped: baselineFile.bootstrapped,
     // While bootstrapping the sweep's job is to PRODUCE the baseline, so it cannot
     // meaningfully judge against one. It reports; it does not block.
-    blocked: baselineFile.bootstrapped && verdicts.some((v) => !v.ok),
+    blocked:
+      baselineFile.bootstrapped &&
+      (verdicts.some((v) => !v.ok) ||
+        purposeEvaluations.some((evaluation) => evaluation.blocking)),
     verdicts,
     netNewRoutes: verdicts.filter((v) => v.routeStatus === "net-new").map((v) => v.routePath),
     regressedRoutes: verdicts.filter((v) => v.regressions.length > 0).map((v) => v.routePath),
     leagueTable,
+    purposeCoverage: summarisePurposeCoverage(purposeEvaluations),
   };
 }
 
@@ -599,5 +638,12 @@ export function formatSweepReport(sweep: SweepVerdict): string {
   for (const row of sweep.leagueTable.slice(0, 15)) {
     lines.push(`  ${String(row.words).padStart(5)}w  ${row.routePath}  [${row.shell}]`);
   }
+  lines.push(
+    "",
+    "Purpose Contract coverage:",
+    `  intent-ratified ${sweep.purposeCoverage.intentRatifiedCount}/${sweep.purposeCoverage.routeCount}`,
+    `  structurally conformant ${sweep.purposeCoverage.structurallyConformantCount}/${sweep.purposeCoverage.routeCount}`,
+    `  task validated ${sweep.purposeCoverage.taskValidatedCount}/${sweep.purposeCoverage.routeCount}`,
+  );
   return lines.join("\n");
 }

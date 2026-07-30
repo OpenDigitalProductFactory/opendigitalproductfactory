@@ -97,6 +97,35 @@ describe("SelfUpgradeTriggerControl – enabled", () => {
     expect(html).toContain("stable");
   });
 
+  it("does not offer a redundant update command when the platform is current", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeTriggerControl {...baseProps} purposeState="current" />,
+    );
+    expect(html).toContain('data-dpf-purpose-message-key="current-status"');
+    expect(html).not.toContain('data-dpf-purpose-action-key="start-upgrade"');
+  });
+
+  it("routes a blocked operator to recovery guidance", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeTriggerControl {...baseProps} purposeState="blocked" />,
+    );
+    expect(html).toContain('data-dpf-purpose-action-key="open-recovery-guidance"');
+    expect(html).toContain("/docs/operations/self-upgrade");
+    expect(html).not.toContain('aria-label="Upgrade now"');
+  });
+
+  it("opens recovery controls instead of retrying blindly after a failed run", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeTriggerControl
+        {...baseProps}
+        purposeState="failed-recoverable"
+      />,
+    );
+    expect(html).toContain('data-dpf-purpose-action-key="open-recovery-controls"');
+    expect(html).toContain("#self-upgrade-recovery-controls");
+    expect(html).not.toContain('aria-label="Upgrade now"');
+  });
+
   it("renders the Upgrade now button, marked as the primary / next action (BI-D77BF495)", () => {
     const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
     expect(html).toContain("Upgrade now");

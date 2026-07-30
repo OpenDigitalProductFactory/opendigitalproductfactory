@@ -22,7 +22,12 @@ const TONE_INTENT = {
   danger: "danger",
 } as const;
 
-function QuestionRow({ q, a }: { q: string; a: string }) {
+const STATE_MESSAGE_KEY: Partial<Record<OwnerReleaseSummary["state"], string>> = {
+  "up-to-date": "current-status",
+  "in-progress": "upgrade-progress",
+};
+
+function QuestionRow({ q, a }: { q: string; a: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-0.5 border-t border-[var(--dpf-border)] py-2 first:border-t-0 sm:flex-row sm:gap-4">
       <dt className="shrink-0 text-xs font-medium text-[var(--dpf-muted)] sm:w-48">{q}</dt>
@@ -49,16 +54,22 @@ export function OwnerReleaseCard({
       aria-label="Release status"
       data-component="owner-release-card"
       data-release-state={summary.state}
+      data-dpf-purpose-key="current-state"
       className="space-y-4 rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
     >
       {/* The single-sentence answer + the one action, at the top. */}
-      <Notice variant={TONE_VARIANT[summary.tone]} title={summary.headline}>
-        <p className="font-medium text-[var(--dpf-text)]">{summary.recommendedAction.label}</p>
-        <p className="text-[var(--dpf-muted)]">{summary.recommendedAction.detail}</p>
-      </Notice>
+      <div data-dpf-purpose-message-key={STATE_MESSAGE_KEY[summary.state]}>
+        <Notice variant={TONE_VARIANT[summary.tone]} title={summary.headline}>
+          <p className="font-medium text-[var(--dpf-text)]">{summary.recommendedAction.label}</p>
+          <p className="text-[var(--dpf-muted)]">{summary.recommendedAction.detail}</p>
+        </Notice>
+      </div>
 
       {/* Version at-a-glance. */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div
+        className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+        data-dpf-purpose-completion-signal="version-and-health"
+      >
         <StatCard
           label="Running now"
           value={<span className="text-base font-semibold">{summary.currentVersion}</span>}
@@ -74,10 +85,33 @@ export function OwnerReleaseCard({
       </div>
 
       {/* The questions an owner actually has, answered in plain words. */}
-      <dl className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3">
+      <dl
+        className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3"
+        data-dpf-purpose-key="impact-on-work"
+      >
         <QuestionRow q="Can the business keep working?" a={summary.canKeepWorking.detail} />
         <QuestionRow q="What's kept on your system?" a={summary.keptLocally.detail} />
-        <QuestionRow q="Can this be undone?" a={summary.rollback.detail} />
+        <div
+          data-dpf-purpose-key="recovery-status"
+          data-dpf-purpose-correction-signal="available"
+          data-dpf-purpose-recovery-signal
+        >
+          <QuestionRow
+            q="Can this be undone?"
+            a={
+              <>
+                {summary.rollback.detail}{" "}
+                <a
+                  href="/docs/operations/self-upgrade"
+                  data-dpf-purpose-action-key="open-recovery-guidance"
+                  className="inline-flex min-h-11 items-center text-[var(--dpf-accent)] underline-offset-2 hover:underline"
+                >
+                  Recovery guidance
+                </a>
+              </>
+            }
+          />
+        </div>
         <QuestionRow q="If you do nothing" a={summary.ifYouDoNothing} />
       </dl>
 
@@ -97,30 +131,46 @@ export function OwnerReleaseCard({
 
       {/* Consequence / reversibility / duration / recovery BEFORE the install action. */}
       {summary.riskNotice && (
-        <Notice variant="warn" title="Before you install">
-          <ul className="space-y-0.5">
-            <li>
-              <span className="font-medium">What happens:</span> {summary.riskNotice.consequence}
-            </li>
-            <li>
-              <span className="font-medium">Can it be undone:</span> {summary.riskNotice.reversibility}
-            </li>
-            <li>
-              <span className="font-medium">How long:</span> {summary.riskNotice.duration}
-            </li>
-            <li>
-              <span className="font-medium">If it fails:</span> {summary.riskNotice.recovery}
-            </li>
-          </ul>
-        </Notice>
+        <div
+          data-dpf-purpose-consequence
+          data-dpf-purpose-reversibility
+          data-dpf-purpose-authority
+          data-dpf-purpose-recovery-context
+        >
+          <Notice variant="warn" title="Before you install">
+            <ul className="space-y-0.5">
+              <li>
+                <span className="font-medium">What happens:</span> {summary.riskNotice.consequence}
+              </li>
+              <li>
+                <span className="font-medium">Can it be undone:</span> {summary.riskNotice.reversibility}
+              </li>
+              <li>
+                <span className="font-medium">How long:</span> {summary.riskNotice.duration}
+              </li>
+              <li>
+                <span className="font-medium">Who can do it:</span> {summary.riskNotice.authority}
+              </li>
+              <li>
+                <span className="font-medium">If it fails:</span> {summary.riskNotice.recovery}
+              </li>
+            </ul>
+          </Notice>
+        </div>
       )}
 
       {/* BI-D77BF495: the live trigger, directly below the risk notice it
           answers to — visible on arrival, not buried behind the Advanced
           disclosure (run history / ledgers / logs stay there). */}
       {primaryAction && (
-        <div data-component="owner-release-primary-action">{primaryAction}</div>
+        <div
+          data-component="owner-release-primary-action"
+          data-dpf-purpose-key="next-action"
+        >
+          {primaryAction}
+        </div>
       )}
+
     </section>
   );
 }

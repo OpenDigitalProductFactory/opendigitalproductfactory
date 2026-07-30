@@ -18,7 +18,12 @@ import type { LocalChangesResult } from "@/lib/self-upgrade/local-changes-ledger
 import { describeSkipReason } from "@/lib/self-upgrade/skip-reason";
 
 /** The release state an owner cares about — deliberately coarser than the run status machine. */
-export type OwnerReleaseState = "up-to-date" | "update-available" | "in-progress" | "failed";
+export type OwnerReleaseState =
+  | "up-to-date"
+  | "update-available"
+  | "in-progress"
+  | "failed"
+  | "blocked";
 
 /** Notice/badge tone paired with each state, resolved through the report-kit intent model by the card. */
 export type OwnerReleaseTone = "success" | "info" | "warning" | "danger";
@@ -28,6 +33,7 @@ export interface OwnerRiskNotice {
   consequence: string;
   reversibility: string;
   duration: string;
+  authority: string;
   recovery: string;
 }
 
@@ -102,6 +108,7 @@ export interface OwnerReleaseInput {
    */
   runningMergePointLabel?: string | null;
   availableMergePointLabel?: string | null;
+  blockerReason?: string | null;
 }
 
 const IN_FLIGHT: ReadonlySet<string> = new Set(["queued", "pending", "running", "completing"]);
@@ -147,6 +154,8 @@ export function buildOwnerReleaseSummary(
     ? "in-progress"
     : failed
       ? "failed"
+      : input.blockerReason
+        ? "blocked"
       : input.isFresh || !input.targetSha
         ? "up-to-date"
         : "update-available";
@@ -156,6 +165,8 @@ export function buildOwnerReleaseSummary(
       ? "success"
       : state === "failed"
         ? "danger"
+        : state === "blocked"
+          ? "warning"
         : state === "in-progress"
           ? "info"
           : "info";
@@ -171,7 +182,7 @@ export function buildOwnerReleaseSummary(
   const targetShort = shortSha(input.targetSha);
   const targetDetail = input.availableMergePointLabel ?? targetShort;
   const availableVersion =
-    state === "update-available"
+    state === "update-available" || state === "blocked"
       ? input.latestRunImpact?.headline
         ? input.latestRunImpact.headline
         : targetDetail
@@ -280,6 +291,7 @@ export function buildOwnerReleaseSummary(
           ? "Reversible — restore the saved recovery point to undo it."
           : "A recovery point is saved first, so it can be undone.",
         duration: "Usually a few minutes.",
+        authority: "Only a platform operator can start or override an update.",
         recovery: "If it fails, the previous version is restored automatically.",
       };
       break;
@@ -292,7 +304,6 @@ export function buildOwnerReleaseSummary(
       ifYouDoNothing = "The update finishes on its own. You don't need to do anything.";
       break;
     case "failed":
-    default:
       headline = "The last update didn't finish";
       recommendedAction = {
         label: "Review and recover",
@@ -302,6 +313,18 @@ export function buildOwnerReleaseSummary(
       };
       ifYouDoNothing =
         "The platform stays on the previous version. Nothing else changes until you retry.";
+      break;
+    case "blocked":
+    default:
+      headline = "The platform update needs attention";
+      recommendedAction = {
+        label: "Resolve the blocker",
+        detail:
+          input.blockerReason ??
+          "Open recovery guidance to resolve the prerequisite safely.",
+      };
+      ifYouDoNothing =
+        "The running version stays in place. No update starts until the blocker is resolved.";
       break;
   }
 

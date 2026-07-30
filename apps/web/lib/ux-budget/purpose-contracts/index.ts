@@ -2,6 +2,7 @@ import {
   purposeContractSourceSchema,
   type PurposeContractSource,
 } from "../page-purpose";
+import { SELF_UPGRADE_PURPOSE_CONTRACT } from "./self-upgrade";
 
 export type PurposeContractModule = readonly PurposeContractSource[];
 
@@ -9,6 +10,7 @@ import { GRAPH_EXPLORER_PURPOSE_CONTRACTS } from "./graph-explorer";
 
 const CONTRACT_MODULES: readonly PurposeContractModule[] = [
   GRAPH_EXPLORER_PURPOSE_CONTRACTS,
+  [SELF_UPGRADE_PURPOSE_CONTRACT],
 ];
 
 export function buildPurposeContractSourceIndex(

@@ -25,9 +25,13 @@ and governed by deployment windows.
 4. Confirm the health check passed after the swap, and read the deployment log if
    it did not.
 
-The owner status card and upgrade action stay visible on arrival. Open
+The owner status card and the state-appropriate next step stay visible on
+arrival. An available update shows one install action. A current or running
+install shows status without a redundant start command. A failed or blocked
+install points to recovery instead of asking you to retry blindly. Open
 **Deploy controls & history** only when you need technical controls, run
-history, logs, or the local-changes ledger.
+history, logs, or the local-changes ledger; a failed update opens that recovery
+detail automatically.
 
 During an active upgrade, the portal enters quiescence and refuses new mutating
 MCP writes. Delivery agents can still read quiescence status and release an
@@ -36,9 +40,11 @@ returns to normal.
 
 ## What Happens If You Do Nothing
 
-The install stays on its current version. Queued fixes and improvements are not
-applied until an operator approves and runs the upgrade. Nothing is lost by
-waiting, but the platform does not move forward on its own.
+When automatic updates are enabled, an available update waits for the next
+governed quiet window and then installs on its own. When automatic updates are
+disabled or a prerequisite is blocked, the current version stays in place
+until an operator resolves the blocker and explicitly starts the update.
+Nothing is lost by waiting.
 
 ## What Is Reversible
 
@@ -56,8 +62,9 @@ waiting, but the platform does not move forward on its own.
 
 ## Recovery And Help
 
-- If an upgrade fails, open the deployment log for the retryable diagnosis, then
-  re-run the upgrade.
+- If an upgrade fails, use **Review recovery controls**. Restore the governed
+  recovery point when needed, read the retryable diagnosis, and only then
+  decide whether to run the update again.
 - Operators on unusually slow hosts can raise the shared build budget by setting
   `DPF_PROMOTER_TIMEOUT_MS` (milliseconds) in the environment.
 - Deployment windows and change-request lifecycle are managed from the wider

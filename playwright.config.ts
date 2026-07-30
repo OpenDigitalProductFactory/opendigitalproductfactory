@@ -32,7 +32,8 @@ export default defineConfig({
       // Phone-width usability contracts. Same seeded-admin auth as the desktop
       // project, viewport pinned to 390x844.
       name: "mobile-390",
-      testMatch: /.*(?:storefront-owner-mobile|coworker-catalog-mobile)\.spec\.ts/,
+      testMatch:
+        /.*(?:storefront-owner-mobile|coworker-catalog-mobile|self-upgrade-purpose)\.spec\.ts/,
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 390, height: 844 },

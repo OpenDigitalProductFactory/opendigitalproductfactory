@@ -1,0 +1,411 @@
+import { describe, expect, it } from "vitest";
+
+import type { RatifiedPurposeContract } from "./page-purpose";
+import {
+  evaluateRoutePurpose,
+  routeMatchesPurposeTemplate,
+  summarisePurposeCoverage,
+  type PurposeDomEvidence,
+  type PurposeEvaluationContext,
+} from "./purpose-evaluator";
+
+const contract: RatifiedPurposeContract = {
+  schemaVersion: 1,
+  status: "intent-ratified",
+  routePath: "/ops/self-upgrade",
+  derived: {
+    audience: "admin",
+    destinationKind: "advanced-diagnostic",
+    shell: "detail",
+    confidence: "high",
+    sweepEligible: false,
+    sweepExclusionReason: "wall-clock-collection",
+  },
+  intent: {
+    primaryUser: "Platform operator",
+    triggeringNeed: "An update needs attention.",
+    prerequisites: [],
+    job: "Understand the current update state and take the one safe next action.",
+    successOutcome: "The intended version is healthy or a truthful recovery path is available.",
+    findability: {
+      parentArea: "Platform operations",
+      entryPoints: ["Platform navigation"],
+      navigationLayer: "section",
+      discoveryCue: "Self-Upgrade",
+      expectedPath: ["Platform", "Self-Upgrade"],
+    },
+    contentRoles: {
+      defaultVisibleKeys: ["current-state", "impact-on-work", "next-action", "recovery-status"],
+      deferredRegions: [
+        {
+          key: "deploy-controls-history",
+          role: "Technical controls, history, and diagnostics",
+          trigger: "Deploy controls & history",
+        },
+      ],
+    },
+    familyConsistency: {
+      terminology: "Self-Upgrade",
+      actionLocation: "Beside the release status",
+      feedbackPrimitive: "Notice",
+      disclosurePattern: "details",
+      returnBehavior: "Remain in Platform operations",
+    },
+  },
+  stateScenarios: {
+    "update-available": {
+      statePredicate: "A newer target is available.",
+      stateSource: {
+        oracleKey: "self-upgrade-status",
+        sourceRef: "apps/web/lib/self-upgrade/purpose-scenario.ts",
+      },
+      essentialEvidenceKeys: ["current-state", "impact-on-work", "next-action", "recovery-status"],
+      primaryExperience: { kind: "command", actionKey: "start-upgrade" },
+      prohibitedActionKeys: ["restore-previous-version"],
+      completionSignal: "The update request is acknowledged.",
+      errorCorrection: "The trigger reports a recoverable error.",
+      recovery: {
+        actionKey: "open-recovery-guidance",
+        routePath: "/docs/operations/self-upgrade",
+      },
+    },
+  },
+  taskProtocol: {
+    startRoute: "/workspace",
+    taskPrompt: "Bring the platform up to date.",
+    completionOracle: "The requested version is healthy.",
+    falseSuccessConditions: ["The update was only queued."],
+    acceptanceThresholds: ["The primary action is visible without opening diagnostics."],
+  },
+  ratifiedBy: { role: "design-owner", ref: "BI-D27323A0" },
+  reviewRef: "docs/superpowers/plans/2026-07-29-page-purpose-contract.md",
+  intentEvidenceRefs: [
+    {
+      kind: "operator-request",
+      ref: "BI-D27323A0",
+      summary: "The operator requested a purpose-led Self-Upgrade flow.",
+    },
+  ],
+  consequentialAction: {
+    noActionConsequence: "The update waits for the next governed window.",
+    reversibility: "A recovery point is created first.",
+    confirmation: "The action is explicit.",
+    authority: "Only a platform operator may start it.",
+    recovery: "Open the governed recovery guidance.",
+  },
+};
+
+const evidence: PurposeDomEvidence = {
+  routePath: "/ops/self-upgrade",
+  stateKey: "update-available",
+  h1Count: 1,
+  purposeKeys: ["current-state", "impact-on-work", "next-action", "recovery-status"],
+  actions: [
+    {
+      key: "start-upgrade",
+      primary: true,
+      visible: true,
+      geometry: { top: 420, bottom: 464, left: 32, right: 180 },
+    },
+    {
+      key: "open-recovery-guidance",
+      primary: false,
+      visible: true,
+      geometry: { top: 470, bottom: 514, left: 32, right: 260 },
+      href: "/docs/operations/self-upgrade",
+    },
+  ],
+  messages: [],
+  prohibitedActionKeysPresent: [],
+  completionSignalPresent: true,
+  correctionSignalPresent: true,
+  recoverySignal: {
+    present: true,
+    actionKey: "open-recovery-guidance",
+    routePath: "/docs/operations/self-upgrade",
+  },
+  disclosures: [
+    {
+      key: "deploy-controls-history",
+      triggerPresent: true,
+      controlledRegionPresent: true,
+      relationshipValid: true,
+      expanded: false,
+    },
+  ],
+  consequentialAction: {
+    consequenceVisible: true,
+    reversibilityVisible: true,
+    confirmationAvailable: true,
+    authorityVisible: true,
+    recoveryVisible: true,
+  },
+  viewport: { width: 1280, height: 900 },
+};
+
+const context: PurposeEvaluationContext = {
+  contractHash: "contract-hash",
+  fixtureVersion: "self-upgrade-v1",
+  interactionFingerprint: "interaction-v1",
+  relevantDependencyFingerprint: "dependencies-v1",
+  resolvedArtifactIds: new Set(["artifact-1"]),
+};
+
+describe("evaluateRoutePurpose", () => {
+  it("keeps intent, structural conformance, and task validation independent", () => {
+    const result = evaluateRoutePurpose({
+      contract,
+      oracle: {
+        routePath: "/ops/self-upgrade",
+        stateKey: "update-available",
+        sourceRef: "apps/web/lib/self-upgrade/purpose-scenario.ts",
+      },
+      evidence,
+      context,
+    });
+
+    expect(result.intentStatus).toBe("intent-ratified");
+    expect(result.structuralStatus).toBe("conformant");
+    expect(result.validation.overall).toBe("not-validated");
+    expect(result.findings).toEqual([]);
+    expect(result.blocking).toBe(false);
+  });
+
+  const structuralDefects: Array<{
+    checkId: string;
+    mutate: (candidate: PurposeDomEvidence) => void;
+  }> = [
+    {
+      checkId: "route-marker",
+      mutate: (candidate) => {
+        candidate.routePath = "/wrong";
+      },
+    },
+    {
+      checkId: "state-oracle",
+      mutate: (candidate) => {
+        candidate.stateKey = "current";
+      },
+    },
+    {
+      checkId: "single-h1",
+      mutate: (candidate) => {
+        candidate.h1Count = 2;
+      },
+    },
+    {
+      checkId: "essential-evidence",
+      mutate: (candidate) => {
+        candidate.purposeKeys = candidate.purposeKeys.filter((key) => key !== "impact-on-work");
+      },
+    },
+    {
+      checkId: "primary-experience",
+      mutate: (candidate) => {
+        candidate.actions = candidate.actions.filter((action) => action.key !== "start-upgrade");
+      },
+    },
+    {
+      checkId: "first-viewport-action",
+      mutate: (candidate) => {
+        candidate.actions[0].geometry.top = 940;
+        candidate.actions[0].geometry.bottom = 984;
+      },
+    },
+    {
+      checkId: "prohibited-action",
+      mutate: (candidate) => {
+        candidate.prohibitedActionKeysPresent = ["restore-previous-version"];
+      },
+    },
+    {
+      checkId: "completion-signal",
+      mutate: (candidate) => {
+        candidate.completionSignalPresent = false;
+      },
+    },
+    {
+      checkId: "correction-signal",
+      mutate: (candidate) => {
+        candidate.correctionSignalPresent = false;
+      },
+    },
+    {
+      checkId: "recovery-signal",
+      mutate: (candidate) => {
+        candidate.recoverySignal.present = false;
+      },
+    },
+    {
+      checkId: "disclosure-contract",
+      mutate: (candidate) => {
+        candidate.disclosures[0].relationshipValid = false;
+      },
+    },
+    {
+      checkId: "consequential-action",
+      mutate: (candidate) => {
+        candidate.consequentialAction.authorityVisible = false;
+      },
+    },
+  ];
+
+  for (const defect of structuralDefects) {
+    it(`detects the known-bad ${defect.checkId} fixture`, () => {
+      const candidate = structuredClone(evidence);
+      defect.mutate(candidate);
+
+      const result = evaluateRoutePurpose({
+        contract,
+        oracle: {
+          routePath: "/ops/self-upgrade",
+          stateKey: "update-available",
+          sourceRef: "apps/web/lib/self-upgrade/purpose-scenario.ts",
+        },
+        evidence: candidate,
+        context,
+      });
+
+      expect(result.structuralStatus).toBe("nonconformant");
+      expect(result.findings.map((finding) => finding.checkId)).toContain(defect.checkId);
+      expect(result.blocking).toBe(false);
+    });
+  }
+
+  it("marks a matching, resolvable functional receipt current without requiring source SHA equality", () => {
+    const result = evaluateRoutePurpose({
+      contract: {
+        ...contract,
+        validationReceipts: [
+          {
+            schemaVersion: 1,
+            evidenceClass: "automated-functional",
+            routePath: "/ops/self-upgrade",
+            contractHash: "contract-hash",
+            sourceSha: "older-provenance-sha",
+            fixtureVersion: "self-upgrade-v1",
+            viewport: "1280x900",
+            inputMode: "pointer",
+            interactionFingerprint: "interaction-v1",
+            relevantDependencyFingerprint: "dependencies-v1",
+            metrics: { completion: true },
+            thresholds: { completion: true },
+            reviewerRef: "VR-BI-D27323A0",
+            observedAt: "2026-07-30T00:00:00.000Z",
+            artifactIds: ["artifact-1"],
+            runnerRef: "playwright",
+            completionOracleResult: "passed",
+          },
+        ],
+      },
+      oracle: {
+        routePath: "/ops/self-upgrade",
+        stateKey: "update-available",
+        sourceRef: "apps/web/lib/self-upgrade/purpose-scenario.ts",
+      },
+      evidence,
+      context,
+    });
+
+    expect(result.validation.overall).toBe("current");
+    expect(result.validation.classes["automated-functional"]).toBe("current");
+  });
+
+  it("marks an unresolved or materially changed receipt stale", () => {
+    const result = evaluateRoutePurpose({
+      contract: {
+        ...contract,
+        validationReceipts: [
+          {
+            schemaVersion: 1,
+            evidenceClass: "automated-functional",
+            routePath: "/ops/self-upgrade",
+            contractHash: "old-contract",
+            sourceSha: "older-sha",
+            fixtureVersion: "self-upgrade-v1",
+            viewport: "1280x900",
+            inputMode: "pointer",
+            interactionFingerprint: "old-interaction",
+            relevantDependencyFingerprint: "dependencies-v1",
+            metrics: { completion: true },
+            thresholds: { completion: true },
+            reviewerRef: "VR-OLD",
+            observedAt: "2026-07-30T00:00:00.000Z",
+            artifactIds: ["missing-artifact"],
+            runnerRef: "playwright",
+            completionOracleResult: "passed",
+          },
+        ],
+      },
+      oracle: {
+        routePath: "/ops/self-upgrade",
+        stateKey: "update-available",
+        sourceRef: "apps/web/lib/self-upgrade/purpose-scenario.ts",
+      },
+      evidence,
+      context,
+    });
+
+    expect(result.validation.overall).toBe("stale");
+  });
+});
+
+describe("summarisePurposeCoverage", () => {
+  it("reports contract and structural coverage without collapsing the statuses", () => {
+    const evaluated = evaluateRoutePurpose({
+      contract,
+      oracle: {
+        routePath: "/ops/self-upgrade",
+        stateKey: "update-available",
+        sourceRef: "apps/web/lib/self-upgrade/purpose-scenario.ts",
+      },
+      evidence,
+      context,
+    });
+
+    expect(
+      summarisePurposeCoverage([
+        evaluated,
+        {
+          routePath: "/workspace",
+          intentStatus: "draft",
+          structuralStatus: "not-evaluated",
+          validation: {
+            overall: "not-validated",
+            classes: {},
+            receipts: [],
+          },
+          enforcement: "advisory",
+          findings: [],
+          blocking: false,
+        },
+      ]),
+    ).toMatchObject({
+      routeCount: 2,
+      intentRatifiedCount: 1,
+      draftCount: 1,
+      structurallyConformantCount: 1,
+      taskValidatedCount: 0,
+    });
+  });
+});
+
+describe("routeMatchesPurposeTemplate", () => {
+  it("matches a concrete docs route to the canonical optional catch-all", () => {
+    expect(
+      routeMatchesPurposeTemplate(
+        "/docs/[[...slug]]",
+        "/docs/operations/self-upgrade",
+      ),
+    ).toBe(true);
+  });
+
+  it("does not match a different canonical family", () => {
+    expect(
+      routeMatchesPurposeTemplate(
+        "/docs/[[...slug]]",
+        "/ops/self-upgrade",
+      ),
+    ).toBe(false);
+  });
+});

@@ -76,6 +76,18 @@ export {
 } from "./purpose-contracts";
 
 export {
+  PURPOSE_CHECK_IDS,
+  evaluateRoutePurpose,
+  routeMatchesPurposeTemplate,
+  summarisePurposeCoverage,
+  type PurposeCoverageSummary,
+  type PurposeDomEvidence,
+  type PurposeEvaluationContext,
+  type PurposeFinding,
+  type RoutePurposeEvaluation,
+} from "./purpose-evaluator";
+
+export {
   buildRoutePolicies,
   type RoutePolicy,
   type RoutePolicyManifestRow,

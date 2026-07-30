@@ -44,6 +44,12 @@ import type {
   ExemptCheck,
   RouteSweepExclusionReason,
 } from "../lib/ux-budget/route-shells";
+import purposeRegistryJson from "../lib/ux-budget/route-purpose.generated.json";
+import { parsePagePurposeRegistry } from "../lib/ux-budget/page-purpose";
+import {
+  evaluateRoutePurpose,
+  type PurposeDomEvidence,
+} from "../lib/ux-budget/purpose-evaluator";
 import {
   parseSweepWorkerCount,
   runBoundedRouteWork,
@@ -134,6 +140,133 @@ function pruneInvisible(): string {
   }
   for (const node of drop) node.remove();
   return doc.querySelector("body")?.innerHTML ?? "";
+}
+
+export function capturePurposeEvidenceFromDom(): PurposeDomEvidence | null {
+  const root = document.querySelector<HTMLElement>("[data-dpf-purpose-route]");
+  if (!root) return null;
+
+  const visible = (element: Element): boolean => {
+    const style = getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    return (
+      style.display !== "none" &&
+      style.visibility !== "hidden" &&
+      rect.width > 0 &&
+      rect.height > 0
+    );
+  };
+  const actions = [
+    ...root.querySelectorAll<HTMLElement>("[data-dpf-purpose-action-key]"),
+  ].map((element) => {
+    const rect = element.getBoundingClientRect();
+    const href =
+      element instanceof HTMLAnchorElement
+        ? new URL(element.href, location.href).pathname
+        : undefined;
+    return {
+      key: element.dataset.dpfPurposeActionKey ?? "",
+      primary: element.hasAttribute("data-dpf-primary-action"),
+      visible: visible(element),
+      geometry: {
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
+      },
+      ...(href ? { href } : {}),
+    };
+  });
+  const recoveryAction = actions.find(
+    (action) => action.key === "open-recovery-guidance",
+  );
+  const disclosures = [
+    ...root.querySelectorAll<HTMLElement>(
+      "[data-dpf-purpose-disclosure-key]",
+    ),
+  ].map((container) => {
+    const key = container.dataset.dpfPurposeDisclosureKey ?? "";
+    const trigger = container.querySelector<HTMLElement>(
+      "[data-dpf-purpose-disclosure-trigger]",
+    );
+    const region = container.querySelector<HTMLElement>(
+      "[data-dpf-purpose-disclosure-region]",
+    );
+    const controlledId = trigger?.getAttribute("aria-controls");
+    return {
+      key,
+      triggerPresent: Boolean(trigger),
+      controlledRegionPresent: Boolean(region),
+      relationshipValid:
+        Boolean(trigger && region) &&
+        (container instanceof HTMLDetailsElement ||
+          (Boolean(controlledId) && region?.id === controlledId)),
+      expanded:
+        container instanceof HTMLDetailsElement
+          ? container.open
+          : trigger?.getAttribute("aria-expanded") === "true",
+    };
+  });
+
+  return {
+    routePath: root.dataset.dpfPurposeRoute ?? null,
+    stateKey: root.dataset.dpfPurposeState ?? null,
+    h1Count: root.querySelectorAll("h1").length,
+    purposeKeys: [
+      ...root.querySelectorAll<HTMLElement>("[data-dpf-purpose-key]"),
+    ]
+      .map((element) => element.dataset.dpfPurposeKey ?? "")
+      .filter(Boolean),
+    actions,
+    messages: [
+      ...root.querySelectorAll<HTMLElement>(
+        "[data-dpf-purpose-message-key]",
+      ),
+    ]
+      .map((element) => element.dataset.dpfPurposeMessageKey ?? "")
+      .filter(Boolean),
+    prohibitedActionKeysPresent: [],
+    completionSignalPresent: Boolean(
+      root.querySelector("[data-dpf-purpose-completion-signal]"),
+    ),
+    correctionSignalPresent: Boolean(
+      root.querySelector("[data-dpf-purpose-correction-signal]"),
+    ),
+    recoverySignal: {
+      present: Boolean(
+        root.querySelector("[data-dpf-purpose-recovery-signal]") &&
+          recoveryAction,
+      ),
+      actionKey: recoveryAction?.key ?? null,
+      routePath: recoveryAction?.href ?? null,
+    },
+    disclosures,
+    consequentialAction: {
+      consequenceVisible: Boolean(
+        root.querySelector("[data-dpf-purpose-consequence]"),
+      ),
+      reversibilityVisible: Boolean(
+        root.querySelector("[data-dpf-purpose-reversibility]"),
+      ),
+      confirmationAvailable: Boolean(
+        root.querySelector("[data-dpf-purpose-confirmation]"),
+      ),
+      authorityVisible: Boolean(
+        root.querySelector("[data-dpf-purpose-authority]"),
+      ),
+      recoveryVisible: Boolean(
+        root.querySelector("[data-dpf-purpose-recovery-context]"),
+      ),
+    },
+    viewport: { width: window.innerWidth, height: window.innerHeight },
+  };
+}
+
+export async function capturePurposeEvidence(
+  page: Page,
+): Promise<PurposeDomEvidence | null> {
+  await page.evaluate(BROWSER_EVALUATION_RUNTIME);
+  return page.evaluate(capturePurposeEvidenceFromDom);
 }
 
 /**
@@ -459,6 +592,7 @@ async function measureRoute(
     ariaSnapshot,
     axeViolations,
     exemptChecks: row.exemptChecks,
+    purposeEvidence: await capturePurposeEvidence(page),
   };
   phases.budgetMeasurementMs = Math.round(performance.now() - phaseStartedAt);
 
@@ -642,7 +776,26 @@ async function main(): Promise<void> {
     return;
   }
 
-  const sweep = evaluateSweep(measurements, loadBaseline(join(ROOT, BASELINE_REL)));
+  const purposeRegistry = parsePagePurposeRegistry(purposeRegistryJson);
+  const evidenceByRoute = new Map(
+    measurements.map((measurement) => [
+      measurement.routePath,
+      measurement.purposeEvidence ?? null,
+    ]),
+  );
+  const purposeEvaluations = purposeRegistry.routes.map((contract) =>
+    evaluateRoutePurpose({
+      contract,
+      evidence: evidenceByRoute.get(contract.routePath) ?? null,
+      oracle: null,
+      enforcement: "advisory",
+    }),
+  );
+  const sweep = evaluateSweep(
+    measurements,
+    loadBaseline(join(ROOT, BASELINE_REL)),
+    purposeEvaluations,
+  );
   writeFileSync(join(ROOT, REPORT_REL), `${JSON.stringify(sweep, null, 2)}\n`, "utf8");
   console.error(formatSweepReport(sweep));
 

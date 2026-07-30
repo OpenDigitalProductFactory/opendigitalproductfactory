@@ -13,6 +13,10 @@ import { PlatformUpdateApplyPanel } from "@/components/admin/PlatformUpdateApply
 import { LocalChangesLedger } from "@/components/ops/LocalChangesLedger";
 import { getLocalChangesLedger } from "@/lib/self-upgrade/local-changes-ledger";
 import { hasGovernedRecoveryPoint } from "@/lib/self-upgrade/rollback";
+import {
+  resolveSelfUpgradePurposeBlocker,
+  resolveSelfUpgradePurposeScenario,
+} from "@/lib/self-upgrade/purpose-scenario";
 import { NAV_MODE_COOKIE, resolveNavModeFromCookie, isSimpleNavMode } from "@/lib/navigation/nav-mode";
 
 export default async function SelfUpgradePage() {
@@ -99,6 +103,8 @@ export default async function SelfUpgradePage() {
   };
 
   const effectiveStatus = status ?? fallbackStatus;
+  const purposeState = resolveSelfUpgradePurposeScenario(effectiveStatus);
+  const purposeBlocker = resolveSelfUpgradePurposeBlocker(effectiveStatus);
 
   const clientProps = JSON.parse(
     JSON.stringify({
@@ -142,6 +148,7 @@ export default async function SelfUpgradePage() {
       // operator can act on or quote back to us.
       runningMergePointLabel: mergePoints.running?.label ?? null,
       availableMergePointLabel: mergePoints.available?.label ?? null,
+      blockerReason: purposeBlocker,
     },
     localChanges,
   );
@@ -149,7 +156,10 @@ export default async function SelfUpgradePage() {
   const simple = isSimpleNavMode(navMode);
 
   return (
-    <div>
+    <div
+      data-dpf-purpose-route="/ops/self-upgrade"
+      data-dpf-purpose-state={purposeState}
+    >
       <div className="mb-6">
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Self-Upgrade</h1>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
@@ -169,6 +179,8 @@ export default async function SelfUpgradePage() {
               latestRun={clientProps.latestRun}
               quiescence={clientProps.quiescence}
               jobEngine={clientProps.jobEngine}
+              purposeState={purposeState}
+              blockerReason={purposeBlocker}
             />
           }
         />
@@ -183,11 +195,15 @@ export default async function SelfUpgradePage() {
           primary action, so hiding it there is the correct progressive
           disclosure the owner-first redesign (BI-8D87084D) intended. */}
       <details
+        id="self-upgrade-recovery-controls"
+        data-dpf-purpose-disclosure-key="deploy-controls-history"
         className="mt-6 rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
-        open={!simple}
+        open={!simple || purposeState === "failed-recoverable"}
       >
         <summary
+          aria-controls="self-upgrade-advanced-content"
           data-component="self-upgrade-advanced-toggle"
+          data-dpf-purpose-disclosure-trigger
           className="cursor-pointer select-none rounded-xl px-4 py-3 text-sm font-medium text-[var(--dpf-text)] marker:text-[var(--dpf-muted)]"
         >
           Deploy controls &amp; history
@@ -196,7 +212,11 @@ export default async function SelfUpgradePage() {
           </span>
         </summary>
 
-        <div className="space-y-6 border-t border-[var(--dpf-border)] p-4">
+        <div
+          id="self-upgrade-advanced-content"
+          data-dpf-purpose-disclosure-region
+          className="space-y-6 border-t border-[var(--dpf-border)] p-4"
+        >
           <SelfUpgradeClient {...clientProps} />
 
           <PlatformUpdateApplyPanel
