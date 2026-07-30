@@ -63,8 +63,12 @@ describe("sanitized clone source integrity", () => {
 
     await expect(assertSanitizedCloneSourceIntegrity(source)).resolves.toBeUndefined();
 
-    expect(source.queries.some((query) => query.includes("TABLESAMPLE SYSTEM (100)")))
-      .toBe(true);
+    const heapScan = source.queries.find((query) =>
+      query.includes("TABLESAMPLE SYSTEM (100)")
+    );
+    expect(heapScan).toMatch(
+      /"PlatformIssueReport"\s+AS report\s+TABLESAMPLE SYSTEM \(100\)/,
+    );
   });
 
   it("names a physically unhealthy PlatformIssueReport index", async () => {

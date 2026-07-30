@@ -66,8 +66,8 @@ async function assertPlatformIssueReportDedupeSemantics(
     SELECT count(*)::integer AS "duplicateGroups"
     FROM (
       SELECT report."dedupeKey"
-      FROM ${quotedSchema}."PlatformIssueReport"
-        TABLESAMPLE SYSTEM (100) AS report
+      FROM ${quotedSchema}."PlatformIssueReport" AS report
+        TABLESAMPLE SYSTEM (100)
       WHERE report."dedupeKey" IS NOT NULL
         AND report.status NOT IN (
           'resolved_locally',
