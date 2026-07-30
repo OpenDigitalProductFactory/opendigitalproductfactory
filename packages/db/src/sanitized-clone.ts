@@ -65,7 +65,7 @@ export function shouldSkipTable(tableName: string): boolean {
 import { PrismaClient } from "../generated/client/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { runSourceCheckedClone } from "./sanitized-clone-cleanup";
-import { assertSourceInventoryIntegrity } from "./sanitized-clone-source-integrity";
+import { assertSanitizedCloneSourceIntegrity } from "./sanitized-clone-source-integrity";
 
 export {
   runSourceCheckedClone,
@@ -343,7 +343,7 @@ export async function runSanitizedClone(): Promise<void> {
 
     await runSourceCheckedClone(
       () => resetDestinationData(dev, destinationTables.map(({ tablename }) => tablename)),
-      () => assertSourceInventoryIntegrity(prod),
+      () => assertSanitizedCloneSourceIntegrity(prod),
       async () => {
         const tables = await listPublicTables(prod, false);
         console.log(`[sanitized-clone] Found ${tables.length} tables to process`);
