@@ -45,7 +45,7 @@ An availability label is not a runtime guess. It is projected from the current s
 - **Token Spend** — Usage tracking per provider and model. Visible to admins to monitor cost and identify unexpected consumption patterns.
 - **Finance Bridge** — When a provider is configured, the platform can seed finance ownership by linking the provider to a supplier, draft contract, and finance work items.
 - **Tool Grants** — Each agent has a declared set of tool grants in `agent_registry.json` that control which platform tools it can invoke. Tool grants are enforced at runtime — an agent can only use tools that match its grants AND the user's role capabilities (effective permissions = user role intersection with agent grants).
-- **Approval and autonomy** — The owner-facing record projects existing HITL and governance evidence into plain labels: **Cannot act**, **Advises only**, **Prepares work for approval**, **Acts with approval**, **Acts with review**, or **Can act within limits**. Incomplete or contradictory evidence appears as **Approval rules need review**.
+- **Approval and autonomy** — The owner-facing record projects existing oversight and governance evidence into plain labels: **Cannot act**, **Advises only**, **Prepares work for approval**, **Acts with approval**, **Acts with review**, or **Can act within limits**. Incomplete or contradictory evidence appears as **Approval rules need review**.
 - **Tool Evaluation Pipeline** — External tools (MCP servers, npm packages, APIs) must pass a multi-agent evaluation pipeline (security, architecture, compliance, integration) before adoption. See EP-GOVERN-002.
 
 ## What You Can Do
@@ -60,7 +60,7 @@ An availability label is not a runtime guess. It is projected from the current s
 - Hand off configured providers into Finance so supplier ownership and committed spend stay visible
 - Manage agent-to-provider assignments for specific platform capabilities
 - Optionally give the standing COO a conversational name from its coworker record; DPF always keeps the `AI COO` role visible and does not change the coworker's identity, authority, or audit attribution
-- View the **Authority** tab to understand agent tool grants, HITL tiers, and escalation paths
+- View the **Authority** tab to understand agent tool grants, oversight levels, and escalation paths
 - Review the **Action History** to see all agent proposals and their approval status
 - Inspect the **Tool Execution Log** to audit every tool call made by any agent (who, what, when, result)
 - Open a coworker record to review **Living Playbooks** and see when the platform is testing a better method
@@ -88,8 +88,8 @@ The **Authority** tab (`/platform/ai/authority`) provides visibility into the ag
 ### Agent Authority Overview
 Each agent card shows:
 - **Tool grant count** — how many platform tools the agent can invoke
-- **HITL tier** — the autonomy level (0-3) determining approval requirements
-- **Escalation path** — which human role receives escalations and the SLA
+- **Oversight** — how much employee involvement the coworker needs: **Employee only**, **Needs approval**, **Employee review**, or **Runs on its own**. Stored internally as the HITL tier (0-3); "HITL" is the technical name for the same setting, and the portal shows the plain label.
+- **Escalation path** — which employee role receives escalations and the SLA
 - **Value stream** — which IT4IT value stream the agent operates in
 
 ### Tool Execution Log

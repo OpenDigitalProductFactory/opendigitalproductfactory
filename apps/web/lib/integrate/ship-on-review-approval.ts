@@ -316,7 +316,7 @@ export async function advanceReviewedBuildToShip(
     /* phase evidence is best-effort and never replaces the lifecycle row */
   }
   await log(
-    "Advanced review→ship (diff already extracted). Push to GitHub remains a human gate.",
+    "Advanced review→ship (diff already extracted). Push to GitHub remains an owner gate.",
   );
 
   // EP-QUALITY-RIGHTSIZING P3 (BI-CFEB2B22): the diff now exists, so derive the

@@ -146,7 +146,7 @@ export function recommendTrustChange(args: {
       reason: regulatoryBinds
         ? `regulatory ceiling (${ceiling}) caps this activity regardless of agreement -- only a compliance change lifts it`
         : ceiling === "propose"
-          ? `kernel-floor risk (${risk}) is capped at propose -- a human always confirms`
+          ? `kernel-floor risk (${risk}) is capped at propose -- an owner always confirms`
           : `at the ${risk} ceiling (${ceiling})`,
     };
   }

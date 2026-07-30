@@ -333,6 +333,32 @@ Every coworker that writes customer-facing copy (marketing-specialist and peers)
 - keep architecture and standards copy precise even when it reads higher;
 - check the Flesch–Kincaid grade before publishing.
 
+### Name the role, not the species (BI-F2EC4699)
+
+User-facing copy names the **role** a person holds in the business. It never renders
+`HITL`, `HITL T2`, `human-only`, or a bare oversight tier number to a user — those are
+technical names for a real mechanism, not language a business owner can act on.
+
+- **Oversight language comes from one module.** `apps/web/lib/workforce/oversight-copy.ts`
+  is the single source of truth: **Employee only / Needs approval / Employee review /
+  Runs on its own**, with colour resolved through the `employeeOversight` intent
+  namespace in `apps/web/components/ui/report-kit/statusColors.ts`. Never declare a
+  local tier→label or tier→colour map. Six components carried drifted ones — two with
+  raw hex — before this rule existed.
+- **Resolve the role in prose.** Use **employee** for a workforce member and **owner**
+  for the accountable business decision-maker (see `apps/web/lib/owner-first/`). Reach
+  for a neutral word ("people") only where the code genuinely does not know which — for
+  example a principal count spanning employees *and* contractors. A blanket
+  `human` → `employee` sweep is wrong: it labels the business owner an employee.
+- **`human` stays correct in code.** Identifiers, comments, the `human` principal-kind
+  enum (`callingPopulation`, principle `appliesTo`, `Principal.kind`), and the Prisma
+  columns keep it, because there "human" is the accurate opposite of "agent".
+- **`human-readable` is a different word.** Never include it in a vocabulary sweep.
+
+This mirrors the "Agent" (technical principal kind) vs "AI coworker" (user-facing
+workforce term) split from BI-08393602. Full rationale:
+[plan](superpowers/plans/2026-07-29-employee-oversight-vocabulary.md).
+
 ## Common Shell Action-Result Contract
 
 The common shell chrome that wraps every owner route (`apps/web/app/(shell)/layout.tsx` — header, Simple/Full rail, contextual help, feedback, health badge, coworker panel) must obey one action-result contract so non-technical owners can predict what a control does and see that it happened. Shared, testable pieces live in `apps/web/lib/shell/shell-action-contract.ts`; the design is in `docs/superpowers/specs/2026-07-22-shell-action-result-contract-design.md` (BI-9C0954D0).

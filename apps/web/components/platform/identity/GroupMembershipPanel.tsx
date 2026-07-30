@@ -1,3 +1,5 @@
+import { oversightLabel } from "@/lib/workforce/oversight-copy";
+
 type RoleGroup = {
   roleId: string;
   name: string;
@@ -42,7 +44,7 @@ export function GroupMembershipPanel({
             <div>
               <h2 className="text-base font-semibold text-[var(--dpf-text)]">Role groups</h2>
               <p className="mt-1 text-sm text-[var(--dpf-muted)]">
-                Platform roles still act like the highest-level shared groups for route access, HITL posture, and administrative authority.
+                Platform roles still act like the highest-level shared groups for route access, oversight posture, and administrative authority.
               </p>
             </div>
             <span className="rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-[var(--dpf-muted)]">
@@ -71,7 +73,7 @@ export function GroupMembershipPanel({
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-medium text-[var(--dpf-text)]">{group.memberCount} members</p>
-                    <p className="mt-1 text-[11px] text-[var(--dpf-muted)]">HITL {group.hitlTierMin}+</p>
+                    <p className="mt-1 text-[11px] text-[var(--dpf-muted)]">{oversightLabel(group.hitlTierMin, { dense: true })}+</p>
                   </div>
                 </div>
 

@@ -6,6 +6,7 @@ import {
   explainEffectiveAuthority,
   type EffectiveAuthorityBinding,
 } from "@/lib/authority/effective-authority";
+import { oversightLabel, oversightStyle } from "@/lib/workforce/oversight-copy";
 import { type AgentIdentitySnapshot } from "@/lib/identity/agent-identity-snapshot";
 
 type AgentInfo = {
@@ -174,13 +175,6 @@ function isUserAllowed(
   if (!allowedRoles) return false;
   return allowedRoles.includes(roleId);
 }
-
-const HITL_COLOURS_EP: Record<number, string> = {
-  0: "var(--dpf-error)",
-  1: "var(--dpf-accent)",
-  2: "var(--dpf-info)",
-  3: "var(--dpf-success)",
-};
 
 const ESCALATION_LABELS_EP: Record<string, string> = {
   "HR-000": "CDIO",
@@ -787,13 +781,13 @@ export function EffectivePermissionsPanel({
             >
               <span>Role</span>
               <span>Authority Domain</span>
-              <span style={{ textAlign: "center" }}>HITL</span>
+              <span style={{ textAlign: "center" }}>Oversight</span>
               <span>Escalates To</span>
               <span>Assigned To</span>
             </div>
 
             {product.roles.map((role, index) => {
-              const tierColour = HITL_COLOURS_EP[role.hitlTierDefault] ?? "var(--dpf-muted)";
+              const tierStyle = oversightStyle(role.hitlTierDefault);
               const escalationLabel = role.escalatesTo
                 ? (ESCALATION_LABELS_EP[role.escalatesTo] ?? role.escalatesTo)
                 : "—";
@@ -820,13 +814,13 @@ export function EffectivePermissionsPanel({
                     <span
                       style={{
                         fontSize: 9,
-                        background: `${tierColour}20`,
-                        color: tierColour,
+                        background: tierStyle.softBg,
+                        color: tierStyle.fg,
                         borderRadius: 3,
                         padding: "1px 5px",
                       }}
                     >
-                      {role.hitlTierDefault}
+                      {oversightLabel(role.hitlTierDefault, { dense: true })}
                     </span>
                   </span>
                   <span style={{ fontSize: 9, color: "var(--dpf-muted)" }}>{escalationLabel}</span>

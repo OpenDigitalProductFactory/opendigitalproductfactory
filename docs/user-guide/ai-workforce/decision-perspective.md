@@ -18,7 +18,7 @@ There is a third scope in the same family. **WSID** is "What Should I Do" — th
 > **Want to see it work, not just read what it is?** [Decision Perspective in
 > Practice](decision-perspective-in-practice.md) walks a real question end-to-end through the gate for
 > each scope (WWMD / WWWD / WSID) — the options framed, the decision vectors scored, the outcome
-> returned, and the ledger row written — plus how HITL and the immutable ledger wrap every one.
+> returned, and the ledger row written — plus how oversight and the immutable ledger wrap every one.
 
 The full design lives in three specs:
 
@@ -34,7 +34,7 @@ When a coworker or external MCP client hits a decision point that doesn't have a
 |---------|---------|-------------------|
 | `recommend` | Confident direction backed by source-traced principles. | The coworker proceeds; the recommendation is logged. |
 | `arbitrate` | Two or more credible directions exist. The gate resolves with weighted vector aggregation and returns the chosen path plus the dissenting view. | The coworker proceeds with the chosen path; the dissent is preserved in the ledger. |
-| `escalate` | The decision needs human leadership — confidence is low, sources contradict, or the principle hierarchy doesn't cover the question. | The work pauses; an approval surface is raised to the operator. |
+| `escalate` | The decision needs owner leadership — confidence is low, sources contradict, or the principle hierarchy doesn't cover the question. | The work pauses; an approval surface is raised to the operator. |
 | `defer` | The active profile lacks enough material to frame even a recommended direction. | The question is captured as a profile gap so future curation can close it. |
 
 Every invocation writes a `DecisionInteraction` row recording the active profile version, the source materials cited, the confidence score, the chosen outcome, and the rationale text. This is the audit ledger — auditors and operators reconstruct "what perspective governed this decision, and on what evidence" from it.
@@ -45,7 +45,7 @@ The gate's confidence is a governed runtime state, not a model-self-reported num
 
 > Confidence is earned in drops and lost in buckets.
 
-Confidence rises slowly through repeated evidence-backed alignment — a recommendation made, observed in practice, and confirmed by a human, increases the profile's confidence for that question domain. Confidence drops fast after misses: a contradicted rationale, a stale source, or an overconfident recommendation that turned out wrong pulls the profile back. The point is to make autonomy something the platform earns, not something it claims.
+Confidence rises slowly through repeated evidence-backed alignment — a recommendation made, observed in practice, and confirmed by an employee, increases the profile's confidence for that question domain. Confidence drops fast after misses: a contradicted rationale, a stale source, or an overconfident recommendation that turned out wrong pulls the profile back. The point is to make autonomy something the platform earns, not something it claims.
 
 ### The Inheritance Chain
 
@@ -103,7 +103,7 @@ In-product coworkers call the gate through the platform's internal handler — t
 
 An operator can also invoke the gate manually from the **Decision Perspective Gate Panel** in Build Studio. A typical use is reviewing an automated `arbitrate` outcome before letting the plan advance — the dissenting view is shown alongside the chosen path so the operator decides whether the resolution holds up.
 
-Tool grants and HITL tiers apply: the gate is callable, but high-risk outcomes (`escalate`) raise a human approval surface even when invoked autonomously.
+Tool grants and oversight levels apply: the gate is callable, but high-risk outcomes (`escalate`) raise an employee approval surface even when invoked autonomously.
 
 ## The Voice Layer
 
@@ -188,7 +188,7 @@ A coworker chat opened alongside `/coworker-decisions` can now read the same gov
 
 - **Page context.** When the user is on `/coworker-decisions`, the coworker's prompt is injected with the Decision Governance summary — open-review counts per discipline (WWMD / WWWD / WSID), decisions recorded in the last 30 days, governing-material counts, and the most recent unresolved reviews with their questions and decision-canvas links. This is the `/coworker-decisions` route-context provider in `apps/web/lib/tak/route-context.ts`.
 - **Perception by construction.** Only a handful of routes carry a bespoke provider like the one above; every other route (the large majority) now falls through to a **default provider** that names the page the user is on and steers the coworker to read via its tools rather than ask the user to paste the screen. So a coworker is never *fully* blind to which page it is looking at — a route without a bespoke summary degrades to page-identity context, not to nothing.
-- **The `list_open_decision_reviews` tool.** A read-only, `registry_read`-baseline tool (so every coworker inherits it) that returns the full open-review queue — each item's discipline, unresolved reason, gap detail, suggested action, and decision-canvas link — projected through the same `apps/web/lib/founder-review/queue.ts` the Founder Review workspace uses. A coworker reads the queue and **recommends** a resolution; **resolving** a deferred/escalated review stays a human action taken in the Founder Review workspace (Human-in-the-Loop at Phase Boundaries).
+- **The `list_open_decision_reviews` tool.** A read-only, `registry_read`-baseline tool (so every coworker inherits it) that returns the full open-review queue — each item's discipline, unresolved reason, gap detail, suggested action, and decision-canvas link — projected through the same `apps/web/lib/founder-review/queue.ts` the Founder Review workspace uses. A coworker reads the queue and **recommends** a resolution; **resolving** a deferred/escalated review stays an owner action taken in the Founder Review workspace (Human-in-the-Loop at Phase Boundaries).
 
 ## Boundaries
 

@@ -175,7 +175,8 @@
         "next-action-marker",
         "lead-band"
       ],
-      "sweepEligible": true,
+      "sweepEligible": false,
+      "sweepExclusionReason": "wall-clock-collection",
       "confidence": "high"
     },
     {
@@ -1844,7 +1845,8 @@
         "next-action-marker",
         "lead-band"
       ],
-      "sweepEligible": true,
+      "sweepEligible": false,
+      "sweepExclusionReason": "wall-clock-collection",
       "confidence": "high"
     },
     {
@@ -3460,7 +3462,8 @@
         "next-action-marker",
         "lead-band"
       ],
-      "sweepEligible": true,
+      "sweepEligible": false,
+      "sweepExclusionReason": "wall-clock-collection",
       "confidence": "high"
     },
     {

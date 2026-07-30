@@ -317,7 +317,7 @@ export const MCP_TOKEN_TEMPLATES: readonly McpTokenTemplate[] = [
     category: "employee",
     tier: "write",
     description:
-      "Finance human or coworker: period summaries, financial reports, supporting registry/document reads.",
+      "Finance employee or coworker: period summaries, financial reports, supporting registry/document reads.",
     grants: EMPLOYEE_FINANCE_TEMPLATE_GRANTS,
   },
   {
@@ -326,7 +326,7 @@ export const MCP_TOKEN_TEMPLATES: readonly McpTokenTemplate[] = [
     category: "employee",
     tier: "write",
     description:
-      "HR human or coworker: employee records, leave policy, supporting registry/document reads.",
+      "HR employee or coworker: employee records, leave policy, supporting registry/document reads.",
     grants: EMPLOYEE_HR_TEMPLATE_GRANTS,
   },
   {
@@ -335,7 +335,7 @@ export const MCP_TOKEN_TEMPLATES: readonly McpTokenTemplate[] = [
     category: "employee",
     tier: "write",
     description:
-      "EA human or coworker: read/write the EA graph, import/export ArchiMate, publish architecture documents.",
+      "EA employee or coworker: read/write the EA graph, import/export ArchiMate, publish architecture documents.",
     grants: EMPLOYEE_EA_TEMPLATE_GRANTS,
   },
   {
@@ -344,7 +344,7 @@ export const MCP_TOKEN_TEMPLATES: readonly McpTokenTemplate[] = [
     category: "employee",
     tier: "write",
     description:
-      "Marketing human or coworker: campaign briefs, SEO analysis, archetype refinement.",
+      "Marketing employee or coworker: campaign briefs, SEO analysis, archetype refinement.",
     grants: EMPLOYEE_MARKETING_TEMPLATE_GRANTS,
   },
   {

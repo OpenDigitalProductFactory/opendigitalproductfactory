@@ -64,7 +64,7 @@ describe("formatEscalationReport (pure)", () => {
 
   it("titles for humans, naming the subject + phase", () => {
     const { title } = formatEscalationReport(base);
-    expect(title).toMatch(/needs a human/i);
+    expect(title).toMatch(/needs you/i);
     expect(title).toContain("BI: Add a thing properly");
     expect(title).toContain("plan");
   });

@@ -280,7 +280,7 @@ function isPlanReviewFailed(planReview: FeatureBuildRow["planReview"]): boolean 
 
 function describeApprovalGap(build: FeatureBuildRow): string {
   if (build.phase === "ideate") {
-    return "This linked backlog build still needs a recorded human start approval before Build Studio should move into planning.";
+    return "This linked backlog build still needs a recorded owner start approval before Build Studio should move into planning.";
   }
 
   return "This linked backlog build reached planning without a recorded start approval. Record the approval in Build Studio now so the governance trail reflects the approval that should have happened before planning.";
@@ -687,7 +687,7 @@ export function deriveBuildStudioWorkflowAction({
       disabledReason: null,
       coworkerLabel: "Ask coworker to summarize",
       coworkerPrompt:
-        "This build was escalated to a human and abandoned. Summarize in plain language why it could not be completed automatically, what the parked backlog item now needs, and the safest next step for me to take.",
+        "This build was escalated to the owner and abandoned. Summarize in plain language why it could not be completed automatically, what the parked backlog item now needs, and the safest next step for me to take.",
       parkedBacklogItemId,
       abandonReason,
       resumeHref: "/ops",
@@ -958,7 +958,7 @@ export function deriveBuildStudioWorkflowAction({
       return {
         kind: "record-acceptance",
         title: "Record Review Acceptance",
-        message: "The review evidence is in place. Record the human acceptance decision here so Build Studio can continue into release decisions without waiting on the coworker route.",
+        message: "The review evidence is in place. Record the owner acceptance decision here so Build Studio can continue into release decisions without waiting on the coworker route.",
         primaryLabel: "Record Acceptance",
         targetPhase: null,
         disabledReason: null,

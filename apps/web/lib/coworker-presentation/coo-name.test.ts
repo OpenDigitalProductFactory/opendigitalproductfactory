@@ -34,8 +34,8 @@ describe("COO conversational-name policy", () => {
     ["AGT-ORCH-000", "internal coworker identifier"],
     ["system", "internal system identity"],
     ["Onboarding COO", "distinct setup coworker"],
-    ["CEO", "accountable human role"],
-    ["Owner", "accountable human role"],
+    ["CEO", "accountable owner role"],
+    ["Owner", "accountable owner role"],
   ])("rejects deceptive or internal name %s", (name, errorFragment) => {
     const result = validateCooConversationalName(name);
     expect(result.ok).toBe(false);

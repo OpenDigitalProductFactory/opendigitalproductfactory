@@ -75,13 +75,13 @@ export function classifyOwnerAttentionLane(
         appliedLevel,
       );
     }
-    return decision("needs-you-now", "A real human judgment is still required.", false, appliedLevel);
+    return decision("needs-you-now", "This still needs your judgment.", false, appliedLevel);
   }
   if (item.triage.decideEffort === "judgment") {
-    return decision("needs-you-now", "A real human judgment is still required.", false, appliedLevel);
+    return decision("needs-you-now", "This still needs your judgment.", false, appliedLevel);
   }
   if (item.source === "agent-proposal" || item.source === "paused-ai") {
-    return decision("needs-you-now", "A coworker is waiting for a bounded human choice.", false, appliedLevel);
+    return decision("needs-you-now", "A coworker is waiting for a bounded choice from you.", false, appliedLevel);
   }
   if (appliedLevel === "assertive") {
     return decision("weekly-digest", "Assertive mode batches this reversible review.", false, appliedLevel);

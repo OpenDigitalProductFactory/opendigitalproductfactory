@@ -301,8 +301,15 @@ describe("generated route-shell registry", () => {
         (route) => route.sweepEligible === Boolean(route.sweepExclusionReason),
       ),
     ).toEqual([]);
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(200);
-    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(110);
+    // 200 -> 197: three time/live-state routes joined the sweep exclusions under
+    // BI-F2EC4699, each after being observed failing on code that changes no
+    // rendered output. /workspace derives a calendar window from `new Date()`;
+    // /ops/self-upgrade and /admin/scheduled-jobs render live orchestration state
+    // that concurrent sessions and in-run crons mutate. All three are tracked for
+    // re-inclusion by BI-0C6C2153 once the fixture pins the clock and isolates state.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(197);
+    // 110 -> 113: the three exclusions above.
+    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(113);
   });
 
   it("keeps contextual sweep exclusions explicit, valid, and non-stale", () => {

@@ -187,7 +187,7 @@ export async function submitRemoteCoworkerTask(input: {
       data: {
         status: "input-required",
         progressPayload: {
-          summary: "Remote submission paused for human approval before side-effecting work can run.",
+          summary: "Remote submission paused for employee approval before side-effecting work can run.",
           riskClass: parsed.riskClass,
           requiresApproval: true,
         },
@@ -201,7 +201,7 @@ export async function submitRemoteCoworkerTask(input: {
         status: "input-required",
         idempotentReplay: false,
         requiresApproval: true,
-        content: remoteTaskContent("Remote task submitted and paused for human approval."),
+        content: remoteTaskContent("Remote task submitted and paused for employee approval."),
         isError: false,
       },
     };

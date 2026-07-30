@@ -3,11 +3,11 @@ import Link from "next/link";
 const CONTINUITY_STATES = [
   {
     state: "normal",
-    description: "Humans are available; agents assist, prepare decisions, and accelerate active work.",
+    description: "Employees are available; agents assist, prepare decisions, and accelerate active work.",
   },
   {
     state: "low-attention",
-    description: "Humans are busy; agents continue safe work and batch non-urgent interruptions.",
+    description: "Employees are busy; agents continue safe work and batch non-urgent interruptions.",
   },
   {
     state: "away",

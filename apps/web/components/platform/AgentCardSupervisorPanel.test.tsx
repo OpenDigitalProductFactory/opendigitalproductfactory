@@ -101,7 +101,7 @@ describe("AgentCardSupervisorPanel", () => {
     expect(html).toContain("Build Specialist");
     expect(html).toContain("gaid:priv:dpf.internal:build-specialist");
     expect(html).toContain("validated");
-    expect(html).toContain("HITL 2");
+    expect(html).toContain("Reviewed");
     expect(html).toContain("3 exposed tools");
     expect(html).toContain("Pending proposals");
     expect(html).toContain("PROP-002");

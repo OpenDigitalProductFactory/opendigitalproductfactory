@@ -175,7 +175,7 @@ export default async function AuditAuthorityPage() {
           Delegation Chain
         </h2>
         <p style={{ fontSize: 11, color: "var(--dpf-muted)", marginBottom: 12 }}>
-          Human roles, their supervised agents, HITL tiers, and escalation paths.
+          Employee roles, their supervised agents, oversight tiers, and escalation paths.
         </p>
         <DelegationChainPanel agents={agentSummaries} bmrNodes={bmrNodes} />
       </div>

@@ -155,7 +155,7 @@ function summarizeDecision(decision: ConsensusDecision): string {
     case "recommend":
       return `Consensus recommends proceeding with ${decision.confidence} confidence.`;
     case "escalate":
-      return "Consensus requires human review.";
+      return "Consensus requires an owner review.";
   }
 }
 

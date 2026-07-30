@@ -48,7 +48,7 @@ export default async function PlatformIdentityPage() {
           href="/platform/identity/directory"
           accent="var(--dpf-info)"
           metrics={[
-            { label: "Humans", value: humanPrincipalCount },
+            { label: "People", value: humanPrincipalCount },
             { label: "Employees", value: employeeCount },
           ]}
         />

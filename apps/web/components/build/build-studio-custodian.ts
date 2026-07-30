@@ -341,7 +341,7 @@ export function deriveBuildStudioCustodianPrompt({
       primaryAction: "workflow",
       coworkerPrompt: appendCustodianInstruction(
         action,
-        "Act as the Build Studio custodian. Explain the recovery in plain English and keep the human to one next action.",
+        "Act as the Build Studio custodian. Explain the recovery in plain English and keep the owner to one next action.",
       ),
       statusLabel: "Blocked",
       intent: "danger",
@@ -402,7 +402,7 @@ export function deriveBuildStudioCustodianPrompt({
         intent: "info",
         details: [
           "The build is being defined from your description; no evidence is missing yet.",
-          "The human should see the conclusion and one next action, not raw workflow internals.",
+          "The owner should see the conclusion and one next action, not raw workflow internals.",
         ],
         proactivityPlan,
       };
@@ -422,7 +422,7 @@ export function deriveBuildStudioCustodianPrompt({
       intent: "accent",
       details: [
         action.disabledReason ?? "Required evidence is missing.",
-        "The human should see the conclusion and one next action, not raw workflow internals.",
+        "The owner should see the conclusion and one next action, not raw workflow internals.",
       ],
       proactivityPlan,
     };

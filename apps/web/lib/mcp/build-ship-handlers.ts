@@ -605,7 +605,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
 
     await commentOnPR({
       owner: repoOwner, repo: repoName, prNumber: prResult.prNumber,
-      body: `This PR requires human review: ${reasons.join(", ")}.\n\n${formatGateReport(gateResult)}`,
+      body: `This PR requires employee review: ${reasons.join(", ")}.\n\n${formatGateReport(gateResult)}`,
       token,
     }).catch(() => {});
 

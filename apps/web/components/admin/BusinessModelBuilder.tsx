@@ -318,7 +318,7 @@ function CreateForm({
                             marginBottom: 2,
                           }}
                         >
-                          HITL tier
+                          Oversight
                         </label>
                         <select
                           value={role.hitlTierDefault}

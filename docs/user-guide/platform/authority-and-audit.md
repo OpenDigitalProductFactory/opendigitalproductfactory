@@ -41,7 +41,7 @@ Metrics instead of filling the journal with low-value chatter.
 1. Name the exact actor, action, resource, route, and time window. Avoid starting
    from a broad claim such as “the coworker has admin.”
 2. In the **Effective Permissions** inspector, select the user role and AI
-   coworker whose combined access you need to understand. Separate the human
+   coworker whose combined access you need to understand. Separate the employee
    role from the coworker grant before changing either one.
 3. In **Authority**, inspect standing agent grants, temporary delegation chains,
    and the shared authority binding. Runtime grants remain execution truth;
@@ -65,7 +65,7 @@ Metrics instead of filling the journal with low-value chatter.
 - **Route not visible** — inspect the user's platform role and authority
   binding.
 - **Route visible, action denied at execution** — inspect coworker grants,
-  delegated scope, record scope, connection state, sensitivity, and HITL
+  delegated scope, record scope, connection state, sensitivity, and oversight
   policy.
 - **Action approved, tool failed** — inspect the execution record and provider
   or service health; do not grant more authority as a connection repair.

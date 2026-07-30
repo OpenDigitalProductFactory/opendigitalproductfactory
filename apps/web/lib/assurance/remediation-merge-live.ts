@@ -241,7 +241,7 @@ export async function createLiveMergeGateAdapters(deps: LiveMergeGateDeps): Prom
         type: "build-stall-escalation",
         source: "build-studio",
         severity: "high",
-        title: `Assurance remediation needs a human merge decision: PR #${pr.prNumber}`,
+        title: `Assurance remediation needs an owner merge decision: PR #${pr.prNumber}`,
         description:
           `Remediation PR #${pr.prNumber} ("${pr.title}") for ${pr.backlogItemId} was NOT auto-merged by the ` +
           `assurance merge gate.\n\nReason: ${reason}\n\nDecide the merge manually. ` +

@@ -315,7 +315,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
     domain: "Employee Management",
     sensitivity: "confidential",
     domainContext:
-      "This page manages employee profiles, role assignments, team structures, HITL tier commitments, and delegation grants. Data here is classified as confidential — it contains personal role and accountability information. Every critical decision must have a qualified human in the loop. Only firstName and lastName are required to add an employee — all other fields (email, department, position, start date) are optional. Use query_employees to search before creating. Use list_departments and list_positions when the user doesn't know the exact department or position name.",
+      "This page manages employee profiles, role assignments, team structures, oversight commitments, and delegation grants. Data here is classified as confidential — it contains personal role and accountability information. Every critical decision must have a qualified employee in the loop. Only firstName and lastName are required to add an employee — all other fields (email, department, position, start date) are optional. Use query_employees to search before creating. Use list_departments and list_positions when the user doesn't know the exact department or position name.",
     domainTools: [
       "query_employees",
       "create_employee",
@@ -335,7 +335,7 @@ export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
       },
       {
         label: "Role tiers",
-        description: "Review HITL tiers and SLA commitments",
+        description: "Review oversight and SLA commitments",
         capability: "view_employee",
         prompt: "Explain the role tiers and their SLA commitments",
       },

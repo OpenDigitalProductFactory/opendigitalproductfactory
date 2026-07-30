@@ -226,7 +226,7 @@ const WORKSPACE_SECTION_BLUEPRINTS: Array<{
   {
     key: "ai-control",
     label: "Direct AI coworkers",
-    description: "A small human team can supervise specialists here while AI fills in deep expertise.",
+    description: "A small employee team can supervise specialists here while AI fills in deep expertise.",
     tileKeys: ["ai_workforce", "build", "documents", "platform", "admin"],
   },
   {

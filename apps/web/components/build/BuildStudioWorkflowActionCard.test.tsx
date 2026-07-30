@@ -258,8 +258,8 @@ describe("BuildStudioWorkflowActionCard WWMD visibility", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Capture human direction" }));
-    fireEvent.change(screen.getByLabelText("Human direction"), {
+    fireEvent.click(screen.getByRole("button", { name: "Capture owner direction" }));
+    fireEvent.change(screen.getByLabelText("Owner direction"), {
       target: { value: "Proceed after the owner confirms the implementation scope." },
     });
     fireEvent.change(screen.getByLabelText("Decision criteria"), {

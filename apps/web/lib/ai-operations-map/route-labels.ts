@@ -112,7 +112,7 @@ export const SUCCESS_SIGNAL_COPY: Record<OperationsMapActivitySuccessSignal, { l
   "review-passed": { label: "Review passed", description: "Output passed review." },
   failed: { label: "Failed", description: "This step failed and needs attention." },
   retried: { label: "Retried", description: "Needed at least one retry before settling." },
-  attention: { label: "Needs attention", description: "Outcome was flagged for a human look." },
+  attention: { label: "Needs attention", description: "Outcome was flagged for an employee look." },
   unknown: { label: "No outcome yet", description: "This route hasn't produced a recorded outcome." },
 };
 

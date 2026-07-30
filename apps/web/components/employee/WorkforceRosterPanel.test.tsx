@@ -58,7 +58,7 @@ describe("WorkforceRosterPanel", () => {
     expect(html).toContain("approval owner");
     expect(html).toContain("Chief Executive Officer"); // resolved parity/owner role
     expect(html).toContain("(role)"); // broad-owner scope hint
-    expect(html).toContain("T2"); // HITL tier
+    expect(html).toContain("Reviewed"); // oversight tier, plain language
     expect(html).toContain("claude-sonnet-4-6"); // model
     expect(html).toContain("200k/day"); // token budget
     expect(html).toContain("unmet needs");

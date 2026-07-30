@@ -128,6 +128,36 @@ export const ROUTE_SWEEP_EXCLUSIONS = {
   "/platform/schedule": "wall-clock-collection",
   "/workspace/calendar": "wall-clock-collection",
   "/platform/development/change-lanes": "wall-clock-collection",
+  // Workspace HOME has the same defect as its /workspace/calendar child, which was
+  // already excluded: loadPlatformWorkspaceHomeData derives a calendar window from
+  // the wall clock — `new Date(now.getFullYear(), now.getMonth(), -7)` through
+  // `new Date(now.getFullYear(), now.getMonth() + 1, 7)` — so which calendar
+  // entities are visible on arrival moves with the date, and the frozen word
+  // baseline drifts on untouched code (measured: 199→211 words on a run of
+  // BI-F2EC4699, whose diff touches this route only for net-zero copy). Same
+  // signature and magnitude as the /platform/schedule 331→342 case above. Remove
+  // once the fixture can pin the app-visible clock (BI-0C6C2153).
+  "/workspace": "wall-clock-collection",
+  // Live-orchestration-state routes. These drift because CONCURRENT SESSIONS and
+  // in-run cron fires mutate the platform state they render, not only because the
+  // clock advances — so the frozen baseline cannot hold even within a single SHA.
+  // Both were caught failing on BI-F2EC4699's branch on commits that change no
+  // rendered output at all (see BI-0C6C2153 for the four-run same-SHA evidence):
+  //
+  //   /ops/self-upgrade      structureChanged=true, no word delta, no budget
+  //                          failure — it renders getSelfUpgradeStatus() +
+  //                          listSelfUpgradeRuns() and stamps
+  //                          new Date().toISOString(), so its heading/landmark
+  //                          shape changes as runs are created and completed.
+  //   /admin/scheduled-jobs  1542 -> 1784 words (+242) — every row shows
+  //                          nextRunAt (computeNextCronRun(schedule, new Date())),
+  //                          lastRunAt, and a health badge, and crons fire during
+  //                          the sweep itself.
+  //
+  // Remove once the fixture pins the app-visible clock AND isolates platform state
+  // from concurrent writers (BI-0C6C2153).
+  "/ops/self-upgrade": "wall-clock-collection",
+  "/admin/scheduled-jobs": "wall-clock-collection",
 } as const satisfies Record<string, RouteSweepExclusionReason>;
 
 export type RouteShellPolicy = {

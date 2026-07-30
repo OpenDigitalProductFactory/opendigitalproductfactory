@@ -150,9 +150,9 @@ export async function evaluateBuildStudioDecision(input: {
     return {
       status: "needs-human",
       recommendation,
-      reasonSummary: sanitizeOperatorSummary(response.data?.reasoning, "WWMD requires human review."),
-      operatorActionLabel: "Ask for human decision",
-      auditSummary: `Decision requires human review for ${input.request.question}.`,
+      reasonSummary: sanitizeOperatorSummary(response.data?.reasoning, "WWMD requires an owner review."),
+      operatorActionLabel: "Ask for an owner decision",
+      auditSummary: `Decision requires owner review for ${input.request.question}.`,
     };
   }
 

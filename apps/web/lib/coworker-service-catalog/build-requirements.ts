@@ -228,7 +228,7 @@ const TRIGGERS: TriggerDefinition[] = [
       reason: "Regulated or sensitive operational domains need specialist requirements before implementation.",
     },
     obligations: ["Classify the sensitive domain, affected parties, authority boundary, and required evidence before build execution."],
-    controls: ["Add acceptance criteria for authorization, audit, retention, notification, rollback, and human checkpoint behavior."],
+    controls: ["Add acceptance criteria for authorization, audit, retention, notification, rollback, and employee checkpoint behavior."],
     prohibitedPatterns: ["Allowing autonomous implementation to set policy, legal, identity, or regulated operational behavior without review."],
     providerRequirements: [],
     costTracking: [],

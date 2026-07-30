@@ -351,7 +351,7 @@ async function deriveUpstreamFork(
         prUrl,
         prNumber,
         packId: pack.packId,
-        errorMessage: delivery.lastError ?? "Pull request delivery needs a human decision",
+        errorMessage: delivery.lastError ?? "Pull request delivery needs an owner decision",
       };
     }
     return { state: "in_progress", prUrl, prNumber, packId: pack.packId, errorMessage: null };

@@ -79,7 +79,7 @@ function CoworkerSection({ vm }: { vm: DigitalProductView }): ReactElement | nul
   // human-role parity anchor, and its approval/interface owner.
   const fields = [
     { label: "Coworker", value: coworker.agentId },
-    { label: "Human-role parity", value: coworker.humanRoleParity },
+    { label: "Employee-role parity", value: coworker.humanRoleParity },
     { label: "Approval / interface owner", value: coworker.approvalInterfaceOwner ?? "broad (unassigned)" },
   ];
   return (

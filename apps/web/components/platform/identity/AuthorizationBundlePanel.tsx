@@ -1,3 +1,5 @@
+import { oversightLabel } from "@/lib/workforce/oversight-copy";
+
 type RoleBundle = {
   roleId: string;
   name: string;
@@ -90,7 +92,7 @@ export function AuthorizationBundlePanel({
                     <h3 className="mt-1 text-sm font-semibold text-[var(--dpf-text)]">{bundle.name}</h3>
                   </div>
                   <span className="rounded-full border border-[var(--dpf-border)] px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-[var(--dpf-text)]">
-                    HITL {bundle.hitlTierMin}+
+                    {oversightLabel(bundle.hitlTierMin, { dense: true })}+
                   </span>
                 </div>
                 {bundle.description ? (
@@ -144,7 +146,7 @@ export function AuthorizationBundlePanel({
 
         <section className="space-y-4">
           <article className="rounded-2xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-5">
-            <h2 className="text-base font-semibold text-[var(--dpf-text)]">Current human assignments</h2>
+            <h2 className="text-base font-semibold text-[var(--dpf-text)]">Current employee assignments</h2>
             <p className="mt-1 text-sm text-[var(--dpf-muted)]">
               Users inherit authorization through platform roles, then pick up narrower working context through team memberships.
             </p>

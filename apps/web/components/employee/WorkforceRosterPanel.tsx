@@ -14,6 +14,7 @@
 import Link from "next/link";
 
 import type { WorkforceMember, WorkforceRoster } from "@/lib/workforce/workforce-roster";
+import { oversightLabel } from "@/lib/workforce/oversight-copy";
 
 function StatPill({ label, value }: { label: string; value: string | number }) {
   return (
@@ -43,7 +44,7 @@ function AgentNeeds({ member }: { member: WorkforceMember }) {
       <StatPill label="stream" value={needs.valueStream ?? "—"} />
       <StatPill label="role parity" value={needs.humanRoleParity?.roleName ?? "—"} />
       <StatPill label="approval owner" value={ownerValue} />
-      <StatPill label="HITL" value={`T${needs.hitlTier}`} />
+      <StatPill label="Oversight" value={oversightLabel(needs.hitlTier, { short: true })} />
       <StatPill label="model" value={needs.model ?? "unset"} />
       <StatPill label="budget" value={tokenBudget} />
       <StatPill label="tools" value={needs.toolGrantCount} />

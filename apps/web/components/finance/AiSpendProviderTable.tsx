@@ -103,7 +103,7 @@ const columns: Column<AiSpendProviderTableRow>[] = [
   },
   {
     key: "asks",
-    header: "Human asks",
+    header: "Employee asks",
     cell: (row) => (
       <div className="flex items-center gap-2">
         <StatusBadge

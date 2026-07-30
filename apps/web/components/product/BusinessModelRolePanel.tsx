@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { assignUserToBusinessModelRole, revokeUserFromBusinessModelRole } from "@/lib/actions/business-model";
+import { oversightLabel, oversightStyle } from "@/lib/workforce/oversight-copy";
 
 type UserOption = { id: string; email: string; displayName: string | null };
 
@@ -45,13 +46,6 @@ type Props = {
   productId: string;
   assignedModels: AssignedBusinessModel[];
   users: UserOption[];
-};
-
-const HITL_COLOURS: Record<number, string> = {
-  0: "var(--dpf-error)",
-  1: "var(--dpf-warning)",
-  2: "var(--dpf-info)",
-  3: "var(--dpf-success)",
 };
 
 const ESCALATION_NAMES: Record<string, string> = {
@@ -142,7 +136,7 @@ export function BusinessModelRolePanel({ productId, assignedModels, users }: Pro
               <div style={{ padding: "8px 14px 12px" }}>
                 {a.businessModel.roles.map((role) => {
                   const activeAssignment = role.assignments.find((asn) => asn.revokedAt === null);
-                  const tierColour = HITL_COLOURS[role.hitlTierDefault] ?? "var(--dpf-muted)";
+                  const tierStyle = oversightStyle(role.hitlTierDefault);
                   const escalationName = role.escalatesTo ? (ESCALATION_NAMES[role.escalatesTo] ?? role.escalatesTo) : null;
 
                   return (
@@ -166,13 +160,13 @@ export function BusinessModelRolePanel({ productId, assignedModels, users }: Pro
                           <span
                             style={{
                               fontSize: 9,
-                              background: `color-mix(in srgb, ${tierColour} 12%, transparent)`,
-                              color: tierColour,
+                              background: tierStyle.softBg,
+                              color: tierStyle.fg,
                               borderRadius: 3,
                               padding: "1px 5px",
                             }}
                           >
-                            HITL {role.hitlTierDefault}
+                            {oversightLabel(role.hitlTierDefault, { dense: true })}
                           </span>
                         </div>
                         {role.authorityDomain && (

@@ -284,7 +284,7 @@ export function decide(
     };
     const reasoning =
       principles.length === 0
-        ? "No applicable principles to evaluate. The decision needs human judgment instead of advisory math."
+        ? "No applicable principles to evaluate. The decision needs an owner call instead of advisory math."
         : "No options supplied. Nothing to score.";
     return { recommendation: null, scores, flags, reasoning };
   }
@@ -312,7 +312,7 @@ export function decide(
       recommendation: null,
       scores,
       flags,
-      reasoning: `Insufficient signal: ${principles.length} principle(s) applied but every contribution is zero — the options carry no scoreable features and semantic alignment was unavailable. Provide per-option \`features\` maps (or embeddings), or decide by human judgment.`,
+      reasoning: `Insufficient signal: ${principles.length} principle(s) applied but every contribution is zero — the options carry no scoreable features and semantic alignment was unavailable. Provide per-option \`features\` maps (or embeddings), or decide by owner judgment.`,
     };
   }
 
@@ -367,7 +367,7 @@ export function decide(
   }
   if (confidence === "low") {
     parts.push(
-      `Margin is below tieMargin (${tieMargin}); the call is close — recommend human review before committing.`,
+      `Margin is below tieMargin (${tieMargin}); the call is close — recommend owner review before committing.`,
     );
   }
   if (flags.commandmentConflict) {

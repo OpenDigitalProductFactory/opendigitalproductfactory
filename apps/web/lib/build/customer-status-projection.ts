@@ -116,7 +116,7 @@ function nextActionForState(state: WorkCaseState): { nextAction: string; owner: 
     case "awaiting-decision":
       return {
         nextAction: "answer the requested decision so the work can continue.",
-        owner: "human decision-maker",
+        owner: "owner",
       };
     case "waiting-on-system":
       return {
@@ -137,7 +137,7 @@ function nextActionForState(state: WorkCaseState): { nextAction: string; owner: 
     case "cancelled":
       return {
         nextAction: "restart the work only if the business priority still stands.",
-        owner: "human decision-maker",
+        owner: "owner",
       };
     case "intake":
     case "triage":
@@ -172,7 +172,7 @@ function nextActionForPhase(phase: BuildPhase): { nextAction: string; owner: str
       return { nextAction: "resolve the failure and rerun the affected phase.", owner: "Build Studio / operator" };
     case "abandoned":
     default:
-      return { nextAction: "restart the work only if the business priority still stands.", owner: "human decision-maker" };
+      return { nextAction: "restart the work only if the business priority still stands.", owner: "owner" };
   }
 }
 
@@ -271,7 +271,7 @@ export function projectBuildStudioCustomerStatus(args: {
             ? `Autonomous delivery stopped: ${delivery.lastError}.`
             : "Autonomous delivery stopped safely.",
           nextAction: "review the delivery issue and decide how to continue.",
-          owner: "human decision-maker",
+          owner: "owner",
           needsYou: true,
         };
     }

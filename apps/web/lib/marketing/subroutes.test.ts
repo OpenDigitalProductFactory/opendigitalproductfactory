@@ -255,7 +255,7 @@ describe("marketing subroute view models", () => {
     expect(view.candidates[0]).toMatchObject({
       title: "Reply follow-up reminder",
       approvalLabel: "Approval required",
-      safetyLabel: "Human approval before this can run",
+      safetyLabel: "Employee approval before this can run",
     });
   });
 });

@@ -99,7 +99,7 @@ export function orderAttention(items: AttentionItem[]): AttentionItem[] {
 const RESIDUE_LABEL: Record<ResidueReason, string> = {
   "coverage-gap": "the kernel had no applicable principle",
   "principle-conflict": "principles conflict on this call",
-  "high-risk-gate": "policy requires a human for this risk",
+  "high-risk-gate": "policy requires an employee for this risk",
   "self-fix-exhausted": "Build Studio could not self-repair",
   "input-required": "a coworker needs your input to continue",
   "needs-credential": "a credential or authority is missing",

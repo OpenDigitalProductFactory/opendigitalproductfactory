@@ -13,6 +13,7 @@ import {
   PROFESSION_COMPETENCY_LEVELS,
 } from "@dpf/db/wiki-taxonomy";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { oversightLabel } from "@/lib/workforce/oversight-copy";
 
 const GAP_REASON_LABEL: Record<string, string> = {
   unmapped: "Unmapped role",
@@ -145,15 +146,7 @@ export type CoworkerSummary = {
   providerHealthy: boolean;
 };
 
-const HITL_LABELS: Record<number, string> = {
-  0: "human-only",
-  1: "approve",
-  2: "review",
-  3: "autonomous",
-};
-
 function SummaryChipRow({ summary }: { summary: CoworkerSummary }) {
-  const hitlLabel = HITL_LABELS[summary.hitlTier] ?? `tier ${summary.hitlTier}`;
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 20 }}>
       <Chip tone="accent">model: {summary.modelTier}</Chip>
@@ -161,7 +154,7 @@ function SummaryChipRow({ summary }: { summary: CoworkerSummary }) {
       <Chip tone="muted">{summary.skillCount} skill{summary.skillCount === 1 ? "" : "s"}</Chip>
       <Chip tone="muted">{summary.toolCount} tool grant{summary.toolCount === 1 ? "" : "s"}</Chip>
       <Chip tone={summary.hitlTier === 3 ? "warning" : summary.hitlTier === 0 ? "muted" : "accent"}>
-        autonomy: {hitlLabel}
+        oversight: {oversightLabel(summary.hitlTier, { short: true })}
       </Chip>
       <Chip tone={summary.providerHealthy ? "success" : "error"}>
         {summary.providerHealthy ? "provider healthy" : "provider degraded"}
@@ -216,11 +209,8 @@ export function OverviewPanel({ record, summary }: { record: CoworkerRecord; sum
           <InfoCard label="Value stream" value={agent.valueStream ?? "—"} />
           <InfoCard label="Lifecycle stage" value={agent.lifecycleStage} />
           <InfoCard label="Sensitivity" value={agent.sensitivity} />
-          <InfoCard
-            label="HITL tier"
-            value={`${agent.hitlTierDefault} (${agent.hitlTierDefault === 0 ? "human-only" : agent.hitlTierDefault === 3 ? "autonomous" : "review required"})`}
-          />
-          <InfoCard label="Supervisor" value={agent.humanSupervisorId ?? "—"} />
+          <InfoCard label="Oversight" value={oversightLabel(agent.hitlTierDefault)} />
+          <InfoCard label="Supervising employee" value={agent.humanSupervisorId ?? "—"} />
           <InfoCard label="Owning team" value={owningTeam ?? "—"} />
           <InfoCard label="Escalates to" value={agent.escalatesTo ?? "none"} />
           <InfoCard label="Delegates to" value={agent.delegatesTo.length > 0 ? agent.delegatesTo.join(", ") : "none"} />
@@ -543,7 +533,7 @@ export function GovernancePanel({ record }: { record: CoworkerRecord }) {
           <InfoGrid>
             <InfoCard label="Capability class" value={agent.governanceProfile.capabilityClass.name} />
             <InfoCard label="Autonomy level" value={agent.governanceProfile.autonomyLevel} />
-            <InfoCard label="HITL policy" value={agent.governanceProfile.hitlPolicy} />
+            <InfoCard label="Oversight policy" value={agent.governanceProfile.hitlPolicy} />
             <InfoCard label="Delegation" value={agent.governanceProfile.allowDelegation ? "allowed" : "denied"} />
             {agent.governanceProfile.maxDelegationRiskBand && (
               <InfoCard label="Max delegation risk" value={agent.governanceProfile.maxDelegationRiskBand} />

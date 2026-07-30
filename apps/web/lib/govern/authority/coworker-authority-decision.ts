@@ -150,28 +150,28 @@ export type CoworkerAuthorityDecision =
   | CoworkerAuthorityApprovalDecision;
 
 const EXPLANATIONS: Record<CoworkerAuthorityReasonCode, string> = {
-  authorized: "The current human and coworker authority permits this action.",
+  authorized: "Your authority and the coworker's permit this action.",
   "human-identity-missing":
-    "A verified human authority root is required before this coworker can act.",
+    "A verified employee authority root is required before this coworker can act.",
   "agent-identity-missing":
     "The executing coworker identity could not be verified.",
   "human-capability-denied":
-    "The current human does not have authority for this action.",
+    "You do not have authority for this action.",
   "agent-grant-denied":
     "This coworker is not assigned the tool authority required for this action.",
   "delegation-inactive": "The delegated authority chain is no longer active.",
   "delegation-origin-mismatch":
-    "The delegated action is not rooted in the current human authority.",
+    "The delegated action is not rooted in your authority.",
   "delegation-agent-mismatch":
     "The delegated action belongs to a different coworker.",
   "delegation-scope-denied":
     "The delegated authority was narrowed before reaching this action.",
   "delegation-chain-required":
-    "This delegated action has no verifiable chain back to a human.",
+    "This delegated action has no verifiable chain back to an employee.",
   "route-scope-denied":
     "This action is not authorized from the current workspace.",
   "subject-scope-denied":
-    "The current human cannot act on the selected record.",
+    "You cannot act on the selected record.",
   "integration-unavailable":
     "The required connection is not currently authorized and available.",
   "sensitivity-clearance-denied":
@@ -181,7 +181,7 @@ const EXPLANATIONS: Record<CoworkerAuthorityReasonCode, string> = {
   "policy-version-stale":
     "The governing policy changed; the action must be evaluated again.",
   "approval-required":
-    "This action is authorized to proceed only after human approval.",
+    "This action is authorized to proceed only after employee approval.",
   "approval-expired": "The prior approval expired; request a new decision.",
   "approval-binding-mismatch":
     "The prior approval belongs to different work or action details.",
@@ -216,7 +216,7 @@ export function buildCoworkerApprovalBinding(
   const agentId = normalize(input.authContext.actingAgentId);
   if (!humanId || !agentId) {
     throw new Error(
-      "Cannot bind coworker approval without human and agent identities.",
+      "Cannot bind coworker approval without employee and agent identities.",
     );
   }
 

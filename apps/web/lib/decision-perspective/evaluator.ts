@@ -225,7 +225,7 @@ export function evaluateDecisionPerspective(
       ...baseResult,
       outcomeType: "escalate",
       rationale:
-        "Principle conflict detected for this decision class. Escalate to the accountable resolver and capture the human resolution as candidate profile material.",
+        "Principle conflict detected for this decision class. Escalate to the accountable resolver and capture the owner resolution as candidate profile material.",
     };
   }
 
@@ -346,7 +346,7 @@ export function failClosedEvaluation(input: {
   const className = errorClass(input.error);
   const isWwwd = input.isWwwd ?? false;
   const rationale = isWwwd
-    ? `WWWD fail-closed escalation: ${className}. The decision could not be safely evaluated, so it routes to a human.`
+    ? `WWWD fail-closed escalation: ${className}. The decision could not be safely evaluated, so it routes to the owner.`
     : `WWMD fail-closed escalation: ${className}. The decision kernel could not safely evaluate this advancement request.`;
 
   return {

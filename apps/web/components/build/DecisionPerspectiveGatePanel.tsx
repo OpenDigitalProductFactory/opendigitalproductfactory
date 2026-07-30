@@ -43,7 +43,7 @@ function confidenceLabel(score: number | null): string {
 }
 
 function captureLabel(outcomeType: DecisionInteractionGateView["outcomeType"]): string | null {
-  if (outcomeType === "escalate") return "Capture human direction";
+  if (outcomeType === "escalate") return "Capture owner direction";
   if (outcomeType === "defer") return "Capture missing evidence";
   return null;
 }
@@ -51,8 +51,8 @@ function captureLabel(outcomeType: DecisionInteractionGateView["outcomeType"]): 
 function actionPrompt(interaction: DecisionInteractionGateView): string | null {
   if (interaction.outcomeType === "escalate") {
     return interaction.escalationCaptured
-      ? "Human direction has been captured for this gate."
-      : "A responsible human should resolve the ambiguity before this build advances.";
+      ? "Owner direction has been captured for this gate."
+      : "The accountable owner should resolve the ambiguity before this build advances.";
   }
   if (interaction.outcomeType === "defer") {
     return interaction.deferralCaptured
@@ -132,7 +132,7 @@ export function DecisionPerspectiveGatePanel({ interaction, onCapture, voiceOutp
     if (!trimmedAnswer) {
       setCaptureError(
         captureOutcomeType === "escalate"
-          ? "Human direction is required."
+          ? "Owner direction is required."
           : "Missing evidence detail is required.",
       );
       return;
@@ -287,7 +287,7 @@ export function DecisionPerspectiveGatePanel({ interaction, onCapture, voiceOutp
                 </fieldset>
               )}
               <label className="grid gap-1 text-xs font-semibold text-[var(--dpf-text)]">
-                {captureOutcomeType === "escalate" ? "Human direction" : "Missing evidence"}
+                {captureOutcomeType === "escalate" ? "Owner direction" : "Missing evidence"}
                 <textarea
                   value={answer}
                   onChange={(event) => setAnswer(event.target.value)}

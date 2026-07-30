@@ -15,7 +15,7 @@ export function EntraConnectPanel({ state }: { state: EntraConnectionState }) {
         description="Use Entra for workforce sign-in and directory bootstrap when a company already runs on the Microsoft identity stack."
         status={state.status}
         ownershipLabel="Tenant sign-in posture, upstream group bootstrap, and workforce directory facts."
-        dpfAuthorityLabel="Route access, coworker authority, local group meaning, and principal linking for humans and agents."
+        dpfAuthorityLabel="Route access, coworker authority, local group meaning, and principal linking for employees and agents."
         href="/platform/identity/federation#entra-guide"
         lastTestedAt={state.lastTestedAt}
         lastErrorMsg={state.lastErrorMsg}
