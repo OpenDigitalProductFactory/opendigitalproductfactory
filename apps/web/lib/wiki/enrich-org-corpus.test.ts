@@ -192,6 +192,12 @@ function makeProposalInfer(opts: {
   });
 }
 
+/** Keep orchestration tests hermetic. Production embedding is covered by the
+ * embedding adapter tests; the fail-open case below injects its own failure. */
+async function successfulEmbed(): Promise<boolean> {
+  return true;
+}
+
 // ─── Tests ─────────────────────────────────────────────────────────────────
 
 describe("enrichOrgCorpus (BI-7C9D6198)", () => {
@@ -205,6 +211,7 @@ describe("enrichOrgCorpus (BI-7C9D6198)", () => {
       provenance: { sourceType: "data-entry", sourceRef: { field: "mission" } },
       trust: "first-party",
       db,
+      embed: successfulEmbed,
       infer,
     });
 
@@ -259,6 +266,7 @@ describe("enrichOrgCorpus (BI-7C9D6198)", () => {
       provenance: { sourceType: "research", sourceRef: { agent: "scout-coworker", urls: ["https://example.org/market"] } },
       trust: "researched",
       db,
+      embed: successfulEmbed,
       infer,
     });
 
@@ -282,6 +290,7 @@ describe("enrichOrgCorpus (BI-7C9D6198)", () => {
       provenance: { sourceType: "document", sourceRef: { documentId: "doc_42", page: 3 } },
       trust: "derived",
       db,
+      embed: successfulEmbed,
       infer,
     });
 
@@ -305,6 +314,7 @@ describe("enrichOrgCorpus (BI-7C9D6198)", () => {
       provenance: { sourceType: "data-entry", sourceRef: { field: "mission", version: 1 } },
       trust: "first-party",
       db,
+      embed: successfulEmbed,
       infer,
     });
 
@@ -317,6 +327,7 @@ describe("enrichOrgCorpus (BI-7C9D6198)", () => {
       provenance: { sourceType: "data-entry", sourceRef: { version: 1, field: "mission" } }, // key order swapped
       trust: "first-party",
       db,
+      embed: successfulEmbed,
       infer,
     });
 

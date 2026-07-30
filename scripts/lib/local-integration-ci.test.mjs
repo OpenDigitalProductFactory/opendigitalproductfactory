@@ -7,6 +7,7 @@ import {
   createLocalIntegrationPlan,
   createProductionArtifactIdentity,
   createToolchainFingerprint,
+  createCommandFailureDiagnostics,
   resolveGitRevision,
   resolveCommandInvocation,
 } from "./local-integration-ci.mjs";
@@ -45,6 +46,7 @@ describe("createLocalIntegrationPlan", () => {
       platform: "linux",
       arch: "arm64",
       lockfileSha256: "lock-sha",
+      nodeEnv: "NODE_ENV=production",
       nodeOptions: "NODE_OPTIONS=--max-old-space-size=8192",
       testNodeOptions: "NODE_OPTIONS=--no-experimental-webstorage",
     });
@@ -58,6 +60,7 @@ describe("createLocalIntegrationPlan", () => {
       platform: "linux",
       arch: "arm64",
       lockfileSha256: "lock-sha",
+      nodeEnv: "NODE_ENV=production",
       nodeOptions: "NODE_OPTIONS=--max-old-space-size=8192",
       testNodeOptions: "NODE_OPTIONS=--no-experimental-webstorage",
     });
@@ -66,6 +69,7 @@ describe("createLocalIntegrationPlan", () => {
       buildStrategy: "host-next",
       gitVersion: "git version 2.50.1",
       lockfileSha256: "lock-sha",
+      nodeEnv: "NODE_ENV=production",
       nodeOptions: "NODE_OPTIONS=--max-old-space-size=8192",
       testNodeOptions: "NODE_OPTIONS=--no-experimental-webstorage",
       nodeVersion: "v24.0.0",
@@ -93,7 +97,7 @@ describe("createLocalIntegrationPlan", () => {
       "node scripts/check-guards.mjs",
       "env NODE_OPTIONS=--no-experimental-webstorage pnpm --filter web exec vitest run --maxWorkers=4",
       "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web typecheck",
-      "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web exec next build",
+      "env NODE_ENV=production NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web exec next build",
     ]);
   });
 
@@ -307,6 +311,28 @@ describe("createLocalIntegrationPlan", () => {
       () => resolveCommandInvocation(["env", "1BAD=value", "pnpm", "test"]),
       /invalid environment assignment/,
     );
+  });
+
+  it("reports secret-safe child-process failure diagnostics", () => {
+    assert.deepEqual(createCommandFailureDiagnostics({
+      invocation: {
+        command: "pnpm",
+        args: ["--token", "sensitive", "--filter", "web", "exec", "vitest", "run"],
+      },
+      result: {
+        status: 1,
+        signal: null,
+        error: null,
+      },
+      elapsedMs: 1180,
+    }), {
+      command: "pnpm",
+      args: ["--token", "[REDACTED]", "--filter", "web", "exec", "vitest", "run"],
+      elapsedMs: 1180,
+      status: 1,
+      signal: null,
+      error: null,
+    });
   });
 });
 
