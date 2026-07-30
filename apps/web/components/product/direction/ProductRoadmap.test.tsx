@@ -1,14 +1,16 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   projectProductRoadmap,
   type ProductRoadmapProjection,
 } from "@/lib/product-management/product-roadmap";
 import type { ProductRoadmapWorkspace } from "@/lib/product-management/product-roadmap-operating-context";
 import { ProductRoadmap } from "./ProductRoadmap";
+
+afterEach(() => cleanup());
 
 function workspace(
   roadmapOverrides: Partial<ProductRoadmapProjection> = {},
@@ -153,10 +155,8 @@ describe("ProductRoadmap", () => {
       screen.getByText("No canonical work dependency links"),
     ).toBeInTheDocument();
     expect(
-      screen.getAllByText("Source posture and projection boundary"),
-    ).toHaveLength(2);
-    expect(
-      screen.getAllByText(/cannot be imported/),
-    ).toHaveLength(2);
+      screen.getByText("Source posture and projection boundary"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/cannot be imported/)).toBeInTheDocument();
   });
 });
