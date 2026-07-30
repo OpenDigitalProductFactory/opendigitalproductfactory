@@ -53,6 +53,7 @@ import { screenedLocalOnlyBlockReason } from "@/lib/inference/data-screening/blo
 import { soleCapabilityFloorFailure } from "@/lib/inference/routing-exclusion-attribution";
 import { createRoutingTraceId } from "@/lib/routing/routing-trace";
 import { AI_ROUTING_ARCHITECTURE_VERSION } from "@/lib/routing/routing-architecture-version";
+import { buildLocalFallbackBanner, extractLocalFallbackFacts } from "./downgrade-explanation";
 export type { RouteAndCallOptions } from "./routed-inference-options";
 // ─── Result type ────────────────────────────────────────────────────────────
 /** Unified inference result — flat token fields, V2 metadata included. */
@@ -65,6 +66,14 @@ export interface RoutedInferenceResult {
   outputTokens: number;
   downgraded: boolean;
   downgradeMessage: string | null;
+  /**
+   * WHY this turn left the preferred route: "provider-unavailable" = a real
+   * dispatch failed; "not-eligible" = ranking ruled every configured route out
+   * before dispatch and nothing was down. Owner-facing copy MUST branch on this
+   * rather than on `downgraded`, which conflated the two and let one reply
+   * assert both at once. See ./downgrade-explanation.ts (BI-F4D3B9E9d).
+   */
+  downgradeReason: "provider-unavailable" | "not-eligible" | null;
   /** True when tools were stripped due to capability degradation (local model). */
   toolsStripped: boolean;
   /** Responses API: the response ID for chaining subsequent calls. */
@@ -659,6 +668,7 @@ export async function routeAndCall(
         outputTokens: 0,
         downgraded: false,
         downgradeMessage: null,
+        downgradeReason: null,
         toolsStripped,
         routeDecision: decision,
         asyncOperationId: asyncOpId,
@@ -688,6 +698,8 @@ export async function routeAndCall(
       outputTokens: result.tokenUsage?.outputTokens ?? 0,
       downgraded: result.downgraded,
       downgradeMessage: result.downgradeMessage,
+      // Background path: only a real dispatch failure downgrades here.
+      downgradeReason: result.downgraded ? "provider-unavailable" : null,
       toolsStripped,
       routeDecision: decision,
       ...routedRehydrationHandle(prepared.rehydrationHandle),
@@ -728,9 +740,20 @@ export async function routeAndCall(
     (m) => m.providerTier === "user_configured" && (m.status === "active" || m.status === "degraded"),
   );
   const fellToLocal = selectedTier === "bundled" && hasUserConfiguredActive && !result.downgraded;
-  // fellToLocal requires an ACTIVE paid provider (no outage) — it was merely ineligible for this request (usually context-window/capability), not unavailable (BI-9DFAFB4A).
+  // fellToLocal requires an ACTIVE paid provider (no outage) — it was merely ineligible for this request, not unavailable (BI-9DFAFB4A).
+  //
+  // BI-F4D3B9E9(d): the banner used to GUESS the cause and to assert the provider
+  // "is active" — wrong whenever a stronger provider is disabled and a weaker one
+  // is not. Both facts are already in scope, so ./downgrade-explanation.ts reads
+  // them instead of guessing.
   const localFallbackBanner = fellToLocal
-    ? `This turn ran on the bundled local model. Your configured provider is active but wasn't eligible for this request — usually because the request exceeded its context window, or needed a capability it doesn't offer. Local output can be less reliable for tool use and complex reasoning; try a shorter request, or review provider settings in Admin > AI.`
+    ? buildLocalFallbackBanner(
+      extractLocalFallbackFacts({
+        manifests,
+        candidates: decision.candidates,
+        sensitivity: decision.sensitivity,
+      }),
+    )
     : null;
 
   // 6. Persist TokenUsage row for the cost ledger (Phase J).
@@ -756,6 +779,12 @@ export async function routeAndCall(
     outputTokens: result.tokenUsage?.outputTokens ?? 0,
     downgraded: result.downgraded || fellToLocal,
     downgradeMessage: result.downgradeMessage ?? localFallbackBanner,
+    // Opposite causes; never both for one turn (BI-F4D3B9E9d).
+    downgradeReason: result.downgraded
+      ? "provider-unavailable"
+      : fellToLocal
+        ? "not-eligible"
+        : null,
     toolsStripped,
     routeDecision: decision,
     responseId: result.responseId,

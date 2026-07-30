@@ -17,6 +17,22 @@
 // NOT projected here (it stays soft "attention" in readiness). Read-only
 // projection over getProviders(); the credential lifecycle stays owned by the
 // provider-oauth flow.
+//
+// BI-DB6A75D4 — the above was necessary but not sufficient, and the incident it
+// was written for recurred verbatim. selectExpiredCredentialProviders only looks
+// at active/degraded providers, but routing/fallback.ts DISABLES a non-local
+// provider once its credentials genuinely fail. So the moment the failure the
+// detector exists for actually lands, the provider leaves the set the detector
+// scans and no item is ever projected. Observed live: `anthropic-sub` sat
+// status=disabled for four days with zero operator signal (AI-readiness only
+// projects "blocked" domains, and a healthy local model keeps Model Supply out
+// of "blocked"; no other source reads provider status). The founder found out
+// when a coworker turn degraded to the bundled local model and failed.
+//
+// selectDisabledConnectedProviders below closes that: a provider that routing
+// disabled, which HAS a stored credential (i.e. was previously connected), is a
+// reconnect alert. "inactive" is deliberately NOT included — that is an operator
+// choice to turn a provider off, not a failure.
 
 import { getProviders } from "@/lib/ai-provider-data";
 import type { prisma } from "@dpf/db";
@@ -106,14 +122,110 @@ export function selectExpiredCredentialProviders(
   return items;
 }
 
+/** A previously-connected provider that routing has since disabled (BI-DB6A75D4). */
+export type DisabledConnectedProvider = {
+  providerId: string;
+  name: string;
+  /** ISO for the age tie-break: the credential expiry when known, else `now`. */
+  detectedAtIso: string;
+};
+
 /**
- * Load providers whose saved sign-in has expired, as attention items. Thin async
- * wrapper over getProviders() + the pure filter above. Best-effort: any failure
- * yields no items (the aggregate records the source as failed, never throws).
+ * Pure projection: a provider routing disabled while a credential is on file →
+ * reconnect item. Distinct copy from the expired-credential lane because the
+ * cause differs: we know routing turned it off, not that the token lapsed.
+ */
+export function disabledConnectedProviderToAttentionItem(
+  provider: DisabledConnectedProvider,
+): AttentionItem {
+  return {
+    id: `provider-credential:${provider.providerId}`,
+    source: "provider-credential",
+    title: `Reconnect ${provider.name}`,
+    context:
+      `${provider.name} was turned off automatically after its sign-in stopped working, ` +
+      `so the AI workforce can no longer use it. Reconnect it to restore this AI provider — ` +
+      `waiting won't clear it.`,
+    // Routing disabled it on an observed credential failure — a fact, not a judgment call.
+    decisionClass: { scorability: "unscorable" },
+    riskClass: "bounded-write",
+    triage: {
+      timeToAct: "none",
+      residueReason: "needs-credential",
+      blastRadius: provider.name,
+      decideEffort: "one-tap",
+      irreversible: false,
+    },
+    createdAtIso: provider.detectedAtIso,
+    actions: [
+      { kind: "open-in-context", label: "Reconnect provider", href: PROVIDER_RECONNECT_ROUTE },
+    ],
+    deepLink: PROVIDER_RECONNECT_ROUTE,
+    audience: { operator: true },
+  };
+}
+
+/**
+ * Filter provider rows to those routing has DISABLED while a credential is still
+ * on file — the previously-connected-then-failed case that
+ * `selectExpiredCredentialProviders` structurally cannot see (BI-DB6A75D4).
+ *
+ * Deliberate scoping, mirroring the expired lane:
+ *  - `inactive` is NOT included — an operator turning a provider off is a choice.
+ *  - no credential row → never connected → opt-in, not an alert.
+ *  - `authMethod: "none"` (local engines) need no reconnect.
+ *  - `endpointType: "service"` is not a routing target.
+ *
+ * Pure over the row shape so it unit-tests without prisma; `now` is injectable.
+ */
+export function selectDisabledConnectedProviders(
+  rows: ReadonlyArray<{
+    provider: { providerId: string; name: string; status: string; authMethod?: string | null; endpointType?: string | null };
+    credential: { tokenExpiresAt?: string | Date | null; status?: string | null } | null;
+  }>,
+  now: Date = new Date(),
+): DisabledConnectedProvider[] {
+  const items: DisabledConnectedProvider[] = [];
+  for (const row of rows) {
+    const p = row.provider;
+    if ((p.endpointType ?? "").toLowerCase() === "service") continue; // not a routing target
+    if (p.status !== "disabled") continue;
+    const requiresCredential = (p.authMethod ?? "").toLowerCase() !== "none";
+    if (!requiresCredential || !row.credential) continue;
+
+    // Age against the token expiry when we have one, so an older lapse sorts
+    // ahead of a newer one; otherwise the disable is only observable as of now.
+    const expiry = row.credential.tokenExpiresAt;
+    const expiryMs = expiry ? new Date(expiry).getTime() : null;
+    const usableExpiry = expiryMs != null && Number.isFinite(expiryMs) && expiryMs < now.getTime();
+
+    items.push({
+      providerId: p.providerId,
+      name: p.name,
+      detectedAtIso: usableExpiry ? new Date(expiryMs!).toISOString() : now.toISOString(),
+    });
+  }
+  return items;
+}
+
+/**
+ * Load providers needing a reconnect, as attention items: saved sign-in expired
+ * (still routable) OR routing disabled it after a credential failure
+ * (BI-DB6A75D4). Thin async wrapper over getProviders() + the pure filters above.
+ * Best-effort: any failure yields no items (the aggregate records the source as
+ * failed, never throws).
+ *
+ * The two lanes are mutually exclusive by construction — the expired lane
+ * requires active/degraded, this one requires disabled — but they share an item
+ * id, so dedupe by id keeps one row per provider if that ever stops holding.
  */
 export async function loadProviderCredentialItems(): Promise<AttentionItem[]> {
   const rows = await getProviders();
-  return selectExpiredCredentialProviders(rows).map(expiredCredentialToAttentionItem);
+  const items = [
+    ...selectExpiredCredentialProviders(rows).map(expiredCredentialToAttentionItem),
+    ...selectDisabledConnectedProviders(rows).map(disabledConnectedProviderToAttentionItem),
+  ];
+  return [...new Map(items.map((item) => [item.id, item])).values()];
 }
 
 export function suitabilityDriftToAttentionItem(signal: ProviderSuitabilityDriftSignal): AttentionItem {

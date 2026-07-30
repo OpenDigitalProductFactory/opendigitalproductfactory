@@ -84,6 +84,28 @@ separate provider or A2A diagrams to reconcile with this map.
   with the related design stage focused. Mode and focus remain in the URL so
   the exact explanatory view can be shared or revisited.
 
+## When a coworker says it used the backup model
+
+A reply can carry a note that the turn ran on the bundled local model instead of
+your strongest provider. The note names which of two different situations you are
+in, and they need different responses:
+
+- **"… is switched off"** — a provider you had connected was turned off
+  automatically after its sign-in stopped working. Nothing you can rephrase will
+  help; reconnect it under **Platform > AI > Providers**. This case also raises a
+  **Reconnect &lt;provider&gt;** item in your "Needs you" inbox, so you hear about
+  it before a coworker turn degrades rather than after.
+- **"Your configured providers stayed available, but …"** — everything is
+  connected and healthy; this particular request was ruled out of the stronger
+  route. The note names the actual reason (for example the request was longer
+  than the model's context window, or it needed a capability that model does not
+  offer). A shorter request, or a new thread, usually routes back to the stronger
+  model.
+
+The two are mutually exclusive: a single reply never tells you a provider is both
+available and switched off. If a coworker also reports hitting its safety limit,
+the wording of that message matches the same cause.
+
 ## What To Watch
 
 - work being routed to the wrong specialist

@@ -647,23 +647,36 @@ export function buildRuntimeLimitToolLoopMessage(executedTools: ExecutedTool[]):
  * steps." which obscured the actual cause (usually: preferred provider
  * unavailable → fallback model overwhelmed by the tool surface). Respects
  * IDENTITY_BLOCK rule #5 — no provider/model/tool internals exposed.
+ *
+ * BI-F4D3B9E9(d): this branched on `downgraded`, which conflated "a dispatch
+ * failed" with "nothing was eligible" — so it printed "My usual AI was
+ * unavailable" directly beneath a banner that had just said "your configured
+ * provider is active but wasn't eligible". One of the two was always wrong.
+ * It now branches on the routed `downgradeReason` so both statements describe
+ * the same cause, and it no longer tells an owner to connect a provider they
+ * already have connected.
  */
-function buildMaxIterationsExhaustedMessage(params: {
-  downgraded: boolean;
+export function buildMaxIterationsExhaustedMessage(params: {
+  downgradeReason: "provider-unavailable" | "not-eligible" | null;
   executedTools: ExecutedTool[];
 }): string {
   const toolSummary = summarizeExecutedToolNames(params.executedTools);
-  const downgradeLead = params.downgraded
+  const downgradeLead = params.downgradeReason === "provider-unavailable"
     ? "My usual AI was unavailable, so I worked through a backup that wasn't able to keep up. "
-    : "";
+    : params.downgradeReason === "not-eligible"
+      ? "My usual AI wasn't a fit for this particular request, so I worked through a backup that wasn't able to keep up. "
+      : "";
   const workNote = toolSummary
     ? `I made several attempts (${toolSummary}) but couldn't complete a final answer before hitting my safety limit.`
     : "I worked through several attempts but couldn't complete a final answer before hitting my safety limit.";
-  // Honest copy (G2, 2026-05-23): no false re-route promises. When downgraded,
-  // point the user at the actual fix; otherwise suggest a smaller question.
-  const suggestion = params.downgraded
-    ? "Connecting a stronger provider (Claude, Gemini, or OpenAI) at Platform > AI > Providers unlocks the work I'm built for. Otherwise, try a narrower question."
-    : "Try the same question again, or break it into a smaller piece.";
+  // Honest copy (G2, 2026-05-23): no false re-route promises. Point at the fix
+  // that matches the actual cause — an owner whose providers are all connected
+  // and merely ineligible must not be told to connect one (BI-F4D3B9E9(d)).
+  const suggestion = params.downgradeReason === "provider-unavailable"
+    ? "Reconnecting or restoring that provider at Platform > AI > Providers unlocks the work I'm built for. Otherwise, try a narrower question."
+    : params.downgradeReason === "not-eligible"
+      ? "A shorter request usually routes back to the stronger model. The note above says what ruled it out."
+      : "Try the same question again, or break it into a smaller piece.";
   return `${downgradeLead}${workNote} ${suggestion}`;
 }
 
@@ -2637,7 +2650,11 @@ export async function runAgenticLoop(params: {
   );
   const downgraded = lastResult?.downgraded ?? false;
   const exhaustedMessage = buildMaxIterationsExhaustedMessage({
-    downgraded,
+    // BI-F4D3B9E9(d): carry the routed cause, not just the boolean, so this copy
+    // agrees with the downgrade banner instead of contradicting it. Older results
+    // that predate the field fall back to the unavailable reading only when they
+    // actually reported a downgrade.
+    downgradeReason: lastResult?.downgradeReason ?? (downgraded ? "provider-unavailable" : null),
     executedTools,
   });
   return {
