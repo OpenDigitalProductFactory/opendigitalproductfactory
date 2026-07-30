@@ -246,7 +246,12 @@ gate, freshness, Prisma generation, migrations, and the cheap doc/repository
 guards run first. Web typecheck then runs before exhaustive Vitest, followed by
 the production build. This preserves every successful-candidate proof while
 returning a definitive compile/type-generation failure before the shared slot
-spends several minutes on tests that cannot make that candidate buildable.
+spends several minutes on tests that cannot make that candidate buildable. The
+executor contract uses the real Windows plan with an injected typecheck exit 2
+and proves that neither Vitest nor the Docker production build is launched
+afterward. Against the motivating failure, this avoids at least the observed
+221.10 seconds of exhaustive test work; green candidates still execute the
+unchanged exhaustive suite and production build.
 
 Claim, heartbeat, signal/fence, and release timestamps are included in the
 evidence and Git-local state. An expired TTL is never permission for the old

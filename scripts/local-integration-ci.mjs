@@ -4,11 +4,10 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
   collectToolchainFingerprint,
-  createCommandFailureDiagnostics,
   createLocalIntegrationPlan,
   createProductionArtifactIdentity,
   dockerBuildTag,
-  resolveCommandInvocation,
+  executeLocalIntegrationPlan,
   resolveGitRevision,
 } from "./lib/local-integration-ci.mjs";
 
@@ -49,24 +48,9 @@ const plan = createLocalIntegrationPlan({
   slotKey: slotKey || undefined,
 });
 const startedAt = new Date().toISOString();
-for (const command of plan.commands) {
-  console.log(`[local-integration-ci] ${command.join(" ")}`);
-  const invocation = resolveCommandInvocation(command);
-  const commandStartedAt = Date.now();
-  const result = spawnSync(invocation.command, invocation.args, {
-    stdio: "inherit",
-    shell: process.platform === "win32",
-    env: invocation.env,
-  });
-  if (result.status !== 0) {
-    const diagnostics = createCommandFailureDiagnostics({
-      invocation,
-      result,
-      elapsedMs: Date.now() - commandStartedAt,
-    });
-    console.error(`[local-integration-ci] command-failure ${JSON.stringify(diagnostics)}`);
-    process.exit(result.status ?? 1);
-  }
+const execution = executeLocalIntegrationPlan(plan);
+if (execution.status !== 0) {
+  process.exit(execution.status);
 }
 if (metadataOut) {
   const evidencePlan = evidencePlanOut

@@ -8,6 +8,7 @@ import {
   createProductionArtifactIdentity,
   createToolchainFingerprint,
   createCommandFailureDiagnostics,
+  executeLocalIntegrationPlan,
   resolveGitRevision,
   resolveCommandInvocation,
 } from "./local-integration-ci.mjs";
@@ -354,6 +355,52 @@ describe("createLocalIntegrationPlan", () => {
       signal: null,
       error: null,
     });
+  });
+});
+
+describe("executeLocalIntegrationPlan", () => {
+  it("does not launch exhaustive tests or a production build after typecheck fails", () => {
+    const launched = [];
+    const errors = [];
+    const plan = createLocalIntegrationPlan({
+      candidateBranch: "fix/controlled-typecheck-red",
+      mode: "single-branch",
+      siblingBranches: [],
+      hostPlatform: "win32",
+    });
+
+    const result = executeLocalIntegrationPlan(plan, {
+      baseEnv: {},
+      platform: "win32",
+      now: () => 100,
+      log: () => {},
+      error: (message) => errors.push(message),
+      spawnSyncImpl(command, args) {
+        launched.push([command, ...args]);
+        return {
+          status: command === "pnpm" && args.includes("typecheck") ? 2 : 0,
+          signal: null,
+        };
+      },
+    });
+
+    assert.equal(result.status, 2);
+    assert.deepEqual(
+      launched.at(-1),
+      ["pnpm", "--filter", "web", "typecheck"],
+      "typecheck must be the terminal launched command",
+    );
+    assert.equal(
+      launched.some((command) => command.includes("vitest")),
+      false,
+      "Vitest must not launch after a red typecheck",
+    );
+    assert.equal(
+      launched.some((command) => command[0] === "docker" || command.includes("next")),
+      false,
+      "the production build must not launch after a red typecheck",
+    );
+    assert.match(errors.join("\n"), /command-failure/);
   });
 });
 
