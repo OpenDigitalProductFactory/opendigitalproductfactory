@@ -1,0 +1,54 @@
+{
+  "version": "1",
+  "accountableOwner": "product-management",
+  "affectedCopies": [
+    "ResearchProposal may retain optional digital-product scope",
+    "MarketingBattlecard may retain optional digital-product scope",
+    "Organization-wide legacy evidence remains unclassified",
+    "Business product operating context remains a projection, not a new persistent authority"
+  ],
+  "migration": {
+    "name": "20260728200000_add_product_scope_to_research_and_battlecards",
+    "backfill": "None. Both scope fields are nullable and existing organization-wide research and battlecards remain unchanged."
+  },
+  "tests": [
+    "apps/web/lib/product-management/product-operating-context.test.ts",
+    "apps/web/lib/product-management/product-operating-context-query.test.ts",
+    "apps/web/lib/marketing/battlecards.test.ts",
+    "apps/web/lib/wiki/research-execution.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:research-proposal-digital-product-scope",
+      "prismaModel": "ResearchProposal",
+      "lifecycleDisposition": "Optional scope follows the retained research proposal; deleting a referenced DigitalProduct is restricted to preserve evidence context.",
+      "fields": [
+        {
+          "fieldId": "data:research-proposal-digital-product-scope#digitalProductId",
+          "resolution": "governed",
+          "reason": "Preserves the existing digital-product research boundary without confusing it with the business Product catalog.",
+          "provenance": "BI-AE062121 canonical operating-context review",
+          "flags": [],
+          "fieldPolicy": "Nullable canonical DigitalProduct relation only; organization-wide legacy rows stay null."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:marketing-battlecard-digital-product-scope",
+      "prismaModel": "MarketingBattlecard",
+      "lifecycleDisposition": "Optional scope follows the retained battlecard; deleting a referenced DigitalProduct is restricted to preserve evidence context.",
+      "fields": [
+        {
+          "fieldId": "data:marketing-battlecard-digital-product-scope#digitalProductId",
+          "resolution": "governed",
+          "reason": "Makes existing digital-product competitive evidence explicit while the operating-context adapter resolves business-product views.",
+          "provenance": "BI-AE062121 compatibility boundary",
+          "flags": [],
+          "fieldPolicy": "Nullable canonical DigitalProduct relation only; no business Product is inferred from legacy text."
+        }
+      ]
+    }
+  ]
+}

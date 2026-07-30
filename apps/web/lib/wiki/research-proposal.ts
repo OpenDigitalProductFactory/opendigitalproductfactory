@@ -11,6 +11,12 @@
 // this layer pure and testable and decoupled from how research runs.
 
 import { prisma } from "@dpf/db";
+import {
+  assertProductIntelligenceScopeExists,
+  buildExactProductIntelligenceScopeWhere,
+  normalizeProductIntelligenceScope,
+  type ProductIntelligenceScopeClient,
+} from "@/lib/product-management/product-intelligence-scope";
 
 export type ResearchProposalStatus =
   | "pending"
@@ -25,6 +31,9 @@ export type ProposedBy = "schedule" | "gap-detection" | "user";
 export type ApprovedProposal = {
   proposalId: string;
   organizationId: string;
+  digitalProductId: string | null;
+  productLineId: string | null;
+  businessProductId: string | null;
   topic: string;
   query: string;
 };
@@ -33,7 +42,7 @@ export type ApprovedProposal = {
 export type OnApproved = (proposal: ApprovedProposal) => Promise<void>;
 
 /** Structural client — satisfied by the real PrismaClient and by test fakes. */
-export type ResearchProposalClient = {
+export type ResearchProposalClient = ProductIntelligenceScopeClient & {
   researchProposal: {
     findFirst: (args: unknown) => Promise<unknown>;
     findMany: (args: unknown) => Promise<unknown>;
@@ -46,10 +55,20 @@ function db(deps: { db?: ResearchProposalClient }): ResearchProposalClient {
   return deps.db ?? (prisma as unknown as ResearchProposalClient);
 }
 
+function requiredText(value: string, label: string): string {
+  const cleaned = value.trim();
+  if (!cleaned) throw new Error(`Research proposal ${label} is required.`);
+  return cleaned;
+}
+
 // ─── Propose ─────────────────────────────────────────────────────────────────
 
 export type ProposeResearchInput = {
   organizationId: string;
+  /** Null/omitted means organization-wide research. Never infer this link. */
+  digitalProductId?: string | null;
+  productLineId?: string | null;
+  businessProductId?: string | null;
   topic: string;
   query: string;
   proposedBy?: ProposedBy;
@@ -65,18 +84,27 @@ export async function proposeResearch(
   deps: { db?: ResearchProposalClient } = {},
 ): Promise<ProposeResearchResult> {
   const client = db(deps);
+  const topic = requiredText(input.topic, "topic");
+  const query = requiredText(input.query, "query");
+  const scope = normalizeProductIntelligenceScope(input);
+  await assertProductIntelligenceScopeExists(scope, client);
+  const scopeWhere = buildExactProductIntelligenceScopeWhere(scope);
 
   const existing = (await client.researchProposal.findFirst({
-    where: { organizationId: input.organizationId, topic: input.topic, status: "pending" },
+    where: {
+      ...scopeWhere,
+      topic,
+      status: "pending",
+    },
     select: { proposalId: true },
   })) as { proposalId: string } | null;
   if (existing) return { proposalId: existing.proposalId, created: false };
 
   const created = (await client.researchProposal.create({
     data: {
-      organizationId: input.organizationId,
-      topic: input.topic,
-      query: input.query,
+      ...scopeWhere,
+      topic,
+      query,
       status: "pending",
       proposedBy: input.proposedBy ?? "schedule",
     },
@@ -86,7 +114,12 @@ export async function proposeResearch(
 
 // ─── Approve ─────────────────────────────────────────────────────────────────
 
-export type ApproveResearchInput = { proposalId: string; decidedByUserId?: string | null };
+export type ApproveResearchInput = {
+  proposalId: string;
+  /** When supplied by an authenticated surface, prevents cross-org decisions. */
+  organizationId?: string;
+  decidedByUserId?: string | null;
+};
 export type ApproveResearchResult = { approved: boolean; proposal: ApprovedProposal | null };
 
 /** Transition pending → approved and fire the onApproved seam exactly once.
@@ -99,8 +132,20 @@ export async function approveResearch(
   const client = db(deps);
 
   const row = (await client.researchProposal.findFirst({
-    where: { proposalId: input.proposalId },
-    select: { proposalId: true, organizationId: true, topic: true, query: true, status: true },
+    where: {
+      proposalId: input.proposalId,
+      ...(input.organizationId ? { organizationId: input.organizationId } : {}),
+    },
+    select: {
+      proposalId: true,
+      organizationId: true,
+      digitalProductId: true,
+      productLineId: true,
+      businessProductId: true,
+      topic: true,
+      query: true,
+      status: true,
+    },
   })) as (ApprovedProposal & { status: string }) | null;
 
   if (!row || row.status !== "pending") return { approved: false, proposal: null };
@@ -113,6 +158,9 @@ export async function approveResearch(
   const proposal: ApprovedProposal = {
     proposalId: row.proposalId,
     organizationId: row.organizationId,
+    digitalProductId: row.digitalProductId,
+    productLineId: row.productLineId,
+    businessProductId: row.businessProductId,
     topic: row.topic,
     query: row.query,
   };
@@ -122,7 +170,12 @@ export async function approveResearch(
 
 // ─── Decline ─────────────────────────────────────────────────────────────────
 
-export type DeclineResearchInput = { proposalId: string; decidedByUserId?: string | null };
+export type DeclineResearchInput = {
+  proposalId: string;
+  /** When supplied by an authenticated surface, prevents cross-org decisions. */
+  organizationId?: string;
+  decidedByUserId?: string | null;
+};
 export type DeclineResearchResult = { declined: boolean };
 
 export async function declineResearch(
@@ -132,7 +185,10 @@ export async function declineResearch(
   const client = db(deps);
 
   const row = (await client.researchProposal.findFirst({
-    where: { proposalId: input.proposalId },
+    where: {
+      proposalId: input.proposalId,
+      ...(input.organizationId ? { organizationId: input.organizationId } : {}),
+    },
     select: { status: true },
   })) as { status: string } | null;
   if (!row || row.status !== "pending") return { declined: false };
@@ -148,6 +204,9 @@ export async function declineResearch(
 
 export type PendingResearchProposal = {
   proposalId: string;
+  digitalProductId: string | null;
+  productLineId: string | null;
+  businessProductId: string | null;
   topic: string;
   query: string;
   proposedBy: string;
@@ -163,6 +222,15 @@ export async function listPendingResearchProposals(
   return (await client.researchProposal.findMany({
     where: { organizationId, status: "pending" },
     orderBy: { proposedAt: "desc" },
-    select: { proposalId: true, topic: true, query: true, proposedBy: true, proposedAt: true },
+    select: {
+      proposalId: true,
+      digitalProductId: true,
+      productLineId: true,
+      businessProductId: true,
+      topic: true,
+      query: true,
+      proposedBy: true,
+      proposedAt: true,
+    },
   })) as PendingResearchProposal[];
 }

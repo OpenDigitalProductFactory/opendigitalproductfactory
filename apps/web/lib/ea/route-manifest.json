@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 587,
+  "routeCount": 595,
   "routes": [
     {
       "routePath": "/",
@@ -1396,6 +1396,21 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/storefront/admin/archetypes/refinement/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/catalog/[catalogItemId]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "catalog",
+        "[catalogItemId]"
+      ],
+      "dynamicParams": [
+        "catalogItemId"
+      ],
+      "file": "apps/web/app/api/storefront/admin/catalog/[catalogItemId]/route.ts"
     },
     {
       "routePath": "/api/storefront/admin/inquiries/[id]/product-backlog",
@@ -6193,6 +6208,20 @@
       "redirectTo": "/ea/capabilities"
     },
     {
+      "routePath": "/portfolio/product-line/[id]/direction",
+      "kind": "page",
+      "segments": [
+        "portfolio",
+        "product-line",
+        "[id]",
+        "direction"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/portfolio/product-line/[id]/direction/page.tsx"
+    },
+    {
       "routePath": "/portfolio/product/[id]",
       "kind": "page",
       "segments": [
@@ -6246,6 +6275,65 @@
         "id"
       ],
       "file": "apps/web/app/(shell)/portfolio/product/[id]/changes/page.tsx"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/direction",
+      "kind": "page",
+      "segments": [
+        "portfolio",
+        "product",
+        "[id]",
+        "direction"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/portfolio/product/[id]/direction/page.tsx"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/direction/intelligence",
+      "kind": "page",
+      "segments": [
+        "portfolio",
+        "product",
+        "[id]",
+        "direction",
+        "intelligence"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/portfolio/product/[id]/direction/intelligence/page.tsx"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/direction/outcomes",
+      "kind": "page",
+      "segments": [
+        "portfolio",
+        "product",
+        "[id]",
+        "direction",
+        "outcomes"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/portfolio/product/[id]/direction/outcomes/page.tsx"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/direction/roadmap",
+      "kind": "page",
+      "segments": [
+        "portfolio",
+        "product",
+        "[id]",
+        "direction",
+        "roadmap"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/portfolio/product/[id]/direction/roadmap/page.tsx"
     },
     {
       "routePath": "/portfolio/product/[id]/health",
@@ -6719,6 +6807,34 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/storefront/items/page.tsx"
+    },
+    {
+      "routePath": "/storefront/items/[id]/catalog",
+      "kind": "page",
+      "segments": [
+        "storefront",
+        "items",
+        "[id]",
+        "catalog"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/storefront/items/[id]/catalog/page.tsx"
+    },
+    {
+      "routePath": "/storefront/items/[id]/purchases",
+      "kind": "page",
+      "segments": [
+        "storefront",
+        "items",
+        "[id]",
+        "purchases"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/storefront/items/[id]/purchases/page.tsx"
     },
     {
       "routePath": "/storefront/sections",

@@ -1,8 +1,12 @@
 // apps/web/app/(shell)/portfolio/product/[id]/offerings/page.tsx
 //
-// Offerings tab — service offerings, SLA targets, and pricing for this product.
+// Offerings tab — operational service commitments for a DigitalProduct.
 
 import { prisma } from "@dpf/db";
+import {
+  loadDigitalProductOperationalOfferings,
+  type OperationalOfferingClient,
+} from "@/lib/products/operational-offerings";
 import { notFound } from "next/navigation";
 
 type Props = {
@@ -12,36 +16,22 @@ type Props = {
 export default async function ProductOfferingsPage({ params }: Props) {
   const { id } = await params;
 
-  const [product, offerings] = await Promise.all([
-    prisma.digitalProduct.findUnique({ where: { id }, select: { id: true } }),
-    prisma.serviceOffering.findMany({
-      where: { digitalProductId: id },
-      orderBy: { name: "asc" },
-      select: {
-        id: true,
-        offeringId: true,
-        name: true,
-        description: true,
-        availabilityTarget: true,
-        mttrHours: true,
-        rtoHours: true,
-        rpoHours: true,
-        supportHours: true,
-        status: true,
-      },
-    }),
-  ]);
+  const { exists, offerings } =
+    await loadDigitalProductOperationalOfferings(
+      prisma as unknown as OperationalOfferingClient,
+      id,
+    );
 
-  if (!product) notFound();
+  if (!exists) notFound();
 
   if (offerings.length === 0) {
     return (
       <div className="text-center py-12">
         <p className="text-sm text-[var(--dpf-muted)]">
-          No service offerings defined for this product yet.
+          No operational service commitments defined for this digital product yet.
         </p>
         <p className="text-xs text-[var(--dpf-muted)] mt-1">
-          Service offerings define how this product is consumed — tiers, SLA targets, and pricing models.
+          Add a service offering when availability, recovery, or support commitments need to be managed.
         </p>
       </div>
     );
@@ -64,8 +54,14 @@ export default async function ProductOfferingsPage({ params }: Props) {
               <span
                 className="text-[9px] px-1.5 py-0.5 rounded-full"
                 style={{
-                  background: o.status === "active" ? "#4ade8020" : "#8888a020",
-                  color: o.status === "active" ? "#4ade80" : "#8888a0",
+                  background:
+                    o.status === "active"
+                      ? "color-mix(in srgb, var(--dpf-success) 13%, transparent)"
+                      : "var(--dpf-surface-2)",
+                  color:
+                    o.status === "active"
+                      ? "var(--dpf-success)"
+                      : "var(--dpf-muted)",
                 }}
               >
                 {o.status}
@@ -83,6 +79,26 @@ export default async function ProductOfferingsPage({ params }: Props) {
               {o.rpoHours != null && <span>RPO: {o.rpoHours}h</span>}
               {o.supportHours && <span>Support: {o.supportHours}</span>}
             </div>
+
+            {o.commercialTrace && (
+              <details className="mt-3 border-t border-[var(--dpf-border)] pt-2">
+                <summary className="cursor-pointer text-dpf-caption font-medium text-[var(--dpf-muted)]">
+                  Commercial trace · {o.commercialTrace.catalogItems.length} catalog item
+                  {o.commercialTrace.catalogItems.length === 1 ? "" : "s"}
+                </summary>
+                <div className="mt-2 space-y-1">
+                  {o.commercialTrace.catalogItems.map((item) => (
+                    <div
+                      key={item.catalogItemId}
+                      className="flex items-center justify-between gap-3 text-dpf-caption"
+                    >
+                      <span className="truncate text-[var(--dpf-text)]">{item.name}</span>
+                      <span className="shrink-0 text-[var(--dpf-muted)]">{item.status}</span>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
           </div>
         ))}
       </div>

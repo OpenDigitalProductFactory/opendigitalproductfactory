@@ -131,7 +131,23 @@ const definitions: ToolDefinition[] = [
               unitPrice: { type: "number", description: "Unit price." },
               discountPercent: { type: "number", description: "Optional per-line discount %." },
               taxPercent: { type: "number", description: "Optional per-line tax %." },
-              productId: { type: "string", description: "Optional DigitalProduct id." },
+              catalogItemId: {
+                type: "string",
+                description: "Preferred exact CatalogItem.id for the sellable configuration.",
+              },
+              catalogSkuId: {
+                type: "string",
+                description: "Optional exact reusable CatalogSku.id selected for this quote line.",
+              },
+              configurationSnapshot: {
+                type: "object",
+                description: "Optional immutable one-off configuration captured on this quote line. Reusable standard configurations should use a published SKU instead.",
+                additionalProperties: true,
+              },
+              productId: {
+                type: "string",
+                description: "Legacy optional DigitalProduct id retained during catalog migration.",
+              },
             },
             required: ["description", "quantity", "unitPrice"],
           },
@@ -330,6 +346,14 @@ async function createQuoteTool(params: Record<string, unknown>, userId: string):
       unitPrice: typeof o["unitPrice"] === "number" ? o["unitPrice"] : 0,
       discountPercent: typeof o["discountPercent"] === "number" ? o["discountPercent"] : undefined,
       taxPercent: typeof o["taxPercent"] === "number" ? o["taxPercent"] : undefined,
+      catalogItemId: typeof o["catalogItemId"] === "string" ? o["catalogItemId"] : undefined,
+      catalogSkuId: typeof o["catalogSkuId"] === "string" ? o["catalogSkuId"] : undefined,
+      configurationSnapshot:
+        o["configurationSnapshot"] !== null &&
+        typeof o["configurationSnapshot"] === "object" &&
+        !Array.isArray(o["configurationSnapshot"])
+          ? o["configurationSnapshot"] as import("@dpf/db").Prisma.InputJsonObject
+          : undefined,
       productId: typeof o["productId"] === "string" ? o["productId"] : undefined,
     };
   });

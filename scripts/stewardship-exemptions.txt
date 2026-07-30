@@ -63,3 +63,20 @@ EdgeNodeCertificate  domain-lifecycle-managed  # Certificate records follow the 
 ProductLine  domain-lifecycle-managed  # Organization-owned hierarchy changes through explicit business-product lifecycle actions and organization cascade, never an age-based sweep.
 Product      domain-lifecycle-managed  # Organization-owned product definitions change through explicit business-product lifecycle actions and product-line cascade, never an age-based sweep.
 OperationalSceneLayout  domain-lifecycle-managed  # Operator-authored geometry follows the owning organization's explicit layout lifecycle and cascades with the organization; an age-based sweep could delete an active floor plan.
+ProductOffering  domain-lifecycle-managed  # Organization-owned commercial packaging follows explicit offering status/effective-date actions and product cascade, never an age-based sweep.
+CatalogItem  domain-lifecycle-managed  # Canonical ways-to-buy follow explicit catalog status/effective-date actions and offering cascade, never an age-based sweep.
+ProductConfiguration  domain-lifecycle-managed  # Reusable configurations follow explicit publish/retire actions and catalog-item cascade, never an age-based sweep.
+CatalogSku  domain-lifecycle-managed  # Reusable selling identities follow explicit publish/retire actions and catalog-item cascade, never an age-based sweep.
+CatalogBundleComponent  domain-lifecycle-managed  # Package membership changes through explicit Catalog Builder effective-dated actions and catalog-item cascade, never an age-based sweep.
+CatalogPriceList  domain-lifecycle-managed  # Business price lists have explicit status/effective dates and organization lifecycle; a generic age sweep could delete a still-referenced commercial definition.
+CatalogPriceListEntry  domain-lifecycle-managed  # Item/SKU prices follow their price-list and catalog lifecycles with explicit effective dates, not record age.
+CatalogPromotion  domain-lifecycle-managed  # Promotions retire through explicit status/effective dates and organization lifecycle; age alone is not a safe deletion signal.
+CatalogPromotionItem  domain-lifecycle-managed  # Promotion targeting follows its promotion/catalog parents and is cascade-managed rather than independently aged.
+CatalogChannelEligibility  domain-lifecycle-managed  # Channel eligibility is effective-dated commercial policy changed by explicit Catalog Builder actions, not a time-based retention sweep.
+ProductSold  domain-lifecycle-managed  # Immutable commercial sale facts follow explicit cancellation/refund and organization lifecycles; age alone cannot determine their legal or reporting usefulness.
+ProductSoldEvidence  domain-lifecycle-managed  # Typed transaction evidence follows its ProductSold and source-authority lifecycle; an independent age sweep would break commercial traceability.
+ProductSoldParty  domain-lifecycle-managed  # Evidence-backed customer roles follow ProductSold and canonical party lifecycles rather than record age.
+ProductSoldEntitlement  domain-lifecycle-managed  # Rights end through their explicit validity/status lifecycle and ProductSold cascade, not a generic age threshold.
+ProductFulfillmentInstance  domain-lifecycle-managed  # Fulfillment records close through booking, rental, or supported-instance lifecycle transitions and ProductSold cascade.
+ProductSoldComponentAllocation  domain-lifecycle-managed  # Non-additive package attribution follows its immutable ProductSold fact and is never independently aged out.
+StorefrontOrderLineItem  domain-lifecycle-managed  # Normalized commercial lines follow the owning StorefrontOrder lifecycle; independent purging would corrupt order and sale evidence.

@@ -325,8 +325,9 @@ describe("generated route-shell registry", () => {
     // that concurrent sessions and in-run crons mutate. All three are tracked for
     // re-inclusion by BI-0C6C2153 once the fixture pins the clock and isolates state.
     expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(197);
-    // 110 -> 113: the three exclusions above.
-    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(113);
+    // The three time/live-state exclusions above plus the dynamic catalog and
+    // product-direction workspaces are explicit in ROUTE_SWEEP_EXCLUSIONS.
+    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(120);
   });
 
   it("keeps contextual sweep exclusions explicit, valid, and non-stale", () => {

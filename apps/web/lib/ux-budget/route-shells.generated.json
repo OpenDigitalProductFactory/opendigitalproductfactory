@@ -1,11 +1,11 @@
 {
   "generator": "apps/web/scripts/build-route-shells.ts",
-  "pageRouteCount": 310,
+  "pageRouteCount": 317,
   "migratedCount": 0,
   "summary": {
     "cockpit": 16,
     "list": 6,
-    "detail": 237,
+    "detail": 244,
     "settings": 12,
     "form": 18,
     "public": 21,
@@ -2794,6 +2794,18 @@
       "confidence": "high"
     },
     {
+      "routePath": "/portfolio/product-line/[id]/direction",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
+      "confidence": "high"
+    },
+    {
       "routePath": "/portfolio/product/[id]",
       "shell": "detail",
       "migrated": false,
@@ -2831,6 +2843,54 @@
     },
     {
       "routePath": "/portfolio/product/[id]/changes",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/direction",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/direction/intelligence",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/direction/outcomes",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
+      "confidence": "high"
+    },
+    {
+      "routePath": "/portfolio/product/[id]/direction/roadmap",
       "shell": "detail",
       "migrated": false,
       "exemptChecks": [
@@ -3290,6 +3350,30 @@
       ],
       "sweepEligible": false,
       "sweepExclusionReason": "storefront-setup-required",
+      "confidence": "high"
+    },
+    {
+      "routePath": "/storefront/items/[id]/catalog",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
+      "confidence": "high"
+    },
+    {
+      "routePath": "/storefront/items/[id]/purchases",
+      "shell": "detail",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "dynamic-fixture-required",
       "confidence": "high"
     },
     {

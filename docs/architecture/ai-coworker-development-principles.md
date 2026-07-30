@@ -280,6 +280,12 @@ Services for Sale**. `DigitalProduct` remains the architecture record for
 software, data, and digital platforms. Storefront archetypes and taxonomy nodes
 are reference definitions; neither is the organization's mutable product truth.
 
+For selectable commercial objects, continue through
+`ProductOffering → CatalogItem`. `StorefrontItem` is a channel projection and
+must not become a second price/name authority. `ServiceOffering` continues to
+own DigitalProduct operational commitments; follow its optional
+`commercialOffering` trace only when that link was explicitly recorded.
+
 The organization is the default provider for a simple business. Consumer claims
 must be derived from real customer, booking, order, subscription, or fulfilment
 evidence. Product-line capture alone never proves a product team, business unit,
@@ -289,6 +295,40 @@ subscriber, entitlement, or consumer.
 
 - filter product lines and products by `organizationId` and `effectiveTo: null`;
 - follow `ProductLine.parentId` for rollups while preserving organization scope;
+- use `CatalogItem` as the exact selectable/requestable object for storefront,
+  quote, sales-desk, partner, and mobile-channel reasoning;
+- query bundle, price-list, promotion, and channel-eligibility rows through the
+  organization-scoped CatalogItem boundary; never treat Storefront projection
+  fields as a second packaging authority;
+- resolve price and promotion windows against an explicit `asOf` time, prefer
+  an exact SKU price over the catalog-item default, and preserve the selected
+  identifiers in the commercial snapshot;
+- count a package sale once; component allocations are non-additive analysis
+  attributes and must not be summed into a second revenue total;
+- query `product-sold-query.ts` for historical purchase/use context rather
+  than rebuilding joins across orders, bookings, rentals, and subscriptions;
+- query `product-operating-context-query.ts` for product-management context
+  instead of reconstructing organization, product-line, commercial,
+  intelligence, demand, delivery, and architecture joins in prompts or routes;
+- keep organization-wide research and battlecards distinct from explicit
+  ProductLine, business Product, and DigitalProduct records; allow at most one
+  narrower scope and never infer it from topic, prompt, route, title, or similar
+  names;
+- use `propose_product_research` when a competitive claim needs external
+  evidence; it creates a pending proposal only, and the coworker must not imply
+  that research ran or knowledge was published;
+- treat reviewed `RawSource → WikiPageSource → WikiPage` provenance as the
+  baseline for changed-since research; never compare against an unreviewed
+  draft as authority;
+- treat an `unavailable` context slice as a missing typed association, not as
+  zero activity or permission to fabricate a placeholder;
+- treat names and emails on transaction evidence as evidence-only unless a
+  canonical account/contact party link exists;
+- describe entitlements and fulfillment instances only when their typed,
+  evidence-backed rows exist;
+- read a quote line's immutable `configurationSnapshot` for one-off choices and
+  its `catalogSkuId` for an exact reusable choice; do not promote a one-off
+  snapshot to a reusable SKU unless the operator deliberately does so;
 - use `StorefrontArchetypeComposition.productLineId` only as channel provenance;
 - defer any business-product-to-digital-product trace until a later governed
   phase has real endpoint evidence and a consuming workflow;

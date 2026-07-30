@@ -4,9 +4,15 @@
 // with each tab as a child route.
 
 import { notFound } from "next/navigation";
-import { prisma } from "@dpf/db";
 import { ProductHeader } from "@/components/product/ProductHeader";
 import { ProductTabNav } from "@/components/product/ProductTabNav";
+import { BusinessProductHeader } from "@/components/product/BusinessProductHeader";
+import { BusinessProductTabNav } from "@/components/product/BusinessProductTabNav";
+import {
+  ProductManagementAccessError,
+  ProductManagementOrganizationNotFoundError,
+  resolveCurrentProductRouteAuthority,
+} from "@/lib/product-management/current-product-operating-context.server";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -16,27 +22,33 @@ type Props = {
 export default async function ProductLayout({ params, children }: Props) {
   const { id } = await params;
 
-  const product = await prisma.digitalProduct.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      productId: true,
-      name: true,
-      description: true,
-      lifecycleStage: true,
-      lifecycleStatus: true,
-      version: true,
-      portfolio: { select: { name: true, slug: true } },
-      taxonomyNode: { select: { name: true, nodeId: true } },
-    },
-  });
-
-  if (!product) notFound();
+  let authority;
+  try {
+    authority = await resolveCurrentProductRouteAuthority(id);
+  } catch (error) {
+    if (
+      error instanceof ProductManagementAccessError ||
+      error instanceof ProductManagementOrganizationNotFoundError
+    ) {
+      notFound();
+    }
+    throw error;
+  }
+  if (!authority) notFound();
 
   return (
     <div>
-      <ProductHeader product={product} />
-      <ProductTabNav productId={product.id} />
+      {authority.kind === "business-product" ? (
+        <>
+          <BusinessProductHeader product={authority.product} />
+          <BusinessProductTabNav productId={authority.product.id} />
+        </>
+      ) : (
+        <>
+          <ProductHeader product={authority.product} />
+          <ProductTabNav productId={authority.product.id} />
+        </>
+      )}
       {children}
     </div>
   );

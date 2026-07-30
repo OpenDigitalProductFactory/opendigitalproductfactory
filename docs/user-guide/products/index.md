@@ -22,6 +22,167 @@ augment it, once a real relationship and consuming workflow exist. Setup does
 not invent that trace, and it does not turn a salon service, hotel room, meal,
 or retail good into a digital product.
 
+DPF assembles product-management summaries from a read-only operating context.
+That context follows the business hierarchy first, then includes a digital
+product only when a real operational Offering link establishes it. Research and
+competitive evidence can be organization-wide or explicitly scoped to one
+enabling digital product. An empty section means no matching evidence exists;
+an unavailable section means the platform does not yet have a safe typed link.
+Neither state is silently presented as healthy, complete, or zero.
+
+## Use Product Direction
+
+Open **Products** and start in **Goods and Services for Sale**. This is the
+business-product hierarchy created from the product mix confirmed during
+Storefront setup. Select a product line to compare its managed products, or
+select a product to open its **Direction** brief.
+
+A product-line comparison currently uses only recorded Product Sold sales and
+additive revenue. Package allocations remain non-additive attribution. Mixed
+currencies are labelled instead of being presented as one valid currency
+total. Margin, adoption, forecasts, and outcomes are not inferred when their
+typed evidence does not exist.
+
+The product brief is ordered around work:
+
+1. demand that needs a decision;
+2. changed research and delivery evidence;
+3. funded or in-progress bets;
+4. outcome posture;
+5. scheduled coworker runs.
+
+The **Simple** navigation preference uses guided language and collapses source
+detail. **Full** uses a denser professional presentation. This changes only the
+projection; it does not create a different role, product model, provider, or
+consumer.
+
+An unavailable card means the owning contract is not active or no safe typed
+association exists. For example, Objectives and Outcomes remain unavailable
+until their owning product-management phase is installed. An empty card means
+the source is available but has no matching evidence. Neither condition is
+rendered as a healthy zero.
+
+The stable product URL is shared through a compatibility boundary. A business
+Product receives the business header and Direction navigation. A
+`DigitalProduct` keeps its existing lifecycle, architecture, delivery, and
+operations navigation. DPF never guesses a business Product from a digital
+product or offering; an ambiguous identifier fails closed.
+
+**Preview a demand review** explains the read scope, sources, proposed writes,
+approval boundary, and schedule effect before leaving the page. The Direction
+brief itself does not send a prompt, approve funding, or mutate backlog data.
+
+## Build Continuous Product Intelligence
+
+From a business Product, open **Direction → Intelligence**. The page keeps four
+things visibly separate:
+
+- research proposals waiting for a person to approve or skip;
+- completed research drafts waiting for Knowledge review;
+- published Wiki knowledge that has been reviewed;
+- competitive battlecards, which retain positioning without becoming a second
+  citation store.
+
+Choose **Propose research** to write one focused question. The preview shows the
+business Product scope and the proposed write before anything is saved. Saving
+creates a pending proposal only. A web and inference run begins only after a
+person approves it, and its result remains a draft until someone reviews and
+publishes it in Knowledge.
+
+Choose **Schedule a recurring scan** when the question should be revisited
+weekly or monthly. Each run creates another reviewable proposal; it does not
+search, spend inference capacity, or publish automatically. You can pause,
+resume, or request the next proposal run from the same page.
+
+Evidence labels distinguish **This product**, **Product line**, **Whole
+business**, and **Enabling digital architecture**. ProductLine/Product evidence
+does not become DigitalProduct architecture, and a DigitalProduct link is never
+used to infer a business Product. Reviewed research exposes its source URLs,
+retrieval time, confidence, and whether it is the first baseline or a change
+since the last reviewed baseline. A stale warning means the evidence is older
+than 30 days; it is not a claim that the finding is false.
+
+If no source returns a useful result, the completed proposal says so instead of
+creating a fabricated report. Failed runs remain visible with their failure
+summary. A first-run page offers one useful research action rather than
+displaying a zero-filled dashboard.
+
+## From Product To Something A Customer Can Select
+
+The commercial path is:
+
+`Product line → Product → Offering → Catalog item → Storefront item`
+
+- A **Product** is the durable good, service, experience, or access the
+  organization manages.
+- An **Offering** is the provider's commercial promise for that Product.
+- A **Catalog item** is the exact selectable or requestable thing shared by
+  storefront, sales-desk, quote, partner, and future mobile channels.
+- A **Storefront item** is the public presentation of that catalog item. Its
+  name, description, price, and quote requirement come from the catalog while
+  storefront-only presentation such as image, category, call to action, and
+  display order remains on the Storefront item.
+
+For the common one-product case, DPF creates and updates the Product, default
+Offering, and Catalog item together. Owners keep using **Storefront → Items**;
+the underlying record layers are not exposed unless the commercial definition
+actually diverges. A one-line business sees no product-line control. When the
+confirmed business mix has multiple lines, the add-item form asks which real
+line owns the new item. An item labeled **Needs setup link** is an older projection
+that lacks real product-line evidence. Finish or reconcile setup rather than
+guessing a relationship.
+
+A reusable standard configuration may later receive a SKU. A one-off
+configuration selected for a specific quote is captured immutably on that
+quote line and does not create permanent catalog or SKU clutter.
+
+## Package And Price A Catalog Item
+
+After an item has a catalog link, open **Storefront → Items** and choose
+**Manage packaging and sales options** from that item's actions. The first
+control is intentionally simple: confirm how customers complete the purchase.
+Ordinary fixed-price purchases and bookings continue directly; a quote is
+required only when the selected route says so.
+
+Open **Advanced packaging and sales options** only when the business actually
+needs one of these:
+
+- combine existing things you sell into a package;
+- divide one package sale across components for non-additive analysis;
+- add an effective-dated price or seasonal offer;
+- publish a deliberately reusable standard option and SKU;
+- promote a successful one-off quoted option into that reusable catalog;
+- allow or disallow the catalog item in a sales channel.
+
+Adding a package does not move its components to another product line. A
+seasonal offer does not create another Product. New package components begin
+with equal revenue attribution; use **Set exact revenue attribution** when the
+business has a defensible percentage split. The percentages must total 100,
+and the package is still counted as one sale.
+
+## Review Customer Purchases And Use
+
+From a catalog-linked item, choose **Customer purchases and use** to review
+what customers actually selected. Each purchase keeps the historical Product,
+Offering, Catalog item, provider, configuration, and charged amount that
+applied at the time. Later catalog edits do not rewrite that record.
+
+The ordinary view shows the purchase, amount, status, available customer
+evidence, and fulfillment. Open **More traceability** only when you need the
+underlying commercial and transaction references. A package is shown as one
+charged purchase; included-item allocations are labelled as analysis, not
+additional revenue.
+
+DPF distinguishes captured customer details from a canonical customer record.
+For example, a booking email remains useful transaction evidence, but DPF says
+that the customer/account link is not established until a real Customer
+Account or Customer Contact is linked. A purchase by itself never fabricates a
+consumer, subscriber, entitlement, or installed instance.
+
+For configured goods such as cars or homes, an off-the-lot selection can point
+to an exact reusable SKU. A build-to-order selection stays as an immutable
+one-off quote or order snapshot unless an operator explicitly promotes it.
+
 ## Key Concepts
 
 - **Lifecycle Stage** — Where the product is in its development and operational life: Plan, Design, Build, Production, or Retirement.
@@ -39,6 +200,20 @@ or retail good into a digital product.
 
 - Confirm the initial business product mix during Storefront setup
 - Use the Goods and Services for Sale hierarchy for business-product reporting
+- Edit the common Product, default Offering, and Catalog item through one
+  collapsed Storefront item workflow
+- Manage optional packages, dated prices, promotions, reusable SKUs, channel
+  eligibility, and fulfillment routes without creating parallel products
+- Review catalog-linked purchases and fulfillment with honest customer evidence
+- Review product context with organization-wide and product-specific evidence
+  kept visibly distinct
+- Propose, approve, review, and repeat product research while retaining source
+  provenance and human publication control
+- Schedule proposal-only competitive scans without unattended research or
+  publication
+- Compare product-line sales evidence and drill into a business Product's
+  Direction brief
+- Switch between guided and professional density without forking product truth
 - Browse all products with filtering by lifecycle stage, status, portfolio, and taxonomy
 - View a product's full profile including its health metrics, linked backlog items, and architecture models
 - Inspect available software identity and support-lifecycle facts without leaving the inventory entity detail page

@@ -85,7 +85,22 @@ describe("CRM tool handlers", () => {
     mockCrm.createQuote.mockResolvedValue({ quoteId: "QUO-1", quoteNumber: "QUO-2026-0001", status: "draft", currency: "USD", totalAmount: "1100" });
     const res = await executeTool(
       "create_quote",
-      { opportunityId: "o1", validUntil: "2026-07-31", lineItems: [{ description: "Setup", quantity: 1, unitPrice: 1000, taxPercent: 10 }] },
+      {
+        opportunityId: "o1",
+        validUntil: "2026-07-31",
+        lineItems: [{
+          description: "Configured setup",
+          quantity: 1,
+          unitPrice: 1000,
+          taxPercent: 10,
+          catalogItemId: "catalog-row",
+          catalogSkuId: "sku-row",
+          configurationSnapshot: {
+            capturedAt: "2026-07-28T12:00:00.000Z",
+            selections: { finish: "walnut" },
+          },
+        }],
+      },
       "user_test",
     );
     expect(res.success).toBe(true);
@@ -96,7 +111,18 @@ describe("CRM tool handlers", () => {
         opportunityId: "o1",
         validUntil: "2026-07-31",
         userId: "user_test",
-        lineItems: [expect.objectContaining({ description: "Setup", quantity: 1, unitPrice: 1000, taxPercent: 10 })],
+        lineItems: [expect.objectContaining({
+          description: "Configured setup",
+          quantity: 1,
+          unitPrice: 1000,
+          taxPercent: 10,
+          catalogItemId: "catalog-row",
+          catalogSkuId: "sku-row",
+          configurationSnapshot: {
+            capturedAt: "2026-07-28T12:00:00.000Z",
+            selections: { finish: "walnut" },
+          },
+        })],
       }),
     );
   });

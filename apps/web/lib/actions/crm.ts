@@ -1,11 +1,11 @@
 "use server";
 
-import { prisma } from "@dpf/db";
+import { Prisma, prisma } from "@dpf/db";
 import { registerCustomerAccountSource } from "@/lib/mdm/crosswalk";
 import crypto from "crypto";
 import { STAGE_DEFAULT_PROBABILITY } from "@dpf/validators";
 import { revalidatePath } from "next/cache";
-import { generateInvoiceFromSalesOrder } from "@/lib/actions/finance";
+import { acceptQuoteImpl } from "./crm-quote-acceptance";
 import {
   checkCustomerAccountDuplicates,
   customerAccountNormalizedColumns,
@@ -809,21 +809,14 @@ async function nextQuoteNumber(): Promise<string> {
   return `QUO-${year}-${String(seq).padStart(4, "0")}`;
 }
 
-/** Generate sequential sales order ref: SO-YYYY-NNNN */
-async function nextSalesOrderRef(): Promise<string> {
-  const year = new Date().getFullYear();
-  const result = await prisma.$queryRawUnsafe<{ nextval: bigint }[]>(
-    `SELECT nextval('sales_order_number_seq')`,
-  );
-  const seq = Number(result[0]!.nextval);
-  return `SO-${year}-${String(seq).padStart(4, "0")}`;
-}
-
 export async function createQuote(input: {
   opportunityId: string;
   validUntil: string;
   lineItems: {
     productId?: string;
+    catalogItemId?: string;
+    catalogSkuId?: string;
+    configurationSnapshot?: Prisma.InputJsonObject;
     description: string;
     quantity: number;
     unitPrice: number;
@@ -843,6 +836,50 @@ export async function createQuote(input: {
     select: { id: true, accountId: true },
   });
   if (!opp) throw new Error("Opportunity not found");
+
+  const skuSelections = input.lineItems.filter(
+    (
+      line,
+    ): line is typeof line & { catalogSkuId: string; catalogItemId: string } =>
+      Boolean(line.catalogSkuId && line.catalogItemId),
+  );
+  if (
+    input.lineItems.some(
+      (line) => line.catalogSkuId && !line.catalogItemId,
+    )
+  ) {
+    throw new Error("An exact SKU selection requires its catalog item");
+  }
+  if (skuSelections.length > 0) {
+    const selectionAsOf = new Date();
+    const selectedSkus = await prisma.catalogSku.findMany({
+      where: {
+        id: {
+          in: [...new Set(skuSelections.map((line) => line.catalogSkuId))],
+        },
+        status: "active",
+        effectiveFrom: { lte: selectionAsOf },
+        OR: [
+          { effectiveTo: null },
+          { effectiveTo: { gt: selectionAsOf } },
+        ],
+      },
+      select: { id: true, catalogItemId: true },
+    });
+    const skuCatalogItems = new Map(
+      selectedSkus.map((sku) => [sku.id, sku.catalogItemId]),
+    );
+    if (
+      skuSelections.some(
+        (line) =>
+          skuCatalogItems.get(line.catalogSkuId) !== line.catalogItemId,
+      )
+    ) {
+      throw new Error(
+        "Every selected SKU must belong to its quote-line catalog item",
+      );
+    }
+  }
 
   const quoteNumber = await nextQuoteNumber();
   const discountType = input.discountType || "percentage";
@@ -893,6 +930,9 @@ export async function createQuote(input: {
         lineItems: {
           create: lines.map((l) => ({
             productId: l.productId || null,
+            catalogItemId: l.catalogItemId || null,
+            catalogSkuId: l.catalogSkuId || null,
+            configurationSnapshot: l.configurationSnapshot ?? undefined,
             description: l.description,
             quantity: l.quantity,
             unitPrice: l.unitPrice,
@@ -962,6 +1002,9 @@ export async function reviseQuote(quoteId: string, userId?: string) {
         lineItems: {
           create: current.lineItems.map((li) => ({
             productId: li.productId,
+            catalogItemId: li.catalogItemId,
+            catalogSkuId: li.catalogSkuId,
+            configurationSnapshot: li.configurationSnapshot ?? undefined,
             description: li.description,
             quantity: li.quantity,
             unitPrice: li.unitPrice,
@@ -1017,76 +1060,8 @@ export async function sendQuote(quoteId: string, userId?: string) {
 }
 
 export async function acceptQuote(quoteId: string, userId?: string) {
-  const quote = await prisma.quote.findUnique({
-    where: { id: quoteId },
-    include: { opportunity: true },
-  });
-  if (!quote) throw new Error("Quote not found");
-  if (quote.status === "accepted") throw new Error("Quote already accepted");
-
-  const orderRef = await nextSalesOrderRef();
-
-  const result = await prisma.$transaction(async (tx) => {
-    // Accept quote
-    const accepted = await tx.quote.update({
-      where: { id: quoteId },
-      data: { status: "accepted", acceptedAt: new Date() },
-      include: {
-        lineItems: { orderBy: { sortOrder: "asc" } },
-        account: { select: { id: true, accountId: true, name: true } },
-      },
-    });
-
-    // Create sales order
-    const order = await tx.salesOrder.create({
-      data: {
-        orderRef,
-        status: "confirmed",
-        quoteId: accepted.id,
-        accountId: accepted.accountId,
-        totalAmount: accepted.totalAmount,
-        currency: accepted.currency,
-      },
-    });
-
-    // Close opportunity as won
-    await tx.opportunity.update({
-      where: { id: accepted.opportunityId },
-      data: {
-        stage: "closed_won",
-        probability: 100,
-        actualClose: new Date(),
-        stageChangedAt: new Date(),
-        isDormant: false,
-      },
-    });
-
-    return { quote: accepted, salesOrder: order };
-  });
-
-  await logSystemActivity(
-    `Quote ${result.quote.quoteNumber} accepted → Sales Order ${result.salesOrder.orderRef} created`,
-    {
-      type: "quote_event",
-      accountId: result.quote.accountId,
-      opportunityId: result.quote.opportunityId,
-    },
-  );
-
-  await logSystemActivity("Opportunity closed WON (quote accepted)", {
-    type: "status_change",
-    accountId: result.quote.accountId,
-    opportunityId: result.quote.opportunityId,
-  });
-
-  // Auto-generate invoice from sales order
-  try {
-    await generateInvoiceFromSalesOrder(result.salesOrder.id);
-  } catch (err) {
-    console.error("Auto-invoice generation failed for SalesOrder", result.salesOrder.orderRef, err);
-  }
-
-  return result;
+  void userId;
+  return acceptQuoteImpl(quoteId, logSystemActivity);
 }
 
 export async function rejectQuote(

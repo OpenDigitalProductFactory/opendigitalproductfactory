@@ -65,8 +65,11 @@ flowchart LR
    URL if they are ready.
 5. Select **Create Portal**. The platform creates the storefront, its starting
    sections and items, the confirmed product-line and product hierarchy, the
-   matching archetype compositions, and the corresponding business and
-   operational architecture. The organization is the provider. Setup does not
+   matching default commercial offerings and catalog items, the matching
+   archetype compositions, and the corresponding business and operational
+   architecture. Storefront items are channel presentations of those shared
+   catalog items, not a second commercial source of truth. The organization is
+   the provider. Setup does not
    invent product teams, business units, subscribers, entitlements, or
    customers; consumer context appears only after real customer, booking,
    order, subscription, or fulfilment evidence exists. Booking-oriented
@@ -97,6 +100,42 @@ open each relevant workspace:
 
 Select **Publish now** on the Storefront dashboard only after these checks.
 Publishing makes the portal available immediately at `/s/{your-slug}`.
+
+If an older item shows **Needs setup link**, DPF could not find real
+product-line evidence for it during upgrade reconciliation. The item remains
+usable through the compatibility path, but it is not silently attached to a
+guessed product. Confirm the business's product mix before treating that item
+as catalog-backed.
+
+Setup also derives the ordinary customer route from real storefront evidence:
+booking items book a time, purchase items buy directly, rental items reserve,
+and quote-required items request a quote. Setup does not guess a route for an
+ambiguous inquiry. After launch, use an item's contextual **Manage packaging
+and sales options** action only when it needs packages, seasonal prices,
+reusable configurations, or another verified route. Those controls are
+collapsed by default so a simple one-line business keeps the ordinary
+one-item/one-price workflow.
+
+The same confirmed hierarchy becomes the boundary for later product-management
+summaries. Setup does not need extra product-management fields: the
+organization is the provider, and the operating context remains empty or marks
+a source unavailable until real offerings, purchases, research, delivery work,
+or architecture links exist. Adding another product line changes what is
+disclosed, not the underlying provider/consumer model.
+
+Setup does not schedule market research or invent competitor knowledge. After
+launch, an operator may open a business Product's **Direction → Intelligence**
+page to preview a focused proposal or an optional recurring proposal-only scan.
+Research still requires explicit approval, and its draft must be reviewed
+before publication.
+
+After setup, open **Products → Goods and Services for Sale**. The hierarchy is
+shown above the digital-product inventory. A simple one-line business sees one
+line and can go directly to its managed product. A mixed salon, hotel, or
+restaurant can open each confirmed line and compare only the sales evidence
+actually recorded for its products. The Products view does not manufacture
+teams, consumers, subscriptions, outcome scores, or cross-line currency totals
+to make the page look complete.
 
 ## Verify The Customer Experience
 

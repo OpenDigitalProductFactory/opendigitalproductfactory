@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 579,
+  "pageCount": 580,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -818,6 +818,23 @@
         "enforcement",
         "legacy-plan-path-aliases-intentionally-retained",
         "recommended-follow-up-operator-decision"
+      ]
+    },
+    "docs/architecture/business-commercial-catalog.md": {
+      "publicHref": "/architecture/business-commercial-catalog/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "business-commercial-catalog",
+        "authority-boundary",
+        "canonical-and-projected-fields",
+        "configurations-and-quotes",
+        "packaging-prices-promotions-and-routes",
+        "product-sold-ledger",
+        "product-operating-context-query-boundary",
+        "direction-route-and-projection-boundary",
+        "fleet-safe-evolution"
       ]
     },
     "docs/architecture/capability-driven-runtime-profiles.md": {
@@ -9920,6 +9937,11 @@
       "publishedPortal": true,
       "anchors": [
         "overview",
+        "use-product-direction",
+        "build-continuous-product-intelligence",
+        "from-product-to-something-a-customer-can-select",
+        "package-and-price-a-catalog-item",
+        "review-customer-purchases-and-use",
         "key-concepts",
         "what-you-can-do",
         "reading-product-health"
@@ -9978,7 +10000,8 @@
         "workflow",
         "managing-a-row",
         "fixing-generated-content-that-doesnt-fit",
-        "what-to-watch"
+        "what-to-watch",
+        "purchase-traceability"
       ]
     },
     "docs/user-guide/storefront/inbox-and-enquiries.md": {

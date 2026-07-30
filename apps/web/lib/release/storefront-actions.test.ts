@@ -10,6 +10,10 @@ vi.mock("@dpf/db", () => {
     storefrontInquiry: { create: vi.fn() },
     storefrontBooking: { create: vi.fn() },
     storefrontOrder: { create: vi.fn() },
+    storefrontOrderLineItem: { create: vi.fn() },
+    storefrontItem: { findMany: vi.fn(), findFirst: vi.fn() },
+    productSold: { upsert: vi.fn() },
+    productFulfillmentInstance: { upsert: vi.fn() },
     storefrontDonation: { create: vi.fn() },
     bookingHold: { findFirst: vi.fn(), delete: vi.fn() },
     // Interactive-transaction shim: run the callback against the same mock so
@@ -23,7 +27,12 @@ vi.mock("@dpf/db", () => {
   return { prisma };
 });
 
-import { submitInquiry, submitDonation, submitBooking } from "./storefront-actions";
+import {
+  submitInquiry,
+  submitDonation,
+  submitBooking,
+  submitOrder,
+} from "./storefront-actions";
 import { prisma } from "@dpf/db";
 
 const mockPublishedStorefront = { id: "sf-1", organizationId: "org-1" };
@@ -75,8 +84,228 @@ describe("submitDonation", () => {
   });
 });
 
+describe("submitOrder Product Sold traceability", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(
+      mockPublishedStorefront as never,
+    );
+    vi.mocked(prisma.storefrontOrder.create).mockResolvedValue({
+      id: "order-row",
+      orderRef: "ORD-TESTREF",
+    } as never);
+    vi.mocked(prisma.storefrontOrderLineItem.create).mockResolvedValue({
+      id: "order-line-row",
+    } as never);
+    vi.mocked(prisma.productSold.upsert).mockResolvedValue({
+      id: "sold-row",
+      productSoldId: "PS-TESTREF",
+      evidence: [{ id: "evidence-row" }],
+    } as never);
+    vi.mocked(prisma.productFulfillmentInstance.upsert).mockResolvedValue({
+      id: "instance-row",
+    } as never);
+  });
+
+  it("atomically writes a normalized line and Product Sold for a catalog-linked purchase", async () => {
+    vi.mocked(prisma.storefrontItem.findMany).mockResolvedValue([
+      {
+        itemId: "item-one",
+        name: "Haircut",
+        priceAmount: { toNumber: () => 45 },
+        catalogItem: {
+          id: "catalog-row",
+          catalogItemId: "CATALOG-ONE",
+          name: "Haircut appointment",
+          organizationId: "org-1",
+          offering: {
+            id: "offering-row",
+            offeringId: "OFFERING-ONE",
+            name: "Standard haircut",
+            organizationId: "org-1",
+            providerOrganizationId: "org-1",
+            product: {
+              id: "product-row",
+              productId: "PRODUCT-ONE",
+              name: "Haircut",
+              organizationId: "org-1",
+            },
+          },
+        },
+      },
+    ] as never);
+
+    const result = await submitOrder("salon", {
+      customerEmail: "walk-in@example.com",
+      customerName: "Walk-in customer",
+      items: [{ itemId: "item-one", name: "Haircut", qty: 1, unitPrice: 45 }],
+      totalAmount: 45,
+      currency: "USD",
+    });
+
+    expect(result).toEqual({
+      success: true,
+      ref: "ORD-TESTREF",
+      type: "order",
+    });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.storefrontOrder.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          organizationId: "org-1",
+          storefrontId: "sf-1",
+        }),
+      }),
+    );
+    expect(prisma.storefrontOrderLineItem.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        organizationId: "org-1",
+        storefrontOrderId: "order-row",
+        catalogItemId: "catalog-row",
+        quantity: 1,
+        unitPrice: 45,
+        totalAmount: 45,
+        sourcePosition: 0,
+      }),
+      select: { id: true },
+    });
+    expect(prisma.productSold.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          materializationKey: "storefront-order-line:order-line-row",
+        },
+        create: expect.objectContaining({
+          organizationId: "org-1",
+          providerOrganizationId: "org-1",
+          productId: "product-row",
+          offeringId: "offering-row",
+          catalogItemId: "catalog-row",
+          evidence: {
+            create: expect.objectContaining({
+              storefrontOrderLineItemId: "order-line-row",
+              evidenceKind: "storefront-order-line",
+            }),
+          },
+        }),
+      }),
+    );
+  });
+
+  it("keeps an unlinked legacy item purchasable without fabricating a trace", async () => {
+    vi.mocked(prisma.storefrontItem.findMany).mockResolvedValue([
+      {
+        itemId: "legacy-item",
+        name: "Legacy item",
+        priceAmount: { toNumber: () => 20 },
+        catalogItem: null,
+      },
+    ] as never);
+
+    const result = await submitOrder("shop", {
+      customerEmail: "buyer@example.com",
+      items: [
+        {
+          itemId: "legacy-item",
+          name: "Legacy item",
+          qty: 1,
+          unitPrice: 20,
+        },
+      ],
+      totalAmount: 20,
+    });
+
+    expect(result.success).toBe(true);
+    expect(prisma.storefrontOrderLineItem.create).not.toHaveBeenCalled();
+    expect(prisma.productSold.upsert).not.toHaveBeenCalled();
+  });
+});
+
 describe("submitBooking (enhanced)", () => {
   beforeEach(() => { vi.clearAllMocks(); });
+
+  it("materializes a catalog-linked booking without inventing a consumer", async () => {
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(
+      mockPublishedStorefront as never,
+    );
+    vi.mocked(prisma.storefrontItem.findFirst).mockResolvedValue({
+      id: "storefront-item-row",
+      itemId: "item-one",
+      name: "Haircut",
+      priceAmount: { toNumber: () => 45 },
+      priceCurrency: "USD",
+      catalogItem: {
+        id: "catalog-row",
+        catalogItemId: "CATALOG-ONE",
+        name: "Haircut appointment",
+        organizationId: "org-1",
+        offering: {
+          id: "offering-row",
+          offeringId: "OFFERING-ONE",
+          name: "Standard haircut",
+          organizationId: "org-1",
+          providerOrganizationId: "org-1",
+          product: {
+            id: "product-row",
+            productId: "PRODUCT-ONE",
+            name: "Haircut",
+            organizationId: "org-1",
+          },
+        },
+      },
+    } as never);
+    vi.mocked(prisma.storefrontBooking.create).mockResolvedValue({
+      id: "booking-row",
+      bookingRef: "BK-TESTREF",
+    } as never);
+    vi.mocked(prisma.productSold.upsert).mockResolvedValue({
+      id: "sold-row",
+      productSoldId: "PS-TESTREF",
+      evidence: [{ id: "evidence-row" }],
+    } as never);
+
+    await submitBooking("salon", {
+      itemId: "item-one",
+      customerEmail: "walk-in@example.com",
+      customerName: "Walk-in customer",
+      scheduledAt: new Date("2026-07-29T09:00:00Z"),
+      durationMinutes: 45,
+    });
+
+    expect(prisma.productSold.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { materializationKey: "storefront-booking:booking-row" },
+        create: expect.objectContaining({
+          organizationId: "org-1",
+          providerOrganizationId: "org-1",
+          totalAmount: 45,
+          evidence: {
+            create: expect.objectContaining({
+              evidenceKind: "storefront-booking",
+              storefrontBookingId: "booking-row",
+              evidenceSnapshot: expect.objectContaining({
+                customerEmail: "walk-in@example.com",
+              }),
+            }),
+          },
+        }),
+      }),
+    );
+    expect(
+      vi.mocked(prisma.productSold.upsert).mock.calls[0]?.[0],
+    ).not.toHaveProperty("create.parties");
+    expect(prisma.productFulfillmentInstance.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          evidenceId: "evidence-row",
+          instanceKind: "booking",
+          storefrontBookingId: "booking-row",
+          rentalAgreementId: null,
+          rentableUnitId: null,
+          edgeNodeId: null,
+        }),
+      }),
+    );
+  });
 
   it("validates hold token before creating booking", async () => {
     vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(mockPublishedStorefront as never);

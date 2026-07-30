@@ -1,5 +1,6 @@
 "use client";
 import { useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { ItemFormDialog, type ItemFormData } from "./ItemFormDialog";
 import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
 import type { ArchetypeVocabulary } from "@/lib/storefront/archetype-vocabulary";
@@ -16,6 +17,8 @@ import {
 type Item = {
   id: string;
   itemId: string;
+  catalogItemId?: string | null;
+  compatibilitySource?: "catalog" | "storefront";
   name: string;
   description: string | null;
   category: string | null;
@@ -39,14 +42,15 @@ type Props = {
   defaultCurrency?: string;
   isPublished: boolean;
   residueGroups: ResidueGroup[];
+  productLines?: Array<{ id: string; name: string }>;
 };
 
 const CTA_BADGES: Record<string, { color: string; label: string }> = {
   booking: { color: "var(--dpf-accent)", label: "Booking" },
   purchase: { color: "var(--dpf-success)", label: "Purchase" },
-  inquiry: { color: "#fb923c", label: "Inquiry" },
-  donation: { color: "#f472b6", label: "Donation" },
-  rental: { color: "#a78bfa", label: "Rental" },
+  inquiry: { color: "var(--dpf-warning)", label: "Inquiry" },
+  donation: { color: "var(--dpf-info)", label: "Donation" },
+  rental: { color: "var(--dpf-info)", label: "Rental" },
 };
 
 export function ItemsManager({
@@ -58,7 +62,9 @@ export function ItemsManager({
   defaultCurrency,
   isPublished,
   residueGroups,
+  productLines = [],
 }: Props) {
+  const router = useRouter();
   const [items, setItems] = useState(initial);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
@@ -94,6 +100,11 @@ export function ItemsManager({
         body: JSON.stringify(body),
       });
       const updated = await res.json();
+      if (!res.ok) {
+        throw new Error(
+          updated.message ?? updated.error ?? `HTTP ${res.status}`,
+        );
+      }
       setItems((prev) => prev.map((i) => (i.id === editingItem.id ? { ...i, ...updated } : i)));
     } else {
       const res = await fetch("/api/storefront/admin/items", {
@@ -102,6 +113,11 @@ export function ItemsManager({
         body: JSON.stringify(body),
       });
       const created = await res.json();
+      if (!res.ok) {
+        throw new Error(
+          created.message ?? created.error ?? `HTTP ${res.status}`,
+        );
+      }
       setItems((prev) => [...prev, created]);
     }
   }, [editingItem]);
@@ -273,6 +289,15 @@ export function ItemsManager({
 
           const actions: RowAction[] = [
             { label: `Edit ${item.name}`, onSelect: () => openEdit(item) },
+            ...(item.catalogItemId
+              ? [
+                  {
+                    label: `Manage packaging and sales options for ${item.name}`,
+                    onSelect: () =>
+                      router.push(`/storefront/items/${item.id}/catalog`),
+                  },
+                ]
+              : []),
             {
               label: item.isActive
                 ? `Hide ${item.name} from ${publicWhere}`
@@ -315,6 +340,18 @@ export function ItemsManager({
                   {item.category && (
                     <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)] shrink-0">
                       {item.category}
+                    </span>
+                  )}
+                  {item.compatibilitySource === "storefront" && (
+                    <span
+                      className="shrink-0 rounded-full px-1.5 py-0.5 text-dpf-caption text-[var(--dpf-warning)]"
+                      style={{
+                        background:
+                          "color-mix(in srgb, var(--dpf-warning) 13%, transparent)",
+                      }}
+                      title="Finish the product-line setup so this item can use the shared commercial catalog."
+                    >
+                      Needs setup link
                     </span>
                   )}
                   {!item.isActive && (
@@ -379,6 +416,7 @@ export function ItemsManager({
         defaultPriceCurrency={defaultCurrency}
         isEditing={!!editingItem}
         editingItemId={editingItem?.id}
+        productLines={productLines}
       />
     </div>
   );
@@ -422,6 +460,7 @@ function buildRequestBody(form: ItemFormData): Record<string, unknown> {
     priceCurrency: form.priceCurrency,
     imageUrl: form.imageUrl.trim() || null,
     ctaLabel: form.ctaLabel.trim() || null,
+    productLineId: form.productLineId || null,
   };
 
   if (form.ctaType === "booking") {

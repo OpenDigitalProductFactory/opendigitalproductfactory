@@ -2,6 +2,18 @@ import { describe, it, expect, vi } from "vitest";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
+    organization: {
+      findFirst: vi.fn(async ({ where }: any) => ({ id: where.id })),
+    },
+    productLine: {
+      findFirst: vi.fn(async ({ where }: any) => ({ id: where.id })),
+    },
+    product: {
+      findFirst: vi.fn(async ({ where }: any) => ({ id: where.id })),
+    },
+    digitalProduct: {
+      findFirst: vi.fn(async ({ where }: any) => ({ id: where.id })),
+    },
     scheduledAgentTask: {
       findUnique: vi.fn(),
       update: vi.fn().mockResolvedValue({}),
@@ -17,7 +29,13 @@ vi.mock("@dpf/db", () => ({
 
 // Imported after the mock so the module picks up the mocked prisma. The cron /
 // allocator helpers it imports are pure (no DB), so they run for real.
-import { scheduleAgentTaskFor, getScheduledAgentTasksFor, cancelAgentTaskFor } from "./agent-task-core";
+import {
+  scheduleAgentTaskFor,
+  getScheduledAgentTasksFor,
+  cancelAgentTaskFor,
+  setAgentTaskActiveFor,
+  rerunAgentTaskFor,
+} from "./agent-task-core";
 
 const baseInput = { agentId: "a", title: "t", prompt: "p", routeContext: "/x", schedule: "0 9 1 * *" };
 
@@ -47,12 +65,85 @@ describe("scheduleAgentTaskFor", () => {
       expect.objectContaining({ data: expect.objectContaining({ ownerUserId: "u1" }) }),
     );
   });
+
+  it("stores a typed business-product scope without putting it in prompt text", async () => {
+    const { prisma } = await import("@dpf/db");
+    const create = prisma.scheduledAgentTask.create as ReturnType<typeof vi.fn>;
+    create.mockClear();
+
+    const r = await scheduleAgentTaskFor("u1", {
+      ...baseInput,
+      organizationId: "org-1",
+      businessProductId: "product-1",
+    });
+
+    expect(r.success).toBe(true);
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          organizationId: "org-1",
+          productLineId: null,
+          businessProductId: "product-1",
+          prompt: "p",
+        }),
+      }),
+    );
+  });
+
+  it("rejects conflicting product-line and product scope before scheduling", async () => {
+    const { prisma } = await import("@dpf/db");
+    const create = prisma.scheduledAgentTask.create as ReturnType<typeof vi.fn>;
+    create.mockClear();
+
+    const r = await scheduleAgentTaskFor("u1", {
+      ...baseInput,
+      organizationId: "org-1",
+      productLineId: "line-1",
+      businessProductId: "product-1",
+    });
+
+    expect(r).toMatchObject({ success: false });
+    if (!r.success) expect(r.error).toMatch(/one narrower/i);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("rejects a typed intelligence watch without organization scope or structured config", async () => {
+    const { prisma } = await import("@dpf/db");
+    const create = prisma.scheduledAgentTask.create as ReturnType<typeof vi.fn>;
+    create.mockClear();
+
+    const withoutScope = await scheduleAgentTaskFor("u1", {
+      ...baseInput,
+      taskKind: "product-intelligence-watch",
+      taskConfig: { topic: "market", query: "What changed?" },
+    });
+    const withoutConfig = await scheduleAgentTaskFor("u1", {
+      ...baseInput,
+      organizationId: "org-1",
+      businessProductId: "product-1",
+      taskKind: "product-intelligence-watch",
+      taskConfig: null,
+    });
+
+    expect(withoutScope).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/organization scope/i),
+    });
+    expect(withoutConfig).toMatchObject({
+      success: false,
+      error: expect.stringMatching(/configuration/i),
+    });
+    expect(create).not.toHaveBeenCalled();
+  });
 });
 
 describe("cancelAgentTaskFor", () => {
   it("refuses to cancel a task owned by another user", async () => {
     const { prisma } = await import("@dpf/db");
-    (prisma.scheduledAgentTask.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({ ownerUserId: "owner" });
+    (prisma.scheduledAgentTask.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ownerUserId: "owner",
+      schedule: "0 9 * * 1",
+    });
     const update = prisma.scheduledAgentTask.update as ReturnType<typeof vi.fn>;
     update.mockClear();
 
@@ -73,14 +164,67 @@ describe("cancelAgentTaskFor", () => {
 
   it("cancels a task the caller owns", async () => {
     const { prisma } = await import("@dpf/db");
-    (prisma.scheduledAgentTask.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({ ownerUserId: "u1" });
+    (prisma.scheduledAgentTask.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ownerUserId: "u1",
+      schedule: "0 9 * * 1",
+    });
     const update = prisma.scheduledAgentTask.update as ReturnType<typeof vi.fn>;
     update.mockClear();
 
     const r = await cancelAgentTaskFor("u1", "agent-task-1");
 
     expect(r.success).toBe(true);
-    expect(update).toHaveBeenCalledWith({ where: { taskId: "agent-task-1" }, data: { isActive: false } });
+    expect(update).toHaveBeenCalledWith({
+      where: { taskId: "agent-task-1" },
+      data: { isActive: false, nextRunAt: null },
+    });
+  });
+});
+
+describe("scheduled task controls", () => {
+  it("resumes an owned task on its canonical schedule", async () => {
+    const { prisma } = await import("@dpf/db");
+    (prisma.scheduledAgentTask.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ownerUserId: "u1",
+      schedule: "0 9 * * 1",
+    });
+
+    const result = await setAgentTaskActiveFor("u1", "agent-task-1", true);
+
+    expect(result.success).toBe(true);
+    expect(prisma.scheduledAgentTask.update).toHaveBeenCalledWith({
+      where: { taskId: "agent-task-1" },
+      data: {
+        isActive: true,
+        nextRunAt: expect.any(Date),
+      },
+    });
+    expect(prisma.scheduledJob.update).toHaveBeenCalledWith({
+      where: { jobId: "agent-task-1" },
+      data: {
+        schedule: "0 9 * * 1",
+        nextRunAt: expect.any(Date),
+      },
+    });
+  });
+
+  it("queues an immediate rerun only for the owner", async () => {
+    const { prisma } = await import("@dpf/db");
+    (prisma.scheduledAgentTask.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ownerUserId: "u1",
+      schedule: "0 9 * * 1",
+    });
+
+    const result = await rerunAgentTaskFor("u1", "agent-task-1");
+
+    expect(result.success).toBe(true);
+    expect(prisma.scheduledAgentTask.update).toHaveBeenCalledWith({
+      where: { taskId: "agent-task-1" },
+      data: {
+        isActive: true,
+        nextRunAt: expect.any(Date),
+      },
+    });
   });
 });
 
@@ -98,6 +242,9 @@ describe("getScheduledAgentTasksFor", () => {
         nextRunAt: new Date("2026-07-01T09:00:00.000Z"),
         lastRunAt: null,
         lastStatus: null,
+        organizationId: "org-1",
+        productLineId: null,
+        businessProductId: "product-1",
       },
     ]);
 
@@ -105,6 +252,7 @@ describe("getScheduledAgentTasksFor", () => {
 
     expect(r).toHaveLength(1);
     expect(r[0]!.nextRunAt).toBe("2026-07-01T09:00:00.000Z");
+    expect(r[0]!.businessProductId).toBe("product-1");
     expect(prisma.scheduledAgentTask.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { ownerUserId: "u1" } }),
     );

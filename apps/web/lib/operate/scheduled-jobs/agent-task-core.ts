@@ -11,11 +11,25 @@
 // A "use server" file exports only client-callable actions, so a userId
 // parameter there would be client-spoofable — hence this separate core.
 
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 import { randomUUID } from "crypto";
 import { SCHEDULING_MAP } from "@/lib/operate/scheduled-jobs/scheduling-map";
 import { occupiedTicks, deconflictCron } from "@/lib/operate/scheduled-jobs/scheduling-allocator";
 import { computeNextCronRun } from "@/lib/operate/cron-next-run";
+import {
+  ProductIntelligenceScopeError,
+  assertProductIntelligenceScopeExists,
+  normalizeProductIntelligenceScope,
+  type ProductIntelligenceScopeInput,
+} from "@/lib/product-management/product-intelligence-scope";
+import {
+  isScheduledAgentTaskKind,
+  type ScheduledAgentTaskKind,
+} from "./agent-task-kind";
+import {
+  PRODUCT_INTELLIGENCE_WATCH_TASK_KIND,
+  parseProductIntelligenceWatchConfig,
+} from "@/lib/product-management/product-intelligence-watch-contract";
 
 export type ScheduleAgentTaskInput = {
   agentId: string;
@@ -25,6 +39,13 @@ export type ScheduleAgentTaskInput = {
   /** Cron expression (5-field). */
   schedule: string;
   timezone?: string;
+  /** Omit all three fields for a generic user-owned task. */
+  organizationId?: string | null;
+  productLineId?: string | null;
+  businessProductId?: string | null;
+  /** Typed discriminator/config for deterministic scheduler branches. */
+  taskKind?: ScheduledAgentTaskKind | null;
+  taskConfig?: Record<string, unknown> | null;
 };
 
 export type ScheduleAgentTaskResult =
@@ -41,7 +62,27 @@ export type ScheduledAgentTaskView = {
   nextRunAt: string | null;
   lastRunAt: string | null;
   lastStatus: string | null;
+  organizationId: string | null;
+  productLineId: string | null;
+  businessProductId: string | null;
+  taskKind: ScheduledAgentTaskKind | null;
+  taskConfig: unknown;
 };
+
+function scheduleScopeData(input: ScheduleAgentTaskInput) {
+  const hasProductScope =
+    input.organizationId !== undefined ||
+    input.productLineId !== undefined ||
+    input.businessProductId !== undefined;
+  if (!hasProductScope) {
+    return null;
+  }
+  return normalizeProductIntelligenceScope({
+    organizationId: input.organizationId ?? "",
+    productLineId: input.productLineId,
+    businessProductId: input.businessProductId,
+  });
+}
 
 /**
  * Create a recurring agent task owned by `userId`. De-conflicts the cron tick at
@@ -53,11 +94,46 @@ export async function scheduleAgentTaskFor(
   userId: string,
   input: ScheduleAgentTaskInput,
 ): Promise<ScheduleAgentTaskResult> {
+  if (input.taskKind != null && !isScheduledAgentTaskKind(input.taskKind)) {
+    return { success: false, error: "Unsupported scheduled agent task kind." };
+  }
   if (input.timezone && input.timezone !== "UTC") {
     return {
       success: false,
       error: "Non-UTC timezones are not yet supported. All schedules run in UTC.",
     };
+  }
+
+  let productScope: ReturnType<typeof scheduleScopeData>;
+  try {
+    productScope = scheduleScopeData(input);
+    if (productScope) {
+      await assertProductIntelligenceScopeExists(productScope, prisma);
+    }
+  } catch (error) {
+    if (error instanceof ProductIntelligenceScopeError) {
+      return { success: false, error: error.message };
+    }
+    throw error;
+  }
+  if (input.taskKind === PRODUCT_INTELLIGENCE_WATCH_TASK_KIND) {
+    if (!productScope) {
+      return {
+        success: false,
+        error: "Product intelligence watches require an organization scope.",
+      };
+    }
+    try {
+      parseProductIntelligenceWatchConfig(input.taskConfig);
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Invalid product intelligence watch configuration.",
+      };
+    }
   }
 
   const taskId = `agent-task-${randomUUID().slice(0, 8)}`;
@@ -88,6 +164,11 @@ export async function scheduleAgentTaskFor(
       schedule,
       timezone: input.timezone ?? "UTC",
       ownerUserId: userId,
+      organizationId: productScope?.organizationId ?? null,
+      productLineId: productScope?.productLineId ?? null,
+      businessProductId: productScope?.businessProductId ?? null,
+      taskKind: input.taskKind ?? null,
+      taskConfig: input.taskConfig as Prisma.InputJsonValue | undefined,
       nextRunAt,
     },
   });
@@ -103,9 +184,22 @@ export async function scheduleAgentTaskFor(
 }
 
 /** List the recurring agent tasks owned by `userId`, newest first. */
-export async function getScheduledAgentTasksFor(userId: string): Promise<ScheduledAgentTaskView[]> {
+export async function getScheduledAgentTasksFor(
+  userId: string,
+  scope?: Omit<ProductIntelligenceScopeInput, "digitalProductId">,
+): Promise<ScheduledAgentTaskView[]> {
+  const normalizedScope = scope ? normalizeProductIntelligenceScope(scope) : null;
   const tasks = await prisma.scheduledAgentTask.findMany({
-    where: { ownerUserId: userId },
+    where: {
+      ownerUserId: userId,
+      ...(normalizedScope
+        ? {
+            organizationId: normalizedScope.organizationId,
+            productLineId: normalizedScope.productLineId,
+            businessProductId: normalizedScope.businessProductId,
+          }
+        : {}),
+    },
     orderBy: { createdAt: "desc" },
     select: {
       taskId: true,
@@ -117,11 +211,17 @@ export async function getScheduledAgentTasksFor(userId: string): Promise<Schedul
       nextRunAt: true,
       lastRunAt: true,
       lastStatus: true,
+      organizationId: true,
+      productLineId: true,
+      businessProductId: true,
+      taskKind: true,
+      taskConfig: true,
     },
   });
 
   return tasks.map((t) => ({
     ...t,
+    taskKind: isScheduledAgentTaskKind(t.taskKind) ? t.taskKind : null,
     nextRunAt: t.nextRunAt?.toISOString() ?? null,
     lastRunAt: t.lastRunAt?.toISOString() ?? null,
   }));
@@ -135,22 +235,64 @@ export async function cancelAgentTaskFor(
   userId: string,
   taskId: string,
 ): Promise<{ success: boolean; error?: string }> {
+  return setAgentTaskActiveFor(userId, taskId, false);
+}
+
+export async function setAgentTaskActiveFor(
+  userId: string,
+  taskId: string,
+  isActive: boolean,
+): Promise<{ success: boolean; error?: string }> {
   const task = await prisma.scheduledAgentTask.findUnique({
     where: { taskId },
-    select: { ownerUserId: true },
+    select: { ownerUserId: true, schedule: true },
   });
   if (!task) return { success: false, error: "Scheduled agent task not found" };
   if (task.ownerUserId !== userId) {
-    return { success: false, error: "Not authorized to cancel this scheduled agent task" };
+    return { success: false, error: "Not authorized to change this scheduled agent task" };
   }
 
+  const nextRunAt = isActive ? computeNextCronRun(task.schedule, new Date()) : null;
   await prisma.scheduledAgentTask.update({
     where: { taskId },
-    data: { isActive: false },
+    data: { isActive, nextRunAt },
   });
   await prisma.scheduledJob
-    .update({ where: { jobId: taskId }, data: { schedule: "disabled" } })
+    .update({
+      where: { jobId: taskId },
+      data: {
+        schedule: isActive ? task.schedule : "disabled",
+        nextRunAt,
+      },
+    })
     .catch(() => {});
 
+  return { success: true };
+}
+
+export async function rerunAgentTaskFor(
+  userId: string,
+  taskId: string,
+): Promise<{ success: boolean; error?: string }> {
+  const task = await prisma.scheduledAgentTask.findUnique({
+    where: { taskId },
+    select: { ownerUserId: true, schedule: true },
+  });
+  if (!task) return { success: false, error: "Scheduled agent task not found" };
+  if (task.ownerUserId !== userId) {
+    return { success: false, error: "Not authorized to rerun this scheduled agent task" };
+  }
+
+  const nextRunAt = new Date();
+  await prisma.scheduledAgentTask.update({
+    where: { taskId },
+    data: { isActive: true, nextRunAt },
+  });
+  await prisma.scheduledJob
+    .update({
+      where: { jobId: taskId },
+      data: { schedule: task.schedule, nextRunAt },
+    })
+    .catch(() => {});
   return { success: true };
 }

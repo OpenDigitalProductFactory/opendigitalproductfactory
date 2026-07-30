@@ -3,10 +3,15 @@ import { useState, useEffect, useRef } from "react";
 import type { ArchetypeVocabulary } from "@/lib/storefront/archetype-vocabulary";
 import { DEFAULT_CTA_LABELS } from "@/lib/storefront/cta-labels";
 import { getCurrencySymbol } from "@/lib/finance/currency-symbol";
+import {
+  STOREFRONT_CTA_OPTIONS,
+  storefrontPriceOptions,
+} from "@/lib/products/storefront-commercial-options";
 import { MediaUploader } from "./MediaUploader";
 
 export type ItemFormData = {
   id?: string;
+  productLineId: string;
   name: string;
   description: string;
   category: string;
@@ -29,6 +34,7 @@ export type ItemFormData = {
 };
 
 const EMPTY_FORM: ItemFormData = {
+  productLineId: "",
   name: "",
   description: "",
   category: "",
@@ -48,43 +54,6 @@ const EMPTY_FORM: ItemFormData = {
   suggestedAmount: "",
 };
 
-const CTA_TYPES = [
-  { value: "booking", label: "Booking" },
-  { value: "purchase", label: "Purchase" },
-  { value: "rental", label: "Rental" },
-  { value: "inquiry", label: "Inquiry" },
-  { value: "donation", label: "Donation" },
-];
-
-const PRICE_TYPES_BY_CTA: Record<string, Array<{ value: string; label: string }>> = {
-  booking: [
-    { value: "per-hour", label: "Per hour" },
-    { value: "per-session", label: "Per session" },
-    { value: "fixed", label: "Fixed price" },
-    { value: "free", label: "Free" },
-  ],
-  purchase: [
-    { value: "fixed", label: "Fixed price" },
-    { value: "from", label: "From (minimum)" },
-  ],
-  rental: [
-    { value: "per-session", label: "Per rental period" },
-    { value: "per-hour", label: "Per hour" },
-    { value: "fixed", label: "Fixed price" },
-    { value: "from", label: "From (minimum)" },
-    { value: "free", label: "Free" },
-  ],
-  inquiry: [
-    { value: "quote", label: "Request a quote" },
-    { value: "from", label: "From (starting at)" },
-    { value: "per-hour", label: "Per hour" },
-    { value: "fixed", label: "Fixed price" },
-  ],
-  donation: [
-    { value: "donation", label: "Any amount" },
-  ],
-};
-
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -98,6 +67,7 @@ type Props = {
   isEditing: boolean;
   /** DB id of the item being edited; enables the photo-gallery uploader. */
   editingItemId?: string;
+  productLines?: Array<{ id: string; name: string }>;
 };
 
 export function ItemFormDialog({
@@ -111,12 +81,15 @@ export function ItemFormDialog({
   defaultPriceCurrency = "USD",
   isEditing,
   editingItemId,
+  productLines = [],
 }: Props) {
   const [form, setForm] = useState<ItemFormData>(() => ({
     ...EMPTY_FORM,
+    productLineId:
+      productLines.length === 1 ? productLines[0]!.id : "",
     priceCurrency: defaultPriceCurrency,
     ctaType: defaultCtaType,
-    priceType: PRICE_TYPES_BY_CTA[defaultCtaType]?.[0]?.value ?? "",
+    priceType: storefrontPriceOptions(defaultCtaType)[0]?.value ?? "",
     ...initial,
   }));
   const [saving, setSaving] = useState(false);
@@ -128,13 +101,19 @@ export function ItemFormDialog({
   initialRef.current = initial;
   const defaultCtaTypeRef = useRef(defaultCtaType);
   defaultCtaTypeRef.current = defaultCtaType;
+  const productLinesRef = useRef(productLines);
+  productLinesRef.current = productLines;
   useEffect(() => {
     if (open && !prevOpenRef.current) {
       const ct = defaultCtaTypeRef.current ?? "booking";
       setForm({
         ...EMPTY_FORM,
+        productLineId:
+          productLinesRef.current.length === 1
+            ? productLinesRef.current[0]!.id
+            : "",
         ctaType: ct,
-        priceType: PRICE_TYPES_BY_CTA[ct]?.[0]?.value ?? "",
+        priceType: storefrontPriceOptions(ct)[0]?.value ?? "",
         ...initialRef.current,
       });
     }
@@ -148,7 +127,7 @@ export function ItemFormDialog({
       const next = { ...prev, [field]: value };
       // When CTA type changes, reset price type to first option for new type
       if (field === "ctaType") {
-        next.priceType = PRICE_TYPES_BY_CTA[value]?.[0]?.value ?? "";
+        next.priceType = storefrontPriceOptions(value)[0]?.value ?? "";
       }
       return next;
     });
@@ -165,7 +144,7 @@ export function ItemFormDialog({
     }
   }
 
-  const priceOptions = PRICE_TYPES_BY_CTA[form.ctaType] ?? [];
+  const priceOptions = storefrontPriceOptions(form.ctaType);
   const showPrice = form.ctaType !== "donation" && form.priceType !== "free" && form.priceType !== "quote";
   const showBookingConfig = form.ctaType === "booking";
   const showDonationConfig = form.ctaType === "donation";
@@ -230,13 +209,32 @@ export function ItemFormDialog({
               </datalist>
             </Field>
 
+            {!isEditing && productLines.length > 1 && (
+              <Field label="Product line" required>
+                <select
+                  value={form.productLineId}
+                  onChange={(e) => set("productLineId", e.target.value)}
+                  required
+                  className="w-full px-3 py-1.5 text-sm rounded-md bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
+                >
+                  <option value="">Choose a product line</option>
+                  {productLines.map((line) => (
+                    <option key={line.id} value={line.id}>{line.name}</option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-dpf-caption text-[var(--dpf-muted)]">
+                  Shown because this business sells through more than one product line.
+                </span>
+              </Field>
+            )}
+
             <Field label="Type">
               <select
                 value={form.ctaType}
                 onChange={(e) => set("ctaType", e.target.value)}
                 className="w-full px-3 py-1.5 text-sm rounded-md bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[var(--dpf-text)] outline-none focus:border-[var(--dpf-accent)]"
               >
-                {CTA_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                {STOREFRONT_CTA_OPTIONS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </Field>
           </div>
@@ -468,7 +466,13 @@ export function ItemFormDialog({
             </button>
             <button
               type="submit"
-              disabled={saving || !form.name.trim()}
+              disabled={
+                saving ||
+                !form.name.trim() ||
+                (!isEditing &&
+                  productLines.length > 1 &&
+                  !form.productLineId)
+              }
               className="px-4 py-1.5 text-sm rounded-md font-medium transition-colors disabled:opacity-50 bg-[var(--dpf-accent)] text-white"
             >
               {saving ? "Saving..." : isEditing ? "Save changes" : "Create"}

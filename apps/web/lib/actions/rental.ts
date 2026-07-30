@@ -11,6 +11,15 @@ import {
   type AgreementPeriod,
 } from "@/lib/storefront/rental";
 import { isExclusionViolation } from "@/lib/db/exclusion-violation";
+import {
+  createProductSoldDraft,
+  createTypedFulfillmentInstance,
+  materializeProductSold,
+  persistProductFulfillmentInstance,
+  persistProductSoldComponentAllocations,
+  snapshotProductSoldComponents,
+  transitionProductSoldByEvidence,
+} from "@/lib/products/product-sold";
 
 /** Sentinel: the pre-check found an overlapping agreement for this unit.
  *  Thrown to abort the reservation transaction with a friendly message before
@@ -44,10 +53,32 @@ function makeRef(prefix: string): string {
   return `${prefix}-${crypto.randomUUID().replace(/-/g, "").slice(0, 8).toUpperCase()}`;
 }
 
-async function getStorefront(): Promise<{ id: string }> {
-  const sf = await prisma.storefrontConfig.findFirst({ select: { id: true } });
+async function getStorefront(): Promise<{ id: string; organizationId: string }> {
+  const sf = await prisma.storefrontConfig.findFirst({
+    select: { id: true, organizationId: true },
+  });
   if (!sf) throw new Error("No storefront configured");
   return sf;
+}
+
+function calculateRentalCharge(input: {
+  pricingModel: string;
+  rateAmount: number | undefined;
+  periodStart: Date;
+  periodEnd: Date;
+}): number | null {
+  if (input.rateAmount == null || input.rateAmount < 0) return null;
+  const durationMs = input.periodEnd.getTime() - input.periodStart.getTime();
+  switch (input.pricingModel) {
+    case "fixed":
+      return input.rateAmount;
+    case "per-day":
+      return Math.ceil(durationMs / 86_400_000) * input.rateAmount;
+    case "per-week":
+      return Math.ceil(durationMs / (7 * 86_400_000)) * input.rateAmount;
+    default:
+      return null;
+  }
 }
 
 // ─── Fleet setup ──────────────────────────────────────────────────────────────
@@ -113,6 +144,75 @@ export async function createReservation(input: {
       return { ok: false, message: "Renter name and email are required" };
     }
     const sf = await getStorefront();
+    const item = await prisma.storefrontItem.findFirst({
+      where: { id: input.storefrontItemId, storefrontId: sf.id },
+      select: {
+        id: true,
+        name: true,
+        priceCurrency: true,
+        catalogItem: {
+          select: {
+            id: true,
+            catalogItemId: true,
+            name: true,
+            organizationId: true,
+            bundleComponents: {
+              where: { effectiveTo: null },
+              orderBy: { sortOrder: "asc" },
+              include: { componentCatalogItem: true },
+            },
+            offering: {
+              select: {
+                id: true,
+                offeringId: true,
+                name: true,
+                organizationId: true,
+                providerOrganizationId: true,
+                product: {
+                  select: {
+                    id: true,
+                    productId: true,
+                    name: true,
+                    organizationId: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        rentableUnits: {
+          where: { id: input.rentableUnitId ?? "__quantity_pool__" },
+          take: 1,
+          select: {
+            id: true,
+            catalogSku: {
+              select: {
+                id: true,
+                skuId: true,
+                code: true,
+                name: true,
+                configuration: {
+                  select: {
+                    id: true,
+                    configurationId: true,
+                    name: true,
+                    specification: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!item) return { ok: false, message: "Rental class not found" };
+    const pricingModel = input.pricingModel || "per-day";
+    const totalAmount = calculateRentalCharge({
+      pricingModel,
+      rateAmount: input.rateAmount,
+      periodStart,
+      periodEnd,
+    });
 
     // The application-level overlap check is a fast, friendly pre-check; the
     // authoritative guard is the `RentalAgreement_no_overlap` gist EXCLUDE
@@ -147,13 +247,104 @@ export async function createReservation(input: {
           customerPhone: input.customerPhone?.trim() || null,
           periodStart,
           periodEnd,
-          pricingModel: input.pricingModel || "per-day",
+          pricingModel,
           rateAmount: input.rateAmount ?? null,
           depositAmount: input.depositAmount ?? null,
+          currency: item.priceCurrency,
           status: "reserved",
           verificationStatus: input.depositAmount && input.depositAmount > 0 ? "pending" : "not-required",
         },
       });
+      const catalogItem = item.catalogItem;
+      if (catalogItem && totalAmount != null) {
+        const catalogSku = item.rentableUnits[0]?.catalogSku ?? null;
+        const configuration = catalogSku?.configuration ?? null;
+        const observedAt = new Date();
+        const pricingSnapshot = {
+          version: 1,
+          source: "rental-agreement-rate",
+          pricingModel,
+          rateAmount: input.rateAmount ?? null,
+          periodStart: periodStart.toISOString(),
+          periodEnd: periodEnd.toISOString(),
+          totalAmount,
+          currency: item.priceCurrency,
+          depositAmount: input.depositAmount ?? null,
+        };
+        const draft = createProductSoldDraft({
+          selection: {
+            organizationId: sf.organizationId,
+            providerOrganizationId:
+              catalogItem.offering.providerOrganizationId,
+            product: catalogItem.offering.product,
+            offering: catalogItem.offering,
+            catalogItem,
+            catalogSku,
+            configuration,
+            priceListEntryId: null,
+            promotionId: null,
+            quantity: 1,
+            unitPrice: totalAmount,
+            discountAmount: 0,
+            taxAmount: 0,
+            totalAmount,
+            currency: item.priceCurrency,
+            purchasedAt: observedAt,
+            configurationSnapshot: configuration?.specification ?? null,
+            pricingSnapshot,
+          },
+          evidence: {
+            kind: "rental-agreement",
+            sourceId: ag.id,
+            sourceRef: ag.agreementRef,
+            observedAt,
+            snapshot: {
+              agreementRef: ag.agreementRef,
+              status: ag.status,
+              customerEmail: input.customerEmail.trim(),
+              customerName: input.customerName.trim(),
+              periodStart: periodStart.toISOString(),
+              periodEnd: periodEnd.toISOString(),
+            },
+          },
+        });
+        const materialized = await materializeProductSold({
+          db: tx as never,
+          draft,
+        });
+        await persistProductSoldComponentAllocations({
+          db: tx as never,
+          organizationId: sf.organizationId,
+          productSoldId: materialized.id,
+          packageRevenue: totalAmount,
+          components: snapshotProductSoldComponents(
+            catalogItem.bundleComponents ?? [],
+          ),
+        });
+        const instance = createTypedFulfillmentInstance({
+          evidenceId: materialized.evidenceId,
+          kind: "rental",
+          status: "active",
+          targets: {
+            storefrontBookingId: null,
+            rentalAgreementId: ag.id,
+            rentableUnitId: input.rentableUnitId ?? null,
+            edgeNodeId: null,
+          },
+          snapshot: {
+            agreementRef: ag.agreementRef,
+            rentableUnitId: input.rentableUnitId ?? null,
+            periodStart: periodStart.toISOString(),
+            periodEnd: periodEnd.toISOString(),
+          },
+        });
+        await persistProductFulfillmentInstance({
+          db: tx as never,
+          organizationId: sf.organizationId,
+          productSoldId: materialized.id,
+          instance,
+        });
+      }
       if (input.rentableUnitId) {
         await tx.rentableUnit.update({
           where: { id: input.rentableUnitId },
@@ -215,6 +406,13 @@ export async function checkoutAgreement(
         where: { id },
         data: { status: "active", checkoutConditionId: record.id },
       });
+      await transitionProductSoldByEvidence({
+        db: tx as never,
+        kind: "rental-agreement",
+        sourceId: id,
+        to: "active",
+        occurredAt: new Date(),
+      });
       if (agreement.rentableUnitId) {
         await tx.rentableUnit.update({
           where: { id: agreement.rentableUnitId },
@@ -261,6 +459,13 @@ export async function returnAgreement(
         where: { id },
         data: { status: "closed", returnConditionId: record.id },
       });
+      await transitionProductSoldByEvidence({
+        db: tx as never,
+        kind: "rental-agreement",
+        sourceId: id,
+        to: "fulfilled",
+        occurredAt: new Date(),
+      });
       if (agreement.rentableUnitId) {
         // Re-pool: damaged units divert to maintenance, otherwise back to available.
         await tx.rentableUnit.update({
@@ -301,9 +506,17 @@ export async function cancelAgreement(
       return { ok: false, message: "Cannot cancel an active rental — record a return instead" };
     }
     await prisma.$transaction(async (tx) => {
+      const cancelledAt = new Date();
       await tx.rentalAgreement.update({
         where: { id },
-        data: { status: "cancelled", cancellationReason: reason?.trim() || null, cancelledAt: new Date() },
+        data: { status: "cancelled", cancellationReason: reason?.trim() || null, cancelledAt },
+      });
+      await transitionProductSoldByEvidence({
+        db: tx as never,
+        kind: "rental-agreement",
+        sourceId: id,
+        to: "cancelled",
+        occurredAt: cancelledAt,
       });
       if (agreement.rentableUnitId) {
         await tx.rentableUnit.update({

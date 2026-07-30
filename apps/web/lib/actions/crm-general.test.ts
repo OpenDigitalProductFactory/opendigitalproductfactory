@@ -4,6 +4,7 @@ vi.mock("@dpf/db", () => ({
   prisma: {
     $transaction: vi.fn(),
     $queryRaw: vi.fn(),
+    $queryRawUnsafe: vi.fn(),
     country: {
       findFirst: vi.fn(),
     },
@@ -42,6 +43,25 @@ vi.mock("@dpf/db", () => ({
     opportunity: {
       findUnique: vi.fn(),
       update: vi.fn(),
+    },
+    quote: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
+    },
+    salesOrder: {
+      create: vi.fn(),
+    },
+    productSold: {
+      upsert: vi.fn(),
+    },
+    productSoldEvidence: {
+      upsert: vi.fn(),
+    },
+    productSoldParty: {
+      upsert: vi.fn(),
+    },
+    catalogSku: {
+      findMany: vi.fn(),
     },
     activity: {
       create: vi.fn(),

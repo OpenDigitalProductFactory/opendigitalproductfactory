@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import { transitionProductSoldByEvidence } from "@/lib/products/product-sold";
 
 export async function POST(
   _req: NextRequest,
@@ -22,9 +23,18 @@ export async function POST(
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
 
-  await prisma.storefrontBooking.update({
-    where: { id },
-    data: { status: "confirmed" },
+  await prisma.$transaction(async (tx) => {
+    await tx.storefrontBooking.update({
+      where: { id },
+      data: { status: "confirmed" },
+    });
+    await transitionProductSoldByEvidence({
+      db: tx as never,
+      kind: "storefront-booking",
+      sourceId: id,
+      to: "active",
+      occurredAt: new Date(),
+    });
   });
 
   // EP-3516E23D field-service dispatch: a confirmed, provider-assigned booking
