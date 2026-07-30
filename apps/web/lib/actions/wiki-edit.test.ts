@@ -15,6 +15,12 @@ vi.mock("@dpf/db", () => ({
 
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
+// BI-8AC24F3D: mocked so the callsite wiring is what is under test here; the
+// helper's own contract is covered in lib/wiki/craft-override-promotion.test.ts.
+vi.mock("@/lib/wiki/craft-override-promotion", () => ({
+  promoteCraftOverrideOnPublish: vi.fn().mockResolvedValue(null),
+}));
+
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import { saveWikiOverlayEdit } from "./wiki-edit";
@@ -361,5 +367,108 @@ describe("saveWikiOverlayEdit — wikilink graph", () => {
         { fromPageId: "wp_self", toPageId: "wp_target_b" },
       ]),
     );
+  });
+});
+
+// ─── Craft-override promotion on publish (BI-8AC24F3D) ─────────────────────
+//
+// THE DEFECT THESE PIN. This action is what the portal Edit page calls, so
+// flipping Status to `published` here IS how an operator publishes a craft
+// override. It used to write `status` and nothing else: the page went live, no
+// PerspectiveMaterial was written, and the profession gate kept deferring —
+// while the craft form said "Publish it to make it part of this role's craft"
+// and the WWWD sibling promised "Your AI now weighs this stance when it
+// decides". Structurally published, functionally inert.
+//
+// The promoting path (publishWikiOverlayPages) had the hook but no UI caller,
+// so the two publish routes meant different things. Both now share
+// promoteCraftOverrideOnPublish; these tests keep the reachable one wired.
+
+describe("saveWikiOverlayEdit — craft-override promotion", () => {
+  const craftSlug = "craft/enterprise-architecture/verify-the-substrate-first";
+
+  function stubExistingCraftPage(status: string) {
+    const existing = {
+      id: "wp_craft",
+      slug: craftSlug,
+      isKernel: false,
+      organizationId: "org_test",
+      pageKind: "heuristic",
+      status,
+    };
+    (prisma.wikiPage.findFirst as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(existing)
+      .mockResolvedValueOnce({ id: existing.id });
+    return existing;
+  }
+
+  function stubUpdateResult(status: string) {
+    (prisma.wikiPage.update as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      id: "wp_craft",
+      slug: craftSlug,
+      status,
+    });
+    (prisma.wikiPageRevision.create as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      id: "rev_craft",
+    });
+  }
+
+  const save = (status: "draft" | "published") =>
+    saveWikiOverlayEdit({
+      pageId: "wp_craft",
+      slug: craftSlug,
+      pageKind: "heuristic",
+      title: "Verify the substrate first",
+      body: "Sweep the existing substrate before proposing a new model.",
+      status,
+    });
+
+  it("promotes to gate-live material when an operator flips draft -> published", async () => {
+    const { promoteCraftOverrideOnPublish } = await import("@/lib/wiki/craft-override-promotion");
+    stubExistingCraftPage("draft");
+    stubUpdateResult("published");
+
+    const result = await save("published");
+
+    expect(result.ok).toBe(true);
+    expect(promoteCraftOverrideOnPublish).toHaveBeenCalledWith(
+      expect.objectContaining({
+        origin: "wiki-edit",
+        page: expect.objectContaining({ id: "wp_craft", slug: craftSlug, pageKind: "heuristic" }),
+      }),
+    );
+  });
+
+  it("does NOT promote when the save leaves the page in draft", async () => {
+    const { promoteCraftOverrideOnPublish } = await import("@/lib/wiki/craft-override-promotion");
+    stubExistingCraftPage("draft");
+    stubUpdateResult("draft");
+
+    await save("draft");
+
+    expect(promoteCraftOverrideOnPublish).not.toHaveBeenCalled();
+  });
+
+  it("does NOT re-promote when editing a page that was ALREADY published", async () => {
+    // Guarded on the transition, not the target status — otherwise every
+    // subsequent copy edit re-promotes and churns material rows.
+    const { promoteCraftOverrideOnPublish } = await import("@/lib/wiki/craft-override-promotion");
+    stubExistingCraftPage("published");
+    stubUpdateResult("published");
+
+    await save("published");
+
+    expect(promoteCraftOverrideOnPublish).not.toHaveBeenCalled();
+  });
+
+  it("still returns ok when promotion fails — a completed publish is never rolled back", async () => {
+    const { promoteCraftOverrideOnPublish } = await import("@/lib/wiki/craft-override-promotion");
+    (promoteCraftOverrideOnPublish as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
+    stubExistingCraftPage("draft");
+    stubUpdateResult("published");
+
+    const result = await save("published");
+
+    expect(result).toMatchObject({ ok: true, status: "published" });
   });
 });

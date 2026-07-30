@@ -573,3 +573,55 @@ overrides (`craft/enterprise-architecture/architecture-review-verdicts-…`,
 `wsid-enterprise-architecture` resolves 2 confirmed materials → confidence 0.9
 at low risk → `recommend` with `professionProfileSelected=true` instead of the
 coverage-gap defer (regression-locked in `profession-gate.test.ts`).
+
+## 13. Addendum (2026-07-29) — the publish path is the promotion trigger (BI-8AC24F3D)
+
+§12 defined the promotion contract but wired it to only one of the two code
+paths that publish an org-overlay page, and it was the path an operator cannot
+reach:
+
+| path | called by | promoted? |
+| --- | --- | --- |
+| `publishWikiOverlayPages` (`apps/web/lib/actions/wiki-publish.ts`) | MCP tool `publish_wiki_overlay_pages` (`registry_write`) only — **no UI caller** | yes |
+| `saveWikiOverlayEdit` (`apps/web/lib/actions/wiki-edit.ts`) | the portal Edit page (`WikiPageEditor`), i.e. every operator | **no** |
+
+So the reachable flow — `/coworker-decisions/craft/<professionKey>` → Edit →
+Status → `published` → Save — flipped the page live and wrote no
+`PerspectiveMaterial`. The gate went on deferring while the surface claimed the
+opposite: the craft form's own success copy is "Publish it to make it part of
+this role's craft", and its WWWD sibling `BusinessStanceForm` promises
+"Published. Your AI now weighs this stance when it decides." A publish that
+structurally succeeds and functionally does nothing is the
+`structural-verification-is-not-functional` commandment's exact failure shape,
+and it is why the §12 acceptance trace above never materialised in the live
+install: both EA overrides sat in `draft`, and every one of the 69
+`architecture-tradeoff` interactions stayed `defer`.
+
+**Contract (from BI-8AC24F3D).**
+
+1. **Publishing is the trigger, not the caller.** A `draft → published`
+   transition on a `craft/<professionKey>/` page promotes to `confirmed` tier,
+   regardless of which action performed the flip. Publishing IS the owner's
+   approval (§12.3); which button they pressed is not part of the contract.
+2. **One implementation, two callers.** The promotion body lives in
+   `apps/web/lib/wiki/craft-override-promotion.ts`
+   (`promoteCraftOverrideOnPublish`); both publish actions call it. Deliberately
+   a plain module, not a `"use server"` file — every export of a server-action
+   module becomes its own callable endpoint, and this helper must not be one.
+   Two publish paths are acceptable; two promotion implementations are not.
+3. **Guard on the transition, not the target status.** Re-saving an
+   already-published page must not re-promote, or ordinary copy edits churn
+   material rows.
+4. **Promotion never rolls back a publish.** The status flip has already
+   happened and the seed backfill converges missed material on its next run, so
+   a promotion failure is a logged warning and the action still returns ok.
+
+**Known residual, tracked separately.** The craft surface still has no
+first-class Publish control — `CraftOverrideForm` offers only "Save as draft",
+and publishing requires noticing the per-row `Edit` link and changing a status
+enum in a generic page editor. The `BusinessStanceForm` sibling has a real
+Publish button. That affordance gap is UX work, out of scope here; this
+addendum only guarantees that *when* a publish happens, it means something.
+Note also that with `confirmed` A/0.9 the gate reaches `escalate` and not
+`recommend` at medium risk — see BI-8E646099; §12's acceptance trace holds at
+low risk only.
