@@ -110,18 +110,36 @@ function loadCatalog(): { grants: CatalogGrant[] } {
 }
 
 function loadToolToGrants(): Record<string, string[]> {
-  const src = readFileSync(join(ROOT, "apps/web/lib/tak/agent-grants.ts"), "utf8");
-  const block = src.match(/TOOL_TO_GRANTS:[^=]*= \{([\s\S]*?)\n\};/);
   const map: Record<string, string[]> = {};
-  if (!block) return map;
-  for (const line of block[1].split("\n")) {
-    const m = line.match(/^\s*(?:"([^"]+)"|'([^']+)'|([a-zA-Z0-9_]+)):\s*\[([^\]]*)\]/);
-    if (!m) continue;
-    const toolName = m[1] ?? m[2] ?? m[3];
-    map[toolName] = m[4]
-      .split(",")
-      .map((s) => s.trim().replace(/^["']|["']$/g, ""))
-      .filter(Boolean);
+
+  // TOOL_TO_GRANTS deliberately composes bounded domain maps so the canonical
+  // authorization registry does not become another oversized monolith. The
+  // static audit must follow those owned composition boundaries; parsing only
+  // the root object silently treats every spread entry as unauthorized.
+  const sources = [
+    {
+      path: "apps/web/lib/tak/agent-grants.ts",
+      pattern: /TOOL_TO_GRANTS:[^=]*= \{([\s\S]*?)\n\};/,
+    },
+    {
+      path: "apps/web/lib/tak/product-management-tool-grants.ts",
+      pattern: /PRODUCT_MANAGEMENT_TOOL_GRANTS[^=]*= \{([\s\S]*?)\n\}/,
+    },
+  ];
+
+  for (const source of sources) {
+    const src = readFileSync(join(ROOT, source.path), "utf8");
+    const block = src.match(source.pattern);
+    if (!block) continue;
+    for (const line of block[1].split("\n")) {
+      const m = line.match(/^\s*(?:"([^"]+)"|'([^']+)'|([a-zA-Z0-9_]+)):\s*\[([^\]]*)\]/);
+      if (!m) continue;
+      const toolName = m[1] ?? m[2] ?? m[3];
+      map[toolName] = m[4]
+        .split(",")
+        .map((s) => s.trim().replace(/^["']|["']$/g, ""))
+        .filter(Boolean);
+    }
   }
   return map;
 }

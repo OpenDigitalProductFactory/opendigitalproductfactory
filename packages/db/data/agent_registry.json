@@ -3223,13 +3223,17 @@
           "backend": null
         },
         "concurrency_limit": 2,
-        "tool_grants": [
-          "backlog_read",
-          "backlog_write",
-          "portfolio_read",
-          "registry_read",
-          "web_search"
-        ]
+      "tool_grants": [
+        "backlog_read",
+        "backlog_write",
+        "crm_read",
+        "marketing_read",
+        "marketing_write",
+        "portfolio_read",
+        "registry_read",
+        "web_search",
+        "work_capsule_read"
+      ]
       }
     },
     {
