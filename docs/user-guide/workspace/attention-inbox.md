@@ -28,6 +28,8 @@ Folding "a human must decide this now" into the backlog is a category error: the
 - **Every card explains the decision.** The top of the card gives a short question; for a blocked coworker, a plain line saying **what it was doing and why it stalled**; a concrete **impact** ("if ignored…"); the **recommendation** with the specialist it came from; and no more than three plain choices. It never invents a confidence score.
 - **Technical detail is preserved.** Open **Technical detail** to see the original title, source, work fields, linked identifiers, detection details, and builder actions. That information is moved one click down, not deleted.
 - **A projection, not another queue.** The inbox is a read-only view *over* each area's own records; it is not a second backlog or ticket tracker. Acting on an item updates the record in its home area.
+- **A card never shows a button it cannot honour.** Some items — a paused governance gate, a failed customer journey — have no action an owner can take from the inbox; their record lives on a builder or platform screen. In **Simple** view those cards show a plain sentence saying your digital team holds it, with the record one click down under **Technical detail**, rather than a button that goes nowhere. In **Full** view, where builder and platform tools are visible by choice, the real record is the card's own action.
+- **Items retire themselves when the question goes away.** If a decision was raised to unblock a build and that build is later abandoned, finished, or folded into an epic, nobody needs to answer it any more. Those cards clear automatically and stop counting toward your daily total. They are marked as closed on their own — never as though a person answered them.
 - **An empty inbox is a good day.** When nothing needs a decision, the inbox shows **"You're all caught up"** — and, when relevant, a short summary of what your digital team is handling on its own. An empty inbox is reassurance, not an unfinished list.
 
 ## What Shows Up Here
@@ -39,7 +41,7 @@ Folding "a human must decide this now" into the backlog is a category error: the
 
 ## What You Can Do
 
-- **Review the business decision** using the plain action on the card. Builder-only links never appear as the main owner action.
+- **Review the business decision** using the plain action on the card. In Simple view, builder-only links never appear as the main owner action — and neither does a placeholder button in their place.
 - **Accept, keep, or narrow a proactivity boundary** without leaving the workspace.
 - **Open Technical detail** when a builder or specialist needs the full source record.
 - **Clear or snooze the Friday review** as one batch, or review an item individually.

@@ -65,6 +65,14 @@ without violating the contract. Instead:
   the fallback action already carries an exact `?attentionId=` deep link (pre-existing) — the
   BI-8EA88797 exact-target requirement is met without changing the label.
 
+> **Correction (2026-07-29, BI-90B6D8C5).** The second half of that last bullet was wrong. The
+> `?attentionId=` deep link pointed at `/workspace/inbox` — the page the card renders on — and no
+> consumer for the param was ever built, so the exact-target requirement was **not** met and the
+> button could only ever no-op. The fallback has been removed: a card with no action this reader can
+> act on now states so in plain language, and in Full view the item's real (builder-rail) action
+> becomes the card's own action. See
+> [the 2026-07-29 plan](../plans/2026-07-29-attention-dead-action-and-decision-residue.md).
+
 ### 2. Demote generic corpus-fallback decisions behind concrete operations
 
 `classifyOwnerAttentionLane` routes an `ai-decision` item that is **unlinked corpus residue**

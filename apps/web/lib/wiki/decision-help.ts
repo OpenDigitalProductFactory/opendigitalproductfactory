@@ -36,6 +36,12 @@ export type DecisionHelpInput = {
   hasBuild: boolean;
   /** True once a human answered (capture row or humanOutcome present). */
   resolved: boolean;
+  /**
+   * True when the hygiene sweep retired the row because the build it gated is
+   * gone (BI-FE034C1E). Distinct from `resolved`: the question stopped being
+   * asked, so telling the reader "a human already answered this" would be false.
+   */
+  withdrawn?: boolean;
 };
 
 /** The tier's playbook, named the way the rest of the surface names it. */
@@ -143,6 +149,17 @@ export function buildDecisionHelp(input: DecisionHelpInput): DecisionHelp {
     return {
       meaning: "This outcome type has no recorded guidance.",
       urgency: "Nothing is known to be waiting on you.",
+      steps: [],
+    };
+  }
+
+  // Checked BEFORE `resolved`: a withdrawal writes humanOutcome without anyone
+  // answering, so the resolved copy would credit a human who never acted.
+  if (input.withdrawn) {
+    return {
+      meaning,
+      urgency:
+        "Closed on its own — the work this question guarded is finished or dropped, so nobody needs to answer it. Kept for the record.",
       steps: [],
     };
   }

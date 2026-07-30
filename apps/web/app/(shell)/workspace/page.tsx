@@ -74,7 +74,10 @@ export default async function WorkspacePage() {
   const cockpit = (
     <>
       <WorkspaceStorefrontAttention density={simpleHome ? "simple" : "full"} />
-      <OperatorCockpit userId={session.user.id} />
+      <OperatorCockpit
+        userId={session.user.id}
+        audience={simpleHome ? "worker" : "operator"}
+      />
     </>
   );
 

@@ -127,6 +127,14 @@ function DecisionActions({ entry }: { entry: OwnerAttentionEntry }) {
       />
     );
   }
+  // Nothing this reader can act on. Say so in words — the old fallback rendered a
+  // button that linked back to this same page and could only no-op (BI-90B6D8C5).
+  if (entry.card.choices.length === 0) {
+    return entry.card.handoff ? (
+      <p className="text-xs leading-relaxed text-[var(--dpf-muted)]">{entry.card.handoff}</p>
+    ) : null;
+  }
+
   return (
     <div className="flex flex-wrap gap-2">
       {entry.card.choices.map((choice, index) => (
