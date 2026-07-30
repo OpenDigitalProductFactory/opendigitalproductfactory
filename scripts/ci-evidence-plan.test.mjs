@@ -134,6 +134,9 @@ describe("ci-evidence-plan CLI", () => {
       selection: { selectedPercentage: 0 },
     });
 
+    assert.match(runtime, /^heavy=true$/m);
+    assert.match(docs, /^heavy=false$/m);
+    assert.match(mobile, /^heavy=false$/m);
     assert.match(runtime, /^portal_ux_required=true$/m);
     assert.match(docs, /^portal_ux_required=false$/m);
     assert.match(mobile, /^portal_ux_required=false$/m);
@@ -150,7 +153,13 @@ describe("ci-evidence-plan CLI", () => {
     };
 
     for (const eventName of ["merge_group", "push", "workflow_dispatch", "schedule", "local-ci"]) {
-      const output = githubOutputsForPlan({ ...docsOnlyPlan, eventName });
+      const output = githubOutputsForPlan({
+        ...docsOnlyPlan,
+        eventName,
+        fullSuite: true,
+        evidenceTier: "exhaustive",
+      });
+      assert.match(output, /^heavy=true$/m, `${eventName} must run the heavy gates`);
       assert.match(output, /^portal_ux_required=true$/m, `${eventName} must stay exhaustive`);
     }
 
@@ -159,6 +168,7 @@ describe("ci-evidence-plan CLI", () => {
       fullSuite: true,
       evidenceTier: "exhaustive",
     });
+    assert.match(escalatedPullRequest, /^heavy=true$/m);
     assert.match(escalatedPullRequest, /^portal_ux_required=true$/m);
 
     const missingLifecycle = githubOutputsForPlan({

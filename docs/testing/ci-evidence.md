@@ -186,6 +186,12 @@ remains unchanged because it does not narrow runtime evidence.
 
 Affected-test and affected-route selection remain observation only. The planner
 continues to emit the existing `heavy` and `mobile` compatibility outputs.
+`heavy` is true when either the file scope intrinsically requires the full
+workspace gates or the semantic plan has expanded to `fullSuite`. Therefore an
+ordinary docs-only or `apps/mobile`-only pull request can remain light, while
+`merge_group`, push, workflow dispatch, schedule, local-CI, and fail-safe
+escalations execute Typecheck, Vitest, and Production Build regardless of file
+scope.
 The planner also emits a dedicated `portal_ux_required` workflow output. It is
 `false` only for docs-only and `apps/mobile`-only pull requests, the two audited
 scopes that cannot alter the rendered web portal. Those changes short-circuit
@@ -241,7 +247,9 @@ non-portal pull request (`portal_ux_required=false`), CI skips the reusable
 sweep job before runner and Postgres allocation; the stable `UX Route Budget
 Sweep` aggregate accepts that skip only for the exact planner signal.
 `merge_group`, push, workflow dispatch, missing/malformed scope, and all portal
-changes remain exhaustive. When packaging/upload does not produce a usable
+changes remain exhaustive. Their full-suite `heavy=true` output also ensures
+the same-run Production Build artifact exists for UX, avoiding a serial
+fallback build after fixture setup. When packaging/upload does not produce a usable
 artifact, the reusable runtime starts the normal local production build
 immediately. Missing, expired, incomplete, corrupt, or identity-mismatched
 evidence removes any partial `.next` output and runs the normal local production
