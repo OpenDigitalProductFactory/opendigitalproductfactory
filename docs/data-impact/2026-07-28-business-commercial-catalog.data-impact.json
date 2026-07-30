@@ -1,0 +1,119 @@
+{
+  "version": "1",
+  "accountableOwner": "goods-and-services-for-sale",
+  "affectedCopies": [
+    "StorefrontItem projects a canonical CatalogItem when one exists",
+    "QuoteLineItem may reference a canonical CatalogItem while preserving its immutable configuration snapshot",
+    "RentableUnit may reference a deliberately published CatalogSku",
+    "ServiceOffering remains the digital operational-commitment authority",
+    "DigitalProduct remains unchanged and does not own the business catalog"
+  ],
+  "migration": {
+    "name": "20260728160000_add_business_commercial_catalog",
+    "backfill": "None. New commercial tables begin empty and compatibility foreign keys are nullable; no legacy product, provider, configuration, SKU, consumer, entitlement, or sale is inferred."
+  },
+  "tests": [
+    "packages/db/src/business-commercial-catalog-schema.test.ts",
+    "apps/web/lib/products/commercial-catalog.test.ts",
+    "apps/web/lib/products/operational-offerings.test.ts",
+    "apps/web/lib/onboarding/backfill-commercial-catalog-on-boot.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:product-offering",
+      "prismaModel": "ProductOffering",
+      "lifecycleDisposition": "Organization-owned commercial promises are retained through effective dating and follow the owning Product lifecycle; operational ServiceOffering links are optional and clear without recasting catalog ownership.",
+      "fields": [
+        {
+          "fieldId": "data:product-offering#organization-product-provider",
+          "resolution": "governed",
+          "reason": "Preserves the canonical business Product owner and an explicit provider at every organizational scale.",
+          "provenance": "BI-6C5C648B; Product Management Operating Loop design sections 4-6",
+          "flags": ["organization"],
+          "fieldPolicy": "Product and provider use canonical organization-scoped relations; the simple-business default is the organization itself."
+        },
+        {
+          "fieldId": "data:product-offering#operationalServiceOfferingId",
+          "resolution": "governed",
+          "reason": "Traces a real operational commitment without transferring business catalog authority to DigitalProduct or ServiceOffering.",
+          "provenance": "BI-6C5C648B architecture review",
+          "flags": [],
+          "fieldPolicy": "Optional one-to-one compatibility link only."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:catalog-item",
+      "prismaModel": "CatalogItem",
+      "lifecycleDisposition": "Canonical selectable commercial items are effective-dated and remain the source for channel projections; ordinary channel removal does not delete the catalog authority.",
+      "fields": [
+        {
+          "fieldId": "data:catalog-item#offering-organization",
+          "resolution": "governed",
+          "reason": "Keeps each catalog item inside one organization-owned commercial offering.",
+          "provenance": "BI-6C5C648B catalog contract",
+          "flags": ["organization"],
+          "fieldPolicy": "Composite organization relation prevents cross-organization catalog membership."
+        },
+        {
+          "fieldId": "data:catalog-item#commercial-terms",
+          "resolution": "governed",
+          "reason": "Represents fixed, quoted, or availability-governed commercial terms without inventing a sale.",
+          "provenance": "apps/web/lib/products/commercial-catalog.ts",
+          "flags": [],
+          "fieldPolicy": "Draft by default; missing price and availability evidence remains null."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:product-configuration",
+      "prismaModel": "ProductConfiguration",
+      "lifecycleDisposition": "Only deliberately reusable configurations become canonical rows; one-off sale choices remain immutable quote snapshots.",
+      "fields": [
+        {
+          "fieldId": "data:product-configuration#catalogItemId-specification",
+          "resolution": "governed",
+          "reason": "Binds reusable configuration to one canonical catalog item and preserves its declared specification.",
+          "provenance": "BI-6C5C648B configuration boundary",
+          "flags": [],
+          "fieldPolicy": "No configuration row is fabricated from free-form or one-off sale evidence."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:catalog-sku",
+      "prismaModel": "CatalogSku",
+      "lifecycleDisposition": "Optional reusable stock identities are effective-dated and retained with their catalog item; items without a real reusable identity have no SKU row.",
+      "fields": [
+        {
+          "fieldId": "data:catalog-sku#catalog-configuration-code",
+          "resolution": "governed",
+          "reason": "Creates stock identity only for a deliberate catalog item/configuration combination.",
+          "provenance": "BI-6C5C648B SKU boundary",
+          "flags": ["organization"],
+          "fieldPolicy": "Code is unique within the organization; configuration is optional and organization-scoped."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:business-catalog-compatibility-links",
+      "prismaModel": "StorefrontItem, QuoteLineItem, RentableUnit",
+      "lifecycleDisposition": "Nullable compatibility links clear with the referenced catalog object where specified; existing channel, quote, and rental lifecycles remain authoritative for their own records.",
+      "fields": [
+        {
+          "fieldId": "data:business-catalog-compatibility-links#catalog-references",
+          "resolution": "governed",
+          "reason": "Extends existing storefront, quote, and rental substrate without creating a parallel authority.",
+          "provenance": "BI-6C5C648B expand-first migration",
+          "flags": [],
+          "fieldPolicy": "All compatibility references are nullable; legacy rows remain valid and no historical association is inferred."
+        }
+      ]
+    }
+  ]
+}
