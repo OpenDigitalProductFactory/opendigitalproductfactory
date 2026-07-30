@@ -1,61 +1,26 @@
 "use client";
 
-// Cartesian floor-plan renderer (EP-SPATIAL-OPERATIONAL-VIEWS §4.1).
-// The reusable "operate mode" surface: given a positioned `FloorScene`, draw the
-// zones as backdrops and the resource units (tables) as status-coloured nodes on
-// the platform's one canvas engine — React Flow (`@xyflow/react`), the same
-// substrate as the EA canvas. Read-only here; the authoring editor (drag/resize
-// + persisted geometry via OperationalSceneLayout) is the next increment.
+// Compatibility adapter for the pre-persistence restaurant FloorScene.
+// Rendering, node semantics, status colors, text alternative, and mode behavior
+// now belong to the generic CartesianSceneCanvas. BI-287AA5F7 will replace this
+// derived geometry with the persisted OperationalSceneLayout on /workspace.
 
 import { useMemo } from "react";
-import {
-  ReactFlow,
-  Background,
-  Controls,
-  type Node,
-} from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
 
-import type { FloorScene } from "@/lib/storefront/floor-layout";
+import type { CartesianSceneLayout } from "@dpf/storefront-templates";
 
-import { FloorZoneNode } from "./FloorZoneNode";
-import { TableFloorNode } from "./TableFloorNode";
+import { CartesianSceneCanvas } from "@/components/twin/cartesian/CartesianSceneCanvas";
+import type { FloorPlacement, FloorScene } from "@/lib/storefront/floor-layout";
+import type { CartesianScenePresentationMap } from "@/lib/twin/cartesian-scene";
 
-const NODE_TYPES = { table: TableFloorNode, zone: FloorZoneNode };
-
-function sceneToNodes(scene: FloorScene): Node[] {
-  // Zones first so they paint behind the tables.
-  const zoneNodes: Node[] = scene.zones.map((z) => ({
-    id: `zone-${z.section}`,
-    type: "zone",
-    position: { x: z.x, y: z.y },
-    data: { label: z.label, w: z.w, h: z.h },
-    draggable: false,
-    selectable: false,
-    connectable: false,
-    zIndex: 0,
-  }));
-  const tableNodes: Node[] = scene.placements.map((p) => ({
-    id: p.key,
-    type: "table",
-    position: { x: p.x, y: p.y },
-    data: {
-      label: p.label,
-      seats: p.seats,
-      shape: p.shape,
-      w: p.w,
-      h: p.h,
-      state: p.state,
-      stateLabel: p.stateLabel,
-      intent: p.intent,
-      freeInMinutes: p.freeInMinutes,
-    },
-    draggable: false,
-    selectable: false,
-    connectable: false,
-    zIndex: 1,
-  }));
-  return [...zoneNodes, ...tableNodes];
+function placementSublabel(placement: FloorPlacement): string | undefined {
+  const details = [
+    placement.seats != null ? `${placement.seats} seats` : null,
+    placement.freeInMinutes != null
+      ? `Free in ${placement.freeInMinutes} min`
+      : null,
+  ].filter((detail): detail is string => detail !== null);
+  return details.length > 0 ? details.join(" · ") : undefined;
 }
 
 export interface FloorPlanCanvasProps {
@@ -65,30 +30,69 @@ export interface FloorPlanCanvasProps {
 }
 
 export function FloorPlanCanvas({ scene, height = 520 }: FloorPlanCanvasProps) {
-  const nodes = useMemo(() => sceneToNodes(scene), [scene]);
+  const layout = useMemo<CartesianSceneLayout>(
+    () => ({
+      schemaVersion: 1,
+      spaceKind: "cartesian-interior",
+      viewport: { x: 0, y: 0, zoom: 1 },
+      zones: scene.zones.map((zone) => ({
+        id: zone.section,
+        label: zone.label,
+        geometry: {
+          kind: "rectangle",
+          x: zone.x,
+          y: zone.y,
+          width: zone.w,
+          height: zone.h,
+        },
+      })),
+      placements: scene.placements.map((placement) => ({
+        id: placement.key,
+        label: placement.label,
+        entityRef: { kind: "table", id: placement.key },
+        geometry: {
+          x: placement.x,
+          y: placement.y,
+          width: placement.w,
+          height: placement.h,
+          rotation: 0,
+          shapeKind: `${placement.shape}-table`,
+        },
+      })),
+    }),
+    [scene],
+  );
+  const bindings = useMemo<CartesianScenePresentationMap>(
+    () =>
+      Object.fromEntries(
+        scene.placements.map((placement) => {
+          const sublabel = placementSublabel(placement);
+          return [
+            `table:${placement.key}`,
+            {
+              label: placement.label,
+              statusLabel: placement.stateLabel,
+              ...(sublabel ? { sublabel } : {}),
+              intent: placement.intent,
+            },
+          ];
+        }),
+      ),
+    [scene],
+  );
 
   return (
-    <div
-      className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
-      style={{ height, borderRadius: 10, overflow: "hidden" }}
-    >
-      <ReactFlow
-        nodes={nodes}
-        edges={[]}
-        nodeTypes={NODE_TYPES}
-        fitView
-        fitViewOptions={{ padding: 0.15 }}
-        minZoom={0.2}
-        maxZoom={2}
-        nodesDraggable={false}
-        nodesConnectable={false}
-        elementsSelectable={false}
-        panOnScroll
-        proOptions={{ hideAttribution: true }}
-      >
-        <Background gap={24} color="var(--dpf-border)" />
-        <Controls showInteractive={false} />
-      </ReactFlow>
-    </div>
+    <CartesianSceneCanvas
+      ariaLabel="Restaurant floor"
+      scene={layout}
+      bindings={bindings}
+      mode="read-only"
+      height={height}
+      empty={
+        <p className="text-dpf-body text-dpf-muted">
+          No tables are configured yet.
+        </p>
+      }
+    />
   );
 }
