@@ -38,3 +38,12 @@ export {
   type TwinOutcome,
 } from "./snapshot";
 export { buildDemoTwinSnapshot } from "./demo-snapshot";
+
+// Spatial operational-scene renderer. Archetype adapters supply geometry,
+// live presentation bindings, and authorized domain commands.
+export {
+  CartesianSceneCanvas,
+  type CartesianSceneCanvasProps,
+  type CartesianScenePersistence,
+  type CartesianSceneSaveInput,
+} from "./cartesian/CartesianSceneCanvas";

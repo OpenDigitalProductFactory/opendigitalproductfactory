@@ -7524,6 +7524,20 @@
     "longSentences": 0,
     "textMass": 7
   },
+  "apps/web/components/twin/cartesian/CartesianResourceNode.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 2
+  },
+  "apps/web/components/twin/cartesian/CartesianSceneCanvas.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 32
+  },
   "apps/web/components/twin/demo-snapshot.ts": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -7536,7 +7550,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 4
+    "textMass": 5
   },
   "apps/web/components/ui/DatePicker.tsx": {
     "vocabulary": 0,
