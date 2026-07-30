@@ -38,7 +38,7 @@ const QUADRANT_TOKEN: Record<ValueEffortQuadrant, string> = {
   time_sink: "var(--dpf-warning)",
 };
 
-const ESTIMATE_SOURCE_LABEL: Record<string, string> = { ai: "AI", human: "human", agreed: "agreed" };
+const ESTIMATE_SOURCE_LABEL: Record<string, string> = { ai: "AI", human: "employee", agreed: "agreed" };
 
 /** Tiny inline text button used across the estimate controls. */
 function MiniButton({

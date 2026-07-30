@@ -99,7 +99,7 @@ function MemberRow({ member }: { member: WorkforceMember }) {
           </p>
         </div>
         <span className="text-[9px] font-mono uppercase tracking-wide text-[var(--dpf-muted)] shrink-0">
-          {isAgent ? "AI coworker" : "human"}
+          {isAgent ? "AI coworker" : "employee"}
         </span>
       </div>
       {isAgent && <AgentNeeds member={member} />}
@@ -122,7 +122,7 @@ export function WorkforceRosterPanel({ roster }: { roster: WorkforceRoster }) {
 
       {members.length === 0 ? (
         <p className="text-sm text-[var(--dpf-muted)] py-8 text-center">
-          No workforce members yet. Humans and AI coworkers will appear here as they are onboarded.
+          No workforce members yet. Employees and AI coworkers will appear here as they are onboarded.
         </p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

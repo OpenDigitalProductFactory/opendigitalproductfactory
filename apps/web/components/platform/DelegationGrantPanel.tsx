@@ -24,7 +24,7 @@ export function DelegationGrantPanel({ grants }: Props) {
         <div>
           <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Recent delegation grants</h2>
           <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-            Human-issued temporary authority for governed agent workflows.
+            Employee-issued temporary authority for governed agent workflows.
           </p>
         </div>
         <span className="rounded-full bg-[var(--dpf-surface-2)] px-2 py-1 text-[10px] font-medium uppercase tracking-widest text-[var(--dpf-muted)]">

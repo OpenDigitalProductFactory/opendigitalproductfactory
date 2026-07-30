@@ -597,7 +597,7 @@ export const PHASE_LABELS: Record<BuildPhase, string> = {
   ship:     "Ready to Ship",
   complete: "Complete",
   failed:   "Failed",
-  abandoned: "Escalated to human",
+  abandoned: "Escalated to owner",
 };
 
 export const PHASE_COLOURS: Record<BuildPhase, string> = {

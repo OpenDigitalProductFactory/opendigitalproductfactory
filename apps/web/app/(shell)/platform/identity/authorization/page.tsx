@@ -164,7 +164,7 @@ export default async function PlatformIdentityAuthorizationPage({ searchParams }
           <div>
             <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Editing binding {activeBinding.bindingId}</h2>
             <p className="text-xs text-[var(--dpf-muted)]">
-              Human-first edit surface for the shared authority binding record.
+              Employee-first edit surface for the shared authority binding record.
             </p>
           </div>
           <BindingDetailDrawer binding={activeBinding} evidence={activeBindingEvidence} />
@@ -175,7 +175,7 @@ export default async function PlatformIdentityAuthorizationPage({ searchParams }
         <div>
           <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Authorization Bindings</h2>
           <p className="text-xs text-[var(--dpf-muted)]">
-            Human-first view of route and coworker authority bindings. This is the shared source of truth for who can
+            Employee-first view of route and coworker authority bindings. This is the shared source of truth for who can
             access which governed surface.
           </p>
         </div>

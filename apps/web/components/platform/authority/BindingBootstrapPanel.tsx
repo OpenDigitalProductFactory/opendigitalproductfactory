@@ -30,7 +30,7 @@ export function BindingBootstrapPanel({
         <div className="space-y-1">
           <h3 className="text-sm font-semibold text-[var(--dpf-text)]">Bootstrap coverage</h3>
           <p className="text-xs text-[var(--dpf-muted)]">
-            Authority bindings are inferred from current route-to-coworker mappings and human access layers. Review
+            Authority bindings are inferred from current route-to-coworker mappings and employee access layers. Review
             anything we could not infer confidently before assuming the control plane is complete.
           </p>
         </div>

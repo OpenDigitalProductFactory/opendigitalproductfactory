@@ -46,7 +46,7 @@ export async function recordEstimate(input: {
   const itemId = typeof input.itemId === "string" ? input.itemId.trim() : "";
   if (!itemId) return { ok: false, error: "No item to estimate." };
   if (input.by !== "ai" && input.by !== "human") {
-    return { ok: false, error: "Estimate source must be AI or human." };
+    return { ok: false, error: "Estimate source must be AI or employee." };
   }
 
   const args: Record<string, unknown> = { itemId, by: input.by };

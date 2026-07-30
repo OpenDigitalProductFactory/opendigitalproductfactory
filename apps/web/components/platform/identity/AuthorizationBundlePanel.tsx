@@ -67,7 +67,7 @@ export function AuthorizationBundlePanel({
             <div>
               <h2 className="text-base font-semibold text-[var(--dpf-text)]">Role bundles</h2>
               <p className="mt-1 text-sm text-[var(--dpf-muted)]">
-                Platform roles remain the top-level human authorization bundle, then fan out into route access and capability grants.
+                Platform roles remain the top-level employee authorization bundle, then fan out into route access and capability grants.
               </p>
             </div>
             <span className="rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-[10px] uppercase tracking-[0.14em] text-[var(--dpf-muted)]">
@@ -153,7 +153,7 @@ export function AuthorizationBundlePanel({
             <div className="mt-4 space-y-3">
               {roleAssignments.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-4 text-sm text-[var(--dpf-muted)]">
-                  No human role assignments have been made yet.
+                  No employee role assignments have been made yet.
                 </div>
               ) : null}
               {roleAssignments.map((assignment) => (

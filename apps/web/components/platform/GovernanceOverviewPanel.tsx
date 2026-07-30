@@ -34,7 +34,7 @@ export function GovernanceOverviewPanel({ summary, recentGrants }: Props) {
       <div>
         <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Identity governance</h2>
         <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-          Human accountability, governed agents, and temporary delegation state.
+          Employee accountability, governed agents, and temporary delegation state.
         </p>
       </div>
 

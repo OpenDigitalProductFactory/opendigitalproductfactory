@@ -105,7 +105,7 @@ export function Header({ platformRole, brandName, brandLogoUrl, brandLogoUrlLigh
             </div>
             {!simpleMode && (
               <p className="mt-0.5 hidden truncate text-xs text-[var(--dpf-muted)] lg:block">
-                Small human team, AI coworkers filling in specialist expertise
+                Small employee team, AI coworkers filling in specialist expertise
               </p>
             )}
           </div>

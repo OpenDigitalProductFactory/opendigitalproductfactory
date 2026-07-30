@@ -20,7 +20,7 @@ export function ReferenceProposalQueue({ proposals }: Props) {
       <div className="mb-3">
         <h3 className="text-sm font-semibold text-[var(--dpf-text)]">Proposal Queue</h3>
         <p className="text-xs text-[var(--dpf-muted)]">
-          AI and human-proposed reference-model changes awaiting review.
+          AI and employee-proposed reference-model changes awaiting review.
         </p>
       </div>
       <div className="space-y-2">
