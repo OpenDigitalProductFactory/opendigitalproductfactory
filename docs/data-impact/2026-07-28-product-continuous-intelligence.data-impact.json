@@ -1,0 +1,70 @@
+{
+  "version": "1",
+  "accountableOwner": "product-management",
+  "affectedCopies": [
+    "ResearchProposal may carry explicit business ProductLine or Product scope",
+    "MarketingBattlecard may carry explicit business ProductLine or Product scope",
+    "ScheduledAgentTask may carry governed product-management scope and task configuration",
+    "Legacy organization-wide evidence and tasks remain unclassified"
+  ],
+  "migration": {
+    "name": "20260728220000_add_business_intelligence_scope",
+    "backfill": "None. Every added scope and task field is nullable; no existing research, battlecard, scheduled task, product line, business product, team, or consumer is inferred."
+  },
+  "tests": [
+    "apps/web/lib/product-management/product-intelligence-scope.test.ts",
+    "apps/web/lib/product-management/product-intelligence-view.test.ts",
+    "apps/web/lib/product-management/product-intelligence-watch.test.ts",
+    "apps/web/lib/operate/scheduled-jobs/agent-task-kind.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:research-proposal-business-product-scope",
+      "prismaModel": "ResearchProposal",
+      "lifecycleDisposition": "Optional business scope is retained with the research proposal; organization-wide proposals remain valid and unclassified.",
+      "fields": [
+        {
+          "fieldId": "data:research-proposal-business-product-scope#productLineId-businessProductId",
+          "resolution": "governed",
+          "reason": "Allows a proposal to target one canonical business ProductLine or Product without changing research ownership.",
+          "provenance": "BI-FB049FCD intelligence scope",
+          "flags": ["organization"],
+          "fieldPolicy": "Nullable organization-scoped canonical relation; mutual-exclusion and membership invariants reject ambiguous scope."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:marketing-battlecard-business-product-scope",
+      "prismaModel": "MarketingBattlecard",
+      "lifecycleDisposition": "Optional business scope is retained with the battlecard; organization-wide battlecards remain valid and unclassified.",
+      "fields": [
+        {
+          "fieldId": "data:marketing-battlecard-business-product-scope#productLineId-businessProductId",
+          "resolution": "governed",
+          "reason": "Targets competitive evidence to one canonical business ProductLine or Product while preserving the existing battlecard authority.",
+          "provenance": "BI-FB049FCD intelligence scope",
+          "flags": ["organization"],
+          "fieldPolicy": "Nullable organization-scoped canonical relation; no mapping is inferred from DigitalProduct or free text."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:scheduled-agent-task-product-scope",
+      "prismaModel": "ScheduledAgentTask",
+      "lifecycleDisposition": "Product-management scheduling context follows the existing scheduled-task lifecycle; task execution evidence remains governed by the scheduler.",
+      "fields": [
+        {
+          "fieldId": "data:scheduled-agent-task-product-scope#organization-product-task",
+          "resolution": "governed",
+          "reason": "Carries explicit product scope and typed configuration through the existing scheduler rather than creating a parallel automation authority.",
+          "provenance": "BI-FB049FCD continuous-intelligence architecture",
+          "flags": ["organization"],
+          "fieldPolicy": "All new fields are nullable for legacy tasks; product-management tasks require validated organization and canonical scope."
+        }
+      ]
+    }
+  ]
+}
