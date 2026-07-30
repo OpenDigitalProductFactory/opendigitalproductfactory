@@ -62,6 +62,44 @@ export function resolveCommandInvocation(command, baseEnv = process.env) {
   };
 }
 
+const SENSITIVE_COMMAND_ARG = /(?:token|secret|password|authorization|api[-_]?key|database[-_]?url)/i;
+
+function redactCommandArgs(args) {
+  let redactNext = false;
+  return args.map((arg) => {
+    if (redactNext) {
+      redactNext = false;
+      return "[REDACTED]";
+    }
+    const separator = arg.indexOf("=");
+    if (separator > 0 && SENSITIVE_COMMAND_ARG.test(arg.slice(0, separator))) {
+      return `${arg.slice(0, separator)}=[REDACTED]`;
+    }
+    if (arg.startsWith("-") && SENSITIVE_COMMAND_ARG.test(arg)) {
+      redactNext = true;
+    }
+    return arg;
+  });
+}
+
+export function createCommandFailureDiagnostics({ invocation, result, elapsedMs }) {
+  const error = result.error
+    ? {
+        name: result.error.name ?? "Error",
+        code: result.error.code ?? null,
+        message: result.error.message ?? String(result.error),
+      }
+    : null;
+  return {
+    command: invocation.command,
+    args: redactCommandArgs(invocation.args),
+    elapsedMs,
+    status: result.status ?? null,
+    signal: result.signal ?? null,
+    error,
+  };
+}
+
 export function resolveGitRevision(ref, { spawnSyncImpl = spawnSync, cwd } = {}) {
   const result = spawnSyncImpl("git", ["rev-parse", "--verify", ref], {
     cwd,

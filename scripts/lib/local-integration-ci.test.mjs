@@ -7,6 +7,7 @@ import {
   createLocalIntegrationPlan,
   createProductionArtifactIdentity,
   createToolchainFingerprint,
+  createCommandFailureDiagnostics,
   resolveGitRevision,
   resolveCommandInvocation,
 } from "./local-integration-ci.mjs";
@@ -310,6 +311,28 @@ describe("createLocalIntegrationPlan", () => {
       () => resolveCommandInvocation(["env", "1BAD=value", "pnpm", "test"]),
       /invalid environment assignment/,
     );
+  });
+
+  it("reports secret-safe child-process failure diagnostics", () => {
+    assert.deepEqual(createCommandFailureDiagnostics({
+      invocation: {
+        command: "pnpm",
+        args: ["--token", "sensitive", "--filter", "web", "exec", "vitest", "run"],
+      },
+      result: {
+        status: 1,
+        signal: null,
+        error: null,
+      },
+      elapsedMs: 1180,
+    }), {
+      command: "pnpm",
+      args: ["--token", "[REDACTED]", "--filter", "web", "exec", "vitest", "run"],
+      elapsedMs: 1180,
+      status: 1,
+      signal: null,
+      error: null,
+    });
   });
 });
 
