@@ -48,7 +48,7 @@ export default function CapacityContinuityPage() {
             Capacity Continuity
           </h1>
           <p className="mt-1 max-w-3xl text-sm text-[var(--dpf-muted)]">
-            Operating policy for using paid AI capacity while human attention is available,
+            Operating policy for using paid AI capacity while employee attention is available,
             reduced, away, or redirected to business events.
           </p>
         </div>

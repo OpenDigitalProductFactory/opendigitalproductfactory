@@ -44,16 +44,16 @@ const roster: WorkforceRoster = {
 };
 
 describe("WorkforceRosterPanel", () => {
-  it("renders both humans and AI agents with the agent-needs lens", () => {
+  it("renders both employees and AI agents with the agent-needs lens", () => {
     const html = renderToStaticMarkup(<WorkforceRosterPanel roster={roster} />);
 
     // both populations present
     expect(html).toContain("Ada Lovelace");
-    expect(html).toContain("human");
+    expect(html).toContain("employee");
     expect(html).toContain("Chief of Staff");
     expect(html).toContain("AI coworker");
 
-    // agent-needs lens surfaced — incl. human-role parity + approval/interface owner
+    // agent-needs lens surfaced — incl. employee-role parity + approval/interface owner
     expect(html).toContain("role parity");
     expect(html).toContain("approval owner");
     expect(html).toContain("Chief Executive Officer"); // resolved parity/owner role

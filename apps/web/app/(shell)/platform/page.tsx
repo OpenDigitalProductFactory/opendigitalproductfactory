@@ -42,7 +42,7 @@ export default async function PlatformPage() {
       <div>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Platform</h1>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
-          Keep AI operations, connection lifecycle management, governance evidence, and controlled admin surfaces understandable for a small human team.
+          Keep AI operations, connection lifecycle management, governance evidence, and controlled admin surfaces understandable for a small employee team.
         </p>
       </div>
 

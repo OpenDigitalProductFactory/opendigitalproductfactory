@@ -57,7 +57,7 @@ function ConcernRow({ concern }: { concern: WorkforceConcern }) {
 
 function ownerChip(item: WorkforceActiveWorkItem): string {
   if (item.ownerKind === "agent") return "AI agent";
-  if (item.ownerKind === "human") return "human";
+  if (item.ownerKind === "human") return "employee";
   return "unassigned";
 }
 

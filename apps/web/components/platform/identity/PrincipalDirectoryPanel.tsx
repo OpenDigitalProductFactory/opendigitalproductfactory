@@ -17,7 +17,7 @@ export function PrincipalDirectoryPanel({ principals }: { principals: PrincipalR
       <div>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Principals</h1>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
-          Review the shared identity inventory for humans, AI coworkers, and future service identities.
+          Review the shared identity inventory for employees, AI coworkers, and future service identities.
         </p>
       </div>
 

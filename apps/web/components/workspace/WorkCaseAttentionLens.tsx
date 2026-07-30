@@ -112,7 +112,7 @@ export function WorkCaseAttentionLens({ view }: Props) {
           <p className="text-xs font-semibold uppercase text-[var(--dpf-muted)]">Workspace</p>
           <h1 className="mt-1 text-2xl font-semibold text-[var(--dpf-text)]">Work Cases</h1>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--dpf-muted)]">
-            Company work projected as cases, ordered by what needs human attention first.
+            Company work projected as cases, ordered by what needs your attention first.
           </p>
         </div>
         <a
@@ -155,7 +155,7 @@ export function WorkCaseAttentionLens({ view }: Props) {
               attentionCases.map((item) => <CaseRow key={item.caseId} item={item} />)
             ) : (
               <div className="px-4 py-6 text-sm text-[var(--dpf-muted)]">
-                Nothing requires human attention right now.
+                Nothing requires your attention right now.
               </div>
             )}
           </section>

@@ -183,7 +183,7 @@ export default async function DecisionRecordPage({ params }: { params: Params })
             No option was actually scored: every principle contribution was
             zero, so no recommendation stands. This usually means the consult
             was submitted without per-option feature values. The decision
-            needs human judgment — or a re-run with scoreable options.
+            needs an owner decision — or a re-run with scoreable options.
           </p>
         ) : null}
         {contributors.length > 0 ? (
@@ -219,7 +219,7 @@ export default async function DecisionRecordPage({ params }: { params: Params })
       {/* Human resolution */}
       <section className="mb-6">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--dpf-muted)] mb-2">
-          Human review
+          Employee review
         </h2>
         {row.escalationCapture ? (
           <div className="rounded-lg border border-[var(--dpf-border)] p-3 text-sm">

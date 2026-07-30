@@ -29,7 +29,7 @@ export function EntraConnectPanel({ state }: { state: EntraConnectionState }) {
           Setup guidance
         </p>
         <p className="mt-2 text-sm text-[var(--dpf-text)]">
-          Start by connecting Entra as an upstream authority for human sign-in and group bootstrap.
+          Start by connecting Entra as an upstream authority for employee sign-in and group bootstrap.
           DPF then maps imported workforce context into local groups, route bundles, and coworker
           approvals instead of delegating authorization decisions upstream.
         </p>

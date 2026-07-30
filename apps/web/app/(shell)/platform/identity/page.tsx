@@ -27,7 +27,7 @@ export default async function PlatformIdentityPage() {
       <div>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Identity &amp; Access</h1>
         <p className="mt-0.5 text-sm text-[var(--dpf-muted)]">
-          Operate human, contractor, AI coworker, and service identity from one platform authority plane.
+          Operate employee, contractor, AI coworker, and service identity from one platform authority plane.
         </p>
       </div>
 

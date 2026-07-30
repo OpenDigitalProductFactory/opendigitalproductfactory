@@ -175,11 +175,11 @@ export function AiSpendWorkspace({
                 <StatusBadge intent="warning" label={`${overview.openWorkItems} queued`} />
               </div>
               <h2 className="mt-3 text-base font-semibold text-[var(--dpf-text)]">
-                Finance Specialist needs human input
+                Finance Specialist needs employee input
               </h2>
               <p className="mt-1 max-w-3xl text-sm text-[var(--dpf-muted)]">
                 Missing AI provider costs are treated as finance traceability gaps until the coworker can
-                retrieve billing details or a human supplies the exact subscription, renewal, and payment evidence.
+                retrieve billing details or an employee supplies the exact subscription, renewal, and payment evidence.
               </p>
             </div>
             <AiFinanceCoworkerAskButton

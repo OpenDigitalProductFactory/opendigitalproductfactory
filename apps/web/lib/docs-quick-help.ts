@@ -320,7 +320,7 @@ const QUICK_HELP_MAP: QuickHelpEntry[] = [
     routePrefix: "/coworker-decisions",
     help: {
       whatThisPageIs:
-        "How your AI decides — the questions it consulted your governance on, what it recommended, and the calls it put in front of a human (escalated or deferred).",
+        "How your AI decides — the questions it consulted your governance on, what it recommended, and the calls it put in front of you (escalated or deferred).",
       actionNow:
         "Use Review & adjust: it rolls the waiting decisions into a few themes. Answer a theme once, or add a stance covering it, and your AI stops needing to ask.",
       ifNothingDone:

@@ -295,7 +295,7 @@ export function DelegationChainPanel({ agents, bmrNodes }: DelegationChainProps)
             Delegation Chain
           </h2>
           <p style={{ fontSize: 10, color: "var(--dpf-muted)", margin: "4px 0 0 0" }}>
-            Human role to agent hierarchy. Click rows to expand/collapse.
+            Employee role to agent hierarchy. Click rows to expand/collapse.
           </p>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
