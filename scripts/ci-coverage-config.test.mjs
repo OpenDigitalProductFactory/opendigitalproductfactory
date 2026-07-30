@@ -82,3 +82,20 @@ test("calibration measures both pnpm and exact-key Turbopack cache economics", (
     /key:\s*nextjs-[\s\S]{0,300}restore-keys:/,
   );
 });
+
+test("calibration Turbopack keys cover every supported web source extension", () => {
+  const supportedSourceHash =
+    /hashFiles\('apps\/web\/\*\*\/\*\.ts', 'apps\/web\/\*\*\/\*\.tsx', 'apps\/web\/\*\*\/\*\.js', 'apps\/web\/\*\*\/\*\.jsx'\)/g;
+  const matches = calibrationWorkflow.match(supportedSourceHash) ?? [];
+
+  assert.equal(
+    matches.length,
+    2,
+    "restore and save must use the same complete source hash",
+  );
+  assert.doesNotMatch(
+    calibrationWorkflow,
+    /hashFiles\([^)]*\{ts,tsx,js,jsx\}[^)]*\)/,
+    "GitHub hashFiles does not expand brace globs",
+  );
+});
