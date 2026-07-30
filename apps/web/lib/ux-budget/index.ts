@@ -7,6 +7,7 @@
 
 export {
   DISCLOSURE_ATTR,
+  DISCLOSURE_TRIGGER_ATTR,
   LEAD_ATTR,
   countDisclosureRegions,
   defaultVisibleHtml,

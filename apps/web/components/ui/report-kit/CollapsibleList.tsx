@@ -65,7 +65,12 @@ export function CollapsibleList({
   const List = as;
 
   return (
-    <div className={className}>
+    // The trigger marker is conditional on `hidden > 0`: a list short enough to render
+    // in full defers nothing, so claiming a disclosure region there would let a surface
+    // satisfy the blocking `deferred-detail` budget check without deferring anything
+    // (BI-2B196D07). Not excised from the measured scope — the preview rows below are
+    // visible on arrival.
+    <div className={className} {...(hidden > 0 ? { "data-dpf-disclosure-trigger": "" } : {})}>
       <List id={listId} className={listClassName}>
         {visible}
       </List>

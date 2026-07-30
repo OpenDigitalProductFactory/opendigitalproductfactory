@@ -32,6 +32,26 @@ const NON_RENDERED = new Set(["script", "style", "template", "noscript"]);
 /** Marks a region as progressive disclosure; excised unless explicitly open. */
 export const DISCLOSURE_ATTR = "data-dpf-disclosure";
 
+/**
+ * Marks a container that DEFERS content behind its own trigger, where the container
+ * itself stays visible on arrival — the canonical React constructs
+ * (`ExpandableCard`, `CollapsibleList`) rather than a native `<details>`.
+ *
+ * WHY THIS IS SEPARATE FROM `DISCLOSURE_ATTR` (BI-2B196D07). Those constructs omit
+ * the deferred subtree from the DOM entirely when collapsed (`{open && …}`,
+ * `rows.slice(0, previewCount)`), so on arrival there is no subtree left to excise —
+ * only a visible summary and a trigger. Reusing `DISCLOSURE_ATTR` would therefore be
+ * actively wrong: `isStructurallyHidden` would excise the whole card INCLUDING the
+ * summary the owner reads, under-counting words and hiding any primary action inside
+ * it. So this attribute makes the region COUNTABLE without making it excisable.
+ *
+ * Before this existed, a surface built from the prescribed constructs measured zero
+ * disclosure regions and FAILED the blocking `deferred-detail` check, while the same
+ * surface using a raw `<details>` — the construct the kernel principle ranks lowest —
+ * passed. The measurement inverted the doctrine it exists to enforce.
+ */
+export const DISCLOSURE_TRIGGER_ATTR = "data-dpf-disclosure-trigger";
+
 /** Marks the lead band — the first thing the owner reads. Budgeted separately. */
 export const LEAD_ATTR = "data-dpf-lead";
 
@@ -184,6 +204,10 @@ function flagOn(attrs: Record<string, string>, name: string): boolean {
 /**
  * Structurally hidden on arrival: `hidden`, `aria-hidden="true"`, a collapsed
  * `<details>`, or a disclosure region that is not explicitly open.
+ *
+ * `DISCLOSURE_TRIGGER_ATTR` is deliberately absent: that marker means "this container
+ * defers content behind a trigger", and the container itself is visible on arrival.
+ * Excising it would delete the summary the owner actually reads.
  */
 export function isStructurallyHidden(tag: TagToken): boolean {
   if (flagOn(tag.attrs, "hidden")) return true;
@@ -195,7 +219,11 @@ export function isStructurallyHidden(tag: TagToken): boolean {
 
 /** True when the element carries progressive-disclosure semantics at all. */
 export function isDisclosureRegion(tag: TagToken): boolean {
-  return tag.name === "details" || DISCLOSURE_ATTR in tag.attrs;
+  return (
+    tag.name === "details" ||
+    DISCLOSURE_ATTR in tag.attrs ||
+    DISCLOSURE_TRIGGER_ATTR in tag.attrs
+  );
 }
 
 /**

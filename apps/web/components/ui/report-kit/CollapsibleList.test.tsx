@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { CollapsibleList } from "./CollapsibleList";
+import { countDisclosureRegions, defaultVisibleHtml } from "../../../lib/ux-budget";
 
 const rows = (n: number) =>
   Array.from({ length: n }, (_, i) => <li key={i}>{`row-${i}`}</li>);
@@ -72,6 +73,25 @@ describe("CollapsibleList", () => {
     );
     expect(html).toContain("<ol");
     expect(html).toContain("+3 others");
+  });
+
+  // BI-2B196D07 — the prescribed construct must SATISFY the blocking `deferred-detail`
+  // budget check. It previously scored zero disclosure regions, so a surface that
+  // deferred correctly here failed while a raw <details> passed.
+  it("is countable as a disclosure region by the UX budget when it defers rows", () => {
+    const html = renderToStaticMarkup(
+      <CollapsibleList previewCount={2}>{rows(5)}</CollapsibleList>,
+    );
+    expect(countDisclosureRegions(html)).toBe(1);
+    // The preview rows are visible on arrival and must survive the measured scope.
+    expect(defaultVisibleHtml(html)).toContain("row-0");
+  });
+
+  it("claims no disclosure region when the whole list already fits", () => {
+    const html = renderToStaticMarkup(
+      <CollapsibleList previewCount={5}>{rows(4)}</CollapsibleList>,
+    );
+    expect(countDisclosureRegions(html)).toBe(0);
   });
 
   it("uses token-backed color, never raw hex", () => {

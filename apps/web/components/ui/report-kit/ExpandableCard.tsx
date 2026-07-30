@@ -48,6 +48,10 @@ export function ExpandableCard({
   return (
     <article
       data-open={open ? "true" : "false"}
+      // Makes this countable as a disclosure region by lib/ux-budget without being
+      // excised from the measured scope — the summary above stays visible on arrival
+      // while `children` is deferred behind the trigger (BI-2B196D07).
+      data-dpf-disclosure-trigger=""
       className={`overflow-hidden rounded-lg border transition-colors ${
         open
           ? "border-[var(--dpf-accent)]/40 bg-[var(--dpf-surface-2)]"

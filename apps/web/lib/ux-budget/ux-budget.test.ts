@@ -65,6 +65,23 @@ describe("disclosure scoping — collapsed detail is excised, never taxed", () =
     expect(countDisclosureRegions(`<details><p>a</p></details><div data-dpf-disclosure><p>b</p></div>`)).toBe(2);
   });
 
+  // BI-2B196D07. The canonical React constructs omit their deferred subtree from the
+  // DOM when collapsed, so there is nothing to excise on arrival — only a visible
+  // summary and a trigger. The trigger marker must therefore COUNT as a region while
+  // staying in the measured scope, or the two attributes would be interchangeable and
+  // marking a card would delete the summary the owner reads.
+  it("counts a disclosure trigger as a region without excising its visible summary", () => {
+    const html = `<article data-dpf-disclosure-trigger=""><h3>Record summary</h3></article>`;
+    expect(countDisclosureRegions(html)).toBe(1);
+    expect(defaultVisibleHtml(html)).toContain("Record summary");
+  });
+
+  it("still excises a data-dpf-disclosure region, so the two markers are not aliases", () => {
+    const html = `<div data-dpf-disclosure><p>deferred body</p></div>`;
+    expect(countDisclosureRegions(html)).toBe(1);
+    expect(defaultVisibleHtml(html)).not.toContain("deferred body");
+  });
+
   it("removeSubtrees leaves void elements alone rather than swallowing the rest", () => {
     const out = removeSubtrees(`<p>a</p><img src="x"><p>b</p>`, (t) => t.name === "img");
     expect(out).toContain("<p>a</p>");
