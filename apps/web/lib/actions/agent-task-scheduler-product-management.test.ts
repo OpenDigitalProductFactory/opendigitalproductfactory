@@ -104,11 +104,7 @@ vi.mock("@/lib/product-management/product-management-playbook-run", () => ({
     mocks.completeProductManagementPlaybookRun,
 }));
 
-import { executeScheduledAgentTask, scheduleAgentTask } from "./agent-task-scheduler";
-import {
-  extractDiscoveryTriageSummary,
-  extractHiveScoutSummary,
-} from "./agent-task-scheduler-summary";
+import { executeScheduledAgentTask } from "./agent-task-scheduler";
 
 beforeEach(() => {
   vi.resetAllMocks();
