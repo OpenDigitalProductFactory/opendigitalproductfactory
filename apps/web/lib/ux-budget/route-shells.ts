@@ -138,6 +138,26 @@ export const ROUTE_SWEEP_EXCLUSIONS = {
   // signature and magnitude as the /platform/schedule 331→342 case above. Remove
   // once the fixture can pin the app-visible clock (BI-0C6C2153).
   "/workspace": "wall-clock-collection",
+  // Live-orchestration-state routes. These drift because CONCURRENT SESSIONS and
+  // in-run cron fires mutate the platform state they render, not only because the
+  // clock advances — so the frozen baseline cannot hold even within a single SHA.
+  // Both were caught failing on BI-F2EC4699's branch on commits that change no
+  // rendered output at all (see BI-0C6C2153 for the four-run same-SHA evidence):
+  //
+  //   /ops/self-upgrade      structureChanged=true, no word delta, no budget
+  //                          failure — it renders getSelfUpgradeStatus() +
+  //                          listSelfUpgradeRuns() and stamps
+  //                          new Date().toISOString(), so its heading/landmark
+  //                          shape changes as runs are created and completed.
+  //   /admin/scheduled-jobs  1542 -> 1784 words (+242) — every row shows
+  //                          nextRunAt (computeNextCronRun(schedule, new Date())),
+  //                          lastRunAt, and a health badge, and crons fire during
+  //                          the sweep itself.
+  //
+  // Remove once the fixture pins the app-visible clock AND isolates platform state
+  // from concurrent writers (BI-0C6C2153).
+  "/ops/self-upgrade": "wall-clock-collection",
+  "/admin/scheduled-jobs": "wall-clock-collection",
 } as const satisfies Record<string, RouteSweepExclusionReason>;
 
 export type RouteShellPolicy = {
