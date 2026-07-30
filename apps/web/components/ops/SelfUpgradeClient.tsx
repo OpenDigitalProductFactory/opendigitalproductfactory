@@ -12,7 +12,7 @@ import { describeSkipReason } from "@/lib/self-upgrade/skip-reason";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { isExpectedDuringSwap } from "@/lib/self-upgrade/is-expected-during-swap";
 import { SelfUpgradeReadiness } from "@/components/ops/SelfUpgradeReadiness";
-import { BuildDetailsDisclosure } from "@/components/ops/BuildDetailsDisclosure";
+import { BuildStamps } from "@/components/ops/BuildStamps";
 import type { LatestRun, QuiescenceActivity } from "@/lib/self-upgrade/run-types";
 
 type RecoveryPointSummary = {
@@ -715,7 +715,7 @@ export default function SelfUpgradeClient({
               )}
           </>
         )}
-        <BuildDetailsDisclosure
+        <BuildStamps
           enabled={enabled}
           deployedSha={deployedSha}
           deployedShaSource={deployedShaSource}
