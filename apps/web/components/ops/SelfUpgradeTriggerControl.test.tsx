@@ -102,6 +102,12 @@ describe("SelfUpgradeTriggerControl – enabled", () => {
       <SelfUpgradeTriggerControl {...baseProps} purposeState="current" />,
     );
     expect(html).toContain('data-dpf-purpose-message-key="current-status"');
+    expect(html).toContain(
+      'data-dpf-purpose-completion-signal-key="current-version-visible"',
+    );
+    expect(html).toContain(
+      'data-dpf-purpose-correction-signal-key="status-refresh"',
+    );
     expect(html).not.toContain('data-dpf-purpose-action-key="start-upgrade"');
   });
 
@@ -110,6 +116,12 @@ describe("SelfUpgradeTriggerControl – enabled", () => {
       <SelfUpgradeTriggerControl {...baseProps} purposeState="blocked" />,
     );
     expect(html).toContain('data-dpf-purpose-action-key="resolve-blocker"');
+    expect(html).toContain(
+      'data-dpf-purpose-completion-signal-key="blocker-route-reachable"',
+    );
+    expect(html).toContain(
+      'data-dpf-purpose-correction-signal-key="blocker-reason-visible"',
+    );
     expect(html).toContain('data-dpf-purpose-action-key="open-recovery-guidance"');
     expect(html).toContain("/docs/operations/self-upgrade");
     expect(html).not.toContain('aria-label="Upgrade now"');
@@ -137,6 +149,9 @@ describe("SelfUpgradeTriggerControl – enabled", () => {
       />,
     );
     expect(html).toContain('data-dpf-purpose-action-key="open-recovery-controls"');
+    expect(html).toContain(
+      'data-dpf-purpose-completion-signal-key="recovery-controls-reachable"',
+    );
     expect(html).toContain("#self-upgrade-latest-run");
     expect(html).not.toContain('aria-label="Upgrade now"');
   });
@@ -152,6 +167,13 @@ describe("SelfUpgradeTriggerControl – enabled", () => {
   it("renders solid primary-button styling, not a faint text-xs ghost button (BI-D77BF495)", () => {
     const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
     expect(html).toMatch(/aria-label="Upgrade now"[^>]*class="[^"]*bg-\[var\(--dpf-accent\)\][^"]*text-white/);
+  });
+
+  it("gives the emergency override checkbox a 44px label target", () => {
+    const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
+    expect(html).toMatch(
+      /<label class="[^"]*min-h-11[^"]*">.*Emergency override/s,
+    );
   });
 });
 
@@ -175,6 +197,12 @@ describe("SelfUpgradeTriggerControl – running", () => {
       <SelfUpgradeTriggerControl {...baseProps} latestRun={makeRun("running")} />,
     );
     expect(html).toContain("Upgrade in progress…");
+    expect(html).toContain(
+      'data-dpf-purpose-completion-signal-key="upgrade-progress-visible"',
+    );
+    expect(html).toContain(
+      'data-dpf-purpose-correction-signal-key="stalled-run-recovery"',
+    );
     expect(html).not.toContain('aria-label="Upgrade now"');
   });
 
@@ -272,6 +300,9 @@ describe("SelfUpgradeTriggerControl – success feedback", () => {
     const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
     expect(html).toContain("Upgrade queued.");
     expect(html).toContain('role="status"');
+    expect(html).toContain(
+      'data-dpf-purpose-completion-signal-key="upgrade-queue-acknowledgement"',
+    );
   });
 });
 
@@ -283,6 +314,9 @@ describe("SelfUpgradeTriggerControl – error feedback", () => {
     const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
     expect(html).toContain("Not queued:");
     expect(html).toContain('role="status"');
+    expect(html).toContain(
+      'data-dpf-purpose-correction-signal-key="upgrade-request-error"',
+    );
   });
 
   it("shows the specific reason for not queuing", () => {

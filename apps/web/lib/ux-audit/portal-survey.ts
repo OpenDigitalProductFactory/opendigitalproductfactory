@@ -136,9 +136,10 @@ export type BehavioralLensEvaluator = (
 export type PurposeLensEvaluator = (
   route: string,
 ) => Promise<RoutePurposeEvaluation | undefined>;
-export type SpecialPurposeEvaluator = () => Promise<
-  RoutePurposeEvaluation[]
->;
+export type SpecialPurposeEvaluator = {
+  routePaths: readonly string[];
+  evaluate: (routePath: string) => Promise<RoutePurposeEvaluation>;
+};
 
 export type SurveyEvaluators = {
   page?: PageLensEvaluator;
@@ -188,7 +189,7 @@ function verdictForPurpose(
   if (
     purpose.intentStatus !== "intent-ratified" ||
     purpose.structuralStatus === "not-evaluated" ||
-    purpose.validation.overall === "stale"
+    purpose.validation.overall !== "current"
   ) {
     return "pass-with-minor";
   }
@@ -354,16 +355,27 @@ export async function runSurvey(
 
   if (evaluators.specialPurpose) {
     const existingRoutes = new Set(results.map((result) => result.route));
-    for (const purpose of await evaluators.specialPurpose()) {
-      if (existingRoutes.has(purpose.routePath)) continue;
-      results.push({
-        route: purpose.routePath,
-        verdict: verdictForPurpose(purpose),
-        findings: [],
-        evaluated: { page: false, behavioral: false },
-        purpose,
-      });
-      existingRoutes.add(purpose.routePath);
+    for (const routePath of evaluators.specialPurpose.routePaths) {
+      if (existingRoutes.has(routePath)) continue;
+      try {
+        const purpose = await evaluators.specialPurpose.evaluate(routePath);
+        results.push({
+          route: purpose.routePath,
+          verdict: verdictForPurpose(purpose),
+          findings: [],
+          evaluated: { page: false, behavioral: false },
+          purpose,
+        });
+      } catch (error) {
+        results.push({
+          route: routePath,
+          verdict: "concerns",
+          findings: [],
+          evaluated: { page: false, behavioral: false },
+          error: getErrorMessage(error),
+        });
+      }
+      existingRoutes.add(routePath);
     }
   }
 

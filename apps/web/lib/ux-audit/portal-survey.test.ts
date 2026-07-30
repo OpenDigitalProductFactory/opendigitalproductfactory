@@ -232,8 +232,9 @@ describe("runSurvey + aggregateReport", () => {
     const report = await runSurvey(
       { entries: [], skipped: [] },
       {
-        specialPurpose: async () => [
-          {
+        specialPurpose: {
+          routePaths: ["/ops/self-upgrade"],
+          evaluate: async () => ({
             routePath: "/ops/self-upgrade",
             intentStatus: "intent-ratified",
             structuralStatus: "conformant",
@@ -245,8 +246,8 @@ describe("runSurvey + aggregateReport", () => {
             enforcement: "advisory",
             findings: [],
             blocking: false,
-          },
-        ],
+          }),
+        },
       },
       lensById,
     );
@@ -254,10 +255,52 @@ describe("runSurvey + aggregateReport", () => {
     expect(report.routes).toHaveLength(1);
     expect(report.routes[0]).toMatchObject({
       route: "/ops/self-upgrade",
-      verdict: "pass",
+      verdict: "pass-with-minor",
       evaluated: { page: false, behavioral: false },
     });
     expect(report.evaluatedRouteCount).toBe(1);
     expect(report.purposeCoverage.intentRatifiedCount).toBe(1);
+  });
+
+  it("keeps surveying special routes when one evaluator throws", async () => {
+    const report = await runSurvey(
+      { entries: [], skipped: [] },
+      {
+        specialPurpose: {
+          routePaths: ["/ops/self-upgrade", "/ops/health"],
+          evaluate: async (routePath) => {
+            if (routePath === "/ops/self-upgrade") {
+              throw new Error("oracle unavailable");
+            }
+            return {
+              routePath,
+              intentStatus: "intent-ratified",
+              structuralStatus: "conformant",
+              validation: {
+                overall: "current",
+                classes: { "automated-functional": "current" },
+                receipts: [],
+              },
+              enforcement: "advisory",
+              findings: [],
+              blocking: false,
+            };
+          },
+        },
+      },
+      lensById,
+    );
+
+    expect(report.routes).toHaveLength(2);
+    expect(report.routes[0]).toMatchObject({
+      route: "/ops/self-upgrade",
+      verdict: "concerns",
+      error: "oracle unavailable",
+    });
+    expect(report.routes[1]).toMatchObject({
+      route: "/ops/health",
+      verdict: "pass",
+    });
+    expect(report.portalVerdict).toBe("concerns");
   });
 });

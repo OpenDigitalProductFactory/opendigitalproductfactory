@@ -8,6 +8,7 @@ import { buildOwnerReleaseSummary } from "@/lib/self-upgrade/owner-summary";
 import SelfUpgradeClient from "@/components/ops/SelfUpgradeClient";
 import SelfUpgradeTriggerControl from "@/components/ops/SelfUpgradeTriggerControl";
 import { OwnerReleaseCard } from "@/components/ops/OwnerReleaseCard";
+import { SelfUpgradePurposeReview } from "@/components/ops/SelfUpgradePurposeReview";
 import { OpsTabNav } from "@/components/ops/OpsTabNav";
 import { PlatformUpdateApplyPanel } from "@/components/admin/PlatformUpdateApplyPanel";
 import { LocalChangesLedger } from "@/components/ops/LocalChangesLedger";
@@ -17,11 +18,25 @@ import {
   resolveSelfUpgradePurposeBlocker,
   resolveSelfUpgradePurposeRecovery,
   resolveSelfUpgradePurposeScenario,
-  resolveSelfUpgradePurposeSignals,
 } from "@/lib/self-upgrade/purpose-scenario";
 import { NAV_MODE_COOKIE, resolveNavModeFromCookie, isSimpleNavMode } from "@/lib/navigation/nav-mode";
+import { isSelfUpgradePurposeReviewState } from "@/lib/ux-budget/self-upgrade-purpose-review";
 
-export default async function SelfUpgradePage() {
+export default async function SelfUpgradePage({
+  searchParams = Promise.resolve({}),
+}: {
+  searchParams?: Promise<{ purposeReview?: string; outcome?: string }>;
+} = {}) {
+  const reviewParams = await searchParams;
+  const reviewState = reviewParams.purposeReview ?? "";
+  if (isSelfUpgradePurposeReviewState(reviewState)) {
+    return (
+      <SelfUpgradePurposeReview
+        state={reviewState}
+        triggerOutcome={reviewParams.outcome === "error" ? "error" : "success"}
+      />
+    );
+  }
   // BI-D43EB266: Self-Upgrade is the single operator entry point for "update
   // the portal". The image/SHA deploy controls (SelfUpgradeClient) are the
   // primary path; the source-merge sub-step (PlatformUpdateApplyPanel) is
@@ -109,7 +124,6 @@ export default async function SelfUpgradePage() {
     ? { ...status, statusAvailable: true }
     : fallbackStatus;
   const purposeState = resolveSelfUpgradePurposeScenario(effectiveStatus);
-  const purposeSignals = resolveSelfUpgradePurposeSignals(purposeState);
   const purposeBlocker = resolveSelfUpgradePurposeBlocker(effectiveStatus);
   const purposeRecovery = resolveSelfUpgradePurposeRecovery(effectiveStatus);
 
@@ -167,8 +181,6 @@ export default async function SelfUpgradePage() {
     <div
       data-dpf-purpose-route="/ops/self-upgrade"
       data-dpf-purpose-state={purposeState}
-      data-dpf-purpose-completion-signal-key={purposeSignals.completion}
-      data-dpf-purpose-correction-signal-key={purposeSignals.correction}
     >
       <div className="mb-6">
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Self-Upgrade</h1>

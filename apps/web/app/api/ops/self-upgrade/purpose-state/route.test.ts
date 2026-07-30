@@ -41,6 +41,20 @@ describe("GET /api/ops/self-upgrade/purpose-state", () => {
       stateKey: "update-available",
       oracleKey: "self-upgrade-status",
       sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
+      statusAvailable: true,
+    });
+  });
+
+  it("returns an independent blocked oracle when the status read fails", async () => {
+    mocks.getSelfUpgradeStatus.mockRejectedValue(new Error("status offline"));
+
+    const response = await GET();
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      stateKey: "blocked",
+      statusAvailable: false,
+      oracleKey: "self-upgrade-status",
     });
   });
 

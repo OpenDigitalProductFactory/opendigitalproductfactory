@@ -59,6 +59,9 @@ export function OwnerReleaseCard({
     >
       <div
         data-dpf-purpose-message-key={STATE_MESSAGE_KEY[summary.state]}
+        data-dpf-purpose-correction-signal-key={
+          summary.state === "failed" ? "failure-reason-visible" : undefined
+        }
       >
         <Notice variant={TONE_VARIANT[summary.tone]} title={summary.headline}>
           <p className="font-medium text-[var(--dpf-text)]">{summary.recommendedAction.label}</p>

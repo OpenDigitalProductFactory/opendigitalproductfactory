@@ -173,7 +173,10 @@ function validationStatus(
   >();
   for (const receipt of contract.validationReceipts) {
     const current = latestByClass.get(receipt.evidenceClass);
-    if (!current || receipt.observedAt >= current.observedAt) {
+    if (
+      !current ||
+      Date.parse(receipt.observedAt) >= Date.parse(current.observedAt)
+    ) {
       latestByClass.set(receipt.evidenceClass, receipt);
     }
   }
@@ -206,6 +209,31 @@ function validationStatus(
       );
       if (unresolved.length > 0) {
         reasons.push(`Evidence artifact did not resolve: ${unresolved.join(", ")}.`);
+      }
+    }
+    if (receipt.evidenceClass === "automated-functional") {
+      for (const [stateKey, scenario] of Object.entries(
+        contract.stateScenarios,
+      )) {
+        const metricPrefix = `state.${stateKey}`;
+        if (
+          receipt.metrics[`${metricPrefix}.completionSignalKey`] !==
+            scenario.completionSignalKey ||
+          receipt.metrics[`${metricPrefix}.completionObserved`] !== true
+        ) {
+          reasons.push(
+            `Completion outcome was not proven for state ${stateKey}.`,
+          );
+        }
+        if (
+          receipt.metrics[`${metricPrefix}.correctionSignalKey`] !==
+            scenario.correctionSignalKey ||
+          receipt.metrics[`${metricPrefix}.correctionObserved`] !== true
+        ) {
+          reasons.push(
+            `Correction outcome was not proven for state ${stateKey}.`,
+          );
+        }
       }
     }
 
@@ -283,6 +311,7 @@ export function evaluateRoutePurpose({
   enforcement = "advisory",
 }: EvaluateRoutePurposeInput): RoutePurposeEvaluation {
   const findings: PurposeFinding[] = [];
+  const validation = validationStatus(contract, context);
   const add = (
     checkId: PurposeCheckId,
     message: string,
@@ -299,7 +328,7 @@ export function evaluateRoutePurpose({
       routePath: contract.routePath,
       intentStatus: contract.status,
       structuralStatus: "not-evaluated",
-      validation: validationStatus(contract, context),
+      validation,
       enforcement,
       findings,
       blocking: false,
@@ -316,7 +345,7 @@ export function evaluateRoutePurpose({
       routePath: contract.routePath,
       intentStatus: contract.status,
       structuralStatus: "not-evaluated",
-      validation: validationStatus(contract, context),
+      validation,
       enforcement,
       findings,
       blocking: false,
@@ -339,7 +368,7 @@ export function evaluateRoutePurpose({
       structuralStatus: excludedFromGenericSweep
         ? "not-evaluated"
         : "nonconformant",
-      validation: validationStatus(contract, context),
+      validation,
       enforcement,
       findings,
       blocking: enforcement === "blocking" && !excludedFromGenericSweep,
@@ -439,6 +468,7 @@ export function evaluateRoutePurpose({
       add(
         "completion-signal",
         `Expected completion signal ${scenario.completionSignalKey}.`,
+        "advisory",
       );
     }
     if (
@@ -447,6 +477,7 @@ export function evaluateRoutePurpose({
       add(
         "correction-signal",
         `Expected correction signal ${scenario.correctionSignalKey}.`,
+        "advisory",
       );
     }
     if (
@@ -536,7 +567,7 @@ export function evaluateRoutePurpose({
     routePath: contract.routePath,
     intentStatus: contract.status,
     structuralStatus,
-    validation: validationStatus(contract, context),
+    validation,
     enforcement,
     findings,
     blocking:

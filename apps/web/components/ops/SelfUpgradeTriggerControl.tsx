@@ -17,7 +17,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { TriangleAlert, Zap } from "lucide-react";
+import { RefreshCw, TriangleAlert, Zap } from "lucide-react";
 import { triggerSelfUpgrade, forceActiveRun, abortActiveRun } from "@/lib/actions/promotions";
 import { isExpectedDuringSwap } from "@/lib/self-upgrade/is-expected-during-swap";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -27,6 +27,12 @@ import SelfUpgradeJobEngineHealthAlert, {
   shouldPollForJobEngineRecovery,
   type JobEngineHealth,
 } from "@/components/ops/SelfUpgradeJobEngineHealthAlert";
+
+export type SelfUpgradeControlActions = {
+  trigger: typeof triggerSelfUpgrade;
+  force: typeof forceActiveRun;
+  abort: typeof abortActiveRun;
+};
 
 type Props = {
   enabled: boolean;
@@ -38,6 +44,7 @@ type Props = {
   blockerReason?: string | null;
   recoveryHref?: string;
   recoveryLabel?: string;
+  actions?: SelfUpgradeControlActions;
 };
 
 export default function SelfUpgradeTriggerControl({
@@ -50,6 +57,11 @@ export default function SelfUpgradeTriggerControl({
   blockerReason = null,
   recoveryHref = "/docs/operations/self-upgrade",
   recoveryLabel = "Open recovery guidance",
+  actions = {
+    trigger: triggerSelfUpgrade,
+    force: forceActiveRun,
+    abort: abortActiveRun,
+  },
 }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -150,7 +162,7 @@ export default function SelfUpgradeTriggerControl({
     const force = override;
     startTransition(async () => {
       try {
-        const result = await triggerSelfUpgrade(force ? { force: true } : undefined);
+        const result = await actions.trigger(force ? { force: true } : undefined);
         setTriggerResult(result);
         if (result.queued) setJustQueued(true);
         router.refresh();
@@ -172,7 +184,7 @@ export default function SelfUpgradeTriggerControl({
     setInFlightError(null);
     startTransition(async () => {
       try {
-        const r = await forceActiveRun(runId);
+        const r = await actions.force(runId);
         setForceConfirm(false);
         if (!r.ok) setInFlightError(r.error ?? "Force failed");
         router.refresh();
@@ -195,7 +207,7 @@ export default function SelfUpgradeTriggerControl({
     setInFlightError(null);
     startTransition(async () => {
       try {
-        const r = await abortActiveRun(runId);
+        const r = await actions.abort(runId);
         setAbortConfirm(false);
         if (!r.ok) setInFlightError(r.error ?? "Abort failed");
         router.refresh();
@@ -215,8 +227,18 @@ export default function SelfUpgradeTriggerControl({
       <div
         className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-sm"
         data-dpf-purpose-message-key="current-status"
+        data-dpf-purpose-completion-signal-key="current-version-visible"
       >
         <span className="text-[var(--dpf-text)]">No update action is needed.</span>
+        <a
+          href="/ops/self-upgrade"
+          aria-label="Refresh update status"
+          title="Refresh update status"
+          data-dpf-purpose-correction-signal-key="status-refresh"
+          className="inline-flex size-11 items-center justify-center rounded-lg text-[var(--dpf-accent)] hover:bg-[var(--dpf-surface-1)]"
+        >
+          <RefreshCw aria-hidden="true" className="size-4" />
+        </a>
         <a
           href="/docs/operations/self-upgrade"
           data-dpf-purpose-action-key="open-recovery-guidance"
@@ -238,6 +260,7 @@ export default function SelfUpgradeTriggerControl({
           data-dpf-primary-action
           data-owner-first-next-action
           data-dpf-purpose-action-key="open-recovery-controls"
+          data-dpf-purpose-completion-signal-key="recovery-controls-reachable"
           className="inline-flex min-h-11 items-center rounded-lg bg-[var(--dpf-accent)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
         >
           Review recovery controls
@@ -259,7 +282,10 @@ export default function SelfUpgradeTriggerControl({
         className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2 text-sm"
         data-upgrade-status="disabled"
       >
-        <span className="text-[var(--dpf-muted)]">
+        <span
+          className="text-[var(--dpf-muted)]"
+          data-dpf-purpose-correction-signal-key="blocker-reason-visible"
+        >
           {blockerReason ??
             "Self-upgrade is disabled. Resolve the prerequisite before starting an update."}
         </span>
@@ -268,6 +294,7 @@ export default function SelfUpgradeTriggerControl({
           data-dpf-primary-action
           data-owner-first-next-action
           data-dpf-purpose-action-key="resolve-blocker"
+          data-dpf-purpose-completion-signal-key="blocker-route-reachable"
           className="inline-flex min-h-11 items-center rounded-lg bg-[var(--dpf-accent)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
         >
           {recoveryLabel}
@@ -399,6 +426,7 @@ export default function SelfUpgradeTriggerControl({
                 className="text-xs text-[var(--dpf-muted)]"
                 aria-live="polite"
                 data-upgrade-inflight="true"
+                data-dpf-purpose-completion-signal-key="upgrade-progress-visible"
               >
                 {queuedRun
                   ? "Upgrade queued — waiting for the worker…"
@@ -407,7 +435,7 @@ export default function SelfUpgradeTriggerControl({
             )
           ) : (
             <>
-              <label className="flex items-center gap-1.5 text-xs text-[var(--dpf-muted)] cursor-pointer select-none">
+              <label className="flex min-h-11 items-center gap-2 px-1 text-xs text-[var(--dpf-muted)] cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={override}
@@ -455,6 +483,7 @@ export default function SelfUpgradeTriggerControl({
         <a
           href="/docs/operations/self-upgrade"
           data-dpf-purpose-action-key="open-recovery-guidance"
+          data-dpf-purpose-correction-signal-key="stalled-run-recovery"
           className="inline-flex min-h-11 items-center text-sm text-[var(--dpf-accent)] underline-offset-2 hover:underline"
         >
           Recovery guidance
@@ -476,6 +505,12 @@ export default function SelfUpgradeTriggerControl({
         <div
           role="status"
           aria-live="polite"
+          data-dpf-purpose-completion-signal-key={
+            triggerResult.queued ? "upgrade-queue-acknowledgement" : undefined
+          }
+          data-dpf-purpose-correction-signal-key={
+            triggerResult.queued ? undefined : "upgrade-request-error"
+          }
           className={`p-3 rounded-lg text-sm ${
             triggerResult.queued
               ? "bg-[var(--dpf-success)]/10 text-[var(--dpf-success)] border border-[var(--dpf-success)]/30"

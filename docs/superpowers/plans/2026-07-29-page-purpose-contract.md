@@ -719,6 +719,34 @@ program itself.
   exact-SHA gate, and desktop/mobile pilot acceptance
 - Captured in: this plan
 
+### Exact-candidate review corrections
+
+Independent architecture and UX reviews rejected the first two evaluator
+candidates. The corrected design now enforces these boundaries:
+
+- The page classifier and status API use separate state mappings, and a failed
+  status read returns a truthful `blocked` oracle instead of aborting browser
+  evaluation.
+- Completion and correction markers live on the actual visible outcome,
+  recovery control, or error. The page root never pre-asserts that an
+  interaction succeeded.
+- Automated-functional receipts must prove the exact completion and correction
+  keys for every ratified state. A superficial one-state or `completion: true`
+  receipt remains stale.
+- `not-validated` and stale Purpose results can never aggregate to `pass`.
+- Receipt supersession compares parsed instants, so different valid ISO
+  fractional precision cannot reorder evidence.
+- Special-route evaluation declares its route set before execution; one route
+  failure becomes an error-bearing `concerns` row and cannot abort the survey.
+- The side-effect-free `purposeReview` mode on `/ops/self-upgrade` renders the
+  real owner card and trigger for all five states. Injected actions can produce
+  success and error outcomes without queuing an update. Playwright records a
+  five-state receipt only after each state exposes its exact completion and
+  correction evidence.
+- Status recovery, rollback, repair, and emergency-override targets all meet
+  the 44px interaction floor. Disabled and unavailable states lead to a
+  specific remedy rather than generic help.
+
 ## Backlog coverage
 
 **Receipt:** `cms6lzjbn0et901l2wlu2868l`

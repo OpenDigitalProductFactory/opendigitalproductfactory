@@ -170,7 +170,13 @@ function functionalReceipt(
     inputMode: "pointer",
     interactionFingerprint: "interaction-v1",
     relevantDependencyFingerprint: "dependencies-v1",
-    metrics: { completion: true },
+    metrics: {
+      "state.update-available.completionSignalKey":
+        "upgrade-queue-acknowledgement",
+      "state.update-available.completionObserved": true,
+      "state.update-available.correctionSignalKey": "upgrade-request-error",
+      "state.update-available.correctionObserved": true,
+    },
     thresholds: { completion: true },
     reviewerRef: "VR-BI-D27323A0",
     observedAt: "2026-07-30T00:00:00.000Z",
@@ -317,11 +323,49 @@ describe("evaluateRoutePurpose", () => {
         context,
       });
 
-      expect(result.structuralStatus).toBe("nonconformant");
+      const outcomeCheck =
+        defect.checkId === "completion-signal" ||
+        defect.checkId === "correction-signal";
+      expect(result.structuralStatus).toBe(
+        outcomeCheck ? "conformant" : "nonconformant",
+      );
       expect(result.findings.map((finding) => finding.checkId)).toContain(defect.checkId);
+      if (outcomeCheck) {
+        expect(
+          result.findings.find((finding) => finding.checkId === defect.checkId)
+            ?.severity,
+        ).toBe("advisory");
+      }
       expect(result.blocking).toBe(false);
     });
   }
+
+  it("keeps a superficial functional receipt stale when it omits state outcomes", () => {
+    const result = evaluateRoutePurpose({
+      contract: {
+        ...contract,
+        validationReceipts: [
+          functionalReceipt({ metrics: { completion: true } }),
+        ],
+      },
+      oracle: {
+        routePath: "/ops/self-upgrade",
+        stateKey: "update-available",
+        oracleKey: "self-upgrade-status",
+        sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
+      },
+      evidence,
+      context,
+    });
+
+    expect(result.validation.overall).toBe("stale");
+    expect(result.validation.receipts[0].reasons).toEqual(
+      expect.arrayContaining([
+        "Completion outcome was not proven for state update-available.",
+        "Correction outcome was not proven for state update-available.",
+      ]),
+    );
+  });
 
   it("marks a matching, resolvable functional receipt current without requiring source SHA equality", () => {
     const result = evaluateRoutePurpose({
@@ -339,7 +383,14 @@ describe("evaluateRoutePurpose", () => {
             inputMode: "pointer",
             interactionFingerprint: "interaction-v1",
             relevantDependencyFingerprint: "dependencies-v1",
-            metrics: { completion: true },
+            metrics: {
+              "state.update-available.completionSignalKey":
+                "upgrade-queue-acknowledgement",
+              "state.update-available.completionObserved": true,
+              "state.update-available.correctionSignalKey":
+                "upgrade-request-error",
+              "state.update-available.correctionObserved": true,
+            },
             thresholds: { completion: true },
             reviewerRef: "VR-BI-D27323A0",
             observedAt: "2026-07-30T00:00:00.000Z",
@@ -431,6 +482,36 @@ describe("evaluateRoutePurpose", () => {
     expect(result.validation.overall).toBe("current");
     expect(result.validation.receipts).toHaveLength(1);
     expect(result.validation.receipts[0].reviewerRef).toBe("VR-PASSED");
+  });
+
+  it("orders valid receipt timestamps by instant, not fractional string shape", () => {
+    const result = evaluateRoutePurpose({
+      contract: {
+        ...contract,
+        validationReceipts: [
+          functionalReceipt({
+            reviewerRef: "VR-LATER",
+            observedAt: "2026-07-30T00:00:00.12Z",
+          }),
+          functionalReceipt({
+            reviewerRef: "VR-EARLIER",
+            observedAt: "2026-07-30T00:00:00.099Z",
+            completionOracleResult: "failed",
+          }),
+        ],
+      },
+      oracle: {
+        routePath: "/ops/self-upgrade",
+        stateKey: "update-available",
+        oracleKey: "self-upgrade-status",
+        sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
+      },
+      evidence,
+      context,
+    });
+
+    expect(result.validation.overall).toBe("current");
+    expect(result.validation.receipts[0].reviewerRef).toBe("VR-LATER");
   });
 
   it("does not let another current class mask a newer stale class", () => {

@@ -905,7 +905,7 @@ export default function SelfUpgradeClient({
           )}
 
           {latestRun.failureLog && (
-            <details className="text-xs">
+            <details className="text-xs" data-dpf-purpose-correction-signal-key="failure-reason-visible">
               <summary className="cursor-pointer text-[var(--dpf-destructive)]">
                 Error details
               </summary>

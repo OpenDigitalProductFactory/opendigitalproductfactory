@@ -77,4 +77,20 @@ describe("OwnerReleaseCard – primary action slot", () => {
     const html = renderToStaticMarkup(<OwnerReleaseCard summary={baseSummary} />);
     expect(html).toContain('data-release-state="update-available"');
   });
+
+  it("anchors a failed summary to the correction evidence it visibly explains", () => {
+    const html = renderToStaticMarkup(
+      <OwnerReleaseCard
+        summary={{
+          ...baseSummary,
+          state: "failed",
+          tone: "danger",
+          headline: "The update did not complete.",
+        }}
+      />,
+    );
+    expect(html).toContain(
+      'data-dpf-purpose-correction-signal-key="failure-reason-visible"',
+    );
+  });
 });
