@@ -1735,6 +1735,13 @@
     "longSentences": 0,
     "textMass": 16
   },
+  "apps/web/app/(shell)/portfolio/product-line/[id]/direction/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 23
+  },
   "apps/web/app/(shell)/portfolio/product/[id]/architecture/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -1768,7 +1775,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 24
+    "textMass": 30
   },
   "apps/web/app/(shell)/portfolio/product/[id]/health/page.tsx": {
     "vocabulary": 0,
@@ -7006,6 +7013,13 @@
     "longSentences": 0,
     "textMass": 41
   },
+  "apps/web/components/product/direction/ProductManagementPlaybooks.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 106
+  },
   "apps/web/components/product/direction/ProductOutcomeEvidenceForms.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -7019,6 +7033,20 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 199
+  },
+  "apps/web/components/product/direction/ProductRoadmap.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 264
+  },
+  "apps/web/components/product/direction/ProductRoadmapExport.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 3
   },
   "apps/web/components/product/intelligence/ProductIntelligence.tsx": {
     "vocabulary": 0,
