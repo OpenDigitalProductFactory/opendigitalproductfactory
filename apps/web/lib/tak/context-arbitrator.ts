@@ -18,6 +18,17 @@ export type ContextSource = {
   compressible: boolean;      // Can this be shortened if over budget?
   compressedContent?: string; // Shorter fallback version
   compressedTokenCount?: number;
+  /**
+   * Set by `arbitrate` on a SELECTED source when it substituted the compressed
+   * fallback to make the source fit. Callers never set this.
+   *
+   * It exists so the persisted arbitration trace (BI-3E218D80) can state
+   * truthfully that a source was degraded rather than INFERRING it from
+   * `tokenCount === compressedTokenCount` — an inference that silently lies
+   * whenever the compressed and full variants happen to cost the same. An audit
+   * record whose whole purpose is trust must not be built on a guess.
+   */
+  usedCompressed?: boolean;
 };
 
 export type ContextBudget = {
@@ -105,6 +116,7 @@ export function arbitrate(
           ...src,
           content: src.compressedContent,
           tokenCount: src.compressedTokenCount,
+          usedCompressed: true,
         });
         l1Used += src.compressedTokenCount;
       } else {
@@ -129,6 +141,7 @@ export function arbitrate(
           ...src,
           content: src.compressedContent,
           tokenCount: src.compressedTokenCount,
+          usedCompressed: true,
         });
         l2Used += src.compressedTokenCount;
       } else {

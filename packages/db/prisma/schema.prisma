@@ -6083,6 +6083,15 @@ model AgentMessage {
   modelId          String?
   taskType         String?
   routedEndpointId String?
+  // BI-3E218D80: what the coworker was actually GIVEN on this turn, and what was dropped
+  // for budget. Extends EP-CTX-001 §9 (Observability), which specified aggregate Prometheus
+  // counters — never built — plus a dev-mode log; neither can answer "why didn't THIS
+  // coworker know X on THIS turn". Shape: lib/tak/arbitration-trace.ts (`ArbitrationTrace`,
+  // versioned). Holds SOURCE LABELS AND TOKEN COUNTS ONLY, never source content: that
+  // content is recalled user facts / page data already persisted elsewhere, and copying it
+  // here would create a second ungoverned retention surface. Nullable: every pre-existing
+  // row stays valid, and a turn that never arbitrates (system messages) simply has none.
+  contextTrace     Json?
   proposal         AgentActionProposal?
   attachments      AgentAttachment[]
   thread           AgentThread          @relation(fields: [threadId], references: [id], onDelete: Cascade)

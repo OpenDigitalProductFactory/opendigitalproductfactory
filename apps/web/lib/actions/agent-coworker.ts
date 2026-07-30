@@ -718,6 +718,10 @@ export async function sendMessage(input: {
   // cap never breaks a `Use the <id> skill.` request (reused for telemetry below).
   const invokedSkillId = extractInvokedSkillId(input.content);
 
+  // BI-3E218D80. Outer scope: arbitration runs inside `useUnified`, both assistant-message
+  // writes are below it. Rationale/contract: lib/tak/arbitration-trace.ts.
+  let contextTrace: import("@/lib/tak/arbitration-trace").ArbitrationTrace | undefined;
+
   if (useUnified) {
     // ── Unified prompt path: composable blocks from route-context-map + prompt-assembler ──
     // EP-CTX-001: Context sources are submitted to the arbitrator, which enforces
@@ -816,6 +820,11 @@ export async function sendMessage(input: {
 
     // Context arbitration logging — always on for operator visibility
     console.log(formatArbitrationLog(result, budget));
+
+    // BI-3E218D80: the log above is ephemeral; persist the decision too. Labels and
+    // counts only, never content — see lib/tak/arbitration-trace.ts.
+    const { buildArbitrationTrace } = await import("@/lib/tak/arbitration-trace");
+    contextTrace = buildArbitrationTrace(result, budget);
 
     // Reconstruct domain context and route data from selected sources
     const selectedDomain = result.selected.find((s) => s.source === "domain")?.content ?? routeCtx.domainContext;
@@ -1941,6 +1950,7 @@ export async function sendMessage(input: {
           modelId: agenticResult.modelId,
           taskType: taskTypeId !== "unknown" ? taskTypeId : null,
           routedEndpointId: null, // EP-INF-009b: routing handled per-iteration by routeAndCall
+          contextTrace, // BI-3E218D80 — proposal path (see also the plain-response write)
         },
         select: { id: true, role: true, content: true, agentId: true, routeContext: true, createdAt: true },
       });
@@ -2357,6 +2367,7 @@ export async function sendMessage(input: {
       modelId: responseModelId,
       taskType: taskTypeId !== "unknown" ? taskTypeId : null,
       routedEndpointId: null, // EP-INF-009b: routing is per-iteration via routeAndCall
+      contextTrace, // BI-3E218D80 — plain-response path (see also the proposal write)
     },
     select: {
       id: true,
