@@ -159,7 +159,7 @@ The sync scripts copy MCP config, preserve non-root Compose isolation, and refre
 
 Agent `tool_grants` in `agent_registry.json` are enforced at runtime.
 
-**Advise-safe tool classification.** A side-effect tool (`sideEffect: true` in MCP tool defs) may still be included in advise-mode when it (1) keeps human visibility (SSE/UI cards), (2) writes an audit trail, (3) is grant- and lifecycle-gated, and (4) is listed in a shared constant imported by every filter path (e.g. peer `request_coworker` / `summon_coworker`). Do not invent a parallel advise-mode allowlist. (BI-IMP-F710F41C)
+**Advise-safe tool classification** — stated once in §8a below.
 
  `getAvailableTools()` (`apps/web/lib/agent-grants.ts`) intersects:
 

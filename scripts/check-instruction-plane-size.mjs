@@ -31,7 +31,7 @@
 //   node scripts/check-instruction-plane-size.mjs --update   # re-baseline (run after an intentional shrink)
 //   node scripts/check-instruction-plane-size.mjs --strict   # make the structural signal a hard failure
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { globSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, relative } from "node:path";
 
@@ -111,10 +111,82 @@ export function sectionSizes(text) {
 }
 
 /**
+ * YAML frontmatter fields of a SKILL.md-style doc, as `key: value` pairs.
+ * Deliberately shallow: only top-level scalar keys, which is all the harness
+ * reads when it builds the session skill listing. A value may be quoted and may
+ * span continuation lines (indented, or a `>`/`|` block) — those are included,
+ * because the harness pays for them too.
+ */
+export function frontmatterFields(text, fields) {
+  const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!m) return {};
+  const want = new Set(fields);
+  const out = {};
+  let key = null;
+  for (const line of m[1].split(/\r?\n/)) {
+    const kv = line.match(/^([A-Za-z0-9_-]+):(.*)$/);
+    if (kv) {
+      key = want.has(kv[1]) ? kv[1] : null;
+      if (key) out[key] = kv[2].trim();
+    } else if (key && /^\s+\S/.test(line)) {
+      out[key] += `\n${line.trim()}`;
+    } else if (!/^\s/.test(line)) {
+      key = null;
+    }
+  }
+  return out;
+}
+
+/**
+ * Resolve one `alwaysOnExtracted` group to its measured byte total.
+ *
+ * WHY THIS TIER EXISTS
+ * `alwaysOn` measures whole files the POINTER forces. It cannot see the plane
+ * the HARNESS injects: Claude Code (and Codex) load every installed skill's
+ * frontmatter `name` + `description` into the system prompt of every session,
+ * while the skill BODY stays progressive-disclosure. Measuring the whole
+ * SKILL.md would over-count ~16x; measuring nothing lets Phase 1 "win" by
+ * moving prose out of AGENTS.md and into skill descriptions — shrinking the
+ * baseline while the true always-on cost is unchanged. That is the same
+ * evasion manifest closure blocks one layer up.
+ *
+ * @returns {{ id: string, bytes: number, items: Array<{ file: string, bytes: number, description: string }> }}
+ */
+export function extractGroup(group, repoRoot) {
+  const fields = Array.isArray(group.fields) ? group.fields : ["name", "description"];
+  const files = globSync(group.glob, { cwd: repoRoot }).sort();
+  const items = [];
+  for (const file of files) {
+    let text;
+    try {
+      text = readFileSync(join(repoRoot, file), "utf8");
+    } catch {
+      continue;
+    }
+    const parsed = frontmatterFields(text, fields);
+    // `key: value\n` is what the harness serialises, so bill the key too.
+    const bytes = fields.reduce(
+      (n, f) => (parsed[f] == null ? n : n + byteLen(`${f}: ${parsed[f]}\n`)),
+      0,
+    );
+    items.push({ file: file.replace(/\\/g, "/"), bytes, description: parsed.description ?? "" });
+  }
+  return { id: group.id, bytes: items.reduce((a, b) => a + b.bytes, 0), items };
+}
+
+export function extractGroups(manifest, repoRoot) {
+  const groups = Array.isArray(manifest.alwaysOnExtracted) ? manifest.alwaysOnExtracted : [];
+  return groups.map((g) => extractGroup(g, repoRoot));
+}
+
+/** Baseline key for an extracted group — namespaced so it cannot collide with a path. */
+export const extractedKey = (id) => `extracted:${id}`;
+
+/**
  * Pure evaluation, exported for tests.
  * @returns {{ errors: string[], warnings: string[], currentTotal: number, baselineTotal: number }}
  */
-export function evaluate({ manifest, fileTexts, baseline, strict }) {
+export function evaluate({ manifest, fileTexts, baseline, strict, extracted = [] }) {
   const errors = [];
   const warnings = [];
   const alwaysOn = Array.isArray(manifest.alwaysOn) ? manifest.alwaysOn : [];
@@ -132,6 +204,31 @@ export function evaluate({ manifest, fileTexts, baseline, strict }) {
       errors.push(`${file} grew ${base} -> ${cur} bytes (always-on plane may only shrink)`);
     } else if (base == null) {
       errors.push(`${file} is in the manifest but missing from the baseline — run --update`);
+    }
+  }
+
+  // 1b. Same ratchet over the harness-injected (extracted) tier.
+  const maxItem = Number(manifest.maxExtractedItemChars) || Infinity;
+  for (const group of extracted) {
+    const key = extractedKey(group.id);
+    currentTotal += group.bytes;
+    const base = baseline[key];
+    if (base != null) baselineTotal += base;
+    if (base != null && group.bytes > base) {
+      errors.push(
+        `${key} grew ${base} -> ${group.bytes} bytes (always-on plane may only shrink) — ` +
+          `skill descriptions are injected into every session; tighten them, do not relocate prose into them`,
+      );
+    } else if (base == null) {
+      errors.push(`${key} is in the manifest but missing from the baseline — run --update`);
+    }
+    for (const item of group.items) {
+      if (item.bytes > maxItem) {
+        const msg =
+          `${item.file} always-on frontmatter is ${item.bytes} bytes (> ${maxItem}) — ` +
+          `a description states WHEN to use the skill; the how-to belongs in the body`;
+        (strict || manifest.structuralStrict === true ? errors : warnings).push(msg);
+      }
     }
   }
 
@@ -200,16 +297,18 @@ function readFileTexts(manifest) {
 function main() {
   const manifest = loadManifest();
   const fileTexts = readFileTexts(manifest);
+  const extracted = extractGroups(manifest, REPO_ROOT);
 
   if (process.argv.includes("--update")) {
     const baseline = {};
     for (const file of manifest.alwaysOn) {
       baseline[file] = fileTexts[file] != null ? byteLen(fileTexts[file]) : 0;
     }
+    for (const group of extracted) baseline[extractedKey(group.id)] = group.bytes;
     writeFileSync(BASELINE_PATH, serializeBaseline(baseline));
     const total = Object.values(baseline).reduce((a, b) => a + b, 0);
     console.log(
-      `Wrote instruction-plane baseline: ${manifest.alwaysOn.length} files, ${total} bytes total (ratchet down as the split lands).`,
+      `Wrote instruction-plane baseline: ${manifest.alwaysOn.length} files + ${extracted.length} extracted group(s), ${total} bytes total (ratchet down as the split lands).`,
     );
     process.exit(0);
   }
@@ -230,6 +329,7 @@ function main() {
     fileTexts,
     baseline,
     strict,
+    extracted,
   });
 
   for (const w of warnings) console.warn(`  [advisory] ${w}`);
@@ -248,8 +348,12 @@ function main() {
   }
 
   const approxTokens = Math.round(currentTotal / 4);
+  const extractedTotal = extracted.reduce((a, g) => a + g.bytes, 0);
+  const extractedNote = extracted.length
+    ? ` + ${extractedTotal} bytes harness-injected across ${extracted.reduce((a, g) => a + g.items.length, 0)} skill frontmatters`
+    : "";
   console.log(
-    `Instruction-plane OK — ${currentTotal} bytes across ${manifest.alwaysOn.length} always-on files ` +
+    `Instruction-plane OK — ${currentTotal} bytes across ${manifest.alwaysOn.length} always-on files${extractedNote} ` +
       `(baseline ${baselineTotal}; ~${approxTokens} tokens advisory).` +
       (warnings.length ? ` ${warnings.length} advisory structural note(s).` : ""),
   );
