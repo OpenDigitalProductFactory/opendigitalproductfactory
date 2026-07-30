@@ -7,6 +7,7 @@ import {
   buildRepeatedQuestionNudge,
   buildRepeatedToolStopMessage,
   buildRuntimeLimitToolLoopMessage,
+  buildMaxIterationsExhaustedMessage,
   detectToolRefusedDespiteAvailability,
   phaseRequiresToolCall,
   detectUnsavedEvidence,
@@ -63,6 +64,7 @@ function mockResult(overrides: {
   toolsStripped?: boolean;
   downgraded?: boolean;
   downgradeMessage?: string | null;
+  downgradeReason?: "provider-unavailable" | "not-eligible" | null;
 }) {
   return {
     content: overrides.content,
@@ -70,6 +72,10 @@ function mockResult(overrides: {
     modelId: overrides.modelId ?? "claude-haiku-4-5-20251001",
     downgraded: overrides.downgraded ?? false,
     downgradeMessage: overrides.downgradeMessage ?? null,
+    // Default matches routed-inference: a downgrade with no stated cause can only
+    // have come from a real dispatch failure (BI-F4D3B9E9d).
+    downgradeReason: overrides.downgradeReason
+      ?? (overrides.downgraded ? "provider-unavailable" as const : null),
     toolsStripped: overrides.toolsStripped ?? false,
     inputTokens: overrides.inputTokens ?? 100,
     outputTokens: overrides.outputTokens ?? 50,
@@ -261,6 +267,76 @@ describe("buildRuntimeLimitToolLoopMessage (BI-0C19AFDD)", () => {
     const msg = buildRuntimeLimitToolLoopMessage([]);
     expect(msg).toContain("the available tools");
     expect(msg.toLowerCase()).not.toContain("finance");
+  });
+});
+
+// BI-F4D3B9E9(d) — the founder received one reply that said BOTH "your
+// configured provider is active but wasn't eligible" (banner) and "My usual AI
+// was unavailable" (this message). The message branched on the `downgraded`
+// boolean, which conflated a dispatch failure with pre-dispatch ineligibility.
+describe("buildMaxIterationsExhaustedMessage (BI-F4D3B9E9d)", () => {
+  const anyTools = [{ name: "query_backlog", result: { ok: true } as never }];
+
+  it("says 'unavailable' only when a dispatch actually failed", () => {
+    const msg = buildMaxIterationsExhaustedMessage({
+      downgradeReason: "provider-unavailable",
+      executedTools: anyTools,
+    });
+    expect(msg).toContain("My usual AI was unavailable");
+    expect(msg).toContain("query_backlog");
+  });
+
+  it("never claims 'unavailable' when the provider was merely ineligible", () => {
+    const msg = buildMaxIterationsExhaustedMessage({
+      downgradeReason: "not-eligible",
+      executedTools: anyTools,
+    });
+    // The exact contradiction with the downgrade banner.
+    expect(msg).not.toContain("was unavailable");
+    expect(msg).toContain("wasn't a fit for this particular request");
+  });
+
+  it("does not tell an owner to connect a provider they already have connected", () => {
+    const msg = buildMaxIterationsExhaustedMessage({
+      downgradeReason: "not-eligible",
+      executedTools: anyTools,
+    });
+    // Old copy: "Connecting a stronger provider (Claude, Gemini, or OpenAI)…"
+    expect(msg).not.toMatch(/connecting a stronger provider/i);
+    expect(msg).toMatch(/shorter request/i);
+  });
+
+  it("points at restoring the failed provider when one genuinely failed", () => {
+    const msg = buildMaxIterationsExhaustedMessage({
+      downgradeReason: "provider-unavailable",
+      executedTools: anyTools,
+    });
+    expect(msg).toContain("Platform > AI > Providers");
+  });
+
+  it("adds no downgrade lead at all on a healthy-provider exhaustion", () => {
+    const msg = buildMaxIterationsExhaustedMessage({
+      downgradeReason: null,
+      executedTools: anyTools,
+    });
+    expect(msg).not.toMatch(/my usual ai/i);
+    expect(msg).toMatch(/^I made several attempts/);
+    expect(msg).toMatch(/smaller piece/i);
+  });
+
+  it("falls back to a generic work note when no tools ran", () => {
+    const msg = buildMaxIterationsExhaustedMessage({
+      downgradeReason: null,
+      executedTools: [],
+    });
+    expect(msg).toContain("I worked through several attempts");
+  });
+
+  it("always names the safety limit rather than an opaque failure", () => {
+    for (const downgradeReason of ["provider-unavailable", "not-eligible", null] as const) {
+      const msg = buildMaxIterationsExhaustedMessage({ downgradeReason, executedTools: anyTools });
+      expect(msg).toContain("safety limit");
+    }
   });
 });
 
