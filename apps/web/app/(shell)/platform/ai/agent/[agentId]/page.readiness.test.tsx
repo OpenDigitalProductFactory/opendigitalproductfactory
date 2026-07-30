@@ -118,7 +118,8 @@ vi.mock("@/lib/coworker-service-catalog/route-readiness", () => ({
   }),
 }));
 
-vi.mock("@/lib/tak/agent-grants", () => ({
+vi.mock("@/lib/tak/agent-grants", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/tak/agent-grants")>()),
   knownGrantKeys: () => [],
 }));
 
