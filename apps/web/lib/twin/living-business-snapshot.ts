@@ -28,20 +28,30 @@ import {
   humanizeWait,
   isWalkInWait,
   moneyToNumber,
-  monthDay,
   statusIntent,
   titleCase,
 } from "./operations-format";
+import {
+  bookingsToQueueItems,
+  longestWaitMs,
+} from "./booking-queue-projection";
 import type { LiveTwinSnapshot } from "./operations-snapshot";
 import {
   createOperationsLoadRuntime,
   type OperationsProjectionDiagnostics,
 } from "./operations-load-runtime";
+import {
+  hospitalityResourceUnits,
+  isReservationQueueKey,
+  isUpcomingReservation,
+  readinessQuest,
+  reservationsToQueueItems,
+  restaurantCapacityChips,
+} from "./restaurant-operations-projection";
 
 import {
   deriveRestaurantCapacity,
   resolveServicePeriod,
-  readinessHeadline,
   type CapacityBookingInput,
   type CapacityAllocationInput,
   type CapacityResourceInput,
@@ -65,7 +75,6 @@ import type {
   CapacityChipData,
   FeedEventData,
   QuestData,
-  QueueItemData,
   ResourceUnitData,
   TwinActor,
   TwinCogSnapshot,
@@ -147,6 +156,15 @@ interface InvoiceRow {
 
 export type { LiveTwinSnapshot } from "./operations-snapshot";
 export { humanizeWait, statusIntent } from "./operations-format";
+export {
+  bookingsToQueueItems,
+  isReservationQueueKey,
+  isUpcomingReservation,
+  longestWaitMs,
+  readinessQuest,
+  reservationsToQueueItems,
+  restaurantCapacityChips,
+};
 
 // ─────────────────────────── pure mapping helpers ───────────────────────────
 
@@ -192,130 +210,6 @@ export function resourceUnits(
       intent: statusIntent(m.status),
       owner: m.kind === "agent" ? { name: m.displayName, kind: "ai" } : undefined,
     }));
-}
-
-function hospitalityResourceUnits(
-  resources: HospitalityResourceRow[],
-  limit = 12,
-): ResourceUnitData[] {
-  return resources.slice(0, limit).map((resource) => ({
-    key: resource.id,
-    label: resource.label,
-    state: resource.status === "active" ? "Available" : "Off",
-    intent: resource.status === "active" ? "success" : "neutral",
-  }));
-}
-
-/** Pending, unstarted demand → queue items with a REAL wait time (age in the
- *  queue, measured from when the booking was created — the flow metric the founder
- *  asked for: "if we know the queue and wait times"). Ordered longest-waiting first. */
-export function bookingsToQueueItems(bookings: BookingRow[], now: Date, limit = 6): QueueItemData[] {
-  return bookings
-    .filter((b) => b.status.toLowerCase() === "pending" || b.provider == null)
-    .sort((a, b) => (a.createdAt?.getTime() ?? Infinity) - (b.createdAt?.getTime() ?? Infinity))
-    .slice(0, limit)
-    .map((b) => {
-      const label = b.provider?.name ? `With ${b.provider.name}` : "Unassigned";
-      // Upcoming reservation — the meaningful metric is time-until, not age.
-      if (b.scheduledAt && b.scheduledAt.getTime() > now.getTime()) {
-        return {
-          key: b.id,
-          label,
-          meta: `booked for ${monthDay(b.scheduledAt)}`,
-          waiting: `in ${humanizeWait(b.scheduledAt.getTime() - now.getTime())}`,
-        };
-      }
-      // Scheduled slot has passed and it is still unfulfilled — overdue, not waiting.
-      if (b.scheduledAt) {
-        return { key: b.id, label, meta: `overdue · was ${monthDay(b.scheduledAt)}` };
-      }
-      // Walk-in / unrouted request — a genuine live queue wait from when it landed.
-      return {
-        key: b.id,
-        label,
-        meta: "awaiting schedule",
-        waiting: b.createdAt ? humanizeWait(now.getTime() - b.createdAt.getTime()) : undefined,
-      };
-    });
-}
-
-/**
- * Restaurant (FLOOR) capacity chips — real table/seat/waitlist counters in the
- * archetype's own words, replacing the archetype-agnostic Workforce/AI/Open-demand
- * chips for a restaurant so the Workspace headline reads as capacity, not staffing.
- */
-export function restaurantCapacityChips(snap: RestaurantCapacitySnapshot): CapacityChipData[] {
-  const seated = snap.counts.occupied + snap.counts["turning-soon"];
-  const chips: CapacityChipData[] = [
-    { key: "tables-open", label: "Tables open", value: snap.counts.available, intent: snap.counts.available > 0 ? "success" : "warning", live: true },
-    { key: "tables-seated", label: "Seated", value: seated, intent: "info", live: true },
-  ];
-  if (snap.counts["turning-soon"] > 0) {
-    chips.push({ key: "turning", label: "Turning soon", value: snap.counts["turning-soon"], intent: "warning", live: true });
-  }
-  chips.push(
-    { key: "waiting", label: "Parties waiting", value: snap.waitlistParties, intent: snap.waitlistParties > 0 ? "warning" : "success", live: true },
-    { key: "reservations", label: "Reservations ahead", value: snap.upcomingReservations, intent: "accent", live: true },
-  );
-  return chips;
-}
-
-/** The service-period readiness answer as a top-priority quest — so a
- *  restaurant's "NEEDS YOU" reflects real reservation/table demand ahead of the
- *  generic finance/tax quests. Null when nothing needs the owner. */
-export function readinessQuest(snap: RestaurantCapacitySnapshot): QuestData | null {
-  if (!snap.nextAction) return null;
-  return {
-    key: "service-readiness",
-    title: readinessHeadline(snap),
-    detail: snap.nextAction.label,
-    intent: snap.readiness === "not-ready" ? "danger" : "warning",
-    cta: snap.nextAction.label,
-  };
-}
-
-/** A queue key that means "reservations" (restaurant FLOOR, rental YARD). */
-export function isReservationQueueKey(key: string): boolean {
-  return /reserv/i.test(key);
-}
-
-/** An upcoming, still-active reservation — a future scheduled slot that is neither
- *  cancelled nor completed. This is the "reservations on the books" set. */
-export function isUpcomingReservation(b: BookingRow, now: Date): boolean {
-  const status = b.status.toLowerCase();
-  if (status === "cancelled" || status === "completed") return false;
-  return b.scheduledAt != null && b.scheduledAt.getTime() > now.getTime();
-}
-
-/** Upcoming reservations → queue items, soonest slot first. The meaningful metric
- *  is time-until-service, not age-in-queue. Reconciles the twin Reservations queue
- *  with the Storefront booking history (BI-348766E5). */
-export function reservationsToQueueItems(bookings: BookingRow[], now: Date, limit = 6): QueueItemData[] {
-  return bookings
-    .filter((b) => isUpcomingReservation(b, now))
-    .sort((a, b) => (a.scheduledAt?.getTime() ?? Infinity) - (b.scheduledAt?.getTime() ?? Infinity))
-    .slice(0, limit)
-    .map((b) => ({
-      key: b.id,
-      label: b.provider?.name ? `With ${b.provider.name}` : "Reservation",
-      meta: b.scheduledAt ? `booked for ${monthDay(b.scheduledAt)}` : "awaiting schedule",
-      waiting: b.scheduledAt ? `in ${humanizeWait(b.scheduledAt.getTime() - now.getTime())}` : undefined,
-    }));
-}
-
-/** The longest a pending item has waited — the queue's headline flow metric. */
-export function longestWaitMs(bookings: BookingRow[], now: Date): number {
-  // Only genuine walk-in waits count — scheduled reservations (upcoming or
-  // overdue) are not "waiting", so an all-reservations business (a restaurant)
-  // reports no headline wait instead of a spurious multi-day figure.
-  const waiting = bookings.filter(
-    (b) => (b.status.toLowerCase() === "pending" || b.provider == null) && isWalkInWait(b),
-  );
-  let max = 0;
-  for (const b of waiting) {
-    if (b.createdAt) max = Math.max(max, now.getTime() - b.createdAt.getTime());
-  }
-  return max;
 }
 
 /** In-flight demand → work items, attributed to the assigned provider (human). */

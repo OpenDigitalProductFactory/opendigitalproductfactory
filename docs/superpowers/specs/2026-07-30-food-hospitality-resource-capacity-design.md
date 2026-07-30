@@ -25,6 +25,28 @@ The selected option won by 2.879 with strong structured coverage and no
 commandment conflict. It best satisfies architecture over shortcuts, grounding
 in existing platform work, single source of truth, and fleet-safe evolution.
 
+## Design grounding
+
+- **Existing specs/plans reviewed:**
+  - `docs/superpowers/specs/2026-07-22-restaurant-capacity-legibility-design.md`
+  - `docs/superpowers/plans/2026-07-28-business-operations-and-performance-views-plan.md`
+  - `docs/superpowers/specs/2026-07-24-cartesian-scene-renderer-design.md`
+- **Current code substrate reviewed:**
+  - human capacity in `ServiceProvider`, `ProviderAvailability`, and
+    `ProviderService`;
+  - customer intent in `StorefrontBooking` and `BookingHold`;
+  - operator-authored geometry in `OperationalSceneLayout` and the shared
+    Cartesian scene canvas;
+  - the existing Storefront table/team routes, operational twin projection, and
+    restaurant capacity read model.
+- **Source of truth:** hospitality resource, availability, capacity-pool, and
+  allocation models own physical capacity; bookings and holds reference that
+  capacity; scene layouts only place live resource identifiers.
+- **Decision:** extend the existing Storefront and operational-twin route
+  families with a dedicated Food & Hospitality domain model. Do not represent
+  furniture as staff and do not create a premature cross-vertical universal
+  resource model.
+
 ## UX fit review
 
 - **Decision:** fits with guardrails.
