@@ -446,7 +446,9 @@ describe("AgentDetailPage readiness actions", () => {
     expect(html).toContain("Needs attention");
     expect(html).toContain("Certification failed in strict lifecycle mode.");
     expect(html).toContain("Review certification");
-    expect(html).toContain('href="/platform/ai/readiness"');
+    expect(html).toContain(
+      'href="/admin/scheduled-jobs#scheduled-job-coworker-certification"',
+    );
     expect(html).not.toContain("Ask Marketing");
   });
 });
