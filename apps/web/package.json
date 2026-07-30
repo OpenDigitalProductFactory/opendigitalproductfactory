@@ -20,6 +20,8 @@
     "ux:sweep-fixture": "tsx scripts/ux-sweep-fixture.ts",
     "build:route-shells": "tsx scripts/build-route-shells.ts",
     "check:route-shells": "tsx scripts/build-route-shells.ts --check",
+    "build:page-purpose": "tsx scripts/build-page-purpose.ts",
+    "check:page-purpose": "tsx scripts/build-page-purpose.ts --check",
     "build:design-tokens": "tsx scripts/build-design-tokens.ts",
     "check:design-tokens": "tsx scripts/build-design-tokens.ts --check"
   },

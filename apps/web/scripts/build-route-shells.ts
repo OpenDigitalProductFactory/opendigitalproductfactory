@@ -17,26 +17,19 @@
  *   pnpm --filter web check:route-shells   # fail if stale
  */
 
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { classifyRoute, type ClassifiableRoute } from "../lib/navigation/route-audience";
-import { shellPolicyFor, type RouteShellPolicy } from "../lib/ux-budget/route-shells";
+import {
+  buildRoutePolicies,
+} from "../lib/ux-budget/route-policy";
+import type { RouteShellPolicy } from "../lib/ux-budget/route-shells";
 import { UX_SHELLS, type UxShell } from "../lib/ux-budget/budgets";
+import {
+  findRepoRoot,
+  readRouteManifestRows,
+  writeOrCheckGeneratedJson,
+} from "./registry-generator-support";
 
-function repoRoot(): string {
-  let dir = process.cwd();
-  while (dir !== "/" && dir !== resolve(dir, "..")) {
-    if (existsSync(join(dir, "pnpm-workspace.yaml"))) return dir;
-    dir = resolve(dir, "..");
-  }
-  return process.cwd();
-}
-
-const ROOT = repoRoot();
-const MANIFEST_REL = "apps/web/lib/ea/route-manifest.json";
+const ROOT = findRepoRoot();
 const OUT_REL = "apps/web/lib/ux-budget/route-shells.generated.json";
-
-type ManifestRow = ClassifiableRoute & { kind: "page" | "route" };
 
 type Registry = {
   generator: string;
@@ -47,18 +40,15 @@ type Registry = {
 };
 
 function build(): Registry {
-  const manifest = JSON.parse(readFileSync(join(ROOT, MANIFEST_REL), "utf8")) as {
-    routes: ManifestRow[];
-  };
-
-  // Page routes only, and never redirect shims — a shim renders no surface to budget.
-  const pages = manifest.routes.filter((r) => r.kind === "page" && !r.redirectTo);
-
-  const routes = pages.map((route) => {
-    const classification = classifyRoute(route);
+  const routes = buildRoutePolicies(readRouteManifestRows(ROOT)).map((policy) => {
+    const {
+      audience: _audience,
+      destinationKind: _destinationKind,
+      classificationSource: _classificationSource,
+      ...shellPolicy
+    } = policy;
     return {
-      ...shellPolicyFor(route.routePath, classification),
-      confidence: classification.confidence,
+      ...shellPolicy,
     };
   });
 
@@ -76,23 +66,29 @@ function build(): Registry {
 
 function main(): void {
   const check = process.argv.includes("--check");
-  const outPath = join(ROOT, OUT_REL);
   const registry = build();
-  const serialized = `${JSON.stringify(registry, null, 2)}\n`;
 
   if (check) {
-    const current = existsSync(outPath) ? readFileSync(outPath, "utf8") : "";
-    if (current !== serialized) {
-      console.error(
-        `[route-shells] STALE — ${OUT_REL} is out of date. Run: pnpm --filter web build:route-shells`,
-      );
-      process.exit(1);
-    }
+    writeOrCheckGeneratedJson({
+      root: ROOT,
+      relativePath: OUT_REL,
+      value: registry,
+      check: true,
+      label: "route-shells",
+      buildCommand: "pnpm --filter web build:route-shells",
+    });
     console.error(`[route-shells] up to date (${registry.pageRouteCount} page routes)`);
     return;
   }
 
-  writeFileSync(outPath, serialized, "utf8");
+  writeOrCheckGeneratedJson({
+    root: ROOT,
+    relativePath: OUT_REL,
+    value: registry,
+    check: false,
+    label: "route-shells",
+    buildCommand: "pnpm --filter web build:route-shells",
+  });
   console.error(
     `[route-shells] wrote ${OUT_REL} (${registry.pageRouteCount} page routes, ${registry.migratedCount} migrated)`,
   );

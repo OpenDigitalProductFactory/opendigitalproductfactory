@@ -27,9 +27,20 @@ on:
       - "apps/web/lib/ux-budget/route-shells.ts"
       - "apps/web/lib/ux-budget/budgets.ts"
       - "apps/web/scripts/build-route-shells.ts"
+      # The Purpose Contract registry derives from the same shared route policy.
+      - "apps/web/lib/ux-budget/page-purpose.ts"
+      - "apps/web/lib/ux-budget/route-policy.ts"
+      - "apps/web/lib/ux-budget/route-purpose-baseline.json"
+      - "apps/web/lib/ux-budget/route-purpose.generated.json"
+      - "apps/web/lib/ux-budget/purpose-contracts/**"
+      - "apps/web/scripts/build-page-purpose.ts"
+      - "apps/web/scripts/registry-generator-support.ts"
+      - "apps/web/package.json"
       - ".github/workflows/audit-route-manifest.yml"
   push:
     branches: [main]
+  merge_group:
+    types: [checks_requested]
 
 concurrency:
   group: audit-route-manifest-${{ github.ref }}
@@ -57,6 +68,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v7.0.0
@@ -88,3 +101,14 @@ jobs:
       # sweep (BI-BD81682A).
       - name: Check route→shell registry is up to date
         run: pnpm --filter web check:route-shells
+
+      # BI-B4A4C76E: every canonical page route gets one deterministic Purpose
+      # Contract record. Legacy draft identities may shrink but cannot grow, and
+      # ratified identities cannot revert to draft.
+      - name: Check Page Purpose Contract registry is up to date
+        shell: bash
+        env:
+          PURPOSE_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: |
+          test -n "$PURPOSE_BASE_REF"
+          pnpm --filter web check:page-purpose -- --base-ref "$PURPOSE_BASE_REF"
