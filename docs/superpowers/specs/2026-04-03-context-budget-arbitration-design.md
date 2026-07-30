@@ -357,6 +357,53 @@ In development mode, log the arbitration decision:
   L2 dropped: attachments(420 tokens, over budget)
 ```
 
+### 9.3 Persisted per-turn trace (BI-3E218D80, shipped 2026-07-30)
+
+**Status of §9.1 and §9.2, honestly:** none of the §9.1 Prometheus metrics
+(`contextBudgetUtilization`, `contextSourceTokens`, `contextSourcesDropped`) were ever
+built. §9.2's *development-mode* log shipped as an unconditional `console.log` in
+`agent-coworker.ts`, commented "always on for operator visibility" — which container
+stdout is not, in any durable sense. So for the arbitrator's whole production life,
+`ArbitrationResult.dropped` had exactly one consumer: a debug-string formatter.
+
+That left three different failures indistinguishable from outside when a coworker behaved
+as though it lacked a fact:
+
+1. the fact was never retrieved,
+2. it was retrieved and **dropped for budget**,
+3. it was present and the model ignored it.
+
+**Aggregates are the wrong instrument for that question.** A counter cannot answer "why
+didn't *this* coworker know X on *this* turn". So this section adds a per-turn record
+rather than the metrics §9.1 proposed:
+
+- **Where:** `AgentMessage.contextTrace Json?` — one nullable column on the existing
+  per-turn row, deliberately not a new model. `TokenUsage` was rejected because it is
+  written per *provider call* (`ai-inference.ts`), and a tool loop makes several per turn.
+- **Shape:** `ArbitrationTrace` in `apps/web/lib/tak/arbitration-trace.ts`, versioned.
+- **Contract — labels and counts only, never content.** Source `content` is recalled user
+  facts, page data, and semantic-memory excerpts already persisted in their own tables;
+  copying it here would create a second, ungoverned retention surface for the same
+  sensitive text. Enforced by a test asserting the *serialized* JSON contains no content.
+- **Compression is stated, not inferred.** `arbitrate` now sets `usedCompressed` on a
+  source when it substitutes the compressed fallback, so the trace does not have to guess
+  from `tokenCount === compressedTokenCount` — an inference that lies whenever the two
+  variants cost the same. This realizes the intent already visible in §9.2's example log
+  (`page-data=680(compressed from 1200)`).
+- **Nullable on purpose:** a turn that does not arbitrate (legacy prompt path, system
+  messages) stores nothing, so "did not arbitrate" stays distinguishable from "arbitrated
+  and dropped nothing".
+
+The §9.2 log is retained — it is useful when tailing live — so this adds durability rather
+than replacing observability. §9.1's aggregate metrics remain unbuilt and are still a
+legitimate gap; they answer fleet-level questions ("how often is semantic memory trimmed
+on the basic tier?") that a per-turn row answers only by scan.
+
+Rationale of record for why this plane needed provenance at all:
+`docs/superpowers/specs/2026-07-29-progressive-disclosure-interpretable-context-enforcement-design.md`
+(finding F2 — the runtime context plane was budgeted but carried no provenance, while the
+portal-UX and static-agent-instruction planes are both ratcheted).
+
 ---
 
 ## 10. Implementation Order

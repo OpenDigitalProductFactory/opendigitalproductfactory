@@ -1,0 +1,32 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "AgentMessage.contextTrace: per-turn record of which context sources entered the coworker's system prompt and which were dropped for budget. Derived operational telemetry — the ONLY copy of the arbitration decision, which was previously ephemeral container stdout."
+  ],
+  "migration": {
+    "name": "20260730040000_add_agent_message_context_trace",
+    "backfill": "none; nullable with no default, so PostgreSQL performs no table rewrite and every pre-existing AgentMessage row remains valid. NULL is meaningful rather than missing: it distinguishes 'this turn did not arbitrate' (legacy prompt path, system messages) from 'arbitrated and dropped nothing'."
+  },
+  "tests": [
+    "apps/web/lib/tak/arbitration-trace.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:agent-message",
+      "prismaModel": "AgentMessage",
+      "lifecycleDisposition": "follows the parent AgentMessage exactly; inherits the thread's cascade delete (AgentThread onDelete: Cascade), so the trace can never outlive the conversation it describes. No independent retention, no separate purge path.",
+      "fields": [
+        {
+          "fieldId": "data:agent-message#contextTrace",
+          "resolution": "governed",
+          "reason": "makes the context-arbitration decision auditable so that 'the fact was never retrieved', 'it was dropped for budget', and 'it was present and ignored' become distinguishable — three failures that need three different fixes and were previously indistinguishable from outside.",
+          "provenance": "computed deterministically by apps/web/lib/tak/arbitration-trace.ts from the ArbitrationResult of that same turn; never operator-entered, never model-generated.",
+          "flags": ["subject"],
+          "fieldPolicy": "SOURCE LABELS AND TOKEN COUNTS ONLY — never source content. Records source name, tier, token count, and whether a compressed fallback was substituted. The excluded payload (recalled user facts, page data, semantic-memory excerpts) stays in its own governed tables; copying it here would have created a second, ungoverned retention surface for the same sensitive text. Enforced by a test asserting the SERIALIZED JSON contains no content, since the serialized form is what reaches the column. Flagged subject because it is per-user conversational metadata inheriting the thread's access boundary, not because it carries personal content."
+        }
+      ]
+    }
+  ]
+}
