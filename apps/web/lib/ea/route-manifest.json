@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 587,
+  "routeCount": 590,
   "routes": [
     {
       "routePath": "/",
@@ -1396,6 +1396,21 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/storefront/admin/archetypes/refinement/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/catalog/[catalogItemId]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "catalog",
+        "[catalogItemId]"
+      ],
+      "dynamicParams": [
+        "catalogItemId"
+      ],
+      "file": "apps/web/app/api/storefront/admin/catalog/[catalogItemId]/route.ts"
     },
     {
       "routePath": "/api/storefront/admin/inquiries/[id]/product-backlog",
@@ -6719,6 +6734,34 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/storefront/items/page.tsx"
+    },
+    {
+      "routePath": "/storefront/items/[id]/catalog",
+      "kind": "page",
+      "segments": [
+        "storefront",
+        "items",
+        "[id]",
+        "catalog"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/storefront/items/[id]/catalog/page.tsx"
+    },
+    {
+      "routePath": "/storefront/items/[id]/purchases",
+      "kind": "page",
+      "segments": [
+        "storefront",
+        "items",
+        "[id]",
+        "purchases"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/(shell)/storefront/items/[id]/purchases/page.tsx"
     },
     {
       "routePath": "/storefront/sections",
