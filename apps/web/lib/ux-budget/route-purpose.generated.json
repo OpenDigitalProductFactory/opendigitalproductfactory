@@ -1,0 +1,3843 @@
+{
+  "schemaVersion": 1,
+  "generator": "apps/web/scripts/build-page-purpose.ts",
+  "pageRouteCount": 310,
+  "draftCount": 310,
+  "ratifiedCount": 0,
+  "quarantinedCount": 0,
+  "routes": [
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/admin",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "section-home",
+        "shell": "list",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/admin/archetypes",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/admin/backups",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "fixture-capability-unavailable"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/admin/branding",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/admin/build-studio/stall-thresholds",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/admin/business-models",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/admin/cockpit",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/admin/data-stewardship",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/admin/diagnostics",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/admin/hive",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/admin/issue-reports",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/admin/platform-development",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/admin/reference-data",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/admin/research",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/admin/scheduled-jobs",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "wall-clock-collection"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/admin/settings",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "settings-config",
+        "shell": "settings",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/admin/storefront/preset",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/admin/twin-gallery",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/admin/twin-gallery/[archetypeId]",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/admin/twin-kit",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/admin/wiki/lint",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/build",
+      "derived": {
+        "audience": "builder",
+        "destinationKind": "section-home",
+        "shell": "list",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/build/work",
+      "derived": {
+        "audience": "builder",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/build/work/[capsuleId]",
+      "derived": {
+        "audience": "builder",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/complaints",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "section-home",
+        "shell": "cockpit",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "section-home",
+        "shell": "cockpit",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance/actions",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance/actions/[id]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance/audits",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance/audits/[id]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance/controls",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance/controls/[id]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance/evidence",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance/evidence/[id]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance/gaps",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance/incidents",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance/incidents/[id]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance/licensing",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance/obligations",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance/obligations/[id]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance/onboard",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance/policies",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance/policies/[id]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance/posture",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance/regulations",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance/regulations/[id]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance/risks",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance/risks/[id]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance/submissions",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/compliance/submissions/[id]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/coworker-decisions",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "section-home",
+        "shell": "cockpit",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/coworker-decisions/[...slug]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/coworker-decisions/craft",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/coworker-decisions/craft/[professionKey]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/coworker-decisions/decisions",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/coworker-decisions/decisions/[interactionId]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/coworker-decisions/edit/[...slug]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/coworker-decisions/matrix",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/coworker-decisions/perspectives",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/coworker-decisions/perspectives/[profileId]/voice",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/coworker-decisions/proactivity",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/coworker-decisions/review",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/coworker-decisions/stance",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/customer",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "section-home",
+        "shell": "cockpit",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/customer-complete-profile",
+      "derived": {
+        "audience": "auth-setup",
+        "destinationKind": "section-home",
+        "shell": "form",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/customer-link-account",
+      "derived": {
+        "audience": "auth-setup",
+        "destinationKind": "section-home",
+        "shell": "form",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/customer-login",
+      "derived": {
+        "audience": "auth-setup",
+        "destinationKind": "section-home",
+        "shell": "form",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "customer-session-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/customer/[id]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/customer/engagements",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/customer/funnel",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/customer/marketing",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/customer/marketing/automation",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/customer/marketing/campaigns",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/customer/marketing/funnel",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/customer/marketing/strategy",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/customer/opportunities",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/customer/opportunities/[id]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/customer/quotes",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/customer/quotes/[id]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/customer/sales-orders",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/delivery",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "section-home",
+        "shell": "cockpit",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/docs/[[...slug]]",
+      "derived": {
+        "audience": "public",
+        "destinationKind": "detail",
+        "shell": "public",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/ea",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "section-home",
+        "shell": "list",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/ea/capabilities",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/ea/data-model",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/ea/models",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/ea/models/[slug]",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/ea/value-streams",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/ea/views",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/ea/views/[id]",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/employee",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "section-home",
+        "shell": "cockpit",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "section-home",
+        "shell": "cockpit",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/assets",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/assets/[id]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/assets/new",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "workflow-step",
+        "shell": "form",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/banking",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/banking/[id]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/banking/[id]/import",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/banking/[id]/reconcile",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/banking/new",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "workflow-step",
+        "shell": "form",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/banking/rules",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/bills",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/bills/[id]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/bills/new",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "workflow-step",
+        "shell": "form",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/close",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/configuration",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "settings-config",
+        "shell": "settings",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/expense-claims",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/expense-claims/[id]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/funds",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "fixture-capability-unavailable"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/invoices",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/invoices/[id]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/invoices/new",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "workflow-step",
+        "shell": "form",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/my-expenses",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/my-expenses/new",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "workflow-step",
+        "shell": "form",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/payment-runs",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/payments",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/purchase-orders",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/purchase-orders/[id]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/purchase-orders/new",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "workflow-step",
+        "shell": "form",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/recurring",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/recurring/[id]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/recurring/new",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "workflow-step",
+        "shell": "form",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/reports",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/reports/aged-creditors",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/reports/aged-debtors",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/reports/cash-flow",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/reports/general-ledger",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/reports/outstanding",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/reports/profit-loss",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/reports/revenue-by-customer",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/reports/vat-summary",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/revenue",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/settings",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "settings-config",
+        "shell": "settings",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/settings/currency",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "settings-config",
+        "shell": "settings",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/settings/dunning",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "settings-config",
+        "shell": "settings",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/settings/rate-card",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "settings-config",
+        "shell": "settings",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/settings/setup",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "settings-config",
+        "shell": "settings",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/settings/tax",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "settings-config",
+        "shell": "settings",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/spend",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/spend/ai",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/suppliers",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/suppliers/[id]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/finance/suppliers/new",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "workflow-step",
+        "shell": "form",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/forgot-password",
+      "derived": {
+        "audience": "auth-setup",
+        "destinationKind": "section-home",
+        "shell": "form",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/governance",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "section-home",
+        "shell": "list",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "fixture-capability-unavailable"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/governance/records-requests",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "fixture-capability-unavailable"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/inventory",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "section-home",
+        "shell": "cockpit",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/inventory/entity/[entityId]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/knowledge",
+      "derived": {
+        "audience": "public",
+        "destinationKind": "section-home",
+        "shell": "public",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/knowledge/[articleId]",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/knowledge/new",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "workflow-step",
+        "shell": "form",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/login",
+      "derived": {
+        "audience": "auth-setup",
+        "destinationKind": "section-home",
+        "shell": "form",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/member-equity",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "section-home",
+        "shell": "cockpit",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "fixture-capability-unavailable"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/ops",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "section-home",
+        "shell": "list",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/ops/changes",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/ops/demand",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/ops/dev-loop",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/ops/health",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "redirects-to-dynamic-resource"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/ops/journeys",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/ops/patches",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/ops/promotions",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/ops/security",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/ops/self-upgrade",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "wall-clock-collection"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/performance",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "section-home",
+        "shell": "cockpit",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "section-home",
+        "shell": "list",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/ai/agent/[agentId]",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/ai/assignments",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/ai/assignments/bindings/[bindingId]",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/ai/browser-sessions",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/ai/browser-sessions/setup",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/ai/build-studio",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/ai/capacity-continuity",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/ai/catalog",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/ai/decisions/[interactionId]",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/ai/founder-review",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/ai/memory",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/ai/operations-map",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/ai/overview",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/ai/priority/outcomes",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/ai/prompts",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/ai/providers",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/ai/providers/[providerId]",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/ai/readiness",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/ai/runtime-health",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/ai/skills",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/audit",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/audit/authority",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/audit/journal",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/audit/ledger",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/audit/metrics",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/audit/operations",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/audit/routes",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/development/change-lanes",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "wall-clock-collection"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/device-catalog",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/edge-nodes",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/federation-links",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/federation-proposals",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/identity",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/identity/agents",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/identity/applications",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/identity/authorization",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/identity/authorization/bindings/[bindingId]",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/identity/directory",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/identity/federation",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/identity/groups",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/identity/principals",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/schedule",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "wall-clock-collection"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/service-desk",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/services/[serverId]",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/built-ins",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/catalog",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/catalog/sync",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/discovery",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/discovery/promotion-audit",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/integrations",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/integrations/adp",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/integrations/communications",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/integrations/email-postmark",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/integrations/facebook-lead-ads",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/integrations/facebook-pages",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/integrations/google-business-profile",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/integrations/google-marketing-intelligence",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/integrations/hubspot",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/integrations/instagram-business",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/integrations/linkedin-personal-social",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/integrations/mailchimp",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/integrations/microsoft365-communications",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/integrations/quickbooks",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/integrations/stripe",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/integrations/whatsapp-business",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/inventory",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/services",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/services/[serverId]",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/platform/tools/services/activate",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "advanced-diagnostic",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portal",
+      "derived": {
+        "audience": "customer",
+        "destinationKind": "section-home",
+        "shell": "cockpit",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "customer-session-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portal/account",
+      "derived": {
+        "audience": "customer",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "customer-session-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portal/cases",
+      "derived": {
+        "audience": "customer",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "customer-session-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portal/cases/[caseKey]",
+      "derived": {
+        "audience": "customer",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portal/health",
+      "derived": {
+        "audience": "customer",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "customer-session-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portal/health/intake/[packetId]",
+      "derived": {
+        "audience": "customer",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portal/orders",
+      "derived": {
+        "audience": "customer",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "customer-session-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portal/services",
+      "derived": {
+        "audience": "customer",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "customer-session-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portal/sign-in",
+      "derived": {
+        "audience": "customer",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portal/sign-up",
+      "derived": {
+        "audience": "customer",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "customer-session-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portal/support",
+      "derived": {
+        "audience": "customer",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "customer-session-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portfolio/[[...slug]]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portfolio/product/[id]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portfolio/product/[id]/architecture",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portfolio/product/[id]/backlog",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portfolio/product/[id]/changes",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portfolio/product/[id]/health",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portfolio/product/[id]/inventory",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portfolio/product/[id]/knowledge",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portfolio/product/[id]/offerings",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portfolio/product/[id]/supply-chain",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portfolio/product/[id]/team",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portfolio/product/[id]/versions",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/portfolio/products/[productId]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/rental",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "section-home",
+        "shell": "cockpit",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "fixture-capability-unavailable"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/reset-password",
+      "derived": {
+        "audience": "auth-setup",
+        "destinationKind": "section-home",
+        "shell": "form",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/s/[slug]",
+      "derived": {
+        "audience": "public",
+        "destinationKind": "detail",
+        "shell": "public",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/s/[slug]/book/[itemId]",
+      "derived": {
+        "audience": "public",
+        "destinationKind": "detail",
+        "shell": "public",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/s/[slug]/booking/confirmed",
+      "derived": {
+        "audience": "public",
+        "destinationKind": "detail",
+        "shell": "public",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/s/[slug]/checkout",
+      "derived": {
+        "audience": "public",
+        "destinationKind": "detail",
+        "shell": "public",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/s/[slug]/donate",
+      "derived": {
+        "audience": "public",
+        "destinationKind": "detail",
+        "shell": "public",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/s/[slug]/donation/received",
+      "derived": {
+        "audience": "public",
+        "destinationKind": "detail",
+        "shell": "public",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/s/[slug]/inquire",
+      "derived": {
+        "audience": "public",
+        "destinationKind": "detail",
+        "shell": "public",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/s/[slug]/inquire/[itemId]",
+      "derived": {
+        "audience": "public",
+        "destinationKind": "detail",
+        "shell": "public",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/s/[slug]/inquiry/received",
+      "derived": {
+        "audience": "public",
+        "destinationKind": "detail",
+        "shell": "public",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/s/[slug]/item/[itemId]",
+      "derived": {
+        "audience": "public",
+        "destinationKind": "detail",
+        "shell": "public",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/s/[slug]/order/[itemId]",
+      "derived": {
+        "audience": "public",
+        "destinationKind": "detail",
+        "shell": "public",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/s/[slug]/order/received",
+      "derived": {
+        "audience": "public",
+        "destinationKind": "detail",
+        "shell": "public",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/s/[slug]/policies",
+      "derived": {
+        "audience": "public",
+        "destinationKind": "detail",
+        "shell": "public",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/s/[slug]/sign-in",
+      "derived": {
+        "audience": "public",
+        "destinationKind": "detail",
+        "shell": "public",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/s/[slug]/sign-up",
+      "derived": {
+        "audience": "public",
+        "destinationKind": "detail",
+        "shell": "public",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/s/approve/[token]",
+      "derived": {
+        "audience": "public",
+        "destinationKind": "detail",
+        "shell": "public",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/s/expense-approve/[token]",
+      "derived": {
+        "audience": "public",
+        "destinationKind": "detail",
+        "shell": "public",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/s/pay/[token]",
+      "derived": {
+        "audience": "public",
+        "destinationKind": "detail",
+        "shell": "public",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/s/quote/[token]",
+      "derived": {
+        "audience": "public",
+        "destinationKind": "detail",
+        "shell": "public",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/sandbox-restricted",
+      "derived": {
+        "audience": "auth-setup",
+        "destinationKind": "section-home",
+        "shell": "form",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/service-requests",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "section-home",
+        "shell": "cockpit",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "fixture-capability-unavailable"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/setup",
+      "derived": {
+        "audience": "auth-setup",
+        "destinationKind": "section-home",
+        "shell": "form",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "setup-phase-only"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/storefront",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "section-home",
+        "shell": "cockpit",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/storefront/animals",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "storefront-setup-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/storefront/dispatch",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/storefront/inbox",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "storefront-setup-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/storefront/intake",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/storefront/items",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "storefront-setup-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/storefront/sections",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "storefront-setup-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/storefront/settings",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "settings-config",
+        "shell": "settings",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "storefront-setup-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/storefront/settings/business",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "settings-config",
+        "shell": "settings",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/storefront/settings/capabilities",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "settings-config",
+        "shell": "settings",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/storefront/settings/operations",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "settings-config",
+        "shell": "settings",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/storefront/setup",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/storefront/tables",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "storefront-setup-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/storefront/team",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/storefront/units",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "storefront-setup-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/welcome",
+      "derived": {
+        "audience": "auth-setup",
+        "destinationKind": "section-home",
+        "shell": "form",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "setup-phase-only"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/wiki/[...slug]",
+      "derived": {
+        "audience": "admin",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/workbooks",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "section-home",
+        "shell": "cockpit",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/workbooks/[workbookId]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/workbooks/system/[entityType]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/workspace",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "section-home",
+        "shell": "cockpit",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "wall-clock-collection"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/workspace/calendar",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "wall-clock-collection"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/workspace/cases/[caseKey]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/workspace/documents",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/workspace/documents/[documentId]",
+      "derived": {
+        "audience": "owner",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": false,
+        "sweepExclusionReason": "dynamic-fixture-required"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/workspace/inbox",
+      "derived": {
+        "audience": "worker",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "status": "draft",
+      "routePath": "/workspace/my-queue",
+      "derived": {
+        "audience": "worker",
+        "destinationKind": "detail",
+        "shell": "detail",
+        "confidence": "high",
+        "sweepEligible": true
+      }
+    }
+  ]
+}

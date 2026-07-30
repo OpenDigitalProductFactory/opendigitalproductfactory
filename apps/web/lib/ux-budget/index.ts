@@ -48,6 +48,38 @@ export {
 } from "./route-shells";
 
 export {
+  pagePurposeContractSchema,
+  pagePurposeRegistrySchema,
+  parsePagePurposeContract,
+  parsePagePurposeRegistry,
+  parsePurposeIdentityBaseline,
+  purposeContractSourceSchema,
+  purposeIdentityBaselineSchema,
+  quarantinedPurposeContractSourceSchema,
+  ratifiedPurposeContractSourceSchema,
+  type DraftPurposeRecord,
+  type PagePurposeContract,
+  type PagePurposeRegistry,
+  type PurposeContractSource,
+  type QuarantinedPurposeRecord,
+  type RatifiedPurposeContract,
+  type RatifiedPurposeContractSource,
+  type TaskValidationReceipt,
+} from "./page-purpose";
+
+export {
+  PURPOSE_CONTRACT_SOURCES,
+  buildPurposeContractSourceIndex,
+  type PurposeContractModule,
+} from "./purpose-contracts";
+
+export {
+  buildRoutePolicies,
+  type RoutePolicy,
+  type RoutePolicyManifestRow,
+} from "./route-policy";
+
+export {
   evaluateUxBudget,
   type BudgetFinding,
   type BudgetReport,

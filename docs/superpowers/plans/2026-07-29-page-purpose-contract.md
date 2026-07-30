@@ -1,11 +1,32 @@
 # Page Purpose Contract Implementation Plan
 
-**Backlog:** BI-939E57D0 (umbrella), BI-B4A4C76E (typed registry), BI-D27323A0 (evaluator and Self-Upgrade pilot), BI-B6935E5B (enforcement activation)  
-**Epic:** EP-UX-SYSTEM  
-**Work Capsule:** WC-102F00C8  
-**Status:** Planned; implementation has not started
+**Backlog:** BI-939E57D0 (umbrella), BI-B4A4C76E (typed registry), BI-D27323A0 (evaluator and Self-Upgrade pilot), BI-B6935E5B (enforcement activation)
+**Epic:** EP-UX-SYSTEM
+**Work Capsule:** WC-102F00C8
+**Status:** In progress; Deliverable 1 implementation complete, merged-code verification pending
 
 > **For agentic workers:** execute this plan one independently reviewable backlog item at a time - one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff.
+
+## Independent implementation review
+
+Two independent reviewers examined Deliverable 1 before commit. Their findings
+were treated as contract defects and resolved in the implementation:
+
+- The identity ratchet compares the candidate baseline with the Git base
+  baseline. On first use it derives the allowed draft set from the base
+  commit's route manifest, so the bootstrap PR cannot grandfather its own new
+  route.
+- Registry summary counts are reconciled against actual route statuses.
+- Scenario identity lives only in the `stateScenarios` record key.
+- Task and recovery routes are validated against the canonical page manifest.
+- A complete positive fixture exercises all four evidence classes, with
+  class-specific rejection tests.
+- Route-family contract modules own intent only, omit derived route policy, and
+  combine through one duplicate-safe index.
+- Route-shell and Purpose generators share root discovery, manifest loading,
+  deterministic serialization, and check/write behavior.
+- The workflow watches its package-script owner and fetches the base history
+  required for transition validation.
 
 ## Outcome
 
@@ -207,8 +228,8 @@ type TaskValidationReceipt =
 
 Each `PurposeStateScenario` declares:
 
-- a stable rendered state key, state predicate, and `stateSource` containing a
-  typed oracle key plus canonical source reference;
+- a stable, whitespace-canonical scenario record key, state predicate, and
+  `stateSource` containing a typed oracle key plus canonical source reference;
 - essential evidence keys;
 - one command or an explicit informational/no-action experience;
 - prohibited actions for that state;
@@ -234,7 +255,7 @@ database model is introduced.
 | Audience | route-audience classifier | Reference as the broad audience |
 | Destination kind | route-audience classifier | Reference only |
 | Shell / sweep eligibility | route-shell policy | Reference only |
-| Route family | `UxShell` initially | Alias the existing shell; do not invent another family enum |
+| Route family | `portal-navigation-model.ts` (`domain`, `parentPath`, shell section, and siblings) | Project semantic family from the navigation owner; `UxShell` remains only a presentation/evaluation class |
 | Primary persona | ratified purpose intent | Refines the broad audience for this job |
 | Family intent defaults | BI-557A6D4E page-family briefs | Consume after those briefs exist; route-specific intent wins explicitly |
 | Job/outcome/state/task protocol | ratified purpose contract | New authoritative route-specific intent |
@@ -245,8 +266,9 @@ The generator produces one row for every non-redirect page route:
 
 - Derived fields are joined from their existing owners during generation; the
   purpose module does not re-classify them.
-- Explicit intent: a small override map keyed by canonical route path stores
-  owner-ratified fields for reviewed routes.
+- Explicit intent: route-family modules keyed by canonical route path store only
+  owner-ratified intent and evidence; derived route policy is added during
+  generation.
 - Unreviewed routes remain `draft` and surface a coverage finding. Generated
   headings or CTA guesses may be diagnostic suggestions, never ratified facts.
 - A route may become `intent-ratified` only with review and a non-empty typed
@@ -258,10 +280,14 @@ The generated output is
 the canonical manifest, not a second inventory. It contains no timestamps and
 is sorted in manifest order.
 
-The coverage baseline stores the exact grandfathered draft-route identity set:
+The coverage baseline stores only the exact first-use draft exception set. It
+does not duplicate ratified identities; the contract-source index owns those:
 
 - a legacy draft may become ratified;
-- a ratified route may not revert to draft;
+- a ratified route may not revert to draft when compared with the base generated
+  registry;
+- a reviewed `intent-quarantined` marker may temporarily suspend enforcement
+  with an owner, incident, reason, and review reference;
 - a net-new route may not enter as draft;
 - a removed manifest route may leave the set;
 - family counts are reporting only and never decide the gate.
@@ -336,7 +362,7 @@ audit model.
 
 ### Deliverable 1 - Typed registry and identity ratchet
 
-**Backlog:** BI-B4A4C76E  
+**Backlog:** BI-B4A4C76E
 **Independently shippable:** yes
 
 1. Add versioned draft/ratified contract types, runtime parsing, and invalid
@@ -354,8 +380,8 @@ one typed contract.
 
 ### Deliverable 2 - Evaluator and Self-Upgrade task pilot
 
-**Backlog:** BI-D27323A0  
-**Depends on:** Deliverable 1  
+**Backlog:** BI-D27323A0
+**Depends on:** Deliverable 1
 **Independently shippable:** yes
 
 1. Add purpose markers and deterministic served-DOM evidence capture.
@@ -374,8 +400,8 @@ Deliverable 1 is source-local and does not wait for browser sweep stability.
 
 ### Deliverable 3 - Reproducible enforcement activation
 
-**Backlog:** BI-B6935E5B  
-**Depends on:** Deliverable 2, BI-232BA634  
+**Backlog:** BI-B6935E5B
+**Depends on:** Deliverable 2, BI-232BA634
 **Independently shippable:** yes
 
 1. Prove two same-SHA purpose sweeps produce byte-identical blocking evidence.
@@ -387,8 +413,8 @@ Deliverable 1 is source-local and does not wait for browser sweep stability.
 
 ### Deliverable 4 - Five AI Workforce lens adoption
 
-**Backlog:** BI-F2278856  
-**Depends on:** Deliverable 2, BI-97CD9E4B, BI-C1943813  
+**Backlog:** BI-F2278856
+**Depends on:** Deliverable 2, BI-97CD9E4B, BI-C1943813
 **Independently shippable:** yes
 
 When the shallow Coworkers, Work, Decisions, Setup, and Health lenses exist,
@@ -585,10 +611,16 @@ Rollback follows the independent delivery boundaries:
 
 | Deliverable | Rollback action | Preserved substrate |
 | --- | --- | --- |
-| Registry and identity ratchet | Remove only after every evaluator and route contract consumer is removed; revert the generator, generated registry, and source-local guard together | Canonical route manifest, route-shell registry, and volume/ARIA ratchets |
+| Registry and identity ratchet | Remove only after every evaluator and route contract consumer is removed; revert the Purpose generator, generated registry, and source-local guard together. Keep the generic shared route-policy and registry I/O refactor because the route-shell generator also owns it. | Canonical route manifest, route-shell registry, shared generator substrate, and volume/ARIA ratchets |
 | Evaluator and Self-Upgrade pilot | Remove purpose findings, markers, and task-receipt projection from the composed evaluator | Typed registry, deterministic generator, and net-new route identity guard |
 | Enforcement activation | Downgrade the activated checks to advisory and retain their evidence, fixtures, and evaluator output | Registry, evaluator, Self-Upgrade contract, and reproducibility history |
 | Five-lens adoption | Revert each new shallow lens route and its co-located contract independently, preserving the underlying canonical coworker/work/decision/setup/health read models | Registry, evaluator, and unrelated routes |
+
+A faulty contract edit rolls back to its last-known-good source through normal
+version control. A faulty first ratification cannot silently become draft; it
+uses an `intent-quarantined` source with owner-approved incident and review
+references until corrected. Quarantine remains visible coverage debt and never
+counts as ratified usability evidence.
 
 No migration or persistent runtime state is involved in the Purpose Contract
 program itself.
@@ -613,7 +645,7 @@ program itself.
 
 ## Backlog coverage
 
-**Receipt:** `cms6lzjbn0et901l2wlu2868l`  
+**Receipt:** `cms6lzjbn0et901l2wlu2868l`
 **Decision:** decomposed
 
 | Deliverable key | Backlog item | Depends on |
