@@ -7,10 +7,16 @@
 // turns them into operator-facing names, groups them into domains, and assigns a
 // colour.
 //
-// Colours are concrete hex, not `var(--dpf-*)`: they are painted onto a `<canvas>`
-// via `ctx.fillStyle`/`strokeStyle`, which cannot resolve CSS custom properties.
-// They are category/series colours (the report-kit `statusColors` registry covers
-// status→intent, which is a different axis and does not apply here).
+// The raw colour values live in `explorer-chart-colors.ts` — canvas category
+// colours cannot be `var(--dpf-*)` because `ctx.fillStyle` does not resolve CSS
+// custom properties, so they get the guard-approved chart-colour home.
+
+import {
+  ARCHIMATE_DEFAULT_COLOR,
+  NODE_CATEGORY_COLORS,
+  REL_TYPE_COLORS,
+  UNKNOWN_CATEGORY_COLOR,
+} from "./explorer-chart-colors";
 
 export type GraphDomainKey = "code" | "data" | "architecture" | "infrastructure" | "portfolio";
 
@@ -67,27 +73,57 @@ export type LabelDescriptor = {
  */
 const LABEL_DESCRIPTORS: LabelDescriptor[] = [
   // ── Code ────────────────────────────────────────────────────────────────────
-  { key: "CodeRoute", label: "Route", domain: "code", color: "#a78bfa", size: 6 },
-  { key: "CodeTool", label: "MCP tool", domain: "code", color: "#f472b6", size: 6 },
-  { key: "TestFile", label: "Test file", domain: "code", color: "#34d399", size: 4 },
-  { key: "CodeFile", label: "Source file", domain: "code", color: "#38bdf8", size: 5 },
-  { key: "CodeSymbol", label: "Symbol", domain: "code", color: "#7dd3fc", size: 3 },
-  { key: "ExternalModule", label: "External module", domain: "code", color: "#94a3b8", size: 3 },
+  { key: "CodeRoute", label: "Route", domain: "code", color: NODE_CATEGORY_COLORS.CodeRoute, size: 6 },
+  { key: "CodeTool", label: "MCP tool", domain: "code", color: NODE_CATEGORY_COLORS.CodeTool, size: 6 },
+  { key: "TestFile", label: "Test file", domain: "code", color: NODE_CATEGORY_COLORS.TestFile, size: 4 },
+  { key: "CodeFile", label: "Source file", domain: "code", color: NODE_CATEGORY_COLORS.CodeFile, size: 5 },
+  { key: "CodeSymbol", label: "Symbol", domain: "code", color: NODE_CATEGORY_COLORS.CodeSymbol, size: 3 },
+  {
+    key: "ExternalModule",
+    label: "External module",
+    domain: "code",
+    color: NODE_CATEGORY_COLORS.ExternalModule,
+    size: 3,
+  },
 
   // ── Data model ──────────────────────────────────────────────────────────────
-  { key: "PrismaModel", label: "Data model", domain: "data", color: "#fbbf24", size: 6 },
-  { key: "PrismaField", label: "Field", domain: "data", color: "#fcd34d", size: 3 },
+  { key: "PrismaModel", label: "Data model", domain: "data", color: NODE_CATEGORY_COLORS.PrismaModel, size: 6 },
+  { key: "PrismaField", label: "Field", domain: "data", color: NODE_CATEGORY_COLORS.PrismaField, size: 3 },
 
   // ── Architecture ────────────────────────────────────────────────────────────
-  { key: "EaElement", label: "EA element", domain: "architecture", color: "#4ade80", size: 5 },
+  {
+    key: "EaElement",
+    label: "EA element",
+    domain: "architecture",
+    color: NODE_CATEGORY_COLORS.EaElement,
+    size: 5,
+  },
 
   // ── Infrastructure ──────────────────────────────────────────────────────────
-  { key: "InfraCI", label: "Infrastructure CI", domain: "infrastructure", color: "#22d3ee", size: 5 },
+  {
+    key: "InfraCI",
+    label: "Infrastructure CI",
+    domain: "infrastructure",
+    color: NODE_CATEGORY_COLORS.InfraCI,
+    size: 5,
+  },
 
   // ── Portfolio ───────────────────────────────────────────────────────────────
-  { key: "Portfolio", label: "Portfolio", domain: "portfolio", color: "#818cf8", size: 8 },
-  { key: "DigitalProduct", label: "Digital product", domain: "portfolio", color: "#4ade80", size: 5 },
-  { key: "TaxonomyNode", label: "Taxonomy node", domain: "portfolio", color: "#fb923c", size: 6 },
+  { key: "Portfolio", label: "Portfolio", domain: "portfolio", color: NODE_CATEGORY_COLORS.Portfolio, size: 8 },
+  {
+    key: "DigitalProduct",
+    label: "Digital product",
+    domain: "portfolio",
+    color: NODE_CATEGORY_COLORS.DigitalProduct,
+    size: 5,
+  },
+  {
+    key: "TaxonomyNode",
+    label: "Taxonomy node",
+    domain: "portfolio",
+    color: NODE_CATEGORY_COLORS.TaxonomyNode,
+    size: 6,
+  },
 ];
 
 const DESCRIPTOR_BY_KEY = new Map(LABEL_DESCRIPTORS.map((d) => [d.key, d]));
@@ -97,7 +133,7 @@ const ARCHIMATE_PREFIX = "ArchiMate__";
 
 const UNKNOWN_DESCRIPTOR: Omit<LabelDescriptor, "key" | "label"> = {
   domain: "architecture",
-  color: "#8888a0",
+  color: UNKNOWN_CATEGORY_COLOR,
   size: 4,
 };
 
@@ -120,7 +156,7 @@ export function describeLabel(raw: string): LabelDescriptor {
       key: raw,
       label: humanizeLabel(raw),
       domain: "architecture",
-      color: "#86efac",
+      color: ARCHIMATE_DEFAULT_COLOR,
       size: 4,
     };
   }
@@ -177,26 +213,6 @@ const REL_TYPE_LABELS: Record<string, string> = {
   PEER_OF: "Peer of",
 };
 
-const REL_TYPE_COLORS: Record<string, string> = {
-  IMPORTS: "#38bdf8",
-  DEFINES: "#7dd3fc",
-  HAS_FIELD: "#fcd34d",
-  TESTED_BY: "#34d399",
-  ASSOCIATED_WITH: "#86efac",
-  RELATES_TO: "#4ade80",
-  IMPLEMENTS_ROUTE: "#a78bfa",
-  EXPOSES_TOOL: "#f472b6",
-  BELONGS_TO: "#818cf8",
-  DEPENDS_ON: "#22d3ee",
-  MEMBER_OF: "#a78bfa",
-  MONITORS: "#fbbf24",
-  HOSTS: "#22d3ee",
-  RUNS_ON: "#34d399",
-  ROUTES_THROUGH: "#f472b6",
-};
-
-const REL_TYPE_FALLBACK_COLOR = "#8888a0";
-
 export type RelTypeDescriptor = {
   key: string;
   label: string;
@@ -207,6 +223,6 @@ export function describeRelType(raw: string): RelTypeDescriptor {
   return {
     key: raw,
     label: REL_TYPE_LABELS[raw] ?? humanizeLabel(raw.toLowerCase().replace(/_/g, " ")),
-    color: REL_TYPE_COLORS[raw] ?? REL_TYPE_FALLBACK_COLOR,
+    color: REL_TYPE_COLORS[raw] ?? UNKNOWN_CATEGORY_COLOR,
   };
 }

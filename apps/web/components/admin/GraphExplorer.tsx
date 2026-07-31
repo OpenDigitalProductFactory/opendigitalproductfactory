@@ -263,7 +263,7 @@ export function GraphExplorer({ census }: Props) {
                     : "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] hover:border-[var(--dpf-accent)]"
                 }`}
               >
-                <p className="text-[10px] text-[var(--dpf-muted)]">{domain.label}</p>
+                <p className="text-dpf-caption text-[var(--dpf-muted)]">{domain.label}</p>
                 <p className="text-sm font-semibold text-[var(--dpf-text)]">
                   {count.toLocaleString()}
                 </p>
@@ -271,7 +271,7 @@ export function GraphExplorer({ census }: Props) {
             );
           })}
         </div>
-        <p className="text-[10px] text-[var(--dpf-muted)] mt-2">
+        <p className="text-dpf-caption text-[var(--dpf-muted)] mt-2">
           {activeDomains.size === 0
             ? "All domains included. Select one or more to narrow search and expansion."
             : `Limited to ${[...activeDomains]
@@ -286,7 +286,7 @@ export function GraphExplorer({ census }: Props) {
           <div className="flex-1 min-w-[240px]">
             <label
               htmlFor="graph-explorer-search"
-              className="block text-[10px] text-[var(--dpf-muted)] mb-1"
+              className="block text-dpf-caption text-[var(--dpf-muted)] mb-1"
             >
               Find a starting point
             </label>
@@ -307,7 +307,7 @@ export function GraphExplorer({ census }: Props) {
           </div>
 
           <div>
-            <span className="block text-[10px] text-[var(--dpf-muted)] mb-1">Hops</span>
+            <span className="block text-dpf-caption text-[var(--dpf-muted)] mb-1">Hops</span>
             <div className="flex items-center gap-1">
               {[1, 2, 3].map((h) => (
                 <button
@@ -364,7 +364,7 @@ export function GraphExplorer({ census }: Props) {
                   >
                     <div className="flex items-center gap-2">
                       <span
-                        className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0"
+                        className="text-dpf-caption px-1.5 py-0.5 rounded-full shrink-0"
                         style={{ background: `${descriptor.color}20`, color: descriptor.color }}
                       >
                         {descriptor.label}
@@ -372,7 +372,7 @@ export function GraphExplorer({ census }: Props) {
                       <span className="text-xs text-[var(--dpf-text)] truncate">{node.name}</span>
                     </div>
                     {node.detail && (
-                      <p className="text-[10px] text-[var(--dpf-muted)] truncate mt-0.5">
+                      <p className="text-dpf-caption text-[var(--dpf-muted)] truncate mt-0.5">
                         {node.detail}
                       </p>
                     )}
@@ -388,7 +388,7 @@ export function GraphExplorer({ census }: Props) {
           type="button"
           onClick={() => setShowAdvanced((v) => !v)}
           aria-expanded={showAdvanced}
-          className="mt-3 text-[10px] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+          className="mt-3 text-dpf-caption text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
         >
           {showAdvanced ? "Hide advanced filters" : "Advanced filters"}
         </button>
@@ -396,14 +396,14 @@ export function GraphExplorer({ census }: Props) {
         {showAdvanced && (
           <div className="mt-3 space-y-3">
             <div>
-              <p className="text-[10px] text-[var(--dpf-muted)] mb-1">Node types in the corpus</p>
+              <p className="text-dpf-caption text-[var(--dpf-muted)] mb-1">Node types in the corpus</p>
               <div className="flex flex-wrap gap-1">
                 {census.labels.map((row) => {
                   const descriptor = describeLabel(row.label);
                   return (
                     <span
                       key={row.label}
-                      className="text-[9px] px-1.5 py-0.5 rounded-full"
+                      className="text-dpf-caption px-1.5 py-0.5 rounded-full"
                       style={{ background: `${descriptor.color}20`, color: descriptor.color }}
                     >
                       {descriptor.label} · {row.count.toLocaleString()}
@@ -414,7 +414,7 @@ export function GraphExplorer({ census }: Props) {
             </div>
 
             <div>
-              <p className="text-[10px] text-[var(--dpf-muted)] mb-1">
+              <p className="text-dpf-caption text-[var(--dpf-muted)] mb-1">
                 Follow only these relationships
                 {activeRelTypes.size > 0 ? ` (${activeRelTypes.size} selected)` : " (all)"}
               </p>
@@ -428,7 +428,7 @@ export function GraphExplorer({ census }: Props) {
                       type="button"
                       onClick={() => toggleRelType(row.relType)}
                       aria-pressed={active}
-                      className="text-[9px] px-1.5 py-0.5 rounded-full border transition-colors"
+                      className="text-dpf-caption px-1.5 py-0.5 rounded-full border transition-colors"
                       style={{
                         borderColor: active ? descriptor.color : "var(--dpf-border)",
                         background: active ? `${descriptor.color}20` : "transparent",
@@ -494,7 +494,7 @@ export function GraphExplorer({ census }: Props) {
                   {inspected.name}
                 </p>
                 {inspected.detail && (
-                  <p className="text-[10px] text-[var(--dpf-muted)] break-words mt-0.5">
+                  <p className="text-dpf-caption text-[var(--dpf-muted)] break-words mt-0.5">
                     {inspected.detail}
                   </p>
                 )}
@@ -506,7 +506,7 @@ export function GraphExplorer({ census }: Props) {
                   return (
                     <span
                       key={label}
-                      className="text-[9px] px-1.5 py-0.5 rounded-full"
+                      className="text-dpf-caption px-1.5 py-0.5 rounded-full"
                       style={{ background: `${descriptor.color}20`, color: descriptor.color }}
                     >
                       {descriptor.label}
@@ -515,7 +515,7 @@ export function GraphExplorer({ census }: Props) {
                 })}
               </div>
 
-              <p className="text-[10px] text-[var(--dpf-muted)]">
+              <p className="text-dpf-caption text-[var(--dpf-muted)]">
                 {inspected.degree.toLocaleString()} relationship
                 {inspected.degree === 1 ? "" : "s"} in the full corpus
               </p>
@@ -533,10 +533,10 @@ export function GraphExplorer({ census }: Props) {
                 <dl className="space-y-1 border-t border-[var(--dpf-border)] pt-3">
                   {Object.entries(inspected.props).map(([key, value]) => (
                     <div key={key}>
-                      <dt className="text-[9px] uppercase tracking-wide text-[var(--dpf-muted)]">
+                      <dt className="text-dpf-caption uppercase tracking-wide text-[var(--dpf-muted)]">
                         {key}
                       </dt>
-                      <dd className="text-[10px] text-[var(--dpf-text)] break-words">
+                      <dd className="text-dpf-caption text-[var(--dpf-text)] break-words">
                         {typeof value === "string" || typeof value === "number"
                           ? String(value)
                           : JSON.stringify(value)}

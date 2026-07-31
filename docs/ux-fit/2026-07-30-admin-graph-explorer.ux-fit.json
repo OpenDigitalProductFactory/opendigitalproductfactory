@@ -5,8 +5,7 @@
   "scope": {
     "files": [
       "apps/web/app/(shell)/admin/graph-explorer/page.tsx",
-      "apps/web/components/admin/GraphExplorer.tsx",
-      "apps/web/components/inventory/RelationshipGraph.tsx"
+      "apps/web/components/admin/GraphExplorer.tsx"
     ]
   },
   "evidence": {
