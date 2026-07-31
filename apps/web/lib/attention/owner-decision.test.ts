@@ -166,6 +166,46 @@ describe("translateAttentionToOwnerDecision", () => {
     expect(card.technical.fields).toContainEqual({ label: "Original title", value: raw });
   });
 
+  it("keeps raw coworker-memory content below technical detail", () => {
+    const rawContext =
+      "Integrate Orchestrator remembered a caution: OpenCode task failed with UnknownError. " +
+      "Check server logs and apps/web/app/api/route.ts before retrying codex-gpt.";
+    const card = translateAttentionToOwnerDecision(
+      item({
+        source: "coworker-memory",
+        context: rawContext,
+        deepLink: "/platform/ai/memory",
+        actions: [
+          { kind: "open-in-context", label: "Review memory", href: "/platform/ai/memory" },
+        ],
+        triage: {
+          timeToAct: "none",
+          residueReason: "new-memory-note",
+          decideEffort: "review",
+          irreversible: false,
+        },
+      }),
+      Date.parse("2026-07-30T12:00:00Z"),
+    );
+    const collapsedOwnerCopy = [
+      card.headline,
+      card.situation,
+      card.whyItMatters,
+      card.ifYouDoNothing,
+      card.recommendation.text,
+      card.recommendation.specialistByline,
+    ].filter(Boolean).join(" ");
+    const details = Object.fromEntries(
+      card.technical.fields.map((field) => [field.label, field.value]),
+    );
+
+    expect(card.situation).toBe("A coworker saved a new note from completed work.");
+    expect(collapsedOwnerCopy).not.toMatch(
+      /OpenCode|UnknownError|server logs|route\.ts|codex-gpt/i,
+    );
+    expect(details["Original context"]).toBe(rawContext);
+  });
+
   it("keeps builder, platform, and admin routes below technical detail in Simple view", () => {
     const card = translateAttentionToOwnerDecision(
       item({
