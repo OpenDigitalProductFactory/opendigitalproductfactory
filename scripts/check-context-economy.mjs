@@ -33,6 +33,18 @@
 // Per-turn ACTUALS are now recorded by BI-3E218D80 (AgentMessage.contextTrace); this
 // guard governs the declared budget, which is the part a PR can change.
 //
+// CLAIM REVIEW — the half that makes "soft" mean something. Letting cost grow on a
+// recorded promise is only honest if the promise is revisited: "this complexity removes
+// load later" is a PREDICTION, and a prediction nobody returns to is just a comment.
+// So a recorded `reason` carries a `recordedAt`, and after `reviewByDays` (default 90)
+// it comes due. Enforcement is scoped so it cannot become collateral damage: an overdue
+// claim is always REPORTED, but it only BLOCKS a change that is itself raising a NEW
+// claim — you do not get to add context debt while your existing claims are unreviewed.
+// A naive "overdue fails the build" rule would red every PR in the repo the morning a
+// claim expired, and a guard that punishes bystanders is one people learn to route
+// around. Re-affirm by moving `recordedAt` and saying what actually happened; the
+// evidence for that answer is in the contextTrace data, not in this script.
+//
 //   node scripts/check-context-economy.mjs          # check (CI)
 //   node scripts/check-context-economy.mjs --update # re-baseline (then write the reasons)
 
@@ -148,6 +160,87 @@ export function evaluateContextEconomy({ measured, baseline, baseBaseline }) {
   return { ok: errors.length === 0, errors, notes, justified };
 }
 
+// ── Claim review: the half that makes "soft" mean something ─────────────────────
+
+/** How long a recorded justification stands before it must be revisited. */
+export const DEFAULT_REVIEW_BY_DAYS = 90;
+const MS_PER_DAY = 86_400_000;
+
+/**
+ * Which recorded claims are now due for review.
+ *
+ * WHY THIS EXISTS. The guard above lets standing context cost grow as long as the
+ * author records what long-term cognitive load it buys. That is the right trade — but
+ * a claim nobody ever revisits is just a comment. "This complexity removes load later"
+ * is a PREDICTION, and the only honest way to hold a prediction accountable is to come
+ * back to it. Without this, a soft guard decays into a warning nobody reads, which is
+ * the exact failure this whole line of work started from.
+ *
+ * `now` is injected so the result is deterministic under test.
+ */
+export function reviewClaims({ baseline, now, defaultReviewByDays = DEFAULT_REVIEW_BY_DAYS }) {
+  const due = [];
+  const undated = [];
+
+  for (const [key, entry] of Object.entries(baseline ?? {})) {
+    const reason = typeof entry?.reason === "string" ? entry.reason.trim() : "";
+    if (!reason) continue; // no claim recorded — nothing to revisit
+
+    const recordedAt = entry.recordedAt ? Date.parse(entry.recordedAt) : NaN;
+    if (Number.isNaN(recordedAt)) {
+      // A claim with no date can never come due, so it would be an immortal excuse.
+      undated.push(key);
+      continue;
+    }
+
+    const windowDays = Number(entry.reviewByDays) > 0 ? Number(entry.reviewByDays) : defaultReviewByDays;
+    const ageDays = Math.floor((now - recordedAt) / MS_PER_DAY);
+    if (ageDays >= windowDays) {
+      due.push({ key, ageDays, windowDays, reason, value: entry.value });
+    }
+  }
+
+  return { due, undated };
+}
+
+/**
+ * Turn the review into enforcement, WITHOUT reddening unrelated work.
+ *
+ * A naive "overdue claims fail the build" rule would red every PR in the repo the
+ * morning a claim expired — the same collateral pain as a policy guard failing on files
+ * the author never touched. So overdue claims are always REPORTED, and they only BLOCK
+ * a change that is itself raising a NEW claim: you do not get to add context debt while
+ * your existing claims are unreviewed. Same shape as the UX budget's "legacy debt earns
+ * a ratchet; new code has no legacy excuse".
+ */
+export function enforceClaimReview({ review, raisedNewClaim }) {
+  const errors = [];
+  const warnings = [];
+
+  for (const key of review.undated) {
+    warnings.push(
+      `${key} carries a reason with no recordedAt, so it can never come due for review — ` +
+        `add recordedAt (YYYY-MM-DD) when you re-baseline.`,
+    );
+  }
+
+  for (const claim of review.due) {
+    const line =
+      `${claim.key} claim is ${claim.ageDays}d old (review window ${claim.windowDays}d): ` +
+      `"${claim.reason}"`;
+    if (raisedNewClaim) {
+      errors.push(
+        `${line} — this change raises a NEW claim while that one is unreviewed. Re-affirm it ` +
+          `(update recordedAt and say what actually happened) or shrink the value back.`,
+      );
+    } else {
+      warnings.push(`${line} — due for review: did the promised reduction actually arrive?`);
+    }
+  }
+
+  return { ok: errors.length === 0, errors, warnings };
+}
+
 // ── I/O ─────────────────────────────────────────────────────────────────────────
 
 function readBaseline(path) {
@@ -185,8 +278,16 @@ function main() {
       entries[key] = {
         value,
         // Carry a prior reason forward only while the number is unchanged; a raised
-        // number needs a fresh justification, not an inherited one.
-        ...(prior && prior.value === value && prior.reason ? { reason: prior.reason } : {}),
+        // number needs a fresh justification, not an inherited one. `recordedAt` travels
+        // WITH the reason so the review clock is not silently reset by an unrelated
+        // re-baseline — re-affirming a claim has to be a deliberate edit.
+        ...(prior && prior.value === value && prior.reason
+          ? {
+              reason: prior.reason,
+              ...(prior.recordedAt ? { recordedAt: prior.recordedAt } : {}),
+              ...(prior.reviewByDays ? { reviewByDays: prior.reviewByDays } : {}),
+            }
+          : {}),
       };
     }
     writeFileSync(
@@ -215,16 +316,26 @@ function main() {
     process.exit(1);
   }
 
-  const { ok, errors, notes, justified } = evaluateContextEconomy({
+  const { errors, notes, justified } = evaluateContextEconomy({
     measured,
     baseline,
     baseBaseline: readBaselineAtBase(),
   });
 
+  // A claim raised in THIS change is what turns an overdue claim from a warning into a
+  // blocker — see enforceClaimReview for why it is scoped that way.
+  const review = reviewClaims({ baseline, now: Date.now() });
+  const claimVerdict = enforceClaimReview({ review, raisedNewClaim: justified.length > 0 });
+
   for (const j of justified) console.log(`  [recorded] ${j}`);
   for (const n of notes) console.log(`  [note] ${n}`);
+  for (const w of claimVerdict.warnings) console.log(`  [review] ${w}`);
+  errors.push(...claimVerdict.errors);
 
-  if (!ok) {
+  // Recomputed AFTER the review errors are folded in — reading a stale `ok` here would
+  // print the review failures and then exit 0, which is the false green this guard exists
+  // to prevent.
+  if (errors.length > 0) {
     console.error("\nContext-economy guard failed (BI-3E218D80 follow-on).\n");
     for (const e of errors) console.error(`  - ${e}`);
     console.error("");
