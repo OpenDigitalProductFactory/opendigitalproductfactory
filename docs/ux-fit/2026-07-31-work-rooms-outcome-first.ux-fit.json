@@ -1,0 +1,24 @@
+{
+  "version": "1",
+  "decidedOption": "outcome-first-existing-route",
+  "decisionInteractionId": "DI-3D4DAE04956D",
+  "scope": {
+    "files": [
+      "apps/web/components/ui/report-kit/statusColors.ts",
+      "apps/web/components/workspace/WorkCaseAttentionLens.tsx",
+      "apps/web/components/workspace/WorkCaseDetailView.tsx",
+      "apps/web/components/workspace/WorkItemCommentBox.tsx",
+      "apps/web/components/workspace/work-room/WorkRoomBody.tsx",
+      "apps/web/components/workspace/work-room/WorkRoomHeader.tsx",
+      "apps/web/components/workspace/work-room/presentation.ts"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "outcome-first-existing-route",
+      "parallel-room-route",
+      "keep-case-inspector"
+    ]
+  }
+}

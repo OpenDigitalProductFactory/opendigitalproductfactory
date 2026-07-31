@@ -204,6 +204,7 @@ The existing Work Case detail route becomes a Work Room experience that is under
 ### UX fit review
 
 - Decision: `fits-with-guardrails`.
+- Governed comparison: `DI-3D4DAE04956D` recommended `outcome-first-existing-route` with usable, high-confidence signal and a 2.920 margin over the next option.
 - Primary persona: founder, operator, or employee coordinating a bounded company outcome with people and AI coworkers.
 - Navigation layer: local page navigation and contextual actions only; the canonical detail URL remains `/workspace/cases/[caseKey]`.
 - Reuse and convergence: retain the Workspace Work Case loader and route, compose report-kit status and notice primitives, and extract focused room components from the existing monolithic detail view.
