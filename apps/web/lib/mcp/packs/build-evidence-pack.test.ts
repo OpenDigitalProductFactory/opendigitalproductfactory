@@ -153,6 +153,7 @@ describe("build-evidence pack — handler behavior (delegation preserved)", () =
       "antigravity",
       "coworker",
     ]);
+    expect(properties?.status.enum).toContain("blocked_control_plane_starvation");
   });
 
   it("record_execution_evidence surfaces not_found for an unknown item", async () => {

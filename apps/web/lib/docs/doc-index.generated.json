@@ -8673,6 +8673,7 @@
         "observation-versus-merge-authority",
         "know-the-constraints-before-you-write-pnpm-gatecontext",
         "before-a-pr-exists-pnpm-prready",
+        "local-ci-infrastructure-outcomes",
         "tests-ci"
       ]
     },

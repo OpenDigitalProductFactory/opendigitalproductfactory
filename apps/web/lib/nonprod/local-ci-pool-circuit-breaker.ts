@@ -9,7 +9,8 @@ type LocalCiGateStatus =
   | "passed"
   | "failed"
   | "conflict"
-  | "blocked_sandbox_drift";
+  | "blocked_sandbox_drift"
+  | "blocked_control_plane_starvation";
 
 export type PlatformConfigCircuitBreakerStore = {
   findUnique: (args: {
@@ -48,6 +49,7 @@ function shouldContract(
   status: LocalCiGateStatus,
   evidence: unknown,
 ): boolean {
+  if (status === "blocked_control_plane_starvation") return true;
   return status !== "passed" && evidenceSlotKey(evidence) === "slot-1";
 }
 

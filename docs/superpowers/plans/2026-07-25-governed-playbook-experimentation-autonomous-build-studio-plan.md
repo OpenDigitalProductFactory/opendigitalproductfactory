@@ -946,6 +946,7 @@ type AutonomousBuildEligibility = {
 | Reproduced blocking review finding | repair and fresh re-review | 2 converging rounds |
 | Plan oscillation | decompose or return to design with retained findings | 1 decomposition |
 | Sandbox drift | classify `blocked_sandbox_drift`; converge governed sandbox | no product-failure charge |
+| Control-plane starvation | classify `blocked_control_plane_starvation`; stop the admitted build and await governed recovery | no product-failure charge; capacity remains one |
 | Post-push CI failure | inspect, classify, repair, locally verify, push new SHA | 2 rounds |
 | Queue rejection/stale base | exit queue, safe owned-commit replay, verify, re-enroll | 1 safe replay |
 | Unresolved review thread | reproduce/address/request re-review | 2 converging rounds |

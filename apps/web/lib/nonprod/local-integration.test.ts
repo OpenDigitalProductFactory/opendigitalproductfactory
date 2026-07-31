@@ -80,6 +80,28 @@ describe("recordLocalIntegrationResult", () => {
     );
   });
 
+  it("records control-plane starvation as infrastructure evidence", async () => {
+    await recordLocalIntegrationResult({
+      actorUserId: "user-1",
+      provider: "codex",
+      externalSessionId: "gate-starved",
+      routeContext: "/build",
+      candidateBranch: "fix/control-plane",
+      mode: "single-branch",
+      status: "blocked_control_plane_starvation",
+      summary: "The shared control-plane degraded during the production build.",
+      evidence: { controlPlane: { samples: 2, healthyThroughout: false } },
+    }, { platformConfig });
+
+    expect(mockRecordExternalEvidence).toHaveBeenCalledWith(
+      expect.objectContaining({
+        details: expect.objectContaining({
+          status: "blocked_control_plane_starvation",
+        }),
+      }),
+    );
+  });
+
   it("contracts the pool before recording a failed slot-1 result", async () => {
     const updatedAt = new Date("2026-07-30T12:00:00.000Z");
     platformConfig.findUnique.mockResolvedValueOnce({

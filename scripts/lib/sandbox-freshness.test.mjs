@@ -319,3 +319,11 @@ test("classifyGateOutcome treats pnpm lifecycle exit 3 as product evidence when 
   assert.equal(failed.status, "failed");
   assert.equal(failed.productEvidence, true);
 });
+
+test("classifyGateOutcome reserves exit 5 for control-plane starvation", () => {
+  const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: 5 });
+  assert.equal(outcome.status, "blocked_control_plane_starvation");
+  assert.equal(outcome.gatePassed, false);
+  assert.equal(outcome.productEvidence, false);
+  assert.match(outcome.summary, /control-plane/i);
+});

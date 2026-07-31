@@ -12,6 +12,7 @@ export const LOCAL_CI_SLOT_KEYS = Object.freeze(
   Object.keys(SLOT_RESOURCE_MANIFEST.slots),
 );
 export const LOCAL_CI_DECLARED_CAPACITY = LOCAL_CI_SLOT_KEYS.length;
+const BUILDER_POLICY = Object.freeze(SLOT_RESOURCE_MANIFEST.builderPolicy);
 
 const SLOT_RESOURCES = Object.freeze(
   Object.fromEntries(
@@ -39,6 +40,7 @@ function requireAbsolutePath(name, value) {
  * @property {{convergenceLock: string, freshStore: string}} dependencies
  * @property {{build: string, log: string}} output
  * @property {{metadata: string, freshness: string, pending: string, state: string, artifact: string}} evidence
+ * @property {{policyVersion: number, name: string, container: string, memoryBytes: number, cpuQuota: number, cpuPeriod: number, maxParallelism: number}} builder
  * @property {{scratchBoundary: string, composeProject: string, postgresContainer: string, postgresVolume: string}} cleanup
  */
 
@@ -83,6 +85,7 @@ export function createLocalCiSlotManifest(input) {
   const postgresContainer = `dpf-local-ci-postgres-${resources.ordinal}`;
   const postgresVolume = `dpf-local-ci-postgres-${resources.ordinal}`;
   const evidenceSuffix = resources.ordinal === 0 ? "" : `-${slotKey}`;
+  const builderName = `dpf-local-ci-buildkit-v${BUILDER_POLICY.version}-${resources.ordinal}`;
 
   return Object.freeze({
     schemaVersion: LOCAL_CI_SLOT_MANIFEST_SCHEMA_VERSION,
@@ -113,6 +116,15 @@ export function createLocalCiSlotManifest(input) {
       convergenceLock: join(workspace, ".dpf-freshness-converge.lock"),
       freshStore: join(workspace, ".pnpm-fresh-store"),
     }),
+    builder: Object.freeze({
+      policyVersion: BUILDER_POLICY.version,
+      name: builderName,
+      container: `buildx_buildkit_${builderName}0`,
+      memoryBytes: BUILDER_POLICY.memoryBytes,
+      cpuQuota: BUILDER_POLICY.cpuQuota,
+      cpuPeriod: BUILDER_POLICY.cpuPeriod,
+      maxParallelism: BUILDER_POLICY.maxParallelism,
+    }),
     output: Object.freeze({
       build: join(workspace, "apps", "web", ".next"),
       log: join(candidateGitDir, `dpf-local-ci-output${evidenceSuffix}.log`),
@@ -123,6 +135,7 @@ export function createLocalCiSlotManifest(input) {
       pending: join(candidateGitDir, `dpf-local-ci-pending-evidence${evidenceSuffix}.json`),
       state: join(candidateGitDir, `dpf-local-ci-gate${evidenceSuffix}.json`),
       artifact: join(candidateGitDir, `dpf-local-ci-artifact${evidenceSuffix}.json`),
+      controlPlane: join(candidateGitDir, `dpf-local-ci-control-plane${evidenceSuffix}.json`),
     }),
     cleanup: Object.freeze({
       scratchBoundary: workspace,
@@ -161,6 +174,14 @@ export function localCiSlotEnvironment(manifest) {
     DPF_LOCAL_CI_ARTIFACT_FILE: manifest.evidence.artifact,
     DPF_LOCAL_CI_OUTPUT_FILE: manifest.output.log,
     DPF_LOCAL_CI_BUILD_OUTPUT: manifest.output.build,
+    DPF_LOCAL_CI_BUILDER_NAME: manifest.builder.name,
+    DPF_LOCAL_CI_BUILDER_CONTAINER: manifest.builder.container,
+    DPF_LOCAL_CI_BUILDER_POLICY_VERSION: String(manifest.builder.policyVersion),
+    DPF_LOCAL_CI_BUILDER_MEMORY_BYTES: String(manifest.builder.memoryBytes),
+    DPF_LOCAL_CI_BUILDER_CPU_QUOTA: String(manifest.builder.cpuQuota),
+    DPF_LOCAL_CI_BUILDER_CPU_PERIOD: String(manifest.builder.cpuPeriod),
+    DPF_LOCAL_CI_BUILDER_MAX_PARALLELISM: String(manifest.builder.maxParallelism),
+    DPF_LOCAL_CI_CONTROL_PLANE_EVIDENCE_FILE: manifest.evidence.controlPlane,
   };
 }
 

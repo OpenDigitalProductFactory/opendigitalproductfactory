@@ -299,6 +299,7 @@ export const EXIT_GREEN = 0;
 export const EXIT_USAGE = 2;
 export const EXIT_SANDBOX_DRIFT = 3;
 export const EXIT_SANDBOX_NOT_READY = 4;
+export const EXIT_CONTROL_PLANE_STARVATION = 5;
 
 export function exitCodeForVerdict(verdict) {
   if (verdict === "green") return EXIT_GREEN;
@@ -326,6 +327,14 @@ export function classifyGateOutcome({ freshnessVerdict, gateExitCode }) {
       gatePassed: false,
       productEvidence: false,
       summary: "local-CI gate blocked: freshness preflight reported sandbox drift. This is a sandbox defect, NOT product build evidence.",
+    };
+  }
+  if (gateExitCode === EXIT_CONTROL_PLANE_STARVATION) {
+    return {
+      status: "blocked_control_plane_starvation",
+      gatePassed: false,
+      productEvidence: false,
+      summary: "local-CI gate blocked: the shared portal/MCP/Docker/PostgreSQL control-plane degraded during the build. This is infrastructure evidence, NOT a product build failure.",
     };
   }
   if (gateExitCode === 0) {

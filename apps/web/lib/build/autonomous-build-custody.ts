@@ -29,6 +29,7 @@ const STALE_HEARTBEAT_MS = 10 * 60 * 1000;
 
 const REPAIR_COPY: Record<string, string> = {
   blocked_sandbox_drift: "The shared verification environment is being refreshed.",
+  blocked_control_plane_starvation: "The shared verification control plane is awaiting governed recovery.",
   sandbox_unavailable: "Build Studio is waiting for a governed verification environment.",
   provider_unavailable: "Build Studio is switching to an eligible AI provider.",
   oracles_red: "Build Studio is repairing evidence that did not pass verification.",

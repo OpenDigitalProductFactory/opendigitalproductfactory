@@ -59,6 +59,9 @@ test("slot manifests are versioned and every mutable identity is isolated", () =
     (slot) => slot.evidence.pending,
     (slot) => slot.evidence.state,
     (slot) => slot.evidence.artifact,
+    (slot) => slot.builder.name,
+    (slot) => slot.builder.container,
+    (slot) => slot.evidence.controlPlane,
   ];
 
   for (const identity of identities) {
@@ -126,6 +129,28 @@ test("slot environment is derived from the manifest without hidden arithmetic", 
     DPF_LOCAL_CI_ARTIFACT_FILE: manifest.evidence.artifact,
     DPF_LOCAL_CI_OUTPUT_FILE: manifest.output.log,
     DPF_LOCAL_CI_BUILD_OUTPUT: manifest.output.build,
+    DPF_LOCAL_CI_BUILDER_NAME: manifest.builder.name,
+    DPF_LOCAL_CI_BUILDER_CONTAINER: manifest.builder.container,
+    DPF_LOCAL_CI_BUILDER_POLICY_VERSION: "2",
+    DPF_LOCAL_CI_BUILDER_MEMORY_BYTES: String(manifest.builder.memoryBytes),
+    DPF_LOCAL_CI_BUILDER_CPU_QUOTA: String(manifest.builder.cpuQuota),
+    DPF_LOCAL_CI_BUILDER_CPU_PERIOD: String(manifest.builder.cpuPeriod),
+    DPF_LOCAL_CI_BUILDER_MAX_PARALLELISM: String(manifest.builder.maxParallelism),
+    DPF_LOCAL_CI_CONTROL_PLANE_EVIDENCE_FILE: manifest.evidence.controlPlane,
+  });
+});
+
+test("builder resources reserve capacity for the shared control plane", () => {
+  const manifest = createLocalCiSlotManifest({ ...fixture(), slotKey: "slot-0" });
+
+  assert.deepEqual(manifest.builder, {
+    policyVersion: 2,
+    name: "dpf-local-ci-buildkit-v2-0",
+    container: "buildx_buildkit_dpf-local-ci-buildkit-v2-00",
+    memoryBytes: 16 * 1024 ** 3,
+    cpuQuota: 800_000,
+    cpuPeriod: 100_000,
+    maxParallelism: 4,
   });
 });
 

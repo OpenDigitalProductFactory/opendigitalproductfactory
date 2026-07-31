@@ -13,6 +13,7 @@ describe("classifyAutonomousBuildFailure", () => {
     ["tool protocol mismatch", "code_generated", "tool-protocol-mismatch"],
     ["maximum context length exceeded", "code_generated", "context-overflow"],
     ["blocked_sandbox_drift", "sandbox_created", "sandbox-drift"],
+    ["blocked_control_plane_starvation", "tests_run", "control-plane-starvation"],
     ["error TS2322 typecheck failed", "code_generated", "scoped-verification-failure"],
   ] as const)("classifies %s", (message, step, expected) => {
     expect(classifyAutonomousBuildFailure({ message, step })).toBe(expected);
@@ -79,6 +80,19 @@ describe("decideAutonomousRecovery", () => {
 
     expect(decision).toMatchObject({
       action: "converge-governed-sandbox",
+      consumedBudget: false,
+      terminal: false,
+      state,
+    });
+  });
+
+  it("waits for governed recovery after control-plane starvation", () => {
+    const state = initialAutonomousRecoveryState();
+    expect(decideAutonomousRecovery({
+      failureClass: "control-plane-starvation",
+      state,
+    })).toMatchObject({
+      action: "await-governed-runner",
       consumedBudget: false,
       terminal: false,
       state,
