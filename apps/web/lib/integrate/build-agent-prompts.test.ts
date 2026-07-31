@@ -65,8 +65,8 @@ describe("getBuildPhasePrompt", () => {
   it("returns review prompt for review phase", async () => {
     const prompt = await getBuildPhasePrompt("review");
     expect(prompt).toContain("acceptanceMet");
-    expect(prompt).toContain("Typecheck MUST be clean");
-    expect(prompt).toContain("Treat unrelated unit-test failures as informational");
+    expect(prompt).toContain("Typecheck and the applicable test suite MUST be clean");
+    expect(prompt).toContain("Treat every reported test failure as unresolved evidence");
     expect(prompt).toContain("Ready to ship");
   });
   it("returns ship prompt for ship phase", async () => {
