@@ -709,6 +709,130 @@ export const pages = [
   },
 ];
 
+// ---- how the coworker decides, per business type ---------------------------
+// Plain-language summary of the decision axes that carry the most weight in
+// this line of work, and the ones that are never traded away. Every business
+// type is judged on the SAME named set of axes — what changes is the emphasis.
+// Full detail (and the axis definitions themselves) lives in
+// docs/architecture/decision-vectors-by-archetype.md, which each page links to
+// by slug. Keep both sides in step when editing.
+export const judgement = {
+  "trades-and-home-services": {
+    weighs:
+      "Getting there fast, with the property history in hand. A quick dispatch is worth nothing if the tech arrives without context.",
+    never:
+      "Safety and licensing. Your coworker flags what a job needs and never improvises code or safety advice to save time.",
+  },
+  "automotive-services": {
+    weighs:
+      "Speed for roadside work, and the vehicle details for everything else. A quote without the VIN is a guess.",
+    never:
+      "Post-install safety steps. Glass recalibration and driver-hours limits are tracked as steps, not afterthoughts.",
+  },
+  "moving-and-logistics": {
+    weighs:
+      "A route that pays, and a record of what was moved. The notes are what settle a dispute later.",
+    never:
+      "Driver-hours limits and chain of custody. Those are limits, not preferences.",
+  },
+  "security-services": {
+    weighs:
+      "Keeping each client's sites and records apart, and making incident records solid.",
+    never:
+      "Officer licensing and documented response. Both are checked up front and over time.",
+  },
+  "clinics-and-wellness": {
+    weighs:
+      "The record being there when care happens, and privacy around it.",
+    never:
+      "Clinical judgement. Your coworker books, prepares and follows up — it never diagnoses, triages, or handles a crisis. Crises go to emergency services.",
+  },
+  "beauty-and-personal-care": {
+    weighs:
+      "Protecting the day's income — real per-person availability, buffers, and fewer no-shows.",
+    never:
+      "Moving a booking in a way you could not have seen coming. You approve first.",
+  },
+  "pet-services": {
+    weighs:
+      "Knowing the animal before it arrives — size, coat, temperament, alerts.",
+    never:
+      "Welfare checks. Vaccination status at intake and medication handling stay gates.",
+  },
+  "fitness-and-recreation": {
+    weighs:
+      "The renewal, not the first sale. A signup won at the cost of the renewal scores badly.",
+    never:
+      "Contacting members without their say-so, and liability details going unrecorded.",
+  },
+  "education-and-training": {
+    weighs:
+      "Knowing who learns and who pays, and keeping terms and packages straight.",
+    never:
+      "Safeguarding. Guardian consent and instructor qualifications are gates when minors are involved.",
+  },
+  "retail-and-goods": {
+    weighs:
+      "A checkout that never drops a price, an image, or a delivery detail.",
+    never:
+      "Payment and delivery privacy, and marketing to a buyer who has not agreed to it.",
+  },
+  "food-and-hospitality": {
+    weighs:
+      "Bookings you can see the effect of before you approve them, and a table that is never double-booked.",
+    never:
+      "Allergens. Dietary needs are a duty of care and reach the kitchen every time.",
+  },
+  "nonprofits-and-community": {
+    weighs:
+      "A gift being treated as a gift — a receipt, never a bill, and no account behind it.",
+    never:
+      "Charity and co-op rules, including how profit is shared back to members.",
+  },
+  "hoa-and-property-management": {
+    weighs:
+      "Residents being able to see what a request or approval will do, and every request knowing its address.",
+    never:
+      "Covenants, reserve disclosures, and deposit law.",
+  },
+  "public-sector-and-civic": {
+    weighs:
+      "Getting the request to the right desk, with a record that lasts. Faster is not better in a statutory process.",
+    never:
+      "Records law and its clocks. For law enforcement, your coworker refuses criminal-justice lookups outright and takes intake only.",
+  },
+  "banking-and-credit-unions": {
+    weighs:
+      "Disclosure before the ask, and identity checks before anything proceeds.",
+    never:
+      "Moving money. DPF records applications and obligations at the engagement layer; your core banking stays where it is.",
+  },
+  "equipment-and-storage-rental": {
+    weighs:
+      "Keeping the fleet earning — nothing double-booked, nothing sitting idle — and a condition record at handover and return.",
+    never:
+      "Deposit law, which changes from place to place.",
+  },
+  "home-building-and-construction": {
+    weighs:
+      "A quote educated enough to still be profitable a year later, and selections that outlive the sale.",
+    never:
+      "Codes, permits and inspections. Once ground is broken, very little can be undone.",
+  },
+  "professional-services": {
+    weighs:
+      "Keeping the first question tied to the quote, and every client's files walled off from the rest.",
+    never:
+      "Advice it is not qualified to give. Legal and financial questions go to a qualified professional.",
+  },
+  "software-and-platforms": {
+    weighs:
+      "Building on what already exists, and building things more than one install can use.",
+    never:
+      "Privacy where the platform touches customer data.",
+  },
+};
+
 // The architectural one-liner the whole page must land (operator + architect).
 export const coreMessage =
   "One DPF install becomes a governed vertical operating system: the archetype shapes the business, TAK governs every agent action, and GAID makes agent identity and evidence inspectable.";

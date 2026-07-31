@@ -89,9 +89,11 @@ non-inherit rule to *software authority scopes* rather than governmental ones.
 ### 2.1 The dimension registry
 
 `PRINCIPLE_DIMENSIONS` (`packages/db/src/wiki-taxonomy.ts`) is a closed, compile-time-enforced set
-of ~20 named axes — e.g. `blast_radius`, `reversibility`, `data_privacy`, `long_term_maintainability`,
+of 20 named axes — e.g. `blast_radius`, `reversibility`, `data_privacy`, `long_term_maintainability`,
 `governance_compliance`, `evidence_density`, `speed_to_value`, `cost_efficiency`,
-`human_cognitive_load`, `operator_effort`. Every kernel principle, org-policy item, and
+`human_cognitive_load`, `operator_effort`. **Each axis is defined individually — meaning, sign,
+scope, projection, and where its weight comes from — in the [Decision Vectors
+reference](decision-vectors.md); this section states only the structure.** Every kernel principle, org-policy item, and
 profession-corpus page that participates in structured scoring declares a **signed
 `principleDimensionVector`** — a hand-authored weight per axis it cares about, with a written
 rationale (`principleWeightRationale`).
