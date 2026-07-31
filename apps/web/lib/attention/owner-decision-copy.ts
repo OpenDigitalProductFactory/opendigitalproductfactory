@@ -16,6 +16,7 @@ const HEADLINE: Record<AttentionSource, string> = {
   "platform-health": "Choose how to handle this outage?",
   "provider-credential": "Reconnect this service?",
   "reservation-exception": "Handle this reservation?",
+  "hospitality-capacity": "Resolve this capacity issue?",
   "storefront-inquiry": "Reply to this enquiry?",
   "business-journey": "Choose how to fix this for customers?",
 };
@@ -36,6 +37,7 @@ const SPECIALIST: Record<AttentionSource, string> = {
   "platform-health": "Platform operations",
   "provider-credential": "Technology",
   "reservation-exception": "Front of house",
+  "hospitality-capacity": "Hospitality operations",
   "storefront-inquiry": "Front of house",
   "business-journey": "Front of house",
 };
@@ -96,6 +98,8 @@ export function whyItMattersFor(item: AttentionItem): string {
       return "Your digital team is accumulating working memory from completed work.";
     case "reservation-exception":
       return "A guest booked through your storefront and is waiting to hear back.";
+    case "hospitality-capacity":
+      return "This capacity issue can prevent a reservation, event, production order, or delivery from being fulfilled.";
     default:
       return "This technical issue matters only if it changes customer or business work.";
   }
@@ -108,6 +112,9 @@ const GENERIC_BLAST_RADIUS = new Set(["a coworker task", "a coworker waiting on 
 export function consequenceFor(item: AttentionItem): string {
   if (item.source === "reservation-exception") {
     return "If you do nothing, the guest is left without a confirmed reservation.";
+  }
+  if (item.source === "hospitality-capacity") {
+    return "If you do nothing, the affected hospitality demand or resource stays unresolved.";
   }
   const blastRadius = item.triage.blastRadius;
   if (
@@ -156,6 +163,8 @@ export function recommendationFor(item: AttentionItem): string {
       return "scan it in the digest and open the memory page only if it looks stale, too broad, or unsafe.";
     case "reservation-exception":
       return "check the date, time, and party size, then confirm the table or offer another time.";
+    case "hospitality-capacity":
+      return "review the affected period, demand, and resource status, then restore supply or move the demand.";
     default:
       return "keep this with the specialist unless it forces a business choice from you.";
   }

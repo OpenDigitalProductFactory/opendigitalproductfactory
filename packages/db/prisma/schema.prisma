@@ -4662,6 +4662,11 @@ model Organization {
   brandingConfig                    BrandingConfig?
   storefrontConfig                  StorefrontConfig?
   operationalSceneLayouts           OperationalSceneLayout[]
+  hospitalityResources              HospitalityResource[]              @relation("HospitalityResourceOrganization")
+  hospitalityCapacityPools          HospitalityCapacityPool[]          @relation("HospitalityCapacityPoolOrganization")
+  hospitalityResourceAvailability   HospitalityResourceAvailability[]  @relation("HospitalityAvailabilityOrganization")
+  hospitalityCapacityAllocations    HospitalityCapacityAllocation[]    @relation("HospitalityAllocationOrganization")
+  hospitalityBookingHolds           BookingHold[]                      @relation("BookingHoldOrganization")
   businessContext                   BusinessContext?
   marketingStrategy                 MarketingStrategy?
   marketingReviews                  MarketingReview[]
@@ -6973,44 +6978,44 @@ model ExternalEvidenceRecord {
 }
 
 model NonProductionEnvironmentLease {
-  id               String    @id @default(cuid())
-  leaseId          String    @unique
+  id                  String    @id @default(cuid())
+  leaseId             String    @unique
   // Stable identity for one gate attempt. Repeated claims with the same key
   // observe the same queued/admitted row instead of creating polling races.
-  claimKey         String?   @unique
-  environmentKey   String
+  claimKey            String?   @unique
+  environmentKey      String
   // Mirrors "<environmentKey>:<slotKey>" only while admitted. slotKey retains
   // the assigned slot for terminal audit/telemetry; activeKey becomes NULL.
   // The @@unique below makes "at most one active lease per environmentKey" a DB
   // invariant at capacity one (Postgres allows many NULLs). Phase 2 expands the
   // same invariant to independently isolated slot keys.
-  activeKey        String?
-  slotKey          String?
-  status           String    @default("queued")
-  ownerProvider    String
-  ownerSessionId   String
-  purpose          String
-  worktreePath     String?
-  branchName       String?
-  buildId          String?
-  taskRunId        String?
+  activeKey           String?
+  slotKey             String?
+  status              String    @default("queued")
+  ownerProvider       String
+  ownerSessionId      String
+  purpose             String
+  worktreePath        String?
+  branchName          String?
+  buildId             String?
+  taskRunId           String?
   // Null means a legacy singleton-only claimant. Version 1 proves the runner
   // can bind the server-assigned slot manifest before any host mutation.
   slotManifestVersion Int?
-  url              String
-  ports            Int[]     @default([])
-  cleanupCommand   String?
-  evidenceRecordId String?
-  requestedTtlMs   Int       @default(900000)
-  expiresAt        DateTime
-  releasedAt       DateTime?
-  queuedAt         DateTime?
-  admittedAt       DateTime?
-  cancelledAt      DateTime?
-  heartbeatAt      DateTime?
-  phase            String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  url                 String
+  ports               Int[]     @default([])
+  cleanupCommand      String?
+  evidenceRecordId    String?
+  requestedTtlMs      Int       @default(900000)
+  expiresAt           DateTime
+  releasedAt          DateTime?
+  queuedAt            DateTime?
+  admittedAt          DateTime?
+  cancelledAt         DateTime?
+  heartbeatAt         DateTime?
+  phase               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   @@unique([activeKey])
   @@index([environmentKey, status])
@@ -9835,37 +9840,42 @@ model StorefrontArchetype {
 }
 
 model StorefrontConfig {
-  id                    String                           @id @default(cuid())
-  organizationId        String                           @unique
-  archetypeId           String
-  tagline               String?
-  description           String?
-  heroImageUrl          String?
-  contactEmail          String?
-  contactPhone          String?
-  socialLinks           Json?
-  designSystem          Json?
-  isPublished           Boolean                          @default(false)
-  customDomain          String?
-  timezone              String                           @default("UTC")
-  portfolioId           String?
-  createdAt             DateTime                         @default(now())
-  updatedAt             DateTime                         @updatedAt
-  bookings              StorefrontBooking[]
-  archetype             StorefrontArchetype              @relation(fields: [archetypeId], references: [id])
-  organization          Organization                     @relation(fields: [organizationId], references: [id])
-  donations             StorefrontDonation[]
-  inquiries             StorefrontInquiry[]
-  items                 StorefrontItem[]
-  orders                StorefrontOrder[]
-  sections              StorefrontSection[]
-  providers             ServiceProvider[]
-  bookingHolds          BookingHold[]
-  marketingStrategies   MarketingStrategy[]
-  rentableUnits         RentableUnit[]
-  rentalAgreements      RentalAgreement[]
-  adoptableAnimals      AdoptableAnimal[]
-  archetypeCompositions StorefrontArchetypeComposition[]
+  id                             String                           @id @default(cuid())
+  organizationId                 String                           @unique
+  archetypeId                    String
+  tagline                        String?
+  description                    String?
+  heroImageUrl                   String?
+  contactEmail                   String?
+  contactPhone                   String?
+  socialLinks                    Json?
+  designSystem                   Json?
+  isPublished                    Boolean                          @default(false)
+  customDomain                   String?
+  timezone                       String                           @default("UTC")
+  portfolioId                    String?
+  createdAt                      DateTime                         @default(now())
+  updatedAt                      DateTime                         @updatedAt
+  bookings                       StorefrontBooking[]
+  archetype                      StorefrontArchetype              @relation(fields: [archetypeId], references: [id])
+  organization                   Organization                     @relation(fields: [organizationId], references: [id])
+  donations                      StorefrontDonation[]
+  inquiries                      StorefrontInquiry[]
+  items                          StorefrontItem[]
+  orders                         StorefrontOrder[]
+  sections                       StorefrontSection[]
+  providers                      ServiceProvider[]
+  bookingHolds                   BookingHold[]
+  marketingStrategies            MarketingStrategy[]
+  rentableUnits                  RentableUnit[]
+  rentalAgreements               RentalAgreement[]
+  adoptableAnimals               AdoptableAnimal[]
+  archetypeCompositions          StorefrontArchetypeComposition[]
+  hospitalityResources           HospitalityResource[]
+  hospitalityCapacityPools       HospitalityCapacityPool[]
+  hospitalityCapacityAllocations HospitalityCapacityAllocation[]
+
+  @@unique([id, organizationId])
 }
 
 /// Operator-authored geometry for one operational-twin scene. Live business
@@ -10429,8 +10439,8 @@ model StorefrontItem {
 }
 
 model StorefrontBooking {
-  id                          String                       @id @default(cuid())
-  bookingRef                  String                       @unique
+  id                          String                          @id @default(cuid())
+  bookingRef                  String                          @unique
   organizationId              String
   storefrontId                String
   itemId                      String
@@ -10445,8 +10455,9 @@ model StorefrontBooking {
   covers                      Int?
   dietaryNotes                String?
   notes                       String?
-  status                      String                       @default("pending")
+  status                      String                          @default("pending")
   providerId                  String?
+  hospitalityResourceId       String?
   assignmentMode              String?
   recurrenceRule              String?
   recurrenceEndDate           DateTime?
@@ -10461,22 +10472,25 @@ model StorefrontBooking {
   // Excluded from the constraint predicate; non-null rows are the operator review
   // queue. New bookings never set this.
   overlapQuarantinedAt        DateTime?
-  idempotencyKey              String?                      @unique
-  createdAt                   DateTime                     @default(now())
-  updatedAt                   DateTime                     @updatedAt
-  storefront                  StorefrontConfig             @relation(fields: [storefrontId], references: [id])
-  organization                Organization                 @relation("StorefrontBookingOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
-  provider                    ServiceProvider?             @relation(fields: [providerId], references: [id])
-  parentBooking               StorefrontBooking?           @relation("BookingRecurrence", fields: [parentBookingId], references: [id])
-  childBookings               StorefrontBooking[]          @relation("BookingRecurrence")
+  idempotencyKey              String?                         @unique
+  createdAt                   DateTime                        @default(now())
+  updatedAt                   DateTime                        @updatedAt
+  storefront                  StorefrontConfig                @relation(fields: [storefrontId], references: [id])
+  organization                Organization                    @relation("StorefrontBookingOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  provider                    ServiceProvider?                @relation(fields: [providerId], references: [id])
+  hospitalityResource         HospitalityResource?            @relation("HospitalityBookingResource", fields: [hospitalityResourceId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  hospitalityAllocations      HospitalityCapacityAllocation[] @relation("HospitalityAllocationBooking")
+  parentBooking               StorefrontBooking?              @relation("BookingRecurrence", fields: [parentBookingId], references: [id])
+  childBookings               StorefrontBooking[]             @relation("BookingRecurrence")
   careAppointment             CareAppointment?
-  productSoldEvidence         ProductSoldEvidence[]        @relation("ProductSoldEvidenceBooking")
-  productFulfillmentInstances ProductFulfillmentInstance[] @relation("ProductFulfillmentBooking")
+  productSoldEvidence         ProductSoldEvidence[]           @relation("ProductSoldEvidenceBooking")
+  productFulfillmentInstances ProductFulfillmentInstance[]    @relation("ProductFulfillmentBooking")
 
   @@unique([id, organizationId])
   @@index([storefrontId, status])
   @@index([customerEmail])
   @@index([scheduledAt])
+  @@index([hospitalityResourceId, scheduledAt])
 }
 
 model ServiceProvider {
@@ -10502,6 +10516,7 @@ model ServiceProvider {
   bookings                    StorefrontBooking[]
   bookingHolds                BookingHold[]
   careAppointmentParticipants CareAppointmentParticipant[]
+  hospitalityResource         HospitalityResource?         @relation("HospitalityResourceLegacyProvider")
 
   @@index([storefrontId])
 }
@@ -10536,23 +10551,158 @@ model ProviderAvailability {
 }
 
 model BookingHold {
-  id           String   @id @default(cuid())
-  storefrontId String
-  itemId       String
-  providerId   String?
-  slotStart    DateTime
-  slotEnd      DateTime
-  holderToken  String
-  holderIp     String?
-  expiresAt    DateTime
-  createdAt    DateTime @default(now())
+  id                    String   @id @default(cuid())
+  organizationId        String
+  storefrontId          String
+  itemId                String
+  providerId            String?
+  hospitalityResourceId String?
+  slotStart             DateTime
+  slotEnd               DateTime
+  holderToken           String
+  holderIp              String?
+  expiresAt             DateTime
+  createdAt             DateTime @default(now())
 
-  storefront StorefrontConfig @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
-  item       StorefrontItem   @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  provider   ServiceProvider? @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  storefront             StorefrontConfig                @relation(fields: [storefrontId], references: [id], onDelete: Cascade)
+  organization           Organization                    @relation("BookingHoldOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  item                   StorefrontItem                  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  provider               ServiceProvider?                @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  hospitalityResource    HospitalityResource?            @relation("HospitalityHoldResource", fields: [hospitalityResourceId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  hospitalityAllocations HospitalityCapacityAllocation[] @relation("HospitalityAllocationHold")
 
+  @@unique([id, organizationId])
   @@index([storefrontId, slotStart, slotEnd])
+  @@index([hospitalityResourceId, slotStart, slotEnd])
   @@index([expiresAt])
+}
+
+/// Food & Hospitality-owned discrete operating resource. People remain in
+/// ServiceProvider/Staffing; geometry remains in OperationalSceneLayout.
+model HospitalityResource {
+  id                      String   @id @default(cuid())
+  resourceId              String
+  organizationId          String
+  storefrontId            String
+  kind                    String
+  label                   String
+  status                  String   @default("active")
+  capacity                Int      @default(1)
+  capacityUnit            String   @default("seats")
+  serviceArea             String?
+  blockedReason           String?
+  attributes              Json?
+  version                 Int      @default(1)
+  legacyServiceProviderId String?  @unique
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  organization          Organization                      @relation("HospitalityResourceOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  storefront            StorefrontConfig                  @relation(fields: [storefrontId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  legacyServiceProvider ServiceProvider?                  @relation("HospitalityResourceLegacyProvider", fields: [legacyServiceProviderId], references: [id], onDelete: SetNull)
+  availability          HospitalityResourceAvailability[]
+  allocations           HospitalityCapacityAllocation[]
+  bookings              StorefrontBooking[]               @relation("HospitalityBookingResource")
+  bookingHolds          BookingHold[]                     @relation("HospitalityHoldResource")
+
+  @@unique([id, organizationId])
+  @@unique([storefrontId, resourceId])
+  @@index([organizationId, kind, status])
+  @@index([storefrontId, kind, status])
+}
+
+/// Aggregate time-bounded capacity such as kitchen covers, bake batches, or a
+/// delivery window. Event people remain in the staffing substrate.
+model HospitalityCapacityPool {
+  id              String   @id @default(cuid())
+  poolId          String
+  organizationId  String
+  storefrontId    String
+  kind            String
+  label           String
+  capacity        Int
+  capacityUnit    String
+  intervalMinutes Int?
+  status          String   @default("active")
+  version         Int      @default(1)
+  attributes      Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization Organization                    @relation("HospitalityCapacityPoolOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  storefront   StorefrontConfig                @relation(fields: [storefrontId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  allocations  HospitalityCapacityAllocation[]
+
+  @@unique([id, organizationId])
+  @@unique([storefrontId, poolId])
+  @@index([organizationId, kind, status])
+  @@index([storefrontId, kind, status])
+}
+
+/// Recurring or dated availability/block window for a discrete hospitality
+/// resource. This is intentionally separate from human ProviderAvailability.
+model HospitalityResourceAvailability {
+  id             String    @id @default(cuid())
+  availabilityId String    @unique
+  organizationId String
+  resourceId     String
+  kind           String    @default("available")
+  days           Int[]     @default([])
+  startTime      String?
+  endTime        String?
+  date           DateTime?
+  startsAt       DateTime?
+  endsAt         DateTime?
+  reason         String?
+  version        Int       @default(1)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization        @relation("HospitalityAvailabilityOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  resource     HospitalityResource @relation(fields: [resourceId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@index([resourceId, date])
+  @@index([organizationId, kind])
+  @@index([startsAt, endsAt])
+}
+
+/// Append-preserving capacity consumption ledger. A row targets exactly one
+/// discrete resource or aggregate pool; the migration owns that CHECK invariant.
+model HospitalityCapacityAllocation {
+  id                    String    @id @default(cuid())
+  allocationId          String    @unique
+  organizationId        String
+  storefrontId          String
+  resourceId            String?
+  poolId                String?
+  bookingId             String?
+  bookingHoldId         String?
+  demandType            String
+  demandRef             String
+  startsAt              DateTime
+  endsAt                DateTime
+  quantity              Int       @default(1)
+  lifecycle             String    @default("reserved")
+  idempotencyKey        String?
+  version               Int       @default(1)
+  releasedAt            DateTime?
+  releaseReason         String?
+  conflictQuarantinedAt DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  organization Organization             @relation("HospitalityAllocationOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  storefront   StorefrontConfig         @relation(fields: [storefrontId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  resource     HospitalityResource?     @relation(fields: [resourceId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  pool         HospitalityCapacityPool? @relation(fields: [poolId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  booking      StorefrontBooking?       @relation("HospitalityAllocationBooking", fields: [bookingId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  bookingHold  BookingHold?             @relation("HospitalityAllocationHold", fields: [bookingHoldId, organizationId], references: [id, organizationId], onDelete: Restrict)
+
+  @@unique([organizationId, idempotencyKey])
+  @@index([resourceId, startsAt, endsAt])
+  @@index([poolId, startsAt, endsAt])
+  @@index([organizationId, lifecycle, startsAt])
+  @@index([storefrontId, demandType, demandRef])
 }
 
 /// Organization-owned definition of a clinical or dental visit. StorefrontItem

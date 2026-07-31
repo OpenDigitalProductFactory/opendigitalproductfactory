@@ -66,33 +66,19 @@ function StatusBadge({ active }: { active: boolean }) {
   );
 }
 
-/**
- * Manage the bookable-resource rows behind a storefront (`ServiceProvider`).
- * Two modes so a Restaurant reads coherently (BI-7C95A586):
- *  - `mode="staff"` — people. Shows contact + routing fields.
- *  - `mode="table"` — physical tables / capacity resources. Hides person-only
- *    fields (email/phone/priority/weight/service links) and speaks "table", not
- *    "provider". Add/edit/delete still hit the shared providers API — a table is
- *    a provider under the hood until BI-57F34A00 gives it its own model.
- */
+/** Manage storefront staff represented by `ServiceProvider` rows. */
 export function TeamManager({
   providers: initial,
   storefrontId,
   items,
   teamLabel = "Staff",
-  singularNoun,
-  mode = "staff",
 }: {
   providers: Provider[];
   storefrontId: string;
   items: BookableItem[];
   teamLabel?: string;
-  /** Singular resource noun ("staff member" / "table"). Defaults from mode. */
-  singularNoun?: string;
-  mode?: "staff" | "table";
 }) {
-  const noun = singularNoun ?? (mode === "table" ? "table" : "staff member");
-  const isTable = mode === "table";
+  const noun = "staff member";
   const [providers, setProviders] = useState<Provider[]>(initial);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -250,30 +236,26 @@ export function TeamManager({
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>New {noun}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <input
-              placeholder={isTable ? "Table name (e.g. Table 5) *" : "Full name *"}
+              placeholder="Full name *"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
               style={{ padding: "8px 10px", borderRadius: 5, color: "inherit", fontSize: 13, width: "100%", boxSizing: "border-box" }}
             />
-            {!isTable && (
-              <>
-                <EmailInput
-                  placeholder="Email"
-                  value={newEmail}
-                  onValueChange={setNewEmail}
-                  className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
-                  style={{ padding: "8px 10px", borderRadius: 5, color: "inherit", fontSize: 13, width: "100%", boxSizing: "border-box" }}
-                />
-                <PhoneInput
-                  placeholder="Phone"
-                  value={newPhone}
-                  onValueChange={setNewPhone}
-                  className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
-                  style={{ padding: "8px 10px", borderRadius: 5, color: "inherit", fontSize: 13, width: "100%", boxSizing: "border-box" }}
-                />
-              </>
-            )}
+            <EmailInput
+              placeholder="Email"
+              value={newEmail}
+              onValueChange={setNewEmail}
+              className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+              style={{ padding: "8px 10px", borderRadius: 5, color: "inherit", fontSize: 13, width: "100%", boxSizing: "border-box" }}
+            />
+            <PhoneInput
+              placeholder="Phone"
+              value={newPhone}
+              onValueChange={setNewPhone}
+              className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+              style={{ padding: "8px 10px", borderRadius: 5, color: "inherit", fontSize: 13, width: "100%", boxSizing: "border-box" }}
+            />
             {addError && <div className="text-[var(--dpf-error)]" style={{ fontSize: 12 }}>{addError}</div>}
             <div style={{ display: "flex", gap: 8 }}>
               <button
@@ -291,9 +273,7 @@ export function TeamManager({
 
       {providers.length === 0 && !showAddForm && (
         <p className="text-[var(--dpf-muted)]" style={{ fontSize: 13 }}>
-          {isTable
-            ? "No tables yet. Add tables so guests can book and you can track capacity."
-            : "No staff yet. Add a team member to start managing availability."}
+          No staff yet. Add a team member to start managing availability.
         </p>
       )}
 
@@ -311,12 +291,10 @@ export function TeamManager({
               >
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 600 }}>{p.name}</div>
-                  {!isTable && p.email && <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>{p.email}</div>}
+                  {p.email && <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>{p.email}</div>}
                 </div>
                 <StatusBadge active={p.isActive} />
-                {!isTable && (
-                  <span className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>{p.services.length} service{p.services.length !== 1 ? "s" : ""}</span>
-                )}
+                <span className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>{p.services.length} service{p.services.length !== 1 ? "s" : ""}</span>
                 <span className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>{expanded ? "▲" : "▼"}</span>
               </div>
 
@@ -327,30 +305,26 @@ export function TeamManager({
                     <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Details</div>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <input
-                        placeholder={isTable ? "Table name *" : "Name *"}
+                        placeholder="Name *"
                         value={edit.name}
                         onChange={(e) => patchEdit(p.id, { name: e.target.value })}
                         className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
                         style={{ flex: 1, minWidth: 140, padding: "6px 10px", borderRadius: 5, color: "inherit", fontSize: 13 }}
                       />
-                      {!isTable && (
-                        <>
-                          <EmailInput
-                            placeholder="Email"
-                            value={edit.email}
-                            onValueChange={(v) => patchEdit(p.id, { email: v })}
-                            className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
-                            style={{ flex: 1, minWidth: 140, padding: "6px 10px", borderRadius: 5, color: "inherit", fontSize: 13 }}
-                          />
-                          <PhoneInput
-                            placeholder="Phone"
-                            value={edit.phone}
-                            onValueChange={(v) => patchEdit(p.id, { phone: v })}
-                            className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
-                            style={{ flex: 1, minWidth: 120, padding: "6px 10px", borderRadius: 5, color: "inherit", fontSize: 13 }}
-                          />
-                        </>
-                      )}
+                      <EmailInput
+                        placeholder="Email"
+                        value={edit.email}
+                        onValueChange={(v) => patchEdit(p.id, { email: v })}
+                        className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+                        style={{ flex: 1, minWidth: 140, padding: "6px 10px", borderRadius: 5, color: "inherit", fontSize: 13 }}
+                      />
+                      <PhoneInput
+                        placeholder="Phone"
+                        value={edit.phone}
+                        onValueChange={(v) => patchEdit(p.id, { phone: v })}
+                        className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+                        style={{ flex: 1, minWidth: 120, padding: "6px 10px", borderRadius: 5, color: "inherit", fontSize: 13 }}
+                      />
                     </div>
                     <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
                       <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
@@ -360,32 +334,28 @@ export function TeamManager({
                           onChange={(e) => patchEdit(p.id, { isActive: e.target.checked })}
                           className="accent-[var(--dpf-accent)]"
                         />
-                        {isTable ? "In service" : "Active"}
+                        Active
                       </label>
-                      {!isTable && (
-                        <>
-                          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                            Priority
-                            <input
-                              type="number"
-                              value={edit.priority}
-                              onChange={(e) => patchEdit(p.id, { priority: parseInt(e.target.value) || 0 })}
-                              className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
-                              style={{ width: 60, padding: "4px 6px", borderRadius: 4, color: "inherit", fontSize: 13 }}
-                            />
-                          </label>
-                          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
-                            Weight
-                            <input
-                              type="number"
-                              value={edit.weight}
-                              onChange={(e) => patchEdit(p.id, { weight: parseInt(e.target.value) || 0 })}
-                              className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
-                              style={{ width: 60, padding: "4px 6px", borderRadius: 4, color: "inherit", fontSize: 13 }}
-                            />
-                          </label>
-                        </>
-                      )}
+                      <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                        Priority
+                        <input
+                          type="number"
+                          value={edit.priority}
+                          onChange={(e) => patchEdit(p.id, { priority: parseInt(e.target.value) || 0 })}
+                          className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+                          style={{ width: 60, padding: "4px 6px", borderRadius: 4, color: "inherit", fontSize: 13 }}
+                        />
+                      </label>
+                      <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                        Weight
+                        <input
+                          type="number"
+                          value={edit.weight}
+                          onChange={(e) => patchEdit(p.id, { weight: parseInt(e.target.value) || 0 })}
+                          className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)]"
+                          style={{ width: 60, padding: "4px 6px", borderRadius: 4, color: "inherit", fontSize: 13 }}
+                        />
+                      </label>
                     </div>
                     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       <button
@@ -401,8 +371,7 @@ export function TeamManager({
                     </div>
                   </div>
 
-                  {/* Service assignment (staff only — a table is not assigned to menu items) */}
-                  {!isTable && bookableItems.length > 0 && (
+                  {bookableItems.length > 0 && (
                     <div style={{ marginTop: 16 }}>
                       <div className="text-[var(--dpf-muted)]" style={{ fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
                         Services
@@ -427,7 +396,10 @@ export function TeamManager({
                   )}
 
                   {/* Schedule editor — when the resource is bookable */}
-                  <ScheduleEditor providerId={p.id} availability={p.availability} />
+                  <ScheduleEditor
+                    saveEndpoint={`/api/storefront/admin/providers/${p.id}`}
+                    availability={p.availability}
+                  />
 
                   {/* Delete */}
                   <div className="border-t border-[var(--dpf-border)]" style={{ marginTop: 16, paddingTop: 12 }}>

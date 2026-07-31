@@ -331,8 +331,8 @@ export function SlotBookingFlow({
       });
 
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? "Failed to hold slot");
+        const body: { error?: string; message?: string } = await res.json().catch(() => ({}));
+        throw new Error(body.message ?? body.error ?? "Failed to hold slot");
       }
 
       const data = await res.json();

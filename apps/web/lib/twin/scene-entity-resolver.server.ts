@@ -1,5 +1,3 @@
-import { classifyStorefrontResource } from "../storefront/storefront-resource-kind";
-
 import {
   type OperationalSceneEntityKind,
   type SceneEntityLookup,
@@ -53,14 +51,17 @@ interface SceneEntityDatabase {
       Array<{ id: string; name: string; ciType: string; status: string }>
     >;
   };
-  serviceProvider: {
+  hospitalityResource: {
     findMany(input: {
       where: {
-        storefront: { organizationId: string };
+        organizationId: string;
+        kind: "table";
         id: { in: readonly string[] };
       };
-      select: { id: true; name: true; isActive: true };
-    }): Promise<Array<{ id: string; name: string; isActive: boolean }>>;
+      select: { id: true; label: true; kind: true; status: true };
+    }): Promise<
+      Array<{ id: string; label: string; kind: string; status: string }>
+    >;
   };
 }
 
@@ -151,23 +152,22 @@ const KIND_LOADERS = {
     }));
   },
   table: async (database, { ids, organization }) => {
-    const rows = await database.serviceProvider.findMany({
+    const rows = await database.hospitalityResource.findMany({
       where: {
-        storefront: { organizationId: organization.id },
+        organizationId: organization.id,
+        kind: "table",
         id: { in: ids },
       },
-      select: { id: true, name: true, isActive: true },
+      select: { id: true, label: true, kind: true, status: true },
     });
-    return rows
-      .filter((row) => classifyStorefrontResource(row) === "table")
-      .map((row) => ({
-        entityKind: "table",
-        id: row.id,
-        label: row.name,
-        operationalStatus: row.isActive ? "active" : "inactive",
-        active: row.isActive,
-        entityType: "table",
-      }));
+    return rows.map((row) => ({
+      entityKind: "table",
+      id: row.id,
+      label: row.label,
+      operationalStatus: row.status,
+      active: statusIsActive(row.status),
+      entityType: row.kind,
+    }));
   },
 } satisfies Record<OperationalSceneEntityKind, KindLoader>;
 

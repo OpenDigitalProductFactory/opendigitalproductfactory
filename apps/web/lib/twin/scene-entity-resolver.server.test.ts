@@ -32,10 +32,9 @@ function database() {
         { id: "ci-1", name: "Roof unit 4", ciType: "hvac", status: "active" },
       ]),
     },
-    serviceProvider: {
+    hospitalityResource: {
       findMany: vi.fn(async () => [
-        { id: "table-1", name: "Table 1", isActive: true },
-        { id: "staff-1", name: "Morgan Lee", isActive: true },
+        { id: "table-1", label: "Aster", kind: "table", status: "active" },
       ]),
     },
   };
@@ -73,7 +72,7 @@ describe("createPrismaSceneEntityLookup", () => {
     });
     const tables = await lookup.findMany({
       kind: "table",
-      ids: ["table-1", "staff-1"],
+      ids: ["table-1"],
       organization,
     });
 
@@ -93,18 +92,19 @@ describe("createPrismaSceneEntityLookup", () => {
       },
       select: { id: true, label: true, status: true },
     });
-    expect(db.serviceProvider.findMany).toHaveBeenCalledWith({
+    expect(db.hospitalityResource.findMany).toHaveBeenCalledWith({
       where: {
-        storefront: { organizationId: "org-row" },
-        id: { in: ["table-1", "staff-1"] },
+        organizationId: "org-row",
+        kind: "table",
+        id: { in: ["table-1"] },
       },
-      select: { id: true, name: true, isActive: true },
+      select: { id: true, label: true, kind: true, status: true },
     });
     expect(tables).toEqual([
       {
         entityKind: "table",
         id: "table-1",
-        label: "Table 1",
+        label: "Aster",
         operationalStatus: "active",
         active: true,
         entityType: "table",

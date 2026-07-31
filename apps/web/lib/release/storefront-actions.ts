@@ -15,6 +15,11 @@ import {
   snapshotProductSoldComponents,
 } from "@/lib/products/product-sold-commercial-persistence";
 import { createProductManagementChangeCollector } from "@/lib/product-management/product-management-playbook-refresh";
+import {
+  allocateHospitalityCapacity,
+  releaseHospitalityCapacityByDemand,
+  resolveHospitalityResourceForProvider,
+} from "@/lib/storefront/hospitality-capacity-repository.server";
 
 /** Sentinel: the hold token was missing/expired when re-checked inside the
  *  booking transaction. Thrown to abort the transaction and surface a clean
@@ -284,12 +289,44 @@ export async function submitBooking(
       };
 
       let holdId: string | undefined;
+      let holdToken: string | undefined;
+      let hospitalityResourceId: string | null = null;
       if (data.holderToken) {
         const hold = await tx.bookingHold.findFirst({
-          where: { holderToken: data.holderToken, expiresAt: { gt: new Date() } },
+          where: {
+            holderToken: data.holderToken,
+            storefrontId: storefront.id,
+            itemId: commercialItem?.id ?? data.itemId,
+            expiresAt: { gt: new Date() },
+          },
         });
         if (!hold) throw new BookingHoldInvalidError();
         holdId = hold.id;
+        holdToken = hold.holderToken;
+        hospitalityResourceId = hold.hospitalityResourceId ?? null;
+      }
+
+      if (!hospitalityResourceId && data.providerId) {
+        const resource = await resolveHospitalityResourceForProvider(
+          tx as never,
+          {
+            organizationId: storefront.organizationId,
+            storefrontId: storefront.id,
+            providerId: data.providerId,
+          },
+        );
+        hospitalityResourceId = resource?.id ?? null;
+      }
+
+      if (holdToken && hospitalityResourceId) {
+        await releaseHospitalityCapacityByDemand(tx as never, {
+          organizationId: storefront.organizationId,
+          demandType: "hold",
+          demandRef: holdToken,
+          at: new Date(),
+          reason: "converted to booking",
+          clearBookingHoldLink: true,
+        });
       }
 
       const booking = await tx.storefrontBooking.create({
@@ -307,12 +344,31 @@ export async function submitBooking(
           covers: data.covers,
           dietaryNotes: data.dietaryNotes,
           providerId: data.providerId,
+          hospitalityResourceId,
           assignmentMode: data.assignmentMode,
           idempotencyKey: data.idempotencyKey,
           recurrenceRule: data.recurrenceRule,
         },
         select: { id: true, bookingRef: true },
       });
+      if (hospitalityResourceId) {
+        await allocateHospitalityCapacity(tx as never, {
+          organizationId: storefront.organizationId,
+          storefrontId: storefront.id,
+          resourceId: hospitalityResourceId,
+          poolId: null,
+          demandType: "booking",
+          demandRef: booking.bookingRef,
+          bookingId: booking.id,
+          bookingHoldId: null,
+          startsAt: data.scheduledAt,
+          endsAt: new Date(
+            data.scheduledAt.getTime() + data.durationMinutes * 60_000,
+          ),
+          quantity: data.covers ?? 1,
+          idempotencyKey: `booking:${booking.id}`,
+        });
+      }
       await materializeBooking(booking, data.scheduledAt);
 
       // Release hold only after the booking commits within this transaction.
@@ -342,12 +398,31 @@ export async function submitBooking(
               covers: data.covers,
               dietaryNotes: data.dietaryNotes,
               providerId: data.providerId,
+              hospitalityResourceId,
               assignmentMode: data.assignmentMode,
               recurrenceRule: data.recurrenceRule,
               parentBookingId: booking.id,
             },
             select: { id: true, bookingRef: true },
           });
+          if (hospitalityResourceId) {
+            await allocateHospitalityCapacity(tx as never, {
+              organizationId: storefront.organizationId,
+              storefrontId: storefront.id,
+              resourceId: hospitalityResourceId,
+              poolId: null,
+              demandType: "booking",
+              demandRef: childBooking.bookingRef,
+              bookingId: childBooking.id,
+              bookingHoldId: null,
+              startsAt: futureScheduledAt,
+              endsAt: new Date(
+                futureScheduledAt.getTime() + data.durationMinutes * 60_000,
+              ),
+              quantity: data.covers ?? 1,
+              idempotencyKey: `booking:${childBooking.id}`,
+            });
+          }
           await materializeBooking(childBooking, futureScheduledAt);
         }
       }

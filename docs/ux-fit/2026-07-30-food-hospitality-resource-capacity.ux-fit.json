@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "hospitality-domain-model",
+  "decisionInteractionId": "DI-B1B1C735B369",
+  "scope": {
+    "files": [
+      "apps/web/components/storefront-admin/HospitalityResourceManager.tsx",
+      "apps/web/components/storefront-admin/TeamManager.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "extend-service-provider",
+      "hospitality-domain-model",
+      "universal-operational-resource"
+    ]
+  }
+}

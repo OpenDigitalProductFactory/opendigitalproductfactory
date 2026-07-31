@@ -75,6 +75,10 @@ describe("deriveArchetypeBusinessViews", () => {
 
     expect(byId("restaurant").operations.twinProfile.template).toBe("FLOOR");
     expect(byId("restaurant").operations.commandKinds).toContain("seat-party");
+    expect(byId("catering").operations.twinProfile.template).toBe("VENUE");
+    expect(byId("catering").operations.commandKinds).toContain("allocate-space");
+    expect(byId("bakery").operations.twinProfile.template).toBe("BAYS");
+    expect(byId("bakery").operations.commandKinds).toContain("change-work-state");
     expect(byId("hair-salon").operations.twinProfile.template).toBe("BOOK");
     expect(byId("equipment-rental").operations.twinProfile.template).toBe("YARD");
     expect(byId("homeowners-association").operations.commandKinds).toContain("prioritize-work");

@@ -18,6 +18,7 @@ import {
 } from "./sources/coworker-memory";
 import { loadProviderCredentialItems, loadProviderSuitabilityDriftItems } from "./sources/provider-credential";
 import { loadReservationExceptionItems } from "./sources/reservation-exception";
+import { loadHospitalityCapacityAttentionItems } from "./sources/hospitality-capacity";
 import { loadStorefrontInquiryItems } from "./sources/storefront-inquiry";
 import { loadBusinessJourneyItems } from "./sources/business-journey";
 import {
@@ -100,6 +101,10 @@ export async function loadAttentionItems(
     { source: "platform-health", load: () => loadPlatformHealthItems(db) },
     { source: "business-journey", load: () => loadBusinessJourneyItems(db) },
     { source: "reservation-exception", load: () => loadReservationExceptionItems(db) },
+    {
+      source: "hospitality-capacity",
+      load: () => loadHospitalityCapacityAttentionItems(db),
+    },
     { source: "storefront-inquiry", load: () => loadStorefrontInquiryItems(db) },
     {
       source: "provider-credential",

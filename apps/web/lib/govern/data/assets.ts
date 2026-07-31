@@ -26,6 +26,7 @@ import {
 } from "./taxonomy";
 import { PROCESSING_GOVERNANCE_ASSETS } from "./processing-governance-assets";
 import { BUSINESS_PRODUCT_PORTFOLIO_ASSETS } from "./business-product-portfolio-assets";
+import { HOSPITALITY_CAPACITY_ASSETS } from "./hospitality-capacity-assets";
 
 // ─── Definitions (spec §6.1) ─────────────────────────────────────────────────
 
@@ -650,6 +651,7 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
     fields: [],
   },
   ...BUSINESS_PRODUCT_PORTFOLIO_ASSETS,
+  ...HOSPITALITY_CAPACITY_ASSETS,
   ...PROCESSING_GOVERNANCE_ASSETS,
    {
     id: "data:agent-conversation",

@@ -96,6 +96,38 @@ export const foodHospitalityArchetypes: ArchetypeDefinition[] = [
       { name: "date", label: "Event date", type: "text" as const, required: false, placeholder: "DD/MM/YYYY" },
       { name: "dietaryRequirements", label: "Dietary requirements", type: "textarea" as const, required: false },
     ],
+    // Catering is an event-readiness operation, not a dining-room turn model.
+    // VENUE supplies the date/run-of-show grammar; this leaf override binds it
+    // to prep, staffing, delivery/setup, and commercial readiness.
+    twinProfile: {
+      template: "VENUE",
+      zones: [
+        { key: "events", label: "Event calendar" },
+        { key: "prep", label: "Kitchen prep" },
+        { key: "staging", label: "Packing & staging" },
+        { key: "delivery", label: "Delivery & setup" },
+      ],
+      capacityZoneKey: "prep",
+      resourceNoun: { singular: "event crew", plural: "event crews" },
+      workItemNoun: { singular: "event", plural: "events" },
+      queues: [
+        { key: "menu", label: "Menu & package readiness" },
+        { key: "staffing", label: "Event staffing" },
+        { key: "delivery", label: "Delivery & setup" },
+        { key: "deposits", label: "Deposits & invoices" },
+      ],
+      cog: {
+        kind: "space-and-date",
+        signals: ["date-range", "availability", "workload", "deadline"],
+      },
+      capacityChips: [
+        "guests committed",
+        "kitchen prep capacity",
+        "delivery/setup readiness",
+        "deposit status",
+      ],
+      forwardHorizon: true,
+    },
   },
   {
     archetypeId: "bakery",
@@ -122,5 +154,40 @@ export const foodHospitalityArchetypes: ArchetypeDefinition[] = [
       { name: "orderType", label: "Order type", type: "select" as const, required: true, options: ["Standard product", "Custom cake", "Wedding cake", "Other"] },
       { name: "notes", label: "Order details", type: "textarea" as const, required: false },
     ],
+    // Bakery is a finite production system. BAYS gives it a physical
+    // station/queue grammar while the override speaks in ovens, batches,
+    // allergen review, fulfilment promises, and payment readiness.
+    twinProfile: {
+      template: "BAYS",
+      zones: [
+        { key: "production", label: "Ovens & production" },
+        { key: "finishing", label: "Cooling & finishing" },
+        { key: "packing", label: "Packing" },
+        { key: "pickup", label: "Pickup & delivery" },
+      ],
+      capacityZoneKey: "production",
+      resourceNoun: { singular: "oven", plural: "ovens" },
+      workItemNoun: {
+        singular: "production order",
+        plural: "production orders",
+      },
+      queues: [
+        { key: "production", label: "Production queue" },
+        { key: "fulfilment", label: "Pickup & delivery" },
+        { key: "allergens", label: "Allergen review" },
+        { key: "balances", label: "Balance due" },
+      ],
+      cog: {
+        kind: "bay-and-tech",
+        signals: ["availability", "workload", "deadline"],
+      },
+      capacityChips: [
+        "bake capacity",
+        "orders due",
+        "pickup/delivery readiness",
+        "allergen holds",
+      ],
+      forwardHorizon: true,
+    },
   },
 ];

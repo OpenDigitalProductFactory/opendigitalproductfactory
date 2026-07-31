@@ -15,6 +15,7 @@ import {
   deriveRestaurantCapacity,
   resolveServicePeriod,
   type CapacityBookingInput,
+  type CapacityAllocationInput,
   type CapacityHoldInput,
   type CapacityResourceInput,
   type OperatingWindow,
@@ -24,28 +25,40 @@ import {
 type FindMany = (args: unknown) => Promise<unknown>;
 export interface CapacityLoaderClient {
   storefrontConfig: { findFirst: (args: unknown) => Promise<unknown> };
-  serviceProvider: { findMany: FindMany };
+  hospitalityResource: { findMany: FindMany };
+  hospitalityCapacityAllocation?: { findMany: FindMany };
   storefrontBooking: { findMany: FindMany };
   bookingHold: { findMany: FindMany };
   businessProfile: { findFirst: (args: unknown) => Promise<unknown> };
 }
 
-interface ProviderRow {
+interface ResourceRow {
   id: string;
-  name: string;
-  isActive: boolean;
+  label: string;
+  kind: CapacityResourceInput["kind"];
+  status: CapacityResourceInput["status"];
+  capacity: number;
+  capacityUnit: CapacityResourceInput["capacityUnit"];
+  availability: NonNullable<CapacityResourceInput["availability"]>;
 }
 interface BookingRow {
   id: string;
-  providerId: string | null;
+  hospitalityResourceId: string | null;
   scheduledAt: Date | null;
   durationMinutes: number | null;
   status: string;
 }
 interface HoldRow {
-  providerId: string | null;
+  hospitalityResourceId: string | null;
   slotStart: Date | null;
   slotEnd: Date | null;
+}
+interface AllocationRow {
+  id: string;
+  resourceId: string | null;
+  startsAt: Date;
+  endsAt: Date;
+  lifecycle: CapacityAllocationInput["lifecycle"];
 }
 
 const DAY_NAME_TO_INDEX: Record<string, number> = {
@@ -71,8 +84,16 @@ export async function loadRestaurantCapacitySnapshot(opts?: {
   const now = opts?.now ?? new Date();
 
   const config = (await db.storefrontConfig.findFirst({
-    select: { id: true, archetype: { select: { archetypeId: true } } },
-  })) as { id: string; archetype: { archetypeId: string } | null } | null;
+    select: {
+      id: true,
+      timezone: true,
+      archetype: { select: { archetypeId: true } },
+    },
+  })) as {
+    id: string;
+    timezone: string;
+    archetype: { archetypeId: string } | null;
+  } | null;
 
   const archetypeId = config?.archetype?.archetypeId;
   if (!config || !archetypeId) return null;
@@ -82,22 +103,68 @@ export async function loadRestaurantCapacitySnapshot(opts?: {
   const profile = deriveTwinProfile(def);
   if (profile.template !== "FLOOR") return null; // not a capacity archetype
 
-  const [providers, bookings, holds, businessProfile] = await Promise.all([
-    db.serviceProvider
-      .findMany({ where: { storefrontId: config.id }, select: { id: true, name: true, isActive: true } })
-      .catch(() => []) as Promise<ProviderRow[]>,
+  const [resources, bookings, holds, allocations, businessProfile] =
+    await Promise.all([
+    db.hospitalityResource
+      .findMany({
+        where: { storefrontId: config.id, kind: "table" },
+        select: {
+          id: true,
+          label: true,
+          kind: true,
+          status: true,
+          capacity: true,
+          capacityUnit: true,
+          availability: {
+            select: {
+              kind: true,
+              days: true,
+              startTime: true,
+              endTime: true,
+              date: true,
+            },
+          },
+        },
+      })
+      .catch(() => []) as Promise<ResourceRow[]>,
     db.storefrontBooking
       .findMany({
         where: { storefrontId: config.id, status: { notIn: ["cancelled", "completed", "void", "no_show"] } },
-        select: { id: true, providerId: true, scheduledAt: true, durationMinutes: true, status: true },
+        select: {
+          id: true,
+          hospitalityResourceId: true,
+          scheduledAt: true,
+          durationMinutes: true,
+          status: true,
+        },
       })
       .catch(() => []) as Promise<BookingRow[]>,
     db.bookingHold
       .findMany({
         where: { storefrontId: config.id, expiresAt: { gt: now } },
-        select: { providerId: true, slotStart: true, slotEnd: true },
+        select: { hospitalityResourceId: true, slotStart: true, slotEnd: true },
       })
       .catch(() => []) as Promise<HoldRow[]>,
+    db.hospitalityCapacityAllocation
+      ? (db.hospitalityCapacityAllocation
+          .findMany({
+            where: {
+              storefrontId: config.id,
+              resourceId: { not: null },
+              lifecycle: { in: ["reserved", "active"] },
+              startsAt: { lte: now },
+              endsAt: { gt: now },
+            },
+            select: {
+              id: true,
+              resourceId: true,
+              startsAt: true,
+              endsAt: true,
+              lifecycle: true,
+            },
+          })
+          .catch(() => []) as Promise<AllocationRow[]>)
+      : Promise.resolve([]),
     db.businessProfile
       .findFirst({ where: { isActive: true, hoursConfirmedAt: { not: null } }, select: { businessHours: true } })
       .catch(() => null) as Promise<{ businessHours: unknown } | null>,
@@ -107,11 +174,13 @@ export async function loadRestaurantCapacitySnapshot(opts?: {
   const nextPeriod = resolveServicePeriod(windows, now);
 
   const snapshot = deriveRestaurantCapacity({
-    resources: providers as CapacityResourceInput[],
+    resources: resources as CapacityResourceInput[],
     bookings: bookings as CapacityBookingInput[],
     holds: holds as CapacityHoldInput[],
+    allocations: allocations as CapacityAllocationInput[],
     now,
     nextPeriod,
+    timeZone: config.timezone,
   });
 
   return { snapshot, archetypeId, hasCapacity: true };

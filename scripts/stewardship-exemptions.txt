@@ -67,6 +67,10 @@ ProductObjectiveWork  domain-lifecycle-managed  # Objective-to-work links follow
 ProductOutcomeObservation  domain-lifecycle-managed  # Append-only observations and corrections follow the owning objective and its explicit review lifecycle; age-based deletion would break the outcome-learning chain.
 DemandEvidenceLink  domain-lifecycle-managed  # Reviewed demand evidence is superseded or removed through the canonical BacklogItem lifecycle; an independent sweep would make investment scores unexplainable.
 OperationalSceneLayout  domain-lifecycle-managed  # Operator-authored geometry follows the owning organization's explicit layout lifecycle and cascades with the organization; an age-based sweep could delete an active floor plan.
+HospitalityResource  domain-lifecycle-managed  # Physical venue resources retire through explicit operating actions and follow their organization/storefront lifecycle; age cannot determine whether a table or station is still in service.
+HospitalityCapacityPool  domain-lifecycle-managed  # Aggregate kitchen, bake, and delivery capacity retires through explicit operating actions; an age sweep could remove a still-active capacity definition.
+HospitalityResourceAvailability  domain-lifecycle-managed  # Availability windows follow their HospitalityResource and cascade with it; independent age-based deletion would silently reopen or close an active resource.
+HospitalityCapacityAllocation  domain-lifecycle-managed  # Append-preserving capacity consumption follows booking/hold and explicit release lifecycles; an age sweep could erase live conflict and utilization evidence.
 ProductOffering  domain-lifecycle-managed  # Organization-owned commercial packaging follows explicit offering status/effective-date actions and product cascade, never an age-based sweep.
 CatalogItem  domain-lifecycle-managed  # Canonical ways-to-buy follow explicit catalog status/effective-date actions and offering cascade, never an age-based sweep.
 ProductConfiguration  domain-lifecycle-managed  # Reusable configurations follow explicit publish/retire actions and catalog-item cascade, never an age-based sweep.
