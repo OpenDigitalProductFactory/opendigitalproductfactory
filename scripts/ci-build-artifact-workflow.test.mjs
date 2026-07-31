@@ -18,7 +18,10 @@ describe("production-build artifact workflow wiring", () => {
   });
 
   it("rendezvous with the same-run build without serializing fixture setup", () => {
-    assert.match(ci, /ux-route-sweep-runtime:[\s\S]*?needs: changes/);
+    assert.match(
+      ci,
+      /ux-route-sweep-runtime:[\s\S]*?needs: \[changes, exact-tree-evidence-shadow\]/,
+    );
     assert.doesNotMatch(ci, /ux-route-sweep-runtime:[\s\S]*?needs: \[changes, build\]/);
     assert.match(ci, /uses: \.\/\.github\/workflows\/ux-route-sweep\.yml/);
     assert.match(
@@ -57,7 +60,7 @@ describe("production-build artifact workflow wiring", () => {
   it("preserves the stable required check and manual calibration path", () => {
     assert.match(
       ci,
-      /ux-route-sweep:\s*\n\s+name: UX Route Budget Sweep\s*\n\s+runs-on: ubuntu-latest\s*\n\s+if: always\(\)\s*\n\s+needs: \[changes, ux-route-sweep-runtime\]/,
+      /ux-route-sweep:\s*\n\s+name: UX Route Budget Sweep\s*\n\s+runs-on: ubuntu-latest\s*\n\s+if: always\(\)\s*\n\s+needs: \[changes, exact-tree-evidence-shadow, ux-route-sweep-runtime\]/,
     );
     assert.match(ci, /needs\.ux-route-sweep-runtime\.result/);
     assert.match(ci, /merge_group:/);
@@ -67,7 +70,7 @@ describe("production-build artifact workflow wiring", () => {
     assert.match(ux, /--update-baseline/);
   });
 
-  it("skips runner allocation only for an explicit non-portal PR scope", () => {
+  it("skips runner allocation only for non-portal scope or accepted exact-tree reuse", () => {
     assert.match(
       ux,
       /run_sweep:\s*\n\s+description:[^\n]*\n\s+required: false\s*\n\s+type: boolean\s*\n\s+default: true/,
@@ -83,7 +86,16 @@ describe("production-build artifact workflow wiring", () => {
     );
     assert.match(
       ci,
-      /ux-route-sweep:\s*\n\s+name: UX Route Budget Sweep[\s\S]*?needs: \[changes, ux-route-sweep-runtime\]/,
+      /ux-route-sweep:\s*\n\s+name: UX Route Budget Sweep[\s\S]*?needs: \[changes, exact-tree-evidence-shadow, ux-route-sweep-runtime\]/,
+    );
+    assert.match(
+      ci,
+      /REUSE_EXACT_TREE: \$\{\{ needs\.exact-tree-evidence-shadow\.outputs\.reusable \}\}/,
+    );
+    assert.match(
+      ci,
+      /if \[ "\$REUSE_EXACT_TREE" = "true" \]; then[\s\S]*?\[ "\$RUNTIME_RESULT" != "skipped" \][\s\S]*?exit 1[\s\S]*?exit 0/,
+      "the aggregate must accept a runtime skip only after an exact reusable verdict",
     );
     assert.match(
       ci,

@@ -35,6 +35,21 @@ function normalizedGates(gates) {
     .sort((left, right) => left.jobId.localeCompare(right.jobId));
 }
 
+function normalizedRequiredGateIds(gateIds) {
+  if (!Array.isArray(gateIds)) return null;
+  const normalized = gateIds.filter((gateId) => typeof gateId === "string" && gateId.length > 0);
+  if (normalized.length === 0 || normalized.length !== gateIds.length) return null;
+  if (new Set(normalized).size !== normalized.length) return null;
+  return [...normalized].sort();
+}
+
+function incompleteRequiredGates(gates, requiredGateIds) {
+  const results = new Map(gates.map((gate) => [gate.jobId, gate.result]));
+  return requiredGateIds
+    .map((jobId) => ({ jobId, result: results.get(jobId) }))
+    .filter((gate) => gate.result !== "success");
+}
+
 export function normalizeArtifactInventory(artifacts) {
   return (artifacts ?? [])
     .filter((artifact) =>
@@ -74,6 +89,16 @@ export function createEvidenceReceipt(input) {
     );
   }
   if (gates.length === 0) throw new Error("cannot attest an empty CI gate set");
+  const requiredGateIds = normalizedRequiredGateIds(input.requiredSuccessfulGateIds);
+  if (!requiredGateIds) throw new Error("cannot attest an invalid required successful gate set");
+  const incompleteRequired = incompleteRequiredGates(gates, requiredGateIds);
+  if (incompleteRequired.length > 0) {
+    throw new Error(
+      `required successful CI gates are incomplete: ${
+        incompleteRequired.map((gate) => `${gate.jobId}=${gate.result ?? "missing"}`).join(", ")
+      }`,
+    );
+  }
 
   const artifacts = normalizeArtifactInventory(input.artifacts);
   if (artifacts.length === 0) throw new Error("cannot attest an empty artifact inventory");
@@ -174,6 +199,14 @@ export function validateEvidenceReceipt({ receipt, expected, checksum, now = Dat
   const actualGateIds = gates.map((gate) => gate.jobId).sort();
   const expectedGateIds = [...expected.gateIds].sort();
   if (!same(actualGateIds, expectedGateIds)) reasons.push("gate set mismatch");
+  const requiredGateIds = normalizedRequiredGateIds(expected.requiredSuccessfulGateIds);
+  if (!requiredGateIds) {
+    reasons.push("invalid required successful gate set");
+  } else {
+    for (const gate of incompleteRequiredGates(gates, requiredGateIds)) {
+      reasons.push(`required successful gate ${gate.jobId}=${gate.result ?? "missing"}`);
+    }
+  }
 
   const artifacts = normalizeArtifactInventory(receipt.artifacts);
   if (invalidArtifacts(artifacts).length > 0 || artifacts.length === 0) {

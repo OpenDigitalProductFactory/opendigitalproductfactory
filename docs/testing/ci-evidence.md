@@ -282,19 +282,24 @@ The CI and UX job summaries report payload bytes and packaging or
 download/validation/extraction duration. Compare those transfer measurements
 with the avoided UX build duration before retaining or tuning the artifact.
 
-## Exact-tree cross-lifecycle receipt (foundation shadow)
+## Exact-tree cross-lifecycle receipt reuse
 
 `BI-9585E580` adds the GitHub-native evidence contract needed to avoid a second
-exhaustive run after an identical merge-group tree reaches `main`. The initial
-slice is deliberately **shadow-only**:
+exhaustive run after an identical merge-group tree reaches `main`:
 
 - a successful merge-group `Merge Readiness` job writes
   `ci-evidence.json` plus `ci-evidence.sha256` after it has accepted every
   dependency;
 - the artifact name includes the immutable Git tree, not only the commit SHA;
 - a push job discovers, downloads, and validates the candidate receipt; and
-- Typecheck, unit/integration tests, Production Build, and UX still run
-  exhaustively regardless of the shadow verdict.
+- only an exact `reusable=true` verdict suppresses duplicate Typecheck,
+  workspace policy, routing-contract, unit/integration-test, Production Build,
+  and UX runner allocations on that `main` push.
+
+Pull-request and merge-group runs remain exhaustive. The stable `Unit Tests`,
+`UX Route Budget Sweep`, and `Merge Readiness` checks remain present on a
+reused push and explicitly attest that their heavy dependencies were skipped
+because exact-tree evidence was accepted.
 
 The receipt binds repository, commit and tree identity, source event/run,
 workflow fingerprint, producer plan digest, planner implementation fingerprint,
@@ -305,17 +310,17 @@ manifest. The companion checksum detects receipt tampering. Validation re-reads
 the source run, its artifact inventory, and the latest CheckRuns for every
 required context—including the independently executed DCO check—from GitHub.
 
-Only a completed, successful `merge_group` producer is eligible. A different
-tree, changed workflow/planner/policy/toolchain, missing or failed gate,
+Only a completed, successful `merge_group` producer is eligible. Every heavy
+gate reused by the push must be recorded as `success`; a merely `skipped` heavy
+gate is not reusable evidence. A different tree, changed
+workflow/planner/policy/toolchain, missing, skipped, or failed required gate,
 different artifact digest, malformed receipt, expiry, API failure, or missing
-evidence produces the explicit shadow verdict `exhaustive`. Unknown never means
-reuse.
+evidence produces the explicit verdict `exhaustive`. Unknown never means reuse.
 
-This foundation does not change branch protection or mint a DPF
+This policy does not change branch protection or mint a DPF
 `ToolExecutionReceipt`; GitHub CheckRun/CheckSuite state and workflow artifacts
-remain the evidence authority. Activation stays separate and must prove the
-real shadow path before any job-level condition consumes the verdict. The
-affected-test calibration window is also unchanged.
+remain the evidence authority. The affected-test calibration window is
+unchanged and remains shadow-only.
 
 GitHub documents that merge-queue checks run against the merge-group head SHA
 and that artifacts from another workflow run require an explicit run identifier
