@@ -1,7 +1,7 @@
 # Exact-tree CI receipt foundation
 
-**Backlog:** `BI-9585E580`  
-**Work Capsule:** `WC-BB748BBC`  
+**Backlog:** `BI-9585E580`
+**Work Capsule:** `WC-BB748BBC`
 **Decision:** `DI-CCAB45B2770D`
 
 ## Outcome
