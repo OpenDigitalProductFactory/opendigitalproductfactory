@@ -93,6 +93,18 @@ describe("buildFindingVerifierPrompt", () => {
     expect(p).toContain("REFUTE");
     expect(p).toContain('{"verified"');
   });
+
+  it("accepts a typed code-change artifact without changing legacy plan text", () => {
+    const finding = { severity: "critical" as const, description: "leaks token" };
+    const legacy = buildFindingVerifierPrompt(finding, "plan text");
+    const code = buildFindingVerifierPrompt(finding, {
+      kind: "code-change",
+      content: "const token = expose();",
+    });
+
+    expect(legacy).toContain("ARTIFACT UNDER REVIEW:\nplan text");
+    expect(code).toContain("CODE CHANGE UNDER REVIEW:\nconst token = expose();");
+  });
 });
 
 describe("verifyReviewFindings (injected dispatch)", () => {

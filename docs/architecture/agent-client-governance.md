@@ -72,6 +72,33 @@ assuming that a missing record means “not applicable.”
 Build Studio is not exempt. Its canonical `FeatureBuild` verification can
 satisfy dimensions through an adapter, so evidence is reused rather than copied.
 
+## Surface-neutral semantic change review
+
+Code authored in Build Studio, Codex, Claude, Grok, or another MCP client uses
+one semantic review contract. The authoring surface is attribution, not a
+different quality policy. The contract is implemented as pure functions in
+`apps/web/lib/change-review/semantic-change-review.ts`; Build Studio retains a
+compatibility adapter while external clients can construct the same receipt.
+
+A receipt is fresh only while all of its semantic identity remains unchanged:
+
+- Work Capsule;
+- base and head trees;
+- diff digest;
+- policy and reviewer versions; and
+- normalized specialist set.
+
+Changing any one of those inputs requires a new review. Reordering or repeating
+the same specialists does not. A genuinely low-risk change may auto-pass, but
+the auto-pass still emits a receipt with its rationale; review is never skipped
+silently.
+
+The receipt reuses the existing `ExternalEvidenceRecord` and
+`WorkCapsuleActivity(kind="evidence-recorded")` streams. It does not create a
+parallel finding table. This keeps the write substrate singular while allowing
+portal timelines, local hooks, CI, and promotion controls to project the same
+evidence in later rollout phases.
+
 ## Client identity and trust
 
 Client identity is useful attribution:

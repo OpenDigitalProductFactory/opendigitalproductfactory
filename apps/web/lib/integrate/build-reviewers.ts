@@ -21,6 +21,10 @@ import type {
   DeliberationActivatedRiskLevel,
 } from "@/lib/deliberation/types";
 import { ENTERPRISE_ARCHITECT_DISPLAY_NAME } from "@dpf/db/agent-identity";
+import {
+  buildSemanticChangeReviewPrompt,
+  parseSemanticReviewResponse,
+} from "@/lib/change-review/semantic-change-review";
 
 // ─── Prompt Templates ────────────────────────────────────────────────────────
 
@@ -170,33 +174,12 @@ RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
 }
 
 export function buildCodeReviewPrompt(taskTitle: string, codeChanges: string, testOutput: string): string {
-  return `You are reviewing code changes for a single build task.
-
-TASK: ${taskTitle}
-
-CODE CHANGES:
-${codeChanges}
-
-TEST OUTPUT:
-${testOutput}
-
-REVIEW CHECKLIST — evaluate EVERY item before responding:
-1. Does a test exist that covers this change?
-2. Is there code duplication with existing functionality?
-3. Does the code follow project patterns (TypeScript, Next.js, Tailwind)?
-4. Are there security concerns (injection, XSS, etc.)?
-5. Is the code clean and maintainable?
-6. Does the code use CSS variables (var(--dpf-*)) for all colors — no text-white, bg-white, text-black, bg-black, or inline hex values? (Exception: text-white on accent-background buttons, semantic status colors from ThemeTokens.states)
-7. Are interactive elements keyboard-accessible with visible focus indicators? Do form inputs have associated labels? Do buttons have descriptive accessible names?
-
-DECISION DISCIPLINE: report the genuine BLOCKING issues in a single response — be comprehensive about real blockers so there are no surprises on re-review, but do NOT pad the list with nice-to-haves. Reserve "critical" for issues that would cause data loss, security holes, or broken functionality; "important"/"minor" do not block. If the change is correct and tested at a level appropriate to its scope, return "pass". A short, converging review beats an exhaustive one.
-
-RESPOND WITH EXACTLY THIS JSON FORMAT (no other text):
-{
-  "decision": "pass" or "fail",
-  "issues": [{"severity": "critical|important|minor", "description": "..."}],
-  "summary": "one sentence summary"
-}`;
+  return buildSemanticChangeReviewPrompt({
+    title: taskTitle,
+    artifact: codeChanges,
+    verificationEvidence: testOutput,
+    promptProfile: "build-studio-v1",
+  });
 }
 
 // ─── Architecture Alignment Review (advisory) ────────────────────────────────
@@ -525,55 +508,7 @@ export function relaxTestFirstAfterRounds(review: ReviewResult, round: number): 
 // ─── Response Parsing ────────────────────────────────────────────────────────
 
 export function parseReviewResponse(raw: string): ReviewResult {
-  try {
-    // Extract JSON from response (may have markdown code fences)
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No JSON found");
-
-    const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
-
-    const rawDecision = parsed.decision === "pass" ? "pass" : "fail";
-    const issues = Array.isArray(parsed.issues)
-      ? parsed.issues.map((issue: Record<string, unknown>) => ({
-          severity: (["critical", "important", "minor"].includes(String(issue.severity))
-            ? String(issue.severity)
-            : "minor") as "critical" | "important" | "minor",
-          description: String(issue.description ?? ""),
-          location: issue.location ? String(issue.location) : undefined,
-          suggestion: issue.suggestion ? String(issue.suggestion) : undefined,
-        }))
-      : [];
-    const summary = String(parsed.summary ?? "Review complete");
-
-    // Honor the reviewer prompt's own severity calibration:
-    //   "Use 'critical' ONLY for issues that would cause data loss,
-    //    security vulnerabilities, or broken functionality. Use
-    //    'important' for design gaps that should be addressed but
-    //    don't block implementation."
-    //
-    // In practice reviewers routinely return decision:"fail" with
-    // only "important" issues, which contradicts the prompt and
-    // trapped real builds (observed 2026-04-19 on FB-21EEA510) in an
-    // endless dual-reviewer loop that kept finding new important
-    // issues each iteration. Overriding the decision to match the
-    // declared severity of the issues — critical fails, anything else
-    // passes (issues are still surfaced for the author to address).
-    const hasCritical = issues.some((i) => i.severity === "critical");
-    const decision: "pass" | "fail" = hasCritical ? "fail" : "pass";
-    // rawDecision retained for diagnostics in logs if the LLM's own decision
-    // diverges from the severity-driven one. The severity-driven decision is
-    // authoritative — see comment above.
-    void rawDecision;
-
-    return { decision, issues, summary };
-  } catch {
-    return {
-      decision: "fail",
-      issues: [{ severity: "critical", description: "Review agent returned unparseable response" }],
-      summary: "Review failed — could not parse agent response",
-      parseError: true,
-    };
-  }
+  return parseSemanticReviewResponse(raw);
 }
 
 // ─── Deliberation Integration (Task 8) ──────────────────────────────────────
