@@ -15,12 +15,48 @@ type PortfolioQualityIssue = {
   digitalProduct: { productId: string; name: string } | null;
 };
 
+/**
+ * Cards rendered per issue type before the group collapses behind a "show all".
+ * A discovery queue is unbounded by nature — one row per unenriched device — so
+ * rendering it flat produced a page thousands of lines long in which the handful
+ * of operator-actionable rows were unfindable. Grouping makes the SHAPE of the
+ * queue the primary read; the rows stay one click away.
+ */
+const PREVIEW_PER_GROUP = 5;
+
+function groupByIssueType(
+  issues: PortfolioQualityIssue[],
+): Array<{ issueType: string; issues: PortfolioQualityIssue[] }> {
+  // Insertion-ordered: the server sorts by severity desc, so the first group is
+  // the most severe. Preserving that beats re-sorting by count, which would bury
+  // a single `error` behind a large `warn` queue.
+  const groups = new Map<string, PortfolioQualityIssue[]>();
+  for (const issue of issues) {
+    const bucket = groups.get(issue.issueType);
+    if (bucket) bucket.push(issue);
+    else groups.set(issue.issueType, [issue]);
+  }
+  return [...groups].map(([issueType, grouped]) => ({ issueType, issues: grouped }));
+}
+
 export function PortfolioQualityIssuesPanel({
   issues,
 }: {
   issues: PortfolioQualityIssue[];
 }) {
   const [configuringIssueId, setConfiguringIssueId] = useState<string | null>(null);
+  const [expandedTypes, setExpandedTypes] = useState<ReadonlySet<string>>(new Set());
+
+  const groups = groupByIssueType(issues);
+
+  const toggleType = (issueType: string) => {
+    setExpandedTypes((previous) => {
+      const next = new Set(previous);
+      if (next.has(issueType)) next.delete(issueType);
+      else next.add(issueType);
+      return next;
+    });
+  };
 
   return (
     <section className="rounded-xl border border-white/10 bg-[var(--dpf-surface-1)] p-4">
@@ -34,8 +70,32 @@ export function PortfolioQualityIssuesPanel({
         <span className="text-sm text-[var(--dpf-muted)]">{issues.length} open</span>
       </div>
 
-      <div className="mt-4 space-y-3">
-        {issues.map((issue) => (
+      <div className="mt-4 space-y-4">
+        {groups.map((group) => {
+          const expanded = expandedTypes.has(group.issueType);
+          const visible = expanded
+            ? group.issues
+            : group.issues.slice(0, PREVIEW_PER_GROUP);
+          return (
+            <div key={group.issueType} className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-dpf-caption uppercase tracking-[0.16em] text-[var(--dpf-muted)]">
+                  {group.issueType}
+                  <span className="ml-2 text-[var(--dpf-text)]">{group.issues.length}</span>
+                </p>
+                {(expanded || visible.length !== group.issues.length) && (
+                  <button
+                    type="button"
+                    onClick={() => toggleType(group.issueType)}
+                    className="rounded-full border border-[var(--dpf-border)] px-3 py-1 text-dpf-caption text-[var(--dpf-muted)] transition-colors hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-text)]"
+                  >
+                    {expanded ? "Show less" : `Show all ${group.issues.length}`}
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                {visible.map((issue) => (
           <article
             key={issue.id}
             className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3"
@@ -43,9 +103,6 @@ export function PortfolioQualityIssuesPanel({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-medium text-[var(--dpf-text)]">{issue.summary}</p>
-                <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--dpf-muted)]">
-                  {issue.issueType}
-                </p>
               </div>
               <div className="flex items-center gap-2">
                 {issue.issueType === "gateway_connection_needed" && (
@@ -89,7 +146,11 @@ export function PortfolioQualityIssuesPanel({
                 />
               )}
           </article>
-        ))}
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {issues.length === 0 && (

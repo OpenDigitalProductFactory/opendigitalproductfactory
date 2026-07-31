@@ -31,9 +31,37 @@ export type QualityIssueResolver =
   /** Resolved by the monitoring source that raised it, when the condition clears. */
   | "monitor-clears";
 
+/**
+ * Which inventory row an issue of this type is raised ABOUT. This is what makes
+ * "the subject went away" machine-checkable: without it, a sweep cannot tell
+ * which FK to follow, and issues pinned to rows that no longer exist accumulate
+ * forever because nobody can act on them.
+ */
+export type QualityIssueSubject =
+  /** An InventoryEntity, via `PortfolioQualityIssue.inventoryEntityId`. */
+  | "entity"
+  /** An InventoryRelationship, via `PortfolioQualityIssue.inventoryRelationshipId`. */
+  | "relationship"
+  /** A portfolio / taxonomy / monitoring scope with no single inventory row. */
+  | "scope";
+
 export interface QualityIssueContract {
   /** How this issue reaches `resolved`. */
   resolvedBy: QualityIssueResolver;
+  /** Which inventory row this issue is about. */
+  subject: QualityIssueSubject;
+  /**
+   * True when the issue's PREMISE is that its subject is missing — `stale_entity`
+   * and `stale_relationship`. For those, the subject coming BACK resolves it.
+   *
+   * For every other subject-bearing type the premise is the opposite: the subject
+   * is present and NEEDS WORK. Those are resolved by the subject GOING AWAY —
+   * nobody can review the manufacturer of a device that is no longer on the
+   * network. The two directions are duals, and conflating them is what left 179
+   * open rows pinned to already-stale entities in the live queue: the recovery
+   * backstop only ever looked in the first direction.
+   */
+  raisedBySubjectAbsence: boolean;
   /**
    * The machine-checkable condition under which the platform closes this WITHOUT
    * human involvement. `null` means nothing auto-closes it — which is only
@@ -62,6 +90,8 @@ const REGISTRY = {
   // ── Discovery → portfolio promotion gates ────────────────────────────────
   type_not_promotable: {
     resolvedBy: "suppressed-at-emission",
+    subject: "entity",
+    raisedBySubjectAbsence: false,
     autoResolveWhen:
       "terminal structural skips (structural-type-gate) are no longer emitted; actionable legacy-list/node-policy cases resolve when a governance.promotion policy is added",
     operatorActionable: true,
@@ -71,6 +101,8 @@ const REGISTRY = {
   },
   name_not_promotable: {
     resolvedBy: "suppressed-at-emission",
+    subject: "entity",
+    raisedBySubjectAbsence: false,
     autoResolveWhen:
       "terminal structural skips (name-gate) are no longer emitted — a runtime-shaped name is a correct classification, not a gap",
     operatorActionable: false,
@@ -80,6 +112,8 @@ const REGISTRY = {
   },
   no_taxonomy: {
     resolvedBy: "discovery-sweep-reconcile",
+    subject: "entity",
+    raisedBySubjectAbsence: false,
     autoResolveWhen: "the entity gains a taxonomy attribution on a later sweep",
     operatorActionable: true,
     expectedSteadyState: 0,
@@ -88,6 +122,8 @@ const REGISTRY = {
   },
   no_portfolio_root: {
     resolvedBy: "operator",
+    subject: "scope",
+    raisedBySubjectAbsence: false,
     autoResolveWhen: "the taxonomy root gains a matching Portfolio row",
     operatorActionable: true,
     expectedSteadyState: 0,
@@ -96,6 +132,8 @@ const REGISTRY = {
   },
   low_confidence_promotion: {
     resolvedBy: "discovery-sweep-reconcile",
+    subject: "entity",
+    raisedBySubjectAbsence: false,
     autoResolveWhen: "attribution confidence rises above the auto-promote threshold",
     operatorActionable: true,
     expectedSteadyState: 0,
@@ -106,6 +144,8 @@ const REGISTRY = {
   // ── Estate freshness ─────────────────────────────────────────────────────
   stale_entity: {
     resolvedBy: "discovery-sweep-reconcile",
+    subject: "entity",
+    raisedBySubjectAbsence: true,
     autoResolveWhen:
       "the entity is observed active again in a later sweep (reconcile-on-recovery); only MANAGED estate raises at all",
     operatorActionable: true,
@@ -115,6 +155,8 @@ const REGISTRY = {
   },
   stale_relationship: {
     resolvedBy: "discovery-sweep-reconcile",
+    subject: "relationship",
+    raisedBySubjectAbsence: true,
     autoResolveWhen:
       "the relationship is observed active again in a later sweep (reconcile-on-recovery); only MANAGED topology raises at all",
     operatorActionable: true,
@@ -126,6 +168,8 @@ const REGISTRY = {
   // ── Identity / enrichment quality ────────────────────────────────────────
   attribution_missing: {
     resolvedBy: "coworker",
+    subject: "entity",
+    raisedBySubjectAbsence: false,
     autoResolveWhen: "the entity gains a taxonomy or product attribution",
     operatorActionable: true,
     expectedSteadyState: 0,
@@ -134,6 +178,8 @@ const REGISTRY = {
   },
   taxonomy_attribution_low_confidence: {
     resolvedBy: "coworker",
+    subject: "entity",
+    raisedBySubjectAbsence: false,
     autoResolveWhen: "attribution confidence rises above the low-confidence threshold",
     operatorActionable: true,
     expectedSteadyState: 0,
@@ -142,6 +188,8 @@ const REGISTRY = {
   },
   catalog_match_ambiguous: {
     resolvedBy: "coworker",
+    subject: "entity",
+    raisedBySubjectAbsence: false,
     autoResolveWhen: "identity evidence resolves (manufacturer + normalized version + catalog match)",
     operatorActionable: true,
     expectedSteadyState: 0,
@@ -150,6 +198,8 @@ const REGISTRY = {
   },
   lifecycle_unverified: {
     resolvedBy: "coworker",
+    subject: "entity",
+    raisedBySubjectAbsence: false,
     autoResolveWhen: "support lifecycle (supportStatus) becomes known for the entity",
     operatorActionable: true,
     expectedSteadyState: 0,
@@ -158,6 +208,8 @@ const REGISTRY = {
   },
   taxonomy_gap_proposal: {
     resolvedBy: "operator",
+    subject: "scope",
+    raisedBySubjectAbsence: false,
     autoResolveWhen: "the proposed taxonomy node is accepted or rejected",
     operatorActionable: true,
     expectedSteadyState: 0,
@@ -166,6 +218,8 @@ const REGISTRY = {
   },
   incomplete_detail: {
     resolvedBy: "coworker",
+    subject: "entity",
+    raisedBySubjectAbsence: false,
     autoResolveWhen: "the missing required fields are populated",
     operatorActionable: true,
     expectedSteadyState: 0,
@@ -174,6 +228,8 @@ const REGISTRY = {
   },
   enrichment_failed: {
     resolvedBy: "discovery-sweep-reconcile",
+    subject: "entity",
+    raisedBySubjectAbsence: false,
     autoResolveWhen: "a later enrichment pass succeeds",
     operatorActionable: false,
     expectedSteadyState: 0,
@@ -184,6 +240,8 @@ const REGISTRY = {
   // ── Operational / monitoring ─────────────────────────────────────────────
   health_alert: {
     resolvedBy: "monitor-clears",
+    subject: "scope",
+    raisedBySubjectAbsence: false,
     autoResolveWhen: "the underlying health alert clears at the monitoring source",
     operatorActionable: true,
     expectedSteadyState: 0,
@@ -192,6 +250,8 @@ const REGISTRY = {
   },
   gateway_connection_needed: {
     resolvedBy: "operator",
+    subject: "entity",
+    raisedBySubjectAbsence: false,
     autoResolveWhen: "the operator configures the gateway connection",
     operatorActionable: true,
     expectedSteadyState: 0,
@@ -200,6 +260,8 @@ const REGISTRY = {
   },
   edge_correlated_incident: {
     resolvedBy: "monitor-clears",
+    subject: "scope",
+    raisedBySubjectAbsence: false,
     autoResolveWhen: "the correlated edge incident clears",
     operatorActionable: true,
     expectedSteadyState: 0,
@@ -208,6 +270,8 @@ const REGISTRY = {
   },
   journey_failure: {
     resolvedBy: "monitor-clears",
+    subject: "scope",
+    raisedBySubjectAbsence: false,
     autoResolveWhen:
       "the next watchdog run of the SAME journey passes — the run that raised it is the run that clears it, so a fixed journey closes its own row without operator bookkeeping",
     operatorActionable: true,
@@ -245,6 +309,28 @@ export function qualityIssueContract(type: QualityIssueType): QualityIssueContra
  */
 export function operatorActionableTypes(): QualityIssueType[] {
   return QUALITY_ISSUE_TYPES.filter((type) => QUALITY_ISSUE_REGISTRY[type].operatorActionable);
+}
+
+/**
+ * Types raised ABOUT a given inventory row kind, split by which direction of
+ * subject change resolves them.
+ *
+ * `raisedBySubjectAbsence: true`  → the subject coming BACK resolves it.
+ * `raisedBySubjectAbsence: false` → the subject GOING AWAY resolves it.
+ *
+ * Both are derived from the registry rather than listed at the call site, so a
+ * new detector inherits the correct self-healing behaviour by declaring its
+ * contract — which is the whole point of the registry existing.
+ */
+export function subjectBearingTypes(
+  subject: Exclude<QualityIssueSubject, "scope">,
+  raisedBySubjectAbsence: boolean,
+): QualityIssueType[] {
+  return QUALITY_ISSUE_TYPES.filter(
+    (type) =>
+      QUALITY_ISSUE_REGISTRY[type].subject === subject
+      && QUALITY_ISSUE_REGISTRY[type].raisedBySubjectAbsence === raisedBySubjectAbsence,
+  );
 }
 
 /**

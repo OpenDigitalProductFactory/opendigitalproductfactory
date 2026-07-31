@@ -95,11 +95,37 @@ LIVE on the operator's install, as a scheduled inngest sweep
 concurrency 1) delegating to the pure `runQualityIssueDriftSweep(db)`
 (`packages/db/src/quality-issue-drift-sweep.ts`):
 
-1. **Self-heal backstop.** Closes open `stale_entity` / `stale_relationship`
-   rows whose FK-linked entity/relationship is now `active` (recovered by a
-   *different* source than the one that marked it stale) or gone (deleted). The
-   common recovery case is already handled in-sweep by discovery-sync; this is
-   the global backstop for what per-source reconcile misses.
+1. **Self-heal backstop — both directions.** Every subject-bearing type declares
+   `subject` (`entity` | `relationship` | `scope`) and `raisedBySubjectAbsence`,
+   and the sweep closes rows in whichever direction the contract implies:
+
+   - **Subject recovered** (`raisedBySubjectAbsence: true` — the staleness
+     detectors). Closes open `stale_entity` / `stale_relationship` rows whose
+     FK-linked row is now `active` (recovered by a *different* source than the
+     one that marked it stale) or gone (deleted). The common recovery case is
+     already handled in-sweep by discovery-sync; this is the global backstop for
+     what per-source reconcile misses.
+   - **Subject lost** (`raisedBySubjectAbsence: false` — everything else with a
+     subject). Closes open rows whose FK-linked row has since gone `stale` or
+     been deleted. An issue like *"still needs identity review for manufacturer"*
+     asserts that a LIVE thing needs work; once that thing stops being observed
+     the assertion is moot and no operator or coworker can ever close it by
+     acting.
+
+   **Why the dual matters.** Phase 2 originally implemented only the first
+   direction, against a hand-written `["stale_entity", "stale_relationship"]`
+   list. On the live install that left **179 of 462 open rows pinned to
+   already-stale entities** — 108 `lifecycle_unverified` and 69
+   `catalog_match_ambiguous` — permanently unresolvable, burying the ~209 rows
+   that were genuinely actionable. Both lists are now DERIVED from the registry,
+   so a new detector inherits the correct self-healing behaviour by declaring its
+   contract rather than by someone remembering to edit the sweep.
+
+   **Deliberately not guessed at.** A row with no subject FK is left alone rather
+   than resolved from its `issueKey` string. 49 such legacy rows exist on the live
+   install (37 naming a now-stale entity, 6 an active one, 6 an entity that no
+   longer exists); they are data hygiene, tracked separately, not a sweep
+   responsibility.
 
 2. **Drift detection.** Compares live open counts to each type's declared
    `expectedSteadyState` and returns every over-budget queue, worst-first, with

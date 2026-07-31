@@ -7,6 +7,7 @@ import {
   qualityIssueContract,
   operatorActionableTypes,
   qualityIssueDrift,
+  subjectBearingTypes,
 } from "./quality-issue-registry";
 
 // The registry IS the governance gate. These tests are what stop a detector
@@ -35,6 +36,43 @@ describe("quality issue registry — lifecycle contract", () => {
       return contract.autoResolveWhen === null && !contract.operatorActionable;
     });
     expect(orphaned).toEqual([]);
+  });
+
+  it("every type declares which inventory row it is raised about", () => {
+    // Without a declared subject the sweep cannot tell which FK to follow, so an
+    // issue pinned to a row that has gone away stays open forever. 179 of 462
+    // open rows on the live install were in exactly that state.
+    const undeclared = QUALITY_ISSUE_TYPES.filter(
+      (type) => !["entity", "relationship", "scope"].includes(QUALITY_ISSUE_REGISTRY[type].subject),
+    );
+    expect(undeclared).toEqual([]);
+  });
+
+  it("only a subject-bearing type may be raised BY its subject's absence", () => {
+    // "scope" issues have no inventory row to go missing, so the absence
+    // direction is meaningless for them and would silently never fire.
+    const contradictory = QUALITY_ISSUE_TYPES.filter((type) => {
+      const contract = QUALITY_ISSUE_REGISTRY[type];
+      return contract.raisedBySubjectAbsence && contract.subject === "scope";
+    });
+    expect(contradictory).toEqual([]);
+  });
+
+  it("splits subject-bearing types into the two auto-resolve directions with no overlap", () => {
+    const recovered = [
+      ...subjectBearingTypes("entity", true),
+      ...subjectBearingTypes("relationship", true),
+    ];
+    const lost = [
+      ...subjectBearingTypes("entity", false),
+      ...subjectBearingTypes("relationship", false),
+    ];
+
+    // The staleness detectors are the ONLY absence-raised types; if a new one
+    // joins them it must be a deliberate decision, not an accident.
+    expect(recovered.sort()).toEqual(["stale_entity", "stale_relationship"]);
+    expect(lost).not.toHaveLength(0);
+    expect(recovered.filter((type) => lost.includes(type))).toEqual([]);
   });
 
   it("covers every issue type present in the live database", () => {
