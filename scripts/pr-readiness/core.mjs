@@ -135,6 +135,10 @@ export function evaluateReadiness({ repo, gateResults = [], prBody = "", gateCon
   if (!repo) {
     blockers.push("Repository state could not be read.");
   } else {
+    const exactPublishedHead = Boolean(repo.publishedRef) && repo.publishedRefMatchesHead === true;
+    if (repo.publishedRef && !exactPublishedHead) {
+      blockers.push(`HEAD does not equal published ref ${repo.publishedRef}; refuse to validate a different tree.`);
+    }
     if (repo.isShallow) {
       blockers.push("Repository is a shallow Git repository; fetch full history before computing a PR diff.");
     }
@@ -143,12 +147,12 @@ export function evaluateReadiness({ repo, gateResults = [], prBody = "", gateCon
     } else if (repo.mergeBases.length > 1) {
       blockers.push(`Found an ambiguous merge-base with origin/main (${repo.mergeBases.length} candidates); repair history before opening a PR.`);
     }
-    if (repo.isDetached) blockers.push("HEAD is detached; switch to a named topic branch before opening a PR.");
+    if (repo.isDetached && !exactPublishedHead) blockers.push("HEAD is detached; switch to a named topic branch before opening a PR.");
     if (repo.branch === "main") blockers.push("Current branch is main; create a topic branch before opening a PR.");
     if (String(repo.statusPorcelain ?? "").trim()) {
       blockers.push("The working tree has uncommitted changes; commit or discard them before opening or queueing the PR.");
     }
-    if (Number(repo.ahead ?? 0) > 0) {
+    if (Number(repo.ahead ?? 0) > 0 && !exactPublishedHead) {
       blockers.push(`${repo.ahead} local commit(s) are not pushed to ${repo.upstream ?? "the branch upstream"}; do not enter the merge queue yet.`);
     }
     if (changedFiles.length === 0) {
@@ -195,7 +199,7 @@ export function evaluateReadiness({ repo, gateResults = [], prBody = "", gateCon
     notes,
     passed,
     changedFiles,
-    branch: repo?.branch ?? "(unknown)",
+    branch: repo?.publishedRef && repo?.publishedRefMatchesHead ? repo.publishedRef : (repo?.branch ?? "(unknown)"),
     base: "origin/main",
     mergeBase: repo?.mergeBases?.[0] ?? null,
     gateContext,

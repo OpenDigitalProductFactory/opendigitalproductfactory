@@ -56,6 +56,9 @@ export interface GitHubCommitResult {
   prNumber: number | null;
 }
 
+export type PublishedBranchCommit = Pick<GitHubCommitResult, "branchName" | "commitSha">;
+export type OpenPullRequestResult = Pick<GitHubCommitResult, "prUrl" | "prNumber">;
+
 const DCO_SIGNOFF_PATTERN = /^Signed-off-by:\s+(.+?)\s+<([^<>\s@]+@[^<>\s@]+)>$/im;
 
 type GitCommitIdentity = {
@@ -263,23 +266,17 @@ async function githubPost<T>(url: string, body: unknown, token: string): Promise
  *      surfaces their URL so callers can back-write the PR URL onto the
  *      FeaturePack.
  */
-export async function createBranchAndPR(input: {
+export async function publishBranchCommit(input: {
   /** Where the branch is pushed. For fork-pr, this is the contributor's fork. */
   headOwner: string;
   headRepo: string;
-  /** Where the PR is opened against. Always the upstream in fork-pr. */
-  baseOwner: string;
-  baseRepo: string;
   /** Base branch — typically "main". */
   baseBranch?: string;
   branchName: string;
   commitMessage: string;
   diff: string;
-  prTitle: string;
-  prBody: string;
-  labels: string[];
   token: string;
-}): Promise<GitHubCommitResult> {
+}): Promise<PublishedBranchCommit> {
   assertDcoSignedCommitMessage(input.commitMessage);
   const dcoIdentity = parseDcoSignedCommitIdentity(input.commitMessage);
   if (!dcoIdentity) {
@@ -289,21 +286,13 @@ export async function createBranchAndPR(input: {
   const {
     headOwner,
     headRepo,
-    baseOwner,
-    baseRepo,
     branchName,
     commitMessage,
     diff,
-    prTitle,
-    prBody,
-    labels,
     token,
   } = input;
   const baseBranch = input.baseBranch ?? "main";
   const headApiBase = `https://api.github.com/repos/${headOwner}/${headRepo}`;
-  const baseApiBase = `https://api.github.com/repos/${baseOwner}/${baseRepo}`;
-  const isCrossRepo = headOwner !== baseOwner || headRepo !== baseRepo;
-  const prHead = isCrossRepo ? `${headOwner}:${branchName}` : branchName;
 
   // 1. Get the SHA of the base branch on the HEAD repo.
   //
@@ -410,8 +399,36 @@ export async function createBranchAndPR(input: {
     }
   }
 
-  // 7. Create the PR on the BASE repo. head is "{headOwner}:{branchName}" for
-  // cross-repo PRs, bare branch name for same-repo.
+  return { branchName, commitSha: commit.sha };
+}
+
+export async function openPullRequest(input: {
+  headOwner: string;
+  headRepo: string;
+  baseOwner: string;
+  baseRepo: string;
+  baseBranch?: string;
+  branchName: string;
+  prTitle: string;
+  prBody: string;
+  labels: string[];
+  token: string;
+}): Promise<OpenPullRequestResult> {
+  const {
+    headOwner,
+    headRepo,
+    baseOwner,
+    baseRepo,
+    branchName,
+    prTitle,
+    prBody,
+    labels,
+    token,
+  } = input;
+  const baseBranch = input.baseBranch ?? "main";
+  const baseApiBase = `https://api.github.com/repos/${baseOwner}/${baseRepo}`;
+  const isCrossRepo = headOwner !== baseOwner || headRepo !== baseRepo;
+  const prHead = isCrossRepo ? `${headOwner}:${branchName}` : branchName;
   let prUrl: string | null = null;
   let prNumber: number | null = null;
 
@@ -455,7 +472,26 @@ export async function createBranchAndPR(input: {
     }
   }
 
-  return { branchName, commitSha: commit.sha, prUrl, prNumber };
+  return { prUrl, prNumber };
+}
+
+export async function createBranchAndPR(input: {
+  headOwner: string;
+  headRepo: string;
+  baseOwner: string;
+  baseRepo: string;
+  baseBranch?: string;
+  branchName: string;
+  commitMessage: string;
+  diff: string;
+  prTitle: string;
+  prBody: string;
+  labels: string[];
+  token: string;
+}): Promise<GitHubCommitResult> {
+  const published = await publishBranchCommit(input);
+  const opened = await openPullRequest(input);
+  return { ...published, ...opened };
 }
 
 // ─── PR Status & Merge ─────────────────────────────────────────────────────

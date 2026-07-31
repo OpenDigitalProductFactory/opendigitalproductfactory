@@ -165,6 +165,40 @@ test("evaluateReadiness blocks unsafe or queue-hostile repository state", () => 
   assert.match(result.blockers.join("\n"), /missing DCO sign-off/);
 });
 
+test("evaluateReadiness accepts a detached exact published ref but no other detached head", () => {
+  const exact = evaluateReadiness({
+    repo: {
+      ...cleanRepo,
+      branch: "HEAD",
+      isDetached: true,
+      upstream: null,
+      ahead: 1,
+      publishedRef: "refs/remotes/origin/build/example",
+      publishedRefMatchesHead: true,
+    },
+    gateResults: [],
+    prBody: "",
+  });
+  assert.equal(exact.ready, true);
+  assert.equal(exact.branch, "refs/remotes/origin/build/example");
+
+  const mismatch = evaluateReadiness({
+    repo: {
+      ...cleanRepo,
+      branch: "HEAD",
+      isDetached: true,
+      upstream: null,
+      ahead: 1,
+      publishedRef: "refs/remotes/origin/build/example",
+      publishedRefMatchesHead: false,
+    },
+    gateResults: [],
+    prBody: "",
+  });
+  assert.equal(mismatch.ready, false);
+  assert.match(mismatch.blockers.join("\n"), /does not equal published ref/);
+});
+
 test("evaluateReadiness folds failed local gates into one pre-PR verdict", () => {
   const result = evaluateReadiness({
     repo: cleanRepo,

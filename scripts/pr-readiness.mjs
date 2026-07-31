@@ -30,7 +30,7 @@ function git(args, { allowFail = false } = {}) {
 }
 
 function parseArgs(argv) {
-  const args = { prBody: process.env.PR_BODY || "", prLabelsJson: process.env.PR_LABELS_JSON || "[]", runGates: true };
+  const args = { prBody: process.env.PR_BODY || "", prLabelsJson: process.env.PR_LABELS_JSON || "[]", runGates: true, json: false, publishedRef: null };
   for (let i = 2; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--pr-body-file") {
@@ -41,6 +41,10 @@ function parseArgs(argv) {
       args.prLabelsJson = argv[++i] ?? "[]";
     } else if (arg === "--skip-gates") {
       args.runGates = false;
+    } else if (arg === "--published-ref") {
+      args.publishedRef = argv[++i] ?? "";
+    } else if (arg === "--json") {
+      args.json = true;
     } else if (arg === "-h" || arg === "--help") {
       args.help = true;
     } else {
@@ -52,7 +56,7 @@ function parseArgs(argv) {
 
 function usage() {
   return [
-    "Usage: node scripts/pr-readiness.mjs [--pr-body-file path | --pr-body text] [--labels-json json] [--skip-gates]",
+    "Usage: node scripts/pr-readiness.mjs [--pr-body-file path | --pr-body text] [--labels-json json] [--published-ref ref] [--json] [--skip-gates]",
     "",
     "Runs local pre-PR governance checks against the exact diff from current origin/main to HEAD.",
     "Exit 0 means safe to open or queue the PR. Exit 1 means fix the listed blockers first.",
@@ -83,10 +87,14 @@ function readAheadBehind(upstream) {
   return { ahead: Number.isFinite(ahead) ? ahead : 0, behind: Number.isFinite(behind) ? behind : 0 };
 }
 
-function readRepoState() {
+function readRepoState(publishedRef = null) {
   fetchOriginMainSharedSafe((args) => git(args));
 
   const branch = git(["rev-parse", "--abbrev-ref", "HEAD"]).trim();
+  const headSha = git(["rev-parse", "HEAD"]).trim();
+  const publishedSha = publishedRef
+    ? git(["rev-parse", "--verify", publishedRef], { allowFail: true }).trim()
+    : "";
   const upstream = git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], { allowFail: true }).trim();
   const aheadBehind = readAheadBehind(upstream);
   const mergeBases = git(["merge-base", "--all", "origin/main", "HEAD"], { allowFail: true })
@@ -109,6 +117,8 @@ function readRepoState() {
     ahead: aheadBehind.ahead,
     behind: aheadBehind.behind,
     commits: readCommits(),
+    publishedRef,
+    publishedRefMatchesHead: Boolean(publishedRef) && publishedSha === headSha,
   };
 }
 
@@ -151,7 +161,7 @@ function main() {
 
   let repo;
   try {
-    repo = readRepoState();
+    repo = readRepoState(args.publishedRef);
   } catch (error) {
     console.error(`pr-readiness: could not read repository state: ${error.message}`);
     process.exit(2);
@@ -165,6 +175,15 @@ function main() {
   });
   const verdict = evaluateReadiness({ repo, gateResults, prBody: args.prBody, gateContext });
   process.stdout.write(formatReadinessReport(verdict));
+  if (args.json) {
+    process.stdout.write(`DPF_PR_READINESS_JSON=${JSON.stringify({
+      ready: verdict.ready,
+      blockers: verdict.blockers,
+      warnings: verdict.warnings,
+      branch: verdict.branch,
+      changedFiles: verdict.changedFiles,
+    })}\n`);
+  }
   process.exit(verdict.ready ? 0 : 1);
 }
 

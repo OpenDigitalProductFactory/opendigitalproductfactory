@@ -2,7 +2,7 @@
 // Sandbox lifecycle management — creates, manages, and destroys Docker containers
 // for isolated code generation.
 
-import { lazyExec, lazyFs } from "@/lib/shared/lazy-node";
+import { lazyChildProcess, lazyExec, lazyFs } from "@/lib/shared/lazy-node";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 const exec = lazyExec();
@@ -397,6 +397,55 @@ export async function execInSandbox(containerId: string, command: string): Promi
     maxBuffer: 100 * 1024 * 1024,
   });
   return stdout;
+}
+
+/**
+ * Execute a sandbox command while delivering sensitive input over stdin.
+ * The input never appears in the host command line or Docker environment.
+ */
+export async function execInSandboxWithStdin(
+  containerId: string,
+  command: string,
+  input: string,
+): Promise<string> {
+  const { spawn } = lazyChildProcess();
+  const safeCommand = prefixSafeWorkspaceCommand(command);
+  return new Promise((resolve, reject) => {
+    const child = spawn("docker", ["exec", "-i", containerId, "sh", "-c", safeCommand], {
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+    });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    let size = 0;
+    let settled = false;
+    const collect = (target: Buffer[], chunk: Buffer) => {
+      size += chunk.length;
+      if (size > 100 * 1024 * 1024 && !settled) {
+        settled = true;
+        child.kill();
+        reject(new Error("Sandbox command output exceeded 100 MiB."));
+        return;
+      }
+      target.push(chunk);
+    };
+    child.stdout.on("data", (chunk: Buffer) => collect(stdout, chunk));
+    child.stderr.on("data", (chunk: Buffer) => collect(stderr, chunk));
+    child.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    });
+    child.on("close", (code) => {
+      if (settled) return;
+      settled = true;
+      const out = Buffer.concat(stdout).toString("utf8");
+      const err = Buffer.concat(stderr).toString("utf8");
+      if (code === 0) resolve(out);
+      else reject(new Error(`Sandbox command exited ${code}: ${err.slice(0, 1000)}`));
+    });
+    child.stdin.end(input);
+  });
 }
 
 /**

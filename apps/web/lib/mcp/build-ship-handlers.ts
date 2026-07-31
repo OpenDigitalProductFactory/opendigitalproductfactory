@@ -340,7 +340,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
   const build = await prisma.featureBuild.findUnique({
     where: { buildId },
     select: {
-      id: true, title: true, diffPatch: true, buildBranch: true,
+      id: true, title: true, diffPatch: true, buildBranch: true, sandboxId: true,
       description: true, gitCommitHashes: true, updatedAt: true, buildExecState: true,
       verificationOut: true, acceptanceMet: true, phase: true,
       designDoc: true, buildPlan: true,
@@ -466,21 +466,6 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
     return { success: false, error: "No GitHub token available.", message: "Configure HIVE_CONTRIBUTION_TOKEN or a git credential to create PRs." };
   }
 
-  // Run pre-PR gates
-  const { runPrePRGates, formatGateReport } = await import("@/lib/integrate/pre-pr-gates");
-  const gateResult = runPrePRGates(shareableDiff);
-
-  // If gates block, return the report without creating a PR
-  if (!gateResult.canProceed) {
-    logBuildActivity(buildId, "create_portal_pr", `BLOCKED: ${gateResult.summary}`);
-    return {
-      success: false,
-      error: "Pre-PR gates failed.",
-      message: `The pre-PR security gates found blocking issues. Fix these before creating a PR.\n\n${formatGateReport(gateResult)}`,
-      data: { gates: gateResult },
-    };
-  }
-
   // Build the PR
   const platformId = await getPlatformIdentity();
   const branchName = generatePrivateBranchName(platformId.clientId, build.title);
@@ -514,6 +499,8 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
   const acMet = acceptance.filter((a) => a?.met === true).length;
   const acTotal = acceptance.length;
 
+  const readinessTrailers =
+    typeof params.readinessTrailers === "string" ? params.readinessTrailers.trim() : "";
   const prBody = [
     `## ${build.title}`,
     "",
@@ -524,47 +511,108 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
     `- Tests: ${testsPassed} passed, ${testsFailed} failed`,
     `- Acceptance: ${acMet}/${acTotal} criteria met`,
     "",
-    formatGateReport(gateResult),
-    "",
+    ...(readinessTrailers ? ["### Readiness decisions", readinessTrailers, ""] : []),
     "---",
     `License: Apache-2.0 | ${platformId.dcoSignoff}`,
   ].join("\n");
 
   const prTitle = `feat(${buildId}): ${build.title}`;
   const labels = ["build-studio", "automated"];
-  if (gateResult.requiresHumanReview) labels.push("needs-review");
-  if (!typecheckPassed || testsFailed > 0) labels.push("verification-issues");
+  const { publishBranchCommit, openPullRequest } = await import("@/lib/integrate/github-api-commit");
 
-  const { createBranchAndPR, commentOnPR } = await import("@/lib/integrate/github-api-commit");
+  const published = await publishBranchCommit({
+    headOwner: repoOwner,
+    headRepo: repoName,
+    branchName,
+    commitMessage,
+    diff: shareableDiff,
+    token,
+  });
 
-  const prResult = await createBranchAndPR({
+  const {
+    buildPublishedReadinessCommand,
+    evaluateBuildVerificationReadiness,
+    parsePublishedReadinessOutput,
+  } = await import("@/lib/integrate/build-studio-pr-readiness");
+  const verificationReadiness = evaluateBuildVerificationReadiness({
+    typecheckPassed,
+    testsFailed,
+    acceptanceMet: acMet,
+    acceptanceTotal: acTotal,
+  });
+  let canonicalReadiness = {
+    ready: false,
+    blockers: ["Build sandbox is unavailable for exact published-tree readiness."],
+  };
+  if (build.sandboxId && build.buildBranch) {
+    try {
+      const { execInSandboxWithStdin } = await import("@/lib/integrate/sandbox/sandbox");
+      const output = await execInSandboxWithStdin(
+        build.sandboxId,
+        buildPublishedReadinessCommand({
+          branchName,
+          commitSha: published.commitSha,
+          restoreBranch: build.buildBranch,
+          prBodyBase64: Buffer.from(prBody, "utf8").toString("base64"),
+          repositoryOwner: repoOwner,
+          repositoryName: repoName,
+        }),
+        `${token}\n`,
+      );
+      canonicalReadiness = parsePublishedReadinessOutput(output);
+    } catch (error) {
+      canonicalReadiness = {
+        ready: false,
+        blockers: [`Exact published-tree readiness failed: ${String(error).slice(0, 240)}`],
+      };
+    }
+  }
+  const blockers = [...verificationReadiness.blockers, ...canonicalReadiness.blockers];
+  const contextState = readinessTrailers ? "context-present" : "context-missing";
+  const verdictState = blockers.length === 0 ? "ready" : "blocked";
+  logBuildActivity(
+    buildId,
+    `pr-readiness:${verdictState}:${contextState}`,
+    `head=${published.commitSha}; blockers=${blockers.length === 0 ? "none" : blockers.join(" | ").slice(0, 700)}`,
+  );
+  if (blockers.length > 0) {
+    return {
+      success: false,
+      error: "PR readiness blocked pull request creation.",
+      message: `Branch \`${branchName}\` is published and recoverable, but no pull request was opened.\n\n${blockers.map((blocker) => `- ${blocker}`).join("\n")}`,
+      data: {
+        branchName,
+        commitSha: published.commitSha,
+        blockers,
+        readiness: canonicalReadiness,
+      },
+    };
+  }
+
+  const prResult = await openPullRequest({
     headOwner: repoOwner,
     headRepo: repoName,
     baseOwner: repoOwner,
     baseRepo: repoName,
     branchName,
-    commitMessage,
-    diff: shareableDiff,
     prTitle,
     prBody,
     labels,
     token,
   });
-
   if (!prResult.prUrl || !prResult.prNumber) {
     logBuildActivity(buildId, "create_portal_pr", `Branch created (${branchName}) but PR creation failed.`);
     return {
       success: false,
       error: "PR creation failed.",
       message: `Branch \`${branchName}\` was created with the commit, but the pull request could not be opened. Check GitHub permissions.`,
-      data: { branchName, commitSha: prResult.commitSha },
+      data: { branchName, commitSha: published.commitSha },
     };
   }
 
   // Integration decision: all local gates pass + build fully verified. GitHub
   // remains authoritative for current-head checks, review threads, branch
   // freshness, and merge-queue policy. A PR merge is NOT deployment.
-  const fullyVerified = typecheckPassed && testsFailed === 0 && acMet === acTotal && acTotal > 0;
   let deliveryState: string;
   try {
     const {
@@ -578,7 +626,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
       prNumber: prResult.prNumber,
       prUrl: prResult.prUrl,
       token,
-      eligible: !gateResult.requiresHumanReview && fullyVerified,
+      eligible: true,
     });
     deliveryState = outcome.state.status;
     logBuildActivity(
@@ -595,27 +643,7 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
     );
   }
 
-  if (gateResult.requiresHumanReview || !fullyVerified) {
-    // Needs human review — post gate report as comment
-    const reasons: string[] = [];
-    if (gateResult.requiresHumanReview) reasons.push("security gate warnings");
-    if (!typecheckPassed) reasons.push("TypeCheck failed");
-    if (testsFailed > 0) reasons.push(`${testsFailed} test(s) failed`);
-    if (acMet < acTotal) reasons.push(`${acTotal - acMet} acceptance criteria not met`);
-
-    await commentOnPR({
-      owner: repoOwner, repo: repoName, prNumber: prResult.prNumber,
-      body: `This PR requires employee review: ${reasons.join(", ")}.\n\n${formatGateReport(gateResult)}`,
-      token,
-    }).catch(() => {});
-
-    logBuildActivity(buildId, "create_portal_pr", `PR #${prResult.prNumber} created — needs review: ${reasons.join(", ")}`);
-  }
-
-  const statusMsg =
-    !gateResult.requiresHumanReview && fullyVerified
-      ? `PR #${prResult.prNumber} created. Delivery state: ${deliveryState}.`
-      : `PR #${prResult.prNumber} created and awaiting review. ${gateResult.summary}`;
+  const statusMsg = `PR #${prResult.prNumber} created. Delivery state: ${deliveryState}.`;
 
   return {
     success: true,
@@ -624,10 +652,10 @@ export async function createPortalPr(params: Record<string, unknown>, userId: st
       prUrl: prResult.prUrl,
       prNumber: prResult.prNumber,
       branchName,
-      commitSha: prResult.commitSha,
+      commitSha: published.commitSha,
       merged: false,
       deliveryState,
-      gates: gateResult,
+      readiness: canonicalReadiness,
     },
   };
 }
