@@ -80,7 +80,10 @@ import { seedCoworkerServiceCatalog } from "./coworker-service-catalog-seed.js";
 import { syncCapabilities } from "./sync-capabilities.js";
 import { defaultGovernanceFor } from "./taxonomy-governance-defaults.js";
 import { buildTaxonomyNodeEntries, type TaxonomySeedRow } from "./taxonomy-seed-entries.js";
-import { AGENT_MODEL_CONFIG_DEFAULTS } from "./agent-model-defaults.js";
+import {
+  AGENT_MODEL_CONFIG_DEFAULTS,
+  resolveAgentModelDefaultUpdate,
+} from "./agent-model-defaults.js";
 import { toModelProfileSeedCreateData } from "./model-profile-seed.js";
 import { deriveLocalModelCapabilityPrior, localInputModalities } from "./local-model-capabilities.js";
 import { ensureDefaultProviderConnection } from "./provider-connection.js";
@@ -2352,26 +2355,15 @@ async function seedAgentModelDefaults(): Promise<void> {
       where: { agentId: d.agentId },
     });
     if (existing) {
-      // Admin-configured rows are preserved for tier/budget.
-      // Only capability floor and context minimum are backfilled if null —
-      // these are system defaults, not admin choices.
-      const needsCapUpdate =
-        (d.minimumCapabilities !== undefined && existing.minimumCapabilities === null) ||
-        (d.minimumContextTokens !== undefined && existing.minimumContextTokens === null);
-
-      if (needsCapUpdate) {
+      const update = resolveAgentModelDefaultUpdate(existing, d);
+      if (update) {
         await prisma.agentModelConfig.update({
           where: { agentId: d.agentId },
-          data: {
-            ...(d.minimumCapabilities !== undefined && existing.minimumCapabilities === null
-              ? { minimumCapabilities: d.minimumCapabilities }
-              : {}),
-            ...(d.minimumContextTokens !== undefined && existing.minimumContextTokens === null
-              ? { minimumContextTokens: d.minimumContextTokens }
-              : {}),
-          },
+          data: update,
         });
-        console.log(`  Updated config for ${d.agentId}`);
+        console.log(
+          `  Updated ${existing.configuredById === null ? "system" : "operator"} config for ${d.agentId}`,
+        );
       }
       existed++;
       continue;
