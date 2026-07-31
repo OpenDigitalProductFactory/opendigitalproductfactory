@@ -543,8 +543,14 @@ original five corrections, then deferred approval leasing, durable-execution
 ownership, and structured context mapping. The amended candidate adds an
 unleaseable `awaiting-approval` state plus approval CAS, makes `BI-PSC-004` a
 hard prerequisite rather than an aspirational adapter, and places query/path/
-entity/focus/return transforms in the machine route registry. Fresh exact-SHA
-architecture and UX confirmation remains required.
+entity/focus/return transforms in the machine route registry. That corrected
+content was frozen for one final exact-SHA architecture and UX confirmation.
+
+Final content candidate `511784f8f8189d94c15e9747f1d67b718f0b6675`
+received terminal architecture fit from
+`019fb733-4b1b-7363-ba35-9a29064e8003` and terminal UX fit from
+`019fb733-4bf8-7eb1-8c6d-503ff548c410`, with no P0, P1, or P2 findings. Review
+provenance is added separately from the immutable reviewed content.
 
 Required before the design PR:
 

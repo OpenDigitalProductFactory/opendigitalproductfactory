@@ -1175,6 +1175,15 @@ This revision adds the unleaseable approval state and approval CAS, makes the
 canonical durable-execution interface a prerequisite, and defines the
 versioned machine context mapping.
 
+Final content candidate `511784f8f8189d94c15e9747f1d67b718f0b6675`
+received terminal architecture fit from
+`019fb733-4b1b-7363-ba35-9a29064e8003` and terminal UX fit from
+`019fb733-4bf8-7eb1-8c6d-503ff548c410`. Both reviewers confirmed the exact SHA,
+read-only worktree, and no P0, P1, or P2 findings. The architecture review
+explicitly closed approval leasing, `BI-PSC-004` ownership, and structured
+route context mapping. The UX review reconfirmed 41 current plus five planned
+routes, 24 observed/declared launchers, and unchanged measured prototype bytes.
+
 The correction defines the versioned named-work target and server permission
 resolver, migration-local SQL alias map and canonical-row locking, sole seed
 registry, staged parser/validator/graph resolver, exhaustive archetype matrix,
