@@ -33,6 +33,7 @@ import { evaluateUxBudget, type BudgetFinding, type RouteStatus } from "./evalua
 import type { UxBudgetMetrics } from "./measure";
 import type { UxShell } from "./budgets";
 import type { ExemptCheck } from "./route-shells";
+import type { RouteAudience } from "../navigation/route-audience";
 
 /** What the sweep measured for one route. */
 export type RouteMeasurement = {
@@ -44,6 +45,8 @@ export type RouteMeasurement = {
   /** Serious/critical axe violations. Necessary, never sufficient. */
   axeViolations: number;
   exemptChecks?: readonly ExemptCheck[];
+  /** Route audience — sets the reading tier for operator surfaces (BI-1DE6F69E). */
+  audience?: RouteAudience;
 };
 
 /** The frozen per-route baseline a changed route is measured against. */
@@ -144,6 +147,7 @@ export function verdictForRoute(
   const report = evaluateUxBudget(measurement.metrics, measurement.shell, {
     routeStatus,
     exemptChecks: measurement.exemptChecks,
+    audience: measurement.audience,
   });
 
   const regressions: string[] = [];

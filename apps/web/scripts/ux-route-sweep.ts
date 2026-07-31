@@ -39,6 +39,7 @@ import {
   type RouteMeasurement,
 } from "../lib/ux-budget/ratchet";
 import type { UxShell } from "../lib/ux-budget/budgets";
+import type { RouteAudience } from "../lib/navigation/route-audience";
 import type {
   ExemptCheck,
   RouteSweepExclusionReason,
@@ -84,6 +85,7 @@ export function uxSweepAxeOptions() {
 type ShellRow = {
   routePath: string;
   shell: UxShell;
+  audience: RouteAudience;
   migrated: boolean;
   exemptChecks: ExemptCheck[];
   sweepEligible: boolean;
@@ -450,6 +452,7 @@ async function measureRoute(
   const measurement = {
     routePath: row.routePath,
     shell: row.shell,
+    audience: row.audience,
     // Collapse wall-clock text first: seeded records render "updated <now>", so a
     // raw measurement moves with the clock (BI-EA221325).
     metrics: measureUxBudget(normaliseVolatileText(html)),
