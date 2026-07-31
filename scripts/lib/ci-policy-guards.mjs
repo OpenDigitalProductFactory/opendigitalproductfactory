@@ -130,6 +130,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-instruction-plane-size.test.mjs"),
       node("scripts/check-instruction-plane-size.mjs"),
     ]),
+    // Plane-3 sibling of the instruction-plane guard, deliberately a SOFTER shape: it
+    // never forbids growth in standing context cost, only growth recorded in silence.
+    guard("context-economy-guard", "Context Economy Guard", [
+      node("--test", "scripts/check-context-economy.test.mjs"),
+      node("scripts/check-context-economy.mjs"),
+    ]),
     guard("archetype-completeness-guard", "Archetype Completeness Guard", [
       node("--test", "scripts/check-archetype-completeness.test.mjs"),
       node("scripts/check-archetype-completeness.mjs"),
