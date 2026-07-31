@@ -176,7 +176,6 @@ test("the committed baseline is in sync with the live source", () => {
 // more importantly, pin the SCOPE of enforcement: overdue claims must not red unrelated
 // work, or the guard becomes the collateral-damage kind everyone learns to ignore.
 
-const DAY = 86_400_000;
 const NOW = Date.parse("2026-07-31T00:00:00Z");
 const claim = (over) => ({ value: 4000, reason: "Funds the profession corpus inline, removing a manual lookup.", ...over });
 
