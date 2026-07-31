@@ -12,6 +12,7 @@ import { describeSkipReason } from "@/lib/self-upgrade/skip-reason";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { isExpectedDuringSwap } from "@/lib/self-upgrade/is-expected-during-swap";
 import { SelfUpgradeReadiness } from "@/components/ops/SelfUpgradeReadiness";
+import { BuildStamps } from "@/components/ops/BuildStamps";
 import type { LatestRun, QuiescenceActivity } from "@/lib/self-upgrade/run-types";
 
 type RecoveryPointSummary = {
@@ -81,22 +82,22 @@ type Props = {
     buildDate?: string | null;
     note: string | null;
   };
+  /**
+   * BI-5B1FDA09: the last merged PR each end of the comparison contains. DPF
+   * ships from `main` with no release tags, so this is the only build identity
+   * with meaning to an operator. Either end can be null (shallow clone,
+   * unfetched commit, direct push with no `(#N)`), in which case the technical
+   * SHA line below carries the identity on its own.
+   */
+  mergePoints?: {
+    running: { sha: string; prNumber: number | null; description: string | null; label: string } | null;
+    available: { sha: string; prNumber: number | null; description: string | null; label: string } | null;
+  } | null;
 };
 
 function shortSha(value: string | null | undefined): string {
   if (!value) return "";
   return value.length > 12 ? `${value.slice(0, 12)}…` : value;
-}
-
-function sourceLabel(source: ImageVersionSource | undefined): string {
-  switch (source) {
-    case "git-sha":
-      return "commit";
-    case "content-hash":
-      return "image hash";
-    default:
-      return "image";
-  }
 }
 
 function statusLabel(value: string): string {
@@ -258,6 +259,7 @@ export default function SelfUpgradeClient({
   historyNextCursor,
   initialImpactSummary,
   platformVersion,
+  mergePoints,
 }: Props) {
   const router = useRouter();
   const [isRollbackPending, startRollbackTransition] = useTransition();
@@ -623,65 +625,52 @@ export default function SelfUpgradeClient({
         className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] space-y-1"
         data-platform-version={platformVersion.version}
       >
+        {/* BI-5B1FDA09: lead with the last merged PR each build contains. DPF
+            ships from `main` with no release tags, so `v<short-sha>` was never
+            a version an operator could act on — and comparing a local merge
+            commit to an upstream commit meant the two ids never matched even
+            when current. PR identity is stable across that divergence, so the
+            SHAs move behind the disclosure below and the old "the two SHAs
+            differ by design" apology is no longer needed at all. */}
         <div className="text-xs text-[var(--dpf-muted)]">
-          <span className="font-medium text-[var(--dpf-text)]">Platform version:</span>{" "}
-          <span className="font-mono text-[var(--dpf-text)]">
-            v{platformVersion.version}
+          <span className="font-medium text-[var(--dpf-text)]">Running:</span>{" "}
+          <span className="font-mono text-[var(--dpf-text)]" data-running-merge-point={mergePoints?.running?.prNumber ?? ""}>
+            {/* `||`, not `??`: shortSha returns "" (not null) for a missing
+                stamp, so a nullish check would render an empty cell. */}
+            {mergePoints?.running?.label
+              || shortSha(platformVersion.gitSha ?? platformVersion.imageVersion?.raw ?? null)
+              || `v${platformVersion.version}`}
           </span>
-        </div>
-        <div className="text-[11px] text-[var(--dpf-muted)]">
-          build{" "}
-          {platformVersion.gitSha || platformVersion.imageVersion?.raw ? (
-            <span className="font-mono">
-              {shortSha(platformVersion.gitSha ?? platformVersion.imageVersion?.raw ?? null)}
-            </span>
-          ) : (
-            <span className="font-mono">dev (unbuilt)</span>
-          )}
-          {platformVersion.imageVersion?.source && (
-            <span className="ml-1">
-              ({sourceLabel(platformVersion.imageVersion.source)})
-            </span>
-          )}
-          {platformVersion.buildDate && (
-            <span className="ml-1">
-              · built <LocalTime value={platformVersion.buildDate} />
-            </span>
+          {mergePoints?.running?.description && (
+            <span className="ml-1">— {mergePoints.running.description}</span>
           )}
         </div>
         {enabled && (
           <>
-            <div className="text-xs text-[var(--dpf-muted)]">
-              <span className="font-medium text-[var(--dpf-text)]">Deployed:</span>{" "}
-              {deployedSha ? (
-                <>
-                  <span className="font-mono">{deployedSha}</span>
-                  {deployedShaSource && deployedShaSource !== "unknown" && (
-                    <span className="ml-2 text-[var(--dpf-muted)]">
-                      ({sourceLabel(deployedShaSource)})
-                    </span>
-                  )}
-                </>
-              ) : (
-                <span className="font-mono">unknown</span>
-              )}
-            </div>
-            <div className="text-xs text-[var(--dpf-muted)]">
-              <span className="font-medium text-[var(--dpf-text)]">Target:</span>{" "}
-              <span className="font-mono">{targetSha ?? "unknown"}</span>
-            </div>
+            {!isFresh && (
+              <div className="text-xs text-[var(--dpf-muted)]">
+                <span className="font-medium text-[var(--dpf-text)]">Available:</span>{" "}
+                <span className="font-mono text-[var(--dpf-text)]" data-available-merge-point={mergePoints?.available?.prNumber ?? ""}>
+                  {mergePoints?.available?.label || shortSha(targetSha) || "unknown"}
+                </span>
+                {mergePoints?.available?.description && (
+                  <span className="ml-1">— {mergePoints.available.description}</span>
+                )}
+              </div>
+            )}
+            {/* "How far behind" comes from the commit walk (release-batch.ts),
+                never from PR-number arithmetic: merge order is a race, so a
+                higher PR number does not imply newer. */}
+            {!isFresh && typeof releaseBatch?.pendingCount === "number" && releaseBatch.pendingCount > 0 && (
+              <div className="text-xs text-[var(--dpf-muted)]">
+                <span className="font-medium text-[var(--dpf-text)]">Behind by:</span>{" "}
+                {releaseBatch.pendingCount} merged{" "}
+                {releaseBatch.pendingCount === 1 ? "PR" : "PRs"}
+              </div>
+            )}
             {isFresh && (
               <div className="text-xs text-[var(--dpf-success)]" data-up-to-date="true">
                 Up to date
-                {deployedSha &&
-                  targetSha &&
-                  deployedSha.toLowerCase() !== targetSha.toLowerCase() && (
-                    <span className="ml-1 text-[var(--dpf-muted)]">
-                      — the running build already contains the target; the
-                      Deployed id is the merge build that absorbed it, so the two
-                      SHAs differ by design.
-                    </span>
-                  )}
               </div>
             )}
             {!isFresh && targetSha && deployedShaSource === "content-hash" && (
@@ -726,6 +715,14 @@ export default function SelfUpgradeClient({
               )}
           </>
         )}
+        <BuildStamps
+          enabled={enabled}
+          deployedSha={deployedSha}
+          deployedShaSource={deployedShaSource}
+          targetSha={targetSha}
+          lineageSha={mergePoints?.running?.sha ?? null}
+          platformVersion={platformVersion}
+        />
       </div>
 
       {enabled && (

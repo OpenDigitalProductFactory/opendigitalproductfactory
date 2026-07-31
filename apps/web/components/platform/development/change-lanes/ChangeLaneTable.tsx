@@ -75,7 +75,25 @@ export function ChangeLaneTable({
               <Td>
                 <ChangeLaneStatusBadge status={lane.status} />
               </Td>
-              <Td>{lane.owner ?? <Em>—</Em>}</Td>
+              {/* BI-3A34D7A9: which CLIENT, then which THREAD. With several
+                  clients building concurrently, the thread id alone does not
+                  answer "whose is this?" — and a thread id that reads like
+                  `unattributed-<pid>` is telling you the gate could not
+                  identify its caller, not that a contributor is named that. */}
+              <Td>
+                {lane.ownerProvider ? (
+                  <div className="font-medium">{lane.ownerProvider}</div>
+                ) : null}
+                {lane.owner ? (
+                  <div
+                    className="font-mono text-dpf-caption text-[var(--dpf-muted)] break-all"
+                    title={lane.owner}
+                  >
+                    {lane.owner}
+                  </div>
+                ) : null}
+                {!lane.ownerProvider && !lane.owner ? <Em>—</Em> : null}
+              </Td>
               <Td>
                 {lane.branch ? (
                   <span className="font-mono text-[11px]">{lane.branch}</span>
@@ -93,7 +111,9 @@ export function ChangeLaneTable({
                     rel="noreferrer"
                     className="text-[var(--dpf-accent)] underline decoration-dotted"
                   >
-                    {prNumberFromUrl(lane.pullRequestUrl)}
+                    {lane.pullRequestNumber !== null
+                      ? `#${lane.pullRequestNumber}`
+                      : prNumberFromUrl(lane.pullRequestUrl)}
                   </a>
                 ) : (
                   <Em>—</Em>

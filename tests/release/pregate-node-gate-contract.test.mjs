@@ -205,13 +205,14 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-slot-manifest.mjs"), join(temp, "scripts", "lib", "local-ci-slot-manifest.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-gate-state.mjs"), join(temp, "scripts", "lib", "local-ci-gate-state.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-host-pressure.mjs"), join(temp, "scripts", "lib", "local-ci-host-pressure.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "agent-identity.mjs"), join(temp, "scripts", "lib", "agent-identity.mjs"));
   cpSync(
     join(repoRoot, "apps", "web", "lib", "nonprod", "local-ci-slot-resources.json"),
     join(temp, "apps", "web", "lib", "nonprod", "local-ci-slot-resources.json"),
   );
 
   const { dir } = makeTempRepo();
-  const env = { ...process.env, DPF_MCP_BEARER_TOKEN: "dpfmcp_test" };
+  const env = { ...process.env, DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_GATE_OWNER_PROVIDER: "codex", DPF_GATE_OWNER_SESSION_ID: "contract-thread" };
   delete env.DPF_ALLOW_LOCAL_CI_STUB;
   delete env.DPF_LOCAL_CI_COMMAND;
 
@@ -232,7 +233,7 @@ test("gate-worktree.mjs claims, records, and releases in order, and carries evid
   try {
     const result = await runGateAsync(
       ["--branch", "feat/local-ci-sandbox", "--sha", "candidate-sha", "--worktree", dir, "--no-push", "--mcp-url", mcp.url],
-      { ...process.env, DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_ALLOW_LOCAL_CI_STUB: "1" },
+      { ...process.env, DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_GATE_OWNER_PROVIDER: "codex", DPF_GATE_OWNER_SESSION_ID: "contract-thread", DPF_ALLOW_LOCAL_CI_STUB: "1" },
     );
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
 
@@ -251,10 +252,17 @@ test("gate-worktree.mjs claims, records, and releases in order, and carries evid
 
     const evidenceCall = mcp.calls.find((c) => c.params.name === "record_local_integration_result");
     const claimCall = mcp.calls.find((c) => c.params.name === "claim_nonprod_environment_lease");
-    assert.match(
+    // BI-3A34D7A9: the claim is keyed on the OWNING CLIENT THREAD, which this
+    // spawn pins explicitly. It used to be keyed on a per-process observer id,
+    // so the key changed every invocation and could not roll a thread's repeated
+    // gates together. The observer id still exists — it proves process liveness
+    // — but it is no longer what the lease is named after.
+    assert.equal(
       claimCall.params.arguments.claimKey,
-      /^local-ci:gate-v2-[0-9a-f-]{36}-\d+:candidate-sha$/,
+      "local-ci:contract-thread:candidate-sha",
     );
+    assert.equal(claimCall.params.arguments.ownerProvider, "codex");
+    assert.equal(claimCall.params.arguments.ownerSessionId, "contract-thread");
     assert.equal(evidenceCall.params.arguments.evidence.leaseId, "NPEL-TEST");
     assert.equal(evidenceCall.params.arguments.evidence.branch, "feat/local-ci-sandbox");
     assert.equal(evidenceCall.params.arguments.evidence.sha, "candidate-sha");
@@ -326,7 +334,7 @@ test("gate-worktree.mjs retries transient quiescence before durable admission", 
       ],
       {
         ...process.env,
-        DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+        DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_GATE_OWNER_PROVIDER: "codex", DPF_GATE_OWNER_SESSION_ID: "contract-thread",
         DPF_ALLOW_LOCAL_CI_STUB: "1",
         DPF_GATE_RETRY_JITTER: "0",
       },
@@ -375,7 +383,7 @@ test("gate-worktree.mjs reports active lease contention and stale main before ex
   try {
     const result = await runGateAsync(
       ["--branch", "feat/topic", "--sha", candidateSha, "--worktree", dir, "--no-push", "--mcp-url", mcp.url],
-      { ...process.env, DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_ALLOW_LOCAL_CI_STUB: "1" },
+      { ...process.env, DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_GATE_OWNER_PROVIDER: "codex", DPF_GATE_OWNER_SESSION_ID: "contract-thread", DPF_ALLOW_LOCAL_CI_STUB: "1" },
     );
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
     assert.match(result.stderr, /preflight sees 1 active local-integration-ci lease/);
@@ -408,7 +416,7 @@ test("gate-worktree.mjs preserves a green gate for finalize-only evidence replay
     ];
     const env = {
       ...process.env,
-      DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+      DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_GATE_OWNER_PROVIDER: "codex", DPF_GATE_OWNER_SESSION_ID: "contract-thread",
       DPF_ALLOW_LOCAL_CI_STUB: "1",
     };
 
@@ -493,7 +501,7 @@ writeFileSync(out, JSON.stringify({
       ["--branch", "feat/freshness-handoff", "--sha", "candidate-sha", "--worktree", dir, "--no-push", "--mcp-url", mcp.url],
       {
         ...process.env,
-        DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+        DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_GATE_OWNER_PROVIDER: "codex", DPF_GATE_OWNER_SESSION_ID: "contract-thread",
         DPF_LOCAL_CI_COMMAND: `"${process.execPath}" "${writerScript}"`,
       },
     );
@@ -556,7 +564,7 @@ test("gate-worktree.mjs does not clear freshness evidence until it owns the loca
       ],
       {
         ...process.env,
-        DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+        DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_GATE_OWNER_PROVIDER: "codex", DPF_GATE_OWNER_SESSION_ID: "contract-thread",
         DPF_ALLOW_LOCAL_CI_STUB: "1",
       },
     );
@@ -602,7 +610,7 @@ process.exit(3);
   try {
     const result = await runGateAsync(
       ["--branch", "feat/x", "--sha", "abc123", "--worktree", dir, "--no-push", "--mcp-url", mcp.url],
-      { ...process.env, DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_LOCAL_CI_COMMAND: `"${process.execPath}" "${writerScript}"` },
+      { ...process.env, DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_GATE_OWNER_PROVIDER: "codex", DPF_GATE_OWNER_SESSION_ID: "contract-thread", DPF_LOCAL_CI_COMMAND: `"${process.execPath}" "${writerScript}"` },
     );
     assert.equal(result.status, 3, `${result.stdout}\n${result.stderr}`);
     assert.match(result.stderr, /BLOCKED \(sandbox drift\)/);
@@ -647,7 +655,7 @@ writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
   try {
     const result = await runGateAsync(
       ["--branch", "feat/local-ci-sandbox", "--sha", "candidate-sha", "--worktree", dir, "--no-push", "--mcp-url", mcp.url],
-      { ...process.env, DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_LOCAL_CI_COMMAND: `"${process.execPath}" "${writerScript}"` },
+      { ...process.env, DPF_MCP_BEARER_TOKEN: "dpfmcp_test", DPF_GATE_OWNER_PROVIDER: "codex", DPF_GATE_OWNER_SESSION_ID: "contract-thread", DPF_LOCAL_CI_COMMAND: `"${process.execPath}" "${writerScript}"` },
     );
     assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
 

@@ -106,6 +106,32 @@ const definitions: ToolDefinition[] = [
     annotations: { readOnlyHint: true, idempotentHint: true },
   },
   {
+    name: "lookup_change_origin",
+    // Kept deliberately short: /platform/audit/authority renders every tool
+    // description, and that route's word budget only ratchets down. The full
+    // usage guidance lives in the dpf-local-merge-ci-before-push skill.
+    description:
+      "Resolve which agent client and thread produced a change, from this install's governed gate records. Match by commit SHA, else branch. Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        shas: {
+          type: "array",
+          items: { type: "string" },
+          description: "Commit SHAs to match.",
+        },
+        branchName: { type: "string", description: "Fallback when no SHA matches." },
+        limit: { type: "number", description: "Max matches (default 20)." },
+      },
+      required: [],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    buildPhases: ["ideate", "plan", "build", "review", "ship"],
+    annotations: { readOnlyHint: true, idempotentHint: true },
+  },
+  {
     name: "claim_nonprod_environment_lease",
     description: "Request admission to a governed shared nonproduction environment for preview, UX verification, or local integration. Reusing claimKey returns the same durable queue entry.",
     inputSchema: {
@@ -208,6 +234,33 @@ async function listNonprodEnvironmentLeases(): Promise<ToolResult> {
     message: `Found ${leases.length} admitted and ${queued.length} queued nonproduction environment lease(s).`,
     data: { leases, queued },
   };
+}
+
+async function lookupChangeOriginHandler(params: Record<string, unknown>): Promise<ToolResult> {
+  const { lookupChangeOrigin } = await import("@/lib/contributor-change-lanes/origin-lookup");
+  const rawShas = params["shas"];
+  const shas = Array.isArray(rawShas)
+    ? rawShas.filter((s): s is string => typeof s === "string")
+    : [];
+  const branchName = typeof params["branchName"] === "string" ? params["branchName"] : null;
+  const limitRaw = params["limit"];
+  const limit = typeof limitRaw === "number" && Number.isFinite(limitRaw) ? limitRaw : undefined;
+
+  if (shas.length === 0 && !branchName) {
+    return {
+      success: false,
+      error: "missing_required",
+      message: "Provide at least one commit SHA or a branchName to look up.",
+    };
+  }
+
+  const result = await lookupChangeOrigin({ shas, branchName, limit });
+  const message = result.origin
+    ? result.unattributed
+      ? `Matched a governed gate record, but its caller was not identifiable (session ${result.origin.sessionId}).`
+      : `Origin: ${result.origin.provider ?? "unknown client"} / thread ${result.origin.sessionId} (matched on ${result.origin.matchedOn}).`
+    : "No governed gate record on this install matches that change.";
+  return { success: true, message, data: result };
 }
 
 async function claimNonprodEnvironmentLeaseHandler(params: Record<string, unknown>): Promise<ToolResult> {
@@ -402,6 +455,7 @@ async function renewNonprodEnvironmentLeaseHandler(params: Record<string, unknow
 
 const handlers: Record<string, ToolPackHandler> = {
   list_nonprod_environment_leases: () => listNonprodEnvironmentLeases(),
+  lookup_change_origin: (params) => lookupChangeOriginHandler(params),
   claim_nonprod_environment_lease: (params) => claimNonprodEnvironmentLeaseHandler(params),
   release_nonprod_environment_lease: (params) => releaseNonprodEnvironmentLeaseHandler(params),
   renew_nonprod_environment_lease: (params) => renewNonprodEnvironmentLeaseHandler(params),
@@ -413,6 +467,7 @@ export const nonprodLeasePack: ToolPack = {
   handlers,
   grants: {
     list_nonprod_environment_leases: ["work_capsule_read"],
+    lookup_change_origin: ["work_capsule_read"],
     claim_nonprod_environment_lease: ["work_capsule_write"],
     release_nonprod_environment_lease: ["work_capsule_write"],
     renew_nonprod_environment_lease: ["work_capsule_write"],

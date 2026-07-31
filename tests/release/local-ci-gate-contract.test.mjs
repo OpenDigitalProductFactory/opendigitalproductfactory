@@ -113,6 +113,10 @@ shellContractTest("gate-worktree.sh still refuses to run when neither an explici
   const env = {
     ...process.env,
     DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+      // BI-3A34D7A9: pin identity — a CI runner exposes no client markers,
+      // and the gate refuses to claim a lease it cannot attribute.
+      DPF_GATE_OWNER_PROVIDER: "codex",
+      DPF_GATE_OWNER_SESSION_ID: "contract-thread",
   };
   delete env.DPF_ALLOW_LOCAL_CI_STUB;
   delete env.DPF_LOCAL_CI_COMMAND;
@@ -188,6 +192,10 @@ printf '%s\\n' '{"jsonrpc":"2.0","result":{"content":[{"type":"text","text":"{\\
     env: {
       ...process.env,
       DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+      // BI-3A34D7A9: pin identity — a CI runner exposes no client markers,
+      // and the gate refuses to claim a lease it cannot attribute.
+      DPF_GATE_OWNER_PROVIDER: "codex",
+      DPF_GATE_OWNER_SESSION_ID: "contract-thread",
       DPF_LOCAL_CI_COMMAND: `printf '%s' '${freshnessReport}' > "$DPF_LOCAL_CI_FRESHNESS_REPORT_FILE"; exit 3`,
       DPF_GATE_GIT_BIN: gitStub,
       DPF_GATE_CURL_BIN: curlStub,
@@ -279,6 +287,10 @@ esac
     env: {
       ...process.env,
       DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+      // BI-3A34D7A9: pin identity — a CI runner exposes no client markers,
+      // and the gate refuses to claim a lease it cannot attribute.
+      DPF_GATE_OWNER_PROVIDER: "codex",
+      DPF_GATE_OWNER_SESSION_ID: "contract-thread",
       DPF_ALLOW_LOCAL_CI_STUB: "1",
       DPF_GATE_GIT_BIN: gitStub,
       DPF_GATE_CURL_BIN: curlStub,
@@ -367,6 +379,10 @@ esac
     env: {
       ...process.env,
       DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+      // BI-3A34D7A9: pin identity — a CI runner exposes no client markers,
+      // and the gate refuses to claim a lease it cannot attribute.
+      DPF_GATE_OWNER_PROVIDER: "codex",
+      DPF_GATE_OWNER_SESSION_ID: "contract-thread",
       DPF_ALLOW_LOCAL_CI_STUB: "1",
       DPF_GATE_GIT_BIN: gitStub,
       DPF_GATE_CURL_BIN: curlStub,
@@ -458,6 +474,10 @@ esac
     env: {
       ...process.env,
       DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+      // BI-3A34D7A9: pin identity — a CI runner exposes no client markers,
+      // and the gate refuses to claim a lease it cannot attribute.
+      DPF_GATE_OWNER_PROVIDER: "codex",
+      DPF_GATE_OWNER_SESSION_ID: "contract-thread",
       DPF_LOCAL_CI_COMMAND: "exit 0",
       DPF_GATE_GIT_BIN: gitStub,
       DPF_GATE_CURL_BIN: curlStub,
@@ -560,6 +580,10 @@ esac
     env: {
       ...process.env,
       DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+      // BI-3A34D7A9: pin identity — a CI runner exposes no client markers,
+      // and the gate refuses to claim a lease it cannot attribute.
+      DPF_GATE_OWNER_PROVIDER: "codex",
+      DPF_GATE_OWNER_SESSION_ID: "contract-thread",
       DPF_GATE_GIT_BIN: gitStub,
       DPF_GATE_CURL_BIN: curlStub,
     },
@@ -659,6 +683,10 @@ writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
     env: {
       ...process.env,
       DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+      // BI-3A34D7A9: pin identity — a CI runner exposes no client markers,
+      // and the gate refuses to claim a lease it cannot attribute.
+      DPF_GATE_OWNER_PROVIDER: "codex",
+      DPF_GATE_OWNER_SESSION_ID: "contract-thread",
       DPF_LOCAL_CI_COMMAND: `"${process.execPath}" "${writerScript}"`,
       DPF_GATE_GIT_BIN: gitStub,
       DPF_GATE_CURL_BIN: curlStub,
@@ -788,6 +816,10 @@ writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
     env: {
       ...process.env,
       DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+      // BI-3A34D7A9: pin identity — a CI runner exposes no client markers,
+      // and the gate refuses to claim a lease it cannot attribute.
+      DPF_GATE_OWNER_PROVIDER: "codex",
+      DPF_GATE_OWNER_SESSION_ID: "contract-thread",
       DPF_LOCAL_CI_COMMAND: `"${process.execPath}" "${writerScript}"`,
       DPF_GATE_GIT_BIN: gateGitStub,
       DPF_GATE_CURL_BIN: curlStub,

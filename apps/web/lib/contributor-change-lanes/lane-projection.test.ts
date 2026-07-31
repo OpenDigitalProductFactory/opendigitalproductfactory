@@ -458,4 +458,61 @@ describe("shipped lane status — completed cross-surface work (EP-UNIFIED-TRACK
     expect(lanes[0]!.status).toBe("claimed");
     expect(lanes[0]!.blockers).toContain("No open PR and no active WIP TTL");
   });
+
+  describe("origin attribution (BI-3A34D7A9)", () => {
+    it("projects the lease's client and thread onto a lease lane", () => {
+      const { lanes } = projectContributorChangeLanes(
+        emptyInput({
+          leases: [
+            lease({
+              environmentKey: "local-integration-ci",
+              ownerProvider: "claude",
+              ownerSessionId: "79495644-27dd-4631-bed1-06e294056a4f",
+              branchName: "feat/test",
+            }),
+          ],
+        }),
+      );
+      const laneRow = lanes.find((l) => l.source === "nonprod-lease");
+      expect(laneRow?.ownerProvider).toBe("claude");
+      expect(laneRow?.owner).toBe("79495644-27dd-4631-bed1-06e294056a4f");
+    });
+
+    it("projects the PR number as a first-class field, not only a URL", () => {
+      const { lanes } = projectContributorChangeLanes(
+        emptyInput({
+          leases: [lease({ environmentKey: "local-integration-ci", branchName: "feat/test" })],
+          pullRequests: [pr({ number: 3748, headBranch: "feat/test" })],
+        }),
+      );
+      const laneRow = lanes.find((l) => l.source === "nonprod-lease");
+      expect(laneRow?.pullRequestNumber).toBe(3748);
+    });
+
+    it("reports no provider for a branch with no local lease or capsule", () => {
+      // An outside contributor's branch legitimately has no local origin, and
+      // that absence must read as "unknown", never as a defaulted client.
+      const { lanes } = projectContributorChangeLanes(
+        emptyInput({
+          branches: [branch({ name: "feat/outside" })],
+          pullRequests: [pr({ number: 4001, headBranch: "feat/outside" })],
+        }),
+      );
+      const laneRow = lanes.find((l) => l.source === "git-branch");
+      expect(laneRow?.ownerProvider).toBeNull();
+      expect(laneRow?.pullRequestNumber).toBe(4001);
+    });
+
+    it("falls back to the capsule's executor kind when no lease is held", () => {
+      const { lanes } = projectContributorChangeLanes(
+        emptyInput({
+          workCapsules: [
+            capsule({ capsuleId: "WC-EXT", status: "working", executorKind: "codex" }),
+          ],
+        }),
+      );
+      const laneRow = lanes.find((l) => l.source === "work-capsule");
+      expect(laneRow?.ownerProvider).toBe("codex");
+    });
+  });
 });
