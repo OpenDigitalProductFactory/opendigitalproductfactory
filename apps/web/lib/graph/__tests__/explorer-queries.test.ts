@@ -5,6 +5,7 @@ const { mockQueryRawUnsafe } = vi.hoisted(() => ({ mockQueryRawUnsafe: vi.fn() }
 vi.mock("@dpf/db", () => ({ prisma: { $queryRawUnsafe: mockQueryRawUnsafe } }));
 
 import {
+  MAX_EDGES_PER_HOP,
   MAX_EXPAND_DEPTH,
   MAX_SUBGRAPH_NODES,
   clampDepth,
@@ -138,16 +139,21 @@ describe("searchGraphNodes", () => {
     expect(lengthRank).toBeGreaterThan(nameRank);
   });
 
-  it("adds a label filter only when one is supplied", async () => {
+  it("passes the label filter as a nullable parameter, not an appended clause", async () => {
+    // The statement text must be identical either way: the provider-connector
+    // lifecycle guard cannot prove anything about SQL assembled from fragments.
     mockQueryRawUnsafe.mockResolvedValue([]);
-
     await searchGraphNodes({ query: "x" });
-    expect(sqlOf(0)).not.toContain("labels &&");
+    const unfilteredSql = sqlOf(0);
+    expect(mockQueryRawUnsafe.mock.calls[0]?.[3]).toBeNull();
 
     mockQueryRawUnsafe.mockReset();
     mockQueryRawUnsafe.mockResolvedValue([]);
     await searchGraphNodes({ query: "x", labels: ["CodeFile"] });
-    expect(sqlOf(0)).toContain("n.labels && $3::text[]");
+
+    expect(sqlOf(0)).toBe(unfilteredSql);
+    expect(sqlOf(0)).toContain("$3::text[] IS NULL OR n.labels && $3::text[]");
+    expect(mockQueryRawUnsafe.mock.calls[0]?.[3]).toEqual(["CodeFile"]);
   });
 });
 
@@ -220,8 +226,32 @@ describe("expandGraphNeighbourhood", () => {
     await expandGraphNeighbourhood({ seedKeys: ["a"], depth: 1, relTypes: ["IMPORTS"] });
 
     // call 0 = seed nodes, call 1 = edges touching the frontier
-    expect(sqlOf(1)).toContain("e.rel_type = ANY($2::text[])");
+    expect(sqlOf(1)).toContain("$2::text[] IS NULL OR e.rel_type = ANY($2::text[])");
     expect(mockQueryRawUnsafe.mock.calls[1]?.[2]).toEqual(["IMPORTS"]);
+  });
+
+  it("binds a null relationship filter rather than changing the statement", async () => {
+    mockQueryRawUnsafe
+      .mockResolvedValueOnce([node("a")])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+
+    await expandGraphNeighbourhood({ seedKeys: ["a"], depth: 1 });
+
+    expect(mockQueryRawUnsafe.mock.calls[1]?.[2]).toBeNull();
+  });
+
+  it("binds the row cap as a parameter instead of inlining it", async () => {
+    // An inlined `LIMIT ${CONST}` makes the statement non-static to the guard.
+    mockQueryRawUnsafe
+      .mockResolvedValueOnce([node("a")])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+
+    await expandGraphNeighbourhood({ seedKeys: ["a"], depth: 1 });
+
+    expect(sqlOf(1)).toContain("LIMIT $3");
+    expect(mockQueryRawUnsafe.mock.calls[1]?.[3]).toBe(MAX_EDGES_PER_HOP);
   });
 
   it("does a second round-trip for a two-hop walk", async () => {

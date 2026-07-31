@@ -148,14 +148,10 @@ export function clampSearchLimit(limit: number | undefined): number {
  */
 export async function getGraphCensus(): Promise<GraphCensus> {
   const [labelRows, relRows, nodeTotalRows, edgeTotalRows] = await Promise.all([
-    prisma.$queryRawUnsafe<LabelCountRow[]>(
-      "SELECT unnest(labels) AS label, count(*)::bigint AS count FROM graph_node GROUP BY 1 ORDER BY 2 DESC",
-    ),
-    prisma.$queryRawUnsafe<RelTypeCountRow[]>(
-      "SELECT rel_type, count(*)::bigint AS count FROM graph_edge GROUP BY 1 ORDER BY 2 DESC",
-    ),
-    prisma.$queryRawUnsafe<TotalRow[]>("SELECT count(*)::bigint AS count FROM graph_node"),
-    prisma.$queryRawUnsafe<TotalRow[]>("SELECT count(*)::bigint AS count FROM graph_edge"),
+    prisma.$queryRawUnsafe<LabelCountRow[]>(LABEL_CENSUS_SQL),
+    prisma.$queryRawUnsafe<RelTypeCountRow[]>(REL_TYPE_CENSUS_SQL),
+    prisma.$queryRawUnsafe<TotalRow[]>(NODE_TOTAL_SQL),
+    prisma.$queryRawUnsafe<TotalRow[]>(EDGE_TOTAL_SQL),
   ]);
 
   return {
@@ -165,6 +161,77 @@ export async function getGraphCensus(): Promise<GraphCensus> {
     edgeTotal: toNumber(edgeTotalRows[0]?.count ?? 0),
   };
 }
+
+// ── SQL ───────────────────────────────────────────────────────────────────────
+//
+// Every statement is a module-level literal with no interpolation, and every
+// optional filter is expressed as a NULLABLE parameter (`$n::text[] IS NULL OR …`)
+// rather than an appended clause. Assembling SQL from an array of fragments —
+// even from fragments that are themselves constants — makes the statement
+// unresolvable to static analysis, which is what the `provider-local-connector
+// lifecycle` guard (scripts/check-no-provider-local-connector-lifecycle.mjs) flags:
+// it cannot prove a dynamically-built `$queryRawUnsafe` never reaches
+// `IntegrationCredential` outside the canonical credential store. Keeping the text
+// static keeps that proof cheap, and Postgres plans the nullable-parameter form
+// just as well.
+
+const SEARCH_NODES_SQL = `
+  SELECT n.key, n.labels, n.props
+    FROM graph_node n
+   WHERE (
+           n.key ILIKE $1 ESCAPE '\\'
+        OR n.props->>'name' ILIKE $1 ESCAPE '\\'
+        OR n.props->>'path' ILIKE $1 ESCAPE '\\'
+         )
+     AND ($3::text[] IS NULL OR n.labels && $3::text[])
+   ORDER BY (lower(coalesce(n.props->>'name', n.key)) = lower($2)) DESC,
+            (coalesce(n.props->>'name', '') ILIKE $1 ESCAPE '\\') DESC,
+            length(coalesce(n.props->>'name', n.key)) ASC,
+            n.key ASC
+   LIMIT $4
+`;
+
+const NODES_BY_KEY_SQL = `
+  SELECT key, labels, props FROM graph_node WHERE key = ANY($1::text[])
+`;
+
+const NODE_DETAIL_SQL = `
+  SELECT key, labels, props FROM graph_node WHERE key = $1
+`;
+
+const NODE_DEGREE_SQL = `
+  SELECT count(*)::bigint AS count FROM graph_edge WHERE src_key = $1 OR dst_key = $1
+`;
+
+const EDGES_TOUCHING_SQL = `
+  SELECT e.src_key, e.dst_key, e.rel_type
+    FROM graph_edge e
+   WHERE (e.src_key = ANY($1::text[]) OR e.dst_key = ANY($1::text[]))
+     AND ($2::text[] IS NULL OR e.rel_type = ANY($2::text[]))
+   LIMIT $3
+`;
+
+const EDGES_AMONG_SQL = `
+  SELECT e.src_key, e.dst_key, e.rel_type
+    FROM graph_edge e
+   WHERE e.src_key = ANY($1::text[])
+     AND e.dst_key = ANY($1::text[])
+     AND ($2::text[] IS NULL OR e.rel_type = ANY($2::text[]))
+   LIMIT $3
+`;
+
+const LABEL_CENSUS_SQL = `
+  SELECT unnest(labels) AS label, count(*)::bigint AS count
+    FROM graph_node GROUP BY 1 ORDER BY 2 DESC
+`;
+
+const REL_TYPE_CENSUS_SQL = `
+  SELECT rel_type, count(*)::bigint AS count
+    FROM graph_edge GROUP BY 1 ORDER BY 2 DESC
+`;
+
+const NODE_TOTAL_SQL = `SELECT count(*)::bigint AS count FROM graph_node`;
+const EDGE_TOTAL_SQL = `SELECT count(*)::bigint AS count FROM graph_edge`;
 
 // ── Search ────────────────────────────────────────────────────────────────────
 
@@ -184,34 +251,12 @@ export async function searchGraphNodes(input: {
   const limit = clampSearchLimit(input.limit);
   const pattern = `%${query.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
-  // $1 = LIKE pattern, $2 = the raw text (for exact-match ranking).
-  const params: unknown[] = [pattern, query];
-  const clauses = [
-    "(n.key ILIKE $1 ESCAPE '\\' OR n.props->>'name' ILIKE $1 ESCAPE '\\' OR n.props->>'path' ILIKE $1 ESCAPE '\\')",
-  ];
-
-  if (labels) {
-    params.push(labels);
-    clauses.push(`n.labels && $${params.length}::text[]`);
-  }
-
-  params.push(limit);
   const rows = await prisma.$queryRawUnsafe<NodeRow[]>(
-    [
-      "SELECT n.key, n.labels, n.props",
-      "  FROM graph_node n",
-      ` WHERE ${clauses.join(" AND ")}`,
-      // Ranking, verified against the live corpus: matching on NAME must beat
-      // matching only on key or path. Searching "BacklogItem" otherwise returned
-      // eight PrismaField rows named "id", "body", "type" — they matched on their
-      // key and then won the length tiebreak — burying the model itself.
-      " ORDER BY (lower(coalesce(n.props->>'name', n.key)) = lower($2)) DESC,",
-      "          (coalesce(n.props->>'name', '') ILIKE $1 ESCAPE '\\') DESC,",
-      "          length(coalesce(n.props->>'name', n.key)) ASC,",
-      "          n.key ASC",
-      ` LIMIT $${params.length}`,
-    ].join("\n"),
-    ...params,
+    SEARCH_NODES_SQL,
+    pattern,
+    query,
+    labels ?? null,
+    limit,
   );
 
   return rows.map(toSummary);
@@ -221,14 +266,8 @@ export async function searchGraphNodes(input: {
 
 export async function getGraphNodeDetail(key: string): Promise<GraphNodeDetail | null> {
   const [nodeRows, degreeRows] = await Promise.all([
-    prisma.$queryRawUnsafe<NodeRow[]>(
-      "SELECT key, labels, props FROM graph_node WHERE key = $1",
-      key,
-    ),
-    prisma.$queryRawUnsafe<TotalRow[]>(
-      "SELECT count(*)::bigint AS count FROM graph_edge WHERE src_key = $1 OR dst_key = $1",
-      key,
-    ),
+    prisma.$queryRawUnsafe<NodeRow[]>(NODE_DETAIL_SQL, key),
+    prisma.$queryRawUnsafe<TotalRow[]>(NODE_DEGREE_SQL, key),
   ]);
 
   const row = nodeRows[0];
@@ -244,29 +283,17 @@ export async function getGraphNodeDetail(key: string): Promise<GraphNodeDetail |
 // ── Expansion ─────────────────────────────────────────────────────────────────
 
 async function fetchEdgesTouching(keys: string[], relTypes: string[] | undefined): Promise<EdgeRow[]> {
-  const params: unknown[] = [keys];
-  const clauses = ["(e.src_key = ANY($1::text[]) OR e.dst_key = ANY($1::text[]))"];
-  if (relTypes) {
-    params.push(relTypes);
-    clauses.push(`e.rel_type = ANY($${params.length}::text[])`);
-  }
   return prisma.$queryRawUnsafe<EdgeRow[]>(
-    [
-      "SELECT e.src_key, e.dst_key, e.rel_type",
-      "  FROM graph_edge e",
-      ` WHERE ${clauses.join(" AND ")}`,
-      ` LIMIT ${MAX_EDGES_PER_HOP}`,
-    ].join("\n"),
-    ...params,
+    EDGES_TOUCHING_SQL,
+    keys,
+    relTypes ?? null,
+    MAX_EDGES_PER_HOP,
   );
 }
 
 async function fetchNodes(keys: string[]): Promise<NodeRow[]> {
   if (keys.length === 0) return [];
-  return prisma.$queryRawUnsafe<NodeRow[]>(
-    "SELECT key, labels, props FROM graph_node WHERE key = ANY($1::text[])",
-    keys,
-  );
+  return prisma.$queryRawUnsafe<NodeRow[]>(NODES_BY_KEY_SQL, keys);
 }
 
 async function fetchEdgesAmong(
@@ -274,20 +301,11 @@ async function fetchEdgesAmong(
   relTypes: string[] | undefined,
 ): Promise<EdgeRow[]> {
   if (keys.length === 0) return [];
-  const params: unknown[] = [keys];
-  const clauses = ["e.src_key = ANY($1::text[])", "e.dst_key = ANY($1::text[])"];
-  if (relTypes) {
-    params.push(relTypes);
-    clauses.push(`e.rel_type = ANY($${params.length}::text[])`);
-  }
   return prisma.$queryRawUnsafe<EdgeRow[]>(
-    [
-      "SELECT e.src_key, e.dst_key, e.rel_type",
-      "  FROM graph_edge e",
-      ` WHERE ${clauses.join(" AND ")}`,
-      ` LIMIT ${MAX_SUBGRAPH_EDGES}`,
-    ].join("\n"),
-    ...params,
+    EDGES_AMONG_SQL,
+    keys,
+    relTypes ?? null,
+    MAX_SUBGRAPH_EDGES,
   );
 }
 
