@@ -36,14 +36,27 @@ describe("principal sensitivity clearance", () => {
     );
   });
 
-  it("gives the installation owner only the public and internal floor", () => {
-    expect(INSTALLATION_OWNER_SENSITIVITY_FLOOR).toEqual(["public", "internal"]);
+  it("clears the installation owner for the business's own data up to confidential — never restricted", () => {
+    // The seed creates tier-2 coworkers at sensitivity "confidential"; the
+    // authority gate requires the owner's clearance to include that level, so
+    // the floor must carry it or every such coworker is unauthorizable.
+    expect(INSTALLATION_OWNER_SENSITIVITY_FLOOR).toEqual([
+      "public",
+      "internal",
+      "confidential",
+    ]);
     expect(
       resolvePrincipalSensitivityClearance({
         existing: ["public"],
         isSuperuser: true,
       }),
-    ).toEqual(["public", "internal"]);
+    ).toEqual(["public", "internal", "confidential"]);
+    expect(
+      resolvePrincipalSensitivityClearance({
+        existing: ["public"],
+        isSuperuser: true,
+      }),
+    ).not.toContain("restricted");
   });
 
   it("preserves governed clearance without widening ordinary principals", () => {
