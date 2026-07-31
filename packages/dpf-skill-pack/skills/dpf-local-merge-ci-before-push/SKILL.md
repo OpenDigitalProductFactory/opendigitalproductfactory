@@ -73,6 +73,47 @@ Then push normally: with a valid record for the head SHA the pre-push hook admit
 - Queue contention is not a reason to override the gate. Waiting is correct; `DPF_SKIP_PREPUSH_GATE` is for a verified-clean push the gate structurally cannot cover, and it is recorded either way.
 - Cancelling a pregate can leave a stale queued lease pinned to the **old** SHA — release it before re-running, or the next run queues behind your own abandoned entry.
 
+## Who the gate records, and keeping it out of the PR
+
+The gate records WHICH CLIENT and WHICH CLIENT THREAD ran it. It does not
+default the provider — it used to default to `codex`, so every client of every
+kind was recorded as Codex — and it does not derive the session from a pid,
+which changed on every invocation and made one thread look like many
+contributors.
+
+Identity is detected from the calling client's own environment where possible.
+When it cannot be, pass it:
+
+```bash
+node scripts/gate-worktree.mjs --owner-provider claude --owner-session-id "$CLAUDE_CODE_SESSION_ID"
+```
+
+or set `DPF_GATE_OWNER_PROVIDER` / `DPF_GATE_OWNER_SESSION_ID`. An unresolvable
+**provider** stops the run at the admission boundary, because the lease and the
+evidence record share a closed vocabulary (`build-studio | claude | codex | grok
+| antigravity | coworker`) with no honest fallback. `--dry-run` needs no
+identity and prints what it resolved, so it answers "will this be attributable,
+and to whom?" before a lease is taken. An unresolvable **thread** does not stop
+the run; it records `unattributed-<pid>` so the gap is visible rather than
+invented.
+
+**Keep the PR body clean.** The `Local-CI-Evidence:` / `Local-CI-Override:`
+trailers are a fallback a normally-gated branch does not need, so do not paste
+lease ids, evidence record ids, candidate/base SHAs, session ids, or worktree
+paths into a PR — it is public and none of it is contract. One non-identifying
+verification line is enough. The detail stays queryable on the install, keyed off
+the number a human actually uses:
+
+```bash
+pnpm pr:origin 3748
+```
+
+That resolves the PR to every commit it contains and matches those against this
+install's own gate records — by **SHA, not branch**, because branch names are
+reused across threads and deleted on merge while commits are permanent. A PR
+this install never gated reports no origin rather than a guess, which is the
+correct answer for an outside contribution.
+
 ## Guardrails
 
 - Do not treat "passed in my worktree" as merge readiness.

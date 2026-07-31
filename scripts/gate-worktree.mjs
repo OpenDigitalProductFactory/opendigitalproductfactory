@@ -671,20 +671,6 @@ async function main() {
     process.exit(0);
   }
 
-  // BI-3A34D7A9: from here on the run can claim a lease and write evidence, and
-  // both carry a CLOSED provider vocabulary with no "unknown" member — so there
-  // is no honest value to fall back to. Refuse rather than attribute this run to
-  // whichever client happens to be most common. Everything above (including
-  // --dry-run) is side-effect-free and stays runnable without attribution.
-  if (!ownerProvider) {
-    die(
-      "cannot attribute this gate to a client. Pass --owner-provider "
-        + "<build-studio|claude|codex|grok|antigravity|coworker> or set "
-        + "DPF_GATE_OWNER_PROVIDER. (The lease and the evidence record use a "
-        + "closed provider vocabulary, so there is no honest default.)",
-    );
-  }
-
   if (!options.finalizeEvidence && !commandSpec && !allowStub) {
     die("local-CI gate runner is not wired (scripts/local-ci-runner.mjs is missing); refusing to record passing stub evidence. Set DPF_LOCAL_CI_COMMAND to the canonical sandbox command, or use DPF_ALLOW_LOCAL_CI_STUB=1 only in contract tests.");
   }
@@ -845,6 +831,20 @@ async function main() {
       queueObserverPath = "";
     }
   };
+
+  // BI-3A34D7A9: the admission loop below is the first side effect that writes
+  // a provider. The lease and the evidence record share a CLOSED vocabulary with
+  // no "unknown" member, so an unresolved provider has no honest value — refuse
+  // rather than attribute this run to whichever client is most common. Everything
+  // above (--dry-run, the runner-wiring check) stays runnable unattributed.
+  if (!ownerProvider) {
+    die(
+      "cannot attribute this gate to a client. Pass --owner-provider "
+        + "<build-studio|claude|codex|grok|antigravity|coworker> or set "
+        + "DPF_GATE_OWNER_PROVIDER. (The lease and the evidence record use a "
+        + "closed provider vocabulary, so there is no honest default.)",
+    );
+  }
 
   let claimAttempt = 0;
   for (;;) {
