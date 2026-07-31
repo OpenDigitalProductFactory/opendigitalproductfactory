@@ -273,3 +273,104 @@ describe("projectRoutingEvidenceConformance", () => {
     expect(serialized).not.toContain("detectedValue");
   });
 });
+
+// BI-C8BC9DD1. The founder asked their coworker "what do I do about these 173
+// issues?" and no answer was possible: findings carried only `message` and
+// `count`, so there was no remediation to retrieve. The coworker exhausted its
+// iteration budget and returned a safety-limit message, which read as a
+// coworker defect but was an empty contract.
+describe("owner-actionable findings (BI-C8BC9DD1)", () => {
+  const unstampedDecision = (id: string) => ({
+    id,
+    traceId: null,
+    designRevision: null,
+    agentId: "ops-coordinator",
+    actorKind: "agent",
+    actorId: "ops-coordinator",
+    selectedEndpointId: "profile-openai",
+    selectedModelId: "gpt-5",
+    taskType: "conversation",
+    sensitivity: "internal",
+    candidateTrace: [],
+    excludedTrace: [],
+    fallbackChain: [],
+    fallbacksUsed: [],
+    screenReceipt: null,
+    createdAt: new Date("2026-07-27T12:00:00.000Z"),
+  });
+
+  it("gives every emitted finding a non-empty next action", () => {
+    const projection = projectRoutingEvidenceConformance(baseInput({
+      decisions: [unstampedDecision("d-1"), unstampedDecision("d-2")],
+    }));
+
+    expect(projection.findings.length).toBeGreaterThan(0);
+    for (const finding of projection.findings) {
+      expect(finding.nextAction.trim()).not.toBe("");
+      expect(finding.ownerAction).toBeDefined();
+    }
+  });
+
+  it("classes pre-instrumentation traffic as historical, not as open work", () => {
+    const projection = projectRoutingEvidenceConformance(baseInput({
+      decisions: [unstampedDecision("d-1")],
+    }));
+
+    const unproven = projection.findings.find(
+      (finding) => finding.issueType === "ai-routing-design-unproven",
+    );
+    expect(unproven).toBeDefined();
+    // Declared `info`, and nothing an owner can do — both must be expressed.
+    expect(unproven?.severity).toBe("info");
+    expect(unproven?.ownerAction).toBe("none-historical");
+    expect(unproven?.nextAction).toMatch(/nothing to do/i);
+  });
+
+  it("marks a boundary crossing as a platform defect the owner cannot fix", () => {
+    const traceId = "abcdefabcdefabcdefabcdefabcdefab";
+    const projection = projectRoutingEvidenceConformance(baseInput({
+      decisions: [{
+        ...unstampedDecision("d-blocked"),
+        traceId,
+        designRevision: AI_ROUTING_ARCHITECTURE_VERSION,
+        candidateTrace: [{ endpointId: "profile-openai", providerId: "openai", modelId: "gpt-5", excluded: false }],
+        screenReceipt: {
+          screenId: "screen_1",
+          routeEffect: "block",
+          transformation: "blocked",
+          classifiedDataClasses: ["employee-records"],
+          rawPayloadStored: false,
+        },
+      }],
+      adapterRuns: [{
+        id: "run-1",
+        traceId,
+        providerId: "openai",
+        modelId: "gpt-5",
+        adapterKind: "chat",
+        status: "success",
+        durationMs: 100,
+        inputTokens: 10,
+        outputTokens: 10,
+        estimatedCostUsd: 0,
+        startedAt: new Date("2026-07-27T12:00:01.000Z"),
+      }],
+      providers: [{ providerId: "openai", category: "direct" }],
+    }));
+
+    const blocked = projection.findings.find(
+      (finding) => finding.issueType === "ai-routing-blocked-path-dispatched",
+    );
+    expect(blocked?.severity).toBe("error");
+    expect(blocked?.ownerAction).toBe("platform-defect");
+    expect(blocked?.nextAction).toMatch(/no action available to you/i);
+  });
+
+  it("keeps remediation free of request content", () => {
+    const projection = projectRoutingEvidenceConformance(baseInput({
+      decisions: [unstampedDecision("d-1")],
+    }));
+    const remediation = projection.findings.map((finding) => finding.nextAction).join(" ");
+    expect(remediation).not.toMatch(/prompt|detectedValue|rawPayload/i);
+  });
+});

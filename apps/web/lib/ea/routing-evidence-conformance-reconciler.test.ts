@@ -70,6 +70,8 @@ describe("reconcileRoutingEvidenceConformance", () => {
         message: "1 routing decision lacks design provenance.",
         count: 1,
         architectureStageId: "rank-quality-time-cost",
+        ownerAction: "none-historical",
+        nextAction: "Nothing to do.",
       }]),
     );
 

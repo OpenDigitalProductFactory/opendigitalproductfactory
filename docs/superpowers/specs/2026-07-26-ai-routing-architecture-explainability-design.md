@@ -538,8 +538,35 @@ not “unused” and not an unconstrained “force.”
 | `BI-758722A7` | Privacy-safe evidence correlation and conformance projection |
 | `BI-52C015D8` | Cross-view drill-through and routing-decision inspector |
 | `BI-7378E34C` | Designed/Observed/Compare Operations Map UX |
+| `BI-C8BC9DD1` | Owner-actionable conformance findings — remediation contract + severity-faithful presentation |
 
 Existing defect `BI-7E2A1DD0` is coordinated, not duplicated.
+
+### 15.1 Conformance findings must carry remediation (BI-C8BC9DD1)
+
+The conformance projection shipped with a finding shape of `message` + `count`
+and nothing else. Two consequences were found in live use and are corrected by
+`BI-C8BC9DD1`:
+
+1. **No remediation exists to retrieve.** An owner asked the on-page coworker
+   what to do about the findings; the coworker had no data to answer from,
+   exhausted its iteration budget on tool calls, and returned a safety-limit
+   message. The failure presented as a coworker defect but was an empty
+   contract. Every finding now carries `ownerAction` and a plain-language
+   `nextAction`, typed as `Record<RoutingConformanceIssueType, …>` so a new
+   issue type cannot ship without its remediation.
+
+2. **Severity was computed and then discarded.** The station badge rendered
+   anything below `error` as a warning, so an `info` finding — including
+   `ai-routing-design-unproven`, which counts traffic predating the evidence
+   ledger — presented as an operational warning. Presentation is now faithful to
+   the declared severity.
+
+The `ownerAction` value `none-historical` is load-bearing: several findings
+count traffic recorded before the evidence contract existed and can never reach
+zero through any action. Presenting those as open work is false. Remediation
+text is static per issue type and carries no request content, so the
+privacy-safe projection boundary in §9 is unchanged.
 
 ## 16. Refactoring budget
 

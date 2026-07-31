@@ -1,8 +1,15 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { RoutingEvidenceConformanceProjection } from "@/lib/ai-operations-map/routing-evidence-conformance";
-import { RoutingArchitectureOverview } from "./RoutingArchitectureOverview";
+import type {
+  RoutingConformanceFinding,
+  RoutingEvidenceConformanceProjection,
+} from "@/lib/ai-operations-map/routing-evidence-conformance";
+import {
+  RoutingArchitectureOverview,
+  stationBadgeIntent,
+  stationBadgeLabel,
+} from "./RoutingArchitectureOverview";
 
 afterEach(() => cleanup());
 
@@ -49,6 +56,8 @@ const EVIDENCE: RoutingEvidenceConformanceProjection = {
       issueKey: "design-unproven",
       issueType: "ai-routing-design-unproven",
       severity: "warn",
+      ownerAction: "none-historical",
+      nextAction: "Nothing to do.",
       message: "One decision was not bound to a design revision.",
       count: 1,
       architectureStageId: "record-safe-receipt",
@@ -100,5 +109,66 @@ describe("RoutingArchitectureOverview", () => {
     expect(screen.getByRole("dialog", { name: "Eligible & available routes details" })).toBeTruthy();
     expect(screen.getByRole("table")).toBeTruthy();
     expect(screen.getByText("RequestContract compilation")).toBeTruthy();
+  });
+});
+
+// BI-C8BC9DD1 — severity was computed and then discarded. The station badge read
+// `severity === "error" ? "danger" : "warning"`, so an `info` finding rendered as
+// an operational warning. Live worst case: station 1 carried exactly one finding,
+// `ai-routing-design-unproven` (declared `info`, counting traffic that predates
+// the evidence ledger) and showed an amber "171 issue" badge to the owner.
+describe("station badge fidelity (BI-C8BC9DD1)", () => {
+  const finding = (over: Partial<RoutingConformanceFinding> = {}): RoutingConformanceFinding => ({
+    issueKey: "ai-routing-design-unproven",
+    issueType: "ai-routing-design-unproven",
+    severity: "info",
+    message: "Historic traffic does not name the design revision. Count: 171.",
+    count: 171,
+    architectureStageId: "request",
+    ownerAction: "none-historical",
+    nextAction: "Nothing to do.",
+    ...over,
+  });
+
+  it("does not render an info-severity historical finding as a warning", () => {
+    expect(stationBadgeIntent([finding()])).toBe("neutral");
+  });
+
+  it("counts purely historic traffic as history, not as issues", () => {
+    expect(stationBadgeLabel([finding()])).toBe("171 historic");
+  });
+
+  it("still escalates a real error to danger", () => {
+    expect(stationBadgeIntent([
+      finding(),
+      finding({
+        issueKey: "ai-routing-blocked-path-dispatched",
+        issueType: "ai-routing-blocked-path-dispatched",
+        severity: "error",
+        ownerAction: "platform-defect",
+        count: 2,
+      }),
+    ])).toBe("danger");
+  });
+
+  it("warns when actionable warn-severity findings are present", () => {
+    expect(stationBadgeIntent([
+      finding({
+        issueKey: "ai-routing-evidence-missing",
+        issueType: "ai-routing-evidence-missing",
+        severity: "warn",
+        ownerAction: "platform-defect",
+        count: 3,
+      }),
+    ])).toBe("warning");
+  });
+
+  it("agrees the noun with the number", () => {
+    expect(stationBadgeLabel([
+      finding({ severity: "warn", ownerAction: "platform-defect", count: 1 }),
+    ])).toBe("1 issue");
+    expect(stationBadgeLabel([
+      finding({ severity: "warn", ownerAction: "platform-defect", count: 4 }),
+    ])).toBe("4 issues");
   });
 });
