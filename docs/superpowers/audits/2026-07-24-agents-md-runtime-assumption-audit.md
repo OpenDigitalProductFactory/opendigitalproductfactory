@@ -86,3 +86,37 @@ The BI title also names DPF skills. A full `SKILL.md` sweep is a larger pass; th
 2. §2 (category A/B) and the host literals (category C) are the prime candidates to move *out* of always-on doctrine into a living, verifiable reference, per BI-0020D511 §4b.
 3. Line 76's unanchored "one release cycle" expiry should be resolved to a concrete anchor now (it is a correctness bug independent of the split).
 4. Defer the enforcement guard (assert no doctrine section carries an untagged version/host/date token) to the instruction-plane ratchet's `--strict` phase.
+
+---
+
+## Application status (2026-07-31) — markers APPLIED to the pre-split file
+
+The convention is now applied to `AGENTS.md` at `origin/main` (`c140cc60c`). **10 markers**, `grep -c "⟦runtime:" AGENTS.md` → 10.
+
+This deliberately follows BI-0020D511 §8/§9 (*"ACC7A2B5's assumption-marking merges before Phase 1 begins, on the pre-split file, so the split relocates already-marked content"*) rather than handoff item 1 above (*"as each section is relocated"*). The two disagree; the spec's committed sequencing wins, and it is the stronger reading — marking during relocation means the marking never exists independently to review, and a section whose relocation slips is left unmarked indefinitely. **BI-0020D511's Phase 1 prerequisite is satisfied by this pass.**
+
+| Finding | Where it landed | Marker gist |
+|---|---|---|
+| A — subdirectory `AGENTS.md` claim | line 3 | re-verify with `git ls-files '*AGENTS.md'` |
+| A/B — stack version pins | §2 Stack bullet | pins drift; re-verify against `package.json` + compose files |
+| A — "landed (re-audited 2026-06-19)" | §5 Build Studio gate | dated snapshot, not doctrine |
+| C — `127.0.0.1:3000` token-refresh endpoint | after the PowerShell block | install-local topology |
+| C — `:3001` Contributor preview | §17 lease bullet | the lease rule is doctrine, the number is not |
+| D — Bash equivalents "landing per" | §2 PowerShell bullet | in-flight; expires when the plan closes |
+| D — "one release cycle" shim promise | §4 worktree-seed bullet | expiry UNANCHORED — see below |
+| E — shallow-clone rebase guidance | §4 rebase bullet | precondition: shallow checkouts only |
+| E — `D:/DPF-worktrees/<topic>` | §17 worktree-location bullet | install-local path; §4 has the POSIX equivalent |
+| E — junction-unsafe `--force` removal | §17 removal bullet | Windows-only hazard |
+
+### Deviations from the audit as written, and why
+
+- **Category C's `localhost:12434` / `/platform/ai/runtime-health` finding is obsolete.** Both literals have been removed from `AGENTS.md` by unrelated edits since 2026-07-24; `grep` returns nothing. No marker was invented for content that no longer exists.
+- **Line 7 (MCP-offline authority) was NOT marked.** The audit itself scores it *"correct, but it is an assumption the reader should see stated"* — and the sentence already states it in its own words (*"remains operationally authoritative when MCP is offline"*). A marker here would add always-on bytes without changing any agent's action. Marking is reserved for assumptions whose failure would cause an agent to act wrongly.
+- **Line 342 was NOT separately marked** — it already carries *"is NOT junction-safe on Windows"* inline, and line 345's marker covers the same hazard for the bullet group.
+- **Handoff item 3 (the unanchored expiry) is surfaced, not resolved.** Resolving *"one release cycle"* to a concrete anchor requires knowing which release retires the `seed-worktree-mcp` / `ensure-dpf-skill-pack` shims — an owner call, not an audit finding. The marker says the expiry is unanchored so the defect is visible; **this remains open and is the one item this pass could not close.**
+
+### Cost, stated plainly
+
+The markers grew `AGENTS.md` 90,298 → 91,400 bytes (**+1,102**), so the instruction-plane ratchet was re-baselined upward (108,033 total) via the intentional-growth path the guard documents. This is a correctness pass adding bytes to the plane BI-0020D511 exists to shrink — a real, if small, tension. It is accepted because the alternative is worse: relocating unmarked runtime-bound facts into on-demand skills converts a visible staleness risk into an invisible one. Phase 1's ≤45,000-byte target now measures against 108,033.
+
+Markers were kept terse for this reason — an earlier draft ran +1,707 bytes and was tightened by 35% with no loss of the actionable verb.
