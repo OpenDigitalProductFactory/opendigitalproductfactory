@@ -25,6 +25,10 @@ import {
   loadCertificationStates,
   type CoworkerCertificationState,
 } from "@/lib/coworker-lifecycle/certification-status";
+import {
+  SELECTABLE_COWORKER_STATE,
+  dropDualSeedAliasAgents,
+} from "@/lib/coworker-record/selectable-coworker";
 
 export type WorkforceMemberKind = "human" | "agent";
 
@@ -140,6 +144,8 @@ type EmployeeRow = {
 type AgentRow = {
   agentId: string;
   name: string;
+  /** Curated role label (AGENT_IDENTITY_OVERRIDES); falls back to the seed name. */
+  displayName?: string | null;
   status: string;
   valueStream: string | null;
   humanSupervisorId: string | null;
@@ -236,7 +242,10 @@ function agentToMember(
   return {
     kind: "agent",
     id: row.agentId,
-    displayName: row.name,
+    // The curated role label, never the raw seed handle: the roster showed
+    // "admin-assistant" / "build-specialist" where every other surface says
+    // "Platform Admin" / "Build Lead" (BI-005DDC70).
+    displayName: row.displayName || row.name,
     status: row.status,
     role: row.valueStream,
     group: row.portfolioId,
@@ -310,7 +319,7 @@ export async function loadWorkforceRoster(input?: {
 }): Promise<WorkforceRoster> {
   const db = input?.db ?? (prisma as unknown as WorkforceRosterClient);
 
-  const [employees, agents] = await Promise.all([
+  const [employees, agentsRaw] = await Promise.all([
     db.employeeProfile.findMany({
       orderBy: { displayName: "asc" },
       select: {
@@ -322,10 +331,17 @@ export async function loadWorkforceRoster(input?: {
       },
     }) as Promise<EmployeeRow[]>,
     db.agent.findMany({
+      // BI-005DDC70: this roster deep-links every coworker to
+      // /platform/ai/agent/[agentId], and that route serves ONLY coworkers that
+      // pass the selection contract. Loading unfiltered rendered retired /
+      // quarantined / draft agents (and dual-seed slug twins) as live rows whose
+      // links 404. Same predicate as the AI Workforce roster — one contract.
+      where: SELECTABLE_COWORKER_STATE,
       orderBy: { name: "asc" },
       select: {
         agentId: true,
         name: true,
+        displayName: true,
         status: true,
         valueStream: true,
         humanSupervisorId: true,
@@ -344,6 +360,11 @@ export async function loadWorkforceRoster(input?: {
       },
     }) as Promise<AgentRow[]>,
   ]);
+
+  // The second half of the selection contract: a canonical AGT-* row whose
+  // executable slug twin is not selectable (and a slug twin shown beside its
+  // canonical) cannot open its detail record either.
+  const agents = dropDualSeedAliasAgents(agentsRaw);
 
   const supervisorIds = [
     ...new Set(
