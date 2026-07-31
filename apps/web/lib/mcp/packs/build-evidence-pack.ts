@@ -66,7 +66,7 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "record_local_integration_result",
-    description: "Record the result of a local merged-code integration gate before push or PR. Captures candidate branch, mode, status (passed | failed | conflict | blocked_sandbox_drift — the latter means the shared sandbox was stale/not-ready and the run is NOT product evidence), and evidence including dependency-freshness verdict.",
+    description: "Record the result of a local merged-code integration gate before push or PR. Captures candidate branch, mode, status (passed | failed | conflict | blocked_sandbox_drift | blocked_control_plane_starvation), and evidence including dependency freshness and concurrent control-plane health. Blocked statuses are infrastructure evidence, not product failures.",
     inputSchema: {
       type: "object",
       properties: {
@@ -77,7 +77,7 @@ const definitions: ToolDefinition[] = [
         taskRunId: { type: "string" },
         candidateBranch: { type: "string" },
         mode: { type: "string", enum: ["single-branch", "sibling-set", "post-merge-main"] },
-        status: { type: "string", enum: ["passed", "failed", "conflict", "blocked_sandbox_drift"] },
+        status: { type: "string", enum: ["passed", "failed", "conflict", "blocked_sandbox_drift", "blocked_control_plane_starvation"] },
         summary: { type: "string" },
         evidence: { type: "object" },
       },
@@ -233,7 +233,7 @@ async function recordLocalIntegrationResultHandler(
   if (!["single-branch", "sibling-set", "post-merge-main"].includes(mode)) {
     return { success: false, error: "invalid_mode", message: `Unsupported local integration mode: ${mode}` };
   }
-  if (!["passed", "failed", "conflict", "blocked_sandbox_drift"].includes(status)) {
+  if (!["passed", "failed", "conflict", "blocked_sandbox_drift", "blocked_control_plane_starvation"].includes(status)) {
     return { success: false, error: "invalid_status", message: `Unsupported local integration status: ${status}` };
   }
 
@@ -246,7 +246,7 @@ async function recordLocalIntegrationResultHandler(
     taskRunId: stringValue("taskRunId") || undefined,
     candidateBranch,
     mode: mode as "single-branch" | "sibling-set" | "post-merge-main",
-    status: status as "passed" | "failed" | "conflict" | "blocked_sandbox_drift",
+    status: status as "passed" | "failed" | "conflict" | "blocked_sandbox_drift" | "blocked_control_plane_starvation",
     summary,
     evidence: evidence as import("@dpf/db").Prisma.InputJsonValue,
   });

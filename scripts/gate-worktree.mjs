@@ -1213,6 +1213,7 @@ async function main() {
   }
   try {
     rmSync(freshnessReportFile, { force: true });
+    rmSync(slotManifest.evidence.controlPlane, { force: true });
   } catch (error) {
     releaseLocalSandboxFence({ path: localFencePath, token: localFenceToken });
     await releaseLeaseOnce();
@@ -1350,6 +1351,14 @@ async function main() {
   } catch {
     // no metadata written by this run — evidence.content stays null, matching the sh port.
   }
+  let controlPlaneEvidence = null;
+  try {
+    controlPlaneEvidence = JSON.parse(
+      readFileSync(slotManifest.evidence.controlPlane, "utf8"),
+    );
+  } catch {
+    // A non-build failure may occur before the bounded wrapper writes samples.
+  }
   const resilience = classifyBaseResilience(
     contentMetadata,
     options.pushBranch ? "push-before-lease" : "deferred",
@@ -1393,6 +1402,7 @@ async function main() {
         postgresVolume: slotManifest.postgres.volume,
         dependencyStore: slotManifest.dependencies.freshStore,
         artifactPath: slotManifest.evidence.artifact,
+        controlPlaneEvidencePath: slotManifest.evidence.controlPlane,
       },
       leaseId,
       leaseEvents,
@@ -1405,6 +1415,7 @@ async function main() {
       pushBeforeLease: options.pushBranch,
       resilience,
       content: contentMetadata,
+      controlPlane: controlPlaneEvidence,
       gatePassed: outcome.gatePassed,
       freshness,
       commands: [commandLabel],
@@ -1423,7 +1434,16 @@ async function main() {
     failureSummary,
   };
 
-  let evidenceResponse = await mcpCall("record_local_integration_result", evidenceArgs, { mcpUrl: options.mcpUrl, bearerToken });
+  let evidenceResponse;
+  try {
+    evidenceResponse = await mcpCall("record_local_integration_result", evidenceArgs, { mcpUrl: options.mcpUrl, bearerToken });
+  } catch (error) {
+    evidenceResponse = {
+      success: false,
+      error: "transport_unavailable",
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
   if (evidenceResponse?.success !== true && outcome.status === "blocked_sandbox_drift" && evidenceResponse?.error === "invalid_status") {
     process.stdout.write("gate-worktree: portal does not know blocked_sandbox_drift yet; recording as failed with sandbox-drift evidence\n");
     evidenceArgs = { ...evidenceArgs, status: "failed", summary: `[SANDBOX_DRIFT — not product evidence] ${evidenceArgs.summary}` };
@@ -1435,6 +1455,31 @@ async function main() {
     evidenceId = evidenceResponse.entityId || "";
   } else {
     const evidenceError = evidenceResponse?.error ?? evidenceResponse?.data?.error ?? "";
+    if (outcome.status === "blocked_control_plane_starvation") {
+      writePendingEvidence(pendingEvidenceFile, {
+        branch,
+        sha,
+        expiresAt,
+        reason: evidenceError || "control_plane_unavailable",
+        retryAfterSeconds: 30,
+        recordArgs: evidenceArgs,
+      });
+      writeState(stateFile, {
+        branch,
+        sha,
+        gatePassed: false,
+        leaseId,
+        evidenceId: "",
+        status: outcome.status,
+        expiresAt,
+        resilience,
+        leaseEvents,
+        evidencePending: true,
+        evidencePendingReason: evidenceError || "control_plane_unavailable",
+      });
+      process.stderr.write("gate-worktree: control-plane starvation evidence is preserved locally and pending portal recovery.\n");
+      process.exit(5);
+    }
     if (outcome.gatePassed && evidenceError === "portal_quiescing") {
       const retryAfterSeconds = Number(
         evidenceResponse?.data?.retryAfterSeconds
@@ -1502,6 +1547,10 @@ async function main() {
     process.stderr.write(`gate-worktree: BLOCKED (sandbox drift): ${outcome.summary}\n`);
     process.stderr.write("gate-worktree: this is a sandbox defect, not product build evidence; converge the sandbox and re-run the gate\n");
     process.exit(3);
+  }
+  if (outcome.status === "blocked_control_plane_starvation") {
+    process.stderr.write(`gate-worktree: BLOCKED (control-plane starvation): ${outcome.summary}\n`);
+    process.exit(5);
   }
   die("gate failed");
 }

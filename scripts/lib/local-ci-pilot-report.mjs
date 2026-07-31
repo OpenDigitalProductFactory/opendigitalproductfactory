@@ -23,6 +23,7 @@ const defectCountFields = [
   "unattributedFailureCount",
   "pressureCeilingBreachCount",
   "dockerHealthFailureCount",
+  "controlPlaneStarvationCount",
 ];
 
 function validWindow(value, { pilot = false } = {}) {
@@ -140,6 +141,9 @@ export function evaluateLocalCiPilot({
     blockers.push("host-pressure-ceiling-breached");
   }
   if (pilot.dockerHealthFailureCount > 0) blockers.push("docker-health-degraded");
+  if (pilot.controlPlaneStarvationCount > 0) {
+    blockers.push("control-plane-starvation-observed");
+  }
   if (
     comparison.medianServiceDurationRegressionPercent
     > thresholds.maximumMedianServiceDurationRegressionPercent

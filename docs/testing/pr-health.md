@@ -89,6 +89,25 @@ Typecheck, tests, and acceptance evidence are additional fail-closed blockers.
 If any check fails, the tool returns the published branch, commit SHA, and
 blockers; it does not create a review-lane placeholder PR.
 
+## Local-CI infrastructure outcomes
+
+The governed local pregate distinguishes a product failure from two shared
+verification failures:
+
+- `blocked_sandbox_drift` means the installed dependency graph was stale or not
+  ready. Converge the governed sandbox and rerun; do not charge the candidate.
+- `blocked_control_plane_starvation` means portal HTTP, MCP, Docker Engine, or
+  direct PostgreSQL health failed in two consecutive rounds during the bounded
+  production build. The gate stops only its admitted build tree, preserves the
+  samples in the slot's `dpf-local-ci-control-plane*.json` evidence, contracts
+  requested capacity to one, and blocks capacity-pilot retention.
+
+A TCP listener alone is not health: the portal probe requires HTTP 200 and a
+valid healthy payload, MCP requires a valid read response, and PostgreSQL is
+queried over the host port independently of Docker exec. The gate never restarts
+Docker Desktop or shared DPF services. If health does not return after the build
+is terminated, recovery is a separately authorized, auditable operation.
+
 ## Tests & CI
 
 The pure verdict (`evaluatePrHealth()`) is unit-tested in [`scripts/pr-health.test.mjs`](../../scripts/pr-health.test.mjs) and runs in CI as the **PR Health Logic** job (`node --test`). The script's GitHub I/O is exercised by running it against live PRs; it is not run in CI (it would be circular).

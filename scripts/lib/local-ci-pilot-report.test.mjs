@@ -33,6 +33,7 @@ const safePilot = {
   unattributedFailureCount: 0,
   pressureCeilingBreachCount: 0,
   dockerHealthFailureCount: 0,
+  controlPlaneStarvationCount: 0,
 };
 
 test("retains capacity two only when representative evidence clears every threshold", () => {
@@ -64,6 +65,7 @@ test("unsafe host health or threshold regressions recommend rollback", () => {
   const scenarios = [
     [{ pressureCeilingBreachCount: 1 }, "host-pressure-ceiling-breached"],
     [{ dockerHealthFailureCount: 1 }, "docker-health-degraded"],
+    [{ controlPlaneStarvationCount: 1 }, "control-plane-starvation-observed"],
     [{ medianServiceDurationMs: 700 }, "service-duration-regressed"],
     [{ infrastructureFailureRatePercent: 6 }, "infrastructure-failure-rate-high"],
   ];

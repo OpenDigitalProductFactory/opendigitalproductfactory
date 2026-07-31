@@ -78,6 +78,24 @@ it("passed, slot-0, and non-slot evidence cannot trip the breaker", async () => 
   expect(reads).toBe(0);
 });
 
+it("control-plane starvation contracts capacity even when observed from slot-0", async () => {
+  const writes = [];
+  const platformConfig = {
+    findUnique: async () => ({ value: CONFIG, updatedAt: new Date("2026-07-31T00:00:00.000Z") }),
+    updateMany: async (args) => {
+      writes.push(args);
+      return { count: 1 };
+    },
+  };
+  const result = await contractLocalCiPoolAfterGateResult({
+    platformConfig,
+    status: "blocked_control_plane_starvation",
+    evidence: slotEvidence("slot-0"),
+  });
+  expect(result.status).toBe("contracted");
+  expect(writes[0].data.value.requestedCapacity).toBe(1);
+});
+
 it("an optimistic-concurrency miss retries against the latest policy", async () => {
   const newer = {
     ...CONFIG,

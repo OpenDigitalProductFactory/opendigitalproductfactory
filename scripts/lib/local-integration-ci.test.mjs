@@ -102,6 +102,18 @@ describe("createLocalIntegrationPlan", () => {
     ]);
   });
 
+  it("routes Windows production builds through the bounded watchdog wrapper", () => {
+    const plan = createLocalIntegrationPlan({
+      candidateBranch: "fix/control-plane",
+      mode: "single-branch",
+      siblingBranches: [],
+      hostPlatform: "win32",
+      slotKey: "slot-0",
+    });
+    assert.equal(plan.commands.at(-1).join(" "),
+      "node scripts/local-ci-bounded-build.mjs --tag dpf-local-integration-slot-0-fix-control-plane-build --slot-key slot-0 --candidate fix/control-plane");
+  });
+
   it("scopes integration refs and freshness to the admitted slot", () => {
     const plan = createLocalIntegrationPlan({
       candidateBranch: "feat/slot-safe-gate",
@@ -268,7 +280,7 @@ describe("createLocalIntegrationPlan", () => {
     ));
   });
 
-  it("uses a Docker production build on Windows hosts", () => {
+  it("uses a bounded Docker production build on Windows hosts", () => {
     const plan = createLocalIntegrationPlan({
       candidateBranch: "feat/build-studio-decision-skills-slice-1",
       mode: "single-branch",
@@ -277,7 +289,7 @@ describe("createLocalIntegrationPlan", () => {
     });
 
     assert.ok(plan.commands.map((command) => command.join(" ")).includes(
-      "docker build --target build -t dpf-local-integration-feat-build-studio-decision-skills-slice-1-build .",
+      "node scripts/local-ci-bounded-build.mjs --tag dpf-local-integration-feat-build-studio-decision-skills-slice-1-build --slot-key slot-0 --candidate feat/build-studio-decision-skills-slice-1",
     ));
     assert.ok(!plan.commands.map((command) => command.join(" ")).join("\n").includes(
       "exec next build",

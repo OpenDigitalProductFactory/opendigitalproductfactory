@@ -236,7 +236,16 @@ export function createLocalIntegrationPlan(input) {
   const baseRef = input.baseRef ?? "origin/main";
   const buildStrategy = input.buildStrategy ?? defaultBuildStrategy(input.hostPlatform);
   const productionBuildCommand = buildStrategy === "docker-build"
-    ? ["docker", "build", "--target", "build", "-t", dockerBuildTag(input.candidateBranch, input.slotKey), "."]
+    ? [
+        "node",
+        "scripts/local-ci-bounded-build.mjs",
+        "--tag",
+        dockerBuildTag(input.candidateBranch, input.slotKey),
+        "--slot-key",
+        input.slotKey || "slot-0",
+        "--candidate",
+        input.candidateBranch,
+      ]
     // `env VAR=… cmd` keeps the plan a plain argv (no shell) — host-next is
     // POSIX-only by construction (Windows defaults to docker-build above).
     // The shared sandbox can inherit NODE_ENV from a prior test/dev process.

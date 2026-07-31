@@ -9,6 +9,7 @@ export const AUTONOMOUS_FAILURE_CLASSES = [
   "reproduced-review-finding",
   "plan-oscillation",
   "sandbox-drift",
+  "control-plane-starvation",
   "post-push-ci-failure",
   "queue-stale-base",
   "unresolved-review-thread",
@@ -74,6 +75,9 @@ export function classifyAutonomousBuildFailure(input: {
   }
   if (/blocked_sandbox_drift|sandbox.*(?:drift|freshness)/.test(text)) {
     return "sandbox-drift";
+  }
+  if (/blocked_control_plane_starvation|control-plane.*starv/.test(text)) {
+    return "control-plane-starvation";
   }
   if (
     /typecheck|error ts\d{4}|tests? failed|build failed/.test(text)
@@ -212,7 +216,10 @@ export function decideAutonomousRecovery(input: {
       state,
     };
   }
-  if (failureClass === "self-upgrade-failure") {
+  if (
+    failureClass === "self-upgrade-failure"
+    || failureClass === "control-plane-starvation"
+  ) {
     return {
       action: "await-governed-runner",
       consumedBudget: false,

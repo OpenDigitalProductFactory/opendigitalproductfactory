@@ -1,5 +1,12 @@
 {
   "schemaVersion": 1,
+  "builderPolicy": {
+    "version": 2,
+    "memoryBytes": 17179869184,
+    "cpuQuota": 800000,
+    "cpuPeriod": 100000,
+    "maxParallelism": 4
+  },
   "slots": {
     "slot-0": {
       "ordinal": 0,

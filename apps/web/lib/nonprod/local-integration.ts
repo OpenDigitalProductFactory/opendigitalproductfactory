@@ -18,7 +18,12 @@ export type LocalIntegrationResultInput = {
   // "blocked_sandbox_drift": the shared sandbox's installed dependency graph
   // did not match the lockfile (or was mid-install), so the gate refused to
   // produce product evidence. A sandbox defect, not a product failure (BI-ECDF9520).
-  status: "passed" | "failed" | "conflict" | "blocked_sandbox_drift";
+  status:
+    | "passed"
+    | "failed"
+    | "conflict"
+    | "blocked_sandbox_drift"
+    | "blocked_control_plane_starvation";
   summary: string;
   evidence: Prisma.InputJsonValue;
 };
