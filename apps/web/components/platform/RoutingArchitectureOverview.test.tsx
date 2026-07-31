@@ -26,6 +26,8 @@ const EVIDENCE: RoutingEvidenceConformanceProjection = {
     unevidencedDecisions: 1,
     screenCoveredDecisions: 3,
     designBoundDecisions: 3,
+    preInstrumentationDecisions: 0,
+    instrumentedSince: null,
     unprovenDesignDecisions: 1,
     staleDesignDecisions: 0,
     attributionRate: 1,
