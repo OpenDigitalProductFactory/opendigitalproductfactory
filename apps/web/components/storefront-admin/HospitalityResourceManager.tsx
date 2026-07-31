@@ -3,6 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ScheduleEditor } from "./ScheduleEditor";
+import {
+  RESTAURANT_TABLE_SHAPES,
+  type RestaurantTableAttributes,
+  type RestaurantTableShape,
+} from "@/lib/storefront/restaurant-table-attributes";
 
 export interface HospitalityResourceManagerRow {
   id: string;
@@ -14,6 +19,7 @@ export interface HospitalityResourceManagerRow {
   capacityUnit: "seats";
   serviceArea: string | null;
   blockedReason: string | null;
+  attributes: RestaurantTableAttributes;
   version: number;
   availability: Array<{
     id: string;
@@ -48,6 +54,12 @@ function ResourceEditor({
   const [blockedReason, setBlockedReason] = useState(
     resource.blockedReason ?? "",
   );
+  const [shape, setShape] = useState<RestaurantTableShape>(
+    resource.attributes.shape,
+  );
+  const [combinationGroup, setCombinationGroup] = useState(
+    resource.attributes.combinationGroup ?? "",
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,6 +79,9 @@ function ResourceEditor({
             status,
             blockedReason:
               status === "blocked" ? blockedReason.trim() || null : null,
+            shape,
+            combinationGroup: combinationGroup.trim() || null,
+            combinableWith: resource.attributes.combinableWith,
             expectedVersion: resource.version,
           }),
         },
@@ -97,6 +112,9 @@ function ResourceEditor({
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <strong>{resource.label}</strong>
           <span>{resource.capacity} seats</span>
+          <span className="text-[var(--dpf-muted)]">
+            {shapeLabel(resource.attributes.shape)}
+          </span>
           {resource.serviceArea && (
             <span className="text-[var(--dpf-muted)]">
               {resource.serviceArea}
@@ -113,6 +131,11 @@ function ResourceEditor({
           >
             {statusLabel(resource.status)}
           </span>
+          {resource.attributes.combinationGroup && (
+            <span className="text-[var(--dpf-muted)]">
+              combines in {resource.attributes.combinationGroup}
+            </span>
+          )}
         </span>
         {resource.blockedReason && (
           <span className="mt-1 block text-sm text-[var(--dpf-muted)]">
@@ -149,6 +172,34 @@ function ResourceEditor({
             placeholder="Dining room, patio, bar"
             className="min-h-[44px] rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3"
           />
+        </label>
+        <label className="grid gap-1 text-sm">
+          Table shape
+          <select
+            value={shape}
+            onChange={(event) =>
+              setShape(event.target.value as RestaurantTableShape)
+            }
+            className="min-h-[44px] rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3"
+          >
+            {RESTAURANT_TABLE_SHAPES.map((value) => (
+              <option key={value} value={value}>
+                {shapeLabel(value)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="grid gap-1 text-sm">
+          Combination group
+          <input
+            value={combinationGroup}
+            onChange={(event) => setCombinationGroup(event.target.value)}
+            placeholder="e.g. main-banquette"
+            className="min-h-[44px] rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3"
+          />
+          <span className="text-xs text-[var(--dpf-muted)]">
+            Tables with the same group may be joined for larger parties.
+          </span>
         </label>
         <label className="grid gap-1 text-sm">
           Status
@@ -218,6 +269,8 @@ export function HospitalityResourceManager({
   const [label, setLabel] = useState("");
   const [capacity, setCapacity] = useState(4);
   const [serviceArea, setServiceArea] = useState("");
+  const [shape, setShape] = useState<RestaurantTableShape>("round");
+  const [combinationGroup, setCombinationGroup] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -239,6 +292,9 @@ export function HospitalityResourceManager({
             label: label.trim(),
             capacity,
             serviceArea: serviceArea.trim() || null,
+            shape,
+            combinationGroup: combinationGroup.trim() || null,
+            combinableWith: [],
           }),
         },
       );
@@ -255,6 +311,8 @@ export function HospitalityResourceManager({
       setLabel("");
       setCapacity(4);
       setServiceArea("");
+      setShape("round");
+      setCombinationGroup("");
       setAdding(false);
       refreshOperationalView();
     } catch {
@@ -317,6 +375,34 @@ export function HospitalityResourceManager({
               className="min-h-[44px] rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3"
             />
           </label>
+          <label className="grid gap-1 text-sm">
+            Table shape
+            <select
+              value={shape}
+              onChange={(event) =>
+                setShape(event.target.value as RestaurantTableShape)
+              }
+              className="min-h-[44px] rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3"
+            >
+              {RESTAURANT_TABLE_SHAPES.map((value) => (
+                <option key={value} value={value}>
+                  {shapeLabel(value)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="grid gap-1 text-sm md:col-span-2">
+            Combination group
+            <input
+              value={combinationGroup}
+              onChange={(event) => setCombinationGroup(event.target.value)}
+              placeholder="e.g. main-banquette"
+              className="min-h-[44px] rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3"
+            />
+            <span className="text-xs text-[var(--dpf-muted)]">
+              Give adjacent tables the same group if they can be joined.
+            </span>
+          </label>
           <div className="flex items-center gap-3 md:col-span-3">
             <button
               type="button"
@@ -358,4 +444,8 @@ export function HospitalityResourceManager({
       )}
     </section>
   );
+}
+
+function shapeLabel(shape: RestaurantTableShape): string {
+  return shape.charAt(0).toUpperCase() + shape.slice(1);
 }

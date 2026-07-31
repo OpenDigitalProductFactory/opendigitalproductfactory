@@ -57,6 +57,7 @@ describe("hospitality resource schedule management", () => {
       id: "resource-1",
       organizationId: "org-1",
       legacyServiceProviderId: "provider-1",
+      attributes: { shape: "round" },
     } as never);
     vi.mocked(
       prisma.hospitalityResourceAvailability.deleteMany,
@@ -80,6 +81,7 @@ describe("hospitality resource schedule management", () => {
       capacityUnit: "seats",
       serviceArea: "Dining room",
       blockedReason: null,
+      attributes: { shape: "booth", combinationGroup: "main-banquette" },
       version: 1,
       availability: [
         {
@@ -176,5 +178,49 @@ describe("hospitality resource schedule management", () => {
       message: "Valid weekly availability and dated exceptions are required",
     });
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("updates validated table shape and combination structure with the resource version", async () => {
+    vi.mocked(prisma.hospitalityResource.updateMany).mockResolvedValue({
+      count: 1,
+    } as never);
+
+    const response = (await PUT(
+      request({
+        label: "Aster",
+        capacity: 4,
+        serviceArea: "Dining room",
+        status: "active",
+        blockedReason: null,
+        expectedVersion: 1,
+        shape: "booth",
+        combinationGroup: "main-banquette",
+        combinableWith: [],
+      }) as never,
+      routeContext,
+    )) as unknown as {
+      status: number;
+      body: { resource: { attributes: unknown } };
+    };
+
+    expect(response.status).toBe(200);
+    expect(prisma.hospitalityResource.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "resource-1",
+        organizationId: "org-1",
+        version: 1,
+      },
+      data: expect.objectContaining({
+        attributes: {
+          shape: "booth",
+          combinationGroup: "main-banquette",
+        },
+        version: { increment: 1 },
+      }),
+    });
+    expect(response.body.resource.attributes).toEqual({
+      shape: "booth",
+      combinationGroup: "main-banquette",
+    });
   });
 });

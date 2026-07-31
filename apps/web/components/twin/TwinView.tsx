@@ -12,7 +12,7 @@
 // feed are all kit primitives; only the vocabulary and which-template come from
 // the profile.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import type { TwinProfile } from "@dpf/storefront-templates";
 import type { OperationalCommandResult } from "@/lib/twin/operations-command";
@@ -41,13 +41,21 @@ export interface TwinViewProps {
   className?: string;
   /** Durable command closure supplied by an archetype adapter. */
   onConfirmCog?: () => Promise<OperationalCommandResult>;
+  /** Authored physical scene replacing the generic resource-unit grid. */
+  physicalScene?: ReactNode;
 }
 
 function titleCase(s: string): string {
   return s.length === 0 ? s : s[0].toUpperCase() + s.slice(1);
 }
 
-export function TwinView({ profile, snapshot, className = "", onConfirmCog }: TwinViewProps) {
+export function TwinView({
+  profile,
+  snapshot,
+  className = "",
+  onConfirmCog,
+  physicalScene,
+}: TwinViewProps) {
   const [cogStatus, setCogStatus] = useState<
     "idle" | "pending" | "confirmed" | "conflict" | "rejected" | "unsupported"
   >(onConfirmCog ? "idle" : "unsupported");
@@ -154,17 +162,25 @@ export function TwinView({ profile, snapshot, className = "", onConfirmCog }: Tw
       <div className="grid gap-4 lg:grid-cols-[1.6fr_1fr]">
         {/* Left: the operation itself — zones of resource units + work in flight. */}
         <div className="flex flex-col gap-3">
-          <div className={zoneWrapClass}>
-            {snapshot.zones.map((zone) => (
-              <TwinZone
-                key={zone.key}
-                label={zoneLabel(zone.key)}
-                meta={zone.meta ?? `${zone.units.length} ${profile.resourceNoun.plural}`}
-              >
-                <ResourceUnitGrid units={zone.units} className="!grid-cols-2" />
-              </TwinZone>
-            ))}
-          </div>
+          {physicalScene ?? (
+            <div className={zoneWrapClass}>
+              {snapshot.zones.map((zone) => (
+                <TwinZone
+                  key={zone.key}
+                  label={zoneLabel(zone.key)}
+                  meta={
+                    zone.meta ??
+                    `${zone.units.length} ${profile.resourceNoun.plural}`
+                  }
+                >
+                  <ResourceUnitGrid
+                    units={zone.units}
+                    className="!grid-cols-2"
+                  />
+                </TwinZone>
+              ))}
+            </div>
+          )}
 
           {snapshot.workItems.length > 0 ? (
             <TwinZone label={titleCase(profile.workItemNoun.plural)}>

@@ -43,6 +43,11 @@ describe("HospitalityResourceManager", () => {
             capacityUnit: "seats",
             serviceArea: "Dining room",
             blockedReason: null,
+            attributes: {
+              shape: "booth",
+              combinationGroup: "main-banquette",
+              combinableWith: [],
+            },
             version: 2,
             availability: [
               {
@@ -66,6 +71,11 @@ describe("HospitalityResourceManager", () => {
             capacityUnit: "seats",
             serviceArea: "Patio",
             blockedReason: "Loose leg",
+            attributes: {
+              shape: "round",
+              combinationGroup: null,
+              combinableWith: [],
+            },
             version: 1,
             availability: [],
           },
@@ -76,6 +86,8 @@ describe("HospitalityResourceManager", () => {
     expect(html).toContain("Aster");
     expect(html).toContain("4 seats");
     expect(html).toContain("Dining room");
+    expect(html).toContain("Booth");
+    expect(html).toContain("main-banquette");
     expect(html).toContain("Blocked");
     expect(html).toContain("Loose leg");
     expect(html).toContain("Add table");
@@ -111,6 +123,11 @@ describe("HospitalityResourceManager", () => {
             capacityUnit: "seats",
             serviceArea: "Dining room",
             blockedReason: null,
+            attributes: {
+              shape: "square",
+              combinationGroup: null,
+              combinableWith: [],
+            },
             version: 1,
             availability: [],
           },
@@ -131,6 +148,9 @@ describe("HospitalityResourceManager", () => {
     });
     fireEvent.change(screen.getByLabelText("Service area"), {
       target: { value: "Dining room" },
+    });
+    fireEvent.change(screen.getByLabelText("Table shape"), {
+      target: { value: "square" },
     });
     fireEvent.click(
       screen.getByText("Add table", {
@@ -157,6 +177,11 @@ describe("HospitalityResourceManager", () => {
             capacityUnit: "seats",
             serviceArea: "Dining room",
             blockedReason: "Maintenance",
+            attributes: {
+              shape: "booth",
+              combinationGroup: "main-banquette",
+              combinableWith: [],
+            },
             version: 2,
             availability: [],
           },
@@ -178,6 +203,11 @@ describe("HospitalityResourceManager", () => {
             capacityUnit: "seats",
             serviceArea: "Dining room",
             blockedReason: null,
+            attributes: {
+              shape: "round",
+              combinationGroup: null,
+              combinableWith: [],
+            },
             version: 1,
             availability: [],
           },
@@ -192,8 +222,22 @@ describe("HospitalityResourceManager", () => {
     fireEvent.change(screen.getByLabelText("Why is it blocked?"), {
       target: { value: "Maintenance" },
     });
+    fireEvent.change(screen.getByLabelText("Table shape"), {
+      target: { value: "booth" },
+    });
+    fireEvent.change(screen.getByLabelText(/^Combination group/), {
+      target: { value: "main-banquette" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Save table" }));
 
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    const fetchMock = vi.mocked(fetch);
+    const body = JSON.parse(
+      String((fetchMock.mock.calls[0]?.[1] as RequestInit).body),
+    ) as Record<string, unknown>;
+    expect(body).toMatchObject({
+      shape: "booth",
+      combinationGroup: "main-banquette",
+    });
   });
 });

@@ -28,10 +28,11 @@ their own **Tables & Capacity** page (`/storefront/tables`):
   action for the next service period. Add, edit, schedule, or block tables here,
   not under Team.
 
-Use **Add table** to record its owner-facing label, seats, and service area.
-Open an existing table to change its status, capacity, area, or internal blocked
-reason. The readiness answer and floor/list state refresh after a successful
-save, so the host does not need to reload the page while a guest is waiting.
+Use **Add table** to record its owner-facing label, seats, service area, and
+physical shape. For tables that can be joined, use one combination group and
+select only real neighboring tables. Open an existing table to change its
+status, capacity, area, shape, combination rules, or internal blocked reason.
+The readiness answer and floor/list state refresh after a successful save.
 
 The availability editor supports recurring weekday hours and dated available or
 blocked windows. Public booking consumes these rules, active holds, and existing
@@ -42,15 +43,33 @@ Under "Tables right now" you can switch between two views of the same live
 capacity:
 
 - **Floor plan** (the default) — a graphical layout of your tables, each shaped
-  by its seats and coloured by its state, so you can see at a glance which tables
-  are open and which are turning soon (with the minutes until they free up).
-  Tables cluster into sections (window, bar, booths, patio) inferred from their
-  names, so the plan is legible without any extra setup. Pan and zoom to explore.
-- **List** — the same tables as a scannable list.
+  from its saved table record and labeled with its current state. Status text
+  accompanies color, and turning tables show when they are expected to free.
+  Choose **Adjust layout** to place tables in their real positions and save the
+  authored floor without changing reservations.
+- **List** — the same live facts as a scannable alternative when the drawing is
+  unavailable or a list is easier to operate.
+
+Use `/workspace` during service. The restaurant floor there joins the saved
+layout to waiting and reserved parties, active service turns, server sections,
+table availability, and workload. To seat a party:
+
+1. Choose a waiting party and review only compatible table choices.
+2. Check the table, timing, and server-load explanation.
+3. Preview and explicitly confirm the assignment.
+4. Advance the table through seated, ordered, paid, clearing, and cleared as
+   service progresses.
+
+To move an active party, choose **Move party**, select a compatible destination,
+review the change, and confirm. If another host changes the floor first, DPF
+does not make a partial assignment: it refreshes the facts and offers current
+alternatives.
 
 Tables are never shown as "providers" and never mixed into the Staff list.
 Blocked reasons and internal allocation references stay in the owner workspace;
-the customer booking experience receives only a safe availability explanation.
+the customer booking experience receives only seat capacity, service area, and
+an availability estimate. It does not receive guest names, staff identity,
+internal table ids, notes, or blocked reasons.
 
 ## What To Watch
 

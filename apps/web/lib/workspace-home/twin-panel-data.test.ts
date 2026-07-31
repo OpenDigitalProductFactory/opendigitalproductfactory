@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 
-import { ALL_ARCHETYPES } from "@dpf/storefront-templates";
+import {
+  ALL_ARCHETYPES,
+  deriveTwinProfile,
+} from "@dpf/storefront-templates";
 
 import {
   loadWorkspaceTwinPresentation,
@@ -8,6 +11,9 @@ import {
 } from "./twin-panel-data";
 
 const SAMPLE = ALL_ARCHETYPES[0];
+const RESTAURANT = ALL_ARCHETYPES.find(
+  (archetype) => deriveTwinProfile(archetype).template === "FLOOR",
+)!;
 const NOW = new Date("2026-07-15T09:00:00Z");
 
 // A fake client for the live projection path. `configured` toggles whether an org
@@ -137,5 +143,84 @@ describe("loadWorkspaceTwinPresentation — live overlay", () => {
   it("returns null for an unresolvable slug regardless of live data", async () => {
     expect(await loadWorkspaceTwinPresentation(null)).toBeNull();
     expect(await loadWorkspaceTwinPresentation("not-a-real-archetype-slug")).toBeNull();
+  });
+
+  it("loads the persisted restaurant scene beside the live FLOOR snapshot", async () => {
+    const base = fakeDb({
+      archetypeId: RESTAURANT.archetypeId,
+      name: RESTAURANT.name,
+    }) as Record<string, unknown>;
+    const sceneLayout = {
+      schemaVersion: 1,
+      spaceKind: "cartesian-interior",
+      viewport: { x: 0, y: 0, zoom: 1 },
+      zones: [],
+      placements: [
+        {
+          id: "placement-1",
+          entityRef: { kind: "table", id: "table-1" },
+          geometry: {
+            x: 10,
+            y: 20,
+            width: 80,
+            height: 80,
+            rotation: 0,
+            shapeKind: "round-table",
+          },
+        },
+      ],
+    };
+    const db = {
+      ...base,
+      storefrontConfig: {
+        findFirst: async (input: {
+          select?: { id?: boolean; timezone?: boolean };
+        }) =>
+          input.select?.id
+            ? {
+                id: "storefront-1",
+                organization: { orgId: "ORG-1" },
+                archetype: { name: RESTAURANT.name },
+                hospitalityResources: [
+                  {
+                    id: "table-1",
+                    label: "Aster",
+                    capacity: 4,
+                    serviceArea: "Main dining",
+                    attributes: { shape: "round" },
+                  },
+                ],
+              }
+            : {
+                timezone: "UTC",
+                archetype: {
+                  archetypeId: RESTAURANT.archetypeId,
+                  name: RESTAURANT.name,
+                },
+              },
+      },
+      operationalSceneLayout: {
+        findUnique: async () => ({
+          id: "scene-1",
+          version: 3,
+          layoutState: sceneLayout,
+        }),
+        create: async () => {
+          throw new Error("existing scene must be reused");
+        },
+      },
+    };
+
+    const result = await loadWorkspaceTwinPresentation(
+      RESTAURANT.archetypeId,
+      null,
+      { db: db as never, now: NOW },
+    );
+
+    expect(result?.scene).toMatchObject({
+      id: "scene-1",
+      version: 3,
+      createdFromStarter: false,
+    });
   });
 });
