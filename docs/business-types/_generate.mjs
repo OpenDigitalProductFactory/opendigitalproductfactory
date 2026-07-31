@@ -9,7 +9,7 @@
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { groups, pages, pagesByGroup, groupMock } from "./_content.mjs";
+import { groups, pages, pagesByGroup, groupMock, judgement } from "./_content.mjs";
 import { analyze, band, TIERS } from "./_readability.mjs";
 
 // Target reading level for BUSINESS-FACING copy — the "archetype" tier of the
@@ -549,6 +549,37 @@ function readabilityNote(page) {
   )}</strong> level (Flesch–Kincaid Reading Ease ${a.readingEase.toFixed(0)}). We hold business copy to a high-school reading level; the architecture and standards sections are intentionally more technical.</p>`;
 }
 
+// ---- how the coworker decides ----------------------------------------------
+// Every business type is judged on the same named set of decision axes; only
+// the emphasis changes. This block says what carries the most weight here and
+// what is never traded away, then links to the full per-business-type detail
+// and the axis definitions behind it.
+function judgementSection(page) {
+  const j = judgement[page.slug];
+  if (!j) return "";
+  return `<section id="decisions" aria-label="How your coworker decides">
+    <p class="section-eyebrow">How your coworker decides</p>
+    <h2>What it weighs, and what it will not trade</h2>
+    <p class="sub">Your AI coworkers judge every call against the same named set of factors, whatever the business. What changes for ${esc(
+      page.display.toLowerCase()
+    )} is which of them carry the most weight.</p>
+    <ul class="tlist caps">
+      <li><span class="ic" aria-hidden="true">✓</span><span class="tx"><span class="lead">Weighs most heavily</span> ${esc(
+        j.weighs
+      )}</span></li>
+      <li><span class="ic" aria-hidden="true">✓</span><span class="tx"><span class="lead">Never traded away</span> ${esc(
+        j.never
+      )}</span></li>
+    </ul>
+    <p class="sub">You are not asked to configure any of this. Five plain-English questions — how far to go when something goes wrong, whether to honour a quote you got wrong, new work vs existing commitments, your quality bar, and what can be bought without asking you — come pre-answered for your line of work, each with a spending limit you can change. Adjust them in your own words at any time.</p>
+    <p class="sub">Every factor is named, and every principle's vote is recorded, so you can always ask why. See <a href="/architecture/decision-vectors-by-archetype#${esc(
+      page.slug
+    )}">the full detail for ${esc(
+    page.display.toLowerCase()
+  )}</a>, or the <a href="/architecture/decision-vectors">complete list of decision factors</a> and where each one's weight comes from.</p>
+  </section>`;
+}
+
 // ---- per-business page -----------------------------------------------------
 function pageHTML(page) {
   const g = groups.find((x) => x.id === page.group);
@@ -576,6 +607,7 @@ function pageHTML(page) {
         page.compliance
       )}</div></section>`
     : "";
+  const judged = judgementSection(page);
 
   return `<!doctype html>
 <html lang="en">
@@ -656,6 +688,8 @@ ${topbar()}
   </section>
 
   ${proofVisuals(page)}
+
+  ${judged}
 
   ${compliance}
 

@@ -30,6 +30,8 @@ The full design lives in three specs:
 
 When a coworker or external MCP client hits a decision point that doesn't have a deterministic answer in code, it calls the Decision Perspective Gate. The gate selects the active profile, retrieves the principles and prior decisions that bear on the question, aggregates them as a weighted vector across decision dimensions, and returns one of four outcomes:
 
+> **What are the decision dimensions?** There are 20 of them, and the set is closed. Each one — what it means, whether it is a benefit or a cost, whether it is shared across every profession or owned by one, and where its weight comes from — is defined in the [Decision Vectors reference](../../architecture/decision-vectors.md). How the emphasis shifts by line of business is in [Decision Vectors by Business Type](../../architecture/decision-vectors-by-archetype.md).
+
 | Outcome | Meaning | What happens next |
 |---------|---------|-------------------|
 | `recommend` | Confident direction backed by source-traced principles. | The coworker proceeds; the recommendation is logged. |

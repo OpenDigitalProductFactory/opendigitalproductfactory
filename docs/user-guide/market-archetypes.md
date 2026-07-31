@@ -38,6 +38,7 @@ An archetype is more than a storefront template. It is the business shape select
 - **Coworker emphasis**: which AI coworkers should be prominent, which skills they can offer, and which handoffs should appear on the daily board.
 - **Marketing posture**: the offers, proof points, content prompts, and campaign ideas should inherit from the same archetype that shaped the customer portal.
 - **Contribution applicability**: reusable features should be recommended to matching archetypes first, not sprayed across every install.
+- **Decision emphasis**: which factors an AI coworker weighs most heavily, and which it never trades away. The named factors are the same for every archetype — only the emphasis changes. See [Decision Vectors by Business Type](../architecture/decision-vectors-by-archetype.md), and the [Decision Vectors reference](../architecture/decision-vectors.md) for the axis definitions themselves.
 
 Implementation source of truth: `StorefrontConfig.archetypeId` selects the install's `StorefrontArchetype`. The archetype catalog lives in `packages/storefront-templates/src/archetypes/`.
 
