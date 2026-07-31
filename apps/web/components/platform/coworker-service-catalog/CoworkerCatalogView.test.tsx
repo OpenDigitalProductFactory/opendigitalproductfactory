@@ -110,6 +110,9 @@ describe("CoworkerCatalogView", () => {
     expect(desktopRegion).toContain('tabindex="0"');
     expect(desktopRegion).toContain("overflow-x-auto");
     expect(html).toContain('role="note"');
+    expect(html).toContain('data-owner-first-detail=""');
+    expect(html).toContain("Engagement controls");
+    expect(html).toContain("Approval and data boundaries");
     expect(html).toContain(
       'aria-label="Provider organization: Example Works"',
     );

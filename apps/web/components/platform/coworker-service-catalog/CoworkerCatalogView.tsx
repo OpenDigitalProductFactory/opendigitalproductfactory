@@ -6,6 +6,7 @@ import {
   DataTable,
   type Column,
 } from "@/components/ui/report-kit";
+import { OwnerFirstDisclosure } from "@/components/owner-first/OwnerFirstDisclosure";
 
 type OfferRowModel = {
   offer: CoworkerOfferCatalogItem;
@@ -111,22 +112,26 @@ export function CoworkerCatalogView({ catalog }: { catalog: CoworkerCatalog }) {
           </div>
         </div>
 
-        <aside className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3">
-          <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Engagement Controls</h2>
-          <dl className="mt-3 space-y-3 text-xs">
-            <div>
-              <dt className="font-semibold text-[var(--dpf-muted)]">Engagement</dt>
-              <dd className="mt-1 text-[var(--dpf-text)]">Requests create engagements; accepted work links a Work Capsule.</dd>
-            </div>
-            <div>
-              <dt className="font-semibold text-[var(--dpf-muted)]">External providers</dt>
-              <dd className="mt-1 text-[var(--dpf-text)]">{external} offer{external === 1 ? "" : "s"} require explicit terms and data-boundary context.</dd>
-            </div>
-            <div>
-              <dt className="font-semibold text-[var(--dpf-muted)]">Approval posture</dt>
-              <dd className="mt-1 text-[var(--dpf-text)]">High-risk and approval-required offers route through proposal/envelope rails before action.</dd>
-            </div>
-          </dl>
+        <aside>
+          <OwnerFirstDisclosure
+            summary="Engagement controls"
+            hint="Approval and data boundaries"
+          >
+            <dl className="space-y-3 text-xs">
+              <div>
+                <dt className="font-semibold text-[var(--dpf-muted)]">Engagement</dt>
+                <dd className="mt-1 text-[var(--dpf-text)]">Requests create engagements; accepted work links a Work Capsule.</dd>
+              </div>
+              <div>
+                <dt className="font-semibold text-[var(--dpf-muted)]">External providers</dt>
+                <dd className="mt-1 text-[var(--dpf-text)]">{external} offer{external === 1 ? "" : "s"} require explicit terms and data-boundary context.</dd>
+              </div>
+              <div>
+                <dt className="font-semibold text-[var(--dpf-muted)]">Approval posture</dt>
+                <dd className="mt-1 text-[var(--dpf-text)]">High-risk and approval-required offers route through proposal/envelope rails before action.</dd>
+              </div>
+            </dl>
+          </OwnerFirstDisclosure>
         </aside>
       </section>
     </div>
