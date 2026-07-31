@@ -153,7 +153,7 @@ export function GraphExplorer({ census }: Props) {
       .catch((cause: unknown) => {
         if (!cancelled) {
           setSubgraph(EMPTY_SUBGRAPH);
-          setError(cause instanceof Error ? cause.message : "Could not load the neighbourhood.");
+          setError(cause instanceof Error ? cause.message : "Could not load that view.");
         }
       })
       .finally(() => {
@@ -239,11 +239,10 @@ export function GraphExplorer({ census }: Props) {
       <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
         <div className="flex items-baseline justify-between gap-3 flex-wrap mb-3">
           <h2 className="text-xs font-semibold uppercase tracking-widest text-[var(--dpf-muted)]">
-            Corpus
+            In the graph
           </h2>
           <p className="text-xs text-[var(--dpf-muted)]">
-            {census.nodeTotal.toLocaleString()} nodes · {census.edgeTotal.toLocaleString()}{" "}
-            relationships
+            {census.nodeTotal.toLocaleString()} nodes · {census.edgeTotal.toLocaleString()} links
           </p>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -273,8 +272,8 @@ export function GraphExplorer({ census }: Props) {
         </div>
         <p className="text-dpf-caption text-[var(--dpf-muted)] mt-2">
           {activeDomains.size === 0
-            ? "All domains included. Select one or more to narrow search and expansion."
-            : `Limited to ${[...activeDomains]
+            ? "All types are shown. Pick one or more to narrow the search."
+            : `Set to ${[...activeDomains]
                 .map((d) => GRAPH_DOMAINS.find((g) => g.key === d)?.label ?? d)
                 .join(", ")}.`}
         </p>
@@ -301,7 +300,7 @@ export function GraphExplorer({ census }: Props) {
                   void runSearch();
                 }
               }}
-              placeholder="Search by name, path, or key — e.g. BacklogItem, /admin, search_code_graph"
+              placeholder="Search by name or path"
               className="w-full px-3 py-2 text-sm rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)]"
             />
           </div>
@@ -327,10 +326,16 @@ export function GraphExplorer({ census }: Props) {
             </div>
           </div>
 
+          {/* Search is the owner's first move on this surface, so it carries both
+              the primary-action and owner-first-next-action markers. It sits above
+              the fold, never inside a disclosure — the primary-action-reachable
+              check is blocking. */}
           <button
             type="button"
             onClick={() => void runSearch()}
             disabled={searching || !query.trim()}
+            data-dpf-primary-action
+            data-owner-first-next-action="graph-explorer-search"
             className="px-3 py-2 text-xs rounded-md bg-[var(--dpf-accent)] text-white disabled:opacity-50"
           >
             {searching ? "Searching…" : "Search"}
@@ -347,7 +352,7 @@ export function GraphExplorer({ census }: Props) {
 
         {searched && results.length === 0 && !searching && (
           <p className="text-xs text-[var(--dpf-muted)] mt-3">
-            Nothing matched “{query.trim()}”. Try a shorter fragment, or clear the domain filter.
+            Nothing matched “{query.trim()}”. Try a shorter word, or clear the type filter.
           </p>
         )}
 
@@ -390,13 +395,13 @@ export function GraphExplorer({ census }: Props) {
           aria-expanded={showAdvanced}
           className="mt-3 text-dpf-caption text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
         >
-          {showAdvanced ? "Hide advanced filters" : "Advanced filters"}
+          {showAdvanced ? "Hide more filters" : "More filters"}
         </button>
 
         {showAdvanced && (
           <div className="mt-3 space-y-3">
             <div>
-              <p className="text-dpf-caption text-[var(--dpf-muted)] mb-1">Node types in the corpus</p>
+              <p className="text-dpf-caption text-[var(--dpf-muted)] mb-1">Node types</p>
               <div className="flex flex-wrap gap-1">
                 {census.labels.map((row) => {
                   const descriptor = describeLabel(row.label);
@@ -415,7 +420,7 @@ export function GraphExplorer({ census }: Props) {
 
             <div>
               <p className="text-dpf-caption text-[var(--dpf-muted)] mb-1">
-                Follow only these relationships
+                Follow only these links
                 {activeRelTypes.size > 0 ? ` (${activeRelTypes.size} selected)` : " (all)"}
               </p>
               <div className="flex flex-wrap gap-1">
@@ -462,7 +467,7 @@ export function GraphExplorer({ census }: Props) {
         <div>
           {loading && seedKeys.length > 0 && subgraph.nodes.length === 0 ? (
             <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-8 text-center text-sm text-[var(--dpf-muted)]">
-              Loading neighbourhood…
+              Loading…
             </div>
           ) : (
             <RelationshipGraph
@@ -470,8 +475,8 @@ export function GraphExplorer({ census }: Props) {
               title="Graph Explorer"
               nodeLegend={nodeLegend}
               linkLegend={linkLegend}
-              emptyMessage="Search above and pick a starting point to draw its neighbourhood."
-              hint="Click a node to inspect it"
+              emptyMessage="Search above. Then pick a starting point."
+              hint="Click a dot to see what it is"
               onFocusChange={inspect}
             />
           )}
@@ -479,13 +484,13 @@ export function GraphExplorer({ census }: Props) {
 
         <aside className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
           <h2 className="text-xs font-semibold uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
-            Inspector
+            Details
           </h2>
           {!inspected ? (
             <p className="text-xs text-[var(--dpf-muted)]">
               {seedKeys.length === 0
-                ? "No starting point selected yet."
-                : "Click a node on the canvas to see its labels, properties, and degree."}
+                ? "Nothing picked yet."
+                : "Click a dot to see what it is."}
             </p>
           ) : (
             <div className="space-y-3">
@@ -516,8 +521,8 @@ export function GraphExplorer({ census }: Props) {
               </div>
 
               <p className="text-dpf-caption text-[var(--dpf-muted)]">
-                {inspected.degree.toLocaleString()} relationship
-                {inspected.degree === 1 ? "" : "s"} in the full corpus
+                {inspected.degree.toLocaleString()} link{inspected.degree === 1 ? "" : "s"} in
+                the whole graph
               </p>
 
               <button
@@ -526,7 +531,7 @@ export function GraphExplorer({ census }: Props) {
                 disabled={seedKeys.includes(inspected.key)}
                 className="w-full px-3 py-2 text-xs rounded-md bg-[var(--dpf-accent)] text-white disabled:opacity-50"
               >
-                {seedKeys.includes(inspected.key) ? "Already expanded" : "Expand from here"}
+                {seedKeys.includes(inspected.key) ? "Already added" : "Expand from here"}
               </button>
 
               {Object.keys(inspected.props).length > 0 && (

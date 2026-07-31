@@ -19,11 +19,15 @@ export default async function GraphExplorerPage() {
 
   return (
     <div>
-      <div className="mb-6">
+      {/* data-dpf-lead marks where the owner starts reading (ux-budget lead-band
+          check). The copy is short and plain on purpose: a net-new route gets no
+          reading-level exemption, and the grade is measured over the whole
+          rendered page, shell chrome included. */}
+      <div className="mb-6" data-dpf-lead>
         <h1 className="text-xl font-bold text-[var(--dpf-text)]">Graph Explorer</h1>
         <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
-          Explore how the platform is connected — source code, data model, architecture, and
-          infrastructure in one graph. Search for a starting point, then follow its relationships.
+          See how the parts of the platform link up. Search for a starting point. Then follow its
+          links.
         </p>
       </div>
 

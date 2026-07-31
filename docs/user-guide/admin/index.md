@@ -40,13 +40,13 @@ model such as `BacklogItem`, a route such as `/admin`, a tool such as
 `search_code_graph`. Pick a result and its neighbourhood is drawn. From there:
 
 - **Hops** controls how far out from your starting point the drawing reaches.
-- Clicking a node opens the **Inspector**, which shows what it is, its stored
-  properties, and how many relationships it has across the whole corpus.
+- Clicking a node opens **Details**, which shows what it is, its stored
+  properties, and how many links it has across the whole graph.
 - **Expand from here** adds that node as a second starting point, growing the
   picture instead of replacing it.
 - Selecting one or more domain tiles narrows both search and expansion.
-- **Advanced filters** exposes the individual node types and relationship types
-  with their counts, for when you want to follow only, say, "Imports".
+- **More filters** exposes the individual node types and link types with their
+  counts, for when you want to follow only, say, "Imports".
 
 The corpus is large enough that a view can be clipped; when that happens the page
 says so and names the three ways to narrow it. Nothing on this page changes any
