@@ -52,9 +52,18 @@
 //
 // Exit: 0 clean · 1 corruption or collation drift found · 2 invocation error
 //
-// Wired into:
-//   - .github/workflows/migration-safety-guard.yml (CI, against the CI cluster)
+// Invoked by:
 //   - packages/db/scripts/index-integrity-guard.test.ts (vitest)
+//   - `pnpm --filter @dpf/db run index-integrity` (manual, against DATABASE_URL)
+//
+// NOT yet wired as a recurring platform sweep. A CI cron would be theatre: CI's
+// cluster is freshly initdb'd under glibc every run, so the musl->glibc
+// collation flip this guard exists to catch (an EXISTING volume carried across
+// an image change) can never reproduce there. The real home is a platform-side
+// scheduled sweep against the live install DB that raises an advisory/BI on
+// corruption — tracked as the recurring-detector follow-up to BI-8EEEF8CB. The
+// repair half of that BI (the shared authoring helper) lives at
+// packages/db/src/migrations/exact-key-repair.ts.
 
 import pg from "pg";
 import {
