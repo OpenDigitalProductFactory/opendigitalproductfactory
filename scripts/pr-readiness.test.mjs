@@ -111,6 +111,22 @@ test("parsePrBodyTrailers extracts supported trailers with line numbers", () => 
   ]);
 });
 
+test("parsePrBodyTrailers ignores commented template examples", () => {
+  const trailers = parsePrBodyTrailers(
+    [
+      "Intro",
+      "<!-- Add exactly one:",
+      "Local-CI-Evidence: <record>",
+      "Local-CI-Override: <reason>",
+      "-->",
+      "UX-Fit-Decision: no-ui-impact",
+    ].join("\n"),
+  );
+  assert.deepEqual(trailers, [
+    { name: "UX-Fit-Decision", value: "no-ui-impact", line: 6 },
+  ]);
+});
+
 test("validatePrBodyTrailers catches duplicate trailers and invalid seed-fit decisions", () => {
   const result = validatePrBodyTrailers(
     [

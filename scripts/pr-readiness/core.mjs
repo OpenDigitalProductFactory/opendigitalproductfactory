@@ -69,7 +69,11 @@ export function buildGatePlan({
 }
 
 export function parsePrBodyTrailers(prBody = "") {
-  return String(prBody)
+  const visibleBody = String(prBody).replace(
+    /<!--[\s\S]*?-->/g,
+    (comment) => comment.replace(/[^\r\n]/g, ""),
+  );
+  return visibleBody
     .split(/\r?\n/)
     .flatMap((line, index) => {
       const match = line.match(/^\s*([A-Za-z][A-Za-z-]*):\s*(\S.*)?$/);
