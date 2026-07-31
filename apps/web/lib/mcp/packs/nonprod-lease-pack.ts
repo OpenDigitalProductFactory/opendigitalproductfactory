@@ -107,18 +107,21 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "lookup_change_origin",
+    // Kept deliberately short: /platform/audit/authority renders every tool
+    // description, and that route's word budget only ratchets down. The full
+    // usage guidance lives in the dpf-local-merge-ci-before-push skill.
     description:
-      "Resolve which agent client and which client thread produced a change, from the governed pregate records this install already writes. Match by commit SHA (pass every SHA a PR contains — head plus commits) and optionally branch; SHA matches are exact and survive branch deletion, branch matches are a fallback. Read-only. Returns no origin for work this install never gated (e.g. an outside contributor), which is the correct answer rather than a guess.",
+      "Resolve which agent client and thread produced a change, from this install's governed gate records. Match by commit SHA, else branch. Read-only.",
     inputSchema: {
       type: "object",
       properties: {
         shas: {
           type: "array",
           items: { type: "string" },
-          description: "Commit SHAs (40-hex) to match. Non-SHA values are ignored.",
+          description: "Commit SHAs to match.",
         },
-        branchName: { type: "string", description: "Fallback match when no SHA matches." },
-        limit: { type: "number", description: "Max matches to return (default 20, max 100)." },
+        branchName: { type: "string", description: "Fallback when no SHA matches." },
+        limit: { type: "number", description: "Max matches (default 20)." },
       },
       required: [],
     },
