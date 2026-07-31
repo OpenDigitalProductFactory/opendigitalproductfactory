@@ -32,6 +32,7 @@ import {
 import { getEmployeeAddresses } from "@/lib/address-data";
 import { getTimesheetForWeek, getPendingTimesheetsForManager, getCurrentWeekStart } from "@/lib/timesheet-data";
 import { auth } from "@/lib/auth";
+import { can } from "@/lib/permissions";
 import { getFinancialProfile } from "@dpf/finance-templates";
 import { CompensationPanel } from "@/components/employee/CompensationPanel";
 import { getEmployeeCompensationRows } from "@/lib/hr/compensation-data";
@@ -82,6 +83,14 @@ export default async function EmployeePage({ searchParams }: Props) {
 
   const session = await auth();
   const currentUserId = session?.user?.id ?? null;
+
+  // Org-chart edits are governed; render read-only for anyone who cannot write (BI-HCM-004).
+  const canManageWorkforce = session?.user
+    ? can(
+        { platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser },
+        "manage_user_lifecycle",
+      )
+    : false;
 
   const primaryEmployeeUserId = employees.find((employee) => employee.userId)?.userId ?? null;
   const selectedEmployee = primaryEmployeeUserId
@@ -155,6 +164,18 @@ export default async function EmployeePage({ searchParams }: Props) {
     prisma.timesheetPeriod.count({ where: { status: "submitted" } }),
   ]);
   const unassignedRoles = roles.filter((r) => r._count.users === 0).length;
+
+  // Role holders, from the users already loaded (no extra query) so cards can name people.
+  const roleHolders = new Map<string, string[]>();
+  for (const user of users) {
+    if (!user.isActive) continue;
+    for (const group of user.groups) {
+      const roleId = group.platformRole.roleId;
+      const list = roleHolders.get(roleId) ?? [];
+      list.push(user.email);
+      roleHolders.set(roleId, list);
+    }
+  }
   const ownerSummary = buildEmployeeOwnerSummary(
     { submittedTimesheets, teamSize: employees.length, unassignedRoles },
     vocab,
@@ -231,7 +252,7 @@ export default async function EmployeePage({ searchParams }: Props) {
             )}
           </div>
         ) : view === "orgchart" ? (
-          <OrgChartView employees={employees} />
+          <OrgChartView employees={employees} canReassign={canManageWorkforce} />
         ) : view === "mypolicies" ? (
           <MyPoliciesView />
         ) : (
@@ -261,72 +282,91 @@ export default async function EmployeePage({ searchParams }: Props) {
         )}
       </div>
 
-      {/* Role governance — oversight, SLAs, and user access. Demoted behind
-          progressive disclosure so staffing readiness leads (BI-3BCAF95F). Simple
-          mode drops it entirely to reduce body content. */}
+      {/* Role governance & access. Behind progressive disclosure so staffing readiness leads
+          (BI-3BCAF95F). The actionable half leads within it (BI-HCM-004): read-only cards used
+          to sit above the only control that changes anything. */}
       {!simple && (
         <div className="mt-8">
           <OwnerFirstDisclosure
             summary="Role governance & access"
-            hint="Oversight, SLAs, and who can do what"
+            hint="Who holds each role"
           >
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {roles.map((r) => {
-                const userCount = r._count.users;
-                const sla =
-                  r.slaDurationH != null && r.slaDurationH > 0
-                    ? `${r.slaDurationH}h SLA`
-                    : "No SLA";
-
-                return (
-                  <div
-                    key={r.id}
-                    className="p-4 rounded-lg bg-[var(--dpf-surface-2)] border-l-4"
-                    style={{ borderLeftColor: "#7c8cf8" }}
-                  >
-                    <p className="text-[9px] font-mono text-[var(--dpf-muted)] mb-1">
-                      {r.roleId}
-                    </p>
-                    <p className="text-sm font-semibold text-[var(--dpf-text)] leading-tight mb-1">
-                      {r.name}
-                    </p>
-                    {r.description != null && (
-                      <p className="text-[10px] text-[var(--dpf-muted)] line-clamp-2 mb-2">
-                        {r.description}
-                      </p>
-                    )}
-                    <div className="flex flex-wrap gap-2">
-                      <span className="text-[9px] text-[var(--dpf-muted)]">
-                        {oversightLabel(r.hitlTierMin, { dense: true })}
-                      </span>
-                      <span className="text-[9px] text-[var(--dpf-muted)]">{sla}</span>
-                      <span className="text-[9px] text-[var(--dpf-muted)]">
-                        {userCount === 0 ? "Unassigned" : `${userCount} ${userCount === 1 ? "person" : "people"}`}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {roles.length === 0 && (
-              <p className="text-sm text-[var(--dpf-muted)]">No roles registered yet.</p>
-            )}
-
             {users.length > 0 && (
-              <div className="mt-8">
-                <HrUserLifecyclePanel
-                  roles={roles.map((role) => ({ roleId: role.roleId, name: role.name }))}
-                  users={users.map((user) => ({
-                    id: user.id,
-                    email: user.email,
-                    isActive: user.isActive,
-                    isSuperuser: user.isSuperuser,
-                    roleId: user.groups[0]?.platformRole.roleId ?? null,
-                  }))}
-                />
-              </div>
+              <HrUserLifecyclePanel
+                roles={roles.map((role) => ({ roleId: role.roleId, name: role.name }))}
+                users={users.map((user) => ({
+                  id: user.id,
+                  email: user.email,
+                  isActive: user.isActive,
+                  isSuperuser: user.isSuperuser,
+                  roleId: user.groups[0]?.platformRole.roleId ?? null,
+                }))}
+              />
             )}
+
+            <div className="mt-8">
+              <div className="mb-3">
+                <p className="text-xs font-semibold text-[var(--dpf-text)]">
+                  What each role can do
+                </p>
+                <p className="mt-0.5 text-dpf-caption text-[var(--dpf-muted)]">
+                  Set by the platform. Use the control above to change who holds a role.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {roles.map((r) => {
+                  const sla =
+                    r.slaDurationH != null && r.slaDurationH > 0
+                      ? `${r.slaDurationH}h SLA`
+                      : "No SLA";
+                  const holders = roleHolders.get(r.roleId) ?? [];
+
+                  return (
+                    <div
+                      key={r.id}
+                      className="rounded-lg border-l-4 bg-[var(--dpf-surface-2)] p-4"
+                      style={{ borderLeftColor: "var(--dpf-accent)" }}
+                    >
+                      <p className="mb-1 font-mono text-dpf-caption text-[var(--dpf-muted)]">
+                        {r.roleId}
+                      </p>
+                      <p className="mb-1 text-sm font-semibold leading-tight text-[var(--dpf-text)]">
+                        {r.name}
+                      </p>
+                      {r.description != null && (
+                        <p className="mb-2 line-clamp-2 text-dpf-caption text-[var(--dpf-muted)]">
+                          {r.description}
+                        </p>
+                      )}
+                      <div className="mb-2 flex flex-wrap gap-2">
+                        <span className="text-dpf-caption text-[var(--dpf-muted)]">
+                          {oversightLabel(r.hitlTierMin, { dense: true })}
+                        </span>
+                        <span className="text-dpf-caption text-[var(--dpf-muted)]">{sla}</span>
+                      </div>
+
+                      {/* A bare count cannot answer "who can do what". */}
+                      <p className="text-dpf-caption text-[var(--dpf-muted)]">
+                        {holders.length === 0 ? (
+                          <span className="text-[var(--dpf-warning)]">Nobody holds this</span>
+                        ) : (
+                          <>
+                            <span className="text-[var(--dpf-text)]">Held by</span>{" "}
+                            {holders.slice(0, 3).join(", ")}
+                            {holders.length > 3 ? ` +${holders.length - 3} more` : ""}
+                          </>
+                        )}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {roles.length === 0 && (
+                <p className="text-sm text-[var(--dpf-muted)]">No roles registered yet.</p>
+              )}
+            </div>
           </OwnerFirstDisclosure>
         </div>
       )}

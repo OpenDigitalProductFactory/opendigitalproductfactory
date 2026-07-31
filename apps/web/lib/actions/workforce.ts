@@ -10,6 +10,7 @@ import { buildPrincipalContext } from "@/lib/principal-context";
 import { resolveGovernedAction } from "@/lib/governance-resolver";
 import { syncEmployeePrincipal } from "@/lib/identity/principal-linking";
 import { validateLifecycleTransition, validateEmployeeProfileInput, type EmployeeProfileInput, type EmploymentEventType, type WorkforceStatus } from "@/lib/workforce-types";
+import { wouldCreateManagerCycle } from "@/lib/workforce/org-chart-model";
 
 export type WorkforceActionResult = {
   ok: boolean;
@@ -351,6 +352,21 @@ export async function assignEmployeeOrg(input: AssignEmployeeOrgInput): Promise<
       const nextDepartmentId = trimOptional(input.departmentId);
       const nextPositionId = trimOptional(input.positionId);
       const nextManagerEmployeeId = trimOptional(input.managerEmployeeId);
+
+      // Self-management is rejected above, but that alone still allows a cycle: moving a
+      // manager underneath one of their own reports detaches that entire branch from every
+      // root, so those people disappear from the org chart and no accountable manager can be
+      // resolved for approvals. Check the whole subtree, not just the one hop (BI-HCM-004).
+      if (nextManagerEmployeeId && nextManagerEmployeeId !== existing.managerEmployeeId) {
+        const reportingRows = await prisma.employeeProfile.findMany({
+          select: { id: true, managerEmployeeId: true },
+        });
+        if (wouldCreateManagerCycle(reportingRows, employeeProfileId, nextManagerEmployeeId)) {
+          return workforceDenied(
+            "That manager reports to this employee, so the change would create a reporting loop.",
+          );
+        }
+      }
       const nextDottedLineManagerId = trimOptional(input.dottedLineManagerId);
       const nextWorkLocationId = trimOptional(input.workLocationId);
       const nextTimezone = trimOptional(input.timezone);
@@ -393,6 +409,111 @@ export async function assignEmployeeOrg(input: AssignEmployeeOrgInput): Promise<
       revalidatePath("/employee");
       revalidatePath("/admin");
       return { ok: true, message: `Organization assignment updated for ${existing.displayName}.` };
+    },
+  });
+}
+
+/**
+ * Change ONLY a reporting line — the org chart's drag-to-reassign and manager picker
+ * (BI-HCM-004).
+ *
+ * Deliberately narrower than `assignEmployeeOrg`: that action rewrites department, position,
+ * work location, and timezone from its input, and `trimOptional(undefined)` is `null`, so
+ * reusing it for a manager-only edit would silently clear four unrelated fields. Same
+ * governance wrapper, same risk band, same `manager_changed` employment event.
+ */
+export async function reassignEmployeeManager(input: {
+  employeeProfileId: string;
+  managerEmployeeId?: string | null;
+  dottedLineManagerId?: string | null;
+  /** Which line is being edited. Omitting a line leaves it untouched. */
+  line?: "solid" | "dotted";
+  effectiveAt?: Date;
+}): Promise<WorkforceActionResult> {
+  const employeeProfileId = trimRequired(input.employeeProfileId);
+  if (!employeeProfileId) return workforceDenied("Employee profile is required.");
+
+  const line = input.line ?? "solid";
+  const nextManagerId =
+    line === "solid" ? trimOptional(input.managerEmployeeId) : trimOptional(input.dottedLineManagerId);
+
+  if (nextManagerId === employeeProfileId) {
+    return workforceDenied("Employee cannot be their own manager.");
+  }
+
+  return withGovernedWorkforceAction({
+    actionKey: "employee_profile.reassign_manager",
+    riskBand: "medium",
+    objectRef: employeeProfileId,
+    run: async (actor) => {
+      const existing = await prisma.employeeProfile.findUnique({
+        where: { id: employeeProfileId },
+        select: {
+          id: true,
+          displayName: true,
+          managerEmployeeId: true,
+          dottedLineManagerId: true,
+        },
+      });
+      if (!existing) return workforceDenied("Employee profile not found.");
+
+      const currentId = line === "solid" ? existing.managerEmployeeId : existing.dottedLineManagerId;
+      if (currentId === nextManagerId) {
+        return { ok: true, message: `${existing.displayName} already reports there.` };
+      }
+
+      if (nextManagerId) {
+        const manager = await prisma.employeeProfile.findUnique({
+          where: { id: nextManagerId },
+          select: { id: true, displayName: true },
+        });
+        if (!manager) return workforceDenied("Manager profile not found.");
+
+        // Only the solid line forms the accountability tree, so only it can create a loop.
+        if (line === "solid") {
+          const reportingRows = await prisma.employeeProfile.findMany({
+            select: { id: true, managerEmployeeId: true },
+          });
+          if (wouldCreateManagerCycle(reportingRows, employeeProfileId, nextManagerId)) {
+            return workforceDenied(
+              `${manager.displayName} reports to ${existing.displayName}, so this would create a reporting loop.`,
+            );
+          }
+        }
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.employeeProfile.update({
+          where: { id: employeeProfileId },
+          data:
+            line === "solid"
+              ? { managerEmployeeId: nextManagerId }
+              : { dottedLineManagerId: nextManagerId },
+        });
+
+        // Only the solid line is an employment event — a dotted line is advisory.
+        if (line === "solid") {
+          await tx.employmentEvent.create({
+            data: {
+              eventId: `EEVT-${crypto.randomUUID()}`,
+              employeeProfileId,
+              eventType: "manager_changed",
+              effectiveAt: input.effectiveAt ?? new Date(),
+              reason: "org_chart_reassignment",
+              actorUserId: actor.id,
+            },
+          });
+        }
+      });
+
+      revalidatePath("/employee");
+      revalidatePath("/admin");
+      return {
+        ok: true,
+        message: nextManagerId
+          ? `${existing.displayName} now reports to their new manager.`
+          : `${existing.displayName} no longer has a ${line === "solid" ? "manager" : "dotted-line manager"}.`,
+      };
     },
   });
 }

@@ -753,7 +753,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 61
+    "textMass": 107
   },
   "apps/web/app/(shell)/error.tsx": {
     "vocabulary": 0,
@@ -4904,7 +4904,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 54
+    "textMass": 129
   },
   "apps/web/components/employee/ReviewPanel.tsx": {
     "vocabulary": 0,
