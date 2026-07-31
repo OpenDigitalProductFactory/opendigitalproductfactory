@@ -169,6 +169,14 @@ describe("RosterView", () => {
     );
     expect(marketingCard).not.toBeNull();
     expect(
+      within(marketingCard as HTMLElement).getByRole("group", {
+        name: "Work includes",
+      }),
+    ).toBeTruthy();
+    expect(
+      within(marketingCard as HTMLElement).queryByText("Work includes"),
+    ).toBeNull();
+    expect(
       within(marketingCard as HTMLElement)
         .getByRole("link", { name: /View coworker/ })
         .getAttribute("class"),

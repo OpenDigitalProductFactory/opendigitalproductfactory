@@ -63,7 +63,7 @@ export function CoworkerCatalogView({ catalog }: { catalog: CoworkerCatalog }) {
         <div>
           <h1 className="m-0 text-xl font-semibold text-[var(--dpf-text)]">Coworker Service Catalog</h1>
           <p className="mt-1 max-w-3xl text-xs text-[var(--dpf-muted)]">
-            Service capabilities, packaged offers, and governed engagement requests for AI coworkers.
+            Review governed AI coworker services.
           </p>
         </div>
         <div className="grid grid-cols-3 gap-2 text-right">
@@ -116,7 +116,7 @@ export function CoworkerCatalogView({ catalog }: { catalog: CoworkerCatalog }) {
           <dl className="mt-3 space-y-3 text-xs">
             <div>
               <dt className="font-semibold text-[var(--dpf-muted)]">Engagement</dt>
-              <dd className="mt-1 text-[var(--dpf-text)]">Requests create engagement records first; execution links a Work Capsule only after acceptance.</dd>
+              <dd className="mt-1 text-[var(--dpf-text)]">Requests create engagements; accepted work links a Work Capsule.</dd>
             </div>
             <div>
               <dt className="font-semibold text-[var(--dpf-muted)]">External providers</dt>

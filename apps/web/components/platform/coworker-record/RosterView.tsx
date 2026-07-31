@@ -442,10 +442,11 @@ function RosterRowCard({
         <p className="mt-1 max-w-3xl text-sm leading-5 text-[var(--dpf-text-secondary)]">
           {row.plainJob}
         </p>
-        <div className="mt-3 flex min-w-0 flex-wrap gap-2">
-          <span className="self-center text-xs font-medium text-[var(--dpf-muted)]">
-            Work includes
-          </span>
+        <div
+          className="mt-3 flex min-w-0 flex-wrap gap-2"
+          role="group"
+          aria-label="Work includes"
+        >
           {row.interaction.scopes.map((scope, index) => (
             <StatusBadge
               key={scope}
