@@ -12,8 +12,10 @@ import {
   createProcessTreeTracker,
   defaultDescendantPollMs,
   defaultProcessScanMs,
+  findConflictingLocalCiMutatorPids,
   findLiveLocalCiMutatorPids,
 } from "./gate-worktree.mjs";
+import { readProcessIdentity } from "./lib/local-sandbox-fence.mjs";
 
 const TEST_HOST_PRESSURE = {
   observedAt: "2026-07-30T05:00:00.000Z",
@@ -467,6 +469,7 @@ test("an admitted owner renews authority while a live host fence delays the run"
     schema: "dpf-local-sandbox-fence/v1",
     token: "prior-live-owner",
     pid: process.pid,
+    processIdentity: readProcessIdentity(process.pid),
     ownerSessionId: "prior-live-owner",
     branch: "fix/prior-owner",
     acquiredAt: new Date().toISOString(),
@@ -1101,6 +1104,24 @@ test("local-CI admission detects legacy shared mutators and their descendants on
     findLiveLocalCiMutatorPids(processRows, { excludePids: [400] }),
     [100, 101, 102, 103],
   );
+});
+
+test("local-CI admission permits a proven peer slot while blocking a legacy mutator", () => {
+  const processRows = [
+    { pid: 100, parentPid: 1, commandLine: "node scripts/gate-worktree.mjs" },
+    { pid: 101, parentPid: 100, commandLine: "node scripts/local-ci-runner.mjs" },
+    { pid: 102, parentPid: 101, commandLine: "docker build D:/DPF-worktrees/.local-ci-runner-slot-1" },
+    { pid: 103, parentPid: 1, commandLine: "docker build D:/DPF-worktrees/.local-ci-runner-slot-1" },
+    { pid: 200, parentPid: 1, commandLine: "node scripts/local-ci-runner.mjs --candidate legacy" },
+  ];
+
+  assert.deepEqual(findConflictingLocalCiMutatorPids(processRows, {
+    currentPid: 300,
+    peerOwners: [{
+      pid: 100,
+      workspace: "D:/DPF-worktrees/.local-ci-runner-slot-1",
+    }],
+  }), [200]);
 });
 
 test("process tree tracker uses a slower default scan cadence on Windows", () => {

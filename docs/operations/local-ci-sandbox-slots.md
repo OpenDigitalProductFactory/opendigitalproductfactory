@@ -28,6 +28,31 @@ win. Client evidence can therefore contract capacity but can never grant
 breached or unmeasurable ceiling stops new `slot-1` admissions but does not
 evict a healthy current owner merely to contract the pool.
 
+### Peer-slot host fencing
+
+The host process scan remains a rolling-upgrade drain for legacy, unscoped
+local-CI mutators. A mutator owned by a different current slot is not a
+conflict when that slot has a live version-one fence and its command is inside
+the peer manifest's exact scratch workspace. The gate excludes only that
+proved peer owner, its descendants, and detached commands scoped to that
+workspace. A peer fence is trusted only while its heartbeat is fresh and the
+PID's observed process-start identity still matches the identity captured at
+acquisition, preventing PID reuse from turning a stale fence into an
+exemption. A missing, invalid, stale, identity-mismatched, dead, or unscoped
+fence remains fail-closed.
+
+## Design grounding
+
+- Existing specs/plans reviewed:
+  `docs/superpowers/plans/2026-07-28-local-ci-sandbox-pool-pilot.md`.
+- Current code substrate reviewed: durable lease admission, slot manifests,
+  host process discovery, and local sandbox fences.
+- Source of truth: the versioned slot manifest owns peer workspace identity;
+  the live local fence owns peer process identity.
+- Decision: preserve the legacy-mutator drain while exempting only a
+  mechanically proved peer slot, so capacity two changes execution capacity
+  without weakening mixed-version safety.
+
 Slot 0 preserves the established external endpoints:
 
 - portal: `http://localhost:3010`
