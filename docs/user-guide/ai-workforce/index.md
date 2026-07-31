@@ -38,6 +38,8 @@ An availability label is not a runtime guess. It is projected from the current s
 
 Missing declarations or unevaluated readiness appear as **Coverage not defined**. Missing backing appears as **Setup needed**, and lifecycle, safety, or routing blockers appear as **Needs attention**. These states fail closed and do not show the Ask action. A recovery action appears only when DPF has an owner-capable destination that the signed-in operator can access, such as business type, capabilities, capability needs, the runnable certification job, or AI readiness. Platform-managed catalog defects remain visible in Availability evidence without a misleading operator action. Coworker-specific actions preserve the current roster filters. Opening a named Ask action never sends work automatically; the operator must submit a message explicitly.
 
+Model assignments explicitly saved by an operator remain unchanged during upgrades. Platform-supplied defaults are system-owned and converge to the current release declaration, so an obsolete default from an earlier release cannot silently leave a coworker unavailable after the platform has corrected that default.
+
 ## Key Concepts
 
 - **Provider Registry** — The list of AI providers connected to the platform (e.g., Anthropic/Claude, OpenAI/Codex, xAI/Grok, Docker Model Runner for local models). Each provider has its own credential path, status, sensitivity clearance, and set of available models.

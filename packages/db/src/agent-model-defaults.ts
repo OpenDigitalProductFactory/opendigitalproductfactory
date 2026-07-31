@@ -6,6 +6,25 @@ export type AgentModelConfigDefault = {
   minimumContextTokens?: number;
 };
 
+export type ExistingAgentModelConfig = {
+  minimumTier: string;
+  budgetClass: string;
+  pinnedProviderId: string | null;
+  pinnedModelId: string | null;
+  minimumCapabilities: unknown;
+  minimumContextTokens: number | null;
+  configuredById: string | null;
+};
+
+export type AgentModelDefaultUpdate = {
+  minimumTier?: string;
+  budgetClass?: string;
+  pinnedProviderId?: null;
+  pinnedModelId?: null;
+  minimumCapabilities?: Record<string, boolean>;
+  minimumContextTokens?: number;
+};
+
 export const AGENT_MODEL_CONFIG_DEFAULTS: AgentModelConfigDefault[] = [
   { agentId: "build-specialist", minimumTier: "strong", budgetClass: "quality_first", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
   { agentId: "change-reviewer", minimumTier: "strong", budgetClass: "quality_first", minimumCapabilities: { toolUse: true }, minimumContextTokens: 32000 },
@@ -46,3 +65,40 @@ export const AGENT_MODEL_CONFIG_DEFAULTS: AgentModelConfigDefault[] = [
   // expensive founder time that a weak model would waste.
   { agentId: "ux-design-critic", minimumTier: "strong", budgetClass: "balanced", minimumCapabilities: { toolUse: true, imageInput: true }, minimumContextTokens: 32000 },
 ];
+
+export function resolveAgentModelDefaultUpdate(
+  existing: ExistingAgentModelConfig,
+  declaration: AgentModelConfigDefault,
+): AgentModelDefaultUpdate | null {
+  if (existing.configuredById === null) {
+    const desired: AgentModelDefaultUpdate = {
+      minimumTier: declaration.minimumTier,
+      budgetClass: declaration.budgetClass,
+      pinnedProviderId: null,
+      pinnedModelId: null,
+      ...(declaration.minimumCapabilities !== undefined
+        ? { minimumCapabilities: declaration.minimumCapabilities }
+        : {}),
+      ...(declaration.minimumContextTokens !== undefined
+        ? { minimumContextTokens: declaration.minimumContextTokens }
+        : {}),
+    };
+    const changed = Object.entries(desired).some(([key, value]) => {
+      const current = existing[key as keyof ExistingAgentModelConfig];
+      return JSON.stringify(current) !== JSON.stringify(value);
+    });
+    return changed ? desired : null;
+  }
+
+  const backfill: AgentModelDefaultUpdate = {
+    ...(declaration.minimumCapabilities !== undefined &&
+    existing.minimumCapabilities === null
+      ? { minimumCapabilities: declaration.minimumCapabilities }
+      : {}),
+    ...(declaration.minimumContextTokens !== undefined &&
+    existing.minimumContextTokens === null
+      ? { minimumContextTokens: declaration.minimumContextTokens }
+      : {}),
+  };
+  return Object.keys(backfill).length > 0 ? backfill : null;
+}
