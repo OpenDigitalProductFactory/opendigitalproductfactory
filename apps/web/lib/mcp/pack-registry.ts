@@ -82,6 +82,7 @@ import { buildOpsPack } from "./packs/build-ops-pack";
 import { decompositionPack } from "./packs/decomposition-pack";
 import { buildVisibilityPack } from "./packs/build-visibility-pack";
 import { buildEvidenceExtraPack } from "./packs/build-evidence-extra-pack";
+import { changeReviewPack } from "./packs/change-review-pack";
 import { principleDecidePack } from "./packs/principle-decide-pack";
 import { productOutcomesPack } from "./packs/product-outcomes-pack";
 
@@ -162,6 +163,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   decompositionPack,
   buildVisibilityPack,
   buildEvidenceExtraPack,
+  changeReviewPack,
   principleDecidePack,
   productOutcomesPack,
   surfaceReadinessPack,

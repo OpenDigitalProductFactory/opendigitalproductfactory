@@ -57,7 +57,7 @@ work until their definition has landed, a read-only golden journey has passed
 through the real execution path, and the coworker factory explicitly promotes
 them. A normal seed or upgrade preserves that lifecycle state; deployment alone
 does not certify or activate a coworker.
-- **Quality Gates** — Automated checks between phases. Each gate requires specific evidence before the feature can advance (design review, plan review, documentation impact, test results, typecheck).
+- **Quality Gates** — Automated checks between phases. Each gate requires specific evidence before the feature can advance (design review, plan review, documentation impact, test results, typecheck). After Build Studio assembles the task outputs, Change Reviewer independently checks that committed change before UX verification or promotion. Its receipt appears in the same Work Capsule activity story; no separate review workspace is added.
 - **Promotion** — The governed process for moving a completed feature from the Build runtime into production where the install is configured for it. Includes evidence capture, backup/rebuild/health-check discipline, and rollback planning.
 
 ## What You Can Do

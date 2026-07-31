@@ -42,7 +42,19 @@ export const buildReviewVerification = inngest.createFunction(
       const { prisma } = await import("@dpf/db");
       return prisma.featureBuild.findUnique({
         where: { buildId },
-        select: { sandboxId: true, sandboxPort: true, brief: true, threadId: true, kind: true },
+        select: {
+          id: true,
+          buildId: true,
+          title: true,
+          createdById: true,
+          sandboxId: true,
+          sandboxPort: true,
+          brief: true,
+          threadId: true,
+          kind: true,
+          diffPatch: true,
+          verificationOut: true,
+        },
       });
     });
 
@@ -83,6 +95,31 @@ export const buildReviewVerification = inngest.createFunction(
       testCaseCount: testCases.length,
       changedFiles,
     });
+
+    // Phase 3 of the shared Change Reviewer control: task-level reviews remain
+    // intact, then one surface-neutral review evaluates the assembled committed
+    // change before UX verification or promotion. Shadow mode is the rollback
+    // default until outcome telemetry calibrates deterministic enforcement.
+    const semanticReview = await step.run("semantic-change-review", async () => {
+      const { getSandboxStateForBuild } = await import("@/lib/build/sandbox-state");
+      const { reviewBuildStudioAssembledChange } = await import(
+        "@/lib/change-review/build-studio-semantic-review"
+      );
+      return reviewBuildStudioAssembledChange({
+        build,
+        sandboxState: await getSandboxStateForBuild(buildId),
+      });
+    });
+    if (semanticReview.kind === "unavailable" && !semanticReview.mayContinue) {
+      return { status: "semantic-review-unavailable", reason: semanticReview.reason };
+    }
+    if (semanticReview.kind === "reviewed" && !semanticReview.outcome.mayPublish) {
+      return {
+        status: "semantic-review-blocked",
+        decision: semanticReview.outcome.receipt.result.decision,
+        nextAction: semanticReview.outcome.nextAction,
+      };
+    }
 
     await step.run("start-verification", async () => {
       const { prisma } = await import("@dpf/db");

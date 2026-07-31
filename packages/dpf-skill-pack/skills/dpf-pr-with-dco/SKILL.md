@@ -1,11 +1,11 @@
 ---
 name: dpf-pr-with-dco
-description: "Use when ready to open a DPF pull request. Encodes the full DPF PR contract: branch from origin/main, sign every commit (-s) for DCO, push and let CI evidence accumulate, overlap-sweep against open PRs before push, open a regular non-draft PR only when ready to merge (not as a parking place). Composes with dpf-finishing-a-development-branch as the successor: that skill decides the integration shape; this one operationalizes the DPF-specific PR mechanics."
+description: "Use when ready to open a DPF pull request. Encodes the full DPF PR contract, including a fresh independent semantic-review receipt for the stable local commit before pregate/first publication, DCO, overlap sweep, exact-tree local CI, and a regular non-draft ready PR."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
 user-invocable: true
-allowed-tools: Bash(git *) Bash(gh *)
+allowed-tools: Bash(git *) Bash(gh *) mcp__dpf__review_semantic_change
 
 # DPF coworker fields (Surface B — in-portal seed loader)
 category: build
@@ -15,7 +15,7 @@ taskType: workflow
 triggerPattern: "open (a |the )?PR|pull request|push (and|to) PR|land this|ship this branch"
 userInvocable: true
 agentInvocable: true
-allowedTools: ["Bash"]
+allowedTools: ["Bash", "mcp__dpf__review_semantic_change"]
 composesFrom: ["dpf-finishing-a-development-branch"]
 contextRequirements: ["git available; gh CLI authenticated; DCO app enabled on repo"]
 riskBand: high
@@ -95,7 +95,11 @@ DPF's PR contract is strict and non-negotiable: **every change lands via PR**, *
    ```
    Resolve the prospective constraints and host-side guard failures first. Do not spend a scarce sandbox lease discovering a missing PR trailer, plan receipt, derived artifact, or source-policy violation.
 
-3b. **Local-CI sandbox gate (default-on pre-push, BI-C74F4DE9).** For runtime-code branches, run `pnpm run pregate` before the push — the chained pre-push hook refuses an ungated push otherwise. Carry the evidence into the PR body as a trailer so `pnpm pr:health` reads the branch as merge-ready even when checked from another machine:
+3b. **Freeze the local review target.** Create the DCO-signed commit that contains the complete concern, confirm the worktree is clean, and compute the exact base tree, head tree, and committed-diff digest. Do not review an uncommitted or moving tree.
+
+3c. **Run independent semantic review before pregate or first publication.** Call `review_semantic_change` for the governing Work Capsule and exact committed tree. Runtime code requires an actual Change Reviewer pass; a low-risk docs-only change may receive a durable auto-pass. Address blocking findings and re-run against the new commit. Stop after two failed repair rounds and escalate rather than oscillating. A commit, rebase, diff, reviewer/policy version, or specialist-set change invalidates the old receipt. Phase 3 defaults to shadow observation; never hide a failed receipt just because deterministic blocking has not yet been ratcheted on.
+
+3d. **Local-CI sandbox gate (default-on pre-push, BI-C74F4DE9).** For runtime-code branches, run `pnpm run pregate` before the push — the chained pre-push hook refuses an ungated push otherwise. Carry the evidence into the PR body as a trailer so `pnpm pr:health` reads the branch as merge-ready even when checked from another machine:
    ```
    Local-CI-Evidence: <evidence-record-id> (<branch>@<sha>)
    ```
