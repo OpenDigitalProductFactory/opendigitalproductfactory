@@ -211,7 +211,7 @@ function availabilityFor(input: {
   hold?: RestaurantHoldInput;
   upcoming?: RestaurantUpcomingAssignmentInput;
 }): RestaurantForwardAvailability {
-  const { now, table, state, occupancy, hold, upcoming } = input;
+  const { now, state, occupancy, hold, upcoming } = input;
   if (state === "available") {
     return {
       kind: "now",
