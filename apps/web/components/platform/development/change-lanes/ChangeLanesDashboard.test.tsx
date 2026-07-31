@@ -16,6 +16,8 @@ function lane(
     source,
     status,
     owner: null,
+    ownerProvider: null,
+    pullRequestNumber: null,
     branch: null,
     worktreePath: null,
     commitSha: null,

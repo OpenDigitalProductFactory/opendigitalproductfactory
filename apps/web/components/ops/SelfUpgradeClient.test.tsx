@@ -111,10 +111,13 @@ describe("SelfUpgradeClient – enabled", () => {
     expect(html).toContain("Up to date");
   });
 
-  it("explains the merge-build identity when fresh but the deployed SHA differs from the target", () => {
+  it("says Up to date without explaining SHAs when fresh but deployed differs from target (BI-5B1FDA09)", () => {
     // Merge-mode: fresh, yet deployed (merge commit) ≠ target (upstream). The
-    // banner must say Up to date AND clarify why the two SHAs differ, so it no
-    // longer reads as contradicting the impact summary.
+    // banner used to say Up to date AND then apologise for the two ids differing
+    // "by design". That explanation only existed because the SHAs were the
+    // headline identity. They are now behind Build details and the headline is
+    // the merged PR, so the contradiction it defused cannot arise — and the
+    // apology must be gone rather than merely relocated.
     const html = renderToStaticMarkup(
       <SelfUpgradeClient
         {...baseStatus}
@@ -124,8 +127,54 @@ describe("SelfUpgradeClient – enabled", () => {
       />,
     );
     expect(html).toContain("Up to date");
-    expect(html).toContain("already contains the target");
+    expect(html).not.toContain("already contains the target");
+    expect(html).not.toContain("differ by design");
     expect(html).not.toContain("Update available");
+  });
+
+  it("leads with the merged PR of each end when they resolve (BI-5B1FDA09)", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        isFresh={false}
+        deployedSha="d7c7b200bcae825c454617ffe36a5353c2318e86"
+        targetSha="802224ba8308c641c3211e38e4d2036d8b11655f"
+        mergePoints={{
+          running: {
+            sha: "d7c7b200bcae825c454617ffe36a5353c2318e86",
+            prNumber: 3746,
+            description: "make amcheck success Prisma-safe",
+            label: "PR #3746",
+          },
+          available: {
+            sha: "802224ba8308c641c3211e38e4d2036d8b11655f",
+            prNumber: 3747,
+            description: "materialize hermetic replay dependencies",
+            label: "PR #3747",
+          },
+        }}
+      />,
+    );
+    expect(html).toContain("PR #3746");
+    expect(html).toContain("PR #3747");
+    expect(html).toContain("make amcheck success Prisma-safe");
+    // The full hex identity stays reachable, demoted rather than hidden.
+    expect(html).toContain("802224ba8308c641c3211e38e4d2036d8b11655f");
+  });
+
+  it("falls back to the short SHA when no merged PR resolves (BI-5B1FDA09)", () => {
+    // A direct push, a shallow clone, or a missing host mount: the operator
+    // still gets an identity rather than an empty line.
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        isFresh={false}
+        deployedSha="d7c7b200bcae825c454617ffe36a5353c2318e86"
+        targetSha="802224ba8308c641c3211e38e4d2036d8b11655f"
+        mergePoints={{ running: null, available: null }}
+      />,
+    );
+    expect(html).toContain("802224ba8308");
   });
 
   it("shows maintenance window notice when inMaintenanceWindow is true", () => {

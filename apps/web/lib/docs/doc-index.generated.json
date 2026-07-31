@@ -7434,6 +7434,7 @@
         "local-ci-admission-and-fairness",
         "impact-planner-shadow-mode",
         "exact-tree-production-build-reuse",
+        "exact-tree-cross-lifecycle-receipt-foundation-shadow",
         "ux-route-sweep-stability",
         "baseline-snapshot"
       ]
@@ -8687,6 +8688,8 @@
         "run-locally-before-pushing",
         "the-pre-push-gate-pregate-default-on",
         "reading-the-result-a-queued-run-can-exit-0",
+        "keep-internal-identifiers-out-of-the-pr-body",
+        "identify-your-client-and-thread",
         "the-pre-commit-typecheck-gate",
         "test-runner-pins-must-hold",
         "appsmobile-jest-must-stay-on-29x",
@@ -10081,6 +10084,7 @@
         "from-setup-to-a-live-portal",
         "complete-the-guided-setup",
         "launch-readiness-check",
+        "confirm-restaurant-tables-and-capacity",
         "verify-the-customer-experience",
         "what-to-watch",
         "related"

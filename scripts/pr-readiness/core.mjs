@@ -1,5 +1,9 @@
 import { SEED_FIT_DECISIONS } from "../lib/seed-fit-gate.mjs";
-import { POLICY_GUARD_PROFILES } from "../lib/ci-policy-guards.mjs";
+import {
+  LOCAL_READINESS_PROFILE_NAMES,
+  POLICY_GUARD_PROFILES,
+  isPolicyGuardSelfTest,
+} from "../lib/ci-policy-guards.mjs";
 import { formatGateContextMarkdown } from "../lib/gate-context.mjs";
 import {
   PR_TRAILER_NAMES,
@@ -31,10 +35,6 @@ const RETIRED_TRAILERS = new Map([
   ],
 ]);
 
-function isSelfTest([command, args]) {
-  return command === "node" && args[0] === "--test";
-}
-
 function mutatesGitState([command, args]) {
   return command === "git" && MUTATING_GIT_COMMANDS.has(args[0]);
 }
@@ -51,14 +51,14 @@ export function buildGatePlan({
     GITHUB_EVENT_NAME: "pull_request",
   };
 
-  return ["source", "pull-request"].flatMap((profileName) =>
+  return LOCAL_READINESS_PROFILE_NAMES.flatMap((profileName) =>
     (profiles[profileName] ?? []).flatMap((entry) => {
       // The readiness command runs in the author's topic worktree. Never replay
       // CI setup that rewrites Git state there. Its checks remain covered by CI
       // and by the exact-tree local-CI gate.
       if (entry.commands.some(mutatesGitState)) return [];
 
-      const commands = entry.commands.filter((command) => !isSelfTest(command));
+      const commands = entry.commands.filter((command) => !isPolicyGuardSelfTest(command));
       return commands.map((command, index) => ({
         name: commands.length === 1 ? entry.name : `${entry.name} (${index + 1}/${commands.length})`,
         command,
@@ -69,7 +69,11 @@ export function buildGatePlan({
 }
 
 export function parsePrBodyTrailers(prBody = "") {
-  return String(prBody)
+  const visibleBody = String(prBody).replace(
+    /<!--[\s\S]*?-->/g,
+    (comment) => comment.replace(/[^\r\n]/g, ""),
+  );
+  return visibleBody
     .split(/\r?\n/)
     .flatMap((line, index) => {
       const match = line.match(/^\s*([A-Za-z][A-Za-z-]*):\s*(\S.*)?$/);

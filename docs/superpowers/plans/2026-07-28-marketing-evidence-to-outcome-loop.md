@@ -1,6 +1,6 @@
 # Marketing Strategist Evidence-to-Outcome Loop Implementation Plan
 
-**Status:** planned
+**Status:** in progress — Deliverable A shipped 2026-07-28 (PR #3701, `ef16e317ce`); B, C and D remain
 
 **Backlog item:** `BI-IMP-14F9E938`
 
@@ -161,7 +161,9 @@ The coworker prompt must stop forcing plan-only replies and one-step waits for s
 
 ### Deliverable A — canonical operating snapshot and tool-contract repair
 
-**Backlog item:** `BI-CEA797A1`
+**Status:** SHIPPED 2026-07-28 — PR #3701, squash-merged as `ef16e317ce`. Do not re-implement; extend it.
+
+**Backlog item:** `BI-CEA797A1` (done)
 
 **Independently shippable:** yes
 **Depends on:** none
@@ -192,6 +194,18 @@ Verification:
 - tool-registry/grant contract tests;
 - source-local typecheck;
 - functional MCP probe against seeded campaigns showing the same state on the owner page and in tool output.
+
+#### What actually landed (read before building B, C or D)
+
+- `apps/web/lib/marketing/operating-snapshot.ts` is the canonical projection. It **composes** `getMarketingWorkspaceSnapshot()` rather than replacing it, and adds campaign identities (execution + measurement rollups), channel-adapter readiness incl. contractual operations an adapter does *not* implement, evidence freshness, blockers each carrying one recovery action, and one next executable step. Pure builders are separate from the single DB assembler.
+- `projectOperatingSnapshotForTools()` is the MCP-facing view; `buildMarketingOwnerDecision()` re-voices the *same* canonical next step for the owner. A parity test walks every next-step id, so the tool surface and the page cannot disagree.
+- Campaign drill-ins are organization-scoped via `requireCampaignInScope`, and a missing/unknown `campaignId` returns candidate ids plus one recovery instruction.
+- Supporting modules to reuse, not re-create: `org-scope.ts`, `archetype-context.ts`, `acquisition-signals.ts`, and `loadPublicationMetricsForTasks()` in `campaign-performance.ts`.
+
+Two constraints B and C inherit:
+
+- **Do not pass `getMarketingOperatingSnapshot()` a workspace it must reload.** `getMarketingWorkspaceSnapshot()` upserts `MarketingStrategy`; loading it twice concurrently races the `organizationId` unique key and 500s the render. Hand the loaded snapshot over via `{ workspace }`. The underlying upsert is still racy on a cold workspace — tracked as `BI-48025D6B`.
+- **Evidence *sufficiency* is still C's job.** The snapshot reports `attributionConfidence` and `stale` — what the data can honestly support — not whether a winner may be declared.
 
 ### Deliverable B — governed recurring acquisition operating cycle
 

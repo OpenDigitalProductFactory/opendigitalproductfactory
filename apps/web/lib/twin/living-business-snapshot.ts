@@ -28,21 +28,32 @@ import {
   humanizeWait,
   isWalkInWait,
   moneyToNumber,
-  monthDay,
   statusIntent,
   titleCase,
 } from "./operations-format";
+import {
+  bookingsToQueueItems,
+  longestWaitMs,
+} from "./booking-queue-projection";
 import type { LiveTwinSnapshot } from "./operations-snapshot";
 import {
   createOperationsLoadRuntime,
   type OperationsProjectionDiagnostics,
 } from "./operations-load-runtime";
+import {
+  hospitalityResourceUnits,
+  isReservationQueueKey,
+  isUpcomingReservation,
+  readinessQuest,
+  reservationsToQueueItems,
+  restaurantCapacityChips,
+} from "./restaurant-operations-projection";
 
 import {
   deriveRestaurantCapacity,
   resolveServicePeriod,
-  readinessHeadline,
   type CapacityBookingInput,
+  type CapacityAllocationInput,
   type CapacityResourceInput,
   type OperatingWindow,
   type RestaurantCapacitySnapshot,
@@ -64,7 +75,6 @@ import type {
   CapacityChipData,
   FeedEventData,
   QuestData,
-  QueueItemData,
   ResourceUnitData,
   TwinActor,
   TwinCogSnapshot,
@@ -86,6 +96,8 @@ export type LivingBusinessClient = WorkforceRosterClient & OrgLocaleClient & {
   obligation: { findMany: FindMany };
   storefrontBooking: { findMany: FindMany };
   serviceProvider: { findMany: FindMany };
+  hospitalityResource: { findMany: FindMany };
+  hospitalityCapacityAllocation: { findMany: FindMany };
 };
 
 // ── Row shapes we select (kept narrow; amounts may arrive as Prisma.Decimal) ──
@@ -110,6 +122,7 @@ interface BookingRow {
   /** Present on the live query (selected); optional so pure-helper test fixtures
    *  that exercise only provider-name behaviour need not supply it. */
   providerId?: string | null;
+  hospitalityResourceId?: string | null;
   scheduledAt: Date | null;
   createdAt: Date | null;
   status: string;
@@ -120,6 +133,22 @@ interface ProviderRow {
   name: string;
   isActive: boolean;
 }
+interface HospitalityResourceRow {
+  id: string;
+  label: string;
+  kind: CapacityResourceInput["kind"];
+  status: CapacityResourceInput["status"];
+  capacity: number;
+  capacityUnit: CapacityResourceInput["capacityUnit"];
+  availability: NonNullable<CapacityResourceInput["availability"]>;
+}
+interface HospitalityAllocationRow {
+  id: string;
+  resourceId: string | null;
+  startsAt: Date;
+  endsAt: Date;
+  lifecycle: CapacityAllocationInput["lifecycle"];
+}
 interface InvoiceRow {
   totalAmount: Money;
   currency: string | null;
@@ -127,6 +156,15 @@ interface InvoiceRow {
 
 export type { LiveTwinSnapshot } from "./operations-snapshot";
 export { humanizeWait, statusIntent } from "./operations-format";
+export {
+  bookingsToQueueItems,
+  isReservationQueueKey,
+  isUpcomingReservation,
+  longestWaitMs,
+  readinessQuest,
+  reservationsToQueueItems,
+  restaurantCapacityChips,
+};
 
 // ─────────────────────────── pure mapping helpers ───────────────────────────
 
@@ -172,118 +210,6 @@ export function resourceUnits(
       intent: statusIntent(m.status),
       owner: m.kind === "agent" ? { name: m.displayName, kind: "ai" } : undefined,
     }));
-}
-
-/** Pending, unstarted demand → queue items with a REAL wait time (age in the
- *  queue, measured from when the booking was created — the flow metric the founder
- *  asked for: "if we know the queue and wait times"). Ordered longest-waiting first. */
-export function bookingsToQueueItems(bookings: BookingRow[], now: Date, limit = 6): QueueItemData[] {
-  return bookings
-    .filter((b) => b.status.toLowerCase() === "pending" || b.provider == null)
-    .sort((a, b) => (a.createdAt?.getTime() ?? Infinity) - (b.createdAt?.getTime() ?? Infinity))
-    .slice(0, limit)
-    .map((b) => {
-      const label = b.provider?.name ? `With ${b.provider.name}` : "Unassigned";
-      // Upcoming reservation — the meaningful metric is time-until, not age.
-      if (b.scheduledAt && b.scheduledAt.getTime() > now.getTime()) {
-        return {
-          key: b.id,
-          label,
-          meta: `booked for ${monthDay(b.scheduledAt)}`,
-          waiting: `in ${humanizeWait(b.scheduledAt.getTime() - now.getTime())}`,
-        };
-      }
-      // Scheduled slot has passed and it is still unfulfilled — overdue, not waiting.
-      if (b.scheduledAt) {
-        return { key: b.id, label, meta: `overdue · was ${monthDay(b.scheduledAt)}` };
-      }
-      // Walk-in / unrouted request — a genuine live queue wait from when it landed.
-      return {
-        key: b.id,
-        label,
-        meta: "awaiting schedule",
-        waiting: b.createdAt ? humanizeWait(now.getTime() - b.createdAt.getTime()) : undefined,
-      };
-    });
-}
-
-/**
- * Restaurant (FLOOR) capacity chips — real table/seat/waitlist counters in the
- * archetype's own words, replacing the archetype-agnostic Workforce/AI/Open-demand
- * chips for a restaurant so the Workspace headline reads as capacity, not staffing.
- */
-export function restaurantCapacityChips(snap: RestaurantCapacitySnapshot): CapacityChipData[] {
-  const seated = snap.counts.occupied + snap.counts["turning-soon"];
-  const chips: CapacityChipData[] = [
-    { key: "tables-open", label: "Tables open", value: snap.counts.available, intent: snap.counts.available > 0 ? "success" : "warning", live: true },
-    { key: "tables-seated", label: "Seated", value: seated, intent: "info", live: true },
-  ];
-  if (snap.counts["turning-soon"] > 0) {
-    chips.push({ key: "turning", label: "Turning soon", value: snap.counts["turning-soon"], intent: "warning", live: true });
-  }
-  chips.push(
-    { key: "waiting", label: "Parties waiting", value: snap.waitlistParties, intent: snap.waitlistParties > 0 ? "warning" : "success", live: true },
-    { key: "reservations", label: "Reservations ahead", value: snap.upcomingReservations, intent: "accent", live: true },
-  );
-  return chips;
-}
-
-/** The service-period readiness answer as a top-priority quest — so a
- *  restaurant's "NEEDS YOU" reflects real reservation/table demand ahead of the
- *  generic finance/tax quests. Null when nothing needs the owner. */
-export function readinessQuest(snap: RestaurantCapacitySnapshot): QuestData | null {
-  if (!snap.nextAction) return null;
-  return {
-    key: "service-readiness",
-    title: readinessHeadline(snap),
-    detail: snap.nextAction.label,
-    intent: snap.readiness === "not-ready" ? "danger" : "warning",
-    cta: snap.nextAction.label,
-  };
-}
-
-/** A queue key that means "reservations" (restaurant FLOOR, rental YARD). */
-export function isReservationQueueKey(key: string): boolean {
-  return /reserv/i.test(key);
-}
-
-/** An upcoming, still-active reservation — a future scheduled slot that is neither
- *  cancelled nor completed. This is the "reservations on the books" set. */
-export function isUpcomingReservation(b: BookingRow, now: Date): boolean {
-  const status = b.status.toLowerCase();
-  if (status === "cancelled" || status === "completed") return false;
-  return b.scheduledAt != null && b.scheduledAt.getTime() > now.getTime();
-}
-
-/** Upcoming reservations → queue items, soonest slot first. The meaningful metric
- *  is time-until-service, not age-in-queue. Reconciles the twin Reservations queue
- *  with the Storefront booking history (BI-348766E5). */
-export function reservationsToQueueItems(bookings: BookingRow[], now: Date, limit = 6): QueueItemData[] {
-  return bookings
-    .filter((b) => isUpcomingReservation(b, now))
-    .sort((a, b) => (a.scheduledAt?.getTime() ?? Infinity) - (b.scheduledAt?.getTime() ?? Infinity))
-    .slice(0, limit)
-    .map((b) => ({
-      key: b.id,
-      label: b.provider?.name ? `With ${b.provider.name}` : "Reservation",
-      meta: b.scheduledAt ? `booked for ${monthDay(b.scheduledAt)}` : "awaiting schedule",
-      waiting: b.scheduledAt ? `in ${humanizeWait(b.scheduledAt.getTime() - now.getTime())}` : undefined,
-    }));
-}
-
-/** The longest a pending item has waited — the queue's headline flow metric. */
-export function longestWaitMs(bookings: BookingRow[], now: Date): number {
-  // Only genuine walk-in waits count — scheduled reservations (upcoming or
-  // overdue) are not "waiting", so an all-reservations business (a restaurant)
-  // reports no headline wait instead of a spurious multi-day figure.
-  const waiting = bookings.filter(
-    (b) => (b.status.toLowerCase() === "pending" || b.provider == null) && isWalkInWait(b),
-  );
-  let max = 0;
-  for (const b of waiting) {
-    if (b.createdAt) max = Math.max(max, now.getTime() - b.createdAt.getTime());
-  }
-  return max;
 }
 
 /** In-flight demand → work items, attributed to the assigned provider (human). */
@@ -518,8 +444,14 @@ export async function loadLivingBusinessProjection(
   const in7 = new Date(now.getTime() + 7 * 86_400_000);
 
   const config = (await db.storefrontConfig.findFirst({
-    select: { archetype: { select: { archetypeId: true, name: true } } },
-  })) as { archetype: { archetypeId: string; name: string } | null } | null;
+    select: {
+      timezone: true,
+      archetype: { select: { archetypeId: true, name: true } },
+    },
+  })) as {
+    timezone: string;
+    archetype: { archetypeId: string; name: string } | null;
+  } | null;
   runtime.observe("configuration");
 
   const archetypeId = config?.archetype?.archetypeId;
@@ -531,7 +463,18 @@ export async function loadLivingBusinessProjection(
 
   const in90 = new Date(now.getTime() - 90 * 86_400_000);
   let localeReadFailed = false;
-  const [roster, bills, taxPeriods, obligations, bookings, providers, paidInvoices, orgLocale] = await Promise.all([
+  const [
+    roster,
+    bills,
+    taxPeriods,
+    obligations,
+    bookings,
+    providers,
+    hospitalityResources,
+    hospitalityAllocations,
+    paidInvoices,
+    orgLocale,
+  ] = await Promise.all([
     runtime.read(
       "workforce",
       loadWorkforceRoster({ db }),
@@ -572,6 +515,7 @@ export async function loadLivingBusinessProjection(
         select: {
           id: true,
           providerId: true,
+          hospitalityResourceId: true,
           scheduledAt: true,
           createdAt: true,
           status: true,
@@ -587,6 +531,51 @@ export async function loadLivingBusinessProjection(
         take: 12,
         select: { id: true, name: true, isActive: true },
       }) as Promise<ProviderRow[]>,
+      [],
+    ),
+    runtime.read(
+      "hospitality-capacity",
+      db.hospitalityResource.findMany({
+        where: { kind: "table" },
+        take: 12,
+        select: {
+          id: true,
+          label: true,
+          kind: true,
+          status: true,
+          capacity: true,
+          capacityUnit: true,
+          availability: {
+            select: {
+              kind: true,
+              days: true,
+              startTime: true,
+              endTime: true,
+              date: true,
+            },
+          },
+        },
+      }) as Promise<HospitalityResourceRow[]>,
+      [],
+    ),
+    runtime.read(
+      "hospitality-allocations",
+      db.hospitalityCapacityAllocation.findMany({
+        where: {
+          resourceId: { not: null },
+          lifecycle: { in: ["reserved", "active"] },
+          startsAt: { lte: now },
+          endsAt: { gt: now },
+        },
+        take: 48,
+        select: {
+          id: true,
+          resourceId: true,
+          startsAt: true,
+          endsAt: true,
+          lifecycle: true,
+        },
+      }) as Promise<HospitalityAllocationRow[]>,
       [],
     ),
     db.invoice?.findMany
@@ -628,33 +617,36 @@ export async function loadLivingBusinessProjection(
   const zones: TwinZoneSnapshot[] = [
     {
       key: profile.capacityZoneKey ?? profile.zones[0]?.key ?? "board",
-      units: resourceUnits(providers, members),
+      units:
+        profile.template === "FLOOR"
+          ? hospitalityResourceUnits(hospitalityResources)
+          : resourceUnits(providers, members),
     },
   ];
 
-  // FLOOR (Restaurant) capacity: derive one snapshot from the SAME providers +
+  // FLOOR (Restaurant) capacity: derive one snapshot from the SAME structured
+  // hospitality resources +
   // bookings this projection already loaded, so the Workspace capacity chips,
   // reservations queue, and readiness answer reconcile with the Storefront
   // Tables & Capacity page and inbox (BI-7C95A586 / BI-348766E5). The workspace
-  // reads only active providers, so `blocked` is not a workspace headline — the
-  // Tables page owns the authoritative blocked count.
+  // capacity facts used by the Tables page.
   const floorSnapshot: RestaurantCapacitySnapshot | null =
     profile.template === "FLOOR"
       ? deriveRestaurantCapacity({
-          resources: providers.map(
-            (p): CapacityResourceInput => ({ id: p.id, name: p.name, isActive: p.isActive }),
-          ),
+          resources: hospitalityResources,
           bookings: bookings.map(
             (b): CapacityBookingInput => ({
               id: b.id,
-              providerId: b.providerId ?? null,
+              hospitalityResourceId: b.hospitalityResourceId ?? null,
               scheduledAt: b.scheduledAt,
               durationMinutes: null, // default turn (90m) applied by the projection
               status: b.status,
             }),
           ),
+          allocations: hospitalityAllocations,
           now,
           nextPeriod: resolveServicePeriod(floorWindows(def), now),
+          timeZone: config.timezone,
         })
       : null;
 

@@ -59,6 +59,18 @@ export type SummarizeDeps = {
 
 const GIT_SHA_RE = /^[0-9a-f]{40}$/i;
 
+/**
+ * The upstream commit the running build contains.
+ *
+ * Exported because the operator-facing merge-point labels (BI-5B1FDA09) must
+ * resolve the SAME "running" end this analyzer compares from — labelling the
+ * banner off `deployedSha` instead would resolve a local merge commit, whose
+ * subject carries no PR reference.
+ */
+export async function resolveCurrentLineageSha(): Promise<string | null> {
+  return defaultLoadCurrentLineageSha();
+}
+
 async function defaultLoadCurrentLineageSha(): Promise<string | null> {
   const run = await getLatestSucceededRun();
   // The upstream lineage marker is the targetSha of the latest succeeded run

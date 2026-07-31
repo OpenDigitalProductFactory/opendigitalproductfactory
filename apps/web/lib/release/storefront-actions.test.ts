@@ -9,6 +9,14 @@ vi.mock("@dpf/db", () => {
     storefrontConfig: { findFirst: vi.fn() },
     storefrontInquiry: { create: vi.fn() },
     storefrontBooking: { create: vi.fn() },
+    hospitalityResource: { findFirst: vi.fn() },
+    hospitalityCapacityPool: { findFirst: vi.fn() },
+    hospitalityCapacityAllocation: {
+      findFirst: vi.fn(),
+      findMany: vi.fn(),
+      create: vi.fn(),
+      updateMany: vi.fn(),
+    },
     storefrontOrder: { create: vi.fn() },
     storefrontOrderLineItem: { create: vi.fn() },
     storefrontItem: { findMany: vi.fn(), findFirst: vi.fn() },
@@ -16,6 +24,7 @@ vi.mock("@dpf/db", () => {
     productFulfillmentInstance: { upsert: vi.fn() },
     storefrontDonation: { create: vi.fn() },
     bookingHold: { findFirst: vi.fn(), delete: vi.fn() },
+    $queryRaw: vi.fn(),
     // Interactive-transaction shim: run the callback against the same mock so
     // per-model create/findFirst/delete assertions still observe the calls.
     $transaction: vi.fn(async (arg: unknown) =>
@@ -24,7 +33,10 @@ vi.mock("@dpf/db", () => {
         : Promise.all(arg as Promise<unknown>[])
     ),
   };
-  return { prisma };
+  return {
+    prisma,
+    Prisma: { sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values }) },
+  };
 });
 
 import {
@@ -367,6 +379,61 @@ describe("submitBooking (enhanced)", () => {
       scheduledAt: new Date("2026-03-23T09:00:00Z"), durationMinutes: 45,
     });
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it("writes the structured hospitality resource and allocation in the booking transaction", async () => {
+    vi.mocked(prisma.storefrontConfig.findFirst).mockResolvedValue(
+      mockPublishedStorefront as never,
+    );
+    vi.mocked(prisma.hospitalityResource.findFirst).mockResolvedValue({
+      id: "table-1",
+      legacyServiceProviderId: "prov-1",
+      status: "active",
+      capacity: 6,
+      availability: [],
+      storefront: { timezone: "UTC" },
+    } as never);
+    vi.mocked(
+      prisma.hospitalityCapacityAllocation.findFirst,
+    ).mockResolvedValue(null as never);
+    vi.mocked(prisma.storefrontBooking.create).mockResolvedValue({
+      id: "bk-1",
+      bookingRef: "BK-TESTREF",
+    } as never);
+    vi.mocked(
+      prisma.hospitalityCapacityAllocation.create,
+    ).mockResolvedValue({ id: "allocation-1" } as never);
+
+    const result = await submitBooking("restaurant", {
+      itemId: "itm-1",
+      customerEmail: "a@b.com",
+      customerName: "Alice",
+      scheduledAt: new Date("2026-03-23T09:00:00Z"),
+      durationMinutes: 45,
+      providerId: "prov-1",
+      covers: 4,
+    });
+
+    expect(result.success).toBe(true);
+    expect(prisma.storefrontBooking.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          providerId: "prov-1",
+          hospitalityResourceId: "table-1",
+        }),
+      }),
+    );
+    expect(
+      prisma.hospitalityCapacityAllocation.create,
+    ).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        resourceId: "table-1",
+        bookingId: "bk-1",
+        demandType: "booking",
+        demandRef: "BK-TESTREF",
+        quantity: 4,
+      }),
+    });
   });
 
   it("rejects an overlapping slot on an exclusion-constraint violation (23P01)", async () => {

@@ -25,6 +25,7 @@ export type AttentionSource =
   | "platform-health" // PortfolioQualityIssue issueType=health_alert, status=open (BI-2F778C13)
   | "provider-credential" // an enabled AI provider whose saved sign-in has EXPIRED — reconnect (BI-282C39D5)
   | "reservation-exception" // a public StorefrontBooking awaiting owner action — confirm / reschedule / overlap (BI-3DA1DFDC)
+  | "hospitality-capacity" // blocked, quarantined, over-capacity, or idle Food & Hospitality capacity
   | "storefront-inquiry" // a new public StorefrontInquiry awaiting the owner's first response (BI-348766E5)
   | "business-journey"; // PortfolioQualityIssue issueType=journey_failure — a critical business journey failed its watchdog run (BI-E105303D)
 

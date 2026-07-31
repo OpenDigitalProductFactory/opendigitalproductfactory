@@ -9,7 +9,6 @@ import { describe, expect, it } from "vitest";
 import { getVocabulary } from "./archetype-vocabulary";
 import { resolveResourceVocabulary } from "./resource-vocabulary";
 import {
-  classifyStorefrontResource,
   deriveRestaurantCapacity,
   type CapacityBookingInput,
   type CapacityResourceInput,
@@ -63,15 +62,19 @@ describe("Restaurant resource vocabulary has no provider/rental jargon", () => {
   });
 });
 
-// ── 2. Tables are separated from staff, not filed under providers ────────────
+// ── 2. Tables are structured resources, not inferred providers ──────────────
 
-describe("classifyStorefrontResource keeps tables out of Staff", () => {
-  it("routes the audit's Table 1..9 rows to tables and people to staff", () => {
-    for (let i = 1; i <= 9; i++) {
-      expect(classifyStorefrontResource({ name: `Table ${i}` })).toBe("table");
-    }
-    expect(classifyStorefrontResource({ name: "Digital Product Factory" })).toBe("staff");
-    expect(classifyStorefrontResource({ name: "Sam the Server" })).toBe("staff");
+describe("structured hospitality resources stay out of Staff", () => {
+  it("does not require a ServiceProvider delegate or table-shaped label", () => {
+    const client: CapacityLoaderClient = {
+      storefrontConfig: { findFirst: async () => null },
+      hospitalityResource: { findMany: async () => [] },
+      hospitalityCapacityAllocation: { findMany: async () => [] },
+      storefrontBooking: { findMany: async () => [] },
+      bookingHold: { findMany: async () => [] },
+      businessProfile: { findFirst: async () => null },
+    };
+    expect("serviceProvider" in client).toBe(false);
   });
 });
 
@@ -80,26 +83,27 @@ describe("classifyStorefrontResource keeps tables out of Staff", () => {
 // One fixture, read two ways: the owner Tables & Capacity loader and the
 // Workspace projection must agree on table/capacity/reservation state.
 const TABLES = [
-  { id: "t1", name: "Table 1", isActive: true },
-  { id: "t2", name: "Table 2", isActive: true },
-  { id: "t3", name: "Table 3", isActive: false }, // blocked
+  { id: "t1", label: "Aster", kind: "table", status: "active", capacity: 2, capacityUnit: "seats" },
+  { id: "t2", label: "Birch", kind: "table", status: "active", capacity: 4, capacityUnit: "seats" },
+  { id: "t3", label: "Cedar", kind: "table", status: "blocked", capacity: 6, capacityUnit: "seats" },
 ];
 const BOOKINGS = [
   // seated now (18:30 + 90m spans 19:00) → occupies t2
-  { id: "b-seated", providerId: "t2", scheduledAt: new Date("2026-07-22T18:30:00.000Z"), durationMinutes: 90, status: "confirmed", provider: { name: "Table 2" }, createdAt: new Date("2026-07-22T10:00:00.000Z") },
+  { id: "b-seated", providerId: "legacy-t2", hospitalityResourceId: "t2", scheduledAt: new Date("2026-07-22T18:30:00.000Z"), durationMinutes: 90, status: "confirmed", provider: { name: "Legacy Birch" }, createdAt: new Date("2026-07-22T10:00:00.000Z") },
   // confirmed reservation ahead (20:30) → upcoming reservation
-  { id: "b-upcoming", providerId: "t1", scheduledAt: new Date("2026-07-22T20:30:00.000Z"), durationMinutes: 90, status: "confirmed", provider: { name: "Table 1" }, createdAt: new Date("2026-07-22T12:00:00.000Z") },
+  { id: "b-upcoming", providerId: "legacy-t1", hospitalityResourceId: "t1", scheduledAt: new Date("2026-07-22T20:30:00.000Z"), durationMinutes: 90, status: "confirmed", provider: { name: "Legacy Aster" }, createdAt: new Date("2026-07-22T12:00:00.000Z") },
   // walk-in party with no seat yet → waitlist
-  { id: "b-walkin", providerId: null, scheduledAt: null, durationMinutes: 90, status: "pending", provider: null, createdAt: new Date("2026-07-22T18:55:00.000Z") },
+  { id: "b-walkin", providerId: null, hospitalityResourceId: null, scheduledAt: null, durationMinutes: 90, status: "pending", provider: null, createdAt: new Date("2026-07-22T18:55:00.000Z") },
 ];
 
 function capacityLoaderDb(): CapacityLoaderClient {
   return {
     storefrontConfig: { findFirst: async () => ({ id: "sf1", archetype: { archetypeId: "restaurant" } }) },
-    serviceProvider: { findMany: async () => TABLES },
+    hospitalityResource: { findMany: async () => TABLES },
+    hospitalityCapacityAllocation: { findMany: async () => [] },
     storefrontBooking: {
       findMany: async () =>
-        BOOKINGS.map((b) => ({ id: b.id, providerId: b.providerId, scheduledAt: b.scheduledAt, durationMinutes: b.durationMinutes, status: b.status })),
+        BOOKINGS.map((b) => ({ id: b.id, hospitalityResourceId: b.hospitalityResourceId, scheduledAt: b.scheduledAt, durationMinutes: b.durationMinutes, status: b.status })),
     },
     bookingHold: { findMany: async () => [] },
     businessProfile: { findFirst: async () => null },
@@ -116,7 +120,9 @@ function livingBusinessDb(): LivingBusinessClient {
     taxObligationPeriod: { findMany: async () => [] },
     obligation: { findMany: async () => [] },
     invoice: { findMany: async () => [] },
-    serviceProvider: { findMany: async () => TABLES },
+    serviceProvider: { findMany: async () => [] },
+    hospitalityResource: { findMany: async () => TABLES },
+    hospitalityCapacityAllocation: { findMany: async () => [] },
     storefrontBooking: { findMany: async () => BOOKINGS },
   } as unknown as LivingBusinessClient;
 }
@@ -162,7 +168,8 @@ describe("capacity projection is Restaurant-gated", () => {
   it("returns null for a non-capacity archetype", async () => {
     const db = {
       storefrontConfig: { findFirst: async () => ({ id: "sf1", archetype: { archetypeId: "equipment-rental" } }) },
-      serviceProvider: { findMany: async () => [] },
+      hospitalityResource: { findMany: async () => [] },
+      hospitalityCapacityAllocation: { findMany: async () => [] },
       storefrontBooking: { findMany: async () => [] },
       bookingHold: { findMany: async () => [] },
       businessProfile: { findFirst: async () => null },
@@ -170,10 +177,10 @@ describe("capacity projection is Restaurant-gated", () => {
     expect(await loadRestaurantCapacitySnapshot({ db, now: NOW })).toBeNull();
   });
 
-  it("deriveRestaurantCapacity ignores staff rows when counting tables", () => {
+  it("deriveRestaurantCapacity ignores non-table hospitality resources", () => {
     const resources: CapacityResourceInput[] = [
-      { id: "t1", name: "Table 1", isActive: true },
-      { id: "s1", name: "Sam the Server", isActive: true },
+      { id: "t1", label: "Aster", kind: "table", status: "active", capacity: 4, capacityUnit: "seats" },
+      { id: "o1", label: "Oven 1", kind: "oven", status: "active", capacity: 6, capacityUnit: "batches" },
     ];
     const bookings: CapacityBookingInput[] = [];
     const snap = deriveRestaurantCapacity({ resources, bookings, now: NOW });

@@ -87,12 +87,24 @@ on the latest `main` run — don't hard-code a number here, it goes stale.
 
 ### Policy guard profiles
 
-Fast source and PR-policy checks are registered in
+Fast deterministic checks are registered in
 [`scripts/lib/ci-policy-guards.mjs`](../../scripts/lib/ci-policy-guards.mjs).
 The registry preserves the former job name, display name, command sequence, and
 profile for every migrated guard. The runner executes every named entry even
 when an earlier entry fails, then writes a per-guard pass/fail/duration table to
 the GitHub job summary and a machine-readable artifact.
+
+The profiles reflect execution substrate, not separate policy inventories:
+
+- `source` uses Node plus the isolated guard-AST runtime;
+- `workspace` uses the pinned full workspace graph for checks such as prose
+  lint; and
+- `pull-request` uses PR event context and trailers.
+
+`pregate:preflight` and `pr:ready` consume all locally honest checks from these
+same profiles. In a source-only worktree, a missing workspace runtime is
+reported as environment-skipped and remains CI-enforced; in a compile-ready
+worktree, prose drift is therefore found before the sandbox lease or PR.
 
 Consolidation follows a fail-safe promotion sequence:
 
@@ -169,11 +181,12 @@ pnpm run pregate            # → node scripts/pregate.mjs
 `local-integration-ci` lease, `pregate.mjs` runs the deterministic CI policy
 guards host-natively — the same check commands CI's Policy Guards jobs run
 (module size, style drift, derived-artifact staleness, doc links, SBOM, plus
-the commit-range-driven UX-Fit and Design Grounding trailer gates), with guard
-self-tests stripped and PR-body-dependent gates (Seed-Fit, Decision Baseline)
-left to CI. A violation aborts in well under a minute **before any lease is
-claimed**, so a doomed run never occupies the contended sandbox slot. A guard
-this host cannot execute (missing isolated runtime) is reported as
+the workspace-dependent prose ratchet, and the commit-range-driven UX-Fit and
+Design Grounding trailer gates), with guard self-tests stripped and
+PR-body-dependent gates (Seed-Fit, Decision Baseline) left to CI. A violation
+aborts in well under a minute **before any lease is claimed**, so a doomed run
+never occupies the contended sandbox slot. A guard this host cannot execute
+(missing isolated or workspace runtime) is reported as
 `environment-skipped` with its remedy — a warning, never a false red; CI
 remains the enforcer. Run it standalone with `pnpm run pregate:preflight`
 (`--plan` prints the guard plan without running it). Emergency skip:
@@ -399,6 +412,51 @@ evidence as NOT READY: it needs a passing gate record for the PR head SHA, a
 recorded push-time override, or an explicit `Local-CI-Override: <reason>` /
 `Local-CI-Evidence: <record-id>` trailer in the PR body. Docs-only PRs are
 exempt automatically.
+
+### Keep internal identifiers out of the PR body
+
+The trailers above are a **fallback**, not the normal path: a branch gated
+through `pnpm run pregate` satisfies the guard from its own push-time record, so
+a normally-gated PR needs **nothing** in the body. Do not paste lease ids,
+evidence record ids, candidate/base SHAs, session ids, or worktree paths into a
+PR — a PR is public, and none of it is contract. One line is enough:
+
+> Verified via the governed local-CI gate (exact-tree, merged against main).
+
+The detail stays queryable on the install, keyed off the number a human actually
+uses:
+
+```bash
+pnpm pr:origin 3748
+```
+
+That resolves the PR to its head plus every commit SHA and matches those
+against this install's own gate records, reporting which client and which
+client thread produced the change (and the parent thread, for a sub-thread).
+Matching is by **SHA, not branch**: branch names get reused across threads and
+deleted on merge, while commits are permanent. A PR with no local gate record —
+an outside contribution — correctly reports no origin rather than a guess.
+
+### Identify your client and thread
+
+The gate records **who** ran it. It no longer defaults the provider (it used to
+default to `codex`, so every client of every kind was recorded as Codex), and it
+no longer derives the session from a pid (`gate-<pid>` changed on every re-gate,
+so one thread looked like many contributors).
+
+Identity is detected from the calling client's environment where possible.
+When it cannot be, pass it:
+
+```bash
+node scripts/gate-worktree.mjs --owner-provider claude --owner-session-id "$CLAUDE_CODE_SESSION_ID"
+```
+
+or set `DPF_GATE_OWNER_PROVIDER` / `DPF_GATE_OWNER_SESSION_ID`. An unresolvable
+**provider** stops the gate with a message naming the flag — the provider
+vocabulary is a closed enum (`build-studio | claude | codex | grok | antigravity
+| coworker`), so there is no honest value to fall back to. An unresolvable
+**thread** does not stop the gate; it records `unattributed-<pid>` so the run is
+visibly unattributed rather than falsely attributed.
 
 **Pre-PR vs post-merge (do not confuse the runtimes).** "Pre-PR test" means
 this sandbox lane — the lease + the runner above. "Test on :3000" (the

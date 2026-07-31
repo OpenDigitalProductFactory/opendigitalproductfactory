@@ -44,6 +44,8 @@ function fakeDb(configured: { archetypeId: string; name: string } | null) {
     obligation: { findMany: async () => [] },
     storefrontBooking: { findMany: async () => [] },
     serviceProvider: { findMany: async () => [] },
+    hospitalityResource: { findMany: async () => [] },
+    hospitalityCapacityAllocation: { findMany: async () => [] },
   } as never;
 }
 
@@ -118,7 +120,7 @@ describe("loadWorkspaceTwinPresentation — live overlay", () => {
       freshness: "degraded",
       degradedSourceCount: 1,
     });
-    expect(result!.operations!.telemetry.queryCount).toBe(9);
+    expect(result!.operations!.telemetry.queryCount).toBe(11);
   });
 
   it("falls back to the demo (demo: true) when no org is configured", async () => {

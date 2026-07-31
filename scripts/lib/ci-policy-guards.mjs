@@ -11,6 +11,43 @@ function guard(legacyJobId, name, commands) {
 
 const node = (...args) => ["node", args];
 const git = (...args) => ["git", args];
+const pnpm = (...args) => ["pnpm", args];
+
+export const LOCAL_READINESS_PROFILE_NAMES = Object.freeze([
+  "source",
+  "workspace",
+  "pull-request",
+]);
+
+export function isPolicyGuardSelfTest([command, args]) {
+  return command === "node" && args[0] === "--test"
+    || command === "pnpm" && args[0] === "run" && args[1]?.endsWith(":test");
+}
+
+function quoteWindowsCommandToken(token) {
+  const value = String(token);
+  if (!/[\s"&|<>^()%]/.test(value)) return value;
+  return `"${value.replaceAll("%", "%%").replaceAll('"', '""')}"`;
+}
+
+export function resolvePolicyGuardInvocation(
+  command,
+  args,
+  { platform = process.platform, env = process.env } = {},
+) {
+  if (platform !== "win32" || command !== "pnpm") {
+    return { command, args };
+  }
+  return {
+    command: env.ComSpec || env.COMSPEC || "cmd.exe",
+    args: [
+      "/d",
+      "/s",
+      "/c",
+      [command, ...args].map(quoteWindowsCommandToken).join(" "),
+    ],
+  };
+}
 
 export const POLICY_GUARD_PROFILES = Object.freeze({
   source: Object.freeze([
@@ -146,10 +183,21 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/sandbox-freshness-preflight.test.mjs",
         "scripts/release/re-resolve-stt-digest.test.mjs",
         "scripts/lib/ensure-pre-push-hook.test.mjs",
+        "scripts/lib/agent-identity.test.mjs",
         "tests/release/local-ci-gate-contract.test.mjs",
         "tests/release/pregate-node-gate-contract.test.mjs",
       ),
       node("scripts/runtime-artifact-janitor.mjs", "--help"),
+    ]),
+  ]),
+  // Guards in this profile are still cheap and deterministic, but they import
+  // workspace packages or use the workspace's pinned TypeScript executor.
+  // Keeping them separate preserves the source profile's minimal install while
+  // letting CI, pregate preflight, and pr:ready consume one canonical inventory.
+  workspace: Object.freeze([
+    guard("prose-lint-guard", "Prose Lint Guard", [
+      pnpm("run", "check:prose-lint:test"),
+      pnpm("run", "check:prose-lint"),
     ]),
   ]),
   "pull-request": Object.freeze([
@@ -238,13 +286,15 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
 
 export async function runPolicyProfile({
   entries,
-  execute = (command, args) =>
-    spawnSync(command, args, {
+  execute = (command, args) => {
+    const invocation = resolvePolicyGuardInvocation(command, args);
+    return spawnSync(invocation.command, invocation.args, {
       cwd: process.cwd(),
       env: process.env,
       stdio: "inherit",
       shell: false,
-    }).status ?? 1,
+    }).status ?? 1;
+  },
   logger = () => {},
   now = () => Date.now(),
 }) {

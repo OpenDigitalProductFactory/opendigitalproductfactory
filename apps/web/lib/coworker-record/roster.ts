@@ -10,7 +10,6 @@
 
 import { prisma } from "@dpf/db";
 import {
-  COWORKER_SLUG_TO_CANONICAL_AGENT_ID,
   resolveAgentIdentity,
   resolveCanonicalAgentId,
 } from "@dpf/db/agent-identity";
@@ -48,8 +47,14 @@ import {
 } from "./roster-presentation";
 import {
   SELECTABLE_COWORKER_STATE,
+  dropDualSeedAliasAgents,
   selectableCoworkerIdentityRefs,
 } from "./selectable-coworker";
+
+// Re-exported from its original home so existing importers keep one name for
+// the dual-seed collapse; the implementation now sits beside the selection
+// state it is half of (see ./selectable-coworker).
+export { dropDualSeedAliasAgents };
 
 // BI-74FD6420: roster collapses dual-seed slug + AGT-* pairs for display only.
 // Seed still creates slug agentId rows for FK consumers (service catalog, etc.).
@@ -108,32 +113,6 @@ type FamilyCoverage = {
 };
 
 const DECISION_WINDOW_DAYS = 30;
-
-/**
- * Keep one display row only when the full canonical + executable identity pair
- * is selectable (BI-74FD6420). Known slug rows never render independently:
- * their detail route canonicalizes to AGT-* and execution still uses the slug,
- * so an orphan on either side cannot complete the roster's primary job.
- */
-export function dropDualSeedAliasAgents<T extends { agentId: string }>(
-  agents: T[],
-  slugToCanonical: Readonly<Record<string, string>> = COWORKER_SLUG_TO_CANONICAL_AGENT_ID,
-): T[] {
-  const present = new Set(agents.map((a) => a.agentId));
-  const canonicalToSlug = new Map(
-    Object.entries(slugToCanonical).map(([slug, canonical]) => [
-      canonical,
-      slug,
-    ]),
-  );
-  return agents.filter((a) => {
-    const canonical = slugToCanonical[a.agentId];
-    if (canonical && canonical !== a.agentId) return false;
-    const runtimeSlug = canonicalToSlug.get(a.agentId);
-    if (runtimeSlug && !present.has(runtimeSlug)) return false;
-    return true;
-  });
-}
 
 /** One query over all profession corpus pages, bucketed by family key. */
 async function loadAllCoverage(): Promise<Map<string, FamilyCoverage>> {

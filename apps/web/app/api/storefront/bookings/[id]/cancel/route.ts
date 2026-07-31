@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@dpf/db";
 import { transitionProductSoldByEvidence } from "@/lib/products/product-sold-commercial-persistence";
+import { releaseHospitalityCapacityByDemand } from "@/lib/storefront/hospitality-capacity-repository.server";
 
 export async function POST(
   req: NextRequest,
@@ -18,7 +19,12 @@ export async function POST(
 
   const booking = await prisma.storefrontBooking.findUnique({
     where: { id },
-    select: { id: true, status: true },
+    select: {
+      id: true,
+      bookingRef: true,
+      organizationId: true,
+      status: true,
+    },
   });
   if (!booking) {
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
@@ -40,6 +46,13 @@ export async function POST(
       sourceId: id,
       to: "cancelled",
       occurredAt: cancelledAt,
+    });
+    await releaseHospitalityCapacityByDemand(tx as never, {
+      organizationId: booking.organizationId,
+      demandType: "booking",
+      demandRef: booking.bookingRef,
+      at: cancelledAt,
+      reason: reason || "Booking cancelled",
     });
   });
 

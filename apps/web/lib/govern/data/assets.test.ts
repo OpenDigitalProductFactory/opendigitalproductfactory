@@ -127,6 +127,39 @@ describe("seeded registry", () => {
     });
   });
 
+  it("governs hospitality resources, schedules, pools, and allocations as local operating records", () => {
+    for (const [assetId, prismaModel, projectionClass] of [
+      ["data:hospitality-resource", "HospitalityResource", "structure"],
+      [
+        "data:hospitality-resource-availability",
+        "HospitalityResourceAvailability",
+        "structure",
+      ],
+      [
+        "data:hospitality-capacity-pool",
+        "HospitalityCapacityPool",
+        "structure",
+      ],
+      [
+        "data:hospitality-capacity-allocation",
+        "HospitalityCapacityAllocation",
+        "metadata",
+      ],
+    ] as const) {
+      expect(lookupAsset(DATA_ASSET_REGISTRY, assetId)).toMatchObject({
+        physical: { prismaModel },
+        domain: "food-hospitality-operations",
+        ownerRole: "business-operator",
+        sensitivity: "confidential",
+        criticality: "high",
+        lifecycleClass: "operational",
+        purposeCapabilities: ["service-delivery", "platform-operations"],
+        residencyClass: "local-only",
+        projectionClass,
+      });
+    }
+  });
+
   it("builds without invariant violations and carries the BI-DG-001 worked asset", () => {
     expect(DATA_ASSET_REGISTRY.assets.length).toBeGreaterThan(0);
     const conv = lookupAsset(DATA_ASSET_REGISTRY, "data:agent-conversation");

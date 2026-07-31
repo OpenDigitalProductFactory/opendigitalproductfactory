@@ -212,6 +212,55 @@ describe("loadWorkforceRoster (BI-554E1A14, BI-9A5F0EA3)", () => {
     expect(members[0].agentNeeds?.perTaskTokenLimit).toBeNull();
   });
 
+  // BI-005DDC70: every agent row on this roster deep-links to
+  // /platform/ai/agent/[agentId], which serves ONLY coworkers passing the
+  // selection contract. Loading unfiltered put 20 dead links on the page.
+  describe("selection contract (links must resolve)", () => {
+    it("queries only selectable coworkers (active, not archived, production)", async () => {
+      const db = makeDb({ employees: [], agents: [AGENT] });
+
+      await loadWorkforceRoster({ db: db as never });
+
+      expect(db.agent.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { status: "active", archived: false, lifecycleStage: "production" },
+        }),
+      );
+    });
+
+    it("drops a canonical AGT-* row whose executable slug twin is not selectable", async () => {
+      // AGT-WS-ADMIN's runtime identity is the `admin-assistant` slug row. When
+      // that twin is filtered out by the state predicate, the detail route
+      // returns notFound — so the canonical row must not render either.
+      const canonicalOnly = { ...AGENT, agentId: "AGT-WS-ADMIN" };
+      const db = makeDb({ employees: [], agents: [canonicalOnly] });
+
+      const { members, summary } = await loadWorkforceRoster({ db: db as never });
+
+      expect(members).toEqual([]);
+      expect(summary.agents).toBe(0);
+    });
+
+    it("shows one row per dual-seed pair, keeping the canonical AGT-* id", async () => {
+      const canonical = { ...AGENT, agentId: "AGT-WS-ADMIN" };
+      const slugTwin = { ...AGENT, agentId: "admin-assistant" };
+      const db = makeDb({ employees: [], agents: [canonical, slugTwin] });
+
+      const { members } = await loadWorkforceRoster({ db: db as never });
+
+      expect(members.map((m) => m.id)).toEqual(["AGT-WS-ADMIN"]);
+    });
+  });
+
+  it("labels a coworker with its curated displayName, not the raw seed handle", async () => {
+    const seeded = { ...AGENT, name: "admin-assistant", displayName: "Platform Admin" };
+    const db = makeDb({ employees: [], agents: [seeded] });
+
+    const { members } = await loadWorkforceRoster({ db: db as never });
+
+    expect(members[0].displayName).toBe("Platform Admin");
+  });
+
   it("returns an empty roster when there is no workforce", async () => {
     const db = makeDb({ employees: [], agents: [] });
 

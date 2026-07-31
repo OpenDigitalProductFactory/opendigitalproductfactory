@@ -55,6 +55,19 @@ export type ContributorChangeLane = {
   source: ContributorLaneSource;
   status: ContributorLaneStatus;
   owner: string | null;
+  /**
+   * BI-3A34D7A9: WHICH agent client this lane belongs to (`claude`, `codex`,
+   * `build-studio`, …), paired with `owner` (the client THREAD id). Null when
+   * no lease or capsule names one — an outside contributor's branch has no
+   * local origin, and that absence is itself the correct signal.
+   */
+  ownerProvider: string | null;
+  /**
+   * The PR number, when this lane has one. The PR number is the primary id
+   * a human works with, so it is projected as a first-class field rather than
+   * left to be parsed out of `pullRequestUrl`.
+   */
+  pullRequestNumber: number | null;
   branch: string | null;
   worktreePath: string | null;
   commitSha: string | null;

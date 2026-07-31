@@ -21,12 +21,31 @@ type ClassRule = {
   confidence: InferencePayloadMatch["confidence"];
   pathPattern?: RegExp;
   textPattern?: RegExp;
+  /**
+   * BI-CD13D818 — this rule is built from vocabulary that is ALSO ordinary
+   * English outside its protected domain ("performance", "benefits", "manager",
+   * "incident"). On its own such a match may not escalate a turn to
+   * `restricted`, because restricted hard-denies every external provider; it
+   * needs a second, distinct detector to corroborate it. A lone match still
+   * lands on `confidential`, so the control keeps failing closed.
+   *
+   * Set this ONLY where the words genuinely collide with common usage. Precise
+   * evidence — a field literally named `password` or `employeeDiscipline`, a
+   * secret-shaped token — must NOT carry this flag and escalates alone.
+   */
+  ambiguousVocabulary?: true;
 };
 
 // Text probes must contain value-shaped evidence, not merely governance or
 // instructional vocabulary that happens to name a protected data class.
+//
+// Split by precision (BI-CD13D818). The first set names employment data and
+// nothing else; the second is real HR vocabulary that is ALSO everyday English
+// on an AI-operations, capacity, or product surface, so it needs corroboration.
 const EMPLOYEE_RECORD_VALUE_PATTERN =
-  /\b(?:salary|compensation|benefits?|performance review|disciplinary|manager-only|payroll)\b/i;
+  /\b(?:salary|performance review|disciplinary|manager-only|payroll)\b/i;
+const EMPLOYEE_RECORD_AMBIGUOUS_VALUE_PATTERN =
+  /\b(?:compensation|benefits?)\b/i;
 
 const SOURCE_CODE_VALUE_PATTERN =
   /(?:\b(?:const|let|var)\s+[A-Za-z_$][\w$]*\s*(?:[:=;,])|\bfunction\s+[A-Za-z_$][\w$]*\s*\(|\bclass\s+[A-Za-z_$][\w$]*(?:\s+extends\s+[A-Za-z_$][\w$]*)?\s*\{|\bimport\s+[\w*{},\s]+\s+from\s+["']|\bexport\s+(?:default\s+)?(?:const|let|var|function|class)\b|=>|```(?:ts|tsx|js|jsx|py|sql|sh|ps1)\b)/;
@@ -62,13 +81,26 @@ const CLASS_RULES: readonly ClassRule[] = [
     dataClass: "employee-records",
     reason: "employee-record-field",
     confidence: "inferred",
-    pathPattern: /\b(?:employee|worker|salary|compensation|benefit|performance|discipline|manager|payroll)\b/i,
+    pathPattern: /\b(?:employee|salary|discipline|payroll|performance[-_ ]?review)\b/i,
   },
   {
     dataClass: "employee-records",
     reason: "employee-record-text",
     confidence: "inferred",
     textPattern: EMPLOYEE_RECORD_VALUE_PATTERN,
+  },
+  {
+    // Same class, weaker evidence: these words carry employment meaning in an HR
+    // context and an entirely innocent one elsewhere (model `performance`, the
+    // `benefits` of a routing change, a capacity `manager`, a `worker` process).
+    // Corroboration-gated so one of them cannot deny all external routing on its
+    // own — the live /platform/ai/operations-map false positive.
+    dataClass: "employee-records",
+    reason: "employee-record-ambiguous-term",
+    confidence: "inferred",
+    ambiguousVocabulary: true,
+    pathPattern: /\b(?:worker|compensation|benefit|performance|manager)\b/i,
+    textPattern: EMPLOYEE_RECORD_AMBIGUOUS_VALUE_PATTERN,
   },
   {
     dataClass: "payments-finance",
@@ -112,7 +144,18 @@ const CLASS_RULES: readonly ClassRule[] = [
     dataClass: "security-logs",
     reason: "security-log-field",
     confidence: "inferred",
-    pathPattern: /\b(?:security[-_]?log|audit[-_]?log|incident|ip[-_]?address|siem|threat)\b/i,
+    pathPattern: /\b(?:security[-_]?log|audit[-_]?log|ip[-_]?address|siem)\b/i,
+  },
+  {
+    // `incident` and `threat` are security vocabulary and also ordinary
+    // operations vocabulary (an incident note about a stalled build, the threat
+    // a regression poses). Corroboration-gated for the same reason as the
+    // employee-record ambiguous terms — BI-CD13D818.
+    dataClass: "security-logs",
+    reason: "security-log-ambiguous-term",
+    confidence: "inferred",
+    ambiguousVocabulary: true,
+    pathPattern: /\b(?:incident|threat)\b/i,
   },
   {
     dataClass: "criminal-justice",
@@ -174,6 +217,15 @@ const RESTRICTED_CLASSES = new Set<InferenceDataClass>([
   "unknown-governed-data",
 ]);
 
+/**
+ * Reasons emitted by `ambiguousVocabulary` rules — derived from CLASS_RULES so a
+ * new corroboration-gated rule can never be added without this set following it
+ * (BI-CD13D818).
+ */
+const AMBIGUOUS_REASONS: ReadonlySet<string> = new Set(
+  CLASS_RULES.filter((rule) => rule.ambiguousVocabulary).map((rule) => rule.reason),
+);
+
 const CONFIDENTIAL_CLASSES = new Set<InferenceDataClass>([
   "customer-records",
   "source-code",
@@ -205,7 +257,7 @@ export function classifyInferencePayload(
 
   const dedupedMatches = dedupeMatches(matches);
   const dataClasses = uniqueSorted(dedupedMatches.map((match) => match.dataClass));
-  const overallSensitivity = inferOverallSensitivity(dataClasses, input.governedData);
+  const overallSensitivity = inferOverallSensitivity(dedupedMatches, input.governedData);
   const inputHash = hashCanonical({
     messages: input.messages,
     systemPrompt: input.systemPrompt,
@@ -372,17 +424,73 @@ function uniqueSorted<T extends string>(values: readonly T[]): T[] {
   return [...new Set(values)].sort((a, b) => a.localeCompare(b));
 }
 
+/**
+ * Escalate to `restricted` only on corroborated evidence — BI-CD13D818.
+ *
+ * WHY THIS IS NOT A SIMPLE "any restricted class => restricted" TEST.
+ *
+ * Several restricted classes are detected by regexes built from ordinary
+ * English words: `benefit(s)`, `performance`, `manager`, `worker`,
+ * `compensation`, `incident`, `threat`. On a non-HR, non-security surface those
+ * appear in their everyday sense constantly — "model performance", "the
+ * benefits of local routing", "capacity manager". A single such match escalated
+ * the whole turn to `restricted`, which the data policy then hard-denies for
+ * every external destination (`restricted-cannot-leave-boundary`), leaving only
+ * local-cleared endpoints.
+ *
+ * Observed live: a /platform/ai/operations-map conversation was classified
+ * `employee-records` and pinned to the bundled local model — 14 of 15 endpoints
+ * excluded, 1 candidate ranked. ~20% of recent routing decisions escalated this
+ * way. The same over-trigger was already fixed once for tool DECLARATIONS (see
+ * the note in collectTextProbes); this is the prose-shaped recurrence.
+ *
+ * Escalation now requires one of:
+ *   1. an explicit governed-data hint marked restricted — governance stated by
+ *      the caller, never inferred, always honoured;
+ *   2. any restricted-class match that is NOT from an `ambiguousVocabulary`
+ *      rule — a declared governed class, a secret-shaped token, or a field
+ *      literally named `password` / `employeeDiscipline`. Precise evidence
+ *      escalates alone and is never subject to the corroboration bar;
+ *   3. TWO OR MORE DISTINCT ambiguous detectors agreeing. One word echoed
+ *      across many probes is one signal, so corroboration counts distinct
+ *      `reason` values rather than match volume.
+ *
+ * A lone ambiguous signal does NOT drop to `internal` — it lands on
+ * `confidential`, which still confines routing to confidential-cleared
+ * providers. The control keeps failing closed; it just stops treating one
+ * ambiguous English word as proof of an HR or security record.
+ *
+ * Kernel decision DI-0A58373E26D0 (2026-07-31) scored this against narrowing
+ * the patterns outright, weighting paths over prose, and granting an external
+ * provider restricted clearance. This option won with high confidence (margin
+ * 2.70, no commandment conflict); granting external clearance scored worst,
+ * opposed by "Outbound and irreversible actions require explicit go" and
+ * "Least privilege, deny by default".
+ */
 function inferOverallSensitivity(
-  dataClasses: readonly InferenceDataClass[],
+  matches: readonly InferencePayloadMatch[],
   governedData: readonly GovernedPayloadHint[] | undefined,
 ): InferencePayloadSensitivity {
   if (governedData?.some((hint) => hint.sensitivity === "restricted")) {
     return "restricted";
   }
-  if (dataClasses.some((dataClass) => RESTRICTED_CLASSES.has(dataClass))) {
+
+  const restrictedMatches = matches.filter((match) => RESTRICTED_CLASSES.has(match.dataClass));
+  const hasPreciseEvidence = restrictedMatches.some(
+    (match) => !AMBIGUOUS_REASONS.has(match.reason),
+  );
+  const distinctAmbiguousReasons = new Set(
+    restrictedMatches
+      .filter((match) => AMBIGUOUS_REASONS.has(match.reason))
+      .map((match) => match.reason),
+  ).size;
+  if (hasPreciseEvidence || distinctAmbiguousReasons >= 2) {
     return "restricted";
   }
+
+  const dataClasses = matches.map((match) => match.dataClass);
   if (
+    restrictedMatches.length > 0 ||
     governedData?.some((hint) => hint.sensitivity === "confidential") ||
     dataClasses.some((dataClass) => CONFIDENTIAL_CLASSES.has(dataClass))
   ) {

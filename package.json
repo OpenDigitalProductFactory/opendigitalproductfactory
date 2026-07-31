@@ -76,6 +76,7 @@
     "docs:jsi": "node docs/architecture/generate-jsi-docx.mjs",
     "docs:agent-standards": "node docs/architecture/generate-agent-standard-docx.mjs all",
     "pr:health": "node scripts/pr-health.mjs",
+    "pr:origin": "node scripts/pr-origin.mjs",
     "merge-policy:check": "node scripts/merge-readiness-policy.mjs check",
     "merge-policy:audit": "node scripts/merge-readiness-policy.mjs audit",
     "merge-policy:apply": "node scripts/merge-readiness-policy.mjs apply",

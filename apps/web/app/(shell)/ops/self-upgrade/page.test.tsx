@@ -16,6 +16,31 @@ vi.mock("@/lib/self-upgrade/impact", () => ({
   summarizeUpgradeImpact: vi
     .fn()
     .mockResolvedValue({ ok: false, reason: "no-lineage", detail: "no lineage" }),
+  // BI-5B1FDA09: the merged-PR labels resolve from the upstream lineage marker.
+  resolveCurrentLineageSha: vi
+    .fn()
+    .mockResolvedValue("3c46e27d97781d4663d80ea097a1e9f3dd7f1cdf"),
+}));
+
+vi.mock("@/lib/self-upgrade/config", () => ({
+  getSelfUpgradeConfig: vi.fn().mockResolvedValue({ hostSourceMountPath: "/host/dpf" }),
+}));
+
+vi.mock("@/lib/self-upgrade/merge-point", () => ({
+  resolveUpgradeMergePoints: vi.fn().mockResolvedValue({
+    running: {
+      sha: "3c46e27d97781d4663d80ea097a1e9f3dd7f1cdf",
+      prNumber: 3746,
+      description: "make amcheck success Prisma-safe",
+      label: "PR #3746",
+    },
+    available: {
+      sha: "59f8826e448bdb85580633cdc2ad21fb05bfafd1",
+      prNumber: 3747,
+      description: "materialize hermetic replay dependencies",
+      label: "PR #3747",
+    },
+  }),
 }));
 
 vi.mock("@/components/ops/OpsTabNav", () => ({
@@ -42,6 +67,10 @@ vi.mock("@/components/ops/SelfUpgradeClient", () => ({
     history?: unknown[];
     historyNextCursor?: string | null;
     platformVersion?: { version: string; gitSha: string | null };
+    mergePoints?: {
+      running: { prNumber: number | null } | null;
+      available: { prNumber: number | null } | null;
+    } | null;
   }) => (
     <div
       data-testid="self-upgrade-client"
@@ -53,6 +82,8 @@ vi.mock("@/components/ops/SelfUpgradeClient", () => ({
       data-history-cursor={props.historyNextCursor ?? ""}
       data-platform-version={props.platformVersion?.version ?? ""}
       data-platform-git-sha={props.platformVersion?.gitSha ?? ""}
+      data-running-pr={props.mergePoints?.running?.prNumber ?? ""}
+      data-available-pr={props.mergePoints?.available?.prNumber ?? ""}
     />
   ),
 }));
@@ -103,6 +134,7 @@ vi.mock("next/headers", () => ({
 import { getSelfUpgradeStatus, listSelfUpgradeRuns } from "@/lib/actions/promotions";
 import { getPlatformDevConfig } from "@/lib/actions/platform-dev-config";
 import { loadPersistedImpactSummary, summarizeUpgradeImpact } from "@/lib/self-upgrade/impact";
+import { resolveUpgradeMergePoints } from "@/lib/self-upgrade/merge-point";
 import SelfUpgradePage from "./page";
 
 beforeEach(() => {
@@ -282,6 +314,43 @@ describe("SelfUpgradePage", () => {
     const html = renderToStaticMarkup(await SelfUpgradePage());
 
     expect(html).toContain('data-update-pending="false"');
+  });
+
+  it("passes merged-PR identity for both ends of the comparison (BI-5B1FDA09)", async () => {
+    vi.mocked(getSelfUpgradeStatus).mockResolvedValue({
+      ...baseStatus,
+      enabled: true,
+      isFresh: false,
+      targetSha: "59f8826e448bdb85580633cdc2ad21fb05bfafd1",
+    } as never);
+    vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
+
+    const html = renderToStaticMarkup(await SelfUpgradePage());
+
+    expect(html).toContain('data-running-pr="3746"');
+    expect(html).toContain('data-available-pr="3747"');
+    // Resolved from the UPSTREAM lineage marker, not the local merge-commit id:
+    // a merge commit's subject carries no `(#N)` and would label as bare hex.
+    expect(resolveUpgradeMergePoints).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runningSha: "3c46e27d97781d4663d80ea097a1e9f3dd7f1cdf",
+        targetSha: "59f8826e448bdb85580633cdc2ad21fb05bfafd1",
+      }),
+    );
+  });
+
+  it("skips merge-point resolution when there is no target to compare (BI-5B1FDA09)", async () => {
+    vi.mocked(getSelfUpgradeStatus).mockResolvedValue({
+      ...baseStatus,
+      enabled: true,
+      targetSha: null,
+    } as never);
+    vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
+
+    const html = renderToStaticMarkup(await SelfUpgradePage());
+
+    expect(resolveUpgradeMergePoints).not.toHaveBeenCalled();
+    expect(html).toContain('data-running-pr=""');
   });
 
   it("loads only the persisted impact summary during render when an update is available", async () => {

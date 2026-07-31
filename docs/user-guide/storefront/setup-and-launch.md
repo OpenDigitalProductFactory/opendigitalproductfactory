@@ -101,6 +101,30 @@ open each relevant workspace:
 Select **Publish now** on the Storefront dashboard only after these checks.
 Publishing makes the portal available immediately at `/s/{your-slug}`.
 
+### Confirm Restaurant Tables And Capacity
+
+Restaurant storefronts have a dedicated **Tables & Capacity** workspace. Tables
+are physical operating resources, not members of Staff. Before accepting
+reservations:
+
+1. Add every table guests can actually be seated at. Use the label staff use
+   during service, record its true seat count, and identify its service area
+   (for example, dining room, patio, or bar).
+2. Open each table and set its weekly availability. Add dated exceptions for
+   closures, maintenance, private events, or other temporary restrictions.
+3. Mark a table **Blocked** when it must not be assigned and give the team a
+   useful reason. Use **Retired** only when the table is no longer part of the
+   operating floor.
+4. Compare the table totals and current availability with the physical room
+   before publishing and after any layout change.
+
+An upgraded storefront may show a blocked table with **Confirm seat capacity
+after migration**. DPF intentionally does not guess a physical capacity when
+the legacy record contains no reliable seat count. Confirm the table, correct
+its seats and service area, set its availability, and then mark it available.
+Blocked or out-of-hours tables are rejected by the same allocation rule used by
+the owner view and public booking flow.
+
 If an older item shows **Needs setup link**, DPF could not find real
 product-line evidence for it during upgrade reconciliation. The item remains
 usable through the compatibility path, but it is not silently attached to a

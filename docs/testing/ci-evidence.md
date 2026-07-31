@@ -282,6 +282,50 @@ The CI and UX job summaries report payload bytes and packaging or
 download/validation/extraction duration. Compare those transfer measurements
 with the avoided UX build duration before retaining or tuning the artifact.
 
+## Exact-tree cross-lifecycle receipt (foundation shadow)
+
+`BI-9585E580` adds the GitHub-native evidence contract needed to avoid a second
+exhaustive run after an identical merge-group tree reaches `main`. The initial
+slice is deliberately **shadow-only**:
+
+- a successful merge-group `Merge Readiness` job writes
+  `ci-evidence.json` plus `ci-evidence.sha256` after it has accepted every
+  dependency;
+- the artifact name includes the immutable Git tree, not only the commit SHA;
+- a push job discovers, downloads, and validates the candidate receipt; and
+- Typecheck, unit/integration tests, Production Build, and UX still run
+  exhaustively regardless of the shadow verdict.
+
+The receipt binds repository, commit and tree identity, source event/run,
+workflow fingerprint, producer plan digest, planner implementation fingerprint,
+merge-policy manifest, declared and observed runner/toolchain identity, every
+aggregate gate result, related artifact digests and byte counts, and a 24-hour
+lifetime. It also declares the stable required contexts from the merge-policy
+manifest. The companion checksum detects receipt tampering. Validation re-reads
+the source run, its artifact inventory, and the latest CheckRuns for every
+required context—including the independently executed DCO check—from GitHub.
+
+Only a completed, successful `merge_group` producer is eligible. A different
+tree, changed workflow/planner/policy/toolchain, missing or failed gate,
+different artifact digest, malformed receipt, expiry, API failure, or missing
+evidence produces the explicit shadow verdict `exhaustive`. Unknown never means
+reuse.
+
+This foundation does not change branch protection or mint a DPF
+`ToolExecutionReceipt`; GitHub CheckRun/CheckSuite state and workflow artifacts
+remain the evidence authority. Activation stays separate and must prove the
+real shadow path before any job-level condition consumes the verdict. The
+affected-test calibration window is also unchanged.
+
+GitHub documents that merge-queue checks run against the merge-group head SHA
+and that artifacts from another workflow run require an explicit run identifier
+and token. The implementation follows those contracts while comparing the Git
+tree inside the receipt, because commit identity alone is not sufficient:
+
+- [Events that trigger workflows](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#merge_group)
+- [Store and share data with workflow artifacts](https://docs.github.com/en/actions/tutorials/store-and-share-data)
+- [REST API endpoints for workflow artifacts](https://docs.github.com/en/rest/actions/artifacts)
+
 ## UX route-sweep stability
 
 Workflow: `.github/workflows/ux-route-sweep.yml` (`UX Route Budget Sweep`)

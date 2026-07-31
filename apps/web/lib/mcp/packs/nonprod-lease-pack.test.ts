@@ -15,6 +15,8 @@ import { isToolAllowedByGrants } from "@/lib/tak/agent-grants";
 
 const EXPECTED_TOOLS = [
   "list_nonprod_environment_leases",
+  // BI-3A34D7A9: read-only PR/change -> client+thread attribution lookup.
+  "lookup_change_origin",
   "claim_nonprod_environment_lease",
   "release_nonprod_environment_lease",
   "renew_nonprod_environment_lease",
@@ -25,7 +27,7 @@ beforeEach(() => {
 });
 
 describe("nonprod-lease pack — registration", () => {
-  it("exposes exactly the four lease tools", () => {
+  it("exposes exactly the lease + origin-lookup tools", () => {
     expect(nonprodLeasePack.definitions.map((d) => d.name).sort()).toEqual([...EXPECTED_TOOLS].sort());
     expect(Object.keys(nonprodLeasePack.handlers).sort()).toEqual([...EXPECTED_TOOLS].sort());
   });
@@ -43,6 +45,15 @@ describe("nonprod-lease pack — registration", () => {
       expect(isToolAllowedByGrants(t, ["work_capsule_write"])).toBe(true);
     }
     expect(isToolAllowedByGrants("list_nonprod_environment_leases", ["work_capsule_read"])).toBe(true);
+    // Origin lookup is read-only: attribution must never require write scope.
+    expect(nonprodLeasePack.grants.lookup_change_origin).toEqual(["work_capsule_read"]);
+    expect(isToolAllowedByGrants("lookup_change_origin", ["work_capsule_read"])).toBe(true);
+  });
+
+  it("origin lookup refuses a call with neither a SHA nor a branch", async () => {
+    const res = await nonprodLeasePack.handlers.lookup_change_origin!({}, "user-1", {});
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("missing_required");
   });
 
   it("declares slot capability, host pressure, and assigned-slot binding in the existing tools", () => {

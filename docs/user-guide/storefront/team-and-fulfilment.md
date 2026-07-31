@@ -25,7 +25,18 @@ their own **Tables & Capacity** page (`/storefront/tables`):
 - **Team** — the people who work here. Add, edit, or deactivate staff.
 - **Tables & Capacity** — your tables and their live state (available, occupied,
   turning soon, blocked), how many parties are waiting, and one clear next
-  action for the next service period. Add or block tables here, not under Team.
+  action for the next service period. Add, edit, schedule, or block tables here,
+  not under Team.
+
+Use **Add table** to record its owner-facing label, seats, and service area.
+Open an existing table to change its status, capacity, area, or internal blocked
+reason. The readiness answer and floor/list state refresh after a successful
+save, so the host does not need to reload the page while a guest is waiting.
+
+The availability editor supports recurring weekday hours and dated available or
+blocked windows. Public booking consumes these rules, active holds, and existing
+bookings through the same capacity service. Cancelling a booking or letting a
+hold expire releases its allocation rather than leaving the table unavailable.
 
 Under "Tables right now" you can switch between two views of the same live
 capacity:
@@ -38,6 +49,8 @@ capacity:
 - **List** — the same tables as a scannable list.
 
 Tables are never shown as "providers" and never mixed into the Staff list.
+Blocked reasons and internal allocation references stay in the owner workspace;
+the customer booking experience receives only a safe availability explanation.
 
 ## What To Watch
 
