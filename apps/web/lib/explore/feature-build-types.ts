@@ -4,6 +4,7 @@
 import * as crypto from "crypto";
 import type { BuildExecutionState } from "@/lib/build-exec-types";
 import type { DecisionInteractionGateView } from "@/lib/decision-perspective/types";
+import type { SemanticReviewResult } from "@/lib/change-review/semantic-change-review";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -134,19 +135,7 @@ export type TaxonomyAttributionView = {
 
 // ─── Build Disciplines Evidence Types ────────────────────────────────────────
 
-export type ReviewResult = {
-  decision: "pass" | "fail";
-  issues: Array<{
-    severity: "critical" | "important" | "minor";
-    description: string;
-    location?: string;
-    suggestion?: string;
-  }>;
-  summary: string;
-  /** True when the LLM response could not be parsed (rate-limited, empty, or
-   *  malformed output). Gates and deliberation treat parse-error branches as
-   *  absent reviewers, not dissenting votes. */
-  parseError?: true;
+export type ReviewResult = SemanticReviewResult & {
   /** Iteration tracking populated when this ReviewResult is the output of a
    *  re-review (e.g. reviewBuildPlan called against an existing planReview).
    *  Enables the operator-facing iteration progress chip and the reviewer's

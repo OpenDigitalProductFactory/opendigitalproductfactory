@@ -24,6 +24,19 @@ import type { ReviewResult } from "@/lib/feature-build-types";
 
 type ReviewIssue = ReviewResult["issues"][number];
 
+export type VerifiedFindingArtifact = string | {
+  kind: "plan" | "code-change";
+  content: string;
+};
+
+function normalizeArtifact(artifact: VerifiedFindingArtifact): { label: string; content: string } {
+  if (typeof artifact === "string") return { label: "ARTIFACT", content: artifact };
+  return {
+    label: artifact.kind === "code-change" ? "CODE CHANGE" : "PLAN",
+    content: artifact.content,
+  };
+}
+
 /** One verifier's judgment on one finding. `verified=false` means the verifier
  *  could not reproduce the finding against the artifact — it is downgraded to
  *  advisory rather than allowed to block. */
@@ -86,15 +99,16 @@ export function applyFindingVerdicts(
  *  plausible-but-wrong critical from triggering a wasted rework round. */
 export function buildFindingVerifierPrompt(
   finding: ReviewIssue,
-  artifact: string,
+  artifact: VerifiedFindingArtifact,
 ): string {
   const loc = finding.location ? `\nClaimed location: ${finding.location}` : "";
+  const normalized = normalizeArtifact(artifact);
   return `You are an INDEPENDENT verifier. A reviewer flagged the finding below as CRITICAL (blocking). Your job is to try to REFUTE it against the actual artifact — not to agree with it.
 
 FINDING (severity: ${finding.severity}): ${finding.description}${loc}
 
-ARTIFACT UNDER REVIEW:
-${artifact}
+${normalized.label} UNDER REVIEW:
+${normalized.content}
 
 Decide whether this finding is REAL and BLOCKING — i.e. you can concretely reproduce it in the artifact above (point to the exact place and explain the concrete failure it causes). If you cannot concretely reproduce it, or it is vague/speculative/stylistic, it is NOT verified. Default to NOT verified when uncertain — the burden of proof is on the finding.
 
@@ -136,7 +150,7 @@ export type VerifyFindingsDeps = {
  */
 export async function verifyReviewFindings(
   review: ReviewResult,
-  artifact: string,
+  artifact: VerifiedFindingArtifact,
   deps: VerifyFindingsDeps,
 ): Promise<{ review: ReviewResult; verdicts: FindingVerdict[] }> {
   const criticalIdx = review.issues
