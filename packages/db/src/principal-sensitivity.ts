@@ -7,9 +7,17 @@ export const PRINCIPAL_SENSITIVITIES = [
 
 export type PrincipalSensitivity = (typeof PRINCIPAL_SENSITIVITIES)[number];
 
+// The installation owner is the accountable human for the business's own
+// data: the same seed that grants this floor also creates tier-2 coworkers at
+// sensitivity "confidential" (workforce-seed), and the coworker authority gate
+// requires the acting human's clearance to include the coworker's sensitivity —
+// a floor without "confidential" makes every such coworker permanently
+// unauthorizable on a fresh install. "restricted" stays above the floor and
+// must be granted explicitly.
 export const INSTALLATION_OWNER_SENSITIVITY_FLOOR = [
   "public",
   "internal",
+  "confidential",
 ] as const satisfies readonly PrincipalSensitivity[];
 
 const PRINCIPAL_SENSITIVITY_SET = new Set<string>(PRINCIPAL_SENSITIVITIES);
