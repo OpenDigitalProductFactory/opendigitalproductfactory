@@ -87,12 +87,24 @@ on the latest `main` run — don't hard-code a number here, it goes stale.
 
 ### Policy guard profiles
 
-Fast source and PR-policy checks are registered in
+Fast deterministic checks are registered in
 [`scripts/lib/ci-policy-guards.mjs`](../../scripts/lib/ci-policy-guards.mjs).
 The registry preserves the former job name, display name, command sequence, and
 profile for every migrated guard. The runner executes every named entry even
 when an earlier entry fails, then writes a per-guard pass/fail/duration table to
 the GitHub job summary and a machine-readable artifact.
+
+The profiles reflect execution substrate, not separate policy inventories:
+
+- `source` uses Node plus the isolated guard-AST runtime;
+- `workspace` uses the pinned full workspace graph for checks such as prose
+  lint; and
+- `pull-request` uses PR event context and trailers.
+
+`pregate:preflight` and `pr:ready` consume all locally honest checks from these
+same profiles. In a source-only worktree, a missing workspace runtime is
+reported as environment-skipped and remains CI-enforced; in a compile-ready
+worktree, prose drift is therefore found before the sandbox lease or PR.
 
 Consolidation follows a fail-safe promotion sequence:
 
@@ -169,11 +181,12 @@ pnpm run pregate            # → node scripts/pregate.mjs
 `local-integration-ci` lease, `pregate.mjs` runs the deterministic CI policy
 guards host-natively — the same check commands CI's Policy Guards jobs run
 (module size, style drift, derived-artifact staleness, doc links, SBOM, plus
-the commit-range-driven UX-Fit and Design Grounding trailer gates), with guard
-self-tests stripped and PR-body-dependent gates (Seed-Fit, Decision Baseline)
-left to CI. A violation aborts in well under a minute **before any lease is
-claimed**, so a doomed run never occupies the contended sandbox slot. A guard
-this host cannot execute (missing isolated runtime) is reported as
+the workspace-dependent prose ratchet, and the commit-range-driven UX-Fit and
+Design Grounding trailer gates), with guard self-tests stripped and
+PR-body-dependent gates (Seed-Fit, Decision Baseline) left to CI. A violation
+aborts in well under a minute **before any lease is claimed**, so a doomed run
+never occupies the contended sandbox slot. A guard this host cannot execute
+(missing isolated or workspace runtime) is reported as
 `environment-skipped` with its remedy — a warning, never a false red; CI
 remains the enforcer. Run it standalone with `pnpm run pregate:preflight`
 (`--plan` prints the guard plan without running it). Emergency skip:

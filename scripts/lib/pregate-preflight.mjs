@@ -32,7 +32,12 @@
 
 import { spawnSync } from "node:child_process";
 
-import { POLICY_GUARD_PROFILES, runPolicyProfile } from "./ci-policy-guards.mjs";
+import {
+  POLICY_GUARD_PROFILES,
+  isPolicyGuardSelfTest,
+  resolvePolicyGuardInvocation,
+  runPolicyProfile,
+} from "./ci-policy-guards.mjs";
 import { GUARD_RUNTIME_ENVIRONMENT_ERROR_NAME } from "./load-pinned-guard-typescript.mjs";
 
 export const PREFLIGHT_SKIP_ENV = "DPF_SKIP_PREGATE_PREFLIGHT_REASON";
@@ -55,7 +60,7 @@ export const LOCAL_SAFE_PR_GUARD_IDS = Object.freeze([
 // "the tree violates the guard". Kept narrow: each entry is a message Node or
 // the guard runtime itself emits for a missing execution substrate.
 export const ENVIRONMENT_FAILURE_RE =
-  /ERR_MODULE_NOT_FOUND|MODULE_NOT_FOUND|Cannot find module/;
+  /ERR_MODULE_NOT_FOUND|MODULE_NOT_FOUND|Cannot find module|node_modules missing|tsx(?::|\W+is) (?:command )?not (?:recognized|found)/i;
 
 export function isEnvironmentFailureOutput(output) {
   const text = String(output ?? "");
@@ -67,15 +72,16 @@ function stripSelfTests(entries) {
   return entries
     .map((entry) => ({
       ...entry,
-      commands: entry.commands.filter(
-        ([command, args]) => !(command === "node" && args[0] === "--test"),
-      ),
+      commands: entry.commands.filter((command) => !isPolicyGuardSelfTest(command)),
     }))
     .filter((entry) => entry.commands.length > 0);
 }
 
 export function buildPreflightPlan({ profiles = POLICY_GUARD_PROFILES } = {}) {
-  const source = stripSelfTests(profiles.source);
+  const source = stripSelfTests([
+    ...(profiles.source ?? []),
+    ...(profiles.workspace ?? []),
+  ]);
   const trailer = stripSelfTests(
     profiles["pull-request"].filter((entry) =>
       LOCAL_SAFE_PR_GUARD_IDS.includes(entry.id),
@@ -85,13 +91,14 @@ export function buildPreflightPlan({ profiles = POLICY_GUARD_PROFILES } = {}) {
 }
 
 function defaultExecute(command, args) {
-  const result = spawnSync(command, args, {
+  const invocation = resolvePolicyGuardInvocation(command, args);
+  const result = spawnSync(invocation.command, invocation.args, {
     cwd: process.cwd(),
     env: process.env,
     encoding: "utf8",
     shell: false,
   });
-  const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+  const output = `${result.stdout ?? ""}${result.stderr ?? ""}${result.error?.message ?? ""}`;
   if (result.status !== 0) process.stderr.write(output);
   return { exitCode: result.status ?? 1, output };
 }

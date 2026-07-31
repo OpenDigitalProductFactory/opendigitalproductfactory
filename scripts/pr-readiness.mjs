@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 
 import { buildGatePlan, evaluateReadiness, formatReadinessReport } from "./pr-readiness/core.mjs";
 import { collectWorktreeDiff } from "./gate-context.mjs";
+import { resolvePolicyGuardInvocation } from "./lib/ci-policy-guards.mjs";
 import { buildGateContext } from "./lib/gate-context.mjs";
 import { fetchOriginMainSharedSafe, isShallowRepository } from "./lib/git-fetch-shared-safe.mjs";
 import { isEnvironmentFailureOutput } from "./lib/pregate-preflight.mjs";
@@ -113,13 +114,18 @@ function readRepoState() {
 
 function runGate(gate) {
   const [command, args] = gate.command;
-  const result = spawnSync(command, args, {
+  const invocation = resolvePolicyGuardInvocation(command, args);
+  const result = spawnSync(invocation.command, invocation.args, {
     cwd: process.cwd(),
     env: { ...process.env, ...gate.env },
     encoding: "utf8",
     maxBuffer: 32 * 1024 * 1024,
+    shell: false,
   });
-  const output = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
+  const output = [result.stdout, result.stderr, result.error?.message]
+    .filter(Boolean)
+    .join("\n")
+    .trim();
   return {
     name: gate.name,
     ok: result.status === 0,

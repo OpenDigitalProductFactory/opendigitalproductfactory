@@ -47,11 +47,23 @@ test("buildPreflightPlan strips guard self-tests but keeps every check command",
         commands: [["node", ["--test", "scripts/only.test.mjs"]]],
       },
     ],
+    workspace: [
+      {
+        id: "workspace-check",
+        legacyJobId: "workspace-check",
+        name: "Workspace Check",
+        commands: [
+          ["pnpm", ["run", "workspace-check:test"]],
+          ["pnpm", ["run", "workspace-check"]],
+        ],
+      },
+    ],
     "pull-request": [],
   };
   const plan = buildPreflightPlan({ profiles });
-  assert.deepEqual(plan.map((entry) => entry.id), ["g1"]);
+  assert.deepEqual(plan.map((entry) => entry.id), ["g1", "workspace-check"]);
   assert.deepEqual(plan[0].commands, [["node", ["scripts/g1.mjs"]]]);
+  assert.deepEqual(plan[1].commands, [["pnpm", ["run", "workspace-check"]]]);
 });
 
 test("buildPreflightPlan includes only commit-range-safe pull-request gates", () => {
@@ -74,6 +86,12 @@ test("buildPreflightPlan contains no --test invocations at all", () => {
       );
     }
   }
+});
+
+test("buildPreflightPlan includes the workspace-dependent prose guard", () => {
+  const prose = buildPreflightPlan().find((entry) => entry.id === "prose-lint-guard");
+  assert.ok(prose, "prose lint must run before a sandbox lease or PR");
+  assert.deepEqual(prose.commands, [["pnpm", ["run", "check:prose-lint"]]]);
 });
 
 // ── run + classification ────────────────────────────────────────────────────
@@ -198,6 +216,8 @@ test("runPreflight honors the recorded emergency skip", async () => {
 test("environment failure classification uses stable runtime signals, not guard verdicts", () => {
   assert.ok(ENVIRONMENT_FAILURE_RE.test("Error [ERR_MODULE_NOT_FOUND]: Cannot find package"));
   assert.ok(isEnvironmentFailureOutput("GuardRuntimeEnvironmentError: localized wording"));
+  assert.ok(isEnvironmentFailureOutput("Local package.json exists, but node_modules missing"));
+  assert.ok(isEnvironmentFailureOutput("'tsx' is not recognized as an internal or external command"));
   assert.ok(!isEnvironmentFailureOutput("module exceeds ratchet baseline: 1050 > 1047 lines"));
   assert.ok(!isEnvironmentFailureOutput("Missing UX-Fit-Decision trailer"));
 });

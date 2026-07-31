@@ -125,6 +125,30 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  # Workspace-dependent deterministic guards share the canonical policy
+  # inventory without forcing a full install into the lightweight source job.
+  # The heavy scope gate preserves the former Prose Lint Guard behavior.
+  policy-guards-workspace:
+    name: Policy Guards (workspace)
+    runs-on: ubuntu-latest
+    needs: changes
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup pnpm with cache
+        if: needs.changes.outputs.heavy == 'true'
+        uses: ./.github/actions/setup-pnpm
+      - name: Run named workspace policy guards
+        if: needs.changes.outputs.heavy == 'true'
+        run: node scripts/ci-policy-guards.mjs --profile workspace --results "$RUNNER_TEMP/policy-guards-workspace.json"
+      - name: Upload workspace policy results
+        if: always() && needs.changes.outputs.heavy == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: policy-guards-workspace-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/policy-guards-workspace.json
+          if-no-files-found: error
+          retention-days: 30
+
   policy-guards-pr:
     name: Policy Guards (PR)
     runs-on: ubuntu-latest
@@ -152,34 +176,6 @@ jobs:
           path: ${{ runner.temp }}/policy-guards-pr.json
           if-no-files-found: error
           retention-days: 30
-
-  prose-lint-guard:
-    name: Prose Lint Guard
-    runs-on: ubuntu-latest
-    needs: changes
-    # BI-88D8C725 (EP-UX-SYSTEM §6 L4 / §8.1 D6). Fast in-loop signal for UI
-    # copy — archetype vocabulary conformance, banned generic decision labels
-    # (owner-first/ux-audit.ts, applied at source), the readability tier
-    # (lib/readability/'s Flesch-Kincaid policy, now wired in), and sentence
-    # length / text-mass heuristics. Same ratchet contract as the Style Drift
-    # Guard below: scripts/prose-lint-baseline.json may shrink but never grow.
-    # This complements, and does not replace, the rendered UX sweep (still the
-    # binding measurement) — Vale-shaped, answers in seconds inside the build
-    # loop. Needs the full workspace install (imports @dpf/validators + the
-    # apps/web vocabulary/ux-audit modules directly — the whole point is to
-    # reuse those signals, not reimplement them), unlike the zero-dependency
-    # guards below, so it is gated on `heavy` like Typecheck.
-    steps:
-      - uses: actions/checkout@v7
-      - name: Setup pnpm with cache
-        if: needs.changes.outputs.heavy == 'true'
-        uses: ./.github/actions/setup-pnpm
-      - name: Prose lint guard unit tests
-        if: needs.changes.outputs.heavy == 'true'
-        run: pnpm run check:prose-lint:test
-      - name: Run guard
-        if: needs.changes.outputs.heavy == 'true'
-        run: pnpm run check:prose-lint
 
   routing-contract:
     name: Routing Tier Contract
@@ -549,8 +545,8 @@ jobs:
       - changes
       - typecheck
       - policy-guards-source
+      - policy-guards-workspace
       - policy-guards-pr
-      - prose-lint-guard
       - routing-contract
       - test-web
       - test-packages
