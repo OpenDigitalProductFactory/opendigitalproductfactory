@@ -67,7 +67,10 @@ test("locate converts GitHub API failure into exhaustive evidence", async () => 
     response.end("unavailable");
   });
   assert.match(output, /^found=false$/m);
-  assert.match(output, /^reason=discovery unavailable: GitHub API 503: unavailable$/m);
+  assert.match(
+    output,
+    /^reason=discovery unavailable; exhaustive evidence remains required$/m,
+  );
 });
 
 test("create writes a checksummed receipt from current-run gates and artifacts", async () => {

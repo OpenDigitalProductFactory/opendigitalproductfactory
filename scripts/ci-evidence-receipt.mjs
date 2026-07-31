@@ -188,10 +188,8 @@ async function create(options) {
     "### Exact-tree CI evidence receipt",
     "",
     "- Mode: foundation shadow; no post-merge work is skipped",
-    `- Tree: \`${receipt.source.treeSha}\``,
-    `- Gates: ${receipt.gates.length}`,
-    `- Related artifacts: ${receipt.artifacts.length}`,
-    `- Expires: ${receipt.expiresAt}`,
+    "- Receipt: created with a companion SHA-256 checksum",
+    "- Scope: immutable tree, policy, toolchain, gates, checks, and artifacts",
   ]);
   console.log(
     `[ci-evidence-receipt] created shadow receipt for tree ${receipt.source.treeSha} `
@@ -226,7 +224,7 @@ async function locate() {
     });
     console.log(`[ci-evidence-receipt] shadow discovery: ${verdict.reason}`);
   } catch (error) {
-    const reason = `discovery unavailable: ${error.message}`;
+    const reason = "discovery unavailable; exhaustive evidence remains required";
     appendOutput({
       found: "false",
       artifact_name: artifactName,
@@ -234,7 +232,7 @@ async function locate() {
       reason,
       tree_sha: treeSha,
     });
-    console.warn(`[ci-evidence-receipt] ${reason}; exhaustive remains required`);
+    console.warn(`[ci-evidence-receipt] ${reason}: ${error.message}`);
   }
 }
 
@@ -277,15 +275,18 @@ async function validate(options) {
       },
       checksum,
     });
+    const reason = result.ok
+      ? "validated exact-tree receipt"
+      : "receipt rejected one or more exact-tree invariants";
     appendOutput({
       reusable: result.ok ? "true" : "false",
-      reason: result.ok ? "validated exact-tree receipt" : result.reasons.join("; "),
+      reason,
     });
     appendSummary([
       "### Exact-tree evidence shadow verdict",
       "",
       `- Would reuse: **${result.ok ? "yes" : "no"}**`,
-      `- Reason: ${result.ok ? "validated exact-tree receipt" : result.reasons.join("; ")}`,
+      `- Reason: ${reason}`,
       "- Enforcement: disabled; this push still runs exhaustive evidence",
     ]);
     if (!result.ok) {
@@ -296,7 +297,7 @@ async function validate(options) {
       console.log("[ci-evidence-receipt] shadow validation accepted exact-tree evidence");
     }
   } catch (error) {
-    const reason = `validation unavailable: ${error.message}`;
+    const reason = "validation unavailable; exhaustive evidence remains required";
     appendOutput({ reusable: "false", reason });
     appendSummary([
       "### Exact-tree evidence shadow verdict",
@@ -305,7 +306,7 @@ async function validate(options) {
       `- Reason: ${reason}`,
       "- Enforcement: disabled; this push still runs exhaustive evidence",
     ]);
-    console.warn(`[ci-evidence-receipt] ${reason}; exhaustive remains required`);
+    console.warn(`[ci-evidence-receipt] ${reason}: ${error.message}`);
   }
 }
 
