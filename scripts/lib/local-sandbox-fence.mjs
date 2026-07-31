@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import {
   closeSync,
   openSync,
@@ -10,6 +11,7 @@ import {
 import { fileURLToPath } from "node:url";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
+const DEFAULT_MAX_HEARTBEAT_AGE_MS = 8 * 60 * 1000;
 
 function readFence(path) {
   try {
@@ -17,6 +19,45 @@ function readFence(path) {
   } catch {
     return null;
   }
+}
+
+export function inspectLocalSandboxFence({
+  path,
+  processAlive = isProcessAlive,
+  processIdentity = readProcessIdentity,
+  now = () => new Date(),
+  maxHeartbeatAgeMs = DEFAULT_MAX_HEARTBEAT_AGE_MS,
+}) {
+  const record = readFence(path);
+  if (!record) return { status: "absent", record: null };
+  if (
+    record.schema !== "dpf-local-sandbox-fence/v1"
+    || !Number.isInteger(record.pid)
+    || record.pid <= 0
+    || typeof record.token !== "string"
+    || !record.token
+    || typeof record.processIdentity !== "string"
+    || !record.processIdentity
+    || typeof record.heartbeatAt !== "string"
+  ) {
+    return { status: "invalid", record };
+  }
+  const heartbeatMs = Date.parse(record.heartbeatAt);
+  const ageMs = now().getTime() - heartbeatMs;
+  if (
+    !Number.isFinite(heartbeatMs)
+    || !Number.isFinite(maxHeartbeatAgeMs)
+    || maxHeartbeatAgeMs <= 0
+    || ageMs < 0
+    || ageMs > maxHeartbeatAgeMs
+  ) {
+    return { status: "stale", record };
+  }
+  if (!processAlive(record.pid)) return { status: "stale", record };
+  if (processIdentity(record.pid) !== record.processIdentity) {
+    return { status: "stale", record };
+  }
+  return { status: "live", record };
 }
 
 export function isProcessAlive(pid) {
@@ -29,6 +70,42 @@ export function isProcessAlive(pid) {
   }
 }
 
+export function readProcessIdentity(
+  pid,
+  {
+    platform = process.platform,
+    spawnSyncImpl = spawnSync,
+    readFileSyncImpl = readFileSync,
+  } = {},
+) {
+  if (!Number.isInteger(pid) || pid <= 0) return "";
+  if (platform === "linux") {
+    try {
+      const stat = readFileSyncImpl(`/proc/${pid}/stat`, "utf8");
+      const fields = stat.slice(stat.lastIndexOf(")") + 2).trim().split(/\s+/);
+      const startTicks = fields[19];
+      return startTicks ? `linux:${startTicks}` : "";
+    } catch {
+      return "";
+    }
+  }
+  if (platform === "win32") {
+    const result = spawnSyncImpl("powershell.exe", [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      `(Get-Process -Id ${pid} -ErrorAction Stop).StartTime.ToUniversalTime().Ticks`,
+    ], { encoding: "utf8", windowsHide: true });
+    const startedAtTicks = result.status === 0 ? result.stdout.trim() : "";
+    return /^\d+$/.test(startedAtTicks) ? `win32:${startedAtTicks}` : "";
+  }
+  const result = spawnSyncImpl("ps", ["-o", "lstart=", "-p", String(pid)], {
+    encoding: "utf8",
+  });
+  const startedAtMs = result.status === 0 ? Date.parse(result.stdout.trim()) : Number.NaN;
+  return Number.isFinite(startedAtMs) ? `${platform}:${startedAtMs}` : "";
+}
+
 export function acquireLocalSandboxFence({
   path,
   ownerSessionId,
@@ -36,14 +113,20 @@ export function acquireLocalSandboxFence({
   pid = process.pid,
   now = () => new Date(),
   processAlive = isProcessAlive,
+  processIdentity = readProcessIdentity,
   token = randomUUID(),
 }) {
+  const ownerProcessIdentity = processIdentity(pid);
+  if (!ownerProcessIdentity) {
+    throw new Error(`cannot establish process-start identity for sandbox fence owner ${pid}`);
+  }
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const timestamp = now().toISOString();
     const record = {
       schema: "dpf-local-sandbox-fence/v1",
       token,
       pid,
+      processIdentity: ownerProcessIdentity,
       ownerSessionId,
       branch,
       acquiredAt: timestamp,
@@ -61,9 +144,16 @@ export function acquireLocalSandboxFence({
       if (error?.code !== "EEXIST") throw error;
     }
 
-    const active = readFence(path);
-    if (active && processAlive(active.pid)) {
-      return { status: "conflict", active };
+    const inspection = inspectLocalSandboxFence({
+      path,
+      processAlive,
+      processIdentity,
+      now,
+    });
+    const invalidLiveOwner = inspection.status === "invalid"
+      && processAlive(Number(inspection.record?.pid));
+    if (inspection.status === "live" || invalidLiveOwner) {
+      return { status: "conflict", active: inspection.record };
     }
 
     const orphanPath = `${path}.orphan-${process.pid}-${Date.now()}`;

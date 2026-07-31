@@ -4263,6 +4263,8 @@
       "anchors": [
         "local-ci-sandbox-slots",
         "current-operating-mode",
+        "peer-slot-host-fencing",
+        "design-grounding",
         "policy-and-rollback",
         "pilot-decision-report",
         "recovery",

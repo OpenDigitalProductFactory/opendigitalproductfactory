@@ -23,6 +23,7 @@ import {
 import {
   acquireLocalSandboxFence,
   heartbeatLocalSandboxFence,
+  inspectLocalSandboxFence,
   releaseLocalSandboxFence,
 } from "./lib/local-sandbox-fence.mjs";
 import {
@@ -288,6 +289,64 @@ export function findLiveLocalCiMutatorPids(processRows, { excludePids = [] } = {
   }
 
   return [...mutatorPids].sort((left, right) => left - right);
+}
+
+function commandUsesWorkspace(commandLine, workspace) {
+  const command = String(commandLine ?? "").replaceAll("\\", "/").toLowerCase();
+  const target = String(workspace ?? "").replaceAll("\\", "/").toLowerCase();
+  if (!target) return false;
+  const start = command.indexOf(target);
+  if (start < 0) return false;
+  const next = command[start + target.length] ?? "";
+  return next === "" || /[\/\s"']/.test(next);
+}
+
+export function findConflictingLocalCiMutatorPids(
+  processRows,
+  { currentPid, peerOwners = [] } = {},
+) {
+  const rows = Array.isArray(processRows) ? processRows : [];
+  const peerPids = new Set();
+  for (const peer of peerOwners) {
+    const pid = Number(peer?.pid);
+    if (!Number.isInteger(pid) || pid <= 0) continue;
+    peerPids.add(pid);
+    for (const descendant of collectDescendantPids(pid, rows)) {
+      peerPids.add(descendant);
+    }
+  }
+  const liveMutators = findLiveLocalCiMutatorPids(rows, {
+    excludePids: [currentPid, ...peerPids],
+  });
+  const rowByPid = new Map(rows.map((row) => [Number(row?.pid), row]));
+  return liveMutators.filter((pid) => {
+    const commandLine = rowByPid.get(pid)?.commandLine ?? "";
+    return !peerOwners.some((peer) =>
+      commandUsesWorkspace(commandLine, peer.workspace));
+  });
+}
+
+function readLivePeerSlotOwners({
+  currentSlotKey,
+  rootClone,
+  gitCommonDir,
+  candidateGitDir,
+}) {
+  return LOCAL_CI_SLOT_KEYS.flatMap((slotKey) => {
+    if (slotKey === currentSlotKey) return [];
+    const manifest = createLocalCiSlotManifest({
+      slotKey,
+      rootClone,
+      gitCommonDir,
+      candidateGitDir,
+    });
+    const fence = inspectLocalSandboxFence({ path: manifest.fence.path });
+    if (fence.status !== "live") return [];
+    return [{
+      pid: fence.record.pid,
+      workspace: manifest.scratch.workspace,
+    }];
+  });
 }
 
 function readProcessRows({ platform = process.platform, spawnSyncImpl = spawnSync } = {}) {
@@ -1091,9 +1150,16 @@ async function main() {
       // predecessors must drain before a successor starts. Explicit commands
       // remain fenced by their host record, but may be source-local contract
       // harnesses that neither use nor mutate the convergence sandbox.
+      const processRows = commandSpec?.kind === "argv" ? readProcessRows() : [];
       const liveMutatorPids = commandSpec?.kind === "argv"
-        ? findLiveLocalCiMutatorPids(readProcessRows(), {
-          excludePids: [process.pid],
+        ? findConflictingLocalCiMutatorPids(processRows, {
+          currentPid: process.pid,
+          peerOwners: readLivePeerSlotOwners({
+            currentSlotKey: slotManifest.slotKey,
+            rootClone,
+            gitCommonDir,
+            candidateGitDir,
+          }),
         })
         : [];
       if (liveMutatorPids.length === 0) {
