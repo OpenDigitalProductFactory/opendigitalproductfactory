@@ -40,7 +40,7 @@ beforeEach(() => {
 });
 
 describe("syncUserPrincipal", () => {
-  it("creates the installation owner principal with public and internal clearance", async () => {
+  it("creates the installation owner principal cleared through confidential", async () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue({
       id: "owner-user",
       email: "owner@example.com",
@@ -65,7 +65,7 @@ describe("syncUserPrincipal", () => {
     expect(prisma.principal.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         kind: "human",
-        sensitivityClearance: ["public", "internal"],
+        sensitivityClearance: ["public", "internal", "confidential"],
       }),
     });
   });
