@@ -142,20 +142,100 @@ export type RoutingProviderMetric = {
   };
 };
 
+export type RoutingConformanceIssueType =
+  | "ai-routing-evidence-unattributed"
+  | "ai-routing-evidence-uncorrelated"
+  | "ai-routing-evidence-missing"
+  | "ai-routing-design-unproven"
+  | "ai-routing-design-stale"
+  | "ai-routing-observed-path-unexpected"
+  | "ai-routing-blocked-path-dispatched";
+
+/**
+ * WHO, if anyone, can act on a finding — BI-C8BC9DD1.
+ *
+ * The finding contract previously carried only `message` and `count`. An owner
+ * asked their coworker "what do I do about these 173 issues?" and no answer was
+ * possible, because no remediation existed to retrieve: the coworker burned its
+ * whole iteration budget on tool calls and returned a safety-limit message. The
+ * failure looked like a coworker defect; the cause was an empty contract.
+ *
+ * `none-historical` is the load-bearing value. Several findings count traffic
+ * recorded BEFORE the evidence ledger existed. They can never reach zero
+ * through any action, so presenting them as open work is simply false — the
+ * honest statement is that they predate instrumentation.
+ */
+export type RoutingFindingOwnerAction =
+  /** Nothing to do. Historic traffic that predates the evidence contract. */
+  | "none-historical"
+  /** The workspace owner or operator can resolve this. */
+  | "operator"
+  /** A platform defect. The owner cannot fix it; it needs a DPF change. */
+  | "platform-defect";
+
 export type RoutingConformanceFinding = {
   issueKey: string;
-  issueType:
-    | "ai-routing-evidence-unattributed"
-    | "ai-routing-evidence-uncorrelated"
-    | "ai-routing-evidence-missing"
-    | "ai-routing-design-unproven"
-    | "ai-routing-design-stale"
-    | "ai-routing-observed-path-unexpected"
-    | "ai-routing-blocked-path-dispatched";
+  issueType: RoutingConformanceIssueType;
   severity: "info" | "warn" | "error";
   message: string;
   count: number;
   architectureStageId: string;
+  /** Who can act. Drives whether the surface presents this as work at all. */
+  ownerAction: RoutingFindingOwnerAction;
+  /** Plain-language next step. Never empty — see REMEDIATION below. */
+  nextAction: string;
+};
+
+/**
+ * Owner-facing remediation, one entry per issue type.
+ *
+ * Static per type and free of request content, so the privacy contract at the
+ * top of this file is unaffected: no prompt, detected value, or vendor account
+ * can reach the owner through this map.
+ *
+ * Exhaustive by construction — `Record<RoutingConformanceIssueType, …>` means a
+ * new issue type cannot ship without its remediation, which is the guarantee
+ * that made the original gap possible.
+ */
+const REMEDIATION: Record<
+  RoutingConformanceIssueType,
+  { ownerAction: RoutingFindingOwnerAction; nextAction: string }
+> = {
+  "ai-routing-evidence-unattributed": {
+    ownerAction: "none-historical",
+    nextAction:
+      "Nothing to do. These routing decisions were recorded before requests carried an actor, so they cannot be attributed retrospectively. New traffic is attributed automatically.",
+  },
+  "ai-routing-evidence-uncorrelated": {
+    ownerAction: "none-historical",
+    nextAction:
+      "Nothing to do. These decisions predate request-wide trace identifiers, so they cannot be joined to the other ledgers. New traffic is correlated automatically.",
+  },
+  "ai-routing-evidence-missing": {
+    ownerAction: "platform-defect",
+    nextAction:
+      "No action available to you. A route expected to dispatch recorded no adapter, outcome, or usage row — that is a platform gap in evidence writing, not a setting on this install.",
+  },
+  "ai-routing-design-unproven": {
+    ownerAction: "none-historical",
+    nextAction:
+      "Nothing to do, and this is not a fault. These decisions ran before the routing design revision was stamped onto traffic, so they cannot name the design they executed against. Every decision recorded since then is design-bound.",
+  },
+  "ai-routing-design-stale": {
+    ownerAction: "none-historical",
+    nextAction:
+      "Nothing to do. This traffic ran against an earlier routing design and is retained as history; it clears from the window as newer traffic accrues.",
+  },
+  "ai-routing-observed-path-unexpected": {
+    ownerAction: "platform-defect",
+    nextAction:
+      "No action available to you, and this one is worth reporting. A provider was dispatched that the routing decision had not shortlisted, which means the observed path left the governed design.",
+  },
+  "ai-routing-blocked-path-dispatched": {
+    ownerAction: "platform-defect",
+    nextAction:
+      "No action available to you, and this is the most serious finding on this page. Work that data policy confined to this machine was dispatched across that boundary. Report it.",
+  },
 };
 
 export type RoutingEvidenceConformanceProjection = {
@@ -446,6 +526,7 @@ function addFinding(
   },
 ): void {
   if (input.count <= 0) return;
+  const remediation = REMEDIATION[input.issueType];
   findings.push({
     issueKey: input.issueType,
     issueType: input.issueType,
@@ -453,6 +534,8 @@ function addFinding(
     message: `${input.message} Count: ${input.count}.`,
     count: input.count,
     architectureStageId: input.stage,
+    ownerAction: remediation.ownerAction,
+    nextAction: remediation.nextAction,
   });
 }
 

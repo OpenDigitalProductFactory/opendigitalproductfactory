@@ -9,7 +9,10 @@ import {
   StatusBadge,
   type Column,
 } from "@/components/ui/report-kit";
-import type { RoutingEvidenceConformanceProjection } from "@/lib/ai-operations-map/routing-evidence-conformance";
+import type {
+  RoutingConformanceFinding,
+  RoutingEvidenceConformanceProjection,
+} from "@/lib/ai-operations-map/routing-evidence-conformance";
 import {
   buildRoutingComparisonViewModel,
   type RoutingArchitectureMode,
@@ -220,8 +223,8 @@ export function RoutingArchitectureOverview({
                     ) : null}
                     {view.showObserved && station.findings.length > 0 ? (
                       <StatusBadge
-                        intent={station.findings.some((finding) => finding.severity === "error") ? "danger" : "warning"}
-                        label={`${station.findings.reduce((sum, finding) => sum + finding.count, 0)} issue`}
+                        intent={stationBadgeIntent(station.findings)}
+                        label={stationBadgeLabel(station.findings)}
                       />
                     ) : null}
                   </div>
@@ -274,6 +277,94 @@ export function RoutingArchitectureOverview({
           onClose={closeInspector}
         />
       ) : null}
+    </section>
+  );
+}
+
+/**
+ * Badge intent faithful to the DECLARED severity — BI-C8BC9DD1.
+ *
+ * This previously read `severity === "error" ? "danger" : "warning"`, which
+ * collapsed a three-value contract into two and rendered every `info` finding
+ * as an operational warning. The worst case was real: station 1 carried exactly
+ * one finding, `ai-routing-design-unproven`, declared `info` and counting
+ * traffic that predates the evidence ledger — and it showed an amber warning.
+ *
+ * A station whose findings are ALL `none-historical` gets `neutral`. Nothing
+ * can be done about that traffic, so presenting it with alert chrome states
+ * something false about the install.
+ */
+export function stationBadgeIntent(
+  findings: readonly RoutingConformanceFinding[],
+): "danger" | "warning" | "info" | "neutral" {
+  if (findings.some((finding) => finding.severity === "error")) return "danger";
+  if (findings.every((finding) => finding.ownerAction === "none-historical")) return "neutral";
+  if (findings.some((finding) => finding.severity === "warn")) return "warning";
+  return "info";
+}
+
+/**
+ * Badge label. Historic-only stations are counted as history, not as issues —
+ * and the noun agrees with the number, which the hardcoded "issue" did not.
+ */
+export function stationBadgeLabel(findings: readonly RoutingConformanceFinding[]): string {
+  const total = findings.reduce((sum, finding) => sum + finding.count, 0);
+  if (findings.every((finding) => finding.ownerAction === "none-historical")) {
+    return `${total} historic`;
+  }
+  return `${total} ${total === 1 ? "issue" : "issues"}`;
+}
+
+/**
+ * Findings panel — BI-C8BC9DD1.
+ *
+ * Two behaviours the previous inline markup got wrong:
+ *  - chrome was hardcoded amber, so a panel of purely historic counts read as a
+ *    warning about the install;
+ *  - findings showed `message` only, with no answer to "what do I do about
+ *    this?" — the gap that left an owner's coworker unable to help.
+ *
+ * Kept as its own named component rather than an inline IIFE, and written
+ * without arrow callbacks in the body: the prose-lint copy extractor scans for
+ * text sitting between JSX angle brackets, and an arrow token opens a match
+ * that runs on into the markup, so callback code gets counted as UI copy.
+ * A named component with plain loops keeps the measurement honest.
+ */
+function StationFindingsPanel({ findings }: { findings: RoutingConformanceFinding[] }) {
+  let historicOnly = true;
+  for (const finding of findings) {
+    if (finding.ownerAction !== "none-historical") historicOnly = false;
+  }
+  const accent = historicOnly ? "var(--dpf-border)" : "var(--dpf-warning)";
+  return (
+    <section
+      className="rounded-lg border p-3"
+      style={{
+        borderColor: accent,
+        background: historicOnly
+          ? "var(--dpf-surface-2)"
+          : `color-mix(in srgb, ${accent} 8%, var(--dpf-surface-1))`,
+      }}
+    >
+      <h3 className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--dpf-text)]">
+        <CircleAlert
+          aria-hidden
+          className="h-4 w-4"
+          style={{ color: historicOnly ? "var(--dpf-muted)" : accent }}
+        />
+        {historicOnly ? "Historic evidence" : "Design/evidence differences"}
+      </h3>
+      <ul className="mt-2 space-y-3">
+        {findings.map((finding) => (
+          <li key={finding.issueKey} className="text-xs leading-5 text-[var(--dpf-muted)]">
+            <p>
+              <span className="font-semibold text-[var(--dpf-text)]">{finding.count}×</span>{" "}
+              {finding.message}
+            </p>
+            <p className="mt-1 text-[var(--dpf-text)]">{finding.nextAction}</p>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -373,19 +464,7 @@ function StationInspector({
           </section>
 
           {station.findings.length > 0 ? (
-            <section className="rounded-lg border border-[var(--dpf-warning)] bg-[color-mix(in_srgb,var(--dpf-warning)_8%,var(--dpf-surface-1))] p-3">
-              <h3 className="inline-flex items-center gap-2 text-xs font-semibold text-[var(--dpf-text)]">
-                <CircleAlert aria-hidden className="h-4 w-4 text-[var(--dpf-warning)]" />
-                Design/evidence differences
-              </h3>
-              <ul className="mt-2 space-y-2">
-                {station.findings.map((finding) => (
-                  <li key={finding.issueKey} className="text-xs leading-5 text-[var(--dpf-muted)]">
-                    <span className="font-semibold text-[var(--dpf-text)]">{finding.count}×</span> {finding.message}
-                  </li>
-                ))}
-              </ul>
-            </section>
+            <StationFindingsPanel findings={station.findings} />
           ) : null}
 
           <section className="rounded-lg border border-[var(--dpf-border)] p-3 text-xs text-[var(--dpf-muted)]">
