@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "query-first-census-then-expand",
+  "decisionInteractionId": "DI-A17E11DDE13C",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/admin/graph-explorer/page.tsx",
+      "apps/web/components/admin/GraphExplorer.tsx",
+      "apps/web/components/inventory/RelationshipGraph.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "render-whole-graph",
+      "query-first-census-then-expand",
+      "raw-cypher-style-query-box"
+    ]
+  }
+}

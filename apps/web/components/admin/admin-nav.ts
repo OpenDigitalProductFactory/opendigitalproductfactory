@@ -69,9 +69,11 @@ export const ADMIN_FAMILIES: AdminFamily[] = [
       "/admin/scheduled-jobs",
       "/admin/cockpit",
       "/admin/hive",
+      "/admin/graph-explorer",
     ],
     subItems: [
       { label: "Platform Development", href: "/admin/platform-development" },
+      { label: "Graph Explorer", href: "/admin/graph-explorer" },
       { label: "Hive Contributions", href: "/admin/hive" },
       { label: "Issue Reports", href: "/admin/issue-reports" },
       { label: "Diagnostics", href: "/admin/diagnostics" },
