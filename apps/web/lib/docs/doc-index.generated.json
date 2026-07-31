@@ -907,6 +907,7 @@
       "anchors": [
         "decision-vectors-by-business-type",
         "abstract",
+        "the-part-you-actually-fill-in",
         "how-to-read-an-entry",
         "you-go-to-the-customer-field-and-dispatch",
         "trades-home-services",
@@ -971,6 +972,9 @@
         "72-what-is-not-built-stated-plainly",
         "73-the-constraint-that-makes-all-of-this-safe",
         "8-what-an-organisation-may-choose",
+        "81-the-layer-an-owner-actually-touches-business-stance-vectors",
+        "82-the-honest-boundary-between-the-two-layers",
+        "83-the-full-selection-contract",
         "9-status-summary",
         "references"
       ]

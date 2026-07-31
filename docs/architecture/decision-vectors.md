@@ -386,11 +386,62 @@ small and shared.
 
 ## 8. What an organisation may choose
 
+### 8.1 The layer an owner actually touches — business stance vectors
+
+The 20 axes above are the scoring substrate. They are not what a business owner is asked to fill
+in. The owner-facing layer is a separate, deliberately small set of **five business stance
+vectors**, each phrased as a question the owner recognises, each pre-answered from their business
+type, and each editable in plain English:
+
+| Stance vector | The question it answers | Carries a spend ceiling |
+|---|---|---|
+| `customer-goodwill` | When something goes wrong on our side, how far do we go to make it right — and how far may a coworker go without asking? | Yes |
+| `pricing-integrity` | Do we honour a quote we got wrong? When is a discount legitimate? | Yes |
+| `growth-vs-stability` | When new opportunities compete with existing commitments, which wins? | No |
+| `quality-bar` | What standard does work have to meet before it leaves our hands? | No |
+| `spend-authority` | What may be bought without asking the owner? | Yes |
+
+Three of the five carry an explicit **authority ceiling in money**, which is what converts a stated
+value into an actual delegation: "resolve it on the spot up to the ceiling; above it, the owner
+decides."
+
+**These defaults change by business type — which is the point.** The generic goodwill ceiling is
+$100; a restaurant's is $60 and framed around fixing the visit while the guest is still at the
+table; a clinic's is $150 with a same-day response; a software platform's is $200 and framed around
+outages and billing errors. A clinic's spend ceiling is $500 because a stock-out delays care. Public
+sector does not get a goodwill ceiling at all — remedies follow the published schedule, "not
+discretion" — and its pricing stance says fees change by public decision, never as a service
+gesture. A nonprofit's spend stance is written around the fact that every dollar carries a donor's
+trust. Twelve business types currently override at least one vector; the rest inherit the generic
+set. See [Decision Vectors by Business Type](decision-vectors-by-archetype.md) for how this pairs
+with the axis emphasis.
+
+The owner sees these as cards during onboarding and can revise them at any time on the **business
+stance surface** (`/coworker-decisions/stance`), which lists the organisation's own stance pages and
+offers a plain-language authoring form. Nothing here requires understanding the axis registry.
+
+### 8.2 The honest boundary between the two layers
+
+An org's stance pages are **corpus material, not weight vectors.** They are seeded as published
+organisation pages and retrieved by the decision gate as the org's own policy, where they carry
+evidence grading and the confidence discounting of §5.2. They do **not** currently carry a
+`principleDimensionVector`, which means they steer a decision through retrieval and semantic
+alignment rather than through structured scoring on the 20 axes.
+
+That is a real seam, and it is worth stating rather than glossing: today an organisation edits its
+judgement in plain English, and separately the platform scores options on named axes. Connecting
+them — so that "we honour a quote we got wrong" measurably moves `governance_compliance` and
+`cost_efficiency` on the options a coworker weighs, rather than only influencing what gets retrieved
+— is exactly the per-job vector inventory work described in §5, and it is not done.
+
+### 8.3 The full selection contract
+
 An install's decision posture is selectable within hard bounds. What follows is the contract, with
 each row marked for what is available today.
 
 | The organisation may… | How | Status |
 |---|---|---|
+| Answer the five business stance questions in plain English, pre-filled from its business type, with money ceilings that delegate real authority | The business stance surface (§8.1) | Shipped |
 | Set its own policy material, which is what the org scope weighs | Organisation decision-perspective profile, authored as org stance material | Shipped |
 | Have its real trade-offs learned from its own rulings, then ratify them | The revealed class (§5.1) — proposals surface, a human rules | Engine shipped |
 | Override any single decision | Per-decision override, bounded by policy | Shipped |
@@ -419,6 +470,8 @@ human, not to quietly inherit someone else's judgement.
 | Weight inference from rulings (proposes only, never applies) | Shipped |
 | Profession-local axis registry | Shipped, ships empty |
 | `dimensionSourcing` label on each axis | Designed, not built |
+| Five owner-facing business stance vectors, archetype-defaulted, with spend ceilings | Shipped |
+| Stance answers expressed as weights on the 20 axes | Not built (§8.2) |
 | Per-job vector inventory across all professions | Designed, in progress |
 | External / situational signals | Not built, one pilot scoped |
 | Cold-start pairwise elicitation | Candidate |

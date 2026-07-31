@@ -571,6 +571,7 @@ function judgementSection(page) {
         j.never
       )}</span></li>
     </ul>
+    <p class="sub">You are not asked to configure any of this. Five plain-English questions — how far to go when something goes wrong, whether to honour a quote you got wrong, new work vs existing commitments, your quality bar, and what can be bought without asking you — come pre-answered for your line of work, each with a spending limit you can change. Adjust them in your own words at any time.</p>
     <p class="sub">Every factor is named, and every principle's vote is recorded, so you can always ask why. See <a href="/architecture/decision-vectors-by-archetype#${esc(
       page.slug
     )}">the full detail for ${esc(

@@ -18,6 +18,39 @@ professions instead — see [§7.3 of the reference](decision-vectors.md#7-crowd
 
 ---
 
+## The part you actually fill in
+
+Before the axis detail below, there is a smaller, owner-facing layer that matters more day to day:
+**five business stance questions**, pre-answered from your business type and editable in plain
+English on the business stance surface (`/coworker-decisions/stance`). Three of them carry a spend
+ceiling in money, which is what turns a stated value into real delegated authority.
+
+The defaults are genuinely different per business type, not relabelled. On the goodwill question
+alone:
+
+| Business type | Default posture when something goes wrong on your side | Ceiling |
+|---|---|---|
+| Generic | Make it right quickly — redo, replacement, refund or credit — without making the customer fight for it. | $100 |
+| Food & hospitality | Fix the visit while the guest is still at the table: remake or comp the dish, not the argument. | $60 |
+| Clinics & wellness | Same-day response and a genuine fix; rebook first. Never argue with a patient over a fee we caused. | $150 |
+| Automotive services | If our part or work fails we return and make it right free, at the customer's location. Safety comebacks jump the queue. | $150 |
+| Software & platforms | Outages, bugs and billing errors are credited without friction, and we say plainly what went wrong. | $200 |
+| Education & training | Make the learner whole first — a make-up session or credit — and tell the family before they ask. | $100 |
+| Public sector & civic | Errors are corrected through the published process, equally for every resident. Remedies follow the schedule, **not discretion**. | — none |
+
+The other four vectors shift the same way. A clinic's spend ceiling is $500 because a stock-out
+delays care; a nonprofit's is $150 and written around the fact that every dollar carries a donor's
+trust; public sector's pricing stance says fees change by public decision and never as a service
+gesture. Twelve business types override at least one vector today; the rest inherit the generic set
+and are edited from there.
+
+One boundary stated plainly: these stance answers are **retrieved as your organisation's own policy**
+and weighed with the evidence discounting described in the reference — they are not yet expressed as
+weights on the named axes below. See
+[§8.2 of the reference](decision-vectors.md#82-the-honest-boundary-between-the-two-layers).
+
+---
+
 ## How to read an entry
 
 Each business type below states four things.
