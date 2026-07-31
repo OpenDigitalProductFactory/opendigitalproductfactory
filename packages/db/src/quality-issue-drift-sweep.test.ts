@@ -21,7 +21,16 @@ function makeDb(overrides: {
   const db: DriftSweepDb = {
     portfolioQualityIssue: {
       groupBy: vi.fn(async () => overrides.grouped ?? []),
-      findMany: vi.fn(async () => overrides.candidates ?? []),
+      // The sweep now makes TWO candidate queries (subject-recovered and
+      // subject-lost), each scoped to a disjoint set of issue types. A mock that
+      // ignored `where` would hand every candidate to both passes and let one
+      // pass resolve rows the other owns — so honour the issueType filter.
+      findMany: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
+        const all = overrides.candidates ?? [];
+        const filter = where.issueType as { in?: string[] } | undefined;
+        if (!filter?.in) return all;
+        return all.filter((candidate) => filter.in!.includes(candidate.issueType));
+      }),
       updateMany,
     },
     inventoryEntity: {
@@ -120,5 +129,122 @@ describe("runQualityIssueDriftSweep — recovery backstop (self-heal)", () => {
     const report = await runQualityIssueDriftSweep(db, NOW);
     expect(report.autoResolved).toEqual({});
     expect(updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("runQualityIssueDriftSweep — subject-loss backstop (the dual)", () => {
+  it("resolves an identity issue whose entity has gone stale", async () => {
+    const { db, updateMany } = makeDb({
+      grouped: [],
+      candidates: [
+        {
+          id: "qi-10",
+          issueType: "catalog_match_ambiguous",
+          inventoryEntityId: "e-10",
+          inventoryRelationshipId: null,
+        },
+        {
+          id: "qi-11",
+          issueType: "catalog_match_ambiguous",
+          inventoryEntityId: "e-11",
+          inventoryRelationshipId: null,
+        },
+      ],
+      entities: [
+        { id: "e-10", status: "stale" }, // subject gone → nobody can review it → resolve
+        { id: "e-11", status: "active" }, // still on the network → genuinely actionable → keep
+      ],
+    });
+
+    const report = await runQualityIssueDriftSweep(db, NOW);
+
+    expect(report.autoResolved).toEqual({ catalog_match_ambiguous: 1 });
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ["qi-10"] } },
+      data: { status: "resolved", resolvedAt: NOW },
+    });
+  });
+
+  it("resolves a lifecycle issue whose entity no longer exists at all", async () => {
+    const { db } = makeDb({
+      candidates: [
+        {
+          id: "qi-12",
+          issueType: "lifecycle_unverified",
+          inventoryEntityId: "e-gone",
+          inventoryRelationshipId: null,
+        },
+      ],
+      entities: [], // absent from the canonical lookup → resolve
+    });
+
+    const report = await runQualityIssueDriftSweep(db, NOW);
+
+    expect(report.autoResolved).toEqual({ lifecycle_unverified: 1 });
+  });
+
+  it("leaves an issue with no subject link alone rather than guessing", async () => {
+    const { db, updateMany } = makeDb({
+      candidates: [
+        {
+          id: "qi-13",
+          issueType: "catalog_match_ambiguous",
+          inventoryEntityId: null,
+          inventoryRelationshipId: null,
+        },
+      ],
+      entities: [],
+    });
+
+    const report = await runQualityIssueDriftSweep(db, NOW);
+
+    expect(report.autoResolved).toEqual({});
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it("never resolves a stale_entity row by the subject-loss rule — that is the recovery pass's dual, and would close every genuine staleness signal", async () => {
+    const { db, updateMany } = makeDb({
+      candidates: [
+        {
+          id: "qi-14",
+          issueType: "stale_entity",
+          inventoryEntityId: "e-14",
+          inventoryRelationshipId: null,
+        },
+      ],
+      entities: [{ id: "e-14", status: "stale" }],
+    });
+
+    const report = await runQualityIssueDriftSweep(db, NOW);
+
+    expect(report.autoResolved).toEqual({});
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it("sums both directions into one autoResolved tally", async () => {
+    const { db } = makeDb({
+      candidates: [
+        {
+          id: "qi-15",
+          issueType: "stale_entity",
+          inventoryEntityId: "e-15",
+          inventoryRelationshipId: null,
+        },
+        {
+          id: "qi-16",
+          issueType: "lifecycle_unverified",
+          inventoryEntityId: "e-16",
+          inventoryRelationshipId: null,
+        },
+      ],
+      entities: [
+        { id: "e-15", status: "active" }, // recovered → recovery pass resolves
+        { id: "e-16", status: "stale" }, // lost → subject-loss pass resolves
+      ],
+    });
+
+    const report = await runQualityIssueDriftSweep(db, NOW);
+
+    expect(report.autoResolved).toEqual({ stale_entity: 1, lifecycle_unverified: 1 });
   });
 });

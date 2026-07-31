@@ -189,6 +189,16 @@ export async function persistBootstrapDiscoveryRun(
         sourceSlug: runMeta.sourceSlug,
         trigger: runMeta.trigger ?? "bootstrap",
         status: runMeta.status ?? "completed",
+        // ONE clock governs the whole transaction. `startedAt` is
+        // `@default(now())` in the schema, which Postgres evaluates at INSERT
+        // time — LATER than the `now` this transaction captured up front and
+        // stamps onto every observed entity as `lastSeenAt`. Leaving it to the
+        // default therefore wrote a run whose `startedAt` was a few ms AFTER
+        // the `lastSeenAt` of the very entities it had just confirmed, so
+        // `countStaleEntitiesSince(run.startedAt)` counted 100% of the active
+        // estate as stale on every sweep, and the run row recorded a
+        // `completedAt` that preceded its own `startedAt`.
+        startedAt: now,
         completedAt: now,
         itemCount: dedupedDiscoveredItems.length,
         relationshipCount: normalized.inventoryRelationships.length,

@@ -39,6 +39,13 @@ export type DiscoverySyncTx = InventoryEntityHeapIntegrityTx & {
         sourceSlug: string;
         trigger: string;
         status: string;
+        // Written explicitly rather than deferred to the schema's
+        // `@default(now())`: the default is evaluated by Postgres at INSERT,
+        // AFTER the transaction's own `now` has already been stamped onto every
+        // observed entity as `lastSeenAt` — which made every freshly-confirmed
+        // entity read as stale. Required, not optional, so a future caller
+        // cannot silently fall back to the skewed default.
+        startedAt: Date;
         completedAt: Date;
         itemCount: number;
         relationshipCount: number;

@@ -28,6 +28,7 @@
 import {
   qualityIssueDrift,
   isKnownQualityIssueType,
+  subjectBearingTypes,
   type QualityIssueType,
 } from "./quality-issue-registry";
 import {
@@ -36,10 +37,22 @@ import {
 } from "./inventory-entity-lifecycle";
 
 // Types whose auto-resolve is "observed active again" — the ones the recovery
-// backstop can safely close when the scoped row is now active.
+// backstop can safely close when the scoped row is now active. DERIVED from the
+// registry rather than hand-listed, so a new detector that declares
+// `raisedBySubjectAbsence: true` is swept without editing this file.
 const RECOVERY_RESOLVABLE_TYPES: readonly QualityIssueType[] = [
-  "stale_entity",
-  "stale_relationship",
+  ...subjectBearingTypes("entity", true),
+  ...subjectBearingTypes("relationship", true),
+];
+
+// The DUAL of the above: types raised because a subject is present and needs
+// work. These are moot once that subject goes stale or is deleted — nobody can
+// verify the support lifecycle of a device that is no longer on the network.
+// The recovery backstop never looked in this direction, which is why the live
+// queue held 179 open rows pinned to already-stale entities.
+const SUBJECT_LOSS_RESOLVABLE_TYPES: readonly QualityIssueType[] = [
+  ...subjectBearingTypes("entity", false),
+  ...subjectBearingTypes("relationship", false),
 ];
 
 /** Narrow DB handle — the real Prisma client is a structural superset. */
@@ -192,14 +205,116 @@ async function autoResolveRecovered(
 }
 
 /**
- * Run the quality-issue drift sweep: self-heal the backstop, then measure drift
- * against the registry budgets. Pure over the injected db + clock.
+ * Resolve issues whose SUBJECT HAS GONE: open rows of a subject-bearing type
+ * whose FK-linked entity/relationship is now `stale` or no longer present.
+ *
+ * This is the dual of `autoResolveRecovered`. An issue like "still needs
+ * identity review for manufacturer" asserts that a live thing needs work; once
+ * that thing stops being observed, the assertion is moot and no operator or
+ * coworker can ever close it by acting. Leaving these open buries the rows that
+ * ARE actionable — 179 of 462 open issues in the live queue were pinned to
+ * already-stale entities.
+ *
+ * Deliberately requires a non-null FK: a row with no subject link (legacy
+ * residue) is left alone rather than guessed at from its issueKey.
+ *
+ * Pure over the injected db; the caller supplies `now` for deterministic tests.
+ */
+async function autoResolveMootSubjects(
+  db: DriftSweepDb,
+  now: Date,
+): Promise<Record<string, number>> {
+  const candidates = await db.portfolioQualityIssue.findMany({
+    where: {
+      status: "open",
+      issueType: { in: SUBJECT_LOSS_RESOLVABLE_TYPES as unknown as string[] },
+      OR: [
+        { inventoryEntityId: { not: null } },
+        { inventoryRelationshipId: { not: null } },
+      ],
+    },
+    select: {
+      id: true,
+      issueType: true,
+      inventoryEntityId: true,
+      inventoryRelationshipId: true,
+    },
+  });
+
+  if (candidates.length === 0) return {};
+
+  const entityIds = [
+    ...new Set(candidates.map((c) => c.inventoryEntityId).filter((v): v is string => !!v)),
+  ];
+  const relationshipIds = [
+    ...new Set(
+      candidates.map((c) => c.inventoryRelationshipId).filter((v): v is string => !!v),
+    ),
+  ];
+
+  const [entities, relationships] = await Promise.all([
+    entityIds.length
+      ? db.inventoryEntity.findMany({
+          where: { ...INVENTORY_ENTITY_CANONICAL_WHERE, id: { in: entityIds } },
+          select: { id: true, status: true },
+        })
+      : Promise.resolve([]),
+    relationshipIds.length
+      ? db.inventoryRelationship.findMany({
+          where: {
+            ...INVENTORY_RELATIONSHIP_CANONICAL_WHERE,
+            id: { in: relationshipIds },
+          },
+          select: { id: true, status: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const entityStatus = new Map(entities.map((e) => [e.id, e.status]));
+  const relationshipStatus = new Map(relationships.map((r) => [r.id, r.status]));
+
+  // Moot when the subject is stale, or absent from the canonical lookup
+  // (deleted, or merged away — the surviving row raises its own issues).
+  const resolvableByType: Record<string, string[]> = {};
+  for (const c of candidates) {
+    const subjectGone = c.inventoryEntityId
+      ? (entityStatus.get(c.inventoryEntityId) ?? "stale") === "stale"
+      : c.inventoryRelationshipId
+        ? (relationshipStatus.get(c.inventoryRelationshipId) ?? "stale") === "stale"
+        : false;
+    if (subjectGone) {
+      (resolvableByType[c.issueType] ??= []).push(c.id);
+    }
+  }
+
+  const resolved: Record<string, number> = {};
+  for (const [type, ids] of Object.entries(resolvableByType)) {
+    if (ids.length === 0) continue;
+    const { count } = await db.portfolioQualityIssue.updateMany({
+      where: { id: { in: ids } },
+      data: { status: "resolved", resolvedAt: now },
+    });
+    resolved[type] = count;
+  }
+  return resolved;
+}
+
+/**
+ * Run the quality-issue drift sweep: self-heal the backstop in BOTH directions
+ * (subject recovered, subject lost), then measure drift against the registry
+ * budgets. Pure over the injected db + clock.
  */
 export async function runQualityIssueDriftSweep(
   db: DriftSweepDb,
   now: Date = new Date(),
 ): Promise<QualityIssueDriftReport> {
-  const autoResolved = await autoResolveRecovered(db, now);
+  const recovered = await autoResolveRecovered(db, now);
+  const moot = await autoResolveMootSubjects(db, now);
+
+  const autoResolved: Record<string, number> = { ...recovered };
+  for (const [type, count] of Object.entries(moot)) {
+    autoResolved[type] = (autoResolved[type] ?? 0) + count;
+  }
 
   const grouped = await db.portfolioQualityIssue.groupBy({
     by: ["issueType"],
