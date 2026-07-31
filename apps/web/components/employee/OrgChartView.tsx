@@ -46,6 +46,29 @@ const NODE_TYPES = { orgPerson: OrgChartNode };
 
 type Density = "chart" | "list";
 
+/**
+ * The React Flow node envelope for one person.
+ *
+ * Exported and pure so the size contract is testable: the footprint MUST travel in `style`.
+ * React Flow v12 treats top-level `width`/`height` as the internal MEASURED dimensions, so
+ * setting them there leaves `measured` unpopulated and edge paths never compute — the chart
+ * renders every person with no reporting lines, silently and with no console warning. That
+ * shipped once (PR #3801) because unit tests covered the model and layout but never a render.
+ */
+export function orgFlowNodeShell(input: {
+  id: string;
+  position: { x: number; y: number };
+  draggable: boolean;
+}): Pick<Node, "id" | "type" | "position" | "draggable" | "style"> {
+  return {
+    id: input.id,
+    type: "orgPerson",
+    position: input.position,
+    draggable: input.draggable,
+    style: { width: ORG_NODE_W, height: ORG_NODE_H },
+  };
+}
+
 function matchesSearch(emp: EmployeeDirectoryRow, needle: string): boolean {
   if (!needle) return true;
   const hay = [emp.displayName, emp.positionTitle, emp.departmentName, emp.workEmail]
@@ -136,13 +159,12 @@ function OrgChartViewInner({ employees, canReassign = true, onSelect }: Props) {
           pending: emp.id === pendingId,
         };
         return {
-          id: emp.id,
-          type: "orgPerson",
-          position: positions[emp.id] ?? { x: 0, y: 0 },
+          ...orgFlowNodeShell({
+            id: emp.id,
+            position: positions[emp.id] ?? { x: 0, y: 0 },
+            draggable: canReassign,
+          }),
           data: data as unknown as Record<string, unknown>,
-          draggable: canReassign,
-          width: ORG_NODE_W,
-          height: ORG_NODE_H,
         } satisfies Node;
       }),
     );
