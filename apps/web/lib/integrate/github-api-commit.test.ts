@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createBranchAndPR } from "./github-api-commit";
+import {
+  createBranchAndPR,
+  openPullRequest,
+  publishBranchCommit,
+} from "./github-api-commit";
 
 // Minimal unified-diff shape extractNewFileContent can parse — its regex
 // expects exactly one line between "diff --git" and "--- /dev/null", so we
@@ -175,6 +179,48 @@ describe("createBranchAndPR head/base split", () => {
 
     expect(result.prUrl).toBe("https://github.com/base-owner/base-repo/pull/42");
     expect(result.prNumber).toBe(42);
+  });
+
+  it("can publish a recoverable branch without opening a pull request", async () => {
+    const { calls } = setupFetchMock();
+
+    const published = await publishBranchCommit({
+      headOwner: "upstream-org",
+      headRepo: "upstream-repo",
+      baseBranch: "main",
+      branchName: "feat/tiny",
+      commitMessage: SIGNED_COMMIT_MESSAGE,
+      diff: TINY_DIFF,
+      token: "ghp_test",
+    });
+
+    expect(published).toEqual({
+      branchName: "feat/tiny",
+      commitSha: "commit-sha-1",
+    });
+    expect(calls.some((call) => call.url.endsWith("/pulls"))).toBe(false);
+  });
+
+  it("opens a pull request from an already-published branch", async () => {
+    const { calls } = setupFetchMock();
+
+    const opened = await openPullRequest({
+      headOwner: "upstream-org",
+      headRepo: "upstream-repo",
+      baseOwner: "upstream-org",
+      baseRepo: "upstream-repo",
+      baseBranch: "main",
+      branchName: "feat/tiny",
+      prTitle: "feat: tiny",
+      prBody: "validated body",
+      labels: ["build-studio"],
+      token: "ghp_test",
+    });
+
+    expect(opened.prNumber).toBe(42);
+    const prPost = calls.find((call) => call.url.endsWith("/pulls"));
+    expect(prPost?.body?.body).toBe("validated body");
+    expect(calls.some((call) => call.url.includes("/git/commits"))).toBe(false);
   });
 
   it("opens a cross-repo PR with '<headOwner>:<branchName>' when headOwner !== baseOwner", async () => {

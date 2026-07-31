@@ -135,8 +135,16 @@ const definitions: ToolDefinition[] = [
   },
   {
     name: "create_portal_pr",
-    description: "Create a pull request on the portal's own repository from the current build's diff. Runs pre-PR security gates (security scan, destructive ops, architecture compliance, dependency audit). If all gates pass and the build is fully verified, auto-merges via squash. If any gate fails, creates the PR with findings and requests human review.",
-    inputSchema: { type: "object", properties: {} },
+    description: "Publish a recoverable branch, validate its exact commit with the canonical PR-readiness contract, and create a pull request only when every build and repository gate passes. A blocked result returns the branch, commit, and actionable blockers without opening a PR.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        readinessTrailers: {
+          type: "string",
+          description: "Reviewed PR decision trailers from the injected gate context, one per line. Pass only applicable trailers with final values.",
+        },
+      },
+    },
     requiredCapability: "manage_capabilities",
     executionMode: "immediate",
     sideEffect: true,

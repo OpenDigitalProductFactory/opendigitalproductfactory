@@ -73,6 +73,22 @@ machine-readable pack (`scripts/lib/gate-context.mjs` is the single source —
 the Build Studio prompt section and MCP tool consume the same module). The
 pack is advisory context: CI gates remain the only authority.
 
+## Before a PR exists: `pnpm pr:ready`
+
+`pnpm pr:ready -- --pr-body-file <path>` applies the same policy-profile
+registry, exact diff, DCO, clean-tree, pushed-branch, and PR-trailer contracts
+before a contributor opens a PR. This is the shift-left gate; `pr:health`
+remains the end-to-end observer after GitHub creates the PR and starts CI.
+
+Build Studio uses the same readiness command with an internal
+`--published-ref` mode. Its shipping transaction is deliberately branch-first:
+it publishes a recoverable branch, fetches and checks out that exact remote
+commit in the build sandbox, runs canonical readiness against the final PR
+body, restores the build branch, and opens a PR only for a ready verdict.
+Typecheck, tests, and acceptance evidence are additional fail-closed blockers.
+If any check fails, the tool returns the published branch, commit SHA, and
+blockers; it does not create a review-lane placeholder PR.
+
 ## Tests & CI
 
 The pure verdict (`evaluatePrHealth()`) is unit-tested in [`scripts/pr-health.test.mjs`](../../scripts/pr-health.test.mjs) and runs in CI as the **PR Health Logic** job (`node --test`). The script's GitHub I/O is exercised by running it against live PRs; it is not run in CI (it would be circular).
