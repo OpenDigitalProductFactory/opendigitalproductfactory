@@ -150,7 +150,7 @@ describe("createLocalIntegrationPlan", () => {
     );
   });
 
-  it("uses a locally available accepted-base ref without fetching by default (BI-76551B2D)", () => {
+  it("uses the runner-resolved accepted base without fetching a second time", () => {
     const plan = createLocalIntegrationPlan({
       candidateBranch: "feat/local-ci-content-evidence",
       mode: "single-branch",

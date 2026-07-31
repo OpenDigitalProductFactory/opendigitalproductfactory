@@ -36,6 +36,7 @@ import {
   createLocalCiSlotManifest,
   localCiSlotEnvironment,
 } from "./lib/local-ci-slot-manifest.mjs";
+import { classifyBaseResilience } from "./lib/local-ci-base-freshness.mjs";
 import { writeLocalCiGateState } from "./lib/local-ci-gate-state.mjs";
 import {
   sampleLocalCiHostPressure,
@@ -1283,11 +1284,10 @@ async function main() {
   } catch {
     // no metadata written by this run — evidence.content stays null, matching the sh port.
   }
-  const resilience = {
-    publicationMode: options.pushBranch ? "push-before-lease" : "deferred",
-    acceptedBaseMode: contentMetadata?.fetchBase === true ? "fetch-base" : "local-ref",
-    networkTolerance: (!options.pushBranch && contentMetadata?.fetchBase !== true) ? "offline-capable" : "network-required",
-  };
+  const resilience = classifyBaseResilience(
+    contentMetadata,
+    options.pushBranch ? "push-before-lease" : "deferred",
+  );
 
   const commandLabel = commandSpec ? commandSpec.label : "sandbox checkout/build stub";
   let evidenceArgs = {
