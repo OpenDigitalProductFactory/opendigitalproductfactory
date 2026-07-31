@@ -55,12 +55,22 @@ const SELF_EXPLANATORY_SOURCES = new Set<AttentionSource>([
   "compliance-submission",
 ]);
 
+/** Source context that is valuable to builders but is not safe owner copy.
+ * Keep the raw `item.context` unchanged for `technicalFields()` and replace only
+ * the collapsed situation line. This is the progressive-disclosure boundary:
+ * translation here, complete source record one click down. */
+const OWNER_SAFE_SITUATION: Partial<Record<AttentionSource, string>> = {
+  "coworker-memory": "A coworker saved a new note from completed work.",
+};
+
 /** The plain "what the coworker was doing and why it stalled" line. Surfaced from
  *  the item's own context one-liner for sources whose headline is generic
  *  (blocked/paused/proposal); undefined for self-explanatory approvals. This is
  *  the rationale the owner needs to decide — it was previously discarded. */
 export function situationFor(item: AttentionItem): string | undefined {
   if (SELF_EXPLANATORY_SOURCES.has(item.source)) return undefined;
+  const translated = OWNER_SAFE_SITUATION[item.source];
+  if (translated) return translated;
   const context = (item.context ?? "").trim();
   return context.length > 0 ? context : undefined;
 }

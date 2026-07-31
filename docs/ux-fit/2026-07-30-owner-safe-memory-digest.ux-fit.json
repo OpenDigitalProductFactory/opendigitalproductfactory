@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "fixed-owner-summary",
+  "decisionInteractionId": "DI-2525558BD68A",
+  "scope": {
+    "files": [
+      "apps/web/lib/attention/owner-decision-copy.ts"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "fixed-owner-summary",
+      "omit-situation",
+      "heuristic-rewrite"
+    ]
+  }
+}
