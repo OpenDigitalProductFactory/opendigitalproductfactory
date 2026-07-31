@@ -45,6 +45,11 @@ vi.mock("@/lib/storefront-data", () => ({
   getPublicItem: (...a: unknown[]) => getPublicItem(...a),
   resolveInquiryFormSchema: (...a: unknown[]) => resolveInquiryFormSchema(...a),
 }));
+const loadPublicRestaurantAvailabilityBySlugSafe = vi.fn();
+vi.mock("@/lib/twin/restaurant-floor-loader.server", () => ({
+  loadPublicRestaurantAvailabilityBySlugSafe: (...a: unknown[]) =>
+    loadPublicRestaurantAvailabilityBySlugSafe(...a),
+}));
 
 // Prisma is only touched by donate (orgSettings) and checkout; give it a
 // per-model mock surface the tests configure.
@@ -100,6 +105,7 @@ async function renderPage(el: Promise<React.ReactElement> | React.ReactElement) 
 beforeEach(() => {
   vi.clearAllMocks();
   resolveInquiryFormSchema.mockResolvedValue([]);
+  loadPublicRestaurantAvailabilityBySlugSafe.mockResolvedValue(null);
 });
 
 // ── layout metadata (brand inheritance) ─────────────────────────────────────
@@ -142,6 +148,48 @@ describe("booking page", () => {
     expect(html).toMatch(/allerg/i);
     expect(html).toContain('data-test="slot-flow"');
     expect(html).toContain("/s/copper-kettle/inquire");
+  });
+
+  it("renders the customer-safe physical table outlook when it is available", async () => {
+    getPublicStorefront.mockResolvedValue(RESTAURANT);
+    getPublicItem.mockResolvedValue({
+      id: "x",
+      itemId: "itm-1",
+      name: "Table for 2",
+      ctaType: "booking",
+      bookingConfig: null,
+    });
+    loadPublicRestaurantAvailabilityBySlugSafe.mockResolvedValue({
+      asOf: "2026-07-31T18:14:00.000Z",
+      summary: { totalTables: 1, availableNow: 0, availableSoon: 1 },
+      tables: [
+        {
+          key: "availability-1",
+          capacity: 2,
+          shape: "round",
+          serviceArea: "Main dining",
+          availability: {
+            kind: "at",
+            availableAt: "2026-07-31T18:35:00.000Z",
+            minutes: 21,
+            explanation: "Available in about 21 minutes",
+          },
+        },
+      ],
+    });
+
+    const Page = (await import("./book/[itemId]/page")).default;
+    const html = await renderPage(
+      Page({
+        params: params({ slug: "copper-kettle", itemId: "itm-1" }),
+      }),
+    );
+
+    expect(html).toContain("Table availability");
+    expect(html).toContain("Available in about 21 minutes");
+    expect(
+      loadPublicRestaurantAvailabilityBySlugSafe,
+    ).toHaveBeenCalledWith(prismaMock, { slug: "copper-kettle" });
   });
 });
 

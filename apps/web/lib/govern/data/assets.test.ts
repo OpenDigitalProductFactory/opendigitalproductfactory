@@ -145,6 +145,16 @@ describe("seeded registry", () => {
         "HospitalityCapacityAllocation",
         "metadata",
       ],
+      [
+        "data:hospitality-service-turn",
+        "HospitalityServiceTurn",
+        "metadata",
+      ],
+      [
+        "data:hospitality-service-turn-event",
+        "HospitalityServiceTurnEvent",
+        "metadata",
+      ],
     ] as const) {
       expect(lookupAsset(DATA_ASSET_REGISTRY, assetId)).toMatchObject({
         physical: { prismaModel },

@@ -60,4 +60,21 @@ describe("TwinView — one renderer, both lenses", () => {
     expect(html).toContain("Needs you");
     expect(html).toContain("Activity");
   });
+
+  it("uses the shared physical-scene slot instead of rendering a duplicate resource grid", () => {
+    const profile = deriveTwinProfile(byCategory("food-hospitality"));
+    const snapshot = buildDemoTwinSnapshot(profile);
+    const hiddenGridLabel = snapshot.zones[0]?.units[0]?.label;
+    const html = renderToStaticMarkup(
+      <TwinView
+        profile={profile}
+        snapshot={snapshot}
+        physicalScene={<div>Authored restaurant floor</div>}
+      />,
+    );
+
+    expect(html).toContain("Authored restaurant floor");
+    if (hiddenGridLabel) expect(html).not.toContain(hiddenGridLabel);
+    expect(html).toContain("Waitlist");
+  });
 });

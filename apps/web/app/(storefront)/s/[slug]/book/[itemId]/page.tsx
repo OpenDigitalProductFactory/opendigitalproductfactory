@@ -1,9 +1,15 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { prisma } from "@dpf/db";
 import { getPublicStorefront, getPublicItem, resolveInquiryFormSchema } from "@/lib/storefront-data";
 import { resolveTrustProfile } from "@/lib/storefront/public-trust";
+import { CustomerRestaurantAvailability } from "@/components/storefront/CustomerRestaurantAvailability";
 import { SlotBookingFlow } from "@/components/storefront/SlotBookingFlow";
 import { resolveResourceVocabulary } from "@/lib/storefront/resource-vocabulary";
+import {
+  loadPublicRestaurantAvailabilityBySlugSafe,
+  type PublicRestaurantAvailabilityDatabase,
+} from "@/lib/twin/restaurant-floor-loader.server";
 
 export default async function BookItemPage({
   params,
@@ -11,9 +17,13 @@ export default async function BookItemPage({
   params: Promise<{ slug: string; itemId: string }>;
 }) {
   const { slug, itemId } = await params;
-  const [storefront, item] = await Promise.all([
+  const [storefront, item, restaurantAvailability] = await Promise.all([
     getPublicStorefront(slug),
     getPublicItem(slug, itemId),
+    loadPublicRestaurantAvailabilityBySlugSafe(
+      prisma as unknown as PublicRestaurantAvailabilityDatabase,
+      { slug },
+    ),
   ]);
   if (!storefront || !item) notFound();
 
@@ -51,6 +61,12 @@ export default async function BookItemPage({
           </p>
         )}
       </div>
+
+      {restaurantAvailability && (
+        <CustomerRestaurantAvailability
+          availability={restaurantAvailability}
+        />
+      )}
 
       <SlotBookingFlow
         orgSlug={slug}

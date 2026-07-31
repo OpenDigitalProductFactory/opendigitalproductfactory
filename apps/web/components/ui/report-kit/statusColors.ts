@@ -64,6 +64,19 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     "turning-soon": "warning",
     blocked: "danger",
   },
+  // Restaurant host-stand state. Physical scene, equivalent table list, and
+  // command preview share this vocabulary; text labels always accompany color.
+  restaurantFloor: {
+    available: "success",
+    held: "warning",
+    reserved: "accent",
+    seated: "info",
+    ordered: "info",
+    paid: "warning",
+    dirty: "warning",
+    blocked: "danger",
+    "late-turn": "danger",
+  },
   // Service-period readiness — "are we ready for the next service?" (BI-7C95A586).
   servicePeriodReadiness: {
     ready: "success",

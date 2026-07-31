@@ -57,6 +57,14 @@ export const HOSPITALITY_CAPACITY_ASSETS: readonly DataAssetDefinition[] = [
         "data:hospitality-capacity-allocation",
         "HospitalityCapacityAllocation",
       ],
+      [
+        "data:hospitality-service-turn",
+        "HospitalityServiceTurn",
+      ],
+      [
+        "data:hospitality-service-turn-event",
+        "HospitalityServiceTurnEvent",
+      ],
     ],
     ["operational"],
     "metadata",

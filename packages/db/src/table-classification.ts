@@ -185,6 +185,8 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   Activity: "confidential",
   StorefrontBooking: "confidential",
   HospitalityCapacityAllocation: "confidential",
+  HospitalityServiceTurn: "confidential",
+  HospitalityServiceTurnEvent: "confidential",
   ServiceProvider: "confidential",
   BookingHold: "confidential",
   StorefrontOrder: "confidential",

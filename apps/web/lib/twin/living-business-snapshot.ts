@@ -47,6 +47,7 @@ import {
   readinessQuest,
   reservationsToQueueItems,
   restaurantCapacityChips,
+  restaurantFloorResourceUnits,
 } from "./restaurant-operations-projection";
 
 import {
@@ -610,20 +611,6 @@ export async function loadLivingBusinessProjection(
   ).length;
   const unassigned = bookings.filter((b) => b.provider == null || b.status.toLowerCase() === "pending");
 
-  // Render the resource units under the zone that actually holds them
-  // (`capacityZoneKey`) — a restaurant's tables belong in the dining room, not
-  // "Kitchen / the pass"; a shop's work orders on the bays, not at intake. Its
-  // label resolves from the profile at render time (TwinView).
-  const zones: TwinZoneSnapshot[] = [
-    {
-      key: profile.capacityZoneKey ?? profile.zones[0]?.key ?? "board",
-      units:
-        profile.template === "FLOOR"
-          ? hospitalityResourceUnits(hospitalityResources)
-          : resourceUnits(providers, members),
-    },
-  ];
-
   // FLOOR (Restaurant) capacity: derive one snapshot from the SAME structured
   // hospitality resources +
   // bookings this projection already loaded, so the Workspace capacity chips,
@@ -649,6 +636,23 @@ export async function loadLivingBusinessProjection(
           timeZone: config.timezone,
         })
       : null;
+
+  // Render the resource units under the zone that actually holds them
+  // (`capacityZoneKey`) — a restaurant's tables belong in the dining room, not
+  // "Kitchen / the pass"; a shop's work orders on the bays, not at intake. FLOOR
+  // must use the derived capacity snapshot so occupied/turning tables do not
+  // regress to "Available" merely because the resource itself is active.
+  const zones: TwinZoneSnapshot[] = [
+    {
+      key: profile.capacityZoneKey ?? profile.zones[0]?.key ?? "board",
+      units:
+        profile.template === "FLOOR" && floorSnapshot
+          ? restaurantFloorResourceUnits(floorSnapshot)
+          : profile.template === "FLOOR"
+            ? hospitalityResourceUnits(hospitalityResources)
+            : resourceUnits(providers, members),
+    },
+  ];
 
   // Distribute booking-derived demand across the profile's queues by MEANING, not
   // just into queue 0. A profile with a dedicated reservations queue (e.g. the

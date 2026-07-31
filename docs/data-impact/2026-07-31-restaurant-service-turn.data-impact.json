@@ -1,0 +1,146 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "Restaurant operator-floor, table-management, and living-business views are read-time projections over canonical bookings, hospitality resources, allocations, service turns, staffing assignments, and authored scene layouts; no parallel operational copy is persisted.",
+    "The customer availability projection is an explicit allow-list over capacity and timing. Service-turn identifiers, booking and staffing links, demand references, actor references, idempotency keys, event detail, guest facts, staff facts, and internal block reasons are excluded.",
+    "The scene-identity migration preserves every authored layout. For duplicate non-null organization/template/location identities, the newest row remains active and older rows move to stable recovery location identifiers instead of being deleted."
+  ],
+  "migration": {
+    "name": "20260731190000_enforce_operational_scene_location_identity + 20260731193000_add_hospitality_service_turn",
+    "backfill": "The scene migration deterministically detaches duplicate location identities without deleting authored geometry, then adds the unique index. The service-turn migration is additive: new turn/event tables start empty, demandKind defaults existing bookings to reservation, and the allocation serviceTurnId link is nullable. Rollback disables new turn commands and customer explanations while preserving bookings, allocations, layouts, staffing history, and event evidence; no rollback path deletes business records."
+  },
+  "tests": [
+    "apps/web/lib/govern/data/assets.test.ts",
+    "apps/web/lib/govern/data/coverage.live.test.ts",
+    "apps/web/lib/storefront/hospitality-service-turn.test.ts",
+    "apps/web/lib/storefront/hospitality-service-turn-repository.server.test.ts",
+    "apps/web/lib/twin/restaurant-floor-command.server.test.ts",
+    "apps/web/lib/twin/restaurant-move-command.server.test.ts",
+    "apps/web/lib/twin/restaurant-turn-command.server.test.ts",
+    "apps/web/lib/twin/restaurant-floor-loader.server.test.ts",
+    "apps/web/lib/twin/restaurant-floor-projection.test.ts",
+    "scripts/check-migration-safety.mjs",
+    "scripts/check-stewardship-scope.mjs",
+    "scripts/check-data-impact.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:operational-scene-layout",
+      "prismaModel": "OperationalSceneLayout",
+      "lifecycleDisposition": "domain-lifecycle-managed — authored geometry remains under the owning organization and location until explicit domain removal; duplicate remediation preserves displaced layouts under recovery identities rather than deleting them",
+      "fields": [
+        {
+          "fieldId": "data:operational-scene-layout#locationId",
+          "resolution": "governed",
+          "reason": "the organization/template/location identity becomes unique so one active authored scene deterministically owns each physical restaurant location",
+          "provenance": "operator-authored location identity or deterministic duplicate-recovery migration",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": "organization-scoped and local-only; recovery identifiers remain internal and are never projected to customers"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:hospitality-service-turn",
+      "prismaModel": "HospitalityServiceTurn",
+      "lifecycleDisposition": "domain-lifecycle-managed — turns progress through seated, ordered, paid, dirty, closed, or cancelled; closedAt and append-only events preserve operating history, and deletion occurs only through the owning organization-domain lifecycle",
+      "fields": [
+        {
+          "fieldId": "data:hospitality-service-turn#identity-and-ownership",
+          "resolution": "inherited",
+          "reason": "id, turnId, organizationId, and storefrontId form the tenant-scoped canonical turn identity",
+          "provenance": "Prisma and the service-turn command repository"
+        },
+        {
+          "fieldId": "data:hospitality-service-turn#demand-links",
+          "resolution": "governed",
+          "reason": "bookingId, demandType, and demandRef can identify a customer booking or walk-in demand",
+          "provenance": "validated seating command",
+          "flags": [
+            "subject",
+            "sensitive"
+          ],
+          "fieldPolicy": "organization-scoped; available only to authorized operators and omitted from customer-safe availability payloads"
+        },
+        {
+          "fieldId": "data:hospitality-service-turn#staffingAssignmentId",
+          "resolution": "governed",
+          "reason": "the staffing link identifies an internal worker assignment",
+          "provenance": "published on-site staffing resolution at seating time",
+          "flags": [
+            "subject",
+            "sensitive"
+          ],
+          "fieldPolicy": "authorized workforce and restaurant operations only; customer projections omit worker identity and assignment references"
+        },
+        {
+          "fieldId": "data:hospitality-service-turn#lifecycle-and-time",
+          "resolution": "inherited",
+          "reason": "stage, startedAt, expectedEndAt, closedAt, and version are the conflict-safe operational lifecycle contract",
+          "provenance": "service-turn command repository and database constraints"
+        },
+        {
+          "fieldId": "data:hospitality-service-turn#persistence",
+          "resolution": "inherited",
+          "reason": "createdAt, updatedAt, allocations, and owning relations are ordinary persistence and reconciliation metadata",
+          "provenance": "Prisma relations and timestamps"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:hospitality-service-turn-event",
+      "prismaModel": "HospitalityServiceTurnEvent",
+      "lifecycleDisposition": "domain-lifecycle-managed — append-only events remain attached to the turn as audit evidence and are removed only with the owning turn through an explicit organization-domain lifecycle",
+      "fields": [
+        {
+          "fieldId": "data:hospitality-service-turn-event#identity-and-ownership",
+          "resolution": "inherited",
+          "reason": "id, eventId, organizationId, and serviceTurnId bind each event to one tenant-owned turn",
+          "provenance": "Prisma and the service-turn event repository"
+        },
+        {
+          "fieldId": "data:hospitality-service-turn-event#transition",
+          "resolution": "inherited",
+          "reason": "eventType, fromStage, toStage, atVersion, and occurredAt form the append-only transition receipt",
+          "provenance": "validated stage, table-assignment, or staffing-assignment command"
+        },
+        {
+          "fieldId": "data:hospitality-service-turn-event#idempotencyKey",
+          "resolution": "governed",
+          "reason": "the internal deduplication token may encode an upstream workflow identity",
+          "provenance": "operator command boundary",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": "internal replay and reconciliation only; redact from presentation, customer payloads, and exports"
+        },
+        {
+          "fieldId": "data:hospitality-service-turn-event#actorRef",
+          "resolution": "governed",
+          "reason": "the accountable actor reference may identify an operator or coworker",
+          "provenance": "authenticated command context",
+          "flags": [
+            "subject",
+            "sensitive"
+          ],
+          "fieldPolicy": "organization-scoped audit access only; never expose through the customer availability boundary"
+        },
+        {
+          "fieldId": "data:hospitality-service-turn-event#detail",
+          "resolution": "governed",
+          "reason": "structured command evidence can contain table, demand, and before/after operational references",
+          "provenance": "allow-listed service-turn command receipt",
+          "flags": [
+            "sensitive"
+          ],
+          "fieldPolicy": "allow-listed keys, organization-scoped, local-only, and excluded from customer-safe projections"
+        }
+      ]
+    }
+  ]
+}

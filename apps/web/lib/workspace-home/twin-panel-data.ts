@@ -20,12 +20,23 @@ import {
   type TwinProfile,
 } from "@dpf/storefront-templates";
 
-import { buildDemoTwinSnapshot, type TwinSnapshot } from "@/components/twin";
+import { buildDemoTwinSnapshot } from "@/components/twin/demo-snapshot";
+import type { TwinSnapshot } from "@/components/twin/snapshot";
 import { loadVersionedOperationsSnapshot } from "@/lib/twin/operations-loader";
 import {
   toLivingBusinessSnapshot,
   type OperationsSnapshotTelemetry,
 } from "@/lib/twin/operations-snapshot";
+import {
+  loadOrCreateRestaurantScene,
+  type OperationalSceneLayoutDatabase,
+  type RestaurantOperationalScene,
+} from "@/lib/twin/restaurant-scene-layout";
+import {
+  loadRestaurantFloorOperationalView,
+  type RestaurantFloorDatabase,
+  type RestaurantFloorOperationalView,
+} from "@/lib/twin/restaurant-floor-loader.server";
 
 export interface WorkspaceTwinPresentation {
   archetypeId: string;
@@ -40,6 +51,8 @@ export interface WorkspaceTwinPresentation {
     degradedSourceCount: number;
     telemetry: OperationsSnapshotTelemetry;
   } | null;
+  scene: RestaurantOperationalScene | null;
+  restaurantFloor: RestaurantFloorOperationalView | null;
   /**
    * True while the snapshot is deterministic demo fixture data — the live
    * `LivingBusinessSnapshot` projection (parent spec P4) has not been wired.
@@ -96,8 +109,108 @@ export function resolveWorkspaceTwinPresentation(
     profile,
     snapshot: condenseForWorkspaceHome(snapshot),
     operations: null,
+    scene: null,
+    restaurantFloor: null,
     demo,
   };
+}
+
+async function loadRestaurantWorkspaceFloor(
+  dbInput: unknown,
+  archetypeId: string,
+  now?: Date,
+): Promise<RestaurantFloorOperationalView | null> {
+  try {
+    const db =
+      dbInput ??
+      ((await import("@dpf/db")).prisma as unknown);
+    const client = db as RestaurantFloorDatabase & {
+      storefrontConfig: {
+        findFirst(input: unknown): Promise<{
+          id: string;
+          organizationId: string;
+        } | null>;
+      };
+    };
+    if (
+      !client.hospitalityResource ||
+      !client.hospitalityCapacityAllocation ||
+      !client.storefrontBooking ||
+      !client.bookingHold ||
+      !client.staffingResourceLink ||
+      !client.employeeProfile
+    ) {
+      return null;
+    }
+    const config = await client.storefrontConfig.findFirst({
+      where: { archetype: { archetypeId } },
+      select: { id: true, organizationId: true },
+    });
+    if (!config?.organizationId) return null;
+    return await loadRestaurantFloorOperationalView(client, {
+      organizationId: config.organizationId,
+      storefrontId: config.id,
+      now,
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function loadRestaurantWorkspaceScene(
+  dbInput: unknown,
+  archetypeId: string,
+): Promise<RestaurantOperationalScene | null> {
+  try {
+    const db =
+      dbInput ??
+      ((await import("@dpf/db")).prisma as unknown);
+    const client = db as {
+      storefrontConfig: {
+        findFirst(input: unknown): Promise<{
+          id: string;
+          organization: { orgId: string };
+          archetype: { name: string } | null;
+          hospitalityResources: Array<{
+            id: string;
+            label: string;
+            capacity: number;
+            serviceArea: string | null;
+            attributes: unknown;
+          }>;
+        } | null>;
+      };
+    } & OperationalSceneLayoutDatabase;
+    if (!client.operationalSceneLayout) return null;
+    const config = await client.storefrontConfig.findFirst({
+      where: { archetype: { archetypeId } },
+      select: {
+        id: true,
+        organization: { select: { orgId: true } },
+        archetype: { select: { name: true } },
+        hospitalityResources: {
+          where: { kind: "table", status: { not: "retired" } },
+          select: {
+            id: true,
+            label: true,
+            capacity: true,
+            serviceArea: true,
+            attributes: true,
+          },
+        },
+      },
+    });
+    if (!config || config.hospitalityResources.length === 0) return null;
+    return await loadOrCreateRestaurantScene({
+      database: client,
+      orgId: config.organization.orgId,
+      locationId: config.id,
+      locationLabel: `${config.archetype?.name ?? "Restaurant"} floor`,
+      tables: config.hospitalityResources,
+    });
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -117,25 +230,35 @@ export async function loadWorkspaceTwinPresentation(
 ): Promise<WorkspaceTwinPresentation | null> {
   const base = resolveWorkspaceTwinPresentation(archetypeId, archetypeName);
   if (!base) return null;
-  try {
-    const operations = await loadVersionedOperationsSnapshot(opts);
-    if (operations && operations.identity.archetypeId === base.archetypeId) {
-      return {
-        ...base,
-        snapshot: condenseForWorkspaceHome(toLivingBusinessSnapshot(operations)),
-        operations: {
-          version: operations.version,
-          asOf: operations.asOf,
-          sourceWatermark: operations.sourceWatermark,
-          freshness: operations.freshness,
-          degradedSourceCount: operations.degradedSources.length,
-          telemetry: operations.telemetry,
-        },
-        demo: false,
-      };
-    }
-  } catch {
-    // Projection failed (no DB in this context, transient error) — keep the demo.
+  const isFloor = base.profile.template === "FLOOR";
+  // These projections are independent read models. Run them concurrently so
+  // the host is not waiting on scene IO, live floor joins, then the generic
+  // operations snapshot in series during a customer-facing interaction.
+  const [scene, restaurantFloor, operations] = await Promise.all([
+    isFloor
+      ? loadRestaurantWorkspaceScene(opts?.db, base.archetypeId)
+      : Promise.resolve(null),
+    isFloor
+      ? loadRestaurantWorkspaceFloor(opts?.db, base.archetypeId, opts?.now)
+      : Promise.resolve(null),
+    loadVersionedOperationsSnapshot(opts).catch(() => null),
+  ]);
+  if (operations && operations.identity.archetypeId === base.archetypeId) {
+    return {
+      ...base,
+      snapshot: condenseForWorkspaceHome(toLivingBusinessSnapshot(operations)),
+      operations: {
+        version: operations.version,
+        asOf: operations.asOf,
+        sourceWatermark: operations.sourceWatermark,
+        freshness: operations.freshness,
+        degradedSourceCount: operations.degradedSources.length,
+        telemetry: operations.telemetry,
+      },
+      scene,
+      restaurantFloor,
+      demo: false,
+    };
   }
-  return base;
+  return { ...base, scene, restaurantFloor };
 }

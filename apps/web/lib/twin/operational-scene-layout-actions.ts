@@ -57,7 +57,10 @@ export async function saveOperationalCartesianScene(input: {
       expectedVersion: input.expectedVersion,
       layout: input.layout,
     });
-    if (result.ok) revalidatePath("/workspace");
+    if (result.ok) {
+      revalidatePath("/workspace");
+      revalidatePath("/storefront/tables");
+    }
     return result;
   } catch {
     return {

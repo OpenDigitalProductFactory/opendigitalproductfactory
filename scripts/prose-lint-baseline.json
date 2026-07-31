@@ -1906,9 +1906,9 @@
   "apps/web/app/(shell)/storefront/tables/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
-    "readability": 0,
+    "readability": 1,
     "longSentences": 0,
-    "textMass": 4
+    "textMass": 19
   },
   "apps/web/app/(shell)/storefront/team/page.tsx": {
     "vocabulary": 0,
@@ -5744,7 +5744,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 271
+    "textMass": 268
   },
   "apps/web/components/ops/EpicCard.tsx": {
     "vocabulary": 0,
@@ -7270,7 +7270,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 48
+    "textMass": 120
   },
   "apps/web/components/storefront-admin/ItemFormDialog.tsx": {
     "vocabulary": 0,
@@ -7361,7 +7361,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 11
+    "textMass": 50
   },
   "apps/web/components/storefront-admin/TeamManager.tsx": {
     "vocabulary": 0,
@@ -7397,6 +7397,13 @@
     "readability": 1,
     "longSentences": 1,
     "textMass": 44
+  },
+  "apps/web/components/storefront/CustomerRestaurantAvailability.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 21
   },
   "apps/web/components/storefront/DonationForm.tsx": {
     "vocabulary": 0,
@@ -7579,6 +7586,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 5
+  },
+  "apps/web/components/twin/restaurant/RestaurantFloorOperations.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 150
   },
   "apps/web/components/ui/DatePicker.tsx": {
     "vocabulary": 0,
@@ -7935,7 +7949,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 7
+    "textMass": 12
   },
   "apps/web/components/workspace/ActivityFeed.tsx": {
     "vocabulary": 0,
