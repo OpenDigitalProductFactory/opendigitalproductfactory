@@ -1,10 +1,10 @@
 # Recursive Compliance Evidence Readiness Implementation Plan
 
-**Umbrella backlog item:** `BI-734BEF5B`  
-**Epic:** `EP-CF64D652` — Recursive Compliance Assurance  
-**Governed architecture decision:** `DI-E86653E6475C`  
-**Status:** Planned  
-**Scope:** DPF's own organization, every DPF install, and every self-authored change  
+**Backlog item:** `BI-734BEF5B`
+**Epic:** `EP-CF64D652` — Recursive Compliance Assurance
+**Governed architecture decision:** `DI-E86653E6475C`
+**Status:** Planned
+**Scope:** DPF's own organization, every DPF install, and every self-authored change
 **Frameworks:** ISO/IEC 27001:2022, SOC 2 Trust Services Criteria, and HIPAA when applicable
 
 > **For agentic workers:** execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff.
@@ -569,20 +569,20 @@ Each implementation BI must update the appropriate sources:
 - `AGENTS.md` only for durable contributor doctrine such as recursive
   compliance-impact handling.
 
-## 19. Backlog coverage
+## Backlog coverage
 
-- **Decision:** `decomposed`
-- **Umbrella BI:** `BI-734BEF5B`
-- **Coverage receipt:** `cms8cran40bdd01qo7fd16ois`
-- **Plan path:** `docs/superpowers/plans/2026-07-30-recursive-compliance-evidence-readiness.md`
-- **Mappings:**
-  - `scope-crosswalk` → `BI-421DADF5`
-  - `evidence-contracts` → `BI-2B626F20`
-  - `recursive-change-gates` → `BI-53829B94`
-  - `continuous-controls` → `BI-51110EA2`
-  - `auditor-packages` → `BI-8455D0D3`
-  - `organizational-program` → `BI-44B160F5`
-  - `conformance-drills` → `BI-7B642587`
+- Decision: decomposed
+- Parent: `BI-734BEF5B`
+- Receipt: `cms8cran40bdd01qo7fd16ois`
+- Rationale: Framework scope, evidence contracts, recursive change gates, continuous controls, organizational operations, auditor packages, and conformance drills are independently shippable capabilities with explicit sequencing dependencies.
+- Dependencies: evidence contracts depend on scope/crosswalks; recursive change gates and continuous controls depend on evidence contracts; organizational operations depend on scope/crosswalks and evidence contracts; auditor packages depend on scope/crosswalks, evidence contracts, and continuous controls; conformance drills depend on recursive gates, continuous controls, organizational operations, and auditor packages.
+- Authoritative compliance scope, responsibility, and framework crosswalks -> `BI-421DADF5`
+- Control test, assessment, and immutable evidence provenance contracts -> `BI-2B626F20`
+- Recursive control-impact and evidence gates on every self-authored change -> `BI-53829B94`
+- Continuous control evidence and compliance drift detection -> `BI-51110EA2`
+- Auditor-grade readiness views and on-demand evidence packages -> `BI-8455D0D3`
+- DPF organizational ISMS, SOC 2, and HIPAA evidence program -> `BI-44B160F5`
+- Recursive compliance conformance drills and external-assessment readiness gates -> `BI-7B642587`
 
 Before implementation or resumption, revalidate this receipt through
 `check_plan_backlog_coverage`. If the mapping is stale or a mapped BI is retired,
