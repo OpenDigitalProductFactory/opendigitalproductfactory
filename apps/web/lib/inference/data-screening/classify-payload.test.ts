@@ -230,3 +230,101 @@ describe("classifyInferencePayload", () => {
     },
   );
 });
+
+// BI-CD13D818. A single ambiguous English word escalated a whole turn to
+// `restricted`, which hard-denies every external provider and left the bundled
+// local model as the only tool-capable route. Live evidence: a
+// /platform/ai/operations-map conversation classified `employee-records`,
+// "14 endpoint(s) excluded; 1 candidate(s) ranked", ~20% of recent decisions.
+// Kernel decision DI-0A58373E26D0 chose corroboration over deleting the
+// patterns, so detection stays intact and only the escalation bar moves.
+describe("ambiguous-vocabulary corroboration (BI-CD13D818)", () => {
+  const screen = (content: string) =>
+    classifyInferencePayload({
+      messages: [{ role: "user", content }],
+      systemPrompt: "",
+      taskType: "conversation",
+    });
+
+  it("does NOT escalate an AI-operations question to restricted on one ambiguous word", () => {
+    const result = screen(
+      "Which provider gives the best performance for this routing work, and what are the benefits of staying local?",
+    );
+    expect(result.overallSensitivity).not.toBe("restricted");
+  });
+
+  it("still fails closed at confidential — never silently drops to internal", () => {
+    expect(screen("What are the benefits of the local model?").overallSensitivity)
+      .toBe("confidential");
+  });
+
+  it("keeps precise employment vocabulary escalating on its own", () => {
+    for (const text of [
+      "The employee salary band needs review.",
+      "Attach the disciplinary letter.",
+      "Schedule the performance review.",
+    ]) {
+      expect(screen(text).overallSensitivity).toBe("restricted");
+    }
+  });
+
+  it("escalates when precise vocabulary accompanies an ambiguous term", () => {
+    expect(screen("Review the payroll run and the benefits elections.").overallSensitivity)
+      .toBe("restricted");
+  });
+
+  it("does not let one ambiguous word repeated across probes fake corroboration", () => {
+    const result = classifyInferencePayload({
+      messages: [
+        { role: "user", content: "What are the benefits here?" },
+        { role: "assistant", content: "The benefits are latency and cost." },
+        { role: "user", content: "Any other benefits?" },
+      ],
+      systemPrompt: "Explain the benefits of each route.",
+      taskType: "conversation",
+    });
+    expect(result.overallSensitivity).toBe("confidential");
+  });
+
+  it("treats operations vocabulary as ambiguous for security-logs too", () => {
+    expect(screen("Write an incident note about the stalled build.").overallSensitivity)
+      .not.toBe("restricted");
+    expect(
+      classifyInferencePayload({
+        messages: [{
+          role: "assistant",
+          content: "",
+          toolCalls: [{ id: "c1", name: "lookup", arguments: { securityLog: "redacted" } }],
+        }],
+        systemPrompt: "",
+        taskType: "conversation",
+      }).overallSensitivity,
+    ).toBe("restricted");
+  });
+
+  it("never applies the corroboration bar to DECLARED governed data", () => {
+    const result = classifyInferencePayload({
+      messages: [{ role: "user", content: "Summarize this." }],
+      systemPrompt: "",
+      taskType: "conversation",
+      governedData: [{
+        assetId: "asset-1",
+        classificationKnown: true,
+        sensitivity: "restricted",
+        dataClasses: ["employee-records"],
+      }],
+    });
+    expect(result.overallSensitivity).toBe("restricted");
+  });
+
+  it("keeps the unknown-governed-data fail-closed intact", () => {
+    const result = classifyInferencePayload({
+      messages: [{ role: "user", content: "Summarize this." }],
+      systemPrompt: "",
+      taskType: "conversation",
+      governedData: [{ assetId: "asset-2", classificationKnown: false }],
+    });
+    expect(result.overallSensitivity).toBe("restricted");
+    expect(result.dataClasses).toContain("unknown-governed-data");
+  });
+});
