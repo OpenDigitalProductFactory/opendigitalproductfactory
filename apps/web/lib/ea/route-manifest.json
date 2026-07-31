@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 595,
+  "routeCount": 597,
   "routes": [
     {
       "routePath": "/",
@@ -1411,6 +1411,33 @@
         "catalogItemId"
       ],
       "file": "apps/web/app/api/storefront/admin/catalog/[catalogItemId]/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/hospitality-resources",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "hospitality-resources"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/storefront/admin/hospitality-resources/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/hospitality-resources/[id]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "hospitality-resources",
+        "[id]"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/storefront/admin/hospitality-resources/[id]/route.ts"
     },
     {
       "routePath": "/api/storefront/admin/inquiries/[id]/product-backlog",

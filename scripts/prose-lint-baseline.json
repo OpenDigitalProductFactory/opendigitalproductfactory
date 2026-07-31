@@ -2267,6 +2267,20 @@
     "longSentences": 0,
     "textMass": 3
   },
+  "apps/web/app/api/storefront/admin/hospitality-resources/[id]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/storefront/admin/hospitality-resources/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
   "apps/web/app/api/storefront/admin/items/[id]/route.ts": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -7244,6 +7258,13 @@
     "longSentences": 0,
     "textMass": 99
   },
+  "apps/web/components/storefront-admin/HospitalityResourceManager.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 48
+  },
   "apps/web/components/storefront-admin/ItemFormDialog.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -7340,7 +7361,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 1,
-    "textMass": 52
+    "textMass": 66
   },
   "apps/web/components/storefront-admin/UnitsManager.tsx": {
     "vocabulary": 0,
