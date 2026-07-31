@@ -6,8 +6,10 @@ import {
 export type PurposeContractModule = readonly PurposeContractSource[];
 
 import { GRAPH_EXPLORER_PURPOSE_CONTRACTS } from "./graph-explorer";
+import { ARCHETYPE_READINESS_PURPOSE_CONTRACTS } from "./archetype-readiness";
 
 const CONTRACT_MODULES: readonly PurposeContractModule[] = [
+  ARCHETYPE_READINESS_PURPOSE_CONTRACTS,
   GRAPH_EXPLORER_PURPOSE_CONTRACTS,
 ];
 

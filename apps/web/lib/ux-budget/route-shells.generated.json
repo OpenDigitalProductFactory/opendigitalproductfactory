@@ -1,11 +1,11 @@
 {
   "generator": "apps/web/scripts/build-route-shells.ts",
-  "pageRouteCount": 318,
+  "pageRouteCount": 319,
   "migratedCount": 0,
   "summary": {
     "cockpit": 16,
     "list": 6,
-    "detail": 245,
+    "detail": 246,
     "settings": 12,
     "form": 18,
     "public": 21,
@@ -2283,6 +2283,18 @@
     },
     {
       "routePath": "/platform/ai/skills",
+      "shell": "detail",
+      "audience": "admin",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": true,
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/archetype-readiness",
       "shell": "detail",
       "audience": "admin",
       "migrated": false,

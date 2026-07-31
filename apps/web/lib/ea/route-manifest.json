@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 600,
+  "routeCount": 601,
   "routes": [
     {
       "routePath": "/",
@@ -5502,6 +5502,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/platform/ai/skills/page.tsx"
+    },
+    {
+      "routePath": "/platform/archetype-readiness",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "archetype-readiness"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/archetype-readiness/page.tsx"
     },
     {
       "routePath": "/platform/audit",

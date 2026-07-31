@@ -105,4 +105,14 @@ describe("platform-nav", () => {
   it("keeps the platform root in the Overview family", () => {
     expect(getPlatformFamily("/platform").key).toBe("overview");
   });
+
+  it("exposes archetype readiness inside the Overview family", () => {
+    const overview = getPlatformFamily("/platform/archetype-readiness");
+
+    expect(overview.key).toBe("overview");
+    expect(overview.subItems).toContainEqual({
+      label: "Archetype Readiness",
+      href: "/platform/archetype-readiness",
+    });
+  });
 });
