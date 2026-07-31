@@ -4,6 +4,7 @@ name: CI
 # applied at workflow level. UX also reads same-run build artifacts.
 permissions:
   actions: read
+  checks: read
   contents: read
 
 on:
@@ -69,6 +70,68 @@ jobs:
           path: ${{ runner.temp }}/ci-evidence-plan.json
           if-no-files-found: error
           retention-days: 30
+
+  # BI-9585E580 foundation. Observe whether a completed merge-group receipt
+  # would authorize exact-tree reuse, but do not feed this verdict into any
+  # job-level condition yet. A missing/malformed/mismatched receipt therefore
+  # leaves the existing exhaustive push lifecycle completely unchanged.
+  exact-tree-evidence-shadow:
+    name: Exact-tree Evidence Shadow
+    runs-on: ubuntu-latest
+    needs: changes
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Locate successful merge-group evidence for this tree
+        id: locate-ci-evidence
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/ci-evidence-receipt.mjs locate
+
+      - name: Download candidate exact-tree evidence
+        id: download-ci-evidence
+        if: steps.locate-ci-evidence.outputs.found == 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ steps.locate-ci-evidence.outputs.artifact_name }}
+          path: ${{ runner.temp }}/ci-evidence
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.locate-ci-evidence.outputs.source_run_id }}
+
+      - name: Validate candidate exact-tree evidence
+        id: validate-ci-evidence
+        if: >-
+          steps.locate-ci-evidence.outputs.found == 'true' &&
+          steps.download-ci-evidence.outcome == 'success'
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: >-
+          node scripts/ci-evidence-receipt.mjs validate
+          --input-dir "$RUNNER_TEMP/ci-evidence"
+          --source-run-id "${{ steps.locate-ci-evidence.outputs.source_run_id }}"
+
+      - name: Report shadow fallback
+        if: >-
+          always() &&
+          steps.validate-ci-evidence.outputs.reusable != 'true'
+        env:
+          LOCATE_REASON: ${{ steps.locate-ci-evidence.outputs.reason }}
+          VALIDATE_REASON: ${{ steps.validate-ci-evidence.outputs.reason }}
+        run: |
+          {
+            echo "### Exact-tree evidence shadow verdict"
+            echo
+            echo "- Would reuse: **no**"
+            echo "- Reason: ${VALIDATE_REASON:-${LOCATE_REASON:-evidence unavailable}}"
+            echo "- Enforcement: disabled; this push still runs exhaustive evidence"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   typecheck:
     name: Typecheck
@@ -543,6 +606,7 @@ jobs:
     if: always()
     needs:
       - changes
+      - exact-tree-evidence-shadow
       - typecheck
       - policy-guards-source
       - policy-guards-workspace
@@ -560,6 +624,31 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Assert every CI dependency is merge-safe
+        id: assert-merge-safe
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: node scripts/merge-readiness-policy.mjs evaluate-needs
+
+      - name: Create exact-tree CI evidence receipt
+        id: create-ci-evidence
+        if: github.event_name == 'merge_group'
+        continue-on-error: true
+        env:
+          DPF_CI_PLANNER_DIGEST: ${{ needs.changes.outputs.evidence_plan_digest }}
+          GITHUB_TOKEN: ${{ github.token }}
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: >-
+          node scripts/ci-evidence-receipt.mjs create
+          --output-dir "$RUNNER_TEMP/ci-evidence"
+
+      - name: Upload exact-tree CI evidence receipt
+        if: >-
+          github.event_name == 'merge_group' &&
+          steps.create-ci-evidence.outcome == 'success'
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.create-ci-evidence.outputs.artifact_name }}
+          path: ${{ runner.temp }}/ci-evidence
+          if-no-files-found: error
+          retention-days: 2
