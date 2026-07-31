@@ -50,6 +50,15 @@ function fixtureInput() {
       "ux-route-sweep": "success",
       "exact-tree-evidence-shadow": "skipped",
     },
+    requiredSuccessfulGateIds: [
+      "typecheck",
+      "test-web",
+      "test-packages",
+      "unit-tests",
+      "build",
+      "ux-route-sweep-runtime",
+      "ux-route-sweep",
+    ],
     artifacts: [
       {
         name: "ci-evidence-plan-30590378765-1",
@@ -80,6 +89,7 @@ function expectedFrom(input) {
     mergePolicyRequiredContexts: input.mergePolicy.requiredContexts,
     toolchain: input.toolchain,
     gateIds: Object.keys(input.gates),
+    requiredSuccessfulGateIds: input.requiredSuccessfulGateIds,
     artifacts: input.artifacts,
     sourceChecks: input.mergePolicy.requiredContexts.map((name) => ({
       name,
@@ -115,6 +125,37 @@ describe("exact-tree CI evidence receipt", () => {
         /cannot attest incomplete CI gates: typecheck=/,
       );
     }
+  });
+
+  it("refuses to create reusable evidence when a required heavy gate was skipped or omitted", () => {
+    const skipped = fixtureInput();
+    skipped.gates.typecheck = "skipped";
+    assert.throws(
+      () => createEvidenceReceipt(skipped),
+      /required successful CI gates are incomplete: typecheck=skipped/,
+    );
+
+    const omitted = fixtureInput();
+    delete omitted.gates.typecheck;
+    assert.throws(
+      () => createEvidenceReceipt(omitted),
+      /required successful CI gates are incomplete: typecheck=missing/,
+    );
+  });
+
+  it("rejects a tampered receipt that marks a required heavy gate skipped", () => {
+    const input = fixtureInput();
+    const receipt = createEvidenceReceipt(input);
+    receipt.gates.find((gate) => gate.jobId === "typecheck").result = "skipped";
+    const result = validateEvidenceReceipt({
+      receipt,
+      expected: expectedFrom(input),
+      checksum: receiptChecksum(receipt),
+      now: NOW + 60_000,
+    });
+
+    assert.equal(result.ok, false);
+    assert.match(result.reasons.join("\n"), /required successful gate typecheck=skipped/);
   });
 
   it("fails closed for every receipt identity and completeness mismatch", () => {

@@ -30,6 +30,18 @@ const PLANNER_PATHS = [
   "config/ci-evidence-policy.json",
 ];
 const SETUP_PATH = ".github/actions/setup-pnpm/action.yml";
+const REUSABLE_HEAVY_GATE_IDS = [
+  "typecheck",
+  "policy-guards-workspace",
+  "routing-contract",
+  "test-web",
+  "test-packages",
+  "unit-tests",
+  "build",
+  "ux-route-sweep-runtime",
+  "ux-route-sweep",
+  "adp-integration-tests",
+];
 
 function parseArgs(argv) {
   const [mode, ...rest] = argv;
@@ -171,6 +183,7 @@ async function create(options) {
     },
     toolchain: identity.toolchain,
     gates: needs,
+    requiredSuccessfulGateIds: REUSABLE_HEAVY_GATE_IDS,
     artifacts,
     createdAt: new Date(now).toISOString(),
     expiresAt: new Date(now + CI_EVIDENCE_LIFETIME_MS).toISOString(),
@@ -187,12 +200,12 @@ async function create(options) {
   appendSummary([
     "### Exact-tree CI evidence receipt",
     "",
-    "- Mode: foundation shadow; no post-merge work is skipped",
+    "- Mode: exact-tree main-push reuse",
     "- Receipt: created with a companion SHA-256 checksum",
-    "- Scope: immutable tree, policy, toolchain, gates, checks, and artifacts",
+    "- Scope: immutable tree, policy, toolchain, successful heavy gates, checks, and artifacts",
   ]);
   console.log(
-    `[ci-evidence-receipt] created shadow receipt for tree ${receipt.source.treeSha} `
+    `[ci-evidence-receipt] created reusable receipt for tree ${receipt.source.treeSha} `
     + `with ${receipt.gates.length} gates`,
   );
 }
@@ -222,7 +235,7 @@ async function locate() {
       reason: verdict.reason,
       tree_sha: treeSha,
     });
-    console.log(`[ci-evidence-receipt] shadow discovery: ${verdict.reason}`);
+    console.log(`[ci-evidence-receipt] reuse discovery: ${verdict.reason}`);
   } catch (error) {
     const reason = "discovery unavailable; exhaustive evidence remains required";
     appendOutput({
@@ -270,6 +283,7 @@ async function validate(options) {
         mergePolicyRequiredContexts: identity.mergePolicyRequiredContexts,
         toolchain: identity.toolchain,
         gateIds: expectedGateIds(),
+        requiredSuccessfulGateIds: REUSABLE_HEAVY_GATE_IDS,
         artifacts: normalizeArtifactInventory(await runArtifacts(sourceRunId)),
         sourceChecks: checks.check_runs ?? [],
       },
@@ -283,28 +297,28 @@ async function validate(options) {
       reason,
     });
     appendSummary([
-      "### Exact-tree evidence shadow verdict",
+      "### Exact-tree evidence reuse verdict",
       "",
-      `- Would reuse: **${result.ok ? "yes" : "no"}**`,
+      `- Reusable: **${result.ok ? "yes" : "no"}**`,
       `- Reason: ${reason}`,
-      "- Enforcement: disabled; this push still runs exhaustive evidence",
+      `- Enforcement: ${result.ok ? "duplicate heavy push jobs are skipped" : "exhaustive fallback"}`,
     ]);
     if (!result.ok) {
       console.warn(
-        `[ci-evidence-receipt] shadow validation rejected evidence: ${result.reasons.join("; ")}`,
+        `[ci-evidence-receipt] reuse validation rejected evidence: ${result.reasons.join("; ")}`,
       );
     } else {
-      console.log("[ci-evidence-receipt] shadow validation accepted exact-tree evidence");
+      console.log("[ci-evidence-receipt] reuse validation accepted exact-tree evidence");
     }
   } catch (error) {
     const reason = "validation unavailable; exhaustive evidence remains required";
     appendOutput({ reusable: "false", reason });
     appendSummary([
-      "### Exact-tree evidence shadow verdict",
+      "### Exact-tree evidence reuse verdict",
       "",
-      "- Would reuse: **no**",
+      "- Reusable: **no**",
       `- Reason: ${reason}`,
-      "- Enforcement: disabled; this push still runs exhaustive evidence",
+      "- Enforcement: exhaustive fallback",
     ]);
     console.warn(`[ci-evidence-receipt] ${reason}: ${error.message}`);
   }
