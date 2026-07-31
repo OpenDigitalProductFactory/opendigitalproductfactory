@@ -158,6 +158,15 @@ Every exact-tree result records:
 - Compose project and portal URL
 - production artifact kind, locator, identity, and integration-tree binding
 - lease, heartbeat/fence events, output path, and freshness verdict
+- accepted-base freshness as `remote-current`, `offline-accepted`, or
+  `fetch-failed`, including the admission-time resolution timestamp
+
+`origin/main` is refreshed once after admission and before the integration
+tree is synthesized. The resolved SHA remains fixed for that run. A network
+failure stops before heavy gates and is never relabeled as offline evidence.
+Operators intentionally working without network must select
+`--offline-accepted-base` (or `DPF_LOCAL_CI_OFFLINE_ACCEPTED_BASE=1`); that
+choice is preserved in the evidence.
 
 Capacity may increase only through the governed pilot after slot-isolation
 tests and the capacity-one exact-tree gate pass. A capacity-two declaration is

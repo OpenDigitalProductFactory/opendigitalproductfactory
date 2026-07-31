@@ -20,6 +20,10 @@ const candidateBranch = valueAfter("--candidate");
 const baseRef = valueAfter("--base-ref") || "origin/main";
 const candidateSha = valueAfter("--candidate-sha");
 const baseSha = valueAfter("--base-sha");
+const baseFreshnessStatus = valueAfter("--base-freshness-status")
+  || (process.argv.includes("--fetch-base") ? "remote-current" : "offline-accepted");
+const baseResolvedAt = valueAfter("--base-resolved-at");
+const baseFetchMode = valueAfter("--base-fetch-mode");
 const metadataOut = valueAfter("--metadata-out");
 const evidencePlanOut = valueAfter("--evidence-plan-out")
   || (metadataOut ? join(dirname(metadataOut), "dpf-ci-evidence-plan.json") : "");
@@ -81,13 +85,18 @@ if (metadataOut) {
     nextBuildId,
   });
   const payload = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     bi: "BI-76551B2D",
     mode,
     candidateRef: candidateBranch,
     candidateSha: candidateSha || resolveGitRevision(candidateBranch),
     baseRef,
-    fetchBase,
+    fetchBase: baseFreshnessStatus === "remote-current" || fetchBase,
+    baseFreshness: {
+      status: baseFreshnessStatus,
+      resolvedAt: baseResolvedAt || null,
+      fetchMode: baseFetchMode || null,
+    },
     baseSha: baseSha || resolveGitRevision(baseRef),
     integrationBranch: plan.integrationBranch,
     slotKey: slotKey || null,

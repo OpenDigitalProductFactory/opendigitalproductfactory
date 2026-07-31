@@ -301,7 +301,7 @@ abandoned entry.
 **The gate command has a checked-in default (BI-157DC9B2, BI-4BE30454):**
 [`scripts/local-ci-runner.mjs`](../../scripts/local-ci-runner.mjs) runs the
 canonical merged-code plan (`scripts/lib/local-integration-ci.mjs`: checkout
-the locally available accepted-base ref, `origin/main` by default → merge
+the admission-resolved accepted-base ref, `origin/main` by default → merge
 candidate → sandbox-freshness converge → vitest → typecheck → production build)
 in a dedicated **non-mutating scratch worktree** (`~/dpf-worktrees/.local-ci-runner`
 for slot 0 and a manifest-owned sibling for slot 1) — never in your topic
@@ -309,15 +309,28 @@ worktree. It records content-addressed
 metadata to `.git/dpf-local-ci-metadata.json` and into MCP evidence: candidate
 ref/SHA, base ref/SHA, integration commit SHA, synthesized tree SHA, command
 list, timestamps, slot key, Compose/PostgreSQL identities, the exact production
-artifact identity, whether the accepted base came from a local ref or explicit
-`--fetch-base`, toolchain fingerprint, and gate-evidence expiry. The evidence
+artifact identity, whether the accepted base was proven `remote-current`,
+explicitly `offline-accepted`, or stopped as `fetch-failed`, toolchain
+fingerprint, and gate-evidence expiry. The evidence
 also carries a `resilience` envelope: `publicationMode` (`deferred` by default
-or explicit `push-before-lease`), `acceptedBaseMode` (`local-ref` or
-`fetch-base`), and `networkTolerance` (`offline-capable` only when publication
-is deferred and the accepted base was local).
-`DPF_LOCAL_CI_BASE_REF` can point at another local accepted-base ref;
-`DPF_LOCAL_CI_FETCH_BASE=1` / `--fetch-base` is the explicit network-refresh
-mode. `DPF_LOCAL_CI_COMMAND` remains an explicit override. The
+or explicit `push-before-lease`), `acceptedBaseMode` (the same authoritative
+freshness status), and `networkTolerance` (`explicit-offline` only when the
+operator selected offline accepted-base mode).
+
+Online refresh is the default. After the lease admits the run, the runner uses
+the shared-safe fetch helper to refresh `origin/main`, resolves one immutable
+base SHA, and passes that SHA to the child plan without fetching again. A
+failed fetch records `fetch-failed` and exits before integration synthesis or
+expensive gates. This admission boundary avoids repeated rebase/rerun churn
+while queued; later movement on `main` is reconciled by the merge queue.
+
+Offline operation must be explicit:
+`--offline-accepted-base` or
+`DPF_LOCAL_CI_OFFLINE_ACCEPTED_BASE=1`. In that mode,
+`DPF_LOCAL_CI_BASE_REF` may point at another locally available accepted-base
+ref and evidence is labeled `offline-accepted`. `--fetch-base` and
+`DPF_LOCAL_CI_FETCH_BASE=1` remain compatibility aliases for the default
+required online refresh. `DPF_LOCAL_CI_COMMAND` remains an explicit override. The
 old Phase 1 stub is only reachable via `DPF_ALLOW_LOCAL_CI_STUB=1` for contract
 tests and must never be used as release evidence.
 
@@ -354,10 +367,11 @@ lock and scratch pnpm store are derived from the same manifest, so convergence
 or cleanup in one slot cannot erase the peer's duplicate-install guard or
 dependency graph.
 
-The network-disconnect proof is encoded in
+The explicit-offline network-disconnect proof is encoded in
 `tests/release/local-ci-gate-contract.test.mjs`: the contract denies network
-Git verbs during `gate-worktree.sh`, records local-only evidence with
-`networkTolerance=offline-capable`, then runs `.githooks/pre-push-gate` through
+Git verbs during `gate-worktree.sh`, selects offline accepted-base mode,
+records local-only evidence with `networkTolerance=explicit-offline`, then
+runs `.githooks/pre-push-gate` through
 the same no-network Git wrapper and proves the same unexpired SHA-bound record
 is sufficient for later publication.
 

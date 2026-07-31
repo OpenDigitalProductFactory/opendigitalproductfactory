@@ -12,7 +12,7 @@
 // here so the lease/resource contract has one implementation source.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { connect } from "node:net";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,6 +21,11 @@ import {
   createLocalCiSlotManifest,
   localCiSlotEnvironment,
 } from "./lib/local-ci-slot-manifest.mjs";
+import {
+  LOCAL_CI_BASE_FRESHNESS,
+  refreshAcceptedBase,
+  resolveBaseFreshnessPolicy,
+} from "./lib/local-ci-base-freshness.mjs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 
@@ -36,6 +41,14 @@ function git(args, cwd) {
 function gitOrEmpty(args, cwd) {
   const result = git(args, cwd);
   return result.status === 0 ? result.stdout.trim() : "";
+}
+
+function gitOutput(args, cwd) {
+  const result = git(args, cwd);
+  if (result.status !== 0) {
+    throw new Error((result.stderr || result.stdout || `git ${args.join(" ")} failed`).trim());
+  }
+  return result.stdout;
 }
 
 function redactUrl(url) {
@@ -177,7 +190,8 @@ async function main() {
       "Options:\n" +
       "  --candidate BRANCH   Branch to gate (default: current branch)\n" +
       "  --base-ref REF       Locally available accepted-base ref (default: origin/main)\n" +
-      "  --fetch-base         Fetch origin/main before checkout (explicit network mode)\n" +
+      "  --fetch-base         Compatibility alias for the default required online refresh\n" +
+      "  --offline-accepted-base  Explicitly use the locally available base without network proof\n" +
       "  --slot-key SLOT      Admitted physical slot (default: DPF_LOCAL_CI_SLOT_KEY or slot-0)\n" +
       "  --workspace PATH     Explicit scratch workspace override (default: admitted manifest)\n" +
       "  --dry-run            Print the resolved workspace + plan; run nothing\n" +
@@ -189,7 +203,12 @@ async function main() {
   const env = process.env;
   let candidate = valueAfter("--candidate");
   const baseRef = valueAfter("--base-ref") || env.DPF_LOCAL_CI_BASE_REF || "origin/main";
-  const fetchBase = argv.includes("--fetch-base") || env.DPF_LOCAL_CI_FETCH_BASE === "1";
+  let baseFreshnessPolicy;
+  try {
+    baseFreshnessPolicy = resolveBaseFreshnessPolicy({ argv, env, baseRef });
+  } catch (error) {
+    die(error instanceof Error ? error.message : String(error));
+  }
   const slotKey = valueAfter("--slot-key") || env.DPF_LOCAL_CI_SLOT_KEY || "slot-0";
   let workspace = valueAfter("--workspace") || env.DPF_LOCAL_CI_WORKSPACE || "";
   const dryRun = argv.includes("--dry-run");
@@ -222,29 +241,64 @@ async function main() {
   }
 
   const candidateSha = gitOrEmpty(["-C", repoTop, "rev-parse", "--verify", candidate]);
-  const baseSha = gitOrEmpty(["-C", repoTop, "rev-parse", "--verify", baseRef]);
+  const plannedFreshnessStatus = baseFreshnessPolicy.fetchRequired
+    ? "pending-admission-refresh"
+    : LOCAL_CI_BASE_FRESHNESS.offlineAccepted;
+  const localBaseSha = gitOrEmpty(["-C", repoTop, "rev-parse", "--verify", baseRef]);
+  let baseFreshness = {
+    status: plannedFreshnessStatus,
+    baseSha: localBaseSha || null,
+    resolvedAt: null,
+    fetchMode: null,
+    error: null,
+  };
+  if (!dryRun) {
+    baseFreshness = refreshAcceptedBase({
+      policy: baseFreshnessPolicy,
+      baseRef,
+      cwd: repoTop,
+      runGit: gitOutput,
+      now: () => new Date(),
+    });
+  }
+  const baseSha = baseFreshness.baseSha || "";
   const baseCommitDate = baseSha ? gitOrEmpty(["-C", repoTop, "show", "-s", "--format=%cI", baseSha]) : "";
   const metadataFile = env.DPF_LOCAL_CI_METADATA_FILE || manifest.evidence.metadata;
 
   if (dryRun) {
     process.stdout.write("local-ci-runner dry-run\n");
     process.stdout.write(
-      `candidate=${candidate}\ncandidateSha=${candidateSha || "unresolved"}\nbaseRef=${baseRef}\nbaseSha=${baseSha || "unresolved"}\nbaseCommitDate=${baseCommitDate}\nfetchBase=${fetchBase ? "1" : "0"}\nslotKey=${manifest.slotKey}\nmanifestVersion=${manifest.schemaVersion}\nroot=${root}\nworkspace=${workspace}\ncomposeProject=${manifest.compose.project}\nportalUrl=${manifest.portal.url}\npostgresContainer=${manifest.postgres.container}\npostgresDatabase=${manifest.postgres.database}\nmetadataFile=${metadataFile}\n`,
+      `candidate=${candidate}\ncandidateSha=${candidateSha || "unresolved"}\nbaseRef=${baseRef}\nbaseSha=${baseSha || "unresolved"}\nbaseCommitDate=${baseCommitDate}\nfetchBase=${baseFreshnessPolicy.fetchRequired ? "1" : "0"}\nslotKey=${manifest.slotKey}\nmanifestVersion=${manifest.schemaVersion}\nroot=${root}\nworkspace=${workspace}\ncomposeProject=${manifest.compose.project}\nportalUrl=${manifest.portal.url}\npostgresContainer=${manifest.postgres.container}\npostgresDatabase=${manifest.postgres.database}\nmetadataFile=${metadataFile}\n`,
     );
-    const fetchFlag = fetchBase ? " --fetch-base" : "";
+    process.stdout.write(`baseFreshnessPolicy=${baseFreshnessPolicy.mode}\nbaseFreshnessStatus=${baseFreshness.status}\n`);
     process.stdout.write(
-      `plan=node scripts/local-integration-ci.mjs --candidate ${candidate} --base-ref ${baseRef} --candidate-sha ${candidateSha} --base-sha ${baseSha} --slot-key ${manifest.slotKey} --metadata-out ${metadataFile}${fetchFlag} (in workspace)\n`,
+      `plan=node scripts/local-integration-ci.mjs --candidate ${candidate} --base-ref ${baseRef} --candidate-sha ${candidateSha} --base-sha ${baseSha} --slot-key ${manifest.slotKey} --metadata-out ${metadataFile} --base-freshness-status ${baseFreshness.status} (in workspace)\n`,
     );
     process.exit(0);
   }
 
   if (!candidateSha) die(`candidate ref not found locally: ${candidate}`);
+  if (baseFreshness.status === LOCAL_CI_BASE_FRESHNESS.fetchFailed) {
+    mkdirSync(dirname(metadataFile), { recursive: true });
+    writeFileSync(metadataFile, `${JSON.stringify({
+      schemaVersion: 2,
+      candidateRef: candidate,
+      candidateSha,
+      baseRef,
+      fetchBase: true,
+      baseFreshness,
+      completedAt: new Date().toISOString(),
+    }, null, 2)}\n`);
+    die(`required origin/main refresh failed: ${baseFreshness.error}`);
+  }
   if (!baseSha) die(`accepted base ref not found locally: ${baseRef} (fetch or set DPF_LOCAL_CI_BASE_REF to a local ref)`);
 
   process.stdout.write(`local-ci-runner: candidate ${candidate} @ ${candidateSha}\n`);
   process.stdout.write(`local-ci-runner: accepted base ${baseRef} @ ${baseSha}${baseCommitDate ? ` (commit date ${baseCommitDate})` : ""}\n`);
-  if (!fetchBase) {
-    process.stdout.write("local-ci-runner: using locally available base ref without fetch (BI-76551B2D)\n");
+  if (baseFreshness.status === LOCAL_CI_BASE_FRESHNESS.offlineAccepted) {
+    process.stdout.write("local-ci-runner: explicit offline mode accepted the locally available base ref\n");
+  } else {
+    process.stdout.write(`local-ci-runner: origin/main refreshed at admission (${baseFreshness.fetchMode})\n`);
   }
 
   ensureScratchWorkspace(root, workspace);
@@ -259,10 +313,12 @@ async function main() {
     "--base-ref", baseRef,
     "--candidate-sha", candidateSha,
     "--base-sha", baseSha,
+    "--base-freshness-status", baseFreshness.status,
+    "--base-resolved-at", baseFreshness.resolvedAt || "",
+    "--base-fetch-mode", baseFreshness.fetchMode || "",
     "--slot-key", manifest.slotKey,
     "--metadata-out", metadataFile,
   ];
-  if (fetchBase) args.push("--fetch-base");
   if (testDatabaseUrl) {
     args.push("--migrate-deploy");
     childEnv.DATABASE_URL = testDatabaseUrl;

@@ -206,6 +206,8 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-gate-state.mjs"), join(temp, "scripts", "lib", "local-ci-gate-state.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-host-pressure.mjs"), join(temp, "scripts", "lib", "local-ci-host-pressure.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "agent-identity.mjs"), join(temp, "scripts", "lib", "agent-identity.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "local-ci-base-freshness.mjs"), join(temp, "scripts", "lib", "local-ci-base-freshness.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "git-fetch-shared-safe.mjs"), join(temp, "scripts", "lib", "git-fetch-shared-safe.mjs"));
   cpSync(
     join(repoRoot, "apps", "web", "lib", "nonprod", "local-ci-slot-resources.json"),
     join(temp, "apps", "web", "lib", "nonprod", "local-ci-slot-resources.json"),
@@ -285,8 +287,8 @@ test("gate-worktree.mjs claims, records, and releases in order, and carries evid
     );
     assert.deepEqual(evidenceCall.params.arguments.evidence.resilience, {
       publicationMode: "deferred",
-      acceptedBaseMode: "local-ref",
-      networkTolerance: "offline-capable",
+      acceptedBaseMode: "unknown",
+      networkTolerance: "network-required",
     });
 
     const state = JSON.parse(readFileSync(join(dir, ".git", "dpf-local-ci-gate.json"), "utf8"));
@@ -637,13 +639,18 @@ test("gate-worktree.mjs carries content-addressed local integration metadata int
   writeFileSync(writerScript, `
 import { writeFileSync } from "node:fs";
 writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
-  schemaVersion: 1,
+  schemaVersion: 2,
   bi: "BI-76551B2D",
   candidateRef: "feat/local-ci-sandbox",
   candidateSha: "candidate-sha",
   baseRef: "origin/main",
-  fetchBase: false,
+  fetchBase: true,
   baseSha: "base-sha",
+  baseFreshness: {
+    status: "remote-current",
+    resolvedAt: "2026-07-31T02:00:00.000Z",
+    fetchMode: "full-fetch"
+  }
 }) + "\\n");
 `);
 
@@ -661,13 +668,23 @@ writeFileSync(process.env.DPF_LOCAL_CI_METADATA_FILE, JSON.stringify({
 
     const evidenceCall = mcp.calls.find((c) => c.params.name === "record_local_integration_result");
     assert.deepEqual(evidenceCall.params.arguments.evidence.content, {
-      schemaVersion: 1,
+      schemaVersion: 2,
       bi: "BI-76551B2D",
       candidateRef: "feat/local-ci-sandbox",
       candidateSha: "candidate-sha",
       baseRef: "origin/main",
-      fetchBase: false,
+      fetchBase: true,
       baseSha: "base-sha",
+      baseFreshness: {
+        status: "remote-current",
+        resolvedAt: "2026-07-31T02:00:00.000Z",
+        fetchMode: "full-fetch",
+      },
+    });
+    assert.deepEqual(evidenceCall.params.arguments.evidence.resilience, {
+      publicationMode: "deferred",
+      acceptedBaseMode: "remote-current",
+      networkTolerance: "network-required",
     });
   } finally {
     await mcp.close();
