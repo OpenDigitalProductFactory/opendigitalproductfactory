@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { evaluateLifecycleGate } from "./lifecycle-gate";
+import {
+  evaluateLifecycleGate,
+  evaluateLifecycleGates,
+} from "./lifecycle-gate";
 
 function makeDb(opts: {
   agent?: { agentId: string; lifecycleStage: string } | null;
@@ -92,5 +95,52 @@ describe("coworker lifecycle gate (EP-COWORKER-LIFECYCLE Phase 3)", () => {
   it("fails open on infrastructure errors", async () => {
     const db = makeDb({ agentThrows: true });
     expect((await evaluateLifecycleGate("coo", { db })).allowed).toBe(true);
+  });
+
+  it("evaluates a roster with one agent, config, and certification batch", async () => {
+    const findMany = vi.fn().mockResolvedValue([
+      {
+        agentId: "new-specialist",
+        slugId: "new-specialist",
+        lifecycleStage: "draft",
+      },
+      {
+        agentId: "coo",
+        slugId: "chief-operating-officer",
+        lifecycleStage: "production",
+      },
+    ]);
+    const configFindUnique = vi
+      .fn()
+      .mockResolvedValue({ value: { enabled: true } });
+    const certificationFindMany = vi.fn().mockResolvedValue([
+      {
+        scopeId: "coo",
+        status: "failed",
+        startedAt: new Date(),
+      },
+    ]);
+    const db = {
+      agent: {
+        findFirst: vi.fn(),
+        findMany,
+      },
+      platformConfig: { findUnique: configFindUnique },
+      assuranceRun: { findMany: certificationFindMany },
+    };
+
+    const verdicts = await evaluateLifecycleGates(
+      ["new-specialist", "chief-operating-officer", "unknown"],
+      { db },
+    );
+
+    expect(verdicts.get("new-specialist")?.allowed).toBe(false);
+    expect(
+      verdicts.get("chief-operating-officer")?.allowed,
+    ).toBe(false);
+    expect(verdicts.get("unknown")?.allowed).toBe(true);
+    expect(findMany).toHaveBeenCalledTimes(1);
+    expect(configFindUnique).toHaveBeenCalledTimes(1);
+    expect(certificationFindMany).toHaveBeenCalledTimes(1);
   });
 });

@@ -345,8 +345,11 @@ export async function callWithFallbackChain(
         fallbackOccurred: i > 0,
       }).catch((err) => console.error("[outcome] Failed to record:", err));
 
-      const pinnedMiss = decision.reason?.startsWith("WARNING: Pinned provider") ?? false;
-      const downgraded = i > 0 || pinnedMiss;
+      const preferenceMiss =
+        decision.preferenceResolution?.fallbackUsed === true;
+      const unavailablePreference =
+        decision.preferenceResolution?.unavailable[0] ?? null;
+      const downgraded = i > 0 || preferenceMiss;
       const raw = result.raw && typeof result.raw === "object"
         ? result.raw as Record<string, unknown>
         : null;
@@ -362,8 +365,10 @@ export async function callWithFallbackChain(
             : undefined,
         downgraded,
         downgradeMessage: downgraded
-          ? pinnedMiss
-            ? `${decision.reason?.split(". ")[0]}. Using ${provider.name} instead. Check AI Workforce settings to fix.`
+          ? preferenceMiss
+            ? unavailablePreference
+              ? `Preferred ${unavailablePreference.kind} "${unavailablePreference.value}" is unavailable. Using ${provider.name} instead. Check AI Workforce settings to fix.`
+              : `A configured AI routing preference is unavailable. Using ${provider.name} instead. Check AI Workforce settings to fix.`
             : `Switched to ${provider.name} after the preferred endpoint was unavailable.`
           : null,
         responseId: result.responseId,

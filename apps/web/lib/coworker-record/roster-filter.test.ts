@@ -77,7 +77,6 @@ function row(over: Partial<RosterRow> = {}): RosterRow {
     competencies: ["practitioner"],
     profileBound: true,
     emptyCorpus: false,
-    providerHealthy: true,
     openBlockers: 0,
     deferRate: 0,
     unmapped: false,
@@ -165,25 +164,33 @@ describe("matchesFilters", () => {
     ).toBe(false);
   });
 
-  it("matches a secondary service-defined owner area without duplicating the card", () => {
+  it("filters on the winning work area shown on the card", () => {
+    const multiAreaRow = row({
+      areas: [
+        {
+          key: "products_and_services_sold",
+          label: "Customers and sales",
+          order: 1,
+        },
+        {
+          key: "foundational",
+          label: "Platform and back office",
+          order: 4,
+        },
+      ],
+    });
+
     expect(
-      matchesFilters(
-        row({
-          areas: [
-            {
-              key: "products_and_services_sold",
-              label: "Customers and sales",
-              order: 1,
-            },
-            {
-              key: "foundational",
-              label: "Platform and back office",
-              order: 4,
-            },
-          ],
-        }),
-        { ...EMPTY_FILTERS, area: "products_and_services_sold" },
-      ),
+      matchesFilters(multiAreaRow, {
+        ...EMPTY_FILTERS,
+        area: "products_and_services_sold",
+      }),
+    ).toBe(false);
+    expect(
+      matchesFilters(multiAreaRow, {
+        ...EMPTY_FILTERS,
+        area: "foundational",
+      }),
     ).toBe(true);
   });
 
@@ -234,7 +241,6 @@ describe("attention and URL state", () => {
         }),
       ),
     ).toBe(true);
-    expect(needsAttention(row({ providerHealthy: false }))).toBe(true);
     expect(needsAttention(row({ openBlockers: 1 }))).toBe(true);
     expect(needsAttention(row({ coveragePct: 40 }))).toBe(false);
   });

@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "../generated/client/client";
 import { AI_WORKFORCE_PRODUCT_ID } from "./workforce-portfolio";
+import { MARKETING_CAMPAIGN_EXECUTION_TOOL_NAMES } from "./coworker-service-backing";
 
 type CoworkerServiceSeed = {
   ownerAreaSlug:
@@ -217,22 +218,24 @@ export const COWORKER_SERVICE_CATALOG_SERVICE_SEEDS: readonly CoworkerServiceSee
     authorityBoundary: "autonomous-allowed",
     personas: ["marketing", "strategist", "operator"],
     valueStreams: ["consume"],
+    archetypes: ["food-hospitality"],
     requiredInputs: [{ key: "business-context" }, { key: "campaign-goal" }],
     producedOutputs: [{ key: "campaign-plan" }, { key: "content-calendar" }, { key: "performance-rollup" }],
-    backingToolNames: [
-      "create_marketing_campaign",
-      "update_marketing_campaign",
-      "attach_to_campaign",
-      "get_campaign_plan",
-      "get_campaign_performance",
-      "get_content_calendar",
-      "build_tracked_links",
-    ],
+    backingToolNames: [...MARKETING_CAMPAIGN_EXECUTION_TOOL_NAMES],
     backingGrantKeys: ["marketing_read", "marketing_write"],
     costModel: { pricing: "internal", metering: "per-campaign" },
     contractTerms: { posture: "internal", approvalGate: "human-approval-before-external-publish" },
     dataBoundary: { sensitivity: "internal" },
-    metadata: { aggregate: true, family: "marketing-execution" },
+    metadata: {
+      aggregate: true,
+      family: "marketing-execution",
+      readinessProbe: {
+        taskType: "tool-action",
+        prompt:
+          "Create a draft marketing campaign for a restaurant promotion using the campaign tools.",
+        requiresToolUse: true,
+      },
+    },
   }),
   serviceSeed("svc-marketing-ab-testing", "marketing-specialist", {
     ownerAreaSlug: "products_and_services_sold",
@@ -406,6 +409,14 @@ export async function seedCoworkerServiceCatalog(prisma: PrismaClient): Promise<
       archetypes: { equals: ["software-and-platforms"] },
     },
     data: { archetypes: [] },
+  });
+
+  await prisma.coworkerService.updateMany({
+    where: {
+      serviceId: "svc-marketing-campaign-execution",
+      archetypes: { equals: [] },
+    },
+    data: { archetypes: ["food-hospitality"] },
   });
 
   await prisma.coworkerService.updateMany({

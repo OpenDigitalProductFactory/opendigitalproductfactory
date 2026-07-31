@@ -56,6 +56,9 @@ export type RosterServiceEvidence = {
   availabilityScope: unknown;
   personas: unknown;
   archetypes: unknown;
+  backingSkillIds: unknown;
+  backingToolNames: unknown;
+  backingGrantKeys: unknown;
   metadata?: unknown;
   portfolio?: { slug: string; name: string } | null;
 };
@@ -64,6 +67,10 @@ export type RosterAvailabilityInput = {
   services: readonly RosterServiceEvidence[];
   install: CoworkerInstallArchetypeResolution;
   readiness?: CoworkerAvailabilityReadiness;
+  readinessByServiceId?: ReadonlyMap<
+    string,
+    CoworkerAvailabilityReadiness
+  >;
 };
 
 export type CoworkerDiscoveryProjection = {
@@ -72,17 +79,28 @@ export type CoworkerDiscoveryProjection = {
   plainJob: string;
   interaction: CoworkerInteractionProjection;
   availability: CoworkerAvailabilityProjection;
+  serviceAvailability: CoworkerServiceAvailability[];
   canStartConversation: boolean;
   workSearchText: string;
+  primaryService: {
+    serviceId: string;
+    name: string;
+  } | null;
+};
+
+export type CoworkerServiceAvailability = {
+  serviceId: string;
+  serviceName: string;
+  availability: CoworkerAvailabilityProjection;
 };
 
 const AVAILABILITY_PRIORITY: Record<
   CoworkerAvailabilityProjection["state"],
   number
 > = {
-  "needs-attention": 0,
-  "setup-needed": 1,
-  available: 2,
+  available: 0,
+  "needs-attention": 1,
+  "setup-needed": 2,
   "coverage-not-defined": 3,
   "not-available": 4,
 };
@@ -149,8 +167,8 @@ export function projectCoworkerInteraction(
 export function projectRosterAvailability(
   input: RosterAvailabilityInput,
 ): CoworkerAvailabilityProjection {
-  const active = activeRosterServices(input.services);
-  if (active.length === 0) {
+  const serviceAvailability = projectRosterServiceAvailability(input);
+  if (serviceAvailability.length === 0) {
     return projectCoworkerAvailability({
       install: input.install.install,
       installResolutionReason: input.install.installResolutionReason,
@@ -162,25 +180,40 @@ export function projectRosterAvailability(
     });
   }
 
-  const readiness = input.readiness ?? {
-    status: "not-evaluated" as const,
-    reason: "Setup readiness has not been evaluated for this coworker.",
-  };
+  return primaryRosterServiceAvailability(serviceAvailability)!.availability;
+}
 
-  return active
-    .map((service) =>
-      projectCoworkerAvailability({
-        install: input.install.install,
-        installResolutionReason: input.install.installResolutionReason,
-        declarations: service.archetypes,
-        readiness,
-      }),
-    )
-    .sort(
-      (left, right) =>
-        AVAILABILITY_PRIORITY[left.state] -
-        AVAILABILITY_PRIORITY[right.state],
-    )[0]!;
+export function projectRosterServiceAvailability(
+  input: RosterAvailabilityInput,
+): CoworkerServiceAvailability[] {
+  return activeRosterServices(input.services).map((service) => {
+    const readiness =
+      input.readinessByServiceId?.get(service.serviceId) ??
+      input.readiness ?? {
+        status: "not-evaluated" as const,
+        reason: `Setup readiness has not been evaluated for ${service.name}.`,
+      };
+    const projection = projectCoworkerAvailability({
+      install: input.install.install,
+      installResolutionReason: input.install.installResolutionReason,
+      declarations: service.archetypes,
+      readiness,
+    });
+    return {
+      serviceId: service.serviceId,
+      serviceName: service.name,
+      availability: {
+        ...projection,
+        evidence: [
+          {
+            source: "coworker-service" as const,
+            values: [service.serviceId, service.name],
+          },
+          ...projection.evidence,
+        ],
+      },
+    };
+  });
 }
 
 export function rosterPlainJob(
@@ -210,10 +243,7 @@ export function rosterWorkSearchText(
 export function canStartCoworkerConversation(
   availability: CoworkerAvailabilityProjection,
 ): boolean {
-  return (
-    availability.matchLevel !== null &&
-    availability.state !== "needs-attention"
-  );
+  return availability.state === "available";
 }
 
 export function projectCoworkerServiceAuthority(input: {
@@ -276,22 +306,67 @@ export function projectCoworkerDiscovery(input: {
   services: readonly RosterServiceEvidence[];
   install: CoworkerInstallArchetypeResolution;
   readiness?: CoworkerAvailabilityReadiness;
+  readinessByServiceId?: ReadonlyMap<
+    string,
+    CoworkerAvailabilityReadiness
+  >;
 }): CoworkerDiscoveryProjection {
   const ownerAreas = projectCoworkerOwnerAreas(input.services);
-  const availability = projectRosterAvailability({
+  const availabilityInput = {
     services: input.services,
     install: input.install,
     readiness: input.readiness,
-  });
-  return {
-    area: ownerAreas.primary,
-    areas: ownerAreas.all,
-    plainJob: rosterPlainJob(input.agentDescription, input.services),
-    workSearchText: rosterWorkSearchText(input.services),
-    interaction: projectCoworkerInteraction(input.services),
-    availability,
-    canStartConversation: canStartCoworkerConversation(availability),
+    readinessByServiceId: input.readinessByServiceId,
   };
+  const serviceAvailability =
+    projectRosterServiceAvailability(availabilityInput);
+  const primaryService =
+    primaryRosterServiceAvailability(serviceAvailability);
+  const primaryServiceEvidence = primaryService
+    ? input.services.find(
+        (service) => service.serviceId === primaryService.serviceId,
+      ) ?? null
+    : null;
+  const availability = primaryService?.availability ??
+    projectRosterAvailability(availabilityInput);
+  const primaryArea = primaryServiceEvidence
+    ? projectCoworkerOwnerAreas([primaryServiceEvidence]).primary
+    : ownerAreas.primary;
+  const primarySummary = primaryServiceEvidence?.summary?.trim();
+  return {
+    area: primaryArea,
+    areas: ownerAreas.all,
+    plainJob:
+      primarySummary ||
+      primaryServiceEvidence?.name ||
+      rosterPlainJob(input.agentDescription, input.services),
+    workSearchText: rosterWorkSearchText(
+      primaryServiceEvidence ? [primaryServiceEvidence] : input.services,
+    ),
+    interaction: projectCoworkerInteraction(
+      primaryServiceEvidence ? [primaryServiceEvidence] : input.services,
+    ),
+    availability,
+    serviceAvailability,
+    canStartConversation: canStartCoworkerConversation(availability),
+    primaryService: primaryService
+      ? {
+          serviceId: primaryService.serviceId,
+          name: primaryService.serviceName,
+        }
+      : null,
+  };
+}
+
+function primaryRosterServiceAvailability(
+  services: readonly CoworkerServiceAvailability[],
+): CoworkerServiceAvailability | null {
+  return [...services].sort(
+    (left, right) =>
+      AVAILABILITY_PRIORITY[left.availability.state] -
+        AVAILABILITY_PRIORITY[right.availability.state] ||
+      left.serviceId.localeCompare(right.serviceId),
+  )[0] ?? null;
 }
 
 function isAggregate(value: unknown): boolean {

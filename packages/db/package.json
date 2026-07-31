@@ -8,6 +8,7 @@
     ".": "./src/index.ts",
     "./sysml-model-seed": "./src/sysml-model-seed.ts",
     "./coworker-service-catalog-seed": "./src/coworker-service-catalog-seed.ts",
+    "./coworker-service-backing": "./src/coworker-service-backing.ts",
     "./ea-validation": "./src/ea-validation.ts",
     "./graph-sync": "./src/graph-sync.ts",
     "./reference-model-projection": "./src/reference-model-projection.ts",

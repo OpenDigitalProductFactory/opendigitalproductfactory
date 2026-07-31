@@ -71,6 +71,7 @@ describe("DataTable render", () => {
     expect(html).toContain("Name");
     expect(html).toContain("Charlie");
     expect(html).toContain("font-mono"); // mono ID column
+    expect(html.match(/scope="col"/g)).toHaveLength(COLUMNS.length);
   });
 
   it("renders the empty state when there are no rows", () => {

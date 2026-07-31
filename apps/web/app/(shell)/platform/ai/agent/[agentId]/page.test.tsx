@@ -50,8 +50,33 @@ vi.mock("@/lib/auth", () => ({
   auth: vi.fn().mockResolvedValue({ user: { id: "u1", platformRole: "admin", isSuperuser: true } }),
 }));
 
-vi.mock("@/lib/permissions", () => ({
+vi.mock("@/lib/permissions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/permissions")>()),
   can: vi.fn().mockReturnValue(true),
+}));
+
+vi.mock("@/lib/coworker-service-catalog/route-readiness", () => ({
+  loadCoworkerRoutingReadinessSnapshot: vi.fn().mockResolvedValue({
+    endpoints: [],
+    policyRules: [],
+    overrides: [],
+    capacityByProvider: new Map(),
+    localOnlyInference: false,
+  }),
+  projectCoworkerRouteReadiness: vi.fn().mockResolvedValue({
+    ready: true,
+    reason: "A configured route satisfies this coworker's requirements.",
+    providerId: "openai",
+    modelId: "gpt-ready",
+  }),
+  parseCoworkerServiceReadinessProbe: vi.fn().mockReturnValue(null),
+}));
+
+vi.mock("@/lib/coworker-lifecycle/lifecycle-gate", () => ({
+  evaluateLifecycleGate: vi.fn().mockResolvedValue({
+    allowed: true,
+    reason: "Lifecycle policy allows dispatch.",
+  }),
 }));
 
 vi.mock("@/components/platform/AgentModelRoutingCard", () => ({
@@ -627,4 +652,5 @@ describe("AgentDetailPage", () => {
     expect(html).not.toContain("DecisionInteraction");
     expect(html).not.toContain("CoworkerActionEnvelope");
   });
+
 });

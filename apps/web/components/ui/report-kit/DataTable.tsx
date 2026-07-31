@@ -147,6 +147,7 @@ export function DataTable<T>({
               return (
                 <th
                   key={col.key}
+                  scope="col"
                   style={col.width ? { width: col.width } : undefined}
                   className={[
                     cellPad,

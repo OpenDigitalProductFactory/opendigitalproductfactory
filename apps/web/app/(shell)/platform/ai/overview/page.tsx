@@ -11,6 +11,8 @@ import { ProfessionCorpusPanel } from "@/components/platform/coworker-record/Pro
 import { WorkforceSummaryPanel } from "@/components/platform/coworker-record/WorkforceSummaryPanel";
 import { computeWorkforceSummary } from "@/lib/coworker-record/workforce-summary";
 import { OwnerFirstDisclosure } from "@/components/owner-first/OwnerFirstDisclosure";
+import { auth } from "@/lib/auth";
+import { getGrantedCapabilities } from "@/lib/permissions";
 
 type PageSearchParams = Record<string, string | string[] | undefined>;
 
@@ -19,14 +21,21 @@ export default async function PlatformAiOverviewPage({
 }: {
   searchParams?: Promise<PageSearchParams>;
 } = {}) {
-  const [{ rows, facets }, corpusSignals] = await Promise.all([
+  const [{ rows, facets }, corpusSignals, session] = await Promise.all([
     loadRoster(),
     loadProfessionCorpusSignals(),
+    auth(),
   ]);
   const initialQuery = toQueryString(
     searchParams ? await searchParams : {},
   );
   const summary = computeWorkforceSummary(rows);
+  const grantedCapabilities = session?.user
+    ? getGrantedCapabilities({
+        platformRole: session.user.platformRole,
+        isSuperuser: session.user.isSuperuser,
+      })
+    : [];
 
   return (
     <div>
@@ -44,6 +53,7 @@ export default async function PlatformAiOverviewPage({
           rows={rows}
           facets={facets}
           initialQuery={initialQuery}
+          grantedCapabilities={grantedCapabilities}
         />
       ) : (
         <div className="border-l-2 border-[var(--dpf-accent)] py-1 pl-4">

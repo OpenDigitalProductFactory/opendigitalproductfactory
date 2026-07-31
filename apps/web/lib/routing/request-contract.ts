@@ -13,6 +13,7 @@
 import { randomUUID } from "crypto";
 import type { ModelClass } from "./model-card-types";
 import { classifyTask } from "./task-classifier";
+import type { TaskRequirement } from "./task-router-types";
 
 // ── RequestContract type ────────────────────────────────────────────────────
 
@@ -120,31 +121,31 @@ function normalizeProviderIds(providerIds: string[]): string[] {
 
 // ── Contract inference ──────────────────────────────────────────────────────
 
+export type RequestRouteContext = {
+  sensitivity?: RequestContract["sensitivity"];
+  interactionMode?: RequestContract["interactionMode"];
+  maxLatencyMs?: number;
+  budgetClass?: RequestContract["budgetClass"];
+  residencyPolicy?: RequestContract["residencyPolicy"];
+  allowedProviders?: string[];
+  deniedProviders?: string[];
+  openRouterObligations?: import("./provider-suitability/types").OpenRouterPolicyObligations;
+  requiresCodeExecution?: boolean;
+  requiresWebSearch?: boolean;
+  requiresComputerUse?: boolean;
+  requiredModelClass?: ModelClass;
+  reasoningDepth?: RequestContract["reasoningDepth"];
+  minimumTier?: string;
+  minimumDimensions?: Record<string, number>;
+};
+
 export async function inferContract(
   taskType: string,
   messages: Array<{ role: string; content: unknown }>,
   tools?: Array<Record<string, unknown>>,
   outputSchema?: Record<string, unknown>,
-  routeContext?: {
-    sensitivity?: string;
-    interactionMode?: string;
-    maxLatencyMs?: number;
-    budgetClass?: string;
-    residencyPolicy?: string;
-    allowedProviders?: string[];
-    deniedProviders?: string[];
-    openRouterObligations?: import("./provider-suitability/types").OpenRouterPolicyObligations;
-    requiresCodeExecution?: boolean;
-    requiresWebSearch?: boolean;
-    requiresComputerUse?: boolean;
-    requiredModelClass?: ModelClass;
-    // EP-GOLDEN-TRIANGLE Slice 3: posture-compiler caller overrides (additive).
-    // The Golden Triangle compiler maps a posture into these fields; when absent,
-    // existing behaviour is unchanged.
-    reasoningDepth?: string;
-    minimumTier?: string;
-    minimumDimensions?: Record<string, number>;
-  },
+  routeContext?: RequestRouteContext,
+  taskRequirement?: TaskRequirement | null,
 ): Promise<RequestContract> {
   // ── Deterministic flags ─────────────────────────────────────────────────
   const requiresTools = tools !== undefined && tools.length > 0;
@@ -227,12 +228,16 @@ export async function inferContract(
   // it supplies the tier floor (below) plus routing-posture defaults (budget class,
   // reasoning depth, residency) so the matrix is load-bearing, not advisory.
   // Dynamic import mirrors the tier-floor lookup and avoids a static import cycle.
-  let taskReq: import("./task-router-types").TaskRequirement | undefined;
-  try {
-    const { getTaskRequirement } = await import("./task-requirements");
-    taskReq = await getTaskRequirement(taskType);
-  } catch {
-    taskReq = undefined;
+  let taskReq: TaskRequirement | undefined;
+  if (taskRequirement === undefined) {
+    try {
+      const { getTaskRequirement } = await import("./task-requirements");
+      taskReq = await getTaskRequirement(taskType);
+    } catch {
+      taskReq = undefined;
+    }
+  } else {
+    taskReq = taskRequirement ?? undefined;
   }
 
   // budgetClass: explicit caller override wins, then the task requirement's

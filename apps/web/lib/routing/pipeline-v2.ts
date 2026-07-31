@@ -31,9 +31,13 @@ import { satisfiesMinimumCapabilities } from "./agent-capability-types";
 import {
   estimateSuccessProbability,
   rankByCostPerSuccess,
+  satisfiesMinimumDimensions,
 } from "./cost-ranking";
-import { computeFitness } from "./scoring";
 import { selectRecipeWithExploration } from "./champion-challenger";
+import {
+  selectEndpointPreference,
+  type EndpointPreferences,
+} from "./preference-finalization";
 import {
   attachHarnessRecipeToPlan,
   buildPlanFromRecipe,
@@ -88,6 +92,10 @@ export function getExclusionReasonV2(
     if (!check.satisfied) {
       return `Agent requires capability '${check.missingCapability}' (EP-AGENT-CAP-002)`;
     }
+  }
+
+  if (!satisfiesMinimumDimensions(ep, contract.minimumDimensions)) {
+    return "Minimum quality dimensions not met";
   }
 
   // Status check — only active and degraded pass
@@ -315,11 +323,13 @@ function filterHardV2(
  * ranking, returning a RouteDecision with a complete audit trail.
  *
  * Stages:
- *   Stage 1: Pin/Block overrides
+ *   Stage 1: Explicit block overrides
  *   Stage 2: Policy filter (filterByPolicy)
  *   Stage 3: Hard filter (getExclusionReasonV2)
  *   Stage 4: Cost-per-success ranking
  *   Stage 5: Capacity penalty (EP-INF-004)
+ *   Stage 6: Eligible preference finalization (pin/provider/model)
+ *   Stage 7: Fallback chain and execution plan
  *   Stage 6: Select winner + build fallback chain
  */
 export async function routeEndpointV2(
@@ -339,6 +349,8 @@ export async function routeEndpointV2(
     skipRecipe?: boolean;
     activityContract?: ActivityContract;
     activityHarnessConfidenceOverrides?: ActivityHarnessConfidenceOverride[];
+    /** Preferences are evaluated only after the complete eligibility pipeline. */
+    preferences?: EndpointPreferences;
     /**
      * Optional ProviderCapacityStatus map (providerId → snapshot). When
      * omitted, the pipeline loads fresh rows from the DB (BI-3607DDDA). Tests
@@ -353,79 +365,11 @@ export async function routeEndpointV2(
   const allExcludedReasons: string[] = [];
   const sensitivity: SensitivityLevel = contract.sensitivity;
 
-  // ── Stage 1: Pin check ──────────────────────────────────────────────────
   const pinnedOverride = overrides.find(
     (o) => o.pinned && o.taskType === contract.taskType,
   );
 
-  if (pinnedOverride) {
-    const pinnedEp = endpoints.find((e) => e.id === pinnedOverride.endpointId);
-    // A pin is a routing preference, not authority to bypass a provider fence.
-    // When the pinned provider is outside the effective set, continue through
-    // the normal pipeline so it is excluded with the canonical hard-filter
-    // reason and another eligible endpoint may be selected.
-    if (pinnedEp && getProviderConstraintExclusionReason(pinnedEp, contract) === null) {
-      // Use legacy computeFitness for pin override scoring
-      const dummyReq = {
-        taskType: contract.taskType,
-        description: "",
-        selectionRationale: "",
-        requiredCapabilities: {},
-        preferredMinScores: {},
-        preferCheap: false,
-      };
-      const { fitness, dimensionScores } = computeFitness(
-        pinnedEp,
-        dummyReq,
-        endpoints,
-      );
-
-      for (const ep of endpoints) {
-        if (ep.id === pinnedEp.id) continue;
-        const result = computeFitness(ep, dummyReq, endpoints);
-        allCandidates.push({
-          endpointId: ep.id,
-          providerId: ep.providerId,
-          modelId: ep.modelId,
-          endpointName: ep.name,
-          fitnessScore: result.fitness,
-          dimensionScores: result.dimensionScores,
-          costPerOutputMToken: ep.costPerOutputMToken,
-          excluded: true,
-          excludedReason: "Overridden by pinned endpoint",
-        });
-      }
-
-      return {
-        selectedEndpoint: pinnedEp.id,
-        selectedModelId: pinnedEp.modelId,
-        reason: `Pinned override: ${pinnedEp.name} (${pinnedEp.providerId}) forced for task type '${contract.taskType}'. Fitness: ${fitness.toFixed(1)}.`,
-        fitnessScore: fitness,
-        fallbackChain: [],
-        candidates: [
-          {
-            endpointId: pinnedEp.id,
-            providerId: pinnedEp.providerId,
-            modelId: pinnedEp.modelId,
-            endpointName: pinnedEp.name,
-            fitnessScore: fitness,
-            dimensionScores,
-            costPerOutputMToken: pinnedEp.costPerOutputMToken,
-            excluded: false,
-          },
-          ...allCandidates,
-        ],
-        excludedCount: allCandidates.length,
-        excludedReasons: ["Overridden by pinned endpoint"],
-        policyRulesApplied: [],
-        taskType: contract.taskType,
-        sensitivity,
-        timestamp,
-      };
-    }
-  }
-
-  // ── Stage 1b: Block — remove blocked endpoints ──────────────────────────
+  // ── Stage 1: Block — remove blocked endpoints ───────────────────────────
   const blockedIds = new Set(
     overrides
       .filter((o) => o.blocked && o.taskType === contract.taskType)
@@ -559,14 +503,34 @@ export async function routeEndpointV2(
     ep.providerTier === "user_configured" ? 0 : 1;
   ranked.sort((a, b) => tierOrder(a.endpoint) - tierOrder(b.endpoint));
 
-  // ── Stage 6: Select winner + build fallback chain ──────────────────────
-  const winner = ranked[0]!;
+  // ── Stage 6: Finalize eligible preferences ──────────────────────────────
+  // Persisted endpoint pins and per-coworker provider/model assignments are
+  // preferences, never authority. They can select only from the set that has
+  // cleared override blocks, policy, contract, cooldown, and capacity fences.
+  const preferenceSelection = selectEndpointPreference(
+    ranked.map((entry) => ({
+      endpointId: entry.endpoint.id,
+      providerId: entry.endpoint.providerId,
+      modelId: entry.endpoint.modelId,
+      entry,
+    })),
+    {
+      ...(pinnedOverride
+        ? { pinnedEndpointId: pinnedOverride.endpointId }
+        : {}),
+      ...(opts?.preferences ?? {}),
+    },
+  );
+  const winner = preferenceSelection.winner.entry;
+  const rankedWithoutWinner = ranked.filter((entry) => entry !== winner);
+
+  // ── Stage 7: Build fallback chain ───────────────────────────────────────
   // Select up to 3 fallbacks, preferring provider diversity.
   // If all top-ranked endpoints are from the same provider and that provider
   // goes down (or runs out of credits), retrying the same provider is useless.
   const fallbackEntries: typeof ranked = [];
   const seenProviders = new Set([winner.endpoint.providerId]);
-  for (const candidate of ranked.slice(1)) {
+  for (const candidate of rankedWithoutWinner) {
     if (fallbackEntries.length >= 3) break;
     // Prefer a new provider; if we haven't found 3 diverse ones, accept same-provider
     if (!seenProviders.has(candidate.endpoint.providerId)) {
@@ -576,7 +540,7 @@ export async function routeEndpointV2(
   }
   // If we didn't fill 3 slots from diverse providers, fill remainder from same-provider
   if (fallbackEntries.length < 3) {
-    for (const candidate of ranked.slice(1)) {
+    for (const candidate of rankedWithoutWinner) {
       if (fallbackEntries.length >= 3) break;
       if (!fallbackEntries.includes(candidate)) {
         fallbackEntries.push(candidate);
@@ -633,12 +597,16 @@ export async function routeEndpointV2(
   // Always include winner in fallback chain too
   const fullFallbackChain = [winner.endpoint.id, ...fallbackChain];
 
+  const preferenceReason = preferenceSelection.resolution
+    ? ` Preferences: ${preferenceSelection.resolution.applied.length} applied, ` +
+      `${preferenceSelection.resolution.unavailable.length} unavailable.`
+    : "";
   const reason =
     `Selected ${winner.endpoint.name} (${winner.endpoint.providerId}) for task type '${contract.taskType}' ` +
     `with rankScore ${winner.rankScore.toFixed(1)}. ` +
     `Budget: ${contract.budgetClass}, reasoning depth: ${contract.reasoningDepth}. ` +
     `${allCandidates.length} endpoint(s) excluded; ` +
-    `${ranked.length} candidate(s) ranked.`;
+    `${ranked.length} candidate(s) ranked.${preferenceReason}`;
 
   return {
     selectedEndpoint: winner.endpoint.id,
@@ -650,6 +618,9 @@ export async function routeEndpointV2(
     excludedCount: allCandidates.length,
     excludedReasons: allExcludedReasons,
     policyRulesApplied: policyResult.applied,
+    ...(preferenceSelection.resolution
+      ? { preferenceResolution: preferenceSelection.resolution }
+      : {}),
     taskType: contract.taskType,
     sensitivity,
     timestamp,

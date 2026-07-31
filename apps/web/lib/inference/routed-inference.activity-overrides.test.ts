@@ -293,6 +293,41 @@ describe("routeAndCall activity harness overrides", () => {
     );
   });
 
+  it("passes the same provider and model preferences to preview and live routing", async () => {
+    const options = {
+      taskType: "summarization",
+      preferredProviderId: "openai",
+      preferredModelId: "gpt-4o-mini",
+      persistDecision: false,
+    };
+
+    await previewRoute(
+      [{ role: "user", content: "Summarize this transcript." }],
+      "internal",
+      options,
+    );
+    const previewRoutingOptions = mocks.routeEndpointV2.mock.calls.at(-1)?.[4];
+
+    await routeAndCall(
+      [{ role: "user", content: "Summarize this transcript." }],
+      "You summarize.",
+      "internal",
+      options,
+    );
+    const liveRoutingOptions = mocks.routeEndpointV2.mock.calls.at(-1)?.[4];
+
+    expect(previewRoutingOptions).toMatchObject({
+      skipRecipe: true,
+      preferences: {
+        preferredProviderId: "openai",
+        preferredModelId: "gpt-4o-mini",
+      },
+    });
+    expect(liveRoutingOptions).toMatchObject({
+      preferences: previewRoutingOptions.preferences,
+    });
+  });
+
   it("binds the compiled policy to routeEndpointV2 and emits an account-scoped receipt", async () => {
     const result = await routeAndCall(
       [{ role: "user", content: "Summarize this customer update." }],

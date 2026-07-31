@@ -64,7 +64,6 @@ function row(over: Partial<RosterRow> = {}): RosterRow {
     competencies: ["practitioner"],
     profileBound: true,
     emptyCorpus: false,
-    providerHealthy: true,
     openBlockers: 0,
     deferRate: 0,
     unmapped: false,
@@ -80,7 +79,7 @@ describe("computeWorkforceSummary", () => {
     expect(s.byKind).toEqual([]);
     expect(s.byFamily).toEqual([]);
     expect(s.familiesRepresented).toBe(0);
-    expect(s.health.providerHealthy).toBe(0);
+    expect(s.health.conversationReady).toBe(0);
     expect(s.naming.needsAttention).toBe(0);
   });
 
@@ -109,15 +108,15 @@ describe("computeWorkforceSummary", () => {
     expect(s.byFamily.reduce((n, b) => n + b.count, 0)).toBe(4);
   });
 
-  it("rolls up provider health, unmapped roles, blockers, and low coverage", () => {
+  it("rolls up conversation availability, unmapped roles, blockers, and low coverage", () => {
     const s = computeWorkforceSummary([
-      row({ providerHealthy: true, openBlockers: 0, coveragePct: 90 }),
-      row({ providerHealthy: false, openBlockers: 2, coveragePct: 90 }),
+      row({ canStartConversation: true, openBlockers: 0, coveragePct: 90 }),
+      row({ canStartConversation: false, openBlockers: 2, coveragePct: 90 }),
       row({ unmapped: true, familyKey: null, coveragePct: null }),
-      row({ providerHealthy: true, openBlockers: 1, coveragePct: 40 }),
+      row({ canStartConversation: true, openBlockers: 1, coveragePct: 40 }),
     ]);
-    expect(s.health.providerHealthy).toBe(3);
-    expect(s.health.providerDegraded).toBe(1);
+    expect(s.health.conversationReady).toBe(3);
+    expect(s.health.conversationUnavailable).toBe(1);
     expect(s.health.unmappedRole).toBe(1);
     expect(s.health.withOpenBlockers).toBe(2);
     expect(s.health.openBlockersTotal).toBe(3);

@@ -10,7 +10,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { MessageSquare, Settings2 } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { can } from "@/lib/permissions";
+import { can, getGrantedCapabilities } from "@/lib/permissions";
 import { AgentModelRoutingCard } from "@/components/platform/AgentModelRoutingCard";
 import { CapabilitiesEditor } from "@/components/platform/coworker-record/CapabilitiesEditor";
 import { RecordActionsMenu } from "@/components/platform/coworker-record/RecordActionsMenu";
@@ -28,6 +28,17 @@ import {
 } from "@/lib/coworker-self-assessment/review-service";
 import { resolveInstallVariantContext } from "@/lib/decision-perspective/install-variant-context";
 import { knownGrantKeys } from "@/lib/tak/agent-grants";
+import {
+  evaluateCoworkerServiceReadiness,
+} from "@/lib/coworker-service-catalog/service-readiness";
+import {
+  loadCoworkerRoutingReadinessSnapshot,
+  parseCoworkerServiceReadinessProbe,
+  projectCoworkerRouteReadiness,
+} from "@/lib/coworker-service-catalog/route-readiness";
+import { evaluateLifecycleGate } from "@/lib/coworker-lifecycle/lifecycle-gate";
+import { availabilityRecoveryTarget } from "@/lib/coworker-record/availability-recovery";
+import { VERIFIED_COWORKER_SERVICE_TOOL_NAMES } from "@/lib/coworker-service-catalog/registered-service-tools";
 import {
   getWorkPatternReadModel,
   type WorkPatternReadModel,
@@ -146,17 +157,17 @@ export default async function AgentDetailPage({
     activeProviders,
     assignedSkillRows,
     catalogSkillRows,
-    allProviderStatuses,
+    routingReadinessSnapshot,
     capabilityNeedReview,
     workPatternReadModel,
   ] =
     await Promise.all([
       auth(),
-      prisma.agentModelConfig.findUnique({ where: { agentId: agent.agentId } }).catch(() => null),
+      prisma.agentModelConfig.findUnique({ where: { agentId: record.runtime.agentId } }).catch(() => null),
       prisma.$queryRaw<Array<{ agentId: string; providerId: string }>>`
         SELECT DISTINCT ON ("agentId") "agentId", "providerId"
         FROM "AgentMessage"
-        WHERE "role" = 'assistant' AND "agentId" = ${agent.agentId} AND "providerId" IS NOT NULL
+        WHERE "role" = 'assistant' AND "agentId" = ${record.runtime.agentId} AND "providerId" IS NOT NULL
         ORDER BY "agentId", "createdAt" DESC
         LIMIT 1
       `.catch(() => [] as Array<{ agentId: string; providerId: string }>),
@@ -175,7 +186,7 @@ export default async function AgentDetailPage({
       }).catch(() => []),
       prisma.skillAssignment
         .findMany({
-          where: { agentId: agent.agentId, enabled: true },
+          where: { agentId: record.runtime.agentId, enabled: true },
           orderBy: { priority: "desc" },
           select: { skill: { select: { skillId: true, name: true, capability: true } } },
         })
@@ -187,10 +198,17 @@ export default async function AgentDetailPage({
           select: { skillId: true, name: true, category: true, riskBand: true },
         })
         .catch(() => [] as Array<{ skillId: string; name: string; category: string; riskBand: string }>),
-      // Provider statuses for the summary health chip (mirrors roster.ts logic).
-      prisma.modelProvider.findMany({ select: { providerId: true, status: true } }).catch(() => []),
-      getCoworkerCapabilityNeedReview({ agentId: agent.agentId }).catch(() => emptyNeedReview()),
-      getWorkPatternReadModel({ agentId: agent.agentId }).catch(() => emptyWorkPatternReadModel()),
+      loadCoworkerRoutingReadinessSnapshot(
+        [record.runtime.agentId],
+        record.services
+          .map((service) =>
+            parseCoworkerServiceReadinessProbe(service.metadata),
+          )
+          .filter((probe) => probe !== null)
+          .map((probe) => probe.taskType),
+      ),
+      getCoworkerCapabilityNeedReview({ agentId: record.runtime.agentId }).catch(() => emptyNeedReview()),
+      getWorkPatternReadModel({ agentId: record.runtime.agentId }).catch(() => emptyWorkPatternReadModel()),
     ]);
 
   const canWrite = !!session?.user && can(
@@ -217,24 +235,70 @@ export default async function AgentDetailPage({
         (modelConfig?.minimumTier as keyof typeof QUALITY_TIER_LABELS) ?? "adequate"
       ] ?? "Adequate";
   const priorityLabel = BUDGET_CLASS_LABELS[modelConfig?.budgetClass ?? "balanced"] ?? "Balanced";
-  // Provider health: a pinned provider must be active; unpinned coworkers are
-  // healthy by default (the router picks an active provider) — same rule as roster.ts.
-  const providerStatusById = new Map(allProviderStatuses.map((p) => [p.providerId, p.status]));
-  const pinnedProvider = modelConfig?.pinnedProviderId ?? null;
-  const providerHealthy = !pinnedProvider || providerStatusById.get(pinnedProvider) === "active";
-
-  const summary = {
-    modelTier,
-    priority: priorityLabel,
-    skillCount: assignedSkills.length,
-    toolCount: agent.toolGrants.length,
-    hitlTier: agent.hitlTierDefault,
-    providerHealthy,
-  };
+  const routeConfiguration = {
+      agentId: record.runtime.agentId,
+      sensitivity: agent.sensitivity,
+      minimumTier: modelConfig?.minimumTier ?? "adequate",
+      pinnedProviderId: modelConfig?.pinnedProviderId ?? null,
+      pinnedModelId: modelConfig?.pinnedModelId ?? null,
+      budgetClass: modelConfig?.budgetClass ?? "balanced",
+      minimumCapabilities: modelConfig?.minimumCapabilities ?? null,
+      minimumContextTokens: modelConfig?.minimumContextTokens ?? null,
+    };
+  const lifecycleVerdict = await evaluateLifecycleGate(
+    record.runtime.agentId,
+    { purpose: "chat" },
+  );
+  const routeReadinessByServiceId = new Map(
+    await Promise.all(
+      record.services.map(async (service) => {
+        const probe = parseCoworkerServiceReadinessProbe(service.metadata);
+        const readiness = probe
+          ? await projectCoworkerRouteReadiness(
+              routeConfiguration,
+              routingReadinessSnapshot,
+              probe,
+            )
+          : {
+              ready: false,
+              reason:
+                "No representative service task is declared for readiness.",
+            };
+        return [service.serviceId, readiness] as const;
+      }),
+    ),
+  );
   const discovery = projectCoworkerDiscovery({
     agentDescription: agent.description,
     services: record.services,
     install: record.installAvailability,
+    readinessByServiceId: new Map(
+      record.services.map((service) => {
+        const routeReadiness = routeReadinessByServiceId.get(
+          service.serviceId,
+        )!;
+        return [
+          service.serviceId,
+          evaluateCoworkerServiceReadiness(service, {
+            assignedSkillIds: record.runtime.assignedSkillIds,
+            registeredToolNames: VERIFIED_COWORKER_SERVICE_TOOL_NAMES,
+            heldGrantKeys: record.runtime.heldGrantKeys,
+            probeDefined:
+              parseCoworkerServiceReadinessProbe(service.metadata) !== null,
+            lifecycleReady: lifecycleVerdict.allowed,
+            lifecycleBlockerReason: lifecycleVerdict.allowed
+              ? undefined
+              : lifecycleVerdict.reason,
+            routeReady: routeReadiness.ready,
+            routeBlockerReason: routeReadiness.ready
+              ? undefined
+              : routeReadiness.reason,
+            blockingCapabilityNeedCount:
+              capabilityNeedReview.summary.byStatus["blocked"] ?? 0,
+          }),
+        ] as const;
+      }),
+    ),
   });
   const {
     area,
@@ -242,13 +306,30 @@ export default async function AgentDetailPage({
     availability,
     canStartConversation,
     plainJob,
+    primaryService,
   } = discovery;
+  const summary = {
+    modelTier,
+    priority: priorityLabel,
+    skillCount: assignedSkills.length,
+    toolCount: record.runtime.heldGrantKeys.length,
+    hitlTier: agent.hitlTierDefault,
+    conversationReady: canStartConversation,
+  };
   const interactionLabel = interaction.labels.join(", ");
-  const coverageSetupHref = availability.reason
-    .toLowerCase()
-    .includes("business type")
-    ? "/storefront/settings/business"
-    : "/platform/ai/readiness";
+  const detailRoute = `/platform/ai/agent/${encodeURIComponent(agent.agentId)}`;
+  const recovery = availabilityRecoveryTarget(
+    availability,
+    `${detailRoute}?returnTo=${encodeURIComponent(returnTo)}`,
+    new Set(
+      session?.user
+        ? getGrantedCapabilities({
+            platformRole: session.user.platformRole,
+            isSuperuser: session.user.isSuperuser,
+          })
+        : [],
+    ),
+  );
   const authority = projectCoworkerServiceAuthority({
     agent: {
       agentId: agent.agentId,
@@ -263,14 +344,12 @@ export default async function AgentDetailPage({
       : { state: "not-configured" },
     services: record.services,
   });
-  const detailRoute = `/platform/ai/agent/${encodeURIComponent(agent.agentId)}`;
-
   const capabilitiesEditor = (
     <CapabilitiesEditor
-      agentCuid={agent.id}
-      agentBusinessId={agent.agentId}
-      slugId={agent.slugId}
-      heldGrants={agent.toolGrants.map((g) => g.grantKey)}
+      agentCuid={record.runtime.id}
+      agentBusinessId={record.runtime.agentId}
+      slugId={record.runtime.slugId}
+      heldGrants={record.runtime.heldGrantKeys}
       allGrantKeys={knownGrantKeys()}
       assignedSkills={assignedSkills}
       catalogSkills={catalogSkillRows}
@@ -280,7 +359,7 @@ export default async function AgentDetailPage({
 
   const routingCard = (
     <AgentModelRoutingCard
-      agentId={agent.agentId}
+      agentId={record.runtime.agentId}
       minimumTier={modelConfig?.minimumTier ?? "adequate"}
       budgetClass={modelConfig?.budgetClass ?? "balanced"}
       pinnedProviderId={modelConfig?.pinnedProviderId ?? null}
@@ -326,7 +405,7 @@ export default async function AgentDetailPage({
     {
       id: "capabilities",
       label: "Capabilities",
-      badge: String(agent.toolGrants.length),
+      badge: String(record.runtime.heldGrantKeys.length),
     },
     {
       id: "autonomy",
@@ -371,34 +450,30 @@ export default async function AgentDetailPage({
             <p className="mt-2 max-w-3xl text-sm leading-5 text-[var(--dpf-text-secondary)]">
               {plainJob}
             </p>
+            {primaryService && (
+              <p className="mt-1 text-xs font-medium text-[var(--dpf-muted)]">
+                Ready work: {primaryService.name}
+              </p>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {canStartConversation && (
               <AskCoworkerButton
                 routeContext={detailRoute}
-                label="Ask this coworker"
-                className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--dpf-accent)] px-3 text-sm font-semibold text-[var(--dpf-accent)] hover:bg-[var(--dpf-surface-2)]"
+                label={`Ask ${agent.displayName}`}
+                className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--dpf-accent)] bg-[var(--dpf-accent)] px-3 text-sm font-semibold text-[var(--dpf-accent-contrast)] hover:brightness-95"
               >
                 <MessageSquare aria-hidden className="h-4 w-4" />
-                <span>Ask this coworker</span>
+                <span>{`Ask ${agent.displayName}`}</span>
               </AskCoworkerButton>
             )}
-            {availability.state === "setup-needed" && (
+            {recovery && (
               <Link
-                href="/setup"
+                href={recovery.href}
                 className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--dpf-border)] px-3 text-sm font-semibold text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
               >
                 <Settings2 aria-hidden className="h-4 w-4" />
-                Finish setup
-              </Link>
-            )}
-            {availability.state === "coverage-not-defined" && (
-              <Link
-                href={coverageSetupHref}
-                className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[var(--dpf-border)] px-3 text-sm font-semibold text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
-              >
-                <Settings2 aria-hidden className="h-4 w-4" />
-                Review availability
+                {recovery.label}
               </Link>
             )}
             <RecordActionsMenu
@@ -422,7 +497,11 @@ export default async function AgentDetailPage({
           <OwnerStatus
             label="Work includes"
             value={interactionLabel}
-            detail="Interaction across this coworker's declared services."
+            detail={
+              canStartConversation
+                ? "Interaction for currently available work."
+                : "Interaction declared for this coworker's best-matching work."
+            }
           />
           <OwnerStatus
             label="Availability"
@@ -471,22 +550,28 @@ export default async function AgentDetailPage({
         <div className="space-y-5">
           <section>
             <h2 className="text-base font-semibold text-[var(--dpf-text)]">
-              Work offered now
+              Ready work
             </h2>
             <div className="mt-2">
-              <WorkHighlights services={record.services} />
+              <WorkHighlights
+                services={record.services}
+                serviceAvailability={discovery.serviceAvailability}
+              />
             </div>
           </section>
           <AdvancedDetail summary="Operational profile">
             <OverviewPanel record={record} summary={summary} />
           </AdvancedDetail>
         </div>
-        <WorkOfferedPanel services={record.services} />
+        <WorkOfferedPanel
+          services={record.services}
+          serviceAvailability={discovery.serviceAvailability}
+        />
         <AvailabilityPanel
           availability={availability}
+          serviceAvailability={discovery.serviceAvailability}
           authority={authority}
           interactionLabel={interactionLabel}
-          canStartConversation={canStartConversation}
           installArchetypeId={
             record.installAvailability.install?.archetypeId ?? null
           }

@@ -19,17 +19,33 @@ export type CoworkerInstallArchetype = {
 export type CoworkerAvailabilityEvidence = {
   source:
     | "storefront-archetype"
+    | "coworker-service"
     | "coworker-service-archetypes"
     | "readiness-evaluation"
+    | "readiness-detail"
     | "availability-blocker"
     | "setup-prerequisite";
   values: string[];
+};
+
+export type CoworkerAvailabilityRecoveryKind =
+  | "business-type"
+  | "catalog"
+  | "capabilities"
+  | "capability-needs"
+  | "lifecycle"
+  | "routing";
+
+export type CoworkerAvailabilityRecovery = {
+  kind: CoworkerAvailabilityRecoveryKind;
+  label: string;
 };
 
 type ApplicableProjection = {
   matchLevel: Exclude<CoworkerAvailabilityMatchLevel, null>;
   reason: string;
   evidence: CoworkerAvailabilityEvidence[];
+  recovery?: CoworkerAvailabilityRecovery;
 };
 
 export type CoworkerAvailabilityProjection =
@@ -51,6 +67,7 @@ export type CoworkerAvailabilityProjection =
       reason: string;
       matchLevel: null;
       evidence: CoworkerAvailabilityEvidence[];
+      recovery?: CoworkerAvailabilityRecovery;
     }
   | {
       state: "coverage-not-defined";
@@ -58,6 +75,7 @@ export type CoworkerAvailabilityProjection =
       reason: string;
       matchLevel: CoworkerAvailabilityMatchLevel;
       evidence: CoworkerAvailabilityEvidence[];
+      recovery?: CoworkerAvailabilityRecovery;
     };
 
 export type CoworkerAvailabilityReadiness =
@@ -65,6 +83,8 @@ export type CoworkerAvailabilityReadiness =
       status: "evaluated";
       blockers: readonly string[];
       missingPrerequisites: readonly string[];
+      details?: readonly string[];
+      recovery?: CoworkerAvailabilityRecovery;
     }
   | {
       status: "not-evaluated";
@@ -151,6 +171,8 @@ export function projectCoworkerAvailability(
       input.installResolutionReason ??
         "Your business type could not be resolved from the storefront configuration.",
       installEvidence(input.install, input.installResolutionReason),
+      null,
+      "business-type",
     );
   }
 
@@ -207,6 +229,11 @@ export function projectCoworkerAvailability(
     source: "readiness-evaluation",
     values: ["evaluated"],
   };
+  const readinessDetails = normalizedFacts(input.readiness.details);
+  const detailEvidence: CoworkerAvailabilityEvidence[] =
+    readinessDetails.length > 0
+      ? [{ source: "readiness-detail", values: readinessDetails }]
+      : [];
   const blockers = normalizedFacts(input.readiness.blockers);
   if (blockers.length > 0) {
     return {
@@ -217,11 +244,15 @@ export function projectCoworkerAvailability(
       evidence: [
         ...baseEvidence,
         readinessEvidence,
+        ...detailEvidence,
         {
           source: "availability-blocker",
           values: blockers,
         },
       ],
+      ...(input.readiness.recovery
+        ? { recovery: input.readiness.recovery }
+        : {}),
     };
   }
 
@@ -235,11 +266,15 @@ export function projectCoworkerAvailability(
       evidence: [
         ...baseEvidence,
         readinessEvidence,
+        ...detailEvidence,
         {
           source: "setup-prerequisite",
           values: missingPrerequisites,
         },
       ],
+      ...(input.readiness.recovery
+        ? { recovery: input.readiness.recovery }
+        : {}),
     };
   }
 
@@ -251,7 +286,7 @@ export function projectCoworkerAvailability(
         ? `This coworker explicitly supports the ${install.archetypeId} business type.`
         : `This coworker supports the ${install.category} business category.`,
     matchLevel,
-    evidence: [...baseEvidence, readinessEvidence],
+    evidence: [...baseEvidence, readinessEvidence, ...detailEvidence],
   };
 }
 
@@ -329,6 +364,7 @@ function coverageNotDefined(
   reason: string,
   evidence: CoworkerAvailabilityEvidence[],
   matchLevel: CoworkerAvailabilityMatchLevel = null,
+  recoveryKind: "business-type" | "catalog" = "catalog",
 ): CoworkerAvailabilityProjection {
   return {
     state: "coverage-not-defined",
@@ -336,6 +372,13 @@ function coverageNotDefined(
     reason,
     matchLevel,
     evidence,
+    recovery: {
+      kind: recoveryKind,
+      label:
+        recoveryKind === "business-type"
+          ? "Review business type"
+          : "Platform update required",
+    },
   };
 }
 

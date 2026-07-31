@@ -1,7 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { CoworkerCatalogView } from "./CoworkerCatalogView";
+import {
+  CoworkerCatalogView,
+  projectOfferPresentation,
+} from "./CoworkerCatalogView";
 import type { CoworkerCatalog } from "@/lib/coworker-service-catalog/catalog";
 
 const catalog: CoworkerCatalog = {
@@ -51,15 +54,15 @@ const catalog: CoworkerCatalog = {
 
 catalog.offers = [
   {
-    offerId: "offer-arcamanus-legal-packet",
+    offerId: "offer-example-works-legal-packet",
     serviceId: "svc-legal-packets",
     serviceName: "Prepare attorney-review packet",
-    name: "Arcamanus/DPF legal packet review",
+    name: "Example Works legal packet review",
     summary: "Internal, high-risk, attorney-review-required offer.",
     description: null,
     status: "active",
     version: "1.0.0",
-    providerOrganization: "Arcamanus",
+    providerOrganization: "Example Works",
     availabilityScope: "internal",
     riskTier: "high",
     authorityBoundary: "proposal-only",
@@ -84,12 +87,89 @@ describe("CoworkerCatalogView", () => {
     const html = renderToStaticMarkup(<CoworkerCatalogView catalog={catalog} />);
 
     expect(html).toContain("Coworker Service Catalog");
-    expect(html).toContain("Arcamanus/DPF legal packet review");
+    expect(html).toContain("Example Works legal packet review");
     expect(html).toContain("Legal Operations Counsel");
     expect(html).toContain("Service");
     expect(html).toContain("Offer");
     expect(html).toContain("Engagement");
     expect(html).toContain("proposal-only");
     expect(html).toContain("attorney-review-required");
+    expect(html).toContain('data-catalog-layout="mobile"');
+    expect(html).toContain('data-catalog-layout="desktop"');
+    expect(html).toContain("lg:hidden");
+    expect(html).toContain("lg:block");
+    expect(html).toContain("<table");
+    expect(html).toContain("<thead");
+    expect(html.match(/scope="col"/g)).toHaveLength(5);
+    expect(html).toContain("<tbody");
+    const desktopRegion = html.match(
+      /<div[^>]*data-catalog-layout="desktop"[^>]*>/,
+    )?.[0];
+    expect(desktopRegion).toContain('role="region"');
+    expect(desktopRegion).toContain('aria-label="Coworker offers"');
+    expect(desktopRegion).toContain('tabindex="0"');
+    expect(desktopRegion).toContain("overflow-x-auto");
+    expect(html).toContain('role="note"');
+    expect(html).toContain('data-owner-first-detail=""');
+    expect(html).toContain("Engagement controls");
+    expect(html).toContain("Approval and data boundaries");
+    expect(html).toContain(
+      'aria-label="Provider organization: Example Works"',
+    );
+    expect(html).not.toContain("Provider organization: <!-- -->");
+  });
+
+  it("shares one complete offer interpretation across desktop and mobile", () => {
+    const presentation = projectOfferPresentation(catalog.offers[0]);
+
+    expect(presentation).toMatchObject({
+      provider: {
+        primary: "Legal Operations Counsel",
+        secondary: "Example Works",
+        secondaryLabel: "Provider organization",
+      },
+      risk: {
+        primary: "high",
+      },
+      authority: {
+        primary: "proposal-only",
+        secondary: "Approval required",
+      },
+      availability: {
+        primary: "internal",
+        secondary: "Digital Product Factory",
+      },
+    });
+    expect(presentation.mobileFacts).toEqual(
+      expect.arrayContaining([
+        { label: "Version", value: "1.0.0" },
+        { label: "Provider organization", value: "Example Works" },
+        {
+          label: "Availability",
+          value: "internal; Digital Product Factory",
+        },
+      ]),
+    );
+  });
+
+  it("does not present a provider type as an organization", () => {
+    const presentation = projectOfferPresentation({
+      ...catalog.offers[0],
+      providerOrganization: null,
+    });
+
+    expect(presentation.provider).toEqual({
+      primary: "Legal Operations Counsel",
+      secondary: "specialist",
+      secondaryLabel: "Provider type",
+    });
+    expect(presentation.mobileFacts).toContainEqual({
+      label: "Provider type",
+      value: "specialist",
+    });
+    expect(presentation.mobileFacts).not.toContainEqual({
+      label: "Provider organization",
+      value: "specialist",
+    });
   });
 });

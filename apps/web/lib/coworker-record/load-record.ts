@@ -61,6 +61,13 @@ export type CoworkerProfessionFacet = {
 
 export type CoworkerRecord = {
   agent: NonNullable<Awaited<ReturnType<typeof loadAgentWithRelations>>>;
+  runtime: {
+    id: string;
+    agentId: string;
+    slugId: string | null;
+    assignedSkillIds: string[];
+    heldGrantKeys: string[];
+  };
   gaid: string | null;
   profession: CoworkerProfessionFacet;
   voice: CoworkerVoice;
@@ -132,16 +139,19 @@ export async function loadCoworkerRecord(
   if (!agent) return null;
 
   const identityRefs = selectableCoworkerIdentityRefs(agent.agentId);
-  if (identityRefs.runtimeAgentId !== agent.agentId) {
-    const runtime = await prisma.agent.findFirst({
-      where: {
-        agentId: identityRefs.runtimeAgentId,
-        ...SELECTABLE_COWORKER_STATE,
-      },
-      select: { agentId: true },
-    });
-    if (!runtime) return null;
-  }
+  const runtimeAgent = await prisma.agent.findFirst({
+    where: {
+      agentId: identityRefs.runtimeAgentId,
+      ...SELECTABLE_COWORKER_STATE,
+    },
+    select: {
+      id: true,
+      agentId: true,
+      slugId: true,
+      toolGrants: { select: { grantKey: true } },
+    },
+  });
+  if (!runtimeAgent) return null;
 
   const family = findProfessionFamilyForAgentIdentity(agent);
 
@@ -163,6 +173,7 @@ export async function loadCoworkerRecord(
     decisions,
     services,
     installAvailability,
+    runtimeSkillAssignments,
   ] = await Promise.all([
     getAgentGaidMap([agent.agentId]).then((m) => m.get(agent.agentId) ?? null),
     family
@@ -188,10 +199,23 @@ export async function loadCoworkerRecord(
     profileId ? loadDecisionSignal(profileId) : Promise.resolve({ total: 0, byOutcome: {}, deferRate: 0 }),
     loadCoworkerDiscoveryServices(serviceProviderIds),
     loadInstallAvailabilityContext(),
+    prisma.skillAssignment.findMany({
+      where: { agentId: runtimeAgent.agentId, enabled: true },
+      select: { skillId: true },
+    }),
   ]);
 
   return {
     agent,
+    runtime: {
+      id: runtimeAgent.id,
+      agentId: runtimeAgent.agentId,
+      slugId: runtimeAgent.slugId,
+      assignedSkillIds: runtimeSkillAssignments.map(
+        (assignment) => assignment.skillId,
+      ),
+      heldGrantKeys: runtimeAgent.toolGrants.map((grant) => grant.grantKey),
+    },
     gaid,
     profession: { family: family ?? null, profile, profileId, coverage },
     voice: voiceRow

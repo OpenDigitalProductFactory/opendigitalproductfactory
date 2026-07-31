@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import type { GoldenTrianglePreference } from "@/lib/golden-triangle";
 
-import { resolveDispatchPosture } from "./dispatch";
+import {
+  resolveDispatchPosture,
+  resolveDispatchPostures,
+} from "./dispatch";
 import type { GoldenTrianglePersistenceClient } from "./persistence";
 
 const ASSURED: GoldenTrianglePreference = { preset: "assured", qualityWeight: 0.8, costWeight: 0.1, timeWeight: 0.1 };
@@ -62,5 +65,32 @@ describe("resolveDispatchPosture", () => {
       },
     };
     expect(await resolveDispatchPosture("agent-x", "conversation", null, throwing)).toBeNull();
+  });
+
+  it("bulk-resolves coworker postures from one platform-profile read", async () => {
+    let reads = 0;
+    const base = client({
+      platform: FRUGAL,
+      perAgent: { "agent-x": ASSURED },
+    });
+    const cached: GoldenTrianglePersistenceClient = {
+      decisionPerspectiveProfile: {
+        findFirst: async (args) => {
+          reads += 1;
+          return base.decisionPerspectiveProfile.findFirst(args);
+        },
+        updateMany: base.decisionPerspectiveProfile.updateMany,
+      },
+    };
+
+    const postures = await resolveDispatchPostures(
+      ["agent-x", "agent-y"],
+      "conversation",
+      cached,
+    );
+
+    expect(reads).toBe(1);
+    expect(postures.get("agent-x")?.preset).toBe("assured");
+    expect(postures.get("agent-y")?.preset).toBe("frugal");
   });
 });
