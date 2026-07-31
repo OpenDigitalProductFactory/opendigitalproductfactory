@@ -3,6 +3,8 @@ import {
   regulationApplies,
   parseApplicability,
   resolveConfirmedProcessingAuthority,
+  isDataHandlingPredicate,
+  type DataHandlingPredicate,
   type RegionProfile,
   type RegulationApplicability,
 } from "@dpf/db/regulation-applicability";
@@ -96,6 +98,7 @@ export type ComplianceLibraryClient = {
         employsIn: true;
         dataResidency: true;
         handlesCardPayments: true;
+        dataHandling: true;
         listingStatus: true;
       };
     }): Promise<{
@@ -106,6 +109,7 @@ export type ComplianceLibraryClient = {
       employsIn: string[];
       dataResidency: string[];
       handlesCardPayments: boolean;
+      dataHandling: string[];
       listingStatus: string | null;
     } | null>;
   };
@@ -439,6 +443,7 @@ export async function resolveComplianceLibraryContext(
         employsIn: true,
         dataResidency: true,
         handlesCardPayments: true,
+        dataHandling: true,
         listingStatus: true,
       },
     }),
@@ -458,6 +463,16 @@ export async function resolveComplianceLibraryContext(
     ),
   ].sort();
 
+  // The declared data-handling predicates, plus the bridge from the existing
+  // handlesCardPayments boolean → handles-card-data, so the two stay consistent
+  // and PCI-DSS gates on a single source of truth.
+  const dataHandling = [
+    ...new Set<DataHandlingPredicate>([
+      ...(businessContext?.dataHandling ?? []).filter(isDataHandlingPredicate),
+      ...(businessContext?.handlesCardPayments ? (["handles-card-data"] as const) : []),
+    ]),
+  ];
+
   return {
     archetype: storefront?.archetype ?? null,
     businessContext: {
@@ -472,6 +487,7 @@ export async function resolveComplianceLibraryContext(
       sellsTo: businessContext?.sellsTo ?? [],
       employsIn: businessContext?.employsIn ?? [],
       dataResidency: businessContext?.dataResidency ?? [],
+      dataHandling,
       listingStatus: businessContext?.listingStatus ?? undefined,
     },
     processingActivities: { confirmedAuthorityRefs },
