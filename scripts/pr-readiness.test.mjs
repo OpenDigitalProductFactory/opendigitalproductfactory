@@ -43,6 +43,16 @@ test("buildGatePlan derives runnable checks from the canonical policy profiles",
         ],
       },
     ],
+    workspace: [
+      {
+        id: "workspace-a",
+        name: "Workspace A",
+        commands: [
+          ["pnpm", ["run", "workspace-a:test"]],
+          ["pnpm", ["run", "workspace-a"]],
+        ],
+      },
+    ],
     "pull-request": [
       {
         id: "pr-a",
@@ -68,12 +78,13 @@ test("buildGatePlan derives runnable checks from the canonical policy profiles",
     plan.map((gate) => [gate.name, gate.command]),
     [
       ["Source A", ["node", ["scripts/source-a.mjs"]]],
+      ["Workspace A", ["pnpm", ["run", "workspace-a"]]],
       ["PR A", ["node", ["scripts/pr-a.mjs"]]],
     ],
   );
   assert.equal(plan[0].env.BASE_SHA, "origin/main");
-  assert.equal(plan[1].env.GITHUB_EVENT_NAME, "pull_request");
-  assert.equal(plan[1].env.PR_LABELS_JSON, "[]");
+  assert.equal(plan[2].env.GITHUB_EVENT_NAME, "pull_request");
+  assert.equal(plan[2].env.PR_LABELS_JSON, "[]");
 });
 
 test("buildGatePlan changes when the canonical profile changes", () => {

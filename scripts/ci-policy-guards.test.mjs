@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 
 import {
   POLICY_GUARD_PROFILES,
+  resolvePolicyGuardInvocation,
   runPolicyProfile,
 } from "./lib/ci-policy-guards.mjs";
 
@@ -33,6 +34,7 @@ const EXPECTED_LEGACY_JOBS = [
   "override-provenance-guard",
   "package-boundary-guard",
   "pr-health-test",
+  "prose-lint-guard",
   "repo-guard-loop",
   "reporting-composition-guard",
   "sbom-divergence-guard",
@@ -52,6 +54,25 @@ function workflowJobBlock(workflow, jobId) {
 }
 
 describe("CI policy guard registry", () => {
+  it("launches pnpm through cmd on Windows without enabling shell mode globally", () => {
+    assert.deepEqual(
+      resolvePolicyGuardInvocation("pnpm", ["run", "check:prose-lint"], {
+        platform: "win32",
+        env: { ComSpec: "C:\\Windows\\System32\\cmd.exe" },
+      }),
+      {
+        command: "C:\\Windows\\System32\\cmd.exe",
+        args: ["/d", "/s", "/c", "pnpm run check:prose-lint"],
+      },
+    );
+    assert.deepEqual(
+      resolvePolicyGuardInvocation("pnpm", ["run", "check:prose-lint"], {
+        platform: "linux",
+      }),
+      { command: "pnpm", args: ["run", "check:prose-lint"] },
+    );
+  });
+
   it("accounts for every migrated legacy job exactly once", () => {
     const entries = Object.values(POLICY_GUARD_PROFILES).flat();
     const legacyJobs = entries.map((entry) => entry.legacyJobId).sort();
@@ -106,14 +127,17 @@ describe("CI policy guard registry", () => {
     );
   });
 
-  it("wires blocking source and pull-request profiles in CI", () => {
+  it("wires blocking source, workspace, and pull-request profiles in CI", () => {
     const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
     assert.match(workflow, /^  policy-guards-source:$/m);
     assert.match(workflow, /node scripts\/ci-policy-guards\.mjs --profile source/);
+    assert.match(workflow, /^  policy-guards-workspace:$/m);
+    assert.match(workflow, /node scripts\/ci-policy-guards\.mjs --profile workspace/);
     assert.match(workflow, /^  policy-guards-pr:$/m);
     assert.match(workflow, /node scripts\/ci-policy-guards\.mjs --profile pull-request/);
     const policyJobs = [
       workflowJobBlock(workflow, "policy-guards-source"),
+      workflowJobBlock(workflow, "policy-guards-workspace"),
       workflowJobBlock(workflow, "policy-guards-pr"),
     ].join("\n");
     assert.equal(
