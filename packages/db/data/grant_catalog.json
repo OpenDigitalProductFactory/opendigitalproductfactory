@@ -956,6 +956,16 @@
       "implies": []
     },
     {
+      "key": "stock_read",
+      "description": "Read stocked-supply levels and derived coverage: on-hand quantity, consumption from sales, days of cover, and suggested reorder quantity.",
+      "category": "consume",
+      "sensitivity": "internal",
+      "honored_by_tools": [
+        "list_stock_coverage"
+      ],
+      "implies": []
+    },
+    {
       "key": "order_create",
       "description": "Create order.",
       "category": "consume",

@@ -154,12 +154,46 @@ async function generateDemand(scenario, itemsByName, orgSlug) {
   step("generate-demand", `${orders} orders submitted`);
 }
 
+async function seedStock(scenario, itemsByName) {
+  const stock = scenario.stock ?? [];
+  if (stock.length === 0) return;
+  let created = 0;
+  let gaps = 0;
+  for (const entry of stock) {
+    const usedBy = (entry.usedBy ?? [])
+      .map((line) => {
+        const item = itemsByName.get(line.item);
+        if (!item) return null;
+        return { storefrontItemId: item.itemId, quantityPerUnit: line.quantityPerUnit };
+      })
+      .filter(Boolean);
+    const res = await http("/api/storefront/admin/stock-items", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...entry, usedBy }),
+    });
+    if (res.status === 404 || res.status === 405) {
+      report.observations.push({
+        kind: "capability-gap",
+        detail: "No stock-items admin API on this install; stock coverage cannot be seeded.",
+      });
+      return;
+    }
+    if (!res.ok) throw new Error(`stock seed failed (${entry.name}): ${res.status}`);
+    const body = await res.json().catch(() => ({}));
+    if ((body.componentsLinked ?? 0) < usedBy.length) gaps++;
+    created++;
+  }
+  step("seed-stock", `${created} supplies seeded${gaps ? `, ${gaps} with unresolved recipe lines` : ""}`);
+}
+
 // ── Main ────────────────────────────────────────────────────────────────────
 const { default: scenario } = await import(`./scenarios/${args.scenario}.mjs`);
 await login();
 if (args.reset) await resetArchetype(scenario);
 await seedCatalog(scenario);
 const itemsByName = await resolveSlugAndItems();
+await seedStock(scenario, itemsByName);
 await generateDemand(scenario, itemsByName, scenario.orgSlug);
 report.finishedAt = new Date().toISOString();
 if (args.report) {

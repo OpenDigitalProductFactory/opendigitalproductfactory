@@ -4662,6 +4662,7 @@ model Organization {
   updatedAt                         DateTime                           @updatedAt
   brandingConfig                    BrandingConfig?
   storefrontConfig                  StorefrontConfig?
+  stockItems                        StockItem[]
   operationalSceneLayouts           OperationalSceneLayout[]
   hospitalityResources              HospitalityResource[]              @relation("HospitalityResourceOrganization")
   hospitalityCapacityPools          HospitalityCapacityPool[]          @relation("HospitalityCapacityPoolOrganization")
@@ -10554,6 +10555,7 @@ model StorefrontItem {
   bookingHolds           BookingHold[]
   rentableUnits          RentableUnit[]
   rentalAgreements       RentalAgreement[]
+  stockComponents        StorefrontItemComponent[]
 
   @@unique([id, storefrontId])
   @@index([storefrontId, isActive, sortOrder])
@@ -12047,6 +12049,66 @@ model PaymentAllocation {
 
 // ─── Finance: Accounts Payable ─────────────────────────────────────
 
+// ── Stock coverage starter (EP-SPEND-PROCUREMENT-ASSETS, BI-SPEND-003 slice) ──
+// The smallest honest model of "are we about to run out of what we sell":
+// a stocked supply the operator counts, and the per-unit link from a sellable
+// StorefrontItem to the supplies it consumes.
+//
+// Deliberately NOT a warehouse system. onHandQuantity is operator-maintained
+// (a stocktake number), and CONSUMPTION IS DERIVED FROM ACTUAL SALES rather
+// than from a decrement ledger — which is how a small operator actually works,
+// and which keeps this slice free of partial-fulfilment/reversal semantics.
+// Receipts, adjustments, valuation, and COGS posting remain BI-SPEND-003 scope.
+//
+// Naming note: `InventoryEntity` is the IT-estate discovery model and `Bom*` is
+// the software bill of materials; neither describes physical supplies, so this
+// is genuinely new substrate rather than a fork of either.
+
+model StockItem {
+  id             String   @id @default(cuid())
+  stockItemId    String   @unique
+  organizationId String
+  name           String
+  /// Counting unit the operator thinks in (kg, litre, each, case).
+  unit           String
+  /// Latest counted quantity. Operator-maintained; not a running ledger.
+  onHandQuantity Decimal  @default(0)
+  /// Reorder when coverage falls to/below this quantity.
+  reorderPoint   Decimal  @default(0)
+  /// Suggested quantity to order when below the reorder point.
+  reorderQuantity Decimal @default(0)
+  supplierId     String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplier     Supplier?                @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  components   StorefrontItemComponent[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, isActive])
+  @@index([supplierId])
+}
+
+/// One line of a sellable item's recipe: selling one unit of `storefrontItem`
+/// consumes `quantityPerUnit` of `stockItem`. Archetype-neutral — a dish
+/// consumes mozzarella, a salon service consumes colourant.
+model StorefrontItemComponent {
+  id               String   @id @default(cuid())
+  storefrontItemId String
+  stockItemId      String
+  quantityPerUnit  Decimal
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  storefrontItem StorefrontItem @relation(fields: [storefrontItemId], references: [id], onDelete: Cascade)
+  stockItem      StockItem      @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
+
+  @@unique([storefrontItemId, stockItemId])
+  @@index([stockItemId])
+}
+
 model Supplier {
   id              String   @id @default(cuid())
   supplierId      String   @unique
@@ -12070,6 +12132,7 @@ model Supplier {
   supplierContracts    SupplierContract[]
   financeWorkItems     FinanceWorkItem[]
   masterDataSourceRefs MasterDataSourceRef[]      @relation("SupplierMdmSourceRef")
+  stockItems           StockItem[]
 
   @@index([status])
 }

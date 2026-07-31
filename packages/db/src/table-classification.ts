@@ -127,6 +127,12 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   StorefrontConfig: "internal",
   StorefrontSection: "internal",
   StorefrontItem: "internal",
+  // Stock coverage starter (BI-SPEND-003 slice). Supply names, counting units,
+  // and quantities carry no PII — the customer-identifying data stays in the
+  // order/booking tables, and the supplier's own contact/bank detail stays in
+  // the confidential Supplier row this only points at by id.
+  StockItem: "internal",
+  StorefrontItemComponent: "internal",
   HospitalityResource: "internal",
   HospitalityCapacityPool: "internal",
   HospitalityResourceAvailability: "internal",
