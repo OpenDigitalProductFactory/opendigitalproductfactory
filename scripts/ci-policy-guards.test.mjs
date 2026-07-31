@@ -26,6 +26,7 @@ const EXPECTED_LEGACY_JOBS = [
   "docs-staleness-detector",
   "finding-substrate-guard",
   "instruction-plane-guard",
+  "instruction-plane-rule-coverage",
   "janitor-tests",
   "mcp-tool-pack-guard",
   "mobile-jest-pin-guard",

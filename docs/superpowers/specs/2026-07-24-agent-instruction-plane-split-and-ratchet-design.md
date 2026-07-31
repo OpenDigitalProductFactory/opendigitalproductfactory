@@ -332,6 +332,18 @@ Phase 1 moves `AGENTS.md` §4/§6/§8/§16 procedure *into* these files. Loading
 
 **Recommended Phase 1 acceptance addition:** a small compliance set — one task per commandment-tier rule (DCO sign-off, branch guard, no-hardcoded-colors, worktree-not-runtime, consult-scopes-before-asking) run against pre- and post-split doctrine on at least Claude Code **and** one non-Claude surface. Without it the 58% cut is unfalsifiable, and per §12d it is exactly the non-Claude surfaces that would absorb the regression.
 
+#### 12f-i. Status (2026-07-31) — the gap splits in two; the deterministic half is BUILT
+
+Framing this as one gap conflated two separable questions:
+
+- **(a) Preservation — did the cut *drop* a rule?** Deterministic, and now gated. `scripts/check-instruction-plane-rule-coverage.mjs` (guard `instruction-plane-rule-coverage`) keys each load-bearing rule on its **kernel-principle anchor** — the `→ [kernel principle](docs/.../x.md)` target — rather than on prose, because Phase 1 is *supposed* to reword and relocate the prose. **46 anchors are baselined from the pre-split plane** (35 kernel + 11 flat profession-wiki). The invariant: every baselined anchor must remain referenced from an always-on file *or* from a registered `manifest.ruleDestinations` target. Relocation passes; deletion fails. This makes Phase 1's *"no rule statement lost (diff-reviewed against the commandment set)"* machine-checked instead of a hand diff-review across a 58% rewrite of a 90kB file — the review step most likely to decay into a rubber stamp precisely when it matters most.
+
+  **Timing was the binding constraint:** the baseline is only trustworthy while the pre-cut plane still exists to be measured. Captured now, before Phase 1 moves anything.
+
+  Two by-products worth carrying into Phase 1: the guard reports **7 duplicated anchors** in today's always-on prose (`worktree-is-source-control-not-runtime` is linked **3×**; `single-source-of-truth`, `all-changes-land-via-pr`, `mcp-is-the-coordination-plane`, `one-common-process-three-surfaces`, `organization-canonical-identity`, `schema-audit-before-features` twice each) — the same SSOT drift shape as Problem 2, advisory for now because fixing them is Phase 1's job. And the anchor pattern must admit *both* wiki shapes; an earlier draft required a directory under `wiki/` and silently dropped all 11 profession anchors — a false-green the guard's own test now pins.
+
+- **(b) Efficacy — does a *shortened* rule still steer the agent?** **Still open, and not addressable deterministically.** This is the compliance set described above and it needs real model runs across surfaces. Nothing in (a) speaks to it: a rule can be perfectly reachable and still stop working once its rationale and worked example are gone, which is exactly what §12d predicts for the weaker surfaces. **A green rule-coverage run must not be read as "the cut was safe" — only as "the cut lost nothing outright."**
+
 ### 12g. Other optimizations worth considering (beyond the article)
 
 1. **Directory-scoped `AGENTS.md`.** §3 of the root file notes subdirectory files "MAY extend this… none exist today." Both Claude Code and Codex load nested `AGENTS.md` by path proximity — a genuine, zero-cost progressive-disclosure channel that Phase 1 should use as a *destination tier* alongside skills: `apps/web/AGENTS.md` (§12 UI styling), `packages/db/AGENTS.md` (§3 enums, §11 stewardship, migration safety), `scripts/AGENTS.md`. Rules land closer to the code they govern and cost nothing to sessions working elsewhere.

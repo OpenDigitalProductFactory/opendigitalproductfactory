@@ -14,6 +14,14 @@
       "fields": ["name", "description"]
     }
   ],
+  "_ruleDestinationsComment": "Where a rule is allowed to LIVE after Phase 1 relocates it out of always-on prose. scripts/check-instruction-plane-rule-coverage.mjs treats a baselined rule anchor as preserved if it is referenced from an always-on file OR from any file matched here; a rule referenced from neither was dropped, not moved, and fails. Widen this list when the split opens a new destination — that is a deliberate, reviewable act, which is the point.",
+  "ruleDestinations": [
+    "packages/dpf-skill-pack/skills/*/SKILL.md",
+    "docs/architecture/*.md",
+    "docs/operations/*.md",
+    "*/AGENTS.md",
+    "*/*/AGENTS.md"
+  ],
   "perSectionCharBudget": 6000,
   "maxLineChars": 800,
   "maxExtractedItemChars": 700,
