@@ -130,6 +130,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-instruction-plane-size.test.mjs"),
       node("scripts/check-instruction-plane-size.mjs"),
     ]),
+    // The size ratchet's twin: bytes measure the cut, this measures what the cut LOST.
+    // A byte gate scores deleting a commandment identically to relocating it, so Phase 1
+    // needs both or "58% smaller" is unfalsifiable (BI-0020D511 §12f).
+    guard("instruction-plane-rule-coverage", "Instruction Plane Rule Coverage", [
+      node("--test", "scripts/check-instruction-plane-rule-coverage.test.mjs"),
+      node("scripts/check-instruction-plane-rule-coverage.mjs"),
+    ]),
     // Plane-3 sibling of the instruction-plane guard, deliberately a SOFTER shape: it
     // never forbids growth in standing context cost, only growth recorded in silence.
     guard("context-economy-guard", "Context Economy Guard", [
