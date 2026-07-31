@@ -1,0 +1,1130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="dpf-prototype-scope" content="AI Workforce content region; use the real responsive portal shell in implementation">
+  <meta name="dpf-prototype-role-modes" content="owner (default); platform-operator via ?role=platform-operator">
+  <title>AI Workforce declaration experience</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --dpf-bg: #fafafa;
+      --dpf-surface-1: #ffffff;
+      --dpf-surface-2: #f4f4f6;
+      --dpf-text: #1a1a2e;
+      --dpf-text-secondary: #4a4a5e;
+      --dpf-muted: #6b7280;
+      --dpf-border: #d4d4dc;
+      --dpf-border-strong: #c8c8d4;
+      --dpf-accent: #2563eb;
+      --dpf-accent-hover: #1d4ed8;
+      --dpf-on-accent: #ffffff;
+      --dpf-focus: #2563eb;
+      --dpf-positive-bg: #dff2e8;
+      --dpf-positive-text: #12523d;
+      --dpf-warning-bg: #fff0c7;
+      --dpf-warning-text: #704b00;
+      --dpf-critical-bg: #fbe5e1;
+      --dpf-critical-text: #872f22;
+      --dpf-info-bg: #e5edf8;
+      --dpf-info-text: #294b78;
+      --dpf-neutral-bg: #e8edef;
+      --dpf-neutral-text: #435158;
+      --dpf-shadow: 0 16px 40px rgb(20 31 36 / 0.2);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --dpf-bg: #0f0f1a;
+        --dpf-surface-1: #1a1a2e;
+        --dpf-surface-2: #161625;
+        --dpf-text: #e2e2f0;
+        --dpf-text-secondary: #b8b8cc;
+        --dpf-muted: #8888a0;
+        --dpf-border: #2a2a40;
+        --dpf-border-strong: #3a3a55;
+        --dpf-accent: #7c8cf8;
+        --dpf-accent-hover: #9aa6ff;
+        --dpf-on-accent: #10101d;
+        --dpf-focus: #7c8cf8;
+        --dpf-positive-bg: #173c31;
+        --dpf-positive-text: #9ce0c6;
+        --dpf-warning-bg: #463711;
+        --dpf-warning-text: #f5d47d;
+        --dpf-critical-bg: #48231e;
+        --dpf-critical-text: #f5b0a5;
+        --dpf-info-bg: #22344a;
+        --dpf-info-text: #b8d1f0;
+        --dpf-neutral-bg: #2a363b;
+        --dpf-neutral-text: #d0d9dc;
+        --dpf-shadow: 0 18px 45px rgb(0 0 0 / 0.42);
+      }
+    }
+
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--dpf-bg);
+      color: var(--dpf-text);
+      line-height: 1.45;
+    }
+    button, input, select, textarea { font: inherit; }
+    button, a, input, select, textarea, summary { border-radius: 6px; }
+    :focus-visible {
+      outline: 3px solid var(--dpf-focus);
+      outline-offset: 2px;
+    }
+    .skip-link {
+      position: fixed;
+      left: 12px;
+      top: 8px;
+      z-index: 10;
+      transform: translateY(-160%);
+      background: var(--dpf-surface-1);
+      color: var(--dpf-text);
+      border: 1px solid var(--dpf-border-strong);
+      padding: 9px 12px;
+    }
+    .skip-link:focus { transform: translateY(0); }
+    .page {
+      width: min(1180px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 30px 0 64px;
+    }
+    .page-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 24px;
+      align-items: start;
+      padding-bottom: 22px;
+      border-bottom: 1px solid var(--dpf-border);
+    }
+    h1 {
+      margin: 0 0 7px;
+      font-size: 28px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+    .lede {
+      margin: 0;
+      max-width: 720px;
+      color: var(--dpf-text-secondary);
+    }
+    .result-summary {
+      margin: 6px 0 0;
+      color: var(--dpf-muted);
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .filters {
+      padding: 18px 0 8px;
+      display: grid;
+      gap: 12px;
+    }
+    .primary-filters {
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) minmax(190px, 260px);
+      gap: 12px;
+      align-items: end;
+    }
+    .field {
+      display: grid;
+      gap: 6px;
+      color: var(--dpf-text-secondary);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    input, select, textarea {
+      width: 100%;
+      color: var(--dpf-text);
+      background: var(--dpf-surface-1);
+      border: 1px solid var(--dpf-border-strong);
+    }
+    input, select {
+      min-height: 44px;
+      padding: 8px 10px;
+    }
+    textarea {
+      min-height: 126px;
+      resize: vertical;
+      padding: 10px 12px;
+    }
+    .secondary-filters {
+      margin: 0;
+      border: 0;
+    }
+    .secondary-filters summary {
+      display: none;
+      width: fit-content;
+      min-height: 44px;
+      align-items: center;
+      border: 1px solid var(--dpf-border-strong);
+      background: var(--dpf-surface-1);
+      color: var(--dpf-text);
+      padding: 8px 12px;
+      cursor: pointer;
+      font-weight: 750;
+    }
+    .secondary-fields {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(190px, 260px)) auto;
+      gap: 12px;
+      align-items: end;
+    }
+    .reset {
+      min-height: 44px;
+      border: 0;
+      background: transparent;
+      color: var(--dpf-accent);
+      padding: 8px 10px;
+      font-weight: 750;
+      cursor: pointer;
+    }
+    .reset:hover { color: var(--dpf-accent-hover); }
+
+    .empty {
+      margin-top: 24px;
+      padding: 28px 0;
+      border-top: 1px solid var(--dpf-border);
+      border-bottom: 1px solid var(--dpf-border);
+    }
+    .empty h2 { margin: 0 0 6px; font-size: 19px; }
+    .empty p { margin: 0 0 14px; color: var(--dpf-muted); }
+
+    .area { margin-top: 28px; }
+    .area-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      padding-bottom: 9px;
+      border-bottom: 1px solid var(--dpf-border);
+    }
+    h2 { margin: 0; font-size: 19px; letter-spacing: 0; }
+    .area-count { color: var(--dpf-muted); font-size: 13px; }
+    .roster {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .coworker {
+      min-width: 0;
+      min-height: 250px;
+      display: grid;
+      grid-template-rows: auto auto auto 1fr auto;
+      gap: 12px;
+      padding: 17px;
+      background: var(--dpf-surface-1);
+      border: 1px solid var(--dpf-border);
+      border-radius: 8px;
+    }
+    .coworker-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    h3 {
+      margin: 0 0 4px;
+      font-size: 17px;
+      line-height: 1.3;
+      letter-spacing: 0;
+    }
+    .job, .reason { margin: 0; }
+    .job { color: var(--dpf-muted); }
+    .reason { font-size: 14px; }
+    .status {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .status::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      margin-right: 6px;
+      background: currentColor;
+    }
+    .available { background: var(--dpf-positive-bg); color: var(--dpf-positive-text); }
+    .setup { background: var(--dpf-warning-bg); color: var(--dpf-warning-text); }
+    .attention, .repair { background: var(--dpf-critical-bg); color: var(--dpf-critical-text); }
+    .unchecked, .future { background: var(--dpf-info-bg); color: var(--dpf-info-text); }
+    .not-applicable, .undefined, .no-work { background: var(--dpf-neutral-bg); color: var(--dpf-neutral-text); }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px 14px;
+      color: var(--dpf-muted);
+      font-size: 13px;
+    }
+    .meta span + span::before {
+      content: "|";
+      color: var(--dpf-border-strong);
+      margin-right: 14px;
+    }
+    .actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 9px;
+      margin-top: auto;
+    }
+    .button, .text-action {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 9px 13px;
+      font-weight: 780;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .button {
+      border: 1px solid var(--dpf-accent);
+      background: var(--dpf-surface-1);
+      color: var(--dpf-accent);
+    }
+    .button:hover { color: var(--dpf-accent-hover); border-color: var(--dpf-accent-hover); }
+    .button.primary {
+      background: var(--dpf-accent);
+      color: var(--dpf-on-accent);
+    }
+    .button.primary:hover { background: var(--dpf-accent-hover); }
+    .button:disabled { cursor: wait; opacity: 0.62; }
+    .text-action {
+      border: 0;
+      background: transparent;
+      color: var(--dpf-accent);
+    }
+    .other-group {
+      margin-top: 34px;
+      padding-top: 20px;
+      border-top: 2px solid var(--dpf-border-strong);
+    }
+    .other-group .area-head { border-bottom-style: dashed; }
+    .record-view[hidden], .directory-view[hidden] { display: none; }
+    .record-back {
+      display: inline-flex;
+      min-height: 44px;
+      align-items: center;
+      color: var(--dpf-accent);
+      font-weight: 760;
+      text-decoration: none;
+    }
+    .record-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 20px;
+      align-items: end;
+      padding: 18px 0 26px;
+      border-bottom: 1px solid var(--dpf-border);
+    }
+    .record-head h1 { margin-bottom: 6px; }
+    .record-primary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 9px;
+      justify-content: flex-end;
+    }
+    .record-section {
+      display: grid;
+      grid-template-columns: minmax(180px, 0.7fr) minmax(0, 1.8fr);
+      gap: 28px;
+      padding: 26px 0;
+      border-bottom: 1px solid var(--dpf-border);
+    }
+    .record-section h2 { font-size: 18px; }
+    .service-list { display: grid; gap: 14px; }
+    .service-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: start;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--dpf-border);
+    }
+    .service-row:last-child { padding-bottom: 0; border-bottom: 0; }
+    .service-row h3 { font-size: 16px; margin-bottom: 4px; }
+    .service-row p { margin: 0; color: var(--dpf-muted); }
+    .owner-disclosure summary {
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      color: var(--dpf-accent);
+      cursor: pointer;
+      font-weight: 760;
+    }
+    .evidence-list {
+      margin: 8px 0 0;
+      padding-left: 20px;
+      color: var(--dpf-muted);
+    }
+
+    dialog {
+      width: min(600px, calc(100vw - 28px));
+      max-height: calc(100vh - 28px);
+      color: var(--dpf-text);
+      background: var(--dpf-surface-1);
+      border: 1px solid var(--dpf-border-strong);
+      border-radius: 8px;
+      padding: 0;
+      box-shadow: var(--dpf-shadow);
+    }
+    dialog form {
+      display: flex;
+      flex-direction: column;
+      max-height: inherit;
+    }
+    dialog::backdrop { background: rgb(10 18 21 / 0.58); }
+    .dialog-head, .dialog-body, .dialog-actions { padding: 18px 20px; }
+    .dialog-head { border-bottom: 1px solid var(--dpf-border); }
+    .dialog-head h2 { font-size: 21px; }
+    .dialog-kicker {
+      margin: 0 0 5px;
+      color: var(--dpf-muted);
+      font-size: 13px;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+    .dialog-body { display: grid; gap: 15px; }
+    .dialog-body { overflow: auto; }
+    .dialog-body p { margin: 0; }
+    .context {
+      padding: 12px;
+      border-left: 4px solid var(--dpf-accent);
+      background: var(--dpf-surface-2);
+    }
+    .dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 9px;
+      border-top: 1px solid var(--dpf-border);
+    }
+    .dialog-status {
+      min-height: 22px;
+      color: var(--dpf-positive-text);
+      font-weight: 700;
+    }
+    .dialog-status[data-state="error"] { color: var(--dpf-critical-text); }
+    .nav-preview {
+      position: fixed;
+      right: 14px;
+      bottom: 14px;
+      z-index: 5;
+      max-width: min(460px, calc(100vw - 28px));
+      padding: 10px 12px;
+      border: 1px solid var(--dpf-border-strong);
+      background: var(--dpf-surface-1);
+      color: var(--dpf-text);
+      box-shadow: var(--dpf-shadow);
+      font-size: 13px;
+    }
+
+    @media (max-width: 760px) {
+      html.dialog-open,
+      body.dialog-open { overflow: hidden; }
+      .page {
+        width: min(100% - 28px, 620px);
+        padding-top: 20px;
+      }
+      .page-head { grid-template-columns: 1fr; gap: 8px; }
+      .result-summary { white-space: normal; margin-top: 0; }
+      .primary-filters { grid-template-columns: 1fr; }
+      .secondary-filters summary { display: inline-flex; }
+      .secondary-fields {
+        grid-template-columns: 1fr;
+        margin-top: 10px;
+        padding: 12px;
+        border: 1px solid var(--dpf-border);
+        border-radius: 6px;
+        background: var(--dpf-surface-2);
+      }
+      .roster { grid-template-columns: 1fr; }
+      .coworker { min-height: 0; }
+      .coworker-top { display: grid; }
+      .status { width: fit-content; }
+      .actions { align-items: stretch; }
+      .button, .text-action { flex: 1 1 180px; }
+      .dialog-actions { flex-direction: column-reverse; }
+      .dialog-actions .button {
+        flex: 0 0 auto;
+        width: 100%;
+      }
+      .record-head, .record-section { grid-template-columns: 1fr; }
+      .record-primary { justify-content: stretch; }
+      .record-primary .button { flex: 1 1 180px; }
+      .service-row { grid-template-columns: 1fr; }
+      dialog {
+        width: 100vw;
+        max-width: none;
+        height: 100dvh;
+        max-height: none;
+        margin: 0;
+        border: 0;
+        border-radius: 0;
+      }
+      dialog form { height: 100%; }
+      .dialog-body { flex: 1 1 auto; }
+      .dialog-actions {
+        flex: 0 0 auto;
+        padding-bottom: max(18px, env(safe-area-inset-bottom));
+      }
+    }
+  </style>
+</head>
+<body data-permission-mode="owner">
+  <!-- Content-region design study. Implementation must use the real portal shell. -->
+  <a class="skip-link" href="#coworker-results">Skip to coworker results</a>
+
+  <main class="page directory-view" id="directory-view">
+    <header class="page-head">
+      <div>
+        <h1>AI Workforce</h1>
+        <p class="lede">Find the coworker whose work matches what you need, then see whether that work is ready for this business.</p>
+      </div>
+      <p id="result-summary" class="result-summary" aria-live="polite">8 coworkers across 4 business areas, plus 1 in Other</p>
+    </header>
+
+    <form class="filters" id="filters" role="search">
+      <fieldset class="primary-filters">
+        <legend class="sr-only">Primary coworker filters</legend>
+        <label class="field" for="search">
+          Find a coworker
+          <input id="search" name="search" type="search" placeholder="Name or work, such as campaigns">
+        </label>
+        <label class="field" for="area-filter">
+          Business area
+          <select id="area-filter" name="area">
+            <option value="all">All business areas</option>
+            <option value="customers">Customers and sales</option>
+            <option value="team">Your team</option>
+            <option value="operations">Operations and delivery</option>
+            <option value="platform">Platform and back office</option>
+          </select>
+        </label>
+      </fieldset>
+
+      <details class="secondary-filters" id="secondary-filters" open>
+        <summary id="filter-summary">Filters (0)</summary>
+        <fieldset class="secondary-fields">
+          <legend class="sr-only">Availability and interaction filters</legend>
+          <label class="field" for="availability-filter">
+            Availability
+            <select id="availability-filter" name="availability">
+              <option value="all">All availability</option>
+              <option value="available">Available</option>
+              <option value="setup">Setup needed</option>
+              <option value="attention">Needs attention</option>
+              <option value="unchecked">Readiness not checked</option>
+              <option value="future">Coming later</option>
+              <option value="not-applicable">Not offered for this business</option>
+              <option value="undefined">Coverage not defined</option>
+              <option value="repair">Coverage needs repair</option>
+              <option value="no-work">No work offered</option>
+            </select>
+          </label>
+          <label class="field" for="interaction-filter">
+            Interaction
+            <select id="interaction-filter" name="interaction">
+              <option value="all">All interaction</option>
+              <option value="customer">Talks to customers</option>
+              <option value="partner">Works with partners</option>
+              <option value="internal">Internal only</option>
+            </select>
+          </label>
+          <button class="reset" type="button" id="reset-filters">Reset filters</button>
+        </fieldset>
+      </details>
+    </form>
+
+    <div id="empty-state" class="empty" hidden>
+      <h2>No coworkers match these filters</h2>
+      <p id="empty-context">No active constraints.</p>
+      <button class="button" type="button" id="empty-reset">Reset filters</button>
+    </div>
+
+    <div id="coworker-results" tabindex="-1">
+      <section class="area" data-area-section="customers">
+        <div class="area-head">
+          <h2>Customers and sales</h2>
+          <span class="area-count" data-area-count>2 coworkers</span>
+        </div>
+        <div class="roster">
+          <!-- Canonical roster identity AGT-WS-MARKETING displays "Marketing".
+               Its aggregate summary is Platform-owned, while the ready,
+               permitted campaign action places it under Customers and sales. -->
+          <article class="coworker" data-name="marketing" data-work="campaign planning measurement customer channels" data-area="customers platform" data-primary-area="customers" data-applicability="supported" data-readiness="ready" data-permission="permitted" data-state="available" data-interaction="customer">
+            <div class="coworker-top">
+              <div>
+                <h3>Marketing</h3>
+                <p class="job">Plans and measures campaigns across customer channels.</p>
+              </div>
+              <span class="status available">Available</span>
+            </div>
+            <p class="reason">Campaign planning and customer-channel connections are ready now.</p>
+            <div class="meta"><span>Talks to customers</span><span>Campaign execution</span><span>Also: Platform and back office</span></div>
+            <div></div>
+            <div class="actions">
+              <button class="button primary" type="button"
+                data-ask-name="Marketing"
+                data-ask-context="Campaign execution for Restaurant"
+                data-canonical-agent-id="AGT-WS-MARKETING"
+                data-provider-agent-id="marketing-specialist"
+                data-service-id="svc-marketing-campaign-execution"
+                data-offer-id="offer-marketing-campaign-execution"
+                data-route-context="ai-workforce-directory"
+                data-return-to="/platform/ai/coworkers"
+                data-projection-revision="prototype-restaurant-v1">Ask Marketing</button>
+              <a class="button" href="?view=record&amp;agent=AGT-WS-MARKETING">View Marketing</a>
+            </div>
+          </article>
+
+          <article class="coworker" data-name="customer advisor" data-work="customer questions service requests intake" data-area="customers" data-primary-area="customers" data-applicability="supported" data-readiness="setup-needed" data-permission="permitted" data-state="setup" data-interaction="customer">
+            <div class="coworker-top">
+              <div>
+                <h3>Customer Advisor</h3>
+                <p class="job">Qualifies customer questions and service requests.</p>
+              </div>
+              <span class="status setup">Setup needed</span>
+            </div>
+            <p class="reason">Customer intake needs setup before it can take requests.</p>
+            <div class="meta"><span>Talks to customers</span><span>Customer intake</span></div>
+            <div></div>
+            <div class="actions">
+              <a class="button primary" href="/platform/ai/setup?agentId=AGT-WS-CUSTOMER&amp;serviceId=svc-customer-sales-intake&amp;recovery=setup&amp;routeContext=ai-workforce-directory&amp;returnTo=%2Fplatform%2Fai%2Fcoworkers">Finish Customer Advisor setup</a>
+              <a class="button" href="/platform/ai/agent/AGT-WS-CUSTOMER">View Customer Advisor</a>
+            </div>
+          </article>
+
+        </div>
+      </section>
+
+      <section class="area" data-area-section="team">
+        <div class="area-head">
+          <h2>Your team</h2>
+          <span class="area-count" data-area-count>2 coworkers</span>
+        </div>
+        <div class="roster">
+          <article class="coworker" data-name="hr" data-work="human roles capability accountability succession compliance" data-area="team" data-primary-area="team" data-applicability="supported" data-readiness="blocked" data-permission="denied" data-state="attention" data-interaction="internal">
+            <div class="coworker-top">
+              <div>
+                <h3>HR</h3>
+                <p class="job">Matches capabilities, accountability, and qualified human oversight.</p>
+              </div>
+              <span class="status attention">Needs attention</span>
+            </div>
+            <p class="reason">An approval rule must be reviewed before this work can proceed.</p>
+            <div class="meta"><span>Internal only</span><span>Workforce governance</span></div>
+            <div></div>
+            <div class="actions">
+              <a class="button primary" href="/platform/ai/setup?agentId=AGT-WS-HR&amp;serviceId=svc-workforce-governance&amp;recovery=authority&amp;blocker=approval-rule&amp;routeContext=ai-workforce-directory&amp;returnTo=%2Fplatform%2Fai%2Fcoworkers">Review blocking approval</a>
+              <a class="button" href="/platform/ai/agent/AGT-WS-HR">View HR</a>
+            </div>
+          </article>
+
+          <article class="coworker" data-name="change reviewer" data-work="change review risk evidence quality" data-area="team" data-primary-area="team" data-applicability="future" data-readiness="not-required" data-permission="not-required" data-state="future" data-interaction="internal">
+            <div class="coworker-top">
+              <div>
+                <h3>Change Reviewer</h3>
+                <p class="job">Reviews proposed changes against evidence and risk controls.</p>
+              </div>
+              <span class="status future">Coming later</span>
+            </div>
+            <p class="reason">Restaurant coverage is planned but is not offered yet.</p>
+            <div class="meta"><span>Internal only</span><span>Change assurance</span></div>
+            <div></div>
+            <div class="actions">
+              <a class="button primary" href="/platform/ai/agent/AGT-WS-REVIEW">View Change Reviewer</a>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="area" data-area-section="operations">
+        <div class="area-head">
+          <h2>Operations and delivery</h2>
+          <span class="area-count" data-area-count>2 coworkers</span>
+        </div>
+        <div class="roster">
+          <article class="coworker" data-name="inventory" data-work="product lifecycle maturity market fit inventory" data-area="operations" data-primary-area="operations" data-applicability="not-applicable" data-readiness="not-required" data-permission="not-required" data-state="not-applicable" data-interaction="internal">
+            <div class="coworker-top">
+              <div>
+                <h3>Inventory</h3>
+                <p class="job">Reviews product lifecycle, maturity, and market fit.</p>
+              </div>
+              <span class="status not-applicable">Not offered for this business</span>
+            </div>
+            <p class="reason">This inventory work is explicitly outside the Restaurant offer.</p>
+            <div class="meta"><span>Internal only</span><span>Product lifecycle</span></div>
+            <div></div>
+            <div class="actions">
+              <a class="button primary" href="/platform/ai/agent/AGT-WS-INVENTORY">View Inventory</a>
+            </div>
+          </article>
+
+          <article class="coworker" data-name="ops coordinator" data-work="delivery flow backlog blockers work in progress" data-area="operations" data-primary-area="operations" data-applicability="supported" data-readiness="stale" data-permission="permitted" data-state="unchecked" data-interaction="internal">
+            <div class="coworker-top">
+              <div>
+                <h3>Ops Coordinator</h3>
+                <p class="job">Coordinates delivery flow, blockers, and work in progress.</p>
+              </div>
+              <span class="status unchecked">Readiness not checked</span>
+            </div>
+            <p class="reason">The work fits, but its last readiness evidence is no longer current.</p>
+            <div class="meta"><span>Internal only</span><span>Delivery coordination</span></div>
+            <div></div>
+            <div class="actions">
+              <a class="button primary" href="/platform/ai/health?agentId=AGT-WS-OPS&amp;serviceId=svc-delivery-coordination&amp;recovery=readiness&amp;routeContext=ai-workforce-directory&amp;returnTo=%2Fplatform%2Fai%2Fcoworkers">Review Ops readiness</a>
+              <a class="button" href="/platform/ai/agent/AGT-WS-OPS">View Ops Coordinator</a>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="area" data-area-section="platform">
+        <div class="area-head">
+          <h2>Platform and back office</h2>
+          <span class="area-count" data-area-count>2 coworkers</span>
+        </div>
+        <div class="roster">
+          <article class="coworker" data-name="platform engineer" data-work="ai providers models costs capabilities routing" data-area="platform" data-primary-area="platform" data-applicability="undeclared" data-readiness="not-required" data-permission="unknown" data-state="undefined" data-interaction="internal">
+            <div class="coworker-top">
+              <div>
+                <h3>Platform Engineer</h3>
+                <p class="job">Manages AI providers, model assignments, costs, and routing.</p>
+              </div>
+              <span class="status undefined">Coverage not defined</span>
+            </div>
+            <p class="reason">Business-type coverage has not been declared yet.</p>
+            <div class="meta"><span>Internal only</span><span>AI operations</span></div>
+            <div></div>
+            <div class="actions">
+              <a class="button primary" href="/platform/ai/setup?agentId=AGT-WS-PLATFORM&amp;serviceId=svc-ai-operations&amp;recovery=declaration&amp;blocker=coverage-missing&amp;routeContext=ai-workforce-directory&amp;returnTo=%2Fplatform%2Fai%2Fcoworkers" data-authorized-action hidden>Complete Platform Engineer declaration</a>
+              <a class="button primary" href="/platform/ai/agent/AGT-WS-PLATFORM?agentId=AGT-WS-PLATFORM&amp;serviceId=svc-ai-operations&amp;recovery=declaration&amp;blocker=coverage-missing&amp;routeContext=ai-workforce-directory&amp;returnTo=%2Fplatform%2Fai%2Fcoworkers" data-owner-recovery>Review missing declaration</a>
+              <a class="button" href="/platform/ai/agent/AGT-WS-PLATFORM">View Platform Engineer</a>
+            </div>
+          </article>
+
+          <article class="coworker" data-name="data governance" data-work="data retention lineage privacy license regulatory compliance" data-area="platform" data-primary-area="platform" data-applicability="invalid" data-readiness="not-required" data-permission="denied" data-state="repair" data-interaction="partner">
+            <div class="coworker-top">
+              <div>
+                <h3>Data Governance</h3>
+                <p class="job">Reviews data lineage, privacy, licensing, and regulatory obligations.</p>
+              </div>
+              <span class="status repair">Coverage needs repair</span>
+            </div>
+            <p class="reason">Two declarations conflict, so no availability claim is made.</p>
+            <div class="meta"><span>Works with partners</span><span>Data compliance</span></div>
+            <div></div>
+            <div class="actions">
+              <a class="button primary" href="/platform/ai/setup?agentId=AGT-902&amp;serviceId=svc-data-compliance&amp;recovery=declaration-conflict&amp;blocker=conflicting-declarations&amp;routeContext=ai-workforce-directory&amp;returnTo=%2Fplatform%2Fai%2Fcoworkers" data-authorized-action hidden>Repair Data Governance declaration</a>
+              <a class="button primary" href="/platform/ai/agent/AGT-902?agentId=AGT-902&amp;serviceId=svc-data-compliance&amp;recovery=declaration-conflict&amp;blocker=conflicting-declarations&amp;routeContext=ai-workforce-directory&amp;returnTo=%2Fplatform%2Fai%2Fcoworkers" data-owner-recovery>Review declaration conflict</a>
+              <a class="button" href="/platform/ai/agent/AGT-902">View Data Governance</a>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="area other-group" data-area-section="other">
+        <div class="area-head">
+          <h2>Other</h2>
+          <span class="area-count" data-area-count>1 coworker</span>
+        </div>
+        <div class="roster">
+          <article class="coworker" data-name="finance" data-work="budget chargeback profit loss subscription financial reporting" data-area="other" data-primary-area="other" data-applicability="catalog-exception" data-readiness="not-required" data-permission="not-required" data-state="no-work" data-interaction="internal">
+            <div class="coworker-top">
+              <div>
+                <h3>Finance</h3>
+                <p class="job">No active work offer has been established.</p>
+              </div>
+              <span class="status no-work">No work offered</span>
+            </div>
+            <p class="reason">Finance does not currently offer work for this business.</p>
+            <div class="meta"><span>Internal only</span><span>No work is currently offered</span></div>
+            <div></div>
+            <div class="actions">
+              <a class="button primary" href="/platform/ai/agent/AGT-900">View Finance</a>
+            </div>
+          </article>
+        </div>
+      </section>
+    </div>
+  </main>
+  <main class="page record-view" id="record-view" hidden>
+    <a class="record-back" href="?view=directory">Back to coworkers</a>
+    <header class="record-head">
+      <div>
+        <p class="dialog-kicker">Customers and sales</p>
+        <h1>Marketing</h1>
+        <p class="lede">Plans and measures campaigns across customer channels.</p>
+      </div>
+      <div class="record-primary">
+        <span class="status available">Available</span>
+        <button class="button primary" type="button"
+          data-ask-name="Marketing"
+          data-ask-context="Campaign execution for Restaurant"
+          data-canonical-agent-id="AGT-WS-MARKETING"
+          data-provider-agent-id="marketing-specialist"
+          data-service-id="svc-marketing-campaign-execution"
+          data-offer-id="offer-marketing-campaign-execution"
+          data-route-context="ai-workforce-record"
+          data-return-to="/platform/ai/agent/AGT-WS-MARKETING"
+          data-projection-revision="prototype-restaurant-v1">Ask Marketing</button>
+      </div>
+    </header>
+    <section class="record-section">
+      <div>
+        <h2>Work you can start</h2>
+        <p class="reason">Ready for this Restaurant.</p>
+      </div>
+      <div class="service-list">
+        <article class="service-row">
+          <div>
+            <h3>Campaign execution</h3>
+            <p>Plans a customer campaign, prepares channel work, and measures the result.</p>
+            <div class="meta"><span>Customers and sales</span><span>Talks to customers</span><span>Ready now</span></div>
+          </div>
+        </article>
+      </div>
+    </section>
+    <section class="record-section">
+      <div>
+        <h2>Other work offered</h2>
+        <p class="reason">Additional services stay visible without competing with the default action.</p>
+      </div>
+      <div class="service-list">
+        <article class="service-row">
+          <div>
+            <h3>Marketing performance</h3>
+            <p>Reviews campaign outcomes and recommends the next investment.</p>
+            <div class="meta"><span>Platform and back office</span><span>Internal only</span></div>
+          </div>
+          <span class="status available">Available</span>
+        </article>
+        <article class="service-row">
+          <div>
+            <h3>Partner campaign coordination</h3>
+            <p>Coordinates campaign inputs and commitments with external partners.</p>
+            <div class="meta"><span>Customers and sales</span><span>Works with partners</span></div>
+          </div>
+          <span class="status setup">Setup needed</span>
+        </article>
+      </div>
+    </section>
+    <section class="record-section">
+      <div>
+        <h2>How this was determined</h2>
+        <p class="reason">Owner-readable evidence stays available without leading the page.</p>
+      </div>
+      <details class="owner-disclosure">
+        <summary>Technical evidence</summary>
+        <ul class="evidence-list">
+          <li>Restaurant coverage is explicitly declared.</li>
+          <li>Campaign route, provider, grants, and authority checks passed.</li>
+          <li>Readiness evidence is current and service-specific.</li>
+          <li>Viewer permission allows Campaign execution.</li>
+        </ul>
+      </details>
+    </section>
+  </main>
+  <p id="nav-preview" class="nav-preview" role="status" hidden></p>
+
+  <dialog id="ask-dialog" aria-labelledby="ask-title">
+    <form method="dialog" id="ask-form">
+      <div class="dialog-head">
+        <p class="dialog-kicker">Start work with</p>
+        <h2 id="ask-title">Marketing</h2>
+      </div>
+      <div class="dialog-body">
+        <div class="context">
+          <strong id="ask-context">Campaign execution for Restaurant</strong>
+          <p>The coworker will review your request, use the selected work context, and return a proposed next step.</p>
+        </div>
+        <label class="field" for="ask-request">
+          What do you need?
+          <textarea id="ask-request" required>Review our current customer campaign and recommend the next action.</textarea>
+        </label>
+        <p class="dialog-status" id="dialog-status" aria-live="polite"></p>
+        <p id="dialog-next" hidden>Track this request in <a href="/platform/ai/work">AI Workforce Work</a>.</p>
+      </div>
+      <div class="dialog-actions">
+        <button class="button" type="button" id="cancel-ask">Cancel</button>
+        <button class="button primary" type="submit" value="send">Send to Marketing</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    const filterForm = document.getElementById("filters");
+    const search = document.getElementById("search");
+    const areaFilter = document.getElementById("area-filter");
+    const availabilityFilter = document.getElementById("availability-filter");
+    const interactionFilter = document.getElementById("interaction-filter");
+    const secondaryFilters = document.getElementById("secondary-filters");
+    const filterSummary = document.getElementById("filter-summary");
+    const cards = [...document.querySelectorAll(".coworker")];
+    const sections = [...document.querySelectorAll("[data-area-section]")];
+    const emptyState = document.getElementById("empty-state");
+    const emptyContext = document.getElementById("empty-context");
+    const resultSummary = document.getElementById("result-summary");
+    const askDialog = document.getElementById("ask-dialog");
+    const askTitle = document.getElementById("ask-title");
+    const askContext = document.getElementById("ask-context");
+    const askRequest = document.getElementById("ask-request");
+    const askSubmit = document.querySelector("#ask-form [type='submit']");
+    const dialogStatus = document.getElementById("dialog-status");
+    const dialogNext = document.getElementById("dialog-next");
+    const cancelAsk = document.getElementById("cancel-ask");
+    const navPreview = document.getElementById("nav-preview");
+    const permissionMode = new URLSearchParams(window.location.search).get("role") === "platform-operator"
+      ? "platform-operator"
+      : "owner";
+    let askInvoker = null;
+    let askPendingTimer = null;
+
+    document.body.dataset.permissionMode = permissionMode;
+    for (const action of document.querySelectorAll("[data-authorized-action]")) {
+      action.hidden = permissionMode !== "platform-operator";
+    }
+    for (const action of document.querySelectorAll("[data-owner-recovery]")) {
+      action.hidden = permissionMode === "platform-operator";
+    }
+
+    function plural(count, singular, pluralForm) {
+      return `${count} ${count === 1 ? singular : pluralForm}`;
+    }
+
+    function activeSecondaryCount() {
+      return Number(availabilityFilter.value !== "all") +
+        Number(interactionFilter.value !== "all");
+    }
+
+    function searchVariants(term) {
+      const variants = new Set([term]);
+      if (term.length > 3) {
+        variants.add(term.endsWith("s") ? term.slice(0, -1) : `${term}s`);
+      }
+      return [...variants];
+    }
+
+    function applyFilters() {
+      const query = search.value.trim().toLowerCase();
+      const queryTerms = query.split(/\s+/).filter(Boolean);
+      let visibleCards = 0;
+      let visiblePrimary = 0;
+      let visibleBusinessAreas = 0;
+      let visibleOther = 0;
+
+      for (const card of cards) {
+        const searchText = `${card.dataset.name} ${card.dataset.work}`;
+        const matchesSearch = queryTerms.length === 0 || queryTerms.every((term) =>
+          searchVariants(term).some((variant) => searchText.includes(variant))
+        );
+        const areaMemberships = card.dataset.area.split(" ");
+        const matchesArea = areaFilter.value === "all" ||
+          areaMemberships.includes(areaFilter.value);
+        const matchesAvailability = availabilityFilter.value === "all" ||
+          card.dataset.state === availabilityFilter.value;
+        const matchesInteraction = interactionFilter.value === "all" ||
+          card.dataset.interaction === interactionFilter.value;
+        card.hidden = !(matchesSearch && matchesArea && matchesAvailability && matchesInteraction);
+        if (!card.hidden) visibleCards += 1;
+        if (!card.hidden && card.dataset.primaryArea !== "other") visiblePrimary += 1;
+      }
+
+      for (const section of sections) {
+        const sectionCards = [...section.querySelectorAll(".coworker")];
+        const sectionVisible = sectionCards.filter((card) => !card.hidden).length;
+        section.hidden = sectionVisible === 0;
+        section.querySelector("[data-area-count]").textContent =
+          plural(sectionVisible, "coworker", "coworkers");
+        if (sectionVisible > 0 && section.dataset.areaSection !== "other") {
+          visibleBusinessAreas += 1;
+        } else if (sectionVisible > 0) {
+          visibleOther += sectionVisible;
+        }
+      }
+
+      emptyState.hidden = visibleCards !== 0;
+      if (visibleCards === 0) {
+        resultSummary.textContent = "No coworkers match the current filters";
+        const constraints = [];
+        if (query) constraints.push(`search "${search.value.trim()}"`);
+        if (areaFilter.value !== "all") constraints.push(`business area "${areaFilter.selectedOptions[0].text}"`);
+        if (availabilityFilter.value !== "all") constraints.push(`availability "${availabilityFilter.selectedOptions[0].text}"`);
+        if (interactionFilter.value !== "all") constraints.push(`interaction "${interactionFilter.selectedOptions[0].text}"`);
+        emptyContext.textContent = constraints.length
+          ? `No results for ${constraints.join(", ")}. Remove a constraint or reset all filters.`
+          : "No coworkers are available in the current catalog.";
+      } else if (visibleBusinessAreas === 0 && visibleOther > 0) {
+        resultSummary.textContent = `${plural(visibleCards, "coworker", "coworkers")} in Other`;
+      } else {
+        resultSummary.textContent =
+          `${plural(visiblePrimary, "coworker", "coworkers")} across ${plural(visibleBusinessAreas, "business area", "business areas")}` +
+          (visibleOther > 0 ? `, plus ${plural(visibleOther, "coworker", "coworkers")} in Other` : "");
+      }
+      filterSummary.textContent = `Filters (${activeSecondaryCount()})`;
+    }
+
+    function resetFilters() {
+      filterForm.reset();
+      applyFilters();
+      search.focus();
+    }
+
+    const mobileMedia = window.matchMedia("(max-width: 760px)");
+    function syncSecondaryDisclosure(isMobile) {
+      if (isMobile) {
+        secondaryFilters.removeAttribute("open");
+      } else {
+        secondaryFilters.setAttribute("open", "");
+      }
+    }
+
+    filterForm.addEventListener("input", applyFilters);
+    document.getElementById("reset-filters").addEventListener("click", resetFilters);
+    document.getElementById("empty-reset").addEventListener("click", resetFilters);
+
+    for (const card of cards) {
+      const ask = card.querySelector("[data-ask-name]");
+      const askEligible = card.dataset.applicability === "supported" &&
+        card.dataset.readiness === "ready" &&
+        card.dataset.permission === "permitted";
+      if (Boolean(ask) !== askEligible) {
+        throw new Error(`Derived Ask state is inconsistent for ${card.dataset.name}.`);
+      }
+    }
+
+    for (const button of document.querySelectorAll("[data-ask-name]")) {
+      const targetFields = [
+        "canonicalAgentId",
+        "providerAgentId",
+        "serviceId",
+        "offerId",
+        "routeContext",
+        "returnTo",
+        "projectionRevision",
+      ];
+      if (targetFields.some((field) => !button.dataset[field])) {
+        throw new Error(`Named-work target is incomplete for ${button.dataset.askName}.`);
+      }
+      const identityRoot = button.closest(".coworker") || button.closest(".record-view");
+      const identityName = identityRoot.querySelector("h1, h3").textContent.trim();
+      if (identityName !== button.dataset.askName) {
+        throw new Error(`Ask identity ${button.dataset.askName} does not match selected coworker ${identityName}.`);
+      }
+      button.addEventListener("click", () => {
+        askInvoker = button;
+        const name = button.dataset.askName;
+        askTitle.textContent = name;
+        askContext.textContent = button.dataset.askContext;
+        askSubmit.textContent = `Send to ${name}`;
+        for (const field of targetFields) askDialog.dataset[field] = button.dataset[field];
+        askSubmit.disabled = false;
+        cancelAsk.textContent = "Cancel";
+        dialogNext.hidden = true;
+        dialogStatus.textContent = "";
+        dialogStatus.dataset.state = "";
+        document.documentElement.classList.add("dialog-open");
+        document.body.classList.add("dialog-open");
+        askDialog.showModal();
+        askRequest.focus();
+        askRequest.select();
+      });
+    }
+
+    cancelAsk.addEventListener("click", () => askDialog.close("cancel"));
+    askDialog.addEventListener("cancel", (event) => {
+      event.preventDefault();
+      askDialog.close("cancel");
+    });
+    askDialog.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      askDialog.close("cancel");
+    });
+    document.getElementById("ask-form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (askSubmit.disabled) return;
+      if (!askRequest.value.trim()) {
+        askRequest.focus();
+        return;
+      }
+      const name = askTitle.textContent;
+      askSubmit.disabled = true;
+      askSubmit.textContent = "Sending...";
+      dialogStatus.dataset.state = "";
+      dialogStatus.textContent = `Sending to ${name}...`;
+      clearTimeout(askPendingTimer);
+      askPendingTimer = setTimeout(() => {
+        if (askRequest.value.includes("[fail]")) {
+          dialogStatus.dataset.state = "error";
+          dialogStatus.textContent = `The request could not be sent to ${name}. Review it and try again.`;
+          askSubmit.disabled = false;
+          askSubmit.textContent = "Try again";
+          return;
+        }
+        dialogStatus.dataset.state = "";
+        dialogStatus.textContent = `Request sent to ${name}.`;
+        dialogNext.hidden = false;
+        cancelAsk.textContent = "Close";
+        askSubmit.textContent = "Sent";
+      }, 700);
+    });
+    askDialog.addEventListener("close", () => {
+      clearTimeout(askPendingTimer);
+      document.documentElement.classList.remove("dialog-open");
+      document.body.classList.remove("dialog-open");
+      if (askInvoker) askInvoker.focus();
+    });
+
+    for (const link of document.querySelectorAll("a[href^='/platform/ai/']")) {
+      link.addEventListener("click", (event) => {
+        if (window.location.protocol !== "file:") return;
+        event.preventDefault();
+        navPreview.textContent = `Route preview: ${link.getAttribute("href")}`;
+        navPreview.hidden = false;
+      });
+    }
+
+    const viewMode = new URLSearchParams(window.location.search).get("view");
+    if (viewMode === "record") {
+      document.getElementById("directory-view").hidden = true;
+      document.getElementById("record-view").hidden = false;
+      document.getElementById("record-view").setAttribute("tabindex", "-1");
+      const skipLink = document.querySelector(".skip-link");
+      skipLink.setAttribute("href", "#record-view");
+      skipLink.textContent = "Skip to coworker record";
+    }
+
+    syncSecondaryDisclosure(mobileMedia.matches);
+    mobileMedia.addEventListener("change", (event) => syncSecondaryDisclosure(event.matches));
+    applyFilters();
+  </script>
+</body>
+</html>
