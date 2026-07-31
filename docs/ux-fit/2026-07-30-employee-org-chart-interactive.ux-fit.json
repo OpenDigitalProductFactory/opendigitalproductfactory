@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "interactive-chart-governed-reassign",
+  "decisionInteractionId": "DI-579CD2259A6F",
+  "scope": {
+    "files": [
+      "apps/web/components/employee/OrgChartView.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "interactive-chart-governed-reassign",
+      "chart-rendering-only-read-only",
+      "reuse-assign-employee-org-directly"
+    ]
+  }
+}

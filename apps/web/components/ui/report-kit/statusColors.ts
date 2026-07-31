@@ -89,6 +89,18 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     "employee-review": "info",
     "on-its-own": "success",
   },
+  // Employment lifecycle (WorkforceStatus in lib/workforce/workforce-types.ts). The org
+  // chart and workforce roster previously hand-rolled Tailwind colour maps (bg-green-500,
+  // bg-amber-400, …) which broke theming and branding; they resolve here now (BI-HCM-004).
+  workforceStatus: {
+    offer: "info",
+    onboarding: "accent",
+    active: "success",
+    leave: "warning",
+    suspended: "danger",
+    offboarding: "warning",
+    inactive: "neutral",
+  },
   // Decision governance ledger (DecisionInteraction.outcomeType / riskTier).
   decisionOutcome: {
     recommend: "success",

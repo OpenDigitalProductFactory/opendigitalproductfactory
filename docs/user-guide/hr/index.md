@@ -12,11 +12,15 @@ Open **People** at `/employee` to maintain the workforce record and see how empl
 - **Directory** — employee identity, organization placement, lifecycle dates, contact details, addresses, and pay basis
 - **Grid** — the same employee records in the shared workbook-style grid
 - **Workforce** — current work, concerns that need an operator, and a unified employee/AI roster
-- **Org Chart** — reporting lines and employees who do not yet have a manager
+- **Org Chart** — an interactive reporting chart you can rearrange, with span-of-control signal
 - **Timesheets** — weekly time entry, manager approval, and optional customer/service billing context
 - **My Policies** — policy acknowledgements and requirements assigned to the signed-in user
 
-The page leads with staffing readiness and work that needs attention. Role IDs, oversight levels, service-level targets, and user access remain available under **Role governance & access** in full navigation mode.
+The page leads with staffing readiness and work that needs attention. **Role governance & access**
+in full navigation mode holds the access controls: it opens with the control that changes who holds
+a role and whether their account is active, followed by what each role can do. Each role names the
+people who currently hold it and flags any role nobody holds. Role definitions themselves —
+oversight level and service-level target — are set by the platform and are not editable there.
 
 ## Workforce Operating Loop
 
@@ -64,9 +68,54 @@ The employee profile and the platform user account are related but distinct reco
 
 ### Check Organization Placement
 
-Use the directory’s **Group by manager** option to find missing or unexpected reporting lines. The **Org Chart** provides a tree view and a separate unassigned section. Treat “No manager,” “Unassigned,” and “Unset” as data-quality signals when the person should already have an established placement.
+Use the directory’s **Group by manager** option to find missing or unexpected reporting lines. Treat “No manager,” “Unassigned,” and “Unset” as data-quality signals when the person should already have an established placement.
+
+The **Org Chart** view is where reporting structure is read and changed. See [Work With the Org Chart](#work-with-the-org-chart) below.
 
 The directory’s detail panels show lifecycle dates, contact information, organization assignment, reference coverage, and recent append-only lifecycle events. Use the event history as evidence of what changed; do not rewrite prior events to make the current record look cleaner.
+
+## Work With the Org Chart
+
+The **Org Chart** view draws the reporting structure as a chart: each person is a card, a solid
+line is a reporting line, and a dashed line is a dotted-line relationship. Drag the canvas to pan
+and use the controls to zoom or fit the whole organization on screen.
+
+Every card carries the signal you need to judge the shape of the organization, not just names:
+employment status, team, and — for managers — how many people report to them directly and how many
+sit beneath them in total. The band above the chart summarises headcount, how many people are
+managers, the average span of control, and how many people have no manager set.
+
+### Change Who Someone Reports To
+
+If your role allows workforce changes, there are two ways to move someone:
+
+- **Drag** their card onto their new manager's card. The target card highlights, and you are asked
+  to confirm before anything is saved.
+- **Select** their card and use the **Reports to** and **Dotted line to** pickers in the side panel.
+
+Either way the change is recorded as a manager change on that person's employment record, so the
+history shows what moved and who moved it. If you do not have permission to make workforce changes,
+the chart is read-only and the pickers are disabled.
+
+The platform refuses a move that would create a reporting loop — you cannot place a manager
+underneath one of their own reports, directly or indirectly. Managers who would create a loop are
+not offered in the picker at all, and a drag that would cause one is rejected with an explanation.
+
+### Find People and Spot Problems
+
+Use the search box and the team and status filters to narrow the chart. Filtered-out people are
+dimmed rather than removed, so the reporting lines that pass through them stay visible instead of
+appearing to re-parent someone.
+
+Two signals are worth acting on:
+
+- **No manager set** counts the people at the top of the chart. More than one usually means a
+  missing reporting line rather than a genuinely flat organization.
+- **Reporting loop detected** appears when people report to each other in a circle. Those people
+  have no path to the top of the chart, so give one of them a manager outside the loop.
+
+Switch to **List** with the chart/list toggle for a compact indented view when you want to scan a
+large workforce rather than study its shape.
 
 ## Set Compensation Inputs
 
