@@ -121,6 +121,13 @@ export type RoutingComparisonViewModel = {
   showObserved: boolean;
   designRevision: string;
   evidenceWindow: { start: string; end: string };
+  /**
+   * When the evidence ledger begins — the earliest design-bound decision in the
+   * window. Shown so an owner can tell "we have no record" apart from "the
+   * platform did something wrong" (BI-A4BC02BE). Null when the window holds no
+   * stamped decision, so the boundary cannot be located.
+   */
+  instrumentedSince: string | null;
   latestEvidenceAt: string | null;
   focusedStationId: OwnerRoutingStationId | null;
   summary: {
@@ -192,6 +199,7 @@ export function buildRoutingComparisonViewModel(
     showObserved: options.mode !== "designed",
     designRevision: evidence.designRevision,
     evidenceWindow: evidence.window,
+    instrumentedSince: evidence.coverage.instrumentedSince,
     latestEvidenceAt: evidence.metrics.latestEvidenceAt,
     focusedStationId: options.focusStageId
       ? stationByStageId.get(options.focusStageId) ?? null

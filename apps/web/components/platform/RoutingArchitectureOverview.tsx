@@ -272,6 +272,7 @@ export function RoutingArchitectureOverview({
           mode={mode}
           designRevision={view.designRevision}
           evidenceWindow={view.evidenceWindow}
+          instrumentedSince={view.instrumentedSince}
           focusedStageId={selectedStageId}
           onFocusStage={focusStage}
           onClose={closeInspector}
@@ -374,6 +375,7 @@ function StationInspector({
   mode,
   designRevision,
   evidenceWindow,
+  instrumentedSince,
   focusedStageId,
   onFocusStage,
   onClose,
@@ -382,6 +384,7 @@ function StationInspector({
   mode: RoutingArchitectureMode;
   designRevision: string;
   evidenceWindow: { start: string; end: string };
+  instrumentedSince: string | null;
   focusedStageId: string | null;
   onFocusStage: (stageId: string) => void;
   onClose: () => void;
@@ -473,6 +476,11 @@ function StationInspector({
             <p className="mt-1">
               Evidence window <LocalTime value={evidenceWindow.start} /> — <LocalTime value={evidenceWindow.end} />
             </p>
+            {instrumentedSince ? (
+              <p className="mt-1">
+                Ledger begins <LocalTime value={instrumentedSince} />
+              </p>
+            ) : null}
             {focusedStage ? (
               <Link
                 href={`/ea?focus=${encodeURIComponent(focusedStage.id)}`}

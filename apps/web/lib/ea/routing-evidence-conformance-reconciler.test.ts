@@ -19,6 +19,8 @@ function projection(findings: RoutingEvidenceConformanceProjection["findings"]):
       unevidencedDecisions: 1,
       screenCoveredDecisions: 0,
       designBoundDecisions: 0,
+      preInstrumentationDecisions: 0,
+      instrumentedSince: null,
       unprovenDesignDecisions: 1,
       staleDesignDecisions: 0,
       attributionRate: 1,

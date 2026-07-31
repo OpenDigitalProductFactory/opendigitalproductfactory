@@ -101,7 +101,22 @@ export type RoutingEvidenceCoverage = {
   unevidencedDecisions: number;
   screenCoveredDecisions: number;
   designBoundDecisions: number;
+  /**
+   * Decisions that SHOULD name a design revision and do not — i.e. recorded
+   * after stamping began. Excludes pre-instrumentation history (BI-A4BC02BE).
+   */
   unprovenDesignDecisions: number;
+  /**
+   * Decisions recorded before design-revision stamping existed. Reported as a
+   * fact about when the ledger starts, never as a conformance failure.
+   */
+  preInstrumentationDecisions: number;
+  /**
+   * ISO timestamp of the earliest design-bound decision in the window — the
+   * point the evidence ledger begins. Null when nothing in the window is
+   * stamped, in which case the era cannot be located from this window.
+   */
+  instrumentedSince: string | null;
   staleDesignDecisions: number;
   attributionRate: number;
   traceRate: number;
@@ -217,9 +232,13 @@ const REMEDIATION: Record<
       "No action available to you. A route expected to dispatch recorded no adapter, outcome, or usage row — that is a platform gap in evidence writing, not a setting on this install.",
   },
   "ai-routing-design-unproven": {
-    ownerAction: "none-historical",
+    // Reclassified by BI-A4BC02BE. This used to count pre-instrumentation
+    // history and was therefore `none-historical`. Those rows are now excluded
+    // from the count, so anything that still reaches this finding was recorded
+    // AFTER stamping began and failed to carry a revision — a real gap.
+    ownerAction: "platform-defect",
     nextAction:
-      "Nothing to do, and this is not a fault. These decisions ran before the routing design revision was stamped onto traffic, so they cannot name the design they executed against. Every decision recorded since then is design-bound.",
+      "No action available to you. These decisions were recorded after design-revision stamping began but did not carry a revision, which is a gap in how the platform records routing evidence.",
   },
   "ai-routing-design-stale": {
     ownerAction: "none-historical",
@@ -329,8 +348,43 @@ export function projectRoutingEvidenceConformance(
   }
 
   const totalDecisions = input.decisions.length;
+
+  // BI-A4BC02BE — the design-conformance denominator must be the INSTRUMENTED
+  // ERA, not the fetch window.
+  //
+  // `unprovenDesignDecisions` was `totalDecisions - designBoundDecisions`. Since
+  // `totalDecisions` is however many rows the loader fetched (WINDOWED_SOURCE_LIMIT,
+  // 400) and design stamping began at a fixed point in the past, that expression
+  // evaluated to `fetch_limit - total_stamped_rows_in_existence`. It measured the
+  // page size, not conformance. Observed live: 400 - 229 = 171, reported to the
+  // owner as "171 issues".
+  //
+  // Two properties made it unfalsifiable. It DECREMENTED by one on every new
+  // inference (each adds a stamped row), so it silently self-cleared without any
+  // remediation; and it SCALED with the cap, so raising the limit to 1000 would
+  // have reported 771 on identical data.
+  //
+  // A decision recorded before stamping existed can never name a revision. Those
+  // are history, not failures. The earliest stamped decision in the window marks
+  // where the ledger begins; anything older is pre-instrumentation, and only
+  // unstamped decisions at or after that point are genuine conformance gaps.
+  //
+  // When the window contains no stamped decision at all the boundary cannot be
+  // located, so every unstamped row is treated as pre-instrumentation. That errs
+  // toward silence rather than toward crying wolf on an install that simply has
+  // not routed since stamping shipped.
+  const instrumentedSinceDate = earliestDate(
+    input.decisions
+      .filter((decision) => decision.designRevision)
+      .map((decision) => decision.createdAt),
+  );
+  const preInstrumentationDecisions = input.decisions.filter((decision) =>
+    !decision.designRevision &&
+    (instrumentedSinceDate === null || decision.createdAt < instrumentedSinceDate)
+  ).length;
   const uncorrelatedDecisions = totalDecisions - correlatedDecisions;
-  const unprovenDesignDecisions = totalDecisions - designBoundDecisions;
+  const unprovenDesignDecisions =
+    totalDecisions - designBoundDecisions - preInstrumentationDecisions;
   const coverage: RoutingEvidenceCoverage = {
     totalDecisions,
     attributedDecisions,
@@ -341,6 +395,8 @@ export function projectRoutingEvidenceConformance(
     screenCoveredDecisions,
     designBoundDecisions,
     unprovenDesignDecisions,
+    preInstrumentationDecisions,
+    instrumentedSince: instrumentedSinceDate?.toISOString() ?? null,
     staleDesignDecisions,
     attributionRate: rate(attributedDecisions, totalDecisions),
     traceRate: rate(tracedDecisions, totalDecisions),
@@ -407,7 +463,10 @@ export function projectRoutingEvidenceConformance(
     severity: "info",
     count: unprovenDesignDecisions,
     stage: "request",
-    message: "Historic traffic does not name the design revision it executed against.",
+    // No longer "historic": pre-instrumentation rows are excluded from this
+    // count, so anything remaining was recorded AFTER stamping began and is a
+    // genuine gap (BI-A4BC02BE).
+    message: "Traffic recorded since design-revision stamping began does not name the revision it executed against.",
   });
   addFinding(findings, {
     issueType: "ai-routing-design-stale",
@@ -631,5 +690,13 @@ function latestDate(values: Date[]): Date | null {
   if (values.length === 0) return null;
   return values.reduce((latest, value) =>
     value.getTime() > latest.getTime() ? value : latest
+  );
+}
+
+/** Earliest of the supplied dates; null when there are none (BI-A4BC02BE). */
+function earliestDate(values: Date[]): Date | null {
+  if (values.length === 0) return null;
+  return values.reduce((earliest, value) =>
+    value.getTime() < earliest.getTime() ? value : earliest
   );
 }

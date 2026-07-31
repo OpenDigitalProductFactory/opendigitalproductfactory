@@ -539,6 +539,7 @@ not “unused” and not an unconstrained “force.”
 | `BI-52C015D8` | Cross-view drill-through and routing-decision inspector |
 | `BI-7378E34C` | Designed/Observed/Compare Operations Map UX |
 | `BI-C8BC9DD1` | Owner-actionable conformance findings — remediation contract + severity-faithful presentation |
+| `BI-A4BC02BE` | Design conformance bounded to the instrumented era, not the fetch window |
 
 Existing defect `BI-7E2A1DD0` is coordinated, not duplicated.
 
@@ -567,6 +568,39 @@ count traffic recorded before the evidence contract existed and can never reach
 zero through any action. Presenting those as open work is false. Remediation
 text is static per issue type and carries no request content, so the
 privacy-safe projection boundary in §9 is unchanged.
+
+### 15.2 Design conformance is bounded by the instrumented era (BI-A4BC02BE)
+
+`unprovenDesignDecisions` was `totalDecisions − designBoundDecisions`, where
+`totalDecisions` is however many rows the loader fetched (`WINDOWED_SOURCE_LIMIT`).
+Because design-revision stamping began at a fixed point in the past, that
+expression evaluated to `fetch_limit − total_stamped_rows_in_existence` — it
+measured the page size, not conformance. Observed live as `400 − 229 = 171`,
+presented to an owner as "171 issues".
+
+Two properties made the figure unfalsifiable, and either alone is disqualifying
+for an owner-facing number:
+
+- it **decremented on every new inference**, because each one adds a stamped
+  row, so it silently self-cleared with no remediation performed;
+- it **scaled with the cap**, so raising the limit to 1000 would have reported
+  771 on identical underlying data.
+
+A decision recorded before stamping existed can never name a revision; those are
+history, not failures. The projection now takes the earliest design-bound
+decision in the window as the point the ledger begins, counts anything older as
+`preInstrumentationDecisions`, and reserves `unprovenDesignDecisions` for
+unstamped decisions at or after that boundary — which are genuine gaps, and are
+classified `platform-defect` rather than `none-historical` accordingly.
+
+When the window contains no stamped decision the boundary cannot be located, and
+every unstamped row is treated as pre-instrumentation. That errs toward silence
+rather than toward reporting a fault on an install that has simply not routed
+since stamping shipped.
+
+`coverage.instrumentedSince` is surfaced in the station inspector so an owner can
+distinguish "we have no record of that period" from "the platform did something
+wrong".
 
 ## 16. Refactoring budget
 
