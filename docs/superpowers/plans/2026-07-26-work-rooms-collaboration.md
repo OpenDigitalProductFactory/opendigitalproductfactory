@@ -240,6 +240,13 @@ Target 20-25 percent:
 
 The route continues to use the same loader. Revert the component composition to the prior `WorkCaseDetailView`; no data migration or route redirect rollback is required.
 
+### Design grounding
+
+- **Existing specs and plans reviewed:** this plan and its companion Work Rooms collaboration design, the Work Management architecture design, and the Work Case Wave 3 operator-surfaces plan.
+- **Current code substrate reviewed:** `workspace-case-loader`, `WorkCaseDetailView`, `WorkCaseAttentionLens`, `WorkItemCommentBox`, and report-kit status/empty-state primitives.
+- **Source of truth:** `WorkRoomView` remains a typed projection over the governed Work Case and its existing policy, activity, participant, action, and receipt seams.
+- **Decision:** keep `/workspace/cases/[caseKey]` as the canonical route, replace inspector composition with outcome-first room composition, reuse report-kit and theme tokens, keep diagnostics behind disclosure, and introduce neither a second work model nor a new navigation family.
+
 ### Implementation record (2026-07-28)
 
 - Preserved `/workspace/cases/[caseKey]` and composed the existing room projection into an outcome-first `WorkRoomHeader` and `WorkRoomBody`.
