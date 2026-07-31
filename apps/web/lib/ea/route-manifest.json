@@ -1612,6 +1612,18 @@
       "file": "apps/web/app/api/storefront/admin/setup/route.ts"
     },
     {
+      "routePath": "/api/storefront/admin/stock-items",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "stock-items"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/storefront/admin/stock-items/route.ts"
+    },
+    {
       "routePath": "/api/storefront/admin/units",
       "kind": "route",
       "segments": [
