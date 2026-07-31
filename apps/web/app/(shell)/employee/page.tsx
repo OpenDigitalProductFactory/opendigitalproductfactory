@@ -84,8 +84,7 @@ export default async function EmployeePage({ searchParams }: Props) {
   const session = await auth();
   const currentUserId = session?.user?.id ?? null;
 
-  // Reporting-line edits on the org chart are a governed action; the chart renders read-only
-  // for anyone who could not complete the write anyway (BI-HCM-004).
+  // Org-chart edits are governed; render read-only for anyone who cannot write (BI-HCM-004).
   const canManageWorkforce = session?.user
     ? can(
         { platformRole: session.user.platformRole, isSuperuser: session.user.isSuperuser },
@@ -166,8 +165,7 @@ export default async function EmployeePage({ searchParams }: Props) {
   ]);
   const unassignedRoles = roles.filter((r) => r._count.users === 0).length;
 
-  // Who actually holds each role. Derived from the users already loaded above — no extra
-  // query — so the governance cards can name people instead of showing a bare count.
+  // Role holders, from the users already loaded (no extra query) so cards can name people.
   const roleHolders = new Map<string, string[]>();
   for (const user of users) {
     if (!user.isActive) continue;
@@ -284,16 +282,14 @@ export default async function EmployeePage({ searchParams }: Props) {
         )}
       </div>
 
-      {/* Role governance & access. Demoted behind progressive disclosure so staffing
-          readiness leads (BI-3BCAF95F); simple mode drops it to reduce body content.
-          Within the disclosure the ACTIONABLE half now leads (BI-HCM-004): the previous
-          order put four read-only role cards above the one control that changes anything,
-          and each card showed a bare headcount, so "who can do what" was unanswerable. */}
+      {/* Role governance & access. Behind progressive disclosure so staffing readiness leads
+          (BI-3BCAF95F). The actionable half leads within it (BI-HCM-004): read-only cards used
+          to sit above the only control that changes anything. */}
       {!simple && (
         <div className="mt-8">
           <OwnerFirstDisclosure
             summary="Role governance & access"
-            hint="Who holds each role, and what that role can do"
+            hint="Who holds each role"
           >
             {users.length > 0 && (
               <HrUserLifecyclePanel
@@ -314,8 +310,7 @@ export default async function EmployeePage({ searchParams }: Props) {
                   What each role can do
                 </p>
                 <p className="mt-0.5 text-dpf-caption text-[var(--dpf-muted)]">
-                  Role definitions — oversight level and SLA — are set by the platform and are
-                  not editable here. Use the control above to change who holds a role.
+                  Set by the platform. Use the control above to change who holds a role.
                 </p>
               </div>
 
@@ -351,11 +346,10 @@ export default async function EmployeePage({ searchParams }: Props) {
                         <span className="text-dpf-caption text-[var(--dpf-muted)]">{sla}</span>
                       </div>
 
-                      {/* Naming the holders is the point — a bare count cannot answer
-                          "who can do what". */}
+                      {/* A bare count cannot answer "who can do what". */}
                       <p className="text-dpf-caption text-[var(--dpf-muted)]">
                         {holders.length === 0 ? (
-                          <span className="text-[var(--dpf-warning)]">Nobody holds this role</span>
+                          <span className="text-[var(--dpf-warning)]">Nobody holds this</span>
                         ) : (
                           <>
                             <span className="text-[var(--dpf-text)]">Held by</span>{" "}

@@ -85,7 +85,7 @@ function OrgChartNodeImpl({ data }: NodeProps & { data: OrgChartNodeData }) {
               className="truncate text-dpf-caption text-[var(--dpf-muted)]"
               title={data.positionTitle ?? undefined}
             >
-              {data.positionTitle ?? "No position set"}
+              {data.positionTitle ?? "No position"}
             </p>
           </div>
 
@@ -104,7 +104,7 @@ function OrgChartNodeImpl({ data }: NodeProps & { data: OrgChartNodeData }) {
             <span
               className="shrink-0 rounded px-1.5 py-0.5 text-dpf-caption text-[var(--dpf-muted)]"
               style={{ backgroundColor: "var(--dpf-surface-2)" }}
-              title={`${data.directReports} direct, ${data.totalReports} total in this branch`}
+              title={`${data.directReports} direct, ${data.totalReports} total`}
             >
               {data.directReports} direct
               {data.totalReports > data.directReports ? ` · ${data.totalReports} total` : ""}

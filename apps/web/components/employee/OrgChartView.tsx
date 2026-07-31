@@ -1,19 +1,12 @@
 "use client";
 
-// People > Org Chart (BI-HCM-004).
-//
-// Replaces an indented read-only list with a real reporting chart the operator can act on:
-// a laid-out node graph (dagre + React Flow, both already platform dependencies and already
-// used by EaCanvas / ProcessGraph / CartesianSceneCanvas), drag-to-reassign wired to the
-// governed `reassignEmployeeManager` action, and span-of-control signal on every card.
-//
-// Design notes worth keeping:
-//   * Reassignment goes through the governed action, so it is permission-checked, audited,
-//     and writes a `manager_changed` employment event. The chart never writes Prisma directly.
-//   * A drop that would create a reporting loop is refused in the UI *and* in the action —
-//     the client check is for feedback, the server check is the guarantee.
-//   * Filters dim rather than remove people, so a filtered chart still shows the reporting
-//     lines that pass through excluded colleagues instead of silently re-parenting them.
+// People > Org Chart (BI-HCM-004). Node graph via dagre + React Flow (existing deps, as used
+// by EaCanvas / ProcessGraph), with drag-to-reassign through the governed
+// `reassignEmployeeManager` action. Notes:
+//   * Reassignment is permission-checked and audited; the chart never writes Prisma directly.
+//   * Loop-creating drops are refused in the UI and the action; the server check is the guarantee.
+//   * Filters dim rather than remove, so lines through excluded people do not appear to
+//     re-parent anyone.
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
@@ -226,10 +219,8 @@ function OrgChartViewInner({ employees, canReassign = true, onSelect }: Props) {
     [positions, setNodes],
   );
 
-  /**
-   * Drag-to-reassign. The dialog is awaited OUTSIDE the transition — a dialog helper called
-   * inside startTransition never renders interactively and wedges the control (AGENTS.md §12).
-   */
+  // Dialog awaited OUTSIDE the transition — inside one it never renders and wedges the
+  // control (AGENTS.md §12).
   const onNodeDragStop = useCallback(
     async (_event: unknown, node: Node) => {
       setDropTargetId(null);
@@ -264,16 +255,14 @@ function OrgChartViewInner({ employees, canReassign = true, onSelect }: Props) {
         restorePosition(node.id);
         setFeedback({
           tone: "error",
-          message: `${manager.displayName} reports to ${dragged.displayName}, so that move would create a reporting loop.`,
+          message: `${manager.displayName} reports to ${dragged.displayName} — that would create a loop.`,
         });
         return;
       }
 
       const confirmed = await confirmDialog({
         title: "Change reporting line",
-        message: `${dragged.displayName} will report to ${manager.displayName}${
-          dragged.managerName ? ` instead of ${dragged.managerName}` : ""
-        }. This is recorded as a manager change on their employment record.`,
+        message: `${dragged.displayName} will report to ${manager.displayName}. Recorded on their employment record.`,
       });
 
       restorePosition(node.id);
@@ -316,7 +305,7 @@ function OrgChartViewInner({ employees, canReassign = true, onSelect }: Props) {
     return (
       <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
         <p className="text-sm text-[var(--dpf-muted)]">
-          No employee profiles registered yet. Add the first person to start the org chart.
+          No people yet. Add the first person to start the chart.
         </p>
       </section>
     );
@@ -324,19 +313,18 @@ function OrgChartViewInner({ employees, canReassign = true, onSelect }: Props) {
 
   return (
     <section className="space-y-4" data-component="org-chart-view">
-      {/* Reporting-structure signal — what the chart is actually for. */}
+      {/* Reporting-structure signal. */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard label="People" value={String(headline.headcount)} />
         <StatCard label="Managers" value={String(headline.managers)} />
-        <StatCard label="Average span of control" value={String(headline.avgSpan)} />
-        <StatCard label="No manager set" value={String(headline.unmanaged)} />
+        <StatCard label="Avg span" value={String(headline.avgSpan)} />
+        <StatCard label="No manager" value={String(headline.unmanaged)} />
       </div>
 
       {graph.cyclicIds.length > 0 && (
         <Notice variant="warn" title="Reporting loop detected">
           {graph.cyclicIds.map((id) => byId.get(id)?.displayName ?? id).join(", ")} report to each
-          other in a loop, so they have no path to the top of the chart. Give one of them a manager
-          outside the loop to fix it.
+          other in a loop. Give one a manager outside the loop.
         </Notice>
       )}
 
@@ -355,8 +343,8 @@ function OrgChartViewInner({ employees, canReassign = true, onSelect }: Props) {
           type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Find a person, role, or team"
-          aria-label="Find a person, role, or team"
+          placeholder="Find a person"
+          aria-label="Find a person"
           className="min-w-[200px] flex-1 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-xs text-[var(--dpf-text)]"
         />
 
@@ -465,14 +453,14 @@ function OrgChartViewInner({ employees, canReassign = true, onSelect }: Props) {
       </div>
 
       <p className="text-[10px] text-[var(--dpf-muted)]">
-        Solid lines are reporting lines; dashed lines are dotted-line relationships.
-        {canReassign ? " Drag a person onto another to change who they report to." : ""}
+        Dashed lines are dotted-line reports.
+        {canReassign ? " Drag a person onto their new manager." : ""}
       </p>
     </section>
   );
 }
 
-/** Compact indented view — kept as a density option for scanning a large workforce. */
+/** Compact view — a density option for scanning a large workforce. */
 function OrgList({
   employees,
   graph,
@@ -555,7 +543,7 @@ function OrgDetailPanel({
     return (
       <aside className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
         <p className="text-xs text-[var(--dpf-muted)]">
-          Select someone on the chart to see and change their reporting lines.
+          Select someone to change their reporting lines.
         </p>
       </aside>
     );
@@ -566,7 +554,7 @@ function OrgDetailPanel({
       <div>
         <p className="text-sm font-semibold text-[var(--dpf-text)]">{employee.displayName}</p>
         <p className="text-xs text-[var(--dpf-muted)]">
-          {employee.positionTitle ?? "No position set"}
+          {employee.positionTitle ?? "No position"}
           {employee.departmentName ? ` · ${employee.departmentName}` : ""}
         </p>
       </div>
@@ -625,7 +613,7 @@ function OrgDetailPanel({
 
       {!canReassign && (
         <p className="text-[10px] text-[var(--dpf-muted)]">
-          You do not have permission to change reporting lines.
+          You cannot change reporting lines.
         </p>
       )}
     </aside>
