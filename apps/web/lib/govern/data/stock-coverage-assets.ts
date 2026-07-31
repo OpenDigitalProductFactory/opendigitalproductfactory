@@ -5,6 +5,13 @@
 
 import type { DataAssetDefinition } from "./assets";
 
+const PROVENANCE = {
+  source: "manual",
+  state: "confirmed",
+  assertedBy: "data-steward",
+  effectiveFrom: "2026-07-31",
+} as const;
+
 const SHARED = {
   domain: "spend-procurement-assets",
   ownerRole: "business-operator",
@@ -15,11 +22,7 @@ const SHARED = {
   lifecycleClass: "operational",
   purposeCapabilities: ["service-delivery", "platform-operations"],
   residencyClass: "local-only",
-  classification: {
-    state: "confirmed",
-    source: "manual",
-    effectiveFrom: "2026-07-31",
-  },
+  classification: PROVENANCE,
 } as const;
 
 export const STOCK_COVERAGE_ASSETS: readonly DataAssetDefinition[] = [
@@ -39,7 +42,7 @@ export const STOCK_COVERAGE_ASSETS: readonly DataAssetDefinition[] = [
         resolution: "governed",
         resolutionReason:
           "Operator-maintained stocktake count, not a measured ledger; coverage projections are only as good as this number and must never be presented as measured.",
-        provenance: "manual",
+        provenance: PROVENANCE,
       },
       {
         id: "data:stock-item#reorderPoint",
@@ -47,7 +50,7 @@ export const STOCK_COVERAGE_ASSETS: readonly DataAssetDefinition[] = [
         resolution: "governed",
         resolutionReason:
           "The threshold that turns a stock level into a restocking proposal — an operator decision, never a platform default.",
-        provenance: "manual",
+        provenance: PROVENANCE,
       },
     ],
   },
@@ -64,7 +67,7 @@ export const STOCK_COVERAGE_ASSETS: readonly DataAssetDefinition[] = [
         resolution: "governed",
         resolutionReason:
           "The multiplier turning units sold into derived consumption; an incorrect value silently scales every coverage projection built on it.",
-        provenance: "manual",
+        provenance: PROVENANCE,
       },
     ],
   },
