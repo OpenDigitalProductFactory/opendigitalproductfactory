@@ -417,6 +417,14 @@ Consistent with §12f: **every guard built for this BI has had a model defect ex
 
 Also noted and **not** fixed here: the duplicate-detection pass (`check-instruction-plane-rule-coverage.mjs`) iterates only the three pointer-forced files. Skill descriptions are equally always-on *and* a registered `ruleDestination`, so a rule duplicated across the two tiers is invisible to it. Measured today: no cross-tier duplication exists — descriptions are trigger-shaped, rules are imperative, and lexical overlap is near zero. The gap is latent, not live, and is recorded for the next pass rather than fixed speculatively.
 
-### 13e. Cadence — the open decision
+### 13e. Seed-fit applicability decision
+
+**`global-default`.** `commons-are-curated-not-just-appended` is a platform principle with `principleRingScope: universal-ring`, `principleConsumerArchetype: universal` and `principlePublic: true`. Its semantics are not tied to an operator, geography, market or archetype — every install inherits doctrine corpora and will add to them, so every install needs the rule that says those corpora are maintained rather than merely appended to. It is canonical seed for all installs, exactly as its sibling `learnings-belong-in-the-shared-commons` is.
+
+Not `archetype-scoped` or `vertical-scoped` (nothing about curation is specific to a business type), not `parameterize-first` (the review cadence is deliberately left to each corpus owner rather than baked in as a literal), and not `install-local-only` (a locally-held curation rule would itself be the local-only-knowledge defect its sibling principle forbids).
+
+Recorded here durably in addition to the `Seed-Fit-Decision:` PR trailer the CI gate reads.
+
+### 13f. Cadence — the open decision
 
 The principle specifies *what* a review asks and *who* owns it. It deliberately does not fix the interval, which is a founder call per corpus. The recommendation: trigger on whichever comes first — a release boundary, growth past the corpus ratchet since the last review, or a calendar floor so a quiet corpus is still examined. WWWD and WSID need their own rule-identity mechanism (the anchor equivalent) before they can be consolidated as safely as `AGENTS.md`; that is unbuilt and is the natural next BI.
