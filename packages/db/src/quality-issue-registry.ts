@@ -117,7 +117,7 @@ const REGISTRY = {
     autoResolveWhen: "the entity gains a taxonomy attribution on a later sweep",
     operatorActionable: true,
     expectedSteadyState: 0,
-    owner: "coworker:estate-specialist",
+    owner: "coworker:inventory-specialist",
     summary: "Entity has no resolvable taxonomy node.",
   },
   no_portfolio_root: {
@@ -137,7 +137,7 @@ const REGISTRY = {
     autoResolveWhen: "attribution confidence rises above the auto-promote threshold",
     operatorActionable: true,
     expectedSteadyState: 0,
-    owner: "coworker:estate-specialist",
+    owner: "coworker:inventory-specialist",
     summary: "Attribution confidence below the auto-promote threshold.",
   },
 
@@ -150,7 +150,7 @@ const REGISTRY = {
       "the entity is observed active again in a later sweep (reconcile-on-recovery); only MANAGED estate raises at all",
     operatorActionable: true,
     expectedSteadyState: 0,
-    owner: "coworker:estate-specialist",
+    owner: "coworker:inventory-specialist",
     summary: "Managed entity was not confirmed in the latest discovery run.",
   },
   stale_relationship: {
@@ -161,7 +161,7 @@ const REGISTRY = {
       "the relationship is observed active again in a later sweep (reconcile-on-recovery); only MANAGED topology raises at all",
     operatorActionable: true,
     expectedSteadyState: 0,
-    owner: "coworker:estate-specialist",
+    owner: "coworker:inventory-specialist",
     summary: "Managed relationship was not confirmed in the latest discovery run.",
   },
 
@@ -173,7 +173,7 @@ const REGISTRY = {
     autoResolveWhen: "the entity gains a taxonomy or product attribution",
     operatorActionable: true,
     expectedSteadyState: 0,
-    owner: "coworker:estate-specialist",
+    owner: "coworker:inventory-specialist",
     summary: "Entity requires taxonomy or product attribution review.",
   },
   taxonomy_attribution_low_confidence: {
@@ -183,7 +183,7 @@ const REGISTRY = {
     autoResolveWhen: "attribution confidence rises above the low-confidence threshold",
     operatorActionable: true,
     expectedSteadyState: 0,
-    owner: "coworker:estate-specialist",
+    owner: "coworker:inventory-specialist",
     summary: "Entity has low-confidence taxonomy attribution candidates.",
   },
   catalog_match_ambiguous: {
@@ -193,7 +193,7 @@ const REGISTRY = {
     autoResolveWhen: "identity evidence resolves (manufacturer + normalized version + catalog match)",
     operatorActionable: true,
     expectedSteadyState: 0,
-    owner: "coworker:estate-specialist",
+    owner: "coworker:inventory-specialist",
     summary: "Entity needs identity review (manufacturer / version / catalog match).",
   },
   lifecycle_unverified: {
@@ -203,7 +203,7 @@ const REGISTRY = {
     autoResolveWhen: "support lifecycle (supportStatus) becomes known for the entity",
     operatorActionable: true,
     expectedSteadyState: 0,
-    owner: "coworker:estate-specialist",
+    owner: "coworker:inventory-specialist",
     summary: "Entity still needs support-lifecycle verification.",
   },
   taxonomy_gap_proposal: {
@@ -223,7 +223,7 @@ const REGISTRY = {
     autoResolveWhen: "the missing required fields are populated",
     operatorActionable: true,
     expectedSteadyState: 0,
-    owner: "coworker:estate-specialist",
+    owner: "coworker:inventory-specialist",
     summary: "Required detail is missing from the record.",
   },
   enrichment_failed: {

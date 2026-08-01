@@ -92,6 +92,18 @@ react-data-grid. Range-select is scoped to a rectangle (not multi-range).
   through the validated `persistCell`. Excel cell parity for the flat grid is now
   complete. **Decomposition follow-up:** extract the range/fill logic from `Grid.tsx`
   into a `useCellRange` hook (Grid.tsx is 1653 LOC).
+- **S5 — Find & Replace (`Ctrl+F` / `Ctrl+H`) — SHIPPED.** An in-grid find bar
+  (Excel/browser-familiar): type to match cells across every field type (matched
+  against each cell's searchable text, so numbers/dates/refs are searchable too),
+  with a live `n / total` count, next/prev navigation (Enter / Shift+Enter) that
+  scrolls the active match into view, and **Match case** / **Whole cell** toggles.
+  `Ctrl+H` (or the "Replace…" button) adds a replacement field with **Replace** and
+  **Replace all**, each write riding the validated `persistCell`. Every match is
+  tinted and the active one is ringed via `cellClass`. Find works in read-only
+  grids; Replace requires edit rights and is scoped to string-valued cells (so it
+  never corrupts a typed number/date). Pure, unit-tested `grid-find-replace.ts`
+  (matching + navigation + literal-safe replace); flat grid only. This closes the
+  last fully-absent Excel cell feature (governance ledger DI-F48CE1B4C2F2).
 
 ## Accessibility & testing
 
