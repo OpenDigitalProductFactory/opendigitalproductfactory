@@ -323,6 +323,16 @@ export function RelationshipGraph({
 
   const focusNode = data.nodes.find((n) => n.id === focusNodeId);
 
+  // `node.label` is the legend KEY — it is what the show/hide filters match on,
+  // and for the graph explorer that key is the raw `graph_node.labels` value
+  // ("PrismaModel", "ArchiMate__DataObject"). It must never reach the operator as
+  // prose: the legend already carries the human name for exactly this key, so
+  // resolve through it and fall back to the raw value only for a node whose type
+  // has no legend entry (BI-AB7FE57B).
+  const focusTypeName = focusNode
+    ? (nodeLegend.find((entry) => entry.key === focusNode.label)?.label ?? focusNode.label)
+    : "";
+
   return (
     <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
       {/* Controls toolbar */}
@@ -338,7 +348,7 @@ export function RelationshipGraph({
               <span className="text-[10px] text-[var(--dpf-muted)]">Focus:</span>
               <span className="text-xs text-[var(--dpf-text)] font-medium">{focusNode.name}</span>
               <span className="text-[9px] px-1 rounded" style={{ background: `${focusNode.color}20`, color: focusNode.color }}>
-                {focusNode.label}
+                {focusTypeName}
               </span>
               <button
                 type="button"
