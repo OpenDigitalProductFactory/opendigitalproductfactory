@@ -198,8 +198,6 @@ export async function DiscoveryOperationsPage({
           as="div"
           previewCount={ESTATE_PREVIEW_COUNT}
           listClassName="grid grid-cols-1 gap-3 sm:grid-cols-2"
-          moreLabel={(hidden) => `Show ${hidden} more products`}
-          fewerLabel="Show fewer products"
         >
           {products.map((product) => {
             const colour = product.portfolio
