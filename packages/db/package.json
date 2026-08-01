@@ -32,6 +32,7 @@
     "./federated-record-sync": "./src/federated-record-sync.ts",
     "./discovery-triage": "./src/discovery-triage.ts",
     "./discovery-triage-enums": "./src/discovery-triage-enums.ts",
+    "./wiki-taxonomy": "./src/wiki-taxonomy.ts",
     "./discovery-collectors-arp-scan": "./src/discovery-collectors/arp-scan.ts",
     "./discovery-collectors-snmp": "./src/discovery-collectors/snmp.ts",
     "./discovery-collectors-unifi": "./src/discovery-collectors/unifi.ts",

@@ -313,13 +313,29 @@ forces that call explicitly rather than letting two overlapping mechanisms accre
 
 ## 10. Open questions for founder ratification
 
-1. **Should a *ruled* stance be able to reach commandment-level magnitude in its own class?** The
-   ladder gives it A/1.0 material weight, but that is material confidence, not principle magnitude.
-   Proposed: no — org policy is authoritative within its scope but never doctrine-tier.
+**Q1 and Q3 are now RESOLVED by kernel ruling** (2026-08-01), before any code was written, per
+`consult-the-governed-scopes-before-asking-a-human`. Both returned high confidence with no
+commandment conflict, and both confirmed this spec's proposed default. They are encoded as enforced
+constants in `apps/web/lib/decision-perspective/stance-dimension-map.ts`, not left as prose.
+
+1. ~~**Should a *ruled* stance be able to reach commandment-level magnitude in its own class?**~~
+   **RESOLVED — `cap-below-doctrine`** (`DI-687A1094E253`, margin 6.52). An org stance is
+   authoritative *within its scope* but never doctrine-tier, even at `ruled`. Subsidiarity grants the
+   org the decision it owns; it does not let commercial policy outweigh the universal obligations
+   commandments carry at magnitude 1.0. Encoded as `STANCE_MAX_MAGNITUDE = 0.4` (the core-tier
+   default), enforced per edge.
 2. **Does `ceilingUsd` scale magnitude at all, or only gate autonomy?** §4.2 proposes it scales,
    sublinearly. The conservative alternative is that it stays purely an autonomy threshold and every
-   derived edge uses the base magnitude.
-3. **Is `public_safety` on `quality-bar` conditional (per archetype) or never derived?** Deriving a
-   safety weight from a commercial quality stance is the most aggressive edge proposed; it may
-   belong to profession corpora only.
-4. **DF87F8D2** — reduce to a refinement step, or close as superseded (§7)?
+   derived edge uses the base magnitude. **Still open — gates Phase 1.** Left to founder input rather
+   than kernel scoring: this is an investment/calibration call, not a principle conflict.
+3. ~~**Is `public_safety` on `quality-bar` conditional (per archetype) or never derived?**~~
+   **RESOLVED — `never-derive-safety`** (`DI-A01830820221`, margin 2.65). `public_safety` sits on the
+   spine as a *universal obligation*, not by usage frequency. That several archetype `quality-bar`
+   defaults explicitly name safety is exactly why deriving from them is tempting, and exactly why it
+   is refused: safety weight comes from profession corpora and kernel principles, so no organization
+   can manufacture or dilute one by editing its commercial quality bar. Encoded as
+   `STANCE_FORBIDDEN_DIMENSIONS`.
+4. **DF87F8D2** — reduce to a refinement step, or close as superseded (§7)? **Still open — gates
+   Phase 4.**
+
+Implementation plan: [2026-08-01-stance-derived-dimension-vectors.md](../plans/2026-08-01-stance-derived-dimension-vectors.md).
