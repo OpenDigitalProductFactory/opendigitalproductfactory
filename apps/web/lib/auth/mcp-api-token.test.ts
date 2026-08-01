@@ -530,7 +530,7 @@ describe("rotateMcpApiToken", () => {
       scope: "write",
       capability: "write",
       scopes: ["backlog_read", "backlog_write"],
-      expiresAt: new Date("2026-08-01T00:00:00Z"),
+      expiresAt: new Date("2999-01-01T00:00:00Z"),
       revokedAt: null,
     });
 
@@ -550,7 +550,7 @@ describe("rotateMcpApiToken", () => {
         scope: "write",
         capability: "write",
         scopes: ["backlog_read", "backlog_write"],
-        expiresAt: new Date("2026-08-01T00:00:00Z"),
+        expiresAt: new Date("2999-01-01T00:00:00Z"),
         tokenSuffix: expect.any(String),
         secretEnc: expect.stringMatching(/^enc:/),
       }),
