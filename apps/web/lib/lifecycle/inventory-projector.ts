@@ -2,7 +2,7 @@
 // The job remains bounded: partial pages may add or refresh evidence, but only a complete
 // evidence window may close memberships or resolve gaps.
 
-import { INVENTORY_ENTITY_CANONICAL_WHERE } from "@dpf/db";
+import { INVENTORY_ENTITY_CANONICAL_WHERE } from "@dpf/db/inventory-entity-lifecycle";
 import { reconcileBaselinePlateau, type BaselineProjectorClient } from "./baseline-projector";
 import { resolveLifecycle, type SupportLifecycleMilestone } from "../lifecycle";
 import { generateTechnologyCurrencyGaps } from "./gap-generators/technology-currency";
