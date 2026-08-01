@@ -3723,12 +3723,12 @@
     "longSentences": 0,
     "textMass": 15
   },
-  "apps/web/components/build-studio/BusinessBriefPanel.tsx": {
+  "apps/web/components/build/BusinessBriefPanel.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 141
+    "textMass": 144
   },
   "apps/web/components/build-studio/Composer.tsx": {
     "vocabulary": 0,
@@ -4037,6 +4037,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 6
+  },
+  "apps/web/components/build/OwnerChangeProofPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 26
   },
   "apps/web/components/build/ParentDesignAmendmentCoordinator.tsx": {
     "vocabulary": 0,
