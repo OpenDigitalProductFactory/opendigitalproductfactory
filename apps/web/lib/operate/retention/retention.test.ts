@@ -311,3 +311,41 @@ describe("retention executor", () => {
     expect(where.read).toBe(true);
   });
 });
+
+describe("legal hold (BI-90A8D153 GAP 2)", () => {
+  const NOW2 = new Date("2026-06-14T04:00:00.000Z");
+
+  it("does not add a legalHold filter to an enrolled model that has no such column", async () => {
+    // The exclusion spread must be a strict no-op for the 20 real policies (none
+    // of which target a legalHold-bearing model) — it must not corrupt their
+    // WHERE clause or accidentally spare rows.
+    const prisma = makeFakePrisma({ toolExecution: 3 });
+    await runRetentionSweep({
+      prisma,
+      now: NOW2,
+      dryRun: false,
+      industryKey: null,
+      onlyModels: ["toolExecution"],
+    });
+    const findManyCall = (
+      prisma.toolExecution as unknown as { state: FakeModelState }
+    ).state.calls.find((c) => c.op === "findMany");
+    const where = findManyCall!.where as Record<string, unknown>;
+    expect(where).not.toHaveProperty("legalHold");
+    // The timestamp arm is still the sole filter — behaviour unchanged.
+    expect(Object.keys(where)).toEqual(["createdAt"]);
+  });
+
+  it("the exclusion clause spares only an explicit hold (unit — the held path is not enrollable today)", async () => {
+    // No legalHold-bearing model is purge-enrolled, so an end-to-end sweep can
+    // never reach one — which is precisely why the defect was latent. The
+    // engine now composes `...legalHoldExclusion(policy.model)` into both the
+    // live and dry-run WHERE clauses (execute.ts); legalHoldExclusion is proven
+    // for both the held and non-held cases in legal-hold.schema.test.ts. Here we
+    // pin the sparing semantics the engine relies on: `{ not: true }` excludes
+    // only legalHold=true, leaving false/null purge-eligible.
+    const { legalHoldExclusion } = await import("./legal-hold");
+    expect(legalHoldExclusion("patientProfile")).toEqual({ legalHold: { not: true } });
+    expect(legalHoldExclusion("toolExecution")).toEqual({});
+  });
+});
