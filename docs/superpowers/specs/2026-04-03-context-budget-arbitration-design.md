@@ -404,6 +404,38 @@ Rationale of record for why this plane needed provenance at all:
 (finding F2 — the runtime context plane was budgeted but carried no provenance, while the
 portal-UX and static-agent-instruction planes are both ratcheted).
 
+### 9.4 Read surface (shipped 2026-08-01)
+
+§9.3 made the decision durable. A record nothing reads is a slower thermometer, and the
+work was approved "for debugging and optimization" — neither of which a column served.
+
+- **Where:** a deferred panel on `/platform/ai/runtime-health`, not a new route.
+  Extending an existing admin surface was the cheaper honest option, and the operator
+  question it answers ("is context being starved?") is a runtime-health question.
+- **Why deferred, and why that is not a workaround:** that route sits at a frozen
+  515-word UX-budget baseline, and the ratchet forbids a changed route exceeding its own
+  baseline. A diagnostic table in the default view would blow it — correctly. The panel
+  is marked `data-dpf-disclosure`, so `lib/ux-budget` both COUNTS it as progressive
+  disclosure and EXCISES its content from the measured scope. That is also the right
+  shape: a debug detail belongs where someone goes looking, not in the lead band. A
+  component test asserts this against the real budget helpers so it cannot regress
+  silently.
+- **Shape:** `lib/tak/context-trace-health.ts` aggregates (pure, unit-tested, no Prisma);
+  `context-trace-health-loader.ts` is a thin bounded query (200 most recent traced turns
+  — a diagnostic panel, not an analytics warehouse); `ContextTraceHealthPanel` renders.
+- **Wording discipline, enforced by test:** every label reports the ARBITRATOR'S DECISION,
+  never answer quality — "dropped on N turns", not "degraded N answers". The projection
+  knows what was withheld from the model; it cannot know whether that mattered, which
+  needs the answer the coworker gave. Claiming otherwise would rebuild the attestation
+  problem these planes were built to eliminate, in a dashboard.
+- **Unreadable rows are skipped, not guessed at.** The column is nullable and versioned;
+  `parseStoredTrace` rejects a future or malformed row so an average an operator is about
+  to act on is never computed over rows we could not read. "No turns recorded a trace" is
+  a distinct, honest state from "nothing was lost".
+
+§9.1's aggregate metrics remain the open gap: this answers per-turn and recent-sample
+questions, not fleet-level ones.
+
 ---
 
 ## 10. Implementation Order
