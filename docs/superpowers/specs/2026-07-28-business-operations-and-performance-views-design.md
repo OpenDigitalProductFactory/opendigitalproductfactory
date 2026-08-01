@@ -233,6 +233,8 @@ interface BusinessPerformanceSnapshot {
 
 `BI-PLAN-004` owns the eventual governed analytics substrate. The first slice may use an internal rollup table/materialized projection, but only after the data-architecture review proves no in-flight canonical model fits. It must store organization, metric key, period, dimensions hash, value/unit, definition version, source watermark, and computed-at time; it must not store display copy or chart layout.
 
+The question-to-execution seam is specified separately in the [Verified Business Analysis Plan design](2026-08-01-verified-business-analysis-plan-design.md). `BI-8EC3E4BF` adds the typed, deterministic plan contract without changing the `BI-PLAN-005` rollup or route, and `BI-36358ACF` owns the later inspectable plan-review and watched-question interaction.
+
 Rollups refresh asynchronously from source facts and append-only telemetry. The route serves the last valid snapshot with freshness. A failed or late rollup degrades the affected card and raises an observable refresh condition; it does not block Operations or fabricate a current number.
 
 ### Reconciliation rule
