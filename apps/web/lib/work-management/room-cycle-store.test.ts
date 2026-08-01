@@ -5,7 +5,6 @@ import {
   completeWorkRoomCycle,
   applyWorkRoomCarryOver,
   openWorkRoomCycle,
-  WorkRoomCycleStoreError,
   type WorkRoomCycleParentRecord,
   type WorkRoomCycleStoreDb,
   type WorkRoomCycleStoreMessage,
@@ -131,7 +130,7 @@ describe("Work Room cycle store", () => {
     await openWorkRoomCycle(openInput(state.db));
     expect((await openWorkRoomCycle(openInput(state.db))).idempotent).toBe(true);
     await expect(openWorkRoomCycle(openInput(state.db, "2026-W32")))
-      .rejects.toMatchObject<Partial<WorkRoomCycleStoreError>>({ reason: "active_cycle_exists" });
+      .rejects.toMatchObject({ reason: "active_cycle_exists" });
     expect(state.cycles).toHaveLength(1);
   });
 
