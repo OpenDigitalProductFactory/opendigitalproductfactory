@@ -282,6 +282,78 @@ describe("projectCoworkerRouteReadiness", () => {
     ).resolves.toMatchObject({ ready: false });
   });
 
+  it("requires both the creative strong floor and tool use for Marketing work", async () => {
+    const creativeRequirement = {
+      taskType: "creative",
+      description: "Campaign planning floor.",
+      selectionRationale: "Creative campaign work with governed tools.",
+      requiredCapabilities: {},
+      preferredMinScores: { conversational: 60, reasoning: 50 },
+      minimumTier: "strong" as const,
+      preferCheap: false,
+      origin: "system" as const,
+    };
+    const probe = {
+      taskType: "creative",
+      prompt: "Create a draft restaurant promotion campaign.",
+      requiresToolUse: true,
+    };
+    const readinessSnapshot = (candidate: EndpointManifest) => ({
+      ...snapshot([candidate]),
+      taskRequirementByTaskType: new Map([
+        ["creative", creativeRequirement],
+      ]),
+    });
+
+    await expect(
+      projectCoworkerRouteReadiness(
+        config,
+        readinessSnapshot(
+          endpoint({
+            reasoning: 50,
+            codegen: 50,
+            toolFidelity: 50,
+            instructionFollowing: 50,
+            structuredOutput: 50,
+            conversational: 50,
+            contextRetention: 50,
+          }),
+        ),
+        probe,
+      ),
+    ).resolves.toMatchObject({ ready: false });
+
+    await expect(
+      projectCoworkerRouteReadiness(
+        config,
+        readinessSnapshot(
+          endpoint({
+            supportsToolUse: false,
+            outputModalities: ["text"],
+            capabilities: {
+              ...EMPTY_CAPABILITIES,
+              streaming: true,
+              toolUse: false,
+            },
+          }),
+        ),
+        probe,
+      ),
+    ).resolves.toMatchObject({ ready: false });
+
+    await expect(
+      projectCoworkerRouteReadiness(
+        config,
+        readinessSnapshot(endpoint()),
+        probe,
+      ),
+    ).resolves.toMatchObject({
+      ready: true,
+      providerId: "openai",
+      modelId: "gpt-ready",
+    });
+  });
+
   it("parses only complete representative service probes", () => {
     expect(
       parseCoworkerServiceReadinessProbe({
