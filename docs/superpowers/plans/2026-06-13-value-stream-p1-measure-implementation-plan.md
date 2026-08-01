@@ -1,6 +1,8 @@
 # Value Stream P1 (Measure) - Operator Value Stream Headline: Implementation Plan
 
-> **For agentic workers:** REQUIRED: Use `superpowers:subagent-driven-development` (if subagents are available) or `superpowers:executing-plans` to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+> **Recovery note (2026-08-01):** this plan was written 2026-06-13 and stranded uncommitted in a deleted thread's worktree. Only the preamble above was rewritten on recovery — it originally invoked the `superpowers:*` skills, which have since been retired. The plan body is unchanged from 2026-06-13 and predates two months of platform change; re-verify against current `main` before executing.
 
 ## Goal
 

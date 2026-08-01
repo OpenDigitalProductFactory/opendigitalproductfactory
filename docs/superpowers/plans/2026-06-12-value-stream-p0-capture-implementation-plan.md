@@ -1,6 +1,8 @@
 # Value Stream P0 Capture Implementation Plan
 
-> **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+> **Recovery note (2026-08-01):** this plan was written 2026-06-12 and stranded uncommitted in a deleted thread's worktree. Only the preamble above was rewritten on recovery — it originally invoked the `superpowers:*` skills, which have since been retired. The plan body is unchanged from 2026-06-12 and predates two months of platform change; re-verify against current `main` before executing.
 
 **Goal:** At storefront setup and archetype reset, derive the org's Operational Value Stream Model (OVSM), persist it as an EA value-stream view, list it on the existing `/ea/value-streams` surface, render it on `/ea/views/[id]`, and keep ArchiMate export working through the existing view export path.
 
