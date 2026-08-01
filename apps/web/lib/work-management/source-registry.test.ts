@@ -51,6 +51,8 @@ describe("Work Case source registry", () => {
       "task-run",
     ]);
     expect(getWorkCaseSourceEntry("booking")?.roomProjection.cycleCarrierPrecedence).toEqual([]);
+    expect(getWorkCaseSourceEntry("scheduled")?.supportedTransitions).toContain("split");
+    expect(getWorkCaseSourceEntry("scheduled")?.supportedTransitions).not.toContain("handoff");
   });
 
   it("normalizes unknown, missing, and whitespace source keys safely", () => {

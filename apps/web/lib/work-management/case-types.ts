@@ -37,6 +37,14 @@ export const WORK_CASE_ACTION_VERBS = [
   "verify",
   "complete",
   "cancel",
+  "open-cycle",
+  "pause-cycle",
+  "verify-cycle",
+  "complete-cycle",
+  "carry-over",
+  "renew",
+  "split",
+  "archive",
 ] as const;
 
 export type WorkCaseActionVerb = (typeof WORK_CASE_ACTION_VERBS)[number];

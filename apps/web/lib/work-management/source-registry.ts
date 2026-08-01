@@ -80,11 +80,17 @@ const SCHEDULED_TRANSITIONS = [
   "pause",
   "needs-input",
   "resume",
-  "delegate",
-  "handoff",
   "verify",
   "complete",
   "cancel",
+  "open-cycle",
+  "pause-cycle",
+  "verify-cycle",
+  "complete-cycle",
+  "carry-over",
+  "renew",
+  "split",
+  "archive",
 ] as const satisfies readonly WorkCaseSupportedTransition[];
 
 const GOVERNED_RECEIPT_POLICY = {

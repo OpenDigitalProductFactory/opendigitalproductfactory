@@ -24,6 +24,14 @@ describe("Work Case action registry", () => {
       "verify",
       "complete",
       "cancel",
+      "open-cycle",
+      "pause-cycle",
+      "verify-cycle",
+      "complete-cycle",
+      "carry-over",
+      "renew",
+      "split",
+      "archive",
     ]);
   });
 
@@ -35,6 +43,14 @@ describe("Work Case action registry", () => {
       "verify",
       "complete",
       "cancel",
+      "open-cycle",
+      "pause-cycle",
+      "verify-cycle",
+      "complete-cycle",
+      "carry-over",
+      "renew",
+      "split",
+      "archive",
     ]) {
       expect(getWorkCaseAction(action)).toMatchObject({
         consequential: true,
