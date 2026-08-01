@@ -16,6 +16,7 @@ export const DIAGRAM_VERSIONS = Object.freeze({
   "architecture/ai-agent-meta-model/0": "17a4d8168409942d",
   "architecture/ai-agent-meta-model/1": "4146b5ef011d16d0",
   "architecture/ai-agent-meta-model/2": "7861196960afd398",
+  "architecture/application-boundaries/0": "023c667c79638a6e",
   "architecture/archetype-owner-positioning/0": "1df0cd530c89b260",
   "architecture/capability-driven-runtime-profiles/0": "5eab6fa2a09f0ded",
   "architecture/platform-overview/0": "9c708514e7702ebd",

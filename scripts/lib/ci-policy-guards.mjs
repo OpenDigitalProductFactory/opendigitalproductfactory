@@ -110,6 +110,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("bundle-boundary-guard", "Bundle Boundary Guard", [
       node("scripts/check-bundle-boundaries.mjs"),
     ]),
+    guard("application-boundary-guard", "Application Boundary Guard", [
+      node("--test", "scripts/check-application-boundaries.test.mjs"),
+      node("scripts/check-application-boundaries.mjs"),
+    ]),
     guard("style-drift-guard", "Style Drift Guard", [
       node("scripts/check-style-drift.mjs"),
     ]),
