@@ -120,3 +120,42 @@ This deliberately follows BI-0020D511 §8/§9 (*"ACC7A2B5's assumption-marking m
 The markers grew `AGENTS.md` 90,298 → 91,400 bytes (**+1,102**), so the instruction-plane ratchet was re-baselined upward (108,033 total) via the intentional-growth path the guard documents. This is a correctness pass adding bytes to the plane BI-0020D511 exists to shrink — a real, if small, tension. It is accepted because the alternative is worse: relocating unmarked runtime-bound facts into on-demand skills converts a visible staleness risk into an invisible one. Phase 1's ≤45,000-byte target now measures against 108,033.
 
 Markers were kept terse for this reason — an earlier draft ran +1,707 bytes and was tightened by 35% with no loss of the actionable verb.
+
+---
+
+## Sibling convention (2026-07-31) — `⟦model:⟧`, a second clock
+
+The `⟦runtime:⟧` convention tracks facts that drift with **the environment**. A second class drifts with **model releases**, and nothing tracked it:
+
+> `⟦model: <what this compensates for, and the assumption behind it>⟧`
+
+**"Re-verify on model upgrade" is implied by the kind and must not be restated in the text** — that redundancy cost 35% of the first draft's bytes for no added meaning.
+
+### Why a separate clock is warranted
+
+Anthropic's per-model prompting guidance shows the correct instruction *reversing between adjacent releases*:
+
+| Behaviour | Claude Opus 4.8 guidance | Claude Opus 5 guidance |
+|---|---|---|
+| Subagent delegation | under-reaches — *add* "delegate more" | over-reaches — *cap* delegation |
+| Verification instructions | prompt for them | **delete them** — they cause over-verification |
+| Self-check ("double-check your answer") | standard good practice | counterproductive; inverts the usual advice |
+
+A rule written to compensate for one model's tendency becomes actively wrong one release later, with no edit and no failing test. The byte ratchet freezes a baseline; model behaviour does not hold still that long.
+
+### Applied — 2 markers, and why so few
+
+Only two sites in `AGENTS.md` are genuine model-behaviour compensation:
+
+| Location | Assumption marked |
+|---|---|
+| line 3, "Read in full before any action" | front-loading beats progressive disclosure — the load-bearing premise of the entire always-on plane (`DI-F844365B0DCC`, Option B) |
+| §7 Subagent Dispatch Discipline | the injected "run the gate and fix errors" lines assume a subagent won't verify unprompted |
+
+**That count is itself the finding.** `AGENTS.md`'s bulk is *enforced procedure*, not model-tuned prose — which means the over-specification problem is mostly a §12d enforcement-criterion problem (collapse a CI-enforced rule to statement + pointer), not a "delete the model-compensation" problem. The convention is therefore mostly **prospective**: it exists so Phase 1 and the destination skills don't accumulate model-tuned prose that silently inverts. Two markers now is the right number; manufacturing more would be marking rules that aren't model-dependent.
+
+### Enforcement
+
+`scripts/check-instruction-plane-size.mjs` exports `assumptionMarkers()`, counts both kinds across the always-on set, prints them in the summary line, and **hard-fails an unterminated marker** — the convention's only value is that `grep "⟦model:"` returns the complete set, so a broken marker is a broken index, not a cosmetic slip.
+
+Cost: +234 bytes (`AGENTS.md` 91,400 → 91,634; plane total 108,267).

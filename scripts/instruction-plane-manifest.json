@@ -25,5 +25,7 @@
   "perSectionCharBudget": 6000,
   "maxLineChars": 800,
   "maxExtractedItemChars": 700,
+  "_maxDescriptionCharsComment": "HARD platform limit, not a DPF budget: the Agent Skills API rejects a SKILL.md `description` over 1024 characters. Distinct from maxExtractedItemChars, which budgets the serialised name+description BYTES the harness injects. This one always errors (never advisory) because exceeding it is an install-time validation failure. Do not raise it — it is not ours to set.",
+  "maxDescriptionChars": 1024,
   "structuralStrict": false
 }
