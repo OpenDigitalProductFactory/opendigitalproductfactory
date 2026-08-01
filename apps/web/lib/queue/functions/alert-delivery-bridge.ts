@@ -30,7 +30,12 @@ import {
   upsertHealthAlertIssue,
   resolveHealthAlertIssue,
 } from "@/lib/observability/health-alert-issue";
-import { notifyAttentionLive, resolveOperatorRecipient } from "@/lib/attention/notify-live";
+// NOT a static import. notify-live statically pulls in `prisma` and the agent
+// event bus, and this module deliberately keeps @dpf/db out of module scope
+// (see the dynamic `await import("@dpf/db")` in runAlertDeliveryScan). A static
+// import here instantiates Prisma for every importer of this module — including
+// lib/queue/functions/index.ts and anything that touches it — which killed the
+// vitest run outright. Loaded lazily inside the scan instead.
 
 // Defensive bound on issues touched per cycle. Real alert counts are tiny
 // (rules x services); this only matters under a pathological fan-out. No hard
@@ -134,6 +139,9 @@ export async function runAlertDeliveryScan(): Promise<AlertDeliveryResult> {
   // a human was missing. This is that last mile.
   let notified = 0;
   if (newlyOpened.length > 0) {
+    const { notifyAttentionLive, resolveOperatorRecipient } = await import(
+      "@/lib/attention/notify-live"
+    );
     const recipient = await resolveOperatorRecipient();
     // No resolvable owner → skip silently; notification is best-effort by
     // contract and must never fail the delivery path.
