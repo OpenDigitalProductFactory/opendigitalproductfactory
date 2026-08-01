@@ -30,6 +30,7 @@ import {
   upsertHealthAlertIssue,
   resolveHealthAlertIssue,
 } from "@/lib/observability/health-alert-issue";
+import { notifyAttentionLive, resolveOperatorRecipient } from "@/lib/attention/notify-live";
 
 // Defensive bound on issues touched per cycle. Real alert counts are tiny
 // (rules x services); this only matters under a pathological fan-out. No hard
@@ -44,6 +45,8 @@ export interface AlertDeliveryResult {
   sourcesReached: Record<AlertSourceSystem, boolean>;
   /** True iff BOTH sources were unreachable — nothing delivered or resolved. */
   sourcesUnreachable?: boolean;
+  /** Newly-opened alerts pushed to the operator's inbox bell this cycle. */
+  notified: number;
 }
 
 const ZERO = (reached: Record<AlertSourceSystem, boolean>): AlertDeliveryResult => ({
@@ -52,6 +55,7 @@ const ZERO = (reached: Record<AlertSourceSystem, boolean>): AlertDeliveryResult 
   resolved: 0,
   capped: false,
   sourcesReached: reached,
+  notified: 0,
 });
 
 /**
@@ -87,7 +91,24 @@ export async function runAlertDeliveryScan(): Promise<AlertDeliveryResult> {
   // we just saw firing so reconciliation can resolve the rest.
   // `prisma as never` at the db-handle boundary matches the established pattern
   // for passing the full client to a narrow injectable handle (discovery-runner.ts).
+  // Snapshot which health-alert issues are ALREADY open, BEFORE any upsert, so a
+  // genuinely new alert can be told apart from one merely re-confirmed this
+  // cycle. This transition gate is what keeps the push below from re-nagging:
+  // notifyAttention only suppresses duplicates while the notification is UNREAD,
+  // so without it, every 5-minute cycle would mint a fresh row the moment the
+  // operator reads one — the failure mode that left 5199 unread taskrun.stalled
+  // rows and trained the inbox to be ignored.
+  const previouslyOpen = new Set(
+    (
+      await prisma.portfolioQualityIssue.findMany({
+        where: { issueType: "health_alert", status: "open" },
+        select: { issueKey: true },
+      })
+    ).map((r) => r.issueKey),
+  );
+
   const firingKeys = new Set<string>();
+  const newlyOpened: { key: string; alert: (typeof firing)[number] }[] = [];
   let delivered = 0;
   for (const a of firing) {
     const key = await upsertHealthAlertIssue(prisma as never, {
@@ -98,6 +119,38 @@ export async function runAlertDeliveryScan(): Promise<AlertDeliveryResult> {
     });
     firingKeys.add(key);
     delivered++;
+    if (!previouslyOpen.has(key)) newlyOpened.push({ key, alert: a });
+  }
+
+  // Push NEW alerts to the operator's inbox bell.
+  //
+  // The read-only projection into the attention inbox
+  // (lib/attention/sources/platform-health.ts) already existed, but nothing ever
+  // pushed — the row only surfaced if a human happened to open that view. So
+  // WindowsHostDiskCritical ("disk G: above 90%") sat open and re-confirmed every
+  // 5 minutes for TWELVE DAYS, from 2026-07-19 until the disk hit 0 bytes free on
+  // 2026-07-31, took the VM's ext4 filesystem read-only, and killed Postgres with
+  // SIGBUS. Detection, delivery and persistence all worked; only the last mile to
+  // a human was missing. This is that last mile.
+  let notified = 0;
+  if (newlyOpened.length > 0) {
+    const recipient = await resolveOperatorRecipient();
+    // No resolvable owner → skip silently; notification is best-effort by
+    // contract and must never fail the delivery path.
+    if (recipient) {
+      for (const { key, alert } of newlyOpened) {
+        await notifyAttentionLive({
+          source: "platform-health",
+          itemKey: key,
+          userId: recipient,
+          title: alert.annotations?.summary ?? alert.labels.alertname ?? "Platform health alert",
+          body: alert.annotations?.description,
+          deepLink: "/ops/health",
+          riskClass: alert.labels.severity === "critical" ? "high-risk" : "bounded-write",
+        });
+        notified++;
+      }
+    }
   }
 
   // Reconcile-resolve. Only resolve open issues that (a) we OWN via a source we
@@ -121,7 +174,7 @@ export async function runAlertDeliveryScan(): Promise<AlertDeliveryResult> {
     resolved++;
   }
 
-  return { firing: firingAll.length, delivered, resolved, capped, sourcesReached: reached };
+  return { firing: firingAll.length, delivered, resolved, capped, sourcesReached: reached, notified };
 }
 
 // BI-915C40C6: every-minute crons multiply orphan accumulation (1440 runs/day).
