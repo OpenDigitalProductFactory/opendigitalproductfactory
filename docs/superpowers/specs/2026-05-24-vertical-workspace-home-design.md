@@ -7,7 +7,7 @@
 | Backlog item | BI-89C19AAF |
 | Epic | EP-REDUCTION-GEAR-ARCH |
 | Anchor spec | [`docs/superpowers/specs/2026-05-24-reduction-gear-architecture-design.md`](2026-05-24-reduction-gear-architecture-design.md) sections 5.5, 5.6, 8.3 |
-| Related specs | [Portal topology consolidation (PR #1083)](2026-05-24-portal-topology-consolidation-design.md); [Archetype-aware item management](2026-04-03-archetype-aware-item-management-design.md); [Customer-surface archetype activation](2026-05-22-customer-surface-archetype-activation-design.md) |
+| Related specs | [Portal topology consolidation (PR #1083)](2026-05-24-portal-topology-consolidation-design.md); [Archetype-aware item management](2026-04-03-archetype-aware-item-management-design.md); [Customer-surface archetype activation](2026-05-22-customer-surface-archetype-activation-design.md); [Vertical workspace home long-tail queue](2026-05-25-vertical-workspace-home-longtail-queue.md) |
 | Scope | Internal employee workspace home tailored per `StorefrontArchetype` |
 | Out of scope | Implementation, schema migration, route rewrite, customer portal changes |
 
@@ -680,6 +680,12 @@ These words may exist in code comments, tests, type names, and projection intern
 
 BIs 1-3 are substrate; they unblock BIs 4-6 and any future vertical. Each archetype BI must be independently reviewable and must not broaden the substrate unless the substrate BIs explicitly change. Per the Build Studio for ALL development standing rule, Claude does not write the feature code for any of these — file BI → promote → Ideate → BS runs.
 
+### 11.3 Long-tail archetype queue
+
+The long-tail queue is documented in [Vertical workspace home long-tail queue](2026-05-25-vertical-workspace-home-longtail-queue.md). It reconciles the recovered 2026-05-25 companion branch with current source and backlog state: all current storefront categories have category or exact workspace-home contribution coverage, while exact visual paradigms, projection depth, persona fixtures, and vertical-specific UX verification remain queued through follow-on BIs.
+
+This queue is intentionally separated from the parallel business-capability seed/load thread. Capability activation owns which modules, skills, templates, and canonical records become available when an archetype is chosen; workspace-home contributions consume that activation and render the appropriate worker home. No long-tail workspace-home BI should add one-off seed fields simply to make a tile render.
+
 ## 12. Decisions and Open Questions
 
 ### Decisions
@@ -703,6 +709,7 @@ This spec pass produces:
 - A written spec at `docs/superpowers/specs/2026-05-24-vertical-workspace-home-design.md`.
 - First-wave persona coverage under `docs/personas/` for the HVAC, clinic, and retail workspace-home variants.
 - Follow-on implementation BIs under `EP-REDUCTION-GEAR-ARCH`.
+- A recovered/current long-tail companion queue at `docs/superpowers/specs/2026-05-25-vertical-workspace-home-longtail-queue.md`.
 - Execution evidence attached to `BI-89C19AAF`.
 
 No implementation is included in this session.
