@@ -1,10 +1,13 @@
 // Universal Grid & Workbooks — InvoiceAdapter (EP-GRID-WORKBOOKS, Phase 1c)
 // Finance invoices as a grid. Status edits route through the canonical
-// updateInvoiceStatus action (enforces manage_finance + status timestamps);
-// other fields are read-only here. No raw prisma writes.
+// updateInvoiceStatus action (enforces manage_finance, the transition map, and
+// status timestamps); the non-economic fields route through updateInvoice, which
+// enforces the same edit-scope rule the invoice surface uses. Amounts and line
+// items stay read-only here. No raw prisma writes.
 
 import { prisma } from "@dpf/db";
-import { updateInvoiceStatus } from "@/lib/actions/finance";
+import { updateInvoice, updateInvoiceStatus } from "@/lib/actions/finance";
+import { POST_DRAFT_EDITABLE_FIELDS } from "@/lib/finance/invoice-lifecycle";
 import {
   gridRegistry,
   type DataSourceAdapter,
@@ -104,10 +107,26 @@ class InvoiceAdapter implements DataSourceAdapter {
     const inv = await prisma.invoice.findUnique({ where: { invoiceRef: rowId }, select: { id: true } });
     if (!inv) throw new Error("Invoice not found");
 
+    // The grid edits the same safe field set an invoice exposes after it has been
+    // sent: status plus the fields carrying no economic claim. Amounts and line
+    // items stay off the grid entirely — they are edited on the invoice itself,
+    // where the totals recompute and the operator can see what changed.
+    const GRID_EDITABLE = new Set<string>(["status", ...POST_DRAFT_EDITABLE_FIELDS]);
     const keys = Object.keys(changes);
-    const nonStatus = keys.filter((k) => k !== "status");
-    if (nonStatus.length > 0) {
-      throw new Error("Only status is editable for invoices from the grid");
+    const rejected = keys.filter((k) => !GRID_EDITABLE.has(k));
+    if (rejected.length > 0) {
+      throw new Error(
+        `Cannot edit ${rejected.join(", ")} from the grid. Editable here: ${[...GRID_EDITABLE].join(", ")}. ` +
+          `Amounts and line items are edited on the invoice itself.`,
+      );
+    }
+
+    const contentKeys = keys.filter((k) => k !== "status");
+    if (contentKeys.length > 0) {
+      const content: Record<string, unknown> = {};
+      for (const k of contentKeys) content[k] = changes[k];
+      const result = await updateInvoice(inv.id, content as Parameters<typeof updateInvoice>[1]);
+      if (!result.ok) throw new Error(result.message);
     }
     if ("status" in changes) {
       const status = changes.status;

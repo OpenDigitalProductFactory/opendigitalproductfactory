@@ -36,13 +36,30 @@ export const createInvoiceSchema = z.object({
   lineItems: z.array(lineItemSchema).min(1),
 });
 
+/**
+ * Every field here is APPLIED by the PATCH route. It previously declared four
+ * fields the handler silently discarded, so a caller got 200 OK and no change;
+ * whatever this schema accepts must reach the database.
+ *
+ * What is permitted for a given invoice is a lifecycle question, not a shape
+ * question — see checkInvoiceEditScope. Draft invoices take everything; sent
+ * invoices take only the fields that carry no economic claim.
+ */
 export const updateInvoiceSchema = z.object({
   status: z.enum(INVOICE_STATUSES).optional(),
   dueDate: z.string().optional(),
   paymentTerms: z.string().optional(),
   notes: z.string().optional(),
   internalNotes: z.string().optional(),
+  accountId: z.string().min(1).optional(),
+  contactId: z.string().optional(),
+  type: z.enum(INVOICE_TYPES).optional(),
+  currency: z.string().length(3).optional(),
+  lineItems: z.array(lineItemSchema).min(1).optional(),
 });
+
+/** The content half of an invoice update — everything except `status`. */
+export const updateInvoiceContentSchema = updateInvoiceSchema.omit({ status: true });
 
 export const recordPaymentSchema = z.object({
   direction: z.enum(PAYMENT_DIRECTIONS),
@@ -70,5 +87,12 @@ export const signInvoiceSchema = z.object({
 
 export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
 export type UpdateInvoiceInput = z.infer<typeof updateInvoiceSchema>;
+/**
+ * z.input, not z.infer: line items carry `.default()` on taxRate and
+ * discountPercent, so the OUTPUT type marks them required. Callers legitimately
+ * omit them (buildInvoiceTotals applies the same defaults), and parsed output
+ * remains assignable to this.
+ */
+export type UpdateInvoiceContentInput = z.input<typeof updateInvoiceContentSchema>;
 export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;
 export type SignInvoiceInput = z.infer<typeof signInvoiceSchema>;

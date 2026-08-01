@@ -98,6 +98,65 @@ export function checkInvoiceDeletion(facts: InvoiceDeletionFacts): DeletionCheck
   return { allowed: true };
 }
 
+// ─── Edit scope ───────────────────────────────────────────────────────────────
+
+/**
+ * Fields that stay editable after an invoice has left the building. They are the
+ * ones that carry no economic claim: nothing here changes what the customer owes.
+ */
+export const POST_DRAFT_EDITABLE_FIELDS = [
+  "notes",
+  "internalNotes",
+  "paymentTerms",
+  "dueDate",
+] as const;
+
+export type InvoiceEditableField =
+  | (typeof POST_DRAFT_EDITABLE_FIELDS)[number]
+  | "lineItems"
+  | "accountId"
+  | "contactId"
+  | "type"
+  | "currency";
+
+export type EditScopeCheck =
+  | { allowed: true }
+  | { allowed: false; reason: string; rejectedFields: string[] };
+
+/**
+ * A draft is fully editable. Once an invoice is sent, its economics are frozen:
+ * the customer is holding a PDF stating what they owe, and silently changing the
+ * total underneath that document is the audit failure this whole epic exists to
+ * close. Terminal invoices (void) are not editable at all.
+ */
+export function checkInvoiceEditScope(
+  status: InvoiceStatus,
+  fields: readonly string[],
+): EditScopeCheck {
+  if (status === "draft") return { allowed: true };
+
+  if (status === "void") {
+    return {
+      allowed: false,
+      reason: "A voided invoice cannot be edited. Raise a new invoice instead.",
+      rejectedFields: [...fields],
+    };
+  }
+
+  const safe = new Set<string>(POST_DRAFT_EDITABLE_FIELDS);
+  const rejectedFields = fields.filter((f) => !safe.has(f));
+  if (rejectedFields.length === 0) return { allowed: true };
+
+  return {
+    allowed: false,
+    reason:
+      `This invoice is "${status}", so its economics are frozen — the customer already has a document stating what they owe. ` +
+      `Cannot change: ${rejectedFields.join(", ")}. Still editable: ${POST_DRAFT_EDITABLE_FIELDS.join(", ")}. ` +
+      `To change the amounts, void this invoice and raise a new one, or issue a credit note.`,
+    rejectedFields,
+  };
+}
+
 // ─── Consequence description ──────────────────────────────────────────────────
 
 export type InvoiceConsequenceFacts = {

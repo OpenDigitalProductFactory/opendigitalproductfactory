@@ -30,7 +30,7 @@ export const INVOICE_COLUMNS: ColumnDefinition[] = [
   { columnId: "amountDue", name: "Due", fieldType: "number", position: 4, required: false, editable: false, width: 120 },
   { columnId: "currency", name: "Currency", fieldType: "text", position: 5, required: false, editable: false, width: 90 },
   { columnId: "issueDate", name: "Issued", fieldType: "date", position: 6, required: false, editable: false, width: 130 },
-  { columnId: "dueDate", name: "Due date", fieldType: "date", position: 7, required: false, editable: false, width: 130 },
+  { columnId: "dueDate", name: "Due date", fieldType: "date", position: 7, required: false, editable: true, width: 130 },
   { columnId: "type", name: "Type", fieldType: "text", position: 8, required: false, editable: false, width: 130 },
 ];
 
