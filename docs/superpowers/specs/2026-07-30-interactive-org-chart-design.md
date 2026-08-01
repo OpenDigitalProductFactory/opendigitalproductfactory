@@ -127,6 +127,29 @@ Role *definitions* remain read-only: no action in the codebase mutates `Platform
 one is new substrate warranting its own risk-band decision and admin-scope check. That gap is
 recorded as follow-up rather than smuggled into this change.
 
+## Addendum — 2026-07-31: placement editing, and the hazard fixed at source
+
+The first slice routed *around* `assignEmployeeOrg` rather than repairing it, which left
+department, position, and work location uneditable anywhere in the portal — the same defect
+this spec was written to fix, one field over. `assignEmployeeOrg` still had zero callers.
+
+`assignEmployeeOrg` now has **PATCH semantics**: an absent key means "leave this field alone",
+an explicit `null` or `""` means "clear it". The distinguishing logic lives in
+`apps/web/lib/workforce/patch-optional.ts` — outside the `"use server"` action module, which
+may only export async functions, so a sync helper could not be exported from it for testing.
+
+That removes the hazard at its source instead of asking every caller to defend against it. The
+org chart's detail panel now carries Team, Role, and Location pickers, each sending exactly one
+field.
+
+Scored at `DI-85C62D7D17CE` against a modal alternative and against keeping the
+rewrite-everything action and passing all current values from the client. The kernel ranked
+that last option last, for the same reason it ranked the equivalent option last in the original
+decision: a client that must remember to resend four unrelated fields will eventually forget.
+
+`reassignEmployeeManager` stays. It is still the right shape for drag-to-reassign — one field,
+one employment event, one cycle check — and it is what the drag handler calls.
+
 ## Not in this slice
 
 BI-HCM-004 also covers approval routing and delegated approval driven by the org service. This slice

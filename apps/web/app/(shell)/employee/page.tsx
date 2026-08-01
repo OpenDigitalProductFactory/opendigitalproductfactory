@@ -252,7 +252,24 @@ export default async function EmployeePage({ searchParams }: Props) {
             )}
           </div>
         ) : view === "orgchart" ? (
-          <OrgChartView employees={employees} canReassign={canManageWorkforce} />
+          <OrgChartView
+            employees={employees}
+            canReassign={canManageWorkforce}
+            referenceData={{
+              departments: workforceReferenceData.departments.map((d) => ({
+                id: d.id,
+                name: d.name,
+              })),
+              positions: workforceReferenceData.positions.map((p) => ({
+                id: p.id,
+                title: p.title,
+              })),
+              workLocations: workforceReferenceData.workLocations.map((wl) => ({
+                id: wl.id,
+                name: wl.name,
+              })),
+            }}
+          />
         ) : view === "mypolicies" ? (
           <MyPoliciesView />
         ) : (

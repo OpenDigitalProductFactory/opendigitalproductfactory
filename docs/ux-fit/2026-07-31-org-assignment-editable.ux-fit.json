@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "inline-pickers-patch-action",
+  "decisionInteractionId": "DI-85C62D7D17CE",
+  "scope": {
+    "files": [
+      "apps/web/components/employee/OrgChartView.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "inline-pickers-patch-action",
+      "separate-placement-modal",
+      "pass-all-fields-no-patch"
+    ]
+  }
+}
