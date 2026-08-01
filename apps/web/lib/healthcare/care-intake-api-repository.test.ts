@@ -101,7 +101,7 @@ describe("issueCareIntakeResumeGrant", () => {
         granteePrincipalId: "principal-patient-a",
         issuedByPrincipalId: "principal-patient-a",
         permittedOperations: ["view", "save", "submit"],
-        expiresAt: new Date("2026-08-01T15:00:00.000Z"),
+        expiresAt: new Date(Date.now() + 60 * 60 * 1_000),
         authorityDecision: { effect: "allow", reasonCodes: ["patient-self-access"] },
       },
       db,
