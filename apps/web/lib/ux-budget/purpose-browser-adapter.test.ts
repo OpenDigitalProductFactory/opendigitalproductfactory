@@ -22,15 +22,18 @@ describe("capturePurposeEvidenceFromDom", () => {
         <div data-dpf-purpose-key="inert-state" inert>Inert</div>
         <div data-dpf-purpose-key="transparent-state" style="opacity:0">Transparent</div>
         <div style="opacity:0"><div data-dpf-purpose-key="ancestor-transparent-state">Ancestor transparent</div></div>
+        <div data-dpf-purpose-key="hidden-descendant-state"><span aria-hidden="true">Hidden descendant</span></div>
         <div data-dpf-purpose-key="covered-state" data-covered>Covered</div>
         <button data-dpf-primary-action data-dpf-purpose-action-key="start-upgrade">Upgrade now</button>
         <div role="button" tabindex="0" data-dpf-purpose-action-key="role-only-action">Looks interactive</div>
         <button disabled data-dpf-purpose-action-key="disabled-action">Disabled</button>
+        <button data-dpf-purpose-action-key="hidden-name-action"><span aria-hidden="true">Hidden name</span></button>
         <a aria-label="Refresh status" href="/ops/self-upgrade" data-dpf-purpose-action-key="status-refresh" data-dpf-purpose-correction-signal-key="status-refresh"><svg aria-hidden="true"></svg></a>
         <div data-dpf-purpose-recovery-signal>
           <a href="/recover-widget" data-dpf-purpose-action-key="recover-widget" data-dpf-purpose-recovery-action>Recover widget</a>
         </div>
         <div data-dpf-purpose-completion-signal-key="hidden-completion" aria-hidden="true">Done</div>
+        <div data-dpf-purpose-correction-signal-key="hidden-descendant-correction"><span aria-hidden="true">Hidden correction</span></div>
         <div data-dpf-purpose-correction-signal-key="covered-correction" data-covered>Corrected</div>
         <div data-dpf-purpose-consequence data-covered>Consequence</div>
         <div id="overlay">Overlay</div>
@@ -56,7 +59,7 @@ describe("capturePurposeEvidenceFromDom", () => {
         };
       },
     );
-    vi.spyOn(window, "innerHeight", "get").mockReturnValue(1_200);
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(1_600);
     Object.defineProperty(document, "elementFromPoint", {
       configurable: true,
       value: vi.fn((_x: number, y: number) => {
@@ -98,6 +101,9 @@ describe("capturePurposeEvidenceFromDom", () => {
       enabled: false,
       focusable: false,
     });
+    expect(
+      evidence?.actions.find((action) => action.key === "hidden-name-action"),
+    ).toMatchObject({ accessibleName: "" });
     expect(evidence?.recoverySignal).toEqual({
       present: true,
       actionKey: "recover-widget",

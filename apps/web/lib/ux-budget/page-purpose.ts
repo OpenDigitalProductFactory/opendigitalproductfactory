@@ -262,7 +262,35 @@ const draftPurposeRecordSchema = z
   })
   .strict();
 
-const ratifiedPurposeContractSchema = z
+function validateConsequentialActionBinding(
+  value: {
+    consequentialAction?: { actionKey: string };
+    stateScenarios: Record<
+      string,
+      { primaryExperience: z.infer<typeof primaryExperienceSchema> }
+    >;
+  },
+  context: z.RefinementCtx,
+) {
+  const actionKey = value.consequentialAction?.actionKey;
+  if (
+    actionKey &&
+    !Object.values(value.stateScenarios).some(
+      (scenario) =>
+        scenario.primaryExperience.kind === "command" &&
+        scenario.primaryExperience.actionKey === actionKey,
+    )
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["consequentialAction", "actionKey"],
+      message:
+        "A consequential action must match a command scenario primary action.",
+    });
+  }
+}
+
+const ratifiedPurposeContractObjectSchema = z
   .object({
     schemaVersion: z.literal(1),
     status: z.literal("intent-ratified"),
@@ -284,6 +312,11 @@ const ratifiedPurposeContractSchema = z
     aiMediated: aiMediatedSchema.optional(),
   })
   .strict();
+
+const ratifiedPurposeContractSchema =
+  ratifiedPurposeContractObjectSchema.superRefine(
+    validateConsequentialActionBinding,
+  );
 
 const quarantinedPurposeRecordSchema = z
   .object({
@@ -308,7 +341,9 @@ const quarantinedPurposeRecordSchema = z
   .strict();
 
 export const ratifiedPurposeContractSourceSchema =
-  ratifiedPurposeContractSchema.omit({ derived: true });
+  ratifiedPurposeContractObjectSchema
+    .omit({ derived: true })
+    .superRefine(validateConsequentialActionBinding);
 export const quarantinedPurposeContractSourceSchema =
   quarantinedPurposeRecordSchema.omit({ derived: true });
 export const purposeContractSourceSchema = z.discriminatedUnion("status", [

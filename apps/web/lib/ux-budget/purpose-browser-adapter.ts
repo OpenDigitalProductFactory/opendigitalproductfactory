@@ -40,6 +40,18 @@ export function capturePurposeEvidenceFromDom(): PurposeDomEvidence | null {
     return true;
   };
 
+  const visibleDescendantText = (element: Element): string =>
+    [...element.childNodes]
+      .map((node) => {
+        if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
+        return node instanceof Element && visible(node)
+          ? visibleDescendantText(node)
+          : "";
+      })
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+
   const accessibleName = (element: HTMLElement): string => {
     const directLabel = element.getAttribute("aria-label")?.trim();
     if (directLabel) return directLabel;
@@ -53,7 +65,9 @@ export function capturePurposeEvidenceFromDom(): PurposeDomEvidence | null {
       if (label) return label;
     }
     return (
-      element.textContent?.trim() || element.getAttribute("title")?.trim() || ""
+      visibleDescendantText(element) ||
+      element.getAttribute("title")?.trim() ||
+      ""
     );
   };
 
@@ -105,7 +119,7 @@ export function capturePurposeEvidenceFromDom(): PurposeDomEvidence | null {
 
   const meaningful = (element: HTMLElement): boolean =>
     visible(element) &&
-    Boolean(element.textContent?.trim()) &&
+    Boolean(visibleDescendantText(element)) &&
     unobstructed(element);
 
   const operable = (element: HTMLElement): boolean =>

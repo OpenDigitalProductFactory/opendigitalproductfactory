@@ -221,6 +221,22 @@ describe("Page Purpose Contract runtime schema", () => {
     expect(parsePagePurposeContract(ratifiedFixture)).toEqual(ratifiedFixture);
   });
 
+  it("rejects a consequential action that no command scenario can exercise", () => {
+    expect(() =>
+      parsePagePurposeContract({
+        ...ratifiedFixture,
+        consequentialAction: {
+          actionKey: "orphaned-action",
+          noActionConsequence: "The work remains pending.",
+          reversibility: "The change can be reversed.",
+          confirmation: "The operator confirms the command.",
+          authority: "Only an authorized operator may act.",
+          recovery: "The operator can return to the governed recovery path.",
+        },
+      }),
+    ).toThrow(/must match a command scenario/);
+  });
+
   it.each([
     {
       evidenceClass: "automated-functional",

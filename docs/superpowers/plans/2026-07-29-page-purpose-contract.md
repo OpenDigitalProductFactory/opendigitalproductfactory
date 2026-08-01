@@ -102,9 +102,14 @@ pilot-specific evaluator logic. The implementation now also requires:
 - browser evidence that is not hidden, inert, transparent, or obstructed, and
   native named buttons or links for action evidence;
 - contract-declared consequential and recovery action keys instead of
-  Self-Upgrade action names embedded in the generic evaluator or adapter;
+  Self-Upgrade action names embedded in the generic evaluator or adapter, with
+  parser-level referential integrity from each consequential action to a
+  declared command scenario;
 - named icon-only controls to count as completion or correction evidence when
   they are genuinely operable;
+- accessible names and meaningful evidence to exclude hidden descendant text,
+  and responsive checks to resolve state from the independent oracle endpoint
+  instead of echoing the DOM state under test;
 - desktop, 390 x 844 portrait, 844 x 390 landscape, and 320 CSS-pixel checks to
   repeat the state/task assertions as well as horizontal-overflow checks;
 - focus restoration after force/abort confirmation and a result union that

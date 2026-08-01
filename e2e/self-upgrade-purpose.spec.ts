@@ -84,18 +84,10 @@ test("Self-Upgrade is findable and its served DOM matches the state oracle", asy
       page.getByRole("heading", { level: 1, name: "Self-Upgrade" }),
     ).toBeVisible();
 
-    const responsiveEvidence = await capturePurposeEvidence(page);
-    const responsiveEvaluation = evaluateRoutePurpose({
+    const responsiveEvaluation = await evaluateCurrentPurposePage(
+      page,
       contract,
-      oracle: {
-        routePath: "/ops/self-upgrade",
-        stateKey: responsiveEvidence?.stateKey ?? "",
-        oracleKey: "self-upgrade-status",
-        sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
-      },
-      evidence: responsiveEvidence,
-      enforcement: "advisory",
-    });
+    );
     expect(
       responsiveEvaluation.structuralStatus,
       responsiveEvaluation.findings
