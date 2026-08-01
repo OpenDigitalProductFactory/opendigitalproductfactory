@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   getCareIntakeSavedResponse,
@@ -90,6 +90,13 @@ function database() {
 }
 
 describe("issueCareIntakeResumeGrant", () => {
+  // Pinned like every other block in this file. Without it the suite reads the real
+  // clock while its fixtures carry a fixed `expiresAt`, so the test passes only until
+  // that instant and then fails forever — which is exactly what happened at
+  // 2026-08-01T15:00Z.
+  beforeEach(() => vi.useFakeTimers().setSystemTime("2026-08-01T14:00:00.000Z"));
+  afterEach(() => vi.useRealTimers());
+
   it("issues the raw token once only after an allow decision", async () => {
     const { db, tx } = database();
     const result = await issueCareIntakeResumeGrant(
