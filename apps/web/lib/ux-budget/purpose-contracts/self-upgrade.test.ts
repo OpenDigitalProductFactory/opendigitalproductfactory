@@ -20,10 +20,22 @@ describe("SELF_UPGRADE_PURPOSE_CONTRACT", () => {
     ]);
     expect(parsed.intent.contentRoles.defaultVisibleKeys).toEqual([
       "current-state",
-      "impact-on-work",
       "next-action",
       "recovery-status",
     ]);
+    expect(parsed.stateScenarios["update-available"].essentialEvidenceKeys).toContain(
+      "impact-on-work",
+    );
+    for (const state of [
+      "queued-or-running",
+      "current",
+      "failed-recoverable",
+      "blocked",
+    ]) {
+      expect(parsed.stateScenarios[state].essentialEvidenceKeys).not.toContain(
+        "impact-on-work",
+      );
+    }
     expect(parsed.consequentialAction).toBeDefined();
     expect(parsed.aiMediated).toBeUndefined();
   });

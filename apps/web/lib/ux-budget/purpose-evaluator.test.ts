@@ -110,12 +110,22 @@ const evidence: PurposeDomEvidence = {
       key: "start-upgrade",
       primary: true,
       visible: true,
+      accessibleName: "Upgrade now",
+      semanticRole: "button",
+      enabled: true,
+      focusable: true,
+      unobstructed: true,
       geometry: { top: 420, bottom: 464, left: 32, right: 180 },
     },
     {
       key: "open-recovery-guidance",
       primary: false,
       visible: true,
+      accessibleName: "Recovery guidance",
+      semanticRole: "link",
+      enabled: true,
+      focusable: true,
+      unobstructed: true,
       geometry: { top: 470, bottom: 514, left: 32, right: 260 },
       href: "/docs/operations/self-upgrade",
     },
@@ -301,7 +311,7 @@ describe("evaluateRoutePurpose", () => {
     {
       checkId: "consequential-action",
       mutate: (candidate) => {
-        candidate.consequentialAction.authorityVisible = false;
+        candidate.consequentialAction!.authorityVisible = false;
       },
     },
   ];
@@ -339,6 +349,34 @@ describe("evaluateRoutePurpose", () => {
       expect(result.blocking).toBe(false);
     });
   }
+
+  it.each([
+    ["accessible name", { accessibleName: "" }],
+    ["semantic role", { semanticRole: null }],
+    ["enabled state", { enabled: false }],
+    ["focusability", { focusable: false }],
+    ["obstruction", { unobstructed: false }],
+  ])("rejects a primary marker without valid %s evidence", (_name, defect) => {
+    const candidate = structuredClone(evidence);
+    Object.assign(candidate.actions[0], defect);
+
+    const result = evaluateRoutePurpose({
+      contract,
+      oracle: {
+        routePath: "/ops/self-upgrade",
+        stateKey: "update-available",
+        oracleKey: "self-upgrade-status",
+        sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
+      },
+      evidence: candidate,
+      context,
+    });
+
+    expect(result.structuralStatus).toBe("nonconformant");
+    expect(result.findings.map((finding) => finding.checkId)).toContain(
+      "primary-experience",
+    );
+  });
 
   it("keeps a superficial functional receipt stale when it omits state outcomes", () => {
     const result = evaluateRoutePurpose({

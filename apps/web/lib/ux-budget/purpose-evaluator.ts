@@ -47,6 +47,11 @@ export type PurposeActionEvidence = {
   key: string;
   primary: boolean;
   visible: boolean;
+  accessibleName: string;
+  semanticRole: string | null;
+  enabled: boolean;
+  focusable: boolean;
+  unobstructed: boolean;
   geometry: {
     top: number;
     bottom: number;
@@ -282,6 +287,17 @@ function isInsideViewport(
   );
 }
 
+function isOperableAction(action: PurposeActionEvidence): boolean {
+  return (
+    action.visible &&
+    action.accessibleName.trim().length > 0 &&
+    (action.semanticRole === "button" || action.semanticRole === "link") &&
+    action.enabled &&
+    action.focusable &&
+    action.unobstructed
+  );
+}
+
 export function routeMatchesPurposeTemplate(
   template: string,
   concretePath: string,
@@ -425,20 +441,25 @@ export function evaluateRoutePurpose({
     }
 
     if (scenario.primaryExperience.kind === "command") {
+      const primaryExperience = scenario.primaryExperience;
       const action = evidence.actions.find(
         (candidate) =>
-          candidate.key === scenario.primaryExperience.actionKey &&
-          candidate.primary,
+          candidate.key === primaryExperience.actionKey && candidate.primary,
       );
       if (!action) {
         add(
           "primary-experience",
-          `Primary command ${scenario.primaryExperience.actionKey} is absent.`,
+          `Primary command ${primaryExperience.actionKey} is absent.`,
+        );
+      } else if (!isOperableAction(action)) {
+        add(
+          "primary-experience",
+          `Primary command ${primaryExperience.actionKey} is not an operable, named button or link.`,
         );
       } else if (!isInsideViewport(action, evidence.viewport)) {
         add(
           "first-viewport-action",
-          `Primary command ${scenario.primaryExperience.actionKey} is not fully visible in the first viewport.`,
+          `Primary command ${primaryExperience.actionKey} is not fully visible in the first viewport.`,
         );
       }
     } else if (

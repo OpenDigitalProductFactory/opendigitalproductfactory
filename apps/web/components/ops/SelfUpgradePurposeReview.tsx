@@ -75,8 +75,16 @@ export function SelfUpgradePurposeReview({
               data-dpf-purpose-correction-signal-key="failure-reason-visible"
               className="rounded-lg border border-[var(--dpf-destructive)]/30 p-3"
             >
-              The candidate did not pass health checks. Governed recovery
-              controls are available.
+              <p>
+                The candidate did not pass health checks. Governed recovery
+                controls are available.
+              </p>
+              <a
+                href="#self-upgrade-retry-action"
+                className="mt-2 inline-flex min-h-11 items-center font-medium text-[var(--dpf-accent)] underline-offset-2 hover:underline"
+              >
+                Try update again
+              </a>
             </div>
           ) : (
             "No state-specific recovery controls are needed."

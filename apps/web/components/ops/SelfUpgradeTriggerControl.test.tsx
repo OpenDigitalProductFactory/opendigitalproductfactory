@@ -108,6 +108,7 @@ describe("SelfUpgradeTriggerControl – enabled", () => {
     expect(html).toContain(
       'data-dpf-purpose-correction-signal-key="status-refresh"',
     );
+    expect(html).toContain('data-dpf-purpose-key="recovery-status"');
     expect(html).not.toContain('data-dpf-purpose-action-key="start-upgrade"');
   });
 
@@ -123,6 +124,7 @@ describe("SelfUpgradeTriggerControl – enabled", () => {
       'data-dpf-purpose-correction-signal-key="blocker-reason-visible"',
     );
     expect(html).toContain('data-dpf-purpose-action-key="open-recovery-guidance"');
+    expect(html).toContain('data-dpf-purpose-key="recovery-status"');
     expect(html).toContain("/docs/operations/self-upgrade");
     expect(html).not.toContain('aria-label="Upgrade now"');
   });
@@ -153,7 +155,10 @@ describe("SelfUpgradeTriggerControl – enabled", () => {
       'data-dpf-purpose-completion-signal-key="recovery-controls-reachable"',
     );
     expect(html).toContain("#self-upgrade-latest-run");
-    expect(html).not.toContain('aria-label="Upgrade now"');
+    expect(html).toContain('id="self-upgrade-retry-action"');
+    expect(html).toContain('aria-label="Try update again"');
+    expect(html).toContain('data-dpf-purpose-action-key="retry-upgrade"');
+    expect(html).toContain('data-dpf-purpose-key="recovery-status"');
   });
 
   it("renders the Upgrade now button, marked as the primary / next action (BI-D77BF495)", () => {
@@ -162,6 +167,7 @@ describe("SelfUpgradeTriggerControl – enabled", () => {
     // The UX budget reachability axis keys off these markers.
     expect(html).toContain("data-dpf-primary-action");
     expect(html).toContain("data-owner-first-next-action");
+    expect(html).toContain('data-dpf-purpose-key="recovery-status"');
   });
 
   it("renders solid primary-button styling, not a faint text-xs ghost button (BI-D77BF495)", () => {
@@ -203,6 +209,7 @@ describe("SelfUpgradeTriggerControl – running", () => {
     expect(html).toContain(
       'data-dpf-purpose-correction-signal-key="stalled-run-recovery"',
     );
+    expect(html).toContain('data-dpf-purpose-key="recovery-status"');
     expect(html).not.toContain('aria-label="Upgrade now"');
   });
 

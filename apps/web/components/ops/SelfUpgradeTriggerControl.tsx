@@ -29,7 +29,9 @@ import SelfUpgradeJobEngineHealthAlert, {
 } from "@/components/ops/SelfUpgradeJobEngineHealthAlert";
 
 export type SelfUpgradeControlActions = {
-  trigger: typeof triggerSelfUpgrade;
+  trigger: (
+    options?: Parameters<typeof triggerSelfUpgrade>[0],
+  ) => Promise<TriggerResult & { runId?: string }>;
   force: typeof forceActiveRun;
   abort: typeof abortActiveRun;
 };
@@ -46,6 +48,73 @@ type Props = {
   recoveryLabel?: string;
   actions?: SelfUpgradeControlActions;
 };
+
+type TriggerResult = { queued: boolean; reason?: string };
+
+function TriggerFeedback({
+  busy,
+  latestRun,
+  queuedRun,
+  result,
+}: {
+  busy: boolean;
+  latestRun: LatestRun | null;
+  queuedRun: boolean;
+  result: TriggerResult | null;
+}) {
+  return (
+    <>
+      {busy && latestRun?.status !== "running" && !queuedRun && (
+        <div
+          className="text-xs text-[var(--dpf-muted)]"
+          data-upgrade-starting="true"
+          aria-live="polite"
+        >
+          Upgrade starting - the worker is checking for a new build. This can take
+          a few seconds; progress will appear below. No need to click again.
+        </div>
+      )}
+
+      {result && (
+        <div
+          role="status"
+          aria-live="polite"
+          data-dpf-purpose-completion-signal-key={
+            result.queued ? "upgrade-queue-acknowledgement" : undefined
+          }
+          data-dpf-purpose-correction-signal-key={
+            result.queued ? undefined : "upgrade-request-error"
+          }
+          className={`p-3 rounded-lg text-sm ${
+            result.queued
+              ? "bg-[var(--dpf-success)]/10 text-[var(--dpf-success)] border border-[var(--dpf-success)]/30"
+              : "bg-[var(--dpf-destructive)]/10 text-[var(--dpf-destructive)] border border-[var(--dpf-destructive)]/30"
+          }`}
+        >
+          {result.queued ? "Upgrade queued." : `Not queued: ${result.reason}`}
+        </div>
+      )}
+    </>
+  );
+}
+
+function RecoveryGuidanceLink({
+  correctionSignalKey,
+}: {
+  correctionSignalKey?: string;
+}) {
+  return (
+    <a
+      href="/docs/operations/self-upgrade"
+      data-dpf-purpose-key="recovery-status"
+      data-dpf-purpose-action-key="open-recovery-guidance"
+      data-dpf-purpose-correction-signal-key={correctionSignalKey}
+      className="inline-flex min-h-11 items-center text-sm text-[var(--dpf-accent)] underline-offset-2 hover:underline"
+    >
+      Recovery guidance
+    </a>
+  );
+}
 
 export default function SelfUpgradeTriggerControl({
   enabled,
@@ -67,9 +136,7 @@ export default function SelfUpgradeTriggerControl({
   const [isPending, startTransition] = useTransition();
   const [override, setOverride] = useState(false);
   const [justQueued, setJustQueued] = useState(false);
-  const [triggerResult, setTriggerResult] = useState<{ queued: boolean; reason?: string } | null>(
-    null,
-  );
+  const [triggerResult, setTriggerResult] = useState<TriggerResult | null>(null);
   const [forceConfirm, setForceConfirm] = useState(false);
   const [abortConfirm, setAbortConfirm] = useState(false);
   const [inFlightError, setInFlightError] = useState<string | null>(null);
@@ -80,6 +147,9 @@ export default function SelfUpgradeTriggerControl({
   const restartBaselineRef = useRef<string | null>(null);
   const forceConfirmRef = useRef<HTMLButtonElement | null>(null);
   const abortConfirmRef = useRef<HTMLButtonElement | null>(null);
+  const forceActionRef = useRef<HTMLButtonElement | null>(null);
+  const abortActionRef = useRef<HTMLButtonElement | null>(null);
+  const restoreFocusRef = useRef<"force" | "abort" | null>(null);
 
   const draining = !!quiescence && quiescence.level !== "normal";
   const queuedRun = latestRun?.status === "queued" || latestRun?.status === "pending";
@@ -149,6 +219,20 @@ export default function SelfUpgradeTriggerControl({
     if (abortConfirm) abortConfirmRef.current?.focus();
   }, [abortConfirm]);
 
+  useEffect(() => {
+    if (forceConfirm || abortConfirm || !restoreFocusRef.current) return;
+    const target =
+      restoreFocusRef.current === "force" ? forceActionRef : abortActionRef;
+    restoreFocusRef.current = null;
+    target.current?.focus();
+  }, [forceConfirm, abortConfirm]);
+
+  function closeConfirmation(action: "force" | "abort") {
+    restoreFocusRef.current = action;
+    if (action === "force") setForceConfirm(false);
+    else setAbortConfirm(false);
+  }
+
   function enterRestarting() {
     restartBaselineRef.current = serverSignature();
     setRestarting(true);
@@ -185,11 +269,11 @@ export default function SelfUpgradeTriggerControl({
     startTransition(async () => {
       try {
         const r = await actions.force(runId);
-        setForceConfirm(false);
+        closeConfirmation("force");
         if (!r.ok) setInFlightError(r.error ?? "Force failed");
         router.refresh();
       } catch (err) {
-        setForceConfirm(false);
+        closeConfirmation("force");
         if (isExpectedDuringSwap(err)) {
           enterRestarting();
         } else {
@@ -208,11 +292,11 @@ export default function SelfUpgradeTriggerControl({
     startTransition(async () => {
       try {
         const r = await actions.abort(runId);
-        setAbortConfirm(false);
+        closeConfirmation("abort");
         if (!r.ok) setInFlightError(r.error ?? "Abort failed");
         router.refresh();
       } catch (err) {
-        setAbortConfirm(false);
+        closeConfirmation("abort");
         if (isExpectedDuringSwap(err)) {
           enterRestarting();
         } else {
@@ -239,39 +323,45 @@ export default function SelfUpgradeTriggerControl({
         >
           <RefreshCw aria-hidden="true" className="size-4" />
         </a>
-        <a
-          href="/docs/operations/self-upgrade"
-          data-dpf-purpose-action-key="open-recovery-guidance"
-          className="inline-flex min-h-11 items-center text-[var(--dpf-accent)] underline-offset-2 hover:underline"
-        >
-          Recovery guidance
-        </a>
+        <RecoveryGuidanceLink />
       </div>
     );
   }
 
   if (purposeState === "failed-recoverable") {
     return (
-      <div
-        className="flex flex-wrap items-center justify-between gap-3"
-      >
-        <a
-          href="#self-upgrade-latest-run"
-          data-dpf-primary-action
-          data-owner-first-next-action
-          data-dpf-purpose-action-key="open-recovery-controls"
-          data-dpf-purpose-completion-signal-key="recovery-controls-reachable"
-          className="inline-flex min-h-11 items-center rounded-lg bg-[var(--dpf-accent)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
-        >
-          Review recovery controls
-        </a>
-        <a
-          href="/docs/operations/self-upgrade"
-          data-dpf-purpose-action-key="open-recovery-guidance"
-          className="inline-flex min-h-11 items-center text-sm text-[var(--dpf-accent)] underline-offset-2 hover:underline"
-        >
-          Recovery guidance
-        </a>
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <a
+            href="#self-upgrade-latest-run"
+            data-dpf-primary-action
+            data-owner-first-next-action
+            data-dpf-purpose-action-key="open-recovery-controls"
+            data-dpf-purpose-completion-signal-key="recovery-controls-reachable"
+            className="inline-flex min-h-11 items-center rounded-lg bg-[var(--dpf-accent)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+          >
+            Review recovery controls
+          </a>
+          <button
+            id="self-upgrade-retry-action"
+            type="button"
+            onClick={handleTrigger}
+            disabled={triggerBusy}
+            aria-busy={triggerBusy}
+            aria-label="Try update again"
+            data-dpf-purpose-action-key="retry-upgrade"
+            className="min-h-11 rounded-lg border border-[var(--dpf-border)] px-3 py-2 text-sm font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)] disabled:opacity-50"
+          >
+            {triggerBusy ? "Trying again..." : "Try update again"}
+          </button>
+          <RecoveryGuidanceLink />
+        </div>
+        <TriggerFeedback
+          busy={triggerBusy}
+          latestRun={latestRun}
+          queuedRun={queuedRun}
+          result={triggerResult}
+        />
       </div>
     );
   }
@@ -299,13 +389,7 @@ export default function SelfUpgradeTriggerControl({
         >
           {recoveryLabel}
         </a>
-        <a
-          href="/docs/operations/self-upgrade"
-          data-dpf-purpose-action-key="open-recovery-guidance"
-          className="inline-flex min-h-11 items-center text-sm text-[var(--dpf-accent)] underline-offset-2 hover:underline"
-        >
-          Recovery guidance
-        </a>
+        <RecoveryGuidanceLink />
       </div>
     );
   }
@@ -371,7 +455,7 @@ export default function SelfUpgradeTriggerControl({
                     </button>
                     <button
                       type="button"
-                      onClick={() => setForceConfirm(false)}
+                      onClick={() => closeConfirmation("force")}
                       className="min-h-11 rounded-lg border border-[var(--dpf-border)] px-3 py-2 text-xs text-[var(--dpf-muted)]"
                     >
                       Cancel
@@ -393,7 +477,7 @@ export default function SelfUpgradeTriggerControl({
                     </button>
                     <button
                       type="button"
-                      onClick={() => setAbortConfirm(false)}
+                      onClick={() => closeConfirmation("abort")}
                       className="min-h-11 rounded-lg border border-[var(--dpf-border)] px-3 py-2 text-xs text-[var(--dpf-muted)]"
                     >
                       Cancel
@@ -402,8 +486,13 @@ export default function SelfUpgradeTriggerControl({
                 ) : (
                   <>
                     <button
+                      ref={forceActionRef}
                       type="button"
-                      onClick={() => { setAbortConfirm(false); setForceConfirm(true); }}
+                      onClick={() => {
+                        restoreFocusRef.current = null;
+                        setAbortConfirm(false);
+                        setForceConfirm(true);
+                      }}
                       aria-label={`Force upgrade run ${quiescence.run.runId} now`}
                       className="inline-flex min-h-11 items-center gap-1.5 rounded-lg border border-[var(--dpf-warning)]/40 bg-[var(--dpf-warning)]/20 px-3 py-2 text-xs text-[var(--dpf-warning)] transition-colors hover:bg-[var(--dpf-warning)]/30"
                     >
@@ -411,8 +500,13 @@ export default function SelfUpgradeTriggerControl({
                       Force now
                     </button>
                     <button
+                      ref={abortActionRef}
                       type="button"
-                      onClick={() => { setForceConfirm(false); setAbortConfirm(true); }}
+                      onClick={() => {
+                        restoreFocusRef.current = null;
+                        setForceConfirm(false);
+                        setAbortConfirm(true);
+                      }}
                       aria-label={`Abort upgrade run ${quiescence.run.runId}`}
                       className="min-h-11 rounded-lg border border-[var(--dpf-border)] px-3 py-2 text-xs text-[var(--dpf-text)] transition-colors hover:bg-[var(--dpf-surface-2)]"
                     >
@@ -467,59 +561,22 @@ export default function SelfUpgradeTriggerControl({
                       ? "Force upgrade now"
                       : "Upgrade now"}
               </button>
-              <a
-                href="/docs/operations/self-upgrade"
-                data-dpf-purpose-action-key="open-recovery-guidance"
-                className="inline-flex min-h-11 items-center text-sm text-[var(--dpf-accent)] underline-offset-2 hover:underline"
-              >
-                Recovery guidance
-              </a>
+              <RecoveryGuidanceLink />
             </>
           )}
         </div>
       </div>
 
       {upgradeInFlight && (
-        <a
-          href="/docs/operations/self-upgrade"
-          data-dpf-purpose-action-key="open-recovery-guidance"
-          data-dpf-purpose-correction-signal-key="stalled-run-recovery"
-          className="inline-flex min-h-11 items-center text-sm text-[var(--dpf-accent)] underline-offset-2 hover:underline"
-        >
-          Recovery guidance
-        </a>
+        <RecoveryGuidanceLink correctionSignalKey="stalled-run-recovery" />
       )}
 
-      {triggerBusy && latestRun?.status !== "running" && !queuedRun && (
-        <div
-          className="text-xs text-[var(--dpf-muted)]"
-          data-upgrade-starting="true"
-          aria-live="polite"
-        >
-          Upgrade starting — the worker is checking for a new build. This can take
-          a few seconds; progress will appear below. No need to click again.
-        </div>
-      )}
-
-      {triggerResult && (
-        <div
-          role="status"
-          aria-live="polite"
-          data-dpf-purpose-completion-signal-key={
-            triggerResult.queued ? "upgrade-queue-acknowledgement" : undefined
-          }
-          data-dpf-purpose-correction-signal-key={
-            triggerResult.queued ? undefined : "upgrade-request-error"
-          }
-          className={`p-3 rounded-lg text-sm ${
-            triggerResult.queued
-              ? "bg-[var(--dpf-success)]/10 text-[var(--dpf-success)] border border-[var(--dpf-success)]/30"
-              : "bg-[var(--dpf-destructive)]/10 text-[var(--dpf-destructive)] border border-[var(--dpf-destructive)]/30"
-          }`}
-        >
-          {triggerResult.queued ? "Upgrade queued." : `Not queued: ${triggerResult.reason}`}
-        </div>
-      )}
+      <TriggerFeedback
+        busy={triggerBusy}
+        latestRun={latestRun}
+        queuedRun={queuedRun}
+        result={triggerResult}
+      />
     </div>
   );
 }

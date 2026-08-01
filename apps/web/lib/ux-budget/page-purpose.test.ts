@@ -491,12 +491,13 @@ describe("deterministic Page Purpose registry", () => {
     // Real contracts are merged in because this case asserts the identity ratchet
     // is CLEAN: a fixture-only contract map would demote genuinely ratified routes
     // to drafts and the ratchet would rightly complain about them.
+    const purposeSources = buildPurposeContractSourceIndex();
     const base = buildPagePurposeRegistry(routeManifest.routes, {
-      ...buildPurposeContractSourceIndex(),
+      ...purposeSources,
       "/workspace": ratifiedSourceFixture,
     });
     const quarantined = buildPagePurposeRegistry(routeManifest.routes, {
-      ...buildPurposeContractSourceIndex(),
+      ...purposeSources,
       "/workspace": quarantinedSourceFixture,
     });
     const baselineWithoutWorkspace = {
@@ -532,6 +533,7 @@ describe("deterministic Page Purpose registry", () => {
   });
 
   it("allows a net-new reviewed route to enter quarantine without a legacy exception", () => {
+    const purposeSources = buildPurposeContractSourceIndex();
     const workspaceRow = routeManifest.routes.find(
       (route) => route.routePath === "/workspace",
     );
@@ -557,11 +559,11 @@ describe("deterministic Page Purpose registry", () => {
     // Same reason as above: this case asserts a clean ratchet, so the real
     // contracts have to be present alongside the fixture.
     const base = buildPagePurposeRegistry(manifest, {
-      ...buildPurposeContractSourceIndex(),
+      ...purposeSources,
       [routePath]: ratifiedSource,
     });
     const quarantined = buildPagePurposeRegistry(manifest, {
-      ...buildPurposeContractSourceIndex(),
+      ...purposeSources,
       [routePath]: quarantineSource,
     });
     expect([

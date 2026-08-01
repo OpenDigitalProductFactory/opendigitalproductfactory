@@ -25,7 +25,7 @@ export const SELF_UPGRADE_PURPOSE_CONTRACT = {
       expectedPath: ["Delivery", "Track & release", "Self-upgrade"],
     },
     contentRoles: {
-      defaultVisibleKeys: ["current-state", "next-action"],
+      defaultVisibleKeys: ["current-state", "next-action", "recovery-status"],
       deferredRegions: [
         {
           key: "release-details",
@@ -84,7 +84,6 @@ export const SELF_UPGRADE_PURPOSE_CONTRACT = {
       },
       essentialEvidenceKeys: [
         "current-state",
-        "impact-on-work",
         "next-action",
         "recovery-status",
       ],
@@ -113,7 +112,6 @@ export const SELF_UPGRADE_PURPOSE_CONTRACT = {
       },
       essentialEvidenceKeys: [
         "current-state",
-        "impact-on-work",
         "next-action",
         "recovery-status",
       ],
@@ -141,7 +139,6 @@ export const SELF_UPGRADE_PURPOSE_CONTRACT = {
       },
       essentialEvidenceKeys: [
         "current-state",
-        "impact-on-work",
         "next-action",
         "recovery-status",
       ],
@@ -170,7 +167,6 @@ export const SELF_UPGRADE_PURPOSE_CONTRACT = {
       },
       essentialEvidenceKeys: [
         "current-state",
-        "impact-on-work",
         "next-action",
         "recovery-status",
       ],

@@ -44,7 +44,15 @@ export function SelfUpgradePurposeReviewTrigger({
       enabled={status.enabled}
       channel="stable"
       latestRun={status.latestRun}
-      jobEngine={status.jobEngine ?? undefined}
+      jobEngine={
+        status.jobEngine
+          ? {
+              status: status.jobEngine.healthy ? "healthy" : "degraded",
+              detail: null,
+              checkedAt: null,
+            }
+          : undefined
+      }
       purposeState={state}
       blockerReason={resolveSelfUpgradePurposeBlocker(status)}
       recoveryHref={recovery.href}

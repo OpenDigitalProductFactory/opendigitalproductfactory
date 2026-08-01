@@ -914,6 +914,14 @@ export default function SelfUpgradeClient({
               </div>
             </details>
           )}
+          {latestRun.status === "failed" && (
+            <a
+              href="#self-upgrade-retry-action"
+              className="inline-flex min-h-11 items-center text-sm font-medium text-[var(--dpf-accent)] underline-offset-2 hover:underline"
+            >
+              Try update again
+            </a>
+          )}
           <SelfUpgradeReadiness completionEvidence={latestRun.completionEvidence} />
           {/* A skipped run persists WHY on `reason`. Without surfacing it, the
               operator sees only a "skipped" badge with no words — the silent

@@ -395,6 +395,18 @@ describe("SelfUpgradeClient – failed", () => {
     );
     expect(html).toContain("promoter exited with code 1");
   });
+
+  it("links a failed run back to the operable retry control", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeClient
+        {...baseStatus}
+        latestRun={makeRun("failed", { failureLog: "health check failed" })}
+      />,
+    );
+
+    expect(html).toContain('href="#self-upgrade-retry-action"');
+    expect(html).toContain("Try update again");
+  });
 });
 
 // ─── Skipped ──────────────────────────────────────────────────────────────────

@@ -23,12 +23,17 @@ vi.mock("@/lib/actions/promotions", () => ({
   abortActiveRun: vi.fn(),
 }));
 
-import { triggerSelfUpgrade, forceActiveRun } from "@/lib/actions/promotions";
+import {
+  abortActiveRun,
+  triggerSelfUpgrade,
+  forceActiveRun,
+} from "@/lib/actions/promotions";
 import SelfUpgradeTriggerControl from "./SelfUpgradeTriggerControl";
 import { isExpectedDuringSwap } from "@/lib/self-upgrade/is-expected-during-swap";
 
 const triggerMock = triggerSelfUpgrade as unknown as ReturnType<typeof vi.fn>;
 const forceMock = forceActiveRun as unknown as ReturnType<typeof vi.fn>;
+const abortMock = abortActiveRun as unknown as ReturnType<typeof vi.fn>;
 
 // The real Next.js E394 transport error: a generic message plus a stable,
 // non-enumerable error code stamped by the server-action reducer.
@@ -215,5 +220,51 @@ describe("SelfUpgradeTriggerControl – forced upgrade swap resilience", () => {
       expect(triggerMock).toHaveBeenCalledTimes(1);
     });
     expect(screen.queryByText(/Applying the upgrade/i)).not.toBeInTheDocument();
+  });
+
+  it("restores focus to Force now after confirmation is cancelled", async () => {
+    render(
+      <SelfUpgradeTriggerControl
+        {...baseProps}
+        latestRun={makeRun("running")}
+        quiescence={drainingQuiescence}
+      />,
+    );
+    const force = screen.getByRole("button", {
+      name: /Force upgrade run QR-DRAIN now/i,
+    });
+
+    fireEvent.click(force);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", {
+          name: /Force upgrade run QR-DRAIN now/i,
+        }),
+      ).toHaveFocus(),
+    );
+  });
+
+  it("restores focus to Abort after the action reports a failure", async () => {
+    abortMock.mockResolvedValue({ ok: false, error: "Abort refused" });
+    render(
+      <SelfUpgradeTriggerControl
+        {...baseProps}
+        latestRun={makeRun("running")}
+        quiescence={drainingQuiescence}
+      />,
+    );
+    const abort = screen.getByRole("button", {
+      name: /Abort upgrade run QR-DRAIN/i,
+    });
+
+    fireEvent.click(abort);
+    fireEvent.click(screen.getByRole("button", { name: /confirm abort/i }));
+
+    await waitFor(() => expect(screen.getByText("Abort refused")).toBeInTheDocument());
+    expect(
+      screen.getByRole("button", { name: /Abort upgrade run QR-DRAIN/i }),
+    ).toHaveFocus();
   });
 });

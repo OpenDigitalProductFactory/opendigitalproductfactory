@@ -762,6 +762,21 @@ candidates. The corrected design now enforces these boundaries:
 - Status recovery, rollback, repair, and emergency-override targets all meet
   the 44px interaction floor. Disabled and unavailable states lead to a
   specific remedy rather than generic help.
+- A failed run now forms a complete recovery loop: the summary leads to the
+  failed record, the record leads back to a named `Try update again` command,
+  and the retry exposes the same queue acknowledgement or request error as the
+  normal trigger. The state no longer ends at a read-only history record.
+- Structural conformance requires the primary command to be visible, named,
+  semantically a button or link, enabled, focusable, and unobstructed. The
+  browser adapter excludes hidden and empty purpose, completion, correction,
+  consequence, and recovery markers instead of treating attribute presence as
+  user evidence.
+- Force and abort confirmations restore focus to the command that opened them
+  after cancellation and after resolved failures, preserving keyboard context
+  as the temporary confirmation controls unmount.
+- The mobile Playwright project overrides the iPhone preset with the declared
+  `390x844` CSS viewport; landscape and 320px reflow remain explicit fixture
+  passes rather than inferred device dimensions.
 
 ## Backlog coverage
 

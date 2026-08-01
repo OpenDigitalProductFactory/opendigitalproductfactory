@@ -74,6 +74,7 @@ test("Self-Upgrade is findable and its served DOM matches the state oracle", asy
   expect(accessibility.violations).toEqual([]);
 
   for (const viewport of [
+    { width: 390, height: 844 },
     { width: 844, height: 390 },
     { width: 320, height: 640 },
   ]) {
@@ -126,6 +127,18 @@ test("Self-Upgrade review fixtures expose every state and correction path withou
     } else if (state === "failed-recoverable") {
       await page.getByRole("link", { name: "Review recovery controls" }).click();
       await expect(page.locator("#self-upgrade-latest-run")).toBeInViewport();
+      await page
+        .locator("#self-upgrade-latest-run")
+        .getByRole("link", { name: "Try update again" })
+        .click();
+      const retry = page.getByRole("button", { name: "Try update again" });
+      await expect(retry).toBeInViewport();
+      await retry.click();
+      await expect(
+        page.locator(
+          "[data-dpf-purpose-completion-signal-key='upgrade-queue-acknowledgement']",
+        ),
+      ).toBeVisible();
       await expect(
         page.locator(
           `[data-dpf-purpose-correction-signal-key='${scenario.correctionSignalKey}']`,

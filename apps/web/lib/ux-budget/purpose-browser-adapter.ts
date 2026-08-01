@@ -25,6 +25,81 @@ export function capturePurposeEvidenceFromDom(): PurposeDomEvidence | null {
       rect.height > 0
     );
   };
+
+  const accessibleName = (element: HTMLElement): string => {
+    const directLabel = element.getAttribute("aria-label")?.trim();
+    if (directLabel) return directLabel;
+    const labelledBy = element.getAttribute("aria-labelledby")?.trim();
+    if (labelledBy) {
+      const label = labelledBy
+        .split(/\s+/)
+        .map((id) => document.getElementById(id)?.textContent?.trim() ?? "")
+        .filter(Boolean)
+        .join(" ");
+      if (label) return label;
+    }
+    return (
+      element.textContent?.trim() || element.getAttribute("title")?.trim() || ""
+    );
+  };
+
+  const semanticRole = (element: HTMLElement): string | null => {
+    const explicitRole = element.getAttribute("role")?.trim();
+    if (explicitRole) return explicitRole;
+    if (element instanceof HTMLButtonElement) return "button";
+    if (element instanceof HTMLAnchorElement && element.hasAttribute("href")) {
+      return "link";
+    }
+    return null;
+  };
+
+  const enabled = (element: HTMLElement): boolean => {
+    if (element.getAttribute("aria-disabled") === "true") return false;
+    if (
+      element instanceof HTMLButtonElement ||
+      element instanceof HTMLInputElement ||
+      element instanceof HTMLSelectElement ||
+      element instanceof HTMLTextAreaElement
+    ) {
+      return !element.disabled;
+    }
+    return true;
+  };
+
+  const focusable = (element: HTMLElement): boolean => {
+    if (!visible(element) || !enabled(element)) return false;
+    if (element.tabIndex >= 0) return true;
+    if (element instanceof HTMLAnchorElement) return element.hasAttribute("href");
+    return element.isContentEditable;
+  };
+
+  const unobstructed = (element: HTMLElement): boolean => {
+    if (!visible(element) || typeof document.elementFromPoint !== "function") {
+      return false;
+    }
+    const rect = element.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) {
+      return false;
+    }
+    const hit = document.elementFromPoint(x, y);
+    return Boolean(hit && (hit === element || element.contains(hit)));
+  };
+
+  const meaningful = (element: HTMLElement): boolean =>
+    visible(element) && Boolean(element.textContent?.trim());
+
+  const operable = (element: HTMLElement): boolean =>
+    accessibleName(element).length > 0 &&
+    (semanticRole(element) === "button" || semanticRole(element) === "link") &&
+    enabled(element) &&
+    focusable(element) &&
+    unobstructed(element);
+
+  const meaningfulMarkerPresent = (selector: string): boolean =>
+    [...root.querySelectorAll<HTMLElement>(selector)].some(meaningful);
+
   const actions = [
     ...root.querySelectorAll<HTMLElement>("[data-dpf-purpose-action-key]"),
   ].map((element) => {
@@ -37,6 +112,11 @@ export function capturePurposeEvidenceFromDom(): PurposeDomEvidence | null {
       key: element.dataset.dpfPurposeActionKey ?? "",
       primary: element.hasAttribute("data-dpf-primary-action"),
       visible: visible(element),
+      accessibleName: accessibleName(element),
+      semanticRole: semanticRole(element),
+      enabled: enabled(element),
+      focusable: focusable(element),
+      unobstructed: unobstructed(element),
       geometry: {
         top: rect.top,
         bottom: rect.bottom,
@@ -84,6 +164,7 @@ export function capturePurposeEvidenceFromDom(): PurposeDomEvidence | null {
     purposeKeys: [
       ...root.querySelectorAll<HTMLElement>("[data-dpf-purpose-key]"),
     ]
+      .filter(meaningful)
       .map((element) => element.dataset.dpfPurposeKey ?? "")
       .filter(Boolean),
     actions,
@@ -92,6 +173,7 @@ export function capturePurposeEvidenceFromDom(): PurposeDomEvidence | null {
         "[data-dpf-purpose-message-key]",
       ),
     ]
+      .filter(meaningful)
       .map((element) => element.dataset.dpfPurposeMessageKey ?? "")
       .filter(Boolean),
     prohibitedActionKeysPresent: [],
@@ -100,6 +182,7 @@ export function capturePurposeEvidenceFromDom(): PurposeDomEvidence | null {
         "[data-dpf-purpose-completion-signal-key]",
       ),
     ]
+      .filter(meaningful)
       .map((element) => element.dataset.dpfPurposeCompletionSignalKey ?? "")
       .filter(Boolean),
     correctionSignalKeys: [
@@ -107,12 +190,20 @@ export function capturePurposeEvidenceFromDom(): PurposeDomEvidence | null {
         "[data-dpf-purpose-correction-signal-key]",
       ),
     ]
+      .filter(meaningful)
       .map((element) => element.dataset.dpfPurposeCorrectionSignalKey ?? "")
       .filter(Boolean),
     recoverySignal: {
       present: Boolean(
-        root.querySelector("[data-dpf-purpose-recovery-signal]") &&
-          recoveryAction,
+        meaningfulMarkerPresent("[data-dpf-purpose-recovery-signal]") &&
+          recoveryAction &&
+          recoveryAction.visible &&
+          recoveryAction.accessibleName &&
+          (recoveryAction.semanticRole === "button" ||
+            recoveryAction.semanticRole === "link") &&
+          recoveryAction.enabled &&
+          recoveryAction.focusable &&
+          recoveryAction.unobstructed,
       ),
       actionKey: recoveryAction?.key ?? null,
       routePath: recoveryAction?.href ?? null,
@@ -120,19 +211,20 @@ export function capturePurposeEvidenceFromDom(): PurposeDomEvidence | null {
     disclosures,
     consequentialAction: {
       consequenceVisible: Boolean(
-        root.querySelector("[data-dpf-purpose-consequence]"),
+        meaningfulMarkerPresent("[data-dpf-purpose-consequence]"),
       ),
       reversibilityVisible: Boolean(
-        root.querySelector("[data-dpf-purpose-reversibility]"),
+        meaningfulMarkerPresent("[data-dpf-purpose-reversibility]"),
       ),
       confirmationAvailable: Boolean(
-        root.querySelector("[data-dpf-purpose-confirmation]"),
+        [...root.querySelectorAll<HTMLElement>("[data-dpf-purpose-confirmation]")]
+          .some(operable),
       ),
       authorityVisible: Boolean(
-        root.querySelector("[data-dpf-purpose-authority]"),
+        meaningfulMarkerPresent("[data-dpf-purpose-authority]"),
       ),
       recoveryVisible: Boolean(
-        root.querySelector("[data-dpf-purpose-recovery-context]"),
+        meaningfulMarkerPresent("[data-dpf-purpose-recovery-context]"),
       ),
     },
     viewport: { width: window.innerWidth, height: window.innerHeight },

@@ -36,6 +36,7 @@ export default defineConfig({
         /.*(?:storefront-owner-mobile|coworker-catalog-mobile|self-upgrade-purpose)\.spec\.ts/,
       use: {
         ...devices["iPhone 13"],
+        viewport: { width: 390, height: 844 },
         storageState: "e2e/.auth/state.json",
       },
     },
