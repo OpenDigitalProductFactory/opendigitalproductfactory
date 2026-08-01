@@ -7,6 +7,7 @@ import type {
 } from "@/lib/ai-operations-map/routing-evidence-conformance";
 import {
   RoutingArchitectureOverview,
+  describeDesignMaturity,
   stationBadgeIntent,
   stationBadgeLabel,
 } from "./RoutingArchitectureOverview";
@@ -172,5 +173,38 @@ describe("station badge fidelity (BI-C8BC9DD1)", () => {
     expect(stationBadgeLabel([
       finding({ severity: "warn", ownerAction: "platform-defect", count: 4 }),
     ])).toBe("4 issues");
+  });
+});
+
+// BI-3006D674. The card rendered `${implemented}/${stages.length} implemented`,
+// counting only the `implemented` status. Station 2 holds three `partial` stages
+// backed by working code (classifyInferencePayload, evaluateDataPolicy,
+// evaluateInferenceDispatchPolicy) and reported "0/6 implemented" — false about
+// the codebase, and read by the founder as their own install being broken when
+// their routing was healthy.
+describe("platform build maturity is not an install score (BI-3006D674)", () => {
+  it("never reports zero for a station whose code is partial", () => {
+    const label = describeDesignMaturity({ implemented: 0, partial: 3, proposed: 3 });
+    expect(label).toBe("3 partial · 3 planned");
+    expect(label).not.toMatch(/^0/);
+    expect(label).not.toContain("0/6");
+  });
+
+  it("names built, partial, and planned separately", () => {
+    expect(describeDesignMaturity({ implemented: 3, partial: 4, proposed: 0 }))
+      .toBe("3 built · 4 partial");
+    expect(describeDesignMaturity({ implemented: 2, partial: 0, proposed: 0 }))
+      .toBe("2 built");
+  });
+
+  it("omits empty segments rather than printing a zero for them", () => {
+    const label = describeDesignMaturity({ implemented: 0, partial: 0, proposed: 5 });
+    expect(label).toBe("5 planned");
+    expect(label).not.toContain("built");
+    expect(label).not.toContain("partial");
+  });
+
+  it("degrades to a word, never a bare ratio, when a station has no stages", () => {
+    expect(describeDesignMaturity({ implemented: 0, partial: 0, proposed: 0 })).toBe("none");
   });
 });

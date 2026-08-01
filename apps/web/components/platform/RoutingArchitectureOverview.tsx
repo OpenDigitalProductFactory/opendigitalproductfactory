@@ -9,6 +9,7 @@ import {
   StatusBadge,
   type Column,
 } from "@/components/ui/report-kit";
+import type { AiRoutingSourceStatus } from "@/lib/ea/ai-routing-architecture-registry";
 import type {
   RoutingConformanceFinding,
   RoutingEvidenceConformanceProjection,
@@ -179,7 +180,15 @@ export function RoutingArchitectureOverview({
           {view.showObserved ? (
             <>
               <span>{view.summary.decisionVolume} routing decisions</span>
-              <span>{formatPercent(view.summary.screenCoverageRate)} screened</span>
+              {/* BI-3006D674: screenReceipt is hard-coded null pending the
+                  sensitive-routing dependency, so this rate is structurally 0.
+                  "0% screened" reads as a screening failure; name the missing
+                  instrumentation instead. */}
+              <span>
+                {view.summary.screenCoverageInstrumented
+                  ? `${formatPercent(view.summary.screenCoverageRate)} screened`
+                  : "screening not instrumented"}
+              </span>
               <span>{formatPercent(view.summary.designBindingRate)} design-bound</span>
               <span className={view.summary.findingCount > 0 ? "text-[var(--dpf-warning)]" : "text-[var(--dpf-success)]"}>
                 {view.summary.findingCount} conformance {view.summary.findingCount === 1 ? "finding" : "findings"}
@@ -234,9 +243,9 @@ export function RoutingArchitectureOverview({
                   <div className="mt-3 space-y-1 border-t border-[var(--dpf-border)] pt-2 text-dpf-caption">
                     {view.showDesigned ? (
                       <p className="flex items-center justify-between gap-2">
-                        <span className="text-[var(--dpf-muted)]">Designed</span>
+                        <span className="text-[var(--dpf-muted)]">Build</span>
                         <span className="font-medium text-[var(--dpf-text)]">
-                          {station.designStatusCounts.implemented}/{station.stages.length} implemented
+                          {describeDesignMaturity(station.designStatusCounts)}
                         </span>
                       </p>
                     ) : null}
@@ -314,6 +323,27 @@ export function stationBadgeLabel(findings: readonly RoutingConformanceFinding[]
     return `${total} historic`;
   }
   return `${total} ${total === 1 ? "issue" : "issues"}`;
+}
+
+/**
+ * Describe a station's PLATFORM BUILD maturity — BI-3006D674.
+ *
+ * This replaced `${implemented}/${stages.length} implemented`, which counted
+ * only the `implemented` status and therefore rendered `partial` as absent.
+ * Station 2 holds three partial stages backed by working code and reported
+ * "0/6 implemented" — false about the codebase, and read by an owner as their
+ * own install being broken when their routing was in fact healthy.
+ *
+ * Stated in words rather than as a ratio precisely so it cannot be mistaken for
+ * a score of the owner's install. Empty segments are omitted, so a station never
+ * reports a zero for a status it simply does not have.
+ */
+export function describeDesignMaturity(counts: Record<AiRoutingSourceStatus, number>): string {
+  const segments: string[] = [];
+  if (counts.implemented > 0) segments.push(`${counts.implemented} built`);
+  if (counts.partial > 0) segments.push(`${counts.partial} partial`);
+  if (counts.proposed > 0) segments.push(`${counts.proposed} planned`);
+  return segments.length > 0 ? segments.join(" · ") : "none";
 }
 
 /**

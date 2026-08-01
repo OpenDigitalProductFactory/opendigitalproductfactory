@@ -136,6 +136,13 @@ export type RoutingComparisonViewModel = {
     findingCount: number;
     criticalFindingCount: number;
     screenCoverageRate: number;
+    /**
+     * False when no decision in the window carried a screen receipt at all —
+     * the screen is not yet instrumented, so the RATE is meaningless. Surfaces
+     * must say so rather than render "0% screened", which reads as a screening
+     * failure rather than a missing dependency (BI-3006D674).
+     */
+    screenCoverageInstrumented: boolean;
     designBindingRate: number;
     correlationRate: number;
   };
@@ -217,6 +224,7 @@ export function buildRoutingComparisonViewModel(
         .filter((finding) => finding.severity === "error")
         .reduce((sum, finding) => sum + finding.count, 0),
       screenCoverageRate: evidence.coverage.screenCoverageRate,
+      screenCoverageInstrumented: evidence.coverage.screenCoveredDecisions > 0,
       designBindingRate: evidence.coverage.designBindingRate,
       correlationRate: evidence.coverage.correlationRate,
     },
