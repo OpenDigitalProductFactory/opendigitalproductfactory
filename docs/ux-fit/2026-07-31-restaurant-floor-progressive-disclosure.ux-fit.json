@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "resource-manager-progressive-disclosure",
+  "decisionInteractionId": "DI-BF8CA951943C",
+  "scope": {
+    "files": [
+      "apps/web/components/storefront-admin/HospitalityResourceManager.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "resource-manager-progressive-disclosure",
+      "separate-floor-configuration-route",
+      "canvas-only-direct-editing"
+    ]
+  }
+}

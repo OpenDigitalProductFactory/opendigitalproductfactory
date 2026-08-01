@@ -1,16 +1,18 @@
 // apps/web/lib/business-activity-sim/oracles.ts
 //
-// Financial + lifecycle oracles for the field-service flow (P1).
-// EP-BUSINESS-ACTIVITY-SIM.
+// Financial + lifecycle oracles for the business-activity flows (P1 field-service;
+// generalized to every archetype in P2). EP-BUSINESS-ACTIVITY-SIM.
 //
-// Each oracle is a pure predicate over a FieldServiceFlowResult that names exactly
-// what broke, so a failing coverage run is diagnosable. Modelled on the existing
-// dispatch harness (packages/coworker-sim-harness/src/oracles.ts): a harness whose
-// oracles cannot catch a broken flow is useless — the negative tests prove they can.
+// Each oracle is a pure predicate over a FinancialFlowShape (the shared shape both
+// P1's FieldServiceFlowResult and P2's ArchetypeFlowResult satisfy) that names
+// exactly what broke, so a failing coverage run is diagnosable. Modelled on the
+// existing dispatch harness (packages/coworker-sim-harness/src/oracles.ts): a
+// harness whose oracles cannot catch a broken flow is useless — the negative
+// tests prove they can.
 
 import { toMinorUnits } from "@/lib/finance/ledger";
-import { isTerminalStatus } from "@dpf/validators";
-import { SIM_ACCOUNTS, type FieldServiceFlowResult } from "./field-service-flow";
+import { SIM_ACCOUNTS } from "./field-service-flow";
+import { type FinancialFlowShape } from "./billing-cycle";
 
 export type SimOracleResult = {
   id: string;
@@ -19,7 +21,7 @@ export type SimOracleResult = {
   violations: string[];
 };
 
-export type SimOracle = (result: FieldServiceFlowResult) => SimOracleResult;
+export type SimOracle = (result: FinancialFlowShape) => SimOracleResult;
 
 /** Equal to the cent — compares in integer minor units so float drift never lies. */
 function moneyEq(a: number, b: number): boolean {
@@ -77,17 +79,24 @@ export const FIN5_noPhantomBilling: SimOracle = (r) => {
   return { id: "FIN5", description: "no invoice without a completed job", ok: violations.length === 0, violations };
 };
 
-/** LC1 — the job ends in a terminal, paid state (the flow ran to completion). */
+/** LC1 — the flow ends in the terminal, paid state (it ran to completion). Every
+ *  archetype lifecycle terminates in a status literally named "paid", so this
+ *  reads the same across field-service / SaaS / retail without a per-archetype
+ *  terminal predicate. */
 export const LC1_terminalPaid: SimOracle = (r) => {
   const violations: string[] = [];
-  if (r.finalStatus !== "paid" || !isTerminalStatus(r.finalStatus)) {
-    violations.push(`job ended in '${r.finalStatus}', expected terminal 'paid'`);
+  if (r.finalStatus !== "paid") {
+    violations.push(`flow ended in '${r.finalStatus}', expected terminal 'paid'`);
   }
-  return { id: "LC1", description: "the job ends terminal-paid", ok: violations.length === 0, violations };
+  return { id: "LC1", description: "the flow ends terminal-paid", ok: violations.length === 0, violations };
 };
 
-/** All oracles run on every field-service scenario. */
-export const FIELD_SERVICE_ORACLES: SimOracle[] = [
+/**
+ * Every financial + lifecycle oracle. Applies to ANY archetype flow (they all
+ * bill through the shared runBillingCycle and end terminal-paid). `FINANCIAL_ORACLES`
+ * is the P2 name; `FIELD_SERVICE_ORACLES` is kept as a back-compat alias for P1.
+ */
+export const FINANCIAL_ORACLES: SimOracle[] = [
   FIN1_ledgerBalanced,
   FIN2_revenueRecognized,
   FIN3_receivableReconciles,
@@ -95,3 +104,6 @@ export const FIELD_SERVICE_ORACLES: SimOracle[] = [
   FIN5_noPhantomBilling,
   LC1_terminalPaid,
 ];
+
+/** @deprecated P1 name — use FINANCIAL_ORACLES. Retained so P1 imports keep working. */
+export const FIELD_SERVICE_ORACLES = FINANCIAL_ORACLES;

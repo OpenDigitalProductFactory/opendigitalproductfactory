@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 
 import { auth } from "@/lib/auth";
 import { apiErrorResponse } from "@/lib/api/error";
 import { newId } from "@/lib/shared/new-id";
+import {
+  serializeRestaurantTableAttributes,
+  validateRestaurantTableAttributesInput,
+} from "@/lib/storefront/restaurant-table-attributes";
 
 function validCapacity(value: unknown): value is number {
   return Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 100;
@@ -32,6 +36,7 @@ export async function GET() {
       capacityUnit: true,
       serviceArea: true,
       blockedReason: true,
+      attributes: true,
       version: true,
       availability: {
         orderBy: { createdAt: "asc" },
@@ -74,6 +79,9 @@ export async function POST(request: NextRequest) {
     label?: string;
     capacity?: number;
     serviceArea?: string | null;
+    shape?: string;
+    combinationGroup?: string | null;
+    combinableWith?: unknown[];
   };
   const label = body.label?.trim();
   if (!body.storefrontId || !label || !validCapacity(body.capacity)) {
@@ -82,6 +90,14 @@ export async function POST(request: NextRequest) {
       "storefrontId, table label, and 1–100 seats are required",
       400,
     );
+  }
+  const attributes = validateRestaurantTableAttributesInput({
+    shape: body.shape ?? "round",
+    combinationGroup: body.combinationGroup ?? null,
+    combinableWith: body.combinableWith ?? [],
+  });
+  if (!attributes.ok) {
+    return apiErrorResponse("INVALID_ARGUMENT", attributes.error, 400);
   }
 
   const config = await prisma.storefrontConfig.findFirst({
@@ -138,6 +154,9 @@ export async function POST(request: NextRequest) {
         capacity: body.capacity,
         capacityUnit: "seats",
         serviceArea: body.serviceArea?.trim() || null,
+        attributes: serializeRestaurantTableAttributes(
+          attributes.value,
+        ) as Prisma.InputJsonValue,
         legacyServiceProviderId: provider.id,
       },
       select: {
@@ -150,6 +169,7 @@ export async function POST(request: NextRequest) {
         capacityUnit: true,
         serviceArea: true,
         blockedReason: true,
+        attributes: true,
         version: true,
       },
     });

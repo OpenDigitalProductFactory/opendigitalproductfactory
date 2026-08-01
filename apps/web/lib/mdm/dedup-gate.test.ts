@@ -1,10 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// The candidate lookups now run inside runHeapForcedCandidateQuery, which opens
+// a $transaction and sets the heap-forcing planner GUCs before the query
+// (BI-FEAEB715). The mock threads the same $queryRaw mock through as the tx so
+// these unit tests keep asserting on the query, and records the GUC statements
+// so a test can prove the heap-forcing fired. vi.hoisted keeps the fns available
+// to the hoisted vi.mock factory without a temporal-dead-zone error.
+const db = vi.hoisted(() => ({
+  queryRaw: vi.fn(),
+  executeRawUnsafe: vi.fn(async (_sql: string) => 0),
+}));
 vi.mock("@dpf/db", () => ({
   prisma: {
-    $queryRaw: vi.fn(),
+    $queryRaw: db.queryRaw,
+    $executeRawUnsafe: db.executeRawUnsafe,
+    $transaction: vi.fn(async (fn: (tx: unknown) => unknown) =>
+      fn({ $queryRaw: db.queryRaw, $executeRawUnsafe: db.executeRawUnsafe }),
+    ),
   },
 }));
+const executeRawUnsafe = db.executeRawUnsafe;
 
 import { prisma } from "@dpf/db";
 import {
@@ -224,5 +239,27 @@ describe("parseDedupResolution", () => {
     expect(parseDedupResolution(null)).toBeUndefined();
     expect(parseDedupResolution({ duplicateResolution: "use-existing:" })).toBeUndefined();
     expect(parseDedupResolution({ duplicateResolution: "bogus" })).toBeUndefined();
+  });
+});
+
+describe("heap-forced candidate lookup (BI-FEAEB715 — collation-drift immunity)", () => {
+  it("disables all three index-scan classes before every candidate query", async () => {
+    executeRawUnsafe.mockClear();
+    queryRaw.mockResolvedValue([]);
+    await checkCustomerContactDuplicates({ email: "a@b.com" });
+    const guc = executeRawUnsafe.mock.calls.map((c) => c[0]);
+    expect(guc).toContain("SET LOCAL enable_indexscan = off");
+    expect(guc).toContain("SET LOCAL enable_indexonlyscan = off");
+    expect(guc).toContain("SET LOCAL enable_bitmapscan = off");
+  });
+
+  it("forces the heap for an exact-only (email) check — the previously exposed arm", async () => {
+    executeRawUnsafe.mockClear();
+    queryRaw.mockResolvedValue([]);
+    // No name, so the collation-immune similarity arm never runs; only the
+    // exact email btree arm would — this is exactly the check that was unsafe.
+    await checkCustomerContactDuplicates({ email: "solo@example.com" });
+    expect(executeRawUnsafe).toHaveBeenCalled();
+    expect(queryRaw).toHaveBeenCalledTimes(1);
   });
 });

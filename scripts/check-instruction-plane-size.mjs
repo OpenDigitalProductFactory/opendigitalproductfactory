@@ -150,7 +150,19 @@ export function frontmatterFields(text, fields) {
  * baseline while the true always-on cost is unchanged. That is the same
  * evasion manifest closure blocks one layer up.
  *
- * @returns {{ id: string, bytes: number, items: Array<{ file: string, bytes: number, description: string }> }}
+ * TWO DIFFERENT MEASURES COME OUT OF THIS, AND THEY ARE NOT INTERCHANGEABLE
+ *   `bytes`            — UTF-8 bytes of the whole serialised `name: …\ndescription: …\n`
+ *                        block. This is what the HARNESS pays for, per session, and it
+ *                        is what the ratchet totals. Ours to choose a budget for.
+ *   `descriptionChars` — CHARACTERS in the `description` value alone. This is what the
+ *                        Agent Skills API validates against its hard 1,024-character
+ *                        ceiling. Not ours to choose: over it, the skill is rejected.
+ *
+ * Conflating them would be a real bug — a 1,100-byte block whose description is 400
+ * chars is fine by the API and merely fat, while a 1,030-char description is a platform
+ * validation failure no byte budget would catch.
+ *
+ * @returns {{ id: string, bytes: number, items: Array<{ file: string, bytes: number, descriptionChars: number, description: string }> }}
  */
 export function extractGroup(group, repoRoot) {
   const fields = Array.isArray(group.fields) ? group.fields : ["name", "description"];
@@ -169,7 +181,15 @@ export function extractGroup(group, repoRoot) {
       (n, f) => (parsed[f] == null ? n : n + byteLen(`${f}: ${parsed[f]}\n`)),
       0,
     );
-    items.push({ file: file.replace(/\\/g, "/"), bytes, description: parsed.description ?? "" });
+    const description = parsed.description ?? "";
+    // [...str] counts code points, not UTF-16 units — an emoji or CJK glyph is one
+    // character to the API's validator, two to `.length`.
+    items.push({
+      file: file.replace(/\\/g, "/"),
+      bytes,
+      descriptionChars: [...description].length,
+      description,
+    });
   }
   return { id: group.id, bytes: items.reduce((a, b) => a + b.bytes, 0), items };
 }
@@ -177,6 +197,43 @@ export function extractGroup(group, repoRoot) {
 export function extractGroups(manifest, repoRoot) {
   const groups = Array.isArray(manifest.alwaysOnExtracted) ? manifest.alwaysOnExtracted : [];
   return groups.map((g) => extractGroup(g, repoRoot));
+}
+
+/**
+ * Contingency markers in an always-on doc, by kind.
+ *
+ * TWO KINDS, TWO CLOCKS — this is the whole point of keeping them separate:
+ *   ⟦runtime: …⟧  drifts with the ENVIRONMENT (version pins, host literals, install
+ *                 shape, in-flight states). Re-verify against the install. BI-ACC7A2B5.
+ *   ⟦model:   …⟧  drifts with MODEL RELEASES. A rule written to compensate for a model's
+ *                 tendency can invert on the next upgrade — Opus 4.8 needed prompting to
+ *                 delegate to subagents, Opus 5 needs a cap; Opus 4.8 wanted verification
+ *                 instructions, Opus 5 documents that they cause over-verification and
+ *                 should be deleted. Nothing else in this repo tracks that clock, so a
+ *                 rule tuned for one model silently becomes wrong prose in the always-on
+ *                 plane. Re-verify on model upgrade. BI-0020D511 §12d.
+ *
+ * A marker that is never grepped is worthless, so `malformed` (an opener with no `⟧`)
+ * is reported as a HARD error by the caller rather than being silently skipped.
+ *
+ * @returns {{ runtime: number, model: number, malformed: Array<{ kind: string, line: number }> }}
+ */
+export function assumptionMarkers(text) {
+  const counts = { runtime: 0, model: 0, malformed: [] };
+  const lines = text.split(/\r?\n/);
+  for (let i = 0; i < lines.length; i += 1) {
+    const opener = /⟦(runtime|model):/g;
+    let m;
+    while ((m = opener.exec(lines[i])) !== null) {
+      // Markers are single-line by construction; a missing close means a broken grep.
+      if (lines[i].indexOf("⟧", m.index) === -1) {
+        counts.malformed.push({ kind: m[1], line: i + 1 });
+      } else {
+        counts[m[1]] += 1;
+      }
+    }
+  }
+  return counts;
 }
 
 /** Baseline key for an extracted group — namespaced so it cannot collide with a path. */
@@ -209,6 +266,12 @@ export function evaluate({ manifest, fileTexts, baseline, strict, extracted = []
 
   // 1b. Same ratchet over the harness-injected (extracted) tier.
   const maxItem = Number(manifest.maxExtractedItemChars) || Infinity;
+  // The Agent Skills API rejects a `description` over 1,024 CHARACTERS. Unlike every
+  // other threshold in this guard that is a budget we chose and ship advisory, this one
+  // is a platform limit: exceed it and the skill fails validation at install. So it is
+  // HARD regardless of `structuralStrict` / `--strict`, and it is deliberately NOT the
+  // same measure as maxExtractedItemChars (see extractGroup's header).
+  const maxDescription = Number(manifest.maxDescriptionChars) || Infinity;
   for (const group of extracted) {
     const key = extractedKey(group.id);
     currentTotal += group.bytes;
@@ -229,6 +292,37 @@ export function evaluate({ manifest, fileTexts, baseline, strict, extracted = []
           `a description states WHEN to use the skill; the how-to belongs in the body`;
         (strict || manifest.structuralStrict === true ? errors : warnings).push(msg);
       }
+      if (item.descriptionChars > maxDescription) {
+        errors.push(
+          `${item.file} description is ${item.descriptionChars} characters (hard limit ${maxDescription}) — ` +
+            `the Agent Skills API rejects a description over ${maxDescription} chars; this is a platform ` +
+            `limit, not a DPF budget. Move the how-to into the SKILL.md body.`,
+        );
+      } else if (item.descriptionChars > maxDescription * 0.9) {
+        // Advisory shoulder: the hard failure mode is an install-time rejection, which is
+        // a bad place to discover it. 995/1024 today — flag the approach, not just the hit.
+        warnings.push(
+          `${item.file} description is ${item.descriptionChars} of ${maxDescription} characters ` +
+            `(${Math.round((item.descriptionChars / maxDescription) * 100)}% of the hard API limit) — ` +
+            `little headroom before the skill fails validation`,
+        );
+      }
+    }
+  }
+
+  // 1c. Contingency markers — a malformed one breaks the grep the convention rests on.
+  const markers = { runtime: 0, model: 0 };
+  for (const file of alwaysOn) {
+    const text = fileTexts[file];
+    if (text == null) continue;
+    const found = assumptionMarkers(text);
+    markers.runtime += found.runtime;
+    markers.model += found.model;
+    for (const bad of found.malformed) {
+      errors.push(
+        `${file}:${bad.line} has an unterminated ⟦${bad.kind}:⟧ marker — the convention is only ` +
+          `useful because it greps cleanly; close it with ⟧ on the same line`,
+      );
     }
   }
 
@@ -268,7 +362,7 @@ export function evaluate({ manifest, fileTexts, baseline, strict, extracted = []
     }
   }
 
-  return { errors, warnings, currentTotal, baselineTotal };
+  return { errors, warnings, currentTotal, baselineTotal, markers };
 }
 
 function loadManifest() {
@@ -324,7 +418,7 @@ function main() {
   }
 
   const strict = process.argv.includes("--strict");
-  const { errors, warnings, currentTotal, baselineTotal } = evaluate({
+  const { errors, warnings, currentTotal, baselineTotal, markers } = evaluate({
     manifest,
     fileTexts,
     baseline,
@@ -355,6 +449,7 @@ function main() {
   console.log(
     `Instruction-plane OK — ${currentTotal} bytes across ${manifest.alwaysOn.length} always-on files${extractedNote} ` +
       `(baseline ${baselineTotal}; ~${approxTokens} tokens advisory).` +
+      ` Contingency markers: ${markers.runtime} ⟦runtime⟧ / ${markers.model} ⟦model⟧.` +
       (warnings.length ? ` ${warnings.length} advisory structural note(s).` : ""),
   );
 }

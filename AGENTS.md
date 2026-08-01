@@ -1,6 +1,6 @@
 # DPF — Agent Rulebook
 
-This is the canonical operating contract for AI agents working in the Digital Product Factory. Read in full before any action. Subdirectory `AGENTS.md` files MAY extend this with area-specific detail in the future (e.g. `apps/web/AGENTS.md`, `packages/db/AGENTS.md`); none exist today, so this root file is the only AGENTS.md to consult. ⟦runtime: re-verify with `git ls-files '*AGENTS.md'` — snapshot 2026-07-31⟧
+This is the canonical operating contract for AI agents working in the Digital Product Factory. Read in full before any action. ⟦model: front-loading over progressive disclosure is a model-era call — DI-F844365B0DCC Option B⟧ Subdirectory `AGENTS.md` files MAY extend this with area-specific detail in the future (e.g. `apps/web/AGENTS.md`, `packages/db/AGENTS.md`); none exist today, so this root file is the only AGENTS.md to consult. ⟦runtime: re-verify with `git ls-files '*AGENTS.md'` — snapshot 2026-07-31⟧
 
 Tool-specific files (`CLAUDE.md`, `.cursor/rules/`, `.clinerules/`, `.github/copilot-instructions.md`, `CONVENTIONS.md`, `.continue/rules/`) are pointers to this file. Do not duplicate rules into them.
 
@@ -127,7 +127,7 @@ TypeScript errors only surface in `next build`, not in `vitest` or IDE checks. R
 
 ## 7. Subagent Dispatch Discipline
 
-**Subagents do not read this file.** They only know what the dispatcher prompt tells them. When dispatching:
+**Subagents do not read this file.** They only know what the dispatcher prompt tells them. When dispatching: ⟦model: the injected "run the gate and fix errors" lines assume a subagent won't verify unprompted; newer models self-verify⟧
 
 - **For TypeScript work:** include "run `pnpm --filter web typecheck` before committing and fix any errors."
 - **For final-task-in-epic work:** include "run `pnpm --filter web build` and fix any errors" plus the required UX verification path. **Instruct the subagent to route that build through the shared local-CI convergence sandbox (`claim_nonprod_environment_lease(environmentKey="local-integration-ci")`) or the canonical local install — not inside the worktree itself.** (See §5 "Where each gate runs" and [kernel principle](docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md).)

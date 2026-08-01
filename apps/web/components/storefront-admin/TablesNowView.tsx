@@ -1,112 +1,121 @@
 "use client";
 
-// "Tables right now" — the owner's live capacity, as either a graphical floor
-// plan (the facsimile: which tables are open / turning soon, at a glance) or the
-// legible list. Both render the SAME `RestaurantTable[]` projection, so they
-// reconcile by construction. Floor plan is the default; the list stays for
-// scan-and-act. EP-SPATIAL-OPERATIONAL-VIEWS (BI-287AA5F7) increment 1.
+import { useMemo, useState } from "react";
 
-import { useMemo, useState, type ReactNode } from "react";
-
-import { StatusBadge } from "@/components/ui/report-kit";
-import { FloorPlanCanvas } from "@/components/twin/floor/FloorPlanCanvas";
-import { layoutRestaurantFloor } from "@/lib/storefront/floor-layout";
+import { Notice } from "@/components/ui/report-kit/Notice";
+import { StatusBadge } from "@/components/ui/report-kit/StatusBadge";
+import { CartesianSceneCanvas } from "@/components/twin/cartesian/CartesianSceneCanvas";
 import {
   capacityStateIntent,
   capacityStateLabel,
   type RestaurantTable,
 } from "@/lib/storefront/restaurant-capacity";
-
-type View = "floor" | "list";
+import type { CartesianSceneMode } from "@/lib/twin/cartesian-scene";
+import { saveOperationalCartesianScene } from "@/lib/twin/operational-scene-layout-actions";
+import type { RestaurantOperationalScene } from "@/lib/twin/restaurant-scene-layout";
 
 export interface TablesNowViewProps {
   tables: RestaurantTable[];
+  scene: RestaurantOperationalScene | null;
 }
 
-export function TablesNowView({ tables }: TablesNowViewProps) {
-  const [view, setView] = useState<View>("floor");
-  const scene = useMemo(() => layoutRestaurantFloor(tables), [tables]);
+function tableSublabel(table: RestaurantTable): string | undefined {
+  const details = [
+    table.seats != null ? `${table.seats} seats` : null,
+    table.freeInMinutes != null
+      ? `Free in ${table.freeInMinutes} min`
+      : null,
+  ].filter((detail): detail is string => detail !== null);
+  return details.length > 0 ? details.join(" · ") : undefined;
+}
+
+export function TablesNowView({ tables, scene }: TablesNowViewProps) {
+  const [mode, setMode] = useState<CartesianSceneMode>("read-only");
+  const bindings = useMemo(
+    () =>
+      Object.fromEntries(
+        tables.map((table) => {
+          const sublabel = tableSublabel(table);
+          return [
+            `table:${table.key}`,
+            {
+              label: table.label,
+              statusLabel: capacityStateLabel(table.state),
+              ...(sublabel ? { sublabel } : {}),
+              intent: capacityStateIntent(table.state),
+            },
+          ];
+        }),
+      ),
+    [tables],
+  );
 
   return (
-    <div className="border border-[var(--dpf-border)]" style={{ borderRadius: 10, overflow: "hidden" }}>
-      <div
-        className="bg-[var(--dpf-surface-1)] border-b border-[var(--dpf-border)]"
-        style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px" }}
-      >
-        <div style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>Tables right now</div>
-        <div role="tablist" aria-label="Table view" style={{ display: "flex", gap: 4 }}>
-          <ViewTab current={view} value="floor" onSelect={setView}>
-            Floor plan
-          </ViewTab>
-          <ViewTab current={view} value="list" onSelect={setView}>
-            List
-          </ViewTab>
-        </div>
+    <section
+      aria-labelledby="tables-now-heading"
+      className="grid gap-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
+    >
+      <div>
+        <h2 id="tables-now-heading" className="text-sm font-semibold">
+          Tables right now
+        </h2>
+        <p className="text-xs text-[var(--dpf-muted)]">
+          Live state is joined onto the saved floor. Choose Adjust layout to
+          move tables without changing reservations.
+        </p>
       </div>
 
-      {view === "floor" ? (
-        <FloorPlanCanvas scene={scene} />
+      {scene ? (
+        <CartesianSceneCanvas
+          ariaLabel="Restaurant floor"
+          scene={scene.layout}
+          bindings={bindings}
+          mode={mode}
+          modeOptions={["read-only", "configure"]}
+          onModeChange={setMode}
+          persistence={{
+            sceneId: scene.id,
+            version: scene.version,
+            onSave: saveOperationalCartesianScene,
+          }}
+          empty={
+            <p className="text-dpf-body text-dpf-muted">
+              No tables are configured yet.
+            </p>
+          }
+        />
       ) : (
-        <div>
-          {tables.map((t) => (
-            <div
-              key={t.key}
-              className="border-b border-[var(--dpf-border)]"
-              style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px" }}
-            >
-              <div style={{ flex: 1, fontSize: 14 }}>
-                {t.label}
-                {t.seats != null && (
-                  <span className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>
-                    {" "}
-                    · {t.seats} seats
-                  </span>
-                )}
-              </div>
-              {t.state === "turning-soon" && t.freeInMinutes != null && (
-                <span className="text-[var(--dpf-muted)]" style={{ fontSize: 12 }}>
-                  free in {t.freeInMinutes}m
+        <>
+          <Notice variant="warn" title="Floor layout unavailable">
+            The saved floor could not be loaded. Table state remains available
+            in the list while the layout is repaired.
+          </Notice>
+          <ul
+            aria-label="Restaurant table state"
+            className="grid gap-2"
+          >
+            {tables.map((table) => (
+              <li
+                key={table.key}
+                className="flex min-h-11 items-center gap-3 rounded-md border border-[var(--dpf-border)] px-3"
+              >
+                <span className="flex-1">
+                  {table.label}
+                  {table.seats != null ? ` · ${table.seats} seats` : ""}
+                  {table.freeInMinutes != null
+                    ? ` · free in ${table.freeInMinutes} min`
+                    : ""}
                 </span>
-              )}
-              <StatusBadge
-                intent={capacityStateIntent(t.state)}
-                label={capacityStateLabel(t.state)}
-                variant="soft"
-              />
-            </div>
-          ))}
-        </div>
+                <StatusBadge
+                  intent={capacityStateIntent(table.state)}
+                  label={capacityStateLabel(table.state)}
+                  variant="soft"
+                />
+              </li>
+            ))}
+          </ul>
+        </>
       )}
-    </div>
-  );
-}
-
-function ViewTab({
-  current,
-  value,
-  onSelect,
-  children,
-}: {
-  current: View;
-  value: View;
-  onSelect: (v: View) => void;
-  children: ReactNode;
-}) {
-  const active = current === value;
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={() => onSelect(value)}
-      className={
-        active
-          ? "bg-[var(--dpf-accent)] text-white"
-          : "bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)] border border-[var(--dpf-border)]"
-      }
-      style={{ padding: "4px 10px", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
-    >
-      {children}
-    </button>
+    </section>
   );
 }

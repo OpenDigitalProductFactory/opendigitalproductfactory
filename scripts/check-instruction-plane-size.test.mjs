@@ -15,6 +15,7 @@ import {
   byteLen,
   frontmatterFields,
   extractGroup,
+  assumptionMarkers,
 } from "./check-instruction-plane-size.mjs";
 
 import { readFileSync } from "node:fs";
@@ -218,4 +219,149 @@ test("extractGroup reads real SKILL.md frontmatter and excludes the body", () =>
     0,
   );
   assert.ok(g.bytes < bodyBytes / 5, "always-on frontmatter must be a small fraction of the bodies");
+});
+
+// --- Hard 1,024-character description limit (Agent Skills API) -------------------
+// Every other threshold in this guard is a DPF budget shipped advisory. This one is a
+// platform limit — over it the skill fails validation at install — so the tests below
+// pin that it errors even in the loosest configuration.
+
+const DESC_ARGS = (descriptionChars, extra = {}) => ({
+  manifest: { ...MANIFEST, maxDescriptionChars: 1024, maxExtractedItemChars: 100000, ...extra },
+  fileTexts: { "CLAUDE.md": CLAUDE_OK, "AGENTS.md": "x".repeat(500) },
+  baseline: { "CLAUDE.md": byteLen(CLAUDE_OK), "AGENTS.md": 500, "extracted:skills": 800 },
+  strict: false,
+  extracted: [
+    {
+      id: "skills",
+      bytes: 800,
+      items: [{ file: "a/SKILL.md", bytes: 800, descriptionChars, description: "d" }],
+    },
+  ],
+});
+
+test("a description over 1024 chars FAILS even when nothing else is strict", () => {
+  const { errors } = evaluate(DESC_ARGS(1025));
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /1025 characters \(hard limit 1024\)/);
+  assert.match(errors[0], /platform limit, not a DPF budget/);
+});
+
+test("the 1024-char limit is HARD — structuralStrict:false cannot downgrade it", () => {
+  // The oversized-frontmatter signal right above it IS downgradeable; this one must not be.
+  const { errors, warnings } = evaluate(DESC_ARGS(2000, { structuralStrict: false }));
+  assert.ok(errors.some((e) => e.includes("hard limit 1024")));
+  assert.ok(!warnings.some((w) => w.includes("hard limit 1024")));
+});
+
+test("exactly 1024 chars passes — the limit is inclusive", () => {
+  assert.deepEqual(evaluate(DESC_ARGS(1024)).errors, []);
+});
+
+test("a description in the top 10% warns before it fails", () => {
+  const { errors, warnings } = evaluate(DESC_ARGS(995));
+  assert.deepEqual(errors, [], "97% is a warning, not yet a failure");
+  assert.ok(warnings.some((w) => w.includes("995 of 1024") && w.includes("97%")));
+});
+
+test("a comfortably short description produces neither", () => {
+  const { errors, warnings } = evaluate(DESC_ARGS(300));
+  assert.deepEqual(errors, []);
+  assert.deepEqual(warnings, []);
+});
+
+test("descriptionChars counts code points, not UTF-16 units", () => {
+  // A 2-unit emoji must count as one character, or a description of astral glyphs
+  // would be rejected at half the real limit.
+  const g = extractGroup(
+    { id: "t", glob: "packages/dpf-skill-pack/skills/*/SKILL.md", fields: ["name", "description"] },
+    REPO_ROOT,
+  );
+  for (const item of g.items) {
+    assert.equal(item.descriptionChars, [...item.description].length);
+    assert.ok(item.descriptionChars <= item.bytes, "chars can never exceed UTF-8 bytes");
+  }
+});
+
+test("the live skill pack is within the hard API limit", () => {
+  const manifest = JSON.parse(
+    readFileSync(join(REPO_ROOT, "scripts", "instruction-plane-manifest.json"), "utf8"),
+  );
+  const g = extractGroup(manifest.alwaysOnExtracted[0], REPO_ROOT);
+  const over = g.items.filter((i) => i.descriptionChars > manifest.maxDescriptionChars);
+  assert.deepEqual(over.map((i) => `${i.file}:${i.descriptionChars}`), []);
+});
+
+// --- Contingency markers: two kinds, two clocks -----------------------------------
+// ⟦runtime:⟧ drifts with the environment; ⟦model:⟧ drifts with model releases. The
+// convention is worth nothing if it stops grepping cleanly, so a malformed marker is a
+// hard error rather than a silent skip.
+
+test("assumptionMarkers counts each kind separately", () => {
+  const text = [
+    "- **A rule.** prose ⟦runtime: verify against package.json⟧ more prose",
+    "- **Another.** prose ⟦model: assumes the model won't self-verify⟧",
+    "- **A third.** two on one line ⟦runtime: a⟧ and ⟦model: b⟧",
+    "- **Unmarked.** nothing here",
+  ].join("\n");
+  const m = assumptionMarkers(text);
+  assert.equal(m.runtime, 2);
+  assert.equal(m.model, 2);
+  assert.deepEqual(m.malformed, []);
+});
+
+test("an unterminated marker is reported as malformed, not counted", () => {
+  const m = assumptionMarkers("prose ⟦model: I forgot to close this\nnext line ⟧");
+  assert.equal(m.model, 0, "an unterminated marker must not count as a real one");
+  assert.deepEqual(m.malformed, [{ kind: "model", line: 1 }]);
+});
+
+test("evaluate FAILS on a malformed marker in an always-on file", () => {
+  const { errors } = evaluate({
+    manifest: MANIFEST,
+    fileTexts: { "CLAUDE.md": CLAUDE_OK, "AGENTS.md": "⟦runtime: never closed" },
+    baseline: { "CLAUDE.md": byteLen(CLAUDE_OK), "AGENTS.md": byteLen("⟦runtime: never closed") },
+    strict: false,
+  });
+  assert.ok(errors.some((e) => e.includes("unterminated") && e.includes("AGENTS.md:1")));
+});
+
+test("evaluate reports marker counts across the always-on set", () => {
+  const { markers } = evaluate({
+    manifest: MANIFEST,
+    fileTexts: {
+      "CLAUDE.md": CLAUDE_OK,
+      "AGENTS.md": "a ⟦runtime: x⟧ b ⟦model: y⟧ c ⟦model: z⟧",
+    },
+    baseline: {
+      "CLAUDE.md": byteLen(CLAUDE_OK),
+      "AGENTS.md": byteLen("a ⟦runtime: x⟧ b ⟦model: y⟧ c ⟦model: z⟧"),
+    },
+    strict: false,
+  });
+  assert.deepEqual(markers, { runtime: 1, model: 2 });
+});
+
+test("an unrecognised marker kind is ignored, not miscounted", () => {
+  // Only the two defined clocks are tracked; ⟦todo:⟧ or similar must not inflate either.
+  const m = assumptionMarkers("prose ⟦todo: something⟧ and ⟦runtime: real⟧");
+  assert.equal(m.runtime, 1);
+  assert.equal(m.model, 0);
+  assert.deepEqual(m.malformed, []);
+});
+
+test("the live always-on plane carries both marker kinds and none malformed", () => {
+  const manifest = JSON.parse(
+    readFileSync(join(REPO_ROOT, "scripts", "instruction-plane-manifest.json"), "utf8"),
+  );
+  let runtime = 0;
+  let model = 0;
+  for (const file of manifest.alwaysOn) {
+    const m = assumptionMarkers(readFileSync(join(REPO_ROOT, file), "utf8"));
+    assert.deepEqual(m.malformed, [], `${file} has a malformed marker`);
+    runtime += m.runtime;
+    model += m.model;
+  }
+  assert.ok(runtime >= 10, `expected the BI-ACC7A2B5 runtime markers, saw ${runtime}`);
+  assert.ok(model >= 1, `expected at least one model-assumption marker, saw ${model}`);
 });

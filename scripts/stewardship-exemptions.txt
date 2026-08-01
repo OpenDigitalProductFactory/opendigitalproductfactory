@@ -71,6 +71,8 @@ HospitalityResource  domain-lifecycle-managed  # Physical venue resources retire
 HospitalityCapacityPool  domain-lifecycle-managed  # Aggregate kitchen, bake, and delivery capacity retires through explicit operating actions; an age sweep could remove a still-active capacity definition.
 HospitalityResourceAvailability  domain-lifecycle-managed  # Availability windows follow their HospitalityResource and cascade with it; independent age-based deletion would silently reopen or close an active resource.
 HospitalityCapacityAllocation  domain-lifecycle-managed  # Append-preserving capacity consumption follows booking/hold and explicit release lifecycles; an age sweep could erase live conflict and utilization evidence.
+HospitalityServiceTurn  domain-lifecycle-managed  # A turn closes through explicit service-stage transitions and follows its organization/booking lifecycle; an age sweep could remove a live or still-auditable dining-room turn.
+HospitalityServiceTurnEvent  domain-lifecycle-managed  # Append-only transition evidence follows its HospitalityServiceTurn cascade; independent aging would make seating, movement, and closure decisions unexplainable.
 ProductOffering  domain-lifecycle-managed  # Organization-owned commercial packaging follows explicit offering status/effective-date actions and product cascade, never an age-based sweep.
 CatalogItem  domain-lifecycle-managed  # Canonical ways-to-buy follow explicit catalog status/effective-date actions and offering cascade, never an age-based sweep.
 ProductConfiguration  domain-lifecycle-managed  # Reusable configurations follow explicit publish/retire actions and catalog-item cascade, never an age-based sweep.

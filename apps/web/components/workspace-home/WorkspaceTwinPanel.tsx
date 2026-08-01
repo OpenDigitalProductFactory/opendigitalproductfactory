@@ -8,7 +8,10 @@
 // Plan: docs/superpowers/plans/2026-07-15-twin-workspace-home-placement-execution.md
 
 import { TwinView } from "@/components/twin";
+import { CartesianSceneCanvas } from "@/components/twin/cartesian/CartesianSceneCanvas";
+import { RestaurantFloorOperations } from "@/components/twin/restaurant/RestaurantFloorOperations";
 import type { WorkspaceTwinPresentation } from "@/lib/workspace-home/twin-panel-data";
+import type { CartesianScenePresentationMap } from "@/lib/twin/cartesian-scene";
 
 export interface WorkspaceTwinPanelProps {
   presentation: WorkspaceTwinPresentation;
@@ -16,6 +19,40 @@ export interface WorkspaceTwinPanelProps {
 }
 
 export function WorkspaceTwinPanel({ presentation, className = "" }: WorkspaceTwinPanelProps) {
+  if (presentation.restaurantFloor) {
+    return (
+      <div className={className}>
+        <RestaurantFloorOperations
+          view={presentation.restaurantFloor}
+          scene={presentation.scene}
+        />
+      </div>
+    );
+  }
+
+  const bindings: CartesianScenePresentationMap = Object.fromEntries(
+    presentation.snapshot.zones.flatMap((zone) =>
+      zone.units.map((unit) => [
+        `table:${unit.key}`,
+        {
+          label: unit.label,
+          statusLabel: unit.state,
+          ...(unit.sublabel ? { sublabel: unit.sublabel } : {}),
+          intent: unit.intent ?? "neutral",
+        },
+      ]),
+    ),
+  );
+  const physicalScene = presentation.scene ? (
+    <CartesianSceneCanvas
+      ariaLabel="Restaurant floor"
+      scene={presentation.scene.layout}
+      bindings={bindings}
+      mode="read-only"
+      height={500}
+    />
+  ) : undefined;
+
   return (
     <div className={`flex flex-col gap-3 ${className}`.trim()}>
       {presentation.demo ? (
@@ -30,7 +67,11 @@ export function WorkspaceTwinPanel({ presentation, className = "" }: WorkspaceTw
           Demo data — live business projection pending
         </p>
       ) : null}
-      <TwinView profile={presentation.profile} snapshot={presentation.snapshot} />
+      <TwinView
+        profile={presentation.profile}
+        snapshot={presentation.snapshot}
+        physicalScene={physicalScene}
+      />
     </div>
   );
 }

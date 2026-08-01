@@ -27,8 +27,7 @@ The core record is the `Agent` row; the seven items above are the components tha
 - **`agent_registry.json`** — the human-authorable definition (what you write to declare an agent).
 - **The `AIDoc`** — the projected, portable summary (what the platform publishes about an agent).
 
-![Agent composition](agent-meta-model-diagrams/01-agent-composition.mmd)
-*Diagram: [`agent-meta-model-diagrams/01-agent-composition.mmd`](agent-meta-model-diagrams/01-agent-composition.mmd)*
+**Diagram — Agent composition:** [view Mermaid source](agent-meta-model-diagrams/01-agent-composition.mmd)
 
 ---
 
@@ -73,8 +72,7 @@ Three layers, each with a distinct job:
 
 GAID is deliberately complementary to **TAK** (Trusted AI Kernel): *GAID says who an agent is and what claims can be made about it; TAK says how a trustworthy runtime must govern it.* See `docs/architecture/trusted-ai-kernel.md` and `docs/architecture/agent-standards-dpf-conformance.md`.
 
-![Identity projection](agent-meta-model-diagrams/02-identity-projection.mmd)
-*Diagram: [`agent-meta-model-diagrams/02-identity-projection.mmd`](agent-meta-model-diagrams/02-identity-projection.mmd)*
+**Diagram — Identity projection (Agent → Principal/alias → AIDoc):** [view Mermaid source](agent-meta-model-diagrams/02-identity-projection.mmd)
 
 ### 3.2 LLM routing — *which model the agent runs on*
 
@@ -197,8 +195,7 @@ The `operating_profile_fingerprint` is the key idea for communication-at-scale: 
 
 Identity and config are static; the live agent is *assembled* per request. `getAvailableTools()`, prompt composition, skill loading, and model resolution all run at call time, then the authority gate and `ToolExecution` ledger close the loop.
 
-![Runtime assembly](agent-meta-model-diagrams/03-runtime-assembly.mmd)
-*Diagram: [`agent-meta-model-diagrams/03-runtime-assembly.mmd`](agent-meta-model-diagrams/03-runtime-assembly.mmd)*
+**Diagram — Runtime assembly:** [view Mermaid source](agent-meta-model-diagrams/03-runtime-assembly.mmd)
 
 ---
 

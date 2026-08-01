@@ -4666,6 +4666,8 @@ model Organization {
   hospitalityCapacityPools          HospitalityCapacityPool[]          @relation("HospitalityCapacityPoolOrganization")
   hospitalityResourceAvailability   HospitalityResourceAvailability[]  @relation("HospitalityAvailabilityOrganization")
   hospitalityCapacityAllocations    HospitalityCapacityAllocation[]    @relation("HospitalityAllocationOrganization")
+  hospitalityServiceTurns           HospitalityServiceTurn[]           @relation("HospitalityServiceTurnOrganization")
+  hospitalityServiceTurnEvents      HospitalityServiceTurnEvent[]      @relation("HospitalityServiceTurnEventOrganization")
   hospitalityBookingHolds           BookingHold[]                      @relation("BookingHoldOrganization")
   businessContext                   BusinessContext?
   marketingStrategy                 MarketingStrategy?
@@ -9885,6 +9887,7 @@ model StorefrontConfig {
   hospitalityResources           HospitalityResource[]
   hospitalityCapacityPools       HospitalityCapacityPool[]
   hospitalityCapacityAllocations HospitalityCapacityAllocation[]
+  hospitalityServiceTurns        HospitalityServiceTurn[]
 
   @@unique([id, organizationId])
 }
@@ -9906,6 +9909,7 @@ model OperationalSceneLayout {
   createdAt    DateTime     @default(now())
   organization Organization @relation(fields: [orgId], references: [orgId], onDelete: Cascade)
 
+  @@unique([orgId, twinTemplate, locationId])
   @@index([orgId, twinTemplate])
 }
 
@@ -10464,6 +10468,7 @@ model StorefrontBooking {
   // Structured reservation context (BI-3DA1DFDC): party size and dietary notes are
   // first-class facts so the owner handoff is traceable, not buried in `notes`.
   covers                      Int?
+  demandKind                  String                          @default("reservation")
   dietaryNotes                String?
   notes                       String?
   status                      String                          @default("pending")
@@ -10491,6 +10496,7 @@ model StorefrontBooking {
   provider                    ServiceProvider?                @relation(fields: [providerId], references: [id])
   hospitalityResource         HospitalityResource?            @relation("HospitalityBookingResource", fields: [hospitalityResourceId, organizationId], references: [id, organizationId], onDelete: Restrict)
   hospitalityAllocations      HospitalityCapacityAllocation[] @relation("HospitalityAllocationBooking")
+  hospitalityServiceTurn      HospitalityServiceTurn?         @relation("HospitalityServiceTurnBooking")
   parentBooking               StorefrontBooking?              @relation("BookingRecurrence", fields: [parentBookingId], references: [id])
   childBookings               StorefrontBooking[]             @relation("BookingRecurrence")
   careAppointment             CareAppointment?
@@ -10688,6 +10694,7 @@ model HospitalityCapacityAllocation {
   poolId                String?
   bookingId             String?
   bookingHoldId         String?
+  serviceTurnId         String?
   demandType            String
   demandRef             String
   startsAt              DateTime
@@ -10708,12 +10715,72 @@ model HospitalityCapacityAllocation {
   pool         HospitalityCapacityPool? @relation(fields: [poolId, organizationId], references: [id, organizationId], onDelete: Restrict)
   booking      StorefrontBooking?       @relation("HospitalityAllocationBooking", fields: [bookingId, organizationId], references: [id, organizationId], onDelete: Restrict)
   bookingHold  BookingHold?             @relation("HospitalityAllocationHold", fields: [bookingHoldId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  serviceTurn  HospitalityServiceTurn?  @relation(fields: [serviceTurnId, organizationId], references: [id, organizationId], onDelete: Restrict)
 
   @@unique([organizationId, idempotencyKey])
   @@index([resourceId, startsAt, endsAt])
   @@index([poolId, startsAt, endsAt])
   @@index([organizationId, lifecycle, startsAt])
   @@index([storefrontId, demandType, demandRef])
+  @@index([serviceTurnId])
+}
+
+/// One party's authoritative in-service lifecycle across one or more table
+/// allocations. Reservation, capacity, commerce, staffing, and geometry remain
+/// separate authorities joined through this aggregate.
+model HospitalityServiceTurn {
+  id                   String    @id @default(cuid())
+  turnId               String    @unique
+  organizationId       String
+  storefrontId         String
+  bookingId            String?
+  staffingAssignmentId String?
+  demandType           String
+  demandRef            String
+  stage                String    @default("seated")
+  startedAt            DateTime
+  expectedEndAt        DateTime
+  closedAt             DateTime?
+  version              Int       @default(1)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  organization       Organization                    @relation("HospitalityServiceTurnOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  storefront         StorefrontConfig                @relation(fields: [storefrontId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  booking            StorefrontBooking?              @relation("HospitalityServiceTurnBooking", fields: [bookingId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  staffingAssignment StaffingAssignment?             @relation(fields: [staffingAssignmentId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  allocations        HospitalityCapacityAllocation[]
+  events             HospitalityServiceTurnEvent[]
+
+  @@unique([id, organizationId])
+  @@unique([bookingId, organizationId])
+  @@unique([storefrontId, demandType, demandRef])
+  @@index([organizationId, stage, startedAt])
+  @@index([staffingAssignmentId])
+}
+
+/// Append-only evidence for service-stage, table-assignment, and staffing
+/// changes. One event records each accepted aggregate version.
+model HospitalityServiceTurnEvent {
+  id             String   @id @default(cuid())
+  eventId        String   @unique
+  organizationId String
+  serviceTurnId  String
+  idempotencyKey String?
+  eventType      String
+  fromStage      String?
+  toStage        String?
+  atVersion      Int
+  actorRef       String?
+  detail         Json?
+  occurredAt     DateTime @default(now())
+
+  organization Organization           @relation("HospitalityServiceTurnEventOrganization", fields: [organizationId], references: [id], onDelete: Restrict)
+  serviceTurn  HospitalityServiceTurn @relation(fields: [serviceTurnId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@unique([serviceTurnId, atVersion])
+  @@unique([organizationId, idempotencyKey])
+  @@index([organizationId, occurredAt])
 }
 
 /// Organization-owned definition of a clinical or dental visit. StorefrontItem
@@ -15608,10 +15675,12 @@ model StaffingAssignment {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
-  shift  StaffingShift             @relation(fields: [staffingShiftId], references: [id], onDelete: Cascade)
-  crew   StaffingCrew?             @relation(fields: [staffingCrewId], references: [id])
-  events StaffingAssignmentEvent[]
+  shift                   StaffingShift             @relation(fields: [staffingShiftId], references: [id], onDelete: Cascade)
+  crew                    StaffingCrew?             @relation(fields: [staffingCrewId], references: [id])
+  events                  StaffingAssignmentEvent[]
+  hospitalityServiceTurns HospitalityServiceTurn[]
 
+  @@unique([id, organizationId])
   @@index([organizationId, lifecycle])
   @@index([staffingShiftId])
   @@index([employeeProfileId])
@@ -15674,7 +15743,7 @@ model StaffingResourceLink {
   id              String   @id @default(cuid())
   organizationId  String
   staffingShiftId String
-  resourceType    String // vehicle | room | operatory | kit | equipment | chair | station
+  resourceType    String // vehicle | room | operatory | kit | equipment | chair | station | table
   resourceRef     String
   createdAt       DateTime @default(now())
 

@@ -78,6 +78,7 @@ export type OperationalCommandAdapterResult =
       status: "confirmed";
       newVersion: string;
       changedFacts: OperationalChangedFact[];
+      replayed?: boolean;
     }
   | {
       status: "conflict";
@@ -198,7 +199,10 @@ export function createOperationalCommandBoundary(
         return {
           ...adapterResult,
           idempotencyKey: command.idempotencyKey,
-          replayed: false,
+          replayed:
+            "replayed" in adapterResult
+              ? adapterResult.replayed ?? false
+              : false,
           latencyMs: Math.max(0, clock() - startedAt),
         } as OperationalCommandResult;
       })();

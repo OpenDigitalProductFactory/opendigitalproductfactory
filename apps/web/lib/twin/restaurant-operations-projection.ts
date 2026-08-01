@@ -5,6 +5,8 @@ import type {
   ResourceUnitData,
 } from "@/components/twin";
 import {
+  capacityStateIntent,
+  capacityStateLabel,
   readinessHeadline,
   type RestaurantCapacitySnapshot,
 } from "@/lib/storefront/restaurant-capacity";
@@ -35,6 +37,28 @@ export function hospitalityResourceUnits(
     state: resource.status === "active" ? "Available" : "Off",
     intent: resource.status === "active" ? "success" : "neutral",
   }));
+}
+
+/** Live FLOOR units use the capacity projection, not raw resource status. */
+export function restaurantFloorResourceUnits(
+  snapshot: RestaurantCapacitySnapshot,
+  limit = 24,
+): ResourceUnitData[] {
+  return snapshot.tables.slice(0, limit).map((table) => {
+    const details = [
+      table.seats != null ? `${table.seats} seats` : null,
+      table.freeInMinutes != null
+        ? `free in ${table.freeInMinutes}m`
+        : null,
+    ].filter((detail): detail is string => detail !== null);
+    return {
+      key: table.key,
+      label: table.label,
+      state: capacityStateLabel(table.state),
+      intent: capacityStateIntent(table.state),
+      ...(details.length > 0 ? { sublabel: details.join(" · ") } : {}),
+    };
+  });
 }
 
 /** Restaurant-native capacity facts for the Workspace operations view. */

@@ -72,6 +72,7 @@ export async function allocateHospitalityCapacity(
     demandRef: string;
     bookingId: string | null;
     bookingHoldId: string | null;
+    serviceTurnId?: string | null;
     startsAt: Date;
     endsAt: Date;
     quantity: number;
@@ -227,6 +228,7 @@ export async function allocateHospitalityCapacity(
       poolId: input.poolId,
       bookingId: input.bookingId,
       bookingHoldId: input.bookingHoldId,
+      serviceTurnId: input.serviceTurnId ?? null,
       demandType: input.demandType,
       demandRef: input.demandRef,
       startsAt: input.startsAt,

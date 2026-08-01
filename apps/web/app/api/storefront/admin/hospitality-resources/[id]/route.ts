@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@dpf/db";
+import { prisma, type Prisma } from "@dpf/db";
 
 import { auth } from "@/lib/auth";
 import { apiErrorResponse } from "@/lib/api/error";
 import { newId } from "@/lib/shared/new-id";
+import {
+  parseRestaurantTableAttributes,
+  serializeRestaurantTableAttributes,
+  validateRestaurantTableAttributesInput,
+} from "@/lib/storefront/restaurant-table-attributes";
 
 const STATUSES = new Set(["active", "blocked", "retired"]);
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -90,6 +95,9 @@ export async function PUT(
     expectedVersion?: number;
     availability?: AvailabilityInput[];
     exceptions?: ExceptionInput[];
+    shape?: string;
+    combinationGroup?: string | null;
+    combinableWith?: unknown[];
   };
   const scheduleRequested =
     body.availability !== undefined || body.exceptions !== undefined;
@@ -116,6 +124,7 @@ export async function PUT(
       id: true,
       organizationId: true,
       legacyServiceProviderId: true,
+      attributes: true,
     },
   });
   if (!current) {
@@ -203,6 +212,7 @@ export async function PUT(
           capacityUnit: true,
           serviceArea: true,
           blockedReason: true,
+          attributes: true,
           version: true,
           availability: {
             orderBy: { createdAt: "asc" },
@@ -231,6 +241,18 @@ export async function PUT(
   }
 
   const label = body.label?.trim();
+  const currentAttributes = parseRestaurantTableAttributes(current.attributes);
+  const attributes = validateRestaurantTableAttributesInput({
+    shape: body.shape ?? currentAttributes.shape,
+    combinationGroup:
+      body.combinationGroup === undefined
+        ? currentAttributes.combinationGroup
+        : body.combinationGroup,
+    combinableWith:
+      body.combinableWith === undefined
+        ? currentAttributes.combinableWith
+        : body.combinableWith,
+  });
   if (
     !label ||
     !Number.isInteger(body.capacity) ||
@@ -238,11 +260,14 @@ export async function PUT(
     Number(body.capacity) > 100 ||
     !body.status ||
     !STATUSES.has(body.status) ||
-    !Number.isInteger(body.expectedVersion)
+    !Number.isInteger(body.expectedVersion) ||
+    !attributes.ok
   ) {
     return apiErrorResponse(
       "INVALID_ARGUMENT",
-      "Valid label, seats, status, and expectedVersion are required",
+      attributes.ok
+        ? "Valid label, seats, status, and expectedVersion are required"
+        : attributes.error,
       400,
     );
   }
@@ -264,6 +289,9 @@ export async function PUT(
             body.status === "blocked"
               ? body.blockedReason?.trim() || null
               : null,
+          attributes: serializeRestaurantTableAttributes(
+            attributes.value,
+          ) as Prisma.InputJsonValue,
           version: { increment: 1 },
         },
       });
@@ -290,6 +318,7 @@ export async function PUT(
           capacityUnit: true,
           serviceArea: true,
           blockedReason: true,
+          attributes: true,
           version: true,
           availability: {
             orderBy: { createdAt: "asc" },

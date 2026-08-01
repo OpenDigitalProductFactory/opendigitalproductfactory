@@ -110,13 +110,19 @@ reservations:
 1. Add every table guests can actually be seated at. Use the label staff use
    during service, record its true seat count, and identify its service area
    (for example, dining room, patio, or bar).
-2. Open each table and set its weekly availability. Add dated exceptions for
+2. Record the table's physical shape. If tables can be joined, give them the
+   same combination group and select only the neighboring tables staff can
+   actually combine.
+3. Open each table and set its weekly availability. Add dated exceptions for
    closures, maintenance, private events, or other temporary restrictions.
-3. Mark a table **Blocked** when it must not be assigned and give the team a
+4. Mark a table **Blocked** when it must not be assigned and give the team a
    useful reason. Use **Retired** only when the table is no longer part of the
    operating floor.
-4. Compare the table totals and current availability with the physical room
-   before publishing and after any layout change.
+5. Under **Tables right now**, choose **Adjust layout**, move each table to its
+   real position, and save. Layout changes move the drawing only; they do not
+   change reservations or seat a party.
+6. Compare the table totals, saved floor, and current availability with the
+   physical room before publishing and after any layout change.
 
 An upgraded storefront may show a blocked table with **Confirm seat capacity
 after migration**. DPF intentionally does not guess a physical capacity when

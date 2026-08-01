@@ -19,11 +19,17 @@ import {
   readinessIntent,
   TABLE_CAPACITY_STATES,
 } from "@/lib/storefront/restaurant-capacity";
+import { parseRestaurantTableAttributes } from "@/lib/storefront/restaurant-table-attributes";
+import {
+  loadOrCreateRestaurantScene,
+  type OperationalSceneLayoutDatabase,
+} from "@/lib/twin/restaurant-scene-layout";
 
 export default async function TablesCapacityPage() {
   const config = await prisma.storefrontConfig.findFirst({
     select: {
       id: true,
+      organization: { select: { orgId: true } },
       archetype: { select: { archetypeId: true, category: true, customVocabulary: true } },
       hospitalityResources: {
         where: { kind: "table" },
@@ -38,6 +44,7 @@ export default async function TablesCapacityPage() {
           capacityUnit: true,
           serviceArea: true,
           blockedReason: true,
+          attributes: true,
           version: true,
           availability: {
             orderBy: { createdAt: "asc" },
@@ -79,6 +86,7 @@ export default async function TablesCapacityPage() {
       kind: "table",
       capacityUnit: "seats",
       status: resource.status as HospitalityResourceManagerRow["status"],
+      attributes: parseRestaurantTableAttributes(resource.attributes),
       availability: resource.availability.map((row) => ({
         id: row.id,
         days: row.days,
@@ -89,6 +97,22 @@ export default async function TablesCapacityPage() {
         reason: row.reason,
       })),
     }));
+  const scene =
+    snapshot && snapshot.tables.length > 0
+      ? await loadOrCreateRestaurantScene({
+          database: prisma as unknown as OperationalSceneLayoutDatabase,
+          orgId: config.organization.orgId,
+          locationId: config.id,
+          locationLabel: `${config.archetype?.archetypeId ?? "Restaurant"} floor`,
+          tables: config.hospitalityResources.map((resource) => ({
+            id: resource.id,
+            label: resource.label,
+            capacity: resource.capacity,
+            serviceArea: resource.serviceArea,
+            attributes: resource.attributes,
+          })),
+        }).catch(() => null)
+      : null;
 
   const readiness = snapshot?.readiness ?? "closed";
   const banner = intentStyle(readinessIntent(readiness));
@@ -146,7 +170,9 @@ export default async function TablesCapacityPage() {
 
       {/* Live table state — graphical floor plan or list, one shared projection
           so both reconcile with Workspace and public booking. */}
-      {snapshot && snapshot.tables.length > 0 && <TablesNowView tables={snapshot.tables} />}
+      {snapshot && snapshot.tables.length > 0 && (
+        <TablesNowView tables={snapshot.tables} scene={scene} />
+      )}
 
       {/* Manage the physical tables (add / edit / block). */}
       <div style={{ marginTop: 4 }}>
