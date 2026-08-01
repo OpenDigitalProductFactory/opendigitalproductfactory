@@ -4,12 +4,15 @@ import { describe, expect, it, vi } from "vitest";
 import type { TwinViewProps } from "@/components/twin/TwinView";
 import type { CartesianSceneCanvasProps } from "@/components/twin/cartesian/CartesianSceneCanvas";
 import type { RestaurantFloorOperationsProps } from "@/components/twin/restaurant/RestaurantFloorOperations";
+import type { RoomsOperationsProps } from "@/components/twin/rooms";
+import { buildDemoRoomsOperationalView } from "@/lib/twin/rooms-operations-demo";
 import type { WorkspaceTwinPresentation } from "@/lib/workspace-home/twin-panel-data";
 
 const captured = vi.hoisted(() => ({
   twin: null as TwinViewProps | null,
   canvas: null as CartesianSceneCanvasProps | null,
   restaurant: null as RestaurantFloorOperationsProps | null,
+  rooms: null as RoomsOperationsProps | null,
 }));
 
 vi.mock("@/components/twin", () => ({
@@ -30,6 +33,13 @@ vi.mock("@/components/twin/restaurant/RestaurantFloorOperations", () => ({
   RestaurantFloorOperations: (props: RestaurantFloorOperationsProps) => {
     captured.restaurant = props;
     return <div>live restaurant host stand</div>;
+  },
+}));
+
+vi.mock("@/components/twin/rooms", () => ({
+  RoomsOperations: (props: RoomsOperationsProps) => {
+    captured.rooms = props;
+    return <div>coordinated room rack</div>;
   },
 }));
 
@@ -132,5 +142,25 @@ describe("WorkspaceTwinPanel restaurant scene", () => {
       sublabel: "4 seats",
       intent: "info",
     });
+  });
+});
+
+describe("WorkspaceTwinPanel ROOMS scene", () => {
+  it("uses the coordinated room operations renderer instead of the generic card twin", () => {
+    captured.twin = null;
+    const presentation = {
+      restaurantFloor: null,
+      roomsOperations: buildDemoRoomsOperationalView({ domain: "lodging" }),
+      roomsOperationsDemo: true,
+      scene: null,
+    } as unknown as WorkspaceTwinPresentation;
+
+    const html = renderToStaticMarkup(
+      <WorkspaceTwinPanel presentation={presentation} />,
+    );
+
+    expect(html).toContain("coordinated room rack");
+    expect(captured.rooms?.demo).toBe(true);
+    expect(captured.twin).toBeNull();
   });
 });

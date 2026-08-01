@@ -7608,6 +7608,27 @@
     "longSentences": 0,
     "textMass": 150
   },
+  "apps/web/components/twin/rooms/RoomsList.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/twin/rooms/RoomsOperations.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 66
+  },
+  "apps/web/components/twin/rooms/RoomsRack.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
+  },
   "apps/web/components/ui/DatePicker.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,

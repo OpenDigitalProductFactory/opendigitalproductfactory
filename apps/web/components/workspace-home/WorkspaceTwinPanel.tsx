@@ -10,6 +10,7 @@
 import { TwinView } from "@/components/twin";
 import { CartesianSceneCanvas } from "@/components/twin/cartesian/CartesianSceneCanvas";
 import { RestaurantFloorOperations } from "@/components/twin/restaurant/RestaurantFloorOperations";
+import { RoomsOperations } from "@/components/twin/rooms";
 import type { WorkspaceTwinPresentation } from "@/lib/workspace-home/twin-panel-data";
 import type { CartesianScenePresentationMap } from "@/lib/twin/cartesian-scene";
 
@@ -25,6 +26,17 @@ export function WorkspaceTwinPanel({ presentation, className = "" }: WorkspaceTw
         <RestaurantFloorOperations
           view={presentation.restaurantFloor}
           scene={presentation.scene}
+        />
+      </div>
+    );
+  }
+
+  if (presentation.roomsOperations) {
+    return (
+      <div className={className}>
+        <RoomsOperations
+          demo={presentation.roomsOperationsDemo}
+          view={presentation.roomsOperations}
         />
       </div>
     );
