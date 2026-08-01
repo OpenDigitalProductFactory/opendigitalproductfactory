@@ -28,6 +28,11 @@ const buildReadMocks = vi.hoisted(() => ({
   getFeatureBuildCustomerStatus: vi.fn(),
 }));
 
+const ownerProofMocks = vi.hoisted(() => ({
+  getBuildChangeNarrativeAction: vi.fn().mockResolvedValue(null),
+  getBuildDecisionLedgerAction: vi.fn().mockResolvedValue([]),
+}));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     refresh: routerMocks.refresh,
@@ -56,6 +61,14 @@ vi.mock("@/lib/actions/backlog-build", () => ({
 vi.mock("@/lib/actions/build-read", () => ({
   getFeatureBuild: buildReadMocks.getFeatureBuild,
   getFeatureBuildCustomerStatus: buildReadMocks.getFeatureBuildCustomerStatus,
+}));
+
+vi.mock("@/lib/actions/build-change-narrative", () => ({
+  getBuildChangeNarrativeAction: ownerProofMocks.getBuildChangeNarrativeAction,
+}));
+
+vi.mock("@/lib/actions/build-decision-ledger", () => ({
+  getBuildDecisionLedgerAction: ownerProofMocks.getBuildDecisionLedgerAction,
 }));
 
 vi.mock("@/lib/actions/build-flow", () => ({
@@ -279,9 +292,138 @@ describe("BuildStudio active-build header layout", () => {
     expect(screen.queryByTestId("feature-brief-panel")).toBeNull();
   });
 
+  it("keeps the change narrative and decision summary above Technical details", async () => {
+    ownerProofMocks.getBuildChangeNarrativeAction.mockResolvedValueOnce({
+      headline: "Customers can now change a booking online.",
+      bullets: ["Added self-service rescheduling."],
+      whyItMatters: "Customers get an answer without waiting on the phone.",
+      openQuestions: [],
+      generatedAt: "2026-07-30T12:00:00.000Z",
+      model: "test-model",
+    });
+    ownerProofMocks.getBuildDecisionLedgerAction.mockResolvedValueOnce([{
+      id: "decision-1",
+      phase: "review",
+      source: "kernel",
+      theCall: "Keep staff approval for late changes",
+      theOptions: ["Always automatic", "Approval after cutoff"],
+      theWhy: "Late changes can disrupt the next appointment.",
+      governance: true,
+      unresolvedRisks: [],
+    }]);
+
+    render(
+      <BuildStudio
+        builds={[makeBuild({ phase: "review" })]}
+        portfolios={[]}
+        governedBacklogEnabled
+      />,
+    );
+
+    const context = await screen.findByTestId("owner-proof-supporting-context");
+    const technicalToggle = screen.getByTestId("build-studio-engineer-view-toggle");
+    expect(context.textContent).toContain("Customers can now change a booking online.");
+    expect(context.textContent).toContain("Current call: Keep staff approval for late changes");
+    expect(context.compareDocumentPosition(technicalToggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByTestId("build-studio-technical-details")).toBeNull();
+  });
+
+  it("never shows the previous Change's proof context while the next Change loads", async () => {
+    let resolveSecondNarrative!: (value: {
+      headline: string;
+      bullets: string[];
+      whyItMatters: string;
+      openQuestions: string[];
+      generatedAt: string;
+      model: string;
+    }) => void;
+    let resolveSecondLedger!: (value: Array<{
+      id: string;
+      phase: "review";
+      source: "kernel";
+      theCall: string;
+      theOptions: string[];
+      theWhy: string;
+      governance: boolean;
+      unresolvedRisks: string[];
+    }>) => void;
+    const secondNarrative = new Promise<Parameters<typeof resolveSecondNarrative>[0]>((resolve) => {
+      resolveSecondNarrative = resolve;
+    });
+    const secondLedger = new Promise<Parameters<typeof resolveSecondLedger>[0]>((resolve) => {
+      resolveSecondLedger = resolve;
+    });
+
+    ownerProofMocks.getBuildChangeNarrativeAction
+      .mockResolvedValueOnce({
+        headline: "First Change narrative",
+        bullets: [],
+        whyItMatters: "First Change reason",
+        openQuestions: [],
+        generatedAt: "2026-07-30T12:00:00.000Z",
+        model: "test-model",
+      })
+      .mockReturnValueOnce(secondNarrative);
+    ownerProofMocks.getBuildDecisionLedgerAction
+      .mockResolvedValueOnce([{
+        id: "decision-first",
+        phase: "review",
+        source: "kernel",
+        theCall: "First Change decision",
+        theOptions: [],
+        theWhy: "First Change rationale",
+        governance: true,
+        unresolvedRisks: [],
+      }])
+      .mockReturnValueOnce(secondLedger);
+
+    render(
+      <BuildStudio
+        builds={[
+          makeBuild({ buildId: "FB-FIRST", title: "First Change", phase: "review" }),
+          makeBuild({ id: "build-row-2", buildId: "FB-SECOND", title: "Second Change", phase: "review" }),
+        ]}
+        portfolios={[]}
+        governedBacklogEnabled
+      />,
+    );
+
+    expect(await screen.findByText("First Change narrative")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Open build Second Change" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("First Change narrative")).toBeNull();
+      expect(screen.queryByText("Current call: First Change decision")).toBeNull();
+    });
+
+    resolveSecondNarrative({
+      headline: "Second Change narrative",
+      bullets: [],
+      whyItMatters: "Second Change reason",
+      openQuestions: [],
+      generatedAt: "2026-07-30T12:01:00.000Z",
+      model: "test-model",
+    });
+    resolveSecondLedger([{
+      id: "decision-second",
+      phase: "review",
+      source: "kernel",
+      theCall: "Second Change decision",
+      theOptions: [],
+      theWhy: "Second Change rationale",
+      governance: true,
+      unresolvedRisks: [],
+    }]);
+
+    expect(await screen.findByText("Second Change narrative")).toBeTruthy();
+    expect(screen.getByText("Current call: Second Change decision")).toBeTruthy();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    ownerProofMocks.getBuildChangeNarrativeAction.mockReset().mockResolvedValue(null);
+    ownerProofMocks.getBuildDecisionLedgerAction.mockReset().mockResolvedValue([]);
   });
 
   it("names the intake around the operator's outcome", () => {

@@ -1,5 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import type { BuildDecisionLedgerEntry } from "@/lib/build/decision-ledger";
+import type { BuildChangeNarrative } from "@/lib/feature-build-types";
 import type { OwnerChangeView } from "@/lib/build/owner-change-view";
 import { OwnerChangeProofPanel } from "./OwnerChangeProofPanel";
 
@@ -26,12 +28,34 @@ const view: OwnerChangeView = {
   technicalDetailsAvailable: true,
 };
 
+const changeNarrative: BuildChangeNarrative = {
+  headline: "Customers can now change a booking online.",
+  bullets: ["Added self-service rescheduling."],
+  whyItMatters: "Customers get an answer without waiting on the phone.",
+  openQuestions: ["Confirm the cancellation window."],
+  generatedAt: "2026-07-30T12:00:00.000Z",
+  model: "test-model",
+};
+
+const decisionLedger: BuildDecisionLedgerEntry[] = [{
+  id: "decision-1",
+  phase: "review",
+  source: "kernel",
+  theCall: "Keep staff approval for late changes",
+  theOptions: ["Always automatic", "Staff approval after cutoff"],
+  theWhy: "Late changes can disrupt the next appointment.",
+  governance: true,
+  unresolvedRisks: ["Monitor staff response time."],
+}];
+
 describe("OwnerChangeProofPanel", () => {
   it("renders owner-readable preview and all proof states through report-kit", () => {
     const html = renderToStaticMarkup(
       <OwnerChangeProofPanel
         view={view}
         previewUrl="http://localhost:3035"
+        changeNarrative={changeNarrative}
+        decisionLedger={decisionLedger}
         onOpenBrief={vi.fn()}
         onOpenProof={vi.fn()}
       />,
@@ -42,6 +66,9 @@ describe("OwnerChangeProofPanel", () => {
     expect(html).toContain('data-intent="success"');
     expect(html).toContain('data-intent="warning"');
     expect(html).toContain("Not recorded");
+    expect(html).toContain("Customers can now change a booking online.");
+    expect(html).toContain("Current call: Keep staff approval for late changes");
+    expect(html).toContain('data-testid="owner-proof-supporting-context"');
     expect(html).not.toContain("FB-CHANGE-A");
   });
 });

@@ -1,6 +1,10 @@
 import { Eye, FileCheck2, Pencil } from "lucide-react";
 import { StatusBadge } from "@/components/ui/report-kit";
+import type { BuildDecisionLedgerEntry } from "@/lib/build/decision-ledger";
+import type { BuildChangeNarrative } from "@/lib/feature-build-types";
 import type { OwnerChangeView, OwnerProofState } from "@/lib/build/owner-change-view";
+import { BuildChangeSummaryBand } from "./BuildChangeSummaryBand";
+import { BuildDecisionLedgerBand } from "./BuildDecisionLedgerBand";
 
 const PROOF_LABEL: Record<OwnerProofState, string> = {
   passed: "Passed",
@@ -13,11 +17,15 @@ const PROOF_LABEL: Record<OwnerProofState, string> = {
 export function OwnerChangeProofPanel({
   view,
   previewUrl,
+  changeNarrative = null,
+  decisionLedger = [],
   onOpenBrief,
   onOpenProof,
 }: {
   view: OwnerChangeView;
   previewUrl: string | null;
+  changeNarrative?: BuildChangeNarrative | null;
+  decisionLedger?: readonly BuildDecisionLedgerEntry[];
   onOpenBrief: () => void;
   onOpenProof: () => void;
 }) {
@@ -121,6 +129,16 @@ export function OwnerChangeProofPanel({
           ))}
         </div>
       </div>
+
+      {changeNarrative || decisionLedger.length > 0 ? (
+        <div
+          data-testid="owner-proof-supporting-context"
+          className="mt-4 grid gap-3 lg:grid-cols-2"
+        >
+          {changeNarrative ? <BuildChangeSummaryBand narrative={changeNarrative} /> : null}
+          {decisionLedger.length > 0 ? <BuildDecisionLedgerBand entries={decisionLedger} /> : null}
+        </div>
+      ) : null}
     </section>
   );
 }

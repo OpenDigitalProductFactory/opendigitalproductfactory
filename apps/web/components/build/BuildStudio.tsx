@@ -37,7 +37,6 @@ import { PortalContextStrip } from "@/components/portal-context/PortalContextStr
 import { deriveBuildStudioWorkflowAction } from "./build-studio-workflow-actions";
 import { deriveBuildStudioCustodianPrompt, type BuildStudioCustodianPrompt } from "./build-studio-custodian";
 import { BuildDecisionLedgerBand } from "./BuildDecisionLedgerBand";
-import { BuildChangeSummaryBand } from "./BuildChangeSummaryBand";
 import { BuildSolutionSummaryBand } from "./BuildSolutionSummaryBand";
 import { BuildWorkWarrantBand } from "./BuildWorkWarrantBand";
 import {
@@ -309,8 +308,20 @@ export function BuildStudio({
   const [codeGraphFreshness, setCodeGraphFreshness] = useState<CodeGraphFreshness | null>(null);
   const [bomSummary, setBomSummary] = useState<BomSummary>(MISSING_BOM_SUMMARY);
   const [assuranceFindings, setAssuranceFindings] = useState<ActiveAssuranceFindingRow[]>([]);
-  const [decisionLedger, setDecisionLedger] = useState<BuildDecisionLedgerEntry[]>([]);
-  const [changeNarrative, setChangeNarrative] = useState<BuildChangeNarrative | null>(null);
+  const [decisionLedgerResult, setDecisionLedgerResult] = useState<{
+    buildId: string;
+    entries: BuildDecisionLedgerEntry[];
+  } | null>(null);
+  const [changeNarrativeResult, setChangeNarrativeResult] = useState<{
+    buildId: string;
+    narrative: BuildChangeNarrative | null;
+  } | null>(null);
+  const decisionLedger = activeBuild && decisionLedgerResult?.buildId === activeBuild.buildId
+    ? decisionLedgerResult.entries
+    : [];
+  const changeNarrative = activeBuild && changeNarrativeResult?.buildId === activeBuild.buildId
+    ? changeNarrativeResult.narrative
+    : null;
   const autonomousCustody = activeBuild
     ? projectAutonomousBuildCustody({
       phase: activeBuild.phase,
@@ -475,16 +486,17 @@ export function BuildStudio({
   // phase boundaries, so it stays off the hot SSE refresh path. BI-EC934FC6.
   useEffect(() => {
     if (!activeBuild) {
-      setDecisionLedger([]);
+      setDecisionLedgerResult(null);
       return;
     }
+    const buildId = activeBuild.buildId;
     let cancelled = false;
-    getBuildDecisionLedgerAction(activeBuild.buildId)
+    getBuildDecisionLedgerAction(buildId)
       .then((rows) => {
-        if (!cancelled) setDecisionLedger(rows);
+        if (!cancelled) setDecisionLedgerResult({ buildId, entries: rows });
       })
       .catch(() => {
-        if (!cancelled) setDecisionLedger([]);
+        if (!cancelled) setDecisionLedgerResult({ buildId, entries: [] });
       });
     return () => {
       cancelled = true;
@@ -496,16 +508,17 @@ export function BuildStudio({
   // path; null until the build completes and the narrative is generated. BI-D93CF6C0.
   useEffect(() => {
     if (!activeBuild) {
-      setChangeNarrative(null);
+      setChangeNarrativeResult(null);
       return;
     }
+    const buildId = activeBuild.buildId;
     let cancelled = false;
-    getBuildChangeNarrativeAction(activeBuild.buildId)
+    getBuildChangeNarrativeAction(buildId)
       .then((narrative) => {
-        if (!cancelled) setChangeNarrative(narrative);
+        if (!cancelled) setChangeNarrativeResult({ buildId, narrative });
       })
       .catch(() => {
-        if (!cancelled) setChangeNarrative(null);
+        if (!cancelled) setChangeNarrativeResult({ buildId, narrative: null });
       });
     return () => {
       cancelled = true;
@@ -915,6 +928,8 @@ export function BuildStudio({
                   <OwnerChangeProofPanel
                     view={ownerChangeView}
                     previewUrl={ownerPreviewUrl}
+                    changeNarrative={changeNarrative}
+                    decisionLedger={decisionLedger}
                     onOpenBrief={() => {
                       setDrawerInitialSectionId("brief");
                       setDrawerOpen(true);
@@ -986,11 +1001,6 @@ export function BuildStudio({
                           fallbackIntent={activeBuild.description}
                           custody={autonomousCustody}
                         />
-                      </div>
-                    ) : null}
-                    {changeNarrative ? (
-                      <div className="border-b border-[var(--dpf-border)] px-4 py-3">
-                        <BuildChangeSummaryBand narrative={changeNarrative} />
                       </div>
                     ) : null}
                     {decisionLedger.length > 0 ? (
