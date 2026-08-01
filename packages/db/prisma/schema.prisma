@@ -11873,6 +11873,53 @@ model AbsorptionPosture {
   @@index([connectorTier])
 }
 
+// Per-customer incumbent coverage verdict (BI-548060D5, D3; spec 2026-07-23 §5.2).
+//
+// The INSTANTIATED, evidenced verdict for one customer's one incumbent
+// application — distinct from AbsorptionPosture, which is DPF's authored posture
+// toward a vendor FAMILY. The posture matrix supplies the default (stage 1); this
+// row carries the per-org truth, its confidence, its evidence, and its
+// provenance. verdict/status reuse the AbsorptionPosture vocabulary (deliberately
+// identical). assessedVia keeps provenance honest: a posture_matrix default is a
+// starting position, not a claim, and must be distinguishable from
+// human_confirmed (spec R3). digitalProductId / catalogIdentityId /
+// coveringBusinessCapabilityId / backlogItemId are soft references (plain columns,
+// not enforced FKs — same pattern as AbsorptionPosture) so an assessment can exist
+// before every referent is normalized. Additive, fleet-safe.
+model IncumbentCoverageAssessment {
+  id           String @id @default(cuid())
+  assessmentId String @unique
+  /// The incumbent application: a DigitalProduct with coverageStatus=incumbent.
+  digitalProductId String
+  /// Normalized identity (shared with Phase C), when resolved.
+  catalogIdentityId String?
+  /// native_now | adapter_bridge | generic_connector | provider_led |
+  /// do_not_absorb | gap — == ABSORPTION_VERDICTS.
+  verdict String
+  /// CAPABILITY_REGISTRY key that covers it, when known.
+  coveringCapabilityKey String?
+  coveringBusinessCapabilityId String?
+  confidence Float @default(0)
+  /// posture_matrix | rule | ai | human_confirmed — provenance of the verdict.
+  assessedVia String
+  /// What was matched, and on what basis.
+  evidence Json?
+  /// Set when verdict=gap — populated by D4 (gap→backlog), not this model.
+  backlogItemId String?
+  /// proposed | confirmed | superseded. No verdict reaches confirmed without
+  /// human/authorized-coworker action (spec R3 / §7).
+  status       String    @default("proposed")
+  assessedAt   DateTime  @default(now())
+  supersededAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([digitalProductId])
+  @@index([verdict])
+  @@index([status])
+  @@index([assessedVia])
+}
+
 model McpCatalogSync {
   id                String    @id @default(cuid())
   triggeredBy       String

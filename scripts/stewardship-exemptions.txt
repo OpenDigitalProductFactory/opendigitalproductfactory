@@ -99,3 +99,4 @@ ProductSoldComponentAllocation  domain-lifecycle-managed  # Non-additive package
 StorefrontOrderLineItem  domain-lifecycle-managed  # Normalized commercial lines follow the owning StorefrontOrder lifecycle; independent purging would corrupt order and sale evidence.
 StockItem  domain-lifecycle-managed  # Operator-maintained supply master: retired through isActive and organization cascade, never aged out — a stocked item is current until the operator stops stocking it.
 StorefrontItemComponent  domain-lifecycle-managed  # Recipe lines follow their sellable item and stock item via cascade; an age sweep would silently delete a live product's composition.
+IncumbentCoverageAssessment  domain-lifecycle-managed  # Per-customer coverage verdicts (BI-548060D5); re-assessment supersedes the prior row, never time-aged.
