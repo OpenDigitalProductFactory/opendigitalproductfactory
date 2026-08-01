@@ -25,7 +25,7 @@ import "@xyflow/react/dist/style.css";
 
 import { confirmDialog } from "@/components/ui/Dialog";
 import { Notice, StatCard, StatusBadge } from "@/components/ui/report-kit";
-import { reassignEmployeeManager } from "@/lib/actions/workforce";
+import { assignEmployeeOrg, reassignEmployeeManager } from "@/lib/actions/workforce";
 import { computeOrgChartLayout, ORG_NODE_H, ORG_NODE_W } from "@/lib/graph/layout-org-chart";
 import {
   buildOrgGraph,
@@ -35,10 +35,19 @@ import {
 import type { EmployeeDirectoryRow } from "@/lib/workforce/workforce-types";
 import { OrgChartNode, type OrgChartNodeData } from "./OrgChartNode";
 
+/** Reference sets for the placement pickers. Values are row ids — what EmployeeProfile stores. */
+export type OrgReferenceData = {
+  departments: Array<{ id: string; name: string }>;
+  positions: Array<{ id: string; title: string }>;
+  workLocations: Array<{ id: string; name: string }>;
+};
+
 type Props = {
   employees: EmployeeDirectoryRow[];
   /** When false the chart is read-only (no drag, no pickers). */
   canReassign?: boolean;
+  /** Omitted when the caller has no reference sets to offer; placement pickers then hide. */
+  referenceData?: OrgReferenceData;
   onSelect?: (employee: EmployeeDirectoryRow) => void;
 };
 
@@ -86,7 +95,7 @@ export function OrgChartView(props: Props) {
   );
 }
 
-function OrgChartViewInner({ employees, canReassign = true, onSelect }: Props) {
+function OrgChartViewInner({ employees, canReassign = true, referenceData, onSelect }: Props) {
   const [density, setDensity] = useState<Density>("chart");
   const [search, setSearch] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
@@ -221,6 +230,32 @@ function OrgChartViewInner({ employees, canReassign = true, onSelect }: Props) {
             ? { managerEmployeeId: managerId }
             : { dottedLineManagerId: managerId }),
           line,
+        });
+        setPendingId(null);
+        setFeedback(
+          result.ok
+            ? { tone: "success", message: result.message }
+            : { tone: "error", message: result.message },
+        );
+      });
+    },
+    [],
+  );
+
+  /**
+   * Change one placement field — team, role, or location.
+   *
+   * Exactly one key is sent. `assignEmployeeOrg` now has PATCH semantics, so the fields this
+   * call omits are left alone; before that it rewrote every field from its input and a
+   * single-field call silently cleared the other four.
+   */
+  const runPlacement = useCallback(
+    (employeeId: string, field: "departmentId" | "positionId" | "workLocationId", value: string | null) => {
+      setPendingId(employeeId);
+      startTransition(async () => {
+        const result = await assignEmployeeOrg({
+          employeeProfileId: employeeId,
+          [field]: value,
         });
         setPendingId(null);
         setFeedback(
@@ -469,8 +504,10 @@ function OrgChartViewInner({ employees, canReassign = true, onSelect }: Props) {
           employee={selected}
           employees={employees}
           canReassign={canReassign}
+          referenceData={referenceData}
           busy={isPending}
           onReassign={runReassign}
+          onPlacement={runPlacement}
         />
       </div>
 
@@ -542,19 +579,71 @@ function OrgList({
   );
 }
 
-/** Selected person's reporting lines, editable through the governed action. */
+/** One placement field. Kept local — it is this panel's layout, not a reusable primitive. */
+function PlacementPicker({
+  label,
+  emptyLabel,
+  disabled,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  emptyLabel: string;
+  disabled: boolean;
+  value: string | null;
+  options: Array<{ id: string; label: string }>;
+  onChange: (value: string | null) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-dpf-caption uppercase tracking-widest text-[var(--dpf-muted)]">
+        {label}
+      </span>
+      <select
+        disabled={disabled}
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value || null)}
+        className="w-full rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-2 py-1 text-xs text-[var(--dpf-text)] disabled:opacity-50"
+      >
+        <option value="" className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
+          {emptyLabel}
+        </option>
+        {options.map((opt) => (
+          <option
+            key={opt.id}
+            value={opt.id}
+            className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]"
+          >
+            {opt.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/** Selected person's reporting lines and placement, editable through the governed actions. */
 function OrgDetailPanel({
   employee,
   employees,
   canReassign,
+  referenceData,
   busy,
   onReassign,
+  onPlacement,
 }: {
   employee: EmployeeDirectoryRow | null;
   employees: EmployeeDirectoryRow[];
   canReassign: boolean;
+  referenceData?: OrgReferenceData;
   busy: boolean;
   onReassign: (employeeId: string, managerId: string | null, line: "solid" | "dotted") => void;
+  onPlacement: (
+    employeeId: string,
+    field: "departmentId" | "positionId" | "workLocationId",
+    value: string | null,
+  ) => void;
 }) {
   const options = useMemo(
     () => (employee ? eligibleManagers(employees, employee.id) : []),
@@ -631,6 +720,36 @@ function OrgDetailPanel({
             ))}
           </select>
         </label>
+
+        {/* Placement. Each picker sends ONE field; the rest are left untouched. */}
+        {referenceData && (
+          <>
+            <PlacementPicker
+              label="Team"
+              emptyLabel="Unassigned"
+              disabled={!canReassign || busy}
+              value={employee.departmentId}
+              options={referenceData.departments.map((d) => ({ id: d.id, label: d.name }))}
+              onChange={(v) => onPlacement(employee.id, "departmentId", v)}
+            />
+            <PlacementPicker
+              label="Role"
+              emptyLabel="No role"
+              disabled={!canReassign || busy}
+              value={employee.positionId}
+              options={referenceData.positions.map((p) => ({ id: p.id, label: p.title }))}
+              onChange={(v) => onPlacement(employee.id, "positionId", v)}
+            />
+            <PlacementPicker
+              label="Location"
+              emptyLabel="No location"
+              disabled={!canReassign || busy}
+              value={employee.workLocationId}
+              options={referenceData.workLocations.map((w) => ({ id: w.id, label: w.name }))}
+              onChange={(v) => onPlacement(employee.id, "workLocationId", v)}
+            />
+          </>
+        )}
       </div>
 
       {!canReassign && (

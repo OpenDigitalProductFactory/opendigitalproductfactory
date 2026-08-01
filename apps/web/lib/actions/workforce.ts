@@ -11,6 +11,7 @@ import { resolveGovernedAction } from "@/lib/governance-resolver";
 import { syncEmployeePrincipal } from "@/lib/identity/principal-linking";
 import { validateLifecycleTransition, validateEmployeeProfileInput, type EmployeeProfileInput, type EmploymentEventType, type WorkforceStatus } from "@/lib/workforce-types";
 import { wouldCreateManagerCycle } from "@/lib/workforce/org-chart-model";
+import { patchOptional } from "@/lib/workforce/patch-optional";
 
 export type WorkforceActionResult = {
   ok: boolean;
@@ -349,9 +350,18 @@ export async function assignEmployeeOrg(input: AssignEmployeeOrgInput): Promise<
       });
       if (!existing) return workforceDenied("Employee profile not found.");
 
-      const nextDepartmentId = trimOptional(input.departmentId);
-      const nextPositionId = trimOptional(input.positionId);
-      const nextManagerEmployeeId = trimOptional(input.managerEmployeeId);
+      // PATCH semantics: an ABSENT key means "leave this field alone"; an explicit null or
+      // empty string means "clear it". Previously every field was rewritten from the input,
+      // and `trimOptional(undefined)` is null, so any partial caller silently wiped the four
+      // fields it did not mention. That hazard is why the org chart had to route around this
+      // action instead of using it (BI-HCM-004).
+      const nextDepartmentId = patchOptional(input, "departmentId", existing.departmentId);
+      const nextPositionId = patchOptional(input, "positionId", existing.positionId);
+      const nextManagerEmployeeId = patchOptional(
+        input,
+        "managerEmployeeId",
+        existing.managerEmployeeId,
+      );
 
       // Self-management is rejected above, but that alone still allows a cycle: moving a
       // manager underneath one of their own reports detaches that entire branch from every
@@ -367,9 +377,13 @@ export async function assignEmployeeOrg(input: AssignEmployeeOrgInput): Promise<
           );
         }
       }
-      const nextDottedLineManagerId = trimOptional(input.dottedLineManagerId);
-      const nextWorkLocationId = trimOptional(input.workLocationId);
-      const nextTimezone = trimOptional(input.timezone);
+      const nextDottedLineManagerId = patchOptional(
+        input,
+        "dottedLineManagerId",
+        existing.dottedLineManagerId,
+      );
+      const nextWorkLocationId = patchOptional(input, "workLocationId", existing.workLocationId);
+      const nextTimezone = patchOptional(input, "timezone", existing.timezone);
       const effectiveAt = input.effectiveAt ?? new Date();
 
       await prisma.$transaction(async (tx) => {

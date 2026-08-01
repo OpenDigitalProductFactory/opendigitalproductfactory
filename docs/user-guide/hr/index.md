@@ -101,6 +101,16 @@ The platform refuses a move that would create a reporting loop — you cannot pl
 underneath one of their own reports, directly or indirectly. Managers who would create a loop are
 not offered in the picker at all, and a drag that would cause one is rejected with an explanation.
 
+### Change Someone's Team, Role, or Location
+
+The side panel also holds **Team**, **Role**, and **Location** pickers. Each one saves on its
+own — changing someone's team leaves their role, location, and reporting lines exactly as they
+were. Set a picker back to its blank option ("Unassigned", "No role", "No location") to clear
+that field.
+
+These are the same placements shown on the Directory view; editing them here updates the
+employee record everywhere.
+
 ### Find People and Spot Problems
 
 Use the search box and the team and status filters to narrow the chart. Filtered-out people are
