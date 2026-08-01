@@ -85,6 +85,14 @@ Model assignments explicitly saved by an operator remain unchanged during upgrad
 
 Runtime Health explains infrastructure in terms of enabled capabilities. **Required — unavailable** needs attention because an enabled capability depends on that local service. **Optional — inactive** is expected when its capability is disabled and does not make the platform unhealthy. **Optional — degraded** means the capability is enabled but its local service is unavailable. **External — provider managed** reports reconciled provider evidence rather than pretending the provider is a local container. Each state includes text and an action; color is supplementary.
 
+### Context budget: what recent turns were given
+
+Every coworker turn assembles context — page data, recalled facts, prior conversation — against a token budget for the model running it. When it does not all fit, the least important sources are shortened or left out. **Context budget** is a collapsed panel at the foot of Runtime Health that reports what was left out, across the most recent turns that recorded a decision.
+
+Expand it when a coworker seems not to know something it should. It separates three cases that otherwise look identical: the fact was never found, it was found but left out for budget, or it was supplied and the model did not use it. The first two show here; the third does not, which is itself the answer.
+
+It reports **what was withheld from the model, not whether the reply was worse for it** — that judgement stays yours. "No turns recorded a trace" means nothing has arbitrated in the sample yet, which is different from nothing being left out. If one source dominates the table, that is the candidate for a larger budget or a smaller payload.
+
 ## Authority & Governance
 
 The **Authority** tab (`/platform/ai/authority`) provides visibility into the agent governance model:
