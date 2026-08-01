@@ -18,6 +18,7 @@ export const RESOURCE_CAPACITY_AUTHORITIES = [
   "provider-calendar",
   "staffing",
   "hospitality",
+  "beauty",
   "care",
   "rental",
   "field-operations",
@@ -79,6 +80,7 @@ function authoritiesFor(
       case "appointment":
         authorities.add("provider-calendar");
         authorities.add("staffing");
+        if (archetype.category === "beauty-personal-care") authorities.add("beauty");
         if (archetype.category === "healthcare-wellness") authorities.add("care");
         break;
       case "class":

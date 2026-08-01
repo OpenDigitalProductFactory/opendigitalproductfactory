@@ -4,6 +4,7 @@ import type {
 } from "@dpf/storefront-templates";
 import type {
   CapacityAllocation,
+  CapacityAttentionSignal,
   CapacityAvailability,
   CapacityResource,
   CapacitySourceWatermark,
@@ -22,6 +23,7 @@ export interface CapacityAdapterLoadResult {
   resources: CapacityResource[];
   allocations: CapacityAllocation[];
   availability: CapacityAvailability[];
+  attentionSignals?: CapacityAttentionSignal[];
   diagnostic?: string;
   watermark?: CapacitySourceWatermark;
 }

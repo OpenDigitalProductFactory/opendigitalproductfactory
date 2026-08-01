@@ -1,0 +1,132 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "Beauty Operations and the later Salon BOOK scene are read-time projections over canonical BeautyResource, provider-calendar, booking, hold, and allocation records; they do not persist parallel copies.",
+    "Customer booking responses may expose only customer-safe availability outcomes. Resource labels, service-area names, blocked reasons, demand references, and allocation lifecycle evidence remain organization-scoped.",
+    "Mobile beauty remains projected from provider and field-operations facts; no fixed BeautyResource is seeded for that archetype."
+  ],
+  "migration": {
+    "name": "20260801100000_add_beauty_resource_capacity",
+    "backfill": "Additive new empty tables plus a compound StorefrontItem identity index that extends existing primary-key uniqueness; no existing customer, provider, booking, or hold row is rewritten or deleted."
+  },
+  "tests": [
+    "packages/db/src/beauty-capacity-schema.test.ts",
+    "packages/db/src/beauty-capacity-migration.test.ts",
+    "apps/web/lib/beauty/capacity-adapter.test.ts",
+    "apps/web/lib/beauty/capacity-repository.server.test.ts",
+    "apps/web/lib/beauty/capacity-allocation-repository.server.test.ts",
+    "apps/web/lib/storefront/seed-beauty-capacity-defaults.test.ts",
+    "apps/web/lib/govern/data/assets.test.ts",
+    "apps/web/lib/govern/data/coverage.live.test.ts",
+    "scripts/check-data-impact.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:beauty-resource",
+      "prismaModel": "BeautyResource",
+      "lifecycleDisposition": "domain-lifecycle-managed - fixed chairs, stations, and rooms follow the owning storefront and are retired or blocked through explicit status changes; operator-authored resource state is never age-swept",
+      "fields": [
+        {
+          "fieldId": "data:beauty-resource#identity-ownership",
+          "resolution": "inherited",
+          "reason": "id, resourceId, organizationId, and storefrontId establish stable tenant-scoped physical-resource identity",
+          "provenance": "canonical beauty seed or authenticated operator resource command"
+        },
+        {
+          "fieldId": "data:beauty-resource#operating-contract",
+          "resolution": "governed",
+          "reason": "kind, label, status, capacity, serviceArea, blockedReason, and attributes can reveal internal floor layout and operating constraints",
+          "provenance": "archetype seed and operator configuration",
+          "flags": ["sensitive"],
+          "fieldPolicy": "organization-scoped and local-only; customer projections return generalized availability only"
+        },
+        {
+          "fieldId": "data:beauty-resource#persistence",
+          "resolution": "inherited",
+          "reason": "version and timestamps support optimistic concurrency and ordinary lifecycle evidence",
+          "provenance": "beauty resource service and Prisma"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:beauty-resource-service",
+      "prismaModel": "BeautyResourceService",
+      "lifecycleDisposition": "domain-lifecycle-managed - eligibility follows the resource and storefront service lifecycle and is recreated idempotently when seeded storefront services are reset",
+      "fields": [
+        {
+          "fieldId": "data:beauty-resource-service#eligibility",
+          "resolution": "inherited",
+          "reason": "storefrontId, resourceId, and itemId form an explicit same-storefront service eligibility relationship",
+          "provenance": "canonical archetype seed or operator resource configuration"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:beauty-resource-availability",
+      "prismaModel": "BeautyResourceAvailability",
+      "lifecycleDisposition": "domain-lifecycle-managed - recurring and dated physical-resource windows remain until explicitly changed and cascade only with their owning resource",
+      "fields": [
+        {
+          "fieldId": "data:beauty-resource-availability#window",
+          "resolution": "inherited",
+          "reason": "kind, days, wall-clock times, dates, and concrete intervals define canonical physical availability",
+          "provenance": "archetype seed or operator schedule editor"
+        },
+        {
+          "fieldId": "data:beauty-resource-availability#reason",
+          "resolution": "governed",
+          "reason": "free-text block reasons may contain internal maintenance or incident context",
+          "provenance": "operator schedule editor",
+          "flags": ["sensitive"],
+          "fieldPolicy": "organization-scoped; customer projections emit only unavailable"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:beauty-capacity-allocation",
+      "prismaModel": "BeautyCapacityAllocation",
+      "lifecycleDisposition": "domain-lifecycle-managed - append-preserving allocations transition through held, confirmed, active, released, or cancelled states; release evidence is retained instead of deleting history",
+      "fields": [
+        {
+          "fieldId": "data:beauty-capacity-allocation#ownership-target",
+          "resolution": "inherited",
+          "reason": "organizationId, storefrontId, and resourceId enforce the tenant-scoped capacity target",
+          "provenance": "authenticated booking or operator command"
+        },
+        {
+          "fieldId": "data:beauty-capacity-allocation#demand-links",
+          "resolution": "governed",
+          "reason": "bookingId, bookingHoldId, demandType, and demandRef can indirectly identify customer demand",
+          "provenance": "booking, hold, and assignment commands",
+          "flags": ["subject", "sensitive"],
+          "fieldPolicy": "organization-scoped; presentation models use authorized labels and never expose internal identifiers"
+        },
+        {
+          "fieldId": "data:beauty-capacity-allocation#interval-lifecycle",
+          "resolution": "inherited",
+          "reason": "interval, quantity, lifecycle, version, and release facts are required for conflict-safe append-preserving allocation",
+          "provenance": "beauty capacity lifecycle service"
+        },
+        {
+          "fieldId": "data:beauty-capacity-allocation#idempotency-release-reason",
+          "resolution": "governed",
+          "reason": "deduplication tokens and free-text release reasons contain internal workflow evidence",
+          "provenance": "booking or operator command boundary",
+          "flags": ["sensitive"],
+          "fieldPolicy": "internal reconciliation only; redact from customer and exported operational views"
+        }
+      ]
+    },
+    {
+      "kind": "projection",
+      "derivedContractId": "projection:beauty-capacity-operations",
+      "cleanupTest": "allocation repository tests prove holds and confirmed bookings transition to released without deleting capacity history; seed tests prove mobile beauty receives no fixed resources",
+      "reconciliationTest": "capacity adapter and repository tests reconcile owner attention and shared resource mirrors to canonical beauty, booking, hold, provider, and service records"
+    }
+  ]
+}

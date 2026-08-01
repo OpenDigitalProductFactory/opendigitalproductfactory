@@ -3,6 +3,7 @@ import { applyBusinessCapabilityPerspective } from "@dpf/db/business-capability-
 import { newId } from "@/lib/shared/new-id";
 import { projectOperationalValueStreamForArchetype } from "./project-operational-value-stream";
 import { seedBookingScheduleDefaults } from "./seed-booking-defaults";
+import { seedBeautyCapacityDefaults } from "./seed-beauty-capacity-defaults";
 
 type ResetMode = "replace-seeded-content";
 
@@ -236,6 +237,11 @@ export async function resetStorefrontArchetype(input: {
         storefrontId: storefront.id,
         archetypeId: targetArchetype.archetypeId,
         providerName: finalName ?? "Bookings",
+      });
+      await seedBeautyCapacityDefaults(tx, {
+        organizationId,
+        storefrontId: storefront.id,
+        archetypeId: targetArchetype.archetypeId,
       });
     }
 
