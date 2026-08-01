@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { authorizeWorkspaceRoomItem } from "./workspace-room-access";
+import {
+  authorizeWorkspaceRoomItem,
+  readWorkspaceRoomPolicy,
+} from "./workspace-room-access";
 
 describe("Workspace Work Room access", () => {
   it("separates explicit content admission from action authority", () => {
@@ -64,5 +67,24 @@ describe("Workspace Work Room access", () => {
         isSuperuser: false,
       },
     }).level).toBe("none");
+  });
+
+  it("parses explicitly named participants separately from access admission", () => {
+    expect(readWorkspaceRoomPolicy([{ workRoomPolicy: {
+      admittedPrincipalRefs: ["PRN-REVIEWER"],
+      participants: [{
+        principalRef: "PRN-REVIEWER",
+        roles: ["reviewer"],
+        enteredReason: "Reviews the outcome packet",
+      }],
+    } }])).toMatchObject({
+      admittedPrincipalRefs: ["PRN-REVIEWER"],
+      participants: [{
+        principalRef: "PRN-REVIEWER",
+        roles: ["reviewer"],
+        enteredReason: "Reviews the outcome packet",
+        currentWorkSummary: null,
+      }],
+    });
   });
 });

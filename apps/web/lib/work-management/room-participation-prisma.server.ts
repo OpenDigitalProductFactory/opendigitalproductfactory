@@ -45,7 +45,8 @@ export const loadPrismaWorkRoomParticipants: WorkspaceRoomParticipantLoader = as
     ...lineage.map((participant) => participant.agentId),
   ].filter((value): value is string => Boolean(value));
 
-  const [aliases, presenceRows] = await Promise.all([
+  const policyPrincipalRefs = input.policyParticipants.map((participant) => participant.principalRef);
+  const [aliases, policyPrincipals, presenceRows] = await Promise.all([
     aliasValues.length > 0
       ? prisma.principalAlias.findMany({
           where: {
@@ -67,6 +68,18 @@ export const loadPrismaWorkRoomParticipants: WorkspaceRoomParticipantLoader = as
                 sponsorPrincipal: { select: { principalId: true, displayName: true } },
               },
             },
+          },
+        })
+      : Promise.resolve([]),
+    policyPrincipalRefs.length > 0
+      ? prisma.principal.findMany({
+          where: { principalId: { in: policyPrincipalRefs }, status: "active" },
+          select: {
+            principalId: true,
+            displayName: true,
+            kind: true,
+            authorityMode: true,
+            sponsorPrincipal: { select: { principalId: true, displayName: true } },
           },
         })
       : Promise.resolve([]),
@@ -95,6 +108,29 @@ export const loadPrismaWorkRoomParticipants: WorkspaceRoomParticipantLoader = as
     input.now.getTime(),
   );
   const assignments: WorkRoomParticipantAssignment[] = [];
+
+  const policyPrincipalByRef = new Map(
+    policyPrincipals.map((principal) => [principal.principalId, principal]),
+  );
+  for (const participant of input.policyParticipants) {
+    const principal = policyPrincipalByRef.get(participant.principalRef);
+    if (!principal) continue;
+    assignments.push({
+      principalRef: principal.principalId,
+      displayName: principal.displayName,
+      kind: principal.kind === "agent"
+        ? "agent"
+        : principal.kind === "system" || principal.kind === "service"
+          ? "system"
+          : "person",
+      roles: [...participant.roles],
+      currentWorkSummary: participant.currentWorkSummary,
+      enteredReason: participant.enteredReason ?? "Named in this room's participation policy",
+      sponsorPrincipalRef: principal.sponsorPrincipal?.principalId ?? null,
+      sponsorDisplayName: principal.sponsorPrincipal?.displayName ?? null,
+      authoritySummary: authoritySummary(principal),
+    });
+  }
 
   const assignedPerson = input.assignedToUserId
     ? principalByAlias.get(`user:${input.assignedToUserId}`)

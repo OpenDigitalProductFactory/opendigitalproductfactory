@@ -25,7 +25,11 @@ import {
 import type { WorkRoomParticipantView, WorkRoomView } from "./room-types";
 import { getWorkCaseSourceEntry } from "./source-registry";
 import { fromWorkItemMessage } from "./receipt-envelope";
-import { authorizeWorkspaceRoomItem } from "./workspace-room-access";
+import {
+  authorizeWorkspaceRoomItem,
+  readWorkspaceRoomPolicy,
+  type WorkspaceRoomPolicyParticipant,
+} from "./workspace-room-access";
 
 const CLOSED_WORK_ITEM_STATUSES = ["completed", "cancelled"];
 
@@ -109,6 +113,7 @@ export type WorkspaceRoomParticipantLoader = (input: {
   title: string;
   status: string;
   now: Date;
+  policyParticipants: readonly WorkspaceRoomPolicyParticipant[];
 }) => Promise<WorkRoomParticipantView[]>;
 
 export type WorkspaceWorkCaseListItem = {
@@ -416,6 +421,7 @@ export async function loadWorkspaceWorkCaseDetail({
     authContext,
   });
   if (access.level !== "content" && access.level !== "action") return null;
+  const roomPolicy = readWorkspaceRoomPolicy(item.evidence);
 
   const [messages, participants] = await Promise.all([
     prismaClient.workItemMessage.findMany({
@@ -431,6 +437,7 @@ export async function loadWorkspaceWorkCaseDetail({
       title: item.title,
       status: item.status,
       now,
+      policyParticipants: roomPolicy.participants ?? [],
     }) ?? Promise.resolve([]),
   ]);
   const source = sourceForItem(item);

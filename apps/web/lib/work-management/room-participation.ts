@@ -85,11 +85,23 @@ export function projectWorkRoomParticipants(input: {
   const projected = new Map<string, WorkRoomParticipantView>();
 
   for (const assignment of input.assignments) {
+    const existing = projected.get(assignment.principalRef);
+    const currentWorkSummary = assignment.currentWorkSummary ?? existing?.currentWorkSummary ?? null;
     projected.set(assignment.principalRef, {
       ...assignment,
-      workState: assignment.currentWorkSummary ? "working" : "unknown",
+      roles: existing
+        ? [...new Set([...existing.roles, ...assignment.roles])]
+        : assignment.roles,
+      currentWorkSummary,
+      enteredReason: assignment.enteredReason ?? existing?.enteredReason ?? null,
+      sponsorPrincipalRef: assignment.sponsorPrincipalRef ?? existing?.sponsorPrincipalRef ?? null,
+      sponsorDisplayName: assignment.sponsorDisplayName ?? existing?.sponsorDisplayName ?? null,
+      workState: currentWorkSummary ? "working" : "unknown",
       presence: active.has(assignment.principalRef) ? "active" : "unknown",
-      sourceRefs: [{ kind: "evidence", id: assignment.principalRef, sourceType: "principal" }],
+      sourceRefs: [
+        ...(existing?.sourceRefs ?? []),
+        { kind: "evidence", id: assignment.principalRef, sourceType: "principal" },
+      ],
     });
   }
 

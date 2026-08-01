@@ -312,11 +312,26 @@ describe("workspace Work Case loader", () => {
   });
 
   it("projects governed participants through the room adapter", async () => {
+    let policyParticipants: unknown;
+    const itemWithParticipantPolicy = {
+      ...baseItem,
+      evidence: [{
+        workRoomPolicy: {
+          participants: [{
+            principalRef: "PRN-REVIEWER",
+            roles: ["reviewer"],
+            enteredReason: "Reviews completion evidence",
+          }],
+        },
+      }],
+    };
     const detail = await loadWorkspaceWorkCaseDetail({
-      prismaClient: prismaFor([baseItem]),
+      prismaClient: prismaFor([itemWithParticipantPolicy]),
       caseKey: "booking%3ABK-1",
       userId: "user-1",
-      participantLoader: async () => [{
+      participantLoader: async (input) => {
+        policyParticipants = input.policyParticipants;
+        return [{
         principalRef: "PRN-AGENT",
         displayName: "Scheduling Coworker",
         kind: "agent",
@@ -328,7 +343,8 @@ describe("workspace Work Case loader", () => {
         sponsorPrincipalRef: "PRN-USER-1",
         authoritySummary: "May prepare options; approval remains human",
         sourceRefs: [{ kind: "evidence", id: "TR-1", sourceType: "task-run" }],
-      }],
+        }];
+      },
     });
 
     expect(detail?.room?.participants).toEqual([
@@ -337,6 +353,12 @@ describe("workspace Work Case loader", () => {
         sponsorPrincipalRef: "PRN-USER-1",
       }),
     ]);
+    expect(policyParticipants).toEqual([{
+      principalRef: "PRN-REVIEWER",
+      roles: ["reviewer"],
+      enteredReason: "Reviews completion evidence",
+      currentWorkSummary: null,
+    }]);
   });
 
   it("does not reveal a room assigned to another person", async () => {

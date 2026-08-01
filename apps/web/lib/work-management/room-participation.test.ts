@@ -54,6 +54,15 @@ describe("Work Room participation", () => {
         enteredReason: "Assigned owner",
         sponsorPrincipalRef: null,
         authoritySummary: "May review and approve",
+      }, {
+        principalRef: "PRN-REVIEWER",
+        displayName: "Noah Williams",
+        kind: "person",
+        roles: ["reviewer"],
+        currentWorkSummary: null,
+        enteredReason: "Named reviewer",
+        sponsorPrincipalRef: null,
+        authoritySummary: "May review evidence",
       }],
       conversationParticipants: [{
         principalRef: "PRN-AGENT",
@@ -73,6 +82,11 @@ describe("Work Room participation", () => {
       }],
     })).toEqual([
       expect.objectContaining({ principalRef: "PRN-HUMAN", presence: "unknown" }),
+      expect.objectContaining({
+        principalRef: "PRN-REVIEWER",
+        roles: ["reviewer"],
+        enteredReason: "Named reviewer",
+      }),
       expect.objectContaining({
         principalRef: "PRN-AGENT",
         kind: "agent",

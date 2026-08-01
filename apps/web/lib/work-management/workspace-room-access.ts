@@ -5,6 +5,14 @@ export type WorkspaceRoomPolicyMetadata = {
   discoverablePrincipalRefs: string[];
   actionPrincipalRefs: string[];
   sensitivityCeiling: string;
+  participants: WorkspaceRoomPolicyParticipant[];
+};
+
+export type WorkspaceRoomPolicyParticipant = {
+  principalRef: string;
+  roles: Array<"accountable" | "contributor" | "reviewer" | "observer">;
+  enteredReason: string | null;
+  currentWorkSummary: string | null;
 };
 
 export function readWorkspaceRoomPolicy(evidence: unknown): Partial<WorkspaceRoomPolicyMetadata> {
@@ -19,6 +27,33 @@ export function readWorkspaceRoomPolicy(evidence: unknown): Partial<WorkspaceRoo
     const strings = (key: string) => Array.isArray(record[key])
       ? (record[key] as unknown[]).filter((entry): entry is string => typeof entry === "string")
       : [];
+    const participants = Array.isArray(record.participants)
+      ? record.participants.flatMap((entry): WorkspaceRoomPolicyParticipant[] => {
+          if (!entry || typeof entry !== "object") return [];
+          const participant = entry as Record<string, unknown>;
+          const principalRef = typeof participant.principalRef === "string"
+            ? participant.principalRef.trim()
+            : "";
+          if (!principalRef) return [];
+          const validRoles = ["accountable", "contributor", "reviewer", "observer"];
+          const roles = Array.isArray(participant.roles)
+            ? participant.roles.filter(
+                (role): role is WorkspaceRoomPolicyParticipant["roles"][number] =>
+                  typeof role === "string" && validRoles.includes(role),
+              )
+            : [];
+          return [{
+            principalRef,
+            roles: roles.length > 0 ? roles : ["observer"],
+            enteredReason: typeof participant.enteredReason === "string"
+              ? participant.enteredReason.trim() || null
+              : null,
+            currentWorkSummary: typeof participant.currentWorkSummary === "string"
+              ? participant.currentWorkSummary.trim() || null
+              : null,
+          }];
+        })
+      : [];
     return {
       admittedPrincipalRefs: strings("admittedPrincipalRefs"),
       discoverablePrincipalRefs: strings("discoverablePrincipalRefs"),
@@ -26,6 +61,7 @@ export function readWorkspaceRoomPolicy(evidence: unknown): Partial<WorkspaceRoo
       sensitivityCeiling: typeof record.sensitivityCeiling === "string"
         ? record.sensitivityCeiling
         : "internal",
+      participants,
     };
   }
   return {};
