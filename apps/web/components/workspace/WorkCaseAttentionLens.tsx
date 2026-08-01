@@ -121,10 +121,7 @@ export function WorkCaseAttentionLens({ view }: Props) {
       <MobileAttentionStrip items={attentionCases} />
 
       {view.cases.length === 0 ? (
-        <section
-          aria-labelledby="work-room-empty-title"
-          className="rounded-xl border border-dashed border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-6 py-12 text-center"
-        >
+        <section className="rounded-xl border border-dashed border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-6 py-12 text-center">
           <ListChecks className="mx-auto size-8 text-[var(--dpf-muted)]" aria-hidden="true" />
           <h2 id="work-room-empty-title" className="mt-3 text-base font-semibold text-[var(--dpf-text)]">
             No active Work Rooms
