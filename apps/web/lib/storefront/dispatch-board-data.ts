@@ -62,9 +62,18 @@ export interface DispatchBoard {
 const ASSIGNABLE: ReadonlySet<FieldDispatchJobStatus> = new Set(["scheduled", "confirmed"]);
 const ACTIVE: ReadonlySet<FieldDispatchJobStatus> = new Set(["en-route", "on-site"]);
 
+function assertNeverStatus(status: never): never {
+  throw new Error(`Unhandled field-dispatch status: ${status}`);
+}
+
 /** Map a raw WorkItem status to its board lane through the field-dispatch contract. */
 export function columnForStatus(status: string): DispatchColumnKey {
-  switch (parseFieldDispatchStatus(status)) {
+  const parsed = parseFieldDispatchStatus(status);
+  switch (parsed) {
+    case "quoted":
+    case "scheduled":
+    case "needs-review":
+      return "needs-dispatch";
     case "confirmed":
       return "ready";
     case "en-route":
@@ -76,12 +85,8 @@ export function columnForStatus(status: string): DispatchColumnKey {
     case "paid":
     case "cancelled":
       return "settled";
-    case "quoted":
-    case "scheduled":
-    case "needs-review":
-    default:
-      return "needs-dispatch";
   }
+  return assertNeverStatus(parsed);
 }
 
 function isAssigned(row: Record<string, unknown>): boolean {
@@ -210,6 +215,7 @@ export async function getDispatchBoard(
       orderBy: [{ dueAt: "asc" }, { createdAt: "asc" }],
       select: {
         itemId: true,
+        sourceType: true,
         title: true,
         status: true,
         urgency: true,

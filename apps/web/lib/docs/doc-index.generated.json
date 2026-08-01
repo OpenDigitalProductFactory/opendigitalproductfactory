@@ -10588,6 +10588,16 @@
         "finite-and-standing-rooms",
         "incomplete-or-unavailable-rooms"
       ]
+    },
+    "docs/ux-fit/2026-08-01-field-dispatch-ops-surface-design-grounding.md": {
+      "publicHref": "/ux-fit/2026-08-01-field-dispatch-ops-surface-design-grounding/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "field-dispatch-operational-surface-design-grounding",
+        "design-grounding"
+      ]
     }
   }
 }

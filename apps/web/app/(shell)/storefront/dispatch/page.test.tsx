@@ -80,15 +80,24 @@ describe("DispatchBoardPage", () => {
     const { default: DispatchBoardPage } = await import("./page");
     const html = renderToStaticMarkup(await DispatchBoardPage());
 
-    expect(html).toContain("Dispatch board");
-    expect(html).toContain("Need dispatch");
+    expect(html).toContain("Dispatch");
+    expect(html).toContain("Alerts");
     expect(html).toContain("Unassigned");
-    expect(html).toContain("In motion");
-    expect(html).toContain("Route view");
+    expect(html).toContain("Active");
+    expect(html).toContain("Billing");
+    expect(html).toContain("Route");
     expect(html).toContain("Schedule");
-    expect(html).toContain("Support checks");
-    expect(html).toContain('aria-label="Dispatch work lanes"');
+    expect(html).toContain("Support");
+    expect(html).toContain('role="region"');
+    expect(html).toContain('aria-labelledby="dispatch-lanes-heading"');
     expect(html).toContain('tabindex="0"');
+    expect(html).toContain('aria-label="Route order"');
+    expect(html).toContain('aria-label="Upcoming dispatch schedule"');
+    expect(html).toContain('aria-label="Attention reasons for AC Repair - Dana"');
+    expect(html).toContain('aria-current="step"');
+    expect(html).toContain('aria-posinset="1"');
+    expect(html).toContain('aria-setsize="2"');
+    expect(html).toContain('aria-label="AC Repair - Dana: Scheduled, Needs assignment, due 2026-07-08 14:00 UTC"');
     expect(html).toContain("AC Repair - Dana");
     expect(html).toContain("Needs assignment");
     expect(html).toContain("Scheduled but not confirmed");
@@ -103,7 +112,7 @@ describe("DispatchBoardPage", () => {
     const { default: DispatchBoardPage } = await import("./page");
     const html = renderToStaticMarkup(await DispatchBoardPage());
 
-    expect(html).toContain("The dispatch board is for field-service storefronts");
+    expect(html).toContain("Field-service required.");
     expect(mockGetDispatchBoard).not.toHaveBeenCalled();
   });
 });

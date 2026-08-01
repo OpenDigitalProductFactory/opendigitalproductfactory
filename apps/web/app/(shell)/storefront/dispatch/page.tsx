@@ -41,7 +41,10 @@ function formatDue(iso: string | null): string {
 
 function JobCard({ job }: { job: DispatchJobView }) {
   return (
-    <article className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3">
+    <article
+      aria-label={`${job.title}: ${job.statusLabel}, ${job.assignmentLabel}, due ${formatDue(job.dueAt)}`}
+      className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3"
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h4 className="truncate text-sm font-semibold text-[var(--dpf-text)]">{job.title}</h4>
@@ -59,7 +62,10 @@ function JobCard({ job }: { job: DispatchJobView }) {
         />
       </div>
       {job.attentionReasons.length > 0 ? (
-        <ul className="mt-2 grid gap-1 text-xs text-[var(--dpf-muted)]">
+        <ul
+          aria-label={`Attention reasons for ${job.title}`}
+          className="mt-2 grid gap-1 text-xs text-[var(--dpf-muted)]"
+        >
           {job.attentionReasons.map((reason) => (
             <li key={reason} className="flex gap-1">
               <span aria-hidden="true">-</span>
@@ -76,19 +82,28 @@ function RouteView({ board }: { board: DispatchBoard }) {
   if (board.routeStops.length === 0) {
     return (
       <EmptyState
-        title="No route stops yet"
-        description="Set a visit time on the next confirmed job to place it in today's route."
+        title="Route"
         size="sm"
       />
     );
   }
 
   return (
-    <ol className="grid gap-2">
+    <ol aria-label="Route order" className="grid gap-2">
       {board.routeStops.map((job, index) => (
-        <li key={job.itemId} className="grid grid-cols-[2rem_1fr] gap-2">
+        <li
+          key={job.itemId}
+          aria-label={`Stop ${index + 1}: ${job.title}, ${formatDue(job.dueAt)}`}
+          aria-current={index === 0 ? "step" : undefined}
+          aria-posinset={index + 1}
+          aria-setsize={board.routeStops.length}
+          className="grid grid-cols-[2rem_1fr] gap-2"
+        >
           <div className="flex flex-col items-center">
-            <span className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-xs font-semibold text-[var(--dpf-text)]">
+            <span
+              aria-hidden="true"
+              className="flex h-7 w-7 items-center justify-center rounded-full border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-xs font-semibold text-[var(--dpf-text)]"
+            >
               {index + 1}
             </span>
             {index < board.routeStops.length - 1 ? (
@@ -110,18 +125,18 @@ function ScheduleView({ board }: { board: DispatchBoard }) {
   if (jobs.length === 0) {
     return (
       <EmptyState
-        title="No scheduled work"
-        description="Set visit windows on confirmed jobs to build the day's schedule."
+        title="Schedule"
         size="sm"
       />
     );
   }
 
   return (
-    <div className="grid gap-2">
+    <ol aria-label="Upcoming dispatch schedule" className="grid gap-2">
       {jobs.map((job) => (
-        <div
+        <li
           key={job.itemId}
+          aria-label={`${formatDue(job.dueAt)}: ${job.title}; ${job.assignmentLabel}`}
           className="grid grid-cols-[6rem_1fr] gap-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3"
         >
           <p className="text-xs font-semibold text-[var(--dpf-text)]">
@@ -131,29 +146,29 @@ function ScheduleView({ board }: { board: DispatchBoard }) {
             <p className="truncate text-sm font-medium text-[var(--dpf-text)]">{job.title}</p>
             <p className="text-xs text-[var(--dpf-muted)]">{job.assignmentLabel}</p>
           </div>
-        </div>
+        </li>
       ))}
-    </div>
+    </ol>
   );
 }
 
 function SupportChecks({ board }: { board: DispatchBoard }) {
   const checks = [
     {
-      label: "Assignments",
+      label: "Assign",
       value: board.summary.unassigned === 0 ? "Covered" : `${board.summary.unassigned} open`,
       intent: concernIntent(board.summary.unassigned),
     },
     {
-      label: "Ready to invoice",
+      label: "Bill",
       value:
         board.summary.readyToInvoice === 0
-          ? "None waiting"
+          ? "Clear"
           : `${board.summary.readyToInvoice} job${board.summary.readyToInvoice === 1 ? "" : "s"}`,
       intent: concernIntent(board.summary.readyToInvoice),
     },
     {
-      label: "Parts recorded",
+      label: "Parts",
       value: String(board.summary.partsUsed),
       intent: board.summary.partsUsed > 0 ? "info" : "neutral",
     },
@@ -178,12 +193,15 @@ function DispatchOperationsSurface({ board }: { board: DispatchBoard }) {
   const hasJobs = board.total > 0;
 
   return (
-    <div className="grid gap-5">
-      <section aria-label="Dispatch headline" className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(10rem,1fr))]">
+    <section aria-label="Dispatch operations" className="grid gap-5">
+      <section
+        aria-label="Dispatch metrics"
+        role="region"
+        className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(10rem,1fr))]"
+      >
         <KpiCard
           value={board.summary.needsAttention}
-          label="Need dispatch"
-          hint={board.nextJob ? `Next: ${formatDue(board.nextJob.dueAt)}` : "No immediate exception"}
+          label="Alerts"
           intent={attentionIntent(board.summary.needsAttention)}
           size="sm"
           icon={<AlertTriangle size={18} />}
@@ -191,23 +209,20 @@ function DispatchOperationsSurface({ board }: { board: DispatchBoard }) {
         <KpiCard
           value={board.summary.unassigned}
           label="Unassigned"
-          hint={board.summary.unassigned > 0 ? "Assign before the route tightens" : "All ready jobs have coverage"}
           intent={concernIntent(board.summary.unassigned)}
           size="sm"
           icon={<UserCheck size={18} />}
         />
         <KpiCard
           value={board.summary.active}
-          label="In motion"
-          hint="En route or on site"
+          label="Active"
           intent={board.summary.active > 0 ? "accent" : "neutral"}
           size="sm"
           icon={<Route size={18} />}
         />
         <KpiCard
           value={board.summary.readyToInvoice}
-          label="Ready to bill"
-          hint="Complete work not yet invoiced"
+          label="Billing"
           intent={concernIntent(board.summary.readyToInvoice)}
           size="sm"
           icon={<Wrench size={18} />}
@@ -216,50 +231,60 @@ function DispatchOperationsSurface({ board }: { board: DispatchBoard }) {
 
       {!hasJobs ? (
         <EmptyState
-          title="No dispatch jobs yet"
-          description="Confirm a booking and assign a provider to start the board."
+          title="Dispatch"
           action={
             <Link
               href="/storefront/bookings"
               className="text-sm font-medium text-[var(--dpf-accent)] hover:underline"
             >
-              Review bookings
+              Bookings
             </Link>
           }
         />
       ) : null}
 
       {board.summary.needsAttention > 0 ? (
-        <Notice variant="warn" title="Dispatch attention needed">
-          Review assignment, confirmation, and lifecycle warnings before the next visit window.
-        </Notice>
+        <Notice variant="warn" title="Attention" />
       ) : null}
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.8fr)]">
-        <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+        <section
+          aria-labelledby="dispatch-schedule-heading"
+          className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
+        >
           <div className="mb-3 flex items-center gap-2">
             <CalendarClock size={18} aria-hidden="true" className="text-[var(--dpf-accent)]" />
-            <h3 className="text-sm font-semibold text-[var(--dpf-text)]">Schedule</h3>
+            <h3 id="dispatch-schedule-heading" className="text-sm font-semibold text-[var(--dpf-text)]">
+              Schedule
+            </h3>
           </div>
           <ScheduleView board={board} />
-        </div>
+        </section>
 
-        <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+        <section
+          aria-labelledby="dispatch-route-heading"
+          className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
+        >
           <div className="mb-3 flex items-center gap-2">
             <MapPin size={18} aria-hidden="true" className="text-[var(--dpf-accent)]" />
-            <h3 className="text-sm font-semibold text-[var(--dpf-text)]">Route view</h3>
+            <h3 id="dispatch-route-heading" className="text-sm font-semibold text-[var(--dpf-text)]">
+              Route
+            </h3>
           </div>
           <RouteView board={board} />
-        </div>
+        </section>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(18rem,0.7fr)]">
         <div className="grid gap-3">
-          <h3 className="text-sm font-semibold text-[var(--dpf-text)]">Work lanes</h3>
+          <h3 id="dispatch-lanes-heading" className="text-sm font-semibold text-[var(--dpf-text)]">
+            Lanes
+          </h3>
           <div
-            aria-label="Dispatch work lanes"
+            aria-labelledby="dispatch-lanes-heading"
+            role="region"
             tabIndex={0}
-            className="grid gap-3 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)] [grid-template-columns:repeat(auto-fit,minmax(14rem,1fr))]"
+            className="grid gap-3 rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)] [grid-template-columns:repeat(auto-fit,minmax(14rem,1fr))]"
           >
             {board.columns.map((col) => (
               <section
@@ -275,7 +300,7 @@ function DispatchOperationsSurface({ board }: { board: DispatchBoard }) {
                 </div>
                 <div className="grid gap-2">
                   {col.jobs.length === 0 ? (
-                    <p className="text-xs text-[var(--dpf-muted)]">No jobs in this lane.</p>
+                    <p className="text-xs text-[var(--dpf-muted)]">Empty.</p>
                   ) : (
                     col.jobs.map((jobItem) => <JobCard key={jobItem.itemId} job={jobItem} />)
                   )}
@@ -285,15 +310,20 @@ function DispatchOperationsSurface({ board }: { board: DispatchBoard }) {
           </div>
         </div>
 
-        <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+        <section
+          aria-labelledby="dispatch-support-heading"
+          className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
+        >
           <div className="mb-3 flex items-center gap-2">
             <Wrench size={18} aria-hidden="true" className="text-[var(--dpf-accent)]" />
-            <h3 className="text-sm font-semibold text-[var(--dpf-text)]">Support checks</h3>
+            <h3 id="dispatch-support-heading" className="text-sm font-semibold text-[var(--dpf-text)]">
+              Support
+            </h3>
           </div>
           <SupportChecks board={board} />
-        </div>
+        </section>
       </section>
-    </div>
+    </section>
   );
 }
 
@@ -305,9 +335,9 @@ export default async function DispatchBoardPage() {
   if (!config) {
     return (
       <div style={{ color: "var(--dpf-muted)", fontSize: 14 }}>
-        No storefront configured.{" "}
+        Storefront required.{" "}
         <Link href="/storefront/setup" style={{ color: "var(--dpf-accent)" }}>
-          Set one up
+          Setup
         </Link>
         .
       </div>
@@ -323,9 +353,7 @@ export default async function DispatchBoardPage() {
   if (category !== FIELD_SERVICE_CATEGORY) {
     return (
       <div style={{ color: "var(--dpf-muted)", fontSize: 14, maxWidth: 640 }}>
-        The dispatch board is for field-service storefronts. It turns confirmed,
-        crew-assigned bookings into jobs you can track from unassigned through
-        completion. Switch this storefront to a field-service archetype to use it.
+        Field-service required.
       </div>
     );
   }
@@ -336,14 +364,10 @@ export default async function DispatchBoardPage() {
     <div className="grid gap-4">
       <div>
         <h2 className="m-0 text-base font-bold text-[var(--dpf-text)]">
-          Dispatch board
+          Dispatch
         </h2>
         <p className="mt-1 text-sm text-[var(--dpf-muted)]">
-          Today&apos;s field work for the {vocabulary.teamLabel.toLowerCase()}: what needs attention,
-          who is covered, where the route is going, and what will need billing or supplies.
-          {board.total === 0
-            ? " No jobs yet."
-            : ` ${board.total} job${board.total === 1 ? "" : "s"} on the board.`}
+          {vocabulary.teamLabel}: {board.total} job{board.total === 1 ? "" : "s"}.
         </p>
       </div>
 

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { FIELD_DISPATCH_JOB_STATUSES } from "@dpf/validators";
 import {
   columnForStatus,
   groupDispatchJobs,
@@ -25,15 +26,36 @@ function job(over: Partial<DispatchJobView> = {}): DispatchJobView {
 
 describe("columnForStatus", () => {
   it("maps known statuses to columns", () => {
-    expect(columnForStatus("queued")).toBe("needs-dispatch");
     expect(columnForStatus("quoted")).toBe("needs-dispatch");
     expect(columnForStatus("scheduled")).toBe("needs-dispatch");
     expect(columnForStatus("confirmed")).toBe("ready");
     expect(columnForStatus("en-route")).toBe("active");
+    expect(columnForStatus("on-site")).toBe("active");
     expect(columnForStatus("complete")).toBe("complete");
+    expect(columnForStatus("invoiced")).toBe("settled");
     expect(columnForStatus("paid")).toBe("settled");
+    expect(columnForStatus("cancelled")).toBe("settled");
+    expect(columnForStatus("needs-review")).toBe("needs-dispatch");
   });
-  it("folds unknown statuses into needs-dispatch through the field-dispatch contract", () => {
+
+  it("covers every canonical field-dispatch lifecycle status", () => {
+    const mapped = FIELD_DISPATCH_JOB_STATUSES.map((status) => columnForStatus(status));
+    expect(mapped).toEqual([
+      "needs-dispatch",
+      "needs-dispatch",
+      "ready",
+      "active",
+      "active",
+      "complete",
+      "settled",
+      "settled",
+      "settled",
+      "needs-dispatch",
+    ]);
+  });
+
+  it("folds generic and unknown WorkItem statuses into needs-review work", () => {
+    expect(columnForStatus("queued")).toBe("needs-dispatch");
     expect(columnForStatus("escalated")).toBe("needs-dispatch");
     expect(columnForStatus("in-progress")).toBe("needs-dispatch");
   });
@@ -122,7 +144,7 @@ describe("getDispatchBoard", () => {
     const args = findMany.mock.calls[0]![0];
     expect(args.where.sourceType).toBe("field-service-job");
     expect(args.where.queue).toEqual({ is: { queueId: "dispatch-sf-1" } });
-    expect(args.select).toMatchObject({ status: true, evidence: true, assignedToUserId: true });
+    expect(args.select).toMatchObject({ sourceType: true, status: true, evidence: true, assignedToUserId: true });
     const queuedJob = board.columns.find((c) => c.key === "needs-dispatch")!.jobs[0]!;
     expect(queuedJob.status).toBe("needs-review");
     expect(queuedJob.statusLabel).toBe("Needs review");
