@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getSelfUpgradeStatus } from "@/lib/actions/promotions";
+import { apiErrorResponse } from "@/lib/api/error";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { resolveSelfUpgradePurposeOracle } from "@/lib/ux-budget/oracles/self-upgrade";
@@ -11,7 +12,7 @@ export async function GET(): Promise<Response> {
   const session = await auth();
   const user = session?.user;
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return apiErrorResponse("UNAUTHORIZED", "Unauthorized", 401);
   }
   if (
     !can(
@@ -19,7 +20,7 @@ export async function GET(): Promise<Response> {
       "view_operations",
     )
   ) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return apiErrorResponse("FORBIDDEN", "Forbidden", 403);
   }
 
   const statusResult = await getSelfUpgradeStatus()

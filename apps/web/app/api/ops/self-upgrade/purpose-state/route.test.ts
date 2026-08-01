@@ -64,6 +64,10 @@ describe("GET /api/ops/self-upgrade/purpose-state", () => {
     const response = await GET();
 
     expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({
+      code: "UNAUTHORIZED",
+      message: "Unauthorized",
+    });
     expect(mocks.getSelfUpgradeStatus).not.toHaveBeenCalled();
   });
 
@@ -73,6 +77,10 @@ describe("GET /api/ops/self-upgrade/purpose-state", () => {
     const response = await GET();
 
     expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      code: "FORBIDDEN",
+      message: "Forbidden",
+    });
     expect(mocks.getSelfUpgradeStatus).not.toHaveBeenCalled();
   });
 });
