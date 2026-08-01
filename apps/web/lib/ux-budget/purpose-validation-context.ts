@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve } from "node:path";
 
 import type { RatifiedPurposeContract } from "./page-purpose";
@@ -29,16 +29,44 @@ export function purposeContractHash(contract: RatifiedPurposeContract): string {
     .digest("hex");
 }
 
-function resolvesInsideRepo(repoRoot: string, artifactPath: string): boolean {
-  if (isAbsolute(artifactPath)) return false;
+export function purposeArtifactContentHash(absolutePath: string): string {
+  return createHash("sha256").update(readFileSync(absolutePath)).digest("hex");
+}
+
+function resolveInsideRepo(
+  repoRoot: string,
+  artifactPath: string,
+): string | null {
+  if (isAbsolute(artifactPath)) return null;
   const absolutePath = resolve(repoRoot, artifactPath);
-  const fromRoot = relative(repoRoot, absolutePath);
-  return (
-    fromRoot.length > 0 &&
-    !fromRoot.startsWith("..") &&
-    !isAbsolute(fromRoot) &&
-    existsSync(absolutePath)
-  );
+  if (!existsSync(absolutePath)) return null;
+  const realRoot = realpathSync(repoRoot);
+  const realArtifact = realpathSync(absolutePath);
+  const fromRoot = relative(realRoot, realArtifact);
+  return fromRoot.length > 0 && !fromRoot.startsWith("..") && !isAbsolute(fromRoot)
+    ? realArtifact
+    : null;
+}
+
+function artifactSetFingerprint(
+  artifacts: Array<{
+    id: string;
+    path: string;
+    actualHash: string | null;
+  }>,
+): string {
+  const digest = createHash("sha256");
+  for (const artifact of [...artifacts].sort((left, right) =>
+    `${left.id}:${left.path}`.localeCompare(`${right.id}:${right.path}`),
+  )) {
+    digest.update(artifact.id);
+    digest.update("\0");
+    digest.update(artifact.path);
+    digest.update("\0");
+    digest.update(artifact.actualHash ?? "missing");
+    digest.update("\0");
+  }
+  return digest.digest("hex");
 }
 
 function findRepoRoot(start: string): string {
@@ -57,14 +85,33 @@ export function resolvePurposeEvaluationContext(
   const target = contract.validationTarget;
   if (!target) return undefined;
 
+  const artifacts = target.artifacts.map((artifact) => {
+    const absolutePath = resolveInsideRepo(repoRoot, artifact.path);
+    return {
+      ...artifact,
+      actualHash: absolutePath
+        ? purposeArtifactContentHash(absolutePath)
+        : null,
+    };
+  });
+  const fingerprintFor = (role: (typeof artifacts)[number]["role"]) =>
+    artifactSetFingerprint(
+      artifacts
+        .filter((artifact) => artifact.role === role)
+        .map(({ id, path, actualHash }) => ({ id, path, actualHash })),
+    );
+
   return {
     contractHash: purposeContractHash(contract),
-    fixtureVersion: target.fixtureVersion,
-    interactionFingerprint: target.interactionFingerprint,
-    relevantDependencyFingerprint: target.relevantDependencyFingerprint,
+    fixtureVersion: fingerprintFor("fixture"),
+    interactionFingerprint: fingerprintFor("interaction"),
+    relevantDependencyFingerprint: fingerprintFor("dependency"),
     resolvedArtifactIds: new Set(
-      target.artifacts
-        .filter((artifact) => resolvesInsideRepo(repoRoot, artifact.path))
+      artifacts
+        .filter(
+          (artifact) =>
+            artifact.actualHash !== null && artifact.actualHash === artifact.sha256,
+        )
         .map((artifact) => artifact.id),
     ),
   };

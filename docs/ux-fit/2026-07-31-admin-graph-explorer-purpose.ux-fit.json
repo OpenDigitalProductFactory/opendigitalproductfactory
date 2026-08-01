@@ -5,7 +5,10 @@
   "scope": {
     "files": [
       "apps/web/app/(shell)/admin/graph-explorer/page.tsx",
-      "apps/web/components/admin/GraphExplorer.tsx"
+      "apps/web/app/api/admin/graph-explorer/purpose-state/route.ts",
+      "apps/web/components/admin/GraphExplorer.tsx",
+      "apps/web/components/admin/GraphExplorerInspector.tsx",
+      "apps/web/lib/graph/explorer-purpose-context.ts"
     ]
   },
   "evidence": {

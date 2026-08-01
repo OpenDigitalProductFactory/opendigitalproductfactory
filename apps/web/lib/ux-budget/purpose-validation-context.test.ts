@@ -1,10 +1,13 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import purposeRegistryJson from "./route-purpose.generated.json";
 import { parsePagePurposeRegistry } from "./page-purpose";
 import {
   purposeContractHash,
+  purposeArtifactContentHash,
   resolvePurposeEvaluationContext,
 } from "./purpose-validation-context";
 
@@ -13,37 +16,63 @@ const contract = parsePagePurposeRegistry(purposeRegistryJson).routes.find(
 );
 
 describe("purpose validation context", () => {
-  it("resolves current fingerprints and only artifacts that exist", () => {
+  let repoRoot: string;
+
+  beforeEach(() => {
+    repoRoot = mkdtempSync(resolve(tmpdir(), "dpf-purpose-context-"));
+    writeFileSync(resolve(repoRoot, "fixture.json"), '{"fixture":1}');
+    writeFileSync(resolve(repoRoot, "interaction.json"), '{"steps":2}');
+    writeFileSync(resolve(repoRoot, "dependency.ts"), "export const value = 1;\n");
+    writeFileSync(resolve(repoRoot, "evidence.json"), '{"passed":true}');
+  });
+
+  afterEach(() => rmSync(repoRoot, { recursive: true, force: true }));
+
+  it("derives current fingerprints and invalidates changed artifact bytes", () => {
     expect(contract?.status).toBe("intent-ratified");
     if (!contract || contract.status !== "intent-ratified") return;
+    const artifact = (
+      id: string,
+      path: string,
+      role: "fixture" | "interaction" | "dependency" | "evidence",
+    ) => ({
+      id,
+      path,
+      role,
+      sha256: purposeArtifactContentHash(resolve(repoRoot, path)),
+    });
     const candidate = {
       ...contract,
       validationTarget: {
-        fixtureVersion: "self-upgrade-v1",
-        interactionFingerprint: "interaction-v1",
-        relevantDependencyFingerprint: "dependencies-v1",
         artifacts: [
-          {
-            id: "existing",
-            path: "apps/web/lib/ux-budget/page-purpose.ts",
-          },
-          { id: "missing", path: "test-results/missing-purpose-proof.json" },
+          artifact("fixture", "fixture.json", "fixture"),
+          artifact("interaction", "interaction.json", "interaction"),
+          artifact("dependency", "dependency.ts", "dependency"),
+          artifact("evidence", "evidence.json", "evidence"),
         ],
       },
     };
 
-    const context = resolvePurposeEvaluationContext(
-      candidate,
-      resolve(__dirname, "../../../.."),
-    );
+    const context = resolvePurposeEvaluationContext(candidate, repoRoot)!;
 
-    expect(context).toMatchObject({
-      contractHash: purposeContractHash(candidate),
-      fixtureVersion: "self-upgrade-v1",
-      interactionFingerprint: "interaction-v1",
-      relevantDependencyFingerprint: "dependencies-v1",
-    });
-    expect([...context!.resolvedArtifactIds]).toEqual(["existing"]);
+    expect(context.contractHash).toBe(purposeContractHash(candidate));
+    expect(context.fixtureVersion).toMatch(/^[a-f0-9]{64}$/);
+    expect([...context.resolvedArtifactIds].sort()).toEqual([
+      "dependency",
+      "evidence",
+      "fixture",
+      "interaction",
+    ]);
+
+    writeFileSync(resolve(repoRoot, "dependency.ts"), "export const value = 2;\n");
+    const changed = resolvePurposeEvaluationContext(candidate, repoRoot)!;
+
+    expect(changed.fixtureVersion).toBe(context.fixtureVersion);
+    expect(changed.interactionFingerprint).toBe(context.interactionFingerprint);
+    expect(changed.relevantDependencyFingerprint).not.toBe(
+      context.relevantDependencyFingerprint,
+    );
+    expect(changed.resolvedArtifactIds.has("dependency")).toBe(false);
   });
 
   it("changes the contract fingerprint when purpose semantics change", () => {

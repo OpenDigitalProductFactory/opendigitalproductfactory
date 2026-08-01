@@ -414,7 +414,9 @@ describe("sweep-level verdict", () => {
   it("ranks the league table worst-first by words (§7.1)", () => {
     const sweep = evaluateSweep(measurements, freezeBaseline(measurements, "test"));
     expect(sweep.leagueTable[0].routePath).toBe("/a");
-    expect(sweep.leagueTable[0].words).toBeGreaterThan(sweep.leagueTable[1].words);
+    expect(sweep.leagueTable[0].words ?? -1).toBeGreaterThan(
+      sweep.leagueTable[1].words ?? -1,
+    );
   });
 
   it("freezing is idempotent and sorted", () => {

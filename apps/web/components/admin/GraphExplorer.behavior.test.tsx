@@ -76,6 +76,34 @@ async function chooseStartingPoint() {
 }
 
 describe("GraphExplorer async purpose state", () => {
+  it("restores a bounded exploration from server-parsed URL context", async () => {
+    const { container } = render(
+      <GraphExplorer
+        census={census}
+        initialPurposeContext={{
+          seedKeys: ["node-1"],
+          depth: 2,
+          inspectedKey: "node-1",
+        }}
+      />,
+    );
+
+    expect(mocks.loadGraphNeighbourhood).toHaveBeenCalledWith(
+      expect.objectContaining({ seedKeys: ["node-1"], depth: 2 }),
+    );
+    await waitFor(() =>
+      expect(
+        container
+          .querySelector("[data-component='graph-explorer']")
+          ?.getAttribute("data-dpf-purpose-state"),
+      ).toBe("neighbourhood-drawn"),
+    );
+    const query = new URL(window.location.href).searchParams;
+    expect(query.getAll("seed")).toEqual(["node-1"]);
+    expect(query.get("depth")).toBe("2");
+    expect(query.get("inspected")).toBe("node-1");
+  });
+
   it("does not show stale no-match feedback beside a search failure", async () => {
     mocks.findGraphNodes.mockResolvedValueOnce([]);
     render(<GraphExplorer census={census} />);
@@ -193,6 +221,69 @@ describe("GraphExplorer async purpose state", () => {
     );
     expect(inspector?.getAttribute("aria-busy")).toBe("false");
     expect(new URL(window.location.href).searchParams.has("inspected")).toBe(false);
+  });
+
+  it("ignores an older inspection response after a newer selection completes", async () => {
+    const secondNode = { ...node, key: "node-2", name: "Product" };
+    mocks.loadGraphNeighbourhood.mockResolvedValue({
+      ...neighbourhood,
+      nodes: [node, secondNode],
+    });
+    const resolvers = new Map<
+      string,
+      (detail: typeof node & { degree: number; props: object }) => void
+    >();
+    mocks.loadGraphNodeDetail.mockImplementation(
+      (key: string) =>
+        new Promise((resolve) => {
+          resolvers.set(key, resolve);
+        }),
+    );
+    const { container } = render(<GraphExplorer census={census} />);
+
+    await chooseStartingPoint();
+    fireEvent.click(await screen.findByRole("button", { name: "Inspect node" }));
+    fireEvent.click(screen.getByRole("button", { name: "Inspect node-2" }));
+    resolvers.get("node-2")?.({ ...secondNode, degree: 1, props: {} });
+    expect(await screen.findByText("Product")).toBeTruthy();
+    resolvers.get("node-1")?.({ ...node, degree: 2, props: {} });
+
+    await waitFor(() =>
+      expect(new URL(window.location.href).searchParams.get("inspected")).toBe(
+        "node-2",
+      ),
+    );
+    expect(
+      container.querySelector("[data-dpf-purpose-key='node-inspector']")
+        ?.textContent,
+    ).not.toContain("BacklogItem");
+  });
+
+  it("does not restore a pending inspection after reset", async () => {
+    let resolveDetail!: (
+      detail: typeof node & { degree: number; props: object },
+    ) => void;
+    mocks.loadGraphNodeDetail.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveDetail = resolve;
+        }),
+    );
+    const { container } = render(<GraphExplorer census={census} />);
+
+    await chooseStartingPoint();
+    fireEvent.click(await screen.findByRole("button", { name: "Inspect node" }));
+    fireEvent.click(screen.getByRole("link", { name: "Reset" }));
+    resolveDetail({ ...node, degree: 2, props: {} });
+
+    await waitFor(() =>
+      expect(new URL(window.location.href).searchParams.has("seed")).toBe(false),
+    );
+    expect(
+      container.querySelector(
+        "[data-dpf-purpose-completion-signal-key='graph-neighbourhood-visible']",
+      ),
+    ).toBeNull();
   });
 
   it("marks stale graph content busy while refreshing it", async () => {

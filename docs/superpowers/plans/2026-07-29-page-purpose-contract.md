@@ -432,6 +432,16 @@ attestation, cohort, sample, baseline, distribution, or comparison fields
 required by its evidence class. Otherwise the evaluator reports `stale` or
 `not-validated` rather than carrying forward a success claim.
 
+`validationTarget.artifacts` is the production resolver contract. It requires
+at least one repository-relative artifact for each role: `fixture`,
+`interaction`, `dependency`, and `evidence`, with a pinned SHA-256 for every
+artifact. At evaluation time the resolver rejects absolute paths and paths or
+symlinks outside the repository, hashes current bytes, derives fixture,
+interaction, and dependency fingerprints from those bytes, and resolves an
+artifact ID only when its current digest matches the pin. Contract literals
+therefore cannot keep a receipt current after its evidence or dependencies
+change.
+
 ### Evaluator composition
 
 Extend the current sweep and portal-survey report rather than create another
@@ -451,9 +461,14 @@ rendered page, then compares that oracle result with
 `data-dpf-purpose-state`. A missing oracle, unknown oracle state, or mismatch
 fails structural conformance; the rendered marker cannot attest its own truth.
 The browser adapter accepts an independently resolved `PurposeEvaluationContext`
-when a contract carries validation receipts; current pilot contracts omit
-receipts until governed task evidence and its artifact resolver exist, so the
-honest status remains `not-validated` rather than manufacturing current proof.
+when a contract carries validation receipts. Current pilot contracts omit
+receipts until governed task evidence is captured, so the honest status remains
+`not-validated` rather than manufacturing current proof.
+Graph Explorer also uses one bounded URL-context parser in the server page,
+client serializer, and route-owned oracle. It deduplicates and caps seeds at ten,
+normalizes depth to one through three, hydrates refresh/shared-link state, and
+restores completion only after the loaded neighbourhood and node detail confirm
+the inspected key.
 Deterministic blocking checks then cover state-appropriate action presence or
 absence, first-viewport action geometry, required evidence presence, prohibited
 actions, recovery/completion markers, disclosure relationships, and

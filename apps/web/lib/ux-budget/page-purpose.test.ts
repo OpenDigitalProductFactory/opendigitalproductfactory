@@ -165,15 +165,14 @@ const ratifiedFixture: RatifiedPurposeContract = {
     },
   ],
   validationTarget: {
-    fixtureVersion: "fixture-1",
-    interactionFingerprint: "interaction-1",
-    relevantDependencyFingerprint: "dependencies-1",
-    artifacts: [
-      {
-        id: "artifact-1",
+    artifacts: (["fixture", "interaction", "dependency", "evidence"] as const).map(
+      (role) => ({
+        id: `${role}-artifact`,
         path: "apps/web/lib/ux-budget/page-purpose.test.ts",
-      },
-    ],
+        role,
+        sha256: "a".repeat(64),
+      }),
+    ),
   },
 };
 
@@ -238,6 +237,20 @@ describe("Page Purpose Contract runtime schema", () => {
 
     expect(() => parsePagePurposeContract(candidate)).toThrow(
       /production-resolvable validation target/,
+    );
+  });
+
+  it("rejects a validation target that omits a canonical artifact role", () => {
+    const candidate = structuredClone(ratifiedFixture);
+    const target = candidate.validationTarget;
+    expect(target).toBeDefined();
+    if (!target) return;
+    target.artifacts = target.artifacts.filter(
+      (artifact) => artifact.role !== "evidence",
+    );
+
+    expect(() => parsePagePurposeContract(candidate)).toThrow(
+      /requires an evidence artifact/,
     );
   });
 

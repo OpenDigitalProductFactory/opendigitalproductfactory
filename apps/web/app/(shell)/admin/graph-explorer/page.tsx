@@ -10,11 +10,29 @@
 // on first paint; everything after that is operator-driven via server actions.
 import { GraphExplorer } from "@/components/admin/GraphExplorer";
 import { getGraphCensus } from "@/lib/graph/explorer-queries";
+import { parseGraphPurposeContext } from "@/lib/graph/explorer-purpose-context";
 
 export const dynamic = "force-dynamic";
 
-export default async function GraphExplorerPage() {
-  const census = await getGraphCensus();
+type GraphExplorerPageProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
 
-  return <GraphExplorer census={census} />;
+export default async function GraphExplorerPage({
+  searchParams,
+}: GraphExplorerPageProps) {
+  const census = await getGraphCensus();
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(await searchParams)) {
+    for (const entry of Array.isArray(value) ? value : [value]) {
+      if (entry !== undefined) query.append(key, entry);
+    }
+  }
+
+  return (
+    <GraphExplorer
+      census={census}
+      initialPurposeContext={parseGraphPurposeContext(query)}
+    />
+  );
 }

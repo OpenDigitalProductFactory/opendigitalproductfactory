@@ -176,21 +176,41 @@ const validationReceiptBase = z.object({
 
 const validationTargetSchema = z
   .object({
-    fixtureVersion: nonEmptyString,
-    interactionFingerprint: nonEmptyString,
-    relevantDependencyFingerprint: nonEmptyString,
     artifacts: z
       .array(
         z
           .object({
             id: nonEmptyString,
             path: nonEmptyString,
+            role: z.enum([
+              "fixture",
+              "interaction",
+              "dependency",
+              "evidence",
+            ]),
+            sha256: z.string().regex(/^[a-f0-9]{64}$/),
           })
           .strict(),
       )
-      .min(1),
+      .min(4),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    for (const role of [
+      "fixture",
+      "interaction",
+      "dependency",
+      "evidence",
+    ] as const) {
+      if (!value.artifacts.some((artifact) => artifact.role === role)) {
+        context.addIssue({
+          code: "custom",
+          path: ["artifacts"],
+          message: `Validation target requires ${role === "evidence" ? "an" : "a"} ${role} artifact.`,
+        });
+      }
+    }
+  });
 
 const taskValidationReceiptSchema = z.discriminatedUnion("evidenceClass", [
   validationReceiptBase
@@ -314,6 +334,8 @@ function validateConsequentialActionBinding(
 function validateRatifiedPurposeContract(
   value: {
     consequentialAction?: { actionKey: string };
+    validationReceipts?: unknown[];
+    validationTarget?: unknown;
     stateScenarios: Record<
       string,
       { primaryExperience: z.infer<typeof primaryExperienceSchema> }

@@ -7,6 +7,7 @@ import {
   getGraphCensus,
   getGraphNodeDetail,
 } from "@/lib/graph/explorer-queries";
+import { parseGraphPurposeContext } from "@/lib/graph/explorer-purpose-context";
 import { can } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
@@ -30,10 +31,9 @@ export async function GET(request?: Request): Promise<Response> {
   const url = new URL(
     request?.url ?? "http://localhost/api/admin/graph-explorer/purpose-state",
   );
-  const seedKeys = [...new Set(url.searchParams.getAll("seed"))].slice(0, 10);
-  const inspectedKey = url.searchParams.get("inspected");
-  const requestedDepth = Number.parseInt(url.searchParams.get("depth") ?? "1", 10);
-  const depth = [1, 2, 3].includes(requestedDepth) ? requestedDepth : 1;
+  const { seedKeys, inspectedKey, depth } = parseGraphPurposeContext(
+    url.searchParams,
+  );
   let stateKey = census.nodeTotal === 0 ? "empty-corpus" : "no-starting-point";
   let sourceRef = "apps/web/lib/graph/explorer-queries.ts#getGraphCensus";
 

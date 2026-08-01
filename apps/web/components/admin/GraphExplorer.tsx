@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
+import { GraphExplorerInspector } from "@/components/admin/GraphExplorerInspector";
 import { RelationshipGraph, type GraphLegendEntry } from "@/components/inventory/RelationshipGraph";
 import { Spinner } from "@/components/ui/Spinner";
 import {
@@ -28,6 +29,11 @@ import type {
   GraphSubgraph,
 } from "@/lib/graph/explorer-queries";
 import {
+  appendGraphPurposeSeed,
+  writeGraphPurposeContext,
+  type GraphPurposeContext,
+} from "@/lib/graph/explorer-purpose-context";
+import {
   GRAPH_DOMAINS,
   describeLabel,
   describeNodeLabels,
@@ -38,6 +44,7 @@ import type { GraphData } from "@/lib/actions/graph";
 
 type Props = {
   census: GraphCensus;
+  initialPurposeContext?: GraphPurposeContext;
 };
 
 const EMPTY_SUBGRAPH: GraphSubgraph = { nodes: [], edges: [], truncated: false, notice: null };
@@ -50,12 +57,11 @@ function replaceGraphPurposeQuery(
 ) {
   if (typeof window === "undefined") return;
   const url = new URL(window.location.href);
-  url.searchParams.delete("seed");
-  for (const key of seedKeys) url.searchParams.append("seed", key);
-  if (seedKeys.length > 0) url.searchParams.set("depth", String(depth));
-  else url.searchParams.delete("depth");
-  if (inspectedKey) url.searchParams.set("inspected", inspectedKey);
-  else url.searchParams.delete("inspected");
+  writeGraphPurposeContext(url.searchParams, {
+    seedKeys,
+    depth: depth === 2 || depth === 3 ? depth : 1,
+    inspectedKey: inspectedKey ?? null,
+  });
   window.history.replaceState(window.history.state, "", url);
 }
 
@@ -78,14 +84,19 @@ export function resolveGraphPurposeState(input: {
   return "neighbourhood-drawn";
 }
 
-export function GraphExplorer({ census }: Props) {
+export function GraphExplorer({
+  census,
+  initialPurposeContext = { seedKeys: [], depth: 1, inspectedKey: null },
+}: Props) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GraphNodeSummary[]>([]);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
 
-  const [seedKeys, setSeedKeys] = useState<string[]>([]);
-  const [depth, setDepth] = useState(1);
+  const [seedKeys, setSeedKeys] = useState<string[]>(
+    initialPurposeContext.seedKeys,
+  );
+  const [depth, setDepth] = useState(initialPurposeContext.depth);
   const [activeDomains, setActiveDomains] = useState<Set<GraphDomainKey>>(new Set());
   const [activeRelTypes, setActiveRelTypes] = useState<Set<string>>(new Set());
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -97,6 +108,7 @@ export function GraphExplorer({ census }: Props) {
   const [inspected, setInspected] = useState<GraphNodeDetail | null>(null);
   const [inspecting, setInspecting] = useState(false);
   const inspectionRequest = useRef(0);
+  const initialInspectedKey = useRef(initialPurposeContext.inspectedKey);
 
   // ─── Census-derived facets ──────────────────────────────────────────────────
 
@@ -180,12 +192,18 @@ export function GraphExplorer({ census }: Props) {
       return;
     }
     let cancelled = false;
-    inspectionRequest.current += 1;
+    const requestId = ++inspectionRequest.current;
+    const restoreInspectedKey = initialInspectedKey.current;
+    initialInspectedKey.current = null;
     setLoading(true);
     setError(null);
     setInspected(null);
-    setInspecting(false);
-    replaceGraphPurposeQuery(seedKeys, depth);
+    setInspecting(Boolean(restoreInspectedKey));
+    replaceGraphPurposeQuery(
+      seedKeys,
+      depth,
+      restoreInspectedKey ?? undefined,
+    );
     loadGraphNeighbourhood({
       seedKeys,
       depth,
@@ -193,13 +211,42 @@ export function GraphExplorer({ census }: Props) {
       relTypes: [...activeRelTypes],
     })
       .then((result) => {
-        if (!cancelled) setSubgraph(result);
+        if (cancelled) return;
+        setSubgraph(result);
+        if (!restoreInspectedKey) return;
+        if (!result.nodes.some((node) => node.key === restoreInspectedKey)) {
+          setInspecting(false);
+          replaceGraphPurposeQuery(seedKeys, depth);
+          return;
+        }
+        void loadGraphNodeDetail(restoreInspectedKey)
+          .then((detail) => {
+            if (cancelled || inspectionRequest.current !== requestId) return;
+            setInspected(detail);
+            if (detail) {
+              replaceGraphPurposeQuery(seedKeys, depth, detail.key);
+            } else {
+              replaceGraphPurposeQuery(seedKeys, depth);
+              setError(GRAPH_UNAVAILABLE);
+            }
+          })
+          .catch((cause: unknown) => {
+            if (cancelled || inspectionRequest.current !== requestId) return;
+            replaceGraphPurposeQuery(seedKeys, depth);
+            setError(cause instanceof Error ? cause.message : GRAPH_UNAVAILABLE);
+          })
+          .finally(() => {
+            if (!cancelled && inspectionRequest.current === requestId) {
+              setInspecting(false);
+            }
+          });
       })
       .catch((cause: unknown) => {
         if (!cancelled) {
           setSubgraph(EMPTY_SUBGRAPH);
           setSeedKeys([]);
           setInspected(null);
+          setInspecting(false);
           setError(cause instanceof Error ? cause.message : "Could not load that view.");
         }
       })
@@ -272,7 +319,7 @@ export function GraphExplorer({ census }: Props) {
   function expandFromInspected() {
     if (!inspected) return;
     setSeedKeys((prev) => {
-      const next = prev.includes(inspected.key) ? prev : [...prev, inspected.key];
+      const next = appendGraphPurposeSeed(prev, inspected.key);
       replaceGraphPurposeQuery(next, depth);
       return next;
     });
@@ -298,6 +345,7 @@ export function GraphExplorer({ census }: Props) {
 
   function reset() {
     inspectionRequest.current += 1;
+    initialInspectedKey.current = null;
     setSeedKeys([]);
     setInspected(null);
     setInspecting(false);
@@ -391,7 +439,7 @@ export function GraphExplorer({ census }: Props) {
           <div data-dpf-purpose-key="hop-depth">
             <span className="block text-dpf-caption text-[var(--dpf-muted)] mb-1">Hops</span>
             <div className="flex items-center gap-1">
-              {[1, 2, 3].map((h) => (
+              {([1, 2, 3] as const).map((h) => (
                 <button
                   key={h}
                   type="button"
@@ -658,110 +706,13 @@ export function GraphExplorer({ census }: Props) {
           )}
         </div>
 
-        <aside
-          aria-busy={inspecting}
-          className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
-          data-dpf-purpose-key="node-inspector"
-          data-dpf-purpose-completion-signal-key={
-            purposeState === "neighbourhood-drawn"
-              ? "graph-neighbourhood-visible"
-              : undefined
-          }
-        >
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
-            Details
-          </h2>
-          {inspecting ? (
-            <Spinner presentational />
-          ) : !inspected ? (
-            <p className="text-xs text-[var(--dpf-muted)]">
-              {seedKeys.length === 0
-                ? "Nothing picked."
-                : "Click a dot to see what it is."}
-            </p>
-          ) : (
-            <div
-              className="space-y-3"
-              data-dpf-purpose-message-key="graph-explorer.neighbourhood-ready"
-            >
-              <div>
-                <p className="text-sm font-semibold text-[var(--dpf-text)] break-words">
-                  {inspected.name}
-                </p>
-                {inspected.detail && (
-                  <p className="text-dpf-caption text-[var(--dpf-muted)] break-words mt-0.5">
-                    {inspected.detail}
-                  </p>
-                )}
-              </div>
-
-              <div className="flex flex-wrap gap-1">
-                {inspected.labels.map((label) => {
-                  const descriptor = describeLabel(label);
-                  return (
-                    <span
-                      key={label}
-                      className="text-dpf-caption px-1.5 py-0.5 rounded-full"
-                      style={{ background: `${descriptor.color}20`, color: descriptor.color }}
-                    >
-                      {descriptor.label}
-                    </span>
-                  );
-                })}
-              </div>
-
-              <p className="text-dpf-caption text-[var(--dpf-muted)]">
-                {inspected.degree.toLocaleString()} link{inspected.degree === 1 ? "" : "s"} in
-                the whole graph
-              </p>
-
-              <button
-                type="button"
-                onClick={expandFromInspected}
-                disabled={seedKeys.includes(inspected.key)}
-                data-dpf-purpose-action-key="expand-from-here"
-                className="min-h-11 w-full px-3 py-2 text-xs rounded-md bg-[var(--dpf-accent)] text-[var(--dpf-on-accent,var(--dpf-surface-1))] disabled:opacity-50"
-              >
-                {seedKeys.includes(inspected.key) ? "Already added" : "Expand from here"}
-              </button>
-
-            </div>
-          )}
-
-          <details
-            className="mt-3 border-t border-[var(--dpf-border)] pt-3"
-            data-dpf-purpose-disclosure-key="node-properties"
-          >
-            <summary
-              className="flex min-h-11 cursor-pointer items-center text-dpf-caption text-[var(--dpf-muted)]"
-              data-dpf-purpose-disclosure-trigger
-            >
-              Raw properties
-            </summary>
-            <div data-dpf-purpose-disclosure-region>
-              {inspected && Object.keys(inspected.props).length > 0 ? (
-                <dl className="space-y-1 pt-2">
-                  {Object.entries(inspected.props).map(([key, value]) => (
-                    <div key={key}>
-                      <dt className="text-dpf-caption uppercase tracking-wide text-[var(--dpf-muted)]">
-                        {key}
-                      </dt>
-                      <dd className="text-dpf-caption text-[var(--dpf-text)] break-words">
-                        {typeof value === "string" || typeof value === "number"
-                          ? String(value)
-                          : JSON.stringify(value)}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              ) : (
-                <p className="pt-2 text-dpf-caption text-[var(--dpf-muted)]">
-                  Pick a node to inspect its properties.
-                </p>
-              )}
-            </div>
-          </details>
-        </aside>
+        <GraphExplorerInspector
+          completed={purposeState === "neighbourhood-drawn"}
+          inspected={inspected}
+          inspecting={inspecting}
+          seedKeys={seedKeys}
+          onExpand={expandFromInspected}
+        />
       </div>
     </div>
   );
