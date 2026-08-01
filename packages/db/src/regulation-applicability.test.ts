@@ -239,3 +239,67 @@ describe("archetypeGate — matches archetype id OR category (BI-9DED0CE8)", () 
     expect(r.undeclared).toBe(true);
   });
 });
+
+describe("dataHandlingGate — horizontal regs gate on WHAT the org does with data (BI-242F344C)", () => {
+  const usPrivacy: RegulationApplicability = {
+    basis: ["operating"],
+    jurisdictions: ["us"],
+    dataHandling: ["processes-personal-data"],
+  };
+  const usSoftware = (dataHandling: RegionProfile["dataHandling"]): RegionProfile => ({
+    ...empty,
+    operatesIn: ["us"],
+    archetype: "software-platform",
+    archetypeId: "software-platform",
+    dataHandling,
+  });
+
+  it("applies when the org declares the triggering predicate", () => {
+    expect(regulationApplies(usPrivacy, usSoftware(["processes-personal-data"])).applies).toBe(true);
+  });
+
+  it("is reviewable (undeclared) when the data-handling profile is empty", () => {
+    const r = regulationApplies(usPrivacy, usSoftware([]));
+    expect(r.applies).toBe(false);
+    expect(r.undeclared).toBe(true); // → "review", not "reference": we haven't asked yet
+    expect(r.reason).toMatch(/undeclared/);
+  });
+
+  it("is a definitive miss (reference) when a DIFFERENT predicate is declared", () => {
+    const r = regulationApplies(usPrivacy, usSoftware(["sends-marketing"]));
+    expect(r.applies).toBe(false);
+    expect(r.undeclared).toBe(false);
+  });
+
+  it("composes with nexus: right predicate but wrong jurisdiction is out of scope", () => {
+    const euPrivacy: RegulationApplicability = {
+      basis: ["operating", "selling"],
+      jurisdictions: ["eu"],
+      dataHandling: ["processes-personal-data"],
+    };
+    // US-only software that processes personal data: GDPR does NOT apply (no EU nexus).
+    expect(regulationApplies(euPrivacy, usSoftware(["processes-personal-data"])).applies).toBe(false);
+    // Same org once it sells into the EU: GDPR applies.
+    expect(
+      regulationApplies(euPrivacy, { ...usSoftware(["processes-personal-data"]), sellsTo: ["eu"] }).applies,
+    ).toBe(true);
+  });
+
+  it("ANY-match: declaring any one of several triggers puts the org in scope", () => {
+    const multi: RegulationApplicability = {
+      basis: ["operating"],
+      jurisdictions: ["us"],
+      dataHandling: ["handles-health-data", "handles-financial-data"],
+    };
+    expect(regulationApplies(multi, usSoftware(["handles-financial-data"])).applies).toBe(true);
+  });
+
+  it("parseApplicability round-trips dataHandling and drops unknown predicates", () => {
+    const spec = parseApplicability({
+      basis: ["operating"],
+      jurisdictions: ["us"],
+      dataHandling: ["processes-personal-data", "not-a-real-predicate"],
+    });
+    expect(spec?.dataHandling).toEqual(["processes-personal-data"]);
+  });
+});

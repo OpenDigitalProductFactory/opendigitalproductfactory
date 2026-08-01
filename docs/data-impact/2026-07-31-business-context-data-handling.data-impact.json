@@ -1,0 +1,48 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "BusinessContext operational configuration (per-organization setup profile)",
+    "Regulation and Obligation compliance-library registry (new horizontal-pack rows)",
+    "Prisma-to-EA current-state data-model mirror"
+  ],
+  "migration": {
+    "name": "20260731120000_add_business_context_data_handling",
+    "backfill": "Additive only: adds BusinessContext.dataHandling TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[]. No backfill — existing rows take the empty-array default, which classifies data-handling-gated regulations as 'review' (undeclared) rather than silently applying or hiding them. No column is dropped or rewritten; no row is deleted. The horizontal-pack Regulation/Obligation rows are added idempotently by the seed (upsert by regulationId / find-by-reference), never mutating or removing existing compliance records."
+  },
+  "tests": [
+    "packages/db/src/regulation-applicability.test.ts",
+    "packages/db/src/seed-software-horizontal-compliance.test.ts",
+    "apps/web/lib/compliance-library.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:business-context#data-handling-predicate-profile",
+      "prismaModel": "BusinessContext",
+      "lifecycleDisposition": "Additive nullable-safe array column with an empty default. Existing rows are untouched and remain valid; the field is operator-declared at setup and freely editable. No lifecycle transition, no supersession, no deletion.",
+      "fields": [
+        {
+          "fieldId": "data:business-context#dataHandling",
+          "resolution": "governed",
+          "reason": "Captures the closed DATA_HANDLING_PREDICATES an org declares about what it does with data (processes-personal-data, sends-marketing, deploys-automated-decisioning, …). It is the trigger that scopes horizontal regulations (privacy, breach, AI, marketing, accessibility) to the company, and gives the pre-existing handlesCardPayments flag its first consumer via a resolve-time bridge to handles-card-data.",
+          "provenance": "BI-242F344C; kernel principle_decide chose data-handling-predicate (composite 15.05, high confidence); research determination cited per seeded regulation row."
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:regulation#software-horizontal-pack",
+      "prismaModel": "Regulation,Obligation",
+      "lifecycleDisposition": "Additive seed content: 18 horizontal Regulation rows + their Obligation rows, upserted idempotently by stable regulationId / obligation reference. Statutory rows use sourceType 'external'; SOC 2 / ISO 27001 / NIST AI RMF use sourceType 'framework' (contractual/voluntary, not law). No existing regulation or obligation is modified or removed.",
+      "fields": [
+        {
+          "fieldId": "data:regulation#applicability.dataHandling",
+          "resolution": "governed",
+          "reason": "Each horizontal regulation gates on a data-handling predicate (or an EU/UK nexus), evaluated by the generic regulationApplies classifier, so it surfaces only for an install whose declared profile matches — never as blanket noise.",
+          "provenance": "BI-242F344C research determination with per-row source citations; classifier + gate unit tests."
+        }
+      ]
+    }
+  ]
+}

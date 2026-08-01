@@ -4983,6 +4983,17 @@ model BusinessContext {
   dataResidency             String[]  @default([])
   // Whether the business handles card payments (PCI-DSS, a global-basis obligation).
   handlesCardPayments       Boolean   @default(false)
+  // What the org DOES with data / how it operates — the triggers that put it in
+  // scope of HORIZONTAL regulations (privacy, breach, AI governance, marketing,
+  // accessibility). Values are the DATA_HANDLING_PREDICATES enum in
+  // regulation-applicability.ts (processes-personal-data | serves-consumers |
+  // deploys-automated-decisioning | sends-marketing | publicly-accessible-service
+  // | handles-health-data | handles-financial-data | handles-education-data |
+  // government-customers | handles-card-data). Empty = undeclared → a
+  // data-handling-gated regulation surfaces as "review", never silently applied.
+  // handlesCardPayments=true is bridged to the handles-card-data predicate at
+  // resolve time, so the two stay consistent.
+  dataHandling              String[]  @default([])
   // Corporate-law legal form / market-listing status, orthogonal to industry
   // archetype: any archetype can be a listed or private company. Gates
   // listing-specific governance regimes (e.g. UK Corporate Governance Code

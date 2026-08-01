@@ -36,12 +36,47 @@ export function isListingStatus(value: string | null | undefined): value is List
   return typeof value === "string" && (LISTING_STATUSES as readonly string[]).includes(value);
 }
 
+/**
+ * What an organization DOES with data / how it operates — the triggers that
+ * put it in scope of a HORIZONTAL regulation (privacy, payment security, AI
+ * governance, consumer-protection, accessibility). Unlike the vertical packs,
+ * these regimes bind on activity, not on industry archetype: a software
+ * platform, a retailer, and a gym all face CCPA the moment they process
+ * personal data of California consumers. Closed set — adding a predicate is a
+ * data-model change, not a free-form string, so specs and the setup interview
+ * stay in lockstep.
+ */
+export const DATA_HANDLING_PREDICATES = [
+  "processes-personal-data", // any identifiable individual's data → privacy + breach-notification regimes
+  "serves-consumers", // sells to / serves individual consumers (not just businesses) → consumer-protection
+  "handles-card-data", // stores/processes/transmits payment card data → PCI-DSS
+  "deploys-automated-decisioning", // AI/automated decisions affecting people → AI-governance regimes
+  "sends-marketing", // commercial email / SMS / calls → CAN-SPAM, TCPA, ePrivacy
+  "publicly-accessible-service", // public-facing website/app → accessibility (ADA/WCAG, EAA)
+  "handles-health-data", // protected health information → HIPAA overlay
+  "handles-financial-data", // consumer financial data → GLBA overlay
+  "handles-education-data", // student education records → FERPA overlay
+  "government-customers", // sells to government/public sector → FedRAMP / gov overlays
+] as const;
+export type DataHandlingPredicate = (typeof DATA_HANDLING_PREDICATES)[number];
+
+export function isDataHandlingPredicate(value: string | null | undefined): value is DataHandlingPredicate {
+  return typeof value === "string" && (DATA_HANDLING_PREDICATES as readonly string[]).includes(value);
+}
+
 /** An org's regional footprint + archetype. Jurisdiction values are bloc slugs (e.g. "eu", "us", "uk"). */
 export interface RegionProfile {
   operatesIn: string[];
   sellsTo: string[];
   employsIn: string[];
   dataResidency: string[];
+  /**
+   * What the org does with data / how it operates (DATA_HANDLING_PREDICATES),
+   * as declared at company setup. Drives horizontal-regulation scoping. An
+   * empty/undeclared set means a data-handling-gated regulation surfaces as
+   * "review" (we need to ask) rather than "reference" (known out of scope).
+   */
+  dataHandling?: DataHandlingPredicate[];
   /** Business archetype CATEGORY slug (StorefrontArchetype.category), when known. */
   archetype?: string;
   /**
@@ -76,6 +111,17 @@ export interface RegulationApplicability {
    * than "reference" (known out-of-scope). Omitted = listing-status-agnostic.
    */
   listingStatuses?: string[];
+  /**
+   * If set, the org must declare AT LEAST ONE of these data-handling predicates
+   * to be in scope — the trigger for a HORIZONTAL regulation (e.g.
+   * `["processes-personal-data"]` for a privacy law, `["handles-card-data"]`
+   * for PCI-DSS). Composes with basis/jurisdictions: a privacy law is typically
+   * `basis:["operating"], jurisdictions:["us"], dataHandling:["processes-personal-data"]`
+   * — in scope only when the org operates in the US AND processes personal data.
+   * An undeclared data-handling profile surfaces as "review". Omitted =
+   * data-handling-agnostic (the vertical packs).
+   */
+  dataHandling?: DataHandlingPredicate[];
 }
 
 export interface ApplicabilityResult {
@@ -161,6 +207,23 @@ function listingGate(spec: RegulationApplicability, profile: RegionProfile): Gat
   };
 }
 
+function dataHandlingGate(spec: RegulationApplicability, profile: RegionProfile): GateResult {
+  if (!spec.dataHandling || spec.dataHandling.length === 0) return { pass: true };
+  const declared = profile.dataHandling ?? [];
+  const matched = spec.dataHandling.filter((p) => declared.includes(p));
+  if (matched.length > 0) return { pass: true };
+  return {
+    pass: false,
+    // Nothing declared at all → reviewable (we haven't asked what they do with
+    // data yet). A declared set that simply doesn't intersect → definitive miss.
+    undeclared: declared.length === 0,
+    reason:
+      declared.length === 0
+        ? `data-handling profile undeclared (applies when the org does: ${spec.dataHandling.join(", ")})`
+        : `data-handling profile [${declared.join(", ")}] does not include a trigger (applies to: ${spec.dataHandling.join(", ")})`,
+  };
+}
+
 function nexusGate(spec: RegulationApplicability, profile: RegionProfile): GateResult {
   // Global regulations apply wherever the relevant capability exists (e.g. PCI-DSS).
   if (spec.basis.includes("global")) return { pass: true, matchedBasis: ["global"] };
@@ -191,7 +254,12 @@ export function regulationApplies(
   spec: RegulationApplicability,
   profile: RegionProfile,
 ): ApplicabilityResult {
-  const gates = [archetypeGate(spec, profile), listingGate(spec, profile), nexusGate(spec, profile)];
+  const gates = [
+    archetypeGate(spec, profile),
+    listingGate(spec, profile),
+    dataHandlingGate(spec, profile),
+    nexusGate(spec, profile),
+  ];
   const failed = gates.filter((g): g is Extract<GateResult, { pass: false }> => !g.pass);
 
   if (failed.length === 0) {
@@ -236,6 +304,12 @@ export function parseApplicability(value: unknown): RegulationApplicability | nu
   }
   if (Array.isArray(v.listingStatuses) && v.listingStatuses.every((s) => typeof s === "string")) {
     spec.listingStatuses = v.listingStatuses as string[];
+  }
+  if (Array.isArray(v.dataHandling) && v.dataHandling.every((p) => typeof p === "string")) {
+    // Keep only recognized predicates — an unknown string would silently never
+    // match any declared profile, which reads as "always out of scope".
+    const known = (v.dataHandling as string[]).filter(isDataHandlingPredicate);
+    if (known.length > 0) spec.dataHandling = known;
   }
   return spec;
 }
