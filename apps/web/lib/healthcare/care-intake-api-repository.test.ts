@@ -90,6 +90,15 @@ function database() {
 }
 
 describe("issueCareIntakeResumeGrant", () => {
+  // Freeze the clock like every other block in this file. issueCareIntakeResumeGrant
+  // rejects an expiry that is not in the future, and these cases pass a hardcoded
+  // expiresAt of 2026-08-01T15:00Z. Without a frozen clock that literal was in the
+  // future only until 2026-08-01T15:00Z real time, at which point the block began
+  // failing on main for every PR whose shard included it (BI-6EAEE330). The other
+  // four blocks were immune purely because their frozen 14:00 clock keeps the same
+  // literal ahead of "now" — this block was the one that never got the treatment.
+  beforeEach(() => vi.useFakeTimers().setSystemTime("2026-08-01T14:00:00.000Z"));
+
   it("issues the raw token once only after an allow decision", async () => {
     const { db, tx } = database();
     const result = await issueCareIntakeResumeGrant(
