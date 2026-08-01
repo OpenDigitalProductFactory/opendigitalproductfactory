@@ -315,11 +315,36 @@
     "apps/web/lib/routing/provider-suitability/workload-profile.ts": [
       "docs/user-guide/ai-workforce/sensitive-data-policy-packs.md"
     ],
+    "docker-compose.yml": [
+      "docs/architecture/platform-overview.md",
+      "docs/operations/disaster-recovery.md"
+    ],
+    "monitoring/prometheus/prometheus.yml": [
+      "docs/architecture/platform-overview.md"
+    ],
+    "packages/db/prisma/schema.prisma": [
+      "docs/architecture/platform-overview.md"
+    ],
+    "packages/db/src/pg-graph.ts": [
+      "docs/architecture/platform-overview.md"
+    ],
+    "packages/db/src/pgvector-store.ts": [
+      "docs/architecture/platform-overview.md"
+    ],
+    "packages/db/src/seed-platform-backup.ts": [
+      "docs/operations/disaster-recovery.md"
+    ],
+    "scripts/backup-postgres.sh": [
+      "docs/operations/disaster-recovery.md"
+    ],
     "scripts/dpf-bootstrap-agent-toolchain.ps1": [
       "docs/user-guide/contributing/agent-dev-environments.md"
     ],
     "scripts/dpf-bootstrap-agent-toolchain.sh": [
       "docs/user-guide/contributing/agent-dev-environments.md"
+    ],
+    "scripts/restore-postgres.sh": [
+      "docs/operations/disaster-recovery.md"
     ]
   },
   "docToRoutes": {
@@ -506,6 +531,19 @@
     ]
   },
   "docToCode": {
+    "docs/architecture/platform-overview.md": [
+      "docker-compose.yml",
+      "monitoring/prometheus/prometheus.yml",
+      "packages/db/prisma/schema.prisma",
+      "packages/db/src/pg-graph.ts",
+      "packages/db/src/pgvector-store.ts"
+    ],
+    "docs/operations/disaster-recovery.md": [
+      "docker-compose.yml",
+      "packages/db/src/seed-platform-backup.ts",
+      "scripts/backup-postgres.sh",
+      "scripts/restore-postgres.sh"
+    ],
     "docs/user-guide/ai-workforce/connecting-providers.md": [
       "apps/web/app/(shell)/platform/ai/providers/page.tsx",
       "apps/web/components/platform/ProviderSuitabilityGuide.tsx",
