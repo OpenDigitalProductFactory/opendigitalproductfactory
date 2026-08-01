@@ -14,6 +14,7 @@ import {
   defaultProcessScanMs,
   findConflictingLocalCiMutatorPids,
   findLiveLocalCiMutatorPids,
+  isRecoverableTerminalLeaseResponse,
 } from "./gate-worktree.mjs";
 import { readProcessIdentity } from "./lib/local-sandbox-fence.mjs";
 
@@ -79,6 +80,22 @@ function makeTempWorktree() {
   git(["commit", "-q", "-m", "init"]);
   return dir;
 }
+
+test("terminal claim recovery is limited to the lease service's closed terminal vocabulary", () => {
+  for (const reason of ["released", "expired", "cancelled"]) {
+    assert.equal(isRecoverableTerminalLeaseResponse({
+      error: "lease_terminal",
+      data: { reason },
+    }), true);
+  }
+  for (const response of [
+    { error: "lease_conflict", data: { reason: "released" } },
+    { error: "lease_terminal", data: { reason: "active" } },
+    { error: "lease_terminal", data: {} },
+  ]) {
+    assert.equal(isRecoverableTerminalLeaseResponse(response), false);
+  }
+});
 
 test("canonical gate heartbeats during a long command and releases once", async () => {
   const calls = [];
@@ -201,7 +218,7 @@ test("durable queue observation reuses claimKey and grants a fresh admitted TTL"
     assert.equal(claims[0].args.claimKey, claims[1].args.claimKey);
     assert.match(
       claims[0].args.claimKey,
-      /^local-ci:gate-v2-[0-9a-f-]{36}-\d+:/,
+      /^local-ci:[^:]+:[0-9a-f]{40}$/,
     );
     const grantedMs = Date.parse(claims[1].args.expiresAt) - claims[1].receivedAt;
     assert.ok(grantedMs >= 2_800, `expected a fresh ~3s TTL, got ${grantedMs}ms`);
@@ -300,8 +317,87 @@ test("a queued observer re-establishes intent after quiescence expires its claim
     assert.equal(claims[0].claimKey, claims[1].claimKey);
     assert.equal(claims[1].claimKey, claims[2].claimKey);
     assert.notEqual(claims[2].claimKey, claims[3].claimKey);
-    assert.match(claims[3].claimKey, /:recovery-1$/);
+    assert.match(claims[3].claimKey, /:recovery-1-[0-9a-f-]{36}$/);
     assert.match(result.output, /re-establishing queue intent/);
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("a repeated exact candidate rotates past its prior released claim", async () => {
+  const claims = [];
+  const server = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      const payload = JSON.parse(body);
+      const tool = payload.params.name;
+      if (tool === "claim_nonprod_environment_lease") {
+        claims.push(payload.params.arguments);
+      }
+      const result = tool === "claim_nonprod_environment_lease" && claims.length === 1
+        ? {
+          success: false,
+          error: "lease_terminal",
+          entityId: "NPEL-PRIOR-RELEASED",
+          data: {
+            reason: "released",
+            lease: {
+              leaseId: "NPEL-PRIOR-RELEASED",
+              status: "released",
+              releasedAt: "2026-08-01T04:30:08.937Z",
+            },
+          },
+        }
+        : tool === "claim_nonprod_environment_lease"
+          ? {
+            success: true,
+            entityId: "NPEL-REPEAT-ADMITTED",
+            data: {
+              lease: { leaseId: "NPEL-REPEAT-ADMITTED" },
+              admission: { status: "admitted", slotKey: "slot-0", waitAgeMs: 0 },
+            },
+          }
+          : tool === "record_local_integration_result"
+            ? { success: true, entityId: "EVIDENCE-REPEAT" }
+            : { success: true };
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({
+        jsonrpc: "2.0",
+        id: payload.id,
+        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+
+  try {
+    const result = await run(process.execPath, [
+      "scripts/gate-worktree.mjs",
+      "--branch", "fix/sandbox-lease-fencing",
+      "--worktree", process.cwd(),
+      "--expires-minutes", "0.05",
+      "--poll-seconds", "0.01",
+      "--mcp-url", `http://127.0.0.1:${address.port}`,
+      "--no-push",
+    ], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        DPF_MCP_BEARER_TOKEN: "test-token",
+        DPF_ALLOW_LOCAL_CI_STUB: "1",
+        DPF_GATE_RETRY_JITTER: "0",
+        DPF_LOCAL_SANDBOX_FENCE_PATH: isolatedFencePath(),
+      },
+    });
+
+    assert.ok([0, 3].includes(result.code), result.output);
+    assert.equal(claims.length, 2);
+    assert.notEqual(claims[0].claimKey, claims[1].claimKey);
+    assert.match(claims[1].claimKey, /:recovery-1-[0-9a-f-]{36}$/);
+    assert.match(result.output, /terminal released claim.*re-establishing queue intent/);
   } finally {
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));

@@ -298,6 +298,14 @@ admitted normally. Cancelling a run can also leave a stale queued lease pinned
 to the **old** SHA; release it, or the next run queues behind your own
 abandoned entry.
 
+A completed or cancelled exact run does not make that SHA permanently
+ungateable. The first claim generation remains the stable `session + SHA` key;
+when the lease service returns that key as `released`, `expired`, or
+`cancelled`, the same gate process creates one observer-token-bound recovery
+generation and then polls that new key idempotently. This preserves honest
+thread/SHA attribution, avoids colliding with a prior process's `recovery-1`,
+and never rotates an active or otherwise unknown lease state.
+
 **The gate command has a checked-in default (BI-157DC9B2, BI-4BE30454):**
 [`scripts/local-ci-runner.mjs`](../../scripts/local-ci-runner.mjs) runs the
 canonical merged-code plan (`scripts/lib/local-integration-ci.mjs`: checkout

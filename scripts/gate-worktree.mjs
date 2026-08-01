@@ -97,6 +97,18 @@ function isTransientMcpError(error) {
   return /ECONNRESET|ECONNREFUSED|EPIPE|ETIMEDOUT|socket hang up|invalid JSON response|fetch failed/i.test(text);
 }
 
+const RECOVERABLE_TERMINAL_LEASE_REASONS = new Set([
+  "released",
+  "expired",
+  "cancelled",
+]);
+
+export function isRecoverableTerminalLeaseResponse(response) {
+  const reason = response?.data?.reason ?? response?.data?.lease?.reason;
+  return response?.error === "lease_terminal"
+    && RECOVERABLE_TERMINAL_LEASE_REASONS.has(reason);
+}
+
 function numberOrDefault(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
@@ -848,7 +860,6 @@ async function main() {
   let queueObserverPath = "";
   let leaseReleased = false;
   let receivedSignal = "";
-  let queuedClaimInterruptedByQuiescence = false;
   let claimRecoverySequence = 0;
   const leaseEvents = [];
   const hostPressureSamples = [];
@@ -999,7 +1010,6 @@ async function main() {
       break;
     }
     if (claimResponse?.success === true && admission?.status === "queued") {
-      queuedClaimInterruptedByQuiescence = false;
       if (Date.now() >= deadline) {
         await releaseLeaseOnce();
         die("local-CI admission queue wait timed out");
@@ -1028,7 +1038,6 @@ async function main() {
       continue;
     }
     if (claimResponse?.error === "portal_quiescing") {
-      if (leaseId) queuedClaimInterruptedByQuiescence = true;
       if (Date.now() >= deadline) die("portal remained quiescing through the local-CI admission deadline");
       const retryAfterSeconds = Number(
         claimResponse?.data?.retryAfterSeconds
@@ -1047,26 +1056,27 @@ async function main() {
     }
     const terminalReason = claimResponse?.data?.reason
       ?? claimResponse?.data?.lease?.reason;
-    if (
-      claimResponse?.error === "lease_terminal"
-      && terminalReason === "expired"
-      && queuedClaimInterruptedByQuiescence
-    ) {
+    if (isRecoverableTerminalLeaseResponse(claimResponse)) {
       if (Date.now() >= deadline) {
-        die("local-CI queue claim expired during quiescence at the admission deadline");
+        die(`local-CI ${terminalReason} claim reached the admission deadline`);
       }
       claimRecoverySequence += 1;
-      claimKey = `${baseClaimKey}:recovery-${claimRecoverySequence}`;
+      // A prior exact run and a later rerun share session + SHA, so a numeric
+      // suffix alone would collide with the earlier process's recovery key.
+      // Bind the new generation to this process observer token: polling inside
+      // this run remains idempotent, while a later legitimate rerun receives a
+      // fresh durable claim key without falsifying session identity or SHA.
+      claimKey = `${baseClaimKey}:recovery-${claimRecoverySequence}-${gateObserverIdentity.token}`;
       leaseEvents.push({
         type: "queue-intent-reestablished",
         at: new Date().toISOString(),
         priorLeaseId: leaseId,
+        terminalReason,
         recoverySequence: claimRecoverySequence,
       });
       leaseId = "";
-      queuedClaimInterruptedByQuiescence = false;
       process.stdout.write(
-        `queued claim expired during portal quiescence; re-establishing queue intent with recovery ${claimRecoverySequence}...\n`,
+        `terminal ${terminalReason} claim cannot be reused; re-establishing queue intent with recovery ${claimRecoverySequence}...\n`,
       );
       continue;
     }
