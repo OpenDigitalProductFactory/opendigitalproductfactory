@@ -256,7 +256,11 @@ function DispatchOperationsSurface({ board }: { board: DispatchBoard }) {
       <section className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(18rem,0.7fr)]">
         <div className="grid gap-3">
           <h3 className="text-sm font-semibold text-[var(--dpf-text)]">Work lanes</h3>
-          <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(14rem,1fr))]">
+          <div
+            aria-label="Dispatch work lanes"
+            tabIndex={0}
+            className="grid gap-3 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)] [grid-template-columns:repeat(auto-fit,minmax(14rem,1fr))]"
+          >
             {board.columns.map((col) => (
               <section
                 key={col.key}

@@ -87,6 +87,8 @@ describe("DispatchBoardPage", () => {
     expect(html).toContain("Route view");
     expect(html).toContain("Schedule");
     expect(html).toContain("Support checks");
+    expect(html).toContain('aria-label="Dispatch work lanes"');
+    expect(html).toContain('tabindex="0"');
     expect(html).toContain("AC Repair - Dana");
     expect(html).toContain("Needs assignment");
     expect(html).toContain("Scheduled but not confirmed");
