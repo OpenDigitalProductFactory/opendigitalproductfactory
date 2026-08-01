@@ -165,7 +165,7 @@ function makeBuild(overrides: Partial<FeatureBuildRow> = {}): FeatureBuildRow {
 }
 
 describe("BuildStudio DetailsDrawer integration", () => {
-  it("drawer starts closed (translate-x-full + data-open=false)", () => {
+  it("does not mount the drawer before an explicit owner or operator action", () => {
     render(
       <BuildStudio
         builds={[makeBuild()]}
@@ -175,9 +175,7 @@ describe("BuildStudio DetailsDrawer integration", () => {
         submissionBranchShortId="abc12345"
       />,
     );
-    const drawer = screen.getByTestId(BUILD_STUDIO_TEST_IDS.detailsDrawer);
-    expect(drawer).toHaveAttribute("data-open", "false");
-    expect(drawer.className).toContain("translate-x-full");
+    expect(screen.queryByTestId(BUILD_STUDIO_TEST_IDS.detailsDrawer)).not.toBeInTheDocument();
   });
 
   it("pill click opens the drawer", async () => {
@@ -275,9 +273,8 @@ describe("BuildStudio DetailsDrawer integration", () => {
         submissionBranchShortId="abc12345"
       />,
     );
-    // Before click: drawer closed, Brief default (phase=ideate)
-    const drawer = screen.getByTestId(BUILD_STUDIO_TEST_IDS.detailsDrawer);
-    expect(drawer).toHaveAttribute("data-open", "false");
+    // Before click: the technical drawer stays out of the owner-facing DOM.
+    expect(screen.queryByTestId(BUILD_STUDIO_TEST_IDS.detailsDrawer)).not.toBeInTheDocument();
 
     const fleetHeader = screen.getByTestId("build-studio-fleet-header");
     fireEvent.click(fleetHeader);
@@ -321,7 +318,7 @@ describe("BuildStudio DetailsDrawer integration", () => {
     expect(rows[1]).toHaveAttribute("data-queue-kind", "idle");
   });
 
-  it("close button on the drawer closes it back to translate-x-full", async () => {
+  it("close button unmounts the drawer from the owner-facing DOM", async () => {
     render(
       <BuildStudio
         builds={[makeBuild()]}
@@ -337,7 +334,7 @@ describe("BuildStudio DetailsDrawer integration", () => {
     });
     fireEvent.click(screen.getByLabelText("Close details drawer"));
     await waitFor(() => {
-      expect(screen.getByTestId(BUILD_STUDIO_TEST_IDS.detailsDrawer)).toHaveAttribute("data-open", "false");
+      expect(screen.queryByTestId(BUILD_STUDIO_TEST_IDS.detailsDrawer)).not.toBeInTheDocument();
     });
   });
 });
