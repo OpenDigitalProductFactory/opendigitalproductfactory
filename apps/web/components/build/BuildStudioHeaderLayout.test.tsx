@@ -9,6 +9,7 @@ import {
   type FeatureBuildRow,
 } from "@/lib/feature-build-types";
 import type { EpicRollupView } from "@/lib/build/epic-rollup";
+import type { BusinessBuildBrief } from "@/lib/build/business-build-brief";
 import type { PortalContextEnvelope } from "@/lib/portal-context";
 
 afterEach(cleanup);
@@ -292,6 +293,84 @@ describe("BuildStudio active-build header layout", () => {
     expect(screen.queryByTestId("feature-brief-panel")).toBeNull();
   });
 
+  it("keeps editable business briefs isolated across Change A, Change B, then A", () => {
+    const businessBrief = (
+      briefId: string,
+      title: string,
+      businessOutcome: string,
+    ): BusinessBuildBrief => ({
+      briefId,
+      title,
+      status: "accepted" as const,
+      intakeSource: "user_conversation" as const,
+      businessOutcome,
+      affectedPeople: ["Owner"],
+      affectedWorkflow: "Booking changes",
+      sourceEvidence: [],
+      successSignals: ["Fewer calls"],
+      constraints: [],
+      businessInterpretation: businessOutcome,
+      capabilityPackId: "operations",
+      capabilityPack: "Operations",
+      riskProfile: {
+        customerFacing: true,
+        complianceSensitive: false,
+        revenueImpacting: false,
+        operationalRisk: false,
+        level: "medium" as const,
+      },
+      technicalInterpretation: {
+        dataNeeds: null,
+        likelyWorkflowImpact: [],
+        verificationFocus: [],
+      },
+      openQuestions: [],
+      confidence: "high" as const,
+    });
+
+    render(
+      <BuildStudio
+        builds={[
+          makeBuild({
+            buildId: "FB-FIRST",
+            title: "First Change",
+            phase: "review",
+            businessBuildBrief: businessBrief(
+              "BBB-FIRST",
+              "First Change brief",
+              "First Change business outcome",
+            ),
+          }),
+          makeBuild({
+            id: "build-row-2",
+            buildId: "FB-SECOND",
+            title: "Second Change",
+            phase: "review",
+            businessBuildBrief: businessBrief(
+              "BBB-SECOND",
+              "Second Change brief",
+              "Second Change business outcome",
+            ),
+          }),
+        ]}
+        portfolios={[]}
+        governedBacklogEnabled
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Review outcome" }));
+    expect((screen.getByLabelText("Business outcome") as HTMLTextAreaElement).value)
+      .toBe("First Change business outcome");
+
+    fireEvent.click(screen.getByRole("button", { name: "Open build Second Change" }));
+    expect((screen.getByLabelText("Business outcome") as HTMLTextAreaElement).value)
+      .toBe("Second Change business outcome");
+
+    fireEvent.click(screen.getByRole("button", { name: "Open build First Change" }));
+    expect((screen.getByLabelText("Business outcome") as HTMLTextAreaElement).value)
+      .toBe("First Change business outcome");
+  });
+
   it("keeps the change narrative and decision summary above Technical details", async () => {
     ownerProofMocks.getBuildChangeNarrativeAction.mockResolvedValueOnce({
       headline: "Customers can now change a booking online.",
@@ -328,7 +407,7 @@ describe("BuildStudio active-build header layout", () => {
     expect(screen.queryByTestId("build-studio-technical-details")).toBeNull();
   });
 
-  it("never shows the previous Change's proof context while the next Change loads", async () => {
+  it("never shows another Change's proof context during Change A, B, then A navigation", async () => {
     let resolveSecondNarrative!: (value: {
       headline: string;
       bullets: string[];
@@ -417,6 +496,32 @@ describe("BuildStudio active-build header layout", () => {
 
     expect(await screen.findByText("Second Change narrative")).toBeTruthy();
     expect(screen.getByText("Current call: Second Change decision")).toBeTruthy();
+
+    ownerProofMocks.getBuildChangeNarrativeAction.mockResolvedValueOnce({
+      headline: "First Change narrative reloaded",
+      bullets: [],
+      whyItMatters: "First Change reason",
+      openQuestions: [],
+      generatedAt: "2026-07-30T12:02:00.000Z",
+      model: "test-model",
+    });
+    ownerProofMocks.getBuildDecisionLedgerAction.mockResolvedValueOnce([{
+      id: "decision-first-reloaded",
+      phase: "review",
+      source: "kernel",
+      theCall: "First Change decision reloaded",
+      theOptions: [],
+      theWhy: "First Change rationale",
+      governance: true,
+      unresolvedRisks: [],
+    }]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open build First Change" }));
+
+    expect(await screen.findByText("First Change narrative reloaded")).toBeTruthy();
+    expect(screen.getByText("Current call: First Change decision reloaded")).toBeTruthy();
+    expect(screen.queryByText("Second Change narrative")).toBeNull();
+    expect(screen.queryByText("Current call: Second Change decision")).toBeNull();
   });
 
   beforeEach(() => {
@@ -688,6 +793,7 @@ describe("BuildStudio active-build header layout", () => {
     expect(html).toContain('data-testid="build-studio-operator-status"');
     expect(html).toContain('data-testid="build-studio-operator-next-action"');
     expect(html).toContain('data-testid="build-studio-activity-story"');
+    expect(html).toContain('data-testid="build-solution-summary-band"');
     expect(html).toContain(">Technical details<");
     expect(html).not.toContain(">Engineer view<");
     expect(html).not.toContain(">Work Control<");
