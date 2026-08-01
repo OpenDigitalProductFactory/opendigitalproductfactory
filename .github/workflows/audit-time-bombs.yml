@@ -1,0 +1,128 @@
+name: Time-Bomb Audit
+
+# Finds tests that pass today and fail on a known future date (BI-6A4F47B9).
+#
+# On 2026-08-01T15:00Z a single test with a hardcoded `expiresAt` went red at the
+# instant it encoded and BLOCKED EVERY PR in the repository, because the unit
+# shards are required checks. It was not flaky and could not self-recover.
+#
+# The obvious static sweep was measured on this repo and over-reports ~6:1 (29
+# files matched; the 5 most imminent, one already past its date, all PASSED) —
+# because a future date in a fixture is inert unless the code under test compares
+# it to now. So detection is dynamic instead: run the suite normally, run it again
+# with the clock shifted forward, and report the set difference. A test that
+# passes now and fails later IS a bomb, by definition — no heuristic to tune.
+#
+# SCHEDULED, NOT PER-PR, deliberately: it runs the suite once per horizon plus a
+# baseline, which is far too slow for the merge path. Weekly is early enough —
+# the failure it prevents is one a horizon of 30+ days would have caught long
+# before it reached the fleet.
+
+on:
+  schedule:
+    - cron: "17 5 * * 1" # Mondays — a week's notice on the nearest horizon
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Comma-separated horizons in days"
+        required: false
+        default: "30,90,365"
+  pull_request:
+    branches: [main]
+    # Only when the detector itself changes: this guards the guard, and keeps the
+    # expensive double-suite off every other PR.
+    paths:
+      - "scripts/detect-time-bombs.mjs"
+      - "apps/web/vitest.clock-shift-setup.ts"
+      - "apps/web/lib/testing/clock-shift.test.ts"
+      - ".github/workflows/audit-time-bombs.yml"
+
+permissions:
+  contents: read
+  issues: write # file the finding
+
+concurrency:
+  group: time-bomb-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    name: Time-bomb audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24
+
+      - uses: pnpm/action-setup@v4
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Guard the guard. If the shim stopped shifting the clock, the audit would
+      # report "clean" forever — the worst outcome for a detector, so prove it
+      # still works before trusting a green result.
+      - name: Verify the clock shim
+        run: pnpm --filter web exec vitest run lib/testing/clock-shift.test.ts
+
+      - name: Detect time bombs
+        id: detect
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          DAYS="${{ github.event.inputs.days || '30,90,365' }}"
+          # On PRs to the detector itself, one near horizon is enough to prove it
+          # runs; the scheduled job carries the full sweep.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then DAYS="30"; fi
+          node scripts/detect-time-bombs.mjs --days "$DAYS" | tee time-bomb-report.txt
+          echo "status=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish report to the run summary
+        if: always()
+        run: |
+          { echo '```'; cat time-bomb-report.txt 2>/dev/null || echo "No report produced."; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      # Exit 2 is a harness failure (zero tests collected, unreadable report).
+      # It must never be reported as "clean" — a detector that silently stops
+      # detecting is worse than no detector.
+      - name: Fail on harness error
+        if: steps.detect.outputs.status == '2'
+        run: |
+          echo "::error::The time-bomb audit could not run to completion — its result is not trustworthy."
+          exit 1
+
+      - name: File the finding
+        if: github.event_name == 'schedule' && steps.detect.outputs.status == '1'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TITLE="fix(test): time bomb(s) will block the fleet on a known date"
+          BODY_FILE="$(mktemp)"
+          {
+            echo "The weekly time-bomb audit found test(s) that pass against the current clock and fail against a future one."
+            echo ""
+            echo "Each will go red on a fixed date and STAY red. If it sits on a required shard it blocks every PR in the repository, and rerunning cannot help."
+            echo ""
+            echo "Fix: pin the clock in the enclosing \`describe\` (\`vi.useFakeTimers().setSystemTime(\"…\")\` plus \`afterEach(() => vi.useRealTimers())\`), or make the fixture relative to now."
+            echo ""
+            echo '```'
+            cat time-bomb-report.txt
+            echo '```'
+            echo ""
+            echo "_Filed by .github/workflows/audit-time-bombs.yml — run ${{ github.run_id }}. Context: BI-6A4F47B9._"
+          } > "$BODY_FILE"
+          EXISTING=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file "$BODY_FILE"
+          else
+            gh issue create --title "$TITLE" --body-file "$BODY_FILE"
+          fi
+
+      - name: Fail the run when bombs are present
+        if: steps.detect.outputs.status == '1'
+        run: exit 1

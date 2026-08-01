@@ -47,6 +47,10 @@ export default defineConfig({
     // default and times out (~5.3s observed across mcp-tools-*.test.ts). Raise
     // the per-test budget so the cold import has headroom; real hangs still fail.
     testTimeout: 15_000,
+    // Time-bomb detection (BI-6A4F47B9). A strict no-op unless
+    // DPF_CLOCK_SHIFT_DAYS is set, so normal runs pay only the import. See the
+    // file header for why a static grep does not work here.
+    setupFiles: ["./vitest.clock-shift-setup.ts"],
     include: ["**/*.test.{ts,tsx}"],
     exclude: ["node_modules", ".next"],
     // Each test file gets its own worker process. Without forks, React 18's
