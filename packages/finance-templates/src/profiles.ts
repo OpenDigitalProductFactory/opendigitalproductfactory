@@ -1,70 +1,18 @@
 import type { BillingPatternProfile, FinancialProfile, LedgerModel } from "./types";
+import {
+  AD_HOC_INVOICE_PATTERN,
+  APPOINTMENT_CHECKOUT_PATTERN,
+  DONATION_PATTERN,
+  POINT_OF_SALE_PATTERN,
+  RECURRING_AGREEMENT_PATTERN,
+  RETAINER_PATTERN,
+  STATUTORY_FEES_PATTERN,
+  SUBSCRIPTION_PATTERN,
+  type FinancialProfileSeed,
+} from "./profile-contracts";
+import { AGRICULTURE_RANCHING_FINANCIAL_PROFILE } from "./agriculture-profile";
 
 // ─── Profile catalog ──────────────────────────────────────────────────────────
-
-type FinancialProfileSeed = Omit<FinancialProfile, "billingPatternProfile" | "recurringBillingEnabled"> & {
-  billingPatternProfile?: BillingPatternProfile;
-  recurringBillingEnabled?: boolean;
-};
-
-const POINT_OF_SALE_PATTERN: BillingPatternProfile = {
-  primaryPaymentPattern: "point-of-sale",
-  supportedPaymentPatterns: ["point-of-sale", "ad-hoc-invoice"],
-  invoiceExecutionMode: "manual",
-  recurringBillingApplicability: "optional",
-};
-
-const RECURRING_AGREEMENT_PATTERN: BillingPatternProfile = {
-  primaryPaymentPattern: "recurring-agreement",
-  supportedPaymentPatterns: ["recurring-agreement", "retainer", "project-milestone", "ad-hoc-invoice"],
-  invoiceExecutionMode: "prepared-not-prescribed",
-  recurringBillingApplicability: "required",
-};
-
-const APPOINTMENT_CHECKOUT_PATTERN: BillingPatternProfile = {
-  primaryPaymentPattern: "appointment-checkout",
-  supportedPaymentPatterns: ["appointment-checkout", "point-of-sale", "optional-package"],
-  invoiceExecutionMode: "manual",
-  recurringBillingApplicability: "optional",
-};
-
-const SUBSCRIPTION_PATTERN: BillingPatternProfile = {
-  primaryPaymentPattern: "subscription",
-  supportedPaymentPatterns: ["subscription", "ad-hoc-invoice"],
-  invoiceExecutionMode: "prepared-not-prescribed",
-  recurringBillingApplicability: "required",
-};
-
-const DONATION_PATTERN: BillingPatternProfile = {
-  primaryPaymentPattern: "donation",
-  supportedPaymentPatterns: ["donation", "subscription"],
-  invoiceExecutionMode: "manual",
-  recurringBillingApplicability: "recommended",
-};
-
-const AD_HOC_INVOICE_PATTERN: BillingPatternProfile = {
-  primaryPaymentPattern: "ad-hoc-invoice",
-  supportedPaymentPatterns: ["ad-hoc-invoice", "project-milestone"],
-  invoiceExecutionMode: "manual",
-  recurringBillingApplicability: "optional",
-};
-
-// Matches what `deriveBillingPatternProfile` produces for the
-// `account-based-fees` commercial model — a standing client account invoiced in
-// arrears off a rate card, rather than a charge taken at the point of work.
-const RETAINER_PATTERN: BillingPatternProfile = {
-  primaryPaymentPattern: "retainer",
-  supportedPaymentPatterns: ["retainer", "ad-hoc-invoice"],
-  invoiceExecutionMode: "prepared-not-prescribed",
-  recurringBillingApplicability: "recommended",
-};
-
-const STATUTORY_FEES_PATTERN: BillingPatternProfile = {
-  primaryPaymentPattern: "ad-hoc-invoice",
-  supportedPaymentPatterns: ["ad-hoc-invoice", "recurring-agreement"],
-  invoiceExecutionMode: "prepared-not-prescribed",
-  recurringBillingApplicability: "optional",
-};
 
 // ─── Ledger-model chart-of-accounts fragments ─────────────────────────────────
 // Named template fragments consumed by archetype financial profiles that declare
@@ -708,40 +656,7 @@ const PROFILES: Record<string, FinancialProfileSeed> = {
       { code: "5040", name: "Delivery & Route Costs", type: "expense" },
     ],
   },
-  agriculture_ranching: {
-    archetypeCategory: "agriculture-ranching",
-    displayName: "Agriculture & Ranching",
-    defaultPaymentTerms: "Due within 14 days",
-    defaultCurrency: "USD",
-    vatRegistered: false,
-    defaultTaxRate: 0,
-    dunningEnabled: true,
-    dunningStyle: "standard",
-    billingPatternProfile: AD_HOC_INVOICE_PATTERN,
-    invoiceTemplateStyle: "trade",
-    expenseCategories: [
-      "Feed Seed & Fertility",
-      "Veterinary Breeding & Farrier",
-      "Fuel Lubricants & Utilities",
-      "Equipment Repairs & Parts",
-      "Custom Operators & Hauling",
-      "Crop Protection & Application",
-      "Land Rent Tax & Insurance",
-      "Market Sale & Checkoff Costs",
-    ],
-    purchaseOrdersEnabled: true,
-    chartOfAccountsSeed: [
-      { code: "4000", name: "Livestock Sales", type: "revenue" },
-      { code: "4010", name: "Crop Hay & Forage Sales", type: "revenue" },
-      { code: "4020", name: "Grazing & Custom Service Revenue", type: "revenue" },
-      { code: "4030", name: "Breeding & Other Farm Revenue", type: "revenue" },
-      { code: "5000", name: "Feed Seed & Fertility", type: "expense" },
-      { code: "5010", name: "Veterinary Breeding & Farrier", type: "expense" },
-      { code: "5020", name: "Fuel Lubricants & Utilities", type: "expense" },
-      { code: "5030", name: "Equipment Repairs & Parts", type: "expense" },
-      { code: "5040", name: "Custom Operators & Hauling", type: "expense" },
-    ],
-  },
+  agriculture_ranching: AGRICULTURE_RANCHING_FINANCIAL_PROFILE,
 };
 
 // ─── Exported functions ───────────────────────────────────────────────────────

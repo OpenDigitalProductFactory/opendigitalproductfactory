@@ -36,6 +36,8 @@ Decision `DI-2DC225DEF0FF` selected the new category with high confidence (compo
 
 ## Design grounding
 
+Operational-Precedent: farmos-map
+
 ### Existing platform substrate
 
 Reuse these canonical owners:

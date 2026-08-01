@@ -5,6 +5,8 @@ import { resolveRouteContext, UNIVERSAL_SKILLS } from "@/lib/route-context-map";
 import { resolveSelectedCoworkerForRoute } from "./selected-coworker-route";
 import { CHANGE_REVIEWER_ROUTE_AGENT } from "./change-reviewer-route";
 import { PERFORMANCE_ROUTE_AGENT } from "./performance-route";
+import { AGRICULTURAL_OPERATIONS_ROUTE, AGRICULTURAL_OPERATIONS_ROUTE_AGENT } from "./agricultural-operations-route-agent";
+import { buildAgentNameMap } from "./agent-name-map";
 // prompt-loader is imported server-side only via agent-routing-server.ts.
 // This file stays free of @dpf/db for client component compatibility.
 
@@ -87,38 +89,7 @@ ON THIS PAGE: The user sees discovery operations with a review queue, subnet evi
  * what any single agent could provide.
  */
 const ROUTE_AGENT_MAP: Record<string, RouteAgentEntry> = {
-  "/coworker-decisions/craft/agricultural-operations": {
-    agentId: "farm-ranch-steward",
-    agentName: "Farm & Ranch Steward",
-    agentDescription:
-      "Seasonal land, crop, livestock, working-animal, equipment, vendor, weather, market, and regulatory operating coordination",
-    capability: "view_platform",
-    sensitivity: "confidential",
-    systemPrompt: `You are the Farm & Ranch Steward.
-
-PERSPECTIVE: You see the operation as interlocking biological, seasonal, geographic, equipment, labor, supplier, and market cycles. A recommendation is useful only when it is tied to the operator's location, production system, current records, forecast horizon, and authority boundary.
-
-HEURISTICS:
-- Work backward from weather-sensitive and biological deadlines.
-- Surface dependencies early: people, veterinarian, farrier, applicator, hay crew, dealer, parts, inputs, transport, and market windows.
-- Separate observed facts, forecasts, label or regulatory constraints, and operator judgment.
-- Prefer prevention and readiness checks over emergency response.
-- Treat each animal and machine as an individual record while showing herd, fleet, field, and property rollups.
-
-AUTHORITY: You may inspect, organize, forecast, remind, draft plans, and create internal work. You do not diagnose or treat animals, prescribe or authorize pesticides, give legal advice, place trades or sales, dispatch machinery, or contact an outside party without explicit human approval. Product labels, veterinarians, licensed applicators, extension services, agencies, and qualified mechanics remain authoritative in their domains.
-
-ON THIS PAGE: The user is reviewing the agricultural-operations profession corpus. Ground recommendations in the applicable archetype and jurisdiction pages, cite the page slug, and name missing local facts rather than filling them in.` ,
-    skills: [
-      { label: "Build seasonal plan", description: "Turn operating goals into a dependency-aware calendar", capability: "view_platform", prompt: "Build a seasonal operating plan from the applicable corpus. Separate fixed deadlines, forecast-dependent windows, service bookings, and decisions that require human approval." },
-      { label: "Readiness review", description: "Find animal, equipment, input, and vendor risks", capability: "view_platform", prompt: "Review readiness across livestock and working animals, equipment, materials, vendors, and upcoming weather-sensitive work. Show the highest-consequence gaps first." },
-      { label: "Decision brief", description: "Compare a sale, treatment, or timing decision", capability: "view_platform", prompt: "Prepare a decision brief using current records, forecast confidence, market evidence, regulations, and authority boundaries. Do not execute the decision." },
-      { label: "Report an issue", description: "Report a bug or give feedback", capability: null, prompt: "I'd like to report an issue or give feedback about this page." },
-    ],
-    modelRequirements: {
-      defaultMinimumTier: "strong",
-      defaultBudgetClass: "balanced",
-    },
-  },
+  [AGRICULTURAL_OPERATIONS_ROUTE]: AGRICULTURAL_OPERATIONS_ROUTE_AGENT,
   // AGT-906 (EP-UX-SYSTEM L6). Bound to the WSID craft surface rather than to an
   // owner route: this coworker's home is the profession corpus it curates, not
   // any one screen it critiques. Distinct from the HX UX Analyst
@@ -724,15 +695,7 @@ export { PLATFORM_PREAMBLE, FALLBACK_ENTRY };
 export const ROUTE_AGENT_MAP_ENTRIES = Object.entries(ROUTE_AGENT_MAP);
 
 /** Client-side mirror for rendering historical agent names synchronously. */
-export const AGENT_NAME_MAP: Record<string, string> = {
-  ...Object.fromEntries(Object.values(ROUTE_AGENT_MAP).map((e) => [e.agentId, e.agentName])),
-  coworker: "Coworker",
-  "marketing-specialist": "Marketing Strategist",
-  "storefront-advisor": "Storefront Operations Manager",
-  "doc-specialist": "Documentation Specialist",
-  "data-architect": "Data Architect",
-  "farm-ranch-steward": "Farm & Ranch Steward",
-};
+export const AGENT_NAME_MAP = buildAgentNameMap(Object.values(ROUTE_AGENT_MAP));
 
 /**
  * Resolve which specialist agent should handle the current route.
