@@ -947,8 +947,16 @@
           history.replaceState(null, "", `#ai-workforce-${view}`);
         });
       });
+      const platformDestinations = [
+        "/platform",
+        "/platform/identity",
+        "/platform/ai/coworkers",
+        "/platform/tools",
+        "/platform/audit",
+      ];
       platformSelect.addEventListener("change", () => {
-        window.location.assign(platformSelect.value);
+        const destination = platformDestinations[platformSelect.selectedIndex];
+        if (destination) window.location.assign(destination);
       });
       select.addEventListener("change", () => {
         show(select.value);
