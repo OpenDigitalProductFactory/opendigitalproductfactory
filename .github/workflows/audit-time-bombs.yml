@@ -58,7 +58,9 @@ jobs:
         with:
           node-version: 24
 
-      - uses: pnpm/action-setup@v4
+      # Pinned to a commit, not a tag: a mutable tag on a third-party action is a
+      # supply-chain hole (CodeQL `actions/unpinned-tag`). Same pin as mobile-ci.yml.
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
