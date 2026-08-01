@@ -34,8 +34,8 @@ export async function submitWorkItemComment(input: {
   | { ok: false; error: "unauthenticated" | "empty" | "forbidden" }
 > {
   const session = await auth();
-  const userId = session?.user?.id;
-  if (!userId) return { ok: false, error: "unauthenticated" };
+  if (!session?.user) return { ok: false, error: "unauthenticated" };
+  const userId = session.user.id;
 
   const body = input.body.trim();
   if (!body) return { ok: false, error: "empty" };

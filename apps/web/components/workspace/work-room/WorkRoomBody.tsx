@@ -17,6 +17,7 @@ import type {
 
 import {
   ACTIVITY_KIND_LABEL,
+  roomLabel,
 } from "./presentation";
 import { WorkRoomCycles } from "./WorkRoomCycles";
 import { WorkRoomParticipants } from "./WorkRoomParticipants";
