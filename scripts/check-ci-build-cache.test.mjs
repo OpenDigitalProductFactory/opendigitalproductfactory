@@ -17,10 +17,31 @@ function stepBlock(stepName) {
   return ciWorkflow.slice(start, next === -1 ? undefined : next);
 }
 
+function jobBlock(jobName, nextJobName) {
+  const start = ciWorkflow.indexOf(`  ${jobName}:`);
+  assert.notEqual(start, -1, `missing workflow job: ${jobName}`);
+
+  const next = ciWorkflow.indexOf(`\n  ${nextJobName}:`, start + 1);
+  assert.notEqual(next, -1, `missing workflow job after ${jobName}: ${nextJobName}`);
+  return ciWorkflow.slice(start, next);
+}
+
 test("Production Build Turbopack cache uses exact keys only", () => {
   const block = stepBlock("Cache Turbopack build cache");
 
   assert.match(block, /path:\s*\$\{\{\s*github\.workspace\s*\}\}\/apps\/web\/\.next\/cache/);
   assert.match(block, /key:\s*nextjs-/);
   assert.doesNotMatch(block, /\n\s+restore-keys:/);
+});
+
+test("Production Build is bounded and identifies timed-out evidence", () => {
+  const block = jobBlock("build", "ux-route-sweep-runtime");
+  const buildStep = stepBlock("Build web (Next.js production)");
+
+  assert.match(block, /\n\s{4}timeout-minutes:\s*20\s*\n/);
+  assert.match(buildStep, /production-build.*run=\$\{\{ github\.run_id \}\}/);
+  assert.match(buildStep, /tree=\$\{\{ github\.sha \}\}/);
+  assert.match(buildStep, /timeout=20m/);
+  assert.match(buildStep, /pnpm --filter web build/);
+  assert.doesNotMatch(buildStep, /continue-on-error:\s*true/);
 });
