@@ -6075,6 +6075,13 @@
     "longSentences": 0,
     "textMass": 73
   },
+  "apps/web/components/platform/ContextTraceHealthPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 19
+  },
   "apps/web/components/platform/ContributorMcpReadinessCard.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,

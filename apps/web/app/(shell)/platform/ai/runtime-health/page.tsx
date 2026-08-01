@@ -26,6 +26,11 @@ import {
   type CapabilityServiceHealthProjection,
 } from "@/lib/platform-runtime/service-health";
 import { loadCapabilityServiceHealth } from "@/lib/platform-runtime/service-health-loader";
+import { ContextTraceHealthPanel } from "@/components/platform/ContextTraceHealthPanel";
+import {
+  CONTEXT_TRACE_SAMPLE_SIZE,
+  loadContextTraceHealth,
+} from "@/lib/tak/context-trace-health-loader";
 
 export const dynamic = "force-dynamic";
 
@@ -130,12 +135,19 @@ export default async function RuntimeHealthPage() {
     return unavailableJobEngineHealth();
   });
 
-  const [overviewResult, capabilityResult, queueSnapshots, jobEngineHealth] = await Promise.all([
-    overviewPromise,
-    capabilityPromise,
-    queuePromise,
-    jobEnginePromise,
-  ]);
+  // Read-only and self-catching (loadContextTraceHealth returns an empty projection on
+  // failure), so it is safe to join here — unlike a loader that UPSERTS, which racing in
+  // Promise.all has produced unique-key 500s on this codebase before.
+  const contextTracePromise = loadContextTraceHealth();
+
+  const [overviewResult, capabilityResult, queueSnapshots, jobEngineHealth, contextTraceHealth] =
+    await Promise.all([
+      overviewPromise,
+      capabilityPromise,
+      queuePromise,
+      jobEnginePromise,
+      contextTracePromise,
+    ]);
   const overview: ModelSelectionOverview | null = overviewResult.value;
   const capabilityHealth: CapabilityServiceHealthProjection | null = capabilityResult.value;
   const loadError = overviewResult.unavailable;
@@ -438,6 +450,14 @@ export default async function RuntimeHealthPage() {
           </div>
         </>
       )}
+
+      {/* Deferred on purpose: this route sits at a frozen UX-budget baseline, and a
+          diagnostic table in the default view would (correctly) blow the ratchet. The
+          disclosure region is both counted and excised by lib/ux-budget. */}
+      <ContextTraceHealthPanel
+        health={contextTraceHealth}
+        sampleSize={CONTEXT_TRACE_SAMPLE_SIZE}
+      />
     </div>
   );
 }
