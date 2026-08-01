@@ -3980,7 +3980,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 12
+    "textMass": 22
   },
   "apps/web/components/build/EnableRunnerButton.tsx": {
     "vocabulary": 0,

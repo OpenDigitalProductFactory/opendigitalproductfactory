@@ -49,6 +49,8 @@ export type DetailsDrawerProps = {
 
 export function DetailsDrawer({ isOpen, onClose, sections }: DetailsDrawerProps) {
   const drawerRef = useRef<HTMLElement>(null);
+  const initialSectionButtonRef = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   // Track which sections are expanded. Re-seed from defaultOpen when sections
   // change (e.g. phase change reorders the default-open section).
   const initialOpen = useMemo(() => {
@@ -73,12 +75,7 @@ export function DetailsDrawer({ isOpen, onClose, sections }: DetailsDrawerProps)
 
     queueMicrotask(() => {
       if (cancelled) return;
-      const target = drawerRef.current?.querySelector<HTMLElement>(
-        '[data-open="true"] button[aria-expanded="true"]',
-      ) ?? drawerRef.current?.querySelector<HTMLElement>(
-        '[aria-label="Close details drawer"]',
-      );
-      target?.focus();
+      (initialSectionButtonRef.current ?? closeButtonRef.current)?.focus();
     });
 
     return () => {
@@ -126,6 +123,7 @@ export function DetailsDrawer({ isOpen, onClose, sections }: DetailsDrawerProps)
           Build details
         </h2>
         <button
+          ref={closeButtonRef}
           type="button"
           aria-label="Close details drawer"
           onClick={onClose}
@@ -155,6 +153,7 @@ export function DetailsDrawer({ isOpen, onClose, sections }: DetailsDrawerProps)
             >
               <h3 className="m-0">
                 <button
+                  ref={section.defaultOpen ? initialSectionButtonRef : undefined}
                   type="button"
                   id={headerId}
                   aria-expanded={open}
