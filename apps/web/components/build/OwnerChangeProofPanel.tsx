@@ -62,7 +62,7 @@ export function OwnerChangeProofPanel({
           <button
             type="button"
             onClick={onOpenProof}
-            className="inline-flex min-h-11 items-center gap-2 rounded-md bg-[var(--dpf-accent)] px-3 text-sm font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
+            className="inline-flex min-h-11 items-center gap-2 rounded-md bg-[var(--dpf-accent)] px-3 text-sm font-semibold text-[var(--dpf-on-accent,var(--dpf-surface-1))] transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]"
           >
             <FileCheck2 size={15} aria-hidden="true" />
             Review proof
