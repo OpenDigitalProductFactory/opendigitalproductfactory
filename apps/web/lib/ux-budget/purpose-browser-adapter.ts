@@ -59,7 +59,13 @@ export function capturePurposeEvidenceFromDom(): PurposeDomEvidence | null {
     if (labelledBy) {
       const label = labelledBy
         .split(/\s+/)
-        .map((id) => document.getElementById(id)?.textContent?.trim() ?? "")
+        .map((id) => {
+          const labelElement = document.getElementById(id);
+          if (!labelElement) return "";
+          return visible(labelElement)
+            ? visibleDescendantText(labelElement)
+            : labelElement.textContent?.trim() ?? "";
+        })
         .filter(Boolean)
         .join(" ");
       if (label) return label;
