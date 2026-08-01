@@ -4,17 +4,29 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Mocks
 // ---------------------------------------------------------------------------
 
-vi.mock("@dpf/db", () => ({
-  prisma: {
-    // Update-path dedup gate candidate fetch (lib/mdm/dedup-gate.ts).
-    $queryRaw: vi.fn().mockResolvedValue([]),
-    customerAccount: {
-      findMany: vi.fn(),
-      findUnique: vi.fn(),
-      update: vi.fn(),
+vi.mock("@dpf/db", () => {
+  // Update-path dedup gate candidate fetch (lib/mdm/dedup-gate.ts). The gate now
+  // runs the lookup inside runHeapForcedCandidateQuery, which opens a
+  // $transaction and sets heap-forcing GUCs first (BI-FEAEB715). The mock
+  // threads the same $queryRaw through the tx so the endpoint's dedup path still
+  // sees an empty candidate set instead of throwing on an undefined $transaction.
+  const $queryRaw = vi.fn().mockResolvedValue([]);
+  const $executeRawUnsafe = vi.fn().mockResolvedValue(0);
+  return {
+    prisma: {
+      $queryRaw,
+      $executeRawUnsafe,
+      $transaction: vi.fn(async (fn: (tx: unknown) => unknown) =>
+        fn({ $queryRaw, $executeRawUnsafe }),
+      ),
+      customerAccount: {
+        findMany: vi.fn(),
+        findUnique: vi.fn(),
+        update: vi.fn(),
+      },
     },
-  },
-}));
+  };
+});
 
 vi.mock("../../api/auth-middleware.js", () => ({
   authenticateRequest: vi.fn(),
