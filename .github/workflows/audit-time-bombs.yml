@@ -72,12 +72,21 @@ jobs:
       - name: Detect time bombs
         id: detect
         continue-on-error: true
+        # `workflow_dispatch` input is attacker-influenced text. It reaches the
+        # shell ONLY through env, never through `${{ }}` interpolation into the
+        # run block — that form is CWE-094 run-block injection, which the Actions
+        # Injection Audit correctly rejects.
+        env:
+          INPUT_DAYS: ${{ github.event.inputs.days }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -uo pipefail
-          DAYS="${{ github.event.inputs.days || '30,90,365' }}"
+          DAYS="${INPUT_DAYS:-30,90,365}"
           # On PRs to the detector itself, one near horizon is enough to prove it
           # runs; the scheduled job carries the full sweep.
-          if [ "${{ github.event_name }}" = "pull_request" ]; then DAYS="30"; fi
+          if [ "$EVENT_NAME" = "pull_request" ]; then DAYS="30"; fi
+          # The script itself validates --days and rejects anything non-numeric,
+          # so a hostile value fails the audit rather than reaching a shell.
           node scripts/detect-time-bombs.mjs --days "$DAYS" | tee time-bomb-report.txt
           echo "status=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
 
@@ -99,6 +108,7 @@ jobs:
         if: github.event_name == 'schedule' && steps.detect.outputs.status == '1'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
           TITLE="fix(test): time bomb(s) will block the fleet on a known date"
@@ -114,7 +124,7 @@ jobs:
             cat time-bomb-report.txt
             echo '```'
             echo ""
-            echo "_Filed by .github/workflows/audit-time-bombs.yml — run ${{ github.run_id }}. Context: BI-6A4F47B9._"
+            echo "_Filed by .github/workflows/audit-time-bombs.yml — run ${RUN_ID}. Context: BI-6A4F47B9._"
           } > "$BODY_FILE"
           EXISTING=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
           if [ -n "$EXISTING" ]; then
