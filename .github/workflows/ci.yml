@@ -437,6 +437,10 @@ jobs:
   build:
     name: Production Build
     runs-on: ubuntu-latest
+    # BI-57582F89. Recent healthy jobs (13 samples on 2026-08-01) had a
+    # 511-second p90 and 553-second max. Twice that p90 leaves ample variance
+    # while preventing a silent hosted-runner hang from holding the merge queue.
+    timeout-minutes: 20
     needs: [changes, exact-tree-evidence-shadow]
     if: >-
       always() &&
@@ -480,7 +484,9 @@ jobs:
         # gate only — the Docker release build does not set this env.
         env:
           DPF_TURBOPACK_BUILD_CACHE: "1"
-        run: pnpm --filter web build
+        run: |
+          echo "[production-build] run=${{ github.run_id }} attempt=${{ github.run_attempt }} tree=${{ github.sha }} timeout=20m command=pnpm --filter web build"
+          pnpm --filter web build
 
       # BI-959F4F38. PR and merge-group UX runs consume this exact-tree output
       # instead of compiling the same portal a second time. The receipt binds

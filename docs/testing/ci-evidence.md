@@ -210,7 +210,16 @@ starts the reusable UX runtime from the same change-classification edge so its
 fixture and browser setup overlap the build. After setup, the runtime waits
 only for the exact artifact name in its own Actions run and passes that build to
 the stable `UX Route Budget Sweep` check. The one-day artifact contains a
-versioned receipt and a compressed payload. The receipt binds the payload to:
+versioned receipt and a compressed payload.
+
+The job has a 20-minute upper bound. A 2026-08-01 sample of 13 successful jobs
+measured a 511-second p90 and a 553-second maximum, so the bound is more than
+twice the observed p90 while remaining finite. Before compilation starts, the
+job logs its Actions run, attempt, immutable tree SHA, timeout, and canonical
+build command. A timeout remains red and does not retry or weaken the required
+check; it prevents a silent hosted-runner stall from holding the merge queue.
+
+The receipt binds the payload to:
 
 - repository, commit SHA, and immutable Git tree SHA;
 - GitHub event, source run/attempt, and CI evidence-planner digest;
