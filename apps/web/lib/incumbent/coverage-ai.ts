@@ -11,7 +11,12 @@
 // real routeAndCall. Correct over an empty set — 0 gap incumbents → 0 AI calls.
 
 import type { PrismaClient } from "@dpf/db";
-import { ABSORPTION_VERDICTS, assessmentIdFor } from "@dpf/db";
+// Import from NARROW, client-free subpaths — not the root @dpf/db barrel. The
+// barrel pulls client-dependent modules whose init can fail in the test/edge
+// env, leaving later barrel exports undefined; these two pure modules load
+// cleanly on their own.
+import { ABSORPTION_VERDICTS } from "@dpf/db/portfolio-sources/absorption-posture";
+import { assessmentIdFor } from "@dpf/db/portfolio-sources/incumbent-coverage";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 
 export interface AiVerdictProposal {
@@ -122,10 +127,15 @@ type RouteAndCall = (
   options?: unknown,
 ) => Promise<{ content?: string; text?: string }>;
 
-const AI_SYSTEM_PROMPT =
-  "You classify how a business platform (DPF) should treat a third-party application a customer runs today. " +
-  `Reply ONLY with JSON: {"verdict": one of ${ABSORPTION_VERDICTS.join("|")}, "reason": short justification}. ` +
-  "Default conservatively to provider_led or gap when unsure — never overstate that DPF natively replaces the app.";
+// Built lazily (inside the adapter) so module load never evaluates
+// ABSORPTION_VERDICTS at top level.
+function aiSystemPrompt(): string {
+  return (
+    "You classify how a business platform (DPF) should treat a third-party application a customer runs today. " +
+    `Reply ONLY with JSON: {"verdict": one of ${ABSORPTION_VERDICTS.join("|")}, "reason": short justification}. ` +
+    "Default conservatively to provider_led or gap when unsure — never overstate that DPF natively replaces the app."
+  );
+}
 
 /** Adapter turning routeAndCall into a CoverageProposer. Kept thin — the stage
  *  logic + parsing are the tested parts; this only builds the prompt and reads
@@ -133,7 +143,7 @@ const AI_SYSTEM_PROMPT =
 export function routedInferenceProposer(routeAndCall: RouteAndCall): CoverageProposer {
   return async (incumbent) => {
     const user = `Application: ${incumbent.name}${incumbent.vendor ? ` (vendor: ${incumbent.vendor})` : ""}.`;
-    const res = await routeAndCall([{ role: "user", content: user }], AI_SYSTEM_PROMPT, "internal");
+    const res = await routeAndCall([{ role: "user", content: user }], aiSystemPrompt(), "internal");
     const text = res.content ?? res.text ?? "";
     return parseAiVerdict(text);
   };
