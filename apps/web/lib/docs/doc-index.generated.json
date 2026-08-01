@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 609,
+  "pageCount": 610,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1665,6 +1665,7 @@
       "publishedPortal": false,
       "anchors": [
         "work-room-participation-and-channel-continuity",
+        "design-grounding",
         "authorization-boundary",
         "participant-projection",
         "external-channel-continuity"
