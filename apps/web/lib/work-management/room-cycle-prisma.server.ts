@@ -50,7 +50,25 @@ function txAdapter(tx: Prisma.TransactionClient): WorkRoomCycleStoreTx {
       select: { messageId: true, messageType: true, structuredPayload: true },
       orderBy: [{ createdAt: "asc" }, { messageId: "asc" }],
     }),
-    createCycle: (data) => tx.workItem.create({ data: data as never }),
+    findWorkItemBySource: (sourceType, sourceId) => tx.workItem.findFirst({
+      where: { sourceType, sourceId },
+      select: {
+        id: true,
+        itemId: true,
+        sourceType: true,
+        sourceId: true,
+        title: true,
+        description: true,
+        status: true,
+        assignedToUserId: true,
+        assignedToAgentId: true,
+        dueAt: true,
+        evidence: true,
+        createdAt: true,
+        completedAt: true,
+      },
+    }),
+    createWorkItem: (data) => tx.workItem.create({ data: data as never }),
     completeCycle: async (id, completedAt) => {
       await tx.workItem.update({
         where: { id },

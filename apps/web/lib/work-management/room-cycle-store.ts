@@ -39,7 +39,8 @@ export interface WorkRoomCycleStoreTx {
   getRoom(workItemId: string): Promise<WorkRoomCycleParentRecord | null>;
   listCycles(workItemId: string): Promise<WorkRoomCycleWorkItemRecord[]>;
   listMessages(workItemId: string): Promise<WorkRoomCycleStoreMessage[]>;
-  createCycle(data: Record<string, unknown>): Promise<WorkRoomCycleWorkItemRecord>;
+  findWorkItemBySource(sourceType: string, sourceId: string): Promise<WorkRoomCycleWorkItemRecord | null>;
+  createWorkItem(data: Record<string, unknown>): Promise<WorkRoomCycleWorkItemRecord>;
   completeCycle(itemId: string, completedAt: Date): Promise<void>;
   appendMessage(data: Record<string, unknown>): Promise<{ messageId: string }>;
 }
@@ -175,7 +176,7 @@ export async function openWorkRoomCycle(input: OpenWorkRoomCycleInput): Promise<
       sourceRefs: [{ kind: "work-item", id: room.itemId, sourceType: room.sourceType }],
     });
 
-    const cycle = await tx.createCycle({
+    const cycle = await tx.createWorkItem({
       sourceType: room.sourceType,
       sourceId: room.sourceId ?? room.itemId,
       title: `${room.title} — ${input.cycleKey}`,
@@ -209,6 +210,77 @@ export async function openWorkRoomCycle(input: OpenWorkRoomCycleInput): Promise<
       channel: "in-app",
     });
     return { cycle, messageId: message.messageId, idempotent: false };
+  });
+}
+
+export async function applyWorkRoomCarryOver(input: {
+  db: WorkRoomCycleStoreDb;
+  roomWorkItemId: string;
+  commands: readonly import("./room-cycle").WorkRoomCarryOverCommand[];
+  actor: OpenWorkRoomCycleInput["actor"];
+}): Promise<{ createdItemIds: string[]; reusedItemIds: string[] }> {
+  return input.db.withinRoomLock(input.roomWorkItemId, async (tx) => {
+    const room = await tx.getRoom(input.roomWorkItemId);
+    if (!room) throw new WorkRoomCycleStoreError("room_not_found", "Work Room was not found.");
+    const cycles = await tx.listCycles(room.id);
+    const createdItemIds: string[] = [];
+    const reusedItemIds: string[] = [];
+
+    for (const command of input.commands) {
+      const existing = await tx.findWorkItemBySource("work-room-carry-over", command.idempotencyKey);
+      if (existing) {
+        reusedItemIds.push(existing.itemId);
+        continue;
+      }
+      const target = command.kind === "attach-to-cycle"
+        ? cycles.find((cycle) => parseStoredWorkRoomCycle(cycle.evidence)?.cycleKey === command.targetCycleKey)
+        : null;
+      if (command.kind === "attach-to-cycle" && !target) {
+        throw new WorkRoomCycleStoreError("cycle_not_found", `Target cycle '${command.targetCycleKey}' was not found.`);
+      }
+      const item = await tx.createWorkItem({
+        sourceType: "work-room-carry-over",
+        sourceId: command.idempotencyKey,
+        title: command.summary,
+        description: `Unresolved work from ${room.title}.`,
+        urgency: room.urgency,
+        effortClass: room.effortClass,
+        workerConstraint: room.workerConstraint,
+        teamId: room.teamId,
+        queueId: room.queueId,
+        status: "queued",
+        assignedToUserId: null,
+        assignedToAgentId: null,
+        evidence: {
+          workRoomCarryOver: {
+            version: 1,
+            roomItemId: room.itemId,
+            ownerRef: command.ownerRef,
+            targetCycleKey: command.targetCycleKey,
+          },
+        },
+        parentItemId: target?.id ?? null,
+      });
+      createdItemIds.push(item.itemId);
+      await tx.appendMessage({
+        workItemId: room.id,
+        ...actorData(input.actor),
+        messageType: "work-room-cycle-carried-over",
+        body: command.kind === "attach-to-cycle"
+          ? `Carried '${command.summary}' into cycle ${command.targetCycleKey}.`
+          : `Created a new case for '${command.summary}'.`,
+        structuredPayload: lifecycleReceipt({
+          operation: "carry-over",
+          cycleKey: command.targetCycleKey ?? "new-case",
+          carrierId: item.itemId,
+          idempotencyKey: command.idempotencyKey,
+          enforcementMode: "governed-action",
+          receiptKind: "governed-action",
+        }),
+        channel: "in-app",
+      });
+    }
+    return { createdItemIds, reusedItemIds };
   });
 }
 

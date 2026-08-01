@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { buildWorkRoomOutcomePacket } from "./outcome-packet";
 import {
   completeWorkRoomCycle,
+  applyWorkRoomCarryOver,
   openWorkRoomCycle,
   WorkRoomCycleStoreError,
   type WorkRoomCycleParentRecord,
@@ -36,7 +37,10 @@ function harness() {
       getRoom: async () => room,
       listCycles: async () => cycles,
       listMessages: async () => messages,
-      createCycle: async (data) => {
+      findWorkItemBySource: async (sourceType, sourceId) => cycles.find(
+        (entry) => entry.sourceType === sourceType && entry.sourceId === sourceId,
+      ) ?? null,
+      createWorkItem: async (data) => {
         const cycle = {
           id: `cycle-row-${next}`,
           itemId: `WI-CYCLE-${next++}`,
@@ -164,5 +168,34 @@ describe("Work Room cycle store", () => {
     });
     expect((await completeWorkRoomCycle(input)).idempotent).toBe(true);
     expect(state.messages).toHaveLength(2);
+  });
+
+  it("creates carry-over work once and attaches it to the target cycle", async () => {
+    const state = harness();
+    await openWorkRoomCycle(openInput(state.db, "2026-W32"));
+    const commands = [{
+      kind: "attach-to-cycle" as const,
+      summary: "Recheck late payment",
+      ownerRef: "prn-finance-owner",
+      targetCycleKey: "2026-W32",
+      idempotencyKey: "carry:late-payment",
+    }];
+
+    const first = await applyWorkRoomCarryOver({
+      db: state.db,
+      roomWorkItemId: room.id,
+      commands,
+      actor: { type: "user", id: "user-finance" },
+    });
+    const second = await applyWorkRoomCarryOver({
+      db: state.db,
+      roomWorkItemId: room.id,
+      commands,
+      actor: { type: "user", id: "user-finance" },
+    });
+
+    expect(first.createdItemIds).toHaveLength(1);
+    expect(second).toEqual({ createdItemIds: [], reusedItemIds: first.createdItemIds });
+    expect(state.messages.at(-1)?.messageType).toBe("work-room-cycle-carried-over");
   });
 });
