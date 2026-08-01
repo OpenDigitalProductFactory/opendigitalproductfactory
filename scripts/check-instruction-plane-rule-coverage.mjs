@@ -127,6 +127,44 @@ export function resolveAnchor(target, fromFile = "") {
 }
 
 /**
+ * Do two rule lead-ins state the same rule, or two different rules under one principle?
+ *
+ * Deliberately crude and deliberately CONSERVATIVE: this drives an advisory, and a false
+ * positive here is what teaches people to delete anchors.
+ *
+ * Similarity is JACCARD (shared ÷ union), not shared-over-shorter. A min-based ratio
+ * rewards short labels: "Single source of truth." has three significant words, so merely
+ * sharing "single" and "source" with "Coworker capability filtering is single-source"
+ * cleared a 60% min-ratio — flagging two genuinely different rules. Jaccard scores that
+ * pair 2/6 and stays quiet, while "All changes land via PR against main" vs "All changes
+ * must land via a PR against main" scores 1.0 and is caught.
+ */
+export function labelsRestateEachOther(a, b) {
+  const words = (s) =>
+    new Set(
+      String(s)
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .split(/\s+/)
+        .filter((w) => w.length > 2 && !STOP_WORDS.has(w)),
+    );
+  const wa = words(a);
+  const wb = words(b);
+  if (wa.size === 0 || wb.size === 0) return false;
+  let shared = 0;
+  for (const w of wa) if (wb.has(w)) shared += 1;
+  if (shared < 2) return false;
+  const union = wa.size + wb.size - shared;
+  return shared / union >= 0.6;
+}
+
+const STOP_WORDS = new Set([
+  "the", "and", "for", "not", "but", "with", "from", "into", "via", "per", "its",
+  "that", "this", "than", "then", "when", "what", "each", "any", "all", "one",
+  "are", "was", "has", "have", "been", "must", "only", "your", "you", "before",
+]);
+
+/**
  * Every rule anchor referenced by a doc, with the label of the line that carries it.
  * Returns `Array<{ anchor, label, line }>` — one entry per OCCURRENCE, so a rule linked
  * twice yields two entries (the duplicate signal below depends on that). `fromFile` is
@@ -151,6 +189,43 @@ export function ruleAnchors(text, anchorRe = DEFAULT_ANCHOR_RE, fromFile = "") {
 }
 
 /** Union of anchors referenced anywhere in a set of `path -> text` entries. */
+/**
+ * Source files that READ an always-on doc from disk and assert on its content.
+ *
+ * WHY THIS EXISTS
+ * This guard keys rule identity on the kernel-principle anchor. Some rules are pinned by
+ * a CODE ASSERTION instead, and those are invisible to it. Phase 1 relocated the
+ * `principle_decide` cost-axis sign rule ("on the five cost axes, higher is worse") into
+ * a runbook; the anchor check stayed green, and `dimension-catalog.test.ts` — which parses
+ * AGENTS.md and cross-checks the axis names against the code registry — went red in CI.
+ * The test was right: that is a rule, and the cut had quietly demoted it to procedure.
+ *
+ * We cannot infer which prose a test depends on. What we CAN do is keep the set of such
+ * couplings known, so whoever relocates doctrine next knows which tests to run. A reader
+ * missing from `manifest.contentAssertions` is reported, so the set cannot grow silently.
+ *
+ * The pattern is deliberately narrow — a read call whose own argument names the doc.
+ * Matching "mentions AGENTS.md anywhere" would flag ~20 files that only cite it in a
+ * comment, and a noisy signal is one people learn to ignore.
+ */
+export function contentAssertionReaders(files, readText, alwaysOn) {
+  const names = alwaysOn.map((f) => f.split("/").pop());
+  const found = [];
+  for (const file of files) {
+    const text = readText(file);
+    if (text == null) continue;
+    for (const name of names) {
+      const esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const re = new RegExp(`(readFileSync|readFile|new URL)\\s*\\([^)]*${esc}`);
+      if (re.test(text)) {
+        found.push({ file, doc: name });
+        break;
+      }
+    }
+  }
+  return found;
+}
+
 export function anchorsIn(fileTexts, anchorRe) {
   const set = new Set();
   for (const [file, text] of Object.entries(fileTexts)) {
@@ -176,6 +251,7 @@ export function evaluateRuleCoverage({
   targetExists = () => true,
   anchorRe = DEFAULT_ANCHOR_RE,
   strict = false,
+  contentAssertions = { registered: [], unregistered: [] },
 }) {
   const errors = [];
   const warnings = [];
@@ -203,28 +279,60 @@ export function evaluateRuleCoverage({
     }
   }
 
-  // 3. Duplicate anchor (ADVISORY) — the same rule linked from two places in always-on
-  //    prose is the SSOT drift shape this BI's Problem 2 describes. Advisory because the
-  //    pre-split file already has instances and fixing them is Phase 1 work.
+  // 3. RESTATED rule (ADVISORY) — the SSOT drift shape this BI's Problem 2 describes.
+  //
+  //    An earlier version flagged any anchor cited twice, which was wrong. One kernel
+  //    principle legitimately governs several DISTINCT rules: `single-source-of-truth`
+  //    backs both "each rule in exactly one place" and "coworker capability filtering is
+  //    single-source"; `never-fabricate` backs both itself and "report outcomes
+  //    faithfully". All four "duplicates" in the post-Phase-1 plane were of that kind —
+  //    zero were real. Deleting anchors to silence the advisory would have cut
+  //    discoverability to satisfy a mis-specified check, which is the failure mode this
+  //    guard exists to prevent, not cause.
+  //
+  //    The real defect is the SAME rule restated: same anchor AND a materially similar
+  //    lead-in label. Distinct labels under one principle are normal and stay quiet.
   for (const [file, text] of Object.entries(alwaysOnTexts)) {
     if (text == null) continue;
     const seen = new Map();
-    for (const { anchor, line } of ruleAnchors(text, anchorRe, file)) {
+    for (const { anchor, label, line } of ruleAnchors(text, anchorRe, file)) {
       if (!seen.has(anchor)) seen.set(anchor, []);
-      seen.get(anchor).push(line);
+      seen.get(anchor).push({ label, line });
     }
-    for (const [anchor, lines] of [...seen.entries()].sort()) {
-      if (lines.length < 2) continue;
-      const msg = `${file} links rule anchor "${anchor}" ${lines.length}× (lines ${lines.join(", ")}) — state a rule once, per single-source-of-truth`;
+    for (const [anchor, hits] of [...seen.entries()].sort()) {
+      if (hits.length < 2) continue;
+      const restated = hits.filter((h, i) =>
+        hits.some((other, j) => j !== i && labelsRestateEachOther(h.label, other.label)),
+      );
+      if (restated.length < 2) continue;
+      const lines = restated.map((h) => h.line).join(", ");
+      const msg =
+        `${file} restates the same rule for anchor "${anchor}" at lines ${lines} ` +
+        `(“${restated[0].label}” / “${restated[1].label}”) — state a rule once, per single-source-of-truth`;
       (strict ? errors : warnings).push(msg);
     }
+  }
+
+  // 3b. Content assertions — rules pinned by code, which section 1 structurally cannot see.
+  for (const reader of contentAssertions.unregistered) {
+    warnings.push(
+      `${reader.file} reads ${reader.doc} and asserts on its content, but is not in ` +
+        `manifest.contentAssertions — register it so a future relocation knows to run it`,
+    );
   }
 
   // 4. Net-new anchors are NOT an error — adding a rule is always allowed. Reported so an
   //    intentional addition shows up in the run and lands in the baseline on --update.
   const added = [...inPlane].filter((a) => !baseline.has(a)).sort();
 
-  return { errors, warnings, added, planCount: inPlane.size, baselineCount: baseline.size };
+  return {
+    errors,
+    warnings,
+    added,
+    planCount: inPlane.size,
+    baselineCount: baseline.size,
+    contentAssertionCount: contentAssertions.registered.length,
+  };
 }
 
 function loadManifest() {
@@ -283,13 +391,35 @@ function main() {
   }
 
   const destinationTexts = readTexts(destinationPaths(manifest));
-  const { errors, warnings, added, planCount, baselineCount } = evaluateRuleCoverage({
+
+  const scanGlobs = Array.isArray(manifest.contentAssertionScan) ? manifest.contentAssertionScan : [];
+  const scanned = [...new Set(scanGlobs.flatMap((g) => globSync(g, { cwd: REPO_ROOT })))]
+    .map((f) => f.replace(/\\/g, "/"))
+    .sort();
+  const registered = new Set(manifest.contentAssertions ?? []);
+  const readers = contentAssertionReaders(
+    scanned,
+    (f) => {
+      try {
+        return readFileSync(join(REPO_ROOT, f), "utf8");
+      } catch {
+        return null;
+      }
+    },
+    manifest.alwaysOn,
+  );
+  const contentAssertions = {
+    registered: readers.filter((r) => registered.has(r.file)),
+    unregistered: readers.filter((r) => !registered.has(r.file)),
+  };
+  const { errors, warnings, added, planCount, baselineCount, contentAssertionCount } = evaluateRuleCoverage({
     baseline,
     alwaysOnTexts,
     destinationTexts,
     targetExists: (p) => existsSync(join(REPO_ROOT, p)),
     anchorRe,
     strict: process.argv.includes("--strict"),
+    contentAssertions,
   });
 
   for (const w of warnings) console.warn(`  [advisory] ${w}`);
@@ -311,7 +441,7 @@ function main() {
 
   console.log(
     `Instruction-plane rule coverage OK — ${planCount} rule anchors reachable ` +
-      `(baseline ${baselineCount})` +
+      `(baseline ${baselineCount}; ${contentAssertionCount} code assertion(s) also pin doctrine — run them when relocating)` +
       (warnings.length ? `. ${warnings.length} advisory duplicate(s).` : "."),
   );
 }
