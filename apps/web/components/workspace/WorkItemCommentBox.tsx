@@ -9,11 +9,9 @@ import { submitWorkItemComment } from "@/lib/work-management/submit-work-item-co
 
 export function WorkItemCommentBox({
   workItemId,
-  workItemTitle,
   caseKey,
 }: {
   workItemId: string;
-  workItemTitle: string;
   caseKey: string;
 }) {
   const [body, setBody] = useState("");
@@ -24,7 +22,7 @@ export function WorkItemCommentBox({
     const text = body.trim();
     if (!text) return;
     startTransition(async () => {
-      const result = await submitWorkItemComment({ workItemId, workItemTitle, caseKey, body: text });
+      const result = await submitWorkItemComment({ workItemId, caseKey, body: text });
       if (result.ok) {
         setBody("");
         const notified = result.notifiedUserIds.length + result.mentionedAgentIds.length;

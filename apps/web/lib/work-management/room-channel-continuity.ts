@@ -4,6 +4,10 @@ export type CanonicalWorkRoomRef = {
   workItemId: string;
 };
 
+export function buildCanonicalWorkRoomMetadata(room: CanonicalWorkRoomRef) {
+  return { workRoom: room };
+}
+
 export function buildRoomChannelEnvelope(input: {
   room: CanonicalWorkRoomRef;
   portalOrigin: string;
@@ -13,7 +17,7 @@ export function buildRoomChannelEnvelope(input: {
   return {
     summary: input.summary,
     deepLink: `${origin}/workspace/cases/${input.room.caseKey}`,
-    metadata: { workRoom: input.room },
+    metadata: buildCanonicalWorkRoomMetadata(input.room),
   };
 }
 

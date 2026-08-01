@@ -236,7 +236,7 @@ export function WorkRoomBody({ detail, room }: Props) {
           ) : null}
 
           <div className="border-t border-[var(--dpf-border)] p-4">
-            <WorkItemCommentBox workItemId={detail.workItemId} workItemTitle={detail.workItemTitle} caseKey={room.roomKey} />
+            <WorkItemCommentBox workItemId={detail.workItemId} caseKey={room.roomKey} />
           </div>
         </section>
 

@@ -1,5 +1,6 @@
 import { encodeWorkCaseKey } from "./workspace-case-loader";
 import {
+  buildCanonicalWorkRoomMetadata,
   normalizeInboundRoomEvent,
   type NormalizedInboundRoomEvent,
 } from "./room-channel-continuity";
@@ -122,7 +123,7 @@ export async function ingestWorkRoomChannelEvent(input: {
       structuredPayload: {
         externalEventId: eventId,
         principalRef: normalized.principalRef,
-        workRoom: normalized.room,
+        ...buildCanonicalWorkRoomMetadata(normalized.room),
         requestedAction: normalized.requestedAction,
       },
       channel: input.channelType,

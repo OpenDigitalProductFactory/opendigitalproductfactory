@@ -26,7 +26,6 @@ const commentDb: PostCommentDb = {
 
 export async function submitWorkItemComment(input: {
   workItemId: string;
-  workItemTitle: string;
   caseKey: string;
   body: string;
 }): Promise<
@@ -50,6 +49,7 @@ export async function submitWorkItemComment(input: {
       select: {
         id: true,
         itemId: true,
+        title: true,
         sourceType: true,
         sourceId: true,
         assignedToUserId: true,
@@ -104,7 +104,7 @@ export async function submitWorkItemComment(input: {
   const result = await postWorkItemComment({
     db: commentDb,
     workItemId: input.workItemId,
-    workItemTitle: input.workItemTitle,
+    workItemTitle: item.title,
     roomRef: {
       caseKey: canonicalCaseKey,
       caseId: `${item.sourceType}:${canonicalSourceId}`,
