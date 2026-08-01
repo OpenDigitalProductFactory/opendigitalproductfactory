@@ -90,6 +90,14 @@ function database() {
 }
 
 describe("issueCareIntakeResumeGrant", () => {
+  // Pin the clock, exactly as every other describe in this file does. Without
+  // it these cases ran against the REAL clock while asserting on a hardcoded
+  // `expiresAt` of 2026-08-01T15:00Z, and `issueCareIntakeResumeGrant` rejects
+  // an expiry that is not in the future. At 15:00Z on 2026-08-01 that literal
+  // became the past and the block began failing on every branch at once — a
+  // time bomb, not a regression from any change.
+  beforeEach(() => vi.useFakeTimers().setSystemTime("2026-08-01T14:00:00.000Z"));
+
   it("issues the raw token once only after an allow decision", async () => {
     const { db, tx } = database();
     const result = await issueCareIntakeResumeGrant(
