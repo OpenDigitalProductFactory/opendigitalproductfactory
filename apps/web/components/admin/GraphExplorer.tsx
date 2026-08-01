@@ -13,6 +13,7 @@
 // them.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { RelationshipGraph, type GraphLegendEntry } from "@/components/inventory/RelationshipGraph";
 import {
   findGraphNodes,
@@ -231,12 +232,40 @@ export function GraphExplorer({ census }: Props) {
     setDepth(1);
   }
 
+  const purposeState =
+    census.nodeTotal === 0
+      ? "empty-corpus"
+      : seedKeys.length === 0
+        ? "no-starting-point"
+        : "neighbourhood-drawn";
+
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-4" data-component="graph-explorer">
+    <div
+      className="space-y-4"
+      data-component="graph-explorer"
+      data-dpf-purpose-route="/admin/graph-explorer"
+      data-dpf-purpose-state={purposeState}
+    >
+      <div className="mb-6" data-dpf-lead>
+        <h1 className="text-xl font-bold text-[var(--dpf-text)]">Graph Explorer</h1>
+        <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
+          See how the parts of the platform link up. Search for a starting point. Then follow its
+          links.
+        </p>
+      </div>
+
+      <AdminTabNav />
+
       {/* Corpus census — what the platform knows about itself, at a glance. */}
-      <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+      <section
+        className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
+        data-dpf-purpose-key="corpus-census"
+        data-dpf-purpose-completion-signal-key={
+          purposeState === "empty-corpus" ? "graph-corpus-empty" : undefined
+        }
+      >
         <div className="flex items-baseline justify-between gap-3 flex-wrap mb-3">
           <h2 className="text-xs font-semibold uppercase tracking-widest text-[var(--dpf-muted)]">
             In the graph
@@ -245,7 +274,10 @@ export function GraphExplorer({ census }: Props) {
             {census.nodeTotal.toLocaleString()} nodes · {census.edgeTotal.toLocaleString()} links
           </p>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <div
+          className="grid grid-cols-2 sm:grid-cols-5 gap-3"
+          data-dpf-purpose-key="domain-filter"
+        >
           {GRAPH_DOMAINS.map((domain) => {
             const count = domainCounts.get(domain.key) ?? 0;
             const active = activeDomains.has(domain.key);
@@ -279,8 +311,32 @@ export function GraphExplorer({ census }: Props) {
         </p>
       </section>
 
+      {purposeState === "empty-corpus" && (
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 border border-[var(--dpf-border)] px-3 py-2"
+          data-dpf-purpose-message-key="graph-explorer.empty-corpus"
+        >
+          <p className="text-xs text-[var(--dpf-muted)]">
+            The graph is empty. Populate the platform mirror before exploring relationships.
+          </p>
+          <a
+            href="/admin/platform-development"
+            className="text-xs text-[var(--dpf-accent)] underline"
+            data-dpf-purpose-action-key="open-platform-development"
+            data-dpf-purpose-recovery-action
+            data-dpf-purpose-recovery-signal
+            data-dpf-purpose-correction-signal-key="graph-population-recovery"
+          >
+            Open Platform Development
+          </a>
+        </div>
+      )}
+
       {/* Search — the entry point. Nothing renders until the operator picks a node. */}
-      <section className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+      <section
+        className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
+        data-dpf-purpose-key="search-field"
+      >
         <div className="flex items-end gap-2 flex-wrap">
           <div className="flex-1 min-w-[240px]">
             <label
@@ -305,7 +361,7 @@ export function GraphExplorer({ census }: Props) {
             />
           </div>
 
-          <div>
+          <div data-dpf-purpose-key="hop-depth">
             <span className="block text-dpf-caption text-[var(--dpf-muted)] mb-1">Hops</span>
             <div className="flex items-center gap-1">
               {[1, 2, 3].map((h) => (
@@ -333,31 +389,44 @@ export function GraphExplorer({ census }: Props) {
           <button
             type="button"
             onClick={() => void runSearch()}
-            disabled={searching || !query.trim()}
+            disabled={searching}
             data-dpf-primary-action
             data-owner-first-next-action="graph-explorer-search"
+            data-dpf-purpose-action-key="search-graph"
             className="px-3 py-2 text-xs rounded-md bg-[var(--dpf-accent)] text-white disabled:opacity-50"
           >
             {searching ? "Searching…" : "Search"}
           </button>
 
-          <button
-            type="button"
-            onClick={reset}
+          <a
+            href="/admin/graph-explorer"
+            onClick={(event) => {
+              event.preventDefault();
+              reset();
+            }}
+            data-dpf-purpose-action-key="reset-explorer"
+            data-dpf-purpose-recovery-action={purposeState !== "empty-corpus" || undefined}
+            data-dpf-purpose-recovery-signal={purposeState !== "empty-corpus" || undefined}
             className="px-3 py-2 text-xs rounded-md border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
           >
             Reset
-          </button>
+          </a>
         </div>
 
         {searched && results.length === 0 && !searching && (
-          <p className="text-xs text-[var(--dpf-muted)] mt-3">
+          <p
+            className="text-xs text-[var(--dpf-muted)] mt-3"
+            data-dpf-purpose-correction-signal-key="graph-search-correction"
+          >
             Nothing matched “{query.trim()}”. Try a shorter word, or clear the type filter.
           </p>
         )}
 
         {results.length > 0 && (
-          <ul className="mt-3 max-h-56 overflow-y-auto divide-y divide-[var(--dpf-border)] rounded-md border border-[var(--dpf-border)]">
+          <ul
+            className="mt-3 max-h-56 overflow-y-auto divide-y divide-[var(--dpf-border)] rounded-md border border-[var(--dpf-border)]"
+            data-dpf-purpose-completion-signal-key="graph-search-results-visible"
+          >
             {results.map((node) => {
               const descriptor = describeNodeLabels(node.labels);
               return (
@@ -389,17 +458,24 @@ export function GraphExplorer({ census }: Props) {
         )}
 
         {/* Advanced: the raw label and relationship facets, with live counts. */}
-        <button
-          type="button"
-          onClick={() => setShowAdvanced((v) => !v)}
-          aria-expanded={showAdvanced}
-          className="mt-3 text-dpf-caption text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
-        >
-          {showAdvanced ? "Hide more filters" : "More filters"}
-        </button>
+        <div data-dpf-purpose-disclosure-key="advanced-filters">
+          <button
+            type="button"
+            onClick={() => setShowAdvanced((v) => !v)}
+            aria-expanded={showAdvanced}
+            aria-controls="graph-explorer-advanced-filters"
+            data-dpf-purpose-disclosure-trigger
+            className="mt-3 text-dpf-caption text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+          >
+            {showAdvanced ? "Hide more filters" : "More filters"}
+          </button>
 
-        {showAdvanced && (
-          <div className="mt-3 space-y-3">
+          <div
+            id="graph-explorer-advanced-filters"
+            hidden={!showAdvanced}
+            data-dpf-purpose-disclosure-region
+            className="mt-3 space-y-3"
+          >
             <div>
               <p className="text-dpf-caption text-[var(--dpf-muted)] mb-1">Node types</p>
               <div className="flex flex-wrap gap-1">
@@ -447,7 +523,7 @@ export function GraphExplorer({ census }: Props) {
               </div>
             </div>
           </div>
-        )}
+        </div>
       </section>
 
       {error && (
@@ -457,14 +533,24 @@ export function GraphExplorer({ census }: Props) {
       )}
 
       {subgraph.notice && (
-        <p className="text-xs text-[var(--dpf-muted)] rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2">
+        <p
+          className="text-xs text-[var(--dpf-muted)] rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2"
+          data-dpf-purpose-correction-signal-key="graph-view-narrowing-guidance"
+        >
           {subgraph.notice}
         </p>
       )}
 
       {/* Canvas + inspector */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 items-start">
-        <div>
+        <div
+          data-dpf-purpose-key="graph-canvas"
+          data-dpf-purpose-completion-signal-key={
+            purposeState === "neighbourhood-drawn" && subgraph.nodes.length > 0
+              ? "graph-neighbourhood-visible"
+              : undefined
+          }
+        >
           {loading && seedKeys.length > 0 && subgraph.nodes.length === 0 ? (
             <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-8 text-center text-sm text-[var(--dpf-muted)]">
               Loading…
@@ -482,7 +568,10 @@ export function GraphExplorer({ census }: Props) {
           )}
         </div>
 
-        <aside className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
+        <aside
+          className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
+          data-dpf-purpose-key="node-inspector"
+        >
           <h2 className="text-xs font-semibold uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
             Details
           </h2>
@@ -529,13 +618,29 @@ export function GraphExplorer({ census }: Props) {
                 type="button"
                 onClick={expandFromInspected}
                 disabled={seedKeys.includes(inspected.key)}
+                data-dpf-purpose-action-key="expand-from-here"
+                data-dpf-primary-action
                 className="w-full px-3 py-2 text-xs rounded-md bg-[var(--dpf-accent)] text-white disabled:opacity-50"
               >
                 {seedKeys.includes(inspected.key) ? "Already added" : "Expand from here"}
               </button>
 
-              {Object.keys(inspected.props).length > 0 && (
-                <dl className="space-y-1 border-t border-[var(--dpf-border)] pt-3">
+            </div>
+          )}
+
+          <details
+            className="mt-3 border-t border-[var(--dpf-border)] pt-3"
+            data-dpf-purpose-disclosure-key="node-properties"
+          >
+            <summary
+              className="cursor-pointer text-dpf-caption text-[var(--dpf-muted)]"
+              data-dpf-purpose-disclosure-trigger
+            >
+              Raw properties
+            </summary>
+            <div data-dpf-purpose-disclosure-region>
+              {inspected && Object.keys(inspected.props).length > 0 ? (
+                <dl className="space-y-1 pt-2">
                   {Object.entries(inspected.props).map(([key, value]) => (
                     <div key={key}>
                       <dt className="text-dpf-caption uppercase tracking-wide text-[var(--dpf-muted)]">
@@ -549,9 +654,13 @@ export function GraphExplorer({ census }: Props) {
                     </div>
                   ))}
                 </dl>
+              ) : (
+                <p className="pt-2 text-dpf-caption text-[var(--dpf-muted)]">
+                  Pick a node to inspect its properties.
+                </p>
               )}
             </div>
-          )}
+          </details>
         </aside>
       </div>
     </div>

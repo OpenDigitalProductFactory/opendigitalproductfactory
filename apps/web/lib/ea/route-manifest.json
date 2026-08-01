@@ -1098,6 +1098,18 @@
       "file": "apps/web/app/api/ops/self-upgrade/impact-summary/route.ts"
     },
     {
+      "routePath": "/api/ops/self-upgrade/purpose-state",
+      "kind": "route",
+      "segments": [
+        "api",
+        "ops",
+        "self-upgrade",
+        "purpose-state"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/ops/self-upgrade/purpose-state/route.ts"
+    },
+    {
       "routePath": "/api/platform/alerts",
       "kind": "route",
       "segments": [

@@ -81,8 +81,10 @@ export const GRAPH_EXPLORER_PURPOSE_CONTRACTS: PurposeContractModule = [
         },
         prohibitedActionKeys: ["expand-from-here"],
         completionSignal: "The census reads zero nodes and zero relationships.",
+        completionSignalKey: "graph-corpus-empty",
         errorCorrection:
           "The operator runs the code-graph indexer or discovery sync to populate the mirror.",
+        correctionSignalKey: "graph-population-recovery",
         recovery: {
           actionKey: "open-platform-development",
           routePath: "/admin/platform-development",
@@ -101,8 +103,10 @@ export const GRAPH_EXPLORER_PURPOSE_CONTRACTS: PurposeContractModule = [
         },
         prohibitedActionKeys: ["expand-from-here"],
         completionSignal: "Search results list at least one candidate starting point.",
+        completionSignalKey: "graph-search-results-visible",
         errorCorrection:
           "An unmatched query explains that nothing matched and suggests a shorter fragment or clearing the domain filter.",
+        correctionSignalKey: "graph-search-correction",
         recovery: {
           actionKey: "reset-explorer",
           routePath: "/admin/graph-explorer",
@@ -122,8 +126,10 @@ export const GRAPH_EXPLORER_PURPOSE_CONTRACTS: PurposeContractModule = [
         prohibitedActionKeys: [],
         completionSignal:
           "The canvas draws the seed and its neighbours, and the inspector shows the clicked node's labels, properties, and degree.",
+        completionSignalKey: "graph-neighbourhood-visible",
         errorCorrection:
           "A clipped view states the node cap and names the three ways to narrow it — relationship filter, node-type filter, or fewer hops.",
+        correctionSignalKey: "graph-view-narrowing-guidance",
         recovery: {
           actionKey: "reset-explorer",
           routePath: "/admin/graph-explorer",
