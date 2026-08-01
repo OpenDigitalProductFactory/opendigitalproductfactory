@@ -215,6 +215,17 @@ services:
       # jobs are registered only when this flag is on. Library defaults stay
       # off for tests and ad-hoc imports; compose is the deployment contract.
       DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED: ${DPF_SCHEDULED_INNGEST_FUNCTIONS_ENABLED:-1}
+      # Multi-client governance soak (BI-42FA7DD8): observe-only fleet
+      # backstops for leftover worktrees and Build Studio sandbox builds.
+      # Primary reaping stays session-lifecycle (worktree-session-hygiene on
+      # SessionEnd) and transactional (sandbox GC on promote/abandon/
+      # complete) — these are dry-run-only backstops for whatever slips
+      # through. Default ON for every compose install so operators get the
+      # visibility without asking. Do NOT default AUTO_REAP or
+      # DELETE_BRANCHES to 1 here: those are live/destructive and require an
+      # explicit per-install operator opt-in after a clean observe soak.
+      DPF_WORKTREE_JANITOR_ENABLED: ${DPF_WORKTREE_JANITOR_ENABLED:-1}
+      DPF_SANDBOX_BUILD_GC_ENABLED: ${DPF_SANDBOX_BUILD_GC_ENABLED:-1}
       # Register ScheduledJob heartbeat rows and other low-risk boot hygiene
       # for installed runtimes. Without this, first-run installs have no
       # code-graph job row and status surfaces report missing background work.
