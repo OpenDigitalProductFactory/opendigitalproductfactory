@@ -21,6 +21,22 @@ export interface WorkCaseActionDescriptor {
   sanctionedMutators: readonly string[];
 }
 
+export type WorkRoomLifecycleOperation =
+  | "open-cycle"
+  | "pause-cycle"
+  | "verify-cycle"
+  | "complete-cycle"
+  | "carry-over"
+  | "renew"
+  | "split"
+  | "archive";
+
+export interface WorkRoomLifecycleActionDescriptor {
+  operation: WorkRoomLifecycleOperation;
+  displayLabel: string;
+  canonicalAction: WorkCaseActionVerb;
+}
+
 export const WORK_CASE_ACTION_REGISTRY = [
   {
     action: "claim",
@@ -171,10 +187,34 @@ const WORK_CASE_ACTIONS_BY_VERB = new Map<WorkCaseActionVerb, WorkCaseActionDesc
   WORK_CASE_ACTION_REGISTRY.map((entry) => [entry.action, entry]),
 );
 
+export const WORK_ROOM_LIFECYCLE_ACTION_REGISTRY = [
+  { operation: "open-cycle", displayLabel: "Open cycle", canonicalAction: "claim" },
+  { operation: "pause-cycle", displayLabel: "Pause cycle", canonicalAction: "pause" },
+  { operation: "verify-cycle", displayLabel: "Verify cycle", canonicalAction: "verify" },
+  { operation: "complete-cycle", displayLabel: "Complete cycle", canonicalAction: "complete" },
+  { operation: "carry-over", displayLabel: "Carry over", canonicalAction: "handoff" },
+  { operation: "renew", displayLabel: "Renew", canonicalAction: "resume" },
+  { operation: "split", displayLabel: "Split", canonicalAction: "delegate" },
+  { operation: "archive", displayLabel: "Archive", canonicalAction: "complete" },
+] as const satisfies readonly WorkRoomLifecycleActionDescriptor[];
+
+const WORK_ROOM_LIFECYCLE_ACTIONS_BY_OPERATION = new Map<
+  WorkRoomLifecycleOperation,
+  WorkRoomLifecycleActionDescriptor
+>(WORK_ROOM_LIFECYCLE_ACTION_REGISTRY.map((entry) => [entry.operation, entry]));
+
 export function getWorkCaseAction(
   action: string | null | undefined,
 ): WorkCaseActionDescriptor | null {
   const normalized = action?.trim() as WorkCaseActionVerb | undefined;
   if (!normalized || !WORK_CASE_ACTION_VERBS.includes(normalized)) return null;
   return WORK_CASE_ACTIONS_BY_VERB.get(normalized) ?? null;
+}
+
+export function getWorkRoomLifecycleAction(
+  operation: string | null | undefined,
+): WorkRoomLifecycleActionDescriptor | null {
+  const normalized = operation?.trim() as WorkRoomLifecycleOperation | undefined;
+  if (!normalized) return null;
+  return WORK_ROOM_LIFECYCLE_ACTIONS_BY_OPERATION.get(normalized) ?? null;
 }

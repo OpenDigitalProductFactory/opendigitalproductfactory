@@ -38,6 +38,7 @@ export interface BuildWorkRoomViewInput {
   detail: WorkCaseDetail;
   boundary?: Partial<WorkRoomBoundaryInput>;
   currentCycle?: WorkRoomCycleView | null;
+  completedCycles?: readonly WorkRoomCycleView[];
   participants?: readonly WorkRoomParticipantView[];
   activities?: readonly WorkRoomActivityInput[];
   context?: Partial<WorkRoomContextView>;
@@ -149,6 +150,7 @@ export function buildWorkRoomView(
     },
     boundary,
     currentCycle: input.currentCycle ?? null,
+    completedCycles: [...(input.completedCycles ?? [])],
     participants,
     activity: normalizeWorkRoomActivities(input.activities ?? []),
     work: {

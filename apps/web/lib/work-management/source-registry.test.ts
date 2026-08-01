@@ -34,6 +34,7 @@ describe("Work Case source registry", () => {
       expect(entry.titleProjection.length).toBeGreaterThan(0);
       expect(entry.summaryProjection.length).toBeGreaterThan(0);
       expect(["finite", "standing"]).toContain(entry.roomProjection.mode);
+      expect(Array.isArray(entry.roomProjection.cycleCarrierPrecedence)).toBe(true);
       expect(Array.isArray(entry.roomProjection.outcomePacket.requiredCategories)).toBe(true);
     }
   });
@@ -41,6 +42,15 @@ describe("Work Case source registry", () => {
   it("makes standing room mode an explicit source-registry decision", () => {
     expect(getWorkCaseSourceEntry("scheduled")?.roomProjection.mode).toBe("standing");
     expect(getWorkCaseSourceEntry("booking")?.roomProjection.mode).toBe("finite");
+  });
+
+  it("owns deterministic standing-cycle carrier precedence", () => {
+    expect(getWorkCaseSourceEntry("scheduled")?.roomProjection.cycleCarrierPrecedence).toEqual([
+      "work-item",
+      "work-capsule",
+      "task-run",
+    ]);
+    expect(getWorkCaseSourceEntry("booking")?.roomProjection.cycleCarrierPrecedence).toEqual([]);
   });
 
   it("normalizes unknown, missing, and whitespace source keys safely", () => {

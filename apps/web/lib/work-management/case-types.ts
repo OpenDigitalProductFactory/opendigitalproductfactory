@@ -70,8 +70,11 @@ export type WorkCaseSourceRefKind =
   | "source"
   | "work-item"
   | "work-capsule"
+  | "task-run"
+  | "task-artifact"
   | "decision-interaction"
   | "runtime-verification"
+  | "receipt"
   | "evidence";
 
 export interface WorkCaseSourceRef {

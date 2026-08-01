@@ -241,6 +241,35 @@ export function fromWorkItemMessage(row: WorkItemMessageRow): ReceiptEnvelope {
     actorKind: row.senderType === "agent" ? "agent" : row.senderType === "user" ? "person" : "system",
     actorId: row.senderAgentId ?? row.senderUserId ?? undefined,
   };
+  const payload = row.structuredPayload && typeof row.structuredPayload === "object"
+    ? row.structuredPayload as Record<string, unknown>
+    : null;
+  const nestedReceipt = payload?.receipt && typeof payload.receipt === "object"
+    ? payload.receipt as Record<string, unknown>
+    : null;
+  const lifecycle = payload?.kind === "work-room-lifecycle-receipt" ? payload : nestedReceipt;
+  if (lifecycle?.kind === "work-room-lifecycle-receipt") {
+    const enforcementMode = lifecycle.enforcementMode === "observed-event"
+      ? "observed-event"
+      : "governed-action";
+    return {
+      receiptId: `work-item-message:${row.messageId}`,
+      receiptKind: typeof lifecycle.receiptKind === "string" ? lifecycle.receiptKind : "governed-action",
+      enforcementMode,
+      sourceRef: { kind: "receipt", id: row.messageId, status: row.messageType },
+      actionType: typeof lifecycle.operation === "string" ? lifecycle.operation : undefined,
+      status: lifecycle.status === "valid" ? "valid" : "invalid",
+      summary: row.body,
+      occurredAt: iso(row.createdAt),
+      actorRef,
+      inputDigest: typeof lifecycle.idempotencyKey === "string" ? lifecycle.idempotencyKey : undefined,
+      outputDigest: row.structuredPayload,
+      policyRefs: Array.isArray(lifecycle.policyRefs)
+        ? lifecycle.policyRefs.filter((value): value is string => typeof value === "string")
+        : [],
+      rawRef: { table: "WorkItemMessage", id: row.id },
+    };
+  }
   return observedEnvelope({
     receiptId: `work-item-message:${row.messageId}`,
     sourceRef: {

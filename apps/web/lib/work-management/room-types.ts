@@ -184,6 +184,7 @@ export interface WorkRoomView {
   outcome: WorkRoomOutcomeView;
   boundary: WorkRoomBoundaryView;
   currentCycle: WorkRoomCycleView | null;
+  completedCycles: WorkRoomCycleView[];
   participants: WorkRoomParticipantView[];
   activity: WorkRoomActivityView[];
   work: WorkRoomWorkView;

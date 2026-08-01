@@ -206,4 +206,39 @@ describe("ReceiptEnvelope normalizers", () => {
     expect(governed.enforcementMode).toBe("governed-action");
     expect(observed.enforcementMode).toBe("observed-event");
   });
+
+  it("preserves a Work Room lifecycle receipt as a governed action", () => {
+    const envelope = fromWorkItemMessage({
+      id: "msg-row-cycle",
+      messageId: "MSG-CYCLE",
+      workItemId: "room-row",
+      senderType: "user",
+      senderUserId: "user-finance",
+      messageType: "work-room-outcome-packet",
+      body: "Cycle completed.",
+      structuredPayload: {
+        kind: "work-room-outcome-packet",
+        receipt: {
+          kind: "work-room-lifecycle-receipt",
+          operation: "complete-cycle",
+          receiptKind: "governed-action",
+          enforcementMode: "governed-action",
+          status: "valid",
+          idempotencyKey: "complete:2026-W31",
+          policyRefs: ["work-case-policy-envelope"],
+        },
+      },
+      createdAt: NOW,
+    });
+
+    expect(envelope).toMatchObject({
+      receiptKind: "governed-action",
+      enforcementMode: "governed-action",
+      actionType: "complete-cycle",
+      status: "valid",
+      inputDigest: "complete:2026-W31",
+      sourceRef: { kind: "receipt", id: "MSG-CYCLE" },
+      policyRefs: ["work-case-policy-envelope"],
+    });
+  });
 });
