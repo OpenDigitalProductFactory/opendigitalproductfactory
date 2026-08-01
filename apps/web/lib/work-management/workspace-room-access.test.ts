@@ -46,4 +46,23 @@ describe("Workspace Work Room access", () => {
       },
     }).level).toBe("action");
   });
+
+  it("uses the latest appended policy instead of stale earlier authority", () => {
+    expect(authorizeWorkspaceRoomItem({
+      requested: "content",
+      item: {
+        assignedToUserId: "user-2",
+        evidence: [
+          { workRoomPolicy: { admittedPrincipalRefs: ["PRN-1"], sensitivityCeiling: "internal" } },
+          { workRoomPolicy: { admittedPrincipalRefs: [], sensitivityCeiling: "confidential" } },
+        ],
+      },
+      userId: "user-1",
+      authContext: {
+        principalId: "PRN-1",
+        sensitivityClearance: ["public", "internal", "confidential"],
+        isSuperuser: false,
+      },
+    }).level).toBe("none");
+  });
 });

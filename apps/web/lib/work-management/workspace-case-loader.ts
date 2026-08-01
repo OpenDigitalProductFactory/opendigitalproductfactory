@@ -403,7 +403,6 @@ export async function loadWorkspaceWorkCaseDetail({
       OR: [
         { sourceType: decoded.sourceType, sourceId: decoded.sourceId },
         { sourceType: decoded.sourceType, itemId: decoded.sourceId },
-        { itemId: decoded.sourceId },
       ],
     },
     include: { childItems: true },

@@ -9,7 +9,9 @@ export type WorkspaceRoomPolicyMetadata = {
 
 export function readWorkspaceRoomPolicy(evidence: unknown): Partial<WorkspaceRoomPolicyMetadata> {
   const values = Array.isArray(evidence) ? evidence : evidence ? [evidence] : [];
-  for (const value of values) {
+  // Evidence is append-oriented. The latest explicit policy supersedes an
+  // earlier snapshot; reading the first would preserve stale authority.
+  for (const value of [...values].reverse()) {
     if (!value || typeof value !== "object") continue;
     const policy = (value as Record<string, unknown>).workRoomPolicy;
     if (!policy || typeof policy !== "object") continue;
