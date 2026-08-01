@@ -17,6 +17,8 @@
     "apps/web/lib/lifecycle/gaps.test.ts",
     "apps/web/lib/lifecycle/gap-scoping.test.ts",
     "apps/web/lib/lifecycle/inventory-projector.test.ts",
+    "apps/web/lib/govern/data/lifecycle-governance-assets.test.ts",
+    "apps/web/lib/govern/data/coverage.live.test.ts",
     "packages/db/scripts/migration-safety-guard.mjs",
     "packages/db/scripts/schema-regression-guard.mjs",
     "scripts/check-stewardship-scope.mjs",
