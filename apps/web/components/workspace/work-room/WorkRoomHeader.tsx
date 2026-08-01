@@ -30,6 +30,7 @@ function participantSummary(room: WorkRoomView): string {
 
 export function WorkRoomHeader({ room, summary }: Props) {
   const health = room.outcome.health;
+  const purposeNeedsDisclosure = (room.purpose?.length ?? 0) > 280;
   const dueAt = room.boundary.timeBoundary.reviewAt
     ?? room.boundary.timeBoundary.dueAt
     ?? summary.dueAt;
@@ -82,7 +83,14 @@ export function WorkRoomHeader({ room, summary }: Props) {
             <h1 id="work-room-title" className="mt-3 text-2xl font-semibold text-[var(--dpf-text)] sm:text-3xl">
               {room.title}
             </h1>
-            {room.purpose ? (
+            {room.purpose && purposeNeedsDisclosure ? (
+              <details className="group mt-2 max-w-3xl text-sm text-[var(--dpf-muted)]">
+                <summary className="inline-flex min-h-11 cursor-pointer items-center font-medium text-[var(--dpf-accent)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]">
+                  Room purpose
+                </summary>
+                <p className="pb-1 leading-6">{room.purpose}</p>
+              </details>
+            ) : room.purpose ? (
               <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--dpf-muted)]">{room.purpose}</p>
             ) : null}
           </div>

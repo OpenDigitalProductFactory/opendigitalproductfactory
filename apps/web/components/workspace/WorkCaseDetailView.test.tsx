@@ -176,6 +176,22 @@ describe("WorkCaseDetailView", () => {
     expect(header).not.toContain("WI-1");
   });
 
+  it("keeps a long room purpose available without pushing the outcome out of view", () => {
+    const longPurpose = "Coordinate this room across a deliberately long operating brief. ".repeat(8);
+    const html = renderToStaticMarkup(
+      <WorkCaseDetailView
+        detail={{ ...detail, room: { ...room, purpose: longPurpose } }}
+      />,
+    );
+    const header = html.slice(0, html.indexOf("</header>"));
+
+    expect(header).toContain("<details");
+    expect(header).toContain("Room purpose");
+    expect(header).toContain(longPurpose);
+    expect(header.indexOf("Room purpose")).toBeLessThan(header.indexOf("Outcome"));
+    expect(header).not.toContain("<details open");
+  });
+
   it("keeps technical source references and A2A status behind room details", () => {
     const html = renderToStaticMarkup(<WorkCaseDetailView detail={detail} />);
 

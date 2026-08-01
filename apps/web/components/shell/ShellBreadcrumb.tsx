@@ -15,7 +15,13 @@ import { getRouteNavRecord } from "@/lib/navigation/portal-navigation-model";
 type Crumb = { label: string; href: string };
 
 function titleCase(segment: string): string {
-  return segment
+  let decoded = segment;
+  try {
+    decoded = decodeURIComponent(segment);
+  } catch {
+    // Keep malformed path segments legible without breaking shell navigation.
+  }
+  return decoded
     .replace(/-/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
