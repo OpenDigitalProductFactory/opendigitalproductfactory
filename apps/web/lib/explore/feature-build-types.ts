@@ -3,6 +3,7 @@
 
 import * as crypto from "crypto";
 import type { BuildExecutionState } from "@/lib/build-exec-types";
+import type { BusinessBuildBrief } from "@/lib/build/business-build-brief";
 import type { DecisionInteractionGateView } from "@/lib/decision-perspective/types";
 import type { SemanticReviewDecision, SemanticReviewResult } from "@/lib/change-review/semantic-change-review";
 
@@ -489,6 +490,9 @@ export type FeatureBuildRow = {
   parentEpicId?: string | null;
   originatingBacklogItemId: string | null;
   brief: FeatureBrief | null;
+  // Optional for fixtures and compatibility readers that predate the canonical
+  // relation. Production Build Studio loaders always project this field.
+  businessBuildBrief?: BusinessBuildBrief | null;
   plan: Record<string, unknown> | null;
   phase: BuildPhase;
   sandboxId: string | null;

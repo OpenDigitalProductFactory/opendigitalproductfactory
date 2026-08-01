@@ -12,6 +12,7 @@ import type {
 
 interface Props {
   brief: BusinessBuildBrief;
+  onSaved?: () => void | Promise<void>;
 }
 
 function Section({
@@ -154,7 +155,7 @@ function SelectField({
   );
 }
 
-export function BusinessBriefPanel({ brief }: Props) {
+export function BusinessBriefPanel({ brief, onSaved }: Props) {
   const needsClarification = brief.openQuestions.length > 0;
   const [isEditing, setIsEditing] = useState(Boolean(brief.briefId));
   const [isPending, startTransition] = useTransition();
@@ -189,6 +190,7 @@ export function BusinessBriefPanel({ brief }: Props) {
           openQuestionsText,
           accept,
         });
+        await onSaved?.();
         setMessage(accept ? "Brief accepted." : "Brief saved.");
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "The brief could not be saved.");

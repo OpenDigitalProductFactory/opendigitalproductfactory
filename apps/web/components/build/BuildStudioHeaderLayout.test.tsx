@@ -231,6 +231,54 @@ function makeEpicRollup(overrides: Partial<EpicRollupView> = {}): EpicRollupView
 }
 
 describe("BuildStudio active-build header layout", () => {
+  it("opens the selected Change's canonical business brief from the owner view", () => {
+    const businessOutcome = "Customers can change a booking without calling.";
+    render(
+      <BuildStudio
+        builds={[makeBuild({
+          businessBuildBrief: {
+            briefId: "BBB-CHANGE-A",
+            title: "Make booking changes easier",
+            status: "accepted",
+            intakeSource: "user_conversation",
+            businessOutcome,
+            affectedPeople: ["Customer"],
+            affectedWorkflow: "Booking changes",
+            sourceEvidence: [],
+            successSignals: ["Fewer change calls"],
+            constraints: [],
+            businessInterpretation: businessOutcome,
+            capabilityPackId: "operations",
+            capabilityPack: "Operations",
+            riskProfile: {
+              customerFacing: true,
+              complianceSensitive: false,
+              revenueImpacting: false,
+              operationalRisk: false,
+              level: "medium",
+            },
+            technicalInterpretation: {
+              dataNeeds: null,
+              likelyWorkflowImpact: [],
+              verificationFocus: [],
+            },
+            openQuestions: [],
+            confidence: "high",
+          },
+        })]}
+        portfolios={[]}
+        governedBacklogEnabled
+      />,
+    );
+
+    expect(screen.getByText(businessOutcome)).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Review outcome" }));
+
+    expect(screen.getByRole("heading", { name: "Build details" })).not.toBeNull();
+    expect(screen.getByText("Outcome and brief")).not.toBeNull();
+    expect(screen.queryByTestId("feature-brief-panel")).toBeNull();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();

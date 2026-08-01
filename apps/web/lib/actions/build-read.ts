@@ -15,6 +15,7 @@ import {
   type CustomerStatusBuild,
 } from "@/lib/build/customer-status-loader";
 import type { BuildStudioCustomerStatus } from "@/lib/build/customer-status-projection";
+import { businessBuildBriefFromRecord } from "@/lib/build/business-build-brief";
 
 export async function getFeatureBuildCustomerStatus(
   buildId: string,
@@ -34,7 +35,6 @@ export async function getFeatureBuildCustomerStatus(
   );
   return statuses[build.id] ?? null;
 }
-
 export async function getFeatureBuild(buildId: string): Promise<FeatureBuildRow | null> {
   const session = await auth();
   if (!session?.user?.id) return null;
@@ -42,6 +42,7 @@ export async function getFeatureBuild(buildId: string): Promise<FeatureBuildRow 
   const build = await prisma.featureBuild.findUnique({
     where: { buildId },
     include: {
+      businessBuildBrief: true,
       digitalProduct: { select: { productId: true, version: true } },
       originator: {
         select: {
@@ -84,6 +85,9 @@ export async function getFeatureBuild(buildId: string): Promise<FeatureBuildRow 
   return {
     ...build,
     brief: build.brief as FeatureBuildRow["brief"],
+    businessBuildBrief: build.businessBuildBrief
+      ? businessBuildBriefFromRecord({ title: build.title, row: build.businessBuildBrief })
+      : null,
     plan: build.plan as FeatureBuildRow["plan"],
     phase: build.phase as FeatureBuildRow["phase"],
     draftApprovedAt: build.draftApprovedAt,
