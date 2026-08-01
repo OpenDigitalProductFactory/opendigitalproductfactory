@@ -1,0 +1,78 @@
+name: Daily Checkpoint Tag
+
+# Cuts a dated checkpoint tag (v<YYYY.MM.DD>) once per day WHEN main has new
+# commits since the previous checkpoint. Replaces manual version stamping.
+#
+# WHY THESE TAGS EXIST — they are "how far behind" markers, NOT releases:
+#   Every DPF instance self-upgrades continuously. The real drift signal is the
+#   number of merged commits an install is behind main, already computed by
+#   apps/web/lib/self-upgrade/release-batch.ts, which also decides when the next
+#   batch is worth taking (~10 merged PRs, or 7 days). These tags do NOT drive
+#   that. They give humans clean, dated anchors instead of PR numbers, and they
+#   reset `git describe` so any build reads like `v2026.08.01-12-g<sha>`
+#   ("12 commits past the Aug 1 checkpoint") — the counter, baked into the label.
+#
+# INTENTIONALLY TAG-ONLY. Tags are pushed with the built-in GITHUB_TOKEN, which
+# by GitHub's design does NOT trigger tag-push workflows — so a daily checkpoint
+# does NOT kick the heavier publish-release.yml (Edge-binary build). That path
+# stays for deliberate releases. Cutting a full downloadable Release per
+# checkpoint would be a separate, explicit change (it needs a PAT to chain the
+# release build, and would run that build 365x/year).
+
+on:
+  schedule:
+    - cron: "40 6 * * *" # daily at 06:40 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write # push the checkpoint tag
+
+concurrency:
+  group: daily-checkpoint-tag
+  cancel-in-progress: false
+
+jobs:
+  checkpoint:
+    name: Cut daily checkpoint tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # full history + tags for describe / rev-list
+
+      - name: Cut checkpoint tag if main advanced
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force origin
+
+          today="v$(date -u +%Y.%m.%d)"
+
+          # Idempotent: never cut the same day twice (re-runs / dispatch).
+          if git rev-parse -q --verify "refs/tags/${today}" >/dev/null; then
+            echo "Checkpoint ${today} already exists - nothing to do."
+            exit 0
+          fi
+
+          # Most recent existing dated checkpoint (v20YY.MM.DD), if any. Zero-
+          # padded dates sort chronologically under -refname.
+          prev="$(git tag --list 'v20[0-9][0-9].[0-1][0-9].[0-3][0-9]' --sort=-refname | head -n1 || true)"
+
+          if [ -n "${prev}" ]; then
+            new_commits="$(git rev-list --count "${prev}..HEAD")"
+            if [ "${new_commits}" -eq 0 ]; then
+              echo "No new commits since ${prev} - skipping today's checkpoint."
+              exit 0
+            fi
+            msg="Daily checkpoint ${today} - ${new_commits} commit(s) since ${prev}."
+          else
+            new_commits="$(git rev-list --count HEAD)"
+            msg="Daily checkpoint ${today} - first dated checkpoint (${new_commits} commits on main)."
+          fi
+
+          git config user.name "dpf-checkpoint-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${today}" -m "${msg}"
+          git push origin "refs/tags/${today}"
+          echo "${msg}"
