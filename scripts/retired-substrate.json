@@ -1,0 +1,33 @@
+{
+  "$comment": [
+    "Registry of substrate the platform has RETIRED. Consumed by",
+    "scripts/check-retired-substrate.mjs.",
+    "",
+    "Why this exists: when BET-5 retired Neo4j and Qdrant onto PostgreSQL, the",
+    "code changed and the published docs did not. /architecture/platform-overview/",
+    "kept describing Neo4j as a live service, and the disaster-recovery runbook kept",
+    "telling operators mid-incident to restore a database that no longer exists.",
+    "Nothing failed, because no gate was watching the words.",
+    "",
+    "The doc-impact graph narrows this, but its edges are OPT-IN — it only protects",
+    "pages someone remembered to annotate. This registry is the complement: it needs",
+    "no annotation on the page at all. Add one entry here when you retire something,",
+    "and every live doc still naming it becomes net-new breakage on the next PR.",
+    "",
+    "TO RETIRE SOMETHING: add an entry, run `pnpm check:retired-substrate`, and fix",
+    "or explicitly baseline every page it surfaces. Expect a long list the first",
+    "time — that list is the blast radius you would otherwise have shipped past."
+  ],
+  "retired": [
+    {
+      "term": "neo4j",
+      "retiredBy": "BET-5 (BI-A1E864A5)",
+      "replacement": "the Postgres graph mirror — graph_node / graph_edge, traversed in packages/db/src/pg-graph.ts"
+    },
+    {
+      "term": "qdrant",
+      "retiredBy": "BET-5 (BI-A1E864A5)",
+      "replacement": "pgvector — packages/db/src/pgvector-store.ts"
+    }
+  ]
+}

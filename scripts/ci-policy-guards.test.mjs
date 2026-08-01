@@ -39,6 +39,7 @@ const EXPECTED_LEGACY_JOBS = [
   "prose-lint-guard",
   "repo-guard-loop",
   "reporting-composition-guard",
+  "retired-substrate-guard",
   "sbom-divergence-guard",
   "seed-fit-gate",
   "singleton-safety-guard",

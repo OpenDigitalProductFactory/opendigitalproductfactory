@@ -168,6 +168,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("docs-staleness-detector", "Docs Staleness Detector", [
       node("--test", "scripts/build-docs-staleness.test.mjs"),
     ]),
+    // Catches the words, not the edges: a published page naming a service the
+    // platform no longer runs. Complements the doc-impact graph, whose
+    // `relatedCode:` edges only protect pages someone remembered to annotate.
+    guard("retired-substrate-guard", "Retired Substrate Guard", [
+      node("--test", "scripts/check-retired-substrate.test.mjs"),
+      node("scripts/check-retired-substrate.mjs"),
+    ]),
     guard("mcp-tool-pack-guard", "MCP Tool Pack Guard", [
       node("scripts/check-mcp-tool-pack.mjs"),
     ]),
