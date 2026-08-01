@@ -46,6 +46,12 @@ Because both the page and the coworker read the same thing, they cannot tell you
 two different stories about where marketing stands. The recommendation moves as
 the workspace moves:
 
+Opening Marketing in more than one tab, or loading page sections at the same
+time, still uses one strategy workspace for the organization. A concurrent
+first load may finish through either request, but both views resolve to that
+same saved strategy rather than presenting a setup error or creating competing
+records.
+
 | What the workspace looks like | What you are asked to do next |
 | --- | --- |
 | Drafts are waiting on you | Review them before anything reaches customers |
