@@ -1,0 +1,36 @@
+import { AD_HOC_INVOICE_PATTERN, type FinancialProfileSeed } from "./profile-contracts";
+
+export const AGRICULTURE_RANCHING_FINANCIAL_PROFILE: FinancialProfileSeed = {
+  archetypeCategory: "agriculture-ranching",
+  displayName: "Agriculture & Ranching",
+  defaultPaymentTerms: "Due within 14 days",
+  defaultCurrency: "USD",
+  vatRegistered: false,
+  defaultTaxRate: 0,
+  dunningEnabled: true,
+  dunningStyle: "standard",
+  billingPatternProfile: AD_HOC_INVOICE_PATTERN,
+  invoiceTemplateStyle: "trade",
+  expenseCategories: [
+    "Feed Seed & Fertility",
+    "Veterinary Breeding & Farrier",
+    "Fuel Lubricants & Utilities",
+    "Equipment Repairs & Parts",
+    "Custom Operators & Hauling",
+    "Crop Protection & Application",
+    "Land Rent Tax & Insurance",
+    "Market Sale & Checkoff Costs",
+  ],
+  purchaseOrdersEnabled: true,
+  chartOfAccountsSeed: [
+    { code: "4000", name: "Livestock Sales", type: "revenue" },
+    { code: "4010", name: "Crop Hay & Forage Sales", type: "revenue" },
+    { code: "4020", name: "Grazing & Custom Service Revenue", type: "revenue" },
+    { code: "4030", name: "Breeding & Other Farm Revenue", type: "revenue" },
+    { code: "5000", name: "Feed Seed & Fertility", type: "expense" },
+    { code: "5010", name: "Veterinary Breeding & Farrier", type: "expense" },
+    { code: "5020", name: "Fuel Lubricants & Utilities", type: "expense" },
+    { code: "5030", name: "Equipment Repairs & Parts", type: "expense" },
+    { code: "5040", name: "Custom Operators & Hauling", type: "expense" },
+  ],
+};

@@ -3383,6 +3383,48 @@
           "web_search"
         ]
       }
+    },
+    {
+      "agent_id": "AGT-WS-FARM-RANCH",
+      "agent_name": "farm-ranch-steward",
+      "tier": "specialist",
+      "value_stream": "operate",
+      "role": "specialist",
+      "capability_domain": "Agricultural operating coordination across seasonal land, crop, forage, livestock, working-animal, equipment, vendor, weather, market, and regulated-input cycles.",
+      "human_supervisor_id": "HR-100",
+      "hitl_tier_default": 1,
+      "delegates_to": [],
+      "escalates_to": "AGT-ORCH-000",
+      "it4it_sections": ["5.4 Operate Value Stream"],
+      "status": "draft",
+      "config_profile": {
+        "model_binding": {
+          "model_id": null,
+          "temperature": 0.2,
+          "max_tokens": 8192
+        },
+        "execution_runtime": {
+          "type": "in_process",
+          "timeout_seconds": 300
+        },
+        "token_budget": {
+          "daily_limit": 200000,
+          "per_task_limit": 50000
+        },
+        "memory": {
+          "type": "persistent",
+          "backend": null
+        },
+        "concurrency_limit": 2,
+        "tool_grants": [
+          "backlog_read",
+          "backlog_write",
+          "consumer_read",
+          "file_read",
+          "registry_read",
+          "web_search"
+        ]
+      }
     }
   ]
 }

@@ -5,6 +5,7 @@
 **Epic:** `EP-7015CB99`
 **Umbrella backlog item:** `BI-1A2F61F9`
 **Decision:** `DI-2DC225DEF0FF`
+**Coworker architecture decision:** `DI-AE18927B5DCB`
 **Plan:** `docs/superpowers/plans/2026-08-01-agriculture-ranching-archetype.md`
 
 ## Purpose
@@ -34,6 +35,8 @@ Three approaches were compared through WWMD:
 Decision `DI-2DC225DEF0FF` selected the new category with high confidence (composite 10.1556, margin 4.2838, no commandment conflict). The category introduces a distinct biological, seasonal, geographic, equipment-intensive, and jurisdiction-sensitive operating loop while still reusing common DPF primitives.
 
 ## Design grounding
+
+Operational-Precedent: farmos-map
 
 ### Existing platform substrate
 
@@ -165,6 +168,25 @@ Create shared category professions for farm/ranch ownership, crop/forage operati
 
 Establish one primary `Farm & Ranch Steward` coworker because no current coworker owns the biological, seasonal, geographic whole-operation loop. It orchestrates planning, attention, records, and drafts, and collaborates with existing licensing/compliance, finance, procurement, and research capabilities. Do not create separate weather, cattle, equipment, pesticide, horse, and market coworkers in the first pass.
 
+Decision `DI-AE18927B5DCB` selected the dedicated steward with high confidence (composite 8.084, margin 1.820, no commandment conflict) over three alternatives: reuse the COO with agriculture prompts, create one generic vertical-operations steward, or assemble only a specialist swarm.
+
+The durable rule is **identity for accountability; overlays for difference**:
+
+| Concern | Canonical owner |
+| --- | --- |
+| Whole-operation seasonal, biological, geographic attention loop | `farm-ranch-steward` identity, grants, service declaration, and starter skill |
+| Category and leaf vocabulary, priorities, finance posture, workspace profile, and applicability | archetype category/leaf registries and their typed contribution surfaces |
+| Profession reasoning that differs by archetype or jurisdiction | WSID pages with `professionArchetype` and jurisdiction metadata |
+| Legal/compliance, finance, marketing, procurement, and other specialist authority | existing specialist coworkers and profession corpora, reached through explicit handoffs |
+
+A new coworker is justified only when a business shape introduces a durable accountability, decision loop, and authority boundary that no existing coworker owns. Vocabulary alone, a different checklist, or a different market segment belongs in an archetype/leaf overlay. This prevents a coworker per leaf while also preventing a generic orchestrator from silently absorbing specialist authority.
+
+The steward remains draft until its checked-in definition passes conformance, certification, and promotion. It may prepare evidence and proposals; it does not diagnose or treat animals, determine pesticide legality, submit licenses or exemptions, choose a market sale, spend money, contact an outside party, or control machinery.
+
+#### Archetype-leakage invariant
+
+For a declared install, profession retrieval may include universal pages plus pages matching that install's archetype and jurisdiction. It must never substitute another archetype's pages when no eligible page remains. An empty applicable result is an explicit `missed-empty-applicable-corpus` state, not permission to fail open to the unfiltered profession corpus. The archetype completeness gate separately requires every new category to seed its own primary corpus, so fail-closed retrieval cannot turn a missing overlay into silent cross-archetype advice.
+
 ### 4. Skills and tools
 
 Starter skills should cover seasonal operating review, field/crop plan review, herd/working-animal care review, equipment readiness, outside-service coordination, and regulatory evidence review. Tools must read typed records and cited provider signals; all material writes use proposal/approval envelopes. New provider integrations require tool evaluation.
@@ -228,6 +250,10 @@ This allocation is a delivery constraint, not permission to rewrite unrelated pl
 - Shared-adapter refactoring has regression tests before agriculture adapters are added.
 - UI verification proves responsive, accessible, theme-aware behavior and degraded-state honesty.
 - Migrations apply cleanly against representative existing data and all affected build-gate checks pass.
+
+## Phase-F implementation status
+
+The first implementation slice delivers the four-dimension category foundation under `BI-78C5A164`: category and three leaves, cross-surface typed contributions, workspace/twin profile, finance and marketing posture, dedicated draft coworker/service/occupation records, starter skill, agricultural and specialist overlay corpus, and fail-closed corpus applicability. It intentionally does not claim the typed agricultural records or map-led cockpit owned by Phases A–E and G.
 
 ## Documentation impact
 

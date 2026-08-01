@@ -62,11 +62,12 @@ export const ARCHETYPE_TAG_RULESET: Record<string, string[]> = {
   // Finance / accounting
   accounting:  ["professional-services"],
   invoicing:   ["professional-services", "trades-maintenance", "fabric-care-services"],
+  agriculture: ["agriculture-ranching"],
   // Analytics (cross-cutting — applies to all categories)
   analytics:   [
     "retail-goods", "food-hospitality", "fitness-recreation", "education-training", "pet-services",
     "professional-services", "trades-maintenance", "nonprofit-community", "healthcare-wellness", "beauty-personal-care",
-    "fabric-care-services",
+    "fabric-care-services", "agriculture-ranching",
   ],
 };
 

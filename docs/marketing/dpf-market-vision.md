@@ -102,7 +102,7 @@ Marketing should be ambitious but honest.
 
 **Proof points:**
 
-- 95 seeded archetypes across 21 categories shape the portal, vocabulary, coworker framing, finance defaults, and operating model.
+- 106 seeded archetypes across 24 categories shape the portal, vocabulary, coworker framing, finance defaults, and operating model.
 - Native finance, HR, CRM, customer, inventory, knowledge, work, authority, audit, and integration substrate already exists.
 - QuickBooks, Stripe, HubSpot, ADP, Microsoft 365, WhatsApp, Instagram, Google marketing, and related connectors are already represented in the connector benchmark and adapter work.
 - WorkOS, Workday, QuickBooks, and the wider SaaS ecosystem now map to explicit DPF epics and backlog lanes.

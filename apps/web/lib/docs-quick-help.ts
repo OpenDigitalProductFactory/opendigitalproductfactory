@@ -63,6 +63,7 @@ const RESOURCE_NOUN: Record<string, { resource: string; resourcePlural: string }
   "real-estate-construction": { resource: "appointment slot", resourcePlural: "appointment slots" },
   "warehousing-fulfilment": { resource: "handling slot", resourcePlural: "handling slots" },
   "fabric-care-services": { resource: "counter or station", resourcePlural: "counters and stations" },
+  "agriculture-ranching": { resource: "field, pasture, or pen", resourcePlural: "fields, pastures, and pens" },
 };
 
 const DEFAULT_RESOURCE = { resource: "bookable slot", resourcePlural: "bookable slots" };

@@ -86,6 +86,18 @@ const INDUSTRY_PROFILES: Record<string, ArchetypeBusinessProfile> = {
     supplyChain:
       "We rely on cleaning consumables, tags, packaging, hangers, plant equipment maintenance, route/delivery partners, and specialty repair vendors. Supply continuity and equipment uptime protect ready promises and customer trust.",
   },
+  "agriculture-ranching": {
+    missionTheme:
+      "steward our land, animals, equipment, and resources to produce dependable food, forage, livestock, and rural services across seasons",
+    businessModel:
+      "Seasonal, asset-intensive production with biological and weather uncertainty: income may combine crops, hay, livestock, grazing, breeding stock, and custom services, while major costs and commitments arrive well before sale.",
+    whoWeServe:
+      "We serve buyers, neighbors, landowners, processors, sale barns, and other agricultural businesses who depend on honest condition, timing, handling, and availability information.",
+    howWeDecide:
+      "We decide for long-term land and herd health, animal welfare, safe and label-compliant work, equipment readiness, and financial resilience. Forecasts inform a decision but never masquerade as certainty, and irreversible or regulated actions stay with the owner and qualified professional.",
+    supplyChain:
+      "We depend on feed, seed, fertilizer and crop-protection suppliers, veterinarians, farriers, equipment dealers, parts and fuel providers, laboratories, haulers, applicators, custom hay crews, and market channels. Seasonal capacity means we reserve critical services and parts before the work window opens.",
+  },
   "fitness-recreation": {
     missionTheme:
       "help our members move, train, and live healthier, more active lives",
@@ -572,6 +584,36 @@ const INDUSTRY_STANCE_VECTORS: Record<string, Partial<ArchetypeStanceVectors>> =
       stance:
         "Routine cleaning supplies, tags, hangers, bags, and urgent minor equipment fixes can proceed without the owner up to the ceiling. New equipment, new vendors, or anything above it goes to the owner.",
       ceilingUsd: 300,
+    },
+  },
+  "agriculture-ranching": {
+    "customer-goodwill": {
+      title: "When our product or handling falls short",
+      stance:
+        "If our description, handling, timing, or quality is wrong, we say so promptly and offer a practical correction within the ceiling. Animal-welfare, food-safety, title, or high-value disputes go to the owner immediately.",
+      ceilingUsd: 250,
+    },
+    "pricing-integrity": {
+      title: "Quotes in a moving market",
+      stance:
+        "We state what a quote covers, how long it is valid, and which weight, grade, quality, delivery, or market facts can change it. We do not hide uncertainty or rewrite agreed terms after the fact.",
+      ceilingUsd: 250,
+    },
+    "growth-vs-stability": {
+      title: "More acres or animals vs resilient capacity",
+      stance:
+        "Land condition, feed and water, animal care, labor, equipment, cash, and outside-service capacity set the safe growth rate. We do not add production faster than those systems can carry it through a poor-weather year.",
+    },
+    "quality-bar": {
+      title: "Our stewardship and welfare standard",
+      stance:
+        "Animal welfare, label compliance, traceable records, safe equipment, and honest product condition are never traded for speed or a sale. Stop and escalate when the record, label, withdrawal interval, forecast, or qualified advice is missing.",
+    },
+    "spend-authority": {
+      title: "Routine seasonal spending without asking",
+      stance:
+        "Budgeted feed, seed, consumables, routine parts, and scheduled animal or equipment care may proceed within the ceiling. New chemicals, major repairs, new vendors, capital equipment, and unbudgeted commitments go to the owner.",
+      ceilingUsd: 500,
     },
   },
   "automotive-services": {

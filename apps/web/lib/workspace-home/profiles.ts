@@ -293,6 +293,31 @@ export const DEFAULT_WORKSPACE_HOME_CONTRIBUTIONS: WorkspaceHomeContribution[] =
     ],
   }),
   profile({
+    id: "home-agriculture-ranching",
+    label: "Farm & ranch operations home",
+    description:
+      "Seasonal work windows, herd and working-animal care, field and pasture readiness, equipment, materials, outside services, and owner decisions in one operating view.",
+    primaryOperatingQuestion: "what has to be ready before the next biological or weather window closes?",
+    topConcerns: [
+      "animal health, breeding, farrier, and handling actions due",
+      "field, pasture, crop, hay, and grazing windows",
+      "tractors, implements, parts, fuel, and maintenance readiness",
+      "feed, seed, fertilizer, regulated inputs, and inventory risk",
+      "outside-service bookings, market decisions, and regulatory deadlines",
+    ],
+    archetypeCategories: ["agriculture-ranching"],
+    primitives: ["appointment-schedule", "capacity-lanes", "inventory-watch", "decision-queue", "handoff-queue"],
+    requiredCanonicalData: ["work-item", "work-schedule", "calendar-event"],
+    requiredSignals: ["scheduled-work", "urgent-exception", "coworker-handoff"],
+    components: [
+      { key: "today-schedule", slotId: "today-now", primitiveKey: "appointment-schedule", title: "Seasonal work, animal care, and outside-service windows", dataRefs: [calendarEvent, scheduledWork] },
+      { key: "technician-load", slotId: "today-now", primitiveKey: "capacity-lanes", title: "People, equipment, field, and pasture capacity", dataRefs: [workSchedule, scheduledWork] },
+      { key: "parts-watch", slotId: "exceptions-needs-review", primitiveKey: "inventory-watch", title: "Feed, seed, inputs, parts, fuel, and implement readiness", dataRefs: [workItem] },
+      { key: "unassigned-work", slotId: "exceptions-needs-review", primitiveKey: "decision-queue", title: "Herd, land, market, weather, and compliance decisions", dataRefs: [workItem, urgentException] },
+      { key: "coworker-handoffs", slotId: "coworker-handoffs", primitiveKey: "handoff-queue", title: "Owner, veterinarian, farrier, dealer, applicator, and service handoffs", dataRefs: [coworkerHandoff] },
+    ],
+  }),
+  profile({
     id: "home-food-hospitality",
     label: "Service period home",
     description:

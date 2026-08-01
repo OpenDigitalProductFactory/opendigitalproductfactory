@@ -5,6 +5,10 @@ import type {
   ProductMixDefinition,
 } from "./types";
 
+// Keep the product-mix module's public contract self-contained for consumers
+// and tests that import the parser and its result type from the same boundary.
+export type { ProductMixDefinition } from "./types";
+
 const KEY_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export function toProductMixKey(value: string): string {
