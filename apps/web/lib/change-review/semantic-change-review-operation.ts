@@ -62,7 +62,7 @@ export interface SemanticChangeReviewOperationResult {
   reusedFreshReceipt: boolean;
   repairLimitReached: boolean;
   mayPublish: boolean;
-  nextAction: "publish" | "repair" | "operator-review" | "shadow-observe";
+  nextAction: "publish" | "repair" | "retry-review" | "operator-review" | "shadow-observe";
 }
 
 const DOC_ONLY_PATH = /^(?:docs\/|[^/]+\.md$)|\.(?:md|mdx|txt)$/i;
@@ -126,10 +126,13 @@ function resultForReceipt(args: {
   mode: SemanticChangeReviewMode;
 }): SemanticChangeReviewOperationResult {
   const failed = args.receipt.result.decision === "fail";
+  const inconclusive = args.receipt.result.decision === "inconclusive";
   const repairLimitReached = failed && args.repairRound >= SEMANTIC_CHANGE_REVIEW_MAX_REPAIR_ROUNDS;
-  const mayPublish = args.mode === "shadow" || !failed;
-  const nextAction: SemanticChangeReviewOperationResult["nextAction"] = args.mode === "shadow" && failed
+  const mayPublish = args.mode === "shadow" || (!failed && !inconclusive);
+  const nextAction: SemanticChangeReviewOperationResult["nextAction"] = args.mode === "shadow" && (failed || inconclusive)
     ? "shadow-observe"
+    : inconclusive
+      ? "retry-review"
     : repairLimitReached
       ? "operator-review"
       : failed

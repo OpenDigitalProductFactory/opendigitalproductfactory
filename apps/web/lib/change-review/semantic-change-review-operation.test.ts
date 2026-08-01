@@ -160,4 +160,21 @@ describe("semantic change-review operation", () => {
     expect(out.mayPublish).toBe(true);
     expect(out.nextAction).toBe("shadow-observe");
   });
+
+  it("classifies exhausted review capacity as inconclusive instead of a semantic rejection", async () => {
+    const out = await runSemanticChangeReview(input(), {
+      dispatch: vi.fn().mockResolvedValue({
+        decision: "inconclusive",
+        issues: [],
+        summary: "Two required review branches did not complete.",
+        inconclusiveReason: "review-branch-capacity-exhausted",
+      }),
+    });
+
+    expect(out.receipt.result.decision).toBe("inconclusive");
+    expect(out.receipt.result.issues).toEqual([]);
+    expect(out.mayPublish).toBe(false);
+    expect(out.nextAction).toBe("retry-review");
+    expect(out.repairLimitReached).toBe(false);
+  });
 });

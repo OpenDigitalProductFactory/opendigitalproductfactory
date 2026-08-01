@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "converge-notice-three-state",
+  "decisionInteractionId": "DI-BAF7F486FA43",
+  "scope": {
+    "files": [
+      "apps/web/components/build/EvidenceSummary.tsx",
+      "apps/web/components/build/FeatureBriefPanel.tsx",
+      "apps/web/components/build/ReviewPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "converge-notice-three-state",
+      "keep-custom-three-state",
+      "coerce-inconclusive-to-fail"
+    ]
+  }
+}
