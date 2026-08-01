@@ -124,6 +124,7 @@
     {
       "routePath": "/admin/graph-explorer",
       "shell": "detail",
+      "audience": "admin",
       "migrated": false,
       "exemptChecks": [
         "next-action-marker",
