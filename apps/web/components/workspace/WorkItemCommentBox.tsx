@@ -43,7 +43,7 @@ export function WorkItemCommentBox({
         Share an update
       </label>
       <p id="work-item-comment-help" className="text-xs leading-5 text-[var(--dpf-muted)]">
-        Add context, ask a question, or @mention a participant.
+        Add context or @mention a participant.
       </p>
       <textarea
         id="work-item-comment"
@@ -61,7 +61,7 @@ export function WorkItemCommentBox({
           disabled={pending || body.trim().length === 0}
           className="min-h-11 rounded-md bg-[var(--dpf-accent)] px-4 text-sm font-semibold text-[var(--dpf-bg)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)] disabled:opacity-50"
         >
-          {pending ? "Posting…" : "Post update"}
+          {pending ? "Posting…" : "Post"}
         </button>
         <span aria-live="polite" className="text-xs text-[var(--dpf-muted)]">{status}</span>
       </div>

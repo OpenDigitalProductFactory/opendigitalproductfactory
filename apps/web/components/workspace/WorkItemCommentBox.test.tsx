@@ -13,10 +13,10 @@ describe("WorkItemCommentBox", () => {
     );
 
     expect(html).toContain("Share an update");
-    expect(html).toContain("Add context, ask a question, or @mention a participant.");
+    expect(html).toContain("Add context or @mention a participant.");
     expect(html).toContain('aria-live="polite"');
     expect(html).toContain("min-h-11");
-    expect(html).toContain("Post update");
+    expect(html).toContain(">Post<");
     expect(html).not.toContain("window.confirm");
   });
 });

@@ -22,7 +22,7 @@ export function WorkCaseDetailView({ detail }: Props) {
         </a>
         <EmptyState
           title="Work Room unavailable"
-          description="The room projection could not be loaded. Return to My Work and try opening it again."
+          description="The room could not load. Return to My Work and try again."
           icon={<DoorClosed className="size-7" />}
           action={(
             <a

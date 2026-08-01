@@ -8034,5 +8034,19 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 39
+  },
+  "apps/web/components/workspace/work-room/WorkRoomBody.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 64
+  },
+  "apps/web/components/workspace/work-room/WorkRoomHeader.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 46
   }
 }
