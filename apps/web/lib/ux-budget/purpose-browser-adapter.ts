@@ -16,14 +16,28 @@ export function capturePurposeEvidenceFromDom(): PurposeDomEvidence | null {
   if (!root) return null;
 
   const visible = (element: Element): boolean => {
-    const style = getComputedStyle(element);
     const rect = element.getBoundingClientRect();
-    return (
-      style.display !== "none" &&
-      style.visibility !== "hidden" &&
-      rect.width > 0 &&
-      rect.height > 0
-    );
+    if (
+      element.closest("[hidden], [aria-hidden='true'], [inert]") ||
+      rect.width <= 0 ||
+      rect.height <= 0
+    ) {
+      return false;
+    }
+    let current: HTMLElement | null = element as HTMLElement;
+    while (current) {
+      const style = getComputedStyle(current);
+      if (
+        style.display === "none" ||
+        style.visibility === "hidden" ||
+        style.visibility === "collapse" ||
+        Number.parseFloat(style.opacity || "1") <= 0
+      ) {
+        return false;
+      }
+      current = current.parentElement;
+    }
+    return true;
   };
 
   const accessibleName = (element: HTMLElement): string => {
@@ -44,13 +58,15 @@ export function capturePurposeEvidenceFromDom(): PurposeDomEvidence | null {
   };
 
   const semanticRole = (element: HTMLElement): string | null => {
+    const nativeRole =
+      element instanceof HTMLButtonElement
+        ? "button"
+        : element instanceof HTMLAnchorElement && element.hasAttribute("href")
+          ? "link"
+          : null;
+    if (!nativeRole) return null;
     const explicitRole = element.getAttribute("role")?.trim();
-    if (explicitRole) return explicitRole;
-    if (element instanceof HTMLButtonElement) return "button";
-    if (element instanceof HTMLAnchorElement && element.hasAttribute("href")) {
-      return "link";
-    }
-    return null;
+    return explicitRole || nativeRole;
   };
 
   const enabled = (element: HTMLElement): boolean => {
@@ -81,14 +97,16 @@ export function capturePurposeEvidenceFromDom(): PurposeDomEvidence | null {
     const x = rect.left + rect.width / 2;
     const y = rect.top + rect.height / 2;
     if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) {
-      return false;
+      return true;
     }
     const hit = document.elementFromPoint(x, y);
     return Boolean(hit && (hit === element || element.contains(hit)));
   };
 
   const meaningful = (element: HTMLElement): boolean =>
-    visible(element) && Boolean(element.textContent?.trim());
+    visible(element) &&
+    Boolean(element.textContent?.trim()) &&
+    unobstructed(element);
 
   const operable = (element: HTMLElement): boolean =>
     accessibleName(element).length > 0 &&
@@ -97,12 +115,15 @@ export function capturePurposeEvidenceFromDom(): PurposeDomEvidence | null {
     focusable(element) &&
     unobstructed(element);
 
+  const evidenceBearing = (element: HTMLElement): boolean =>
+    meaningful(element) || operable(element);
+
   const meaningfulMarkerPresent = (selector: string): boolean =>
     [...root.querySelectorAll<HTMLElement>(selector)].some(meaningful);
 
-  const actions = [
-    ...root.querySelectorAll<HTMLElement>("[data-dpf-purpose-action-key]"),
-  ].map((element) => {
+  const describeAction = (
+    element: HTMLElement,
+  ): PurposeDomEvidence["actions"][number] => {
     const rect = element.getBoundingClientRect();
     const href =
       element instanceof HTMLAnchorElement
@@ -125,10 +146,16 @@ export function capturePurposeEvidenceFromDom(): PurposeDomEvidence | null {
       },
       ...(href ? { href } : {}),
     };
-  });
-  const recoveryAction = actions.find(
-    (action) => action.key === "open-recovery-guidance",
+  };
+  const actions = [
+    ...root.querySelectorAll<HTMLElement>("[data-dpf-purpose-action-key]"),
+  ].map(describeAction);
+  const recoveryActionElement = root.querySelector<HTMLElement>(
+    "[data-dpf-purpose-recovery-action][data-dpf-purpose-action-key]",
   );
+  const recoveryAction = recoveryActionElement
+    ? describeAction(recoveryActionElement)
+    : undefined;
   const disclosures = [
     ...root.querySelectorAll<HTMLElement>(
       "[data-dpf-purpose-disclosure-key]",
@@ -160,7 +187,8 @@ export function capturePurposeEvidenceFromDom(): PurposeDomEvidence | null {
   return {
     routePath: root.dataset.dpfPurposeRoute ?? null,
     stateKey: root.dataset.dpfPurposeState ?? null,
-    h1Count: root.querySelectorAll("h1").length,
+    h1Count: [...root.querySelectorAll<HTMLElement>("h1")].filter(meaningful)
+      .length,
     purposeKeys: [
       ...root.querySelectorAll<HTMLElement>("[data-dpf-purpose-key]"),
     ]
@@ -182,7 +210,7 @@ export function capturePurposeEvidenceFromDom(): PurposeDomEvidence | null {
         "[data-dpf-purpose-completion-signal-key]",
       ),
     ]
-      .filter(meaningful)
+      .filter(evidenceBearing)
       .map((element) => element.dataset.dpfPurposeCompletionSignalKey ?? "")
       .filter(Boolean),
     correctionSignalKeys: [
@@ -190,7 +218,7 @@ export function capturePurposeEvidenceFromDom(): PurposeDomEvidence | null {
         "[data-dpf-purpose-correction-signal-key]",
       ),
     ]
-      .filter(meaningful)
+      .filter(evidenceBearing)
       .map((element) => element.dataset.dpfPurposeCorrectionSignalKey ?? "")
       .filter(Boolean),
     recoverySignal: {

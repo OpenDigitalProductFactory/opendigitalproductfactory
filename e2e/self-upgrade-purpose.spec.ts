@@ -79,6 +79,52 @@ test("Self-Upgrade is findable and its served DOM matches the state oracle", asy
     { width: 320, height: 640 },
   ]) {
     await page.setViewportSize(viewport);
+    await page.goto("/ops/self-upgrade");
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Self-Upgrade" }),
+    ).toBeVisible();
+
+    const responsiveEvidence = await capturePurposeEvidence(page);
+    const responsiveEvaluation = evaluateRoutePurpose({
+      contract,
+      oracle: {
+        routePath: "/ops/self-upgrade",
+        stateKey: responsiveEvidence?.stateKey ?? "",
+        oracleKey: "self-upgrade-status",
+        sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
+      },
+      evidence: responsiveEvidence,
+      enforcement: "advisory",
+    });
+    expect(
+      responsiveEvaluation.structuralStatus,
+      responsiveEvaluation.findings
+        .map((finding) => finding.message)
+        .join("\n"),
+    ).toBe("conformant");
+
+    const recovery = page.getByRole("link", {
+      name: "Recovery guidance",
+      exact: true,
+    });
+    await expect(recovery).toBeVisible();
+    await expect(recovery).toHaveAttribute(
+      "href",
+      "/docs/operations/self-upgrade",
+    );
+    const recoveryBox = await recovery.boundingBox();
+    expect(recoveryBox?.height).toBeGreaterThanOrEqual(44);
+
+    const responsiveDetails = page.getByText("Version, impact & recovery", {
+      exact: true,
+    });
+    await responsiveDetails.focus();
+    await expect(responsiveDetails).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(
+      page.locator("[data-dpf-purpose-disclosure-key='release-details']"),
+    ).toHaveAttribute("open", "");
+
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - window.innerWidth,
     );
@@ -172,6 +218,14 @@ test("Self-Upgrade review fixtures expose every state and correction path withou
       structural.structuralStatus,
       structural.findings.map((finding) => finding.message).join("\n"),
     ).toBe("conformant");
+    expect(evidence.correctionSignalKeys).toContain(
+      scenario.correctionSignalKey,
+    );
+    if (state !== "update-available") {
+      expect(evidence.completionSignalKeys).toContain(
+        scenario.completionSignalKey,
+      );
+    }
     expect(structural.validation.overall).toBe("not-validated");
   }
 });

@@ -47,7 +47,7 @@ export function SelfUpgradePurposeReviewTrigger({
       jobEngine={
         status.jobEngine
           ? {
-              status: status.jobEngine.healthy ? "healthy" : "degraded",
+              status: status.jobEngine.status,
               detail: null,
               checkedAt: null,
             }

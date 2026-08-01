@@ -25,7 +25,7 @@ beforeEach(() => {
     isFresh: false,
     targetSha: "target",
     latestRun: null,
-    jobEngine: { healthy: true },
+    jobEngine: { status: "healthy" },
     windowSource: "operating-hours",
   });
 });

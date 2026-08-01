@@ -12,7 +12,7 @@ function status(
     isFresh: false,
     targetSha: "target",
     latestRun: null,
-    jobEngine: { healthy: true },
+    jobEngine: { status: "healthy" },
     windowSource: "operating-hours",
     ...overrides,
   };
@@ -26,7 +26,7 @@ describe("resolveSelfUpgradePurposeOracle", () => {
     [{ isFresh: true }, "current"],
     [{ targetSha: null }, "current"],
     [{ enabled: false }, "blocked"],
-    [{ jobEngine: { healthy: false } }, "blocked"],
+    [{ jobEngine: { status: "degraded" } }, "blocked"],
     [{ windowSource: "needs-timezone" }, "blocked"],
     [{}, "update-available"],
   ] as const)("maps canonical raw status %j to %s", (overrides, expected) => {

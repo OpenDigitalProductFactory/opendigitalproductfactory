@@ -542,7 +542,7 @@ export function evaluateRoutePurpose({
   if (
     contract.consequentialAction &&
     scenario?.primaryExperience.kind === "command" &&
-    scenario.primaryExperience.actionKey === "start-upgrade"
+    scenario.primaryExperience.actionKey === contract.consequentialAction.actionKey
   ) {
     const consequence = evidence.consequentialAction;
     if (

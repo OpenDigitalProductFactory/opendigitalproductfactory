@@ -64,7 +64,7 @@ export function buildSelfUpgradePurposeReviewStatus(
     blackoutName: null,
     platformVersion: { version: "vabc1234", gitSha: "abc1234" },
     latestRun: null,
-    jobEngine: { healthy: true },
+    jobEngine: { status: "healthy" },
     windowSource: "operating-hours",
     quiescence: { blockers: [] },
   };

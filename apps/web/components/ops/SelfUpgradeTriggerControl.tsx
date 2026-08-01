@@ -31,7 +31,7 @@ import SelfUpgradeJobEngineHealthAlert, {
 export type SelfUpgradeControlActions = {
   trigger: (
     options?: Parameters<typeof triggerSelfUpgrade>[0],
-  ) => Promise<TriggerResult & { runId?: string }>;
+  ) => Promise<TriggerResult>;
   force: typeof forceActiveRun;
   abort: typeof abortActiveRun;
 };
@@ -49,7 +49,9 @@ type Props = {
   actions?: SelfUpgradeControlActions;
 };
 
-type TriggerResult = { queued: boolean; reason?: string };
+export type TriggerResult =
+  | { queued: true; reason?: never; runId?: string }
+  | { queued: false; reason: string; runId?: string };
 
 function TriggerFeedback({
   busy,
@@ -108,6 +110,7 @@ function RecoveryGuidanceLink({
       href="/docs/operations/self-upgrade"
       data-dpf-purpose-key="recovery-status"
       data-dpf-purpose-action-key="open-recovery-guidance"
+      data-dpf-purpose-recovery-action
       data-dpf-purpose-correction-signal-key={correctionSignalKey}
       className="inline-flex min-h-11 items-center text-sm text-[var(--dpf-accent)] underline-offset-2 hover:underline"
     >
@@ -318,6 +321,7 @@ export default function SelfUpgradeTriggerControl({
           href="/ops/self-upgrade"
           aria-label="Refresh update status"
           title="Refresh update status"
+          data-dpf-purpose-action-key="status-refresh"
           data-dpf-purpose-correction-signal-key="status-refresh"
           className="inline-flex size-11 items-center justify-center rounded-lg text-[var(--dpf-accent)] hover:bg-[var(--dpf-surface-1)]"
         >

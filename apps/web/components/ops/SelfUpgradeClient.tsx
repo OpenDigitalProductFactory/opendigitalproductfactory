@@ -14,6 +14,7 @@ import { isExpectedDuringSwap } from "@/lib/self-upgrade/is-expected-during-swap
 import { SelfUpgradeReadiness } from "@/components/ops/SelfUpgradeReadiness";
 import { BuildStamps } from "@/components/ops/BuildStamps";
 import type { LatestRun, QuiescenceActivity } from "@/lib/self-upgrade/run-types";
+import { conciseFailureReason } from "@/lib/self-upgrade/owner-summary";
 import { RECOVERY_ACTION_CLASS, RECOVERY_CONFIRMATION_CLASS } from "@/components/ops/self-upgrade-recovery-control-styles";
 type RecoveryPointSummary = {
   status: string;
@@ -113,29 +114,6 @@ function formatDuration(start: Date | string, end: Date | string): string {
   if (minutes === 0) return `${seconds}s`;
   if (seconds === 0) return `${minutes}m`;
   return `${minutes}m ${seconds}s`;
-}
-
-// A one-line "why it failed" for the Run History, drawn from the persisted
-// failureLog. The orchestrator stores a classified excerpt that LEADS with
-// `[build-failure-class] <summary>` lines, so prefer the human summary line;
-// otherwise fall back to the last non-empty line (usually the raw daemon/build
-// error). The full log stays available on hover. Without this the history table
-// showed a bare "failed" badge with no words — the gap this closes.
-export function conciseFailureReason(log: string | null | undefined): string | null {
-  if (!log) return null;
-  const lines = log
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
-  if (lines.length === 0) return null;
-  const classLines = lines
-    .filter((l) => l.startsWith("[build-failure-class]"))
-    .map((l) => l.replace(/^\[build-failure-class\]\s*/, "").trim())
-    .filter((l) => l && !l.startsWith("playbook:"));
-  // classLines[0] is the class id (e.g. "docker-mount-denied"); [1] is the
-  // human summary. Prefer the summary, else the id, else the last raw line.
-  const chosen = classLines[1] ?? classLines[0] ?? lines[lines.length - 1];
-  return chosen.length > 200 ? `${chosen.slice(0, 200)}…` : chosen;
 }
 
 /**
@@ -905,7 +883,7 @@ export default function SelfUpgradeClient({
           )}
 
           {latestRun.failureLog && (
-            <details className="text-xs" data-dpf-purpose-correction-signal-key="failure-reason-visible">
+            <details className="text-xs">
               <summary className="cursor-pointer text-[var(--dpf-destructive)]">
                 Error details
               </summary>

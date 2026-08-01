@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildOwnerReleaseSummary, type OwnerReleaseInput } from "./owner-summary";
+import {
+  buildOwnerReleaseSummary,
+  conciseFailureReason,
+  type OwnerReleaseInput,
+} from "./owner-summary";
 import type { LocalChangesResult } from "./local-changes-ledger";
 
 const NO_LOCAL_CHANGES: LocalChangesResult = { available: true, changes: [] };
@@ -39,6 +43,7 @@ function allCopy(s: ReturnType<typeof buildOwnerReleaseSummary>): string {
     s.rollback.detail,
     s.ifYouDoNothing,
     ...(s.riskNotice ? Object.values(s.riskNotice) : []),
+    s.failureReason ?? "",
   ].join(" \n ");
 }
 
@@ -149,7 +154,13 @@ describe("buildOwnerReleaseSummary", () => {
         isFresh: false,
         targetSha: "f".repeat(40),
         rollbackAvailable: true,
-        latestRun: { status: "failed", reason: null, targetSha: null },
+        latestRun: {
+          status: "failed",
+          reason: null,
+          targetSha: null,
+          failureLog:
+            "[build-failure-class] health-check-failed\nHealth checks did not pass.",
+        },
       }),
       NO_LOCAL_CHANGES,
     );
@@ -157,6 +168,7 @@ describe("buildOwnerReleaseSummary", () => {
     expect(s.tone).toBe("danger");
     expect(s.rollback.available).toBe(true);
     expect(s.recommendedAction.detail).toContain("Restore the previous version");
+    expect(s.failureReason).toBe("Health checks did not pass.");
   });
 
   it("reports a truthful blocked state instead of contradicting the unavailable control", () => {
@@ -277,5 +289,15 @@ describe("buildOwnerReleaseSummary", () => {
         expect(copy).not.toContain(term);
       }
     }
+  });
+});
+
+describe("conciseFailureReason", () => {
+  it("prefers the classified human summary", () => {
+    expect(
+      conciseFailureReason(
+        "[build-failure-class] docker-mount-denied\n[build-failure-class] Docker Desktop refused to share /root/.dpf.",
+      ),
+    ).toBe("Docker Desktop refused to share /root/.dpf.");
   });
 });

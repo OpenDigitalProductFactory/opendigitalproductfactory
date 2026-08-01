@@ -29,7 +29,7 @@ export function resolveSelfUpgradePurposeOracle(
   if (status.isFresh || status.targetSha === null) return "current";
   if (
     status.enabled === false ||
-    status.jobEngine?.healthy === false ||
+    status.jobEngine?.status === "degraded" ||
     status.windowSource === "needs-timezone"
   ) {
     return "blocked";

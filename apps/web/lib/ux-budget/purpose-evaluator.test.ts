@@ -92,6 +92,7 @@ const contract: RatifiedPurposeContract = {
     },
   ],
   consequentialAction: {
+    actionKey: "start-upgrade",
     noActionConsequence: "The update waits for the next governed window.",
     reversibility: "A recovery point is created first.",
     confirmation: "The action is explicit.",
@@ -375,6 +376,38 @@ describe("evaluateRoutePurpose", () => {
     expect(result.structuralStatus).toBe("nonconformant");
     expect(result.findings.map((finding) => finding.checkId)).toContain(
       "primary-experience",
+    );
+  });
+
+  it("enforces consequence evidence for a contract-declared non-pilot action", () => {
+    const genericContract = structuredClone(contract);
+    genericContract.stateScenarios["update-available"].primaryExperience = {
+      kind: "command",
+      actionKey: "execute-change",
+    };
+    genericContract.consequentialAction = {
+      ...genericContract.consequentialAction!,
+      actionKey: "execute-change",
+    };
+    const candidate = structuredClone(evidence);
+    candidate.actions[0].key = "execute-change";
+    candidate.consequentialAction!.confirmationAvailable = false;
+
+    const result = evaluateRoutePurpose({
+      contract: genericContract,
+      oracle: {
+        routePath: "/ops/self-upgrade",
+        stateKey: "update-available",
+        oracleKey: "self-upgrade-status",
+        sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
+      },
+      evidence: candidate,
+      context,
+    });
+
+    expect(result.structuralStatus).toBe("nonconformant");
+    expect(result.findings.map((finding) => finding.checkId)).toContain(
+      "consequential-action",
     );
   });
 

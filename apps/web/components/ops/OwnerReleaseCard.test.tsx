@@ -21,6 +21,7 @@ const baseSummary: OwnerReleaseSummary = {
   whatCouldGoWrong: [],
   rollback: { available: true, detail: "Can be undone from a recovery point." },
   ifYouDoNothing: "It installs automatically overnight.",
+  failureReason: null,
   riskNotice: {
     consequence: "The portal restarts briefly.",
     reversibility: "Yes, via the recovery point.",
@@ -86,11 +87,12 @@ describe("OwnerReleaseCard – primary action slot", () => {
           state: "failed",
           tone: "danger",
           headline: "The update did not complete.",
+          failureReason: "Health checks did not pass.",
         }}
       />,
     );
-    expect(html).toContain(
-      'data-dpf-purpose-correction-signal-key="failure-reason-visible"',
+    expect(html).toMatch(
+      /data-dpf-purpose-correction-signal-key="failure-reason-visible"[^>]*>[^<]*Health checks did not pass\./,
     );
   });
 });

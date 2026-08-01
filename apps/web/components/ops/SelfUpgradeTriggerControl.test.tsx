@@ -9,7 +9,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 // same behavior, new home.
 const shared = vi.hoisted(() => ({
   isPending: false,
-  triggerResult: null as { queued: boolean; reason?: string } | null,
+  triggerResult: null as
+    | { queued: true; reason?: never; runId?: string }
+    | { queued: false; reason: string; runId?: string }
+    | null,
 }));
 
 vi.mock("react", async () => {

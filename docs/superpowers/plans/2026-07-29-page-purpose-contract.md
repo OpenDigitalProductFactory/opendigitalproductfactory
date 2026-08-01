@@ -94,6 +94,22 @@ receipt. The corrected evidence boundary is:
   owning recovery destination, and the resulting evidence is resolved from
   the DPF audit evidence store.
 
+A second architecture and UX review cycle rejected marker-only recovery and
+pilot-specific evaluator logic. The implementation now also requires:
+
+- an actual retry command and the canonical concise failure reason in the
+  failed state, while collapsed technical logs cannot self-attest correction;
+- browser evidence that is not hidden, inert, transparent, or obstructed, and
+  native named buttons or links for action evidence;
+- contract-declared consequential and recovery action keys instead of
+  Self-Upgrade action names embedded in the generic evaluator or adapter;
+- named icon-only controls to count as completion or correction evidence when
+  they are genuinely operable;
+- desktop, 390 x 844 portrait, 844 x 390 landscape, and 320 CSS-pixel checks to
+  repeat the state/task assertions as well as horizontal-overflow checks;
+- focus restoration after force/abort confirmation and a result union that
+  cannot represent a rejected trigger without a reason.
+
 ## Design grounding
 
 - Existing specs/plans reviewed:

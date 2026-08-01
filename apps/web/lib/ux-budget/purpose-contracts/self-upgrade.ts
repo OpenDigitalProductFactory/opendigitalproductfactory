@@ -231,6 +231,7 @@ export const SELF_UPGRADE_PURPOSE_CONTRACT = {
     },
   ],
   consequentialAction: {
+    actionKey: "start-upgrade",
     noActionConsequence:
       "When automatic updates are enabled the update waits for the next governed window; otherwise it remains pending.",
     reversibility:

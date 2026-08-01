@@ -115,7 +115,7 @@ export default async function SelfUpgradePage({
     quiescence: { blockers: [] },
     admission: { mode: "uncapped" as const, limit: null, blockedBy: [] },
     cooldownUntil: null,
-    jobEngine: { healthy: false },
+    jobEngine: { status: "degraded" as const },
     platformVersion: {
       version: "unknown",
       publishedAt: new Date().toISOString(),
@@ -168,6 +168,7 @@ export default async function SelfUpgradePage({
             status: effectiveStatus.latestRun.status,
             reason: effectiveStatus.latestRun.reason,
             targetSha: effectiveStatus.latestRun.targetSha,
+            failureLog: effectiveStatus.latestRun.failureLog,
           }
         : null,
       latestRunImpact: effectiveStatus.latestRunImpact,

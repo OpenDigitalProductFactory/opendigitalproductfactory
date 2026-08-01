@@ -60,6 +60,8 @@ export interface OwnerReleaseSummary {
   ifYouDoNothing: string;
   /** Present only when a risk-bearing install action is offered (state = update-available). */
   riskNotice: OwnerRiskNotice | null;
+  /** Concise persisted diagnosis for a failed run; null when no run failed. */
+  failureReason: string | null;
 }
 
 /**
@@ -89,6 +91,7 @@ export interface OwnerReleaseInput {
     status: string;
     reason: string | null;
     targetSha: string | null;
+    failureLog?: string | null;
   } | null;
   latestRunImpact: {
     counts: {
@@ -123,6 +126,32 @@ function plural(n: number): string {
   return n === 1 ? "" : "s";
 }
 
+export function conciseFailureReason(
+  log: string | null | undefined,
+): string | null {
+  if (!log) return null;
+  const lines = log
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return null;
+  const classified = lines
+    .filter((line) => line.startsWith("[build-failure-class]"))
+    .map((line) => line.replace(/^\[build-failure-class\]\s*/, "").trim())
+    .filter((line) => line && !line.startsWith("playbook:"));
+  const adjacentSummary =
+    classified.length > 0
+      ? lines.find(
+          (line) =>
+            !line.startsWith("[build-failure-class]") &&
+            !line.startsWith("playbook:"),
+        )
+      : null;
+  const chosen =
+    classified[1] ?? adjacentSummary ?? classified[0] ?? lines[lines.length - 1];
+  return chosen.length > 200 ? `${chosen.slice(0, 200)}…` : chosen;
+}
+
 /** A friendly "on Tuesday at 2:00 AM" for the next quiet window, or "" when unknown. */
 function describeWhen(iso: string | null): string {
   if (!iso) return "";
@@ -150,6 +179,9 @@ export function buildOwnerReleaseSummary(
   const runStatus = input.latestRun?.status ?? null;
   const inFlight = runStatus != null && IN_FLIGHT.has(runStatus);
   const failed = runStatus === "failed";
+  const failureReason = failed
+    ? conciseFailureReason(input.latestRun?.failureLog)
+    : null;
 
   const state: OwnerReleaseState = inFlight
     ? "in-progress"
@@ -344,5 +376,6 @@ export function buildOwnerReleaseSummary(
     rollback,
     ifYouDoNothing,
     riskNotice,
+    failureReason,
   };
 }

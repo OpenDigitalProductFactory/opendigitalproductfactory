@@ -229,6 +229,7 @@ const taskValidationReceiptSchema = z.discriminatedUnion("evidenceClass", [
 
 const consequentialActionSchema = z
   .object({
+    actionKey: identityKey,
     noActionConsequence: nonEmptyString,
     reversibility: nonEmptyString,
     confirmation: nonEmptyString,

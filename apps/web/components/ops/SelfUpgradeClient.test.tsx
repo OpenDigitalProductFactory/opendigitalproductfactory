@@ -41,7 +41,8 @@ vi.mock("@/components/ops/UpgradeImpactPanel", () => ({
   default: () => null,
 }));
 
-import SelfUpgradeClient, { conciseFailureReason } from "./SelfUpgradeClient";
+import { conciseFailureReason } from "@/lib/self-upgrade/owner-summary";
+import SelfUpgradeClient from "./SelfUpgradeClient";
 
 const baseStatus = {
   enabled: true,
@@ -394,6 +395,9 @@ describe("SelfUpgradeClient – failed", () => {
       />,
     );
     expect(html).toContain("promoter exited with code 1");
+    expect(html).not.toMatch(
+      /<details[^>]*data-dpf-purpose-correction-signal-key="failure-reason-visible"/,
+    );
   });
 
   it("links a failed run back to the operable retry control", () => {

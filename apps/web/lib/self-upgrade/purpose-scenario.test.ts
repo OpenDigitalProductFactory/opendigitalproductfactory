@@ -5,16 +5,19 @@ import {
   resolveSelfUpgradePurposeRecovery,
   resolveSelfUpgradePurposeScenario,
   resolveSelfUpgradePurposeSignals,
+  type SelfUpgradePurposeStatus,
 } from "./purpose-scenario";
 
-function status(overrides: Record<string, unknown> = {}) {
+function status(
+  overrides: Partial<SelfUpgradePurposeStatus> = {},
+): SelfUpgradePurposeStatus {
   return {
     enabled: true,
     isFresh: false,
     targetSha: "target",
     latestRun: null,
     quiescence: { blockers: [] },
-    jobEngine: { healthy: true },
+    jobEngine: { status: "healthy" },
     windowSource: "operating-hours",
     ...overrides,
   };
@@ -27,7 +30,7 @@ describe("resolveSelfUpgradePurposeScenario", () => {
     [{ enabled: false, isFresh: false, targetSha: "target" }, "blocked"],
     [
       {
-        jobEngine: { healthy: false },
+        jobEngine: { status: "degraded" as const },
         isFresh: false,
         targetSha: "target",
       },
@@ -48,7 +51,7 @@ describe("resolveSelfUpgradePurposeScenario", () => {
         enabled: false,
         isFresh: true,
         targetSha: null,
-        jobEngine: { healthy: false },
+        jobEngine: { status: "degraded" as const },
       },
       "current",
     ],
@@ -63,7 +66,7 @@ describe("resolveSelfUpgradePurposeScenario", () => {
       resolveSelfUpgradePurposeScenario(
         status({
           latestRun: { status: "completing" },
-          jobEngine: { healthy: false },
+          jobEngine: { status: "degraded" as const },
         }),
       ),
     ).toBe("queued-or-running");
@@ -72,7 +75,10 @@ describe("resolveSelfUpgradePurposeScenario", () => {
   it.each([
     [{ statusAvailable: false }, "Update status is temporarily unavailable."],
     [{ enabled: false }, "Automatic platform updates are disabled."],
-    [{ jobEngine: { healthy: false } }, "The update worker is unavailable."],
+    [
+      { jobEngine: { status: "degraded" as const } },
+      "The update worker is unavailable.",
+    ],
     [
       { windowSource: "needs-timezone" },
       "Operating timezone is required before updates can be scheduled safely.",
@@ -87,7 +93,7 @@ describe("resolveSelfUpgradePurposeScenario", () => {
       { windowSource: "needs-timezone" },
       "/storefront/settings/operations",
     ],
-    [{ jobEngine: { healthy: false } }, "/ops/health"],
+    [{ jobEngine: { status: "degraded" as const } }, "/ops/health"],
     [
       { enabled: false },
       "/docs/operations/self-upgrade#enable-self-upgrade",
