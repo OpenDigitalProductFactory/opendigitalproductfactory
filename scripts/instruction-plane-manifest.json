@@ -22,6 +22,16 @@
     "*/AGENTS.md",
     "*/*/AGENTS.md"
   ],
+  "_contentAssertionsComment": "Source files that READ an always-on doc and assert on its CONTENT. These pin rules the anchor-based coverage check cannot see: Phase 1 relocated the principle_decide cost-axis sign rule and only dimension-catalog.test.ts caught it. Registered so whoever relocates doctrine next knows which tests to run; check-instruction-plane-rule-coverage.mjs reports any reader missing from this list so the set cannot grow silently.",
+  "contentAssertions": [
+    "apps/web/lib/decision/dimension-catalog.test.ts"
+  ],
+  "contentAssertionScan": [
+    "apps/web/lib/**/*.ts",
+    "apps/web/components/**/*.ts",
+    "packages/db/src/**/*.ts",
+    "packages/dpf-skill-pack/hooks/*.mjs"
+  ],
   "perSectionCharBudget": 6000,
   "maxLineChars": 800,
   "maxExtractedItemChars": 700,
