@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   authorizeWorkRoomAccess,
+  projectWorkRoomDiscovery,
   projectWorkRoomParticipants,
 } from "./room-participation";
 
@@ -19,7 +20,7 @@ describe("Work Room participation", () => {
   });
 
   it("limits discover-only participants to explicitly safe metadata", () => {
-    expect(authorizeWorkRoomAccess({
+    const decision = authorizeWorkRoomAccess({
       requested: "content",
       principalRef: "PRN-OBSERVER",
       assignedPrincipalRefs: ["PRN-OWNER"],
@@ -27,7 +28,22 @@ describe("Work Room participation", () => {
       sensitivityCeiling: "internal",
       sensitivityClearance: ["public", "internal"],
       isSuperuser: false,
-    })).toEqual({ level: "discover", reason: "discover-only" });
+    });
+    expect(decision).toEqual({ level: "discover", reason: "discover-only" });
+    expect(projectWorkRoomDiscovery({
+      decision,
+      allowedFields: ["title", "mode"],
+      metadata: {
+        title: "Quarterly access review",
+        outcome: "Every exception has an accountable disposition.",
+        mode: "standing",
+      },
+    })).toEqual({
+      accessLevel: "discover",
+      title: "Quarterly access review",
+      outcome: null,
+      mode: "standing",
+    });
   });
 
   it("never lets presence expand authority", () => {

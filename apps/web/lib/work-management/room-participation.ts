@@ -20,6 +20,23 @@ export type WorkRoomAccessDecision = {
   reason: "authorized" | "discover-only" | "not-admitted" | "insufficient-clearance";
 };
 
+export type WorkRoomDiscoveryField = "title" | "outcome" | "mode";
+
+export function projectWorkRoomDiscovery(input: {
+  decision: WorkRoomAccessDecision;
+  allowedFields: readonly WorkRoomDiscoveryField[];
+  metadata: { title: string; outcome: string | null; mode: "finite" | "standing" };
+}) {
+  if (input.decision.level === "none") return null;
+  const visible = new Set(input.allowedFields);
+  return {
+    accessLevel: input.decision.level,
+    title: visible.has("title") ? input.metadata.title : null,
+    outcome: visible.has("outcome") ? input.metadata.outcome : null,
+    mode: visible.has("mode") ? input.metadata.mode : null,
+  };
+}
+
 export function authorizeWorkRoomAccess(input: {
   requested: Exclude<WorkRoomAccessLevel, "none">;
   principalRef: string | null;
