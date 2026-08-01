@@ -5452,6 +5452,13 @@
     "longSentences": 0,
     "textMass": 64
   },
+  "apps/web/components/inventory/AttributedEstateGrid.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 21
+  },
   "apps/web/components/inventory/ConfigureConnectionInline.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
