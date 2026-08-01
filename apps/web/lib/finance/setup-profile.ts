@@ -19,6 +19,7 @@ const FINANCE_PROFILE_BY_ARCHETYPE_CATEGORY: Record<string, string> = {
   "live-events-venues": "live_events_venues",
   "warehousing-fulfilment": "warehousing_fulfilment",
   "fabric-care-services": "fabric_care_services",
+  "agriculture-ranching": "agriculture_ranching",
 };
 
 export function financeProfileSlugFromCategory(category: string | null | undefined): string {

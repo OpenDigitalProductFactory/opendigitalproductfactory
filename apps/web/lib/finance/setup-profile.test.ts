@@ -12,6 +12,18 @@ describe("finance setup profile resolution", () => {
     expect(financeProfileSlugFromCategory("retail-goods")).toBe("retail");
     expect(financeProfileSlugFromCategory("software-platform")).toBe("software_platform");
     expect(financeProfileSlugFromCategory("fabric-care-services")).toBe("fabric_care_services");
+    expect(financeProfileSlugFromCategory("agriculture-ranching")).toBe("agriculture_ranching");
+  });
+
+  it("exposes invoice-first seasonal finance setup for agriculture and ranching", () => {
+    expect(resolveFinanceSetupProfile({
+      category: "agriculture-ranching",
+      archetypeName: "Mixed Farm & Ranch",
+    })).toMatchObject({
+      slug: "agriculture_ranching",
+      primaryPaymentPattern: "ad-hoc-invoice",
+      recurringBillingApplicability: "optional",
+    });
   });
 
   it("falls back to professional services when the business category is unknown", () => {

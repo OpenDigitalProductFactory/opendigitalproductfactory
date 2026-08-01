@@ -251,6 +251,18 @@ export const COWORKER_AGENT_SEEDS: readonly CoworkerAgentSeed[] = [
     valueStream: "operate",
     sensitivity: "confidential",
   },
+  {
+    agentId: "farm-ranch-steward",
+    slugId: "farm-ranch-steward",
+    name: "Farm & Ranch Steward",
+    tier: 2,
+    type: "coworker",
+    description:
+      "Seasonal land, forage, livestock, working-animal, equipment, vendor, weather, market, and regulatory operating coordination",
+    valueStream: "operate",
+    sensitivity: "confidential",
+    initialLifecycleStage: "draft",
+  },
   // AGT-906 revived through the enforced lifecycle (EP-UX-SYSTEM L6, BI-42892849
   // / BI-3880DA1D). Deliberately established in its CURATION stage: it owns the
   // founder-authored UX critique corpus and holds NO gating authority. Its
@@ -371,6 +383,14 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // Reads field-service jobs and customer contact data, updates job status, and
   // proposes customer notifications for approval.
   dispatcher: ["backlog_read", "backlog_write", "consumer_read", "consumer_write", "registry_read"],
+  "farm-ranch-steward": [
+    "registry_read",
+    "backlog_read",
+    "backlog_write",
+    "consumer_read",
+    "web_search",
+    "file_read",
+  ],
   // UX Design Critic (AGT-906) — READ-AND-DRAFT ONLY, deliberately.
   //
   // Absent by design: backlog_write / backlog_triage (cannot file its own

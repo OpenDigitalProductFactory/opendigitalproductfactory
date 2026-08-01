@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 596,
+  "pageCount": 602,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -4771,6 +4771,51 @@
         "see-also"
       ]
     },
+    "docs/professions/agricultural-operations/wiki/equipment-material-and-service-readiness.md": {
+      "publicHref": "/professions/agricultural-operations/wiki/equipment-material-and-service-readiness/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "interoperability-posture",
+        "source"
+      ]
+    },
+    "docs/professions/agricultural-operations/wiki/herd-and-working-animal-care-records.md": {
+      "publicHref": "/professions/agricultural-operations/wiki/herd-and-working-animal-care-records/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "record-pattern",
+        "authority-boundary",
+        "sources"
+      ]
+    },
+    "docs/professions/agricultural-operations/wiki/seasonal-operating-horizon.md": {
+      "publicHref": "/professions/agricultural-operations/wiki/seasonal-operating-horizon/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "human-authority",
+        "sources"
+      ]
+    },
+    "docs/professions/agricultural-operations/wiki/weather-and-market-decision-evidence.md": {
+      "publicHref": "/professions/agricultural-operations/wiki/weather-and-market-decision-evidence/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "weather-evidence",
+        "market-evidence",
+        "decision-brief",
+        "sources"
+      ]
+    },
     "docs/professions/build-studio/wiki/build-phase-lifecycle.md": {
       "publicHref": "/professions/build-studio/wiki/build-phase-lifecycle/",
       "portalHref": null,
@@ -5549,6 +5594,16 @@
         "see-also"
       ]
     },
+    "docs/professions/finance/wiki/agriculture-seasonal-cash-and-sale-decisions.md": {
+      "publicHref": "/professions/finance/wiki/agriculture-seasonal-cash-and-sale-decisions/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "sources"
+      ]
+    },
     "docs/professions/finance/wiki/double-entry-invariant.md": {
       "publicHref": "/professions/finance/wiki/double-entry-invariant/",
       "portalHref": null,
@@ -5844,6 +5899,16 @@
         "anti-discrimination-always-overrides",
         "how-dpf-coworkers-use-it",
         "see-also"
+      ]
+    },
+    "docs/professions/legal-compliance/wiki/agriculture-pesticide-label-license-and-exemption-control.md": {
+      "publicHref": "/professions/legal-compliance/wiki/agriculture-pesticide-label-license-and-exemption-control/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "control-pattern",
+        "sources"
       ]
     },
     "docs/professions/legal-compliance/wiki/ai-provider-account-and-sovereignty-review.md": {

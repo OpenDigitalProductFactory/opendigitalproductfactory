@@ -412,6 +412,13 @@ function chooseTemplate(
   }
 
   // 5. Physical categories.
+  // Agriculture is a spatial operating system: land units, herds, working
+  // animals, equipment, and active work are understood in aggregate by place.
+  // TERRITORY/unit-portfolio is the closest existing visual grammar; a richer
+  // land-and-herd scene is governed by BI-0077303A rather than a one-off twin.
+  if (category === "agriculture-ranching") {
+    return { template: "TERRITORY", variant: "unit-portfolio" };
+  }
   if (category === "food-hospitality") {
     return { template: "FLOOR" };
   }

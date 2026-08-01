@@ -84,6 +84,48 @@
       ],
       "onboardingCurriculumId": "occ-intro-field-dispatcher",
       "moverCurriculumId": null
+    },
+    {
+      "occupationKey": "farm-ranch-owner-operator",
+      "label": "Farm & Ranch Owner-Operator",
+      "summary": "Owns the seasonal operating system across land, livestock, working animals, equipment, materials, outside services, markets, finance, and compliance.",
+      "archetypeCategories": ["agriculture-ranching"],
+      "archetypeIds": [],
+      "baseAccessProfile": "workforce-member",
+      "wsidProfessionFamily": "agricultural-operations",
+      "featureSurface": {
+        "tileAllowlist": ["today-schedule", "needs-you", "calendar", "unassigned-work"],
+        "navEmphasis": ["/workspace", "/workspace/calendar", "/workspace/my-queue"],
+        "workspaceHomeOccupationId": "home-agriculture-ranching"
+      },
+      "coworkerRoster": [
+        { "agentSlug": "farm-ranch-steward", "interaction": "summon", "governanceProfileRef": null },
+        { "agentSlug": "compliance-officer", "interaction": "summon", "governanceProfileRef": null },
+        { "agentSlug": "finance-controller", "interaction": "summon", "governanceProfileRef": null },
+        { "agentSlug": "marketing-specialist", "interaction": "summon", "governanceProfileRef": null }
+      ],
+      "onboardingCurriculumId": "occ-intro-farm-ranch-owner-operator",
+      "moverCurriculumId": null
+    },
+    {
+      "occupationKey": "farm-ranch-hand",
+      "label": "Farm & Ranch Hand",
+      "summary": "Carries out assigned livestock, working-animal, field, pasture, equipment, and materials work while recording observations and escalating exceptions.",
+      "archetypeCategories": ["agriculture-ranching"],
+      "archetypeIds": [],
+      "baseAccessProfile": "workforce-member",
+      "wsidProfessionFamily": "agricultural-operations",
+      "featureSurface": {
+        "tileAllowlist": ["today-schedule", "needs-you", "calendar"],
+        "navEmphasis": ["/workspace", "/workspace/my-queue", "/workspace/calendar"],
+        "workspaceHomeOccupationId": "home-agriculture-ranching"
+      },
+      "coworkerRoster": [
+        { "agentSlug": "farm-ranch-steward", "interaction": "summon", "governanceProfileRef": null },
+        { "agentSlug": "compliance-officer", "interaction": "read-only", "governanceProfileRef": null }
+      ],
+      "onboardingCurriculumId": "occ-intro-farm-ranch-hand",
+      "moverCurriculumId": null
     }
   ]
 }

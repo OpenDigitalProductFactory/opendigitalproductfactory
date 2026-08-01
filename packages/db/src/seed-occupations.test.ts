@@ -26,6 +26,8 @@ describe("occupation registry (shipped seed)", () => {
     const keys = OCCUPATION_SEED_DATA.map((o) => o.occupationKey);
     expect(keys).toContain("dental-hygienist");
     expect(keys).toContain("field-service-technician");
+    expect(keys).toContain("farm-ranch-owner-operator");
+    expect(keys).toContain("farm-ranch-hand");
   });
 
   it("passes referential-integrity validation against the live catalogs", () => {

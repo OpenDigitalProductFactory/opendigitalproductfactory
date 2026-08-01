@@ -27,6 +27,25 @@ describe("archetype catalog", () => {
     expect(unique.size).toBe(ids.length);
   });
 
+  it("ships agriculture and ranching as one operating category with three distinct production systems", () => {
+    const agriculture = ALL_ARCHETYPES.filter((a) => a.category === "agriculture-ranching");
+    expect(agriculture.map((a) => a.archetypeId).sort()).toEqual([
+      "cattle-ranch",
+      "crop-hay-farm",
+      "mixed-farm-ranch",
+    ]);
+
+    for (const archetype of agriculture) {
+      expect(archetype.ctaType).toBe("inquiry");
+      expect(archetype.vocabulary).toMatchObject({
+        stakeholderLabel: "Customers",
+        teamLabel: "Farm & Ranch Team",
+        agentName: "Farm & Ranch Steward",
+      });
+      expect(archetype.itemTemplates.some((item) => /hay|cattle|grazing|crop/i.test(`${item.name} ${item.description}`))).toBe(true);
+    }
+  });
+
   it("ships fabric-care services with dry-cleaning plant-network custody flow (BI-7CFFC421)", () => {
     const fabricCare = ALL_ARCHETYPES.filter((a) => a.category === "fabric-care-services");
     expect(fabricCare.map((a) => a.archetypeId).sort()).toEqual([

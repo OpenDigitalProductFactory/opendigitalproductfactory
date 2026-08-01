@@ -299,4 +299,26 @@ describe("resolveProfessionCorpusContext — variant selection", () => {
     });
     expect(ctx.pages.map((p) => p.slug)).toEqual(["professions/operations/incident-severity"]);
   });
+
+  it("fails closed instead of injecting another archetype's craft when no page is applicable", async () => {
+    const foreignOnly: Row[] = [
+      {
+        slug: "professions/operations/automotive-adas-recalibration",
+        title: "ADAS recalibration after auto-glass replacement",
+        abstract: "Windshield work can require ADAS camera recalibration.",
+        body: "After glass replacement, recalibrate ADAS per OEM specification.",
+        metadata: meta(["automotive-services"]),
+      },
+    ];
+    const ctx = await resolveProfessionCorpusContext({
+      db: fakeCorpusDb(foreignOnly),
+      identity: { agentId: "operate-orchestrator" },
+      query: "plan pasture rotation",
+      installContext: { archetype: "agriculture-ranching" },
+    });
+
+    expect(ctx.status).toBe("missed-empty-applicable-corpus");
+    expect(ctx.pages).toEqual([]);
+    expect(ctx.promptBlock).toBeNull();
+  });
 });
