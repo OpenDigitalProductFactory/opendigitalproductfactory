@@ -138,6 +138,119 @@ describe("workspace Work Case loader", () => {
     }));
   });
 
+  it("loads the current cycle, completed packets, and governed receipts from canonical child records", async () => {
+    const boundary = (cycleKey: string) => ({
+      workRoomCycle: {
+        kind: "work-room-cycle",
+        version: 1,
+        cycleKey,
+        trigger: "Weekly schedule fired.",
+        objective: "Review cash position and assign exceptions.",
+        accountablePrincipalRef: "prn-finance-owner",
+        expectedReviewAt: "2026-08-08T16:00:00.000Z",
+        stopConditions: ["Stop if the ledger is unreconciled."],
+        measureSummary: "All material variances have an owner.",
+        contextRefs: [{ kind: "evidence", id: `cash:${cycleKey}` }],
+      },
+    });
+    const current = {
+      ...baseItem,
+      id: "cycle-row-32",
+      itemId: "WI-CYCLE-32",
+      sourceType: "scheduled",
+      sourceId: "WEEKLY-CASH",
+      title: "Weekly cash review — 2026-W32",
+      status: "in-progress",
+      evidence: boundary("2026-W32"),
+      createdAt: new Date("2026-08-02T09:00:00.000Z"),
+    };
+    const completed = {
+      ...current,
+      id: "cycle-row-31",
+      itemId: "WI-CYCLE-31",
+      title: "Weekly cash review — 2026-W31",
+      status: "completed",
+      evidence: boundary("2026-W31"),
+      createdAt: new Date("2026-07-27T09:00:00.000Z"),
+      completedAt: new Date("2026-08-01T16:00:00.000Z"),
+    };
+    const scheduled = {
+      ...baseItem,
+      id: "room-row",
+      itemId: "ROOM-WEEKLY-CASH",
+      sourceType: "scheduled",
+      sourceId: "WEEKLY-CASH",
+      title: "Weekly cash review",
+      status: "in-progress",
+      childItems: [completed, current],
+    };
+    const packet = {
+      outcomeState: "achieved" as const,
+      summary: "Weekly cash review completed.",
+      decisionRefs: [],
+      artifactRefs: [],
+      actionRefs: [],
+      receiptRefs: [{ kind: "receipt" as const, id: "R-31" }],
+      evidenceRefs: [{ kind: "runtime-verification" as const, id: "RV-31" }],
+      unresolvedWork: [],
+      accountablePrincipalRef: "prn-finance-owner",
+      verifiedByRef: "prn-controller",
+      completedAt: "2026-08-01T16:00:00.000Z",
+      nextReviewAt: "2026-08-08T16:00:00.000Z",
+      sourceRefs: [{ kind: "receipt" as const, id: "R-31" }],
+    };
+    const prismaClient: WorkspaceCasePrismaClient = {
+      workItem: {
+        findMany: async () => [scheduled],
+        findFirst: async () => scheduled,
+      },
+      workItemMessage: {
+        findMany: async () => [{
+          id: "message-row-outcome",
+          messageId: "MSG-OUTCOME-31",
+          workItemId: "room-row",
+          senderType: "user",
+          senderUserId: "user-1",
+          messageType: "work-room-outcome-packet",
+          body: packet.summary,
+          structuredPayload: {
+            kind: "work-room-outcome-packet",
+            version: 1,
+            cycleKey: "2026-W31",
+            carrierId: "WI-CYCLE-31",
+            packet,
+            receipt: {
+              kind: "work-room-lifecycle-receipt",
+              operation: "complete-cycle",
+              receiptKind: "governed-action",
+              enforcementMode: "governed-action",
+              status: "valid",
+              idempotencyKey: "complete:2026-W31",
+              policyRefs: ["work-case-policy-envelope"],
+            },
+          },
+          createdAt: new Date("2026-08-01T16:00:00.000Z"),
+        }],
+      },
+    };
+
+    const detail = await loadWorkspaceWorkCaseDetail({
+      prismaClient,
+      caseKey: "scheduled%3AWEEKLY-CASH",
+      userId: "user-1",
+    });
+
+    expect(detail?.room?.currentCycle).toMatchObject({ cycleKey: "2026-W32", carrierId: "WI-CYCLE-32" });
+    expect(detail?.room?.completedCycles).toHaveLength(1);
+    expect(detail?.room?.completedCycles[0]).toMatchObject({ cycleKey: "2026-W31", outcomePacket: packet });
+    expect(detail?.room?.outcome.packet).toEqual(packet);
+    expect(detail?.room?.activity).toContainEqual(expect.objectContaining({ kind: "cycle-closed" }));
+    expect(detail?.room?.receipts).toContainEqual(expect.objectContaining({
+      enforcementMode: "governed-action",
+      actionType: "complete-cycle",
+    }));
+  });
+
   it("returns no room metadata when the scoped work item is not visible to the user", async () => {
     let query: unknown;
     const prismaClient: WorkspaceCasePrismaClient = {

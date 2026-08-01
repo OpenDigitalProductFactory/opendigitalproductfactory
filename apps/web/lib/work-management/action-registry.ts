@@ -21,6 +21,22 @@ export interface WorkCaseActionDescriptor {
   sanctionedMutators: readonly string[];
 }
 
+export type WorkRoomLifecycleOperation =
+  | "open-cycle"
+  | "pause-cycle"
+  | "verify-cycle"
+  | "complete-cycle"
+  | "carry-over"
+  | "renew"
+  | "split"
+  | "archive";
+
+export interface WorkRoomLifecycleActionDescriptor {
+  operation: WorkRoomLifecycleOperation;
+  displayLabel: string;
+  canonicalAction: WorkCaseActionVerb;
+}
+
 export const WORK_CASE_ACTION_REGISTRY = [
   {
     action: "claim",
@@ -165,11 +181,115 @@ export const WORK_CASE_ACTION_REGISTRY = [
     requiresReceipt: true,
     sanctionedMutators: ["update_work_capsule_status", "update_backlog_item_status"],
   },
+  {
+    action: "open-cycle",
+    displayLabel: "Open cycle",
+    a2aStatusHint: "working",
+    consequential: true,
+    requiresPolicyEvaluation: true,
+    requiresDecisionInteraction: false,
+    requiresCoworkerEnvelope: "never",
+    requiresReceipt: true,
+    sanctionedMutators: ["WorkItem", "WorkItemMessage"],
+  },
+  {
+    action: "pause-cycle",
+    displayLabel: "Pause cycle",
+    a2aStatusHint: "working",
+    consequential: true,
+    requiresPolicyEvaluation: true,
+    requiresDecisionInteraction: false,
+    requiresCoworkerEnvelope: "never",
+    requiresReceipt: true,
+    sanctionedMutators: ["WorkItem", "WorkItemMessage"],
+  },
+  {
+    action: "verify-cycle",
+    displayLabel: "Verify cycle",
+    a2aStatusHint: "working",
+    consequential: true,
+    requiresPolicyEvaluation: true,
+    requiresDecisionInteraction: false,
+    requiresCoworkerEnvelope: "never",
+    requiresReceipt: true,
+    sanctionedMutators: ["RuntimeVerification", "WorkItemMessage"],
+  },
+  {
+    action: "complete-cycle",
+    displayLabel: "Complete cycle",
+    a2aStatusHint: "completed",
+    consequential: true,
+    requiresPolicyEvaluation: true,
+    requiresDecisionInteraction: false,
+    requiresCoworkerEnvelope: "never",
+    requiresReceipt: true,
+    sanctionedMutators: ["WorkItem", "WorkItemMessage"],
+  },
+  {
+    action: "carry-over",
+    displayLabel: "Carry over",
+    a2aStatusHint: "working",
+    consequential: true,
+    requiresPolicyEvaluation: true,
+    requiresDecisionInteraction: false,
+    requiresCoworkerEnvelope: "never",
+    requiresReceipt: true,
+    sanctionedMutators: ["WorkItem", "WorkItemMessage"],
+  },
+  {
+    action: "renew",
+    displayLabel: "Renew",
+    a2aStatusHint: "working",
+    consequential: true,
+    requiresPolicyEvaluation: true,
+    requiresDecisionInteraction: false,
+    requiresCoworkerEnvelope: "never",
+    requiresReceipt: true,
+    sanctionedMutators: ["WorkItem", "WorkItemMessage"],
+  },
+  {
+    action: "split",
+    displayLabel: "Split",
+    a2aStatusHint: "working",
+    consequential: true,
+    requiresPolicyEvaluation: true,
+    requiresDecisionInteraction: false,
+    requiresCoworkerEnvelope: "never",
+    requiresReceipt: true,
+    sanctionedMutators: ["WorkItem", "WorkItemMessage"],
+  },
+  {
+    action: "archive",
+    displayLabel: "Archive",
+    a2aStatusHint: "completed",
+    consequential: true,
+    requiresPolicyEvaluation: true,
+    requiresDecisionInteraction: false,
+    requiresCoworkerEnvelope: "never",
+    requiresReceipt: true,
+    sanctionedMutators: ["WorkItem", "WorkItemMessage"],
+  },
 ] as const satisfies readonly WorkCaseActionDescriptor[];
 
 const WORK_CASE_ACTIONS_BY_VERB = new Map<WorkCaseActionVerb, WorkCaseActionDescriptor>(
   WORK_CASE_ACTION_REGISTRY.map((entry) => [entry.action, entry]),
 );
+
+export const WORK_ROOM_LIFECYCLE_ACTION_REGISTRY = [
+  { operation: "open-cycle", displayLabel: "Open cycle", canonicalAction: "open-cycle" },
+  { operation: "pause-cycle", displayLabel: "Pause cycle", canonicalAction: "pause-cycle" },
+  { operation: "verify-cycle", displayLabel: "Verify cycle", canonicalAction: "verify-cycle" },
+  { operation: "complete-cycle", displayLabel: "Complete cycle", canonicalAction: "complete-cycle" },
+  { operation: "carry-over", displayLabel: "Carry over", canonicalAction: "carry-over" },
+  { operation: "renew", displayLabel: "Renew", canonicalAction: "renew" },
+  { operation: "split", displayLabel: "Split", canonicalAction: "split" },
+  { operation: "archive", displayLabel: "Archive", canonicalAction: "archive" },
+] as const satisfies readonly WorkRoomLifecycleActionDescriptor[];
+
+const WORK_ROOM_LIFECYCLE_ACTIONS_BY_OPERATION = new Map<
+  WorkRoomLifecycleOperation,
+  WorkRoomLifecycleActionDescriptor
+>(WORK_ROOM_LIFECYCLE_ACTION_REGISTRY.map((entry) => [entry.operation, entry]));
 
 export function getWorkCaseAction(
   action: string | null | undefined,
@@ -177,4 +297,12 @@ export function getWorkCaseAction(
   const normalized = action?.trim() as WorkCaseActionVerb | undefined;
   if (!normalized || !WORK_CASE_ACTION_VERBS.includes(normalized)) return null;
   return WORK_CASE_ACTIONS_BY_VERB.get(normalized) ?? null;
+}
+
+export function getWorkRoomLifecycleAction(
+  operation: string | null | undefined,
+): WorkRoomLifecycleActionDescriptor | null {
+  const normalized = operation?.trim() as WorkRoomLifecycleOperation | undefined;
+  if (!normalized) return null;
+  return WORK_ROOM_LIFECYCLE_ACTIONS_BY_OPERATION.get(normalized) ?? null;
 }

@@ -13,7 +13,18 @@ import {
   buildWorkRoomView,
   type WorkRoomActivityInput,
 } from "./room-read-model";
+import {
+  projectStoredWorkRoomOutcomePackets,
+  projectWorkItemCycleCarriers,
+  WORK_ROOM_OUTCOME_MESSAGE_TYPE,
+} from "./room-cycle-adapter";
+import {
+  selectCompletedWorkRoomCycles,
+  selectCurrentWorkRoomCycle,
+} from "./room-cycle";
 import type { WorkRoomView } from "./room-types";
+import { getWorkCaseSourceEntry } from "./source-registry";
+import { fromWorkItemMessage } from "./receipt-envelope";
 
 const CLOSED_WORK_ITEM_STATUSES = ["completed", "cancelled"];
 
@@ -55,15 +66,20 @@ type WorkspaceWorkItemRecord = {
   evidence?: unknown;
   createdAt: Date | string;
   updatedAt?: Date | string;
+  completedAt?: Date | string | null;
+  childItems?: WorkspaceWorkItemRecord[];
 };
 
 type WorkspaceWorkItemMessageRecord = {
+  id?: string;
   messageId: string;
+  workItemId?: string;
   senderType: string;
   senderUserId?: string | null;
   senderAgentId?: string | null;
   messageType: string;
   body: string;
+  structuredPayload?: unknown;
   createdAt: Date | string;
 };
 
@@ -295,9 +311,13 @@ function roomActivitiesFromMessages(
 ): WorkRoomActivityInput[] {
   return messages.map((message) => ({
     sourceEventId: message.messageId,
-    // Free text remains a message regardless of messageType. Structured
-    // decisions, artifacts, and outcomes require their canonical write paths.
-    kind: "message",
+    // Free text remains a message. Only the canonical structured lifecycle
+    // journal can project a cycle boundary event.
+    kind: message.messageType === WORK_ROOM_OUTCOME_MESSAGE_TYPE
+      ? "cycle-closed"
+      : message.messageType === "work-room-cycle-opened"
+        ? "cycle-opened"
+        : "message",
     occurredAt: message.createdAt,
     actorRef: {
       actorKind:
@@ -318,6 +338,28 @@ function roomActivitiesFromMessages(
       status: message.messageType,
     },
   }));
+}
+
+function roomReceiptsFromMessages(
+  item: WorkspaceWorkItemRecord,
+  messages: WorkspaceWorkItemMessageRecord[],
+) {
+  return messages.flatMap((message) => {
+    if (!message.id || !message.structuredPayload) return [];
+    if (!["work-room-cycle-opened", WORK_ROOM_OUTCOME_MESSAGE_TYPE].includes(message.messageType)) return [];
+    return [fromWorkItemMessage({
+      id: message.id,
+      messageId: message.messageId,
+      workItemId: message.workItemId ?? item.id,
+      senderType: message.senderType,
+      senderUserId: message.senderUserId,
+      senderAgentId: message.senderAgentId,
+      messageType: message.messageType,
+      body: message.body,
+      structuredPayload: message.structuredPayload,
+      createdAt: message.createdAt,
+    })];
+  });
 }
 
 export async function loadWorkspaceWorkCaseDetail({
@@ -352,11 +394,12 @@ export async function loadWorkspaceWorkCaseDetail({
         },
       ],
     },
+    include: { childItems: true },
   });
   if (!item) return null;
 
   const messages = await prismaClient.workItemMessage.findMany({
-    where: { workItemId: item.id },
+    where: { workItemId: { in: [item.id, ...(item.childItems ?? []).map((child) => child.id)] } },
     orderBy: [{ createdAt: "asc" }],
     take: 20,
   });
@@ -378,6 +421,18 @@ export async function loadWorkspaceWorkCaseDetail({
     evidence,
   });
   const sourceRefs = detail.summary.sourceRefs;
+  const cycleCandidates = projectWorkItemCycleCarriers({
+    items: item.childItems ?? [],
+    messages,
+  });
+  const sourceEntry = getWorkCaseSourceEntry(item.sourceType);
+  const currentCycle = sourceEntry
+    ? selectCurrentWorkRoomCycle(item.sourceType, cycleCandidates)
+    : null;
+  const completedCycles = sourceEntry
+    ? selectCompletedWorkRoomCycles(item.sourceType, cycleCandidates)
+    : [];
+  const storedPackets = projectStoredWorkRoomOutcomePackets(messages);
   const room = buildWorkRoomView({
     caseKey,
     detail,
@@ -400,6 +455,10 @@ export async function loadWorkspaceWorkCaseDetail({
       sourceRefs,
     },
     activities: roomActivitiesFromMessages(item, messages),
+    currentCycle,
+    completedCycles,
+    outcomePacket: storedPackets[0] ?? null,
+    receipts: roomReceiptsFromMessages(item, messages),
     context: {
       refs: sourceRefs,
       digest: null,

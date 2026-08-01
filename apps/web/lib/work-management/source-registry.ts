@@ -3,6 +3,7 @@ import {
   type WorkCaseActionVerb,
 } from "./case-types";
 import type {
+  WorkRoomCycleView,
   WorkRoomMode,
   WorkRoomOutcomePacketCategory,
 } from "./room-types";
@@ -42,6 +43,7 @@ export interface WorkCaseReceiptPolicy {
 
 export interface WorkCaseRoomProjectionPolicy {
   mode: WorkRoomMode;
+  cycleCarrierPrecedence: readonly WorkRoomCycleView["carrierKind"][];
   outcomePacket: {
     requiredCategories: readonly WorkRoomOutcomePacketCategory[];
   };
@@ -81,6 +83,14 @@ const SCHEDULED_TRANSITIONS = [
   "verify",
   "complete",
   "cancel",
+  "open-cycle",
+  "pause-cycle",
+  "verify-cycle",
+  "complete-cycle",
+  "carry-over",
+  "renew",
+  "split",
+  "archive",
 ] as const satisfies readonly WorkCaseSupportedTransition[];
 
 const GOVERNED_RECEIPT_POLICY = {
@@ -95,6 +105,7 @@ const OBSERVED_RECEIPT_POLICY = {
 
 const FINITE_ROOM_PROJECTION = {
   mode: "finite",
+  cycleCarrierPrecedence: [],
   outcomePacket: {
     requiredCategories: ["evidence"],
   },
@@ -102,6 +113,7 @@ const FINITE_ROOM_PROJECTION = {
 
 const APPROVAL_ROOM_PROJECTION = {
   mode: "finite",
+  cycleCarrierPrecedence: [],
   outcomePacket: {
     requiredCategories: ["decisions", "receipts", "evidence"],
   },
@@ -109,6 +121,7 @@ const APPROVAL_ROOM_PROJECTION = {
 
 const STANDING_ROOM_PROJECTION = {
   mode: "standing",
+  cycleCarrierPrecedence: ["work-item", "work-capsule", "task-run"],
   outcomePacket: {
     requiredCategories: ["receipts", "evidence"],
   },
