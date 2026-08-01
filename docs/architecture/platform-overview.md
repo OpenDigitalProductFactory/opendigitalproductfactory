@@ -1,3 +1,17 @@
+---
+# Doc-impact edges (EP-DOCS-SYSTEM Phase 4). Changing any file below flags this
+# page for review in the Docs Impact Gate, because this page documents the
+# runtime topology and datastore substrate those files define. Retiring a
+# datastore without this list is how the BET-5 Neo4j/Qdrant removal shipped
+# while this page still described Neo4j as a live service.
+relatedCode:
+  - docker-compose.yml
+  - packages/db/prisma/schema.prisma
+  - packages/db/src/pg-graph.ts
+  - packages/db/src/pgvector-store.ts
+  - monitoring/prometheus/prometheus.yml
+---
+
 # Platform Overview
 
 > **Scope:** this document describes the **current GA runtime** — the Single VM substrate served via Docker Desktop on Windows. Multi-platform (macOS Apple Silicon, native Linux), customer-cloud (AWS / GCP / Azure), Managed Kubernetes, and TAPPaaS deployment shapes are documented under the deployment doctrine at [`docs/superpowers/specs/2026-05-09-deployment-contracts.md`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/specs/2026-05-09-deployment-contracts.md). Implementation status for each is tracked in the [umbrella branch plan](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/docs/superpowers/plans/2026-05-09-deployment-architecture-and-rollout.md).
@@ -16,9 +30,7 @@ The current platform runtime is a containerized application stack centered on th
 |---------|------|
 | `portal-init` | One-shot startup container that waits for infrastructure readiness, applies Prisma migrations, and exits once initialization is complete |
 | `portal` | Main Next.js application surface for operations, portfolio, architecture, AI coworker, storefront, and governance workflows |
-| `postgres` | System of record for transactional platform data |
-| `neo4j` | Graph storage for relationship-rich models such as enterprise architecture and connected capability views |
-| `qdrant` | Vector database for semantic indexing, retrieval, and memory-style AI support |
+| `postgres` | The single datastore: system of record for transactional data, **plus** the graph mirror (`graph_node` / `graph_edge`) for topology and impact, **plus** vector storage via `pgvector` for semantic indexing and memory. Built from `docker/postgres/Dockerfile` so the `vector` and `ltree` extensions can never drift out of the image |
 | `inngest` | Durable execution engine for scheduled jobs, event-driven workflows, and retryable background tasks |
 | `redis` | In-memory store backing Inngest's job queue and state |
 | Docker Model Runner | Local AI inference built into Docker Desktop 4.40+ — no separate container needed. Models managed via `docker model pull`. On Linux installs without Docker Desktop, Ollama in compose substitutes; on TAPPaaS deployments, the customer's AI Stack Ollama / LiteLLM serves the same role. The runtime contract (`DPF_LLM_PROVIDER`, `LLM_BASE_URL`) is universal — see Doctrine Contract 9. |
@@ -27,9 +39,11 @@ The current platform runtime is a containerized application stack centered on th
 ### Runtime Characteristics
 
 - `portal` is the only service that needs to be directly exposed to end users in the target customer deployment.
-- `postgres`, `neo4j`, and `qdrant` remain internal services by default. Docker Model Runner is built into Docker Desktop and does not run as a separate container.
+- `postgres` remains an internal service by default. Docker Model Runner is built into Docker Desktop and does not run as a separate container.
 - `portal` can route AI work to either local models (via Docker Model Runner) or enabled external providers.
 - Governance, auditability, and human approval sit above the execution layer rather than outside it.
+
+> **One datastore, not three.** Earlier releases ran Neo4j (graph) and Qdrant (vectors) as separate services. **BET-5 (BI-A1E864A5) retired both onto PostgreSQL** — graph traversals moved to the `graph_node` / `graph_edge` mirror queried with recursive CTEs (`packages/db/src/pg-graph.ts`), and vectors moved to `pgvector` (`packages/db/src/pgvector-store.ts`). Both swaps were parity-verified against the live services before cutover. Existing installs remove the retired containers and volumes with `scripts/decommission-neo4j-qdrant.{sh,ps1}`.
 
 ## Deployment Model 1: Customer Mode
 
@@ -53,9 +67,7 @@ flowchart LR
         subgraph docker["Docker runtime"]
             portal[portal<br/>published :3000]
             init[portal-init<br/>one-shot]
-            postgres[(postgres)]
-            neo4j[(neo4j)]
-            qdrant[(qdrant)]
+            postgres[("postgres<br/>relational + graph + vector")]
             modelrunner[Docker Model Runner<br/>built into Docker Desktop]
             sandbox[sandbox containers<br/>on demand]
         end
@@ -64,8 +76,6 @@ flowchart LR
     user --> portal
     init --> postgres
     portal --> postgres
-    portal --> neo4j
-    portal --> qdrant
     portal --> modelrunner
     portal -. create / inspect / destroy .-> sandbox
 ```
@@ -86,7 +96,7 @@ Native developer mode uses the same platform services, but changes the ergonomic
 ### Characteristics
 
 - `portal` runs locally via `pnpm --filter web dev`
-- `postgres`, `neo4j`, and related services remain containerized. Docker Model Runner is built into Docker Desktop.
+- `postgres` and related services remain containerized. Docker Model Runner is built into Docker Desktop.
 - Docker-published ports let the local app connect directly to those services
 - IDE integration and live debugging are first-class in this mode
 - The same sandbox image and sandbox orchestration mechanisms can still be used
@@ -101,19 +111,15 @@ flowchart LR
         localapp[Local Next.js app<br/>pnpm --filter web dev]
 
         subgraph docker["Docker sidecars"]
-            postgres[(postgres<br/>:5432)]
-            neo4j[(neo4j<br/>:7474 / :7687)]
+            postgres[("postgres<br/>:5432<br/>relational + graph + vector")]
             modelrunner[Docker Model Runner<br/>built-in]
-            qdrant[(qdrant<br/>internal by default)]
             sandbox[sandbox containers<br/>on demand]
         end
     end
 
     browser --> localapp
     localapp --> postgres
-    localapp --> neo4j
     localapp --> modelrunner
-    localapp --> qdrant
     localapp -. launch / inspect .-> sandbox
 ```
 
@@ -138,7 +144,7 @@ The current codebase already includes:
 - source copy into an isolated `/workspace`
 - sandbox-local dependency install and Prisma client generation
 - a local development server inside the sandbox
-- optional sandbox-local `postgres`, `neo4j`, and `qdrant` containers on a dedicated network
+- an optional sandbox-local `postgres` container (`sandbox-postgres`, on `pgvector/pgvector:pg16`) on a dedicated network
 - time, CPU, memory, and disk limits for sandbox containers
 - sandbox lifecycle controls for launch, inspect, and teardown
 
@@ -190,9 +196,11 @@ flowchart TD
 - Human review remains the promotion gate for consequential changes.
 - The adaptive feedback loop should tune behavior gradually rather than allowing uncontrolled architectural drift.
 
-## Data Architecture: Three Complementary Data Layers
+## Data Architecture: One Datastore, Three Question Shapes
 
-The platform uses three distinct data stores, each optimized for a different kind of question. Understanding which system answers which question is key to understanding the architecture.
+The platform asks three fundamentally different kinds of question — *what is true*, *how is it performing*, and *what did it say* — and each needs a different storage shape. Understanding which layer answers which question is key to understanding the architecture.
+
+What it does **not** need is a different *server* per shape. PostgreSQL answers the first shape in three modes (relational, graph, vector); Prometheus and Loki cover the other two because time-series and log storage are genuinely different engines, not just different query languages.
 
 ### Layer 1: PostgreSQL — System of Record
 
@@ -205,12 +213,17 @@ PostgreSQL is the authoritative source for all mutable platform data. Every enti
 | AI workforce | Agents, providers, credentials, token usage, task evaluations |
 | Governance | Change requests, deployment windows, audit trails, authority grants |
 | Health data | HealthSnapshot, PortfolioQualityIssue (from monitoring pipeline) |
+| Semantic memory | `pgvector` embeddings — one table, per-collection HNSW indexes |
 
 **Question it answers:** "What is the current state of this entity and its full history?"
 
-### Layer 2: Neo4j — Graph Projection for Topology and Impact
+### Layer 2: The Graph Mirror — Topology and Impact
 
-Neo4j receives a **read-only projection** from PostgreSQL. It does not accept direct writes — sync functions (`syncDigitalProduct`, `syncInventoryEntityAsInfraCI`, `syncEaElement`) fire after Postgres writes and project the data into graph form. Failures are logged but never block the source write.
+Relationship-shaped questions ("what breaks if this fails?") are answered by a **read-only graph mirror that lives inside PostgreSQL**: the `graph_node` and `graph_edge` tables, traversed with `WITH RECURSIVE` CTEs in [`packages/db/src/pg-graph.ts`](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/blob/main/packages/db/src/pg-graph.ts).
+
+The mirror does not accept direct writes — sync functions (`syncDigitalProduct`, `syncInventoryEntityAsInfraCI`, `syncEaElement`) fire after Postgres writes and project the data into graph form. Failures are logged but never block the source write.
+
+> **This layer used to be Neo4j.** BET-5 (BI-A1E864A5) retired it in favour of the in-Postgres mirror, porting the traversal surface function for function — `getDownstreamImpact`, `getUpstreamDependencies`, `shortestPath`, `getNeighbours`, `getLayeredDependencyStack` and the rest keep their names and semantics. Parity was verified against the live Neo4j instance (40/40 downstream-impact and 40/40 neighbour queries) before the swap. One less server, one less backup member, one less thing to fall out of sync at a different rate than everything else.
 
 | Node Type | Source | Purpose |
 |-----------|--------|---------|
@@ -219,14 +232,17 @@ Neo4j receives a **read-only projection** from PostgreSQL. It does not accept di
 | Portfolio | Prisma Portfolio | Product grouping |
 | InfraCI | Prisma InventoryEntity | Infrastructure topology (hosts, containers, databases, monitoring services) |
 | EaElement | Prisma EaElement | Enterprise architecture modeling (ArchiMate notation) |
+| Code + data model | Source indexer, Prisma introspection | Source files and Prisma models/fields as first-class nodes |
 
-**Relationship types:** BELONGS_TO, CATEGORIZED_AS, CHILD_OF, DEPENDS_ON (with role: hosts, monitors, depends_on, stores_data_in), PROVIDES_TO, EA_REPRESENTS, and dynamic EA relationship types.
+**Relationship types traversed for impact:** DEPENDS_ON, HOSTS, RUNS_ON, LISTENS_ON, MONITORS, MEMBER_OF, ROUTES_THROUGH, CARRIED_BY, CONNECTS_TO, PEER_OF — defined once as `IMPACT_RELATIONSHIP_TYPES` so queries cannot drift apart. Structural edges (BELONGS_TO, CATEGORIZED_AS, CHILD_OF, EA_REPRESENTS and the dynamic EA types) sit alongside them.
 
 **Questions it answers:**
 - "If PostgreSQL goes down, what digital products are affected?" (downstream impact traversal)
 - "What infrastructure does this product depend on?" (upstream dependency traversal)
 - "What is the shortest dependency path between these two systems?" (shortest path)
 - "Show me the full topology of the Foundational portfolio" (subgraph extraction)
+
+**One adjacency structure, four corpora.** The mirror spans infrastructure CIs, the EA/ArchiMate ontology, the Prisma data model, and the source code itself — so a dependency question can cross from a running container to the model it persists to the file that defines it. Operators explore it visually at **`/admin/graph-explorer`**.
 
 **What it cannot answer:** "How is PostgreSQL performing right now?" or "What was the CPU usage of this container over the last hour?" — those are time-series questions.
 
@@ -241,17 +257,16 @@ Prometheus scrapes metrics from running services every 10-15 seconds and stores 
 | Database health | postgres-exporter | Connection pool utilization, active connections, query performance |
 | Application performance | Portal /api/metrics (prom-client) | HTTP request latency, error rates, AI inference duration/tokens/cost |
 | AI provider health | Portal /api/metrics | Inference errors by type (auth, rate_limit, network), semantic memory ops |
-| Vector DB health | Qdrant native /metrics | Collection sizes, search latency |
 
 **Questions it answers:**
 - "What is the CPU utilization of the portal container right now?"
 - "What was the p95 AI inference latency over the last hour?"
-- "Is the Qdrant vector DB reachable?"
+- "How saturated is the Postgres connection pool?"
 - "How many auth errors has the Anthropic provider thrown in the last 5 minutes?"
 
-**What it cannot answer:** "What depends on Qdrant?" or "Which digital products are affected if Qdrant goes down?" — those are graph questions.
+**What it cannot answer:** "What depends on Postgres?" or "Which digital products are affected if Postgres goes down?" — those are graph questions.
 
-### How the Three Layers Work Together
+### How the Layers Work Together
 
 ```mermaid
 %%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e293b', 'primaryTextColor': '#f8fafc', 'primaryBorderColor': '#334155', 'lineColor': '#64748b', 'secondaryColor': '#0f172a', 'tertiaryColor': '#1e293b', 'fontSize': '14px' }}}%%
@@ -263,14 +278,14 @@ flowchart TB
 
     subgraph PROJECTIONS["READ-ONLY PROJECTIONS"]
         direction LR
-        neo4j[("Neo4j Graph\n─────────────────\nTopology & Impact\n\nDigitalProduct nodes\nInfraCI nodes\nEaElement nodes\nDEPENDS_ON edges\nMONITORS edges\nBELONGS_TO edges\nCHILD_OF edges")]
+        graphmirror[("Graph Mirror\n(in PostgreSQL)\n─────────────────\nTopology & Impact\n\ngraph_node / graph_edge\nDigitalProduct nodes\nInfraCI nodes\nEaElement nodes\nCode + Prisma nodes\nDEPENDS_ON edges\nMONITORS edges\nBELONGS_TO edges")]
         prometheus[("Prometheus\n─────────────────\nTime-Series Metrics\n\nContainer CPU/Memory\nHost Resources\nInference Latency\nToken Consumption\nError Rates\nCredential Expiry\nRate Limit Utilization")]
     end
 
     subgraph QUESTIONS["WHAT EACH LAYER ANSWERS"]
         direction TB
-        q_pg["PostgreSQL answers:\n'What is the current state\nof this entity?'\n'What changed and when?'"]
-        q_neo["Neo4j answers:\n'What breaks if this\ngoes down?'\n'What depends on what?'"]
+        q_pg["Relational tables answer:\n'What is the current state\nof this entity?'\n'What changed and when?'"]
+        q_neo["The graph mirror answers:\n'What breaks if this\ngoes down?'\n'What depends on what?'"]
         q_prom["Prometheus answers:\n'How is this performing\nright now?'\n'What was the p95 latency\nover the last hour?'"]
     end
 
@@ -284,14 +299,14 @@ flowchart TB
 
     grafana["Grafana\n(Power-User Escape Hatch)\n─────────────────\nAd-hoc PromQL queries\nCustom dashboards\nRaw metric exploration\n\nPrometheus only\nNo graph · No business context"]
 
-    postgres -->|"sync functions\n(fire-and-forget)"| neo4j
+    postgres -->|"sync functions\n(fire-and-forget)"| graphmirror
     postgres -->|"HealthSnapshot\nrecords"| health
 
     prometheus -->|"real-time metrics\n(scraped every 15s)"| health
     prometheus -->|"health overlay\nvia bridge"| graph_view
 
-    neo4j -->|"topology\ntraversal"| graph_view
-    neo4j -->|"downstream\nimpact"| impact
+    graphmirror -->|"recursive CTE\ntraversal"| graph_view
+    graphmirror -->|"downstream\nimpact"| impact
 
     postgres -->|"entity data\nattribution"| graph_view
     postgres -->|"business\ncontext"| product
@@ -308,16 +323,16 @@ flowchart TB
     style QUESTIONS fill:#0f172a,stroke:#334155,stroke-width:1px
     style grafana fill:#44403c,stroke:#a8a29e,stroke-width:1px,stroke-dasharray: 5 5
     style postgres fill:#1e3a5f,stroke:#3b82f6,stroke-width:2px
-    style neo4j fill:#312e81,stroke:#6366f1,stroke-width:2px
+    style graphmirror fill:#312e81,stroke:#6366f1,stroke-width:2px
     style prometheus fill:#7c2d12,stroke:#f97316,stroke-width:2px
 ```
 
 **The convergence point** is the platform's native UI. Only the platform can combine:
-- Topology from Neo4j ("Prometheus monitors PostgreSQL")
+- Topology from the graph mirror ("Prometheus monitors PostgreSQL")
 - Health from Prometheus ("PostgreSQL CPU is at 85%")
-- Business context from PostgreSQL ("PostgreSQL belongs to the Foundational portfolio and is attributed to the Database taxonomy node")
+- Business context from the relational tables ("PostgreSQL belongs to the Foundational portfolio and is attributed to the Database taxonomy node")
 
-No single data store has all three. This is why the platform renders its own dashboards rather than delegating entirely to Grafana.
+No single query surface has all three. This is why the platform renders its own dashboards rather than delegating entirely to Grafana.
 
 ### Grafana's Role: Power-User Escape Hatch
 
@@ -326,10 +341,10 @@ Grafana ships as an **opt-in** power-user tool — it is not started by `docker 
 | | Platform UI | Grafana |
 |---|---|---|
 | **Audience** | All users — business owners, operators, product managers | Platform engineers, DevOps, advanced troubleshooting |
-| **Data sources** | PostgreSQL + Neo4j + Prometheus (all three) | Prometheus only (time-series) |
+| **Data sources** | PostgreSQL (relational + graph mirror) + Prometheus + Loki | Prometheus only (time-series) |
 | **Navigation** | Integrated into product lifecycle views | Separate tool at :3002 |
 | **Dashboards** | Curated, pre-built, context-aware | Ad-hoc, customizable, raw PromQL |
-| **Graph data** | Yes — topology, impact analysis, dependency visualization | No — cannot query Neo4j |
+| **Graph data** | Yes — topology, impact analysis, dependency visualization | No — cannot query the graph mirror |
 | **Business context** | Yes — portfolios, products, taxonomy, governance | No — infrastructure metrics only |
 | **Alerting** | Fires into PortfolioQualityIssue (platform-native, visible in product lifecycle) | Fires into Grafana UI (separate tool) |
 
@@ -338,8 +353,8 @@ Grafana ships as an **opt-in** power-user tool — it is not started by `docker 
 flowchart TB
     subgraph DATASOURCES["DATA SOURCES"]
         direction LR
-        pg[("PostgreSQL\n─────\nEntities\nRelationships\nGovernance\nBusiness Context")]
-        neo[("Neo4j\n─────\nGraph Topology\nImpact Paths\nDependencies\nEA Models")]
+        pg[("PostgreSQL — tables\n─────\nEntities\nRelationships\nGovernance\nBusiness Context")]
+        neo[("PostgreSQL — graph mirror\n─────\nGraph Topology\nImpact Paths\nDependencies\nEA Models")]
         prom[("Prometheus\n─────\nTime-Series\nMetrics\nCounters\nHistograms")]
     end
 
@@ -347,7 +362,7 @@ flowchart TB
         direction TB
         p_header["Every User Sees This"]
         p_health["System Health\n─────\nService status grid\nHost resource gauges\nAI provider table\nAgent quality scores\nAlert history"]
-        p_graph["Dependency Graph\n─────\nTopology from Neo4j\n+ Health from Prometheus\n+ Attribution from PostgreSQL\n= Full operational picture"]
+        p_graph["Dependency Graph\n─────\nTopology from the graph mirror\n+ Health from Prometheus\n+ Attribution from PostgreSQL\n= Full operational picture"]
         p_impact["Impact Analysis\n─────\n'If Postgres goes down,\nwhich products are affected?'\nGraph traversal + business context"]
         p_product["Product Lifecycle\n─────\nHealth tab per product\nFeature degradation warnings\nCapability tier availability"]
         p_coworker["AI Coworker\n─────\nContextual health warnings\n'Memory offline'\n'Inference degraded'"]
@@ -401,9 +416,8 @@ flowchart LR
 
     subgraph DATA["Data Services"]
         direction TB
-        pg[("PostgreSQL\n:5432")]
-        neo[("Neo4j\n:7474")]
-        qdrant[("Qdrant\n:6333\n─────\n/metrics native")]
+        pg[("PostgreSQL\n:5432\n─────\ntables + graph mirror\n+ pgvector")]
+        redis_svc[("Redis\n:6379\n─────\nInngest queue state")]
     end
 
     subgraph AI["AI Inference"]
@@ -418,6 +432,8 @@ flowchart LR
         cadvisor["cAdvisor\n:8080\n─────\nContainer\nCPU/Mem/Net/Disk"]
         nodeexp["node-exporter\n:9100\n─────\nHost OS\nCPU/Mem/Disk"]
         pgexp["postgres-exporter\n:9187\n─────\nConnections\nQuery perf"]
+        redisexp["redis-exporter\n:9121\n─────\nQueue depth\nMemory"]
+        loki_svc["Loki + Alloy\n:3100\n─────\nContainer logs\n14-day retention\nLogQL ruler"]
     end
 
     subgraph PLATFORM_UI["Platform-Native UI"]
@@ -435,15 +451,15 @@ flowchart LR
     prom -->|"scrape"| cadvisor
     prom -->|"scrape"| nodeexp
     prom -->|"scrape"| pgexp
-    prom -->|"scrape\nnative /metrics"| qdrant
+    prom -->|"scrape"| redisexp
     prom -->|"scrape\nnative /metrics"| modelrunner
 
     cadvisor -.->|"Docker socket\n(read-only)"| portal
     cadvisor -.->|"monitors all\ncontainers"| pg
-    cadvisor -.->|"monitors"| neo
-    cadvisor -.->|"monitors"| qdrant
+    cadvisor -.->|"monitors"| redis_svc
 
     pgexp -->|"SQL stats"| pg
+    redisexp -->|"queue stats"| redis_svc
 
     grafana_svc -->|"datasource"| prom
 
@@ -452,7 +468,8 @@ flowchart LR
     portal --> nav_dot
     portal --> coworker
 
-    grafana_svc -.->|"webhook"| alerts_wh
+    loki_svc -.->|"tails every\ncontainer's stdout"| portal
+    portal -->|"poll firing alerts\n(Prometheus + Loki ruler)"| alerts_wh
     alerts_wh -->|"creates\nQualityIssue"| pg
 
     portal -.->|"inference\ncalls"| modelrunner
@@ -602,15 +619,17 @@ Key design: degradation is **feature-specific, not platform-wide**. A missing de
 
 Router providers are also policy boundaries. The suitability compiler carries account-scoped OpenRouter obligations through the request contract and every execution/fallback plan. The chat adapter is the single request-construction point for the `provider` controls and router-metadata header. Restricted routes require bounded endpoint slugs, ZDR, data-collection denial, disabled unbounded fallback, parameter support, and returned underlying-provider evidence. EU base-URL selection additionally requires current enterprise regional entitlement on that specific connection. This prevents a router fallback or a second account for the same provider ID from bypassing the original route policy.
 
-### Neo4j Sync Integrity
+### Graph Mirror Sync Integrity
 
-Because Neo4j is a projection, it can fall out of sync with PostgreSQL. The current sync is fire-and-forget — failures are logged but not retried. This is a known operational risk that the monitoring system should track:
+Because the graph mirror is a projection, it can fall out of sync with the relational tables it projects from. The current sync is fire-and-forget — failures are logged but not retried. This is a known operational risk that the monitoring system should track:
 
 - **Sync success/failure rate** — Prometheus metric to track projection health
-- **Drift detection** — periodic reconciliation comparing Postgres entity counts to Neo4j node counts
+- **Drift detection** — periodic reconciliation comparing source entity counts to `graph_node` counts
 - **Full rebuild** — the EA graph has `rebuildEaGraph()` for complete re-projection; inventory/product graphs should have equivalent capability
 
 When the monitoring stack detects sync drift, it creates a `PortfolioQualityIssue` so operators are aware that graph-based views (impact analysis, dependency topology) may be stale.
+
+Co-locating the mirror with its source removed one failure mode outright. The projection is still fire-and-forget, so *logical* drift remains possible — but the mirror can no longer be **unreachable** while the system of record is healthy, because it is the same server. A separate graph service could be down, unauthenticated, or version-skewed on its own schedule; `graph_node` cannot. It also means graph state is captured by the ordinary Postgres backup rather than needing a backup member of its own.
 
 ---
 
@@ -646,7 +665,7 @@ These defaults are meant to keep installation practical. They are not the only m
 Open Digital Product Factory is designed as a contained business platform with:
 
 - a main application container
-- internal data and AI services
+- a single internal datastore — PostgreSQL serving relational, graph and vector workloads — alongside the observability and AI services
 - optional external model providers
 - isolated sandbox environments for controlled iteration
 - two practical operating modes: packaged customer deployment and native developer mode

@@ -18,12 +18,12 @@ export const DIAGRAM_VERSIONS = Object.freeze({
   "architecture/ai-agent-meta-model/2": "7861196960afd398",
   "architecture/archetype-owner-positioning/0": "1df0cd530c89b260",
   "architecture/capability-driven-runtime-profiles/0": "5eab6fa2a09f0ded",
-  "architecture/platform-overview/0": "3a902249d1b666d7",
-  "architecture/platform-overview/1": "b0dce92039a1631f",
+  "architecture/platform-overview/0": "9c708514e7702ebd",
+  "architecture/platform-overview/1": "2a1d843bd85ab6e8",
   "architecture/platform-overview/2": "68d006ae6ff7475e",
-  "architecture/platform-overview/3": "153ef5c95f89d7f0",
-  "architecture/platform-overview/4": "3cd4ee7f10680209",
-  "architecture/platform-overview/5": "5c287c67721ac07e",
+  "architecture/platform-overview/3": "2fda2cd8f76b8755",
+  "architecture/platform-overview/4": "14f432109f86d7e1",
+  "architecture/platform-overview/5": "1b7650cb641d9ccf",
   "architecture/platform-overview/6": "2c35a3c490b4c41e",
   "architecture/unified-development-tracking/0": "207be4c1c22032b0"
 });
