@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   getCareIntakeSavedResponse,
@@ -90,6 +90,15 @@ function database() {
 }
 
 describe("issueCareIntakeResumeGrant", () => {
+  // Every other block in this file pins the clock; this one did not, so its
+  // hardcoded 2026-08-01T15:00Z expiries were validated against the REAL clock
+  // and the suite detonated the moment wall-clock passed that instant — the same
+  // class of failure as the mcp-api-token rotation bomb (#3834). Pinning the
+  // clock here matches the file's existing convention and makes the block
+  // deterministic forever (BI-E104FBCC).
+  beforeEach(() => vi.useFakeTimers().setSystemTime("2026-08-01T14:00:00.000Z"));
+  afterEach(() => vi.useRealTimers());
+
   it("issues the raw token once only after an allow decision", async () => {
     const { db, tx } = database();
     const result = await issueCareIntakeResumeGrant(
