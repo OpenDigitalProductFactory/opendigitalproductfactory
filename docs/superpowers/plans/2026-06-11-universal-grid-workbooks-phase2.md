@@ -312,6 +312,14 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   toggles, tint + active-ring highlight) and `Ctrl+H` Replace / Replace-all through the validated
   `persistCell` (string cells only). Pure, unit-tested `grid-find-replace.ts`; flat grid only. Closes
   the last fully-absent Excel cell feature the survey found (kernel ledger DI-F48CE1B4C2F2).
+- **Slice 28f — native .xlsx export — SHIPPED.** An "Export Excel" toolbar button downloads the
+  current view as a real `.xlsx`, pairing with the existing `read-excel-file` import so the grid
+  round-trips with Excel. Numbers export as numeric cells; everything else as the same display text
+  as the CSV export. **Zero-dependency writer** (`grid-xlsx.ts`): a stored-ZIP + minimal OOXML
+  SpreadsheetML built by hand — keeps the platform fully local (no spreadsheet library, no vendor).
+  Functionally verified by a **round-trip unit test that parses the output back with the existing
+  `read-excel-file` parser** and asserts the matrix (numbers, strings, sheet name) — structural *and*
+  functional. Flat data of the current view (visible columns, current sort/filter).
 - **Remaining (not built):** manual row reordering for *platform* grids (would need a per-user client
   order; low value on 1000s of rows); platform-grid *shareable* views (needs a `WorkbookView.tableId`
   schema change — platform tables have no `WorkbookTable` row); richer charts (grouped/stacked/line);
