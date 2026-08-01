@@ -86,7 +86,7 @@ Assessed against `docs/architecture/context-engineering-standards.md` (P1–P13)
 | P10 Deterministic enforcement | Implemented | `apps/web/lib/mcp-tools.ts` (kernel gate), `packages/dpf-skill-pack/hooks/` | Kernel runtime gate + PreToolUse prechecks (incl. `tool-economy-precheck.mjs`). |
 | P11 Persist/re-inject across compaction | Partially Implemented | `apps/web/lib/tak/agentic-loop.ts` | `withPlanReminder` keeps the plan out of the compacted window; memory-fact re-injection tracked as R9. |
 | P12 Empirical measurement | Partially Implemented (Phase 1) | `apps/web/lib/tak/context-economy-metrics.ts` | Per-turn tool-surface gauge (count + est. definition tokens, banded vs the 15-tool cliff) + tool-selection accuracy, logged in the agentic loop. Cross-task tokens-per-task rollup staged (Phase 2). |
-| Deferred tool exposure on external CLI path | Partially Implemented (Phase 1) | `apps/web/lib/mcp/tool-tier.ts` | Opt-in core tier on `/api/mcp/v1?tier=core` (lean discovery, full execution retained, default unchanged). Model-driven deferral (load_tools + list_changed) staged as Phase 2. |
+| Deferred tool exposure on external CLI path | Partially Implemented (Phase 1) | `apps/web/lib/mcp/tool-tier.ts` | Core tier is the **default for non-Claude-Code clients** on `/api/mcp/v1` (lean discovery, full execution retained; Claude Code keeps full, opt back with `?tier=full`). Model-driven deferral (load_tools + list_changed) staged as Phase 2. |
 
 Recommended next steps for this area are tracked in `docs/superpowers/specs/2026-06-20-context-engineering-tool-efficiency-design.md` (R3, R4, R6, R7, R8, R9) and kept current by `docs/architecture/agent-client-capability-parity.md`.
 

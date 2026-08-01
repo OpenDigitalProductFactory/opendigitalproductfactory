@@ -77,8 +77,15 @@ function makeRequest(opts: {
   forwardedProto?: string;
   forwardedHost?: string;
   hostHeader?: string;
+  userAgent?: string;
 }): Request {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
+  // Default the caller to Claude Code so tools/list returns the FULL granted
+  // surface (BI-88681BE0: tools/list defaults non-Claude-Code clients to the
+  // lean core tier). Tests asserting a specific tool is exposed assume the full
+  // surface; the client-aware default is covered explicitly below and in
+  // tool-tier.test.ts. Pass userAgent to exercise a different client.
+  headers["User-Agent"] = opts.userAgent ?? "claude-code/2.1 (test)";
   if (opts.bearer !== null && opts.bearer !== undefined) {
     headers["Authorization"] = `Bearer ${opts.bearer}`;
   }
@@ -608,6 +615,49 @@ describe("POST — tools/list", () => {
       expect(typeof tool.annotations.readOnlyHint).toBe("boolean");
       expect(typeof tool.annotations.destructiveHint).toBe("boolean");
     }
+  });
+
+  it("defaults a non-Claude-Code client to the lean core tier; ?tier=full opts back in (BI-88681BE0)", async () => {
+    resolveMock.mockResolvedValue({
+      tokenId: "tok_c",
+      userId: "u1",
+      agentId: null,
+      scopes: ["registry_read", "backlog_read"],
+      capability: "read",
+    });
+    const names = async (req: Request) =>
+      ((await (await POST(req)).json()).result.tools as { name: string }[]).map((t) => t.name);
+
+    // Non-Claude-Code client, no explicit tier -> lean core surface.
+    const coreNames = await names(
+      makeRequest({
+        bearer: "dpfmcp_X",
+        userAgent: "codex/1.0",
+        body: { jsonrpc: "2.0", id: 20, method: "tools/list" },
+      }),
+    );
+    expect(coreNames).toContain("query_backlog"); // a core tool: present
+    expect(coreNames).not.toContain("wiki_query"); // granted but non-core: filtered out by default
+
+    // Same non-CC client, explicit ?tier=full -> opts back into the full surface.
+    const fullNames = await names(
+      makeRequest({
+        bearer: "dpfmcp_X",
+        userAgent: "codex/1.0",
+        url: "http://localhost:3000/api/mcp/v1?tier=full",
+        body: { jsonrpc: "2.0", id: 21, method: "tools/list" },
+      }),
+    );
+    expect(fullNames).toContain("wiki_query");
+
+    // Claude Code (default UA) keeps the full surface without opting in.
+    const ccNames = await names(
+      makeRequest({
+        bearer: "dpfmcp_X",
+        body: { jsonrpc: "2.0", id: 22, method: "tools/list" },
+      }),
+    );
+    expect(ccNames).toContain("wiki_query");
   });
 
   // ─── Principles-as-wiki-kind Phase 2 Task 2.8 ───────────────────────────
