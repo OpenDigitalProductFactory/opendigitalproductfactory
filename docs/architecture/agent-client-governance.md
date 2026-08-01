@@ -99,6 +99,33 @@ parallel finding table. This keeps the write substrate singular while allowing
 portal timelines, local hooks, CI, and promotion controls to project the same
 evidence in later rollout phases.
 
+External delivery surfaces invoke the native `review_semantic_change` operation
+only after the complete concern is committed locally and before pregate or the
+first push. Build Studio invokes the same operation contract once over the
+assembled task diff, before UX verification and promotion; its existing
+task-level reviews remain intact. Runtime code activates the Change Reviewer,
+while a docs-only low-risk change can receive an explicit auto-pass receipt.
+Content selects existing specialist branches (accessibility, data governance,
+SBOM, and architecture guardrail), and the normalized specialist set is part of
+freshness. Repair loops stop after two failed rounds and surface operator review
+instead of oscillating. The adapters initially run in shadow mode; the next
+rollout phase ratchets deterministic publication enforcement only after outcome
+telemetry demonstrates sufficient signal quality.
+
+## Design grounding
+
+- Existing specs/plans reviewed: the shared Change Reviewer control plan and
+  the agent-client governance contract on this page.
+- Current code substrate reviewed: the surface-neutral semantic review receipt,
+  external-review activation policy, existing external evidence and Work
+  Capsule activity streams, Build Studio task review, and assembled-change
+  verification transition.
+- Source of truth: the immutable receipt identity in
+  `apps/web/lib/change-review/semantic-change-review.ts` plus Work Capsule
+  evidence; no new persistence substrate is introduced.
+- Decision: both authoring paths use one operation and evidence shape in shadow
+  mode first. Deterministic enforcement remains owned by the next rollout phase.
+
 ## Client identity and trust
 
 Client identity is useful attribution:

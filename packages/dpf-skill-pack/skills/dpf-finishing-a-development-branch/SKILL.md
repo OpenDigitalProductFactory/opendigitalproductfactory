@@ -1,11 +1,11 @@
 ---
 name: dpf-finishing-a-development-branch
-description: "Use when a unit of work is functionally complete and needs to leave the working tree. Decide the integration shape first — one PR, a stack, or a split by concern — confirm the branch is green and every commit is DCO-signed, sweep for uncommitted or overlapping work, then hand off to dpf-pr-with-dco for the PR mechanics. The DPF-native branch-finishing step; replaces the retired upstream superpowers finishing-a-development-branch dependency."
+description: "Use when a unit of work is functionally complete and needs to leave the working tree. Decide the integration shape first, confirm the branch is green, obtain independent semantic review of the stable committed tree before pregate or publication, sweep for loose/overlapping work, then hand off to dpf-pr-with-dco."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
 user-invocable: true
-allowed-tools: Bash(git *) Bash(gh *) Grep
+allowed-tools: Bash(git *) Bash(gh *) Grep mcp__dpf__review_semantic_change
 
 # DPF coworker fields (Surface B — in-portal seed loader)
 category: build
@@ -15,7 +15,7 @@ taskType: workflow
 triggerPattern: "finish (the )?branch|wrap up|integration shape|ready to merge|split (this )?into PRs|done with this work|how should I land"
 userInvocable: true
 agentInvocable: true
-allowedTools: ["Bash", "Grep"]
+allowedTools: ["Bash", "Grep", "mcp__dpf__review_semantic_change"]
 composesFrom: []
 contextRequirements: []
 riskBand: medium
@@ -60,13 +60,16 @@ This is the **decision** step; `dpf-pr-with-dco` is the **execution** step that 
 
 4. **Sweep for overlap.** Check open PRs and other worktrees for work touching the same files (`gh pr list`, `git worktree list`) so you don't land a conflicting change — the overlap sweep that `dpf-pr-with-dco` formalizes.
 
-5. **Hand off.** With the shape decided and the branch green + clean, invoke [`dpf-pr-with-dco`](../dpf-pr-with-dco/SKILL.md) to branch from `origin/main`, sign every commit (`-s`), push, and open the PR when ready to merge.
+5. **Freeze and independently review the assembled change.** Account for every file, create a DCO-signed local commit, and confirm `git status --short` is clean. Before `pregate` or the first push, call the native `review_semantic_change` operation with the Work Capsule, exact base/head tree hashes, a digest of the committed diff, changed files, and available verification evidence. A docs-only low-risk change may return an evidenced auto-pass. Runtime code must run the independent Change Reviewer. If it fails, repair and mint a fresh receipt; after two failed repair rounds, stop the loop and escalate for operator review. Any material commit, rebase, policy/reviewer change, or specialist-set change makes the prior receipt stale.
+
+6. **Hand off.** With the shape decided, branch green + clean, and semantic-review receipt fresh for the current committed tree, invoke [`dpf-pr-with-dco`](../dpf-pr-with-dco/SKILL.md) for pregate and PR mechanics.
 
 ## Guardrails
 
 - **Don't bundle concerns to save a PR.** A mixed PR is harder to review and revert; split it.
 - **Don't open a PR as a parking place.** Open it when it is ready to merge, not to stash in-progress work (this is `dpf-pr-with-dco`'s contract). DPF delivery PRs are regular ready-for-review PRs, not GitHub draft PRs.
 - **Don't finish on a red or unverified branch.** Green gate + functional verification first.
+- **Don't review a dirty or moving tree.** Semantic findings bind to one immutable base/head/diff identity; edit first, commit, then review.
 
 ## See also
 

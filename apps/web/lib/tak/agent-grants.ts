@@ -179,6 +179,7 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // Non-build-scoped evidence remains on the broad backlog_write grant —
   // these tools coordinate across the whole backlog surface, not just build.
   record_external_development_evidence: ["backlog_write"],
+  review_semantic_change: ["backlog_write"],
   record_local_integration_result: ["backlog_write"],
   record_functional_failure_evidence: ["backlog_write"],
   get_next_recommended_work: ["backlog_read"],

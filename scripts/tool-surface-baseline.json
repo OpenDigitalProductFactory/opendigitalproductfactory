@@ -3,10 +3,14 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 347
+      "value": 348,
+      "reason": "Adds one surface-neutral semantic change-review operation because the existing review tools are task- or plan-scoped and cannot issue a fresh stable-commit Work Capsule receipt shared by external delivery and Build Studio.",
+      "recordedAt": "2026-08-01T03:57:17.246Z"
     },
     "registry.packFiles": {
-      "value": 79
+      "value": 80,
+      "reason": "Keeps the shared semantic change-review contract in its own bounded pack so both delivery surfaces can load the capability without coupling it to an unrelated domain pack.",
+      "recordedAt": "2026-08-01T03:57:17.246Z"
     },
     "tier.coreToolNames": {
       "value": 22

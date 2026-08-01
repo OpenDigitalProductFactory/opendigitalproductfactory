@@ -739,6 +739,13 @@ async function stepComplete(
     listSandboxCommitsAheadOfBase(state.containerId, baseRef, buildWorkdir),
   ]);
 
+  // Branch-start currency is stale once task output is committed.
+  const { refreshCommittedSourceCurrency } = await import("./sandbox/refresh-source-currency");
+  const sourceCurrency = await refreshCommittedSourceCurrency({
+    workspace: buildWorkdir,
+    targetRef: baseRef,
+    exec: (command) => execInSandbox(state.containerId!, command),
+  });
   // BI-D93CF6C0 — generate the plain-language change narrative (Band 2 of the
   // overseer layer) from the goal + plan + diff. Best-effort: a null result just
   // falls back to the raw diffSummary dive-in, so this never blocks completion.
@@ -788,5 +795,5 @@ async function stepComplete(
     `[build-pipeline] stepComplete: captured ${fullDiff.length} bytes diff + ${commitHashes.length} commits for ${JSON.stringify(buildId)}`,
   );
 
-  return state;
+  return { ...state, sourceCurrency };
 }

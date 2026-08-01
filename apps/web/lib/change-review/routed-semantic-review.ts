@@ -1,0 +1,77 @@
+import { routeAndCall } from "@/lib/inference/routed-inference";
+import { CHANGE_REVIEWER_ROUTE_AGENT } from "@/lib/tak/change-reviewer-route";
+import { parseSemanticReviewResponse, type SemanticReviewResult } from "./semantic-change-review";
+import type { SemanticChangeReviewDispatchContext } from "./semantic-change-review-operation";
+
+const SPECIALIST_SYSTEM_PROMPTS: Record<string, string> = {
+  "AGT-903": "You are the UX Accessibility specialist. Review only accessibility and interaction risks grounded in the supplied committed diff.",
+  "AGT-902": "You are the Data Governance specialist. Review only data-model, migration, privacy, retention, and governance risks grounded in the supplied committed diff.",
+  "AGT-131": "You are the SBOM Management specialist. Review only dependency, provenance, license, and software-supply-chain risks grounded in the supplied committed diff.",
+  "AGT-181": "You are the Architecture Guardrail specialist. Review only architectural alignment and boundary risks grounded in the supplied committed diff.",
+};
+
+function mergeReviewResults(results: SemanticReviewResult[]): SemanticReviewResult {
+  const issues = results.flatMap((result) => result.issues);
+  const criticals = issues.filter((issue) => issue.severity === "critical").length;
+  return {
+    decision: criticals > 0 ? "fail" : "pass",
+    issues,
+    summary: results.length === 1
+      ? results[0]!.summary
+      : `${results.length} independent review branches completed; ${criticals} blocking finding${criticals === 1 ? "" : "s"}.`,
+    ...(results.some((result) => result.parseError) ? { parseError: true as const } : {}),
+  };
+}
+
+/** Execute the governed Change Reviewer plus content-scoped specialist branches. */
+export async function dispatchRoutedSemanticReview(
+  prompt: string,
+  context: SemanticChangeReviewDispatchContext,
+): Promise<SemanticReviewResult> {
+  const branches = [
+    {
+      agentId: "change-reviewer",
+      displayName: "Change Reviewer",
+      systemPrompt: CHANGE_REVIEWER_ROUTE_AGENT.systemPrompt,
+    },
+    ...context.specialistIds.flatMap((agentId) => {
+      const systemPrompt = SPECIALIST_SYSTEM_PROMPTS[agentId];
+      return systemPrompt ? [{ agentId, displayName: agentId, systemPrompt }] : [];
+    }),
+  ];
+
+  const settled = await Promise.allSettled(branches.map(async (branch) => {
+    const response = await routeAndCall(
+      [{ role: "user", content: prompt }],
+      branch.systemPrompt,
+      "confidential",
+      {
+        taskType: "build-review",
+        budgetClass: context.strategyProfile === "economy" ? "balanced" : "quality_first",
+        modelTier: "robust",
+        minimumCapabilities: { toolUse: true },
+        agentMinimumContextTokens: 32_000,
+        agentId: branch.agentId,
+        agentDisplayName: branch.displayName,
+        effort: context.strategyProfile === "document-authority" ? "max" : "high",
+        interactionMode: "sync",
+      },
+    );
+    return parseSemanticReviewResponse(response.content);
+  }));
+
+  const completed = settled.flatMap((branch) => branch.status === "fulfilled" ? [branch.value] : []);
+  const rejected = settled.filter((branch) => branch.status === "rejected").length;
+  if (rejected > 0) {
+    completed.push({
+      decision: "fail",
+      issues: [{
+        severity: "critical",
+        description: `${rejected} required semantic review branch${rejected === 1 ? "" : "es"} did not complete`,
+      }],
+      summary: "Semantic review was incomplete — retry before publication.",
+      parseError: true,
+    });
+  }
+  return mergeReviewResults(completed);
+}
