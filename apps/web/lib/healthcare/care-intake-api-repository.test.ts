@@ -90,6 +90,11 @@ function database() {
 }
 
 describe("issueCareIntakeResumeGrant", () => {
+  // Frozen like every sibling block below. Without this the suite ran on real
+  // wall-clock time against a hardcoded 15:00Z expiry and began failing the moment
+  // that instant passed, wedging the merge queue for the whole repo.
+  beforeEach(() => vi.useFakeTimers().setSystemTime("2026-08-01T14:00:00.000Z"));
+
   it("issues the raw token once only after an allow decision", async () => {
     const { db, tx } = database();
     const result = await issueCareIntakeResumeGrant(
