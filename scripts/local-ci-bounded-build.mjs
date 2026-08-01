@@ -18,6 +18,7 @@ import {
   monitorControlPlane,
   terminateProcessTreeCommand,
 } from "./lib/local-ci-control-plane-watchdog.mjs";
+import { reapSupersededSlotImages } from "./lib/local-integration-image-retention.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const BUILDKIT_CONFIG = join(SCRIPT_DIR, "config", "local-ci-buildkitd.toml");
@@ -61,6 +62,24 @@ function runDocker(args, timeout = 20_000) {
     windowsHide: true,
     timeout,
   });
+}
+
+// Repository-only listing: `docker images` prints one repository per line, and
+// these build tags carry the implicit `:latest`, so the repository name IS the
+// tag the build produced.
+function listLocalImageTags() {
+  const listed = runDocker(["images", "--format", "{{.Repository}}"], 30_000);
+  if (listed.status !== 0) {
+    throw new Error(listed.stderr?.trim() || "docker images failed");
+  }
+  return (listed.stdout || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+}
+
+function removeLocalImage(tag) {
+  const removed = runDocker(["rmi", tag], 60_000);
+  if (removed.status !== 0) {
+    throw new Error(removed.stderr?.trim() || `docker rmi ${tag} failed`);
+  }
 }
 
 function inspectBuilder(builder) {
@@ -382,6 +401,20 @@ async function main() {
   if (finalStatus === "blocked_control_plane_starvation") {
     process.stderr.write(`[local-ci-bounded-build] ${finalStatus} ${failures.join(",")}\n`);
     return EXIT_CONTROL_PLANE_STARVATION;
+  }
+  // Retention runs ONLY on a green build, so the slot always keeps a working
+  // image: the one just produced supersedes the slot's older images. Gating on
+  // success is what makes this safe — reaping after a failure would delete the
+  // last image that actually worked. Best-effort by construction; it must never
+  // turn a passing build red.
+  if (finalStatus === "healthy") {
+    reapSupersededSlotImages({
+      slotKey,
+      keepTag: tag,
+      listImages: listLocalImageTags,
+      removeImage: removeLocalImage,
+      log: (message) => process.stdout.write(`[local-ci-bounded-build] retention: ${message}\n`),
+    });
   }
   return buildOutcome.exitCode;
 }
