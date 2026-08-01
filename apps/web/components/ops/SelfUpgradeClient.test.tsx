@@ -83,12 +83,10 @@ beforeEach(() => {
   shared.isPending = false;
   shared.triggerResult = null;
 });
-
 // Trigger/force/abort button behavior (disabled notice, Upgrade now, loading,
 // success/error feedback) moved to SelfUpgradeTriggerControl.test.tsx and
 // SelfUpgradeTriggerControl.swap-resilience.test.tsx (BI-D77BF495) — the
 // trigger now lives there, co-located with OwnerReleaseCard, not here.
-
 // ─── Enabled ──────────────────────────────────────────────────────────────────
 
 describe("SelfUpgradeClient – enabled", () => {
@@ -395,21 +393,7 @@ describe("SelfUpgradeClient – failed", () => {
       />,
     );
     expect(html).toContain("promoter exited with code 1");
-    expect(html).not.toMatch(
-      /<details[^>]*data-dpf-purpose-correction-signal-key="failure-reason-visible"/,
-    );
-  });
-
-  it("links a failed run back to the operable retry control", () => {
-    const html = renderToStaticMarkup(
-      <SelfUpgradeClient
-        {...baseStatus}
-        latestRun={makeRun("failed", { failureLog: "health check failed" })}
-      />,
-    );
-
-    expect(html).toContain('href="#self-upgrade-retry-action"');
-    expect(html).toContain("Try update again");
+    expect(html).toMatch(/href="#self-upgrade-retry-action"[^>]*>Try update again</);
   });
 });
 

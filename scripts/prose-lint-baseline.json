@@ -188,13 +188,6 @@
     "longSentences": 0,
     "textMass": 85
   },
-  "apps/web/app/(shell)/admin/graph-explorer/page.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 20
-  },
   "apps/web/app/(shell)/admin/hive/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -3210,7 +3203,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 93
+    "textMass": 136
   },
   "apps/web/components/admin/HiveContributionsPanel.tsx": {
     "vocabulary": 0,
@@ -5506,7 +5499,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 122
+    "textMass": 120
   },
   "apps/web/components/inventory/DiscoveryRunSummary.tsx": {
     "vocabulary": 0,
@@ -5884,7 +5877,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 24
+    "textMass": 17
   },
   "apps/web/components/ops/PromotionsClient.tsx": {
     "vocabulary": 0,
@@ -5905,7 +5898,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 235
+    "textMass": 238
   },
   "apps/web/components/ops/SelfUpgradeJobEngineHealthAlert.tsx": {
     "vocabulary": 0,
@@ -5921,12 +5914,19 @@
     "longSentences": 0,
     "textMass": 20
   },
+  "apps/web/components/ops/SelfUpgradePurposeReview.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 29
+  },
   "apps/web/components/ops/SelfUpgradeTriggerControl.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 125
+    "textMass": 154
   },
   "apps/web/components/ops/StandardChangeCatalog.tsx": {
     "vocabulary": 0,
