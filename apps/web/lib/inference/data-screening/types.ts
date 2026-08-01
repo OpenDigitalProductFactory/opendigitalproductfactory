@@ -77,7 +77,27 @@ export type InferenceDataScreenReceipt = {
   obligationKinds: string[];
   /** Present for policy-pack-aware screens; absent on pre-pack v1 receipts. */
   policyPackVersions?: string[];
+  /**
+   * WHY each data class was detected: the probe path, the rule that fired, and
+   * its confidence — never the matched value. Without this a receipt records
+   * that a payload classified as, say, customer-records but not what tripped it,
+   * so a local-only routing decision cannot be diagnosed without re-deriving the
+   * payload by hand. Deliberately excludes matched text so `rawPayloadStored`
+   * stays false: a path plus a rule name is enough to locate the source, and the
+   * value itself is exactly what must not be persisted.
+   */
+  matchProvenance?: InferenceMatchProvenance[];
   rawPayloadStored: false;
+};
+
+/** Provenance for one classifier match. Carries no payload values. */
+export type InferenceMatchProvenance = {
+  dataClass: InferenceDataClass;
+  /** Probe path, e.g. "systemPrompt" or "messages[3].content". Never the value. */
+  path: string;
+  /** The rule that fired, e.g. "contact-detail" or "employee-record-text". */
+  reason: string;
+  confidence: InferencePayloadMatch["confidence"];
 };
 
 export type InferenceDataScreenResult = {
