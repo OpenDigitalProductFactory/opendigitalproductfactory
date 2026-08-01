@@ -1,6 +1,6 @@
 # Archetype Business Capability Perspectives Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For DPF-native agent workers:** Follow `AGENTS.md`, use live DPF MCP/backlog tools first, and keep implementation work in an isolated worktree. This plan owns the selected-archetype Business Capability projection contract; extend it rather than creating a competing plan for the same substrate.
 
 **Goal:** Seed the Business Capability Map from the selected business archetype so `/portfolio/architecture` is not empty after setup or restore.
 
@@ -12,14 +12,16 @@
 
 ## Scope
 
-This first slice implements:
+The initial slice implemented:
 
 - a common small-business baseline capability perspective
 - an `it-managed-services` overlay for the current MSP archetype
 - projection during storefront setup and archetype reset
 - restore-safe seeding through the normal database seed path
 
-This first slice does not implement the full BIAN/APQC/SCOR/TM Forum library, a perspective selector UI, or governed external standard import. Those remain follow-on slices after the projection contract is proven.
+The 2026-08-01 expansion adds category overlays for every active storefront archetype category so restored installs and newly selected archetypes no longer fall back to a generic capability map. Existing detailed overlays remain authoritative where they exist: BIAN v14 for `banking-financial-services`, the beauty/trades/fabric care overlays, and the leaf-specific MSP overlay on top of the `professional-services` category.
+
+This plan still does not implement the full BIAN/APQC/SCOR/TM Forum library, a perspective selector UI, or governed external standard import. Those remain follow-on slices after the projection contract is proven.
 
 ## Design Notes
 
@@ -27,13 +29,13 @@ This first slice does not implement the full BIAN/APQC/SCOR/TM Forum library, a 
 
 Seed-created capabilities use deterministic IDs with the `BCAP-SEED-` prefix. The projector preserves existing maturity fields when a seed capability already exists, updates names/descriptions/order/value-streams, and deactivates obsolete seed rows that are no longer part of the selected perspective. Non-seed/manual capabilities are left alone.
 
-The initial standards posture is:
+The standards posture is:
 
 - APQC: reference language for common small-business process families
-- BIAN: future banking overlay source
+- BIAN: banking overlay source for the active `banking-financial-services` category
 - SCOR: future supply-chain-heavy overlay source
 - TM Forum eTOM: future telecom/service-provider overlay source
-- NIST CSF: future IT/security/compliance overlay source
+- NIST CSF: IT/security/compliance reference source for the MSP and assurance lanes
 
 ## Files
 
@@ -46,7 +48,9 @@ The initial standards posture is:
 ## Acceptance
 
 - Selecting or resetting `it-managed-services` applies the common baseline plus MSP overlay.
-- Selecting a non-MSP archetype applies the common baseline only.
+- Selecting any active storefront archetype applies the common baseline plus its category overlay.
+- Selecting `it-managed-services` composes common baseline, `professional-services`, and the MSP leaf overlay.
+- The test suite fails if an active storefront archetype category is missing from the category overlay registry.
 - Re-running the projector is idempotent.
 - Existing maturity values are preserved across re-projection.
 - Obsolete seed capabilities are marked inactive, not deleted.
@@ -54,4 +58,4 @@ The initial standards posture is:
 
 ## Next Smallest Slice
 
-After this lands, add a read-only provenance badge to `/portfolio/architecture` showing which archetype/category perspective supplied the active map, then add additional overlays category by category.
+After category overlay coverage lands, add a read-only provenance badge to `/portfolio/architecture` showing which archetype/category perspective supplied the active map, then deepen high-priority overlays from compact DPF-authored seed rows into governed standard-backed models where a mature standard exists.
