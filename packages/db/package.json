@@ -64,6 +64,8 @@
     "./seed-skills": "./src/seed-skills.ts",
     "./portfolio-sources/types": "./src/portfolio-sources/types.ts",
     "./portfolio-sources/vertical-incumbents-manifest": "./src/portfolio-sources/vertical-incumbents-manifest.ts",
+    "./portfolio-sources/absorption-posture": "./src/portfolio-sources/absorption-posture.ts",
+    "./portfolio-sources/incumbent-coverage": "./src/portfolio-sources/incumbent-coverage.ts",
     "./patch": "./src/patch/index.ts"
   },
   "scripts": {
@@ -81,8 +83,8 @@
   },
   "dependencies": {
     "@dpf/storefront-templates": "workspace:*",
-    "@prisma/adapter-pg": "^7.8.0",
-    "@prisma/client": "^7.8.0",
+    "@prisma/adapter-pg": "^7.9.0",
+    "@prisma/client": "^7.9.0",
     "bcryptjs": "^3.0.3",
     "dotenv": "^17.4.2",
     "fflate": "^0.8.3",
@@ -90,14 +92,14 @@
     "net-snmp": "^3.26.3",
     "pg": "^8.22.0",
     "read-excel-file": "9.2.0",
-    "undici": "^8.7.0"
+    "undici": "^8.9.0"
   },
   "devDependencies": {
     "@types/pg": "^8.20.0",
     "@types/picomatch": "^4.0.2",
     "@vitest/coverage-v8": "^4.1.10",
     "picomatch": "^4.0.5",
-    "prisma": "^7.8.0",
+    "prisma": "^7.9.0",
     "tsx": "^4.23.1",
     "typescript": "^6.0.3",
     "vite": "^8.1.5",

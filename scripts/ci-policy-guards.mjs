@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   POLICY_GUARD_PROFILES,
+  formatRunSummary,
   runPolicyProfile,
 } from "./lib/ci-policy-guards.mjs";
 
@@ -68,6 +69,13 @@ export async function main() {
       "utf8",
     );
   }
+
+  // Consolidated summary at the LOG TAIL (outside any collapsed `::group`), so
+  // the failing guard is never hidden behind the last guard's output.
+  const summary = formatRunSummary(profile, result);
+  console.log(`\n${summary.text}`);
+  if (summary.annotation) console.error(summary.annotation);
+
   if (!result.ok) process.exitCode = 1;
 }
 

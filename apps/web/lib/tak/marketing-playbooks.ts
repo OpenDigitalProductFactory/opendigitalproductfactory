@@ -485,6 +485,30 @@ const CATEGORY_PLAYBOOKS: Record<string, MarketingPlaybook> = {
     agentSkills: ["Pickup route campaign", "Ready-promise notice", "Commercial account outreach", "Seasonal garment-care promotion"],
   },
 
+  "agriculture-ranching": {
+    primaryGoal: "Build trusted buyer and service relationships around honest availability, condition, timing, and stewardship",
+    stakeholders: "Livestock and hay buyers, processors, sale barns, landowners, neighboring operators, custom-service customers, and rural communities",
+    campaignTypes: [
+      "Breeding-stock and herd offering profiles with current health and lineage evidence",
+      "Hay and forage availability by cutting, quality, analysis, quantity, and pickup window",
+      "Farm-direct seasonal crop and product availability",
+      "Custom field, grazing, hauling, or cattle-service capacity windows",
+      "Pre-season booking outreach for limited outside-service capacity",
+      "Stewardship, animal-welfare, and land-practice trust stories grounded in records",
+      "Market-window outreach that states dated evidence and avoids price promises",
+    ],
+    contentTone: "Plainspoken, specific, evidence-led, local, and never speculative",
+    keyMetrics: [
+      "Qualified enquiry-to-sale conversion",
+      "Committed volume or head against available supply",
+      "Average realized price against the documented market window",
+      "Repeat buyer and referral rate",
+      "On-time pickup, delivery, and service-window performance",
+    ],
+    ctaLanguage: ["Ask about availability", "Request current details", "Discuss a sale window", "Reserve a service window"],
+    agentSkills: ["Livestock offering brief", "Hay availability campaign", "Seasonal service-window outreach", "Buyer follow-up plan"],
+  },
+
   "security-services": {
     primaryGoal: "Win and renew recurring contracts — built on credibility, a response track record, and compliance assurance",
     stakeholders: "Businesses, property managers, event organizers, residents, insurers",

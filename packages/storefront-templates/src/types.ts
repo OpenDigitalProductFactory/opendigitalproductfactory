@@ -92,7 +92,12 @@ export type ArchetypeCategory =
    *  (the customer is not the work surface), warehousing-fulfilment B2B stock
    *  custody, and trades-maintenance site work. See
    *  docs/superpowers/specs/2026-07-22-fabric-care-services-archetype-design.md. */
-  | "fabric-care-services";
+  | "fabric-care-services"
+  /** Agriculture and ranching: land-based production systems whose operating
+   *  clock is seasonal and biological. Covers forage/crop cycles, grazing and
+   *  livestock health, working animals, equipment readiness, regulated inputs,
+   *  outside services, and market/weather decisions. */
+  | "agriculture-ranching";
 
 export interface FormField {
   name: string;

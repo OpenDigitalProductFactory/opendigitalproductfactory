@@ -192,6 +192,25 @@ describe("business capability perspectives", () => {
     expect(keys).not.toContain("trades-dispatch-technician-readiness");
   });
 
+  it("adds an agriculture category overlay across land, animals, equipment, markets, and obligations", () => {
+    const agriculture = resolveBusinessCapabilityPerspective({
+      archetypeId: "mixed-farm-ranch",
+      category: "agriculture-ranching",
+    });
+
+    expect(agriculture.sourcePerspectiveIds).toEqual(["common-small-business", "agriculture-ranching"]);
+    expect(agriculture.capabilities.map((capability) => capability.key)).toEqual(
+      expect.arrayContaining([
+        "agriculture-land-field-pasture-planning",
+        "agriculture-livestock-breeding-health",
+        "agriculture-working-animal-readiness",
+        "agriculture-equipment-implement-maintenance",
+        "agriculture-market-weather-decisions",
+        "agriculture-regulation-license-exemption",
+      ]),
+    );
+  });
+
   it("adds the BIAN v14 banking overlay for the banking-financial-services category (BI-5D9DCDE6)", () => {
     const creditUnion = resolveBusinessCapabilityPerspective({
       archetypeId: "credit-union",

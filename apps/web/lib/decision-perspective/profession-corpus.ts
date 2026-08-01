@@ -40,6 +40,7 @@ export type ProfessionCorpusStatus =
   | "injected" // a family resolved AND it has corpus pages → promptBlock is non-null
   | "missed-unmapped" // the agent maps to no profession family
   | "missed-empty-corpus" // the family resolved but has no published corpus pages
+  | "missed-empty-applicable-corpus" // pages exist, but none apply to this install variant
   | "error"; // a DB read failed (fail-open — caller still proceeds without corpus)
 
 export type ProfessionCorpusPageExcerpt = {
@@ -425,10 +426,14 @@ export async function resolveProfessionCorpusContext(input: {
 
   // Variant selection: keep pages eligible for this install (archetype-specific
   // craft only to a matching install; jurisdiction filtered only when declared).
-  // Fail-safe: if filtering would starve the coworker, fall back to all pages.
+  // Fail closed across archetypes: an empty applicable slice is a corpus gap,
+  // never permission to inject another industry's craft.
   const install = input.installContext ?? {};
   const eligible = rows.filter((r) => pageEligibleForInstall(normalizeVariantAxes(r.metadata), install));
-  const usable = eligible.length > 0 ? eligible : rows;
+  if (eligible.length === 0) {
+    return missContext("missed-empty-applicable-corpus", family, input.query);
+  }
+  const usable = eligible;
 
   const ranked = rankCorpusPages(usable, input.query, family, install);
   const top = ranked.slice(0, input.maxPages ?? DEFAULT_MAX_PAGES);

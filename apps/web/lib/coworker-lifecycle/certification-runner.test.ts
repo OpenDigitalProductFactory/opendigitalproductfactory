@@ -242,6 +242,38 @@ describe("coworker certification runner (EP-COWORKER-LIFECYCLE Phase 2)", () => 
   });
 });
 
+describe("certification tool resolution carries the journey route (BI-8D5BB185)", () => {
+  // The runner computes routeContext via certificationRouteFor() and passes it to
+  // resolveAgent and to runLoop — but omitted it when resolving TOOLS. routeContext
+  // is what force-attaches a route's declared domain tools (tier 0), so without it
+  // the journey's central tool is absent from the available list and the loop
+  // refuses the call with "requires the `view_marketing` capability, which is not
+  // available on this page". Observed live on 2026-08-01: the
+  // marketing-specialist/campaign-readiness-review journey emitted a well-formed
+  // get_marketing_summary call and was refused, so the journey could never pass.
+  it("passes the journey's routeContext to resolveTools", async () => {
+    const { deps } = makeDeps();
+
+    await runCoworkerCertificationSweep({ agentIds: ["marketing-specialist"], deps });
+
+    expect(deps.resolveTools).toHaveBeenCalled();
+    const call = (deps.resolveTools as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(call.routeContext).toBe("/customer/marketing");
+  });
+
+  it("resolves tools and the agent under the SAME route", async () => {
+    const { deps } = makeDeps();
+
+    await runCoworkerCertificationSweep({ agentIds: ["marketing-specialist"], deps });
+
+    const toolCall = (deps.resolveTools as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    const agentCall = (deps.resolveAgent as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    // A split here is the defect: the agent is resolved for the route while its
+    // tools are resolved for nowhere.
+    expect(toolCall.routeContext).toBe(agentCall.routeContext);
+  });
+});
+
 describe("certification state derivation", () => {
   const now = new Date("2026-07-08T12:00:00Z");
 

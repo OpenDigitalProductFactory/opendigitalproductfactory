@@ -1,14 +1,13 @@
 // apps/web/lib/route-context-map.ts
 // Factual domain context definitions per route — replaces persona-based agent routing.
-
 import { resolveDocsPath } from "@/lib/docs-route-map";
+import { AGRICULTURE_ROUTE_CONTEXT } from "./agriculture-route-context";
 import { CHANGE_REVIEWER_ROUTE_CONTEXT } from "./change-reviewer-route";
 import { PERFORMANCE_ROUTE_CONTEXT } from "./performance-route";
 import { PRODUCT_LINE_ROUTE_CONTEXT } from "./product-line-route-context";
 import { PRODUCT_ROUTE_CONTEXT } from "./product-route-context";
 import type { RouteContextDef } from "./route-context-types";
 export type { RouteContextDef } from "./route-context-types";
-
 // Universal baseline page-interaction skills added to every route.
 export const UNIVERSAL_SKILLS: RouteContextDef["skills"] = [
   {
@@ -42,6 +41,7 @@ export const UNIVERSAL_SKILLS: RouteContextDef["skills"] = [
 ];
 
 export const ROUTE_CONTEXT_MAP: Record<string, RouteContextDef> = {
+  ...AGRICULTURE_ROUTE_CONTEXT,
   // Sensitivity MUST match ROUTE_AGENT_MAP["/coworker-decisions/craft"] — the
   // LIFE-007 conformance check fails on divergence, because the
   // USE_UNIFIED_COWORKER flag would otherwise flip this route's data boundary.

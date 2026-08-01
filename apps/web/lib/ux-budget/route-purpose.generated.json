@@ -2341,7 +2341,8 @@
         "destinationKind": "advanced-diagnostic",
         "shell": "detail",
         "confidence": "high",
-        "sweepEligible": true
+        "sweepEligible": false,
+        "sweepExclusionReason": "wall-clock-collection"
       }
     },
     {

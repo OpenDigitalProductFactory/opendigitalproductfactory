@@ -154,7 +154,7 @@ These invariants keep this artefact useful to architecture, UX, testing, and bus
 
 ---
 
-## 6. Per-category value-stream profiles (all 103 archetypes across 23 categories)
+## 6. Per-category value-stream profiles (all 106 archetypes across 24 categories)
 
 > The field-dispatch leaves folded into existing categories on 2026-06-13 (e.g. `hvac-contractor`, `home-health-care`, `mobile-pet-grooming`) share their category's value-stream profile below and are catalogued — with their cross-category pattern — in §10.2. The three dispatch-native categories are §6.16–6.18; `media-production` and `live-events-venues` are now first-class profiles in §6.20–§6.21.
 
@@ -504,6 +504,25 @@ Related: `freight-brokerage` joins `moving-and-logistics` in the same change —
 
 ---
 
+### 6.24 Agriculture & Ranching — `mixed-farm-ranch`, `crop-hay-farm`, `cattle-ranch`
+
+> Added 2026-08-01. This category operates land, crops/forage, livestock, working animals, machinery, materials, and outside services through weather- and biology-constrained windows. It is distinct from the nonprofit `agricultural-cooperative`, which coordinates member-owned shared assets rather than owning one operation's production plan.
+
+- **Value delivered:** cared-for land and animals produce a safe, saleable crop, forage, or livestock outcome while the operation preserves future productive capacity.
+- **Commercial model:** seasonal production and sale, sometimes supplemented by breeding stock, custom work, direct sales, or grazing arrangements; cash commitments precede uncertain yields, weights, quality, and market timing.
+- **Load-bearing stage:** **S4 Deliver the Value** — land condition, biological timing, equipment/material readiness, qualified people and providers, and a workable weather window must coincide. Missing one prerequisite can erase the window rather than merely delay a task.
+- **Distinctive stage:** Now / Next / Season readiness joins long-horizon planning to near-term execution. Forecasts, outlooks, market reports, labels, and regulations are dated evidence, never silent permission or guaranteed outcomes.
+- **Trust gate:** animal welfare and qualified veterinary authority; pesticide label, applicator, site/crop/pest, and jurisdiction constraints; working-animal care; safe equipment release; and human approval for sales, spend, filings, external contact, and machinery control.
+- **Value-stream-critical assertions:** farm/ranch vocabulary survives portal, workspace, finance, marketing, and coworker surfaces; `TERRITORY` aggregates land/herd/equipment attention; outside-service prerequisites and human-helper needs are visible; every consequential proposal shows source, as-of time, uncertainty, and approval owner.
+
+| Archetype | Diverges by |
+|-----------|-------------|
+| `mixed-farm-ranch` | Whole-operation coordination across forage/crops, cattle, working horses, machinery, inputs, providers, and multiple seasonal horizons. |
+| `crop-hay-farm` | Field/stand readiness, fertility and pest evidence, harvest windows, equipment/material dependencies, storage, and custom cutting/baling dominate. |
+| `cattle-ranch` | Herd/group and individual identity, breeding/calving, health, movement, forage/water, working-animal support, and market-readiness decisions dominate. |
+
+---
+
 ## 7. Demand–capacity dynamics at the load-bearing stage
 
 The load-bearing stage (Section 6) is not only where the main transaction interface between stakeholders sits — it is also **where demand meets finite capacity.** That is not a coincidence: a stage is load-bearing precisely because the business lives or dies on its ability to match demand against a scarce resource there. Managing that match — *neither starving demand nor paying for idle capacity* — is the operator's hardest recurring decision, and it is where a typical operator most needs the platform's help.
@@ -581,6 +600,7 @@ Severity note for the audit: a capacity/demand surface (calendar, inventory, ros
 | `new-home-builder`, `custom-home-builder` | **build slots** (crews + subcontractor pool + working capital tied in WIP) + design/sales throughput | interest-rate + housing-season sensitive (spring purchase peak); production builder smooths via inventory homes, custom is pipeline-lumpy | overcommitted crews/subs → slipped completion + carrying cost on unsold spec homes; idle crews between contracts | project-pipeline capacity + subcontractor scheduling; milestone-draw cadence to keep WIP financed; model-home/design-centre throughput (production) vs consultative pipeline (custom) |
 | Field-dispatch leaves (Gap-A/Gap-B: `automotive-services`, `moving-and-logistics`, `security-services`, and the folded trades/healthcare/pet/professional/beauty/nonprofit/retail leaves) | **mobile labour × route/drive-time geography** (crew/technician/officer-hours) | per-vertical: emergency-reactive (roadside, HVAC no-heat, lockout), seasonal (moving, pest), steady-recurring (guard coverage, monitoring, pool service) | idle crews between geographically scattered jobs; emergency under-coverage; over-routed days that slip appointments | see §10.2 — route/assignment (skill×proximity×availability), emergency-reserve blocking, recurring-route capture; the horizontal Field Dispatch capability is the platform lever |
 | `dry-cleaning-plant-network`, `wash-and-fold-laundry`, `alterations-tailoring` | **plant/workroom throughput** + counter/route capacity | weekly repeat laundry rhythm; weather and event spikes (coats, gowns, uniforms, back-to-school); commercial accounts smooth the baseline | idle plant labour in troughs; over-accepted work misses ready promises or causes garment mix-ups | promised-ready board; ticket/tag reconciliation; plant capacity lanes; recurring route/account smoothing; early delay notifications |
+| `mixed-farm-ranch`, `crop-hay-farm`, `cattle-ranch` | **land/forage carrying capacity × biological window × ready equipment/people/provider capacity** | seasonal and weather-driven; planting/harvest, breeding/calving, forage growth, care and regulatory calendars; market timing is exogenous | unused forage/field window, spoiled inputs or crop, idle capital equipment, animal-health/welfare risk, forced sale, or missed custom-operator slot | backward-plan from latest-safe biological/field dates; dependency readiness; fallback windows; forage/feed and herd-capacity scenarios; source-dated weather/market/regulatory evidence |
 
 ### 7.3 What this means for platform functionality (requirements implication)
 

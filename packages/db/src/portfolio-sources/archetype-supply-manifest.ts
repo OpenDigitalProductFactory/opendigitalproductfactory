@@ -166,4 +166,17 @@ export const ARCHETYPE_SUPPLY_MANIFEST: Partial<
       },
     ],
   },
+  "agriculture-ranching": {
+    suppliers: [
+      { name: "Seed Feed Fertility & Crop-Input Supplier", description: "Seed, feed, minerals, fertilizer, and regulated crop inputs whose product identity, lot, label, availability, and timing affect the whole season." },
+      { name: "Veterinarian Farrier & Animal-Health Provider", description: "Qualified livestock and working-animal care, herd-health planning, diagnostics, vaccinations, breeding support, and hoof care." },
+      { name: "Equipment Dealer Parts & Service", description: "Tractors, implements, wear parts, fluids, tires, diagnostics, scheduled maintenance, and emergency repair support." },
+      { name: "Custom Operator Hauler & Applicator", description: "Outside hay, field, hauling, livestock-handling, or licensed-application capacity booked against narrow weather and biological windows." },
+      { name: "Market Weather Laboratory & Extension Information", description: "Official forecasts, market reports, soil/forage/feed tests, and local extension guidance used as dated evidence rather than certainty." },
+    ],
+    goods: [
+      { name: "Feed Seed Fertilizer & Farm Consumables", description: "Lot- and quantity-tracked production materials held for a season, with labels, expiry, storage, and use constraints kept with the item." },
+      { name: "Parts Fluids Tires & Implement Wear Items", description: "Critical spares and maintenance materials whose absence can close a field or harvest window." },
+    ],
+  },
 };

@@ -283,6 +283,45 @@ export const COWORKER_SERVICE_CATALOG_SERVICE_SEEDS: readonly CoworkerServiceSee
     dataBoundary: { sensitivity: "internal" },
     metadata: { family: "marketing-execution" },
   }),
+  serviceSeed("svc-farm-ranch-seasonal-stewardship", "farm-ranch-steward", {
+    ownerAreaSlug: "manufacturing_and_delivery",
+    name: "Farm and ranch seasonal stewardship",
+    summary: "Turns land, herd, working-animal, equipment, input, vendor, weather, market, and compliance records into an owner-reviewable operating horizon.",
+    description:
+      "Maintains a rolling seasonal plan, detects readiness gaps, and drafts decision briefs while preserving owner approval and qualified-professional authority for regulated, clinical, financial, and external actions.",
+    riskTier: "high",
+    authorityBoundary: "proposal-only",
+    personas: ["owner-operator", "farm-manager", "ranch-manager", "farm-hand"],
+    valueStreams: ["operate", "cross-cutting"],
+    archetypes: ["agriculture-ranching"],
+    jurisdictions: ["global"],
+    requiredInputs: [
+      { key: "production-system-and-location" },
+      { key: "fields-pastures-herds-working-animals-equipment" },
+      { key: "current-plans-records-and-authority-sources" },
+    ],
+    producedOutputs: [
+      { key: "rolling-seasonal-plan" },
+      { key: "readiness-and-exception-brief" },
+      { key: "owner-decision-brief" },
+      { key: "qualified-provider-handoff" },
+    ],
+    backingSkillIds: ["dpf-farm-ranch-seasonal-planning"],
+    backingToolNames: ["wiki_query", "create_backlog_item"],
+    backingGrantKeys: ["registry_read", "backlog_read", "backlog_write", "web_search"],
+    costModel: { pricing: "internal", externalCost: "veterinary-dealer-laboratory-service-or-data-provider-dependent" },
+    contractTerms: { posture: "owner-approval-for-external-regulated-clinical-financial-or-irreversible-action" },
+    dataBoundary: { sensitivity: "confidential", animalHealth: true, landAndFinancialRecords: true },
+    metadata: {
+      family: "agricultural-operations",
+      decisionLedgerId: "DI-AE18927B5DCB",
+      readinessProbe: {
+        taskType: "analysis",
+        prompt: "Prepare a 90-day farm and ranch readiness brief from the applicable corpus without prescribing treatment or executing an outside action.",
+        requiresToolUse: true,
+      },
+    },
+  }),
 ];
 
 export const COWORKER_SERVICE_CATALOG_OFFER_SEEDS: readonly CoworkerOfferSeed[] = [
@@ -366,6 +405,18 @@ export const COWORKER_SERVICE_CATALOG_OFFER_SEEDS: readonly CoworkerOfferSeed[] 
     eligibleConsumers: ["marketing", "product", "operator"],
     deliverables: ["Battlecard", "Competitive matrix"],
     filters: { domain: "marketing-execution", family: "competitive" },
+  }),
+  offerSeed("offer-farm-ranch-seasonal-stewardship", "svc-farm-ranch-seasonal-stewardship", {
+    name: "Farm and ranch seasonal readiness brief",
+    summary: "A rolling plan and exception brief across land, animals, equipment, inputs, services, forecasts, markets, and obligations.",
+    riskTier: "high",
+    authorityBoundary: "proposal-only",
+    eligibleConsumers: ["owner-operator", "farm-manager", "ranch-manager"],
+    requiredApprovals: [
+      { type: "owner-approval-before-external-regulated-clinical-financial-or-irreversible-action", required: true },
+    ],
+    deliverables: ["90-day seasonal plan", "Readiness exceptions", "Decision briefs", "Qualified-provider handoffs"],
+    filters: { archetype: "agriculture-ranching", domain: "agricultural-operations" },
   }),
 ];
 

@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 598,
+  "pageCount": 609,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -716,7 +716,7 @@
         "4-the-bridge-value-stream-stage-platform-surface-audit-phase",
         "5-the-value-stream-stages-map-onto-substrate-the-platform-already-carries",
         "51-architecture-and-usability-invariants",
-        "6-per-category-value-stream-profiles-all-103-archetypes-across-23-categories",
+        "6-per-category-value-stream-profiles-all-106-archetypes-across-24-categories",
         "61-trades-maintenance-run-1-plumber-electrician-facilities-maintenance-landscaping-cleaning-service",
         "62-beauty-personal-care-run-2-hair-salon-barber-shop-nail-salon-beauty-spa-personal-trainer-mobile-beauty",
         "63-healthcare-wellness-run-3-veterinary-clinic-dental-practice-medical-practice-physiotherapy-counselling-optician-plus-medical-mobile-leaves-in-102",
@@ -740,6 +740,7 @@
         "621-live-events-venues-event-venue-tour-promoter-talent-booking-agency",
         "622-warehousing-fulfilment-third-party-logistics-ecommerce-fulfilment-cold-chain-storage-cross-dock-transload",
         "623-fabric-care-services-dry-cleaning-plant-network-wash-and-fold-laundry-alterations-tailoring",
+        "624-agriculture-ranching-mixed-farm-ranch-crop-hay-farm-cattle-ranch",
         "7-demandcapacity-dynamics-at-the-load-bearing-stage",
         "71-the-model-capacity-unit-demand-signature-two-sided-risk",
         "72-per-archetype-demandcapacity-matrix",
@@ -1349,17 +1350,17 @@
         "target-iterative-workflow",
         "mermaid-diagram-2",
         "important-boundaries",
-        "data-architecture-three-complementary-data-layers",
+        "data-architecture-one-datastore-three-question-shapes",
         "layer-1-postgresql-system-of-record",
-        "layer-2-neo4j-graph-projection-for-topology-and-impact",
+        "layer-2-the-graph-mirror-topology-and-impact",
         "layer-3-prometheus-time-series-metrics-for-operational-health",
-        "how-the-three-layers-work-together",
+        "how-the-layers-work-together",
         "grafanas-role-power-user-escape-hatch",
         "monitoring-stack-topology",
         "layer-3b-loki-alloy-container-logs-the-unbounded-signal",
         "how-the-platform-handles-anything-that-happens",
         "ai-provider-failure-detection-and-recovery",
-        "neo4j-sync-integrity",
+        "graph-mirror-sync-integrity",
         "hardware-guidance",
         "practical-tiers",
         "current-local-model-auto-selection",
@@ -4377,10 +4378,10 @@
         "1-inventory-whats-recoverable-from-what",
         "2-decision-tree-my-portal-wont-start",
         "3-specific-recovery-scenarios",
-        "31-volume-wipe-recovery-postgres-neo4j-qdrant-all-gone",
+        "31-volume-wipe-recovery-the-postgres-volume-is-gone",
         "32-postgres-down-other-stores-ok",
-        "33-neo4j-down-other-stores-ok",
-        "34-qdrant-down-other-stores-ok",
+        "33-redis-down-postgres-ok",
+        "34-graph-or-vector-data-looks-wrong-postgres-ok",
         "35-portal-returns-500-containers-healthy",
         "35a-failed-upgrade-seed-clobber-or-migration-damage",
         "35b-sandbox-assisted-recovery-rehearsal",
@@ -4789,6 +4790,51 @@
         "see-also"
       ]
     },
+    "docs/professions/agricultural-operations/wiki/equipment-material-and-service-readiness.md": {
+      "publicHref": "/professions/agricultural-operations/wiki/equipment-material-and-service-readiness/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "interoperability-posture",
+        "source"
+      ]
+    },
+    "docs/professions/agricultural-operations/wiki/herd-and-working-animal-care-records.md": {
+      "publicHref": "/professions/agricultural-operations/wiki/herd-and-working-animal-care-records/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "record-pattern",
+        "authority-boundary",
+        "sources"
+      ]
+    },
+    "docs/professions/agricultural-operations/wiki/seasonal-operating-horizon.md": {
+      "publicHref": "/professions/agricultural-operations/wiki/seasonal-operating-horizon/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "human-authority",
+        "sources"
+      ]
+    },
+    "docs/professions/agricultural-operations/wiki/weather-and-market-decision-evidence.md": {
+      "publicHref": "/professions/agricultural-operations/wiki/weather-and-market-decision-evidence/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "weather-evidence",
+        "market-evidence",
+        "decision-brief",
+        "sources"
+      ]
+    },
     "docs/professions/build-studio/wiki/build-phase-lifecycle.md": {
       "publicHref": "/professions/build-studio/wiki/build-phase-lifecycle/",
       "portalHref": null,
@@ -4967,6 +5013,19 @@
         "see-also"
       ]
     },
+    "docs/professions/data-architect/wiki/dedupe-migration-means-the-constraint-is-wrong.md": {
+      "publicHref": "/professions/data-architect/wiki/dedupe-migration-means-the-constraint-is-wrong/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "the-rule",
+        "do-this-first",
+        "when-you-do-write-the-repair",
+        "why-not-just-add-on-conflict-do-nothing",
+        "related"
+      ]
+    },
     "docs/professions/data-architect/wiki/fix-the-seed-not-the-runtime.md": {
       "publicHref": "/professions/data-architect/wiki/fix-the-seed-not-the-runtime/",
       "portalHref": null,
@@ -4980,6 +5039,20 @@
         "decision-dimensions",
         "examples",
         "sources"
+      ]
+    },
+    "docs/professions/data-architect/wiki/index-and-collation-integrity.md": {
+      "publicHref": "/professions/data-architect/wiki/index-and-collation-integrity/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "why-a-text-index-depends-on-collation",
+        "how-it-silently-breaks",
+        "the-fingerprint",
+        "detection-find-it-before-a-ui-does",
+        "prevention-and-repair",
+        "related"
       ]
     },
     "docs/professions/data-architect/wiki/least-privilege-db-access.md": {
@@ -5008,6 +5081,21 @@
         "decision-dimensions",
         "examples",
         "sources"
+      ]
+    },
+    "docs/professions/data-architect/wiki/mdm-what-it-does-and-does-not-do.md": {
+      "publicHref": "/professions/data-architect/wiki/mdm-what-it-does-and-does-not-do/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "the-one-sentence-to-remember",
+        "what-mdm-is",
+        "what-mdm-is-not",
+        "merge-policy-tombstone-never-hard-delete",
+        "the-corollary-that-bites-prevention-shares-the-constraints-failure-mode",
+        "when-to-reach-for-mdm-and-when-not",
+        "related"
       ]
     },
     "docs/professions/data-architect/wiki/native-cohesion-over-interfacing.md": {
@@ -5567,6 +5655,16 @@
         "see-also"
       ]
     },
+    "docs/professions/finance/wiki/agriculture-seasonal-cash-and-sale-decisions.md": {
+      "publicHref": "/professions/finance/wiki/agriculture-seasonal-cash-and-sale-decisions/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "sources"
+      ]
+    },
     "docs/professions/finance/wiki/double-entry-invariant.md": {
       "publicHref": "/professions/finance/wiki/double-entry-invariant/",
       "portalHref": null,
@@ -5864,6 +5962,16 @@
         "see-also"
       ]
     },
+    "docs/professions/legal-compliance/wiki/agriculture-pesticide-label-license-and-exemption-control.md": {
+      "publicHref": "/professions/legal-compliance/wiki/agriculture-pesticide-label-license-and-exemption-control/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "control-pattern",
+        "sources"
+      ]
+    },
     "docs/professions/legal-compliance/wiki/ai-provider-account-and-sovereignty-review.md": {
       "publicHref": "/professions/legal-compliance/wiki/ai-provider-account-and-sovereignty-review/",
       "portalHref": null,
@@ -5986,6 +6094,16 @@
         "the-structural-fact",
         "coppa-the-cleanly-sourced-example",
         "see-also"
+      ]
+    },
+    "docs/professions/marketing/wiki/agriculture-evidence-led-market-positioning.md": {
+      "publicHref": "/professions/marketing/wiki/agriculture-evidence-led-market-positioning/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "sources"
       ]
     },
     "docs/professions/marketing/wiki/brand-consistency.md": {
@@ -7423,6 +7541,32 @@
         "9-risks-and-mitigations",
         "10-open-questions",
         "11-definition-of-done"
+      ]
+    },
+    "docs/strategy/2026-09-cada-architects-forum-deck.md": {
+      "publicHref": "/strategy/2026-09-cada-architects-forum-deck/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "architects-forum-cada-cloud-sovereignty-deck-outline-speaker-notes",
+        "slide-1-title",
+        "slide-2-the-shift-from-politics-to-procurement-law",
+        "slide-3-hero-the-four-tier-sovereignty-ladder-the-four-tier-ladder-visual",
+        "slide-4-why-hyperscaler-ai-is-capped-at-l1l2",
+        "slide-5-whos-in-scope-and-the-cascade",
+        "slide-6-the-architecture-that-can-reach-the-top",
+        "slide-7-sovereign-by-construction-how-dpf-embodies-it",
+        "slide-8-the-evidence-trail-what-auditorsprocurement-now-demand",
+        "slide-9-live-demo-what-tier-is-this-install",
+        "slide-10-the-partner-reference-stack",
+        "slide-11-beyond-the-platform-governing-the-whole-estate",
+        "slide-12-honest-caveats-credibility-with-this-audience",
+        "slide-13-call-to-action",
+        "slide-14-appendix-pointer-qa",
+        "appendix-a-legislation-references",
+        "appendix-b-dpf-architecture-references",
+        "appendix-c-live-demo-script"
       ]
     },
     "docs/strategy/2026-09-cada-cloud-sovereignty-architects-forum.md": {
@@ -9945,6 +10089,7 @@
         "complete-personal-policy-work",
         "manage-roles-and-account-access",
         "what-is-not-yet-a-people-page-workflow",
+        "who-can-approve-leave",
         "evidence-and-recovery-checklist"
       ]
     },

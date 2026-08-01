@@ -86,6 +86,12 @@ export const COWORKER_SLUG_TO_CANONICAL_AGENT_ID: Readonly<Record<string, string
   "ops-coordinator": "AGT-WS-OPS",
   "platform-engineer": "AGT-WS-PLATFORM",
   "onboarding-coo": "AGT-WS-ONBOARD",
+  // BI-6A1BFE77: UX Design Critic was established as AGT-906 (commit 24abf01c9)
+  // but ALSO dual-seeded under its slug, and the slug was never added here — so
+  // both rows rendered as a visible duplicate in the live roster (the exact
+  // "manually-maintained map drifts" failure the BI names). The seed-integrity
+  // guard (dual-seed-coverage) now fails the build on any future uncovered pair.
+  "ux-design-critic": "AGT-906",
 };
 
 /** Reverse map: canonical AGT-* → preferred slug handle. */

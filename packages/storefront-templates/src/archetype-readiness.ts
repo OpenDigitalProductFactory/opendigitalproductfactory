@@ -212,6 +212,12 @@ const VERTICAL_READINESS_EPICS_BY_CATEGORY: Partial<
     title: "Fabric Care Operations Readiness",
     status: "open",
   },
+  "agriculture-ranching": {
+    kind: "epic",
+    id: "EP-7015CB99",
+    title: "Agriculture & Ranching Archetype",
+    status: "in-progress",
+  },
   "fitness-recreation": {
     kind: "epic",
     id: "EP-VERTICAL-FITNESS",

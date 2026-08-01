@@ -540,6 +540,7 @@ not “unused” and not an unconstrained “force.”
 | `BI-7378E34C` | Designed/Observed/Compare Operations Map UX |
 | `BI-C8BC9DD1` | Owner-actionable conformance findings — remediation contract + severity-faithful presentation |
 | `BI-A4BC02BE` | Design conformance bounded to the instrumented era, not the fetch window |
+| `BI-3006D674` | Platform build maturity presented as such, never as the owner's operational gap |
 
 Existing defect `BI-7E2A1DD0` is coordinated, not duplicated.
 
@@ -601,6 +602,37 @@ since stamping shipped.
 `coverage.instrumentedSince` is surfaced in the station inspector so an owner can
 distinguish "we have no record of that period" from "the platform did something
 wrong".
+
+### 15.3 Build maturity is DPF's, not the owner's (BI-3006D674)
+
+The station card rendered `designStatusCounts.implemented / stages.length`
+followed by the word "implemented", under a row labelled "Designed" and directly
+above the live "Observed" figure. Three problems compounded:
+
+1. **`partial` was rendered as zero.** The registry status enum is
+   `implemented | partial | proposed`, and only the first was counted. Station 2
+   holds three `partial` stages pointing at working code
+   (`classifyInferencePayload`, `evaluateDataPolicy`,
+   `evaluateInferenceDispatchPolicy`) and rendered **"0/6 implemented"** — a
+   false statement about the codebase.
+2. **Nothing separated platform roadmap from install health.** A DPF build-progress
+   number sat immediately above an operational one in the same visual frame. The
+   founder read "0/6" and "3/7" as their own routing being misconfigured; their
+   routes were in fact healthy, with six endpoints serving traffic in the window.
+3. **A metric that is zero for want of instrumentation read as a failing score.**
+   `screenCoverageRate` is structurally 0 because the loader hard-codes
+   `screenReceipt: null` pending the sensitive-routing dependency; the code
+   comment says coverage is "honestly reported as absent", but the surface
+   rendered **"0% screened"**, which reads as a screening failure.
+
+The row is now labelled **Build** and states maturity in words that
+cannot be mistaken for a score — built / partial / planned, omitting empty
+segments — so a station with working partial code never reports zero. An
+uninstrumented metric names itself as not yet instrumented rather than
+presenting a rate.
+
+This closes the last of the four content defects behind the original report;
+`BI-97E5582F` remains for the layout and disclosure work on the same route.
 
 ## 16. Refactoring budget
 

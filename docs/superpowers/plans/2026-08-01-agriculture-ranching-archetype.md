@@ -4,9 +4,10 @@
 **Date:** 2026-08-01
 **Epic:** `EP-7015CB99`
 **Umbrella:** `BI-1A2F61F9`
-**Branch:** `doc/agriculture-ranching-archetype`
+**Implementation branch:** `feat/agriculture-ranching-archetype`
 **Spec:** `docs/superpowers/specs/2026-08-01-agriculture-ranching-archetype-design.md`
 **Decision:** `DI-2DC225DEF0FF`
+**Coworker architecture decision:** `DI-AE18927B5DCB`
 **Backlog coverage receipt:** `cmsakhc6907ae01qkmxuosfg7` — decomposed; seven live mappings validated
 
 ## Outcome
@@ -14,6 +15,8 @@
 Deliver a complete `agriculture-ranching` category whose first three leaves help mixed-farm, crop/hay, and cattle-ranch owners operate land, plants, animals, equipment, supplies, vendors, services, compliance, weather, and market attention from one source-attributed, map-led decision cockpit.
 
 This is a decomposition plan for an xlarge umbrella. No implementation begins from the umbrella item. Each independently shippable phase has its own live backlog item.
+
+Phase F's category foundation is implemented on the named feature branch. Its delivery proves the four provisioning dimensions and the archetype-leakage boundary without pretending that the later agricultural system-of-record or map-led cockpit phases have shipped.
 
 ## Delivery graph
 
@@ -106,6 +109,8 @@ This phase is the deliberate approximately 20% refactoring allocation.
 Exit: agriculture extends two stable registries while all existing scene and capacity consumers retain behavior.
 
 ## Phase F — four-dimension provisioning (`BI-78C5A164`)
+
+**Implementation status:** foundation implemented; build, UX, and PR evidence pending.
 
 1. Add `agriculture-ranching` to the closed `ArchetypeCategory` union and category registry.
 2. Add `mixed-farm-ranch`, `crop-hay-farm`, and `cattle-ranch` definitions with finance defaults, value streams, applicability, scheduling/dispatch, launch primitives, and `TERRITORY/farm-operation` twin configuration.

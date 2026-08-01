@@ -111,4 +111,24 @@ describe("default workspace home profiles", () => {
       expect.arrayContaining(["plant-capacity", "ticket-exceptions", "garment-tracking"]),
     );
   });
+
+  it("uses an agriculture home that aggregates seasonal, animal, land, equipment, and outside-service decisions", () => {
+    const resolution = resolveWorkspaceHomeContribution({
+      storefrontConfig: {
+        archetype: {
+          archetypeId: "mixed-farm-ranch",
+          category: "agriculture-ranching",
+          name: "Mixed Farm & Ranch",
+        },
+      },
+    });
+
+    expect(resolution.match).toBe("category");
+    expect(resolution.contribution?.id).toBe("home-agriculture-ranching");
+    expect(resolution.contribution?.topConcerns).toEqual(expect.arrayContaining([
+      "animal health, breeding, farrier, and handling actions due",
+      "field, pasture, crop, hay, and grazing windows",
+      "tractors, implements, parts, fuel, and maintenance readiness",
+    ]));
+  });
 });

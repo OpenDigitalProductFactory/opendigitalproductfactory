@@ -113,6 +113,26 @@ describe("coworker service catalog seed data", () => {
     });
   });
 
+  it("seeds a proposal-only agriculture stewardship service for the dedicated coworker", () => {
+    const service = COWORKER_SERVICE_CATALOG_SERVICE_SEEDS.find(
+      (candidate) => candidate.serviceId === "svc-farm-ranch-seasonal-stewardship",
+    );
+    const offer = COWORKER_SERVICE_CATALOG_OFFER_SEEDS.find(
+      (candidate) => candidate.offerId === "offer-farm-ranch-seasonal-stewardship",
+    );
+
+    expect(service).toMatchObject({
+      providerAgentId: "farm-ranch-steward",
+      authorityBoundary: "proposal-only",
+      archetypes: ["agriculture-ranching"],
+      backingSkillIds: ["dpf-farm-ranch-seasonal-planning"],
+    });
+    expect(offer).toMatchObject({
+      serviceId: "svc-farm-ranch-seasonal-stewardship",
+      authorityBoundary: "proposal-only",
+    });
+  });
+
   it("includes verified GAID authority metadata for public A2A offers", () => {
     const externalOffers = COWORKER_SERVICE_CATALOG_OFFER_SEEDS.filter(
       (offer) => offer.availabilityScope === "external",
@@ -146,6 +166,7 @@ describe("coworker service catalog seed data", () => {
         findMany: async () => [
           { id: "portfolio-customer", slug: "products_and_services_sold" },
           { id: "portfolio-foundational", slug: "foundational" },
+          { id: "portfolio-delivery", slug: "manufacturing_and_delivery" },
         ],
       },
       coworkerService: {
@@ -182,11 +203,15 @@ describe("coworker service catalog seed data", () => {
       expect(args["create"]).toHaveProperty("portfolioId");
       expect(args["update"]).toHaveProperty("portfolioId");
       const create = args["create"] as { serviceId?: string };
-      expect(args["create"]).toHaveProperty(
-        "archetypes",
+      const expectedArchetypes =
         create.serviceId === "svc-marketing-campaign-execution"
           ? ["food-hospitality"]
-          : [],
+          : create.serviceId === "svc-farm-ranch-seasonal-stewardship"
+            ? ["agriculture-ranching"]
+            : [];
+      expect(args["create"]).toHaveProperty(
+        "archetypes",
+        expectedArchetypes,
       );
       expect(args["update"]).not.toHaveProperty("archetypes");
     }
@@ -317,6 +342,7 @@ describe("coworker service catalog seed data", () => {
               slug: "products_and_services_sold",
             },
             { id: "portfolio-foundational", slug: "foundational" },
+            { id: "portfolio-delivery", slug: "manufacturing_and_delivery" },
           ],
         },
         coworkerService: {

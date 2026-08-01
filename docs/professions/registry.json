@@ -485,6 +485,54 @@
       ]
     },
     {
+      "professionKey": "agricultural-operations",
+      "label": "Agricultural Operations",
+      "roles": ["farm-ranch-steward"],
+      "contextSlugs": ["agriculture-ranching", "seasonal-operations", "land-livestock-equipment"],
+      "sources": [
+        {
+          "name": "USDA National Agricultural Statistics Service",
+          "url": "https://www.nass.usda.gov/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "USDA Agricultural Marketing Service Market News",
+          "url": "https://www.ams.usda.gov/market-news",
+          "licenseClass": "open"
+        },
+        {
+          "name": "NOAA National Weather Service",
+          "url": "https://www.weather.gov/",
+          "licenseClass": "open"
+        },
+        {
+          "name": "US EPA Pesticide Labels and Product Information",
+          "url": "https://www.epa.gov/pesticide-labels",
+          "licenseClass": "open"
+        },
+        {
+          "name": "USDA APHIS Animal Health",
+          "url": "https://www.aphis.usda.gov/livestock-poultry-disease",
+          "licenseClass": "open"
+        },
+        {
+          "name": "ADAPT Standard",
+          "url": "https://adaptstandard.org/",
+          "licenseClass": "open"
+        }
+      ],
+      "coverageChecklist": [
+        "seasonal-and-weather-window-planning",
+        "field-pasture-and-forage-cycles",
+        "herd-health-breeding-and-movement-records",
+        "working-animal-health-and-service-scheduling",
+        "equipment-maintenance-and-implement-readiness",
+        "regulated-input-label-and-license-controls",
+        "vendor-and-outside-service-coordination",
+        "market-and-sale-decision-evidence"
+      ]
+    },
+    {
       "professionKey": "enterprise-architecture",
       "label": "Enterprise Architect",
       "roles": [

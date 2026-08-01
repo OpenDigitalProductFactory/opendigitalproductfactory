@@ -182,6 +182,13 @@ async function executeJourney(
       userContext,
       mode: journey.mode,
       agentId: journey.agentId,
+      // The journey MUST resolve its tools under the same route the agent was
+      // resolved for. routeContext is what force-attaches a route's declared
+      // domain tools (tier 0); without it the journey's central tool is absent
+      // from the available list and the loop refuses the call as "not available
+      // on this page" — so the journey can never pass, for reasons unrelated to
+      // the coworker, its grants, or the tool (BI-8D5BB185).
+      routeContext,
     });
     // Non-destructive surface: certification only ever offers read-only tools.
     const readOnlyTools = resolved.tools.filter((t) => !t.sideEffect);

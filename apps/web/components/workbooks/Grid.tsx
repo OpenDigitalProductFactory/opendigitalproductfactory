@@ -32,6 +32,8 @@ import {
   type CellKeyDownArgs,
   type CellKeyboardEvent,
   type PositionChangeArgs,
+  type FillEvent,
+  type DataGridHandle,
 } from "react-data-grid";
 import "react-data-grid/lib/styles.css";
 import "./dpf-grid.css";
@@ -139,7 +141,17 @@ import {
   rangeToTsv,
   parseTsv,
   pasteWrites,
+  fillDownWrites,
+  fillRightWrites,
 } from "./grid-range";
+import {
+  findMatches,
+  stepMatch,
+  replaceInText,
+  type FindOptions,
+  type FindUiState,
+} from "./grid-find-replace";
+import { GridFindBar } from "./GridFindBar";
 import { GridCalendar } from "./GridCalendar";
 import { dateColumns } from "./grid-calendar";
 import {
@@ -177,6 +189,7 @@ import {
   Table as TableIcon,
   LayoutGrid,
   Calendar as CalendarIcon,
+  Search,
 } from "lucide-react";
 
 export interface WorkbookGridProps {
@@ -687,6 +700,9 @@ export function WorkbookGrid({
   );
   const groupColumnId = effectiveGroupBy[0];
   const grouping = Boolean(groupColumnId) && viewMode === "grid" && columns.length > 0;
+  // The flat DataGrid (the surface with cell addressing) — where range select and
+  // Find & Replace apply. Gallery, calendar and grouped views don't.
+  const flatGridActive = viewMode === "grid" && !grouping && columns.length > 0;
 
   // Manual row reordering (drag a row to a new slot). Optimistic: reorder the
   // local rows immediately, then persist the new order to WorkbookRow.position
@@ -745,6 +761,43 @@ export function WorkbookGrid({
     return set;
   }, [range, sortedRows, visibleCols]);
 
+  // --- Find & Replace (Excel Ctrl+F / Ctrl+H). Matches are computed over the
+  // displayed rows/cols against each cell's searchable text (so Find spans every
+  // field type); each replacement rides the validated `persistCell`. Flat grid only.
+  const [findState, setFindState] = useState<FindUiState | null>(null);
+  const [matchIndex, setMatchIndex] = useState(0);
+  const gridRef = useRef<DataGridHandle>(null);
+
+  const findMatchList = useMemo(() => {
+    if (!findState || findState.query === "") return [];
+    const opts: FindOptions = { matchCase: findState.matchCase, wholeCell: findState.wholeCell };
+    return findMatches(
+      sortedRows.length - 1,
+      visibleCols.length - 1,
+      (r, c) => cellSearchText(sortedRows[r]?.[visibleCols[c]?.columnId ?? ""] ?? null),
+      findState.query,
+      opts,
+    );
+  }, [findState, sortedRows, visibleCols]);
+
+  const findCellSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const m of findMatchList) {
+      const rowId = sortedRows[m.row]?.rowId;
+      const colId = visibleCols[m.col]?.columnId;
+      if (rowId && colId) set.add(`${rowId}:${colId}`);
+    }
+    return set;
+  }, [findMatchList, sortedRows, visibleCols]);
+
+  const activeMatch =
+    findMatchList.length > 0
+      ? findMatchList[Math.min(matchIndex, findMatchList.length - 1)]!
+      : null;
+  const activeMatchKey = activeMatch
+    ? `${sortedRows[activeMatch.row]?.rowId ?? ""}:${visibleCols[activeMatch.col]?.columnId ?? ""}`
+    : null;
+
   const gridColumns = useMemo<Column<GridRowData, SummaryRow>[]>(() => {
     const cols = visibleCols.map((c, i) => {
       const built = buildColumn(
@@ -753,12 +806,21 @@ export function WorkbookGrid({
         showProvenance,
         i < effectiveFrozen,
       ) as Column<GridRowData, SummaryRow>;
-      // Highlight cells inside the selected range (Excel-style rectangle).
-      const base: Column<GridRowData, SummaryRow> = rangeCellSet
+      // Highlight cells inside the selected range (Excel-style rectangle) and/or
+      // Find matches — the active match gets its own class so it stands out.
+      const needsCellClass = Boolean(rangeCellSet) || findCellSet.size > 0;
+      const base: Column<GridRowData, SummaryRow> = needsCellClass
         ? {
             ...built,
-            cellClass: (row: GridRowData) =>
-              rangeCellSet.has(`${row.rowId}:${c.columnId}`) ? "dpf-cell-range" : undefined,
+            cellClass: (row: GridRowData) => {
+              const key = `${row.rowId}:${c.columnId}`;
+              const classes: string[] = [];
+              if (rangeCellSet?.has(key)) classes.push("dpf-cell-range");
+              if (findCellSet.has(key)) {
+                classes.push(key === activeMatchKey ? "dpf-cell-find-active" : "dpf-cell-find");
+              }
+              return classes.length ? classes.join(" ") : undefined;
+            },
           }
         : built;
       // Inline per-group subtotal: when grouping is active, a non-group-by column
@@ -885,6 +947,8 @@ export function WorkbookGrid({
     sortColumns.length,
     onReorderRow,
     rangeCellSet,
+    findCellSet,
+    activeMatchKey,
   ]);
 
   const onColumnsReorder = useCallback(
@@ -1103,6 +1167,101 @@ export function WorkbookGrid({
     [sortedRows, visibleCols, persistCell],
   );
 
+  // Excel Ctrl+D / Ctrl+R: fill the selection's top row down / left column right.
+  const fillRange = useCallback(
+    (r: CellRange, dir: "down" | "right") => {
+      const rect = rangeRect(r);
+      const getCell = (row: number, col: number) =>
+        cellSearchText(sortedRows[row]?.[visibleCols[col]?.columnId ?? ""] ?? null);
+      const writes = dir === "down" ? fillDownWrites(rect, getCell) : fillRightWrites(rect, getCell);
+      for (const w of writes) {
+        const gr = sortedRows[w.row];
+        const cd = visibleCols[w.col];
+        if (!gr || !cd?.editable) continue;
+        void persistCell(gr.rowId, cd.columnId, w.value, gr[cd.columnId] ?? null);
+      }
+    },
+    [sortedRows, visibleCols, persistCell],
+  );
+
+  // Excel Ctrl+X: copy the range to the clipboard, then clear it (only clears if
+  // the copy succeeded, so a blocked clipboard never loses data).
+  const cutRange = useCallback(
+    async (r: CellRange) => {
+      const tsv = rangeToTsv(rangeRect(r), (row, col) =>
+        cellSearchText(sortedRows[row]?.[visibleCols[col]?.columnId ?? ""] ?? null),
+      );
+      try {
+        await navigator.clipboard.writeText(tsv);
+      } catch {
+        return;
+      }
+      clearRange(r);
+    },
+    [sortedRows, visibleCols, clearRange],
+  );
+
+  // Excel fill-handle: react-data-grid renders the drag square on the active cell;
+  // dragging it copies the source cell's value down/up the column. onRowsChange
+  // persists each filled row through the validated path.
+  const onFill = useCallback(
+    ({ columnKey, sourceRow, targetRow }: FillEvent<GridRowData>): GridRowData => {
+      const cd = columns.find((c) => c.columnId === columnKey);
+      if (!capabilities.canEditCell || !cd?.editable) return targetRow;
+      return { ...targetRow, [columnKey]: sourceRow[columnKey] ?? null };
+    },
+    [columns, capabilities.canEditCell],
+  );
+
+  // --- Find & Replace controls.
+  const openFind = useCallback((mode: "find" | "replace") => {
+    setFindState((prev) => (prev ? { ...prev, mode } : { mode, query: "", replacement: "", matchCase: false, wholeCell: false }));
+    setMatchIndex(0);
+  }, []);
+  const closeFind = useCallback(() => setFindState(null), []);
+  const gotoMatch = useCallback(
+    (dir: 1 | -1) => setMatchIndex((i) => Math.max(0, stepMatch(i, findMatchList.length, dir))),
+    [findMatchList.length],
+  );
+
+  // Scroll the active match into view whenever it changes.
+  useEffect(() => {
+    if (!activeMatch || !gridRef.current) return;
+    const key = visibleCols[activeMatch.col]?.columnId;
+    const idx = key ? gridColumns.findIndex((gc) => gc.key === key) : -1;
+    if (idx >= 0) gridRef.current.scrollToCell({ rowIdx: activeMatch.row, idx });
+  }, [activeMatch, visibleCols, gridColumns]);
+
+  // Replace the active match (string-valued editable cells only — replacing inside
+  // a number/date's rendered text would corrupt the typed value). Advances via the
+  // recomputed match set once the write lands.
+  const replaceActive = useCallback(async () => {
+    if (!findState || !capabilities.canEditCell || !activeMatch) return;
+    const gr = sortedRows[activeMatch.row];
+    const cd = visibleCols[activeMatch.col];
+    if (!gr || !cd?.editable) { gotoMatch(1); return; }
+    const cur = gr[cd.columnId] ?? null;
+    if (typeof cur !== "string") { gotoMatch(1); return; }
+    const opts: FindOptions = { matchCase: findState.matchCase, wholeCell: findState.wholeCell };
+    const next = replaceInText(cur, findState.query, findState.replacement, opts);
+    if (next !== cur) await persistCell(gr.rowId, cd.columnId, next, cur);
+  }, [findState, capabilities.canEditCell, activeMatch, sortedRows, visibleCols, persistCell, gotoMatch]);
+
+  // Replace every match across the grid (over a stable snapshot of the match set).
+  const replaceAll = useCallback(async () => {
+    if (!findState || !capabilities.canEditCell) return;
+    const opts: FindOptions = { matchCase: findState.matchCase, wholeCell: findState.wholeCell };
+    for (const m of findMatchList) {
+      const gr = sortedRows[m.row];
+      const cd = visibleCols[m.col];
+      if (!gr || !cd?.editable) continue;
+      const cur = gr[cd.columnId] ?? null;
+      if (typeof cur !== "string") continue;
+      const next = replaceInText(cur, findState.query, findState.replacement, opts);
+      if (next !== cur) await persistCell(gr.rowId, cd.columnId, next, cur);
+    }
+  }, [findState, capabilities.canEditCell, findMatchList, sortedRows, visibleCols, persistCell]);
+
   // Click a cell → start a range there; Shift+click → extend to it.
   const onCellClick = useCallback(
     (args: CellMouseArgs<GridRowData, SummaryRow>, event: CellMouseEvent) => {
@@ -1140,6 +1299,8 @@ export function WorkbookGrid({
       const cur = range ?? singleCell(args.rowIdx, col);
       const maxRow = sortedRows.length - 1;
       const maxCol = visibleCols.length - 1;
+      const mod = event.ctrlKey || event.metaKey;
+      const k = event.key.toLowerCase();
       const delta = event.shiftKey ? ARROW[event.key] : undefined;
       if (delta) {
         event.preventGridDefault();
@@ -1147,9 +1308,25 @@ export function WorkbookGrid({
       } else if ((event.key === "Delete" || event.key === "Backspace") && isMultiCell(cur)) {
         event.preventGridDefault();
         clearRange(cur);
+      } else if (mod && k === "a") {
+        // Select all cells (also stop the browser's select-all).
+        event.preventDefault();
+        event.preventGridDefault();
+        setRange({ anchorRow: 0, anchorCol: 0, focusRow: maxRow, focusCol: maxCol });
+      } else if (mod && k === "d") {
+        event.preventDefault(); // Ctrl+D would bookmark
+        event.preventGridDefault();
+        fillRange(cur, "down");
+      } else if (mod && k === "r") {
+        event.preventDefault(); // Ctrl+R would reload
+        event.preventGridDefault();
+        fillRange(cur, "right");
+      } else if (mod && k === "x") {
+        event.preventGridDefault();
+        void cutRange(cur);
       }
     },
-    [range, sortedRows, visibleCols, dataColIndex, clearRange],
+    [range, sortedRows, visibleCols, dataColIndex, clearRange, fillRange, cutRange],
   );
 
   // Replay a cell to a target value through the validated dispatch; on success
@@ -1179,13 +1356,26 @@ export function WorkbookGrid({
 
   const onKeyDown = useCallback(
     (e: ReactKeyboardEvent<HTMLDivElement>) => {
+      const mod = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
+      // Find (Ctrl+F) works even in read-only grids; Replace (Ctrl+H) needs edit.
+      // These open the in-grid bar instead of the browser's own find, and are
+      // scoped to the flat grid (the surface that has cell addressing).
+      if (mod && key === "f" && flatGridActive) {
+        e.preventDefault();
+        openFind("find");
+        return;
+      }
+      if (mod && key === "h" && flatGridActive && capabilities.canEditCell) {
+        e.preventDefault();
+        openFind("replace");
+        return;
+      }
       if (!capabilities.canEditCell) return;
       // Don't hijack a cell editor's own text undo while editing.
       const tag = (e.target as HTMLElement).tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      const mod = e.ctrlKey || e.metaKey;
       if (!mod) return;
-      const key = e.key.toLowerCase();
       if (key === "z" && !e.shiftKey) {
         e.preventDefault();
         undo();
@@ -1194,7 +1384,7 @@ export function WorkbookGrid({
         redo();
       }
     },
-    [capabilities.canEditCell, undo, redo],
+    [capabilities.canEditCell, undo, redo, flatGridActive, openFind],
   );
 
   const onAddRow = useCallback(async () => {
@@ -1300,6 +1490,17 @@ export function WorkbookGrid({
               Redo
             </button>
           </>
+        )}
+        {flatGridActive && (
+          <button
+            type="button"
+            onClick={() => openFind("find")}
+            className="inline-flex items-center gap-1.5 rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+            title="Find & replace (Ctrl+F)"
+          >
+            <Search size={15} aria-hidden />
+            Find
+          </button>
         )}
         <div className="ml-auto">
           <GridViewsMenu
@@ -1411,6 +1612,24 @@ export function WorkbookGrid({
         </div>
         {error && <span className="text-sm text-[var(--dpf-error)]">{error}</span>}
       </div>
+
+      {findState && flatGridActive && (
+        <GridFindBar
+          state={findState}
+          matchCount={findMatchList.length}
+          activeIndex={findMatchList.length === 0 ? 0 : Math.min(matchIndex, findMatchList.length - 1)}
+          canEdit={capabilities.canEditCell}
+          onPatch={(patch) => {
+            setFindState((prev) => (prev ? { ...prev, ...patch } : prev));
+            if (patch.query !== undefined) setMatchIndex(0);
+          }}
+          onStep={gotoMatch}
+          onSetMode={openFind}
+          onReplaceActive={() => void replaceActive()}
+          onReplaceAll={() => void replaceAll()}
+          onClose={closeFind}
+        />
+      )}
 
       {showFilters && columns.length > 0 && (
         <GridFilterPanel
@@ -1539,6 +1758,7 @@ export function WorkbookGrid({
             />
           ) : (
             <DataGrid
+              ref={gridRef}
               className="dpf-workbook-grid"
               columns={gridColumns}
               rows={sortedRows}
@@ -1549,6 +1769,7 @@ export function WorkbookGrid({
               onCellClick={onCellClick}
               onActivePositionChange={onActivePositionChange}
               onCellKeyDown={onCellKeyDown}
+              onFill={onFill}
               sortColumns={sortColumns}
               onSortColumnsChange={setSortColumns}
               selectedRows={selectedRows}

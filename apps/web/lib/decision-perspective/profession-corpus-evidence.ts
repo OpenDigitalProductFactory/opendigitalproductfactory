@@ -196,6 +196,7 @@ export function gapReasonForContext(
     case "missed-unmapped":
       return "unmapped";
     case "missed-empty-corpus":
+    case "missed-empty-applicable-corpus":
       return "empty-corpus";
     case "injected":
       return context.lowRelevance ? "low-relevance" : null;

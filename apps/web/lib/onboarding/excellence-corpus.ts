@@ -47,6 +47,12 @@ const CATEGORY_OPERATOR_MOVES: Partial<Record<ArchetypeCategory, string[]>> = {
     "Watch promised-ready risk daily and tell customers before they ask",
     "Balance plant capacity across dry cleaning, laundry, alterations, and pickup routes",
   ],
+  "agriculture-ranching": [
+    "Plan backward from biological deadlines and weather-sensitive field windows",
+    "Keep every animal, field, machine, implement, material, vendor, and obligation tied to a current record",
+    "Book outside services and parts before the seasonal rush, with a fallback and a latest-safe date",
+    "Separate observations, forecasts, market signals, label restrictions, and owner decisions",
+  ],
   "food-hospitality": [
     "Turn tables without rushing — seat from the waitlist as they clear",
     "Keep the pass moving; expedite before it backs up",

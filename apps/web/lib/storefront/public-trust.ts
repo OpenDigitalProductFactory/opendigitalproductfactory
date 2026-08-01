@@ -121,6 +121,17 @@ const TRUST_BY_CATEGORY: Record<string, TrustProfile> = {
       "No payment is taken to send this request. Cleaning, alteration, and delivery fees are handled directly with the business.",
     accountPurpose: "manage your garment orders, pickup requests, and claim-ticket updates",
   },
+  "agriculture-ranching": {
+    bookingNoun: "request",
+    bookingPolicy:
+      "Sending a request shares your product, livestock, grazing, or service needs with the farm; availability, timing, handling, and terms are confirmed before anything is committed.",
+    cancellationPolicy:
+      "Weather, animal welfare, field conditions, and market timing can change availability. Contact the farm promptly if your requirements or timing change.",
+    dietaryNote: null,
+    paymentNote:
+      "No payment is taken to send this request. Price, delivery, pickup, and any deposit are agreed directly with the farm.",
+    accountPurpose: "manage your farm product, livestock, and service requests",
+  },
 };
 
 /** Resolve the trust profile for an archetype category (falls back to generic). */

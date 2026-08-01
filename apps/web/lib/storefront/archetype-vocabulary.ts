@@ -149,6 +149,12 @@ const VOCABULARY: Record<string, ArchetypeVocabulary> = {
     portalLabel: "Customer Portal", stakeholderLabel: "Customers",
     teamLabel: "Fabric Care Team", inboxLabel: "Orders", agentName: "Fabric Care Coordinator",
   },
+  "agriculture-ranching": {
+    itemsLabel: "Products & Services", singleItemLabel: "Product or Service", addButtonLabel: "Add product or service",
+    categoryLabel: "Type", priceLabel: "Price or Rate",
+    portalLabel: "Farm & Ranch Portal", stakeholderLabel: "Customers",
+    teamLabel: "Farm & Ranch Team", inboxLabel: "Farm & Ranch Requests", agentName: "Farm & Ranch Steward",
+  },
 };
 
 const DEFAULT_VOCABULARY: ArchetypeVocabulary = {

@@ -203,6 +203,7 @@ describe("gapReasonForContext", () => {
   it("maps statuses to gap reasons", () => {
     expect(gapReasonForContext(makeContext({ status: "missed-unmapped" }))).toBe("unmapped");
     expect(gapReasonForContext(makeContext({ status: "missed-empty-corpus" }))).toBe("empty-corpus");
+    expect(gapReasonForContext(makeContext({ status: "missed-empty-applicable-corpus" }))).toBe("empty-corpus");
     expect(gapReasonForContext(makeContext({ status: "injected", lowRelevance: true }))).toBe("low-relevance");
     expect(gapReasonForContext(makeContext({ status: "injected", lowRelevance: false }))).toBeNull();
     expect(gapReasonForContext(makeContext({ status: "error" }))).toBeNull();

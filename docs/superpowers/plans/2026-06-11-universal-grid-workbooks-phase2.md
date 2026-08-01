@@ -301,8 +301,17 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   validated `persistCell`); `Delete` clears a multi-cell selection. Pure, unit-tested range math in
   `grid-range.ts` (`rangeRect`/`extendFocus`/`rangeToTsv`/`parseTsv`/`pasteWrites`); react-data-grid v7
   has no native range, so it's a custom layer over its `onCellClick`/`onSelectedCellChange`/
-  `onCellKeyDown`/`onCellCopy`/`onCellPaste`. **Next (spec S4):** fill-handle + Ctrl+D/R; extract the
-  range logic into a `useCellRange` hook (Grid.tsx is 1585 LOC).
+  `onCellKeyDown`/`onCellCopy`/`onCellPaste`.
+- **Slice 28d — fill + cut + select-all + fill-handle (S4) — SHIPPED.** `Ctrl+D`/`Ctrl+R` fill the
+  selection down/right (pure, unit-tested `fillDownWrites`/`fillRightWrites`); `Ctrl+X` cut; `Ctrl+A`
+  select-all; and react-data-grid's built-in **drag fill-handle** via `onFill`. Excel cell parity for
+  the flat grid is complete. **Debt:** extract the range/fill logic into a `useCellRange` hook —
+  Grid.tsx is now 1653 LOC (decomposition follow-up).
+- **Slice 28e — Find & Replace (S5) — SHIPPED.** In-grid `Ctrl+F` find bar (match across all field
+  types, `n/total` count, Enter/Shift+Enter navigation with scroll-to-match, Match-case + Whole-cell
+  toggles, tint + active-ring highlight) and `Ctrl+H` Replace / Replace-all through the validated
+  `persistCell` (string cells only). Pure, unit-tested `grid-find-replace.ts`; flat grid only. Closes
+  the last fully-absent Excel cell feature the survey found (kernel ledger DI-F48CE1B4C2F2).
 - **Remaining (not built):** manual row reordering for *platform* grids (would need a per-user client
   order; low value on 1000s of rows); platform-grid *shareable* views (needs a `WorkbookView.tableId`
   schema change — platform tables have no `WorkbookTable` row); richer charts (grouped/stacked/line);

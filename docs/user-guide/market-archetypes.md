@@ -44,7 +44,7 @@ Implementation source of truth: `StorefrontConfig.archetypeId` selects the insta
 
 ## Current Market Coverage
 
-The source catalog currently contains 23 market categories and 103 leaf archetype templates. The public docs should usually describe the categories first, then use leaf archetypes when a concrete example helps.
+The source catalog currently contains 24 market categories and 106 leaf archetype templates. The public docs should usually describe the categories first, then use leaf archetypes when a concrete example helps.
 
 For a fast owner-facing summary of every category and leaf, use the [Archetype Owner Quick Guide](../marketing/archetype-owner-quick-guide.md). It is the skimmable layer for sales, marketing, and test planning before reading the deeper positioning or audit documents.
 
@@ -61,6 +61,7 @@ For a fast owner-facing summary of every category and leaf, use the [Archetype O
 | Retail and goods | retail shops, artisan goods, florist-style selling |
 | Fitness and recreation | gyms, yoga studios, dance studios, classes |
 | Nonprofit and community | donations, programs, volunteers, membership; agricultural shared-machinery co-op |
+| Agriculture and ranching | mixed farm and ranch, crop and hay farm, cattle ranch — seasonal land, livestock, working-animal, equipment, outside-service, weather, market, and regulatory attention |
 | HOA and property management | residents, dues, violations, service requests |
 | Banking and financial services | community bank, credit union, mortgage lending — BIAN-grounded, jurisdiction-specific regulatory governance |
 | Public sector and civic | small-town municipality, municipal utility (water/electric), law enforcement — resident/ratepayer skins, open-meetings governance, records requests, 311 |

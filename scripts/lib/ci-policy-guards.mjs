@@ -168,6 +168,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     guard("docs-staleness-detector", "Docs Staleness Detector", [
       node("--test", "scripts/build-docs-staleness.test.mjs"),
     ]),
+    // Catches the words, not the edges: a published page naming a service the
+    // platform no longer runs. Complements the doc-impact graph, whose
+    // `relatedCode:` edges only protect pages someone remembered to annotate.
+    guard("retired-substrate-guard", "Retired Substrate Guard", [
+      node("--test", "scripts/check-retired-substrate.test.mjs"),
+      node("scripts/check-retired-substrate.mjs"),
+    ]),
     guard("mcp-tool-pack-guard", "MCP Tool Pack Guard", [
       node("scripts/check-mcp-tool-pack.mjs"),
     ]),
@@ -302,6 +309,49 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
     ]),
   ]),
 });
+
+/**
+ * Build the consolidated end-of-run summary for a policy-guard profile.
+ *
+ * The per-guard logger in the CLI only annotates a failure INSIDE the guard's
+ * `::group::…::endgroup::` block, which GitHub collapses by default. Because
+ * `runPolicyProfile` runs every guard even after one fails, the last guard's
+ * output (for `source`, the janitor `--help` USAGE text) is what a reader sees
+ * at the tail — with no hint of which earlier guard actually failed. That gap
+ * caused a real misdiagnosis (a module-size ratchet failure read as a janitor
+ * flake). This summary is printed OUTSIDE any group so the failing guard(s) and
+ * their exact failing command are always the last thing in the log.
+ *
+ * Returns `{ text, annotation }`: `text` is the human block for the log tail;
+ * `annotation` is a single `::error` workflow command (null when everything
+ * passed) so the failing guards also surface as a GitHub annotation.
+ */
+export function formatRunSummary(profile, result) {
+  const failed = result.entries.filter((entry) => entry.status === "failed");
+  const total = result.entries.length;
+  const passed = total - failed.length;
+
+  if (failed.length === 0) {
+    return {
+      text: `Policy guards (${profile}): all ${total} guard(s) passed.`,
+      annotation: null,
+    };
+  }
+
+  const lines = [
+    `Policy guards (${profile}): ${failed.length} of ${total} guard(s) FAILED (${passed} passed):`,
+    ...failed.map(
+      (entry) =>
+        `  ✗ ${entry.name} — ${entry.failedCommand ?? "(command not recorded)"}`,
+    ),
+  ];
+  return {
+    text: lines.join("\n"),
+    annotation: `::error title=Policy Guards (${profile})::${failed.length} guard(s) failed: ${failed
+      .map((entry) => entry.name)
+      .join(", ")}`,
+  };
+}
 
 export async function runPolicyProfile({
   entries,
