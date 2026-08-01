@@ -11,7 +11,7 @@ apps/web/components/ops/SelfUpgradeClient.tsx	1124
 apps/web/components/platform/EffectivePermissionsPanel.tsx	845
 apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx	985
 apps/web/components/storefront/SlotBookingFlow.tsx	1015
-apps/web/components/workbooks/Grid.tsx	1653
+apps/web/components/workbooks/Grid.tsx	1806
 apps/web/instrumentation.test.ts	945
 apps/web/instrumentation.ts	1524
 apps/web/lib/actions/agent-coworker-external.test.ts	867

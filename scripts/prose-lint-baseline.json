@@ -7830,7 +7830,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 2,
-    "textMass": 496
+    "textMass": 501
   },
   "apps/web/components/workbooks/GridCalendar.tsx": {
     "vocabulary": 0,
@@ -7838,6 +7838,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 22
+  },
+  "apps/web/components/workbooks/GridFindBar.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 44
   },
   "apps/web/components/workbooks/GridPanels.tsx": {
     "vocabulary": 0,
