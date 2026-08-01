@@ -38,6 +38,7 @@ const room: WorkRoomView = {
     sourceRefs: [{ kind: "source", id: "BK-1", sourceType: "booking" }],
   },
   currentCycle: null,
+  completedCycles: [],
   participants: [
     {
       principalRef: "person:dispatcher-1",

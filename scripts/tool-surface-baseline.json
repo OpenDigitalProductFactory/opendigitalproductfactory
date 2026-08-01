@@ -3,14 +3,14 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 348,
-      "reason": "Adds one surface-neutral semantic change-review operation because the existing review tools are task- or plan-scoped and cannot issue a fresh stable-commit Work Capsule receipt shared by external delivery and Build Studio.",
-      "recordedAt": "2026-08-01T03:57:17.246Z"
+      "value": 349,
+      "reason": "Adds one consolidated read that turns sales into supply coverage — days of cover and a suggested order quantity per stocked supply. Nothing in the registry could answer 'what are we about to run out of': the sales reads stop at what was ordered, and the finance/procurement tools start at a purchase order that already exists. Without it a proactive operations coworker can only report a capability gap, which is what the live restaurant run did.",
+      "recordedAt": "2026-08-01"
     },
     "registry.packFiles": {
-      "value": 80,
-      "reason": "Keeps the shared semantic change-review contract in its own bounded pack so both delivery surfaces can load the capability without coupling it to an unrelated domain pack.",
-      "recordedAt": "2026-08-01T03:57:17.246Z"
+      "value": 81,
+      "reason": "Keeps supply coverage in its own bounded pack rather than widening the storefront pack, so the capability travels with its own grant (stock_read) and an archetype that stocks nothing never pays for it in its selection space.",
+      "recordedAt": "2026-08-01"
     },
     "tier.coreToolNames": {
       "value": 22

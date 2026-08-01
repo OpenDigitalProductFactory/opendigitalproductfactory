@@ -97,3 +97,5 @@ ProductSoldEntitlement  domain-lifecycle-managed  # Rights end through their exp
 ProductFulfillmentInstance  domain-lifecycle-managed  # Fulfillment records close through booking, rental, or supported-instance lifecycle transitions and ProductSold cascade.
 ProductSoldComponentAllocation  domain-lifecycle-managed  # Non-additive package attribution follows its immutable ProductSold fact and is never independently aged out.
 StorefrontOrderLineItem  domain-lifecycle-managed  # Normalized commercial lines follow the owning StorefrontOrder lifecycle; independent purging would corrupt order and sale evidence.
+StockItem  domain-lifecycle-managed  # Operator-maintained supply master: retired through isActive and organization cascade, never aged out — a stocked item is current until the operator stops stocking it.
+StorefrontItemComponent  domain-lifecycle-managed  # Recipe lines follow their sellable item and stock item via cascade; an age sweep would silently delete a live product's composition.

@@ -7,6 +7,7 @@ relatedCode:
   - apps/web/app/(shell)/workspace/cases/[caseKey]/page.tsx
   - apps/web/components/workspace/WorkCaseAttentionLens.tsx
   - apps/web/components/workspace/WorkCaseDetailView.tsx
+  - apps/web/components/workspace/work-room/WorkRoomCycles.tsx
 ---
 
 ## Overview
@@ -45,6 +46,10 @@ AI coworkers remain governed participants. Joining a room does not expand their 
 - A **standing room** supports recurring work. Each cycle still has its own objective, measures, stop conditions, and structured outcome.
 
 Completion produces an Outcome Packet from governed decisions, artifacts, actions, receipts, evidence, and unresolved work. Conversation alone cannot complete a room.
+
+In a standing room, the **Current cycle** panel shows the objective, trigger, review point, measure of done, and stop conditions before the general activity stream. When no cycle is active, the room says that it is healthy and idle rather than implying that recurring work is complete.
+
+**Completed cycles** are ordered by completion time. Open a completed cycle to read its Outcome Packet, durable-record count, verification state, and unresolved work. Each unresolved item has an explicit disposition: carry it into the next cycle, open a separate case, defer it, or accept it. Retrying carry-over does not create duplicate work.
 
 ## Incomplete or Unavailable Rooms
 

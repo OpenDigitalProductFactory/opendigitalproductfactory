@@ -294,6 +294,9 @@
     "apps/web/components/workspace/WorkCaseDetailView.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
+    "apps/web/components/workspace/work-room/WorkRoomCycles.tsx": [
+      "docs/user-guide/workspace/work-rooms.md"
+    ],
     "apps/web/lib/ai-inference.ts": [
       "docs/user-guide/ai-workforce/connecting-providers.md"
     ],
@@ -575,7 +578,8 @@
       "apps/web/app/(shell)/workspace/cases/[caseKey]/page.tsx",
       "apps/web/app/(shell)/workspace/my-queue/page.tsx",
       "apps/web/components/workspace/WorkCaseAttentionLens.tsx",
-      "apps/web/components/workspace/WorkCaseDetailView.tsx"
+      "apps/web/components/workspace/WorkCaseDetailView.tsx",
+      "apps/web/components/workspace/work-room/WorkRoomCycles.tsx"
     ]
   }
 }

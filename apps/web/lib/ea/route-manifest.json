@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 598,
+  "routeCount": 599,
   "routes": [
     {
       "routePath": "/",
@@ -1610,6 +1610,18 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/storefront/admin/setup/route.ts"
+    },
+    {
+      "routePath": "/api/storefront/admin/stock-items",
+      "kind": "route",
+      "segments": [
+        "api",
+        "storefront",
+        "admin",
+        "stock-items"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/storefront/admin/stock-items/route.ts"
     },
     {
       "routePath": "/api/storefront/admin/units",
@@ -6482,6 +6494,18 @@
         "productId"
       ],
       "file": "apps/web/app/(shell)/portfolio/products/[productId]/page.tsx"
+    },
+    {
+      "routePath": "/r/[token]",
+      "kind": "route",
+      "segments": [
+        "r",
+        "[token]"
+      ],
+      "dynamicParams": [
+        "token"
+      ],
+      "file": "apps/web/app/r/[token]/route.ts"
     },
     {
       "routePath": "/rental",
