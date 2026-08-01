@@ -6,9 +6,10 @@ name: Publish GitHub Release
 # (git describe is the canonical platform version - see version.json and
 # apps/web/lib/platform/version.ts). This workflow turns those tags into
 # official, dated Release entries. Every Release automatically carries the
-# source archives GitHub generates (.zip / .tar.gz), which are downloadable
-# and counted per-asset - so the project finally accrues a real
-# downloads-over-time series instead of relying on uncounted git clones.
+# source archives GitHub generates (.zip / .tar.gz) - but GitHub does NOT
+# expose per-download counts for those auto-generated archives. The real
+# downloads-over-time series comes from the *uploaded* native Edge binaries
+# this workflow attaches (below); only uploaded assets carry a download_count.
 #
 # Docker image publishing is handled separately by publish-image.yml. This
 # workflow also attaches the integrity-bound native Edge binaries required for
@@ -86,22 +87,38 @@ jobs:
           TAG: ${{ steps.resolve.outputs.tag }}
         run: |
           set -euo pipefail
-          git checkout --detach "refs/tags/${TAG}"
-          make -C services/edge-node-go build-darwin-arm64 VERSION="${TAG}"
-          make -C services/edge-node-go build-windows-amd64 VERSION="${TAG}"
-          cd services/edge-node-go/bin
-          sha256sum dpf-edge-node-darwin-arm64 dpf-edge-node-windows-amd64.exe > dpf-edge-node-checksums.sha256
-          cd ../../..
-          if ! gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+
+          # 1. Ensure the Release exists FIRST. Creating it up front means a
+          #    later binary-build failure degrades to a source-only Release
+          #    rather than blocking the Release (and its notes) entirely.
+          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists - reusing it (idempotent)."
+          else
             gh release create "${TAG}" \
               --repo "${GITHUB_REPOSITORY}" \
               --title "${TAG}" \
               --generate-notes \
               --verify-tag
+            echo "Created GitHub Release ${TAG}."
           fi
-          gh release upload "${TAG}" \
-            services/edge-node-go/bin/dpf-edge-node-darwin-arm64 \
-            services/edge-node-go/bin/dpf-edge-node-windows-amd64.exe \
-            services/edge-node-go/bin/dpf-edge-node-checksums.sha256 \
-            --repo "${GITHUB_REPOSITORY}" --clobber
-          echo "Published GitHub Release ${TAG} with native Edge assets."
+
+          # 2. Build + attach the native Edge binaries from the tag's tree.
+          #    These uploaded assets are what carry per-download counters.
+          #    A build failure here must NOT delete the Release, so the make
+          #    steps run in an `if` (which suspends `set -e`); on failure we
+          #    warn and leave the source-only Release in place.
+          git checkout --detach "refs/tags/${TAG}"
+          if make -C services/edge-node-go build-darwin-arm64 VERSION="${TAG}" \
+             && make -C services/edge-node-go build-windows-amd64 VERSION="${TAG}"; then
+            ( cd services/edge-node-go/bin \
+              && sha256sum dpf-edge-node-darwin-arm64 dpf-edge-node-windows-amd64.exe \
+                 > dpf-edge-node-checksums.sha256 )
+            gh release upload "${TAG}" \
+              services/edge-node-go/bin/dpf-edge-node-darwin-arm64 \
+              services/edge-node-go/bin/dpf-edge-node-windows-amd64.exe \
+              services/edge-node-go/bin/dpf-edge-node-checksums.sha256 \
+              --repo "${GITHUB_REPOSITORY}" --clobber
+            echo "Attached native Edge assets to Release ${TAG}."
+          else
+            echo "::warning::Edge binary build failed for ${TAG}; published a source-only Release. Re-run this workflow after fixing the build to attach the counted binary assets."
+          fi
