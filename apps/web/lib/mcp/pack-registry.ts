@@ -24,6 +24,7 @@ import { feedbackPack } from "./packs/feedback-pack";
 import { orgDecisionPack } from "./packs/org-decision-pack";
 import { founderReviewPack } from "./packs/founder-review-pack";
 import { professionDecisionPack } from "./packs/profession-decision-pack";
+import { uxCritiquePack } from "./packs/ux-critique-pack";
 import { optimizationPack } from "./packs/optimization-pack";
 import { marketingPack } from "./packs/marketing-pack";
 import { workCapturePack } from "./packs/work-capture-pack";
@@ -102,6 +103,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   orgDecisionPack,
   founderReviewPack,
   professionDecisionPack,
+  uxCritiquePack,
   optimizationPack,
   marketingPack,
   workCapturePack,

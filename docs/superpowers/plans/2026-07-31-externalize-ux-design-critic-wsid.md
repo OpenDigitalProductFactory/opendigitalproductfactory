@@ -53,6 +53,15 @@ The skill-pack still has a role: it is where the *procedure* for consulting the 
 - Read: craft corpus + critique corpus, for retrieval-augmented grounding.
 - Write: critique entries as drafts only. The authority contract in `apps/web/lib/ux-critique/critique-entry.ts` is preserved exactly — an agent caller can only ever produce `verdictAuthority: "agent-proposed"`, which is never calibration-eligible, and `callerKind` is derived from the authenticated principal, never from a client-supplied field.
 
+**Shipped 2026-08-04** as `apps/web/lib/mcp/packs/ux-critique-pack.ts`, registered in `apps/web/lib/mcp/pack-registry.ts`:
+
+- `search_ux_critique_corpus` — read past findings and their verdicts before offering a UX opinion. An empty corpus returns an explicit "any design judgement here is ungrounded" rather than a bare empty list, because a caller reads silence as "nothing relevant" and proceeds to assert anyway.
+- `capture_ux_critique` — record a finding as a draft.
+
+The authority contract is enforced at the tool boundary, not merely described: `callerKind` is **pinned** to `"agent"` in the handler rather than read from params, so an MCP caller can only ever produce `verdictAuthority: "agent-proposed"` and `isCalibrationEligible` excludes it. Founder and designer verdicts stay a human act in the portal. Grants land in `TOOL_TO_GRANTS` (`apps/web/lib/tak/agent-grants.ts`) as well as on the pack, because a pack advertising a grant the gating map lacks is denied for every coworker while looking authoritative (BI-88B77204); capture takes `registry_write`, matching `record_org_business_answer` writing drafts into the org corpus.
+
+Known consequence, measured rather than assumed: `/platform/audit/authority` renders every tool description via `PLATFORM_TOOLS`, which spreads `TOOL_PACK_REGISTRY.definitions`. Two new tools therefore add words to a route with a +0 regression tolerance — the same mechanism observed when #3826 and #3864 landed their packs. That route's baseline entry moves with this change; it is not a defect in either.
+
 ### 3. ux-design profession-local axes (BI-F405AC58)
 
 Four axes, each sourced, each projecting onto the spine in one hop: `ux-design/hierarchy_clarity`, `ux-design/content_density`, `ux-design/disclosure_quality`, `ux-design/perceptual_coherence`. Provenance and projection targets are already specified on the BI. `content_density` must be labelled platform calibration, not validated science; `perceptual_coherence` is the one validated member (CHI 2015) and may carry more weight.
