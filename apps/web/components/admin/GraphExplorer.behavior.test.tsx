@@ -19,11 +19,11 @@ vi.mock("@/components/inventory/RelationshipGraph", () => ({
   }) => (
     <div>
       Graph canvas
-      {data.nodes.length > 0 && (
-        <button type="button" onClick={() => onFocusChange(data.nodes[0].id)}>
-          Inspect node
+      {data.nodes.map((node, index) => (
+        <button key={node.id} type="button" onClick={() => onFocusChange(node.id)}>
+          {index === 0 ? "Inspect node" : `Inspect ${node.id}`}
         </button>
-      )}
+      ))}
     </div>
   ),
 }));
@@ -149,6 +149,50 @@ describe("GraphExplorer async purpose state", () => {
     expect(purposeQuery.getAll("seed")).toEqual(["node-1"]);
     expect(purposeQuery.get("depth")).toBe("1");
     expect(purposeQuery.get("inspected")).toBe("node-1");
+  });
+
+  it("clears prior completion while a replacement inspection fails", async () => {
+    const secondNode = { ...node, key: "node-2", name: "Product" };
+    mocks.loadGraphNeighbourhood.mockResolvedValue({
+      ...neighbourhood,
+      nodes: [node, secondNode],
+    });
+    let rejectSecond!: (reason: Error) => void;
+    mocks.loadGraphNodeDetail.mockImplementation((key: string) =>
+      key === node.key
+        ? Promise.resolve({ ...node, degree: 2, props: {} })
+        : new Promise((_resolve, reject) => {
+            rejectSecond = reject;
+          }),
+    );
+    const { container } = render(<GraphExplorer census={census} />);
+
+    await chooseStartingPoint();
+    fireEvent.click(await screen.findByRole("button", { name: "Inspect node" }));
+    await waitFor(() =>
+      expect(new URL(window.location.href).searchParams.get("inspected")).toBe(
+        "node-1",
+      ),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Inspect node-2" }));
+    const inspector = container.querySelector(
+      "[data-dpf-purpose-key='node-inspector']",
+    );
+    expect(inspector?.getAttribute("aria-busy")).toBe("true");
+    expect(new URL(window.location.href).searchParams.has("inspected")).toBe(false);
+    expect(
+      container.querySelector(
+        "[data-dpf-purpose-completion-signal-key='graph-neighbourhood-visible']",
+      ),
+    ).toBeNull();
+
+    rejectSecond(new Error("Replacement unavailable"));
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Replacement unavailable",
+    );
+    expect(inspector?.getAttribute("aria-busy")).toBe("false");
+    expect(new URL(window.location.href).searchParams.has("inspected")).toBe(false);
   });
 
   it("marks stale graph content busy while refreshing it", async () => {

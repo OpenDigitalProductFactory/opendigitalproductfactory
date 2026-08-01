@@ -12,7 +12,7 @@
 // relationship types stay behind "Advanced filters" for the operator who wants
 // them.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { RelationshipGraph, type GraphLegendEntry } from "@/components/inventory/RelationshipGraph";
 import { Spinner } from "@/components/ui/Spinner";
@@ -95,6 +95,8 @@ export function GraphExplorer({ census }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const [inspected, setInspected] = useState<GraphNodeDetail | null>(null);
+  const [inspecting, setInspecting] = useState(false);
+  const inspectionRequest = useRef(0);
 
   // ─── Census-derived facets ──────────────────────────────────────────────────
 
@@ -178,9 +180,11 @@ export function GraphExplorer({ census }: Props) {
       return;
     }
     let cancelled = false;
+    inspectionRequest.current += 1;
     setLoading(true);
     setError(null);
     setInspected(null);
+    setInspecting(false);
     replaceGraphPurposeQuery(seedKeys, depth);
     loadGraphNeighbourhood({
       seedKeys,
@@ -230,21 +234,32 @@ export function GraphExplorer({ census }: Props) {
   }
 
   const inspect = useCallback((key: string | null) => {
+    const requestId = ++inspectionRequest.current;
     if (!key) {
       setInspected(null);
+      setInspecting(false);
       replaceGraphPurposeQuery(seedKeys, depth);
       return;
     }
     setError(null);
+    setInspected(null);
+    setInspecting(true);
+    replaceGraphPurposeQuery(seedKeys, depth);
     loadGraphNodeDetail(key)
       .then((detail) => {
+        if (inspectionRequest.current !== requestId) return;
         setInspected(detail);
         if (detail) replaceGraphPurposeQuery(seedKeys, depth, detail.key);
         else setError(GRAPH_UNAVAILABLE);
       })
       .catch((cause: unknown) => {
+        if (inspectionRequest.current !== requestId) return;
         setInspected(null);
+        replaceGraphPurposeQuery(seedKeys, depth);
         setError(cause instanceof Error ? cause.message : GRAPH_UNAVAILABLE);
+      })
+      .finally(() => {
+        if (inspectionRequest.current === requestId) setInspecting(false);
       });
   }, [depth, seedKeys]);
 
@@ -282,8 +297,10 @@ export function GraphExplorer({ census }: Props) {
   }
 
   function reset() {
+    inspectionRequest.current += 1;
     setSeedKeys([]);
     setInspected(null);
+    setInspecting(false);
     setSubgraph(EMPTY_SUBGRAPH);
     setActiveDomains(new Set());
     setActiveRelTypes(new Set());
@@ -642,6 +659,7 @@ export function GraphExplorer({ census }: Props) {
         </div>
 
         <aside
+          aria-busy={inspecting}
           className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
           data-dpf-purpose-key="node-inspector"
           data-dpf-purpose-completion-signal-key={
@@ -653,7 +671,9 @@ export function GraphExplorer({ census }: Props) {
           <h2 className="text-xs font-semibold uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
             Details
           </h2>
-          {!inspected ? (
+          {inspecting ? (
+            <Spinner presentational />
+          ) : !inspected ? (
             <p className="text-xs text-[var(--dpf-muted)]">
               {seedKeys.length === 0
                 ? "Nothing picked."
