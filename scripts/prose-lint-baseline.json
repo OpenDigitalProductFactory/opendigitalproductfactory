@@ -8089,7 +8089,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 64
+    "textMass": 37
   },
   "apps/web/components/workspace/work-room/WorkRoomCycles.tsx": {
     "vocabulary": 0,
@@ -8104,5 +8104,12 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 46
+  },
+  "apps/web/components/workspace/work-room/WorkRoomParticipants.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 31
   }
 }
