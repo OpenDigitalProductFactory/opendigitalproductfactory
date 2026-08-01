@@ -5513,7 +5513,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 75
+    "textMass": 79
   },
   "apps/web/components/inventory/SavedConnectionRow.tsx": {
     "vocabulary": 0,
