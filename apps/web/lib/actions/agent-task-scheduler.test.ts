@@ -461,9 +461,17 @@ describe("executeScheduledAgentTask — coworker self-task model + required-tool
     });
   });
 
-  it("force-creates a brief when the loop narrated without calling the tool and no recent brief exists", async () => {
+  // BI-71D945CD. These two cases previously asserted the opposite: that a
+  // narrating loop got a placeholder "Acquisition campaign brief (needs refresh)"
+  // force-created for it, recency-guarded so it was not duplicated tick-over-tick.
+  // That trade made sense only while an empty Campaigns page was a wall of zeros.
+  // The canonical marketing operating snapshot now renders an honest, actionable
+  // empty state instead — "establish one bounded campaign", plus a blocker with
+  // one recovery action — so fabricating a brief is strictly worse than the truth.
+  it("does NOT fabricate a brief when the loop narrated without calling the tool", async () => {
     arrangeMarketingSelfTask();
-    // No successful tool call recorded this run, and no recent brief anywhere.
+    // No successful tool call recorded this run, and no recent brief anywhere —
+    // formerly the exact trigger for the forced placeholder.
     mocks.prisma.toolExecution.findFirst.mockResolvedValue(null);
     mocks.prisma.marketingCampaignBrief.findFirst.mockResolvedValue(null);
     mocks.runAgenticLoop.mockResolvedValue({
@@ -473,31 +481,23 @@ describe("executeScheduledAgentTask — coworker self-task model + required-tool
 
     await executeScheduledAgentTask("self-marketing-specialist-user-1");
 
-    expect(mocks.governedExecuteTool).toHaveBeenCalledWith(
-      expect.objectContaining({
-        toolName: "create_marketing_campaign_brief",
-        context: expect.objectContaining({
-          routeContext: "/customer/marketing",
-          agentId: "marketing-specialist",
-          taskRunId: "TR-SCHED-MKTG1",
-        }),
-      }),
-    );
+    expect(mocks.governedExecuteTool).not.toHaveBeenCalled();
   });
 
-  it("does NOT force-create a brief when a recent brief already exists (recency guard)", async () => {
+  it("still runs the marketing self-task — the loop is unchanged, only the forced artifact is gone", async () => {
     arrangeMarketingSelfTask();
-    // The loop didn't record a tool call this run, but a recent brief exists —
-    // forcing would duplicate a placeholder, so the fallback must stand down.
     mocks.prisma.toolExecution.findFirst.mockResolvedValue(null);
-    mocks.prisma.marketingCampaignBrief.findFirst.mockResolvedValue({ briefId: "brief-existing" });
+    mocks.prisma.marketingCampaignBrief.findFirst.mockResolvedValue(null);
     mocks.runAgenticLoop.mockResolvedValue({
-      content: "Campaign brief recorded. Done.",
+      content: "Nothing new to add this cycle.",
       executedTools: [],
     });
 
     await executeScheduledAgentTask("self-marketing-specialist-user-1");
 
+    // The coworker still gets its turn; it simply is not compelled to invent an
+    // artifact when it has nothing real to say.
+    expect(mocks.runAgenticLoop).toHaveBeenCalledOnce();
     expect(mocks.governedExecuteTool).not.toHaveBeenCalled();
   });
 });
