@@ -331,15 +331,25 @@ test("evaluate reports marker counts across the always-on set", () => {
     manifest: MANIFEST,
     fileTexts: {
       "CLAUDE.md": CLAUDE_OK,
-      "AGENTS.md": "a ⟦runtime: x⟧ b ⟦model: y⟧ c ⟦model: z⟧",
+      "AGENTS.md": "a ⟦runtime: x⟧ b ⟦model: y⟧ c ⟦model: z⟧ d ⟦situational: w — review r⟧",
     },
     baseline: {
       "CLAUDE.md": byteLen(CLAUDE_OK),
-      "AGENTS.md": byteLen("a ⟦runtime: x⟧ b ⟦model: y⟧ c ⟦model: z⟧"),
+      "AGENTS.md": byteLen(
+        "a ⟦runtime: x⟧ b ⟦model: y⟧ c ⟦model: z⟧ d ⟦situational: w — review r⟧",
+      ),
     },
     strict: false,
   });
-  assert.deepEqual(markers, { runtime: 1, model: 2 });
+  assert.deepEqual(markers, { runtime: 1, model: 2, situational: 1 });
+});
+
+test("a malformed ⟦situational:⟧ marker is caught like the other two clocks", () => {
+  // The third clock earns its keep only if an unterminated one still errors —
+  // an ungreppable marker is worse than none, because it reads as recorded.
+  const m = assumptionMarkers("rule ⟦situational: pre-GA, no external installs");
+  assert.equal(m.situational, 0);
+  assert.deepEqual(m.malformed, [{ kind: "situational", line: 1 }]);
 });
 
 test("an unrecognised marker kind is ignored, not miscounted", () => {

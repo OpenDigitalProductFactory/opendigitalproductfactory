@@ -368,3 +368,55 @@ Framing this as one gap conflated two separable questions:
 ### 12h. Net assessment
 
 The article does not change this spec's decision; it **independently converges on Option B** and supplies the outside-view argument for a target the founder was still weighing in §11 Q1 (the ~35k stretch now looks defensible, not aggressive). Its transferable core — *progressive disclosure, single statement per rule, design the interface instead of demonstrating it* — is structural and holds on every surface. Its headline move — *delete constraints and trust model judgement* — is **not** portable as stated, and adopting it verbatim would be a bet on Opus 5 charged to the local-model path. §12d's enforcement criterion is the portable form, and it is one DPF is unusually well-placed to apply because the enforcement already exists.
+
+## 13. Addendum (2026-08-01) — refinement as a standing practice, not a project
+
+Phase 1 cut the plane 108,267 → 37,586 bytes. This addendum records what a *second* pass found, and the founder direction that turned a one-off cut into a continuous obligation: refinement must be **a key part of WWMD, WWWD and WSID**, with a **periodic human review** confirming the corpus is still on-task, because *time changes concerns and a rule that reads as hard-and-fast may carry a temporal or situational element*.
+
+### 13a. The kernel gap this exposed
+
+`learnings-belong-in-the-shared-commons` governs how knowledge gets **in**. Nothing governed what keeps a corpus worth reading once it is there — so every commons was, by doctrine, append-only. That is a genuine kernel gap, now filled by **`commons-are-curated-not-just-appended`** (core tier, universal ring). It defines the review as four questions — altitude, lapsed contingency, scope drift, machine-enforced rules — over a **guard-produced nomination list**, with consolidation and retirement reserved to the accountable human per corpus (WWMD → founder/maintainer; WWWD → the org's owner; WSID → the profession owner; code+`AGENTS.md` → maintainer).
+
+The separation is the load-bearing part: **guards nominate, humans decide.** A guard can measure restatement; it cannot know that a rule protecting a constraint the business no longer has should go.
+
+### 13b. Third clock — `⟦situational:⟧`
+
+`⟦runtime:⟧` and `⟦model:⟧` turned out to be two instances of a general fact: a rule can be true only under conditions the corpus does not record. The generalisation is a third marker carrying its own review trigger, since no external clock ticks for circumstance. Convention and examples: [the runtime-assumption audit](../audits/2026-07-24-agents-md-runtime-assumption-audit.md). The size guard counts and validates all three; a malformed one is still a hard error.
+
+Applied count is deliberately **zero**. The marker exists so a future review can mark what it finds; retro-fitting situational caveats onto rules whose conditions have *not* been examined would be fabrication.
+
+### 13c. What the second pass actually returned — and why the estimate was wrong
+
+Three rule families were found sitting at the wrong altitude and lifted into §1:
+
+| Family | Was | Became |
+|---|---|---|
+| Extend what exists | 5 rules across §1/§6/§10/§11 | one rule; §1 already enumerated the domains |
+| Canonical runtime is truth | 5 rules across §4/§5/§14/§17 | one rule |
+| Machine-enforced prohibitions | 6 rules across §4/§8/§16/§17 | one rule: *an enforcement refusal is a stop, not a workaround* |
+
+Plus structural consolidation: **18 sections → 12**, six single-rule sections folded into their nearest owner.
+
+**Estimated ~4,450 bytes freed. Delivered 468 net** (≈1,450 gross, less ≈980 for the new curation rule and its anchor). The estimate was wrong for a reason worth recording:
+
+> **Anchor-carrying is the floor on consolidation savings.** A rule's identity is its kernel anchor, so a consolidated rule must carry every anchor it absorbs or the coverage guard correctly reports a dropped rule. Anchor paths run ~85 bytes each; absorbing three rules costs ~255 bytes of link text before a word of doctrine is written. **3,939 bytes — 17% of `AGENTS.md` — is anchor path.** The mechanism that makes consolidation *safe* is the same one that caps what it can *save*.
+
+This does not argue against consolidation: the §1 refusal rule now governs guards that do not exist yet, which an enumeration of today's four hooks never could. Consolidation's return is **coverage**, and size is a secondary effect.
+
+**Highest remaining lever, not taken here:** shorten the anchor *representation*. `→ [kernel principle](docs/founder-kernel/wiki/principles/never-fabricate.md)` carries ~85 bytes to express one slug. A resolved short form — the guard already knows the two corpus roots — would cost ~20, recovering ~3,000 bytes across the plane: more than every consolidation in this pass combined. It is deferred because it changes the link format across all doctrine and requires the coverage guard, `check-doc-links` and `check-doc-reference-integrity` to agree on the new form. That is a design change, not a cut.
+
+### 13d. Guard defects this pass exposed (the fourth and fifth)
+
+Consistent with §12f: **every guard built for this BI has had a model defect exposed by real use, and only by real use.**
+
+1. **`--update` silently weakened the rule baseline — shipped twice.** It rescanned the always-on plane alone, so every rule already relocated to a registered destination dropped out of protection (46 → 41 anchors). Caught the first time by inspection and reverted; it recurred here because a revert is not a fix. Now fixed properly: `--update` is a **union** with the committed baseline, never a rescan, extracted as `mergeRuleBaseline()` with five regression tests. Retirement is a deliberate hand edit of the baseline file — which is exactly what `commons-are-curated-not-just-appended` requires of a human.
+
+   The interaction matters: **consolidation requires an `--update`**, so a weakening `--update` penalised precisely the curation the new doctrine mandates. The guard was fighting the practice.
+
+2. **The `situational` marker counter was never incremented.** `evaluate()` summed `runtime` and `model` only, so the new clock would have reported a permanent, plausible-looking `0`. Found because the test written to avoid an unexercised branch ran before the code was trusted.
+
+Also noted and **not** fixed here: the duplicate-detection pass (`check-instruction-plane-rule-coverage.mjs`) iterates only the three pointer-forced files. Skill descriptions are equally always-on *and* a registered `ruleDestination`, so a rule duplicated across the two tiers is invisible to it. Measured today: no cross-tier duplication exists — descriptions are trigger-shaped, rules are imperative, and lexical overlap is near zero. The gap is latent, not live, and is recorded for the next pass rather than fixed speculatively.
+
+### 13e. Cadence — the open decision
+
+The principle specifies *what* a review asks and *who* owns it. It deliberately does not fix the interval, which is a founder call per corpus. The recommendation: trigger on whichever comes first — a release boundary, growth past the corpus ratchet since the last review, or a calendar floor so a quiet corpus is still examined. WWWD and WSID need their own rule-identity mechanism (the anchor equivalent) before they can be consolidated as safely as `AGENTS.md`; that is unbuilt and is the natural next BI.
