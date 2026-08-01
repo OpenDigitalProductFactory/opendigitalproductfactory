@@ -17,7 +17,7 @@
 // the DocumentReference / Postgres graph mirror is a later step, deliberately
 // gated on this being green first (spec §5.5). Zero external dependencies.
 //
-// SCOPE (BI-DOCIMPACT-CORPUS): frontmatter edges are collected from the WHOLE
+// SCOPE: frontmatter edges are collected from the WHOLE
 // published doc corpus, not just docs/user-guide. The narrower walk was the
 // blast-radius hole that let the BET-5 Neo4j/Qdrant retirement ship while
 // /architecture/platform-overview/ — a published page whose entire "three data
