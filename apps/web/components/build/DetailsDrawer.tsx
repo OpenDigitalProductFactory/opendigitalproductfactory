@@ -48,6 +48,7 @@ export type DetailsDrawerProps = {
 };
 
 export function DetailsDrawer({ isOpen, onClose, sections }: DetailsDrawerProps) {
+  const drawerRef = useRef<HTMLElement>(null);
   // Track which sections are expanded. Re-seed from defaultOpen when sections
   // change (e.g. phase change reorders the default-open section).
   const initialOpen = useMemo(() => {
@@ -62,6 +63,29 @@ export function DetailsDrawer({ isOpen, onClose, sections }: DetailsDrawerProps)
   useEffect(() => {
     setOpenIds(initialOpen);
   }, [initialOpen]);
+
+  useEffect(() => {
+    if (!isOpen || typeof document === "undefined") return;
+    const returnFocus = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    let cancelled = false;
+
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const target = drawerRef.current?.querySelector<HTMLElement>(
+        '[data-open="true"] button[aria-expanded="true"]',
+      ) ?? drawerRef.current?.querySelector<HTMLElement>(
+        '[aria-label="Close details drawer"]',
+      );
+      target?.focus();
+    });
+
+    return () => {
+      cancelled = true;
+      if (returnFocus?.isConnected) returnFocus.focus();
+    };
+  }, [isOpen]);
 
   // Esc to close — only when drawer is open, capture-phase so it wins over
   // nested inputs.
@@ -89,6 +113,7 @@ export function DetailsDrawer({ isOpen, onClose, sections }: DetailsDrawerProps)
 
   return (
     <aside
+      ref={drawerRef}
       role="region"
       aria-label="Build details"
       aria-hidden={!isOpen}

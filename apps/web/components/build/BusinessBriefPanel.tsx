@@ -155,7 +155,12 @@ function SelectField({
   );
 }
 
-export function BusinessBriefPanel({ brief, onSaved }: Props) {
+export function BusinessBriefPanel(props: Props) {
+  const briefIdentity = props.brief.briefId ?? `legacy:${props.brief.title}`;
+  return <BusinessBriefPanelContent key={briefIdentity} {...props} />;
+}
+
+function BusinessBriefPanelContent({ brief, onSaved }: Props) {
   const needsClarification = brief.openQuestions.length > 0;
   const [isEditing, setIsEditing] = useState(Boolean(brief.briefId));
   const [isPending, startTransition] = useTransition();

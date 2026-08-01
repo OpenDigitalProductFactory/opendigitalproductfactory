@@ -61,6 +61,31 @@ describe("BusinessBriefPanel", () => {
     expect(screen.getByRole("button", { name: /accept brief/i })).toBeInTheDocument();
   });
 
+  it("resets editable draft fields when the selected brief identity changes", () => {
+    const firstBrief = {
+      ...DEMO_BUSINESS_BRIEF,
+      briefId: "BBB-FIRST",
+      title: "First Change brief",
+      businessOutcome: "First Change outcome",
+    };
+    const secondBrief = {
+      ...DEMO_BUSINESS_BRIEF,
+      briefId: "BBB-SECOND",
+      title: "Second Change brief",
+      businessOutcome: "Second Change outcome",
+    };
+    const { rerender } = render(<BusinessBriefPanel brief={firstBrief} />);
+
+    fireEvent.change(screen.getByLabelText(/business outcome/i), {
+      target: { value: "Unsaved First Change draft" },
+    });
+    rerender(<BusinessBriefPanel brief={secondBrief} />);
+    expect(screen.getByLabelText(/business outcome/i)).toHaveValue("Second Change outcome");
+
+    rerender(<BusinessBriefPanel brief={firstBrief} />);
+    expect(screen.getByLabelText(/business outcome/i)).toHaveValue("First Change outcome");
+  });
+
   it("lets a non-developer mark evidence as an existing working example", async () => {
     updateBusinessBuildBrief.mockResolvedValue(undefined);
     const onSaved = vi.fn();

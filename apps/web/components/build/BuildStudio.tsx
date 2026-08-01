@@ -1173,7 +1173,6 @@ function buildDetailsDrawerSections(
       content: (
         activeBuild.businessBuildBrief ? (
           <BusinessBriefPanel
-            key={activeBuild.buildId}
             brief={activeBuild.businessBuildBrief}
             onSaved={onBriefSaved}
           />
