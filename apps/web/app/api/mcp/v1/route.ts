@@ -27,7 +27,7 @@ import { submitRemoteCoworkerTask } from "@/lib/mcp-task-submit";
 import { getQuiescenceConfig } from "@/lib/self-upgrade/quiescence";
 import { getToolGrantMapping, expandGrants } from "@/lib/tak/agent-grants";
 import { MCP_ROUTE_TOOL_RESULT_CHAR_CAP } from "@/lib/tak/tool-result-budget";
-import { resolveMcpToolTier, selectToolsByTier, type McpToolTier } from "@/lib/mcp/tool-tier";
+import { resolveEffectiveTier, selectToolsByTier, type McpToolTier } from "@/lib/mcp/tool-tier";
 import { can, type CapabilityKey, type UserContext } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
 
@@ -644,7 +644,10 @@ export async function POST(request: Request): Promise<Response> {
         return await handleToolsList(
           body.id ?? null,
           token,
-          resolveMcpToolTier(new URL(request.url).searchParams.get("tier")),
+          resolveEffectiveTier(
+            new URL(request.url).searchParams.get("tier"),
+            deriveCallerClient(request.headers.get("user-agent")),
+          ),
         );
 
       case "tools/call":

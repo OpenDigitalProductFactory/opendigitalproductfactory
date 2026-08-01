@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   resolveMcpToolTier,
+  parseExplicitTier,
+  defaultTierForClient,
+  resolveEffectiveTier,
   selectToolsByTier,
   CORE_MCP_TOOL_NAMES,
 } from "./tool-tier";
@@ -17,6 +20,49 @@ describe("resolveMcpToolTier", () => {
   it("selects core case-insensitively", () => {
     expect(resolveMcpToolTier("core")).toBe("core");
     expect(resolveMcpToolTier("CORE")).toBe("core");
+  });
+});
+
+describe("parseExplicitTier", () => {
+  it("returns the explicit tier only for exact core/full", () => {
+    expect(parseExplicitTier("core")).toBe("core");
+    expect(parseExplicitTier("FULL")).toBe("full");
+  });
+  it("returns null for absent/unknown (so the default can apply)", () => {
+    expect(parseExplicitTier(null)).toBeNull();
+    expect(parseExplicitTier(undefined)).toBeNull();
+    expect(parseExplicitTier("")).toBeNull();
+    expect(parseExplicitTier("lean")).toBeNull();
+  });
+});
+
+describe("defaultTierForClient", () => {
+  it("keeps Claude Code on full (it defers the catalogue client-side)", () => {
+    expect(defaultTierForClient("claude-code/2.1")).toBe("full");
+    expect(defaultTierForClient("claude-code")).toBe("full");
+    expect(defaultTierForClient("Claude-Code/9")).toBe("full");
+  });
+  it("defaults every other / unknown client to the lean core surface", () => {
+    expect(defaultTierForClient("codex/1.0")).toBe("core");
+    expect(defaultTierForClient("grok/2")).toBe("core");
+    expect(defaultTierForClient("some-customer-agent")).toBe("core");
+    expect(defaultTierForClient(undefined)).toBe("core");
+    expect(defaultTierForClient(null)).toBe("core");
+  });
+  it("does not match a client that merely contains 'claude-code' mid-token", () => {
+    expect(defaultTierForClient("not-claude-code")).toBe("core");
+  });
+});
+
+describe("resolveEffectiveTier", () => {
+  it("an explicit ?tier= always wins over the client default", () => {
+    expect(resolveEffectiveTier("full", "codex/1")).toBe("full"); // codex opts back in
+    expect(resolveEffectiveTier("core", "claude-code/2")).toBe("core"); // CC opts down
+  });
+  it("falls back to the client default when no explicit tier is given", () => {
+    expect(resolveEffectiveTier(null, "claude-code/2")).toBe("full");
+    expect(resolveEffectiveTier(undefined, "codex/1")).toBe("core");
+    expect(resolveEffectiveTier("", undefined)).toBe("core");
   });
 });
 

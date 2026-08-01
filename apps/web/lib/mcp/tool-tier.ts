@@ -11,15 +11,56 @@
  * execution (`tools/call`). A granted tool can still be called by name even in
  * core tier — so this is a pure context-economy lever with no loss of
  * capability, and the staged model-driven deferral (load_tools + list_changed,
- * spec Phase 2) is purely additive on top of it. Default tier is "full", so
- * existing clients are unaffected.
+ * spec Phase 2) is purely additive on top of it.
+ *
+ * Server-authoritative default (BI-88681BE0): when a caller passes no explicit
+ * `?tier=`, the default now depends on the client (defaultTierForClient) —
+ * Claude Code keeps "full" (it defers client-side), every other/unknown client
+ * defaults to the lean "core" surface so it stops paying the full catalog. Any
+ * caller opts back in with `?tier=full`.
  */
 
 export type McpToolTier = "core" | "full";
 
+/** Parse an EXPLICIT tier hint (`?tier=core` / `?tier=full`), or null when absent. */
+export function parseExplicitTier(raw: string | null | undefined): McpToolTier | null {
+  if (typeof raw !== "string") return null;
+  const v = raw.toLowerCase();
+  return v === "core" || v === "full" ? (v as McpToolTier) : null;
+}
+
 /** Parse a tier hint (e.g. the `?tier=` query param). Defaults to "full". */
 export function resolveMcpToolTier(raw: string | null | undefined): McpToolTier {
   return typeof raw === "string" && raw.toLowerCase() === "core" ? "core" : "full";
+}
+
+/**
+ * The default tier for a caller when it did NOT pass an explicit `?tier=`
+ * (BI-88681BE0 / BI-71310615 §5a — server-authoritative default-minimal
+ * disclosure). Claude Code defers the catalog client-side (ToolSearch), so it
+ * keeps the `full` surface with no behaviour change; every OTHER client (Codex,
+ * Grok, a customer's own agent, or an unidentified caller) has no client-side
+ * deferral and otherwise pays the whole ~26k-token catalog up front, so it
+ * defaults to the lean `core` surface. This is discovery-only — `tools/call`
+ * still executes any granted tool by name and `search_tool_marketplace` (in
+ * core) surfaces the rest — so no capability is lost, and any caller can opt
+ * back into the full surface with `?tier=full`.
+ */
+export function defaultTierForClient(callerClient: string | null | undefined): McpToolTier {
+  return typeof callerClient === "string" && /^claude-code(\/|$)/i.test(callerClient)
+    ? "full"
+    : "core";
+}
+
+/**
+ * The effective tier for a `tools/list` request: an explicit `?tier=` wins;
+ * otherwise fall back to the client-aware default (above).
+ */
+export function resolveEffectiveTier(
+  rawTierParam: string | null | undefined,
+  callerClient: string | null | undefined,
+): McpToolTier {
+  return parseExplicitTier(rawTierParam) ?? defaultTierForClient(callerClient);
 }
 
 /**
