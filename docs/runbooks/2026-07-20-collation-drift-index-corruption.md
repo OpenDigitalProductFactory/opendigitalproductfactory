@@ -133,8 +133,19 @@ So dedupe is **two** steps, not one:
    `retiredAt`/`retiredReason`; `TaxonomyNode` → `status='retired'`; `SkillDefinition` →
    `status='quarantined'`. Retire, do not delete — the tombstone stays for audit and unmerge.
 
-The durable fix is to fold step 2 into the helper (let each table declare its tombstone marker) so a
-future dedupe retires losers in one pass — tracked in BI-8EEEF8CB.
+The durable fix shipped (BI-8EEEF8CB): the shared authoring helper at
+[`packages/db/src/migrations/exact-key-repair.ts`](../../packages/db/src/migrations/exact-key-repair.ts)
+(`buildExactKeyRepairSql`) folds step 2 into step 1. Each table declares its tombstone marker in the
+`retirement` config field, so the same UPDATE that renames the loser also retires it — a future
+dedupe never needs the `20260721190000_retire_quarantined_duplicate_rows`-style follow-up. Authoring
+a new repair is now a config (table, key columns, survivor order, retirement markers, natural-key FKs
+to detach) rather than a hand-copied 70-line migration; the ratified sequence lives in one
+unit-and-DB-tested place. **Do not hand-copy a prior repair migration** — call the helper.
+
+The recurring *detection* half — a platform scheduled sweep that runs
+`index-integrity-guard.mjs` against the live install DB and raises an advisory/BI on corruption — is
+tracked as a follow-up to BI-8EEEF8CB (a CI cron cannot catch this class: CI's cluster is freshly
+initdb'd under glibc every run, so the musl→glibc flip never reproduces there).
 
 ## Preventing recurrence
 
