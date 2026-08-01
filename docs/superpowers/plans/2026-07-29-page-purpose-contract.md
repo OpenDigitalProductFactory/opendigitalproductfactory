@@ -450,6 +450,10 @@ The evaluator resolves each scenario's `stateSource` independently from the
 rendered page, then compares that oracle result with
 `data-dpf-purpose-state`. A missing oracle, unknown oracle state, or mismatch
 fails structural conformance; the rendered marker cannot attest its own truth.
+The browser adapter accepts an independently resolved `PurposeEvaluationContext`
+when a contract carries validation receipts; current pilot contracts omit
+receipts until governed task evidence and its artifact resolver exist, so the
+honest status remains `not-validated` rather than manufacturing current proof.
 Deterministic blocking checks then cover state-appropriate action presence or
 absence, first-viewport action geometry, required evidence presence, prohibited
 actions, recovery/completion markers, disclosure relationships, and

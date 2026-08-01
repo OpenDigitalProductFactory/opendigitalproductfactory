@@ -27,6 +27,7 @@ import SelfUpgradeJobEngineHealthAlert, {
   shouldPollForJobEngineRecovery,
   type JobEngineHealth,
 } from "@/components/ops/SelfUpgradeJobEngineHealthAlert";
+import { Spinner } from "@/components/ui/Spinner";
 
 export type SelfUpgradeControlActions = {
   trigger: (
@@ -79,8 +80,8 @@ function TriggerFeedback({
 
       {result && (
         <div
-          role="status"
-          aria-live="polite"
+          role={result.queued ? "status" : "alert"}
+          aria-live={result.queued ? "polite" : "assertive"}
           data-dpf-purpose-completion-signal-key={
             result.queued ? "upgrade-queue-acknowledgement" : undefined
           }
@@ -156,7 +157,11 @@ export default function SelfUpgradeTriggerControl({
 
   const draining = !!quiescence && quiescence.level !== "normal";
   const queuedRun = latestRun?.status === "queued" || latestRun?.status === "pending";
-  const upgradeInFlight = queuedRun || latestRun?.status === "running" || draining;
+  const upgradeInFlight =
+    queuedRun ||
+    latestRun?.status === "running" ||
+    latestRun?.status === "completing" ||
+    draining;
   const triggerBusy = isPending || justQueued;
 
   // The manual trigger only *queues* an upgrade: the server action returns
@@ -341,8 +346,7 @@ export default function SelfUpgradeTriggerControl({
             data-dpf-primary-action
             data-owner-first-next-action
             data-dpf-purpose-action-key="open-recovery-controls"
-            data-dpf-purpose-completion-signal-key="recovery-controls-reachable"
-            className="inline-flex min-h-11 items-center rounded-lg bg-[var(--dpf-accent)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+            className="inline-flex min-h-11 items-center rounded-lg bg-[var(--dpf-accent)] px-4 py-2 text-sm font-semibold text-[var(--dpf-on-accent,var(--dpf-surface-1))] hover:opacity-90"
           >
             Review recovery controls
           </a>
@@ -354,8 +358,9 @@ export default function SelfUpgradeTriggerControl({
             aria-busy={triggerBusy}
             aria-label="Try update again"
             data-dpf-purpose-action-key="retry-upgrade"
-            className="min-h-11 rounded-lg border border-[var(--dpf-border)] px-3 py-2 text-sm font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)] disabled:opacity-50"
+            className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--dpf-border)] px-3 py-2 text-sm font-medium text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)] disabled:opacity-50"
           >
+            {triggerBusy && <Spinner size="xs" presentational />}
             {triggerBusy ? "Trying again..." : "Try update again"}
           </button>
           <RecoveryGuidanceLink />
@@ -389,7 +394,7 @@ export default function SelfUpgradeTriggerControl({
           data-owner-first-next-action
           data-dpf-purpose-action-key="resolve-blocker"
           data-dpf-purpose-completion-signal-key="blocker-route-reachable"
-          className="inline-flex min-h-11 items-center rounded-lg bg-[var(--dpf-accent)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+          className="inline-flex min-h-11 items-center rounded-lg bg-[var(--dpf-accent)] px-4 py-2 text-sm font-semibold text-[var(--dpf-on-accent,var(--dpf-surface-1))] hover:opacity-90"
         >
           {recoveryLabel}
         </a>
@@ -555,8 +560,11 @@ export default function SelfUpgradeTriggerControl({
                 data-dpf-primary-action
                 data-dpf-purpose-action-key="start-upgrade"
                 data-dpf-purpose-confirmation="explicit"
-                className="min-h-11 rounded-lg border border-[var(--dpf-accent)] bg-[var(--dpf-accent)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+                className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--dpf-accent)] bg-[var(--dpf-accent)] px-4 py-2 text-sm font-semibold text-[var(--dpf-on-accent,var(--dpf-surface-1))] shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
               >
+                {triggerBusy && (
+                  <Spinner size="xs" tone="current" presentational />
+                )}
                 {isPending
                   ? "Upgrading..."
                   : justQueued

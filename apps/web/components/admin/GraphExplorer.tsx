@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminTabNav } from "@/components/admin/AdminTabNav";
 import { RelationshipGraph, type GraphLegendEntry } from "@/components/inventory/RelationshipGraph";
+import { Spinner } from "@/components/ui/Spinner";
 import {
   findGraphNodes,
   loadGraphNeighbourhood,
@@ -40,6 +41,42 @@ type Props = {
 };
 
 const EMPTY_SUBGRAPH: GraphSubgraph = { nodes: [], edges: [], truncated: false, notice: null };
+const GRAPH_UNAVAILABLE = "Unavailable.";
+
+function replaceGraphPurposeQuery(
+  seedKeys: string[],
+  depth: number,
+  inspectedKey?: string,
+) {
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  url.searchParams.delete("seed");
+  for (const key of seedKeys) url.searchParams.append("seed", key);
+  if (seedKeys.length > 0) url.searchParams.set("depth", String(depth));
+  else url.searchParams.delete("depth");
+  if (inspectedKey) url.searchParams.set("inspected", inspectedKey);
+  else url.searchParams.delete("inspected");
+  window.history.replaceState(window.history.state, "", url);
+}
+
+export function resolveGraphPurposeState(input: {
+  nodeTotal: number;
+  seedCount: number;
+  graphNodeCount: number;
+  loading: boolean;
+  inspected: boolean;
+}): "empty-corpus" | "no-starting-point" | "neighbourhood-drawn" {
+  if (input.nodeTotal === 0) return "empty-corpus";
+  if (
+    input.seedCount === 0 ||
+    input.loading ||
+    input.graphNodeCount === 0 ||
+    !input.inspected
+  ) {
+    return "no-starting-point";
+  }
+  return "neighbourhood-drawn";
+}
 
 export function GraphExplorer({ census }: Props) {
   const [query, setQuery] = useState("");
@@ -137,11 +174,14 @@ export function GraphExplorer({ census }: Props) {
   useEffect(() => {
     if (seedKeys.length === 0) {
       setSubgraph(EMPTY_SUBGRAPH);
+      replaceGraphPurposeQuery([], depth);
       return;
     }
     let cancelled = false;
     setLoading(true);
     setError(null);
+    setInspected(null);
+    replaceGraphPurposeQuery(seedKeys, depth);
     loadGraphNeighbourhood({
       seedKeys,
       depth,
@@ -154,6 +194,8 @@ export function GraphExplorer({ census }: Props) {
       .catch((cause: unknown) => {
         if (!cancelled) {
           setSubgraph(EMPTY_SUBGRAPH);
+          setSeedKeys([]);
+          setInspected(null);
           setError(cause instanceof Error ? cause.message : "Could not load that view.");
         }
       })
@@ -173,12 +215,14 @@ export function GraphExplorer({ census }: Props) {
       return;
     }
     setSearching(true);
+    setSearched(false);
     setError(null);
     try {
       setResults(await findGraphNodes({ query: trimmed, labels: activeLabels }));
       setSearched(true);
     } catch (cause: unknown) {
       setResults([]);
+      setSearched(false);
       setError(cause instanceof Error ? cause.message : "Search failed.");
     } finally {
       setSearching(false);
@@ -188,21 +232,35 @@ export function GraphExplorer({ census }: Props) {
   const inspect = useCallback((key: string | null) => {
     if (!key) {
       setInspected(null);
+      replaceGraphPurposeQuery(seedKeys, depth);
       return;
     }
+    setError(null);
     loadGraphNodeDetail(key)
-      .then(setInspected)
-      .catch(() => setInspected(null));
-  }, []);
+      .then((detail) => {
+        setInspected(detail);
+        if (detail) replaceGraphPurposeQuery(seedKeys, depth, detail.key);
+        else setError(GRAPH_UNAVAILABLE);
+      })
+      .catch((cause: unknown) => {
+        setInspected(null);
+        setError(cause instanceof Error ? cause.message : GRAPH_UNAVAILABLE);
+      });
+  }, [depth, seedKeys]);
 
   function startFrom(node: GraphNodeSummary) {
     setSeedKeys([node.key]);
     setInspected(null);
+    replaceGraphPurposeQuery([node.key], depth);
   }
 
   function expandFromInspected() {
     if (!inspected) return;
-    setSeedKeys((prev) => (prev.includes(inspected.key) ? prev : [...prev, inspected.key]));
+    setSeedKeys((prev) => {
+      const next = prev.includes(inspected.key) ? prev : [...prev, inspected.key];
+      replaceGraphPurposeQuery(next, depth);
+      return next;
+    });
   }
 
   function toggleDomain(domain: GraphDomainKey) {
@@ -230,14 +288,16 @@ export function GraphExplorer({ census }: Props) {
     setActiveDomains(new Set());
     setActiveRelTypes(new Set());
     setDepth(1);
+    replaceGraphPurposeQuery([], 1);
   }
 
-  const purposeState =
-    census.nodeTotal === 0
-      ? "empty-corpus"
-      : seedKeys.length === 0
-        ? "no-starting-point"
-        : "neighbourhood-drawn";
+  const purposeState = resolveGraphPurposeState({
+    nodeTotal: census.nodeTotal,
+    seedCount: seedKeys.length,
+    graphNodeCount: subgraph.nodes.length,
+    loading,
+    inspected: Boolean(inspected),
+  });
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 
@@ -258,7 +318,223 @@ export function GraphExplorer({ census }: Props) {
 
       <AdminTabNav />
 
-      {/* Corpus census — what the platform knows about itself, at a glance. */}
+      {purposeState === "empty-corpus" && (
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 border border-[var(--dpf-border)] px-3 py-2"
+          data-dpf-purpose-message-key="graph-explorer.empty-corpus"
+        >
+          <p className="text-xs text-[var(--dpf-muted)]">
+            The graph is empty. Populate the platform mirror before exploring relationships.
+          </p>
+          <a
+            href="/admin/platform-development"
+            className="inline-flex min-h-11 items-center text-xs text-[var(--dpf-accent)] underline"
+            data-dpf-purpose-action-key="open-platform-development"
+            data-dpf-purpose-recovery-action
+            data-dpf-purpose-recovery-signal
+            data-dpf-purpose-correction-signal-key="graph-population-recovery"
+          >
+            Open Platform Development
+          </a>
+        </div>
+      )}
+
+      {/* Search — the entry point. Nothing renders until the operator picks a node. */}
+      <section
+        className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
+        data-dpf-purpose-key="search-field"
+      >
+        <div className="flex items-end gap-2 flex-wrap">
+          <div className="flex-1 min-w-[240px]">
+            <label
+              htmlFor="graph-explorer-search"
+              className="block text-dpf-caption text-[var(--dpf-muted)] mb-1"
+            >
+              Find a starting point
+            </label>
+            <input
+              id="graph-explorer-search"
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void runSearch();
+                }
+              }}
+              placeholder="Name or path"
+              data-dpf-primary-action
+              data-owner-first-next-action="graph-explorer-query"
+              data-dpf-purpose-action-key="enter-graph-query"
+              className="min-h-11 w-full px-3 py-2 text-sm rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)]"
+            />
+          </div>
+
+          <div data-dpf-purpose-key="hop-depth">
+            <span className="block text-dpf-caption text-[var(--dpf-muted)] mb-1">Hops</span>
+            <div className="flex items-center gap-1">
+              {[1, 2, 3].map((h) => (
+                <button
+                  key={h}
+                  type="button"
+                  onClick={() => setDepth(h)}
+                  aria-pressed={depth === h}
+                  className={`min-h-11 min-w-11 px-2.5 py-2 text-xs rounded-md border transition-colors ${
+                    depth === h
+                      ? "border-[var(--dpf-accent)] bg-[var(--dpf-accent)]/20 text-[var(--dpf-text)]"
+                      : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+                  }`}
+                >
+                  {h}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* The input is the owner's first move. It stays outside disclosure and
+              carries the primary and owner-next-action markers. */}
+          <button
+            type="button"
+            onClick={() => void runSearch()}
+            disabled={searching || !query.trim() || census.nodeTotal === 0}
+            aria-busy={searching}
+            data-dpf-purpose-action-key="search-graph"
+            className="inline-flex min-h-11 items-center gap-2 px-3 py-2 text-xs rounded-md bg-[var(--dpf-accent)] text-[var(--dpf-on-accent,var(--dpf-surface-1))] disabled:opacity-50"
+          >
+            {searching && <Spinner size="xs" tone="current" presentational />}
+            {searching ? "Searching…" : "Search"}
+          </button>
+
+          <a
+            href="/admin/graph-explorer"
+            onClick={(event) => {
+              event.preventDefault();
+              reset();
+            }}
+            data-dpf-purpose-action-key="reset-explorer"
+            data-dpf-purpose-recovery-action={purposeState !== "empty-corpus" || undefined}
+            data-dpf-purpose-recovery-signal={purposeState !== "empty-corpus" || undefined}
+            className="inline-flex min-h-11 items-center px-3 py-2 text-xs rounded-md border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+          >
+            Reset
+          </a>
+        </div>
+
+        {searched && results.length === 0 && !searching && (
+          <p
+            className="text-xs text-[var(--dpf-muted)] mt-3"
+            data-dpf-purpose-correction-signal-key="graph-search-correction"
+          >
+            Nothing matched “{query.trim()}”. Try a shorter word, or clear the type filter.
+          </p>
+        )}
+
+        {results.length > 0 && (
+          <ul
+            className="mt-3 max-h-56 overflow-y-auto divide-y divide-[var(--dpf-border)] rounded-md border border-[var(--dpf-border)]"
+            data-dpf-purpose-completion-signal-key="graph-search-results-visible"
+          >
+            {results.map((node) => {
+              const descriptor = describeNodeLabels(node.labels);
+              return (
+                <li key={node.key}>
+                  <button
+                    type="button"
+                    onClick={() => startFrom(node)}
+                    className="min-h-11 w-full text-left px-3 py-2 hover:bg-[var(--dpf-surface-2)] transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="text-dpf-caption px-1.5 py-0.5 rounded-full shrink-0"
+                        style={{ background: `${descriptor.color}20`, color: descriptor.color }}
+                      >
+                        {descriptor.label}
+                      </span>
+                      <span className="text-xs text-[var(--dpf-text)] truncate">{node.name}</span>
+                    </div>
+                    {node.detail && (
+                      <p className="text-dpf-caption text-[var(--dpf-muted)] truncate mt-0.5">
+                        {node.detail}
+                      </p>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        {/* Advanced: the raw label and relationship facets, with live counts. */}
+        <div data-dpf-purpose-disclosure-key="advanced-filters">
+          <button
+            type="button"
+            onClick={() => setShowAdvanced((v) => !v)}
+            aria-expanded={showAdvanced}
+            aria-controls="graph-explorer-advanced-filters"
+            data-dpf-purpose-disclosure-trigger
+            className="mt-3 inline-flex min-h-11 items-center text-dpf-caption text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
+          >
+            {showAdvanced ? "Hide more filters" : "More filters"}
+          </button>
+
+          <div
+            id="graph-explorer-advanced-filters"
+            hidden={!showAdvanced}
+            data-dpf-purpose-disclosure-region
+            className="mt-3 space-y-3"
+          >
+            <div>
+              <p className="text-dpf-caption text-[var(--dpf-muted)] mb-1">Node types</p>
+              <div className="flex flex-wrap gap-1">
+                {census.labels.map((row) => {
+                  const descriptor = describeLabel(row.label);
+                  return (
+                    <span
+                      key={row.label}
+                      className="text-dpf-caption px-1.5 py-0.5 rounded-full"
+                      style={{ background: `${descriptor.color}20`, color: descriptor.color }}
+                    >
+                      {descriptor.label} · {row.count.toLocaleString()}
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-dpf-caption text-[var(--dpf-muted)] mb-1">
+                Follow only these links
+                {activeRelTypes.size > 0 ? ` (${activeRelTypes.size} selected)` : " (all)"}
+              </p>
+              <div className="flex flex-wrap gap-1">
+                {census.relTypes.map((row) => {
+                  const descriptor = describeRelType(row.relType);
+                  const active = activeRelTypes.has(row.relType);
+                  return (
+                    <button
+                      key={row.relType}
+                      type="button"
+                      onClick={() => toggleRelType(row.relType)}
+                      aria-pressed={active}
+                      className="min-h-11 text-dpf-caption px-2 py-1 rounded-full border transition-colors"
+                      style={{
+                        borderColor: active ? descriptor.color : "var(--dpf-border)",
+                        background: active ? `${descriptor.color}20` : "transparent",
+                        color: active ? descriptor.color : "var(--dpf-muted)",
+                      }}
+                    >
+                      {descriptor.label} · {row.count.toLocaleString()}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Corpus census supports filtering after the primary task entry point. */}
       <section
         className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
         data-dpf-purpose-key="corpus-census"
@@ -311,223 +587,11 @@ export function GraphExplorer({ census }: Props) {
         </p>
       </section>
 
-      {purposeState === "empty-corpus" && (
-        <div
-          className="flex flex-wrap items-center justify-between gap-3 border border-[var(--dpf-border)] px-3 py-2"
-          data-dpf-purpose-message-key="graph-explorer.empty-corpus"
-        >
-          <p className="text-xs text-[var(--dpf-muted)]">
-            The graph is empty. Populate the platform mirror before exploring relationships.
-          </p>
-          <a
-            href="/admin/platform-development"
-            className="text-xs text-[var(--dpf-accent)] underline"
-            data-dpf-purpose-action-key="open-platform-development"
-            data-dpf-purpose-recovery-action
-            data-dpf-purpose-recovery-signal
-            data-dpf-purpose-correction-signal-key="graph-population-recovery"
-          >
-            Open Platform Development
-          </a>
-        </div>
-      )}
-
-      {/* Search — the entry point. Nothing renders until the operator picks a node. */}
-      <section
-        className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
-        data-dpf-purpose-key="search-field"
-      >
-        <div className="flex items-end gap-2 flex-wrap">
-          <div className="flex-1 min-w-[240px]">
-            <label
-              htmlFor="graph-explorer-search"
-              className="block text-dpf-caption text-[var(--dpf-muted)] mb-1"
-            >
-              Find a starting point
-            </label>
-            <input
-              id="graph-explorer-search"
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  void runSearch();
-                }
-              }}
-              placeholder="Search by name or path"
-              className="w-full px-3 py-2 text-sm rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] text-[var(--dpf-text)] placeholder:text-[var(--dpf-muted)]"
-            />
-          </div>
-
-          <div data-dpf-purpose-key="hop-depth">
-            <span className="block text-dpf-caption text-[var(--dpf-muted)] mb-1">Hops</span>
-            <div className="flex items-center gap-1">
-              {[1, 2, 3].map((h) => (
-                <button
-                  key={h}
-                  type="button"
-                  onClick={() => setDepth(h)}
-                  aria-pressed={depth === h}
-                  className={`px-2.5 py-2 text-xs rounded-md border transition-colors ${
-                    depth === h
-                      ? "border-[var(--dpf-accent)] bg-[var(--dpf-accent)]/20 text-[var(--dpf-text)]"
-                      : "border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
-                  }`}
-                >
-                  {h}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Search is the owner's first move on this surface, so it carries both
-              the primary-action and owner-first-next-action markers. It sits above
-              the fold, never inside a disclosure — the primary-action-reachable
-              check is blocking. */}
-          <button
-            type="button"
-            onClick={() => void runSearch()}
-            disabled={searching}
-            data-dpf-primary-action
-            data-owner-first-next-action="graph-explorer-search"
-            data-dpf-purpose-action-key="search-graph"
-            className="px-3 py-2 text-xs rounded-md bg-[var(--dpf-accent)] text-white disabled:opacity-50"
-          >
-            {searching ? "Searching…" : "Search"}
-          </button>
-
-          <a
-            href="/admin/graph-explorer"
-            onClick={(event) => {
-              event.preventDefault();
-              reset();
-            }}
-            data-dpf-purpose-action-key="reset-explorer"
-            data-dpf-purpose-recovery-action={purposeState !== "empty-corpus" || undefined}
-            data-dpf-purpose-recovery-signal={purposeState !== "empty-corpus" || undefined}
-            className="px-3 py-2 text-xs rounded-md border border-[var(--dpf-border)] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
-          >
-            Reset
-          </a>
-        </div>
-
-        {searched && results.length === 0 && !searching && (
-          <p
-            className="text-xs text-[var(--dpf-muted)] mt-3"
-            data-dpf-purpose-correction-signal-key="graph-search-correction"
-          >
-            Nothing matched “{query.trim()}”. Try a shorter word, or clear the type filter.
-          </p>
-        )}
-
-        {results.length > 0 && (
-          <ul
-            className="mt-3 max-h-56 overflow-y-auto divide-y divide-[var(--dpf-border)] rounded-md border border-[var(--dpf-border)]"
-            data-dpf-purpose-completion-signal-key="graph-search-results-visible"
-          >
-            {results.map((node) => {
-              const descriptor = describeNodeLabels(node.labels);
-              return (
-                <li key={node.key}>
-                  <button
-                    type="button"
-                    onClick={() => startFrom(node)}
-                    className="w-full text-left px-3 py-2 hover:bg-[var(--dpf-surface-2)] transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="text-dpf-caption px-1.5 py-0.5 rounded-full shrink-0"
-                        style={{ background: `${descriptor.color}20`, color: descriptor.color }}
-                      >
-                        {descriptor.label}
-                      </span>
-                      <span className="text-xs text-[var(--dpf-text)] truncate">{node.name}</span>
-                    </div>
-                    {node.detail && (
-                      <p className="text-dpf-caption text-[var(--dpf-muted)] truncate mt-0.5">
-                        {node.detail}
-                      </p>
-                    )}
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-
-        {/* Advanced: the raw label and relationship facets, with live counts. */}
-        <div data-dpf-purpose-disclosure-key="advanced-filters">
-          <button
-            type="button"
-            onClick={() => setShowAdvanced((v) => !v)}
-            aria-expanded={showAdvanced}
-            aria-controls="graph-explorer-advanced-filters"
-            data-dpf-purpose-disclosure-trigger
-            className="mt-3 text-dpf-caption text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
-          >
-            {showAdvanced ? "Hide more filters" : "More filters"}
-          </button>
-
-          <div
-            id="graph-explorer-advanced-filters"
-            hidden={!showAdvanced}
-            data-dpf-purpose-disclosure-region
-            className="mt-3 space-y-3"
-          >
-            <div>
-              <p className="text-dpf-caption text-[var(--dpf-muted)] mb-1">Node types</p>
-              <div className="flex flex-wrap gap-1">
-                {census.labels.map((row) => {
-                  const descriptor = describeLabel(row.label);
-                  return (
-                    <span
-                      key={row.label}
-                      className="text-dpf-caption px-1.5 py-0.5 rounded-full"
-                      style={{ background: `${descriptor.color}20`, color: descriptor.color }}
-                    >
-                      {descriptor.label} · {row.count.toLocaleString()}
-                    </span>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div>
-              <p className="text-dpf-caption text-[var(--dpf-muted)] mb-1">
-                Follow only these links
-                {activeRelTypes.size > 0 ? ` (${activeRelTypes.size} selected)` : " (all)"}
-              </p>
-              <div className="flex flex-wrap gap-1">
-                {census.relTypes.map((row) => {
-                  const descriptor = describeRelType(row.relType);
-                  const active = activeRelTypes.has(row.relType);
-                  return (
-                    <button
-                      key={row.relType}
-                      type="button"
-                      onClick={() => toggleRelType(row.relType)}
-                      aria-pressed={active}
-                      className="text-dpf-caption px-1.5 py-0.5 rounded-full border transition-colors"
-                      style={{
-                        borderColor: active ? descriptor.color : "var(--dpf-border)",
-                        background: active ? `${descriptor.color}20` : "transparent",
-                        color: active ? descriptor.color : "var(--dpf-muted)",
-                      }}
-                    >
-                      {descriptor.label} · {row.count.toLocaleString()}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {error && (
-        <p className="text-xs text-[var(--dpf-text)] rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2">
+        <p
+          role="alert"
+          className="text-xs text-[var(--dpf-text)] rounded-md border border-[var(--dpf-destructive)] bg-[var(--dpf-destructive)]/10 px-3 py-2"
+        >
           {error}
         </p>
       )}
@@ -544,33 +608,47 @@ export function GraphExplorer({ census }: Props) {
       {/* Canvas + inspector */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4 items-start">
         <div
+          aria-busy={loading}
+          className="relative"
           data-dpf-purpose-key="graph-canvas"
-          data-dpf-purpose-completion-signal-key={
-            purposeState === "neighbourhood-drawn" && subgraph.nodes.length > 0
-              ? "graph-neighbourhood-visible"
-              : undefined
-          }
         >
           {loading && seedKeys.length > 0 && subgraph.nodes.length === 0 ? (
-            <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-8 text-center text-sm text-[var(--dpf-muted)]">
-              Loading…
+            <div
+              aria-busy="true"
+              className="flex min-h-44 items-center justify-center gap-2 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-8 text-center text-sm text-[var(--dpf-muted)]"
+            >
+              <Spinner label="Loading" />
             </div>
           ) : (
-            <RelationshipGraph
-              data={graphData}
-              title="Graph Explorer"
-              nodeLegend={nodeLegend}
-              linkLegend={linkLegend}
-              emptyMessage="Search above. Then pick a starting point."
-              hint="Click a dot to see what it is"
-              onFocusChange={inspect}
-            />
+            <>
+              <div className={loading ? "opacity-60" : undefined}>
+                <RelationshipGraph
+                  data={graphData}
+                  title="Graph Explorer"
+                  nodeLegend={nodeLegend}
+                  linkLegend={linkLegend}
+                  emptyMessage="Search above. Then pick a starting point."
+                  hint="Click a dot to see what it is"
+                  onFocusChange={inspect}
+                />
+              </div>
+              {loading && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-[var(--dpf-surface-1)]/50">
+                  <Spinner label="Updating" />
+                </div>
+              )}
+            </>
           )}
         </div>
 
         <aside
           className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4"
           data-dpf-purpose-key="node-inspector"
+          data-dpf-purpose-completion-signal-key={
+            purposeState === "neighbourhood-drawn"
+              ? "graph-neighbourhood-visible"
+              : undefined
+          }
         >
           <h2 className="text-xs font-semibold uppercase tracking-widest text-[var(--dpf-muted)] mb-3">
             Details
@@ -578,11 +656,14 @@ export function GraphExplorer({ census }: Props) {
           {!inspected ? (
             <p className="text-xs text-[var(--dpf-muted)]">
               {seedKeys.length === 0
-                ? "Nothing picked yet."
+                ? "Nothing picked."
                 : "Click a dot to see what it is."}
             </p>
           ) : (
-            <div className="space-y-3">
+            <div
+              className="space-y-3"
+              data-dpf-purpose-message-key="graph-explorer.neighbourhood-ready"
+            >
               <div>
                 <p className="text-sm font-semibold text-[var(--dpf-text)] break-words">
                   {inspected.name}
@@ -619,8 +700,7 @@ export function GraphExplorer({ census }: Props) {
                 onClick={expandFromInspected}
                 disabled={seedKeys.includes(inspected.key)}
                 data-dpf-purpose-action-key="expand-from-here"
-                data-dpf-primary-action
-                className="w-full px-3 py-2 text-xs rounded-md bg-[var(--dpf-accent)] text-white disabled:opacity-50"
+                className="min-h-11 w-full px-3 py-2 text-xs rounded-md bg-[var(--dpf-accent)] text-[var(--dpf-on-accent,var(--dpf-surface-1))] disabled:opacity-50"
               >
                 {seedKeys.includes(inspected.key) ? "Already added" : "Expand from here"}
               </button>
@@ -633,7 +713,7 @@ export function GraphExplorer({ census }: Props) {
             data-dpf-purpose-disclosure-key="node-properties"
           >
             <summary
-              className="cursor-pointer text-dpf-caption text-[var(--dpf-muted)]"
+              className="flex min-h-11 cursor-pointer items-center text-dpf-caption text-[var(--dpf-muted)]"
               data-dpf-purpose-disclosure-trigger
             >
               Raw properties

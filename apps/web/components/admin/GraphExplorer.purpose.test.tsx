@@ -15,7 +15,7 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/admin/graph-explorer",
 }));
 
-import { GraphExplorer } from "./GraphExplorer";
+import { GraphExplorer, resolveGraphPurposeState } from "./GraphExplorer";
 
 describe("GraphExplorer purpose evidence", () => {
   it("exposes an honest empty-corpus recovery contract", () => {
@@ -47,11 +47,39 @@ describe("GraphExplorer purpose evidence", () => {
 
     expect(html).toContain('data-dpf-purpose-state="no-starting-point"');
     expect(html).toContain('data-dpf-purpose-key="search-field"');
+    expect(html).toContain('data-dpf-purpose-action-key="enter-graph-query"');
     expect(html).toContain('data-dpf-purpose-action-key="search-graph"');
     expect(
       html.match(/<button[^>]*data-dpf-purpose-action-key="search-graph"[^>]*>/)?.[0],
-    ).not.toContain('disabled=""');
+    ).toContain('disabled=""');
     expect(html).toContain('data-dpf-purpose-action-key="reset-explorer"');
     expect(html).toContain('data-dpf-purpose-recovery-signal="true"');
+    expect(html.indexOf('data-dpf-purpose-key="search-field"')).toBeLessThan(
+      html.indexOf('data-dpf-purpose-key="corpus-census"'),
+    );
+    expect(html).not.toContain(
+      'data-dpf-purpose-completion-signal-key="graph-neighbourhood-visible"',
+    );
+  });
+
+  it("does not claim a drawn neighbourhood until graph and inspector data are ready", () => {
+    expect(
+      resolveGraphPurposeState({
+        nodeTotal: 3,
+        seedCount: 1,
+        graphNodeCount: 2,
+        loading: false,
+        inspected: false,
+      }),
+    ).toBe("no-starting-point");
+    expect(
+      resolveGraphPurposeState({
+        nodeTotal: 3,
+        seedCount: 1,
+        graphNodeCount: 2,
+        loading: false,
+        inspected: true,
+      }),
+    ).toBe("neighbourhood-drawn");
   });
 });

@@ -220,22 +220,20 @@ export default async function SelfUpgradePage({
       {/* Run history, runtime/security ledgers and logs. BI-D77BF495: the
           primary "Upgrade now" trigger now lives above, co-located with the
           release status in OwnerReleaseCard — it is reachable on arrival in
-          BOTH nav modes regardless of whether this section is expanded. That
-          lets this section go back to collapsing by default in Simple (worker)
-          nav mode: it holds only detail (history/ledgers/logs), not the
-          primary action, so hiding it there is the correct progressive
-          disclosure the owner-first redesign (BI-8D87084D) intended. */}
+          BOTH nav modes regardless of whether this section is expanded. This
+          section therefore stays collapsed during normal operation in every
+          nav mode and opens only when failed recovery needs the evidence. */}
       <details
         id="self-upgrade-recovery-controls"
         data-dpf-purpose-disclosure-key="deploy-controls-history"
-        className="mt-6 rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
-        open={!simple || purposeState === "failed-recoverable"}
+        className="mt-6 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
+        open={purposeState === "failed-recoverable"}
       >
         <summary
           aria-controls="self-upgrade-advanced-content"
           data-component="self-upgrade-advanced-toggle"
           data-dpf-purpose-disclosure-trigger
-          className="cursor-pointer select-none rounded-xl px-4 py-3 text-sm font-medium text-[var(--dpf-text)] marker:text-[var(--dpf-muted)]"
+          className="cursor-pointer select-none rounded-lg px-4 py-3 text-sm font-medium text-[var(--dpf-text)] marker:text-[var(--dpf-muted)]"
         >
           Deploy controls &amp; history
           <span className="ml-2 text-xs font-normal text-[var(--dpf-muted)]">

@@ -63,6 +63,7 @@ const purposeIntentSchema = z
               key: nonEmptyString,
               role: nonEmptyString,
               trigger: nonEmptyString,
+              defaultExpandedInScenarios: nonEmptyStrings.optional(),
             })
             .strict(),
         ),
@@ -173,6 +174,24 @@ const validationReceiptBase = z.object({
   artifactIds: nonEmptyStrings,
 });
 
+const validationTargetSchema = z
+  .object({
+    fixtureVersion: nonEmptyString,
+    interactionFingerprint: nonEmptyString,
+    relevantDependencyFingerprint: nonEmptyString,
+    artifacts: z
+      .array(
+        z
+          .object({
+            id: nonEmptyString,
+            path: nonEmptyString,
+          })
+          .strict(),
+      )
+      .min(1),
+  })
+  .strict();
+
 const taskValidationReceiptSchema = z.discriminatedUnion("evidenceClass", [
   validationReceiptBase
     .extend({
@@ -265,6 +284,8 @@ const draftPurposeRecordSchema = z
 function validateConsequentialActionBinding(
   value: {
     consequentialAction?: { actionKey: string };
+    validationReceipts?: unknown[];
+    validationTarget?: unknown;
     stateScenarios: Record<
       string,
       { primaryExperience: z.infer<typeof primaryExperienceSchema> }
@@ -290,6 +311,53 @@ function validateConsequentialActionBinding(
   }
 }
 
+function validateRatifiedPurposeContract(
+  value: {
+    consequentialAction?: { actionKey: string };
+    stateScenarios: Record<
+      string,
+      { primaryExperience: z.infer<typeof primaryExperienceSchema> }
+    >;
+    intent: {
+      contentRoles: {
+        deferredRegions: Array<{
+          defaultExpandedInScenarios?: string[];
+        }>;
+      };
+    };
+  },
+  context: z.RefinementCtx,
+) {
+  validateConsequentialActionBinding(value, context);
+  if (value.validationReceipts?.length && !value.validationTarget) {
+    context.addIssue({
+      code: "custom",
+      path: ["validationTarget"],
+      message:
+        "Validation receipts require a production-resolvable validation target.",
+    });
+  }
+  const scenarioKeys = new Set(Object.keys(value.stateScenarios));
+  value.intent.contentRoles.deferredRegions.forEach((region, regionIndex) => {
+    region.defaultExpandedInScenarios?.forEach((stateKey, stateIndex) => {
+      if (!scenarioKeys.has(stateKey)) {
+        context.addIssue({
+          code: "custom",
+          path: [
+            "intent",
+            "contentRoles",
+            "deferredRegions",
+            regionIndex,
+            "defaultExpandedInScenarios",
+            stateIndex,
+          ],
+          message: `Expanded disclosure scenario ${stateKey} is not defined.`,
+        });
+      }
+    });
+  });
+}
+
 const ratifiedPurposeContractObjectSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -308,6 +376,7 @@ const ratifiedPurposeContractObjectSchema = z
     reviewRef: nonEmptyString,
     intentEvidenceRefs: z.array(intentEvidenceRefSchema).min(1),
     validationReceipts: z.array(taskValidationReceiptSchema).min(1).optional(),
+    validationTarget: validationTargetSchema.optional(),
     consequentialAction: consequentialActionSchema.optional(),
     aiMediated: aiMediatedSchema.optional(),
   })
@@ -315,7 +384,7 @@ const ratifiedPurposeContractObjectSchema = z
 
 const ratifiedPurposeContractSchema =
   ratifiedPurposeContractObjectSchema.superRefine(
-    validateConsequentialActionBinding,
+    validateRatifiedPurposeContract,
   );
 
 const quarantinedPurposeRecordSchema = z
@@ -343,7 +412,7 @@ const quarantinedPurposeRecordSchema = z
 export const ratifiedPurposeContractSourceSchema =
   ratifiedPurposeContractObjectSchema
     .omit({ derived: true })
-    .superRefine(validateConsequentialActionBinding);
+    .superRefine(validateRatifiedPurposeContract);
 export const quarantinedPurposeContractSourceSchema =
   quarantinedPurposeRecordSchema.omit({ derived: true });
 export const purposeContractSourceSchema = z.discriminatedUnion("status", [

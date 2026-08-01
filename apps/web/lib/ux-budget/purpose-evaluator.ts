@@ -159,6 +159,7 @@ type EvaluateRoutePurposeInput = {
   evidence?: PurposeDomEvidence | null;
   context?: PurposeEvaluationContext;
   enforcement?: PurposeEnforcement;
+  disclosureCapture?: "initial" | "post-interaction";
 };
 
 function validationStatus(
@@ -291,7 +292,9 @@ function isOperableAction(action: PurposeActionEvidence): boolean {
   return (
     action.visible &&
     action.accessibleName.trim().length > 0 &&
-    (action.semanticRole === "button" || action.semanticRole === "link") &&
+    (["button", "link", "textbox"] as const).includes(
+      action.semanticRole as "button" | "link" | "textbox",
+    ) &&
     action.enabled &&
     action.focusable &&
     action.unobstructed
@@ -325,6 +328,7 @@ export function evaluateRoutePurpose({
   evidence,
   context,
   enforcement = "advisory",
+  disclosureCapture = "initial",
 }: EvaluateRoutePurposeInput): RoutePurposeEvaluation {
   const findings: PurposeFinding[] = [];
   const validation = validationStatus(contract, context);
@@ -454,7 +458,7 @@ export function evaluateRoutePurpose({
       } else if (!isOperableAction(action)) {
         add(
           "primary-experience",
-          `Primary command ${primaryExperience.actionKey} is not an operable, named button or link.`,
+          `Primary command ${primaryExperience.actionKey} is not an operable, named button, link, or textbox.`,
         );
       } else if (!isInsideViewport(action, evidence.viewport)) {
         add(
@@ -517,25 +521,36 @@ export function evaluateRoutePurpose({
     }
   }
 
-  const invalidDisclosures = contract.intent.contentRoles.deferredRegions.filter(
+  const disclosureDefects = contract.intent.contentRoles.deferredRegions.flatMap(
     (region) => {
       const disclosure = evidence.disclosures.find(
         (candidate) => candidate.key === region.key,
       );
-      return (
+      if (
         !disclosure ||
         !disclosure.triggerPresent ||
         !disclosure.controlledRegionPresent ||
         !disclosure.relationshipValid
-      );
+      ) {
+        return [`${region.key} has no valid trigger-to-region relationship`];
+      }
+      const shouldBeExpanded =
+        region.defaultExpandedInScenarios?.includes(oracle.stateKey) ?? false;
+      if (
+        disclosureCapture === "initial" &&
+        disclosure.expanded !== shouldBeExpanded
+      ) {
+        return [
+          `${region.key} is ${disclosure.expanded ? "expanded" : "collapsed"} but must be ${shouldBeExpanded ? "expanded" : "collapsed"} in ${oracle.stateKey}`,
+        ];
+      }
+      return [];
     },
   );
-  if (invalidDisclosures.length > 0) {
+  if (disclosureDefects.length > 0) {
     add(
       "disclosure-contract",
-      `Deferred regions lack a valid disclosure relationship: ${invalidDisclosures
-        .map((region) => region.key)
-        .join(", ")}.`,
+      `Deferred disclosure contract failed: ${disclosureDefects.join("; ")}.`,
     );
   }
 

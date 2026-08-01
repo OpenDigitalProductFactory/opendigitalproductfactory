@@ -426,6 +426,18 @@
       "file": "apps/web/app/api/admin/bs-dispatch-test/route.ts"
     },
     {
+      "routePath": "/api/admin/graph-explorer/purpose-state",
+      "kind": "route",
+      "segments": [
+        "api",
+        "admin",
+        "graph-explorer",
+        "purpose-state"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/admin/graph-explorer/purpose-state/route.ts"
+    },
+    {
       "routePath": "/api/admin/model-capability-changes",
       "kind": "route",
       "segments": [

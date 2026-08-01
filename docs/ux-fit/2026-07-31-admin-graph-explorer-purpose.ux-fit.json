@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "url-context-server-validation",
+  "decisionInteractionId": "DI-40DE1A80117B",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/admin/graph-explorer/page.tsx",
+      "apps/web/components/admin/GraphExplorer.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "dom-self-attestation",
+      "url-context-server-validation",
+      "persisted-user-session"
+    ]
+  }
+}

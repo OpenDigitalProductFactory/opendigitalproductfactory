@@ -164,6 +164,17 @@ const ratifiedFixture: RatifiedPurposeContract = {
       comparisonResult: "improved",
     },
   ],
+  validationTarget: {
+    fixtureVersion: "fixture-1",
+    interactionFingerprint: "interaction-1",
+    relevantDependencyFingerprint: "dependencies-1",
+    artifacts: [
+      {
+        id: "artifact-1",
+        path: "apps/web/lib/ux-budget/page-purpose.test.ts",
+      },
+    ],
+  },
 };
 
 const {
@@ -219,6 +230,45 @@ describe("Page Purpose Contract runtime schema", () => {
 
   it("accepts a complete ratified contract with every evidence class", () => {
     expect(parsePagePurposeContract(ratifiedFixture)).toEqual(ratifiedFixture);
+  });
+
+  it("rejects validation receipts with no production-resolvable target", () => {
+    const { validationTarget: _validationTarget, ...candidate } =
+      structuredClone(ratifiedFixture);
+
+    expect(() => parsePagePurposeContract(candidate)).toThrow(
+      /production-resolvable validation target/,
+    );
+  });
+
+  it("accepts scenario-specific expansion for a deferred region", () => {
+    const candidate = structuredClone(ratifiedFixture);
+    candidate.intent.contentRoles.deferredRegions = [
+      {
+        key: "diagnostics",
+        role: "Failure diagnostics",
+        trigger: "Show diagnostics",
+        defaultExpandedInScenarios: ["ready"],
+      },
+    ];
+
+    expect(parsePagePurposeContract(candidate)).toEqual(candidate);
+  });
+
+  it("rejects expansion rules that name an undefined scenario", () => {
+    const candidate = structuredClone(ratifiedFixture);
+    candidate.intent.contentRoles.deferredRegions = [
+      {
+        key: "diagnostics",
+        role: "Failure diagnostics",
+        trigger: "Show diagnostics",
+        defaultExpandedInScenarios: ["missing-state"],
+      },
+    ];
+
+    expect(() => parsePagePurposeContract(candidate)).toThrow(
+      /missing-state is not defined/,
+    );
   });
 
   it("rejects a consequential action that no command scenario can exercise", () => {

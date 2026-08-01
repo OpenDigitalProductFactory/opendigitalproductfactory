@@ -1,9 +1,11 @@
 import type { Page } from "@playwright/test";
 
 import type { RatifiedPurposeContract } from "./page-purpose";
+import { resolvePurposeEvaluationContext } from "./purpose-validation-context";
 import {
   evaluateRoutePurpose,
   type PurposeDomEvidence,
+  type PurposeEvaluationContext,
   type PurposeStateOracle,
   type RoutePurposeEvaluation,
 } from "./purpose-evaluator";
@@ -99,6 +101,18 @@ export function capturePurposeEvidenceFromDom(): PurposeDomEvidence | null {
         .join(" ");
       if (label) return label;
     }
+    if (
+      element instanceof HTMLInputElement ||
+      element instanceof HTMLSelectElement ||
+      element instanceof HTMLTextAreaElement
+    ) {
+      const label = [...(element.labels ?? [])]
+        .map((candidate) => accessibleDescendantText(candidate))
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (label) return label;
+    }
     return (
       accessibleDescendantText(element) ||
       element.getAttribute("title")?.trim() ||
@@ -112,6 +126,11 @@ export function capturePurposeEvidenceFromDom(): PurposeDomEvidence | null {
         ? "button"
         : element instanceof HTMLAnchorElement && element.hasAttribute("href")
           ? "link"
+          : element instanceof HTMLInputElement &&
+              ["search", "text", "email", "url", "tel"].includes(element.type)
+            ? "textbox"
+            : element instanceof HTMLTextAreaElement
+              ? "textbox"
           : null;
     if (!nativeRole) return null;
     const explicitRole = element.getAttribute("role")?.trim();
@@ -315,12 +334,13 @@ export async function capturePurposeEvidence(
   return page.evaluate(capturePurposeEvidenceFromDom);
 }
 
-export async function evaluateCurrentPurposePage(
+export async function capturePurposeOracle(
   page: Page,
   contract: RatifiedPurposeContract,
-): Promise<RoutePurposeEvaluation> {
-  const oraclePath = `/api${contract.routePath}/purpose-state`;
-  const oracle = await page.evaluate(async (path) => {
+): Promise<PurposeStateOracle> {
+  const currentUrl = new URL(page.url());
+  const oraclePath = `/api${contract.routePath}/purpose-state${currentUrl.search}`;
+  return page.evaluate(async (path) => {
     const response = await fetch(path, {
       cache: "no-store",
       credentials: "same-origin",
@@ -329,12 +349,19 @@ export async function evaluateCurrentPurposePage(
       throw new Error(`purpose oracle returned http ${response.status}`);
     }
     return response.json();
-  }, oraclePath) as PurposeStateOracle;
+  }, oraclePath) as Promise<PurposeStateOracle>;
+}
 
+export async function evaluateCurrentPurposePage(
+  page: Page,
+  contract: RatifiedPurposeContract,
+  context?: PurposeEvaluationContext,
+): Promise<RoutePurposeEvaluation> {
   return evaluateRoutePurpose({
     contract,
-    oracle,
+    oracle: await capturePurposeOracle(page, contract),
     evidence: await capturePurposeEvidence(page),
+    context: context ?? resolvePurposeEvaluationContext(contract),
     enforcement: "advisory",
   });
 }

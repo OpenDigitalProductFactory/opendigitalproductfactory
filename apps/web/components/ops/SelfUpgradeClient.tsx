@@ -280,7 +280,11 @@ export default function SelfUpgradeClient({
   // True once the worker has actually picked the upgrade up — the run is running
   // or the portal is draining/swapping for the swap.
   const queuedRun = latestRun?.status === "queued" || latestRun?.status === "pending";
-  const upgradeInFlight = queuedRun || latestRun?.status === "running" || draining;
+  const upgradeInFlight =
+    queuedRun ||
+    latestRun?.status === "running" ||
+    latestRun?.status === "completing" ||
+    draining;
 
   // Once a run is actually running, project when it should finish from the
   // median duration of past successful runs, anchored to this run's start. Null
@@ -799,6 +803,9 @@ export default function SelfUpgradeClient({
         <div
           id="self-upgrade-latest-run" className="p-3 rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] space-y-2"
           data-run-status={latestRun.status}
+          data-dpf-purpose-completion-signal-key={
+            latestRun.status === "failed" ? "recovery-controls-reachable" : undefined
+          }
         >
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-[var(--dpf-text)]">Latest Run</span>

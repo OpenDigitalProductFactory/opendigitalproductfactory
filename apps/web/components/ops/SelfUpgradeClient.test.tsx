@@ -382,7 +382,7 @@ describe("SelfUpgradeClient – failed", () => {
       />,
     );
     expect(html).toContain("failed");
-    expect(html).toContain('data-run-status="failed"');
+    expect(html).toMatch(/data-run-status="failed"[^>]*data-dpf-purpose-completion-signal-key="recovery-controls-reachable"/);
   });
 
   it("shows the error message", () => {

@@ -56,7 +56,6 @@ import {
 } from "../lib/ux-budget/purpose-evaluator";
 import {
   BROWSER_EVALUATION_RUNTIME,
-  capturePurposeEvidence,
   evaluateCurrentPurposePage,
 } from "../lib/ux-budget/purpose-browser-adapter";
 import {
@@ -66,6 +65,11 @@ import {
   type SemanticStructureNode,
   type RouteWorkResult,
 } from "./ux-route-sweep-runner";
+import {
+  captureRoutePurpose,
+  selectSweepPurposeContracts,
+  type CapturedRoutePurpose,
+} from "./ux-route-purpose";
 
 function repoRoot(): string {
   let dir = process.cwd();
@@ -118,6 +122,7 @@ export type RoutePhaseTimings = {
 type MeasuredRoute = {
   measurement: RouteMeasurement;
   phases: RoutePhaseTimings;
+  purpose: CapturedRoutePurpose;
 };
 
 function arg(name: string, fallback: string): string {
@@ -410,6 +415,7 @@ async function measureRoute(
   page: Page,
   row: ShellRow,
   baseUrl: string,
+  purposeContract?: RatifiedPurposeContract,
 ): Promise<MeasuredRoute> {
   const phases = {} as RoutePhaseTimings;
   let phaseStartedAt = performance.now();
@@ -480,6 +486,7 @@ async function measureRoute(
   }
 
   phaseStartedAt = performance.now();
+  const purpose = await captureRoutePurpose(page, purposeContract, ROOT);
   const measurement = {
     routePath: row.routePath,
     shell: row.shell,
@@ -490,11 +497,11 @@ async function measureRoute(
     ariaSnapshot,
     axeViolations,
     exemptChecks: row.exemptChecks,
-    purposeEvidence: await capturePurposeEvidence(page),
+    purposeEvidence: purpose.evidence,
   };
   phases.budgetMeasurementMs = Math.round(performance.now() - phaseStartedAt);
 
-  return { measurement, phases };
+  return { measurement, phases, purpose };
 }
 
 function loadBaseline(path: string): BaselineFile {
@@ -558,6 +565,7 @@ async function main(): Promise<void> {
   );
   const updateBaseline = process.argv.includes("--update-baseline");
   const purposeRegistry = parsePagePurposeRegistry(purposeRegistryJson);
+  const sweepPurposeContracts = selectSweepPurposeContracts(purposeRegistry);
 
   const inventory = (
     JSON.parse(readFileSync(join(ROOT, SHELLS_REL), "utf8")) as { routes: ShellRow[] }
@@ -598,7 +606,12 @@ async function main(): Promise<void> {
       async (row, workerIndex) =>
         withIsolatedSweepPage(contexts[workerIndex], async (page) => {
           try {
-            return await measureRoute(page, row, baseUrl);
+            return await measureRoute(
+              page,
+              row,
+              baseUrl,
+              sweepPurposeContracts.get(row.routePath),
+            );
           } catch (error) {
             await captureFailureScreenshot(page, row.routePath);
             throw error;
@@ -720,6 +733,20 @@ async function main(): Promise<void> {
       measurement.purposeEvidence ?? null,
     ]),
   );
+  const oracleByRoute = new Map(
+    routeRun.outcomes.flatMap((outcome) =>
+      outcome.status === "measured"
+        ? [[outcome.routePath, outcome.value.purpose.oracle] as const]
+        : [],
+    ),
+  );
+  const purposeContextByRoute = new Map(
+    routeRun.outcomes.flatMap((outcome) =>
+      outcome.status === "measured"
+        ? [[outcome.routePath, outcome.value.purpose.context] as const]
+        : [],
+    ),
+  );
   const purposeOnlyRoutePaths = new Set(
     purposeOnlyEvaluations.map((evaluation) => evaluation.routePath),
   );
@@ -730,7 +757,8 @@ async function main(): Promise<void> {
         evaluateRoutePurpose({
           contract,
           evidence: evidenceByRoute.get(contract.routePath) ?? null,
-          oracle: null,
+          oracle: oracleByRoute.get(contract.routePath) ?? null,
+          context: purposeContextByRoute.get(contract.routePath),
           enforcement: "advisory",
         }),
       ),

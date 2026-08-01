@@ -6,7 +6,11 @@
     "files": [
       "apps/web/app/(shell)/ops/self-upgrade/page.tsx",
       "apps/web/components/ops/OwnerReleaseCard.tsx",
-      "apps/web/components/ops/SelfUpgradeTriggerControl.tsx"
+      "apps/web/components/ops/SelfUpgradeClient.tsx",
+      "apps/web/components/ops/SelfUpgradePurposeReview.tsx",
+      "apps/web/components/ops/SelfUpgradePurposeReviewTrigger.tsx",
+      "apps/web/components/ops/SelfUpgradeTriggerControl.tsx",
+      "apps/web/components/ops/self-upgrade-recovery-control-styles.ts"
     ]
   },
   "evidence": {

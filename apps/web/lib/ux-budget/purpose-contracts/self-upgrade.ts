@@ -36,6 +36,7 @@ export const SELF_UPGRADE_PURPOSE_CONTRACT = {
           key: "deploy-controls-history",
           role: "Technical deploy controls, run history, local-change ledger, and diagnostics",
           trigger: "Deploy controls & history",
+          defaultExpandedInScenarios: ["failed-recoverable"],
         },
       ],
     },

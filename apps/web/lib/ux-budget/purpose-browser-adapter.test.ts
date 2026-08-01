@@ -25,6 +25,8 @@ describe("capturePurposeEvidenceFromDom", () => {
         <div data-dpf-purpose-key="hidden-descendant-state"><span aria-hidden="true">Hidden descendant</span></div>
         <div data-dpf-purpose-key="covered-state" data-covered>Covered</div>
         <button data-dpf-primary-action data-dpf-purpose-action-key="start-upgrade">Upgrade now</button>
+        <label for="purpose-query">Find a starting point</label>
+        <input id="purpose-query" type="search" data-dpf-primary-action data-dpf-purpose-action-key="enter-query" />
         <div role="button" tabindex="0" data-dpf-purpose-action-key="role-only-action">Looks interactive</div>
         <button disabled data-dpf-purpose-action-key="disabled-action">Disabled</button>
         <button data-dpf-purpose-action-key="hidden-name-action"><span aria-hidden="true">Hidden name</span></button>
@@ -102,10 +104,16 @@ describe("capturePurposeEvidenceFromDom", () => {
       focusable: true,
       unobstructed: true,
     });
-    expect(evidence?.actions[1]).toMatchObject({
+    expect(evidence?.actions.find((action) => action.key === "enter-query")).toMatchObject({
+      accessibleName: "Find a starting point",
+      semanticRole: "textbox",
+      enabled: true,
+      focusable: true,
+    });
+    expect(evidence?.actions.find((action) => action.key === "role-only-action")).toMatchObject({
       semanticRole: null,
     });
-    expect(evidence?.actions[2]).toMatchObject({
+    expect(evidence?.actions.find((action) => action.key === "disabled-action")).toMatchObject({
       enabled: false,
       focusable: false,
     });

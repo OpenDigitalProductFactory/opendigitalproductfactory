@@ -44,6 +44,7 @@ const contract: RatifiedPurposeContract = {
           key: "deploy-controls-history",
           role: "Technical controls, history, and diagnostics",
           trigger: "Deploy controls & history",
+          defaultExpandedInScenarios: [],
         },
       ],
     },
@@ -350,6 +351,80 @@ describe("evaluateRoutePurpose", () => {
       expect(result.blocking).toBe(false);
     });
   }
+
+  it("rejects a deferred region expanded outside an allowed scenario", () => {
+    const candidate = structuredClone(evidence);
+    candidate.disclosures[0].expanded = true;
+
+    const result = evaluateRoutePurpose({
+      contract,
+      oracle: {
+        routePath: "/ops/self-upgrade",
+        stateKey: "update-available",
+        oracleKey: "self-upgrade-status",
+        sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
+      },
+      evidence: candidate,
+      context,
+    });
+
+    expect(result.findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ checkId: "disclosure-contract" }),
+      ]),
+    );
+  });
+
+  it("allows a user-opened deferred region during post-interaction capture", () => {
+    const candidate = structuredClone(evidence);
+    candidate.disclosures[0].expanded = true;
+
+    const result = evaluateRoutePurpose({
+      contract,
+      oracle: {
+        routePath: "/ops/self-upgrade",
+        stateKey: "update-available",
+        oracleKey: "self-upgrade-status",
+        sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
+      },
+      evidence: candidate,
+      context,
+      disclosureCapture: "post-interaction",
+    });
+
+    expect(result.findings).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ checkId: "disclosure-contract" }),
+      ]),
+    );
+  });
+
+  it("accepts a named textbox as an operable primary command", () => {
+    const candidate = structuredClone(evidence);
+    candidate.actions[0] = {
+      ...candidate.actions[0],
+      semanticRole: "textbox",
+      accessibleName: "Find a starting point",
+    };
+
+    const result = evaluateRoutePurpose({
+      contract,
+      oracle: {
+        routePath: "/ops/self-upgrade",
+        stateKey: "update-available",
+        oracleKey: "self-upgrade-status",
+        sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
+      },
+      evidence: candidate,
+      context,
+    });
+
+    expect(result.findings).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ checkId: "primary-experience" }),
+      ]),
+    );
+  });
 
   it.each([
     ["accessible name", { accessibleName: "" }],

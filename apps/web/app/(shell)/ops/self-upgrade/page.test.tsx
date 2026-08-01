@@ -431,20 +431,43 @@ describe("SelfUpgradePage", () => {
 
   // BI-D77BF495: now that the trigger is co-located with the release status
   // card (not gated by this disclosure), the Advanced section holding only
-  // history/ledgers/logs can go back to the ordinary owner-first pattern —
-  // open in Full (operator) mode, collapsed by default in Simple (worker)
-  // mode — instead of being force-held open as the BI-D77BF495 stopgap.
-  it("collapses the Advanced (history/ledgers/logs) section by default in Simple nav mode", async () => {
+  // history/ledgers/logs follow one progressive-disclosure rule in both modes:
+  // collapsed during normal operation, opened only when failed recovery needs it.
+  it("collapses technical history by default in both navigation modes", async () => {
     vi.mocked(getSelfUpgradeStatus).mockResolvedValue(baseStatus);
     vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
 
     const fullHtml = renderToStaticMarkup(await SelfUpgradePage());
-    expect(fullHtml).toMatch(/<details[^>]*\sopen/);
+    expect(fullHtml).not.toMatch(/<details[^>]*\sopen/);
 
     mockCookieGet.mockReturnValue({ value: "worker" });
     const simpleHtml = renderToStaticMarkup(await SelfUpgradePage());
     expect(simpleHtml).not.toMatch(/<details[^>]*\sopen/);
     expect(simpleHtml).toContain('data-component="self-upgrade-advanced-toggle"');
+  });
+
+  it("opens technical recovery evidence for a failed run", async () => {
+    vi.mocked(getSelfUpgradeStatus).mockResolvedValue({
+      ...baseStatus,
+      latestRun: {
+        runId: "SUR-FAILED",
+        status: "failed",
+        trigger: "manual",
+        currentSha: "a".repeat(40),
+        targetSha: "b".repeat(40),
+        deployedSha: "a".repeat(40),
+        reason: "migration failed",
+        startedAt: new Date("2026-07-30T01:00:00.000Z"),
+        completedAt: new Date("2026-07-30T01:01:00.000Z"),
+        completionEvidence: null,
+        failureLog: "migration failed",
+        createdAt: new Date("2026-07-30T01:00:00.000Z"),
+      },
+    } as never);
+    vi.mocked(listSelfUpgradeRuns).mockResolvedValue({ runs: [], nextCursor: null });
+
+    const html = renderToStaticMarkup(await SelfUpgradePage());
+    expect(html).toMatch(/<details[^>]*\sopen/);
   });
 
   // The trigger's own primary/next-action markers and behavior live inside

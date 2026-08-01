@@ -154,7 +154,7 @@ describe("SelfUpgradeTriggerControl – enabled", () => {
       />,
     );
     expect(html).toContain('data-dpf-purpose-action-key="open-recovery-controls"');
-    expect(html).toContain(
+    expect(html).not.toContain(
       'data-dpf-purpose-completion-signal-key="recovery-controls-reachable"',
     );
     expect(html).toContain("#self-upgrade-latest-run");
@@ -175,7 +175,9 @@ describe("SelfUpgradeTriggerControl – enabled", () => {
 
   it("renders solid primary-button styling, not a faint text-xs ghost button (BI-D77BF495)", () => {
     const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
-    expect(html).toMatch(/aria-label="Upgrade now"[^>]*class="[^"]*bg-\[var\(--dpf-accent\)\][^"]*text-white/);
+    expect(html).toMatch(
+      /aria-label="Upgrade now"[^>]*class="[^"]*bg-\[var\(--dpf-accent\)\][^"]*text-\[var\(--dpf-on-accent,var\(--dpf-surface-1\)\)\]/,
+    );
   });
 
   it("gives the emergency override checkbox a 44px label target", () => {
@@ -214,6 +216,15 @@ describe("SelfUpgradeTriggerControl – running", () => {
     );
     expect(html).toContain('data-dpf-purpose-key="recovery-status"');
     expect(html).not.toContain('aria-label="Upgrade now"');
+  });
+
+  it("keeps the trigger unavailable while a run is completing", () => {
+    const html = renderToStaticMarkup(
+      <SelfUpgradeTriggerControl {...baseProps} latestRun={makeRun("completing")} />,
+    );
+    expect(html).toContain("Upgrade in progress");
+    expect(html).not.toContain('aria-label="Upgrade now"');
+    expect(html).not.toContain('data-dpf-purpose-action-key="start-upgrade"');
   });
 
   it("surfaces Force now / Abort controls when the portal is draining (BI-4F3B2FA9)", () => {
@@ -271,6 +282,7 @@ describe("SelfUpgradeTriggerControl – loading", () => {
     shared.isPending = true;
     const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
     expect(html).toContain("Upgrading...");
+    expect(html).toContain("dpf-spin");
     expect(html).not.toContain(">Upgrade now<");
   });
 
@@ -323,7 +335,8 @@ describe("SelfUpgradeTriggerControl – error feedback", () => {
     shared.triggerResult = { queued: false, reason: "disabled" };
     const html = renderToStaticMarkup(<SelfUpgradeTriggerControl {...baseProps} />);
     expect(html).toContain("Not queued:");
-    expect(html).toContain('role="status"');
+    expect(html).toContain('role="alert"');
+    expect(html).toContain('aria-live="assertive"');
     expect(html).toContain(
       'data-dpf-purpose-correction-signal-key="upgrade-request-error"',
     );

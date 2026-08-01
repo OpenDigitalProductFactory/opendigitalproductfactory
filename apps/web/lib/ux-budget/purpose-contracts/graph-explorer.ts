@@ -50,7 +50,7 @@ export const GRAPH_EXPLORER_PURPOSE_CONTRACTS: PurposeContractModule = [
           {
             key: "node-properties",
             role: "Raw property map for one node.",
-            trigger: "Operator clicks a node on the canvas.",
+            trigger: "Operator activates 'Raw properties' after inspecting a node.",
           },
         ],
       },
@@ -91,7 +91,8 @@ export const GRAPH_EXPLORER_PURPOSE_CONTRACTS: PurposeContractModule = [
         },
       },
       "no-starting-point": {
-        statePredicate: "The corpus is populated but the operator has not chosen a seed node.",
+        statePredicate:
+          "The corpus is populated but no loaded neighbourhood and inspected node are ready yet.",
         stateSource: {
           oracleKey: "route-owned-read-model",
           sourceRef: "apps/web/lib/graph/explorer-queries.ts#getGraphCensus",
@@ -99,7 +100,7 @@ export const GRAPH_EXPLORER_PURPOSE_CONTRACTS: PurposeContractModule = [
         essentialEvidenceKeys: ["corpus-census", "search-field"],
         primaryExperience: {
           kind: "command",
-          actionKey: "search-graph",
+          actionKey: "enter-graph-query",
         },
         prohibitedActionKeys: ["expand-from-here"],
         completionSignal: "Search results list at least one candidate starting point.",
@@ -120,8 +121,8 @@ export const GRAPH_EXPLORER_PURPOSE_CONTRACTS: PurposeContractModule = [
         },
         essentialEvidenceKeys: ["graph-canvas", "node-inspector"],
         primaryExperience: {
-          kind: "command",
-          actionKey: "expand-from-here",
+          kind: "informational",
+          messageKey: "graph-explorer.neighbourhood-ready",
         },
         prohibitedActionKeys: [],
         completionSignal:
