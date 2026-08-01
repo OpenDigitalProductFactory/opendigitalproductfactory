@@ -1278,7 +1278,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 37
+    "textMass": 27
   },
   "apps/web/app/(shell)/platform/ai/agent/[agentId]/page.tsx": {
     "vocabulary": 0,
@@ -6081,6 +6081,20 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 19
+  },
+  "apps/web/components/performance/BusinessPerformanceDashboard.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 112
+  },
+  "apps/web/components/performance/PerformanceTrendPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 38
   },
   "apps/web/components/platform/ActivityRoutingPresentation.tsx": {
     "vocabulary": 0,

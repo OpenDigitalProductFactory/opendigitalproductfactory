@@ -554,6 +554,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "business-metrics-aggregator",
+    inngestId: "business/metrics-aggregator",
+    name: "Business metrics aggregator",
+    purpose:
+      "Builds tenant-scoped owner/manager performance snapshots from canonical operational evidence. The Performance view stays fast and preserves its last valid snapshot when a refresh fails.",
+    cron: "17 * * * *",
+    cadence: "Hourly at :17",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "skill-curator",
     inngestId: "skills/curator",
     name: "Skill curator",
