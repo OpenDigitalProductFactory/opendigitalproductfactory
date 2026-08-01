@@ -15,6 +15,7 @@ import {
   type RetentionPrismaClient,
 } from "./policies";
 import { resolveEffectiveRetentionDays } from "./industry-floors";
+import { legalHoldExclusion } from "./legal-hold";
 import {
   RETENTION_BATCH_SIZE,
   RETENTION_PER_POLICY_CAP,
@@ -87,6 +88,9 @@ async function purgeByTimestamp(
   const baseWhere: Record<string, unknown> = {
     [policy.timestampField]: { lt: cutoff },
     ...(policy.extraWhere ?? {}),
+    // BI-90A8D153 GAP 2: never purge a row under legal hold. No-op for models
+    // without a legalHold column; excludes held rows on those that have one.
+    ...legalHoldExclusion(policy.model),
   };
 
   let deleted = 0;
@@ -122,6 +126,9 @@ async function countEligible(
     where: {
       [policy.timestampField]: { lt: cutoff },
       ...(policy.extraWhere ?? {}),
+      // BI-90A8D153 GAP 2: the dry-run count must match the real purge, so it
+      // excludes held rows on the same models the live path does.
+      ...legalHoldExclusion(policy.model),
     },
   });
   return { deleted: Math.min(count, cap), capped: count > cap };

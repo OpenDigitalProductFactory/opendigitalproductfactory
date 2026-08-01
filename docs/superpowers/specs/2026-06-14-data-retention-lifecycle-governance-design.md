@@ -131,6 +131,8 @@ catalog.ts (editable, run-now)   ·   ScheduledJob row (seed-platform-retention.
 
 A null/unknown industry safely falls back to base windows; regulated **records** remain protected regardless of industry. Industry strings are alias-normalized (`"financial"`, `"credit-union"`, … → `"banking-financial-services"`).
 
+**Row-level legal hold (BI-90A8D153 GAP 2).** Distinct from the table-level `RETAINED_DATASETS` above: a `legalHold` boolean on individual rows. The engine now honours it — a purge over any model carrying a `legalHold` column excludes held rows (`legalHold: { not: true }`, which spares only an explicit `true`; `false`/`null` stay purge-eligible). The held-model set (`apps/web/lib/operate/retention/legal-hold.ts`) is guarded against schema drift by `legal-hold.schema.test.ts`, which parses `schema.prisma` and fails if the set ever disagrees with the actual `legalHold` columns — so enrolling a new held model can never silently reintroduce the "held row purged" trap. Before this, `execute.ts` built its WHERE purely from the timestamp field + `extraWhere` and read none of the three existing `legalHold` columns; the trap was latent only because those models are not purge-enrolled. A full hold substrate (scope / custodian / matter / release workflow), the jurisdiction axis, and per-run disposition evidence are the remaining, separable parts of BI-90A8D153.
+
 ## 8. Safety properties
 
 1. **Backup-before-purge** — cron at `0 4 * * *`, strictly after the `0 3 * * *` backup crons.

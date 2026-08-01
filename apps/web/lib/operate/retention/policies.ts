@@ -358,6 +358,13 @@ export const PURGE_POLICIES: readonly PurgePolicy[] = [
 // posture is explicit and the guard test can assert no overlap with
 // PURGE_POLICIES. Deletion of these, when ever needed, is a deliberate,
 // separately-governed action (legal hold release), not a scheduled sweep.
+//
+// Row-level legal hold (distinct from these table-level retained datasets) is
+// now honoured by the engine: a purge over any model carrying a `legalHold`
+// column excludes held rows (see ./legal-hold.ts + execute.ts, BI-90A8D153
+// GAP 2). A full hold substrate (scope / custodian / matter / release) and the
+// jurisdiction axis + per-run disposition evidence are the remaining, separable
+// parts of that BI.
 
 export const RETAINED_DATASETS: readonly RetainedDataset[] = [
   // Financial records — IRS/SOX-style 7-year floor.

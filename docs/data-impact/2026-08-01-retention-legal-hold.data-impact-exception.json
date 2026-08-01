@@ -1,0 +1,9 @@
+{
+  "scope": "lifecycle:data-retention-sweep (apps/web/lib/operate/retention)",
+  "approver": "privacy-compliance-authority",
+  "rationale": "BI-90A8D153 GAP 2: this change makes the retention engine HONOUR legal hold before purging (legalHoldExclusion in execute.ts), closing a correctness trap where a held row on a purge-enrolled model would be deleted. The data-impact gate additionally requires per-run disposition EVIDENCE for a destructive path; that runtime artifact (GAP 3) does not yet exist and is out of scope for this urgent hold-check fix. This exception covers the disposition-evidence requirement only; the hold-check requirement is satisfied in-code, not waived.",
+  "compensatingControl": "The sweep now excludes legal-held rows (legalHold: { not: true }) on every model carrying a legalHold column, guarded against schema drift by legal-hold.schema.test.ts. It continues to persist the rolling per-run summary (counts by category, last 10 runs) on the ScheduledJob row. No purge-enrolled model carries a legalHold column today, so no held row is currently at risk; the enforcement is protective-by-construction for future enrollment.",
+  "expiry": "2026-11-01",
+  "remediationBI": "BI-F0F3887F",
+  "waives": ["disposition-evidence"]
+}
