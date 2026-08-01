@@ -161,6 +161,30 @@ describe("DetailsDrawer", () => {
     trigger.remove();
   });
 
+  it("uses the supplied fallback when the invoking control is removed before close", async () => {
+    const trigger = document.createElement("button");
+    const fallback = document.createElement("button");
+    document.body.append(trigger, fallback);
+    trigger.focus();
+
+    const { unmount } = render(
+      <DetailsDrawer
+        isOpen
+        onClose={vi.fn()}
+        sections={sampleSections()}
+        fallbackFocusRef={{ current: fallback }}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Brief / Design Doc" })).toHaveFocus();
+    });
+
+    trigger.remove();
+    unmount();
+    expect(fallback).toHaveFocus();
+    fallback.remove();
+  });
+
   it("renders an empty-state placeholder when sections is empty", () => {
     render(
       <DetailsDrawer isOpen onClose={vi.fn()} sections={[]} />,

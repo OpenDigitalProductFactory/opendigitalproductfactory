@@ -303,6 +303,7 @@ export function BuildStudio({
   // ─── Refetch deduplication: prevent triple-fetch from overlapping channels ─
   const lastFetchRef = useRef<number>(0);
   const fetchInFlightRef = useRef<boolean>(false);
+  const drawerFallbackFocusRef = useRef<HTMLButtonElement>(null);
   const [flowState, setFlowState] = useState<BuildFlowState | null>(null);
   const [progressVisibility, setProgressVisibility] = useState<BuildProgressVisibility | null>(null);
   const [codeGraphFreshness, setCodeGraphFreshness] = useState<CodeGraphFreshness | null>(null);
@@ -952,6 +953,7 @@ export function BuildStudio({
                 ) : null}
                 <div className="border-t border-[var(--dpf-border)] px-4 py-3">
                   <button
+                    ref={drawerFallbackFocusRef}
                     type="button"
                     onClick={toggleEngineerView}
                     aria-expanded={engineerView}
@@ -1072,6 +1074,7 @@ export function BuildStudio({
                   <DetailsDrawer
                     isOpen
                     onClose={() => setDrawerOpen(false)}
+                    fallbackFocusRef={drawerFallbackFocusRef}
                     sections={buildDetailsDrawerSections(
                       activeBuild,
                       progressVisibility,

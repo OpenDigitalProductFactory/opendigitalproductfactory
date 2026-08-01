@@ -15,6 +15,7 @@ describe("BusinessBriefPanel", () => {
   it("renders the business outcome before technical interpretation", () => {
     render(<BusinessBriefPanel brief={DEMO_BUSINESS_BRIEF} />);
 
+    expect(screen.getByRole("region", { name: DEMO_BUSINESS_BRIEF.title })).toBeInTheDocument();
     const outcome = screen.getByText(/business outcome/i);
     const technical = screen.getByText(/how dpf will likely build this/i);
 

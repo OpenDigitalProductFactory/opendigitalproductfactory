@@ -1,7 +1,7 @@
 "use client";
 import { AlertCircle, CheckCircle2, FileText, Pencil, Save, Target, Users } from "lucide-react";
 import type { ReactNode } from "react";
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { updateBusinessBuildBrief } from "@/lib/actions/build";
 import type {
   BusinessBriefEvidence,
@@ -161,6 +161,7 @@ export function BusinessBriefPanel(props: Props) {
 }
 
 function BusinessBriefPanelContent({ brief, onSaved }: Props) {
+  const headingId = useId();
   const needsClarification = brief.openQuestions.length > 0;
   const [isEditing, setIsEditing] = useState(Boolean(brief.briefId));
   const [isPending, startTransition] = useTransition();
@@ -204,7 +205,11 @@ function BusinessBriefPanelContent({ brief, onSaved }: Props) {
   }
 
   return (
-    <div className="h-full overflow-auto bg-[var(--dpf-bg)] text-[var(--dpf-text)]">
+    <div
+      role="region"
+      aria-labelledby={headingId}
+      className="h-full overflow-auto bg-[var(--dpf-bg)] text-[var(--dpf-text)]"
+    >
       <header className="border-b border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-5 py-4">
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <Pill>{brief.capabilityPack}</Pill>
@@ -224,7 +229,7 @@ function BusinessBriefPanelContent({ brief, onSaved }: Props) {
             {needsClarification ? "Needs clarification" : "Ready for interpretation"}
           </span>
         </div>
-        <h2 className="m-0 text-[17px] font-bold tracking-normal text-[var(--dpf-text)]">
+        <h2 id={headingId} className="m-0 text-[17px] font-bold tracking-normal text-[var(--dpf-text)]">
           {brief.title}
         </h2>
         {brief.briefId && (
