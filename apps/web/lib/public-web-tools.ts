@@ -1,3 +1,5 @@
+import { PUBLIC_WEB_ARCHETYPE_CATALOG } from "./public-web-archetype-catalog";
+
 type BraveSearchApiResult = {
   web?: {
     results?: Array<{
@@ -496,8 +498,6 @@ function extractColorCandidates(html: string): string[] {
  * Keyword catalog: maps archetype slug → display name + keywords to match in page text/title/description.
  * Ordered so more specific archetypes appear before generic ones.
  */
-const ARCHETYPE_CATALOG = PUBLIC_WEB_ARCHETYPE_CATALOG;
-
 type ArchetypeMatch = { id: string; name: string; score: number };
 
 /** Detect business archetype from concatenated page text using keyword scoring. */
@@ -505,7 +505,7 @@ export function detectArchetype(text: string): { id: string; name: string; confi
   const lower = text.toLowerCase();
   const scored: ArchetypeMatch[] = [];
 
-  for (const entry of ARCHETYPE_CATALOG) {
+  for (const entry of PUBLIC_WEB_ARCHETYPE_CATALOG) {
     let score = 0;
     for (const kw of entry.keywords) {
       if (lower.includes(kw)) score++;
@@ -701,7 +701,9 @@ export const ARCHETYPE_TO_INDUSTRY: Record<string, string> = {
   "nonprofit": "nonprofit-community",
 };
 
-for (const { id, category } of ARCHETYPE_CATALOG) if (category) ARCHETYPE_TO_INDUSTRY[id] ??= category;
+for (const { id, category } of PUBLIC_WEB_ARCHETYPE_CATALOG) {
+  if (category) ARCHETYPE_TO_INDUSTRY[id] ??= category;
+}
 
 /** Maps ISO 3166-1 alpha-2 country code → primary IANA timezone. */
 // Canonical home is @/lib/timezone-from-location (dependency-light, importable
@@ -748,4 +750,3 @@ export function analyzePublicWebsiteBranding(
     suggestedContactPhone: evidence.contactPhoneCandidates[0] ?? null,
   };
 }
-import { PUBLIC_WEB_ARCHETYPE_CATALOG } from "./public-web-archetype-catalog";
