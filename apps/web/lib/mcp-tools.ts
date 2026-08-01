@@ -1133,7 +1133,29 @@ export async function executeTool(
           },
         };
       })();
-      const review = architectureAdvisory ? { ...reviewWithIteration, architectureAdvisory } : reviewWithIteration;
+      let review = architectureAdvisory ? { ...reviewWithIteration, architectureAdvisory } : reviewWithIteration;
+      // A3 (BI-D506598C): governed Data Architect consultation, flag-gated
+      // default-off. Unlike the anonymous `architect` routeAndCall above, this is
+      // attributed to the real AGT-BUILD-DA Agent and informed by its profession
+      // corpus (BI-B31072B8) — actor trail, not just artifact trail. Advisory
+      // only; never gates. Strict no-op when the flag is off (skipped=true).
+      try {
+        const { runGovernedDaConsultationViaRouteAndCall } = await import(
+          "@/lib/integrate/governed-data-architect-consultation"
+        );
+        const daAdvisory = await runGovernedDaConsultationViaRouteAndCall({
+          doc: typeof build.designDoc === "string" ? build.designDoc : JSON.stringify(designDocTyped),
+          db: prisma,
+          transport: (messages, systemPrompt) =>
+            routeAndCall(messages, systemPrompt, "internal", { budgetClass: "minimize_cost" }),
+        });
+        if (!daAdvisory.skipped && daAdvisory.findings.length > 0) {
+          review = Object.assign({}, review, { dataArchitectureAdvisory: daAdvisory }) as typeof review;
+          logBuildActivity(buildId, "reviewDesignDoc", `Data Architect consultation (advisory, ${daAdvisory.agentId}): ${daAdvisory.findings.length} finding(s).`);
+        }
+      } catch (e) {
+        console.warn("[reviewDesignDoc] governed DA consultation failed (fail-open):", e);
+      }
       const archAdvisoryNote = architectureAdvisory && architectureAdvisory.issues.length > 0
         ? ` Architecture review (advisory): ${architectureAdvisory.summary} Fold actionable items into the design before building — they do not block this gate.`
         : "";
