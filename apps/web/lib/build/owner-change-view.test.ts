@@ -189,4 +189,35 @@ describe("projectOwnerChangeView", () => {
       pendingDecisionId: "DI-OWNER-1",
     });
   });
+
+  it.each([
+    ["ideate", "Understanding the outcome", "working"],
+    ["plan", "Shaping the approach", "working"],
+    ["build", "Building the change", "working"],
+    ["review", "Checking the work", "working"],
+    ["ship", "Ready for a release decision", "ready"],
+    ["complete", "Live", "live"],
+    ["failed", "Blocked by a problem", "blocked"],
+    ["abandoned", "Work stopped", "blocked"],
+  ] as const)("maps the %s lifecycle to owner status and health", (phase, now, health) => {
+    const view = projectOwnerChangeView({ build: build({ phase }) });
+
+    expect(view.now).toBe(now);
+    expect(view.health).toBe(health);
+  });
+
+  it("prioritizes an owner decision over an otherwise active lifecycle", () => {
+    const view = projectOwnerChangeView({
+      build: build({ phase: "build" }),
+      status: {
+        lifecyclePosition: "Waiting for your decision",
+        nextAction: "Choose the preferred approach.",
+        needsYou: true,
+      },
+    });
+
+    expect(view.health).toBe("needs-you");
+    expect(view.now).toBe("Waiting for your decision");
+    expect(view.next).toBe("Choose the preferred approach.");
+  });
 });
