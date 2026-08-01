@@ -14,6 +14,7 @@ import { runAgenticLoop, type AgenticResult } from "@/lib/agentic-loop";
 import { agentEventBus, type AgentEvent } from "@/lib/agent-event-bus";
 import { getAvailableTools, toolsToOpenAIFormat } from "@/lib/mcp-tools";
 import { getBuildContextSection } from "@/lib/integrate/build-agent-prompts";
+import { appendGovernedSpecialistCorpus } from "@/lib/integrate/build-specialist-corpus";
 import {
   buildDependencyGraph,
   type AssignedTask,
@@ -941,12 +942,15 @@ async function dispatchSpecialist(params: {
   const scopedTools = allTools.filter(t => allowedToolNames.has(t.name));
   const toolsForProvider = toolsToOpenAIFormat(scopedTools);
 
-  const systemPrompt = await buildSpecialistPrompt({
+  const baseSystemPrompt = await buildSpecialistPrompt({
     role,
     taskDescription: `Task: ${task.title}\n\nFiles to work on:\n${(task.files ?? []).map(f => `- ${f.path} (${f.action}): ${f.purpose}`).join("\n") || "See task description for details."}`,
     buildContext,
     priorResults,
   });
+  // A1 (BI-C654F960) Phase 2a: govern the inline path — append the real
+  // specialist Agent's corpus (BI-B31072B8). Flag-gated default-off (no-op).
+  const { prompt: systemPrompt } = await appendGovernedSpecialistCorpus(baseSystemPrompt, { role, agentId, query: task.title });
 
   let lastResult: AgenticResult | null = null;
   let retries = 0;
