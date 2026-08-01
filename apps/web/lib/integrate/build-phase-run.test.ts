@@ -17,6 +17,22 @@ vi.mock("@/lib/self-upgrade/quiescence", () => ({
   },
 }));
 
+// completeBuildPhaseRun fires the Ring 1→2 / Ring 2→3 gear emitters
+// fire-and-forget (`void emit(...).catch(...)`). Left real, they run against
+// this file's deliberately-narrow @dpf/db mock (no featureBuild model), reject,
+// and log "[gear-interface] … emit failed" via their .catch AFTER the test has
+// already resolved. That late console.warn leaves an onUserConsoleLog RPC
+// pending at worker teardown — the intermittent EnvironmentTeardownError that
+// fails the shard with 0 failed tests + exit 1 (same hazard build-governed.test
+// documents for autoExecuteBuild). Mocking the emitters to no-ops keeps the
+// fire-and-forget a clean resolved promise; the emitters have their own tests.
+vi.mock("@/lib/gear-interface/emit-ring-1-2", () => ({
+  emitRing12FromCompletedPhase: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/lib/gear-interface/emit-ring-2-3", () => ({
+  emitRing23FromCompletedShip: vi.fn().mockResolvedValue(undefined),
+}));
+
 // ── Mock Prisma ──────────────────────────────────────────────────────────────
 const phaseRuns = new Map<string, Record<string, unknown>>();
 
