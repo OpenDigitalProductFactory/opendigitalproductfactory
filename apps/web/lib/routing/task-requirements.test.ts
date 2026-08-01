@@ -81,4 +81,24 @@ describe("getTaskRequirement", () => {
     expect(result?.minimumTier).toBe("strong");
     expect(result?.description).toBe("Custom greeting from DB");
   });
+
+  it("retains the built-in tier when a persisted row cannot store it", async () => {
+    mockPrisma.taskRequirement.findUnique.mockResolvedValueOnce({
+      taskType: "creative",
+      description: "Persisted creative work",
+      selectionRationale: "Configured before tier persistence existed",
+      requiredCapabilities: {},
+      preferredMinScores: { conversational: 60, reasoning: 50 },
+      preferCheap: false,
+      origin: "system",
+    });
+    const { getTaskRequirement: get } = await import("./task-requirements");
+
+    const result = await get("creative");
+
+    expect(result).toMatchObject({
+      description: "Persisted creative work",
+      minimumTier: "strong",
+    });
+  });
 });

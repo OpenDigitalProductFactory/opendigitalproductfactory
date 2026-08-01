@@ -99,6 +99,20 @@ describe("coworker service catalog seed data", () => {
     expect(customerAdvisor?.archetypes).toEqual([]);
   });
 
+  it("probes Marketing campaign planning as creative work with tools", () => {
+    const marketing = COWORKER_SERVICE_CATALOG_SERVICE_SEEDS.find(
+      (service) => service.serviceId === "svc-marketing-campaign-execution",
+    );
+    const readinessProbe = record(record(marketing?.metadata).readinessProbe);
+
+    expect(readinessProbe).toEqual({
+      taskType: "creative",
+      prompt:
+        "Create a draft marketing campaign for a restaurant promotion using the campaign tools.",
+      requiresToolUse: true,
+    });
+  });
+
   it("includes verified GAID authority metadata for public A2A offers", () => {
     const externalOffers = COWORKER_SERVICE_CATALOG_OFFER_SEEDS.filter(
       (offer) => offer.availabilityScope === "external",
@@ -176,6 +190,29 @@ describe("coworker service catalog seed data", () => {
       );
       expect(args["update"]).not.toHaveProperty("archetypes");
     }
+    const marketingUpsert = serviceUpserts.find(
+      (args) =>
+        (args["where"] as { serviceId?: string } | undefined)?.serviceId ===
+        "svc-marketing-campaign-execution",
+    );
+    expect(marketingUpsert?.["create"]).toHaveProperty(
+      "metadata.readinessProbe",
+      {
+        taskType: "creative",
+        prompt:
+          "Create a draft marketing campaign for a restaurant promotion using the campaign tools.",
+        requiresToolUse: true,
+      },
+    );
+    expect(marketingUpsert?.["update"]).toHaveProperty(
+      "metadata.readinessProbe",
+      {
+        taskType: "creative",
+        prompt:
+          "Create a draft marketing campaign for a restaurant promotion using the campaign tools.",
+        requiresToolUse: true,
+      },
+    );
     // BI-74FD6420 seed-FK contract: providerAgentId stays the slug agentId
     // (build-specialist), NOT the dual-seed AGT-* twin. Collapsing to AGT-*
     // here breaks CoworkerService_providerAgentId_fkey when slug rows are the

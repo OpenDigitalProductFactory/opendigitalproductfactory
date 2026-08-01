@@ -230,7 +230,7 @@ export const COWORKER_SERVICE_CATALOG_SERVICE_SEEDS: readonly CoworkerServiceSee
       aggregate: true,
       family: "marketing-execution",
       readinessProbe: {
-        taskType: "tool-action",
+        taskType: "creative",
         prompt:
           "Create a draft marketing campaign for a restaurant promotion using the campaign tools.",
         requiresToolUse: true,
