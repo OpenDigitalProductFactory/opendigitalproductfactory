@@ -1,5 +1,12 @@
 # BIAN-Grounded Banking Archetypes Design
 
+> **Authority notice (2026-08-01):** This historical design records earlier BIAN and CSDM
+> research lineage. The locally tracked joint discussion paper is not current normative or
+> AI evidence until its source-use decision is completed (`GAP-SOURCE-001`). Use the
+> rights-cleared BIAN data contract for observed implementation inputs and the
+> [Four-Portfolio Archetype and AI Workforce Operating Standard](../../architecture/four-portfolio-archetype-ai-workforce-operating-standard.md)
+> for target semantics and source-use controls.
+
 - **Status:** Draft for review (enterprise-architecture review pass applied 2026-06-09; substrate claims verified against `origin/main` @ 240b528f3)
 - **Author:** Claude (directed by maintainer: "incorporate BIAN for the banking archetypes")
 - **Date:** 2026-06-09

@@ -1,28 +1,31 @@
 ---
+sourceKey: frameworks/csdm
 sourceType: framework
 title: "Common Service Data Model (CSDM)"
 authors:
   - ServiceNow
-url: https://www.servicenow.com/csdm
-license: third-party
+url: https://www.servicenow.com/docs/r/servicenow-platform/common-service-data-model-csdm/csdm-conceptual-model.html
+authorshipModel: pointer-only
+license: proprietary
+redistributable: false
+sourceCitation: SCIT-SNOW-CSDM-RESOURCES
 abstract: |
-  ServiceNow's Common Service Data Model — the unified data spine connecting
-  Asset, Dev, Ops, ITSM, and CSM. Originated to solve the technical-debt
-  reporting problem that didn't have a single source of truth. Mark's framing:
-  "The vision was to create a common model that connects what naturally
-  happens. CSDM was born." Currently at v5. ServiceNow product documentation;
-  abstract + locator per RAW-SOURCES-LICENSE.md.
+  Pointer to ServiceNow's current Australia-release "CSDM data domains"
+  documentation. DPF uses the canonical locator only to identify an external
+  implementation-profile research target. Vendor publication expression is not
+  content in this source note.
 ---
 
 ## Why it's cited
 
-Backs the **trust the CMDB or rebuild it** stance and the **model what naturally happens** heuristic. The "shared data foundation" position rests on CSDM as the substrate that makes Digital Product, Portfolio, and Service-Now-the-platform self-consistent.
+The index is a starting point for a future authorized implementation mapping. DPF's current product,
+service, deployment, and runtime distinctions are independently expressed in FPAW.
 
-## Key claims
+## Rights boundary
 
-- Connect what naturally happens across asset/dev/ops/ITSM/CSM — don't aggregate into a data lake.
-- The CMDB is only useful if it's trusted; trust is built via Ingestion + Insight + Governance.
-- CSDM is the canonical model; everything else is a projection.
+This is a pointer-only note under `SCIT-SNOW-CSDM-RESOURCES`. Mark's bounded provenance statement
+is recorded separately by `CA-MB-2026-08-01-CSDM-PROVENANCE` and does not authorize ServiceNow
+content.
 
 ## See also
 

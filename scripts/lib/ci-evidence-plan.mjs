@@ -169,6 +169,7 @@ export function createEvidencePlan(input) {
     production: compilePatterns(policy.patterns.production),
     mobile: compilePatterns(policy.patterns.mobile),
     mobileOnly: compilePatterns(policy.patterns.mobileOnly),
+    workspaceRequiredDocs: compilePatterns(policy.patterns.workspaceRequiredDocs),
   };
   const riskRules = policy.riskRules.map((rule) => ({
     code: rule.code,
@@ -177,9 +178,14 @@ export function createEvidencePlan(input) {
   const kinds = new Map(changedFiles.map((path) => [path, classifyPath(path, compiled)]));
   const productionFiles = changedFiles.filter((path) => kinds.get(path) === "production");
   const changedTests = changedFiles.filter((path) => kinds.get(path) === "test");
-  const docsOnly = changedFiles.length > 0
+  const workspaceRequired = changedFiles.some((path) => (
+    matchesAny(path, compiled.workspaceRequiredDocs)
+  ));
+  const docsOnly = !workspaceRequired
+    && changedFiles.length > 0
     && changedFiles.every((path) => kinds.get(path) === "docs");
-  const mobileOnly = !docsOnly
+  const mobileOnly = !workspaceRequired
+    && !docsOnly
     && changedFiles.length > 0
     && changedFiles.every((path) => (
       kinds.get(path) === "docs" || matchesAny(path, compiled.mobileOnly)

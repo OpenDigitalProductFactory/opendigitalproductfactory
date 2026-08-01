@@ -1,0 +1,2579 @@
+# Four-Portfolio Archetype and AI Workforce Operating Standard
+
+**Identifier:** `DPF-FPAW`
+**Version:** Candidate 0.1.0
+**Status:** DPF normative candidate; not an adopted Open Group, ISO, OMG, NIST, or ServiceNow standard
+**Normative owner:** DPF Standards Steward, a human role designated by the platform maintainer
+**Design sponsor and bounded direct-source contributor attestor:** Mark Bodman
+**Owned concerns:** enterprise value, portfolio placement, operating-flow, work-allocation, and
+cross-standard traceability semantics
+**Companion:** [Archetype Profile Catalog](four-portfolio-archetype-standard-profile-catalog.md)
+
+IT4IT™ is a trademark of The Open Group. This document uses the mark only for accurate editorial
+reference to the IT4IT Reference Architecture; no affiliation, endorsement, certification, or
+trademark license is claimed.
+
+## Abstract
+
+This standard defines an enterprise operating-model bridge between:
+
+- the operator-contributed four portfolio roles and Mark Bodman's direct design direction, with
+  bibliographic lineage references to The Open Group IT4IT™ Reference Architecture, Version 3,
+  *The Shift to Digital Product* (`W205`), and Digital Product Portfolio Management (`G252`),
+  under the source-use controls in Section 13.1.1
+- DPF's DigitalProduct lifecycle architecture, with the IT4IT Reference Architecture, Version 3, as
+  a high-level public reference target
+- the goods, services, experiences, access products, and public services/benefits an organization actually
+  provides
+- the industry operational value streams that create those outcomes
+- human employees, contractors, partners, AI coworkers, automated systems, and robots that perform
+  work
+- the digital and physical resources, controls, and evidence required to perform that work safely
+  and accountably
+
+The IT4IT Reference Architecture is intentionally centered on managing the business of IT and the
+lifecycle of DigitalProducts.
+That scope remains valuable and unchanged. This standard adds the missing business-operating context
+around it. A veterinary clinic, bank, municipality, warehouse, builder, restaurant, or salon does not
+sell only DigitalProducts, even when its work is deeply digitally enabled. The organization's business
+products and value streams therefore remain first-class and link to the IT4IT Reference Architecture only where a DigitalProduct
+constitutes, enables, operates, governs, or depends on part of that value creation.
+
+An AI coworker is a particularly important bridge. It is simultaneously:
+
+1. a managed DigitalProduct with a strategy, design, build/acquire, release, deployment, operation,
+   assurance, improvement, and retirement lifecycle; and
+2. an identity-bearing performer that contributes capacity and work under a job qualification,
+   delegated authority, oversight, and evidence contract.
+
+Those aspects are linked, not duplicated. The digital-product record does not become an employee,
+and the agent identity does not replace product lifecycle management.
+
+## 1. Status, scope, and normative language
+
+### 1.1 Status
+
+`DPF-FPAW` is an independently expressed DPF candidate intended to become suitable contribution material for a
+profile or extension of the IT4IT Reference Architecture. It is not an assertion that The Open Group or any other cited body has
+reviewed, adopted, endorsed, or certified it.
+
+Contributor provenance is material design evidence, but it does not turn DPF expression into Open
+Group Material or make acknowledgement credit a license to a collective publication. Section 13.1.1
+keeps contributor-supplied source material, published standards, attribution, trademark use, and
+external conformance as separate decisions.
+
+The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** indicate requirement
+strength in the sense of [BCP 14](https://www.rfc-editor.org/info/bcp14) when, and only when, they
+appear in bold capitals.
+
+### 1.2 In scope
+
+This standard specifies:
+
+- an original enterprise operating-model metamodel
+- four-portfolio placement and dependency rules
+- business Product, Offering, DigitalProduct, and service boundaries
+- operational value-stream and stage contracts across industries
+- activity, job, role, skill, performer, allocation, capacity, and physical-work semantics
+- human-AI-robot-partner augmentation and substitution patterns
+- the dual DigitalProduct/performer treatment of an AI coworker
+- composition of shared, category, leaf-archetype, organization, and jurisdiction profiles
+- mapping to the IT4IT Reference Architecture, CSDM, architecture/workflow, AI-governance,
+  workforce, physical-operation, and
+  industry standards
+- conformance claims, evidence, and minute-detail gap analysis
+
+### 1.3 Out of scope
+
+This standard does not:
+
+- redefine the seven IT4IT Reference Architecture v3 value streams, functional components, data objects, or licensed
+  conformance criteria
+- define a universal ontology of every occupation; TAK-JSI and referenced occupation sources own
+  job-qualification inputs
+- define live agent authorization, global agent identity, or job qualification; TAK, GAID, and
+  TAK-JSI own those subjects
+- replace BPMN, CMMN, DMN, ArchiMate, BACM, VDML, ISA-95, GS1, or industry transaction standards
+- require every business product, task, facility, asset, or person to be represented as a
+  DigitalProduct
+- prescribe one database schema, product platform, model provider, process engine, or CMDB
+- imply that a mapped or derived result is an external certification
+
+## 2. Design goals and invariants
+
+The standard exists to make the following questions answerable from one traceable model:
+
+1. What value does the organization promise, to whom, and through which business Product or Offer?
+2. Which portfolio owns each governed aspect and which other portfolios does it depend on?
+3. Through which industry-recognizable value stream and stages is the outcome created?
+4. Which capabilities and work units realize each stage?
+5. Which human, AI, robot, automated, or partner performers may do that work, under which job,
+   skill, authority, supervision, and evidence conditions?
+6. Which DigitalProducts and physical resources enable the work, and where do their separate
+   lifecycles connect?
+7. What actually happened, did it achieve the intended outcome, and what gaps remain?
+
+The following invariants apply throughout:
+
+- **Portfolio role is not item type.** A portfolio says why an aspect is funded and governed; it
+  does not turn every member into a DigitalProduct.
+- **Business Product is not DigitalProduct.** A business Product may be physical, digital, service,
+  experience, access, entitlement, public benefit, or hybrid.
+- **Value stream is not process.** A value stream describes value-state transitions; processes,
+  cases, decisions, and physical tasks realize those transitions.
+- **Capability is not skill.** A capability belongs to an organization; a skill or competence is
+  demonstrated by a performer in a context.
+- **Job is not incumbent.** A job bundles outcomes and accountabilities; a person or AI coworker is
+  one possible performer.
+- **Role is not performer.** A role is contextual responsibility; a performer is an identity-bearing
+  subject eligible for an assignment.
+- **Digital command is not physical completion.** Appropriate physical, human, sensor, custody, or
+  transaction evidence is required.
+- **Capability is not authority.** A model, human, partner, or robot may be able to act without being
+  permitted or qualified to do so.
+- **Evidence is not certification.** A local mapping or assessment states only what its declared
+  method and verifier support.
+- **One concern, one authority.** The standard links existing canonical records; it does not create
+  a second home for commerce, the IT4IT Reference Architecture, agent identity, runtime policy, job qualification, or archetypes.
+
+## 3. Standards position and ownership
+
+### 3.1 The bridge in one view
+
+```mermaid
+flowchart LR
+    A["Business outcome and business Product"] --> B["Industry operational value stream"]
+    B --> C["Stage, capability, and work system"]
+    C --> D["Human / AI / robot / partner allocation"]
+    C --> E["Digital and physical realization"]
+    E --> F["DigitalProduct lifecycle under the IT4IT Reference Architecture"]
+    D --> G["GAID identity + TAK-JSI qualification + TAK authority"]
+    C --> H["Controls, measures, and evidence"]
+    F --> H
+    G --> H
+    H --> I["Conformance gaps and portfolio backlog"]
+```
+
+The diagram is a textual summary, not a new record hierarchy. It shows that the IT4IT Reference Architecture and the agent
+standards family join the business operating model at different, explicit seams.
+
+### 3.2 Canonical ownership map
+
+| Concern | Normative or canonical owner | `DPF-FPAW` relationship |
+|---|---|---|
+| Business Product, Offer, catalog, and sale truth | DPF commercial catalog | References; does not redefine transaction truth |
+| DigitalProduct lifecycle | DPF `DigitalProduct`/`ServiceOffering`; the IT4IT Reference Architecture is an external reference target and separately authorized assessment authority | Profiles and maps explicit digital touchpoints without asserting external conformance |
+| Four portfolio roots | Mark Bodman's contributor-attested design direction plus DPF portfolio registry; published G252 expression remains separately governed | Generalizes governed membership across business and workforce aspects |
+| Operational value creation | This standard plus archetype profile catalog | Defines value-flow, stage, work, and evidence contracts |
+| Enterprise architecture view | ArchiMate and DPF EA substrate | Projects views; does not replace the source metamodel |
+| Processes, cases, and decisions | BPMN, CMMN, DMN or equivalent | References execution semantics |
+| AI coworker identity and claims | GAID | Requires a stable identity reference |
+| AI job qualification | TAK-JSI | Requires a current scoped qualification when applicable |
+| AI runtime authority and evidence | TAK | Requires execution-time enforcement and receipts |
+| Profession doctrine | WSID or equivalent | References versioned craft and decision doctrine |
+| Archetype inventory | `ALL_ARCHETYPES` in storefront templates | Profiles are derived/checkable; they do not own the catalog |
+| Work/backlog status | Existing domain work records and `BacklogItem` | Links; never duplicates work status inside a gap |
+
+### 3.3 Relationship vocabulary
+
+Cross-standard mappings **MUST** use one of these relationships:
+
+| Relationship | Meaning |
+|---|---|
+| `adopts` | Uses an external artifact directly for the concern it already defines |
+| `profiles` | Narrows or composes an external artifact without changing its core semantics |
+| `augments` | Adds a missing relationship or control outside the external artifact's scope |
+| `maps-to` | Declares a correspondence without asserting semantic identity or conformance |
+| `adjacent` | Addresses a related layer and remains independently governed |
+| `out-of-scope` | Must remain with the cited authority and is not redefined here |
+
+Concept mappings **SHOULD** additionally use the SKOS-style relations `exact`, `close`, `broad`,
+`narrow`, or `related`, with rationale, source and target versions, confidence, reviewer, and date.
+An `exact` mapping **MUST NOT** be used merely because two labels look alike.
+
+## 4. Resolution model and trace spine
+
+`DPF-FPAW` uses six resolution levels. They provide a degree of specificity comparable to the
+IT4IT Reference Architecture without copying that architecture's metamodel.
+
+| Level | View | Required content |
+|---|---|---|
+| `R0` Enterprise context | Why and for whom | Organization, mission, stakeholders, ecosystem, objectives, jurisdictions, external obligations |
+| `R1` Portfolio landscape | What is governed and funded | Four roots, product lines, primary placements, dependencies, owners, current and target posture |
+| `R2` Value flow | How stakeholder value changes | Operational value streams, stages, triggers, incoming/outgoing value states, handoffs, variants, capabilities |
+| `R3` Work system | Who/what performs the flow | Work units, jobs, roles, skills, allocation patterns, authority, physical/digital resources, controls, exceptions |
+| `R4` Implementation bindings | Which mechanisms realize it | DPF records, applications, DigitalProducts, services, facilities, partners, interfaces, external-standard mappings |
+| `R5` Operational evidence | What happened and whether it worked | Occurrences, decisions, queues, capacity, custody, actions, outcomes, metrics, evidence, incidents, conformance, gaps |
+
+Every refinement **MUST** trace upward. An `R3`–`R5` object without an `R0`–`R2` purpose is orphaned;
+an `R0`–`R2` promise without an `R3`–`R5` realization is unsubstantiated.
+
+The complete trace spine is:
+
+```text
+Organization
+  → objective / outcome
+  → business Product / Offering
+  → operational value stream
+  → stage
+  → capability
+  → operating flow / work unit
+  → allocation
+  → performer + job/role + skill/qualification
+  → digital/physical/information resource
+  → authority/control
+  → evidence/measure/incident
+  → conformance finding/gap
+  → primary portfolio and canonical backlog work
+```
+
+An implementation **MAY** materialize this as relations, projections, resolvable references, or an
+exchange graph. It **MUST NOT** infer a missing semantic link solely from a matching name.
+
+### 4.1 Applicability and consequence predicates
+
+Terms that gate requirements are governed data, not discretionary prose:
+
+| Predicate/axis | Controlled values | Decision rule |
+|---|---|---|
+| applicability | `applicable`, `not-applicable`, `undetermined` | `not-applicable` requires source, scope-specific rationale, evidence, reviewer, and review date; `undetermined` cannot satisfy an applicable **MUST** |
+| consequence class | `ordinary`, `material`, `consequential`, `safety-critical`, `unknown` | select the highest triggered class; `unknown` cannot be used to bypass a control |
+| load-bearing | `true`, `false`, `undetermined` | true when omission or failure prevents Stage acceptance, breaches a commitment/control, or materially degrades an Outcome |
+
+`material` means a change or work item crosses a profile-declared threshold for stakeholder outcome,
+law/rights, safety, financial exposure, privacy/security, service commitment, identity/authority,
+capacity, or reversibility. `consequential` means it can commit funds or obligations, determine rights
+or eligibility, affect health/safety, alter an authoritative record, disclose protected data, control
+physical equipment, or cause a difficult-to-reverse state change. A profile **MUST** publish its
+thresholds and source authority. When classification is disputed or evidence is missing, the record
+remains `undetermined` or `unknown`, the related requirement is `not-assessed`, and a Gap is opened.
+
+## 5. Original conceptual metamodel
+
+The concepts below are logical contracts. They do not imply one new database table per row.
+
+| Concept | Definition | Minimum identifying attributes |
+|---|---|---|
+| `Organization` | Legal or operating authority that owns objectives, products, portfolios, accountability, and evidence | stable ID, legal/operating scope, owner, effective period |
+| `Principal` | Enduring, issuer- or resolver-recognized identity anchor for an organization, natural person, governed team, GAID AgentSubject, deterministic automation, or authorized robot; distinct from every contextual role, job, performer projection, assignment, and runtime instance | stable ID, `principalKind`, authoritative namespace/resolver, issuer or owning authority, organization relationship, status, effective period |
+| `Stakeholder` | Person, group, organization, community, animal/patient proxy, or public beneficiary affected by value or risk | stable ID/class, relationship, needs, affected-party status |
+| `Objective` | Governed intent or target the Organization chooses to pursue; distinct from observed achievement | ID/version, statement, owner, measures/targets, effective period, source |
+| `Outcome` | Measurable change intended for a stakeholder or the organization | ID/version, statement, beneficiary, measure, target, acceptance rule, time horizon |
+| `OutcomeObservation` | Append-only observation about progress toward or achievement of an intended Outcome; it is evidence, not the intended state itself | ID, Outcome reference, observed value/state, time, method, provenance, confidence, verifier |
+| `PortfolioDefinition` | Stable meaning and governance rule for a portfolio root | key, name, placement rule, allowed aspects, owner, version |
+| `Portfolio` | Managed, effective-dated collection of item references under one definition | ID, definition, scope, owner, objectives, period |
+| `AspectKindDefinition` | Versioned registry entry that makes a GovernedAspect concern computable and prevents arbitrary sibling labels | kind key/version, permitted canonical target kinds, owning concern, boundary predicate, incompatible/overlap rules, lifecycle and merge policy, owner, effective period |
+| `GovernedAspect` | Stable, versioned projection of one canonical target for one non-overlapping concern, lifecycle, and accountability boundary; it prevents arbitrary labels from evading exact-one placement | aspect ID/version, canonical target ID/type, aspect kind, owning concern, boundary/non-overlap rule, owner, sibling relations, effective period, merge/supersession history |
+| `PortfolioItemReference` | Placement of a GovernedAspect, not a duplicate business object or an invented aspect label | aspect ID/version, canonical target reference, primary root, rationale, evidence, period |
+| `BusinessProduct` | Good, service, experience, access right, entitlement, public service/benefit, or hybrid offered to a beneficiary | ID, type/form, owner, value proposition, lifecycle |
+| `ServiceDefinition` | Stable description of a capability or outcome supplied to consumers; distinct from a BusinessProduct whose form is service, the terms of an Offering, and any runtime/service instance | ID/version, outcome/capability, provider, consumers, commitments, realization links |
+| `CoworkerService` | Specialized ServiceDefinition for governed work outcomes supplied through one or more coworker Products/Performers; distinct from its offer, accepted engagement, assignment, and runtime instance | ID/version, outcome/activity scope, provider, eligible consumers, Product/Performer realization links, authority/qualification prerequisites |
+| `Offering` | Abstract, typed terms envelope for potential consumption; it does not itself determine commercial sale truth, service-operation truth, or accepted engagement | ID/version, `offerKind`, provider, typed target reference, terms, channel, eligibility, commitment, effective period |
+| `BusinessProductOffering` | Commercial or public-value configuration of a BusinessProduct | Offering ID, BusinessProduct ID, price/funding/eligibility, catalog and sale references |
+| `OperationalServiceOffering` | Operational commitments for a ServiceDefinition or DigitalProduct-backed service | Offering ID, ServiceDefinition/DigitalProduct reference, SLO, support, entitlement and instance policy |
+| `CoworkerServiceOffering` | Terms under which a coworker service may be engaged; a DPF mapping specializes this as `CoworkerOffer` | Offering ID, CoworkerService reference, authority/qualification prerequisites, commercial/approval terms |
+| `DigitalProduct` | Governed digital capability or product with a digital lifecycle | ID, owner, value, lifecycle, versions/releases, service bindings |
+| `DigitalProductRelease` | Approved, versioned composition of DigitalProduct assets/packages intended for defined environments and consumers; distinct from a deployment operating profile | ID/version, DigitalProduct, composition, approval/status, effective period |
+| `ValueStream` | End-to-end flow from a stakeholder trigger to an accepted outcome | ID, beneficiary, trigger, outcome, stages, owner, profile/version |
+| `Stage` | Measurable value-state transition within a ValueStream | stable key, input/output state, acceptance, owner, evidence |
+| `Capability` | Repeatable organizational ability needed to achieve an outcome | ID, definition, owner, maturity/evidence |
+| `OperatingFlow` | Behavioral realization of work: process, case, decision, task network, or physical operation | ID, kind, inputs/outputs, controls, version |
+| `ActivityDefinition` | Stable, qualification-addressable responsibility within a Job, Stage, OperatingFlow, or WorkUnitDefinition; it is not an occurrence of work | ID/version, owning context, intended outcome, boundaries, mappings |
+| `WorkUnitDefinition` | Reusable contract for a coherent unit of work | ID/version, Stage, outcome, inputs/outputs, execution-media set/connectivity, requirements, acceptance/evidence, exceptions |
+| `WorkOccurrence` | One demanded instance of a WorkUnitDefinition | ID, state, scope, times, assignments, evidence, exceptions |
+| `Job` | Stable bundle of outcomes, accountabilities, and work responsibilities | ID/version, purpose, activities, accountable owner, constraints |
+| `Role` | Responsibility in a stage, flow, or work occurrence | ID, context, responsibilities, decision rights |
+| `Occupation` | External or internal classification of similar jobs | stable referenced ID, source/version, mappings |
+| `SkillConcept` | Versioned human- or machine-applicable ability concept from a governed internal or external vocabulary | concept ID/version, definition, source, mappings |
+| `SkillRequirement` | Required proficiency in a SkillConcept for a Job, ActivityDefinition, or WorkUnitDefinition | concept ID/version, level, evidence policy, freshness, context |
+| `CompetenceAssertion` | Evidence-backed assertion that a Performer has a proficiency or capability relevant to a SkillRequirement | performer, skill concept/version, level, scope, evidence, issuer/verifier, confidence, freshness |
+| `Performer` | Identity-bearing human, AI coworker, authorized robot, automated system, or partner eligible for work | Principal ID, kind, operating status, authority/qualification refs |
+| `AgentSubjectReference` | Typed reference to the enduring AI-agent subject whose identity semantics are owned by GAID | GAID/Principal ID, GAID version, resolver, validity, operating-profile context |
+| `AIProductOperatingBinding` | Versioned temporal binding that states which GAID subject operates under which AI-coworker DigitalProductRelease and operating-profile fingerprint; the release/deployment realizes the Product while the subject performs under the binding | ID/version, organization scope, DigitalProductRelease, operating-profile fingerprint, AgentSubjectReference, deployment/instance when applicable, role, binding state, TAK-JSI qualification reference, compatibility-relation references, effective period, owner, evidence |
+| `AIProductBindingCompatibility` | Pairwise, effective-dated assessment governing whether two operating bindings of the same subject/role may be active concurrently | ID/version, canonical ordered binding pair, overlap scope, disposition, segregation constraints when applicable, evaluator, evidence, effective period |
+| `Resource` | Digital, physical, informational, spatial, material, inventory, equipment, facility, or supplier resource used by work | ID/type, owner/custodian, state, location, lifecycle |
+| `AllocationDecision` | Governed eligibility-then-suitability decision that applies one allocation pattern to one WorkOccurrence and owns the complete atomic assignment set | ID/version, WorkOccurrence, pattern, `1..*` WorkAssignments, Collaboration when required, eligibility/suitability evidence, owner/decision time, effective period |
+| `WorkAssignment` | Atomic governed binding of exactly one work occurrence, one responsibility, one Performer, and one AllocationDecision for an effective period | work, responsibility, performer, allocation-decision reference, authority, supervision, fallback, evidence expectation, effective period |
+| `WorkforceTransitionAssessment` | Versioned baseline-to-target decision for augmentation, substitution, redeployment, or deliberate human-only retention at WorkUnitDefinition granularity | ID/version, scope, immutable baseline/target allocation snapshots, retained/transferred/retired/new activity partitions, affected Jobs/SkillRequirements/Principals, reskilling/redeployment, controlled decision state, effective period, owner, evidence, rollback/fallback |
+| `AccountabilityAssignment` | Human or organizational accountability that persists regardless of executor | scope, accountable Principal, decision rights, period |
+| `Collaboration` | Structured handoff or joint execution over one WorkOccurrence and `2..*` atomic WorkAssignments | ID/version, WorkOccurrence, assignment references, sequence/parallelism, handoffs, reconciliation, shared acceptance, evidence, escalation |
+| `Control` | Obligation, permission, prohibition, approval, segregation, safety, or escalation rule | ID, source, applicability, owner, enforcement, evidence |
+| `Metric` | Defined value, flow, quality, economics, capacity, safety, or risk measure | ID, formula, unit, source, target, freshness |
+| `Evidence` | Attributable observation supporting a claim about work, outcome, control, or conformance | ID, claim, provenance, subject, time, integrity, retention |
+| `Incident` | Undesired event, failure, harm, exception, or control breach | ID, affected scope, severity, cause status, response, evidence |
+| `SourceCitation` | Identifier-level reference used only for research orientation, never as normative, mapping, or conformance evidence | ID, owner, title/version, canonical URI or reproducible owner-approved resolver, access date, orientation scope |
+| `SourceUseDecision` | Source- and use-specific determination of whether material may be accessed or incorporated for a declared purpose | ID, source/version/locator, intended use, status, rights basis, permitted/prohibited actions, evidence, reviewer, dates |
+| `ContributorAttestation` | Authenticated or signed provenance and permission statement for a contributor's specifically identified original or separable contribution | ID, contributor/member/rightsholder, work and exact scope, contribution kind, rights basis, permissions, exclusions, evidence, authentication/signature/date |
+| `Profile` | Versioned composition of core rules, facets, vocabulary, mappings, and constraints | ID/version, applicability, inherited facets, requirements, owner |
+| `ConformanceClaim` | Scoped assertion against declared standard/profile requirements | scope, versions, requested/achieved depth, statuses, evidence, verifier, date |
+| `Gap` | Evidence-backed delta between an applicable target and observed state, with verification state independent from remediation-work status | ID, target, observation, type, dimension, impact, portfolio, verification state, closure evidence, work ref or disposition rationale |
+
+`principalKind` uses exactly `organization`, `person`, `team`, `agent-subject`,
+`deterministic-automation`, or `authorized-robot` in the core vocabulary. A versioned Profile may add
+a namespaced kind only when it preserves the identity and authority invariants below. A partner is an
+organization relationship, not a second identity kind.
+
+Current DPF persistence still carries contextual values in `Principal.kind`. Until that substrate is
+converged, its lossless FPAW adapter **MUST** emit both the source value and the canonical kind/role:
+
+| Current DPF value | FPAW projection rule |
+|---|---|
+| `human` | `person` |
+| `agent` | `agent-subject` only when the Principal resolves through a GAID alias/reference; otherwise create an identity Gap |
+| `customer` | resolve the enduring party as `person` or `organization`; preserve `customer` as a contextual relationship/Role |
+| `partner` | resolve the enduring party as `person` or `organization`; preserve partner enrollment/contract as an organization relationship/Role |
+
+An additional runtime value **MUST** have an explicit lossless mapping or a namespaced Profile
+extension. Changing customer/partner context **MUST NOT** re-identify the Principal.
+
+### 5.1 Relationship invariants
+
+- An in-scope governed aspect **MUST** have exactly one active primary portfolio placement for an
+  effective period or a `missing` `GDM-PORTFOLIO` Gap whose observed placement is `unclassified`, and
+  **MUST NOT** have more than one. One real-world thing may expose several explicitly related aspects.
+- A GovernedAspect **MUST** resolve to one canonical target, declare its owning concern, lifecycle,
+  accountability, and non-overlap boundary, relate itself to sibling aspects, and retain
+  merge/supersession history. An arbitrary label **MUST NOT** create a new aspect or evade the
+  exact-one-placement invariant.
+- An active GovernedAspect **MUST** resolve its kind through one effective AspectKindDefinition. For
+  overlapping effective periods, `(organizationScope, canonicalTargetRef, aspectKind,
+  owningConcern)` is unique, and `owningConcern` **MUST** equal the resolved definition. Two sibling
+  kinds on the same target are permitted only when both
+  definitions prove their boundary predicates disjoint; otherwise they are duplicate/overlap Gaps.
+- Every active Objective **MUST** relate to one or more intended Outcomes. An Outcome may have zero or
+  more OutcomeObservations; an observation **MUST NOT** replace the target or imply satisfaction
+  without the Outcome's declared measure, acceptance rule, and verifier.
+- A BusinessProduct **MUST** bind to at least one ValueStream and intended Outcome.
+- A ValueStream **MUST** begin with a stakeholder trigger and end with an accepted stakeholder
+  outcome.
+- A Stage **MUST** require one or more Capabilities and identify its work realization or a justified
+  gap.
+- Every Organization **MUST** resolve to an `organization` Principal when it owns accountability,
+  authority, or governed records. Its affiliated people, teams, and AgentSubjects remain separate
+  Principals; affiliation never merges their identities.
+- Every Performer **MUST** resolve to exactly one Principal for its scoped effective period. One
+  Principal **MAY** have multiple contextual Performer projections over time; a new role, job,
+  assignment, deployment, or runtime instance **MUST NOT** create a second enduring identity.
+- A Team Principal exists only when the team has a stable identity, governed membership, owner or
+  sponsor, accountable human or Organization Principal, authority boundary, lifecycle, and effective
+  period. An ad hoc human/AI grouping remains Collaboration over its member Principals.
+- An `agent-subject` Principal **MUST** bind through AgentSubjectReference to exactly one authoritative
+  GAID AgentSubject for the FPAW identity scope and effective period. GAID owns that subject identity;
+  FPAW **MUST NOT** mint a competing AgentSubject or treat a deployment/runtime instance as one.
+- Principal identity alone **MUST NOT** grant work eligibility, qualification, accountability, or
+  action authority. Those rights arise only from effective assignments, qualifications, policy, and
+  control evidence. AccountabilityAssignment remains human or organizational; a Team Principal can
+  receive it only when its accountable human or Organization Principal is explicit.
+- A consequential WorkOccurrence **MUST** have an accountable Principal even when the executor is
+  AI, robotic, automated, or external.
+- A WorkAssignment **MUST** bind exactly one WorkOccurrence, one ActivityDefinition-or-Role
+  responsibility, one Performer, and one AllocationDecision, plus authority,
+  qualification/eligibility, supervision, fallback, evidence expectations, and an effective period;
+  an assignee ID alone is insufficient. Joint work **MUST** use the AllocationDecision's one
+  Collaboration containing `2..*` atomic WorkAssignments.
+- A qualification or assignment that names an activity **MUST** resolve that name to an
+  ActivityDefinition and state whether any external activity mapping is exact, close, broad, narrow,
+  or merely related.
+- A SkillRequirement **MUST** reference a SkillConcept; claimed performer proficiency **MUST** be a
+  separate CompetenceAssertion with provenance, verifier, scope, confidence, and freshness.
+- A DigitalProduct relation to a BusinessProduct, Stage, or WorkUnitDefinition **MUST** be explicit
+  and typed.
+- A Gap **MUST** carry its own verification lifecycle and **MUST NOT** duplicate remediation-work
+  status. Planned remediation links canonical work; detection/triage may instead carry an explicit
+  disposition rationale until remediation is authorized.
+- A profile or mapping **MUST** retain source version and effective date; silent inheritance from a
+  newer source version is prohibited.
+- A SourceUseDecision **MUST** bind one source artifact or separately supplied contribution to one
+  intended use. Permission for a contributor-origin source **MUST NOT** be inherited by the compiled
+  publication, another contributor's expression, or another use.
+
+### 5.2 Core aspect-kind registry
+
+The base `aspectKind` set is the registry `FPAW-ASPECT-KINDS@0.1.0`. Every row below expands to a
+complete AspectKindDefinition record with `registryVersion = 0.1.0`, `owner = DPF Standards
+Steward`, `effectiveFrom = 2026-08-01`, and `effectiveTo = null`. These common values are data, not
+defaults that an implementation may omit. A Profile may add only a versioned, namespaced record with
+the same fields and predicate grammar.
+
+The predicate grammar is deliberately small and deterministic: `eq(field,value)`,
+`in(field,{values})`, `and(predicate,...)`, and `cardinality(field,min,max)`. Operands use the exact
+field keys shown below. A predicate engine **MUST** reject an unknown operator, field, target kind, or
+concern key rather than treating it as free text.
+
+| Kind key | Permitted target-kind IDs | Owning concern key | Predicate ID and expression | Uniqueness discriminator | Incompatible kind set | Merge-policy key |
+|---|---|---|---|---|---|---|
+| `business-product` | `{BusinessProduct}` | `promised-value-lifecycle` | `AKP-BP-001 = eq(targetType,BusinessProduct)` | `targetId,targetVersion` | `{}` | `source-lineage-compatible` |
+| `service-definition` | `{ServiceDefinition,CoworkerService}` | `supplied-outcome-commitment` | `AKP-SD-001 = in(targetType,{ServiceDefinition,CoworkerService})` | `targetId,targetVersion` | `{}` | `source-lineage-compatible` |
+| `offering` | `{Offering}` | `terms-channel-eligibility` | `AKP-OF-001 = eq(targetType,Offering)` | `targetId,targetVersion` | `{}` | `identity-preserving-only` |
+| `performer` | `{Principal}` | `performer-capacity-authority` | `AKP-PF-001 = eq(targetType,Principal)` | `targetId,performerContextKey,assignmentAuthorityScope` | `{}` | `scope-disjoint-only` |
+| `workforce-structure` | `{Job,Role,SkillRequirement,AccountabilityAssignment}` | `workforce-structure-governance` | `AKP-WS-001 = in(targetType,{Job,Role,SkillRequirement,AccountabilityAssignment})` | `targetId,targetVersion` | `{}` | `source-lineage-compatible` |
+| `digital-product-lifecycle` | `{DigitalProduct}` | `digital-product-lifecycle` | `AKP-DP-001 = eq(targetType,DigitalProduct)` | `targetId,targetVersion` | `{}` | `source-lineage-compatible` |
+| `operating-capability` | `{Capability,OperatingFlow}` | `dedicated-production-ability` | `AKP-OC-001 = and(in(targetType,{Capability,OperatingFlow}),eq(reuseScope,dedicated))` | `targetId,targetVersion,dedicatedProductOrStageScope` | `{shared-foundation}` | `dedicated-scope-disjoint` |
+| `operating-resource` | `{Resource}` | `dedicated-resource-custody` | `AKP-OR-001 = and(eq(targetType,Resource),eq(reuseScope,dedicated))` | `targetId,targetVersion,dedicatedProductOrStageScope` | `{shared-foundation}` | `custody-lineage-compatible` |
+| `shared-foundation` | `{Capability,OperatingFlow,Resource,ServiceDefinition,DigitalProduct}` | `cross-product-foundation` | `AKP-SF-001 = and(in(targetType,{Capability,OperatingFlow,Resource,ServiceDefinition,DigitalProduct}),eq(reuseScope,shared),cardinality(consumerScope,2,*))` | `targetId,targetVersion,consumerScope` | `{operating-capability,operating-resource}` | `shared-scope-disjoint` |
+| `control-governance` | `{Control,ServiceDefinition}` | `policy-authority-assurance` | `AKP-CG-001 = in(targetType,{Control,ServiceDefinition})` | `targetId,targetVersion,authoritySource,controlObjective` | `{}` | `authority-objective-compatible` |
+
+Active uniqueness is a collision predicate, not string equality over a serialized tuple. Two aspects
+collide when organization scope, kind key, target ID/version, and every scalar discriminator are
+equal; their half-open effective periods overlap; and every set-valued discriminator has a non-empty
+intersection. An open interval end is positive infinity. The set-valued keys are
+`assignmentAuthorityScope`, `dedicatedProductOrStageScope`, and `consumerScope`; their members are
+canonical IDs, not labels. Thus `{A,B}` and `{B,C}` collide through `B`. Pairwise-disjoint scope sets
+do not collide. The row predicate, discriminator, incompatibility set, and merge-policy key are
+normative data.
+
+For two different kinds, an incompatibility-set match is evaluated when their organization, target,
+effective period, and applicable set-valued scopes overlap under the same rules. Boundary predicates
+are evaluated over overlapping effective periods; partially overlapping scopes **MUST NOT** evade a
+duplicate/overlap finding by using different serialized set values.
+
+The merge policies have exact outcomes: `identity-preserving-only` forbids merging distinct source
+identities; `source-lineage-compatible` and `custody-lineage-compatible` require a common declared
+successor plus compatible target kind, owner/custodian, and scope; `scope-disjoint-only`,
+`dedicated-scope-disjoint`, and `shared-scope-disjoint` require pairwise-disjoint scopes before a
+successor is formed; `authority-objective-compatible` additionally requires equal authority source
+and control objective. An incompatible pair or failed predicate creates a duplicate/overlap Gap.
+Split creates versioned siblings with disjoint scopes and a common predecessor; merge creates one
+successor and supersedes every predecessor. Neither operation may rewrite historical placements or
+evidence.
+
+## 6. Four-portfolio enterprise model
+
+The four roots remain stable. They are grounded in Mark Bodman's contributor-attested design
+direction and DPF's canonical portfolio registry. G252 is recorded only as bibliographic design
+lineage; the published guide and the contributor-origin concepts are distinct sources under Section 13.1.1.
+`DPF-FPAW` calls the roots portfolio **roles** because membership describes governance purpose, not
+intrinsic object type. Exact published-wording or conformance equivalence remains unasserted.
+
+| Canonical FPAW exchange key | Display name | Primary placement question | Representative governed aspects |
+|---|---|---|---|
+| `products_and_services_sold` | Goods and Services for Sale | Is this aspect part of the value promise transferred, sold, granted, or delivered to an external customer or beneficiary? | goods, services, experiences, access, entitlements, public services, subscriptions, DigitalProducts sold externally |
+| `for_employees` | Workforce | Is this contributor capacity, a job/role/skill/authority construct, or a BusinessProduct/ServiceDefinition intended primarily for contributors? | employees, contractors, partners, AI coworkers, authorized robots, internal employee services and tools |
+| `manufacturing_and_delivery` | Manufacturing and Delivery | Is this a specialized production or fulfillment capability/resource used directly to make or deliver external value? | factories, kitchens, field fleets, warehouses, delivery workflows, production tooling, CI/CD, specialized operational technology |
+| `foundational` | Foundational | Is this a reusable cross-product foundation used broadly across the enterprise? | compute, network, shared data, identity, security, governance, shared facilities, common platforms and infrastructure |
+
+The snake_case keys above are the target exchange vocabulary of this standard. Current DPF runtime
+types and persisted `PortfolioDecomposition` values still use camelCase keys. Until the adapter
+convergence in Section 18 lands, an implementation **MUST** publish an explicit, lossless mapping
+between those current keys and this target vocabulary; neither spelling may be silently presented as
+already authoritative for the other surface.
+
+The current DPF adapter mapping is:
+
+| Current runtime/persistence key | FPAW exchange key |
+|---|---|
+| `productsAndServicesSold` | `products_and_services_sold` |
+| `forEmployees` | `for_employees` |
+| `manufactureAndDeliver` | `manufacturing_and_delivery` |
+| `foundational` | `foundational` |
+
+This table defines serialization equivalence only. It does not rename the current source enum, and
+it does not make a runtime object conformant without the governed-aspect placement, ownership,
+relationship, and evidence assertions required by this section.
+
+### 6.1 Placement algorithm
+
+For each governed aspect, evaluate in this order:
+
+1. If it is part of the external value promise, place it in Goods and Services for Sale.
+2. Otherwise, if it is contributor capacity, workforce structure, or contributor-consumed value,
+   place it in Workforce.
+3. Otherwise, if it is dedicated to producing or fulfilling one or more external products, place it
+   in Manufacturing and Delivery.
+4. Otherwise, if it is reusable enterprise foundation, place it in Foundational.
+5. If no rule applies, record a `missing` `GDM-PORTFOLIO` Gap with observed placement
+   `unclassified`; do not choose the nearest label.
+
+Placement follows investment accountability and lifecycle ownership, not implementation technology.
+A cloud service can be Foundational, Manufacturing and Delivery, Workforce, or part of a sold BusinessProduct,
+depending on the governed aspect and consumer.
+
+### 6.2 Multi-aspect decomposition
+
+A thing **MUST NOT** be double-counted by assigning one aspect to several primary portfolios. It
+**MAY** have several aspects, each with one placement and typed relations among them.
+
+Examples:
+
+- An AI coworker's identity, skills, capacity, and authority are a Workforce performer aspect. Its
+  software, prompts, models, tool adapters, and operational service form a DigitalProduct aspect.
+- A passive industrial robot is a Manufacturing and Delivery asset. If it is independently
+  identity-bearing, schedulable, and authorized to perform work, it also has a linked Workforce
+  performer aspect.
+- A SaaS platform sold to customers has a commercial BusinessProduct/BusinessProductOffering aspect in Goods and Services
+  for Sale, a DigitalProduct lifecycle, dedicated delivery tooling in Manufacturing and Delivery,
+  and shared infrastructure dependencies in Foundational.
+- Client-owned inventory in a warehouse is not the warehouse operator's sold good. Custody and
+  handling are the sold service; racks, scanners, and dock operations are delivery resources.
+
+### 6.3 Portfolio dependency contract
+
+Dependencies **MUST** be directional. The canonical serialization below always reads
+`subject --relation--> object`; passive UI labels are aliases, not reversed exchange edges.
+
+| Relation | Permitted subject → object semantics | Inverse display alias | Closure/cardinality rule |
+|---|---|---|---|
+| `constitutes` | component/realization aspect → value-bearing BusinessProduct or aspect of it | `constituted-by` | `0..* → 0..*`; non-transitive unless a Profile explicitly closes a composition path |
+| `enables` | enabling aspect → enabled aspect, without joining the value promise | `enabled-by` | `0..* → 0..*`; non-transitive |
+| `consumes` | consuming aspect → capacity, Resource, ServiceDefinition, or supplied aspect | `consumed-by` | `0..* → 0..*`; non-transitive |
+| `operates` | operating performer/service/aspect → operated Product, service, Resource, Stage, or work | `operated-by` | `0..* → 0..*`; non-transitive and effective-dated |
+| `governs` | Control/authority aspect → governed aspect or work | `governed-by` | `0..* → 0..*`; non-transitive unless the authority source defines delegation |
+| `supplies` | supplying aspect → recipient of material, data, capacity, or service | `supplied-by` | `0..* → 0..*`; non-transitive |
+| `commercializes` | Offering → its exactly-one Section 7.1 compatible primary target | `commercialized-by` | each Offering version has exactly one primary object; other Products/services are related through separate realization or bundle edges |
+| `replaces` | replacement aspect/version → predecessor aspect/version | `replaced-by` | time-directed and acyclic; predecessor/successor periods **MUST NOT** silently overlap |
+
+Every edge **MUST** carry subject/object identifiers and versions, relation key, owner, effective
+period, and evidence. A namespaced extension **MUST** publish the same subject/object, inverse,
+transitivity, temporal, and cardinality semantics.
+
+Every active BusinessProduct **MUST** trace to its necessary Workforce, Manufacturing and Delivery,
+and Foundational aspects or carry a justified `not-applicable` decision. Externally supplied products
+remain dependencies of the consuming portfolio; they **MUST NOT** be represented as the organization's
+own Goods and Services for Sale.
+
+### 6.4 Two Workforce lenses
+
+The Workforce portfolio contains two linked but distinguishable lenses:
+
+- **contribution lens:** performers, jobs, roles, skills, capacity, authority, supervision, and
+  workforce outcomes
+- **internal-consumption lens:** products and services supplied primarily to those contributors
+
+An implementation **MUST** state which lens applies. An internal HR portal is not a performer; an AI
+coworker is not merely an internal application.
+
+## 7. Product, offer, service, and realization boundary
+
+### 7.1 Business Product forms
+
+A BusinessProduct `form` **MUST** use a controlled vocabulary that can represent at least:
+
+- `good`
+- `service`
+- `experience`
+- `access`
+- `entitlement`
+- `public-service`
+- `public-benefit`
+- `digital-product`
+- `hybrid`
+
+The form is independent of delivery mode. A service may be delivered physically, digitally, or
+hybrid; a physical good may contain software; a DigitalProduct may be sold, used internally, or
+embedded in another BusinessProduct.
+
+Business Products **SHOULD** also declare:
+
+- target consumers and beneficiaries
+- commercial or public-value model
+- channels
+- provisioning or entitlement model
+- ownership/custody transfer
+- promised outcomes and commitments
+- returns, cancellation, renewal, retirement, or end-of-life treatment
+
+`offerKind` uses exactly `business-product`, `operational-service`, or `coworker-service` in the core.
+Each Offering version **MUST** have exactly one provider Organization Principal, one effective period,
+and exactly one primary target compatible with its kind:
+
+| `offerKind` | Exactly-one primary target |
+|---|---|
+| `business-product` | BusinessProduct |
+| `operational-service` | ServiceDefinition **xor** DigitalProduct |
+| `coworker-service` | CoworkerService |
+
+Bundling or cross-selling uses explicit relations among separate Offering versions; it does not add a
+second primary target. An accepted engagement, entitlement, ProductSold, subscription, or runtime
+instance is downstream evidence and **MUST NOT** replace the Offering. A BusinessProduct whose
+`form = digital-product` **MUST** have at least one effective DigitalProduct
+`--constitutes--> BusinessProduct` edge; otherwise the form claim is `unsatisfied`, not a naming
+shortcut.
+
+### 7.2 DPF authority boundary
+
+For DPF implementations:
+
+- `ProductLine → Product → ProductOffering → CatalogItem → ProductSold` owns commercial and sale
+  truth.
+- `DigitalProduct → ServiceOffering` owns digital architecture and operational-service commitments.
+- `CoworkerService → CoworkerOffer → CoworkerEngagement` owns coworker-service terms and accepted
+  engagement context; those records do not replace ProductOffering or ServiceOffering truth.
+- Relationships among the commercial, operational-service, and coworker-service chains are explicit
+  and evidence-bearing; they are never inferred from a name,
+  URL, catalog presence, or common owner.
+
+DPF may display the following familiar passive labels, but its exchange edge **MUST** retain the
+Section 6.3 canonical direction:
+
+| DPF display label | Canonical edge |
+|---|---|
+| `constituted-by-digital-product` | `DigitalProduct --constitutes--> BusinessProduct` |
+| `digitally-enabled-by` | `DigitalProduct --enables-->` a BusinessProduct, Stage, or WorkUnitDefinition |
+| `operated-by-digital-product` | `DigitalProduct --operates-->` a BusinessProduct, ServiceDefinition, Stage, or WorkUnitDefinition |
+| `governed-by-digital-product` | `DigitalProduct --governs-->` a BusinessProduct, Stage, or WorkUnitDefinition |
+| `sold-as-digital-product` | derived display only when `BusinessProductOffering --commercializes--> BusinessProduct` and `DigitalProduct --constitutes--> BusinessProduct` are both effective; it is not a third exchange edge |
+
+The removed premature DPF `ProductDigitalProduct` join is not evidence that no semantic relationship
+exists; it is evidence that persistence must wait for a real consumer workflow and endpoint contract.
+
+### 7.3 Bill of realization
+
+Every material BusinessProduct **SHOULD** have a bill of realization linking its promised outcomes to:
+
+- operational value streams and stages
+- required capabilities
+- human, AI, robot, automated, and partner work
+- DigitalProducts and services
+- facilities, equipment, materials, inventory, data, and suppliers
+- authority, safety, privacy, and commercial controls
+- outcome, flow, quality, economics, capacity, and risk evidence
+
+This is broader than a bill of materials and **MUST NOT** be collapsed into a DigitalProduct-only
+dependency graph.
+
+## 8. Operational value streams
+
+### 8.1 Business value is independent from the IT4IT Reference Architecture
+
+An operational ValueStream describes how a business or public organization creates stakeholder
+value. It is not an IT4IT Reference Architecture stream and is not automatically part of that
+architecture's `Consume` stream. A relevant stage may map to one or more candidate lifecycle
+touchpoints when a DigitalProduct is involved, but the business
+stream retains its own identity and outcome.
+
+DPF's default macro-backbone reuses the canonical runtime keys from
+`operational-value-stream.ts`; display wording is not a second identifier:
+
+| Canonical key | Default display label |
+|---|---|
+| `attract` | Attract & Discover |
+| `capture` | Capture Demand |
+| `qualify` | Qualify & Schedule |
+| `deliver` | Deliver the Value |
+| `settle` | Settle & Account |
+| `retain` | Retain & Grow |
+
+`trust-compliance` and `operate-improve` are cross-cutting. Profiles **MAY** insert, split, repeat,
+rename, or omit stages where the value-state logic requires it. Common insertions include
+`return-inspect`, `receive-store`, field-dispatch states, case review, statutory eligibility, donation
+acknowledgment, and seasonal production cycles.
+
+A display label may use industry language, but the stable semantic key and mapping rationale **MUST**
+remain inspectable.
+
+### 8.2 Stage contract
+
+Every material Stage **MUST** declare the following groups:
+
+| Group | Required content |
+|---|---|
+| Identity | stable key, label, ValueStream/profile/version, applicability |
+| Value intent | stakeholder/beneficiary, trigger, incoming value state, promised outcome, exit and acceptance condition |
+| Flow | predecessors/successors, handoff contract, queue/WIP semantics, cadence, variants, rework, cancellation and exception paths |
+| Capacity | demand signal, capacity unit, load-bearing status, bottleneck/constraint policy |
+| Execution | required capabilities, OperatingFlows, WorkUnitDefinitions, jobs/roles, allocation patterns |
+| Resources | DigitalProducts, services, data, facilities, equipment, materials, inventory, locations, suppliers |
+| Governance | accountable Principal, decision rights, authority limits, approvals, segregation, safety/privacy/regulatory controls, escalation |
+| Evidence | authoritative records/events, completion proof, custody/provenance, evidence owner, retention |
+| Measures | stakeholder value, flow, quality, economics, capacity, risk, target bands, confidence, freshness |
+| Dependencies | four-portfolio placements and explicit DigitalProduct lifecycle bindings |
+| Tailoring | profile source, allowed variation, local extensions, unresolved conflicts |
+
+### 8.3 Handoffs and flow truth
+
+A material handoff **MUST** identify sender, receiver, value/evidence transferred, acceptance
+condition, timing expectation, rejection path, and escalation. A stage marked complete while its
+transferred work is rejected is rework or exception flow, not successful value movement.
+
+Load-bearing stages **MUST** be identified from operational evidence or profile rationale. Measures
+**SHOULD** cover value, flow, quality, economics, capacity, and risk separately; a single throughput
+metric cannot stand in for all six.
+
+## 9. Work system
+
+### 9.1 OperatingFlow types
+
+An OperatingFlow **MUST** declare one or more behavior kinds:
+
+- `process` for predictable ordered work
+- `case` for evidence-driven, non-linear work
+- `decision` for rule, judgment, or policy determination
+- `task-network` for coordinated discrete work
+- `physical-operation` for transformation, movement, treatment, inspection, custody, or onsite work
+- `event-response` for reactive or incident-driven work
+
+BPMN, CMMN, and DMN **SHOULD** be used where their semantics apply. A physical-operation profile may
+map to ISA-95, GS1, asset, safety, or industry models. `DPF-FPAW` adds cross-model traceability; it
+does not redefine their execution semantics.
+
+### 9.2 Work-unit definition
+
+Every allocatable WorkUnitDefinition **MUST** identify:
+
+1. stable identifier, version, and owning Stage
+2. intended outcome and acceptance evidence
+3. inputs, outputs, and value-state change
+4. required skills, proficiency, credentials, and qualifications
+5. data classification, permitted use, residency, retention, and steward
+6. tools, connectors, facilities, equipment, materials, and inventory
+7. physical presence, location, environment, safety, and custody requirements
+8. authority, approval, reversibility, consequence, segregation, and escalation class
+9. expected time, capacity, quality, cost, continuity, and service constraints
+10. exception, fallback, retry, cancellation, and handoff conditions
+
+It also **MUST** declare a non-empty `executionMedia` set drawn from:
+
+- `software-executed` — software, AI, or deterministic automation performs an authoritative action or
+  state transition
+- `human-cognitive` — a human/partner performs judgment, communication, approval, or administrative
+  work, even when a digital tool records it
+- `physical-actuation` — transformation, movement, treatment, inspection, custody, or onsite action is
+  essential
+
+`hybrid` is a derived label only when the set contains more than one value; it is not a fourth value
+that hides which media apply.
+
+`connectivityMode` is orthogonal and uses exactly `online | intermittently-connected | offline |
+not-applicable`. Paper, verbal, or offline work is therefore representable without misclassifying it
+as physical. If materially different media have different authority, evidence, or acceptance rules,
+they are separate WorkUnitDefinitions rather than one coarse multi-value declaration.
+
+Work units **SHOULD** be split when authority, tools, data sensitivity, consequence, required
+knowledge, evaluation method, physical reach, or autonomy ceiling differ materially.
+
+### 9.3 Physical and non-digital work
+
+A WorkUnitDefinition whose `executionMedia` contains `physical-actuation` **MUST** evaluate every
+stable field group below. Each group has either a value/evidence record or a Section 4.1
+`not-applicable` decision with source, rationale, reviewer, and review date; `undetermined` cannot
+satisfy the field contract:
+
+| Field-group key | Required concern set |
+|---|---|
+| `PHY-SITE` | site, environment, access window, and operating conditions |
+| `PHY-ASSET` | equipment, materials, facility, vehicle, and inventory state |
+| `PHY-CUSTODY` | ownership, custody, serialization/lot, condition, and transfer points |
+| `PHY-SAFETY` | hazards, human licenses, safety envelope, safe state, emergency stop, and prohibited conditions |
+| `PHY-CONDITION` | calibration, inspection, maintenance, sanitation, contamination, or cold-chain requirements |
+| `PHY-OBSERVATION` | authoritative observation method, acceptance evidence, and accountable supervisor |
+| `PHY-INCIDENT` | incident, damage, waste, rework, and recovery evidence |
+
+Authoritative observation method, acceptance evidence, and accountable supervision are mandatory
+for physical completion; the remaining groups are conditional only through the recorded
+field-applicability decision above. A WorkUnitDefinition whose media include `human-cognitive`
+**MUST** likewise identify its authoritative record or observation method—for example a signed form, approved case record,
+transaction, inspection, or witnessed handoff—rather than inferring completion from task UI state.
+
+`canPerformPhysicalWork: true` is never sufficient. A digital twin or EA projection **MUST NOT**
+replace the authoritative asset, transaction, clinical, custody, or domain record.
+
+A digital command, checklist completion, or AI statement **MUST NOT** be treated as proof of physical
+completion. Evidence may come from an authorized human, partner, machine/sensor, transaction,
+inspection, custody transfer, or another profile-approved source.
+
+### 9.4 Capacity
+
+Capacity **MUST** be typed. Supported units may include employee-hours, crew-hours, AI concurrency,
+model/provider budget, appointment slots, facility beds/chairs/bays/rooms, vehicle/equipment time,
+inventory, storage volume, route stops, decision-review capacity, or regulated credentials.
+
+Capacity projections **MUST** expose the limiting resource and freshness of observation. Substituting
+AI for one activity does not remove residual human exception, approval, supervision, or recovery
+capacity.
+
+## 10. Performer and work-allocation model
+
+### 10.1 Performer kinds
+
+An implementation **MUST** distinguish at least:
+
+- `human`
+- `ai-coworker`
+- `deterministic-automation`
+- `authorized-robot`
+- `partner-organization`
+
+Passive machinery is a Resource, not a Performer. An authorized robot has both a performer identity
+and a separately managed physical asset/controller/safety configuration. A mixed team is a
+Collaboration and allocation over canonical Performers, unless the team itself resolves to an
+independently governed Team Principal; it is not a primitive Performer kind.
+
+### 10.2 Allocation is a governed decision
+
+Allocation occurs in two ordered steps:
+
+1. **Eligibility gates:** authority, license/credential, safety, physical reach/location, data
+   clearance, tool/resource availability, current skill or job qualification, contractual and legal
+   constraints.
+2. **Suitability selection:** expected quality, latency, cost, capacity, oversight burden,
+   resilience, learning value, stakeholder preference, and concentration risk.
+
+An ineligible performer **MUST NOT** become eligible merely because it is faster, cheaper, available,
+or preferred by a model.
+
+### 10.3 Allocation patterns
+
+The following controlled vocabulary is normative:
+
+| Pattern | Execution and control intent | Assignment/coordination contract |
+|---|---|---|
+| `human-only` | A human performs; AI/automation may not execute the work | exactly one human execution assignment unless several humans collaborate under an explicit Collaboration |
+| `human-led-ai-assisted` | Human owns execution; AI supplies bounded analysis, retrieval, or drafting | `2..*` assignments and one Collaboration; human execution and AI assistance are separate responsibilities |
+| `ai-prepare-human-decide` | AI prepares; an authorized human makes the consequential decision or commit | `2..*` assignments and one Collaboration with prepare→decide acceptance |
+| `paired-execution` | Human and AI execute distinct, interdependent responsibilities with explicit handoffs | `2..*` assignments and one Collaboration |
+| `ai-led-human-approved` | AI performs the work; human approval is required before effect | `2..*` assignments and one Collaboration with approval before commit |
+| `ai-primary-human-exception` | AI executes within a bounded envelope; a human handles declared exceptions and escalation | `2..*` assignments and one Collaboration, including the exception responsibility |
+| `bounded-autonomous-ai` | Qualified AI executes without per-occurrence review inside a TAK-enforced ceiling | exactly one AI execution assignment; AccountabilityAssignment and escalation remain separate |
+| `deterministic-automation` | Rule-bound system executes without agentic discretion | exactly one deterministic-automation execution assignment unless explicit reconciliation requires Collaboration |
+| `robot-primary-safety-supervised` | Robot executes physical work inside an engineered safety envelope and supervision contract | `2..*` assignments and one Collaboration, including safety supervision |
+| `partner-primary-internal-accountable` | External party executes under contract while internal accountability remains explicit | one or more partner assignments; internal AccountabilityAssignment is mandatory and is not a second executor by default |
+| `mixed-sequential` | Several performer kinds execute ordered responsibilities | `2..*` assignments and one ordered Collaboration |
+| `mixed-parallel` | Several performer kinds execute concurrent responsibilities with reconciliation | `2..*` assignments and one parallel Collaboration with reconciliation |
+
+### 10.4 Accountability and collaboration
+
+Every consequential WorkOccurrence **MUST** identify:
+
+- executor(s)
+- accountable human or organizational Principal
+- reviewer/approver when required
+- consulted roles when their input is mandatory
+- escalation receiver
+- override authority
+- prohibited actions
+- fallback and continuity owner
+
+This applies to a zero-employee organization. Human employment is not mandatory; legal and
+organizational accountability cannot be delegated away to an AI coworker.
+
+Each AllocationDecision references exactly one WorkOccurrence, exactly one pattern, and `1..*`
+WorkAssignments. Each WorkAssignment references that same WorkOccurrence and exactly one
+ActivityDefinition/Role responsibility, one Performer, and one AllocationDecision. `executor(s)`
+above is therefore the set of atomic assignments, not a plural assignee field. When the pattern table
+requires joint work, the AllocationDecision references exactly one Collaboration over `2..*` of its
+assignments; that Collaboration records sequencing/parallelism, handoffs, reconciliation, shared
+acceptance, and escalation. One WorkAssignment **MUST NOT** belong to several AllocationDecisions.
+Within an AllocationDecision, `(WorkAssignment, responsibility)` membership is unique. A
+Collaboration cannot contain an assignment owned by another AllocationDecision, and every assignment
+required by the selected pattern appears exactly once in the decision's complete assignment set.
+
+### 10.5 Augmentation and substitution
+
+Augmentation or replacement **MUST** be assessed at WorkUnitDefinition granularity, not by deleting a
+job title. The assessment **MUST** be a versioned WorkforceTransitionAssessment and record:
+
+- immutable baseline and target allocation snapshots, controlled decision state, effective period,
+  and scope
+- a total activity partition: baseline activities are exactly one of `retained`, `transferred`, or
+  `retired`; every `retained`/`transferred` baseline activity maps to `1..*` target activities, and
+  every target activity maps to exactly one retained/transferred predecessor or is `new`
+- affected Jobs, SkillRequirements, human Principals or populations, and AI/automation/partner Performers
+- reskilling, redeployment, displacement, consultation, or no-change treatment for affected people
+- residual human demand and exception load
+- supervision, approval, and recovery cost
+- safety, legal, professional, and affected-party constraints
+- data/tool/provider dependencies and concentration risk
+- quality, time, cost, capacity, and resilience evidence
+- transition, rollback, fallback, and workforce-impact plan
+- accountable owner and review date
+
+`WorkforceTransitionAssessment.decisionState` uses exactly:
+
+`draft | assessed | approved | effective | verification-pending | closed | withdrawn | superseded`.
+
+Legal forward transitions are `draft → assessed | superseded`, `assessed → approved | withdrawn |
+superseded`, `approved → effective | withdrawn | superseded`, `effective → verification-pending |
+superseded`, and `verification-pending → closed | effective | superseded`. `withdrawn`, `closed`, and
+`superseded` are terminal; every `superseded` transition links its successor. Once `assessed`, baseline
+and target snapshots are immutable; a change creates a new version. Two `approved`, `effective`, or
+`verification-pending` versions for the same scope **MUST NOT** have overlapping effective periods.
+
+Every `retired` baseline activity **MUST** state how its intended Outcome, obligation, exception,
+evidence, and residual demand are eliminated, transferred, or otherwise satisfied. Deleting a Job or
+position **MUST NOT** silently delete work or its accountability. `closed` requires target-outcome and
+workforce-impact verification; completing a rollout task is insufficient.
+
+Observed performance may update suitability or proficiency confidence. It **MUST NOT** silently widen
+authority, job scope, or autonomy.
+
+### 10.6 Shared versus industry-specific AI coworkers
+
+A shared AI-coworker DigitalProduct/profile family **SHOULD** be reused when intended outcome, activity
+semantics, authority envelope, evidence contract, tool pattern, data sensitivity, legal/safety burden,
+and evaluation requirements remain materially equivalent. A family is a reusable design and
+qualification template; it is not a GAID AgentSubject or proof that a deployed coworker exists.
+
+Specialization **SHOULD** occur through versioned profession, archetype, jurisdiction, vocabulary,
+control, tool, and evidence facets. A distinct industry-specific DigitalProduct/profile family **SHOULD**
+require at least one material difference in:
+
+- occupational or professional decision scope
+- regulated or delegated authority
+- safety boundary or physical interface
+- data/custody boundary
+- non-transferable evidence or evaluation contract
+- accountability or external relying-party contract
+
+GAID alone governs when an AgentSubject identity is minted, resolved, or retired for an issuer,
+organization/deployment, and accountability lifecycle. Industry novelty is neither necessary nor
+sufficient for identity creation.
+
+This produces reusable horizontal coworkers for demand, customer care, scheduling/dispatch, finance,
+compliance, supply, workforce, records, and operations, with narrower specializations for clinical,
+financial-regulatory, public-safety, cold-chain/custody, licensed craft, or similarly bounded work.
+
+## 11. AI coworker as DigitalProduct and performer
+
+### 11.1 Dual-aspect rule
+
+An AI coworker **MUST** be modeled through two linked aspects:
+
+| Aspect | Governs | Required canonical references |
+|---|---|---|
+| DigitalProduct aspect | strategy, investment, design, components, versions, build/acquire, release, deployment, service, operations, assurance, improvement, retirement | DigitalProduct ID, owner, portfolio placement, lifecycle/version, realization and service references |
+| Performer aspect | identity, job/activity scope, qualifications, skills, capacity, authority, supervision, assignment, actions, receipts, status | GAID/Principal ID, operating-profile fingerprint, TAK-JSI status, TAK policy/authority, work and evidence references |
+
+The aspects **MUST** have a resolvable, versioned relationship. They **MUST NOT** be two independent
+copies of the same identity or lifecycle truth.
+
+The following implications are normative:
+
+- An AI coworker in Workforce is still subject to DigitalProduct lifecycle management.
+- A DigitalProduct release does not automatically authorize an Agent to act.
+- A GAID identity does not prove that its current operating profile is qualified for a job.
+- A TAK-JSI qualification does not grant live permission; TAK computes the execution-time ceiling.
+- A service offer for coworker work does not become evidence that the work happened.
+- A new model, prompt, tool, corpus, memory policy, provider route, or authority envelope may be a
+  material change requiring product, qualification, and runtime re-evaluation.
+
+### 11.2 Qualification boundary: Agent, AI coworker, and DigitalProduct
+
+`Agent` is the broad technical and organizational actor class. `AI coworker` is the narrower term
+for an Agent deliberately managed as both a DigitalProduct and a Performer. A prompt, model, tool,
+skill, script, experimental agent, or subordinate worker **MUST NOT** be promoted to an AI coworker
+or standalone DigitalProduct merely because it can execute agentic behavior. It normally remains a
+versioned asset or component of the DigitalProduct that owns the consumer outcome.
+
+An implementation claiming the `FPAW-Managed-AI-Coworker-DigitalProduct` qualification **MUST**
+evidence:
+
+1. an agreed consumer and outcome
+2. software that is essential to realizing that outcome
+3. active product ownership and lifecycle management
+4. at least one formal internal or external offer
+5. explicit price, chargeback, showback, or documented zero-price treatment
+6. accepted consumption or assignment terms
+7. instance-readiness evidence and, for an operated claim, one or more managed runtime or service
+   instances
+
+DPF **MAY** project an Agent into a candidate DigitalProduct record to establish lifecycle work, but
+the projection itself is not conformance evidence. Until the criteria above are verified, the
+record **MUST** report `candidate` or an equivalent non-conformant qualification state rather than
+claim the FPAW qualification. This qualification is an original DPF product-management profile, not
+an assertion of IT4IT Reference Architecture conformance. An external conformance claim requires an authorized edition,
+applicable SourceUseDecision, and qualified human assessment. Within this standard, the unqualified phrase
+*AI coworker* always denotes the managed dual-aspect concept; broader technical agents are named
+explicitly as Agents or components.
+
+This boundary preserves the operator's key insight—an AI coworker is itself a type of
+DigitalProduct—without treating every reusable agentic artifact as an independently offered product.
+
+### 11.3 Product-to-runtime chain
+
+A conforming AI-coworker implementation **SHOULD** expose this chain, using local equivalents:
+
+```text
+strategy / portfolio decision
+  → DigitalProduct definition
+  → DigitalProductRelease definition
+  → versioned AI assets (model, prompt, data/corpus, skill packages, tools, policies)
+  → build/acquired package or deployment artifact
+  → deployed runtime/service instance
+  → deployment-scoped operating-profile fingerprint referencing the DigitalProductRelease and actual configuration
+  → enduring GAID/Principal performer identity
+  → coworker service and eligible job/activity assignments
+  → TAK-governed actions and attributable evidence
+```
+
+This independently authored chain separates planning, Product definition, versioned Digital Assets,
+deployable packages, operational instances/services, and consumable services or offers. Those are
+candidate topics for a future authorized comparison with public CSDM guidance; this chain does not
+require ServiceNow tables or claim a semantic correspondence.
+
+One DigitalProduct version **MAY** support several deployed instances. One enduring AI-coworker
+identity **MAY** move across approved versions over time. A conformance claim **MUST** identify which
+operating-profile fingerprint and deployed configuration produced the evidence.
+
+The release or deployment realizes the DigitalProduct; an AgentSubject does not. An
+AIProductOperatingBinding states that one enduring subject performs under one release/profile
+combination for a declared role and period. Each binding references exactly one DigitalProductRelease,
+one operating-profile fingerprint, and one AgentSubjectReference, plus zero or one deployed instance:
+zero is permitted for approved pre-deployment qualification and exactly one is required for an
+active/`operated` claim.
+
+`bindingState` uses exactly `candidate | approved | active | suspended | retired`. Legal transitions
+are `candidate → approved | retired`, `approved → active | suspended | retired`, `active → suspended |
+retired`, and `suspended → approved | active | retired`; `retired` is terminal. `approved` requires a
+current TAK-JSI qualification reference and approved release/profile combination; `active` additionally
+requires exactly one deployed instance and current runtime policy evidence.
+
+The active uniqueness key is `(organizationScope, DigitalProductRelease,
+operatingProfileFingerprint, AgentSubjectReference, role)` over overlapping effective periods.
+AIProductBindingCompatibility.disposition uses exactly `compatible | segregated | incompatible |
+undetermined`. It is a pairwise relation, not one scalar field on a binding. For every pair of
+bindings with the same subject/role whose effective periods overlap in `active`, exactly one current
+compatibility relation exists, keyed by the lexically ordered pair of binding IDs plus the evaluated
+overlap period. Only `compatible`, or `segregated` with provably disjoint assignment, authority, data,
+tool, and memory scopes, may overlap in `active`; `incompatible`/`undetermined` overlap is prohibited.
+One binding can therefore have different evidenced dispositions against different peers. Every
+AI-Performer WorkAssignment references exactly one active
+AIProductOperatingBinding and its current TAK-JSI qualification; a non-AI assignment references none.
+One binding may support many temporal WorkAssignments. Every Evidence record that supports an AI
+WorkAssignment or an `operated` implementation-state claim references exactly one binding that was
+`active` at `observedAt`, its one deployed instance, and the qualification/policy versions effective
+at that time. Later suspension or retirement does not rewrite that historical evidence.
+
+The following cardinalities are the vendor-neutral default. A profile **MAY** narrow them but
+**MUST NOT** collapse the identities or lifecycles:
+
+- an AI-coworker DigitalProduct has `1..*` DigitalProductReleases over its life
+- a release composes `1..*` versioned assets and may produce `1..*` packages
+- one DigitalProductRelease may support many operating profiles; each operating profile references
+  exactly one primary DigitalProductRelease plus `0..*` dependency releases and fingerprints the
+  deployed model, prompt, skill package, tool, data, memory,
+  policy, provider, and oversight configuration that TAK-JSI evaluates
+- a DigitalProduct has `0..*` offers and `0..*` runtime or service instances; the FPAW managed-product
+  qualification requires a formal offer, while an `operated` implementation-state claim also
+  requires a managed instance in the assessed scope
+- a DigitalProduct has `0..*` AIProductOperatingBindings before managed-coworker qualification; the
+  `FPAW-Managed-AI-Coworker-DigitalProduct` qualification requires at least one current `approved` or
+  `active` binding, and an `operated` claim requires an `active` binding
+- the Performer aspect resolves through the binding to a GAID-owned enduring subject plus the
+  applicable release and operating-profile context; GAID remains authoritative for subject identity
+  while FPAW owns this Product/work relationship
+- a referenced agent subject may participate in many runtime deployments and temporal WorkAssignments
+- CoworkerService-to-DigitalProduct is conceptually many-to-many: one product can provide several
+  services, and a composite service can depend on several products
+
+The `Offer → Engagement/Contract → Instance/usage` chain and the
+`DigitalProduct → Release → Asset → Package → Deployment` chain are related but distinct. Neither
+chain substitutes for the GAID subject identity, qualification, assignment, or action-evidence
+chain.
+
+### 11.4 AI-coworker operating reference view using TAK
+
+Mark Bodman attests that he originated CSDM as a ServiceNow internal standard, created several public
+CSDM pattern videos, and regards the opening implementation-agnostic view in *AI Control Tower with
+CSDM 5* as relevant to TAK. The exact videos and any separable rights in ServiceNow publications have
+not been enumerated. The canonical DPF four-plane reference architecture lives in the
+[TAK standard](trusted-ai-kernel.md#11-ai-coworker-operating-reference-architecture). The bridge view
+below is independently expressed from DPF's own TAK, GAID, DigitalProduct, and work-allocation
+semantics. It does not reproduce, transform, or claim permission to use the ServiceNow source figure.
+TAK's companion
+[lifecycle and architecture view](trusted-ai-kernel.md#12-ai-coworker-lifecycle-and-architecture-view)
+expresses the requested end-to-end lifecycle pattern in DPF vocabulary.
+
+```mermaid
+flowchart LR
+    DP["AI-coworker DigitalProduct"]
+    REL["DigitalProductRelease"]
+    INS["Runtime or service instance"]
+    PROF["Deployment operating-profile fingerprint"]
+    SUBJ["GAID AgentSubject reference"]
+    BND["AIProductOperatingBinding"]
+    PERF["AI Performer aspect"]
+    JOB["Job, ActivityDefinition, and WorkAssignment"]
+    GATE["TAK authority decision and execution receipt"]
+    EVID["Outcome, control, and performance evidence"]
+
+    DP --> REL --> INS --> PROF
+    REL -. "release" .-> BND
+    INS -. "deployment" .-> BND
+    PROF -. "operating profile" .-> BND
+    SUBJ -. "subject" .-> BND
+    SUBJ --> PERF --> JOB --> GATE --> EVID
+    BND -. "qualified Product context" .-> PERF
+    EVID -. "assurance and lifecycle feedback" .-> DP
+```
+
+TAK owns the runtime authority, delegation, gating, and evidence semantics. FPAW owns only the typed
+bridge from DigitalProduct lifecycle and deployment context to the identity-bearing Performer and its work.
+`CA-MB-2026-08-01-CSDM-PROVENANCE` records that origin/video provenance and direct design direction;
+it does not assert personal ownership of the ServiceNow publications. The local CSDM/AICT publication
+was used to challenge the technical level boundaries in Section 13.4, but the figure's entities,
+relationships, and geometry are DPF-owned TAK/FPAW expression. Public ServiceNow pages are
+`reference-only` citations; no external conformance or exact class equivalence is asserted.
+
+### 11.5 DPF lifecycle profile for future IT4IT review
+
+| DPF lifecycle key | AI-coworker lifecycle concern | Minimum evidence examples |
+|---|---|---|
+| `Evaluate` | strategy, portfolio placement, value hypothesis, investment, risk appetite, make/buy/partner choice | decision record, owner, outcome hypothesis, portfolio dependency map |
+| `Explore` | job discovery, stakeholder impact, architecture, data/tool needs, controls, experience, feasibility | job/activity draft, impact assessment, architecture and evaluation plan |
+| `Integrate` | build/acquire/configure model, prompts, skills, tools, corpus, policies; test the complete operating profile | source/provenance, SBOM/AIBOM-style inventory, test and qualification evidence |
+| `Deploy` | place an approved artifact into an environment with configuration identity and rollback | deployment record, environment, artifact/fingerprint, controls and rollback proof |
+| `Release` | authorize a version for defined consumers, jobs, and service commitments | release decision, service/offer binding, qualification and policy status |
+| `Consume` | invoke or assign the coworker for eligible work and observe stakeholder experience | engagement/work assignment, entitlement, request, handoff and acceptance evidence |
+| `Operate` | monitor quality, latency, cost, drift, risk, safety, incidents, provider/dependency health; improve or retire | runtime telemetry, receipts, outcomes, surveillance, incident and revalidation records |
+
+These rows define a local DPF lifecycle profile using keys already present in DPF's EA registry. The
+Open Group public product page identifies only the external publication and its high-level lifecycle
+scope; it does not substantiate the semantics of these rows. The table is therefore a future review
+target, not a mapping record, reproduced IT4IT Reference Architecture requirement set, or conformance
+profile. Authoritative comparison and external conformance assessment require an authorized edition,
+applicable SourceUseDecision, complete mapping records, and a qualified human reviewer.
+
+### 11.6 Vendor-neutral deployment patterns for future CSDM review
+
+The following are independently expressed DPF profiles. Public CSDM pages and videos are linked only
+as implementation orientation; their expression is not an input. The profiles are useful because the
+same DigitalProduct can have different product, asset, deployment, service, and dependency shapes.
+
+| Pattern | Distinguishing topology | DPF lifecycle implication |
+|---|---|---|
+| `standalone-service` | one product family supplies a separately operated service | keep product/version, deployment, service instance, and offer distinct |
+| `platform-hosted-capability` | application or coworker capability depends on a shared platform host | model both design-time and runtime dependency; platform lifecycle remains separate |
+| `microservice-composite` | many independently versioned components collectively realize one BusinessProduct/ServiceDefinition | component releases and runtime dependencies do not create multiple commercial BusinessProducts by default |
+| `shared-technology-service` | common service supports many internal Products or performers | Foundational or Workforce internal-consumption placement; explicit consumers and commitments |
+| `client-compute-or-edge` | capability runs partly on user, vehicle, device, site, or edge infrastructure | include location, device, offline, data-residency, update, and support constraints |
+| `external-federated-ai` | externally operated agent/model/service participates in local work | preserve external identity, contract, data boundary, service dependency, internal accountability, fallback |
+| `hybrid-orchestrated-ai` | local and external agents, models, data, MCP/API services, or humans collaborate | record component and action provenance across every boundary |
+| `multi-instance-product` | one product/asset version is deployed into several runtime instances | avoid duplicating product truth; version and observe each instance separately |
+
+An implementation **MUST** state whether a mapping describes product definition, versioned asset,
+deployment artifact, runtime instance, service dependency, or commercial offer. Treating all six as
+one "AI agent" record creates ambiguous ownership and lifecycle gaps.
+
+## 12. Archetype profile composition
+
+The core is stable; industry meaning is composed through profiles. The hierarchy is:
+
+```text
+DPF-FPAW core
+  → reusable facet profiles
+  → category baseline
+  → leaf-archetype delta
+  → organization composition and overrides
+  → jurisdiction / contract / deployment overlays
+```
+
+### 12.1 Required facets
+
+An ArchetypeProfile **MUST** compose or explicitly mark not applicable:
+
+| Facet | Minimum content |
+|---|---|
+| `market-offering` | BusinessProduct lines/forms, consumers, value propositions, channels, offers |
+| `four-portfolio` | primary governed aspects and typed dependencies across all four roots |
+| `commercial-public-value` | transaction, subscription, recurring agreement, appointment, project, membership, donation, grant, statutory, or other value model |
+| `delivery-topology` | digital, facility, field, production, warehouse, route, professional case, event/media, public service, or composed pattern |
+| `capacity-demand` | demand signature, scarce resources, queues, calendars, throughput, seasonal or emergency behavior |
+| `asset-custody-material` | owned/client goods, serialized/lot items, inventory, equipment, facilities, movement, custody and evidence |
+| `activity-job-skill` | stages, WorkUnitDefinitions, jobs, roles, skills, licenses/qualifications, profession/occupation references |
+| `performer-allocation` | human/AI/robot/partner patterns, handoffs, authority, supervision, fallback, specialization |
+| `trust-control` | safety, privacy, professional, regulatory, accessibility, public/member governance, jurisdiction |
+| `outcome-measure` | stakeholder outcomes plus flow, quality, economics, capacity, risk evidence |
+| `vocabulary-delta` | recognizable industry labels and genuine leaf differences without changing core semantics |
+| `digital-enablement` | explicit DigitalProducts, services, CSDM candidate profile, and IT4IT Reference Architecture lifecycle touchpoints |
+
+### 12.2 Composition rules
+
+- A profile **MUST** declare ID, version, purpose, applicability, inherited facets, requirements,
+  vocabulary, mappings, owner, and effective period.
+- Core **MUST** requirements cannot be weakened.
+- Applicable requirements compose by union. Applicable controls compose only through the
+  deterministic meet rule for their declared constraint axis; “most restrictive” is not a
+  free-text judgment.
+- Vocabulary may relabel a concept but **MUST NOT** silently change its meaning.
+- Conflicts become explicit ConformanceClaims/Gaps; they are never silently resolved.
+- Local extensions **MUST** be namespaced and **MUST NOT** mutate the built-in archetype definition.
+- `not-applicable` **MUST** carry a scope-specific rationale and reviewer.
+- Multi-archetype organizations **MUST** compose every active primary/secondary BusinessProduct,
+  DigitalProduct, and value-flow
+  facet, reconcile shared resources/coworkers, and surface conflicts.
+
+Each composable control **MUST** declare one merge axis and normalized unit. Candidate 0.1.0 defines:
+
+| Merge axis | Meet operation |
+|---|---|
+| required obligations/evidence/reviewers | set union |
+| allowed performers/actions/data/tools/jurisdictions | set intersection |
+| prohibited performers/actions/data/tools | set union |
+| minimum oversight, evidence depth, qualification, or retention | maximum lower bound |
+| maximum autonomy, authority, exposure, latency, risk tolerance, or retention | minimum upper bound |
+| numeric interval | interval intersection |
+| categorical equality such as jurisdiction or record class | exact equality or an explicit lossless mapping |
+| permitted allocation modes | set intersection |
+
+Composition first decomposes a control that spans several axes into atomic constraints that retain
+the source control ID, authority, scope, and evidence. It then resolves any declared lossless
+categorical mappings to one canonical value, normalizes units, and applies each axis meet. A
+lossless mapping **MUST** be a total one-to-one mapping for the values in scope; otherwise the values
+are incomparable.
+
+For any member-set axis, let `Required = union(requiredMembers)`, `Allowed =
+intersection(allowedMembers)` with an undeclared allowed set treated as the axis universe, and
+`Prohibited = union(prohibitedMembers)`. The effective set is `Allowed - Prohibited`. A member in
+both Required and Prohibited, or any Required member absent from the effective set, is a composition
+conflict. Prohibition therefore prevents execution while the claim remains unsatisfied; it does not
+silently erase the requirement. Controls with different authorities or scopes are not combined until
+Appendix B proves they apply to the same subject, period, and decision.
+
+An empty intersection, inverted interval, incompatible unit, incomparable authority source, or
+simultaneous minimum/maximum that cannot both hold is a composition conflict. It produces an
+`unsatisfied` requirement and Gap; precedence in Appendix B may identify the governing authority but
+**MUST NOT** fabricate a meet. A Profile extension that adds a merge axis **MUST** publish its partial
+order, normalization, meet operation, conflict predicate, and evidence.
+
+### 12.3 Coverage manifest
+
+A generated or mechanically checked manifest **MUST** assert for every current unique leaf:
+
+- exactly one category baseline
+- BusinessProduct classification and at least one value proposition
+- all four portfolio roots with placement or justified non-applicability
+- one or more operating patterns and complete Stage contracts to the claimed resolution
+- performer allocation and activity/job/skill references
+- physicality, location, resource, material, and custody declarations
+- controls, evidence expectations, and outcome measures
+- explicit provenance `explicit | derived`
+- evidence maturity `template-ready | ops-ready | connector-ready | regulated-ready | sole-platform-ready`
+- zero unknown/unmapped facets; exceptions include rationale and owner
+
+The source registry remains authoritative. A new leaf without complete facets **MUST** fail profile
+coverage rather than inherit an unreported generic fallback.
+
+## 13. External standards mappings
+
+### 13.1 Mapping rules
+
+Every external mapping **MUST** identify:
+
+- standards owner, title, edition/version, canonical URI, and access date
+- source concept or requirement identifier without reproducing restricted text
+- local concept or requirement identifier
+- relationship (`adopts | profiles | augments | maps-to | adjacent | out-of-scope`)
+- semantic relation (`exact | close | broad | narrow | related`)
+- rationale, confidence, known loss or mismatch, reviewer, and review cadence
+- SourceUseDecision ID, use status, permitted-use scope, and ContributorAttestation ID when applicable
+
+Unknown license terms default to `undetermined` and no content processing. An AI system **MUST NOT**
+open a restricted or unknown-rights artifact merely to decide whether it may open that artifact.
+Rights evidence must instead come from a separately accessible public license/rights page, signed
+permission, the operative agreement, or a qualified human-supplied rights record. An express
+prohibition for the declared use makes the source `excluded`. A public abstract, product page, or
+download link is not permission to process or reproduce the publication. A mapping **MUST NOT** imply
+endorsement, certification, or standards-body status.
+
+#### 13.1.1 Source-use decisions and contributor-origin material
+
+Every source/use pair **MUST** have a complete SourceUseDecision before any of these actions:
+
+- AI or automated access to non-public, restricted, unknown-rights, or contributor-origin content
+- use of external content to substantiate normative text, an `exact` or `close` mapping, a
+  conformance claim, copied/transformed content, or generated artifacts
+- storage, reproduction, repository distribution, sublicensing, or external submission of a source
+  asset or protected expression
+
+A public page used only to identify a title, owner, version, canonical URI or reproducible
+owner-approved resolver, or research target **MAY** instead have a SourceCitation. A SourceCitation
+**MUST** identify those fields plus access date and orientation scope, **MUST** be `reference-only`,
+**MUST NOT** represent a license determination, and **MUST NOT** support normative text, a claimed
+correspondence, or conformance evidence. Public availability alone never qualifies a source as
+`permitted-public`.
+
+Each SourceUseDecision binds one exact artifact or one explicitly enumerated immutable source set to
+one declared use and has exactly one status:
+
+- `permitted-public` — the declared use is authorized by a public license or public-domain basis
+- `permitted-contributor` — the declared use is authorized for a bounded contributor-origin source
+- `reference-only` — bibliographic or identifier reference is allowed, but protected expression is
+  not an input
+- `excluded` — an applicable term expressly prohibits the declared access or use
+- `undetermined` — the rights basis is unresolved; treatment defaults to reference-only and the
+  material **MUST NOT** be processed or incorporated
+
+A SourceUseDecision **MUST** record:
+
+- source artifact, title, owner, edition/version, locator, access date, intended use, and use status
+- claimed rightsholder, contributor, member organization, and employer/assignment context when relevant
+- governing public license, contract, permission, retained-use clause, or other asserted rights basis
+- exact contribution scope and locator, contribution kind, and whether it is sole, separable joint,
+  collective-work, work-for-hire, assigned, or undetermined
+- separate permissions for AI processing, quotation, paraphrase, transformation, storage,
+  reproduction, repository distribution, sublicensing under the repository license, and external submission
+- excluded coauthor, editor, publisher, employer, standards-body, confidential, and third-party material
+- attribution/trademark conditions, evidence, reviewer, decision/effective dates, expiry, and revocation terms
+
+Grouping is permitted only when every enumerated source has the same owner, rights basis, intended
+use, status, permission matrix, exclusions, reviewer, and dates. Otherwise each source requires a
+separate decision. A summary row or a decision ID without these resolved fields is not a complete
+SourceUseDecision.
+
+A natural-person contributor **MAY** supply a clean-room statement, excerpt, source asset, or concept
+description as a new `permitted-contributor` source when a ContributorAttestation establishes every
+applicable field above and grants the intended use. Acceptance covers only the specifically
+identified, separable contribution and permissions. It **MUST NOT** extend to:
+
+- collective-work wording, clause structure, numbering, editorial synthesis, or definitions not
+  demonstrated to be the attestor's authorized contribution
+- a coauthor's, editor's, employer's, publisher's, standards body's, or third party's material
+- a published figure, table, logo, or trade dress unless rights to that exact artifact are evidenced
+- trademark use beyond accurate nominative reference
+- confidential material, external conformance/certification, or an adoption, endorsement, or ownership claim
+
+The member-rights distinction is explicit. The Open Group's current Membership Terms define the
+`Member` as the member company or organization, treat contributed Information and resulting Material
+as The Open Group intellectual property, and reserve to the Member the continuing right to use the
+Information it contributed. A named individual's acknowledgement therefore proves participation, not
+by itself personal ownership, the member organization's authorization, contribution boundaries, or a
+license to the compiled Material. The agreement actually governing the contribution controls.
+
+When the attestor is also the DPF Standards Steward, or joint authorship, employment, assignment,
+work-for-hire, or collective-work rights are implicated, an independent human rights reviewer
+**MUST** accept the SourceUseDecision before contributor-origin expression is incorporated into an
+adopted normative version, the source asset itself is redistributed or sublicensed, or an external
+submission relies on the claimed rights. An authenticated clean-room design statement may support a
+candidate's independently expressed semantics under a bounded decision; adoption remains gated.
+Contributor provenance cannot be represented as a current external requirement or authoritative
+interpretation without an authorized edition and the applicable standards process.
+
+### 13.2 Orientation references, not mapping records
+
+The following table is research orientation only. Its rows are deliberately non-conformant as
+external mapping records because they do not carry the complete fields required by Section 13.1.
+No row may be used as evidence for `FPAW-MAP-001`; a production mapping registry must create a
+separate complete record for each claimed correspondence.
+
+| Reference | Research question, not a relation | DPF concern to test in a future authorized mapping |
+|---|---|---|
+| [IT4IT Standard, Version 3.0.1](https://publications.opengroup.org/c24a) | Could a licensed mapping relate the lifecycle models? | DigitalProduct lifecycle; the compiled standard's definitions and criteria are not inputs |
+| [The Shift to Digital Product W205](https://publications.opengroup.org/w205) | Is there documentable conceptual lineage? | bibliographic lineage under `SUD-W205-2026-08-01` |
+| [DPPM Guide G252](https://publications.opengroup.org/g252) | Could the operator-contributed roles be reconciled? | direct statements remain separate; exact published expression/equivalence is not asserted |
+| [CSDM data domains](https://www.servicenow.com/docs/r/servicenow-platform/common-service-data-model-csdm/csdm-conceptual-model.html) and [AI Portfolio](https://www.servicenow.com/docs/r/application-portfolio-management/eaw-exploring-the-ai-portfolio.html?contentId=0wyzUqVB2jKs~oh7xWrGVA) | Could an implementation profile validate the Section 13.4 candidate? | product-model/asset/package/deployment/service/consumption levels and their non-collapse rules |
+| [OMG BACM](https://www.omg.org/spec/BACM) | Could FPAW profile or augment it? | business elements, value, capability, stakeholder, operational work, and assurance |
+| [OMG VDML 1.1](https://www.omg.org/spec/VDML/1.1/) | Could a semantic relation be established? | actor-neutral value creation and value networks |
+| [ArchiMate](https://www.opengroup.org/archimate-forum/archimate-overview) | Could architecture views be represented without conflating ontologies? | viewpoints and architecture relations |
+| [BPMN 2.0.2](https://www.omg.org/spec/BPMN/2.0.2/) | Could predictable execution be allocated? | process and collaboration execution |
+| [CMMN](https://www.omg.org/spec/CMMN) | Could case work be allocated? | case and evidence-driven execution |
+| [DMN](https://www.omg.org/dmn/) | Could governed decisions be referenced? | decision requirements and logic |
+| [NIST AI RMF 1.0](https://www.nist.gov/itl/ai-risk-management-framework) | Could an authorized control profile be defined? | scoped AI risk governance |
+| [ISO/IEC 42001:2023](https://www.iso.org/standard/42001) | Could organizational controls be related? | AI management-system context, not individual job qualification |
+| [ISO/IEC 23894:2023](https://www.iso.org/standard/77304.html) | Could risk-management integration be related? | AI risk context |
+| [ISO 30414:2025](https://www.iso.org/standard/30414) | Where is the reporting boundary? | human-capital reporting versus AI-coworker DigitalProduct/Performer semantics |
+| [ISCO-08](https://isco.ilo.org/en/isco-08/) | Could licensed identifiers be referenced? | human occupation/job classification |
+| [ESCO](https://esco.ec.europa.eu/en/about-esco) | Could licensed identifiers be referenced? | occupation, skill, competence, and qualification identifiers |
+| [O*NET Content Model](https://www.onetcenter.org/content.html) | Could a licensed workforce profile be defined? | work and worker descriptors with attribution |
+| [ISA-95](https://www.isa.org/standards-and-publications/isa-standards/isa-95-standard) | Could an authorized boundary profile be defined? | enterprise, control-system, and manufacturing-operation boundaries |
+| [GS1 standards](https://www.gs1.org/standards/how-gs1-standards-work) | Which licensed identifiers/events are applicable? | product, location, logistics, and physical traceability |
+| [ISO 55000 family](https://www.iso.org/committee/55089/x/catalogue/) | Could asset context be related? | asset-management lifecycle |
+| [W3C PROV-O](https://www.w3.org/TR/prov-o/) | Could interoperable provenance be represented? | attribution among entities, activities, and responsible agents |
+| [W3C SKOS](https://www.w3.org/TR/skos-reference/) | Could concept-scheme relations be represented? | qualified semantic mapping vocabulary |
+| [W3C SHACL](https://www.w3.org/TR/shacl/) | Could RDF constraints be validated? | machine-verifiable graph/profile constraints |
+| [W3C DCAT 3](https://www.w3.org/TR/vocab-dcat-3/) | Could exchange resources be related? | versioned resource/catalog relationships |
+
+APQC's Process Classification Framework is useful prior art for cross-industry and industry-specific
+taxonomies, but APQC artifacts carry version- and artifact-specific license and attribution terms.
+This standard does not import the taxonomy. Implementers **MUST** obtain and review the applicable
+license before mapping APQC content. The same reference-only rule applies to ISO/IEC full text and artifact-specific material
+from CSDM, SCOR, TM Forum, BIAN, ISA, GS1, or other licensors.
+
+### 13.3 IT4IT Reference Architecture candidate-binding contract
+
+An FPAW candidate binding intended for comparison with the IT4IT Reference Architecture **MUST**
+contain every Section 13.1 mapping-envelope field, including owner/title/version/URI, source and
+local concept identifiers, relationship and semantic relation, complete SourceUseDecision
+ID/status/permitted-use scope, applicable ContributorAttestation, known loss, reviewer, and date. It
+**MUST** additionally contain:
+
+- `digitalProductId`
+- declared IT4IT Reference Architecture edition/version identifier
+- a local DPF lifecycle key and, only when an authorized source is available, the declared external
+  value-stream identifier being tested
+- local BusinessProduct, ValueStream, Stage, Capability, or WorkUnitDefinition reference
+- relation (`constitutes | enables | operates | governs | consumes | supplies`)
+- rationale and applicable lifecycle boundary
+- source criteria/component identifiers when licensed and available
+- evidence, confidence, reviewer, and date
+
+The current DPF lifecycle-key vocabulary is:
+
+`Evaluate | Explore | Integrate | Deploy | Release | Consume | Operate`.
+
+These labels are observed local registry state, not evidence that this candidate reproduces the
+external stream definitions. A binding that uses them **MUST** remain `present-unverified` until a
+source-authorized comparison satisfies Section 13.1. Legacy DPF labels such as Strategy to
+Portfolio, Requirement to Deploy, Request to Fulfill, Detect to Correct, and Deploy to Operate are
+distinct local identifiers and **MUST** be represented separately; no synonym or replacement
+relationship may be inferred without a complete mapping record.
+
+If no evidenced DigitalProduct relation exists, binding state remains `absent`; a complete candidate
+record awaiting verification uses `present-unverified`.
+There is no DPF blanket Request-to-Fulfill fallback, and an industry ValueStream **MUST NOT** be
+classified wholesale as the `Consume` registry key.
+
+Binding state is a separate controlled axis:
+
+- `present-verified` — every mandatory binding field is present and evidence verification is current
+- `present-unverified` — a complete candidate binding exists but its evidence has not been verified
+- `absent` — no binding is asserted
+- `not-applicable` — no binding is required for the scoped object, with the Section 4.1 decision record
+
+The word `unverified` in this section refers only to `present-unverified`; it is not a RequirementStatus.
+
+### 13.4 CSDM/AICT technical bridge candidate
+
+The operator-supplied *AICT with CSDM v1* paper prompted a stricter level-separation review, but its
+`undetermined` SourceUseDecision cannot substantiate a mapping. The independently authored technical
+hypotheses below are therefore a validation backlog, not Section 13.1 mapping records or Section 13.3
+bindings. Every row has BindingState `absent`: no CSDM correspondence is asserted. The lifecycle
+column identifies DPF phases in the review scope, not the single local lifecycle key required by a
+future binding. A complete mapping envelope and permitted source review are required before a row may
+become `present-unverified`.
+
+| Candidate ID | CSDM/AICT implementation level to validate | FPAW target level | DPF lifecycle phases in review scope (not binding keys) | Known loss and required verification |
+|---|---|---|---|---|
+| `CSDM-CAND-STRATEGY-001` | ideation, strategy, planning, and portfolio context | Objective, intended Outcome, PortfolioDefinition/Portfolio, BusinessProduct or DigitalProduct idea | Evaluate, Explore | validate object identity, decision state, measure/target semantics, and Objective→Outcome cardinality |
+| `CSDM-CAND-PRODUCT-001` | AI System, AI Agent, or Digital Worker Product Model | AI-coworker DigitalProduct definition | Evaluate, Explore, Integrate | determine whether the model denotes a reusable Product, a sellable BusinessProduct, or only a template; do not infer GAID identity |
+| `CSDM-CAND-RELEASE-001` | approved Product Model version plus its approved composition | DigitalProductRelease | Integrate, Release | no single exact release authority is yet established; validate version, composition, approval, consumer/environment scope, and effective period |
+| `CSDM-CAND-ASSET-001` | versioned AI Digital Asset such as model, prompt, data, skill/tool definition, or agentic component | release-composed versioned asset | Integrate | validate asset kind, provenance, immutability, dependency direction, and whether the asset can be shared by several releases |
+| `CSDM-CAND-PACKAGE-001` | deployable Package or Artifact | package produced from one release composition | Integrate, Deploy | validate many-package/many-deployment cardinalities, digest, environment compatibility, and rollback identity |
+| `CSDM-CAND-RUNTIME-001` | Application Service Instance, AI Application, AI Function, model deployment, or equivalent operational CI | deployed instance/service realization | Deploy, Operate | validate whether the record is deployment, service instance, function, or model endpoint; one CI **MUST NOT** collapse all four |
+| `CSDM-CAND-CONSUME-001` | Product Offering, Service Offering, catalog/request, installed-base or usage context | typed Offering, engagement/contract, entitlement, instance/usage, and WorkOccurrence | Release, Consume, Operate | validate target kind, provider/consumer, accepted terms, entitlement, request-to-instance chain, and usage evidence |
+| `CSDM-CAND-IDENTITY-001` | operational AI Agent or Function record | deployed identity projection only; AgentSubjectReference remains GAID-owned | Deploy, Consume, Operate | prove an authoritative enduring subject resolver before identity mapping; a deployment/CI identifier alone is insufficient |
+| `CSDM-CAND-BINDING-001` | relation among Product Model/version, operational CI, service, and agent context | AIProductOperatingBinding | Release, Deploy, Consume, Operate | no single source entity is assumed; validate binding state, release/profile/subject/deployment temporal uniqueness, compatibility, and qualification |
+| `CSDM-CAND-WORK-001` | task, request, case, or operational assignment context | ActivityDefinition, WorkOccurrence, AllocationDecision, WorkAssignment, Collaboration | Consume, Operate | validate atomic responsibility/Performer cardinality, authority, human/AI synergy, handoff, and acceptance evidence; likely requires FPAW/TAK extension |
+| `CSDM-CAND-EVIDENCE-001` | monitoring, risk/governance, lifecycle, and consumption telemetry | Evidence, OutcomeObservation, ConformanceClaim, Gap, TAK receipt | Evaluate, Integrate, Operate | validate claim subject, deployed/profile identity, provenance, freshness, verifier, and separation of observed evidence from intended Outcome |
+| `CSDM-CAND-FEDERATION-001` | internal, external, or hybrid AI blueprint | provider/dependency topology plus external/federated Performer and service relations | Integrate, Deploy, Operate | preserve external identity/provenance, provider contract, data/authority boundary, internal accountability, fallback, and concentration risk |
+
+The bridge's anti-collapse rule is normative for FPAW implementations: Product definition, release,
+asset, package, deployment, service definition/instance, Offering, engagement/usage, AgentSubject,
+AIProductOperatingBinding, WorkAssignment, and evidence **MUST** retain distinct identities and typed
+relations. A future CSDM adapter may map several source records to one FPAW level or one source record
+to several explicit projections, but it **MUST** report the mapping level and known loss rather than
+materializing a generic `AI Agent` object as all of them.
+
+### 13.5 Industry-standard profiles
+
+Industry mappings belong in versioned profile facets, not in the core. A profile **SHOULD** select
+authoritative sources for the actual regulated or transaction boundary—for example BIAN in banking,
+HL7 FHIR in healthcare data exchange, NIEM in public-sector information exchange, TM Forum in
+telecommunications, GS1 in supply chains, or jurisdiction-specific law and professional doctrine.
+
+Selection **MUST** be based on applicability, version, license, and actual implementation evidence.
+A category label alone is not proof that a standard applies to every leaf or WorkUnitDefinition.
+
+## 14. Conformance model
+
+### 14.1 Profiles
+
+A conformance claim includes the Core profile plus any claimed profiles:
+
+| Profile | Required scope |
+|---|---|
+| `FPAW-Core-Semantic` | concepts, identities, source/version boundaries, traceability, and core invariants |
+| `FPAW-Four-Portfolio` | placements, aspects, dependencies, ownership, and BusinessProduct/DigitalProduct realization |
+| `FPAW-Business-Offering-Value` | BusinessProducts, Offerings, Outcomes, ValueStreams, Stages, and measures |
+| `FPAW-Operational-Work` | OperatingFlows, WorkUnitDefinitions/Occurrences, handoffs, capacity, resources, and physical work |
+| `FPAW-Workforce-AI` | jobs, roles, skills, performers, allocation, AI dual aspect, TAK/GAID/TAK-JSI links |
+| `FPAW-AI-Coworker-DigitalProduct-Lifecycle` | the AI coworker's explicit DigitalProduct lifecycle and candidate external-reference mappings |
+| `FPAW-Industry-Archetype` | composed category/leaf/organization/jurisdiction facets and complete coverage manifest |
+| `FPAW-Assurance-Evidence` | controls, metrics, provenance, conformance verification, gaps, waivers, surveillance |
+| `FPAW-Publication-Governance` | standard ownership, change control, adoption, version publication, and external contribution state |
+
+Profile dependency and minimum claimable depth are normative:
+
+| Profile | Required profiles | Minimum claimable depth | Requirement membership |
+|---|---|---:|---|
+| `FPAW-Core-Semantic` | none | `R5` | `FPAW-CORE-*`, `FPAW-CONF-*` |
+| `FPAW-Four-Portfolio` | Core | `R5` | `FPAW-PORT-*`, `FPAW-PROD-*`, `FPAW-CONF-*` |
+| `FPAW-Business-Offering-Value` | Core, Four-Portfolio | `R5` | `FPAW-PROD-*`, `FPAW-FLOW-*`, `FPAW-CONF-*` |
+| `FPAW-Operational-Work` | Core, Business-Offering-Value | `R5` | `FPAW-FLOW-*`, `FPAW-WORK-*`, `FPAW-PHYS-*`, `FPAW-CONF-*` |
+| `FPAW-Workforce-AI` | Core, Operational-Work, Assurance-Evidence | `R5` | `FPAW-WORK-*`, `FPAW-AI-*`, `FPAW-CONF-*` |
+| `FPAW-AI-Coworker-DigitalProduct-Lifecycle` | Core, Four-Portfolio, Workforce-AI, Assurance-Evidence | `R5` | `FPAW-AI-*`, `FPAW-MAP-*`, `FPAW-CONF-*` |
+| `FPAW-Industry-Archetype` | Core, Operational-Work, Workforce-AI | `R5` | `FPAW-PROF-*`, `FPAW-CONF-*`, plus every requirement ID selected by the versioned facet manifest; the companion Candidate 0.1.0 catalog adds `FPAW-CAT-*` |
+| `FPAW-Assurance-Evidence` | Core | `R5` | `FPAW-MAP-*`, `FPAW-CONF-*`, `FPAW-GAP-*` |
+| `FPAW-Publication-Governance` | Core | `R5` | `FPAW-GOV-*`, `FPAW-CONF-*` |
+
+Profile scope is non-vacuous. A claim **MUST** contain the profile's characteristic anchors below;
+objects outside the declared scope remain outside the claim, but an empty characteristic scope cannot
+earn conformance:
+
+| Profile | Mandatory non-empty characteristic anchors |
+|---|---|
+| `FPAW-Core-Semantic` | one Organization plus the identities, source/version boundary, and ConformanceClaim being assessed |
+| `FPAW-Four-Portfolio` | one or more GovernedAspects and a complete four-root inventory, including evidenced zero counts where a root has no items |
+| `FPAW-Business-Offering-Value` | one BusinessProduct or ServiceDefinition, one typed Offering, one intended Outcome, and one ValueStream |
+| `FPAW-Operational-Work` | one material Stage, WorkUnitDefinition, and WorkOccurrence |
+| `FPAW-Workforce-AI` | one AI Performer, one applicable Job/ActivityDefinition, and one WorkAssignment |
+| `FPAW-AI-Coworker-DigitalProduct-Lifecycle` | one AI-coworker DigitalProduct, release, AIProductOperatingBinding, and lifecycle evidence chain |
+| `FPAW-Industry-Archetype` | one canonical leaf manifest and every facet selected by that manifest |
+| `FPAW-Assurance-Evidence` | one scoped claim, its mandatory evidence set, and the resulting Gap/waiver inventory, including evidenced zero counts |
+| `FPAW-Publication-Governance` | one standard version publication, adoption, or normative change action |
+
+An implementation **MUST NOT** claim a profile below its minimum depth or omit a dependency. It
+conforms only if every applicable **MUST** in the union of the exact membership expressions above,
+the selected facet manifest, and Core is satisfied with acceptable evidence.
+
+A Gap may document that a mandatory anchor is missing during a readiness assessment, but it is not
+the anchor and cannot make the scope non-empty. Any Gap against a mandatory characteristic anchor
+blocks conformance to that profile until the required object exists and the Gap is verified closed.
+
+Two conditional closures are additive to every row above and prevent requirements from disappearing
+through an escape path: a claim that records or references any Gap **MUST** add `FPAW-GAP-*`, and a
+claim that asserts any external mapping or candidate binding **MUST** add `FPAW-MAP-*`. A
+`not-assessed` or `unsatisfied` RequirementStatus, or a requirement carrying an active waiver record,
+is not itself a Gap; if the implementation creates a Gap from it, the Gap family becomes part of the
+exact membership expression.
+
+Resolution is cumulative: an `Rn` assessment includes `R0` through `Rn` and cannot selectively omit
+a lower level. A catalog row becomes depth-applicable when assessed depth is at least its `Minimum
+depth`, subject to profile membership and object applicability. Because each profile's minimum
+claimable depth equals or exceeds the deepest requirement in its membership, a shallower exercise is
+only a readiness/gap assessment; it is not profile conformance.
+
+Achieved depth is derived, not declared: it is the deepest `Rn` for which all mandatory anchors,
+applicable requirement objects, upward/downward traces, and required evidence through `Rn` have been
+assessed. The implementation statement records both requested and achieved depth; conformance uses
+the lower of the two and cannot claim a profile whose minimum is deeper.
+
+Every requirement ID inherits a default applicability predicate from its family:
+
+| Family | Default applicability |
+|---|---|
+| `CORE` | every conformance scope |
+| `PORT` | every governed aspect inside a Four-Portfolio claim |
+| `PROD` | each in-scope BusinessProduct, ServiceDefinition, Offering, DigitalProduct, or realization relation named by the requirement |
+| `FLOW` | each in-scope operational ValueStream, Stage, or handoff named by the requirement |
+| `WORK` | each in-scope ActivityDefinition, Job, work, Performer, assignment, collaboration, or capacity record named by the requirement |
+| `PHYS` | work/resource scopes whose WorkUnitDefinition `executionMedia` contains `physical-actuation`; otherwise a recorded `not-applicable` decision is required |
+| `AI` | any in-scope AI coworker, AI Performer, or agentic component named by the requirement |
+| `PROF` | every declared industry/category/leaf/organization/jurisdiction profile |
+| `CAT` | every claim using the companion Candidate 0.1.0 archetype profile catalog |
+| `MAP` | every asserted external mapping or IT4IT binding; mapping-governance requirements apply whenever any mapping is in scope |
+| `CONF` | every ConformanceClaim |
+| `GAP` | every declared gap-analysis scope and each resulting Gap named by the requirement |
+| `GOV` | every proposal, approval, version publication, adoption, or external-contribution action for this standard |
+
+A row's own conditional text may narrow this default, but every exclusion **MUST** carry the
+Section 4.1 applicability decision. Profile membership and applicability are different axes: a
+requirement can belong to a profile yet be `not-applicable` only with that evidence.
+
+### 14.2 Implementation statement
+
+A claim **MUST** state:
+
+- standard and profile versions
+- organization, BusinessProduct, DigitalProduct, ValueStream, workforce, deployment, and jurisdiction scope
+- requested and derived achieved resolution depth `R0`–`R5`
+- requirement applicability and status
+- evidence references, provenance, confidence, freshness, verifier, and verification method
+- deviations/waivers, owner, rationale, expiry, and review date
+- external mappings, SourceUseDecision status/ID, permitted-use scope, and ContributorAttestation ID
+  when applicable
+
+Requirement status uses exactly:
+
+- `satisfied`
+- `partial`
+- `unsatisfied`
+- `not-applicable`
+- `not-assessed`
+
+Implementation state is a separate axis:
+
+- `defined`
+- `mapped`
+- `implemented`
+- `verified`
+- `operated`
+
+Evidence verification status is also a separate axis:
+
+- `verified`
+- `provisional`
+- `unverified`
+- `stale`
+- `not-required`
+
+MappingConfidence uses `unknown | low | medium | high`, optionally accompanied by a calibrated
+`0..1` value and method. It and the Section 13.3 binding state are separate again. None of these axes
+may be collapsed into a single status.
+
+### 14.3 Evidence rules
+
+- Missing mandatory evidence sets RequirementStatus to `not-assessed` and EvidenceVerificationStatus
+  to `unverified`; it never implies satisfaction.
+- Derived evidence **MUST** retain its method, inputs, source versions, and confidence.
+- Lower-confidence projections **MUST NOT** overwrite a human-verified assessment.
+- Runtime evidence **MUST** identify the relevant deployed version and effective policy/profile.
+- Evidence **MUST** be re-evaluated after an applicable standard/profile change or material
+  BusinessProduct, DigitalProduct, or operating-profile change.
+- **SHOULD** deviations require a recorded rationale even when they do not block conformance.
+- A waiver **MUST** be scoped, owned, reasoned, time-bounded, and reviewed.
+- A waiver records governance acceptance or temporary risk treatment only. It does not change an
+  unsatisfied **MUST** to `satisfied`; the claim remains nonconformant unless the governing profile
+  applies a tailoring point expressly delegated by the owning core requirement and satisfies its
+  evidence contract. A profile cannot invent an exception to a core **MUST**.
+- DPF's archetype readiness ladder is an implementation-evidence ladder, not an external
+  certification ladder.
+
+### 14.4 Machine-readable projection
+
+A conforming implementation **SHOULD** publish a machine-readable implementation statement. JSON,
+JSON-LD/RDF, ArchiMate exchange, or another governed representation may be used. If RDF is used,
+SHACL **SHOULD** express conformance constraints, SKOS **SHOULD** express concept mappings, and PROV-O
+**SHOULD** express evidence attribution.
+
+At minimum, the exchange representation **MUST** preserve:
+
+- canonical object type/ID/version, organization scope, owner, and effective period
+- GovernedAspect kind-definition reference, target, placement, uniqueness/non-overlap assertion, and
+  split/merge/supersession lineage
+- relation subject/object IDs and versions, canonical direction/key, owner, effective period, and evidence
+- intended Outcome targets separately from append-only OutcomeObservations and their measure,
+  acceptance, provenance, confidence, and verifier fields
+- WorkUnitDefinition `executionMedia`, `connectivityMode`, applicable `PHY-*` decisions, authoritative
+  completion evidence, and physical-resource/custody references
+- AllocationDecision pattern, complete atomic WorkAssignment set, ActivityDefinition-or-Role
+  responsibilities, Performer/Principal references, and the one Collaboration when required
+- WorkforceTransitionAssessment state/version, immutable snapshots, baseline/target partitions,
+  predecessor/successor mappings, people treatment, rollback/fallback, and verification evidence
+- AIProductOperatingBinding state and uniqueness fields, the pairwise
+  AIProductBindingCompatibility relations, effective-time TAK-JSI qualification/deployment, and the
+  WorkAssignment/evidence references that select one current binding
+- Profile IDs/versions/dependencies, characteristic anchors, merge-axis controls, and applicability
+- requested/achieved depth plus each requirement's applicability, RequirementStatus, waiver reference,
+  evidence references, and verifier
+- Evidence type/integrity/provenance/time/freshness/verification fields and derived-method lineage
+- Gap target/observation, assessment scales, verification state/history, closure evidence, and canonical
+  work reference or disposition rationale
+- external mappings, SourceUseDecision status/IDs, applicable ContributorAttestation references, and
+  permitted-use scope
+
+Round-tripping a diagram or a single score without these fields is insufficient.
+
+## 15. Gap-analysis model
+
+### 15.1 Gap types
+
+`Gap.type` uses a controlled vocabulary:
+
+`missing | partial | misaligned | unverified | stale | duplicate | orphaned | obsolete |
+under-controlled | over-constrained | incompatible`.
+
+### 15.2 Gap dimensions
+
+Every Gap has one primary dimension key and may have related dimension keys:
+
+| Key | Dimension |
+|---|---|
+| `GDM-VALUE` | stakeholder value, objective, and outcome |
+| `GDM-PRODUCT` | BusinessProduct, ServiceDefinition, typed Offering, and catalog boundary |
+| `GDM-PORTFOLIO` | portfolio placement and dependency |
+| `GDM-FLOW` | ValueStream, Stage, handoff, queue, bottleneck, and rework |
+| `GDM-CAPABILITY` | capability coverage and maturity |
+| `GDM-WORK` | OperatingFlow, ActivityDefinition, and WorkUnitDefinition/Occurrence |
+| `GDM-WORKFORCE` | job, role, occupation, skill, credential, qualification, and capacity |
+| `GDM-ALLOCATION` | human/AI/robot/partner allocation and synergy |
+| `GDM-CONTROL` | authority, accountability, segregation, safety, privacy, accessibility, and regulation |
+| `GDM-PHYSICAL` | physical assets, facilities, materials, inventory, maintenance, location, and custody |
+| `GDM-DIGITAL-PRODUCT` | DigitalProduct enablement and lifecycle coverage |
+| `GDM-INFORMATION` | information, interface, record, data quality, provenance, and interoperability |
+| `GDM-ECONOMICS` | commercial economics, cost, margin, entitlement, contract, and commitment |
+| `GDM-AI` | AI risk, evaluation, monitoring, drift, provider, and runtime control |
+| `GDM-MEASUREMENT` | value, flow, quality, economics, capacity, risk metrics, and evidence |
+| `GDM-MAPPING` | external mapping, license, version, and semantic confidence |
+| `GDM-RESILIENCE` | resilience, continuity, recovery, concentration, and vendor dependence |
+
+### 15.3 Assessment scales
+
+Gap records use these closed scales:
+
+- severity: `unknown | informational | low | moderate | high | critical`
+- gate disposition: `none | hard-gate | undetermined`, with source authority and reason
+- confidence: `unknown | low | medium | high`, optionally accompanied by a calibrated `0..1` value
+- freshness: `unknown | current | aging | stale`, computed from `observedAt`, `validUntil` or a
+  profile-owned maximum age, and `assessedAt`
+- verification state: `open | verification-pending | closed | superseded`
+
+`unknown` or `undetermined` is conservative: it cannot satisfy a mandatory control or reduce
+prioritization. `hard-gate` is a blocking disposition reserved for unsatisfied law, rights, safety,
+or mandatory authority constraints; it is independent of severity.
+Each profile **MUST** publish any domain-specific threshold that maps evidence to these shared keys.
+
+Evidence records also use controlled classification:
+
+- type: `authoritative-record | execution-receipt | observation | test | attestation | document |
+  projection | inference`
+- integrity: `signature-verified | source-verified | controlled-copy | unverified | failed`
+
+Every evidence reference **MUST** carry type, integrity, provenance, observed/issued time, assessed
+time, applicable freshness policy, and verification status. A projection or inference cannot become
+an authoritative record merely because confidence is high.
+
+Gap verification state is independent from backlog/remediation status. A Gap is `open` when created;
+it may enter `verification-pending` only after remediation or an accepted no-remediation disposition
+has supplied the declared acceptance evidence. It becomes `closed` only when an authorized verifier
+confirms that the target is achieved or no longer applicable and records the evidence/decision. A
+failed verification returns it to `open`. A `closed` Gap returns to `open` when its closure evidence
+expires or is invalidated while the target/requirement version and scope identity are unchanged; the
+prior closure event, verifier, evidence, and reopening reason remain in append-only state history.
+When a target, requirement, Profile, or scope identity/version changes, the existing Gap is not
+retargeted: if the newly applicable comparison exposes a delta, create a new `open` successor Gap and
+mark the prior Gap `superseded` with that replacement reference. If no new delta exists, retain the
+closed record and append the re-evaluation event. Backlog completion alone never closes a Gap.
+
+### 15.4 Gap record
+
+A Gap **MUST** contain:
+
+- stable key, scope, profile/requirement version, and applicability
+- explicit target/requirement and observed state
+- type, primary/related dimensions, severity, gate disposition, confidence, and freshness
+- verification state, state-change times, verifier, closure/supersession evidence, and replacement Gap when applicable
+- every applicable impacted Outcome, BusinessProduct, DigitalProduct, Stage, Capability, work,
+  Performer, and Resource reference; each omitted impact class carries a Section 4.1 applicability decision
+- evidence and provenance
+- cause hypothesis kept separate from established observation
+- business impact, safety/regulatory severity, frequency, load-bearing relevance, and urgency
+- remediation alternatives, `remediationOwnerPortfolio` (or `unassigned` while triaging), dependent
+  portfolios, and constraints
+- `rootCausePortfolio` only when causal evidence is verified; otherwise the cause remains a hypothesis
+- expected acceptance evidence and test when remediation or disposition is proposed
+- canonical `BacklogItem` or equivalent work reference when remediation is planned; otherwise an
+  explicit no-remediation/triage disposition rationale, owner, and review date
+
+A Gap **MUST NOT** duplicate backlog work status. Remediation progress is read from canonical work;
+Gap verification state is changed only by the lifecycle and evidence rules above.
+
+### 15.5 Prioritization
+
+Gap prioritization remains a vector. Safety, legality, rights, and mandatory authority constraints act
+as hard gates. Other gaps **SHOULD** expose stakeholder impact, flow criticality, frequency,
+confidence, cost of delay, remediation effort, dependency leverage, reversibility, and evidence
+freshness. A single composite percentage **MUST NOT** conceal these dimensions.
+
+## 16. Normative requirement catalog
+
+This catalog is the stable requirement index for Candidate 0.1.0. Sections 1–15 define the terms and
+interpretation context. Requirement IDs remain stable within a major version; changed meaning requires
+a new ID or major-version change.
+
+### 16.1 Core semantic requirements
+
+| ID | Requirement | Minimum depth |
+|---|---|---|
+| `FPAW-CORE-001` | A conformance scope **MUST** identify its Organization, standard version, profiles, resolution depth, owner, and effective period. | `R0` |
+| `FPAW-CORE-002` | Every identity-bearing Performer **MUST** resolve to one canonical Principal for the scoped period. | `R3` |
+| `FPAW-CORE-003` | An implementation **MUST** distinguish BusinessProduct from DigitalProduct. | `R1` |
+| `FPAW-CORE-004` | A BusinessProduct **MUST NOT** be inferred to be digital from its channel, tools, dependencies, or name. | `R1` |
+| `FPAW-CORE-005` | A DigitalProduct relationship to a BusinessProduct, Stage, or WorkUnitDefinition **MUST** be explicit, typed, and versioned. | `R4` |
+| `FPAW-CORE-006` | Capability, job, role, occupation, skill, work, performer, and resource **MUST** remain semantically distinct. | `R3` |
+| `FPAW-CORE-007` | Every lower-resolution realization **MUST** trace to an `R0`–`R2` purpose, and every claimed `R0`–`R2` promise **MUST** expose realization or a Gap. | `R3` |
+| `FPAW-CORE-008` | Every normative, implementation, mapping, or conformance claim **MUST** identify source, version, scope, evidence status, and the applicable SourceUseDecision when an external, restricted, or contributor-origin source is used. | `R0` |
+| `FPAW-CORE-009` | External published expression **SHOULD** be referenced by identifier and mapping rather than reproduced unless a SourceUseDecision expressly permits the exact use. | `R0` |
+| `FPAW-CORE-010` | A mapping **MUST NOT** imply semantic identity, endorsement, conformance, or certification beyond its declared relationship and evidence. | `R0` |
+| `FPAW-CORE-011` | A local representation **MUST** preserve canonical identifiers and ownership rather than copy authoritative business or transaction state into the standard model. | `R4` |
+| `FPAW-CORE-012` | Unknown applicability, mapping, ownership, or evidence **MUST** remain explicit and **MUST NOT** be filled by nearest-label inference. | `R0` |
+| `FPAW-CORE-013` | Every Profile **MUST** publish its materiality/consequence/load-bearing thresholds and source authority; every resulting applicability determination **MUST** use Section 4.1 and retain threshold, source, rationale, evidence, reviewer, and date. | `R0` |
+| `FPAW-CORE-014` | A qualification or assignment activity **MUST** resolve to an ActivityDefinition and carry a qualified semantic mapping when the source activity vocabulary differs. | `R3` |
+| `FPAW-CORE-015` | A SkillRequirement **MUST** reference a versioned SkillConcept, and performer proficiency **MUST** remain a separate CompetenceAssertion with scope, provenance, verifier, confidence, and freshness. | `R3` |
+| `FPAW-CORE-016` | A machine-readable exchange **MUST** preserve every Section 14.4 identity, version, placement, relation, Profile/anchor/control, depth, requirement, evidence, Gap lifecycle, mapping, SourceUseDecision, applicable ContributorAttestation, and permitted-use field. | `R4` |
+| `FPAW-CORE-017` | Every Principal **MUST** carry a controlled kind and authoritative identity reference and satisfy the Organization, Performer, Team Principal, and GAID AgentSubject boundaries in Section 5.1; Principal identity **MUST NOT** itself grant eligibility, qualification, accountability, or action authority. | `R3` |
+| `FPAW-CORE-018` | Every source/use pair subject to Section 13.1.1 **MUST** have a complete, resolved, source-granular and use-granular SourceUseDecision containing every field and per-action permission required there before the declared action; an orientation-only SourceCitation **MUST NOT** substitute for that decision. A ContributorAttestation **MAY** authorize only the attestor's specifically identified direct or separable contribution and declared uses, **MUST NOT** extend to collective/coauthor/third-party expression or external claims, and **MUST** receive the independent review required by Section 13.1.1. | `R0` |
+| `FPAW-CORE-019` | Objective, intended Outcome, and OutcomeObservation **MUST** remain distinct; each active Objective **MUST** trace to at least one intended Outcome, and observed evidence **MUST NOT** replace the Outcome target or imply achievement outside its measure/acceptance contract. | `R5` |
+
+### 16.2 Four-portfolio requirements
+
+| ID | Requirement | Minimum depth |
+|---|---|---|
+| `FPAW-PORT-001` | The four canonical roots **MUST** be represented: Goods and Services for Sale, Workforce, Manufacturing and Delivery, and Foundational. | `R1` |
+| `FPAW-PORT-002` | Each in-scope governed aspect **MUST** have exactly one active primary placement for an effective period or a `missing` `GDM-PORTFOLIO` Gap whose observed placement is `unclassified`; it **MUST NOT** have more than one. | `R1` |
+| `FPAW-PORT-003` | Placement **MUST** be based on value promise, primary consumer, investment accountability, and lifecycle ownership rather than technology. | `R1` |
+| `FPAW-PORT-004` | Goods and Services for Sale **MUST** admit physical goods, services, experiences, access, entitlements, public services/benefits, DigitalProducts, and hybrids. | `R1` |
+| `FPAW-PORT-005` | Workforce **MUST** distinguish the contribution and internal-consumption lenses. | `R1` |
+| `FPAW-PORT-006` | Workforce contribution **MUST** admit humans, contractors, partners, AI coworkers, and authorized robots without treating them as employees by default. | `R3` |
+| `FPAW-PORT-007` | Manufacturing and Delivery **MUST** admit specialized digital and non-digital means of making and fulfilling external value. | `R1` |
+| `FPAW-PORT-008` | Foundational **MUST** admit reusable cross-product platforms, infrastructure, shared facilities, data, identity, security, and governance services. | `R1` |
+| `FPAW-PORT-009` | Cross-portfolio dependencies **MUST** be directional, owned, effective-dated, and typed with the Section 6.3 controlled relation set or a versioned namespaced extension. | `R1` |
+| `FPAW-PORT-010` | Every active BusinessProduct **MUST** trace to required Workforce, Manufacturing and Delivery, and Foundational aspects or justified non-applicability. | `R2` |
+| `FPAW-PORT-011` | Externally supplied dependencies **MUST NOT** be represented as the organization's own Goods and Services for Sale. | `R1` |
+| `FPAW-PORT-012` | Multi-aspect decomposition **MUST** be used instead of assigning one undifferentiated record to several primary portfolios. | `R1` |
+| `FPAW-PORT-013` | Placement changes **MUST** retain prior state, rationale, evidence, owner, and effective dates. | `R5` |
+| `FPAW-PORT-014` | A portfolio view **MUST** reference canonical managed items; it **MUST NOT** become a second BusinessProduct, DigitalProduct, workforce, asset, or backlog ledger. | `R4` |
+| `FPAW-PORT-015` | An implementation using current camelCase portfolio keys **MUST** publish the explicit, lossless mapping to FPAW snake_case exchange keys until adapter convergence is complete. | `R4` |
+| `FPAW-PORT-016` | Every GovernedAspect **MUST** have stable versioned identity, one canonical target, an owning concern/lifecycle/accountability boundary, a non-overlap rule, typed sibling relations, and merge/supersession history; an arbitrary aspect label **MUST NOT** create a new placement subject. | `R4` |
+| `FPAW-PORT-017` | Every GovernedAspect **MUST** resolve a versioned AspectKindDefinition and satisfy the Section 5.2 registry, active uniqueness tuple, overlap predicate, and split/merge history; unresolved or overlapping sibling concerns **MUST** produce a Gap. | `R4` |
+
+### 16.3 Product and value-flow requirements
+
+| ID | Requirement | Minimum depth |
+|---|---|---|
+| `FPAW-PROD-001` | Commercial promise and sale truth **MUST** remain on BusinessProduct/BusinessProductOffering/catalog/sale equivalents. | `R1` |
+| `FPAW-PROD-002` | Authoritative digital operational commitments **MUST** reside on OperationalServiceOffering/DigitalProduct service records; a commercial BusinessProductOffering may reference but **MUST NOT** redefine them. | `R4` |
+| `FPAW-PROD-003` | A BusinessProduct **MUST** declare form, target consumer/beneficiary, value proposition, owner, and lifecycle status. | `R1` |
+| `FPAW-PROD-004` | A BusinessProduct **MUST** bind to at least one intended Outcome and operational ValueStream. | `R2` |
+| `FPAW-PROD-005` | A material BusinessProduct **SHOULD** expose a bill of realization across portfolios, work, DigitalProducts, resources, controls, and evidence. | `R4` |
+| `FPAW-PROD-006` | BusinessProduct form **MUST** use the Section 7.1 controlled vocabulary or a versioned namespaced extension and **MUST NOT** treat an Outcome as a Product form. | `R1` |
+| `FPAW-PROD-007` | ServiceDefinition/CoworkerService, a BusinessProduct whose form is service, typed BusinessProductOffering/OperationalServiceOffering/CoworkerServiceOffering terms, accepted engagement, DigitalProduct commitments, WorkAssignment, and runtime/service instance **MUST** remain distinguishable and traceably related. | `R4` |
+| `FPAW-PROD-008` | A bill of realization **MUST NOT** be collapsed into a DigitalProduct-only bill of materials or represented as duplicate transaction truth. | `R4` |
+| `FPAW-PROD-009` | A BusinessProduct **SHOULD** declare target consumers/beneficiaries, commercial/public-value model, channels, provisioning/entitlement, ownership/custody transfer, promised outcomes/commitments, and return/cancellation/renewal/retirement treatment. | `R2` |
+| `FPAW-PROD-010` | A BusinessProduct/DigitalProduct realization relation **MUST** serialize in the Section 6.3 canonical subject→object direction; a Section 7.2 passive display alias or versioned namespaced extension **MUST** preserve equivalent inverse, temporal, transitivity, and cardinality semantics. | `R4` |
+| `FPAW-PROD-011` | Every Offering version **MUST** declare one core or namespaced `offerKind`, exactly one provider Organization Principal, and exactly one compatible primary target; bundles, engagements, entitlements, sale records, and runtime instances **MUST NOT** create a second primary target or replace the Offering. | `R4` |
+| `FPAW-FLOW-001` | An operational ValueStream **MUST** begin with a stakeholder trigger and end with an accepted stakeholder Outcome. | `R2` |
+| `FPAW-FLOW-002` | A Stage **MUST** describe a value-state transition, not merely a department, system, role, or task list. | `R2` |
+| `FPAW-FLOW-003` | Every material Stage **MUST** satisfy the Stage contract to the claimed resolution depth. | `R2` |
+| `FPAW-FLOW-004` | Stable Stage keys **MUST** remain inspectable when profiles substitute industry display labels. | `R2` |
+| `FPAW-FLOW-005` | A material handoff **MUST** define sender, receiver, transferred value/evidence, acceptance, rejection, timing, and escalation. | `R3` |
+| `FPAW-FLOW-006` | Load-bearing stages **MUST** be identified with evidence or profile rationale. | `R2` |
+| `FPAW-FLOW-007` | Iteration, rework, cancellation, and exception flow **MUST** be represented where material. | `R3` |
+| `FPAW-FLOW-008` | Physical or manual execution **MUST NOT** be hidden behind a digital completion state. | `R5` |
+| `FPAW-FLOW-009` | Profiles **MAY** split, insert, repeat, rename, or omit stages only when upward traceability and value-state semantics remain intact. | `R2` |
+| `FPAW-FLOW-010` | Trust/compliance and operate/improve **SHOULD** be modeled as cross-cutting controls/capabilities unless a genuine sequential value transition exists. | `R2` |
+| `FPAW-FLOW-011` | IT4IT Reference Architecture bindings **MUST** be limited to applicable, explicit DigitalProduct lifecycle touchpoints. | `R4` |
+| `FPAW-FLOW-012` | A business ValueStream **MUST NOT** be classified wholesale as the `Consume` stream or a legacy functional group of the IT4IT Reference Architecture. | `R4` |
+| `FPAW-FLOW-013` | Stage measurement **SHOULD** cover stakeholder value, flow, quality, economics, capacity, and risk as separable measures. | `R5` |
+| `FPAW-FLOW-014` | Every Stage **MUST** identify required Capabilities and an OperatingFlow/WorkUnitDefinition realization or an explicit Gap. | `R3` |
+| `FPAW-FLOW-015` | Every OperatingFlow **MUST** declare one or more controlled behavior kinds from Section 9.1 or a versioned namespaced extension. | `R3` |
+| `FPAW-FLOW-016` | BPMN, CMMN, and DMN **SHOULD** be used where their execution semantics apply; any alternative **SHOULD** record why those semantics are inapplicable or insufficient. | `R4` |
+| `FPAW-FLOW-017` | A DPF implementation **MUST** use the canonical `operational-value-stream.ts` Stage keys (`attract`, `capture`, `qualify`, `deliver`, `settle`, `retain`, and applicable registered insertions/cross-cuts); display labels or profile vocabulary **MUST NOT** become a parallel identifier. | `R4` |
+
+### 16.4 Work, workforce, and allocation requirements
+
+| ID | Requirement | Minimum depth |
+|---|---|---|
+| `FPAW-WORK-001` | A Job **MUST** be defined by outcomes, accountabilities, activities, and constraints rather than incumbent identity. | `R3` |
+| `FPAW-WORK-002` | Every allocatable WorkUnitDefinition **MUST** satisfy the complete Section 9.2 field contract, including identity/version/Stage, value state, skills/qualifications, data, resources, physical conditions, authority/consequence, service constraints, and exception/handoff fields. | `R3` |
+| `FPAW-WORK-003` | Work units **SHOULD** be split where authority, tools, data, consequence, qualification, physical reach, or evaluation differ materially. | `R3` |
+| `FPAW-WORK-004` | Performer eligibility gates **MUST** be evaluated before cost, speed, or availability optimization. | `R3` |
+| `FPAW-WORK-005` | Applicable credential, authority, safety, presence, data, tool/resource, contractual, legal, skill, and qualification constraints **MUST** act as hard gates. | `R3` |
+| `FPAW-WORK-006` | Allocation **MUST** use the controlled pattern vocabulary or a versioned namespaced extension. | `R3` |
+| `FPAW-WORK-007` | Every consequential WorkOccurrence **MUST** trace to an accountable Principal, executor, and escalation path. | `R5` |
+| `FPAW-WORK-008` | AI, robot, automation, and partner Performers **MUST NOT** expand their own authority. | `R5` |
+| `FPAW-WORK-009` | Human intervention **MUST** be driven by law, policy, authority, consequence, qualification, safety, or risk rather than a blanket assumption. | `R3` |
+| `FPAW-WORK-010` | Augmentation and substitution **MUST** be assessed at WorkUnitDefinition granularity. | `R3` |
+| `FPAW-WORK-011` | Substitution analysis **MUST** record residual human work, exception load, supervision, recovery, dependency, concentration, transition, and fallback. | `R3` |
+| `FPAW-WORK-012` | AI Performer readiness **MUST** use current operating-profile, qualification, grant, tool/data, evaluation, and observed-performance evidence. | `R5` |
+| `FPAW-WORK-013` | An authorized robot **MUST** separate performer identity, physical asset, controller, safety envelope, and maintenance state. | `R4` |
+| `FPAW-WORK-014` | Partner-performed work **MUST** identify contract/commitment, data/custody boundary, accountable internal Principal, and fallback. | `R4` |
+| `FPAW-WORK-015` | Suitability **SHOULD** consider quality, latency, cost, capacity, oversight, resilience, learning value, stakeholder preference, and concentration risk. | `R3` |
+| `FPAW-WORK-016` | Outcome evidence **MAY** update suitability or proficiency confidence but **MUST NOT** silently widen authority, scope, qualification, or autonomy. | `R5` |
+| `FPAW-WORK-017` | A zero-employee workforce profile **MUST** remain representable without weakening legal or organizational accountability. | `R3` |
+| `FPAW-WORK-018` | Shared AI-coworker DigitalProduct/profile families **SHOULD** be specialized through versioned facets before a distinct family is defined; family reuse **MUST NOT** be represented as AgentSubject reuse or implementation evidence. | `R3` |
+| `FPAW-WORK-019` | A distinct industry AI-coworker DigitalProduct/profile family **SHOULD** require a material occupational, authority, safety, physical-interface, data/custody, evidence, or relying-party-contract difference; GAID remains authoritative for AgentSubject identity creation. | `R3` |
+| `FPAW-WORK-020` | Human skill, AI capability assertion, organization capability, tool grant, and job qualification **MUST** remain distinct and separately evidenced. | `R3` |
+| `FPAW-WORK-021` | Capacity **MUST** declare a governed unit, limiting resource, time window, observation source, confidence, and freshness; nominal headcount or AI availability alone is insufficient. | `R5` |
+| `FPAW-WORK-022` | Reallocation **MUST** preserve prior assignment, rationale, authority, handoff, and evidence when consequential. | `R5` |
+| `FPAW-WORK-023` | Every WorkAssignment **MUST** bind exactly one WorkOccurrence, one ActivityDefinition-or-Role responsibility, one Performer, and one AllocationDecision plus authority, qualification/eligibility, supervision, fallback, evidence expectations, and effective period. | `R5` |
+| `FPAW-WORK-024` | Performer kind **MUST** use the Section 10.1 vocabulary or a versioned namespaced extension; a mixed team **MUST** be modeled as Collaboration/allocation unless it resolves to an independently governed Team Principal. | `R3` |
+| `FPAW-WORK-025` | Every consequential WorkOccurrence **MUST** identify executors, accountable Principal, required reviewer/approver and consulted roles, escalation receiver, override authority, prohibited actions, and fallback/continuity owner. | `R5` |
+| `FPAW-WORK-026` | An augmentation/substitution assessment **MUST** retain transferred, retained, and new activities; residual demand/exceptions; supervision/recovery; constraints; dependencies; multidimensional evidence; transition/rollback/fallback; owner; and review date. | `R5` |
+| `FPAW-WORK-027` | Every WorkforceTransitionAssessment **MUST** version its baseline and target allocation, affected Jobs/SkillRequirements/human Principals or populations, reskilling/redeployment/displacement treatment, decision state, effective period, accountable owner, outcome evidence, and rollback/fallback. | `R5` |
+| `FPAW-WORK-028` | Each AllocationDecision **MUST** use one Section 10.3 pattern and its exact assignment/coordination cardinality; when Collaboration is required, the decision **MUST** reference exactly one Collaboration containing `2..*` unique atomic WorkAssignments from the same WorkOccurrence and decision, with explicit sequence/parallelism, handoffs, reconciliation, and shared acceptance. A plural assignee field **MUST NOT** substitute. | `R5` |
+| `FPAW-WORK-029` | Every WorkforceTransitionAssessment **MUST** use the exhaustive Section 10.5 state machine, immutable assessed snapshots, non-overlapping effective versions, and total baseline/target activity conservation: every retained/transferred baseline maps to `1..*` targets and every target has exactly one such predecessor or is exclusively `new`. Verified closure is mandatory; deleting a Job or completing rollout work **MUST NOT** silently retire work or prove the transition outcome. | `R5` |
+
+### 16.5 Physical and non-digital work requirements
+
+| ID | Requirement | Minimum depth |
+|---|---|---|
+| `FPAW-PHYS-001` | Every WorkUnitDefinition whose `executionMedia` contains `physical-actuation` **MUST** evaluate each stable `PHY-*` Section 9.3 field group with a value/evidence record or governed `not-applicable` decision; authoritative observation, acceptance evidence, and accountable supervision are mandatory for physical completion. | `R3` |
+| `FPAW-PHYS-002` | A digital command, checklist, or AI assertion **MUST NOT** be treated as proof that physical work completed. | `R5` |
+| `FPAW-PHYS-003` | Completion evidence **MUST** come from a profile-approved human, partner, sensor/machine, transaction, inspection, custody, or equivalent authoritative record. | `R5` |
+| `FPAW-PHYS-004` | Dedicated delivery assets **MUST** be distinguishable from shared Foundational assets. | `R1` |
+| `FPAW-PHYS-005` | Load-bearing equipment/facilities **MUST** expose applicable availability, maintenance, calibration, sanitation, inspection, and replacement dependencies. | `R4` |
+| `FPAW-PHYS-006` | A digital twin or EA view **MUST NOT** replace authoritative physical/domain records. | `R4` |
+| `FPAW-PHYS-007` | Custody work **MUST** identify owner, custodian, item/lot identity, transfer points, condition, acceptance, discrepancy, and incident evidence. | `R5` |
+| `FPAW-PHYS-008` | Safety-critical robotic work **MUST** define operating envelope, safe state, emergency stop, responsible supervisor, and failure recovery. | `R4` |
+| `FPAW-PHYS-009` | Every WorkUnitDefinition **MUST** declare a non-empty Section 9.2 `executionMedia` subset and exactly one orthogonal `connectivityMode`; offline or human-cognitive work **MUST** retain authoritative evidence, `hybrid` **MUST** be derived from a multi-value set, and materially different authority/evidence modes **MUST** be split. | `R3` |
+
+### 16.6 AI coworker and DigitalProduct requirements
+
+| ID | Requirement | Minimum depth |
+|---|---|---|
+| `FPAW-AI-001` | An AI coworker **MUST** have linked DigitalProduct and Performer aspects. | `R4` |
+| `FPAW-AI-002` | The DigitalProduct aspect **MUST** own product strategy, version/component, build/acquire, release, deployment, operation, assurance, and retirement truth. | `R4` |
+| `FPAW-AI-003` | The Performer aspect **MUST** own identity, job/activity scope, qualification, capacity, authority, assignment, action, receipt, and operating status references. | `R5` |
+| `FPAW-AI-004` | A DigitalProduct release **MUST NOT** be treated as runtime authorization or job qualification. | `R5` |
+| `FPAW-AI-005` | An Agent identity or declared capability **MUST NOT** be treated as evidence of job qualification. | `R3` |
+| `FPAW-AI-006` | Every AI WorkAssignment **MUST** resolve exactly one effective `active` AIProductOperatingBinding, its current TAK-JSI qualification, deployed instance, and TAK authority-decision evidence; qualification alone **MUST NOT** imply live permission, and a non-AI assignment **MUST NOT** carry such a binding. TAK owns enforcement semantics. | `R5` |
+| `FPAW-AI-007` | AI work evidence **MUST** identify the enduring subject, operating-profile fingerprint, job/activity, deployed configuration, policy state, and action provenance. | `R5` |
+| `FPAW-AI-008` | Material model, prompt, skill, tool, corpus/data, memory, provider, policy, or authority change **MUST** trigger impact analysis and applicable revalidation. | `R5` |
+| `FPAW-AI-009` | DigitalProduct definition, DigitalProductRelease, operating-profile fingerprint, versioned asset, package/artifact, deployed instance, service dependency, typed Offering, and AgentSubject identity reference **MUST** remain distinguishable; every mapping **MUST** declare which level it targets. | `R4` |
+| `FPAW-AI-010` | External or federated agents **MUST** preserve external identity/provenance, contract, data/authority boundary, internal accountability, and fallback. | `R5` |
+| `FPAW-AI-011` | An FPAW Collaboration involving multi-agent delegation **MUST** link the authoritative TAK delegation chain, escalation, and failure-owner evidence; TAK owns delegation semantics. | `R5` |
+| `FPAW-AI-012` | An AI coworker lifecycle mapping **MUST** use DPF's governed local lifecycle-key vocabulary and **MUST NOT** silently substitute legacy functional-group labels; any external equivalence requires an authorized edition, complete SourceUseDecision and mapping envelope, and qualified human review. | `R4` |
+| `FPAW-AI-013` | The term AI coworker **MUST** denote an Agent managed through linked DigitalProduct and Performer aspects; an agentic asset or subordinate component **MUST NOT** be promoted by capability alone. | `R4` |
+| `FPAW-AI-014` | The `FPAW-Managed-AI-Coworker-DigitalProduct` qualification **MUST** evidence consumer outcome, essential software, lifecycle owner, formal offer, explicit price/showback treatment, accepted terms, instance readiness, and a managed instance for an `operated` claim; it **MUST NOT** be represented as IT4IT Reference Architecture conformance. | `R5` |
+| `FPAW-AI-015` | A generated Agent-to-DigitalProduct projection **MUST** remain a candidate association until the applicable product-qualification evidence is verified. | `R5` |
+| `FPAW-AI-016` | The Performer aspect **MUST** resolve through an `AgentSubjectReference` to the GAID-owned subject and applicable operating-profile context; FPAW **MUST NOT** mint or redefine that identity. | `R5` |
+| `FPAW-AI-017` | Offer/engagement/usage, product/release/asset/deployment, and identity/qualification/assignment/evidence chains **MUST** remain distinguishable and traceably related. | `R5` |
+| `FPAW-AI-018` | A conforming AI-coworker implementation **SHOULD** expose the complete Section 11.3 Product-to-runtime chain using resolvable local equivalents. | `R5` |
+| `FPAW-AI-019` | AI-coworker DigitalProduct, DigitalProductRelease, asset/package, operating-profile, AIProductOperatingBinding, pairwise AIProductBindingCompatibility, deployment/instance, AgentSubjectReference, service/Offering, WorkAssignment, and operated-evidence cardinalities **MUST** satisfy Section 11.3 or a stricter profile. Binding state, temporal uniqueness, compatibility/overlap, and effective-time qualification rules are mandatory; the identities or lifecycles **MUST NOT** collapse. | `R5` |
+
+### 16.7 Profile, mapping, and conformance requirements
+
+| ID | Requirement | Minimum depth |
+|---|---|---|
+| `FPAW-PROF-001` | Every Profile **MUST** declare ID, version, purpose, applicability, inherited facets, requirements, vocabulary, mappings, owner, and effective period. | `R0` |
+| `FPAW-PROF-002` | A Profile **MUST NOT** weaken a core **MUST**. | `R0` |
+| `FPAW-PROF-003` | Composed requirements **MUST** use union semantics; each applicable control **MUST** declare a Section 12.2 merge axis/unit and use its deterministic meet operation. A namespaced axis **MUST** publish its partial order, normalization, meet, and conflict predicate. | `R3` |
+| `FPAW-PROF-004` | Empty intersections, inverted intervals, incompatible units, incomparable authorities, or otherwise undefined meets **MUST** produce an `unsatisfied` conformance finding and Gap; they **MUST NOT** be silently resolved as “most restrictive.” | `R0` |
+| `FPAW-PROF-005` | Local extensions **MUST** be namespaced and **MUST NOT** mutate built-in archetype truth. | `R0` |
+| `FPAW-PROF-006` | Archetype coverage **MUST** be generated or mechanically checked against the canonical registry. | `R4` |
+| `FPAW-PROF-007` | `not-applicable` **MUST** carry scope-specific rationale, evidence, and reviewer. | `R0` |
+| `FPAW-PROF-008` | A new canonical archetype leaf **MUST** fail profile coverage until all required facets are explicit or governed-derived. | `R4` |
+| `FPAW-PROF-009` | Every profile **MUST** retain source version and effective dates; vocabulary relabeling **MUST NOT** silently change core meaning. | `R0` |
+| `FPAW-PROF-010` | A multi-archetype organization **MUST** compose every active BusinessProduct, DigitalProduct, and value-flow facet, reconcile shared resources/coworker profile families, and expose conflicts. | `R4` |
+| `FPAW-PROF-011` | A leaf coverage manifest **MUST** assert every Section 12.3 field, provenance, evidence maturity, and zero unresolved facets or a governed exception with owner. | `R4` |
+| `FPAW-PROF-012` | An industry Profile **SHOULD** select authoritative domain standards for its actual regulated/transaction boundary; selection **MUST** record applicability, version, license, and implementation evidence, and a category label alone **MUST NOT** establish applicability. | `R4` |
+| `FPAW-PROF-013` | Every ArchetypeProfile **MUST** compose or explicitly mark not applicable every facet in the Section 12.1 required-facet contract. | `R4` |
+| `FPAW-MAP-001` | External mappings **MUST** carry owner, title, version, URI, concept IDs, relationship, semantic relation, rationale, confidence, SourceUseDecision ID/status/permitted-use scope, ContributorAttestation ID when applicable, reviewer, and date. | `R4` |
+| `FPAW-MAP-002` | An exact mapping **MUST NOT** be asserted from label similarity alone. | `R4` |
+| `FPAW-MAP-003` | A source whose separately obtained rights evidence expressly prohibits the declared AI use **MUST** be `excluded`; an AI system **MUST NOT** inspect a restricted or unknown-rights artifact to discover its own permission. Unknown rights **MUST** be `undetermined` with no content processing; contributor-origin material **MUST** be recorded as a separate source and **MUST NOT** inherit permission from or confer permission on the compiled publication. | `R0` |
+| `FPAW-MAP-004` | An IT4IT candidate binding **MUST** identify the specific DigitalProduct, authorized source/edition and external stream identifier when available, local lifecycle key and target, relation, rationale, evidence, and SourceUseDecision; it **MUST** remain `present-unverified` until the external comparison is authorized and reviewed. | `R4` |
+| `FPAW-MAP-005` | Absence of an evidenced DigitalProduct relation **MUST** use BindingState `absent`; a complete candidate awaiting verification **MUST** use `present-unverified`; neither **MUST** receive a generic IT4IT fallback. | `R4` |
+| `FPAW-MAP-006` | Cross-standard relationship **MUST** use the Section 3.3 controlled vocabulary; a concept mapping **SHOULD** also carry a qualified semantic relation. | `R4` |
+| `FPAW-CONF-001` | Every ConformanceClaim **MUST** state scope, versions, profiles, requested and derived achieved depth, requirement statuses, evidence, confidence, freshness, and verifier. | `R0` |
+| `FPAW-CONF-002` | Missing mandatory evidence **MUST** set RequirementStatus to `not-assessed` and EvidenceVerificationStatus to `unverified`, never imply satisfaction. | `R5` |
+| `FPAW-CONF-003` | Lower-confidence derived assessments **MUST NOT** overwrite human-verified evidence. | `R5` |
+| `FPAW-CONF-004` | Derived or mapped alignment **MUST NOT** be represented as external certification. | `R0` |
+| `FPAW-CONF-005` | Mandatory-requirement satisfaction, recommended-requirement deviations, ImplementationState, EvidenceVerificationStatus, BindingState, and MappingConfidence **MUST** be reported as separate axes. | `R5` |
+| `FPAW-CONF-006` | Waivers **MUST** be scoped, owned, reasoned, time-bounded, and reviewed. | `R5` |
+| `FPAW-CONF-007` | Applicable standard, Profile, BusinessProduct, DigitalProduct, operating-profile, or jurisdiction change, or evidence expiry, **MUST** trigger applicability and evidence re-evaluation. | `R5` |
+| `FPAW-CONF-008` | Conformance reporting **SHOULD** expose requirement counts, evidence quality, and Gaps rather than a single composite score. | `R5` |
+| `FPAW-CONF-009` | A conformance profile **MUST** include every dependency and every requirement in its Section 14.1 membership expression; claim depth **MUST NOT** filter out deeper requirements. | `R5` |
+| `FPAW-CONF-010` | Evidence **MUST** carry the Section 15.3 type, integrity, provenance, time, freshness policy, and verification fields; projections/inferences **MUST NOT** become authoritative solely from confidence. | `R5` |
+| `FPAW-CONF-011` | Derived evidence **MUST** retain method, inputs, source versions, and confidence; runtime evidence **MUST** identify the deployed version and effective policy/profile. | `R5` |
+| `FPAW-CONF-012` | A conforming implementation **SHOULD** publish a machine-readable implementation statement preserving the Section 14.4 exchange contract. | `R4` |
+| `FPAW-CONF-013` | An RDF conformance exchange **SHOULD** use SHACL for constraints, SKOS for semantic mappings, and PROV-O for evidence attribution, or record why an alternative preserves equivalent semantics. | `R4` |
+| `FPAW-CONF-014` | Profile conformance **MUST** include the Section 14.1 non-empty characteristic anchors, and achieved resolution depth **MUST** be derived from assessed objects, trace coverage, and evidence rather than accepted from a declared label. | `R5` |
+
+### 16.8 Gap requirements
+
+| ID | Requirement | Minimum depth |
+|---|---|---|
+| `FPAW-GAP-001` | A Gap **MUST** compare an explicit applicable target/requirement with observed state. | `R5` |
+| `FPAW-GAP-002` | Evidence, cause hypothesis, and remediation proposal **MUST** remain separate. | `R5` |
+| `FPAW-GAP-003` | Gap type, dimension, severity, confidence, and freshness **MUST** use governed vocabularies. | `R5` |
+| `FPAW-GAP-004` | A Gap **MUST** trace to impacted Outcomes, Products, Stages, Capabilities, work, Performers, Resources, or controls where applicable. | `R5` |
+| `FPAW-GAP-005` | Remediation **MUST** route to one `remediationOwnerPortfolio` or `unassigned` while triaging, with dependent portfolios linked; `rootCausePortfolio` **MUST** be set only from verified causal evidence. | `R5` |
+| `FPAW-GAP-006` | A Gap **MUST NOT** duplicate remediation-work status; planned remediation **MUST** link canonical backlog/work, while detection/triage may carry an explicit disposition rationale until remediation is authorized. | `R5` |
+| `FPAW-GAP-007` | Safety, legality, rights, and mandatory authority Gaps **MUST** be prioritizable independently of economic score. | `R5` |
+| `FPAW-GAP-008` | Every planned remediation **MUST** define acceptance evidence or a test. | `R5` |
+| `FPAW-GAP-009` | `open`, `verification-pending`, and `closed` Gaps **MUST** be re-evaluated when evidence expires or an applicable target, requirement, Profile, or scope changes. Stale closure evidence **MUST** reopen the same Gap only when target/requirement version and scope identity are unchanged; a changed identity/version that exposes a delta **MUST** create an `open` successor and supersede the prior Gap. Backlog completion alone **MUST NOT** close a Gap. | `R5` |
+| `FPAW-GAP-010` | Duplicate authorities, orphan records, silent fallbacks, and parallel sources of truth **MUST** be valid Gap findings. | `R5` |
+| `FPAW-GAP-011` | Every Gap **MUST** carry all applicable Section 15.4 record fields, per-impact-class applicability decisions, and either the applicable acceptance evidence/test plus canonical work reference or an explicit triage/no-remediation disposition. | `R5` |
+| `FPAW-GAP-012` | Gap severity, gate disposition, confidence, freshness, evidence type, and evidence integrity **MUST** use the Section 15.3 scales; `unknown`/`undetermined` **MUST NOT** reduce priority or satisfy a mandatory control. | `R5` |
+| `FPAW-GAP-013` | Every Gap **MUST** use the Section 15.3 verification-state lifecycle; `closed` requires authorized target/no-longer-applicable verification evidence, failed verification or stale closure evidence on the unchanged target returns to `open` with its prior closure event retained, and a changed target/requirement/profile/scope identity uses an `open` successor plus `superseded` predecessor without deleting history. | `R5` |
+
+### 16.9 Publication-governance requirements
+
+| ID | Requirement | Minimum depth |
+|---|---|---|
+| `FPAW-GOV-001` | The normative owner **MUST** be the human DPF Standards Steward designated by the platform maintainer; AI contributors **MUST NOT** adopt a version. | `R0` |
+| `FPAW-GOV-002` | A standard version change **MUST NOT** silently update Profiles, mappings, ConformanceClaims, qualifications, or implementation evidence. | `R4` |
+| `FPAW-GOV-003` | A normative change proposal **MUST** satisfy every field in the Section 19.3 proposal contract. | `R4` |
+| `FPAW-GOV-004` | Candidate-to-adopted transition **MUST** satisfy all five Section 19.3 gates, including an approved human decision record. | `R4` |
+| `FPAW-GOV-005` | External submission **MUST NOT** be represented as adoption or ownership transfer before the receiving body accepts it under its process. | `R4` |
+
+### 16.10 Requirement verification contract
+
+The numbered rows in Section 16 are the complete stable core requirement index for Candidate 0.1.0.
+A versioned profile may add requirements only through registered, namespaced IDs; the companion
+catalog's `FPAW-CAT-*` register is part of an Industry-Archetype claim. Normative prose elsewhere in
+this document defines the interpretation, controlled fields, and tests referenced by these IDs; it does not
+create a second untracked requirement status. An assessment **MUST** create one record per applicable
+core or selected-profile requirement and scope object with:
+
+- requirement ID and standard version
+- resolved profile membership and dependency set
+- applicability predicate/decision and scope-object reference
+- minimum and assessed resolution depth
+- RequirementStatus, ImplementationState, and EvidenceVerificationStatus
+- evidence IDs, verification method, test-case ID/result, verifier, and assessment date
+- one result per atomic clause using this Candidate 0.1.0 decomposition: mandatory keywords are
+  numbered left-to-right as `.m1`, `.m2`, and so on; recommendation keywords are numbered
+  left-to-right as `.s1`, `.s2`, and so on; entries in a referenced field set are numbered in their
+  published order as `.f1`, `.f2`, and so on
+- deviation rationale for every applicable **SHOULD**/**SHOULD NOT** not followed
+
+All applicable `.m*` and `.f*` subtests must pass for the parent row to be `satisfied`; a partial
+pass is `partial`, never an implementation-defined rearrangement of suffixes.
+
+Default verification patterns are:
+
+| Family | Minimum evidence | Default test pattern |
+|---|---|---|
+| `CORE` | identity, source/version, source-use/attestation, applicability, semantic and trace records | schema/graph constraint plus orphan, permission-inheritance and nearest-label negative tests |
+| `PORT` | placement decisions, aspect/dependency history, owners and effective dates | exactly-one-or-unclassified-Gap and dependency-integrity queries |
+| `PROD` | BusinessProduct/ServiceDefinition/typed Offering/DigitalProduct records and realization links | type/identity/cardinality and boundary tests |
+| `FLOW` | ValueStream/Stage contracts, handoffs, capabilities, work and measures | required-field, state-transition, rejection/rework and mapping tests |
+| `WORK` | activity/job/skill contracts, assignments, eligibility decisions, occurrences and capacity observations | eligibility-before-suitability, assignment-field and accountability tests |
+| `PHYS` | authoritative physical/domain records, custody, inspection/sensor and safety evidence | digital-assertion negative test plus physical completion/control checks |
+| `AI` | typed DigitalProduct/Performer binding and referenced GAID, TAK-JSI and TAK receipts | identity/lifecycle separation, cross-standard reference and material-change tests |
+| `PROF` | complete versioned facet manifest and canonical registry reconciliation | category/leaf uniqueness, facet completeness, composition and no-silent-conflict checks |
+| `CAT` | category matrix, leaf deltas, source-registry reconciliation and resolved leaf manifest | state-effect, matrix completeness, deviation and manifest-assertion tests |
+| `MAP` | complete mapping/binding and SourceUseDecision records | required-field, controlled-relation, version, prohibited-use and absent-binding negative tests |
+| `CONF` | implementation statement, statuses, evidence and verifier records | dependency/depth closure and status-axis validation |
+| `GAP` | target/observation comparison, governed scales, evidence and canonical work link | record completeness, vector-priority and no-duplicate-status checks |
+| `GOV` | proposal, source-rights/independent review, human approval and publication records | owner-humanity, attestor-conflict, transition-gate, version-isolation and no-implied-adoption tests |
+
+## 17. Worked end-to-end traces
+
+These examples are informative. They demonstrate use of the same core across different archetypes;
+they are not complete jurisdictional operating instructions.
+
+### 17.1 HVAC maintenance agreement with AI dispatch
+
+| Resolution | Example trace |
+|---|---|
+| `R0` | A property owner needs safe, reliable climate control; the HVAC contractor owns the service outcome and applicable trade/environmental obligations. |
+| `R1` | The maintenance agreement is Goods and Services for Sale. Technicians and the AI dispatcher are Workforce aspects. Vans, gauges, truck stock, and dispatch operations are Manufacturing and Delivery. Shared identity, data, communications, model gateway, and accounting platform are Foundational. |
+| `R2` | Capture demand → triage/qualify → quote/schedule → assign/dispatch → travel/on-site diagnose → approve/repair → test/close → invoice/retain. The IT4IT Reference Architecture does not define this business stream. |
+| `R3` | `diagnose-refrigerant-system` requires a qualified technician, site access, equipment, environmental controls, measurements, and inspection evidence. `rank-dispatch-options` may use AI-primary/human-exception allocation; `authorize-refrigerant-work` remains constrained by credential, policy, and jurisdiction. |
+| `R4` | The dispatcher AI coworker has a DigitalProduct version, Agent configuration, GAID/Principal AgentSubject reference, TAK-JSI dispatcher qualification, TAK grants, route/map and scheduling services, data classifications, and explicit IT4IT lifecycle bindings. |
+| `R5` | Work order, assignment decision, travel/arrival evidence, readings, parts custody, approval, repair/test result, invoice, customer acceptance, Agent receipts, exceptions, and outcome measures support conformance and improvement. |
+
+The AI dispatcher can recommend or execute assignment only within its authority and qualification.
+It cannot infer a technician's license, declare physical repair complete, or turn a DigitalProduct release
+into permission to contact a customer or modify a schedule.
+
+### 17.2 Community bank loan application delta
+
+The same macro-backbone is tailored to disclose/consent, identity/KYC, application capture,
+eligibility and underwriting, decision/approval, booking, servicing, and retention. Work units separate
+document extraction, risk analysis, adverse-action reasoning, credit decision, approval, and customer
+communication because their authority, explainability, data, and legal consequences differ.
+
+A shared document or scheduling coworker may be reused. A financial decision coworker requires a
+specialized profile when regulation, model risk, adverse-action evidence, or delegated decision
+authority differs. Human approval is required where the applicable policy or law requires it—not
+merely because the performer is AI.
+
+### 17.3 Warehouse custody delta
+
+The warehouse sells custody, storage, and handling, not the client's inventory. The profile inserts
+receive/store and dispatch custody transitions, records owner/custodian and condition at every
+transfer, and adds lot/serialization, count, segregation, cold-chain, bonded, or dangerous-goods
+controls where applicable. A scanner or AI allocation decision is not proof that goods moved; the
+authoritative inventory/custody event and its provenance provide the evidence.
+
+## 18. DPF implementation baseline and convergence plan
+
+This section is an informative, source-derived baseline as of 2026-08-01. It is not a claim about
+every live customer organization's operational state.
+
+### 18.1 Current coverage
+
+- The authoritative source contains 24 categories and 106 unique leaf archetypes with 570 item
+  templates.
+- All 106 can derive an operational-value-stream projection, but the current stage shape lacks the
+  complete work/performer/resource/evidence contract defined here.
+- 68 leaves have explicit activation profiles; 38 do not.
+- 65 leaves have explicit four-portfolio decompositions; 41 rely on missing or legacy inference.
+- Only two leaves declare an explicit `productMix`; most business Products are derived from item
+  templates.
+- 59 leaves contain legacy Request-to-Fulfill metadata; 30 explicit decompositions contain no other
+  lifecycle label. Neither fact is acceptable as evidence of an external lifecycle mapping.
+- The occupation registry has six profiles across healthcare, trades, and agriculture. The two
+  agriculture profiles declare a WSID profession family but still have null governance-profile
+  references; no profile is thereby proven job-qualified.
+- The platform has 70 agent definitions: 19 active, 50 defined, and one draft Farm & Ranch Steward.
+  Two of 11 coworker-service seeds declare archetype coverage; a seed or draft is not a deployment,
+  qualification, or conforming coworker profile.
+- The current workforce projection can create a DigitalProduct record for every active Agent, but it
+  does not by itself prove the offer, economic treatment, accepted-consumption terms, instance
+  readiness, and lifecycle evidence required for the FPAW managed-product qualification; a managed
+  instance is additionally required only for an `operated` implementation-state claim.
+- Six specialized metric-pack registrations exist: five target current leaves and one
+  (`independent-hotel`) is orphaned from the current 106-leaf registry; the remaining leaves rely on
+  generic metrics.
+- Thirty leaves derive one or more trust gates and 76 do not; field-dispatch has rich type
+  definitions but no configured built-in profile registry.
+- Three of 24 categories currently meet the mechanically checked Tier-2 depth floor; 21 remain
+  grandfathered gaps.
+- Current readiness claims are `template-ready`; no category has source evidence here for a blanket
+  `ops-ready`, `connector-ready`, `regulated-ready`, or `sole-platform-ready` claim.
+
+These are gaps, not failures of the standard. They establish an honest starting point for applying it.
+
+### 18.2 Existing substrate to reuse
+
+| Standard concept | Current DPF authority or projection |
+|---|---|
+| portfolio definitions | four local root identities in `packages/db/data/portfolio_registry.json`, `Portfolio`, `TaxonomyNode`; legacy exact external-section fields are non-admissible under `GAP-SOURCE-007` |
+| Objective/intended Outcome/observation | `ProductObjective` can project Objective and its `outcomeHypothesis`/targets can seed intended-Outcome semantics; `ProductOutcomeObservation` is append-only observed evidence only; no exact generalized Outcome authority exists yet, so that target remains a substrate Gap |
+| business Product/Offer | `ProductLine`, `Product`, `ProductOffering`, `CatalogItem`, `ProductSold` |
+| DigitalProduct lifecycle | `DigitalProduct`, `ServiceOffering`, IT4IT EA reference/assessment substrate |
+| archetypes/profiles | `packages/storefront-templates/src/archetypes/`, activation profiles, operating-model axes |
+| operational ValueStreams | `operational-value-stream.ts`, archetype EA projection |
+| capabilities | `BusinessCapability`, capability corpus and trace links |
+| identity/workforce | `Principal`, `EmployeeProfile`, `Position`, `OccupationProfile`; `Agent` is configuration/template substrate, not identity |
+| agent assurance | TAK, GAID, TAK-JSI, agent registry, authority and execution evidence |
+| coworker services | `CoworkerService`, `CoworkerOffer`, `CoworkerEngagement` |
+| work and allocation | `WorkItem`, `WorkQueue`, `WorkEngagement`, staffing/scheduling and domain transactions |
+| physical state | vertical-owned records, `InventoryEntity`, `WorkLocation`, `CustomerSite`; twins remain projections |
+| conformance/gaps | `EaReferenceAssessment`, `EaConformanceIssue`, `LifecycleGap`, `PortfolioQualityIssue`, `BacklogItem` |
+
+### 18.3 Priority convergence backlog
+
+The documentation release reserves approximately 20% of its effort for convergence. The following
+implementation work is deliberately identified rather than prematurely built:
+
+1. normalize stable portfolio slugs and retire camelCase/legacy aliases at adapter boundaries
+2. widen or layer Manufacturing and Delivery and Foundational definitions to include the business's
+   physical/service delivery and shared non-digital foundations
+3. separate local lifecycle keys, legacy functional groups, candidate external identifiers, and
+   industry stages into typed vocabularies; do not promote legacy exact fields before authorized review
+4. remove blanket Request-to-Fulfill fallback and require evidence-bearing DigitalProduct bindings
+5. expand the thin Stage projection into the Stage contract, with typed capability relations
+6. apply multi-archetype composition consistently to BusinessProduct, DigitalProduct, capability, and ValueStream projections
+7. converge performer assignment on canonical Principal so humans, AI, robots, partners, crews, and
+   mixed allocations can be represented honestly
+8. establish a shared job/activity/skill/competence crosswalk that reuses TAK-JSI rather than creating
+   another qualification model
+9. replace critical JSON-only coworker applicability, activity, authority, and portfolio axes with
+   typed/versioned relations when a real consumer workflow is proven
+10. preserve empty coworker applicability as a gap; add explicit governed-universal coverage
+11. add an evidenced AI-coworker DigitalProduct qualification state, a referentially constrained
+    AIProductOperatingBinding across release, operating profile, GAID subject, and deployment, and
+    pairwise AIProductBindingCompatibility evidence for overlapping bindings; keep projected records
+    explicitly candidate until proven
+12. define BusinessProduct/DigitalProduct realization dependencies only after endpoint and consumer evidence, and clarify
+    the existing DigitalProduct-only dependency model
+13. reconcile the several conformance/gap ledgers and project them into one report without creating a
+    fifth general-purpose Gap authority
+14. add a canonical generalized intended-Outcome target and Objective→Outcome→OutcomeObservation
+    cardinalities without recasting append-only `ProductOutcomeObservation` evidence as intent
+
+### 18.4 Documentation convergence in this release
+
+This release updates canonical pointers and status notes in the existing business-operating-model,
+archetype-value-stream, workforce, agent-standards, and architecture-orientation documents. Their
+historical decisions remain traceable; superseded claims no longer compete with this standard.
+
+## 19. Governance and versioning
+
+### 19.1 Ownership
+
+The accountable authority is the human DPF Standards Steward designated by the platform maintainer.
+AI coworkers and contributors may research, draft, test, and review changes but cannot adopt a
+normative version. The steward approves version state, owns the conformance policy, and records any
+delegation or succession of that role.
+
+The standard owns only enterprise value, four-portfolio placement, operating-flow, work-allocation,
+AI dual-aspect, cross-standard traceability, conformance, and gap semantics. Changes to commerce,
+IT4IT, archetypes, TAK, GAID, TAK-JSI, WSID, or domain records occur in their owning sources.
+
+### 19.2 Versioning
+
+- major version: incompatible semantic or normative change
+- minor version: additive concepts, requirements, profiles, or mappings
+- patch version: clarification or erratum with no changed conformance meaning
+
+Profiles, mappings, conformance claims, qualifications, and implementation evidence have independent
+versions or immutable IDs. Updating this standard **MUST NOT** silently update them.
+
+### 19.3 Change process
+
+A normative change proposal **MUST** include:
+
+- problem and evidence
+- affected requirement/concept/profile IDs
+- compatibility and migration impact
+- source/standards research, SourceUseDecisions, ContributorAttestations, and independent rights
+  review when Section 13.1.1 requires it
+- archetype and implementation impact
+- alternatives and decision record
+- conformance-test and documentation impact
+
+New industry content should normally enter through a profile. A core change requires proof that the
+concern is universal and cannot be expressed without weakening consistency.
+
+Candidate-to-adopted transition requires all of the following:
+
+1. complete requirement/profile/test coverage and a passing conformance-grammar audit
+2. documented SourceUseDecisions and source-rights review, including independent human acceptance
+   of contributor-origin use when Section 13.1.1 requires it, and closure of every Section 20.5
+   source gap whose gate disposition is `stop`
+3. independent architecture/semantic review with material findings resolved
+4. an approved human decision record from the DPF Standards Steward
+5. versioned publication and migration/compatibility notice
+
+Submission to an external standards body is a separate state. DPF ownership remains until that body
+accepts a contribution under its own process; no submission or liaison implies adoption.
+
+### 19.4 Review cadence
+
+- core standard: at least annually and after material IT4IT Reference Architecture, DPPM guide, or DPF architecture change
+- external mapping: on source version change or at its declared cadence
+- archetype profile: on source-registry, regulation, BusinessProduct/DigitalProduct, or operating-model change
+- conformance/evidence: on expiry, incident, material change, or declared surveillance cadence
+
+## 20. Research and source register
+
+### 20.1 Bounded operator-source locators
+
+The authenticated task log is the immutable evidence store for these three source records. Their
+opening markers identify the exact turns without republishing the full messages. Later explanations
+are not included; each future source requires a new locator and SourceUseDecision.
+
+| Source ID | Exact locator | Bounded content |
+|---|---|---|
+| `OP-FPAW-01` | 2026-08-01 operator turn beginning “this is a deep research and documentation exercise”; Work Capsule `WC-1B88712B` | the requested four-portfolio, archetype, non-digital-work, human/AI-coworker, job/skill, value-stream, and standards-bridge direction |
+| `OP-CSDM-02` | 2026-08-01 operator turn beginning “one of the more interesting aspects of the digital product definition”; same capsule | the AI-coworker-as-DigitalProduct proposition, CSDM/TAK relationship, CSDM-origin/video provenance statement, and instruction to include named local references |
+| `OP-RIGHTS-03` | 2026-08-01 operator turn beginning “for the IT4IT standard, I was a contributor”; same capsule | the named-contributor and retained-rights assertion plus permission to research; not a grant by The Open Group or an employer |
+
+### 20.2 Complete SourceUseDecision records
+
+Every record below resolves the complete Section 13.1.1 field contract. “No” in an action matrix means
+the decision supplies no permission for that action, even if a legacy repository path or runtime
+currently performs it. Such current behavior is a Gap, not evidence of authorization.
+
+#### 20.2.1 `SUD-MB-FPAW-DIRECT-2026-08-01`
+
+| Field | Resolved value |
+|---|---|
+| Source/title/owner/version/locator/access | `OP-FPAW-01`, “FPAW goal statement”, Mark Bodman, task-turn version 1, `WC-1B88712B/OP-FPAW-01`, accessed 2026-08-01 |
+| Intended use / status | AI-assisted analysis and independently worded DPF candidate design; `permitted-contributor` |
+| Rights context | Mark is source owner and direct contributor; employer, Open Group Member, assignment, and work-for-hire context are not asserted for this message |
+| Rights basis | authenticated instruction to create the requested DPF standard from this directly supplied direction |
+| Exact scope / contribution kind | only the bounded concepts listed for `OP-FPAW-01`; direct sole-source problem statement and design direction, not compiled-publication expression |
+| Action permissions | AI processing: yes; quotation: no; paraphrase: yes; transformation into independently worded DPF semantics: yes; source-message storage: task log only; source-message reproduction: no; repository distribution of source message: no; Apache-2.0 sublicensing of source message: no; external submission of source message: no |
+| Exclusions | every compiled standard/guide, coauthor/editor/employer/publisher expression, figures, tables, criteria, confidential material, logos, and trade dress |
+| Attribution / trademark | credit Mark as design sponsor and bounded direct-source contributor; comply with the IT4IT trademark notice in this document |
+| Evidence / reviewer | authenticated task record, `WC-1B88712B`, `BI-C7DFE0F5`; recorded by the DPF candidate-authorship process; independent human rights acceptance not yet recorded |
+| Decision dates / expiry / revocation | decided and effective 2026-08-01 for Candidate 0.1.0; expires on scope or source change; Mark may revoke prospective use by authenticated instruction; adoption/external rights reliance still requires Section 13.1.1 review |
+
+#### 20.2.2 `SUD-MB-CSDM-DIRECT-2026-08-01`
+
+| Field | Resolved value |
+|---|---|
+| Source/title/owner/version/locator/access | `OP-CSDM-02`, “CSDM/TAK direction and provenance statement”, Mark Bodman, task-turn version 1, `WC-1B88712B/OP-CSDM-02`, accessed 2026-08-01 |
+| Intended use / status | record provenance and create an independently expressed DPF bridge from DPF-owned TAK/GAID/product/work semantics; `permitted-contributor` |
+| Rights context | Mark is source owner and attested originator; ServiceNow employer/assignment and publication rights are undetermined |
+| Rights basis | authenticated direct instruction and provenance statement; no ServiceNow permission is inferred |
+| Exact scope / contribution kind | the statement that Mark originated CSDM, created several public CSDM pattern videos, and views the opening AICT/CSDM image as relevant; exact videos, source-figure elements, and separable publication contributions are not enumerated |
+| Action permissions | AI processing: yes for this message; quotation: no; paraphrase: yes; transformation into independently worded DPF semantics: yes; source-message storage: task log only; reproduction: no; repository distribution: no; Apache-2.0 sublicensing: no; external submission: no |
+| Exclusions | ServiceNow publications, figures, tables, class definitions, video expression/transcripts, confidential material, logos, trade dress, and any unenumerated employer-owned work |
+| Attribution / trademark | credit only the bounded provenance statement; do not attribute any individual linked video to Mark until separately enumerated and verified |
+| Evidence / reviewer | authenticated task record and `CA-MB-2026-08-01-CSDM-PROVENANCE`; recorded by the DPF candidate-authorship process; independent employer/rights review pending |
+| Decision dates / expiry / revocation | decided/effective 2026-08-01 for Candidate 0.1.0; expires on scope/source change; revocable prospectively by authenticated instruction |
+
+#### 20.2.3 `SUD-MB-RIGHTS-STATEMENT-2026-08-01`
+
+| Field | Resolved value |
+|---|---|
+| Source/title/owner/version/locator/access | `OP-RIGHTS-03`, “IT4IT contributor-rights statement”, Mark Bodman, task-turn version 1, `WC-1B88712B/OP-RIGHTS-03`, accessed 2026-08-01 |
+| Intended use / status | record the attested claim and research public provenance/rights context; `permitted-contributor` |
+| Rights context | Mark is the attestor; the historically applicable member organization, employer, assignment, and chain of title are undetermined |
+| Rights basis | authenticated direct statement; the statement is evidence of the claim, not proof of rights in collective Material |
+| Exact scope / contribution kind | the named-contributor and retained-rights assertion only; direct provenance/rights attestation |
+| Action permissions | AI processing: yes for the statement; quotation: no; paraphrase: yes; transformation: attestation record only; task-log storage: yes; reproduction: no; repository distribution: no; Apache-2.0 sublicensing: no; external submission as proof of compiled-publication rights: no |
+| Exclusions | all compiled publication expression, unenumerated contribution items, other contributors, employers, member organizations, publishers, marks, and confidential material |
+| Attribution / trademark | identify the assertion as Mark's attestation and preserve the organizational-Member caveat |
+| Evidence / reviewer | authenticated task record; official member profile corroborates involvement/leadership but not personal title; current Membership Terms provide present-day context only; recorded by the DPF candidate-authorship process |
+| Decision dates / expiry / revocation | decided/effective 2026-08-01; expires when contribution-specific evidence or the operative agreement changes the conclusion; no independent-human acceptance yet |
+
+#### 20.2.4 `SUD-C24A-COMPILED-2026-08-01`
+
+| Field | Resolved value |
+|---|---|
+| Source/title/owner/version/locator/access | The Open Group IT4IT Standard, Version 3.0.1, The Open Group, C24A; `D:\DPF_References\IT4IT v3.0.1.pdf` SHA-256 `311849EE0001EECA4437A65F10D9FD1D0A56C2C6DAA09C17D0ED3D3AA7CF99B6` and `.docx` SHA-256 `796342AE7871004214D62438E86B48B21DABE18397A6D95272800D1BEC9A44A6`; path/hash inventory observed 2026-08-01, no renewed content access |
+| Intended use / status | AI research, mapping, paraphrase, transformation, and conformance support; `excluded` |
+| Rights/contribution context | The Open Group is publisher/rightsholder of the compiled Material; Mark attests named contribution, but exact separable contribution, member organization, employer authorization, and personal chain of title are unestablished |
+| Rights basis | current public product page offers personal/member/evaluation/commercial licensing and supplies no permission for this DPF repository use; a historical access event reported an express AI restriction |
+| Exact scope / kind | complete PDF/DOCX and all protected expression; collective standard |
+| Action permissions | AI processing, quotation, paraphrase, transformation, storage by this decision, reproduction, repository distribution, Apache-2.0 sublicensing, and external submission: no |
+| Exclusions / conditions | all clauses, definitions, figures, tables, criteria, numbering, editorial synthesis, logos, and trade dress; nominative trademark use only |
+| Attribution / trademark | no artifact use is permitted by this decision; editorial reference uses IT4IT™ as an adjective, includes The Open Group attribution, and does not place the mark in this candidate's title |
+| Evidence / reviewer | public C24A product page, public Membership Terms, `SAE-2026-08-01-01`; fail-closed candidate review, with qualified human/rightsholder review required to change status |
+| Decision dates / expiry / revocation | decided/effective 2026-08-01; no expiry while permission is absent; superseded only by source-specific written permission or qualified review of the operative license |
+
+#### 20.2.5 `SUD-G252-COMPILED-2026-08-01`
+
+| Field | Resolved value |
+|---|---|
+| Source/title/owner/version/locator/access | `Digital Product Portfolio Management in the Digital Enterprise`, The Open Group Guide G252, The Open Group; `docs/Reference/DigitaProductPortfolioManagement.pdf` SHA-256 `98954AB92E5F108F6C48C08F47D023A0A0E840966B8BB4D20CDC01375C2FFC3A` and `docs/Reference/digital_product_portfolio_mgmt.txt` SHA-256 `29324F40F23413AEE431799444883FB7A0302E711285FC9BF031B718E08098DF`; path/hash inventory observed 2026-08-01, no renewed content access |
+| Intended use / status | AI research, exact four-role equivalence, paraphrase, transformation, and mapping evidence; `excluded` |
+| Rights/contribution context | The Open Group is publisher/rightsholder of the compiled Material; the operator identifies the guide as design lineage, but no contributor-credit claim from the compiled guide is admissible here and exact contribution/member/employer authority is unestablished |
+| Rights basis | public product metadata supplies no AI/repository license; a historical access event reported an express AI restriction |
+| Exact scope / kind | complete PDF, text extract, and protected expression; collective guide |
+| Action permissions | AI processing, quotation, paraphrase, transformation, storage by this decision, reproduction, repository distribution, Apache-2.0 sublicensing, and external submission: no |
+| Exclusions / conditions | all definitions, four-role wording/equivalence, figures, tables, criteria, editorial synthesis, logos, and trade dress |
+| Attribution / trademark | no compiled-guide use is permitted by this decision; bibliographic reference credits The Open Group and does not imply endorsement, authorship, or permission to use protected marks or expression |
+| Evidence / reviewer | public G252 product page, public Membership Terms, `SAE-2026-08-01-01`; fail-closed candidate review, with qualified human/rightsholder review required to change status |
+| Decision dates / expiry / revocation | decided/effective 2026-08-01; no expiry while permission is absent; superseded only by source-specific written permission or qualified review |
+
+#### 20.2.6 `SUD-W205-2026-08-01`
+
+| Field | Resolved value |
+|---|---|
+| Source/title/owner/version/locator/access | `The Shift to Digital Product: A Full Lifecycle Perspective`, The Open Group W205, December 2020; `docs/Reference/Shift to Digital Product.pdf` SHA-256 `6AA9A2C154EC72117D0A6C609468E24E82DD34CBF198ECBC4E0524D41F6B87AB` and `docs/Reference/shift_to_digital_product.txt` SHA-256 `428712837B0E7335221D017834F8120E0E41D12ADD9A71B2D391934A08F65C73`; reviewed 2026-08-01 |
+| Intended use / status | conceptual lineage and independently expressed synthesis; `permitted-public` |
+| Rights/contribution context | The Open Group publication; Mark Bodman and Dan Warfield are identified authors; no sole-ownership claim |
+| Rights basis | publication permission allowing use for any purpose when each copy or copied part retains its copyright and proprietary notices |
+| Exact scope / kind | W205 publication under its own notice; jointly authored white paper, not a standard |
+| Action permissions | AI processing: yes; quotation: yes only with notice and other applicable limits; paraphrase/transformation: yes; storage/reproduction/repository distribution: conditional on retained notices **and** the independent qualified-human acceptance required by Section 13.1.1; Apache-2.0 sublicensing: no; external submission: independently expressed output only unless separately reviewed with the W205 notice preserved |
+| Exclusions / conditions | no standards status, endorsement, or ownership claim; retain W205 copyright/proprietary notices with every copy or copied part |
+| Attribution / trademark | preserve the W205 copyright/proprietary notices; use third-party marks only as accurate editorial references under their owners' rules |
+| Evidence / reviewer | W205 embedded permission and public product record; candidate source-use review; no independent qualified-human acceptance of the existing tracked copy/extract is recorded, so continued asset redistribution is not authorized by this candidate and remains `GAP-SOURCE-005` |
+| Decision dates / expiry / revocation | decided/effective 2026-08-01; expires if the identified artifact/notice changes; no unilateral DPF revocation of publisher terms |
+
+#### 20.2.7 `SUD-PORTFOLIO-WORKBOOK-V2-2026-08-01`
+
+| Field | Resolved value |
+|---|---|
+| Source/title/owner/version/locator/access | `4_portfolio_Reworked_V2_Definitions_IT4IT.xlsx`, owner/contributors/version undetermined, `docs/Reference/`, SHA-256 `D051F436B3580AB5BCCFB6690A90F2C106F49CC189A94312B247BCA5639C35C7`, inventoried 2026-08-01 |
+| Intended use / status | portfolio/taxonomy design input and repository distribution; `undetermined` |
+| Rights/contribution context | Mark's relationship may be material, but sole authorship, employer/member rights, third-party fields, and assignment are not established |
+| Rights basis / exact scope | no complete source-specific evidence; mixed-origin research workbook, exact contribution cells unenumerated |
+| Action permissions | AI processing, quotation, paraphrase, transformation, storage by this decision, reproduction, repository distribution, Apache-2.0 sublicensing, and external submission: no |
+| Exclusions / conditions | every field without per-cell provenance and any Open Group/TBM/APQC/employer/coauthor expression |
+| Attribution / trademark | no external attribution or mark-use conclusion until the workbook's owners and sources are resolved |
+| Evidence / reviewer | repository path and rights audit; candidate review; independent per-field lineage review pending |
+| Decision dates / expiry / revocation | decided/effective 2026-08-01; expires when replaced or rights-cleared; status may change only through a complete new decision |
+
+#### 20.2.8 `SUD-PORTFOLIO-WORKBOOK-V3-2026-08-01`
+
+| Field | Resolved value |
+|---|---|
+| Source/title/owner/version/locator/access | `4_portfolio_Reworked_V3_Definitions_IT4IT.xlsx`, owner/contributors/version undetermined, `docs/Reference/`, SHA-256 `512C50F7F82EDED8C28A02ABEDD853E2249685CC8271FAA746CC617F22CDE0E0`, inventoried 2026-08-01 |
+| Intended use / status | generator input for `taxonomy_v3.json`, portfolio design, and repository distribution; `undetermined` |
+| Rights/contribution context | Mark's relationship may be material, but sole authorship, employer/member rights, third-party fields, and assignment are not established |
+| Rights basis / exact scope | no complete source-specific evidence; mixed-origin workbook, exact contribution cells unenumerated |
+| Action permissions | AI processing, quotation, paraphrase, transformation, storage by this decision, reproduction, repository distribution, Apache-2.0 sublicensing, and external submission: no |
+| Exclusions / conditions | every field without per-cell provenance and any Open Group/TBM/APQC/employer/coauthor expression |
+| Attribution / trademark | no external attribution or mark-use conclusion until the workbook's owners and sources are resolved |
+| Evidence / reviewer | workbook path and `packages/db/scripts/generate-taxonomy-v3-json.ts`; candidate review; independent per-field lineage review pending |
+| Decision dates / expiry / revocation | decided/effective 2026-08-01; expires when replaced or rights-cleared; status may change only through a complete new decision |
+
+#### 20.2.9 `SUD-IT4IT-CRITERIA-WORKBOOK-2026-08-01`
+
+| Field | Resolved value |
+|---|---|
+| Source/title/owner/version/locator/access | `IT4IT_Functional_Criteria_Taxonomy.xlsx`, owner/contributors/version undetermined, `docs/Reference/`, SHA-256 `BE8951DB1CA106B9930BB0EE988C35C383E014669FDFF4F7FAC08224069E3B8C`, inventoried 2026-08-01 |
+| Intended use / status | EA reference-model seeding, image distribution, research, and conformance evidence; `undetermined` |
+| Rights/contribution context | mixed IT4IT/functional-criteria lineage; personal, member, employer, and third-party rights unestablished |
+| Rights basis / exact scope | no complete permission or per-cell provenance; research workbook, exact separable contribution unenumerated |
+| Action permissions | AI processing, quotation, paraphrase, transformation, storage by this decision, reproduction, repository/image distribution, Apache-2.0 sublicensing, and external submission: no |
+| Exclusions / conditions | all criteria, definitions, mappings, and third-party expression without separately cleared lineage |
+| Attribution / trademark | no external attribution or mark-use conclusion until the workbook's owners and sources are resolved |
+| Evidence / reviewer | workbook path, `packages/db/src/seed-ea-reference-models.ts`, and `Dockerfile`; candidate review; current ingestion/distribution is `GAP-SOURCE-002` |
+| Decision dates / expiry / revocation | decided/effective 2026-08-01; expires when replaced or rights-cleared; status may change only through a complete new decision |
+
+#### 20.2.10 `SUD-TAXONOMY-V3-COMPOSITE-2026-08-01`
+
+| Field | Resolved value |
+|---|---|
+| Source/title/owner/version/locator/access | `taxonomy_v3.json`, DPF-maintained generated composite, current repository version, `packages/db/data/taxonomy_v3.json`, SHA-256 `022E5E7E2022F11E386857DB2F5787C47631FE904741B1A4A7DE488776D495FF`, reviewed 2026-08-01 |
+| Intended use / status | platform taxonomy, archetype/portfolio evidence, repository and image distribution; `undetermined` |
+| Rights/contribution context | generator copies V3 workbook fields, some marked from TBM/APQC; Mark/DPF originality and third-party field rights require per-field proof |
+| Rights basis / exact scope | repository Apache license does not establish title to inherited fields; generated composite, not demonstrated clean-room sole work |
+| Action permissions | further AI processing, quotation, paraphrase, transformation, storage, reproduction, repository/image distribution, Apache-2.0 sublicensing, and external submission: no under this decision; current legacy use remains a Gap |
+| Exclusions / conditions | all inherited fields until source, license, transformation, and contributor provenance are recorded per field |
+| Attribution / trademark | preserve recorded field-level source labels as audit clues, not rights conclusions; no external mark use or attribution conclusion until lineage is verified |
+| Evidence / reviewer | JSON provenance markers and `packages/db/scripts/generate-taxonomy-v3-json.ts`; candidate review; `GAP-SOURCE-003` |
+| Decision dates / expiry / revocation | decided/effective 2026-08-01; expires after a verified per-field lineage rebuild or replacement |
+
+#### 20.2.11 `SUD-CSDM-LOCAL-2026-08-01`
+
+| Field | Resolved value |
+|---|---|
+| Source/title/owner/version/locator/access | `CSDM 5.pdf` SHA-256 `56C133D31923B0503E45EDC1D4F11DD6904B70BE46B202F4DFDEF646FB229670` and `AICT with CSDM v1.pdf` SHA-256 `66D84B1174DC5D679C71E3E7ABE3A35938503840834FC6BA5B2A05289FA904D3`, ServiceNow, versions identified by filenames, `D:\DPF_References\`; path/hash inventory and the contained access event `SAE-2026-08-01-02` recorded 2026-08-01 |
+| Intended use / status | AI research, figure replication, transformation, and implementation mapping; `undetermined` |
+| Rights/contribution context | ServiceNow publication rights; Mark's origin/provenance statement does not establish personal ownership or employer permission |
+| Rights basis / exact scope | no public license or written permission established; compiled vendor publications, exact separable contributions unenumerated |
+| Action permissions | AI processing, quotation, paraphrase, transformation, storage by this decision, reproduction, repository distribution, Apache-2.0 sublicensing, and external submission: no |
+| Exclusions / conditions | all publication expression, figures, tables, class definitions, logos, and trade dress |
+| Attribution / trademark | ServiceNow owns its publication marks/trade dress; public-page names may be cited accurately, but this decision grants no mark or content use |
+| Evidence / reviewer | authenticated `OP-CSDM-02` plus public ServiceNow citations for orientation only; candidate review; employer/rightsholder review pending |
+| Decision dates / expiry / revocation | decided/effective 2026-08-01; expires on source-specific permission or replacement; no permission may be inferred from public availability |
+
+#### 20.2.12 Historical source-access events
+
+##### `SAE-2026-08-01-01` — C24A/G252 front matter
+
+| Field | Recorded value |
+|---|---|
+| ID / event | `SAE-2026-08-01-01`; during candidate drafting, an AI process inspected cover/front-matter portions of local C24A/G252 artifacts before a valid SourceUseDecision existed |
+| Artifacts | C24A PDF SHA-256 `311849EE…CF99B6` and G252 PDF SHA-256 `98954AB9…C2FFC3A`; the complete digests are in Sections 20.2.4 and 20.2.5 |
+| Actor / tool / time | Codex AI candidate-authorship process on 2026-08-01; exact wall-clock timestamp was not retained and is recorded as `unknown` |
+| Trigger | `OP-RIGHTS-03` asked that the named contribution be researched and traced; that instruction was a research trigger, not publisher permission |
+| Scope observed | title/imprint; rights notices at C24A printed page viii and G252 printed page ii; acknowledgement/credit fields at C24A printed pages xxvi, xxviii, xxx, and xxxi and G252 printed page viii; no substantive chapter review was authorized |
+| Restriction discovered | both artifact notices were reported to restrict the declared generative-AI use; the notices are not reproduced here |
+| Admissibility | the access does not create permission; page-specific credit locators and artifact-derived license assertions are excluded from this candidate |
+| Containment | no substantive clauses, definitions, mappings, figures, tables, or conformance criteria from that access are admitted as design evidence |
+| Outputs influenced / re-review | pre-amendment ACKNOWLEDGMENTS and Section 20 rights/provenance wording; both were re-reviewed and page-specific roles/locators were removed from admissible claims |
+| Corrective action | complete prospective SUDs now fail closed; contributor statements are separate sources; a public rights page or qualified human/rightsholder review is required before any future artifact access |
+| Evidence / review date | candidate task audit and pre-amendment review findings; recorded 2026-08-01 by the DPF candidate-authorship process |
+
+##### `SAE-2026-08-01-02` — AICT/CSDM orientation review
+
+| Field | Recorded value |
+|---|---|
+| ID / event | `SAE-2026-08-01-02`; during the technical-hardening pass, an AI process inspected the complete local `AICT with CSDM v1.pdf` while its SourceUseDecision remained `undetermined` |
+| Artifact | ServiceNow `AICT with CSDM v1.pdf`, SHA-256 `66D84B1174DC5D679C71E3E7ABE3A35938503840834FC6BA5B2A05289FA904D3` |
+| Actor / tool / time | Codex AI candidate-authorship process on 2026-08-01; exact wall-clock timestamp was not retained and is `unknown` |
+| Trigger | `OP-CSDM-02` requested use of the opening implementation-agnostic picture; the later operator priority requested technical robustness over legal analysis |
+| Scope observed | title/authors, contents, overview and opening lifecycle figure, architecture layers, product-model/asset/package/deployment/service/offer-consumption distinctions, lifecycle workflows, and internal/external/hybrid blueprint patterns across all 20 PDF pages |
+| Admissibility | the review is recorded as an orientation event only; Section 13.4 keeps its independently authored research hypotheses at BindingState `absent`, and the event does not substantiate a CSDM class mapping, conformance claim, or copied/transformed figure |
+| Containment | no vendor wording, geometry, colors, trade dress, class list, or table was copied; the TAK lifecycle view uses DPF lifecycle keys, FPAW entities, and the independently supplied `OP-CSDM-02` direction |
+| Outputs influenced / re-review | confirmed the end-to-end lifecycle/architecture-scope view and the need to keep Product Model, asset, package, deployment/service, offer/consumption, GAID subject, binding, work, and evidence levels distinct; the FPAW/TAK views and Section 13.4 validation backlog were re-reviewed accordingly |
+| Corrective action | retain `SUD-CSDM-LOCAL-2026-08-01` as `undetermined`; keep every Section 13.4 row at BindingState `absent` and require a complete mapping envelope plus permitted source-specific review before any candidate binding, exact/close mapping, copied/transformed figure, or external conformance assertion |
+| Evidence / review date | candidate task audit; recorded 2026-08-01 by the DPF candidate-authorship process |
+
+### 20.3 ContributorAttestation records
+
+#### 20.3.1 `CA-MB-2026-08-01-IT4IT-PROVENANCE`
+
+| Field | Recorded value |
+|---|---|
+| Contributor / authentication | Mark Bodman; authenticated `OP-RIGHTS-03` and `OP-FPAW-01` in `WC-1B88712B` / `BI-C7DFE0F5` |
+| Work / relationship | Mark attests that he was a named contributor to the IT4IT Reference Architecture works discussed and retains rights to his contributed material; the public member profile corroborates involvement since the Forum's 2014 inception and an Adoption Forum chair role, not exact contribution ownership |
+| Exact source scope | only `OP-RIGHTS-03` for the rights assertion and `OP-FPAW-01` for the separately supplied design direction; no future message and no compiled-publication content |
+| Contribution kind / separability | direct provenance assertion, concepts, architecture intent, and extension scope; exact C24A text, figures, tables, criteria, and contribution items remain unenumerated; no G252 contributor-credit conclusion is made by this attestation |
+| Asserted rights basis | Mark's statement; current Membership Terms preserve continuing use of contributed Information for the organizational `Member` while treating resulting Material as The Open Group IP, but the historically operative agreement and personal/employer chain remain unverified |
+| Permissions / exclusions | only the direct-message permissions in Sections 20.2.1 and 20.2.3; no permission for collective, coauthor, editor, employer, publisher, standards-body, confidential, logo, trade-dress, conformance, certification, or endorsement content |
+| Authentication / evidence / date | authenticated task turns, public member profile, current public Membership Terms and style guide; recorded 2026-08-01; no signature beyond task authentication and no independent-human rights acceptance |
+| Adoption / external submission | this independently expressed DPF candidate may be reviewed; adoption or an external submission relying on retained rights requires an authorized edition, complete source-specific decisions, and independent qualified human review |
+
+#### 20.3.2 `CA-MB-2026-08-01-CSDM-PROVENANCE`
+
+| Field | Recorded value |
+|---|---|
+| Contributor / authentication | Mark Bodman; authenticated `OP-CSDM-02` in `WC-1B88712B` / `BI-C7DFE0F5` |
+| Work / relationship | Mark attests that he originated CSDM as a ServiceNow internal standard and created several public CSDM pattern videos |
+| Exact source scope | the provenance and design-direction statements in `OP-CSDM-02` only; the exact videos and exact separable content inside CSDM/AICT publications are not enumerated |
+| Contribution kind / separability | direct provenance statement and high-level standards direction; not a claim to ServiceNow publication expression |
+| Asserted rights basis | authenticated direct statement; ServiceNow employment, assignment, work-for-hire, and publication rights remain undetermined |
+| Permissions / exclusions | only the direct-message permissions in Section 20.2.2; no permission for ServiceNow text, figures, tables, class definitions, videos/transcripts, confidential material, marks, or trade dress |
+| Authentication / evidence / date | authenticated task turn; recorded 2026-08-01; no employer/rightsholder confirmation or independent-human rights acceptance |
+| Attribution rule | record Mark's bounded provenance without attributing any individual linked video to him until a separate enumerated attestation and decision exist |
+
+### 20.4 SourceCitation register
+
+Every row is `reference-only`, accessed 2026-08-01, and supplies orientation or identity context
+only. It is not a license decision or normative/mapping/conformance evidence.
+
+| ID | Owner / title and version | Canonical locator or reproducible resolver | Orientation scope |
+|---|---|---|---|
+| `SCIT-TOG-C24A` | The Open Group, IT4IT Standard Version 3.0.1 product record | <https://publications.opengroup.org/c24a> | title, identifier, version, type, and high-level research target |
+| `SCIT-TOG-G252` | The Open Group, DPPM Guide G252 product record | <https://publications.opengroup.org/g252> | title, identifier, type, and research target |
+| `SCIT-TOG-W205` | The Open Group, W205 product record | <https://publications.opengroup.org/w205> | title, publication identity, and lineage |
+| `SCIT-TOG-MEMBERSHIP` | The Open Group, current Membership Terms page | <https://www.opengroup.org/membership/terms> | present-day Member/Contribution/Material context; historically operative agreement still controls |
+| `SCIT-TOG-PROCESS` | The Open Group, current Standards Process page | <https://www.opengroup.org/standardsprocess/main.html> | present-day process orientation only |
+| `SCIT-TOG-COPYRIGHT` | The Open Group, current copyright-transfer definition | <https://www.opengroup.org/standardsprocess/definitions.html> | present-day process definition only |
+| `SCIT-TOG-LICENSING` | The Open Group, current commercial/non-commercial licensing page | <https://www.opengroup.org/licensing-commercial-and-non-commercial> | route for obtaining permission; not a license |
+| `SCIT-TOG-TRADEMARKS` | The Open Group, current trademark guidelines | <https://www.opengroup.org/trademarks> | nominative/editorial-use constraints and attribution |
+| `SCIT-TOG-STYLE` | The Open Group, current technical-publications style guide | <https://pubs.opengroup.org/handbooks/technical-publications-styleguide/chap2.html> | contributor-versus-author and publication-structure orientation |
+| `SCIT-MB-PROFILE` | The Open Group member profile for Mark Bodman | <https://www.opengroup.org/member-spotlight/mark-bodman> | public identity, involvement-since-inception, and chair-role corroboration only |
+| `SCIT-SNOW-CSDM-RESOURCES` | ServiceNow, CSDM data domains, Australia release | <https://www.servicenow.com/docs/r/servicenow-platform/common-service-data-model-csdm/csdm-conceptual-model.html> | current CSDM domain and CI-relationship implementation orientation |
+| `SCIT-SNOW-CSDM-MODEL` | ServiceNow, CSDM glossary, Australia release | <https://www.servicenow.com/docs/r/servicenow-platform/common-service-data-model-csdm/csdm-term-definitions.html> | current vendor term-boundary orientation |
+| `SCIT-SNOW-CSDM-INDEX` | ServiceNow, Exploring the AI Portfolio, Australia release | <https://www.servicenow.com/docs/r/application-portfolio-management/eaw-exploring-the-ai-portfolio.html?contentId=0wyzUqVB2jKs~oh7xWrGVA> | product-model, Digital Asset, dependency, and lifecycle implementation orientation |
+| `SCIT-SNOW-AICT-PRODUCT` | ServiceNow, AI Control Tower product page | <https://www.servicenow.com/products/ai-control-tower.html> | product identity plus discover/govern/observe/measure scope orientation |
+| `SCIT-SNOW-AICT-GUIDANCE` | ServiceNow, Common Service Data Model (CSDM) shapes, Australia release | <https://www.servicenow.com/docs/r/application-portfolio-management/eaw-modeling-csdm-shapes.html> | AI Product Model, Digital Asset, application/function, and service-delivery shape orientation |
+| `SCIT-SNOW-TERMS` | ServiceNow, current Website Terms of Use | <https://www.servicenow.com/>; navigate via footer Legal / Website Terms of Use | current restriction context for website content and linking; not source permission |
+| `SCIT-OMG-BACM` | Object Management Group, Business Architecture Core Metamodel 1.1 beta | <https://www.omg.org/spec/BACM> | business-architecture research target only |
+| `SCIT-OMG-VDML` | Object Management Group, Value Delivery Modeling Language 1.1 | <https://www.omg.org/spec/VDML/1.1/> | value-network research target only |
+| `SCIT-TOG-ARCHIMATE` | The Open Group, ArchiMate® overview; version not asserted by this citation | <https://www.opengroup.org/archimate-forum/archimate-overview> | architecture-view research target only |
+| `SCIT-OMG-BPMN` | Object Management Group, Business Process Model and Notation 2.0.2 | <https://www.omg.org/spec/BPMN/2.0.2/> | process-execution research target only |
+| `SCIT-OMG-CMMN` | Object Management Group, Case Management Model and Notation 1.1 | <https://www.omg.org/spec/CMMN> | case-execution research target only |
+| `SCIT-OMG-DMN` | Object Management Group, Decision Model and Notation landing page; exact specification version not asserted | <https://www.omg.org/dmn/> | decision-model research target only |
+| `SCIT-NIST-AIRMF` | US NIST, AI Risk Management Framework 1.0 | <https://www.nist.gov/itl/ai-risk-management-framework> | AI-risk research target only |
+| `SCIT-ISO-42001` | ISO/IEC 42001:2023 product record | <https://www.iso.org/standard/42001> | AI-management-system research target only |
+| `SCIT-ISO-23894` | ISO/IEC 23894:2023 product record | <https://www.iso.org/standard/77304.html> | AI-risk research target only |
+| `SCIT-ISO-30414` | ISO 30414:2025 product record | <https://www.iso.org/standard/30414> | human-capital reporting research target only |
+| `SCIT-ILO-ISCO08` | International Labour Organization, ISCO-08 public portal | <https://isco.ilo.org/en/isco-08/> | occupation-classification research target only |
+| `SCIT-EC-ESCO` | European Commission, ESCO public portal; dataset version not asserted | <https://esco.ec.europa.eu/en/about-esco> | occupation/skill reference research target only |
+| `SCIT-USDOL-ONET` | US Department of Labor O*NET Resource Center, Content Model; page version current on access | <https://www.onetcenter.org/content.html> | worker/work descriptor research target only |
+| `SCIT-ISA-95` | International Society of Automation, ISA-95 standards-family page; family version not asserted | <https://www.isa.org/standards-and-publications/isa-standards/isa-95-standard> | enterprise/control boundary research target only |
+| `SCIT-GS1-STANDARDS` | GS1, “How GS1 standards work”; page version current on access | <https://www.gs1.org/standards/how-gs1-standards-work> | physical identity/event research target only |
+| `SCIT-ISO-55000` | ISO, ISO 55000 family committee catalog; family version not asserted | <https://www.iso.org/committee/55089/x/catalogue/> | asset-management research target only |
+| `SCIT-W3C-PROVO` | W3C, PROV-O Recommendation, 30 April 2013 | <https://www.w3.org/TR/prov-o/> | provenance-exchange research target only |
+| `SCIT-W3C-SKOS` | W3C, SKOS Reference Recommendation, 18 August 2009 | <https://www.w3.org/TR/skos-reference/> | semantic-mapping research target only |
+| `SCIT-W3C-SHACL` | W3C, Shapes Constraint Language Recommendation, 20 July 2017 | <https://www.w3.org/TR/shacl/> | graph-validation research target only |
+| `SCIT-W3C-DCAT3` | W3C, Data Catalog Vocabulary Version 3 Recommendation, 22 August 2024 | <https://www.w3.org/TR/vocab-dcat-3/> | catalog-exchange research target only |
+
+DPF-owned code, schema, portfolio/archetype registries, TAK, GAID, TAK-JSI, and existing design
+documents are current implementation evidence, subject to their own provenance. “DPF-owned” is not
+used to launder inherited fields whose lineage is unresolved.
+
+### 20.5 Current source-control and ingestion gaps
+
+These are observed repository nonconformities, not permissions granted by this candidate. The
+candidate may be reviewed as an independently expressed draft, but adoption, a repository
+conformance claim, external publication, or standards-body submission is blocked while any `stop`
+row applies. Removing, quarantining, or rights-clearing pre-existing assets and derived outputs is a
+separate governed remediation action; this documentation release does not silently perform it.
+
+| Gap ID | Gate | Observation | Required resolution |
+|---|---|---|---|
+| `GAP-SOURCE-001` | `stop` | legacy third-party PDFs, text extracts, workbooks, and images remain tracked under `docs/Reference/` | inventory each artifact, establish rights, then retain with terms or remove/quarantine through a governed PR |
+| `GAP-SOURCE-002` | `stop` | `IT4IT_Functional_Criteria_Taxonomy.xlsx` is ingested by `seed-ea-reference-models.ts` and copied into an image despite an `undetermined` decision | disable authoritative ingestion/distribution until a complete permission and provenance record exists, or replace it with rights-cleared data |
+| `GAP-SOURCE-003` | `stop` | `taxonomy_v3.json` is generated from the V3 workbook and contains fields marked from TBM/APQC, while its per-field title/license lineage is incomplete | rebuild from rights-cleared inputs with per-field provenance; do not assert blanket originality, Apache sublicensing, or donation rights |
+| `GAP-SOURCE-004` | `warn` | 15 founder-kernel raw-source notes existed under the legacy contract; 3 scope-critical notes are migrated and 12 remain legacy | migrate the remaining notes to the target rights contract; until then they are not new AI/normative evidence |
+| `GAP-SOURCE-005` | `stop` | the tracked W205 PDF/extract has retained-notice permission, but the independent qualified-human acceptance required by Section 13.1.1 for existing joint-work asset redistribution is not recorded | independently verify the notice, title/ownership context, current retained notices, and declared repository use; record acceptance or remove/quarantine the copies through a governed PR |
+| `GAP-SOURCE-006` | `stop` | legacy Markdown designs and published stances contain externally derived or exact claims from workbooks, compiled publications, or the local BIAN/CSDM paper without complete output-level SUD/re-review records | treat them as historical non-admissible outputs; clean-room rewrite, rights-clear, or quarantine each affected output before adoption or external publication |
+| `GAP-SOURCE-007` | `stop` | `portfolio_registry.json`, `business_model_registry.json`, and `agent_registry.json` retain exact external section/stream/criterion fields without complete mapping envelopes or source decisions; the draft Farm Steward also pairs local `operate` with a section label that conflicts with the registry's own numbering | quarantine those fields from standards evidence, inventory lineage per field, repair internal contradictions, and replace them with typed local lifecycle keys plus authorized, versioned mapping records |
+
+### 20.6 Originality and licensing declaration
+
+The candidate authorship process asserts that this document's prose, diagrams, requirement IDs,
+metamodel, profile system, and conformance grammar are independently expressed DPF work. The
+four-portfolio, DigitalProduct, and AI-coworker idea lineage includes Mark Bodman's bounded direct
+statements under the decisions above. This assertion excludes `taxonomy_v3.json`, the reference
+workbooks, compiled publications, and inherited data fields whose provenance is unresolved.
+
+This document does not reproduce IT4IT Reference Architecture functional criteria, exact G252
+four-role wording, APQC taxonomies, ISO/IEC clauses, CSDM diagrams/table definitions, or other
+restricted artifacts. Implementers remain responsible for obtaining authoritative editions and
+licenses. DPF mappings are not a substitute for those sources.
+
+## Appendix A — DPF logical mapping
+
+This appendix is informative and intentionally identifies conceptual gaps rather than inventing
+parallel persistence.
+
+| `DPF-FPAW` concept | Current DPF mapping | Status |
+|---|---|---|
+| `Organization` | `Organization` and business context | present |
+| `Principal` | canonical `Principal`; human, organization, team, agent-subject, automation, and robot projections require kind/resolver convergence | present; cross-kind identity invariants are incomplete |
+| `Objective/intended Outcome` | `ProductObjective`; its `outcomeHypothesis` and target measures provide partial intent substrate | partial; no exact generalized Outcome authority exists |
+| `OutcomeObservation` | `ProductOutcomeObservation` | present as append-only observed evidence; **MUST NOT** be mapped as intended Outcome |
+| `PortfolioDefinition/Portfolio` | portfolio registry, `Portfolio`, taxonomy | present; key/definition convergence needed |
+| `BusinessProduct/BusinessProductOffering` | `ProductLine`, schema `Product`, `ProductOffering`, `CatalogItem`, `ProductSold` | present |
+| `ServiceDefinition/OperationalServiceOffering` | service-domain definitions and `ServiceOffering` | fragmented; typed abstract boundary is new |
+| `DigitalProduct` | `DigitalProduct` | present; lifecycle remains separate from offers and instances |
+| `DigitalProductRelease` | `ProductVersion` and release/deployment records | partial; operating-profile relationship requires convergence |
+| `CoworkerService/CoworkerServiceOffering/engagement` | `CoworkerService`, `CoworkerOffer`, `CoworkerEngagement` | present; typed FPAW mapping required |
+| `ValueStream/Stage` | archetype OVSM and EA projection | derived; Stage contract incomplete |
+| `Capability` | `BusinessCapability` and corpus | present; Stage relation thin |
+| `OperatingFlow/WorkUnitDefinition` | domain flows, `WorkItem`, staffing, process/case records | fragmented; normative bridge missing |
+| `Job/Occupation/Skill` | `Position`, `OccupationProfile`, skills and profession corpora | present but fragmented |
+| `Performer` | `Principal`, `EmployeeProfile`, partner/domain models; `Agent` is configuration/template, not identity | convergence incomplete |
+| `WorkAssignment/Collaboration` | `WorkItem`, schedules, staffing, agent engagements | atomic assignment arity and human/AI/robot/partner collaboration union incomplete |
+| `AIProductOperatingBinding/AIProductBindingCompatibility` | GAID aliases, operating profiles, deployments, agent registry relations | explicit release/profile/subject temporal binding and pairwise overlap disposition are target substrate Gaps |
+| `Resource` | DigitalProduct, inventory, location/site and domain-owned physical records | distributed by correct domain ownership |
+| `Control/Authority` | authority, delegation, compliance, TAK | substantial substrate |
+| `Evidence` | tool execution, receipts, outcome/domain observations, EA evidence | substantial but not one common claim graph |
+| `Profile` | archetype definitions/activation profiles/readiness | present; composition/completeness uneven |
+| `ConformanceClaim/Gap` | EA assessment/issues, lifecycle/portfolio gaps, backlog links | present but fragmented |
+
+## Appendix B — Interpretation precedence
+
+For semantic and control interpretation, apply this order:
+
+1. applicable law and regulation, non-waivable rights, and mandatory safety constraints
+2. valid contract and explicit human/organizational authority, only within tier 1 bounds
+3. the authoritative external standard for the concept it owns, when lawfully accessible and applicable
+4. this standard for its owned bridge semantics
+5. the applicable versioned profile and organization override
+6. informative examples, white papers, videos, projections, and inferred defaults
+
+A profile or organization override may tighten a higher-tier requirement but **MUST NOT** weaken it.
+Current DPF schema, registry, and domain records are authoritative evidence of *as-is implementation
+state*; they do not outrank FPAW target semantics for concerns FPAW owns. A conflict between current
+state and target requirement is recorded as a Gap. All conflicts **MUST** be recorded; precedence
+determines temporary interpretation, not silent deletion of the discrepancy.

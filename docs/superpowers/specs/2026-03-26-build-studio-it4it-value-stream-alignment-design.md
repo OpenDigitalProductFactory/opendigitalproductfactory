@@ -1,5 +1,11 @@
 # Build Studio IT4IT Value Stream Alignment — Multi-User, Release Bundling, Calendar Integration
 
+> **Authority notice (2026-08-01):** This historical design preserves delivery lineage;
+> its section labels and G252 references are not current normative mappings or evidence.
+> Use current code and live data for observed state and the
+> [Four-Portfolio Archetype and AI Workforce Operating Standard](../../architecture/four-portfolio-archetype-ai-workforce-operating-standard.md)
+> for candidate mappings, source-use decisions, and conformance semantics.
+
 **Status:** Draft (2026-03-26)
 **Predecessor:** EP-SELF-DEV-003 (Sandbox Execution & DB Isolation), EP-CHG-MGMT (Change & Deployment Management), EP-CODEGEN-001 (Robust Sandbox Coding), Promotion Pipeline & Change Window Design (2026-03-25)
 **IT4IT Alignment:** §5.3 Integrate, §5.4 Deploy, §5.5 Release Value Streams

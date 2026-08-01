@@ -45,6 +45,132 @@ This standard does not define:
 
 Those concerns are addressed by `GAID` and the companion [Job-Specific Intelligence (`TAK-JSI`) profile](job-specific-intelligence.md).
 
+### 1.1 AI-coworker operating reference architecture
+
+The following implementation-neutral view places the TAK runtime boundary inside the wider
+AI-coworker operating system. It is independently derived from DPF's TAK, GAID, TAK-JSI,
+DigitalProduct, and work-allocation semantics in response to the bounded operator direction recorded
+as `OP-CSDM-02` in the
+[FPAW source register](four-portfolio-archetype-ai-workforce-operating-standard.md#20-research-and-source-register).
+ServiceNow's current [Common Service Data Model (CSDM) shapes](https://www.servicenow.com/docs/r/application-portfolio-management/eaw-modeling-csdm-shapes.html)
+page, identified by `SCIT-SNOW-AICT-GUIDANCE`, is a `reference-only` implementation target for the
+FPAW Section 13.4 validation backlog; its figure, terminology, and vendor data model were not copied
+into this view.
+
+```mermaid
+flowchart TB
+    subgraph L1["1. Outcomes and interaction"]
+        CON["Customer, workforce actor, or machine consumer"]
+        OUT["Desired and accepted outcome"]
+        ENG["Service offer and engagement"]
+        CON --> ENG --> OUT
+    end
+
+    subgraph L2["2. Governed agency and work"]
+        ID["GAID AgentSubject and Principal"]
+        OPF["Deployment operating-profile fingerprint"]
+        JOB["Job, activity, and TAK-JSI qualification"]
+        TEAM["Human oversight and agent collaboration"]
+        AUTH["TAK authority decision"]
+        ID --> OPF --> JOB --> TEAM --> AUTH
+    end
+
+    subgraph L3["3. Capabilities and controlled access"]
+        SK["Agent skill packages and procedures"]
+        TL["Tools and action interfaces"]
+        SV["Retrieval, decision, and execution services"]
+        GW["MCP, API, A2A, identity, and data gateways"]
+        SK --> TL --> SV --> GW
+    end
+
+    subgraph L4["4. Knowledge, models, and runtime resources"]
+        MOD["Model routes and inference resources"]
+        DIR["Prompts, directives, policies, and memory"]
+        DAT["Structured and unstructured knowledge"]
+        RUN["Compute, packages, deployments, and telemetry"]
+        MOD --> DIR --> DAT --> RUN
+    end
+
+    subgraph SPINE["Product, lifecycle, and assurance spine"]
+        DP["AI-coworker DigitalProduct"]
+        REL["DigitalProductRelease"]
+        AST["Digital assets and package"]
+        INS["Runtime or service instance"]
+        BND["FPAW AIProductOperatingBinding"]
+        EVD["Controls, provenance, observations, and evidence"]
+        DP --> REL --> AST --> INS --> BND --> EVD
+        REL -. "referenced by" .-> OPF
+        INS -. "configuration captured by" .-> OPF
+        REL -. "release" .-> BND
+        OPF -. "operating profile" .-> BND
+    end
+
+    ENG --> AUTH
+    AUTH --> SK
+    GW --> MOD
+    RUN --> AUTH
+    AUTH --> EVD
+    OUT --> EVD
+    DP -. "offers" .-> ENG
+    ID -. "subject" .-> BND
+    BND -. "qualified operating context" .-> JOB
+```
+
+The consequential-action path crosses `AUTH` and produces attributable evidence. TAK owns the
+authority decision, runtime gate, delegation, and execution-receipt semantics. GAID owns the
+AgentSubject and operating-profile identity; TAK-JSI owns job/activity qualification; the
+[Four-Portfolio Archetype and AI Workforce Operating
+Standard](four-portfolio-archetype-ai-workforce-operating-standard.md) owns the Product, service,
+work, and lifecycle bridge. Context nodes in this view do not transfer that ownership to TAK.
+
+### 1.2 AI-coworker lifecycle and architecture view
+
+The operator direction in `OP-CSDM-02` also calls for an implementation-neutral lifecycle picture.
+The view below is DPF's own expression: it uses the canonical DPF lifecycle keys and separates
+lifecycle state, architecture scope, and governed entity maturity. It is the lifecycle companion to
+the runtime stack above, not a vendor data model or a claim that every stage is executed by TAK.
+
+```mermaid
+flowchart LR
+    subgraph LIFE["AI-coworker DigitalProduct and service lifecycle"]
+        EV["Evaluate<br/>Objectives, Outcomes, portfolio decision"]
+        EX["Explore<br/>BusinessProduct, ValueStream, work and architecture"]
+        IN["Integrate<br/>Release, assets, package, tests and qualification"]
+        DR["Deploy and Release<br/>Instance, operating profile and approved binding"]
+        CO["Consume<br/>Offering, engagement, assignment and WorkOccurrence"]
+        OP["Operate and Improve<br/>TAK actions, evidence, incidents, change and retirement"]
+        EV --> EX --> IN --> DR --> CO --> OP
+        OP -. "outcome and assurance feedback" .-> EV
+    end
+
+    STRAT["Strategy and business model<br/>stakeholder value, Outcomes and four portfolios"]
+    BOA["Business operational architecture<br/>ValueStreams, capabilities, jobs and work"]
+    SOL["Solution architecture<br/>DigitalProduct releases, assets and dependencies"]
+    SVC["Service and engagement model<br/>services, offers, instances and assignments"]
+    FND["Foundation<br/>GAID identity, TAK-JSI qualification, data, vocabulary, controls and provenance"]
+
+    STRAT -. "governs" .-> EV
+    STRAT -. "governs" .-> EX
+    BOA -. "shapes" .-> EX
+    BOA -. "accepts" .-> CO
+    SOL -. "specifies" .-> IN
+    SOL -. "constrains" .-> DR
+    SVC -. "defines" .-> DR
+    SVC -. "defines" .-> CO
+    FND -. "supports every lifecycle state" .-> EV
+    FND -.-> EX
+    FND -.-> IN
+    FND -.-> DR
+    FND -.-> CO
+    FND -.-> OP
+```
+
+Portfolio governance spans the lifecycle. FPAW owns the Product, portfolio, work, service, and
+AIProductOperatingBinding semantics; GAID owns the enduring subject; TAK-JSI owns qualification; TAK
+owns the action-time authority, delegation, execution, and receipt boundary in Consume/Operate. An AI
+Agent record, release, deployed instance, AgentSubject, Offering, and WorkAssignment are therefore
+related but never interchangeable.
+
 ## 2. Conformance
 
 An implementation conforms to this standard only if it satisfies all requirements identified as `MUST` for its claimed conformance profile.

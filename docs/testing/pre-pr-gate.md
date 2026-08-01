@@ -98,13 +98,16 @@ The profiles reflect execution substrate, not separate policy inventories:
 
 - `source` uses Node plus the isolated guard-AST runtime;
 - `workspace` uses the pinned full workspace graph for checks such as prose
-  lint; and
+  lint and the executable FPAW standard/inventory conformance guard; and
 - `pull-request` uses PR event context and trailers.
 
 `pregate:preflight` and `pr:ready` consume all locally honest checks from these
 same profiles. In a source-only worktree, a missing workspace runtime is
 reported as environment-skipped and remains CI-enforced; in a compile-ready
-worktree, prose drift is therefore found before the sandbox lease or PR.
+worktree, prose or FPAW semantic drift is therefore found before the sandbox
+lease or PR. The FPAW guard reconciles canonical archetype/category ownership,
+matrix and deviation structure, closed vocabularies, requirement/reference and
+profile-dependency closure, worked profiles, and source-governance records.
 
 Consolidation follows a fail-safe promotion sequence:
 

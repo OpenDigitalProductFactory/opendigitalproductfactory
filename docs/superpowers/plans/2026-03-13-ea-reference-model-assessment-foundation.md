@@ -1,5 +1,13 @@
 # EA Reference Model Assessment Foundation Implementation Plan
 
+> **Authority notice (2026-08-01):** This completed historical plan preserves delivery
+> lineage; it does not establish permission to ingest or redistribute the criteria
+> workbook. That artifact is `undetermined` under
+> `SUD-IT4IT-CRITERIA-WORKBOOK-2026-08-01`. Use current code and live data for observed
+> state and the
+> [Four-Portfolio Archetype and AI Workforce Operating Standard](../../architecture/four-portfolio-archetype-ai-workforce-operating-standard.md)
+> for target semantics and source-use controls.
+
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a generic EA reference-model assessment foundation in `/ea`, seed IT4IT as the first authoritative model, and support portfolio-first scoring plus an AI proposal lane.
