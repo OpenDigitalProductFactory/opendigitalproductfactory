@@ -27,6 +27,50 @@ import {
 import { standardizeDomain, standardizeEmail, standardizeName, standardizePhone } from "./standardize";
 import { MATCH_CONFIG_DEFAULTS, loadMatchConfig, type MatchConfig } from "./match-config";
 
+/**
+ * Minimal transaction surface the heap-forced candidate lookups need: the raw
+ * query builder plus the raw executor for the planner GUCs. Kept structural so
+ * the queries stay testable with an in-memory fake.
+ */
+export interface HeapForcedTx {
+  $queryRaw<T = unknown>(query: TemplateStringsArray, ...values: unknown[]): Promise<T>;
+  $executeRawUnsafe(query: string): Promise<number>;
+}
+
+/**
+ * Run a candidate-lookup query with index scans DISABLED, so every predicate —
+ * including the exact-equality arms on email / phone / domain / name — is
+ * evaluated against the true heap rather than a btree that may silently disagree
+ * with it (BI-FEAEB715 / BI-8CCF7F13, collation drift).
+ *
+ * Why this and not a trgm index: the gate's name arm uses `similarity() > floor`,
+ * which no GIN index can serve — it is already a heap seq scan and is therefore
+ * already collation-immune. The EXPOSED arms are the exact-equality ones with no
+ * heap-forcing companion (an email-only or domain-only check drives a plain
+ * btree index scan that a collation flip makes descend the wrong subtree and
+ * return zero — the gate then reports "clear" for a record that exists). Forcing
+ * a heap scan is the fix the repair migrations already use everywhere
+ * (SET LOCAL enable_indexscan = off, e.g.
+ * 20260720180000_repair_scheduled_job_index_integrity) and the one thing the
+ * write-time gate did not do. SET LOCAL is transaction-scoped, so it reverts on
+ * commit and touches no other query.
+ *
+ * Cost: a full heap scan per gated check. The name arm already seq-scans, so the
+ * only NEW cost falls on exact-only checks — which are exactly the ones that
+ * were silently unsafe. For a write-time correctness gate that is the right
+ * trade: never miss a duplicate the database constraint could also miss.
+ */
+export async function runHeapForcedCandidateQuery<T>(
+  run: (tx: HeapForcedTx) => Promise<T>,
+): Promise<T> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRawUnsafe("SET LOCAL enable_indexscan = off");
+    await tx.$executeRawUnsafe("SET LOCAL enable_indexonlyscan = off");
+    await tx.$executeRawUnsafe("SET LOCAL enable_bitmapscan = off");
+    return run(tx as unknown as HeapForcedTx);
+  });
+}
+
 /** Domains the write-time gate covers today (subset of MasterDataDomain). */
 export type DedupGatedDomain = "customer-account" | "customer-site" | "customer-contact";
 
@@ -110,7 +154,7 @@ export async function checkCustomerAccountDuplicates(
   if (!nameNormalized && !domainNormalized) return { verdict: "clear", candidates: [] };
   const config = await loadMatchConfig("customer-account");
 
-  const rows = await prisma.$queryRaw<AccountCandidateRow[]>`
+  const rows = await runHeapForcedCandidateQuery((tx) => tx.$queryRaw<AccountCandidateRow[]>`
     SELECT "id", "name", "status", "website", "nameNormalized", "domainNormalized"
     FROM "CustomerAccount"
     WHERE "status" <> 'superseded'
@@ -122,7 +166,7 @@ export async function checkCustomerAccountDuplicates(
       )
     ORDER BY similarity("nameNormalized", ${nameNormalized}) DESC NULLS LAST
     LIMIT ${CANDIDATE_LIMIT}
-  `;
+  `);
 
   const subjectMatch: MatchSubject = {
     id: "__subject__",
@@ -184,7 +228,7 @@ export async function checkCustomerContactDuplicates(
   const accountId = subject.accountId ?? "";
   const excludeId = subject.excludeId ?? "";
   const config = await loadMatchConfig("customer-contact");
-  const rows = await prisma.$queryRaw<ContactCandidateRow[]>`
+  const rows = await runHeapForcedCandidateQuery((tx) => tx.$queryRaw<ContactCandidateRow[]>`
     SELECT "id", "email", "firstName", "lastName", "name", "phone", "accountId"
     FROM "CustomerContact"
     WHERE (${excludeId} = '' OR "id" <> ${excludeId})
@@ -197,7 +241,7 @@ export async function checkCustomerContactDuplicates(
           ))
     ORDER BY similarity("nameNormalized", ${nameNormalized}) DESC NULLS LAST
     LIMIT ${CANDIDATE_LIMIT}
-  `;
+  `);
 
   const subjectMatch: MatchSubject = {
     id: "__subject__",
@@ -240,7 +284,7 @@ export async function checkCustomerSiteDuplicates(
   if (!nameNormalized) return { verdict: "clear", candidates: [] };
   const config = await loadMatchConfig("customer-site");
 
-  const rows = await prisma.$queryRaw<SiteCandidateRow[]>`
+  const rows = await runHeapForcedCandidateQuery((tx) => tx.$queryRaw<SiteCandidateRow[]>`
     SELECT "id", "name", "status", "nameNormalized"
     FROM "CustomerSite"
     WHERE "accountId" = ${subject.accountId}
@@ -252,7 +296,7 @@ export async function checkCustomerSiteDuplicates(
       )
     ORDER BY similarity("nameNormalized", ${nameNormalized}) DESC NULLS LAST
     LIMIT ${CANDIDATE_LIMIT}
-  `;
+  `);
 
   const subjectMatch: MatchSubject = { id: "__subject__", name: subject.name };
   return toResult(
