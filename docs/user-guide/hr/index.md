@@ -194,6 +194,22 @@ For an exit, coordinate the employee status and end-date evidence, account deact
 
 The platform contains service logic and reusable components for leave requests, onboarding/offboarding checklists, and performance reviews, but the current `/employee` tab set does not expose those as complete operator workflows. Do not tell employees to look for a Leave or Reviews tab, and do not treat those capabilities as operational until a routed screen and its permissions have been verified.
 
+### Who Can Approve Leave
+
+Leave decisions follow the org chart. The approver is the person's manager — or, if that manager
+cannot act right now, the first person above them who can. Anyone else attempting to decide the
+request is refused.
+
+A manager is treated as unable to act when they are inactive, offboarding, suspended, on leave, or
+have not yet started. When the platform routes past someone who is temporarily on leave, the
+decision still belongs to them: the deputy acts on their behalf rather than taking the decision
+over.
+
+If nobody up the chain can approve, the platform says so instead of silently holding the request —
+for example, "Kofi Wolfe has no manager set, so there is nobody to approve this." Fix the reporting
+line on the **Org Chart** and the request becomes decidable. The chart's **No manager** count and
+its reporting-loop warning are the two things to check first.
+
 Similarly, the lifecycle timeline is visible evidence, but the current page does not provide a general-purpose control for manually appending every possible lifecycle event.
 
 ## Evidence and Recovery Checklist

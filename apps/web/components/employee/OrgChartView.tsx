@@ -55,6 +55,13 @@ const NODE_TYPES = { orgPerson: OrgChartNode };
 
 type Density = "chart" | "list";
 
+/** Banner title per placement field. */
+const PLACEMENT_TITLE: Record<"departmentId" | "positionId" | "workLocationId", string> = {
+  departmentId: "Team updated",
+  positionId: "Role updated",
+  workLocationId: "Location updated",
+};
+
 /**
  * The React Flow node envelope for one person.
  *
@@ -103,9 +110,10 @@ function OrgChartViewInner({ employees, canReassign = true, referenceData, onSel
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(
-    null,
-  );
+  // Title travels with the feedback. A hardcoded one mislabelled placement edits.
+  const [feedback, setFeedback] = useState<
+    { tone: "success" | "error"; title: string; message: string } | null
+  >(null);
   const [isPending, startTransition] = useTransition();
 
   const instanceRef = useRef<ReactFlowInstance | null>(null);
@@ -234,8 +242,8 @@ function OrgChartViewInner({ employees, canReassign = true, referenceData, onSel
         setPendingId(null);
         setFeedback(
           result.ok
-            ? { tone: "success", message: result.message }
-            : { tone: "error", message: result.message },
+            ? { tone: "success", title: "Reporting line updated", message: result.message }
+            : { tone: "error", title: "Change not applied", message: result.message },
         );
       });
     },
@@ -260,8 +268,8 @@ function OrgChartViewInner({ employees, canReassign = true, referenceData, onSel
         setPendingId(null);
         setFeedback(
           result.ok
-            ? { tone: "success", message: result.message }
-            : { tone: "error", message: result.message },
+            ? { tone: "success", title: PLACEMENT_TITLE[field], message: result.message }
+            : { tone: "error", title: "Change not applied", message: result.message },
         );
       });
     },
@@ -312,6 +320,7 @@ function OrgChartViewInner({ employees, canReassign = true, referenceData, onSel
         restorePosition(node.id);
         setFeedback({
           tone: "error",
+          title: "Change not applied",
           message: `${manager.displayName} reports to ${dragged.displayName} — that would create a loop.`,
         });
         return;
@@ -388,7 +397,7 @@ function OrgChartViewInner({ employees, canReassign = true, referenceData, onSel
       {feedback && (
         <Notice
           variant={feedback.tone === "success" ? "success" : "error"}
-          title={feedback.tone === "success" ? "Reporting line updated" : "Change not applied"}
+          title={feedback.tone === "success" ? feedback.title : "Change not applied"}
         >
           {feedback.message}
         </Notice>

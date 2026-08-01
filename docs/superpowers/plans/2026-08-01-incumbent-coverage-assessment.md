@@ -52,11 +52,12 @@ Closed enums (`verdict`, `assessedVia`, `status`) guarded by predicates + a pari
 - **Accessor:** `coverageForIncumbent` / `listCoverageAssessments` (the typed read D6 consumes).
 - **Acceptance:** enum predicates; stage-1 matching (hit → posture verdict; miss → gap; idempotent supersede); confirm transitions provenance; unit-tested with mock prisma; governance battery green; `prisma validate` clean.
 
-### P2 — Stage 2 (rule) — `CatalogIdentity → taxonomy node → capability`
-Deterministic rule matching using the taxonomy the portfolio already carries, for incumbents the posture matrix does not name. `assessedVia=rule`. Follow-on.
+### P2 — Stage 2 (rule) — covering capability via the category corpus — **SHIPPED**
+Deterministic covering-capability resolution using the taxonomy the portfolio already carries. `assessIncumbentsViaRule` derives an incumbent's archetype category (posture `archetypeIds` → `StorefrontArchetype.category`) and resolves the covering **business** capability via the existing `CATEGORY_BUSINESS_CAPABILITY_PERSPECTIVES` corpus (`coveringBusinessCapabilityForCategory`) — no authored crosswalk. Enriches `coveringBusinessCapabilityId`; idempotent; never clobbers a human-confirmed row.
+**Scope note:** a rule stage that produces a VERDICT for gap incumbents the posture matrix never named needs a crosswalk between the incumbent identity vocabulary (`CatalogIdentity` CPE `category`) and the archetype/capability vocabulary — that crosswalk does not exist and is a separate authoring effort. This stage resolves what the existing substrate deterministically supports.
 
-### P3 — Stage 3 (AI)
-An AI assessment proposal with an evidence trail for still-unmatched entries. `assessedVia=ai`, always `status=proposed`, never auto-confirmed (spec §7). Follow-on.
+### P3 — Stage 3 (AI) — inference-backed proposal — **SHIPPED**
+`assessGapsViaAi` (apps/web, needs the inference chain) asks an injected proposer to classify gap incumbents; writes `assessedVia=ai`, always `status=proposed`, never auto-confirmed (spec §7). The LLM call is behind `routedInferenceProposer` (thin adapter over `routeAndCall`); `parseAiVerdict` validates against the closed verdict enum. Proposer errors are isolated. Correct over an empty set.
 
 ## 5. Verification
 - Unit: enum predicates; stage-1 matching + gap + idempotent supersede; confirm; the accessor — all with mock prisma (source-only worktree).

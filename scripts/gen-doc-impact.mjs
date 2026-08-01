@@ -4,8 +4,8 @@
 // EP-DOCS-SYSTEM Phase 4 — the doc-impact graph (filesystem-first).
 //
 // Generates apps/web/lib/docs/doc-impact.generated.json: a small, reviewable,
-// bidirectional manifest linking user-guide pages to the ROUTES and CODE that,
-// when changed, should flag the page for review. Two edge sources:
+// bidirectional manifest linking published doc pages to the ROUTES and CODE
+// that, when changed, should flag the page for review. Two edge sources:
 //   1. DOCS_ROUTE_MAP (route -> doc) — the map that already powers contextual
 //      help, inverted here so a route change flags its page (this is what the
 //      Phase 3 gate already does structurally; the manifest makes it queryable).
@@ -14,8 +14,17 @@
 //      change (not just a route-file edit) flags the affected pages.
 //
 // The manifest is the source-controlled contract; projecting stable edges into
-// the DocumentReference/Neo4j graph is a later step, deliberately gated on this
-// being green first (spec §5.5). Zero external dependencies.
+// the DocumentReference / Postgres graph mirror is a later step, deliberately
+// gated on this being green first (spec §5.5). Zero external dependencies.
+//
+// SCOPE: frontmatter edges are collected from the WHOLE
+// published doc corpus, not just docs/user-guide. The narrower walk was the
+// blast-radius hole that let the BET-5 Neo4j/Qdrant retirement ship while
+// /architecture/platform-overview/ — a published page whose entire "three data
+// layers" section described Neo4j — went unflagged. `docs/architecture/**` is
+// as customer-visible as `docs/user-guide/**`; the site publishes both.
+// Widening is safe because edges are OPT-IN: a page contributes nothing until
+// it declares `relatedCode:` / `relatedRoutes:`.
 //
 //   node scripts/gen-doc-impact.mjs           # write the manifest
 //   node scripts/gen-doc-impact.mjs --check    # fail if stale, or edges are invalid
@@ -24,21 +33,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseRouteMap, docFileForDocsPath } from "./check-docs-impact.mjs";
+import { publishedDocFiles } from "./lib/published-doc-roots.mjs";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const USER_GUIDE_DIR = path.join(REPO_ROOT, "docs", "user-guide");
 const ROUTE_MAP_TS = path.join(REPO_ROOT, "apps", "web", "lib", "docs-route-map.ts");
 const OUT_PATH = path.join(REPO_ROOT, "apps", "web", "lib", "docs", "doc-impact.generated.json");
-
-function walkMd(dir) {
-  const out = [];
-  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, e.name);
-    if (e.isDirectory()) out.push(...walkMd(full));
-    else if (e.name.endsWith(".md")) out.push(full);
-  }
-  return out;
-}
 
 /**
  * Extract a frontmatter list value (relatedRoutes / relatedCode). Supports YAML
@@ -95,10 +94,9 @@ export function buildManifest() {
     addEdge(docToRoutes, doc, routePrefix);
   }
 
-  // 2. Frontmatter relatedRoutes / relatedCode edges.
-  for (const file of walkMd(USER_GUIDE_DIR).sort()) {
-    const sourcePath = path.relative(REPO_ROOT, file).split(path.sep).join("/");
-    const raw = fs.readFileSync(file, "utf-8");
+  // 2. Frontmatter relatedRoutes / relatedCode edges, across every published page.
+  for (const sourcePath of publishedDocFiles(REPO_ROOT)) {
+    const raw = fs.readFileSync(path.join(REPO_ROOT, sourcePath), "utf-8");
     for (const route of frontmatterList(raw, "relatedRoutes")) {
       if (!route.startsWith("/")) problems.push(`${sourcePath}: relatedRoutes "${route}" must start with /`);
       addEdge(routeToDocs, route, sourcePath);

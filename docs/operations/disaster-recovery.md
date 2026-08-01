@@ -1,3 +1,16 @@
+---
+# Doc-impact edges (EP-DOCS-SYSTEM Phase 4). This runbook names specific
+# services, backup members and restore scripts, so a change to the service
+# topology or the backup job set must flag it for review. Without these edges
+# the BET-5 datastore retirement left this page telling operators — mid-incident
+# — to restore a Neo4j database that no longer exists.
+relatedCode:
+  - docker-compose.yml
+  - packages/db/src/seed-platform-backup.ts
+  - scripts/backup-postgres.sh
+  - scripts/restore-postgres.sh
+---
+
 # Disaster recovery runbook
 
 **Audience:** DPF operators in an incident. Non-technical-friendly; everything has copy-pasteable commands.
@@ -21,8 +34,7 @@ The DR-hardening epic (BIs shipped 2026-05-24) put recovery artifacts in **speci
 | What you lost | Where it lives | Restores via |
 |---|---|---|
 | Postgres rows (current state) | `$DPF_BACKUPS_HOST_PATH/postgres/<YYYY-MM-DDTHH-MM-SSZ>/dpf.dump` — nightly at 03:00 UTC | Admin UI `/admin/backups` → "Restore" wizard, OR `docker exec -i dpf-postgres-1 pg_restore --clean --if-exists -U dpf -d dpf < <dump>` |
-| Neo4j graph (current state) | `$DPF_BACKUPS_HOST_PATH/neo4j/<ts>/neo4j.dump` — nightly | `scripts/restore-neo4j.sh` (called by admin UI Neo4j-restore action) |
-| Qdrant collections | `$DPF_BACKUPS_HOST_PATH/qdrant/<ts>/` — nightly | `scripts/restore-qdrant.sh` |
+| Graph topology + vector/semantic memory | **Inside the Postgres dump above** — since BET-5 these are the `graph_node` / `graph_edge` tables and `pgvector` embeddings, not separate stores | Same Postgres restore; there is no separate graph or vector member to restore |
 | Postgres state from JUST BEFORE a destructive action | `$DPF_BACKUPS_HOST_PATH/pre-destructive/<date>/docker-volume-rm-pgdata-<ts>.dump` (or similar fingerprint per action) | Same restore wizard; treats it as any other dump |
 | Uncommitted git work before `git reset --hard` | `git stash list` shows entries named `pre-destructive-snapshot <ts> <fingerprint>` | `git stash pop stash@{N}` |
 | `.env` + `.claude/settings.local.json` before install-dir rm | `$DPF_BACKUPS_HOST_PATH/pre-destructive/<date>/remove-item-recurse-*.essentials.zip` | `Expand-Archive <zip> -DestinationPath $DPF_DIR` |
@@ -32,10 +44,18 @@ The DR-hardening epic (BIs shipped 2026-05-24) put recovery artifacts in **speci
 | Docker images | Pull-on-demand from registries | `docker compose pull` or `install-dpf.{ps1,sh}` |
 | Docker volumes (any) | NOT recoverable from Docker layer — the daily backup IS the durable copy | See dump-restore rows above |
 | Tool config / installer state | `install-state.json` in install dir | If lost: re-run `install-dpf.{ps1,sh}`; it's idempotent |
-| Failed platform upgrade / bad seed apply / migration damage | Governed upgrade recovery point: linked `BackupRun` rows under `$DPF_BACKUPS_HOST_PATH/{postgres,neo4j,qdrant}/<ts>/` plus previous runtime identity under `$DPF_BACKUPS_HOST_PATH/self-upgrade/<runId>/` | Upgrade Center rollback/restore flow; if unavailable, restore the Postgres member first, then Neo4j/Qdrant as needed |
+| Failed platform upgrade / bad seed apply / migration damage | Governed upgrade recovery point: linked `BackupRun` rows under `$DPF_BACKUPS_HOST_PATH/postgres/<ts>/` plus previous runtime identity under `$DPF_BACKUPS_HOST_PATH/self-upgrade/<runId>/` | Upgrade Center rollback/restore flow; if unavailable, restore the Postgres member directly |
+
+> **BET-5 changed this table.** Neo4j and Qdrant were retired onto PostgreSQL
+> (BI-A1E864A5). Their nightly backup jobs are **deactivated** and
+> `scripts/{backup,restore}-{neo4j,qdrant}.sh` only apply to pre-BET-5 archives
+> you may still hold — do not reach for them during a current-day incident. One
+> Postgres dump now carries relational state, graph topology and vectors
+> together, which also removes the old hazard of restoring three members to
+> three different points in time.
 
 Implementation note (2026-06-01): self-upgrade runs record the linked
-Postgres/Neo4j/Qdrant backup members in
+Postgres backup member in
 `SelfUpgradeRun.completionEvidence.recoveryPoint` after quiescence drains active
 work and before the swap boundary. `/ops/self-upgrade` can restore that matched
 recovery point for completed non-running runs; the action records
@@ -46,12 +66,12 @@ ids to restore through the backup substrate directly.
 
 Research note (2026-06-02): the sandbox server is a recovery rehearsal target,
 not a backup of record. Use it to prove that a recovery point can restore and
-boot before production state is touched. Today only the Postgres trial-restore
-path is shipped end-to-end. The default Build Studio sandbox has isolated
-Postgres, but its base compose configuration still points Neo4j and Qdrant at
-the shared services; full graph/vector rehearsal requires isolated Neo4j and
-Qdrant endpoints first. Never use the dev-against-live-DB compose overlay for
-recovery rehearsal because it can write to live data.
+boot before production state is touched. The Postgres trial-restore path is
+shipped end-to-end, and since BET-5 that single path also rehearses graph and
+vector recovery — they are tables in the same dump, and `sandbox-postgres` is
+isolated, so the old caveat about the sandbox pointing at shared Neo4j/Qdrant no
+longer applies. Never use the dev-against-live-DB compose overlay for recovery
+rehearsal because it can write to live data.
 
 **Key principle:** if you can't find your loss in this table, that means there's no automatic recovery for it. Stop and ask for help BEFORE doing anything destructive — the action you take next may be the difference between a 1-hour and 6-hour recovery.
 
@@ -60,7 +80,7 @@ recovery rehearsal because it can write to live data.
 ## 2. Decision tree — "my portal won't start"
 
 ```
-Is `docker ps` showing dpf-portal-1 + dpf-postgres-1 + dpf-neo4j-1 healthy?
+Is `docker ps` showing dpf-portal-1 + dpf-postgres-1 healthy?
 │
 ├── NO containers at all
 │   └── Did you run `docker compose down -v` recently?
@@ -70,8 +90,7 @@ Is `docker ps` showing dpf-portal-1 + dpf-postgres-1 + dpf-neo4j-1 healthy?
 ├── Containers exist but unhealthy
 │   └── Which one?
 │       ├── postgres unhealthy → §3.2 Postgres-down recovery
-│       ├── neo4j unhealthy    → §3.3 Neo4j-down recovery
-│       ├── qdrant unhealthy   → §3.4 Qdrant-down recovery
+│       ├── redis unhealthy    → §3.3 Redis-down recovery
 │       └── portal unhealthy   → check `docker compose logs portal` for migration errors → §3.5
 │
 └── All healthy but portal returns 500
@@ -83,7 +102,7 @@ Is `docker ps` showing dpf-portal-1 + dpf-postgres-1 + dpf-neo4j-1 healthy?
 
 ## 3. Specific recovery scenarios
 
-### 3.1 Volume wipe recovery (Postgres + Neo4j + Qdrant all gone)
+### 3.1 Volume wipe recovery (the Postgres volume is gone)
 
 1. **DO NOT** re-run `docker compose down -v` or `Remove-Item -Recurse $DPF_DIR` again. The runtime kernel commandments should block you; if they don't, you're on a pre-relocation install — STOP and read [`runtime-kernel-commandments.md`](runtime-kernel-commandments.md) first.
 
@@ -91,32 +110,22 @@ Is `docker ps` showing dpf-portal-1 + dpf-postgres-1 + dpf-neo4j-1 healthy?
 
    ```powershell
    Get-ChildItem "$env:DPF_DIR-backups\postgres" | Sort-Object Name -Descending | Select-Object -First 3
-   Get-ChildItem "$env:DPF_DIR-backups\neo4j"    | Sort-Object Name -Descending | Select-Object -First 3
-   Get-ChildItem "$env:DPF_DIR-backups\qdrant"   | Sort-Object Name -Descending | Select-Object -First 3
    ```
 
-3. Bring containers back up with empty volumes:
+3. Bring the database back up with an empty volume:
 
    ```powershell
    cd $DPF_DIR
-   docker compose up -d postgres neo4j qdrant
+   docker compose up -d postgres
    # Wait for healthcheck (~30s)
    ```
 
-4. Restore each store from its most recent dump:
+4. Restore from the most recent dump — one dump carries relational state, the
+   graph mirror and the vector embeddings together:
 
    ```powershell
-   # Postgres
    docker exec -i dpf-postgres-1 pg_restore --clean --if-exists -U dpf -d dpf `
      < "$env:DPF_DIR-backups\postgres\<latest-ts>\dpf.dump"
-
-   # Neo4j (offline restore — script stops + restarts neo4j)
-   bash $DPF_DIR/scripts/restore-neo4j.sh `
-     --dump "$env:DPF_DIR-backups/neo4j/<latest-ts>/neo4j.dump"
-
-   # Qdrant (snapshot restore)
-   bash $DPF_DIR/scripts/restore-qdrant.sh `
-     --snapshot "$env:DPF_DIR-backups/qdrant/<latest-ts>/"
    ```
 
 5. Start the portal:
@@ -146,14 +155,19 @@ Steps:
 
 3. Run the restore via admin UI (`/admin/backups` → select dump → "Restore") OR via CLI as in §3.1 step 4.
 
-### 3.3 Neo4j down (other stores OK)
+### 3.3 Redis down (Postgres OK)
 
-- If Docker says container is unhealthy: `docker compose logs neo4j` — usually a memory pressure or auth-config issue. Restart: `docker compose restart neo4j`.
-- If the data is gone (volume wiped): restore from nightly dump per §3.1 step 4. There is NO pre-destructive snapshot for Neo4j (it requires the DB stopped to dump, which the destructive command itself does). The nightly is the floor.
+- Redis backs the Inngest job queue and its state, so a Redis outage stops scheduled and event-driven work while leaving platform data intact.
+- Restart first: `docker compose logs redis`, then `docker compose restart redis`.
+- Redis holds **no system of record**. If its volume is gone, bring it back empty — in-flight job state is lost and Inngest re-establishes from its own durable records. There is nothing to restore from a backup.
 
-### 3.4 Qdrant down (other stores OK)
+### 3.4 Graph or vector data looks wrong (Postgres OK)
 
-- Similar to Neo4j — restart first, then restore from nightly snapshot if data gone. Qdrant collections are rebuildable from Postgres source data in most cases, so this is the least painful loss.
+Since BET-5 there is no separate graph or vector service to be "down". Both live in Postgres, so this is a *projection* problem, not an availability one:
+
+- **Graph topology stale or missing** — the `graph_node` / `graph_edge` mirror is a fire-and-forget projection, so it can drift from its source tables. Re-project rather than restore: `rebuildEaGraph()` for the EA graph, and the discovery/inventory sync for infrastructure CIs. A restore only helps if the source tables themselves are damaged.
+- **Semantic search returning nothing** — `pgvector` embeddings are regenerable from their source documents. Re-embed rather than restore.
+- If the underlying Postgres data is genuinely lost, this is §3.1 or §3.2 — one dump restores tables, graph and vectors together.
 
 ### 3.5 Portal returns 500 (containers healthy)
 
@@ -178,21 +192,17 @@ not as a fresh install problem.
    apply is the boundary between recoverable and data-lossy.
 2. In the portal, open `/ops/self-upgrade` and inspect the failed run. When the
    run has a complete `pre-upgrade-recovery` point, type the confirmation text
-   and use the recovery-point restore action; it knows the exact
-   Postgres/Neo4j/Qdrant backup rows created for the run and records rollback
-   evidence on the run.
+   and use the recovery-point restore action; it knows the exact Postgres
+   backup row created for the run and records rollback evidence on the run.
 3. If production is impaired but stable enough to wait, prefer a sandbox-assisted
    rehearsal before touching production: restore the recovery-point members into
    an isolated nonproduction target, boot the portal against that target, and
-   capture health/smoke evidence on the `SelfUpgradeRun`. Until the full
-   rehearsal tool lands, treat Postgres trial-restore as the only shipped
-   restore proof and mark Neo4j/Qdrant rehearsal `not-run` unless isolated
-   endpoints are provisioned.
+   capture health/smoke evidence on the `SelfUpgradeRun`. Postgres
+   trial-restore is the shipped restore proof, and since BET-5 it covers graph
+   and vector state too — they are tables in the same dump.
 4. If the portal is unavailable, use `/admin/backups` after bringing the
-   database services up. Restore the Postgres backup associated with the failed
-   upgrade first. Restore Neo4j and Qdrant only when graph/vector data is
-   missing or incompatible; both are usually regenerable from Postgres, but
-   restoring the matched recovery-point members is faster.
+   database up, and restore the Postgres backup associated with the failed
+   upgrade. That single member carries relational, graph and vector state.
 5. After recovery, capture the failed `SelfUpgradeRun`, `BackupRun`, and
    restore records in the incident notes. Do not delete the failed recovery
    point until the next successful nightly backup and trial restore have passed.
@@ -213,16 +223,17 @@ an isolated target and smoke-tested.
 Safe targets:
 
 - `local-integration-ci`, when leased through the nonproduction environment
-  lease system and backed by isolated Postgres, Neo4j, and Qdrant endpoints.
+  lease system and backed by an isolated Postgres endpoint.
 - A future dedicated `recovery-drill` environment key for longer BC/DR drills.
-- The Build Studio `sandbox` only for source, seed, migration, and Postgres
-  rehearsal until its graph/vector endpoints are isolated.
+- The Build Studio `sandbox`, which has its own `sandbox-postgres` — and since
+  graph and vector state are tables in that same database, isolating Postgres
+  now isolates the whole rehearsal.
 
 Unsafe targets:
 
 - `docker-compose.dev-against-live-db.yml`, because it intentionally writes to
   live databases.
-- Any sandbox whose Neo4j/Qdrant URLs resolve to the production containers.
+- Any sandbox whose `DATABASE_URL` resolves to the production Postgres container.
 - Docker named volumes by themselves. Volumes persist container data, but the
   durable recovery artifact is the host-retained backup plus restore evidence.
 

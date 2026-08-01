@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 607,
+  "pageCount": 608,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1350,17 +1350,17 @@
         "target-iterative-workflow",
         "mermaid-diagram-2",
         "important-boundaries",
-        "data-architecture-three-complementary-data-layers",
+        "data-architecture-one-datastore-three-question-shapes",
         "layer-1-postgresql-system-of-record",
-        "layer-2-neo4j-graph-projection-for-topology-and-impact",
+        "layer-2-the-graph-mirror-topology-and-impact",
         "layer-3-prometheus-time-series-metrics-for-operational-health",
-        "how-the-three-layers-work-together",
+        "how-the-layers-work-together",
         "grafanas-role-power-user-escape-hatch",
         "monitoring-stack-topology",
         "layer-3b-loki-alloy-container-logs-the-unbounded-signal",
         "how-the-platform-handles-anything-that-happens",
         "ai-provider-failure-detection-and-recovery",
-        "neo4j-sync-integrity",
+        "graph-mirror-sync-integrity",
         "hardware-guidance",
         "practical-tiers",
         "current-local-model-auto-selection",
@@ -4360,10 +4360,10 @@
         "1-inventory-whats-recoverable-from-what",
         "2-decision-tree-my-portal-wont-start",
         "3-specific-recovery-scenarios",
-        "31-volume-wipe-recovery-postgres-neo4j-qdrant-all-gone",
+        "31-volume-wipe-recovery-the-postgres-volume-is-gone",
         "32-postgres-down-other-stores-ok",
-        "33-neo4j-down-other-stores-ok",
-        "34-qdrant-down-other-stores-ok",
+        "33-redis-down-postgres-ok",
+        "34-graph-or-vector-data-looks-wrong-postgres-ok",
         "35-portal-returns-500-containers-healthy",
         "35a-failed-upgrade-seed-clobber-or-migration-damage",
         "35b-sandbox-assisted-recovery-rehearsal",
@@ -7525,6 +7525,32 @@
         "11-definition-of-done"
       ]
     },
+    "docs/strategy/2026-09-cada-architects-forum-deck.md": {
+      "publicHref": "/strategy/2026-09-cada-architects-forum-deck/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "architects-forum-cada-cloud-sovereignty-deck-outline-speaker-notes",
+        "slide-1-title",
+        "slide-2-the-shift-from-politics-to-procurement-law",
+        "slide-3-hero-the-four-tier-sovereignty-ladder-the-four-tier-ladder-visual",
+        "slide-4-why-hyperscaler-ai-is-capped-at-l1l2",
+        "slide-5-whos-in-scope-and-the-cascade",
+        "slide-6-the-architecture-that-can-reach-the-top",
+        "slide-7-sovereign-by-construction-how-dpf-embodies-it",
+        "slide-8-the-evidence-trail-what-auditorsprocurement-now-demand",
+        "slide-9-live-demo-what-tier-is-this-install",
+        "slide-10-the-partner-reference-stack",
+        "slide-11-beyond-the-platform-governing-the-whole-estate",
+        "slide-12-honest-caveats-credibility-with-this-audience",
+        "slide-13-call-to-action",
+        "slide-14-appendix-pointer-qa",
+        "appendix-a-legislation-references",
+        "appendix-b-dpf-architecture-references",
+        "appendix-c-live-demo-script"
+      ]
+    },
     "docs/strategy/2026-09-cada-cloud-sovereignty-architects-forum.md": {
       "publicHref": "/strategy/2026-09-cada-cloud-sovereignty-architects-forum/",
       "portalHref": null,
@@ -10045,6 +10071,7 @@
         "complete-personal-policy-work",
         "manage-roles-and-account-access",
         "what-is-not-yet-a-people-page-workflow",
+        "who-can-approve-leave",
         "evidence-and-recovery-checklist"
       ]
     },
