@@ -383,10 +383,15 @@ describe("generated route-shell registry", () => {
     // re-inclusion by BI-0C6C2153 once the fixture pins the clock and isolates state.
     // 197 -> 198: /admin/graph-explorer (BI-89A149A9) is sweep-eligible — it renders
     // no wall-clock or live-orchestration state, only the graph mirror.
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(198);
+    // 198 -> 197: /platform/ai/operations-map joins the live-orchestration exclusions
+    // above — it re-fetches live-edge-windowed orchestration state on a 45s timer, so
+    // its frozen ariaSnapshot flips on untouched code (measured across six sweep runs
+    // two days apart; see ROUTE_SWEEP_EXCLUSIONS for the run ids).
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(197);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
-    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(120);
+    // 120 -> 121: /platform/ai/operations-map.
+    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(121);
   });
 
   it("keeps contextual sweep exclusions explicit, valid, and non-stale", () => {
