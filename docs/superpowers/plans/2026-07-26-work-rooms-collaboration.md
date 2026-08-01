@@ -248,16 +248,16 @@ The route continues to use the same loader. Revert the component composition to 
 - **Source of truth:** `WorkRoomView` remains a typed projection over the governed Work Case and its existing policy, activity, participant, action, and receipt seams.
 - **Decision:** keep `/workspace/cases/[caseKey]` as the canonical route, replace inspector composition with outcome-first room composition, reuse report-kit and theme tokens, keep diagnostics behind disclosure, and introduce neither a second work model nor a new navigation family.
 
-### Implementation record (2026-07-28)
+### Implementation record (updated 2026-08-01)
 
 - Preserved `/workspace/cases/[caseKey]` and composed the existing room projection into an outcome-first `WorkRoomHeader` and `WorkRoomBody`.
 - Put outcome, attention, accountability, participant summary, and next action ahead of activity; moved A2A/source diagnostics under **Room details**.
 - Integrated the existing update composer into Activity and kept informational disclosure controls prompt-free.
 - Added honest incomplete-boundary, unavailable-source, missing-projection, permission non-disclosure, customer-portal segregation, and unavailable-AI-coworker states. A coworker availability issue opens the participant disclosure and gives one safe continuation path.
 - Refactoring accounted for at least 25 percent of the slice: the monolithic detail component was split by responsibility, repeated room status intent moved into report-kit, and comment/activity presentation converged.
-- Current source evidence: 6 affected test files / 31 tests pass; scoped route generation and web typecheck pass; secret scan and DCO hooks pass.
-- Exact merged-tree production build evidence exists for the outcome-first composition before the final unavailable-coworker hardening. Re-run the merged-tree production build after the final mainline rebase.
-- Governed desktop/narrow/keyboard browser evidence remains pending behind `BI-CF4ADDAC`; do not mark this BI done or open its PR until that evidence is captured.
+- Current source evidence: 7 affected test files / 40 tests pass; scoped route generation, web typecheck, secret scan, and DCO hooks pass.
+- Final exact merged-tree evidence `cmsa2vs0701hx01qqc4vq7ygb` covers the complete candidate at `e3cec3ef8618eb32a2f7a0fd8c024ddd02f444ed` against accepted base `af398e985a30f9a7507d3ab7802fbe7d7f97c5c8`: migrations, documentation guards, typecheck, the full Vitest suite, and the production Docker/Next build passed.
+- Governed UX evidence `cms9zqzjx0doq01r2mknr75li` and `cms9vep3v00bs01r2e0vno56z` covers authenticated desktop and 390px narrow layouts, first-viewport outcome priority, no horizontal overflow, long-purpose disclosure, and the Activity/Context/details interactions. Interactive disclosures use native `details`/`summary`; browser focusability and component semantics are verified, while the harness's synthetic Enter/Space limitation is explicitly recorded rather than presented as a product failure.
 
 ## 7. BI-BA868848 — Standing cycles and Outcome Packets
 
