@@ -161,10 +161,13 @@ export const BUILT_IN_TASK_REQUIREMENTS: Record<string, TaskRequirement> = {
 // ── Loader ────────────────────────────────────────────────────────────────────
 
 /**
- * Retrieves a task requirement contract, prioritising the database then falling
- * back to built-in definitions. Results are cached in memory for the process lifetime.
+ * Retrieves a task requirement contract, prioritising persisted fields then
+ * filling contract fields the current table cannot represent from the built-in
+ * definition. Results are cached in memory for the process lifetime.
  *
- * DB rows win over built-ins so admins can tune task requirements without code changes.
+ * DB rows win over built-ins so admins can tune task requirements without code
+ * changes. Built-in-only fields such as minimumTier remain load-bearing until
+ * the persistence contract can store an explicit override.
  */
 export async function getTaskRequirement(
   taskType: string,
@@ -181,7 +184,10 @@ export async function getTaskRequirement(
   try {
     const dbRow = await prisma.taskRequirement.findUnique({ where: { taskType } });
     if (dbRow) {
-      const requirement = dbRow as unknown as TaskRequirement;
+      const requirement = {
+        ...BUILT_IN_TASK_REQUIREMENTS[taskType],
+        ...(dbRow as unknown as TaskRequirement),
+      } as TaskRequirement;
       taskRequirementCache.set(taskType, requirement);
       return requirement;
     }
