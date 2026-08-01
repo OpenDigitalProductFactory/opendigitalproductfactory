@@ -95,5 +95,8 @@ describe("WorkCaseAttentionLens", () => {
 
     expect(html).toContain("No active Work Rooms");
     expect(html).toContain("New rooms will appear here when work is assigned or made available for claiming.");
+    expect(html).toContain('<section aria-labelledby="work-room-empty-title"');
+    expect(html).toContain('<h2 id="work-room-empty-title"');
+    expect(html).not.toContain('role="status"');
   });
 });

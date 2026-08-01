@@ -1,7 +1,7 @@
 import { AlertTriangle, ArrowRight, Clock, Inbox, ListChecks, Smartphone, UserCheck } from "lucide-react";
 
 import { LocalTime } from "@/components/ui/LocalTime";
-import { EmptyState, StatCard, StatusBadge } from "@/components/ui/report-kit";
+import { StatCard, StatusBadge } from "@/components/ui/report-kit";
 import {
   roomLabel,
 } from "@/components/workspace/work-room/presentation";
@@ -121,11 +121,18 @@ export function WorkCaseAttentionLens({ view }: Props) {
       <MobileAttentionStrip items={attentionCases} />
 
       {view.cases.length === 0 ? (
-        <EmptyState
-          title="No active Work Rooms"
-          description="New rooms will appear here when work is assigned or made available for claiming."
-          icon={<ListChecks className="size-8" />}
-        />
+        <section
+          aria-labelledby="work-room-empty-title"
+          className="rounded-xl border border-dashed border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-6 py-12 text-center"
+        >
+          <ListChecks className="mx-auto size-8 text-[var(--dpf-muted)]" aria-hidden="true" />
+          <h2 id="work-room-empty-title" className="mt-3 text-base font-semibold text-[var(--dpf-text)]">
+            No active Work Rooms
+          </h2>
+          <p className="mx-auto mt-2 max-w-prose text-sm leading-6 text-[var(--dpf-muted)]">
+            New rooms will appear here when work is assigned or made available for claiming.
+          </p>
+        </section>
       ) : (
         <>
           <section aria-labelledby="work-room-attention-title" className="overflow-hidden rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
