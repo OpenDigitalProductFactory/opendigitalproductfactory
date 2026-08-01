@@ -79,3 +79,47 @@ describe("dropDualSeedAliasAgents (BI-74FD6420)", () => {
     }
   });
 });
+
+// BI-6A1BFE77 — the collapse map must stay in sync with the seeded workforce.
+import { uncoveredDualSeedDisplayNames } from "./selectable-coworker";
+
+describe("uncoveredDualSeedDisplayNames (BI-6A1BFE77)", () => {
+  it("returns empty when every dual-seed pair is covered by the map", () => {
+    const agents = [
+      { agentId: "AGT-ORCH-000", displayName: "COO" },
+      { agentId: "coo", displayName: "COO" },
+      { agentId: "AGT-WS-EA", displayName: "Enterprise Architect" },
+      { agentId: "ea-architect", displayName: "Enterprise Architect" },
+      { agentId: "storefront-advisor", displayName: "Storefront Operations Manager" },
+    ];
+    expect(uncoveredDualSeedDisplayNames(agents)).toEqual([]);
+  });
+
+  it("FLAGS an uncovered dual-seed pair — the exact regression the BI names", () => {
+    // A newly-established coworker seeded in BOTH forms whose slug is NOT in the
+    // map. Before the map fix, this is what UX Design Critic (AGT-906 /
+    // ux-design-critic) looked like: two rows survive the collapse.
+    const agents = [
+      { agentId: "AGT-999", displayName: "Brand New Critic" },
+      { agentId: "brand-new-critic", displayName: "Brand New Critic" },
+    ];
+    expect(uncoveredDualSeedDisplayNames(agents)).toEqual(["Brand New Critic"]);
+  });
+
+  it("confirms the ux-design-critic fix: AGT-906 + ux-design-critic now collapse", () => {
+    const agents = [
+      { agentId: "AGT-906", displayName: "UX Design Critic" },
+      { agentId: "ux-design-critic", displayName: "UX Design Critic" },
+    ];
+    expect(uncoveredDualSeedDisplayNames(agents)).toEqual([]);
+  });
+
+  it("ignores archived / non-production twins (they never render)", () => {
+    const agents = [
+      { agentId: "AGT-777", displayName: "Retired Twin", status: "active", lifecycleStage: "retired" },
+      { agentId: "retired-twin", displayName: "Retired Twin", status: "active", lifecycleStage: "production" },
+    ];
+    // Only one renders (the production slug row), so no visible duplicate.
+    expect(uncoveredDualSeedDisplayNames(agents)).toEqual([]);
+  });
+});

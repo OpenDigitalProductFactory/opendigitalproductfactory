@@ -1,0 +1,85 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "StockItem: operator-maintained supply master (name, counting unit, on-hand, reorder thresholds); no PII",
+    "StorefrontItemComponent: per-unit consumption link from a sellable item to a supply; no PII"
+  ],
+  "migration": {
+    "name": "20260731210000_add_stock_coverage_starter",
+    "backfill": "none — purely additive; two new tables, no existing row read, written, or newly constrained"
+  },
+  "tests": [
+    "apps/web/lib/stock/stock-coverage.test.ts",
+    "apps/web/lib/mcp/packs/stock-coverage-pack.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:stock-item",
+      "prismaModel": "StockItem",
+      "lifecycleDisposition": "domain-lifecycle-managed — retired through isActive and organization cascade, never aged out",
+      "fields": [
+        {
+          "fieldId": "data:stock-item#stockItemId",
+          "resolution": "governed",
+          "reason": "stable supply identity so coverage history and recipe links survive renames",
+          "provenance": "generated at operator creation"
+        },
+        {
+          "fieldId": "data:stock-item#organizationId",
+          "resolution": "governed",
+          "reason": "supply levels are the organization's own operating data and must not leak across tenants",
+          "provenance": "install organization",
+          "flags": ["subject"],
+          "fieldPolicy": "organization-scoped; cascade delete with the organization"
+        },
+        {
+          "fieldId": "data:stock-item#onHandQuantity",
+          "resolution": "governed",
+          "reason": "operator-maintained stocktake number; the coverage projection is only as good as this count and must never be presented as a measured ledger",
+          "provenance": "operator stocktake entry"
+        },
+        {
+          "fieldId": "data:stock-item#reorderPoint",
+          "resolution": "governed",
+          "reason": "the threshold that turns a level into a proposal — an operator decision, not a platform default",
+          "provenance": "operator configuration"
+        },
+        {
+          "fieldId": "data:stock-item#supplierId",
+          "resolution": "governed",
+          "reason": "points at a confidential Supplier row; the supplier's own contact and bank detail stay in that row and are never copied here",
+          "provenance": "operator selection",
+          "fieldPolicy": "nullable reference; SET NULL on supplier delete so coverage survives supplier churn"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:storefront-item-component",
+      "prismaModel": "StorefrontItemComponent",
+      "lifecycleDisposition": "domain-lifecycle-managed — cascades with its sellable item and its supply",
+      "fields": [
+        {
+          "fieldId": "data:storefront-item-component#storefrontItemId",
+          "resolution": "governed",
+          "reason": "identifies the sellable item whose sales drive derived consumption",
+          "provenance": "operator recipe entry"
+        },
+        {
+          "fieldId": "data:storefront-item-component#stockItemId",
+          "resolution": "governed",
+          "reason": "identifies the consumed supply; the pair is unique so a recipe line cannot be silently duplicated",
+          "provenance": "operator recipe entry"
+        },
+        {
+          "fieldId": "data:storefront-item-component#quantityPerUnit",
+          "resolution": "governed",
+          "reason": "the multiplier turning units sold into consumption; a wrong value produces a confidently wrong reorder proposal",
+          "provenance": "operator recipe entry"
+        }
+      ]
+    }
+  ]
+}

@@ -32,6 +32,7 @@ import {
   type CellKeyDownArgs,
   type CellKeyboardEvent,
   type PositionChangeArgs,
+  type FillEvent,
 } from "react-data-grid";
 import "react-data-grid/lib/styles.css";
 import "./dpf-grid.css";
@@ -139,6 +140,8 @@ import {
   rangeToTsv,
   parseTsv,
   pasteWrites,
+  fillDownWrites,
+  fillRightWrites,
 } from "./grid-range";
 import { GridCalendar } from "./GridCalendar";
 import { dateColumns } from "./grid-calendar";
@@ -1103,6 +1106,52 @@ export function WorkbookGrid({
     [sortedRows, visibleCols, persistCell],
   );
 
+  // Excel Ctrl+D / Ctrl+R: fill the selection's top row down / left column right.
+  const fillRange = useCallback(
+    (r: CellRange, dir: "down" | "right") => {
+      const rect = rangeRect(r);
+      const getCell = (row: number, col: number) =>
+        cellSearchText(sortedRows[row]?.[visibleCols[col]?.columnId ?? ""] ?? null);
+      const writes = dir === "down" ? fillDownWrites(rect, getCell) : fillRightWrites(rect, getCell);
+      for (const w of writes) {
+        const gr = sortedRows[w.row];
+        const cd = visibleCols[w.col];
+        if (!gr || !cd?.editable) continue;
+        void persistCell(gr.rowId, cd.columnId, w.value, gr[cd.columnId] ?? null);
+      }
+    },
+    [sortedRows, visibleCols, persistCell],
+  );
+
+  // Excel Ctrl+X: copy the range to the clipboard, then clear it (only clears if
+  // the copy succeeded, so a blocked clipboard never loses data).
+  const cutRange = useCallback(
+    async (r: CellRange) => {
+      const tsv = rangeToTsv(rangeRect(r), (row, col) =>
+        cellSearchText(sortedRows[row]?.[visibleCols[col]?.columnId ?? ""] ?? null),
+      );
+      try {
+        await navigator.clipboard.writeText(tsv);
+      } catch {
+        return;
+      }
+      clearRange(r);
+    },
+    [sortedRows, visibleCols, clearRange],
+  );
+
+  // Excel fill-handle: react-data-grid renders the drag square on the active cell;
+  // dragging it copies the source cell's value down/up the column. onRowsChange
+  // persists each filled row through the validated path.
+  const onFill = useCallback(
+    ({ columnKey, sourceRow, targetRow }: FillEvent<GridRowData>): GridRowData => {
+      const cd = columns.find((c) => c.columnId === columnKey);
+      if (!capabilities.canEditCell || !cd?.editable) return targetRow;
+      return { ...targetRow, [columnKey]: sourceRow[columnKey] ?? null };
+    },
+    [columns, capabilities.canEditCell],
+  );
+
   // Click a cell → start a range there; Shift+click → extend to it.
   const onCellClick = useCallback(
     (args: CellMouseArgs<GridRowData, SummaryRow>, event: CellMouseEvent) => {
@@ -1140,6 +1189,8 @@ export function WorkbookGrid({
       const cur = range ?? singleCell(args.rowIdx, col);
       const maxRow = sortedRows.length - 1;
       const maxCol = visibleCols.length - 1;
+      const mod = event.ctrlKey || event.metaKey;
+      const k = event.key.toLowerCase();
       const delta = event.shiftKey ? ARROW[event.key] : undefined;
       if (delta) {
         event.preventGridDefault();
@@ -1147,9 +1198,25 @@ export function WorkbookGrid({
       } else if ((event.key === "Delete" || event.key === "Backspace") && isMultiCell(cur)) {
         event.preventGridDefault();
         clearRange(cur);
+      } else if (mod && k === "a") {
+        // Select all cells (also stop the browser's select-all).
+        event.preventDefault();
+        event.preventGridDefault();
+        setRange({ anchorRow: 0, anchorCol: 0, focusRow: maxRow, focusCol: maxCol });
+      } else if (mod && k === "d") {
+        event.preventDefault(); // Ctrl+D would bookmark
+        event.preventGridDefault();
+        fillRange(cur, "down");
+      } else if (mod && k === "r") {
+        event.preventDefault(); // Ctrl+R would reload
+        event.preventGridDefault();
+        fillRange(cur, "right");
+      } else if (mod && k === "x") {
+        event.preventGridDefault();
+        void cutRange(cur);
       }
     },
-    [range, sortedRows, visibleCols, dataColIndex, clearRange],
+    [range, sortedRows, visibleCols, dataColIndex, clearRange, fillRange, cutRange],
   );
 
   // Replay a cell to a target value through the validated dispatch; on success
@@ -1549,6 +1616,7 @@ export function WorkbookGrid({
               onCellClick={onCellClick}
               onActivePositionChange={onActivePositionChange}
               onCellKeyDown={onCellKeyDown}
+              onFill={onFill}
               sortColumns={sortColumns}
               onSortColumnsChange={setSortColumns}
               selectedRows={selectedRows}

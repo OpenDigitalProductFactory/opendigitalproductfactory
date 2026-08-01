@@ -193,7 +193,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 28
+    "textMass": 20
   },
   "apps/web/app/(shell)/admin/hive/page.tsx": {
     "vocabulary": 0,
@@ -3189,7 +3189,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 101
+    "textMass": 93
   },
   "apps/web/components/admin/HiveContributionsPanel.tsx": {
     "vocabulary": 0,
@@ -5513,7 +5513,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 75
+    "textMass": 79
   },
   "apps/web/components/inventory/SavedConnectionRow.tsx": {
     "vocabulary": 0,
@@ -8054,14 +8054,14 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 57
+    "textMass": 53
   },
   "apps/web/components/workspace/WorkCaseDetailView.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 22
+    "textMass": 19
   },
   "apps/web/components/workspace/WorkItemCommentBox.tsx": {
     "vocabulary": 0,
@@ -8083,6 +8083,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 64
+  },
+  "apps/web/components/workspace/work-room/WorkRoomCycles.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 39
   },
   "apps/web/components/workspace/work-room/WorkRoomHeader.tsx": {
     "vocabulary": 0,

@@ -40,6 +40,7 @@ import { subagentFanoutPack } from "./packs/subagent-fanout-pack";
 import { mdmStewardshipPack } from "./packs/mdm-stewardship-pack";
 import { crmContactsPack } from "./packs/crm-contacts-pack";
 import { storefrontActivityPack } from "./packs/storefront-activity-pack";
+import { stockCoveragePack } from "./packs/stock-coverage-pack";
 import { queueAwarenessPack } from "./packs/queue-awareness-pack";
 import { documentPack } from "./packs/document-pack";
 import { screenPack } from "./packs/screen-pack";
@@ -116,6 +117,7 @@ export const TOOL_PACK_REGISTRY = composeToolPacks([
   mdmStewardshipPack,
   crmContactsPack,
   storefrontActivityPack,
+  stockCoveragePack,
   queueAwarenessPack,
   documentPack,
   screenPack,

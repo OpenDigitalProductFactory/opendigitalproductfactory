@@ -336,6 +336,30 @@ Target at least 20 percent:
 - remove any duplicate terminal-state or evidence-normalization logic;
 - keep cycle behavior source-adapter-driven.
 
+### Design grounding and persistence result (2026-08-01)
+
+- Existing specs/plans reviewed:
+  - this Work Rooms collaboration plan, especially the projection contract, cycle invariant gate, and sequencing constraints;
+  - `docs/superpowers/specs/2026-06-05-unified-delivery-surfaces-execution-alignment-design.md` for canonical Work Case and Work Capsule ownership;
+  - `docs/superpowers/specs/2026-05-30-unified-backlog-worktype-design.md` for work-item axis and lifecycle convergence.
+- Current code substrate reviewed:
+  - `WorkItem` hierarchy, evidence, messages, presence, and API lifecycle;
+  - `WorkCapsule`, `TaskRun`, `TaskArtifact`, `DecisionInteraction`, `RuntimeVerification`, and receipt adapters;
+  - the Work Case source/action/policy/receipt registries and Workspace case loader;
+  - the outcome-first Work Room shell from BI-32E26F62.
+- Source of truth:
+  - the source registry owns finite/standing mode, carrier precedence, required packet categories, and supported actions;
+  - a canonical child `WorkItem`, `WorkCapsule`, or `TaskRun` remains the cycle carrier;
+  - a structured append-only `WorkItemMessage` is the completion journal for a sealed Outcome Packet and governed lifecycle receipt;
+  - raw chat remains conversation only and cannot satisfy decision, artifact, evidence, or completion fields.
+- Decision:
+  - projection plus the existing Work Item hierarchy/journal is sufficient; no Prisma migration or new room/cycle identity is warranted;
+  - the parent Work Item is locked for lifecycle writes, which serializes cycle opening and carry-over, enforces one active logical cycle, and makes retry idempotency deterministic;
+  - completed packets are write-once through the sanctioned store and reconstruct in completion-time order; closed cycles reject consequential writes;
+  - retention follows the canonical Work Item record and its cascading journal. Independent retention was not a product requirement, so it does not justify new persistence.
+
+The refactoring allocation exceeded 20 percent: lifecycle operations now converge on the existing action registry, lifecycle messages converge on the existing receipt envelope, source selection is adapter-driven, and duplicated carry-over creation/idempotency logic is centralized in the locked store.
+
 ### Rollback
 
 If projection-only, revert action/projection/UI changes. If persistence is introduced, use an expand-first nullable shape so code can stop writing it without destructive rollback.

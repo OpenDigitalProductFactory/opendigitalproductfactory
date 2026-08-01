@@ -158,6 +158,33 @@ export const ROUTE_SWEEP_EXCLUSIONS = {
   // from concurrent writers (BI-0C6C2153).
   "/ops/self-upgrade": "wall-clock-collection",
   "/admin/scheduled-jobs": "wall-clock-collection",
+  // /platform/ai/operations-map is the same class as /ops/self-upgrade above, with
+  // the identical verdict signature: structureChanged=true, regressions=[], no
+  // blocking budget failure. It was observed INTERMITTENT across sweep runs that
+  // nobody's diff can explain — it is the sole not-ok route in two failing runs two
+  // days apart, with passing runs on both sides and in between:
+  //
+  //   run 30591069593  2026-07-30 23:37Z  main @ c140cc60  BLOCKED (sole route)
+  //   runs on 07-31 02:30 / 02:58 / 04:02                  sweep green
+  //   run 30705690653  2026-08-01 15:20Z                   sweep green
+  //   run 30708524750  2026-08-01 16:36Z  @ d57b01b        BLOCKED (sole route)
+  //   runs 30711415258 / 30711426386 17:56Z               sweep green
+  //
+  // Mechanism, on three compounding counts: loadOperationsMapData reads the live
+  // orchestration set (proactive TaskRuns, ToolExecutions, TokenUsage, RouteOutcomes,
+  // ProviderCapacityStatus, DeliberationRuns) that concurrent sessions and crons
+  // mutate; OperationsMapLiveShell derives its fetch window from the LIVE EDGE
+  // (now + LIVE_EDGE_FORECAST_PAD_MS), so the visible entity set moves with the
+  // clock; and that shell re-fetches on a REFRESH_INTERVAL_MS = 45s timer, so the
+  // page mutates its own tree while the sweep is measuring it. The serialized tree
+  // is roles-only, so a changed entity COUNT (list/listitem, row/cell) is indistin-
+  // guishable from a hand-authored landmark change — an exact frozen ariaSnapshot is
+  // the wrong instrument here, and re-freezing it only moves the next false failure
+  // to the next run.
+  //
+  // Remove alongside the two above once the fixture pins the clock and isolates
+  // platform state (BI-0C6C2153).
+  "/platform/ai/operations-map": "wall-clock-collection",
 } as const satisfies Record<string, RouteSweepExclusionReason>;
 
 export type RouteShellPolicy = {

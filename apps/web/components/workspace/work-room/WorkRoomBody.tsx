@@ -20,6 +20,7 @@ import {
   ACTIVITY_KIND_LABEL,
   roomLabel,
 } from "./presentation";
+import { WorkRoomCycles } from "./WorkRoomCycles";
 
 type Props = {
   detail: WorkspaceWorkCaseDetailView;
@@ -243,6 +244,8 @@ export function WorkRoomBody({ detail, room }: Props) {
   return (
     <>
       <BoundaryNotice room={room} />
+
+      <WorkRoomCycles room={room} />
 
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(18rem,0.75fr)]">
         <section

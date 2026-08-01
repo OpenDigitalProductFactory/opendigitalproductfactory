@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 604,
+  "pageCount": 607,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -4995,6 +4995,19 @@
         "see-also"
       ]
     },
+    "docs/professions/data-architect/wiki/dedupe-migration-means-the-constraint-is-wrong.md": {
+      "publicHref": "/professions/data-architect/wiki/dedupe-migration-means-the-constraint-is-wrong/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "the-rule",
+        "do-this-first",
+        "when-you-do-write-the-repair",
+        "why-not-just-add-on-conflict-do-nothing",
+        "related"
+      ]
+    },
     "docs/professions/data-architect/wiki/fix-the-seed-not-the-runtime.md": {
       "publicHref": "/professions/data-architect/wiki/fix-the-seed-not-the-runtime/",
       "portalHref": null,
@@ -5008,6 +5021,20 @@
         "decision-dimensions",
         "examples",
         "sources"
+      ]
+    },
+    "docs/professions/data-architect/wiki/index-and-collation-integrity.md": {
+      "publicHref": "/professions/data-architect/wiki/index-and-collation-integrity/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "why-a-text-index-depends-on-collation",
+        "how-it-silently-breaks",
+        "the-fingerprint",
+        "detection-find-it-before-a-ui-does",
+        "prevention-and-repair",
+        "related"
       ]
     },
     "docs/professions/data-architect/wiki/least-privilege-db-access.md": {
@@ -5036,6 +5063,21 @@
         "decision-dimensions",
         "examples",
         "sources"
+      ]
+    },
+    "docs/professions/data-architect/wiki/mdm-what-it-does-and-does-not-do.md": {
+      "publicHref": "/professions/data-architect/wiki/mdm-what-it-does-and-does-not-do/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "the-one-sentence-to-remember",
+        "what-mdm-is",
+        "what-mdm-is-not",
+        "merge-policy-tombstone-never-hard-delete",
+        "the-corollary-that-bites-prevention-shares-the-constraints-failure-mode",
+        "when-to-reach-for-mdm-and-when-not",
+        "related"
       ]
     },
     "docs/professions/data-architect/wiki/native-cohesion-over-interfacing.md": {

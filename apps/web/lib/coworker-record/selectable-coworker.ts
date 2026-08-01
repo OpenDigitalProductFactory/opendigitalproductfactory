@@ -53,3 +53,33 @@ export function dropDualSeedAliasAgents<T extends { agentId: string }>(
     return true;
   });
 }
+
+/**
+ * Detect dual-seed pairs that survive the render collapse as visible duplicates
+ * (BI-6A1BFE77). The collapse map (COWORKER_SLUG_TO_CANONICAL_AGENT_ID) is
+ * belt-and-suspenders that must be MANUALLY maintained: a coworker seeded in
+ * both its AGT-* form and its slug form whose slug was never added to the map
+ * renders twice. This returns every displayName still held by more than one row
+ * after the collapse — an EMPTY result is the invariant. Wire it against the
+ * seeded workforce (dual-seed-coverage.pg.test.ts) so a future uncovered pair
+ * fails the build instead of silently duplicating in the roster.
+ *
+ * Only `active` / `production` rows are considered — archived or non-production
+ * twins never render in the roster, so they cannot be a visible duplicate.
+ */
+export function uncoveredDualSeedDisplayNames<
+  T extends { agentId: string; displayName: string; status?: string; lifecycleStage?: string },
+>(
+  agents: T[],
+  slugToCanonical: Readonly<Record<string, string>> = COWORKER_SLUG_TO_CANONICAL_AGENT_ID,
+): string[] {
+  const rendered = agents.filter(
+    (a) =>
+      (a.status === undefined || a.status === "active") &&
+      (a.lifecycleStage === undefined || a.lifecycleStage === "production"),
+  );
+  const kept = dropDualSeedAliasAgents(rendered, slugToCanonical);
+  const counts = new Map<string, number>();
+  for (const a of kept) counts.set(a.displayName, (counts.get(a.displayName) ?? 0) + 1);
+  return [...counts.entries()].filter(([, n]) => n > 1).map(([name]) => name).sort();
+}

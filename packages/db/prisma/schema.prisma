@@ -4662,6 +4662,7 @@ model Organization {
   updatedAt                         DateTime                           @updatedAt
   brandingConfig                    BrandingConfig?
   storefrontConfig                  StorefrontConfig?
+  stockItems                        StockItem[]
   operationalSceneLayouts           OperationalSceneLayout[]
   hospitalityResources              HospitalityResource[]              @relation("HospitalityResourceOrganization")
   hospitalityCapacityPools          HospitalityCapacityPool[]          @relation("HospitalityCapacityPoolOrganization")
@@ -10554,6 +10555,7 @@ model StorefrontItem {
   bookingHolds           BookingHold[]
   rentableUnits          RentableUnit[]
   rentalAgreements       RentalAgreement[]
+  stockComponents        StorefrontItemComponent[]
 
   @@unique([id, storefrontId])
   @@index([storefrontId, isActive, sortOrder])
@@ -11871,6 +11873,53 @@ model AbsorptionPosture {
   @@index([connectorTier])
 }
 
+// Per-customer incumbent coverage verdict (BI-548060D5, D3; spec 2026-07-23 §5.2).
+//
+// The INSTANTIATED, evidenced verdict for one customer's one incumbent
+// application — distinct from AbsorptionPosture, which is DPF's authored posture
+// toward a vendor FAMILY. The posture matrix supplies the default (stage 1); this
+// row carries the per-org truth, its confidence, its evidence, and its
+// provenance. verdict/status reuse the AbsorptionPosture vocabulary (deliberately
+// identical). assessedVia keeps provenance honest: a posture_matrix default is a
+// starting position, not a claim, and must be distinguishable from
+// human_confirmed (spec R3). digitalProductId / catalogIdentityId /
+// coveringBusinessCapabilityId / backlogItemId are soft references (plain columns,
+// not enforced FKs — same pattern as AbsorptionPosture) so an assessment can exist
+// before every referent is normalized. Additive, fleet-safe.
+model IncumbentCoverageAssessment {
+  id           String @id @default(cuid())
+  assessmentId String @unique
+  /// The incumbent application: a DigitalProduct with coverageStatus=incumbent.
+  digitalProductId String
+  /// Normalized identity (shared with Phase C), when resolved.
+  catalogIdentityId String?
+  /// native_now | adapter_bridge | generic_connector | provider_led |
+  /// do_not_absorb | gap — == ABSORPTION_VERDICTS.
+  verdict String
+  /// CAPABILITY_REGISTRY key that covers it, when known.
+  coveringCapabilityKey String?
+  coveringBusinessCapabilityId String?
+  confidence Float @default(0)
+  /// posture_matrix | rule | ai | human_confirmed — provenance of the verdict.
+  assessedVia String
+  /// What was matched, and on what basis.
+  evidence Json?
+  /// Set when verdict=gap — populated by D4 (gap→backlog), not this model.
+  backlogItemId String?
+  /// proposed | confirmed | superseded. No verdict reaches confirmed without
+  /// human/authorized-coworker action (spec R3 / §7).
+  status       String    @default("proposed")
+  assessedAt   DateTime  @default(now())
+  supersededAt DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([digitalProductId])
+  @@index([verdict])
+  @@index([status])
+  @@index([assessedVia])
+}
+
 model McpCatalogSync {
   id                String    @id @default(cuid())
   triggeredBy       String
@@ -12047,6 +12096,66 @@ model PaymentAllocation {
 
 // ─── Finance: Accounts Payable ─────────────────────────────────────
 
+// ── Stock coverage starter (EP-SPEND-PROCUREMENT-ASSETS, BI-SPEND-003 slice) ──
+// The smallest honest model of "are we about to run out of what we sell":
+// a stocked supply the operator counts, and the per-unit link from a sellable
+// StorefrontItem to the supplies it consumes.
+//
+// Deliberately NOT a warehouse system. onHandQuantity is operator-maintained
+// (a stocktake number), and CONSUMPTION IS DERIVED FROM ACTUAL SALES rather
+// than from a decrement ledger — which is how a small operator actually works,
+// and which keeps this slice free of partial-fulfilment/reversal semantics.
+// Receipts, adjustments, valuation, and COGS posting remain BI-SPEND-003 scope.
+//
+// Naming note: `InventoryEntity` is the IT-estate discovery model and `Bom*` is
+// the software bill of materials; neither describes physical supplies, so this
+// is genuinely new substrate rather than a fork of either.
+
+model StockItem {
+  id             String   @id @default(cuid())
+  stockItemId    String   @unique
+  organizationId String
+  name           String
+  /// Counting unit the operator thinks in (kg, litre, each, case).
+  unit           String
+  /// Latest counted quantity. Operator-maintained; not a running ledger.
+  onHandQuantity Decimal  @default(0)
+  /// Reorder when coverage falls to/below this quantity.
+  reorderPoint   Decimal  @default(0)
+  /// Suggested quantity to order when below the reorder point.
+  reorderQuantity Decimal @default(0)
+  supplierId     String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  supplier     Supplier?                @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  components   StorefrontItemComponent[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, isActive])
+  @@index([supplierId])
+}
+
+/// One line of a sellable item's recipe: selling one unit of `storefrontItem`
+/// consumes `quantityPerUnit` of `stockItem`. Archetype-neutral — a dish
+/// consumes mozzarella, a salon service consumes colourant.
+model StorefrontItemComponent {
+  id               String   @id @default(cuid())
+  storefrontItemId String
+  stockItemId      String
+  quantityPerUnit  Decimal
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  storefrontItem StorefrontItem @relation(fields: [storefrontItemId], references: [id], onDelete: Cascade)
+  stockItem      StockItem      @relation(fields: [stockItemId], references: [id], onDelete: Cascade)
+
+  @@unique([storefrontItemId, stockItemId])
+  @@index([stockItemId])
+}
+
 model Supplier {
   id              String   @id @default(cuid())
   supplierId      String   @unique
@@ -12070,6 +12179,7 @@ model Supplier {
   supplierContracts    SupplierContract[]
   financeWorkItems     FinanceWorkItem[]
   masterDataSourceRefs MasterDataSourceRef[]      @relation("SupplierMdmSourceRef")
+  stockItems           StockItem[]
 
   @@index([status])
 }

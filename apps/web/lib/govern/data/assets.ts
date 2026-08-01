@@ -29,6 +29,7 @@ import { BUSINESS_PRODUCT_PORTFOLIO_ASSETS } from "./business-product-portfolio-
 import { HOSPITALITY_CAPACITY_ASSETS } from "./hospitality-capacity-assets";
 import { BEAUTY_CAPACITY_ASSETS } from "./beauty-capacity-assets";
 import { LIFECYCLE_GOVERNANCE_ASSETS } from "./lifecycle-governance-assets";
+import { STOCK_COVERAGE_ASSETS } from "./stock-coverage-assets";
 
 // ─── Definitions (spec §6.1) ─────────────────────────────────────────────────
 
@@ -619,6 +620,27 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
     fields: [],
   },
   {
+    // Per-customer incumbent coverage verdict (BI-548060D5). Operational — the
+    // instantiated verdict for a customer's incumbent app, defaulted from the
+    // authored posture matrix; no data subject. Domain-lifecycle-managed
+    // (re-assessment supersedes).
+    id: "data:incumbent-coverage-assessment",
+    physical: { prismaModel: "IncumbentCoverageAssessment" },
+    domain: "asset-intelligence",
+    ownerRole: "platform-owner",
+    stewardRole: "data-steward",
+    categories: ["operational", "configuration"],
+    sensitivity: "internal",
+    criticality: "standard",
+    subjectLocators: [],
+    lifecycleClass: "operational",
+    purposeCapabilities: ["platform-operations", "service-delivery"],
+    residencyClass: "local-only",
+    projectionClass: "metadata",
+    classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-08-01" },
+    fields: [],
+  },
+  {
     id: "data:runtime-capability-transition-event",
     physical: { prismaModel: "RuntimeCapabilityTransitionEvent" },
     domain: "platform-runtime",
@@ -656,6 +678,7 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
   ...HOSPITALITY_CAPACITY_ASSETS,
   ...BEAUTY_CAPACITY_ASSETS,
   ...LIFECYCLE_GOVERNANCE_ASSETS,
+  ...STOCK_COVERAGE_ASSETS,
   ...PROCESSING_GOVERNANCE_ASSETS,
    {
     id: "data:agent-conversation",

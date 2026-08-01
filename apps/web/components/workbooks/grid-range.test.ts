@@ -9,6 +9,8 @@ import {
   rangeToTsv,
   parseTsv,
   pasteWrites,
+  fillDownWrites,
+  fillRightWrites,
   type CellRange,
 } from "./grid-range";
 
@@ -118,5 +120,38 @@ describe("pasteWrites", () => {
     // origin at the last row/col — only "a" fits.
     const writes = pasteWrites(block, 4, 4, { top: 4, bottom: 4, left: 4, right: 4 }, 4, 4);
     expect(writes).toEqual([{ row: 4, col: 4, value: "a" }]);
+  });
+});
+
+describe("fillDownWrites (Ctrl+D)", () => {
+  // grid values: getCell(r,c) = `${r}-${c}`
+  const getCell = (r: number, c: number) => `${r}-${c}`;
+  it("copies each column's top-row value down over the rect", () => {
+    const writes = fillDownWrites({ top: 1, bottom: 3, left: 2, right: 3 }, getCell);
+    expect(writes).toEqual([
+      { row: 2, col: 2, value: "1-2" },
+      { row: 3, col: 2, value: "1-2" },
+      { row: 2, col: 3, value: "1-3" },
+      { row: 3, col: 3, value: "1-3" },
+    ]);
+  });
+  it("is empty for a single-row rect (nothing below the top)", () => {
+    expect(fillDownWrites({ top: 5, bottom: 5, left: 0, right: 2 }, getCell)).toEqual([]);
+  });
+});
+
+describe("fillRightWrites (Ctrl+R)", () => {
+  const getCell = (r: number, c: number) => `${r}-${c}`;
+  it("copies each row's left-column value across the rect", () => {
+    const writes = fillRightWrites({ top: 0, bottom: 1, left: 0, right: 2 }, getCell);
+    expect(writes).toEqual([
+      { row: 0, col: 1, value: "0-0" },
+      { row: 0, col: 2, value: "0-0" },
+      { row: 1, col: 1, value: "1-0" },
+      { row: 1, col: 2, value: "1-0" },
+    ]);
+  });
+  it("is empty for a single-column rect", () => {
+    expect(fillRightWrites({ top: 0, bottom: 2, left: 4, right: 4 }, getCell)).toEqual([]);
   });
 });

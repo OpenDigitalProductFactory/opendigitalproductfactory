@@ -1,4 +1,4 @@
-apps/web/app/api/mcp/v1/route.test.ts	1223
+apps/web/app/api/mcp/v1/route.test.ts	1273
 apps/web/app/api/v1/edge/discovery-runs/route.test.ts	982
 apps/web/components/admin/BusinessModelBuilder.tsx	821
 apps/web/components/admin/McpTokenManager.tsx	1326
@@ -11,7 +11,7 @@ apps/web/components/ops/SelfUpgradeClient.tsx	1127
 apps/web/components/platform/EffectivePermissionsPanel.tsx	845
 apps/web/components/platform/edge-nodes/EdgeNodesAdminClient.tsx	985
 apps/web/components/storefront/SlotBookingFlow.tsx	1015
-apps/web/components/workbooks/Grid.tsx	1585
+apps/web/components/workbooks/Grid.tsx	1653
 apps/web/instrumentation.test.ts	945
 apps/web/instrumentation.ts	1524
 apps/web/lib/actions/agent-coworker-external.test.ts	867

@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 
 import {
   POLICY_GUARD_PROFILES,
+  formatRunSummary,
   resolvePolicyGuardInvocation,
   runPolicyProfile,
 } from "./lib/ci-policy-guards.mjs";
@@ -128,6 +129,39 @@ describe("CI policy guard registry", () => {
         { id: "second", status: "passed" },
       ],
     );
+  });
+
+  it("names every failed guard and its command in the tail summary", () => {
+    const result = {
+      ok: false,
+      entries: [
+        { name: "Module Size Guard", status: "failed", failedCommand: "node scripts/check-module-size.mjs" },
+        { name: "Janitor Tests", status: "passed", failedCommand: null },
+        { name: "Doc Reference Integrity", status: "failed", failedCommand: "node scripts/check-doc-reference-integrity.mjs" },
+      ],
+    };
+    const summary = formatRunSummary("source", result);
+    // The failing guards — not the last (passing) guard — must be surfaced.
+    assert.match(summary.text, /2 of 3 guard\(s\) FAILED \(1 passed\)/);
+    assert.match(summary.text, /✗ Module Size Guard — node scripts\/check-module-size\.mjs/);
+    assert.match(summary.text, /✗ Doc Reference Integrity — node scripts\/check-doc-reference-integrity\.mjs/);
+    assert.doesNotMatch(summary.text, /Janitor Tests/);
+    assert.equal(
+      summary.annotation,
+      "::error title=Policy Guards (source)::2 guard(s) failed: Module Size Guard, Doc Reference Integrity",
+    );
+  });
+
+  it("emits a clean pass line and no annotation when every guard passes", () => {
+    const summary = formatRunSummary("source", {
+      ok: true,
+      entries: [
+        { name: "Repo Guard Loop", status: "passed", failedCommand: null },
+        { name: "Janitor Tests", status: "passed", failedCommand: null },
+      ],
+    });
+    assert.equal(summary.text, "Policy guards (source): all 2 guard(s) passed.");
+    assert.equal(summary.annotation, null);
   });
 
   it("wires blocking source, workspace, and pull-request profiles in CI", () => {
