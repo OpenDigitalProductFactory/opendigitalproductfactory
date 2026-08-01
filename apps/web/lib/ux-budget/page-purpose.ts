@@ -167,6 +167,7 @@ const validationReceiptBase = z.object({
   inputMode: z.enum(["pointer", "keyboard", "touch", "assistive-technology"]),
   interactionFingerprint: nonEmptyString,
   relevantDependencyFingerprint: nonEmptyString,
+  evidenceFingerprint: nonEmptyString,
   metrics: evidenceMap,
   thresholds: evidenceMap,
   reviewerRef: nonEmptyString,

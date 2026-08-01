@@ -116,6 +116,7 @@ export type PurposeEvaluationContext = {
   fixtureVersion: string;
   interactionFingerprint: string;
   relevantDependencyFingerprint: string;
+  evidenceFingerprint: string;
   resolvedArtifactIds: ReadonlySet<string>;
 };
 
@@ -209,6 +210,9 @@ function validationStatus(
         context.relevantDependencyFingerprint
       ) {
         reasons.push("A relevant dependency changed.");
+      }
+      if (receipt.evidenceFingerprint !== context.evidenceFingerprint) {
+        reasons.push("Validation evidence changed.");
       }
       const unresolved = receipt.artifactIds.filter(
         (artifactId) => !context.resolvedArtifactIds.has(artifactId),

@@ -106,6 +106,7 @@ export function resolvePurposeEvaluationContext(
     fixtureVersion: fingerprintFor("fixture"),
     interactionFingerprint: fingerprintFor("interaction"),
     relevantDependencyFingerprint: fingerprintFor("dependency"),
+    evidenceFingerprint: fingerprintFor("evidence"),
     resolvedArtifactIds: new Set(
       artifacts
         .filter(

@@ -165,6 +165,7 @@ const context: PurposeEvaluationContext = {
   fixtureVersion: "self-upgrade-v1",
   interactionFingerprint: "interaction-v1",
   relevantDependencyFingerprint: "dependencies-v1",
+  evidenceFingerprint: "evidence-v1",
   resolvedArtifactIds: new Set(["artifact-1"]),
 };
 
@@ -182,6 +183,7 @@ function functionalReceipt(
     inputMode: "pointer",
     interactionFingerprint: "interaction-v1",
     relevantDependencyFingerprint: "dependencies-v1",
+    evidenceFingerprint: "evidence-v1",
     metrics: {
       "state.update-available.completionSignalKey":
         "upgrade-queue-acknowledgement",
@@ -529,6 +531,7 @@ describe("evaluateRoutePurpose", () => {
             inputMode: "pointer",
             interactionFingerprint: "interaction-v1",
             relevantDependencyFingerprint: "dependencies-v1",
+            evidenceFingerprint: "evidence-v1",
             metrics: {
               "state.update-available.completionSignalKey":
                 "upgrade-queue-acknowledgement",
@@ -560,6 +563,28 @@ describe("evaluateRoutePurpose", () => {
     expect(result.validation.classes["automated-functional"]).toBe("current");
   });
 
+  it("makes a prior receipt stale when evidence bytes are re-pinned", () => {
+    const result = evaluateRoutePurpose({
+      contract: {
+        ...contract,
+        validationReceipts: [functionalReceipt()],
+      },
+      oracle: {
+        routePath: "/ops/self-upgrade",
+        stateKey: "update-available",
+        oracleKey: "self-upgrade-status",
+        sourceRef: "apps/web/lib/ux-budget/oracles/self-upgrade.ts",
+      },
+      evidence,
+      context: { ...context, evidenceFingerprint: "evidence-v2" },
+    });
+
+    expect(result.validation.overall).toBe("stale");
+    expect(result.validation.receipts[0].reasons).toContain(
+      "Validation evidence changed.",
+    );
+  });
+
   it("marks an unresolved or materially changed receipt stale", () => {
     const result = evaluateRoutePurpose({
       contract: {
@@ -576,6 +601,7 @@ describe("evaluateRoutePurpose", () => {
             inputMode: "pointer",
             interactionFingerprint: "old-interaction",
             relevantDependencyFingerprint: "dependencies-v1",
+            evidenceFingerprint: "evidence-v1",
             metrics: { completion: true },
             thresholds: { completion: true },
             reviewerRef: "VR-OLD",
@@ -677,6 +703,7 @@ describe("evaluateRoutePurpose", () => {
             inputMode: "touch",
             interactionFingerprint: "interaction-v1",
             relevantDependencyFingerprint: "dependencies-v1",
+            evidenceFingerprint: "evidence-v1",
             metrics: { completion: true },
             thresholds: { completion: true },
             reviewerRef: "UR-STALE",

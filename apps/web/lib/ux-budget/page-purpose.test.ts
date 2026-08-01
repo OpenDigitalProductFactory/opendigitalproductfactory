@@ -45,6 +45,7 @@ const validationReceiptBase = {
   inputMode: "pointer" as const,
   interactionFingerprint: "interaction-1",
   relevantDependencyFingerprint: "dependencies-1",
+  evidenceFingerprint: "evidence-1",
   metrics: {},
   thresholds: {},
   reviewerRef: "reviewer",

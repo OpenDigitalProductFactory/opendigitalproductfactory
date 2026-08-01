@@ -425,7 +425,7 @@ attempt is an observation, not a benchmark.
 `TaskValidationReceipt` is canonical evidence, not a free-form reference. A
 receipt is current only when it resolves from the audit evidence store and its
 route, contract hash, fixture version, interaction fingerprint, and relevant
-dependency fingerprint match the evaluated page. `sourceSha` remains provenance:
+dependency and evidence fingerprints match the evaluated page. `sourceSha` remains provenance:
 a SHA mismatch triggers those fingerprint comparisons but does not, by itself,
 expire unrelated evidence. Runtime parsing rejects a receipt that omits the
 attestation, cohort, sample, baseline, distribution, or comparison fields
@@ -440,7 +440,8 @@ symlinks outside the repository, hashes current bytes, derives fixture,
 interaction, and dependency fingerprints from those bytes, and resolves an
 artifact ID only when its current digest matches the pin. Contract literals
 therefore cannot keep a receipt current after its evidence or dependencies
-change.
+change. The evidence fingerprint is also stored on each receipt, so replacing
+and re-pinning evidence under the same artifact ID still stales prior proof.
 
 ### Evaluator composition
 

@@ -73,6 +73,20 @@ describe("purpose validation context", () => {
       context.relevantDependencyFingerprint,
     );
     expect(changed.resolvedArtifactIds.has("dependency")).toBe(false);
+
+    writeFileSync(resolve(repoRoot, "evidence.json"), '{"passed":false}');
+    const evidenceArtifact = candidate.validationTarget.artifacts.find(
+      (entry) => entry.id === "evidence",
+    );
+    expect(evidenceArtifact).toBeDefined();
+    if (!evidenceArtifact) return;
+    evidenceArtifact.sha256 = purposeArtifactContentHash(
+      resolve(repoRoot, "evidence.json"),
+    );
+    const rePinned = resolvePurposeEvaluationContext(candidate, repoRoot)!;
+
+    expect(rePinned.resolvedArtifactIds.has("evidence")).toBe(true);
+    expect(rePinned.evidenceFingerprint).not.toBe(context.evidenceFingerprint);
   });
 
   it("changes the contract fingerprint when purpose semantics change", () => {
