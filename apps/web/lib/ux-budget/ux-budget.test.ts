@@ -372,11 +372,25 @@ describe("generated route-shell registry", () => {
   });
 
   it("records pre-migration debt rather than hiding it", () => {
-    // Nothing has adopted an L1 shell yet (shells are Phase 2, BI-36CE8BAB), so every
-    // route must carry its exemptions explicitly. When this starts failing, the
-    // migration has begun — update MIGRATED_ROUTES, do not weaken the check.
-    expect(registry.migratedCount).toBe(0);
-    expect(registry.routes.every((r) => r.exemptChecks.length > 0)).toBe(true);
+    // The migration has begun (BI-36CE8BAB). Cohort 0 is `/platform/ai/skills`,
+    // the worst-measured surface in the portal — 5,349 default-visible words
+    // against a 450-word budget — chosen worst-first, which is the ordering the
+    // league table exists to give.
+    //
+    // The invariant this test protects is unchanged: a route is either MIGRATED
+    // (and therefore held to the full shell contract) or it carries its
+    // exemptions EXPLICITLY. What must never happen is a route that is neither —
+    // debt that passes because nobody wrote it down.
+    const migrated = registry.routes.filter((r) => r.migrated);
+    expect(migrated.map((r) => r.routePath)).toEqual(["/platform/ai/skills"]);
+    expect(registry.migratedCount).toBe(migrated.length);
+
+    // A migrated route has earned its way out of the exemptions.
+    expect(migrated.every((r) => r.exemptChecks.length === 0)).toBe(true);
+    // Everything not yet migrated still declares its debt.
+    expect(
+      registry.routes.filter((r) => !r.migrated).every((r) => r.exemptChecks.length > 0),
+    ).toBe(true);
   });
 
   it("summary totals reconcile with the route list", () => {

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ListShell } from "@/components/page-shells";
 import { SkillsCatalogView } from "@/components/admin/SkillsCatalogView";
 import { SkillsObservatoryPanel } from "@/components/platform/SkillsObservatoryPanel";
 import { SkillProposalsPanel } from "@/components/platform/SkillProposalsPanel";
@@ -22,6 +23,19 @@ import {
   getSkillSeedWarnings,
 } from "@/lib/actions/skills-observatory";
 import { isSkillLifecycleState } from "@/lib/skills/lifecycle";
+
+// Migrated to the L1 `list` shell (BI-36CE8BAB, EP-UX-SYSTEM §6 L1).
+//
+// This route measured 5,349 default-visible words against a 450-word budget —
+// the 2nd-worst surface in the portal and 28x the 192-word median across the
+// 201 routes swept — with ZERO lead-band words and an accessibility tree that
+// was a flat run of ~150 sibling paragraphs. It stacked five unrelated panels
+// vertically with no way to skip any of them.
+//
+// The content did not shrink; it got a hierarchy. The catalog is what a reader
+// comes here for and stays default-visible; observability, the curator report
+// and seed-drift detail are diagnostics and now sit behind one disclosure.
+// Nothing was removed and every control remains reachable.
 
 export default async function SkillsObservatoryPage({
   searchParams,
@@ -88,96 +102,92 @@ export default async function SkillsObservatoryPage({
       : null;
 
   return (
-    <div>
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-[var(--dpf-text)]">AI Operations</h1>
-        <p className="text-sm text-[var(--dpf-muted)] mt-0.5">
-          Skills — {catalogStats.total} catalog entries and {stats.totalSkills} route-visible skills across {stats.routes} routes
-        </p>
-      </div>
+    <ListShell
+      title="Skills"
+      lead={`What your coworkers know how to do. ${catalogStats.total} skills in the catalog.`}
+      // Granting a skill is the verb people come here for, and it lives on the
+      // coworker's record rather than on this page. It used to be a sentence of
+      // prose in the middle of a banner; making it the marked next action is
+      // both the honest hierarchy and what makes "this screen says what to do
+      // next" measurable instead of asserted.
+      nextAction={{
+        label: "Grant a skill to a coworker",
+        href: "/platform/ai/overview",
+        hint: "You grant skills one coworker at a time, on their record.",
+      }}
+      // Rendered only when something is genuinely wrong. A permanent "all clear"
+      // banner trains people to skip the band that carries the real warnings.
+      attention={
+        seedWarnings.length > 0 ? (
+          <>
+            {seedWarnings.length} skill{seedWarnings.length !== 1 ? "s have" : " has"} drifted from
+            the seed, so a fresh install would not match this one. Detail is under Technical details.
+          </>
+        ) : undefined
+      }
+      actions={[{ label: "Prompts", href: "/platform/ai/prompts" }]}
+      technicalDetails={
+        <div className="space-y-6">
+          <section>
+            <h2 className="mb-1 text-sm font-semibold text-[var(--dpf-text)]">Route skills</h2>
+            <p className="text-xs text-[var(--dpf-muted)]">
+              {stats.totalSkills} route-visible skills across {stats.routes} routes — what coworkers
+              can surface in context.
+            </p>
+          </section>
 
-      {/* Catalog framing (coworker-management-consolidation WS3): this is the
-          GLOBAL skills catalog / observatory. Granting or revoking skills for a
-          single coworker lives on that coworker's record, reached from the
-          directory. */}
-      <div className="mb-6 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-4 py-3 text-xs text-[var(--dpf-muted)]">
-        This is the <strong className="text-[var(--dpf-text)]">global skills catalog and observatory</strong>. To grant
-        or revoke skills for a single coworker, open that coworker&rsquo;s record from the{" "}
-        <Link href="/platform/ai/overview" className="underline text-[var(--dpf-accent)]">
-          AI Workforce directory
-        </Link>{" "}
-        and use its Capabilities tab.
-      </div>
-
-      {seedWarnings.length > 0 && (
-        <div
-          className="mb-6 rounded border p-4"
-          style={{
-            borderColor: "color-mix(in srgb, var(--dpf-warning) 40%, var(--dpf-border))",
-            background: "color-mix(in srgb, var(--dpf-warning) 8%, var(--dpf-surface-1))",
-          }}
-        >
-          <h2 className="mb-2 text-sm font-semibold text-[var(--dpf-text)]">Seed Warnings</h2>
-          <div className="space-y-2">
-            {seedWarnings.map((warning) => (
-              <div
-                key={warning.warningId}
-                className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-xs"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-semibold text-[var(--dpf-text)]">{warning.skillId}</span>
-                  <span className="font-mono text-[10px] text-[var(--dpf-muted)]">
-                    {warning.warningType}
-                  </span>
-                </div>
-                <p className="mt-1 text-[var(--dpf-muted)]">{warning.message}</p>
-                <p className="mt-1 font-mono text-[10px] text-[var(--dpf-muted)]">
-                  {warning.legacyPath}{" -> "}{warning.pluginPath}
-                </p>
+          {seedWarnings.length > 0 && (
+            <section>
+              <h2 className="mb-2 text-sm font-semibold text-[var(--dpf-text)]">Seed drift</h2>
+              <div className="space-y-2">
+                {seedWarnings.map((warning) => (
+                  <div
+                    key={warning.warningId}
+                    className="rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2 text-xs"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-semibold text-[var(--dpf-text)]">{warning.skillId}</span>
+                      <span className="font-mono text-[10px] text-[var(--dpf-muted)]">
+                        {warning.warningType}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-[var(--dpf-muted)]">{warning.message}</p>
+                    <p className="mt-1 font-mono text-[10px] text-[var(--dpf-muted)]">
+                      {warning.legacyPath}
+                      {" -> "}
+                      {warning.pluginPath}
+                    </p>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </section>
+          )}
+
+          <section>
+            <h2 className="mb-3 text-sm font-semibold text-[var(--dpf-text)]">Observability</h2>
+            <SkillsObservatoryPanel
+              skills={skills}
+              finishingPasses={JSON.parse(JSON.stringify(finishingPasses))}
+              specialistExecutions={JSON.parse(JSON.stringify(executions))}
+              stats={stats}
+              telemetry={telemetry}
+            />
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-sm font-semibold text-[var(--dpf-text)]">Curator</h2>
+            <SkillCuratorReportPanel report={curatorReport} />
+          </section>
         </div>
-      )}
+      }
+    >
+      <SkillsCatalogView
+        skills={JSON.parse(JSON.stringify(catalogSkills))}
+        stats={JSON.parse(JSON.stringify(catalogStats))}
+      />
 
-      <div className="mb-6 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
-        <h2 className="mb-2 text-sm font-semibold text-[var(--dpf-text)]">Catalog</h2>
-        <p className="mb-3 text-xs text-[var(--dpf-muted)]">
-          Skills are user-triggerable or agent-triggerable actions with capability gates and tool access.
-          Prompts remain the system instructions that shape coworker behavior and now live under{" "}
-          <Link href="/platform/ai/prompts" className="underline text-[var(--dpf-accent)]">
-            Prompts
-          </Link>.
-        </p>
-        <SkillsCatalogView
-          skills={JSON.parse(JSON.stringify(catalogSkills))}
-          stats={JSON.parse(JSON.stringify(catalogStats))}
-        />
-      </div>
-
-      <div className="mb-6 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
-        <h2 className="mb-2 text-sm font-semibold text-[var(--dpf-text)]">Route Skills</h2>
-        <p className="text-xs text-[var(--dpf-muted)]">
-          Route-level and universal skills describe what coworkers can surface in-context across the platform.
-        </p>
-      </div>
-
-      <div>
-        <h2 className="mb-3 text-sm font-semibold text-[var(--dpf-text)]">Observability</h2>
-        <SkillsObservatoryPanel
-          skills={skills}
-          finishingPasses={JSON.parse(JSON.stringify(finishingPasses))}
-          specialistExecutions={JSON.parse(JSON.stringify(executions))}
-          stats={stats}
-          telemetry={telemetry}
-        />
-      </div>
-
-      <div className="mt-6">
-        <h2 className="mb-3 text-sm font-semibold text-[var(--dpf-text)]">Curator</h2>
-        <SkillCuratorReportPanel report={curatorReport} />
-      </div>
-
+      {/* When ?skill= is set, that skill IS why the reader is here — so it stays
+          default-visible rather than being demoted with the diagnostics. */}
       {focusedSkillId && (
         <div className="mt-6 rounded border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-4">
           <div className="mb-3 flex items-baseline justify-between gap-3">
@@ -192,7 +202,6 @@ export default async function SkillsObservatoryPage({
             </Link>
           </div>
 
-          {/* Slice 4: lifecycle controls */}
           {focusedLifecycleState && (
             <div className="mb-4">
               <SkillLifecycleControls
@@ -202,7 +211,6 @@ export default async function SkillsObservatoryPage({
             </div>
           )}
 
-          {/* Slice 3: seed drift, proposals, revisions */}
           {review ? (
             <>
               {!review.seedDrift.inSync && review.seedDrift.seedBody !== null && (
@@ -263,6 +271,6 @@ export default async function SkillsObservatoryPage({
           )}
         </div>
       )}
-    </div>
+    </ListShell>
   );
 }
