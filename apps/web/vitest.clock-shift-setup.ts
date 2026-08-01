@@ -40,14 +40,18 @@ if (rawDays.trim() !== "" && Number.isFinite(shiftDays) && shiftDays !== 0) {
   const RealDate = Date;
 
   class ShiftedDate extends RealDate {
-    constructor(...args: ConstructorParameters<typeof Date>) {
+    // `unknown[]`, not `ConstructorParameters<typeof Date>`: that helper resolves
+    // to a single fixed-arity overload, so TypeScript proves `args.length === 0`
+    // impossible and rejects the zero-arg branch (TS2367) — the one branch this
+    // shim exists to implement. At runtime the arguments are forwarded verbatim.
+    constructor(...args: unknown[]) {
       // Only a bare `new Date()` means "now" and gets shifted. An explicit
       // argument is the caller's own instant and must be preserved verbatim —
       // shifting it would move the very fixture we are testing and mask the bomb.
       if (args.length === 0) {
         super(RealDate.now() + offsetMs);
       } else {
-        super(...args);
+        super(...(args as ConstructorParameters<typeof Date>));
       }
     }
 
