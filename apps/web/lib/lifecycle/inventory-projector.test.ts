@@ -24,11 +24,23 @@ function row(over: Partial<InventoryLifecycleRow> = {}): InventoryLifecycleRow {
 }
 
 function makeClient(input: { rows: InventoryLifecycleRow[]; total?: number; gaps?: ExistingGap[] }) {
-  const calls = { membershipsCreated: 0, gapsCreated: 0, gapsUpdated: [] as unknown[] };
+  const calls = {
+    inventoryCount: [] as unknown[],
+    inventoryFindMany: [] as unknown[],
+    membershipsCreated: 0,
+    gapsCreated: 0,
+    gapsUpdated: [] as unknown[],
+  };
   const client: InventoryLifecycleProjectorClient = {
     inventoryEntity: {
-      count: async () => input.total ?? input.rows.length,
-      findMany: async () => input.rows,
+      count: async (args) => {
+        calls.inventoryCount.push(args);
+        return input.total ?? input.rows.length;
+      },
+      findMany: async (args) => {
+        calls.inventoryFindMany.push(args);
+        return input.rows;
+      },
     },
     eaNotation: { findUnique: async () => ({ id: "notation-1" }) },
     eaElementType: { findUnique: async () => ({ id: "plateau-type-1" }) },
@@ -73,6 +85,14 @@ describe("projectInventoryLifecycle", () => {
     expect(result.baseline.summary.opened).toBe(1);
     expect(result.gaps.created).toBe(1);
     expect(calls).toMatchObject({ membershipsCreated: 1, gapsCreated: 1 });
+    expect(calls.inventoryCount).toEqual([{
+      where: { mergedIntoId: null, status: { not: "inactive" } },
+    }]);
+    expect(calls.inventoryFindMany).toEqual([
+      expect.objectContaining({
+        where: { mergedIntoId: null, status: { not: "inactive" } },
+      }),
+    ]);
   });
 
   it("preserves unseen gaps when the bounded inventory page is incomplete", async () => {

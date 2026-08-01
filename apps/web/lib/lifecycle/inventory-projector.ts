@@ -2,6 +2,7 @@
 // The job remains bounded: partial pages may add or refresh evidence, but only a complete
 // evidence window may close memberships or resolve gaps.
 
+import { INVENTORY_ENTITY_CANONICAL_WHERE } from "@dpf/db";
 import { reconcileBaselinePlateau, type BaselineProjectorClient } from "./baseline-projector";
 import { resolveLifecycle, type SupportLifecycleMilestone } from "../lifecycle";
 import { generateTechnologyCurrencyGaps } from "./gap-generators/technology-currency";
@@ -52,11 +53,18 @@ export async function projectInventoryLifecycle(
   options: { limit: number; upstreamEvidenceComplete: boolean; now?: Date },
 ): Promise<InventoryLifecycleProjectionResult> {
   const now = options.now ?? new Date();
-  const where = { mergedIntoId: null, status: { not: "inactive" } };
   const [total, rows] = await Promise.all([
-    prisma.inventoryEntity.count({ where }),
+    prisma.inventoryEntity.count({
+      where: {
+        ...INVENTORY_ENTITY_CANONICAL_WHERE,
+        status: { not: "inactive" },
+      },
+    }),
     prisma.inventoryEntity.findMany({
-      where,
+      where: {
+        ...INVENTORY_ENTITY_CANONICAL_WHERE,
+        status: { not: "inactive" },
+      },
       take: options.limit,
       orderBy: { id: "asc" },
       select: {
