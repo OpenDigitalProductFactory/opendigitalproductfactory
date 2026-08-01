@@ -65,6 +65,15 @@ Templates arrange the grammar for a class of operation. Physical templates rende
 
 ## 5. `TwinProfile` — derive, never author
 
+> **2026-08-01 capacity-contract note:** `TwinProfile` remains the visual and
+> vocabulary grammar. The source-neutral resource read contract is the typed
+> runtime mirror defined in
+> [`2026-08-01-shared-scarce-resource-capacity-design.md`](2026-08-01-shared-scarce-resource-capacity-design.md).
+> It derives applicability from this profile, preserves each bounded context as
+> authority, and normalizes availability, allocations, conflicts, utilization,
+> source health, and attention signals for twin consumers. It does not turn
+> `TwinProfile` or `OperationalSceneLayout` into a resource database.
+
 ```ts
 // packages/storefront-templates/src/twin-profile.ts (proposed; pure, DB-free)
 export interface TwinProfile {
