@@ -11,6 +11,25 @@ import {
   DECISION_INTERACTION_GATE_SELECT,
   decisionInteractionRowToGateView,
 } from "@/lib/decision-perspective/view-model";
+import { businessBuildBriefFromRecord } from "@/lib/build/business-build-brief";
+
+const BUSINESS_BUILD_BRIEF_SELECT = {
+  briefId: true,
+  status: true,
+  intakeSource: true,
+  capabilityPackId: true,
+  businessOutcome: true,
+  affectedPeople: true,
+  affectedWorkflow: true,
+  sourceEvidence: true,
+  successSignals: true,
+  constraints: true,
+  businessInterpretation: true,
+  technicalInterpretation: true,
+  riskProfile: true,
+  openQuestions: true,
+  confidence: true,
+} satisfies Prisma.BusinessBuildBriefSelect;
 
 const EXECUTION_EPIC_ROLLUP_SELECT = {
   id: true,
@@ -90,6 +109,7 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
       parentEpicId: true,
       originatingBacklogItemId: true,
       brief: true,
+      businessBuildBrief: { select: BUSINESS_BUILD_BRIEF_SELECT },
       plan: true,
       phase: true,
       sandboxId: true,
@@ -163,6 +183,9 @@ export const getFeatureBuilds = cache(async (userId: string): Promise<FeatureBui
   return rows.map((r) => ({
     ...r,
       brief: r.brief as FeatureBrief | null,
+      businessBuildBrief: r.businessBuildBrief
+        ? businessBuildBriefFromRecord({ title: r.title, row: r.businessBuildBrief })
+        : null,
       plan: r.plan as Record<string, unknown> | null,
       phase: r.phase as BuildPhase,
       draftApprovedAt: r.draftApprovedAt,
@@ -236,6 +259,7 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
       parentEpicId: true,
       originatingBacklogItemId: true,
       brief: true,
+      businessBuildBrief: { select: BUSINESS_BUILD_BRIEF_SELECT },
       plan: true,
       phase: true,
       sandboxId: true,
@@ -311,6 +335,9 @@ export const getFeatureBuildById = cache(async (buildId: string): Promise<Featur
   return {
     ...r,
     brief: r.brief as FeatureBrief | null,
+    businessBuildBrief: r.businessBuildBrief
+      ? businessBuildBriefFromRecord({ title: r.title, row: r.businessBuildBrief })
+      : null,
     plan: r.plan as Record<string, unknown> | null,
     phase: r.phase as BuildPhase,
     draftApprovedAt: r.draftApprovedAt,

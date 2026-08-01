@@ -9,6 +9,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { FeatureBriefPanel } from "./FeatureBriefPanel";
+import { BusinessBriefPanel } from "./BusinessBriefPanel";
+import { OwnerChangeProofPanel } from "./OwnerChangeProofPanel";
 import { ReviewPanel } from "./ReviewPanel";
 import { NodeInspector } from "./NodeInspector";
 import type { ProcessGraphNodeClickInfo } from "./ProcessGraphClickInfo";
@@ -72,6 +74,7 @@ import { STEP_LABELS } from "@/lib/integrate/build-exec-types";
 import type { PortfolioForSelect } from "@/lib/backlog-data";
 import { deriveLifecycleLabel } from "@/lib/governed-backlog-workflow";
 import type { PortalContextEnvelope } from "@/lib/portal-context";
+import { projectOwnerChangeView } from "@/lib/build/owner-change-view";
 import {
   BUILD_STUDIO_TEST_IDS,
   getBuildStudioGraphPanelClassName,
@@ -209,9 +212,9 @@ export function BuildStudio({
   const [pendingIntake, setPendingIntake] = useState<BuildStudioPendingIntake | null>(null);
   const [promotingItemId, setPromotingItemId] = useState<string | null>(null);
   const [intakeOpen, setIntakeOpen] = useState(() => buildRows.length === 0);
-  // One evidence drawer remains authoritative for progress, brief, review,
-  // runtime, and queue diagnostics. The operator overview stays primary;
-  // the graph and drawer mount only inside Technical details.
+  // One details drawer remains authoritative for the owner brief/review and
+  // technical diagnostics. It mounts only after an explicit owner or operator
+  // action, so closed evidence surfaces stay out of the default DOM.
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerInitialSectionId, setDrawerInitialSectionId] = useState<string | null>(null);
   // Assurance + code-intel cards collapse so the workflow graph stays the
@@ -261,6 +264,24 @@ export function BuildStudio({
     activeBuild && !buildRows.some((build) => build.buildId === activeBuild.buildId)
       ? [activeBuild, ...buildRows]
       : buildRows;
+  const drivingBuild = computeDrivingBuild(supervisedBuildRows.map((build) => ({
+    buildCode: build.buildId,
+    sandboxPort: build.sandboxPort,
+    lastActivityAt: build.updatedAt,
+  })));
+  const ownerChangeView = activeBuild
+    ? projectOwnerChangeView({
+      build: activeBuild,
+      status: customerStatuses[activeBuild.id],
+      previewDrivingBuildId: drivingBuild?.buildCode ?? null,
+    })
+    : null;
+  const ownerPreviewUrl =
+    ownerChangeView?.preview.drivingThisChange
+    && drivingBuild
+    && isValidSandboxPort(drivingBuild.sandboxPort)
+      ? `http://localhost:${drivingBuild.sandboxPort}`
+      : null;
   const branchBadge = resolveBuildStudioBranchBadge({
     submissionBranchShortId,
     buildTitle: activeBuild?.title ?? null,
@@ -833,11 +854,7 @@ export function BuildStudio({
             <>
               <BuildOperatorOverview
                 title={activeBuild.title}
-                outcome={
-                  activeBuild.designDoc?.problemStatement
-                  ?? activeBuild.description
-                  ?? activeBuild.originator?.resolution
-                }
+                outcome={ownerChangeView?.outcome}
                 phase={activeBuild.phase}
                 status={ownerStatus}
               />
@@ -894,6 +911,20 @@ export function BuildStudio({
                     )}
                   </div>
                 )}
+                {ownerChangeView ? (
+                  <OwnerChangeProofPanel
+                    view={ownerChangeView}
+                    previewUrl={ownerPreviewUrl}
+                    onOpenBrief={() => {
+                      setDrawerInitialSectionId("brief");
+                      setDrawerOpen(true);
+                    }}
+                    onOpenProof={() => {
+                      setDrawerInitialSectionId("review");
+                      setDrawerOpen(true);
+                    }}
+                  />
+                ) : null}
                 <div className="border-t border-[var(--dpf-border)] px-4 py-3">
                   <button
                     type="button"
@@ -1024,20 +1055,23 @@ export function BuildStudio({
                           setDrawerInitialSectionId(null);
                         }}
                       />
-                      <DetailsDrawer
-                        isOpen={drawerOpen}
-                        onClose={() => setDrawerOpen(false)}
-                        sections={buildDetailsDrawerSections(
-                          activeBuild,
-                          progressVisibility,
-                          drawerInitialSectionId,
-                          supervisedBuildRows,
-                          changeNarrative,
-                          true,
-                        )}
-                      />
                     </div>
                   </section>
+                ) : null}
+                {drawerOpen ? (
+                  <DetailsDrawer
+                    isOpen
+                    onClose={() => setDrawerOpen(false)}
+                    sections={buildDetailsDrawerSections(
+                      activeBuild,
+                      progressVisibility,
+                      drawerInitialSectionId,
+                      supervisedBuildRows,
+                      changeNarrative,
+                      engineerView,
+                      () => refreshActiveBuildState(activeBuild.buildId),
+                    )}
+                  />
                 ) : null}
               </div>
             </>
@@ -1095,6 +1129,7 @@ function buildDetailsDrawerSections(
   allBuilds: readonly FeatureBuildRow[],
   changeNarrative: BuildChangeNarrative | null,
   engineerView: boolean = false,
+  onBriefSaved?: () => void | Promise<void>,
 ): DetailsDrawerSection[] {
   // Default-open section depends on phase + explicit operator intent.
   // - When the queue header opened the drawer, BS-Queue is the explicit pick.
@@ -1123,15 +1158,19 @@ function buildDetailsDrawerSections(
     },
     {
       id: "brief",
-      title: activeBuild.phase === "complete" ? "Shipped — original brief" : "Brief / Design Doc",
+      title: activeBuild.phase === "complete" ? "Shipped — original outcome" : "Outcome and brief",
       defaultOpen: defaultId === "brief",
       content: (
-        <FeatureBriefPanel
-          brief={activeBuild.brief}
-          phase={activeBuild.phase}
-          changeNarrative={changeNarrative}
-          build={activeBuild}
-        />
+        activeBuild.businessBuildBrief ? (
+          <BusinessBriefPanel brief={activeBuild.businessBuildBrief} onSaved={onBriefSaved} />
+        ) : (
+          <FeatureBriefPanel
+            brief={activeBuild.brief}
+            phase={activeBuild.phase}
+            changeNarrative={changeNarrative}
+            build={activeBuild}
+          />
+        )
       ),
     },
     {

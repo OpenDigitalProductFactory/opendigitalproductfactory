@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import "./test-setup";
+import "../build-studio/test-setup";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { BusinessBriefPanel } from "./BusinessBriefPanel";
@@ -63,9 +63,11 @@ describe("BusinessBriefPanel", () => {
 
   it("lets a non-developer mark evidence as an existing working example", async () => {
     updateBusinessBuildBrief.mockResolvedValue(undefined);
+    const onSaved = vi.fn();
 
     render(
       <BusinessBriefPanel
+        onSaved={onSaved}
         brief={{
           ...DEMO_BUSINESS_BRIEF,
           briefId: "BBB-FB-123",
@@ -100,6 +102,7 @@ describe("BusinessBriefPanel", () => {
           copyAdaptAvoidText: "Copy: guided checklist\nAdapt: approval rules\nAvoid: HR-only labels",
         }),
       );
+      expect(onSaved).toHaveBeenCalledOnce();
     });
   });
 });
