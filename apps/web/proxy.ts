@@ -3,7 +3,7 @@
 // All route policy decisions are centralised here. Layout guards provide
 // defence-in-depth for role/capability checks within authenticated areas.
 
-import { auth } from "@/lib/auth";
+import { auth } from "@/lib/govern/auth-edge";
 import { enforceCanonicalHost } from "@/lib/canonical-host";
 import { classifyRoute, RouteClass } from "@/lib/storefront-middleware";
 import {

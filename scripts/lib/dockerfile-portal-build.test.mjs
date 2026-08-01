@@ -12,7 +12,7 @@ test("portal image build uses the default Next builder under Docker", () => {
 });
 
 test("portal image build reserves enough heap for Next production tracing", () => {
-  assert.match(dockerfile, /NODE_OPTIONS="--max-old-space-size=8192"/);
+  assert.match(dockerfile, /NODE_OPTIONS="--max-old-space-size=16384"/);
 });
 
 test("runner image carries profession corpus seed assets", () => {

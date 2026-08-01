@@ -6,7 +6,9 @@ import Apple from "next-auth/providers/apple";
 import { prisma } from "@dpf/db";
 import { verifyPassword, hashPassword } from "./password";
 import { determineSocialAuthFlow, createTempToken } from "./social-auth";
-import { normalizeAuthRedirect } from "./auth-redirect";
+import { authBaseConfig } from "./auth-config";
+
+export type { DpfSession, UserType } from "./auth-config";
 
 /**
  * Load social auth credentials from PlatformConfig DB into process.env.
@@ -56,72 +58,8 @@ async function ensureSocialAuthCredentials(): Promise<void> {
   await syncSocialAuthCredentials();
 }
 
-export type UserType = "admin" | "customer";
-
-export type DpfSession = {
-  user: {
-    id: string;
-    email: string;
-    type: UserType;
-    // Admin fields
-    platformRole: string | null;
-    isSuperuser: boolean;
-    // Customer fields
-    accountId: string | null;
-    accountName: string | null;
-    contactId: string | null;
-  };
-};
-
-// Port-scoped session cookie isolation.
-//
-// Portal (localhost:3000) and sandbox (localhost:3035) share the same
-// localhost domain. Browsers scope cookies by domain, NOT port, so the
-// default NextAuth cookie name "authjs.session-token" is overwritten
-// whenever you log into one from the same browser — you end up with the
-// other app's session clobbering yours. Symptom: logging into sandbox
-// hides your active FeatureBuild list on the portal because the portal
-// receives a sandbox-DB userId that doesn't exist locally.
-//
-// Fix: give the sandbox a distinct cookie name. Portal keeps the default
-// so existing sessions survive, sandbox gets its own cookie that never
-// collides.
-const isSandboxEnv = process.env.DPF_ENVIRONMENT === "sandbox";
-const sessionCookieName = isSandboxEnv
-  ? "authjs.session-token.sandbox"
-  : "authjs.session-token";
-
-// `secure: true` on a cookie tells the browser to drop it over plain HTTP.
-// In a self-hosted deploy, the portal can be reached three ways:
-//   - http://localhost:3000           (single-machine dev)
-//   - http://<lan-ip>:3000            (LAN / mDNS, plain HTTP)
-//   - https://dpf.example.com         (public domain behind reverse proxy)
-//
-// Gating on NODE_ENV breaks the LAN case: the production build sets
-// NODE_ENV=production, secure=true, the cookie is dropped over HTTP, every
-// click after login sees no session and bounces back to /login.
-//
-// Gate on the *protocol* instead: secure only when the operator has
-// explicitly declared an HTTPS public URL. This is the same convention
-// used by Gitea, Outline, and other self-hosted Next.js / Auth.js apps.
-const publicUrl = process.env.PUBLIC_URL ?? "";
-const isHttps = publicUrl.startsWith("https://");
-
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  trustHost: true,
-  session: { strategy: "jwt" },
-  pages: { signIn: "/login" },
-  cookies: {
-    sessionToken: {
-      name: sessionCookieName,
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: isHttps,
-      },
-    },
-  },
+  ...authBaseConfig,
   providers: [
     // Admin/workforce login
     Credentials({
@@ -210,17 +148,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     }),
   ],
   callbacks: {
-    // BI-86165533: guarantee the post-login redirect targets an operator-visible
-    // host. With trustHost + no AUTH_URL, Auth.js can derive its base URL from the
-    // 0.0.0.0 bind address on some request paths; a relative redirectTo then
-    // resolves to http://0.0.0.0:3000/… which no browser can follow, leaving the
-    // user stranded on /login with no error. normalizeAuthRedirect repairs the
-    // host (PUBLIC_URL when set, else localhost) while preserving Auth.js's
-    // open-redirect guard.
-    redirect({ url, baseUrl }) {
-      return normalizeAuthRedirect({ url, baseUrl, publicUrl: process.env.PUBLIC_URL });
-    },
-
+    ...authBaseConfig.callbacks,
     async signIn({ user, account }) {
       await ensureSocialAuthCredentials();
       // Credential providers: pass through (existing behavior)
@@ -287,30 +215,5 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       return `/customer-complete-profile?token=${encodeURIComponent(tempToken)}`;
     },
 
-    jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-        token.type = user.type ?? "admin";
-        token.platformRole = user.platformRole ?? null;
-        token.isSuperuser = user.isSuperuser ?? false;
-        token.accountId = user.accountId ?? null;
-        token.accountName = user.accountName ?? null;
-        token.contactId = user.contactId ?? null;
-      }
-      return token;
-    },
-
-    session({ session, token }) {
-      if (session.user) {
-        session.user.id = typeof token.id === "string" ? token.id : token.sub ?? "";
-        session.user.type = (token.type as UserType) ?? "admin";
-        session.user.platformRole = token.platformRole ?? null;
-        session.user.isSuperuser = token.isSuperuser ?? false;
-        session.user.accountId = (token.accountId as string) ?? null;
-        session.user.accountName = (token.accountName as string) ?? null;
-        session.user.contactId = (token.contactId as string) ?? null;
-      }
-      return session;
-    },
   },
 });

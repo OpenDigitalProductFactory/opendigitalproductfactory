@@ -19,8 +19,8 @@ export function buildGitPromotionVerificationScript(input: {
     `git checkout --detach ${shellQuote(input.afterSha)}`,
     "pnpm install --frozen-lockfile",
     "pnpm --filter @dpf/db exec prisma generate --schema prisma/schema.prisma",
-    "pnpm --filter web typecheck",
-    "pnpm --filter web exec next build",
+    "NODE_OPTIONS=--max-old-space-size=16384 pnpm --filter web typecheck",
+    "NODE_OPTIONS=--max-old-space-size=16384 pnpm --filter web build",
   ].join("\n");
 }
 

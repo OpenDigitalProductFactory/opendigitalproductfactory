@@ -7,7 +7,7 @@
     "dev": "next dev",
     "build": "node scripts/next-build.mjs",
     "start": "next start",
-    "typecheck": "next typegen && tsc --noEmit",
+    "typecheck": "node scripts/typecheck.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

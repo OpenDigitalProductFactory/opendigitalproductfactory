@@ -12,7 +12,7 @@ import {
   scheduleInitialCodeGraphBootstrap,
   warnIfLegacyHiveTokenEnvSet,
   syncPlatformVersionOnBoot,
-} from "./instrumentation";
+} from "./instrumentation-node";
 
 const syncPlatformVersionConfigMock = vi.fn();
 const getDeployedShaMock = vi.fn();

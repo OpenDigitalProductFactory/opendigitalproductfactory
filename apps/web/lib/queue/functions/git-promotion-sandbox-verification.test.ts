@@ -13,8 +13,8 @@ describe("buildGitPromotionVerificationScript", () => {
     expect(script).toContain("git fetch --depth 1 origin 'abc123'");
     expect(script).toContain("git checkout --detach 'abc123'");
     expect(script).toContain("pnpm install --frozen-lockfile");
-    expect(script).toContain("pnpm --filter web typecheck");
-    expect(script).toContain("pnpm --filter web exec next build");
+    expect(script).toContain("NODE_OPTIONS=--max-old-space-size=16384 pnpm --filter web typecheck");
+    expect(script).toContain("NODE_OPTIONS=--max-old-space-size=16384 pnpm --filter web build");
     expect(script).not.toContain("executePromotion");
   });
 });

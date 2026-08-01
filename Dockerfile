@@ -72,7 +72,7 @@ RUN pnpm --filter @dpf/db exec prisma generate
 # not a constructor" when --webpack is forced. Use the default builder (Turbopack
 # in Next 16, gated in next.config.mjs) which does not trigger the broken plugin.
 # Re-evaluate --webpack on next version bump.
-RUN NODE_OPTIONS="--max-old-space-size=8192" NEXT_TELEMETRY_DISABLED=1 pnpm --filter web exec next build
+RUN NODE_OPTIONS="--max-old-space-size=16384" NEXT_TELEMETRY_DISABLED=1 pnpm --filter web exec next build
 
 # ─── Stage 4: init (build source for migrations, seed, Prisma client) ─────────
 FROM deps AS init

@@ -34,7 +34,7 @@ describe("SANDBOX_BUILD_COMMAND", () => {
   it("forces NODE_ENV=production for the Next production build", () => {
     expect(SANDBOX_BUILD_COMMAND).toContain("NODE_ENV=production");
     expect(SANDBOX_BUILD_COMMAND).toMatch(
-      /NODE_ENV=production\s+NODE_OPTIONS=--max-old-space-size=8192\s+pnpm --filter web build/,
+      /NODE_ENV=production\s+NODE_OPTIONS=--max-old-space-size=16384\s+pnpm --filter web build/,
     );
   });
 
@@ -44,10 +44,10 @@ describe("SANDBOX_BUILD_COMMAND", () => {
 
   it("gives TypeScript and Next enough heap for the current portal graph", () => {
     expect(SANDBOX_TYPECHECK_COMMAND).toContain(
-      "NODE_OPTIONS=--max-old-space-size=8192",
+      "NODE_OPTIONS=--max-old-space-size=16384",
     );
     expect(SANDBOX_BUILD_COMMAND).toContain(
-      "NODE_OPTIONS=--max-old-space-size=8192",
+      "NODE_OPTIONS=--max-old-space-size=16384",
     );
   });
 
