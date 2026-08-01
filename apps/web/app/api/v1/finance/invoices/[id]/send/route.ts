@@ -8,6 +8,7 @@ import { getInvoice, sendInvoice } from "@/lib/actions/finance";
 import { getOrgIdentity } from "@/lib/org-identity";
 import { generateInvoicePdf, getInvoicePdfFilename } from "@/lib/invoice-pdf";
 import { sendEmail, composeInvoiceEmail, isEmailConfigured } from "@/lib/email";
+import { checkInvoiceTransition, type InvoiceStatus } from "@/lib/finance/invoice-lifecycle";
 
 export async function POST(
   request: Request,
@@ -33,6 +34,13 @@ export async function POST(
     if (!invoice) throw apiError("NOT_FOUND", "Invoice not found", 404);
     if (!invoice.contact?.email)
       throw apiError("VALIDATION_ERROR", "Invoice has no contact email", 422);
+
+    // Checked here as well as inside sendInvoice so the operator gets the actual
+    // reason: a bare throw out of the action surfaces as a generic 500.
+    const transition = checkInvoiceTransition(invoice.status as InvoiceStatus, "sent");
+    if (!transition.allowed) {
+      throw apiError("ILLEGAL_TRANSITION", transition.reason, 422);
+    }
 
     const { payToken } = await sendInvoice(id);
 

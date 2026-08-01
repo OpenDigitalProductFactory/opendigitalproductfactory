@@ -1271,7 +1271,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 103
+    "textMass": 92
   },
   "apps/web/app/(shell)/platform/ai/assignments/bindings/[bindingId]/page.tsx": {
     "vocabulary": 0,
@@ -2741,7 +2741,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 10
+    "textMass": 14
   },
   "apps/web/app/api/v1/finance/invoices/[id]/send/route.ts": {
     "vocabulary": 0,
@@ -5856,7 +5856,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 259
+    "textMass": 235
   },
   "apps/web/components/ops/SelfUpgradeJobEngineHealthAlert.tsx": {
     "vocabulary": 0,
@@ -6556,7 +6556,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 92
+    "textMass": 84
   },
   "apps/web/components/platform/coworker-record/WorkPatternBindingCard.tsx": {
     "vocabulary": 0,
@@ -6584,7 +6584,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 57
+    "textMass": 53
   },
   "apps/web/components/platform/development/change-lanes/ChangeLaneSourceSummary.tsx": {
     "vocabulary": 0,

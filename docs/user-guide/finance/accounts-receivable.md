@@ -75,6 +75,33 @@ the business reason in supporting records. Do not mark an invoice paid to
 remove it from an overdue queue. For a partial receipt, record the actual
 amount; the remaining balance stays visible.
 
+### Status Movement Is Governed
+
+Invoice status follows a declared transition map, so an unsupported move is
+refused with the reason rather than silently accepted. In particular a **paid**
+invoice cannot be voided — issue a credit note instead, so the ledger keeps both
+halves of the story — and **void** is terminal: correcting a voided invoice
+means raising a new one. Sending is refused for an invoice that is void, paid,
+or written off; resending one that is already sent is allowed, because chasing a
+customer with a fresh payment link is normal collection work.
+
+### Void Versus Delete
+
+**Void** keeps the invoice on record and neutralises its economics. It
+unallocates any payments (the payment record itself is kept, because the money
+really did arrive), posts a reversing journal entry for any general-ledger
+postings rather than deleting them, and returns linked billable time to the
+unbilled pool.
+
+**Delete** is only for an invoice that never became a business record: a draft
+with no payment allocation, no ledger posting, and no dunning history. Anything
+else must be voided so the audit trail survives. Deleting removes the invoice
+and its line items permanently and returns any linked billable time to the
+unbilled pool; it cannot be undone.
+
+Prefer void whenever there is doubt. Delete exists for the mistake you catch
+before it leaves the building, not for tidying up.
+
 Keep the source order or service, sent invoice, delivery evidence, signature
 when required, processor or bank receipt, payment reference, and reconciled
 bank transaction as the evidence chain.
