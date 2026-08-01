@@ -1,8 +1,7 @@
 ---
 # Single fields shared by both surfaces
 name: dpf-architecture-review
-description: "Use when reviewing or updating a specification, design doc, or implementation plan in the DPF codebase for architectural alignment and concerns — whether in Build Studio planning/review or during external (Claude / Codex) development. This is the chief-architect lens, carried by the Enterprise Architect persona rather than a new role: measure the spec against DPF's canonical contracts, data-model stewardship, and kernel principles; research the topic's standards; surface advisory findings with concrete spec edits; and, when research turns up a standard the reference docs don't yet capture, propose an update to those docs. Advisory by contract — it sharpens the spec, it does not gate the build. Composes with dpf-retrieve-decision-context (gather context first) and dpf-decision-via-kernel (escalate genuine option trade-offs)."
-
+description: "Use when reviewing or updating a DPF specification, design doc, or implementation plan for architectural alignment — in Build Studio planning/review or during external Claude/Codex development. Applies the chief-architect lens: canonical contracts, data-model stewardship, kernel principles, and standards research, producing advisory findings with concrete spec edits. Advisory by contract; it sharpens a spec, it does not gate a build."
 # Agent Skills standard fields (Surface A — Claude Code / Codex)
 disable-model-invocation: false
 user-invocable: true

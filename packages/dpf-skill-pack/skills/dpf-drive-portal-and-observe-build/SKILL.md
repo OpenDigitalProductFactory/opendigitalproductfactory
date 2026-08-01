@@ -1,7 +1,6 @@
 ---
 name: dpf-drive-portal-and-observe-build
-description: "Use when working in the DPF codebase and you need to drive the live portal through the browser (Claude-in-Chrome) — send a coworker a message, click through a build's gates, fill an admin form — OR observe what the build/inference engine is actually doing (which model ran a phase, why a tool call failed, where a build is stuck). Encodes the hard-won mechanics so a fresh session does not trial-and-error the DOM: real keystrokes for React inputs (form_input silently no-ops the Send), read_page/get_page_text instead of screenshots that time out on live pages, native confirm() dialogs that automation cannot dismiss, and verifying every mutation via DB/logs not the UI. The observation half maps where the truth lives: FeatureBuild.phase + buildExecState, BuildActivity events, the [agentic-tool]/[agentic-loop]/[callWithFallbackChain] lines in docker logs dpf-portal-1, the /platform/ai/runtime-health surface, the resolve_model_selection tool, and the DMR local engine at localhost:12434."
-
+description: "Use when driving the live DPF portal through the browser (Claude-in-Chrome) — messaging a coworker, clicking through a build's gates, filling an admin form — OR observing what the build/inference engine is doing: which model ran a phase, why a tool call failed, where a build is stuck. Covers the DOM mechanics that fail by default on live pages, and where build truth actually lives across the database, activity events, container logs and runtime-health surfaces."
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
 user-invocable: true

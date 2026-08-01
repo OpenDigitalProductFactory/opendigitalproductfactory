@@ -18,6 +18,7 @@ import {
   ruleAnchors,
   ruleLabel,
   anchorsIn,
+  resolveAnchor,
 } from "./check-instruction-plane-rule-coverage.mjs";
 
 import { readFileSync } from "node:fs";
@@ -75,7 +76,13 @@ test("a rule RELOCATED to a registered destination passes — the split must sta
     baseline,
     alwaysOnTexts: { "AGENTS.md": "Doctrine shrank; the rule moved to its skill." },
     destinationTexts: {
-      "packages/dpf-skill-pack/skills/dpf-x/SKILL.md": bullet("Never fabricate.", KERNEL),
+      // Real SKILL.md files reach the kernel with `../../../../docs/…` from
+      // packages/dpf-skill-pack/skills/<slug>/ — use the true form, not a root-relative
+      // string that would be a broken link on disk.
+      "packages/dpf-skill-pack/skills/dpf-x/SKILL.md": bullet(
+        "Never fabricate.",
+        `../../../../${KERNEL}`,
+      ),
     },
   });
   assert.deepEqual(errors, []);
@@ -164,4 +171,33 @@ test("the committed baseline matches the live always-on plane", () => {
     assert.ok(baseline.has(anchor), `live rule anchor ${anchor} is missing from the baseline — run --update`);
   }
   assert.ok(live.size >= 40, `expected the pre-split plane to carry 40+ rule anchors, saw ${live.size}`);
+});
+
+// --- Relative-link resolution (regression: Phase 1 relocation) --------------------
+// Moving a rule from AGENTS.md (repo root) into docs/architecture/*.md correctly rewrites
+// its anchor link from `docs/founder-kernel/…` to `../founder-kernel/…`. Comparing raw
+// strings reported those rules as DELETED — a false positive on the exact operation this
+// guard exists to make safe, whose cheapest silencer is --update.
+
+test("resolveAnchor resolves a relative target to a repo-relative path", () => {
+  assert.equal(
+    resolveAnchor("../founder-kernel/wiki/principles/x.md", "docs/architecture/runbook.md"),
+    "docs/founder-kernel/wiki/principles/x.md",
+  );
+  assert.equal(resolveAnchor("./a/b.md", "docs/c.md"), "docs/a/b.md");
+  assert.equal(resolveAnchor("/docs/a.md", "docs/c.md"), "docs/a.md");
+  assert.equal(resolveAnchor(KERNEL, "AGENTS.md"), KERNEL, "root-relative is unchanged");
+});
+
+test("a rule relocated into a subdirectory is NOT reported as dropped", () => {
+  const baseline = new Map([[KERNEL, "Never fabricate."]]);
+  const { errors } = evaluateRuleCoverage({
+    baseline,
+    alwaysOnTexts: { "AGENTS.md": "the rule moved out" },
+    // Same target, written the way a doc one level down must write it.
+    destinationTexts: {
+      "docs/architecture/runbook.md": "- **Never fabricate.** → [kernel principle](../founder-kernel/wiki/principles/never-fabricate.md)",
+    },
+  });
+  assert.deepEqual(errors, [], "a correctly-rewritten relative link is the same rule");
 });

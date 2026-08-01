@@ -1,7 +1,6 @@
 ---
 name: dpf-add-archetype
-description: "Use when adding a NEW business archetype to the DPF platform — a new industry/vertical the storefront-templates taxonomy does not yet cover, or when an archetype idea is floated and needs the paved road. Walks the four-dimension provisioning recipe: template substrate, WSID profession corpus, AI coworker decision, and skills/tools — then the completeness gate that blocks a new archetype from shipping shallow. An archetype added by copying a prior design doc ships template-only and forgets corpus + coworker (as warehousing-fulfilment did); this skill is the single paved road that makes it complete by construction. Mirrors dpf-establish-coworker for the coworker side."
-
+description: "Use when adding a NEW business archetype to the DPF platform — a new industry or vertical the storefront-templates taxonomy does not yet cover, or when an archetype idea is floated and needs the paved road. Covers all four provisioning dimensions (template substrate, WSID profession corpus, AI coworker decision, skills/tools) and the completeness gate that blocks a shallow archetype from shipping."
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
 user-invocable: true

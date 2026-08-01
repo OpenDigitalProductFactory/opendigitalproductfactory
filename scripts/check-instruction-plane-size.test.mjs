@@ -18,7 +18,7 @@ import {
   assumptionMarkers,
 } from "./check-instruction-plane-size.mjs";
 
-import { readFileSync } from "node:fs";
+import { globSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -350,18 +350,33 @@ test("an unrecognised marker kind is ignored, not miscounted", () => {
   assert.deepEqual(m.malformed, []);
 });
 
-test("the live always-on plane carries both marker kinds and none malformed", () => {
+test("markers survive relocation and none are malformed, plane or destination", () => {
+  // Markers travel WITH their content: BI-0020D511 Phase 1 moved procedure out of the
+  // always-on plane into runbooks, and the ⟦runtime:⟧ markers on that procedure went with
+  // it — which is the convention working, not markers being lost. So the invariant is
+  // "still present somewhere reachable", not "still in AGENTS.md". Counting only the
+  // plane would turn every correct relocation into a red test.
   const manifest = JSON.parse(
     readFileSync(join(REPO_ROOT, "scripts", "instruction-plane-manifest.json"), "utf8"),
   );
+  const files = [
+    ...manifest.alwaysOn,
+    ...(manifest.ruleDestinations ?? []).flatMap((g) => globSync(g, { cwd: REPO_ROOT })),
+  ];
   let runtime = 0;
   let model = 0;
-  for (const file of manifest.alwaysOn) {
-    const m = assumptionMarkers(readFileSync(join(REPO_ROOT, file), "utf8"));
+  for (const file of files) {
+    let text;
+    try {
+      text = readFileSync(join(REPO_ROOT, file), "utf8");
+    } catch {
+      continue;
+    }
+    const m = assumptionMarkers(text);
     assert.deepEqual(m.malformed, [], `${file} has a malformed marker`);
     runtime += m.runtime;
     model += m.model;
   }
-  assert.ok(runtime >= 10, `expected the BI-ACC7A2B5 runtime markers, saw ${runtime}`);
+  assert.ok(runtime >= 10, `expected the BI-ACC7A2B5 runtime markers to survive, saw ${runtime}`);
   assert.ok(model >= 1, `expected at least one model-assumption marker, saw ${model}`);
 });
