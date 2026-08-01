@@ -2,9 +2,22 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@dpf/db", () => ({
   prisma: {
-    $transaction: vi.fn(),
+    // Default $transaction invokes its callback with a raw-capable tx so the
+    // dedup gate's heap-forced candidate lookup (runHeapForcedCandidateQuery,
+    // BI-FEAEB715) returns an empty candidate set instead of throwing. Write-path
+    // tests below override this with a mockImplementation that also exposes the
+    // raw methods on its tx.
+    $transaction: vi.fn(async (cb: unknown) =>
+      typeof cb === "function"
+        ? (cb as (tx: unknown) => unknown)({
+            $queryRaw: vi.fn().mockResolvedValue([]),
+            $executeRawUnsafe: vi.fn().mockResolvedValue(0),
+          })
+        : undefined,
+    ),
     $queryRaw: vi.fn(),
     $queryRawUnsafe: vi.fn(),
+    $executeRawUnsafe: vi.fn().mockResolvedValue(0),
     country: {
       findFirst: vi.fn(),
     },
@@ -178,6 +191,8 @@ describe("createCustomerSite", () => {
 
     vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => {
       const tx = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        $executeRawUnsafe: vi.fn().mockResolvedValue(0),
         country: {
           findFirst: vi.fn().mockResolvedValue({
             id: "country-1",
@@ -241,7 +256,10 @@ describe("createCustomerSite", () => {
     expect(result.outcome).toBe("created");
     expect(result.site.name).toBe("Dallas HQ");
     expect(resolveValidatedSiteAddress).toHaveBeenCalledWith("provider-ref-1");
-    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    // Two transactions now: the dedup gate's heap-forced candidate read
+    // (runHeapForcedCandidateQuery, BI-FEAEB715) precedes the site-write
+    // transaction. Both go through prisma.$transaction.
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
     expect(revalidatePath).toHaveBeenCalledWith("/customer");
     expect(revalidatePath).toHaveBeenCalledWith("/customer/acct-1");
   });
@@ -307,6 +325,8 @@ describe("updateCustomerSite", () => {
 
     vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => {
       const tx = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        $executeRawUnsafe: vi.fn().mockResolvedValue(0),
         country: {
           findFirst: vi.fn().mockResolvedValue({ id: "country-1" }),
         },
@@ -348,6 +368,8 @@ describe("updateCustomerSite", () => {
     vi.mocked(prisma.customerSite.findFirst).mockResolvedValue(existingSite as never);
     vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) => {
       const tx = {
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        $executeRawUnsafe: vi.fn().mockResolvedValue(0),
         customerSite: {
           update: vi.fn().mockResolvedValue({
             ...existingSite,
