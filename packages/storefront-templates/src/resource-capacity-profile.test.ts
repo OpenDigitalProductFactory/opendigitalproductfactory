@@ -32,8 +32,21 @@ describe("deriveResourceCapacityProfile", () => {
     const profile = deriveResourceCapacityProfile(archetype("mobile-beauty"));
 
     expect(profile.patterns).toContain("dispatch");
+    expect(profile.authorities).not.toContain("beauty");
     expect(profile.supportsTravel).toBe(true);
   });
+
+  it.each(["hair-salon", "barber-shop", "nail-salon", "beauty-spa"])(
+    "adds beauty-owned physical resources to fixed-premises %s appointments",
+    (archetypeId) => {
+      const profile = deriveResourceCapacityProfile(archetype(archetypeId));
+
+      expect(profile.patterns).toContain("appointment");
+      expect(profile.authorities).toEqual(
+        expect.arrayContaining(["provider-calendar", "staffing", "beauty"]),
+      );
+    },
+  );
 
   it("represents existing restaurant and room occupancy authorities", () => {
     expect(deriveResourceCapacityProfile(archetype("restaurant"))).toMatchObject({

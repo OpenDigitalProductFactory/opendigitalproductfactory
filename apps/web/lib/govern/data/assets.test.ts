@@ -170,6 +170,27 @@ describe("seeded registry", () => {
     }
   });
 
+  it("governs beauty resources, eligibility, availability, and allocations as local operating records", () => {
+    for (const [assetId, prismaModel, sensitivity, projectionClass] of [
+      ["data:beauty-resource", "BeautyResource", "internal", "structure"],
+      ["data:beauty-resource-service", "BeautyResourceService", "internal", "structure"],
+      ["data:beauty-resource-availability", "BeautyResourceAvailability", "internal", "structure"],
+      ["data:beauty-capacity-allocation", "BeautyCapacityAllocation", "confidential", "metadata"],
+    ] as const) {
+      expect(lookupAsset(DATA_ASSET_REGISTRY, assetId)).toMatchObject({
+        physical: { prismaModel },
+        domain: "beauty-personal-care-operations",
+        ownerRole: "business-operator",
+        sensitivity,
+        criticality: "high",
+        lifecycleClass: "operational",
+        purposeCapabilities: ["service-delivery", "platform-operations"],
+        residencyClass: "local-only",
+        projectionClass,
+      });
+    }
+  });
+
   it("builds without invariant violations and carries the BI-DG-001 worked asset", () => {
     expect(DATA_ASSET_REGISTRY.assets.length).toBeGreaterThan(0);
     const conv = lookupAsset(DATA_ASSET_REGISTRY, "data:agent-conversation");

@@ -37,6 +37,13 @@ function adapter(authority: CapacityAdapter["authority"]): CapacityAdapter {
       }],
       allocations: [],
       availability: [],
+      attentionSignals: authority === "provider-calendar" ? [{
+        signalId: "provider-calendar:unassigned",
+        kind: "unassigned-demand" as const,
+        authority,
+        demandRef: "booking-1",
+        detail: "The 11:00 appointment is not fully assigned.",
+      }] : [],
       watermark: { source: authority, observedAt: "2026-08-01T14:00:00.000Z" },
     })),
   };
@@ -49,6 +56,26 @@ describe("CapacityAdapterRegistry", () => {
       expect(patterns.has(pattern), `${pattern} needs an adapter descriptor`).toBe(true);
     }
     expect(CAPACITY_ADAPTER_DESCRIPTORS.every((item) => item.canonicalSources.length > 0)).toBe(true);
+  });
+
+  it("preserves deterministic attention emitted by bounded-context adapters", async () => {
+    const snapshot = await projectCapacitySnapshot({
+      profile,
+      organizationId: "org-1",
+      window: { startAt: "2026-08-01T13:00:00.000Z", endAt: "2026-08-01T17:00:00.000Z" },
+      registry: new CapacityAdapterRegistry([
+        adapter("provider-calendar"),
+        adapter("staffing"),
+      ]),
+    });
+
+    expect(snapshot.attentionSignals).toContainEqual(
+      expect.objectContaining({
+        signalId: "provider-calendar:unassigned",
+        kind: "unassigned-demand",
+        demandRef: "booking-1",
+      }),
+    );
   });
 
   it("refuses duplicate authority registrations", () => {

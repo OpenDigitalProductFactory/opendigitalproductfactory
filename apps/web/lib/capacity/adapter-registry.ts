@@ -42,6 +42,11 @@ export const CAPACITY_ADAPTER_DESCRIPTORS: CapacityAdapterDescriptor[] = [
     canonicalSources: ["HospitalityResource", "HospitalityResourceAvailability", "HospitalityCapacityAllocation"],
   },
   {
+    authority: "beauty",
+    patterns: ["appointment"],
+    canonicalSources: ["BeautyResource", "BeautyResourceService", "BeautyResourceAvailability", "BeautyCapacityAllocation"],
+  },
+  {
     authority: "care",
     patterns: ["appointment", "occupancy"],
     canonicalSources: ["CareResource", "CareAppointmentResource", "CareAppointment"],
@@ -165,10 +170,11 @@ export async function projectCapacitySnapshot(input: {
       ...(result.diagnostic ? { diagnostic: result.diagnostic } : {}),
       ...(result.watermark ? { watermark: result.watermark } : {}),
     })),
-    attentionSignals: results.flatMap((result) =>
-      result.state === "degraded"
+    attentionSignals: results.flatMap((result) => [
+      ...(result.attentionSignals ?? []),
+      ...(result.state === "degraded"
         ? [degradedSignal(result.authority, result.diagnostic ?? `${result.authority} source is degraded`)]
-        : []
-    ),
+        : []),
+    ]),
   };
 }

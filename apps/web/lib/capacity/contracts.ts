@@ -100,7 +100,12 @@ export interface CapacityConflict {
 export type CapacityAttentionKind =
   | CapacityConflictKind
   | "idle-capacity"
-  | "blocked-resource";
+  | "blocked-resource"
+  | "unassigned-demand"
+  | "provider-overlap"
+  | "late-demand"
+  | "no-show-risk"
+  | "group-incomplete";
 
 export interface CapacityAttentionSignal {
   signalId: string;
