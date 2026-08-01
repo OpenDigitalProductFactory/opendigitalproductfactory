@@ -10,7 +10,12 @@ import type { INVOICE_STATUSES } from "@/lib/finance-validation";
 import { generateInvoicePdf, getInvoicePdfFilename } from "@/lib/invoice-pdf";
 import { getOrgIdentity } from "@/lib/org-identity";
 import { sendEmail, composeSignedConfirmationEmail, isEmailConfigured } from "@/lib/email";
-import { postInvoiceIssued, postPaymentRecorded } from "@/lib/finance/ledger-service";
+import { postInvoiceIssued, postPaymentRecorded, reverseJournalEntry } from "@/lib/finance/ledger-service";
+import {
+  checkInvoiceTransition,
+  checkInvoiceDeletion,
+  type InvoiceStatus as InvoiceLifecycleStatus,
+} from "@/lib/finance/invoice-lifecycle";
 import { customerAccountNormalizedColumns } from "@/lib/mdm/dedup-gate";
 import { registerCustomerAccountSource } from "@/lib/mdm/crosswalk";
 
@@ -141,8 +146,33 @@ export async function createInvoice(input: CreateInvoiceInput): Promise<{ id: st
 
 type InvoiceStatus = (typeof INVOICE_STATUSES)[number];
 
-export async function updateInvoiceStatus(id: string, status: InvoiceStatus): Promise<void> {
+/**
+ * Domain outcomes are RETURNED, not thrown: a thrown error crossing the
+ * "use server" boundary is stripped to a generic message in production, which
+ * would hide exactly the "why can't I do this" the operator needs.
+ */
+export type InvoiceStatusResult =
+  | { ok: true }
+  | { ok: false; error: "not_found" | "illegal_transition"; message: string };
+
+export async function updateInvoiceStatus(
+  id: string,
+  status: InvoiceStatus,
+): Promise<InvoiceStatusResult> {
   await requireManageFinance();
+
+  const existing = await prisma.invoice.findUnique({
+    where: { id },
+    select: { status: true },
+  });
+  if (!existing) {
+    return { ok: false, error: "not_found", message: "Invoice not found." };
+  }
+
+  const check = checkInvoiceTransition(existing.status as InvoiceStatus, status);
+  if (!check.allowed) {
+    return { ok: false, error: "illegal_transition", message: check.reason };
+  }
 
   const timestampData: Record<string, Date | undefined> = {};
   if (status === "sent") timestampData.sentAt = new Date();
@@ -159,6 +189,131 @@ export async function updateInvoiceStatus(id: string, status: InvoiceStatus): Pr
 
   revalidatePath("/finance");
   revalidatePath("/finance/invoices");
+  return { ok: true };
+}
+
+// ─── deleteInvoice ────────────────────────────────────────────────────────────
+
+export type DeleteInvoiceResult =
+  | { ok: true }
+  | { ok: false; error: "not_found" | "not_deletable"; message: string };
+
+/**
+ * Hard-delete an invoice that never became a business record.
+ *
+ * Deliberately narrow: anything that has reached a customer, a payment, or the
+ * ledger must be VOIDED instead so the audit trail survives. The gate itself lives
+ * in lib/finance/invoice-lifecycle so it can be reasoned about without a database.
+ */
+export async function deleteInvoice(id: string): Promise<DeleteInvoiceResult> {
+  await requireManageFinance();
+
+  const invoice = await prisma.invoice.findUnique({
+    where: { id },
+    select: { id: true, status: true },
+  });
+  if (!invoice) {
+    return { ok: false, error: "not_found", message: "Invoice not found." };
+  }
+
+  const [allocationCount, dunningCount, journalEntryCount] = await Promise.all([
+    prisma.paymentAllocation.count({ where: { invoiceId: id } }),
+    prisma.dunningLog.count({ where: { invoiceId: id } }),
+    prisma.journalEntry.count({ where: { sourceType: "Invoice", sourceId: id } }),
+  ]);
+
+  const check = checkInvoiceDeletion({
+    status: invoice.status as InvoiceLifecycleStatus,
+    allocationCount,
+    dunningCount,
+    journalEntryCount,
+  });
+  if (!check.allowed) {
+    return { ok: false, error: "not_deletable", message: check.reason };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    // Billable time attached to this invoice returns to the unbilled pool, otherwise
+    // deleting the invoice would silently swallow hours nobody can bill again.
+    await tx.timesheetEntry.updateMany({
+      where: { invoiceId: id },
+      data: { invoiceId: null, invoicedAt: null },
+    });
+    // InvoiceLineItem cascades on the FK; no explicit delete needed.
+    await tx.invoice.delete({ where: { id } });
+  });
+
+  revalidatePath("/finance");
+  revalidatePath("/finance/invoices");
+  return { ok: true };
+}
+
+// ─── voidInvoice ──────────────────────────────────────────────────────────────
+
+export type VoidInvoiceResult =
+  | { ok: true; reversedJournalEntries: number }
+  | { ok: false; error: "not_found" | "illegal_transition"; message: string };
+
+/**
+ * Void an invoice: keep the record, neutralise its economics.
+ *
+ * Unwinds payment allocations (keeping the Payment itself — the money really did
+ * arrive), reverses any general-ledger postings via the storno path rather than
+ * deleting them, and returns linked billable time to the unbilled pool.
+ */
+export async function voidInvoice(id: string, reason: string): Promise<VoidInvoiceResult> {
+  await requireManageFinance();
+
+  const invoice = await prisma.invoice.findUnique({
+    where: { id },
+    select: { id: true, status: true, internalNotes: true },
+  });
+  if (!invoice) {
+    return { ok: false, error: "not_found", message: "Invoice not found." };
+  }
+
+  const check = checkInvoiceTransition(invoice.status as InvoiceLifecycleStatus, "void");
+  if (!check.allowed) {
+    return { ok: false, error: "illegal_transition", message: check.reason };
+  }
+
+  // Reverse ledger postings BEFORE mutating the invoice: a storno that fails must
+  // not leave a voided invoice with live postings still standing against it.
+  const postings = await prisma.journalEntry.findMany({
+    where: { sourceType: "Invoice", sourceId: id, status: "posted" },
+    select: { id: true },
+  });
+  let reversedJournalEntries = 0;
+  for (const posting of postings) {
+    const result = await reverseJournalEntry(posting.id, `Invoice voided: ${reason}`);
+    if (result.success) reversedJournalEntries += 1;
+  }
+
+  const auditLine = `Voided ${new Date().toISOString()}: ${reason}`;
+  const internalNotes = invoice.internalNotes ? `${invoice.internalNotes}\n${auditLine}` : auditLine;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.paymentAllocation.deleteMany({ where: { invoiceId: id } });
+    await tx.timesheetEntry.updateMany({
+      where: { invoiceId: id },
+      data: { invoiceId: null, invoicedAt: null },
+    });
+    await tx.invoice.update({
+      where: { id },
+      data: {
+        status: "void",
+        voidedAt: new Date(),
+        amountDue: 0,
+        amountPaid: 0,
+        paidAt: null,
+        internalNotes,
+      },
+    });
+  });
+
+  revalidatePath("/finance");
+  revalidatePath("/finance/invoices");
+  return { ok: true, reversedJournalEntries };
 }
 
 // ─── recordPayment ────────────────────────────────────────────────────────────
@@ -430,6 +585,14 @@ export async function sendInvoice(invoiceId: string): Promise<{ payToken: string
     select: { id: true, payToken: true, status: true },
   });
   if (!invoice) throw new Error("Invoice not found");
+
+  // A resend of an already-sent invoice is legitimate (chasing, re-issuing the link),
+  // so sent -> sent is a no-op transition rather than a rejection. What this blocks is
+  // sending an invoice that is void, paid, or written off — previously all accepted.
+  const check = checkInvoiceTransition(invoice.status as InvoiceLifecycleStatus, "sent");
+  if (!check.allowed) {
+    throw new Error(check.reason);
+  }
 
   const payToken = invoice.payToken ?? newId(32);
 

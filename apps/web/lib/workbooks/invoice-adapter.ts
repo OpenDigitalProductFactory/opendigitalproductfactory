@@ -112,8 +112,14 @@ class InvoiceAdapter implements DataSourceAdapter {
     if ("status" in changes) {
       const status = changes.status;
       if (typeof status !== "string") throw new Error("Invalid invoice status");
-      // updateInvoiceStatus enforces manage_finance + status-driven timestamps.
-      await updateInvoiceStatus(inv.id, status as Parameters<typeof updateInvoiceStatus>[1]);
+      // updateInvoiceStatus enforces manage_finance, the transition map, and
+      // status-driven timestamps. Surface its rejection rather than reporting
+      // a successful edit the grid never actually made.
+      const result = await updateInvoiceStatus(
+        inv.id,
+        status as Parameters<typeof updateInvoiceStatus>[1],
+      );
+      if (!result.ok) throw new Error(result.message);
     }
 
     const updated = await this.getRow(_entityType, rowId);

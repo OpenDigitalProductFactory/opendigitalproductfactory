@@ -2,17 +2,34 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/permissions", () => ({ can: vi.fn() }));
+// Transaction client shared by deleteInvoice/voidInvoice assertions. prisma.$transaction
+// is given a callback in those actions, so the mock simply hands back this client.
+const mockTx = {
+  invoice: { update: vi.fn(), delete: vi.fn() },
+  paymentAllocation: { deleteMany: vi.fn() },
+  timesheetEntry: { updateMany: vi.fn() },
+};
+
 vi.mock("@dpf/db", () => ({
   prisma: {
-    invoice: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn(), count: vi.fn(), findFirst: vi.fn() },
+    invoice: { create: vi.fn(), findUnique: vi.fn(), update: vi.fn(), delete: vi.fn(), findMany: vi.fn(), count: vi.fn(), findFirst: vi.fn() },
     bill: { findUnique: vi.fn(), update: vi.fn() },
     payment: { create: vi.fn(), findUnique: vi.fn(), count: vi.fn() },
-    paymentAllocation: { create: vi.fn() },
+    paymentAllocation: { create: vi.fn(), count: vi.fn(), deleteMany: vi.fn() },
+    dunningLog: { count: vi.fn() },
+    journalEntry: { count: vi.fn(), findMany: vi.fn() },
+    timesheetEntry: { updateMany: vi.fn() },
     salesOrder: { findUnique: vi.fn() },
     storefrontOrder: { findUnique: vi.fn() },
     customerContact: { findUnique: vi.fn(), create: vi.fn() },
     customerAccount: { create: vi.fn() },
+    $transaction: vi.fn(),
   },
+}));
+vi.mock("@/lib/finance/ledger-service", () => ({
+  postInvoiceIssued: vi.fn().mockResolvedValue({ success: true }),
+  postPaymentRecorded: vi.fn().mockResolvedValue({ success: true }),
+  reverseJournalEntry: vi.fn(),
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 // Keep the signed-confirmation side-effects out of these unit tests: the PDF
@@ -32,18 +49,23 @@ vi.mock("@/lib/email", () => ({
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { prisma } from "@dpf/db";
+import { reverseJournalEntry } from "@/lib/finance/ledger-service";
 import {
   createInvoice,
   recordPayment,
   getInvoice,
   listInvoices,
   updateInvoiceStatus,
+  deleteInvoice,
+  voidInvoice,
   generateInvoiceFromSalesOrder,
   sendInvoice,
   getInvoiceByPayToken,
   signInvoice,
   setInvoiceSignatureRequired,
 } from "./finance";
+
+const mockReverseJournalEntry = vi.mocked(reverseJournalEntry);
 
 const mockAuth = vi.mocked(auth);
 const mockCan = vi.mocked(can);
@@ -78,6 +100,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockAuth.mockResolvedValue(authorizedSession as never);
   mockCan.mockReturnValue(true);
+  mockTx.invoice.update.mockReset();
+  mockTx.invoice.delete.mockReset();
+  mockTx.paymentAllocation.deleteMany.mockReset();
+  mockTx.timesheetEntry.updateMany.mockReset();
+  mockPrisma.$transaction.mockImplementation(async (fn: (tx: typeof mockTx) => unknown) => fn(mockTx));
 });
 
 // ─── Auth checks ─────────────────────────────────────────────────────────────
@@ -360,33 +387,186 @@ describe("listInvoices", () => {
 
 describe("updateInvoiceStatus", () => {
   it("sets sentAt when transitioning to sent", async () => {
+    mockPrisma.invoice.findUnique.mockResolvedValue({ status: "draft" });
     mockPrisma.invoice.update.mockResolvedValue({});
 
-    await updateInvoiceStatus("inv-1", "sent");
+    const result = await updateInvoiceStatus("inv-1", "sent");
 
+    expect(result).toEqual({ ok: true });
     const updateCall = mockPrisma.invoice.update.mock.calls[0][0];
     expect(updateCall.data.status).toBe("sent");
     expect(updateCall.data.sentAt).toBeInstanceOf(Date);
   });
 
   it("sets voidedAt when transitioning to void", async () => {
+    mockPrisma.invoice.findUnique.mockResolvedValue({ status: "draft" });
     mockPrisma.invoice.update.mockResolvedValue({});
 
-    await updateInvoiceStatus("inv-1", "void");
+    const result = await updateInvoiceStatus("inv-1", "void");
 
+    expect(result).toEqual({ ok: true });
     const updateCall = mockPrisma.invoice.update.mock.calls[0][0];
     expect(updateCall.data.status).toBe("void");
     expect(updateCall.data.voidedAt).toBeInstanceOf(Date);
   });
 
   it("sets paidAt when transitioning to paid", async () => {
+    mockPrisma.invoice.findUnique.mockResolvedValue({ status: "sent" });
     mockPrisma.invoice.update.mockResolvedValue({});
 
-    await updateInvoiceStatus("inv-1", "paid");
+    const result = await updateInvoiceStatus("inv-1", "paid");
 
+    expect(result).toEqual({ ok: true });
     const updateCall = mockPrisma.invoice.update.mock.calls[0][0];
     expect(updateCall.data.status).toBe("paid");
     expect(updateCall.data.paidAt).toBeInstanceOf(Date);
+  });
+
+  it("refuses an illegal transition and writes nothing", async () => {
+    mockPrisma.invoice.findUnique.mockResolvedValue({ status: "void" });
+
+    const result = await updateInvoiceStatus("inv-1", "sent");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected rejection");
+    expect(result.error).toBe("illegal_transition");
+    expect(result.message).toContain("terminal");
+    expect(mockPrisma.invoice.update).not.toHaveBeenCalled();
+  });
+
+  it("returns not_found rather than throwing for a missing invoice", async () => {
+    mockPrisma.invoice.findUnique.mockResolvedValue(null);
+
+    const result = await updateInvoiceStatus("nope", "sent");
+
+    expect(result).toEqual({ ok: false, error: "not_found", message: "Invoice not found." });
+    expect(mockPrisma.invoice.update).not.toHaveBeenCalled();
+  });
+});
+
+// ─── deleteInvoice ────────────────────────────────────────────────────────────
+
+describe("deleteInvoice", () => {
+  it("deletes a clean draft and returns its billable time to the unbilled pool", async () => {
+    mockPrisma.invoice.findUnique.mockResolvedValue({ id: "inv-1", status: "draft" });
+    mockPrisma.paymentAllocation.count.mockResolvedValue(0);
+    mockPrisma.dunningLog.count.mockResolvedValue(0);
+    mockPrisma.journalEntry.count.mockResolvedValue(0);
+
+    const result = await deleteInvoice("inv-1");
+
+    expect(result).toEqual({ ok: true });
+    expect(mockTx.timesheetEntry.updateMany).toHaveBeenCalledWith({
+      where: { invoiceId: "inv-1" },
+      data: { invoiceId: null, invoicedAt: null },
+    });
+    expect(mockTx.invoice.delete).toHaveBeenCalledWith({ where: { id: "inv-1" } });
+  });
+
+  it("refuses to delete a sent invoice and points at void", async () => {
+    mockPrisma.invoice.findUnique.mockResolvedValue({ id: "inv-1", status: "sent" });
+    mockPrisma.paymentAllocation.count.mockResolvedValue(0);
+    mockPrisma.dunningLog.count.mockResolvedValue(0);
+    mockPrisma.journalEntry.count.mockResolvedValue(0);
+
+    const result = await deleteInvoice("inv-1");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected rejection");
+    expect(result.message).toContain("Void it instead");
+    expect(mockTx.invoice.delete).not.toHaveBeenCalled();
+  });
+
+  it("refuses to delete a draft that already has a payment allocation", async () => {
+    mockPrisma.invoice.findUnique.mockResolvedValue({ id: "inv-1", status: "draft" });
+    mockPrisma.paymentAllocation.count.mockResolvedValue(1);
+    mockPrisma.dunningLog.count.mockResolvedValue(0);
+    mockPrisma.journalEntry.count.mockResolvedValue(0);
+
+    const result = await deleteInvoice("inv-1");
+
+    expect(result.ok).toBe(false);
+    expect(mockTx.invoice.delete).not.toHaveBeenCalled();
+  });
+
+  it("refuses to delete a draft that already posted to the ledger", async () => {
+    mockPrisma.invoice.findUnique.mockResolvedValue({ id: "inv-1", status: "draft" });
+    mockPrisma.paymentAllocation.count.mockResolvedValue(0);
+    mockPrisma.dunningLog.count.mockResolvedValue(0);
+    mockPrisma.journalEntry.count.mockResolvedValue(2);
+
+    const result = await deleteInvoice("inv-1");
+
+    expect(result.ok).toBe(false);
+    expect(mockTx.invoice.delete).not.toHaveBeenCalled();
+  });
+});
+
+// ─── voidInvoice ──────────────────────────────────────────────────────────────
+
+describe("voidInvoice", () => {
+  it("unallocates payments, reverses ledger postings, and re-bills linked time", async () => {
+    mockPrisma.invoice.findUnique.mockResolvedValue({
+      id: "inv-1",
+      status: "sent",
+      internalNotes: null,
+    });
+    mockPrisma.journalEntry.findMany.mockResolvedValue([{ id: "je-1" }]);
+    mockReverseJournalEntry.mockResolvedValue({
+      success: true,
+      reversingEntryId: "je-2",
+      entryRef: "JE-2",
+    });
+
+    const result = await voidInvoice("inv-1", "duplicate of INV-2026-0009");
+
+    expect(result).toEqual({ ok: true, reversedJournalEntries: 1 });
+    expect(mockReverseJournalEntry).toHaveBeenCalledWith(
+      "je-1",
+      expect.stringContaining("duplicate of INV-2026-0009"),
+    );
+    expect(mockTx.paymentAllocation.deleteMany).toHaveBeenCalledWith({
+      where: { invoiceId: "inv-1" },
+    });
+    expect(mockTx.timesheetEntry.updateMany).toHaveBeenCalledWith({
+      where: { invoiceId: "inv-1" },
+      data: { invoiceId: null, invoicedAt: null },
+    });
+    const updateCall = mockTx.invoice.update.mock.calls[0][0];
+    expect(updateCall.data.status).toBe("void");
+    expect(updateCall.data.amountDue).toBe(0);
+    expect(updateCall.data.amountPaid).toBe(0);
+    expect(updateCall.data.internalNotes).toContain("duplicate of INV-2026-0009");
+  });
+
+  it("refuses to void a paid invoice", async () => {
+    mockPrisma.invoice.findUnique.mockResolvedValue({
+      id: "inv-1",
+      status: "paid",
+      internalNotes: null,
+    });
+
+    const result = await voidInvoice("inv-1", "oops");
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected rejection");
+    expect(result.error).toBe("illegal_transition");
+    expect(mockTx.invoice.update).not.toHaveBeenCalled();
+  });
+
+  it("appends to existing internal notes rather than overwriting them", async () => {
+    mockPrisma.invoice.findUnique.mockResolvedValue({
+      id: "inv-1",
+      status: "draft",
+      internalNotes: "original note",
+    });
+    mockPrisma.journalEntry.findMany.mockResolvedValue([]);
+
+    await voidInvoice("inv-1", "test data");
+
+    const updateCall = mockTx.invoice.update.mock.calls[0][0];
+    expect(updateCall.data.internalNotes).toContain("original note");
+    expect(updateCall.data.internalNotes).toContain("test data");
   });
 });
 
