@@ -37,6 +37,11 @@ import {
   type RestaurantFloorDatabase,
   type RestaurantFloorOperationalView,
 } from "@/lib/twin/restaurant-floor-loader.server";
+import {
+  type RoomsDomain,
+  type RoomsOperationalView,
+} from "@/lib/twin/rooms-operations";
+import { buildDemoRoomsOperationalView } from "@/lib/twin/rooms-operations-demo";
 
 export interface WorkspaceTwinPresentation {
   archetypeId: string;
@@ -53,6 +58,8 @@ export interface WorkspaceTwinPresentation {
   } | null;
   scene: RestaurantOperationalScene | null;
   restaurantFloor: RestaurantFloorOperationalView | null;
+  roomsOperations: RoomsOperationalView | null;
+  roomsOperationsDemo: boolean;
   /**
    * True while the snapshot is deterministic demo fixture data — the live
    * `LivingBusinessSnapshot` projection (parent spec P4) has not been wired.
@@ -60,6 +67,14 @@ export interface WorkspaceTwinPresentation {
    * for live state.
    */
   demo: boolean;
+}
+
+function roomsDomainForArchetype(archetypeId: string): RoomsDomain {
+  if (/(pet|boarding|kennel|shelter)/i.test(archetypeId)) return "boarding";
+  if (/(clinic|dental|medical|health|care|inpatient)/i.test(archetypeId)) {
+    return "care";
+  }
+  return "lodging";
 }
 
 // ─── THE DEMO → REAL SEAM ─────────────────────────────────────────────────────
@@ -111,6 +126,14 @@ export function resolveWorkspaceTwinPresentation(
     operations: null,
     scene: null,
     restaurantFloor: null,
+    roomsOperations:
+      profile.template === "ROOMS"
+        ? buildDemoRoomsOperationalView({
+            domain: roomsDomainForArchetype(archetypeId),
+            roomCount: 40,
+          })
+        : null,
+    roomsOperationsDemo: profile.template === "ROOMS",
     demo,
   };
 }

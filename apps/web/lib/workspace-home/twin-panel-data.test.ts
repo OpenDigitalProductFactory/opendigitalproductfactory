@@ -14,6 +14,9 @@ const SAMPLE = ALL_ARCHETYPES[0];
 const RESTAURANT = ALL_ARCHETYPES.find(
   (archetype) => deriveTwinProfile(archetype).template === "FLOOR",
 )!;
+const ROOMS = ALL_ARCHETYPES.find(
+  (archetype) => deriveTwinProfile(archetype).template === "ROOMS",
+)!;
 const NOW = new Date("2026-07-15T09:00:00Z");
 
 // A fake client for the live projection path. `configured` toggles whether an org
@@ -97,6 +100,17 @@ describe("resolveWorkspaceTwinPresentation", () => {
     const a = resolveWorkspaceTwinPresentation(SAMPLE.archetypeId);
     const b = resolveWorkspaceTwinPresentation(SAMPLE.archetypeId);
     expect(a?.snapshot).toEqual(b?.snapshot);
+  });
+
+  it("provides the coordinated room rack for every ROOMS archetype", () => {
+    const result = resolveWorkspaceTwinPresentation(ROOMS.archetypeId);
+
+    expect(result?.profile.template).toBe("ROOMS");
+    expect(result?.roomsOperations?.rooms).toHaveLength(40);
+    expect(result?.roomsOperationsDemo).toBe(true);
+    expect(["lodging", "boarding", "care"]).toContain(
+      result?.roomsOperations?.domain,
+    );
   });
 
   it("derives for every archetype without throwing", () => {

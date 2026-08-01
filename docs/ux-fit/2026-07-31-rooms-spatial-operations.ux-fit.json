@@ -1,0 +1,22 @@
+{
+  "version": "1",
+  "decidedOption": "rooms-renderer-first",
+  "decisionInteractionId": "DI-36CBF4CAD357",
+  "scope": {
+    "files": [
+      "apps/web/components/twin/rooms/RoomStatusAxes.tsx",
+      "apps/web/components/twin/rooms/RoomsList.tsx",
+      "apps/web/components/twin/rooms/RoomsOperations.tsx",
+      "apps/web/components/twin/rooms/RoomsRack.tsx",
+      "apps/web/components/workspace-home/WorkspaceTwinPanel.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "rooms-renderer-first",
+      "full-hotel-vertical",
+      "prototype-only"
+    ]
+  }
+}

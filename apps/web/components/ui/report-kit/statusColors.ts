@@ -77,6 +77,35 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     blocked: "danger",
     "late-turn": "danger",
   },
+  // Shared ROOMS grammar. Occupancy, housekeeping readiness, sellable
+  // inventory, and privacy are deliberately separate axes: a clean room can
+  // still be blocked, and an occupied room can still need housekeeping.
+  roomsOccupancy: {
+    vacant: "neutral",
+    reserved: "accent",
+    occupied: "info",
+    "departure-due": "warning",
+    unknown: "neutral",
+  },
+  roomsReadiness: {
+    ready: "success",
+    clean: "info",
+    dirty: "warning",
+    cleaning: "accent",
+    inspected: "success",
+    unknown: "neutral",
+  },
+  roomsInventory: {
+    sellable: "success",
+    blocked: "danger",
+    "out-of-service": "danger",
+    unknown: "neutral",
+  },
+  roomsPrivacy: {
+    none: "neutral",
+    "do-not-enter": "warning",
+    restricted: "warning",
+  },
   // Service-period readiness — "are we ready for the next service?" (BI-7C95A586).
   servicePeriodReadiness: {
     ready: "success",
