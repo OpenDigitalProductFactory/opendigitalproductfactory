@@ -1,706 +1,560 @@
 ---
-title: Build Studio Owner Improvement Experience
-status: draft — architecture review applied 2026-06-12 (advisory; see §0)
+title: Build Studio Owner Change Experience
+status: approved direction - current-main refresh applied 2026-07-31
 date: 2026-06-12
+updated: 2026-07-31
 owner: platform
 specKind: design
 relatedSpecs:
-  - docs/superpowers/specs/2026-05-20-build-studio-layout-redesign-design.md
-  - docs/superpowers/specs/2026-05-30-build-studio-right-sizing-design.md
+  - docs/superpowers/specs/2026-06-22-build-studio-overseer-ux-design.md
+  - docs/superpowers/specs/2026-06-23-human-attention-surface-design.md
+  - docs/superpowers/specs/2026-06-27-work-management-architecture-design.md
+  - docs/superpowers/specs/2026-07-05-build-studio-dual-work-intake-differentiation-design.md
+  - docs/superpowers/specs/2026-06-19-unified-build-studio-tracking-all-surfaces-design.md
+  - docs/superpowers/specs/2026-06-14-native-mobile-archetype-apps-design.md
   - docs/superpowers/specs/2026-06-05-human-experience-closed-loop-design.md
   - docs/superpowers/specs/2026-04-05-continuous-improvement-flywheel-design.md
-  - docs/superpowers/specs/2026-06-12-archetype-aware-mobile-companion-remote-access-design.md
-  - docs/architecture/2026-06-09-dap-experience-layer-design.md
-  - docs/architecture/2026-06-09-long-running-agentic-process-architecture.md
 canonicalSubstrate:
-  - packages/db/prisma/schema.prisma#BusinessBuildBrief  # the owner intake brief already exists
-  - apps/web/lib/build/business-build-brief.ts#businessBuildBriefFromRecord  # existing brief projection
-  - apps/web/components/build-studio/BuildStudioV2.tsx  # already the brief-driven owner surface (route ?v=2)
-  - apps/web/lib/explore/build-process-matrix.ts  # (work type, size) -> LifecyclePolicy
-  - packages/db/prisma/schema.prisma#CommunicationChannelBinding  # principal-anchored notification channel policy
-  - packages/db/prisma/schema.prisma#CommunicationDeliveryAttempt  # delivery audit for phone/push channels
-  - packages/db/prisma/schema.prisma#PrincipalAlias  # mobile-device aliases converge here
-  - packages/db/prisma/schema.prisma#PushDeviceRegistration  # token storage only; not notification policy authority
+  - packages/db/prisma/schema.prisma#BusinessBuildBrief
+  - packages/db/prisma/schema.prisma#FeatureBuild
+  - packages/db/prisma/schema.prisma#WorkCapsule
+  - packages/db/prisma/schema.prisma#DecisionInteraction
+  - packages/db/prisma/schema.prisma#ExternalEvidenceRecord
+  - apps/web/components/build/BuildStudio.tsx
+  - apps/web/lib/attention/aggregate.ts
+  - apps/mobile
 relatedPrinciples:
   - docs/founder-kernel/wiki/principles/architecture-over-shortcuts.md
+  - docs/founder-kernel/wiki/principles/single-source-of-truth.md
+  - docs/founder-kernel/wiki/principles/human-in-the-loop-at-phase-boundaries.md
   - docs/founder-kernel/wiki/principles/governance-approves-evidence-not-provenance.md
-  - docs/founder-kernel/wiki/principles/never-ask-user-to-run-commands.md
   - docs/founder-kernel/wiki/principles/no-hardcoded-colors.md
-  - docs/founder-kernel/wiki/principles/compose-report-kit-for-reporting-ux.md
 ---
 
-# Build Studio Owner Improvement Experience
+# Build Studio Owner Change Experience
 
-## 0. Architecture Review (advisory, applied 2026-06-12)
+## 0. Refresh Decision
 
-Reviewed against AGENTS.md §11 data-model stewardship, `schema-audit-before-features`, `single-source-of-truth`, and `architecture-over-shortcuts`, with live substrate verification against `packages/db/prisma/schema.prisma` and `apps/web` on the current main line. The direction is well-aligned: an owner-facing projection over the existing Build Studio engine is the right shape, and the "no second evidence ledger in Phase 1" stance is exactly correct. Three substrate facts the original draft missed materially change the data contract and the convergence story. Findings are folded into the sections below; the raw findings are recorded here so reviewers can see what changed and why.
+This document supersedes its June 12 draft while preserving the original goal: make governed software change feel natural to a small-business owner. It was refreshed against `origin/main` and the live backlog on July 31, 2026 because the platform changed materially after the first review.
 
-- **`[critical]` The "Improvement brief" already exists as `BusinessBuildBrief`.** §5.1/§5.2 describe drafting a brief with business outcome, affected people, affected workflow, source evidence, success signals, constraints, risk, business interpretation, hidden technical interpretation, open questions, and confidence. That is the `BusinessBuildBrief` model field-for-field (`businessOutcome`, `affectedPeople`, `affectedWorkflow`, `sourceEvidence`, `successSignals`, `constraints`, `riskProfile`, `businessInterpretation`, `technicalInterpretation`, `openQuestions`, `confidence`/`confidenceRationale`), with `BriefStatus`/`IntakeSource`/`BriefConfidence` enums and a `featureBuildId` link. Inventing a parallel brief would violate `single-source-of-truth`. **Resolution applied:** §2 and §5 now name `BusinessBuildBrief` and its projection helper `businessBuildBriefFromRecord()` as the canonical intake substrate.
-- **`[important]` `BuildStudioV2` is not "demo-data driven."** It is wired into the live `/build` route behind `?v=2`, and it already consumes a real `BusinessBuildBrief` (see `apps/web/app/(shell)/build/page.tsx:36-77`). It is, in fact, an early version of the very owner surface this spec describes. The convergence requirement (§10) is corrected from "demo shell to absorb or delete" to "harden the brief-driven owner surface and fold the developer `BuildStudio` view into its drill-down" — and which of the two becomes the default is escalated as an Open Question, not asserted here.
-- **`[important]` Needs You, the notification policy, and the cross-process inbox are owned by the DAP experience-layer design.** That doc makes the cross-process inbox the primary new IA, and makes `HitlNotificationEvent.riskClass` the deterministic IRC channel-selector (push-vs-ambient, modal-vs-inbox). §6's hand-authored push table and §4.2's inbox must be the *Build Studio instantiation* of that policy (a mapping of Build events to `riskClass`), not a second policy that will drift. §6, §4.2, §7.2, and Slice 5 now subordinate to the DAP contract.
-- **`[important]` The parallel mobile companion plan makes Needs You a multi-surface contract.** The native companion is planned as one adaptive Expo app with server-owned archetype job packs, and its first viewport is `Today / Needs You`: the mobile projection of the same DAP cross-process inbox. Build Studio should therefore emit phone-renderable decision items and evidence summaries, but mobile remains a downstream channel and archetype job-pack target, not a second Build Studio. The mobile planning source was read from the separate worktree `D:/DPF-worktrees/mobile-companion-remote-access/docs/superpowers/specs/2026-06-12-archetype-aware-mobile-companion-remote-access-design.md`; this branch does not yet contain that file.
-- **`[important]` Push delivery policy must converge on `CommunicationChannelBinding`, not `PushDeviceRegistration`.** The mobile plan verifies the richer principal-anchored substrate already exists: `CommunicationChannelBinding` with `allowedUrgencies`, `quietHours`, `preferences`, `verificationStatus`, and `CommunicationDeliveryAttempt` audit. `PushDeviceRegistration` is token storage/support metadata only. Build Studio must not route phone alerts directly to a device table or invent mobile-only notification preferences.
-- **`[important]` The follow-up loop (§5.8) is owned by the Human Experience Closed-Loop / Continuous Improvement Flywheel.** "Did the outcome improve?" should emit an `ImprovementSignal` into the flywheel, not stand up a new measurement mechanism. §5.8 now routes there.
-- **`[minor]` `ownerPhase` conflates phase and status.** `needs_attention` is a status overlay (a build in any phase can be blocked/failed), not a lifecycle phase; and the underscore casing diverges from the hyphenated string-enum convention (AGENTS.md §3). §7.1 now splits `ownerPhase` (a pure projection of `FeatureBuild.phase`) from a separate `ownerStatus`.
+The refreshed decision is **convergence, not another product shell**:
 
-These are advisory. They sharpen the data contract before Slice 1; they do not gate the build.
+- Ask the owner for the desired **Outcome**.
+- Call the tracked delivery object a **Change**.
+- Keep **Build Studio** as the product name under Delivery.
+- Use Workspace and a coworker as the normal owner entry point.
+- Use `/workspace/inbox` as the only cross-platform **Needs You** queue.
+- Use `/build` as the owner-readable Change detail for progress, preview, proof, and release.
+- Keep `/build/work` and technical disclosure for operators with the relevant authority.
+- Do not create `/improvements`, a second inbox, a second evidence ledger, or a new persisted `Improvement` model.
 
-## 1. Thesis
+Three kernel consultations support this direction:
 
-Build Studio should feel to a small business owner like a business-improvement partner, not a developer tool. The owner-facing object is an **Improvement**: a governed change intended to improve a real business workflow. Build Studio remains the backstage engine that safely turns an Improvement into software.
-
-The owner should be able to say, "Make quotes easier to send," "Fix this booking form," or "Add customer follow-up reminders." The platform should shape the request, ask only the minimum business questions, build safely in the background, then bring the owner back only when judgment is required.
-
-The core design is:
-
-```text
-Ask for outcome -> shape the work -> approve plan -> build safely -> review evidence -> approve release -> follow up on outcome
-```
-
-This adopts the interaction grammar popularized by Lovable-style tools: natural-language intent, a separate planning mode, a building mode, and a visual preview loop. DPF must add what those tools generally do not guarantee: durable evidence, HITL gates, work coordination, verification, rollback, and plain-language accountability.
-
-## 2. Current-State Constraints
-
-This design is intentionally a projection over existing Build Studio substrate, not a parallel development path.
-
-Current DPF substrate already includes:
-
-| Concern | Existing substrate | Design rule |
+| Question | Recommendation | Result |
 | --- | --- | --- |
-| Owner intake brief | `BusinessBuildBrief` (`businessOutcome`, `affectedPeople`, `affectedWorkflow`, `sourceEvidence`, `successSignals`, `constraints`, `riskProfile`, `businessInterpretation`, `technicalInterpretation`, `openQuestions`, `confidence`; enums `BriefStatus`/`IntakeSource`/`BriefConfidence`; `featureBuildId` link) + projection `businessBuildBriefFromRecord()` | **This is the Improvement brief.** Do not invent a parallel "draft Improvement brief" — extend `BusinessBuildBrief` and its projection. |
-| Lifecycle | `FeatureBuild.phase`: `ideate`, `plan`, `build`, `review`, `ship` (default `ideate`) | Preserve the engine lifecycle. Project it into owner language. |
-| Evidence | `designDoc`, `designReview`, `buildPlan`, `planReview`, `taskResults`, `verificationOut`, `acceptanceMet`, `uxTestResults`, `uxVerificationStatus` (verified present on `FeatureBuild`) | Do not invent a second evidence ledger. |
-| Phase handoff | `PhaseHandoff` | Use it to power owner re-entry digests and evidence review. |
-| Work coordination | `WorkCapsule`, `WorkCapsuleActivity`, `RuntimeVerification`, runtime leases, MCP evidence tools | Keep backstage. Show only status and outcomes to owners. |
-| Right-sizing | `(work type, size) -> LifecyclePolicy` in `apps/web/lib/explore/build-process-matrix.ts` | Owner experience should adapt by work size without making the owner choose ceremony. |
-| Durable execution | Inngest migration plan and the DAP experience layer | Long-running work must be ambient, resumable, and interrupt-by-exception. |
-| HITL / attention | DAP experience layer + `HitlNotificationEvent.riskClass` (IRC channel-selector) | The notification + inbox policy lives in the DAP doc. Build Studio maps its events onto it; it does not author a second policy. |
-| Phone / push channel | `CommunicationChannelBinding` + `CommunicationDeliveryAttempt`; `PushDeviceRegistration` only stores device tokens/support metadata | Build Studio emits DAP decision events. Channel resolution, quiet hours, urgency, and push audit live in the communications substrate, not in Build Studio. |
-| Mobile companion | One adaptive Expo app + server-owned archetype job packs from the mobile companion plan | Mobile-facing Improvements modify job-pack schemas/actions and evidence views. Do not create per-archetype native apps or a mobile-only Build Studio. |
-| Remote access | Deployment-selected Authority Core URL, QR/link provisioning, public HTTPS / private mesh / tunnel modes | Build Studio planning must not assume `localhost` or require a non-technical owner to solve reachability. Mobile readiness is a deployment capability surfaced plainly. |
-| Outcome follow-up | Human Experience Closed-Loop → `ImprovementSignal` → Continuous Improvement Flywheel | Follow-up emits signals into the flywheel; it is not a new measurement mechanism. |
-| Existing UI | Live developer `BuildStudio`; brief-driven `BuildStudioV2` behind `/build?v=2` (consumes real `BusinessBuildBrief`, **not** demo data) | `BuildStudioV2` is an early version of this spec's owner surface. Harden and converge — do not stand up a third shell. |
+| Owner noun | `outcome-change` | Composite 10.359, margin 5.957, high confidence, no commandment conflict (`DI-DE45EB7841D6`) |
+| Route architecture | `workspace-first-build-detail` | Composite 10.439, margin 6.840, high confidence, no commandment conflict (`DI-2D164CC7A6C2`) |
+| Needs You source | `decision-interaction-first` | Composite 10.313, margin 3.318, high confidence, no commandment conflict (`DI-A3CBA1CDA98C`) |
 
-Portal, MCP, and live UX were unavailable during this design session because the portal was being reinstalled/tested. This spec is therefore grounded in repo inspection and prior accepted design docs, not live runtime verification.
+The former draft's assertion that `BuildStudioV2` was already a live owner shell was wrong. It loads a real `BusinessBuildBrief`, but the surrounding build, conversation, steps, approvals, sandbox, and actions are demo data or no-ops. It is a prototype to absorb and retire, not a second production path.
+
+## 1. Intended Experience
+
+A small-business owner should be able to say:
+
+> Make quotes easier to send from a phone.
+
+The platform should then:
+
+1. Confirm the business outcome and who is affected.
+2. Shape the request into a brief without asking technical questions.
+3. Explain the proposed change in plain language.
+4. Work in the background with visible, honest progress.
+5. Interrupt only when business judgment, authority, or risk requires it.
+6. Provide a working preview and a short proof packet.
+7. Ask for release approval only when the change is ready.
+8. Follow up on whether the business outcome improved.
+
+The interaction grammar borrows the strongest parts of Lovable-style building: conversational intent, a distinct planning step, visible agent activity, visual preview, focused correction, and reversible change. DPF adds the controls a business operator needs: durable evidence, explicit authority, phase-boundary HITL, a canonical attention queue, verified release, rollback, and outcome follow-up.
+
+## 2. Current Platform Audit
+
+### 2.1 Delivered
+
+| Capability | Current evidence | Design consequence |
+| --- | --- | --- |
+| Outcome-first intake | Default `BuildStudio` presents a business outcome intake and governed start path | Extend this path; do not replace it with a new Improvements home |
+| Owner status | `BuildOperatorOverview` and the customer-status projection explain outcome, Now, Next, and Needs You | Keep as the top altitude |
+| Progressive disclosure | Process graph, branches, IDs, evidence internals, and operator controls are behind Technical details | Preserve the owner/operator boundary |
+| Owner summaries | Solution, change, decision-ledger, work-warrant, and customer-status projections exist | Compose them into one owner proof packet rather than duplicating data |
+| Unified tracking | `WorkCapsule` and its timeline join Build Studio, external contributor, runtime, and PR evidence | The Change detail reads this projection |
+| Cross-process attention | `/workspace/inbox` projects `AttentionItem` from canonical source adapters | Build Studio must feed this inbox, not create another |
+| Native mobile base | `apps/mobile` has install discovery, field/customer surfaces, offline queueing, push, approvals, theming, and release infrastructure | Add the same owner attention projection; do not create a mobile-only Build Studio |
+| Improvement substrate | `ImprovementSignal` can link to a backlog item | Outcome follow-up joins the existing HX/flywheel loop |
+
+### 2.2 Partially delivered
+
+| Capability | Current limitation | Required convergence |
+| --- | --- | --- |
+| Persistent business brief | `BusinessBuildBrief` exists and is editable only through `/build?v=2`; the default route still relies on the legacy `FeatureBuild.brief` presentation | Load and edit the canonical brief in the default Change detail |
+| Evidence packet | Evidence and summary components exist, but important summaries are mostly inside Technical details | Add a concise owner proof packet above technical disclosure |
+| HITL | Escalations and `DecisionInteraction` residue reach Needs You, while derived Build Studio workflow actions can remain local to `/build` | Persist every owner-required phase gate as a `DecisionInteraction` and reuse the existing attention adapter |
+| Mobile attention | Push, notifications, and approvals exist, but not as one first-viewport Today / Needs You experience for Changes | Project the same Attention API and deep links into mobile |
+| Outcome follow-up | HX and flywheel substrate exists, but a completed Change does not yet close the business-outcome loop | Schedule a lightweight follow-up and emit an `ImprovementSignal` when evidence warrants it |
+
+### 2.3 Not production capability
+
+`BuildStudioV2` is an exploratory shell. Its default build, conversation, step tracker, approvals, sandbox URL, and actions come from `apps/web/lib/build-studio-demo.ts` or empty handlers. Only the supplied `BusinessBuildBrief` can be real. Production work must not expand this demo path.
 
 ## 3. Owner Mental Model
 
-Rename the owner-facing concept:
+The owner should understand three concepts, not the Build Studio state machine:
 
-| Engine term | Owner-facing term |
-| --- | --- |
-| Build Studio | Improvements, or Improvement Studio where a named route is needed |
-| FeatureBuild | Improvement |
-| Ideate | Shaping |
-| Plan | Planned |
-| Build | Building |
-| Review | Checking |
-| Ship | Ready / Go Live |
-| Complete | Live |
-| Failed | Needs Attention |
-| HITL gate | Needs You |
-| Evidence | Proof |
-| Sandbox | Preview |
-
-The owner can still click into developer detail when allowed, but the default surface should never require build IDs, branches, MCP tools, containers, schema names, or raw logs.
-
-## 4. Product Surfaces
-
-### 4.1 Improvements Home
-
-The default owner entry point for making the business better.
-
-Primary jobs:
-
-- Start an Improvement from a business outcome.
-- See active work.
-- See what needs the owner's decision.
-- Reopen completed work.
-- Understand whether anything is stuck.
-
-Layout:
-
-```text
-Header: "What do you want to improve?"
-Outcome composer
-Needs You inbox strip
-Active Improvements
-Recently Live
-```
-
-The composer should provide archetype-aware examples. A rental business should see examples such as "make it easier to quote rentals," not generic software prompts. If an outcome is field/mobile-shaped ("let techs capture truck stock in the field", "scan returns at receiving", "get signatures after delivery"), the composer should frame it as a **mobile companion job-pack change** inside the same Improvement, not as "build a separate app."
-
-### 4.2 Needs You Inbox
-
-The highest-priority surface. It is the owner-friendly HITL queue, and it is the **Build Studio projection of the DAP cross-process inbox** (DAP experience layer §5), not a Build-Studio-only inbox. Build decision items must share the one cross-process decision-item contract so that when campaign/close/other `kind`s become DAPs, "what needs me right now?" spans them all without re-platforming. The fixed verbs below must be the DAP inbox verbs.
-
-An inbox item is created only when a decision is actually required:
-
-- approve a plan
-- answer a business question
-- choose between two safe options
-- review evidence
-- approve release
-- send work back
-- pause or abandon work
-
-Fixed owner actions:
-
-| Action | Meaning |
-| --- | --- |
-| Approve | Continue with the proposed action. |
-| Edit | Change the plan or instruction before continuing. |
-| Answer | Provide missing business information. |
-| Send back | The result is not acceptable; revise with the attached reason. |
-| Defer | Keep paused without losing context. |
-| Escalate | Route to an admin/developer/operator review path. |
-
-No "FYI" items belong in this queue. Status updates stay ambient.
-
-### 4.3 Improvement Workspace
-
-One Improvement at a time. Conversation remains available, but the main panel changes by phase.
-
-| Owner phase | Primary artifact |
-| --- | --- |
-| Shaping | Business brief and open questions |
-| Planned | Editable plan checklist |
-| Building | Ambient progress and preview |
-| Checking | Evidence packet |
-| Ready | Release decision |
-| Live | Outcome follow-up |
-
-The workspace has three zones:
-
-```text
-Left: Improvement list / related active work
-Center: current artifact, preview, or evidence packet
-Right: coworker conversation and contextual actions
-```
-
-This preserves the Build Studio layout-redesign principle that the working artifact is the center of gravity, while avoiding a developer-only graph as the first thing an owner sees.
-
-### 4.4 Developer Details
-
-Developer details are collapsible and permission-aware. They include:
-
-- build ID
-- branch/workspace info
-- raw phase graph
-- runtime lease
-- sandbox/container info
-- tool calls
-- raw test output
-- raw evidence JSON
-- logs
-
-This is an admin/operator drill-down, not the default owner experience.
-
-### 4.5 Mobile Companion Projection
-
-Build Studio owns creation, planning, verification, and governed release. The native mobile companion owns short, phone-appropriate work away from the desk.
-
-For Build Studio, mobile matters in two ways:
-
-- **Attention channel:** blocking Build decisions can appear in the mobile `Today / Needs You` surface when they are phone-safe and the operator has an active push channel. The phone item is the same DAP decision item as the portal item, rendered smaller.
-- **Improvement target:** an Improvement may change a server-owned mobile job pack, dynamic form, dynamic view, or action list. The owner still starts with a business outcome; the plan explains "this adds a truck-stock action to the mobile companion" rather than "this creates mobile code."
-
-Phone-renderable Build decisions must be compact and safe: title, one-sentence ask, proposed action, risk class, evidence summary, blast-radius hint, and fixed verbs. Sensitive prompts, patient/customer/financial text, raw logs, and diffs stay behind authenticated detail. High-risk actions require explicit authenticated confirmation; unauthenticated notification actions can at most open the app.
-
-Mobile is optional. If no mobile channel is configured, the same Needs You item remains available in the portal. If the Authority Core is unreachable from the phone, the item must say so plainly and offer portal/admin continuation rather than failing silently.
-
-## 5. End-to-End Workflow
-
-### 5.1 Start: Business Outcome Intake
-
-The owner enters an outcome:
-
-```text
-"I want customers to book pickup times without calling us."
-```
-
-The system converts this into a `BusinessBuildBrief` (the canonical owner intake brief — do not introduce a parallel structure). The owner-facing fields map directly onto existing columns:
-
-| Owner-facing field | `BusinessBuildBrief` column |
-| --- | --- |
-| business outcome | `businessOutcome` |
-| affected workflow | `affectedWorkflow` |
-| affected people | `affectedPeople` |
-| source evidence | `sourceEvidence` |
-| constraints | `constraints` |
-| success signals | `successSignals` |
-| likely risk level | `riskProfile` |
-| confidence in the read | `confidence` / `confidenceRationale` |
-| whether feature / fix / chore / doc | derived to `FeatureBuild.kind` at promote time from `BacklogItem.workType` via `deriveBuildProcessType()`; not a brief field |
-
-`intakeSource` records the existing intake channel (`user_conversation`, `coworker_proposal`, etc.); do not add a new owner-only enum value unless the business-intake contract is explicitly extended. `capabilityPackId` and `hiveReadiness` are populated by the existing brief flow and stay backstage. The coworker asks at most one question at a time, only when the answer changes the plan or safety gate; open questions accumulate on `BusinessBuildBrief.openQuestions`.
-
-### 5.2 Shape: Smart Clarification
-
-Clarification should feel like business consulting, not requirements gathering.
-
-Good question:
-
-```text
-Should customers be able to choose any available pickup time, or only time windows you define?
-```
-
-Bad question:
-
-```text
-What schema model should hold pickup window availability?
-```
-
-The output is a short owner-readable brief (`BusinessBuildBrief.businessInterpretation`) plus hidden technical interpretation (`BusinessBuildBrief.technicalInterpretation`). No new fields are required for shaping.
-
-### 5.3 Plan: Editable Intent Preview
-
-The plan is shown before execution and is editable.
-
-Owner-facing plan format:
-
-```text
-This Improvement will:
-1. Add pickup-time choices to the booking flow.
-2. Let staff define available pickup windows.
-3. Send the selected time into the confirmation record.
-4. Check the booking path on desktop and mobile.
-```
-
-Every plan item maps to backstage evidence:
-
-- design evidence
-- implementation task
-- verification requirement
-- acceptance criterion
-- optional UX check
-
-If the Improvement affects mobile companion behavior, the plan also shows:
-
-- which archetype job pack or phone workflow changes
-- whether the phone app needs only server-owned schema/action updates or a native app release
-- whether remote access / QR provisioning is already configured for the Authority Core
-- what mobile evidence will be required before ship (simulator/device path, accessibility pass, offline/sync behavior if affected)
-
-Approving the plan records the HITL decision and advances the lifecycle.
-
-### 5.4 Build: Ambient Safe Execution
-
-During build, the owner sees:
-
-- current phase in owner language
-- last meaningful action
-- whether the process is alive
-- whether it is waiting on the owner
-- expected next decision
-
-No fake percentages. Use milestone-based progress:
-
-```text
-Building safely: checking the booking flow changes.
-Last action: created the pickup-time selector.
-Next: test the booking path.
-```
-
-The owner can pause, open preview, or ask what is happening. They should not need to babysit logs.
-
-### 5.5 Preview: Point, Comment, Correct
-
-Adopt a Lovable-style preview toolbar, but bind it to DPF evidence.
-
-Preview actions:
-
-| Action | Behavior |
-| --- | --- |
-| Select | Captures element, route, viewport, and component hint. |
-| Comment | Adds an owner-visible requested change. |
-| Edit copy | Creates a scoped copy-change request. |
-| Mark issue | Creates a review concern tied to visual evidence. |
-| Accept visual state | Marks one acceptance criterion as visually satisfied when eligible. |
-
-The preview toolbar never directly bypasses phase gates. A visual request becomes structured input to the current Improvement, then the engine records how it was handled.
-
-### 5.6 Check: Evidence Packet
-
-The review surface is not a diff. It is proof.
-
-Evidence packet sections:
-
-| Section | Owner question answered |
-| --- | --- |
-| What changed | What will I notice in the business? |
-| Why it matches the request | Did it solve the thing I asked for? |
-| How we checked it | What tests, typecheck, UX checks, and acceptance criteria ran? |
-| What needs judgment | What does the system need me to decide? |
-| What could go wrong | What risks remain? |
-| How to undo | What rollback or recovery path exists? |
-
-Technical detail sits behind expansion. Screenshots can support evidence, but dynamic verification and recorded acceptance are the proof.
-
-For mobile-affecting work, the evidence packet includes phone-specific evidence without making the owner inspect native implementation detail:
-
-- mobile workflow preview or screenshots when available
-- device/simulator verification result
-- push/deep-link delivery result when a decision flow is involved
-- offline queue/sync result when writes can happen away from the network
-- accessibility and field-ergonomics result for the changed job form or action
-
-### 5.7 Go Live
-
-Release approval should show consequences:
-
-- who will be affected
-- what will change in the live portal
-- whether data/schema changes are involved
-- whether a backup/rollback point exists
-- whether there are unresolved risks
-- what happens immediately after approval
-
-The owner action is simple:
-
-```text
-Go live
-Send back
-Schedule later
-Escalate
-```
-
-The governed promotion path remains backstage and evidence-gated.
-
-**Undo after go-live is a first-class owner affordance, not just an evidence field.** The single most trust-defining moment for a non-technical owner is "something's wrong — put it back." Once an Improvement is Live, the workspace must surface a plain-language **Undo this change** action whenever a rollback/recovery point exists (its existence is already shown in §5.6 / §5.7). The action maps backstage to the governed rollback path; the owner never sees a revert SHA. If no safe rollback point exists, the action is replaced by **Get help** (Escalate), never silently hidden — honest capability limits per Microsoft HAX. This is the usability counterpart to "no one-click publish without rollback discipline" (§11): no go-live without a legible go-back.
-
-### 5.8 Follow Up
-
-After the Improvement is live, the system should ask whether the business outcome improved.
-
-Examples:
-
-- Did customers use pickup times?
-- Did staff stop receiving calls about booking times?
-- Did quote completion time improve?
-- Did support complaints drop?
-
-Follow-up does not stand up a new measurement mechanism. The owner's answer (and any measurable signal) emits an `ImprovementSignal` into the **Continuous Improvement Flywheel**, and where the Human Experience Closed-Loop is capturing clickstream, the same `successSignals` can be re-measured against `UxFrictionSignal` automatically. Prioritization of any resulting follow-on work stays in the flywheel and the normal backlog — this surface produces evidence, it does not become a competing router.
-
-## 6. HITL And Attention Policy
-
-HITL must be precise. The system should interrupt only when a decision is blocking or materially consequential.
-
-The *policy* — what reaches the operator, when, at what altitude — is owned by the [DAP experience layer](../../architecture/2026-06-09-dap-experience-layer-design.md) (§3: classify every event on the IRC model; `HitlNotificationEvent.riskClass` is the deterministic channel-selector for push-vs-ambient and modal-vs-inbox). This section is the **Build Studio instantiation** of that policy — a mapping of Build events onto `riskClass` — not a second policy. If the two ever disagree, the DAP doc wins and this table is corrected. The "Push?" column below is shorthand for the `riskClass` the event should carry.
-
-When a Build event is delivered to mobile, Build Studio still does not own push delivery. It emits a DAP decision/notification event; the communications layer resolves the accountable `Principal`, active `CommunicationChannelBinding`, allowed urgency, quiet hours, and `CommunicationDeliveryAttempt` audit. `PushDeviceRegistration` is not a policy surface.
-
-| Event | Surface | Push? (riskClass) |
+| Owner concept | Meaning | Canonical substrate |
 | --- | --- | --- |
-| Plan ready for approval | Needs You | Yes |
-| Question required to continue | Needs You | Yes |
-| Build started | Ambient status | No |
-| Step complete | Timeline only | No |
-| Verification failed and blocks review | Needs You | Yes |
-| UX check produced advisory concern | Evidence packet | No, unless release is blocked |
-| Release ready | Needs You | Yes |
-| Build completed while owner away | Digest + Needs You if release decision remains | Maybe |
-| Idle/no work left | Home status | No |
+| Outcome | What should be different for the business | `BusinessBuildBrief.businessOutcome` plus success signals |
+| Change | The governed work intended to produce that outcome | `FeatureBuild` joined to its `BacklogItem` and `WorkCapsule` |
+| Needs You | A decision only the owner or assigned human can make | `DecisionInteraction` projected to `AttentionItem` |
 
-The owner promise is: "We only interrupt when your decision matters."
+Owner-facing lifecycle copy is a projection, never a persisted second status machine:
 
-This preserves calibrated trust and avoids notification fatigue.
+| Engine state | Owner language |
+| --- | --- |
+| `ideate` | Shaping the change |
+| `plan` | Preparing the approach |
+| `build` | Making the change |
+| `review` | Checking the result |
+| `ship` | Ready to go live |
+| complete | Live |
+| blocked or failed | Needs attention |
 
-Mobile-specific guardrails:
+Do not use **Improvement** as the durable delivery noun. That word already names evidence and proposals in the continuous-improvement substrate. Archetype-specific copy may describe the business outcome, but it must not rename the canonical object per industry.
 
-- Push payloads contain privacy-safe summaries only.
-- High-risk approvals are online-only and require authenticated in-app confirmation.
-- Offline mobile may defer, draft a response, or queue explicitly allowed low-risk field mutations; it cannot silently approve Build release.
-- If the phone cannot reach the Authority Core, the item remains visible in the portal and the mobile app shows a reachability error, not a generic failure.
+## 4. Information Architecture
 
-## 7. Evidence And Data Contract
+### 4.1 Canonical surfaces
 
-### 7.1 No New Evidence Ledger In Phase 1
+| Surface | Owner job | Rule |
+| --- | --- | --- |
+| Workspace / coworker | Describe an outcome, review active work, ask what is happening | Normal front door for a nontechnical owner |
+| `/workspace/inbox` | Decide everything that Needs You across the business | One queue, ordered by urgency and risk |
+| `/delivery` | See delivery activity across Changes | Portfolio-level delivery overview |
+| `/build` | Understand one or more Changes, inspect proof, preview, and release | Owner-readable detail; not a developer-only console |
+| `/build/work` | Manage backlog/build operations | Authority-gated operator surface |
 
-Phase 1 should reuse existing models:
+### 4.2 Explicitly rejected
 
-- `FeatureBuild` evidence fields
-- `PhaseHandoff`
-- `BuildActivity`
-- `WorkCapsuleActivity`
-- `ToolExecutionReceipt`
-- `RuntimeVerification`
+- No `/improvements` route.
+- No Build Studio-specific Needs You inbox.
+- No owner homepage that duplicates Workspace work management.
+- No direct mobile route to raw Build Studio internals.
+- No requirement that an owner understand branches, worktrees, MCP, containers, CI, schemas, or PR mechanics.
 
-Add a projection adapter rather than a new table. `ownerPhase` is a pure projection of `FeatureBuild.phase`; `ownerStatus` is a separate overlay (a build in any phase can be blocked or failed), so the two are kept distinct rather than folding `needs_attention` into the phase enum. Enum members use the hyphenated string-enum convention (AGENTS.md §3). The adapter should compose with the existing `businessBuildBriefFromRecord()` projection, not re-read brief columns directly.
+## 5. End-to-End Journey
+
+### 5.1 Ask for an outcome
+
+Intake begins with one multiline field and optional supporting evidence:
+
+> What should be different for your business?
+
+The owner may add a screenshot, customer message, document, or voice note. The platform should derive technical scope later. The initial screen must not ask for work type, repository, architecture, acceptance-test syntax, or implementation approach.
+
+### 5.2 Shape the brief
+
+The coworker converts the request into the existing `BusinessBuildBrief`:
+
+- business outcome;
+- affected people and workflow;
+- source evidence;
+- success signals;
+- constraints;
+- business interpretation;
+- risk profile;
+- open questions and confidence;
+- hidden technical interpretation.
+
+Ask at most one short clarification at a time, and only when the answer changes scope, business behavior, authority, risk, or success. Present the resulting brief as editable business language before governed execution starts.
+
+### 5.3 Explain the approach
+
+The plan view answers:
+
+- What will change?
+- Why should that improve the stated outcome?
+- What will stay unchanged?
+- What could go wrong?
+- What will prove it worked?
+- Will the owner need to decide anything later?
+
+Technical artifacts remain accessible to authorized operators, but they are not the default review surface.
+
+### 5.4 Work in the background
+
+During execution, the owner sees:
+
+- a current plain-language step;
+- the next expected step;
+- recent meaningful activity;
+- whether work is healthy, waiting, or blocked;
+- an honest progress signal for long-running analysis;
+- a pause or stop path where safe.
+
+Do not render synthetic percent-complete values. Progress is milestone-based and evidence-backed.
+
+### 5.5 Ask only when judgment is required
+
+Phase-boundary questions become `DecisionInteraction` rows. The existing `ai-decision` Attention adapter projects them into `/workspace/inbox`; mobile and push consume the same item. The decision card contains:
+
+- situation;
+- why it matters;
+- recommendation;
+- two or three business-language choices;
+- consequence of waiting;
+- risk and urgency;
+- deep link to the relevant Change context.
+
+Choosing an option updates the canonical decision and resumes the workflow. A local `/build` action and an inbox card must resolve the same decision ID and cannot create two decisions.
+
+### 5.6 Preview and correct
+
+Use the shared live preview posture already adopted by Build Studio. The Change detail makes the currently driven preview obvious and supports focused feedback:
+
+- select or identify the affected area;
+- describe what should be different;
+- attach a screenshot where useful;
+- convert the correction into auditable build evidence;
+- show whether the correction is queued, in progress, or reflected.
+
+Do not promise per-build isolated preview infrastructure where the platform uses one shared sandbox. The UI must name which Change is driving the preview.
+
+### 5.7 Review proof
+
+Before release, show a compact proof packet:
+
+1. **Requested outcome** - the approved business brief.
+2. **What changed** - owner-readable change narrative.
+3. **Why it matters** - link to the outcome and affected workflow.
+4. **Checks performed** - acceptance, tests, UX, migration, security, and runtime evidence as applicable.
+5. **Open risks** - unresolved questions or explicit none.
+6. **Release choice** - recommended action, rollback posture, and authority required.
+
+The packet is a projection over canonical evidence. It is not a new evidence table and must not say a check passed unless a corresponding evidence record proves it.
+
+### 5.8 Go live and follow up
+
+Outbound or irreversible release remains an explicit-go decision. After release:
+
+- show the deployed state and recovery point;
+- retain the proof packet and decision history;
+- schedule the agreed outcome check;
+- record the observation through the product-outcome/HX substrate;
+- emit or touch an `ImprovementSignal` when the observation identifies repeatable friction or unmet value.
+
+## 6. Data And Projection Contract
+
+### 6.1 No new owner-domain table in the convergence release
+
+Use the existing canonical records:
+
+| Concern | Source of truth |
+| --- | --- |
+| Business intent | `BusinessBuildBrief` |
+| Delivery lifecycle | `FeatureBuild` |
+| Governed demand | `BacklogItem` and `Epic` |
+| Cross-surface work identity | `WorkCapsule` |
+| Human decision | `DecisionInteraction` |
+| Unified activity/evidence | Work Capsule activity/timeline, runtime verification, Build evidence, `ExternalEvidenceRecord`, PR and release facts |
+| Owner attention | `AttentionItem` projection, not persistence |
+| Follow-up learning | outcome observation and `ImprovementSignal` |
+| Channel policy | `CommunicationChannelBinding` and delivery attempts |
+| Device token | `PushDeviceRegistration` only |
+
+### 6.2 Owner Change projection
+
+Implement a pure server-side projection rather than persisted duplicate state:
 
 ```ts
-type OwnerImprovementView = {
-  improvementId: string;          // FeatureBuild.id (never surfaced as a build ID in owner copy)
+type OwnerChangeView = {
+  changeId: string;
   title: string;
-  ownerPhase: "shaping" | "planned" | "building" | "checking" | "ready" | "live";  // ← FeatureBuild.phase
-  ownerStatus: "on-track" | "needs-you" | "needs-attention" | "deferred" | "abandoned";  // ← status overlay
-  brief: OwnerBriefView | null;   // projected from BusinessBuildBrief via businessBuildBriefFromRecord()
-  needsYou: OwnerDecisionItem[];  // DAP cross-process decision-item contract (see §4.2)
-  mobileProjection: OwnerMobileProjection | null;
-  summary: string;
-  evidencePacket: OwnerEvidencePacket | null;
-  preview: OwnerPreviewState | null;
-  developerDetailsHref: string | null;
+  outcome: string;
+  now: string;
+  next: string;
+  health: "working" | "waiting" | "needs-you" | "blocked" | "ready" | "live";
+  brief: BusinessBuildBrief | null;
+  proof: OwnerProofPacket;
+  pendingDecisionId: string | null;
+  preview: { available: boolean; drivingThisChange: boolean };
+  technicalDetailsAvailable: boolean;
 };
 ```
 
-`OwnerMobileProjection` is not a mobile table. It is a view over the same DAP decision item and Improvement evidence:
+The projection must be deterministic from canonical records and safe to recompute. Missing evidence produces `not recorded` or `not applicable`, never an inferred pass.
 
-```ts
-type OwnerMobileProjection = {
-  phoneSafe: boolean;
-  requiresAuth: boolean;
-  delivery: "portal-only" | "mobile-inbox" | "push-eligible";
-  authorityCoreReachable: boolean | "unknown";
-  summary: string;
-  actionLabels: Array<"approve" | "edit" | "answer" | "send-back" | "defer" | "escalate">;
-};
+### 6.3 Business brief convergence
+
+The default `/build` data loader must resolve the brief associated with the selected `FeatureBuild`, not the most recently edited brief for a user. Add a proper Prisma relation if the schema audit confirms the current string FK still lacks one, then use that relation consistently. The legacy `FeatureBuild.brief` remains a compatibility input only until callers and historical rows are migrated.
+
+### 6.4 Decision convergence
+
+Every owner-required Build Studio workflow gate must create or resolve one `DecisionInteraction` before presentation. Add Build Studio context to that record's supported metadata rather than minting a new table. The existing attention adapter then projects it to web and mobile.
+
+Deduplication key:
+
+```text
+(featureBuildId, gateKind, gateVersion)
 ```
 
-### 7.2 New Data Only When It Proves Necessary
+An escalation may describe a blocked decision, but it must not produce a second actionable choice for the same key.
 
-Potential later models:
+## 7. HITL Policy
 
-| Model | When needed |
-| --- | --- |
-| `BuildPreviewAnnotation` | If visual comments must survive across preview rebuilds with anchors. |
-| `HitlDecisionItem` | Only if the DAP cross-process decision-item model does not yet exist when this lands. This table is the DAP generalization (§4.2) — define it **there**, not as a Build-Studio-private table, so the two do not fork. |
-| `OwnerEvidencePacket` | If evidence packets need immutable snapshots for audit beyond existing evidence fields. |
+### 7.1 Interrupt at boundaries, not during normal execution
 
-Do not start with these migrations. Start with adapters and projections over the canonical evidence substrate.
+Interrupt when one of these is true:
 
-## 8. Navigation And Information Architecture
+- the owner must choose business behavior;
+- legal, financial, privacy, safety, employment, or customer-impact authority is required;
+- scope or cost crosses the approved boundary;
+- evidence contradicts the approved brief;
+- release or another irreversible action needs explicit go;
+- execution is blocked and the platform cannot safely resolve it.
 
-Global navigation should not expose every technical Build Studio concept.
+Do not interrupt for implementation detail, ordinary recoverable errors, tool selection, or evidence the platform can gather itself.
 
-Recommended IA:
+### 7.2 Channel behavior
 
-| Surface | Route | Audience |
+The decision source supplies risk, urgency, deadline, and audience. Communication policy chooses ambient inbox, push, or other allowed channel using principal bindings, quiet hours, and verification state. Build Studio never writes directly to a device token.
+
+Push notifications carry summary and deep link only. High-risk decisions require authenticated in-app context; they are never approved directly from an unauthenticated notification action.
+
+### 7.3 Failure states
+
+- If an attention adapter fails, `/workspace/inbox` reports that source as unavailable rather than showing a false empty state.
+- If the owner lacks authority, show who can decide and route the item appropriately.
+- If a decision is stale or already resolved, deep links show the outcome and current Change state instead of a dead action.
+- If mobile is offline, queue only safe local acknowledgements; decisions requiring current server state wait for reconnection.
+
+## 8. Evidence Standard
+
+Owner proof has three altitudes:
+
+| Altitude | Audience | Content |
 | --- | --- | --- |
-| Improvements | `/build` or future `/improvements` | Owner/operator |
-| Improvement detail | `/build?buildId=...` initially; future `/improvements/:id` | Owner/operator |
-| Needs You | Home strip plus cross-process inbox when DAP generalizes | Owner/operator |
-| Build Studio config | `/platform/ai/build-studio` | Admin |
-| Developer diagnostics | detail drawer or `/platform/ai/build-studio/...` drill-down | Admin/developer |
+| Summary | Owner | outcome, what changed, checks, open risks, recommendation |
+| Inspect | Owner or manager | evidence categories, timestamps, decision history, preview, release state |
+| Technical | Authorized operator | commands, files, checksums, logs, worktree, PR, model/tool receipts |
 
-Do not mix configuration with owner work. The owner asks for improvements; admins configure engines.
+The summary must remain comprehensible without hiding adverse evidence. Technical provenance is available but does not substitute for a clear claim and result.
 
-## 9. UI Standards
+Evidence states are closed and explicit:
 
-Implementation must follow DPF UI rules:
+- `passed`
+- `failed`
+- `not-applicable` with reason
+- `not-recorded`
+- `stale`
 
-- no hardcoded colors
-- use `var(--dpf-*)` tokens
-- use report-kit primitives for status/data/evidence displays
-- progressive disclosure for technical details
-- no raw tool names in owner text
-- mobile owner view must still expose Needs You, active work, and evidence review
-- preview toolbar controls use icons plus accessible labels/tooltips
-- cards are for individual repeated items, not nested page structure
+Do not collapse failed, missing, and not-applicable into one neutral badge.
 
-The design must stay operational and dense. This is a business work surface, not a marketing landing page.
+## 9. UI Design Standard
 
-## 10. Refactoring Requirement
+### 9.1 Default Change detail
 
-At least 20% of implementation capacity for this work is reserved for refactoring.
+The first viewport should answer, in order:
 
-Required refactor targets:
+1. What outcome are we trying to improve?
+2. What is happening now?
+3. What happens next?
+4. Does anything need me?
+5. Can I preview or review proof?
 
-1. **Converge `BuildStudio` and `BuildStudioV2`.** `BuildStudioV2` is **not** demo-data — it is already wired into `/build?v=2` and consumes a real `BusinessBuildBrief` (`apps/web/app/(shell)/build/page.tsx`). It is an early version of this spec's owner surface. Converge toward a single path: harden the brief-driven owner surface and fold the developer `BuildStudio` view into its permission-gated drill-down (§4.4). Which component becomes the default route is Open Question 6. The failure mode to avoid is a *third* shell layered over the existing two.
-2. **Extract owner projection helpers.** Owner phase, Needs You items, evidence packet summaries, and preview state should be pure helpers with tests.
-3. **Preserve existing evidence/gate authority.** Do not duplicate `checkPhaseGate` logic in components.
-4. **Delete obsolete UI once replaced.** Avoid accumulating tabs, panels, and cards that describe the same state at different altitudes.
-5. **Separate owner copy from developer copy.** Owner-facing wording should live in a single copy helper or route-copy module, not scattered inline.
+Recommended structure:
 
-The target is a simpler surface over a stronger engine, not an additional shell around the current complexity.
+```text
+Outcome header
+Now / Next status
+Needs You action, only when present
+Preview and proof actions
+Recent meaningful activity
+Technical details disclosure
+```
 
-## 11. Research And Benchmarking
+### 9.2 Interaction rules
 
-### Open-source / open-core patterns
+- One dominant action per state.
+- Business copy before system copy.
+- No raw identifiers in owner view.
+- No phase rail as the primary status explanation.
+- No fake chat turns or demo approvals in production routes.
+- Long-running work exposes current milestone and recent activity.
+- Use DPF theme tokens only.
+- Use report-kit primitives for proof statuses, evidence lists, filters, and exports.
+- Meet WCAG 2.2 AA, semantic HTML, keyboard access, and reduced-motion expectations.
+- Design mobile decisions for a 44px minimum target and one-handed scanning.
 
-| Source | Data model pattern | Adopt | Reject |
-| --- | --- | --- | --- |
-| LangChain Agent Inbox / LangGraph HITL | Interrupts pause agent execution, present pending action, resume after human response. Inbox actions map to accept/edit/respond/ignore. | Needs You inbox as a queue of durable decision items. | Raw agent interrupt payloads in owner UI. |
-| n8n executions | Workflow executions preserve status, timing, node names, and optional execution metadata; sensitive data can be redacted. | Evidence packet should preserve metadata while hiding raw payloads by default. | Treating execution logs as the primary owner review artifact. |
-| GitLab CI/CD pipelines | Pipelines are composed of jobs and downstream graphs; mini graphs show status while detail pages expose logs. | Owner home shows compact phase/status; detail drawer exposes deeper execution evidence. | Developer pipeline vocabulary as owner-facing language. |
+### 9.3 Empty states
 
-### Commercial patterns
+| State | Required behavior |
+| --- | --- |
+| No Changes | Ask what should be different and offer coworker-guided intake |
+| No Needs You items | Say the platform is continuing; do not show a celebratory dead end |
+| No proof yet | Explain which stage will produce proof |
+| Preview unavailable | Explain whether work is not ready, another Change is driving the sandbox, or the environment is unhealthy |
+| Permission denied | Explain the owner-visible status and who can perform the restricted action |
 
-| Source | Product pattern | Adopt | Reject |
-| --- | --- | --- | --- |
-| Lovable | Plan mode for decision-making, Build mode for execution, visual preview toolbar, version history, publish flow. | Think/build separation, point-and-comment preview loop, fast visual correction. | One-click publish without DPF evidence gates and rollback discipline. |
-| Linear Agent Interaction | Agent sessions have states such as pending, active, awaiting-input, error, complete, stale; agent acts as delegate, not assignee. | Consistent owner statuses and human accountability. | Making the agent the owner of business judgment. |
-| Cursor Plan Mode / Cloud Agents | Plan is editable before execution; cloud agents run asynchronously and return evidence. | Editable plan and re-entry digest. | Diff-first review for non-technical owners. |
-| Replit Agent / Bolt.new / Vercel v0 | Prompt-to-app for non-developers; preview-and-iterate; checkpoints/rollback (Replit) and one-shot generation (v0). | Outcome-first intake and a preview loop aimed at non-developers; explicit checkpoints. | Treating the artifact as a disposable prototype; no governed promotion into a *running business system* the owner already depends on. |
+## 10. Research And Benchmarking
 
-### Market positioning and differentiation
+Research was refreshed from official product documentation on July 31, 2026.
 
-The "describe it in English, watch it build" category (Lovable, Bolt, v0, Replit Agent) has trained SMB owners to expect natural-language intent and a visual preview loop — this spec rightly adopts that grammar so DPF does not feel dated. But those tools optimize for **greenfield prototypes a developer-adjacent user spins up and may throw away.** DPF's owner is changing a system their business *already runs on* (bookings, quotes, invoicing). That reframes the wedge:
+### 10.1 Commercial patterns
 
-- **Governed change to a live business system, not prototype generation.** The differentiators are exactly what prototype tools omit: durable evidence, HITL gates, verification, **legible rollback** (§5.7 undo affordance), and plain-language accountability. These are the spec's moat — keep them load-bearing, never trade them for a slicker one-click feel.
-- **Continuous improvement, not one-and-done.** The follow-up loop (§5.8 → `ImprovementSignal` → the flywheel) and hive-mind reusability (`BusinessBuildBrief.hiveReadiness`) are a retention and network-effect story the prototype category structurally lacks. This is worth stating as positioning, not just plumbing.
-- **Risk to manage:** the category sets expectations on *speed-to-first-result*. If DPF's intake asks too many questions before the owner sees motion, it will feel heavier than Lovable regardless of the governance payoff. The §5.1 "at most one question at a time, only when it changes the plan" rule is the mitigation — treat it as a measured success metric (questions-to-first-build), not just a guideline.
+| Product | Pattern | DPF decision |
+| --- | --- | --- |
+| Lovable | Separate Plan and Agent modes; visible current tasks, files, tools, queue, pause/stop, diffs, browser verification, visual edits, and preview-before-build design directions | Adopt the plan/build grammar, visible milestones, focused correction, and preview. Add governed evidence and authority rather than copying direct-project mutation as the trust model. Sources: `https://docs.lovable.dev/features/agent-mode`, `https://docs.lovable.dev/features/design-guidance`, `https://docs.lovable.dev/features/code-mode` |
+| Replit Agent | Automatic checkpoints, full-state rollback, visible history, preview, testing, and user correction | Adopt explicit recovery posture and checkpoint-like release evidence. DPF recovery remains governed through branches, PRs, runtime verification, recovery points, and self-upgrade. Sources: `https://docs.replit.com/references/version-control/checkpoints-and-rollbacks`, `https://docs.replit.com/learn/build-with-agent` |
+| GitHub | Reviewable diffs, automated checks, approvals, and protected merge conditions | Keep PR/check evidence as technical provenance while translating it into an owner proof packet. Sources: `https://docs.github.com/en/pull-requests/get-started/about-pull-requests`, `https://docs.github.com/en/pull-requests/reference/managing-and-standardizing-pull-requests` |
 
-### Standards
+### 10.2 Open-source and internal patterns
 
-This design follows:
+- Git and pull-request workflows provide durable history, review boundaries, and rollback primitives.
+- DPF's `WorkCapsule` timeline provides the cross-executor identity missing from a prompt-only builder.
+- DPF's Attention Surface provides one deduplicated human queue rather than per-agent notification silos.
+- The native mobile app already proves shared install discovery, channel policy, offline behavior, and archetype-driven surfaces.
 
-- Microsoft HAX principles: make uncertainty, capability limits, rationale, and action consequences visible.
-- Progressive disclosure: default owner view shows the decision and proof; technical artifacts are drill-down.
-- DPF kernel principle: governance approves evidence, not provenance.
+### 10.3 Adopted
 
-References:
+- Natural-language outcome intake.
+- Plan before mutation for nontrivial work.
+- Visible execution milestones and queued corrections.
+- Visual preview and focused feedback.
+- Reversible checkpoints and clear release boundaries.
+- Progressive disclosure of code and infrastructure.
 
-- Lovable docs: https://docs.lovable.dev/introduction/getting-started, https://docs.lovable.dev/features/plan-mode, https://docs.lovable.dev/features/preview-toolbar, https://docs.lovable.dev/features/security-view
-- LangChain HITL docs: https://docs.langchain.com/oss/python/langchain/frontend/human-in-the-loop
-- LangChain Agent Inbox: https://github.com/langchain-ai/agent-inbox
-- Linear Agent Interaction: https://linear.app/developers/agent-interaction
-- n8n executions: https://docs.n8n.io/workflows/executions/
-- GitLab pipelines: https://docs.gitlab.com/ci/pipelines/
-- Microsoft HAX: https://www.microsoft.com/en-us/research/blog/guidelines-for-human-ai-interaction-design/
+### 10.4 Rejected
 
-## 12. Implementation Slices
+- Prompt history as the only durable specification.
+- A preview that is treated as verification.
+- Direct publish without authority and evidence gates.
+- A separate project shell for every workflow or archetype.
+- A second inbox or evidence ledger owned by Build Studio.
+- Demo content on a production route.
 
-### Slice 0: Source-Only Convergence Audit
+### 10.5 DPF differentiation
 
-Goal: keep progress moving while the live portal and Build Studio runtime are unavailable, without pretending runtime evidence exists.
+The target experience is not merely easier code generation. It is **governed outcome delivery**: a nontechnical owner can request, understand, decide, verify, release, and later evaluate a Change without becoming the project manager or software engineer.
 
-Deliverables:
+## 11. Refactoring And Convergence
 
-- source-verified inventory of `BuildStudioV2`, developer `BuildStudio`, and the `/build` route split
-- source-verified incorporation of the parallel mobile companion plan, without copying its file into this branch
-- parity checklist for the route decision in Open Question 6
-- owner projection contract boundaries (`BusinessBuildBrief`, `FeatureBuild`, DAP decision item, evidence packet, mobile projection)
-- list of runtime-bound checks that cannot be claimed until the portal rebuild/test cycle finishes
+Refactoring is part of the product work, not cleanup after it.
 
-No MCP calls, live DB edits, or UX evidence are required for this slice. It is a planning/refactor-readiness slice only. A later implementation plan should explicitly separate source-local gates from canonical-runtime gates per AGENTS.md §5.
+1. Move the persistent `BusinessBriefPanel` capability into the production `BuildStudio` composition.
+2. Resolve briefs by selected Change, not by latest user brief.
+3. Extract the owner Change projection so web, inbox deep links, and mobile consume the same language and state mapping.
+4. Move owner proof summaries above Technical details while retaining technical receipts below.
+5. Persist owner-required workflow actions as `DecisionInteraction` and remove duplicate local action identity.
+6. Remove the `?v=2` route branch, demo-only shell, and dead action handlers after parity tests pass.
+7. Keep `build-studio-demo.ts` only if another explicit Storybook/test fixture owner remains; otherwise delete it.
 
-### Route Convergence Recommendation
+The production `BuildStudio` is the convergence target because it owns real lifecycle actions, customer-status projection, unified evidence, preview posture, and authority gates. Styling from the prototype may be reused selectively, but the prototype is not the architectural base.
 
-Recommended direction: make the existing brief-driven `BuildStudioV2` the owner-surface target, and demote the developer `BuildStudio` to a permission-gated drill-down after parity. Do not flip `/build` by default until the checklist below is true:
+## 12. Delivery Slices
 
-- V2 can select and display existing active builds, not only the latest brief.
-- V2 can start/create an Improvement through `BusinessBuildBrief` and the existing governed promotion path.
-- V2 exposes every blocking action currently available in the developer surface, translated into owner language.
-- V2 has a developer/admin drill-down for graph, raw evidence, runtime lease, and recovery information.
-- Needs You items use the DAP decision-item contract and risk-class policy, and can render in the mobile `Today / Needs You` surface when phone-safe.
-- Release review shows rollback/undo affordance state before owner approval.
-- Canonical-runtime UX verification passes after the portal rebuild path is healthy.
+### Slice A - Canonical brief and owner projection
 
-Until then, keep the route question open but bias implementation toward V2 parity rather than a third shell. The failure mode is not choosing the wrong component; it is allowing three Build Studio experiences to coexist.
+- Load the selected Change's `BusinessBuildBrief` in default `/build`.
+- Port editable business-brief behavior into production composition.
+- Add the pure `OwnerChangeView` projection and tests.
+- Keep legacy brief conversion for historical data, with a measured retirement path.
+- Move outcome, status, and concise proof into the owner altitude.
 
-### Slice 1: Owner Projection Layer
+### Slice B - DecisionInteraction-first Needs You
 
-Goal: derive owner-facing Improvement views from current `FeatureBuild` rows plus their linked `BusinessBuildBrief`.
+- Inventory every owner-required Build Studio workflow gate.
+- Persist or resolve one `DecisionInteraction` per deduplication key.
+- Reuse the existing `ai-decision` Attention adapter and owner decision projection.
+- Add Change deep links, stale/resolved behavior, authority checks, and duplicate suppression.
+- Verify that acting from `/build` or `/workspace/inbox` resolves the same decision.
 
-Deliverables:
+### Slice C - Retire the prototype path
 
-- `deriveOwnerImprovementView()`, composing the existing `businessBuildBriefFromRecord()` projection (do not re-read brief columns directly)
-- owner phase mapping (`FeatureBuild.phase` to `ownerPhase`) and the separate `ownerStatus` overlay
-- Needs You projection from workflow action/gate state, shaped to the DAP cross-process decision-item contract (§4.2)
-- evidence packet summary projection
-- optional mobile projection for phone-safe decision items
-- tests for each lifecycle phase and key blocked states
+- Remove `?v=2` routing.
+- Remove or relocate demo data and no-op handlers.
+- Preserve any visual patterns that pass the current theme, accessibility, and mobile standards.
+- Add a regression test proving production routes cannot render demo build or approval content.
 
-No schema migration. (The brief substrate, evidence fields, and `PhaseHandoff` all already exist; verified against `schema.prisma`.)
+### Slice D - Mobile Today / Needs You
 
-### Slice 2: Improvements Home
+- Add an owner first-viewport projection over the same Attention API.
+- Render Change decisions with situation, recommendation, consequence, risk, and deep link.
+- Respect channel bindings, quiet hours, multi-space identity, offline policy, and current auth state.
+- Require authenticated in-app review for high-risk choices.
 
-Goal: owner-facing landing surface for active and completed Improvements.
+### Slice E - Outcome follow-up
 
-Deliverables:
-
-- outcome composer
-- Needs You strip
-- active improvements list
-- recently live list
-- admin/developer details hidden by permission
-
-This should build on the existing `BuildStudioV2` brief-driven surface (currently `/build?v=2`) rather than a new component, promoting it toward the default once it reaches parity. The outcome composer writes a `BusinessBuildBrief` via the existing intake flow.
-
-### Slice 3: Improvement Workspace
-
-Goal: one Improvement detail surface with phase-specific artifacts.
-
-Deliverables:
-
-- owner phase header
-- editable plan view
-- ambient build status
-- evidence packet view
-- developer detail drawer
-- coworker context actions
-- mobile companion job-pack summary when the Improvement affects phone workflows
-
-### Slice 4: Preview Annotation Loop
-
-Goal: Lovable-style visual corrections without bypassing evidence gates.
-
-Deliverables:
-
-- preview toolbar
-- select/comment/copy-edit actions
-- structured preview annotation projection
-- rerun/review integration
-- accessibility, mobile viewport behavior, and mobile companion evidence when the changed artifact is phone-facing
-
-Defer schema unless anchors must persist across preview rebuilds.
-
-### Slice 5: HITL Inbox Generalization
-
-Goal: make Needs You the cross-process decision surface.
-
-Deliverables:
-
-- durable owner decision item projection
-- fixed verbs
-- notification policy
-- `CommunicationChannelBinding` / delivery-attempt alignment for mobile push channels
-- mobile `Today / Needs You` rendering rules for phone-safe Build decisions
-- re-entry digest
-- metrics for notification precision, decision dwell, and **questions-to-first-build** (the speed-to-first-result guardrail from §11 positioning)
-
-This should compose with the DAP experience layer rather than staying Build-Studio-only.
+- Schedule an outcome check from the approved success signals.
+- Record observations through the existing product-outcome/HX contract.
+- Link unmet or repeatable findings to `ImprovementSignal` and the existing flywheel.
+- Keep this slice dependent on the HX loop rather than reimplementing analytics in Build Studio.
 
 ## 13. Acceptance Criteria
 
-The design is implemented when:
+The design is delivered only when all of the following are proven on the canonical runtime or shared convergence sandbox:
 
-- A small business owner can start an Improvement without seeing developer terminology.
-- Every owner-visible phase maps to the canonical Build Studio lifecycle.
-- A plan approval records a durable HITL decision.
-- The owner can review a feature by evidence, not by raw diff/log.
-- Technical detail is available to permitted admins but hidden by default.
-- Visual preview feedback becomes structured input and does not bypass gates.
-- No new evidence ledger exists in Phase 1, and no parallel "brief" model — the owner brief is `BusinessBuildBrief`.
-- A single converged owner surface exists; `BuildStudioV2` and the developer `BuildStudio` are not both live as competing default paths.
-- Needs You items and notifications use the DAP cross-process decision-item + `riskClass` contract, not a Build-Studio-private policy.
-- Phone/push delivery, if enabled, routes through `CommunicationChannelBinding` / `CommunicationDeliveryAttempt` and treats `PushDeviceRegistration` as token storage only.
-- Mobile companion work is delivered as server-owned archetype job-pack/schema/action changes inside the Improvement model, not as per-archetype app forks or a second Build Studio.
-- UI uses DPF theme tokens and report-kit where applicable.
-- Runtime-bound verification evidence still names its substrate per AGENTS.md.
+1. An owner can start a Change from a plain-language outcome without supplying technical fields.
+2. The selected Change shows and edits its own persistent `BusinessBuildBrief`; switching Changes cannot display another brief.
+3. The first viewport explains outcome, Now, Next, Needs You, preview, and proof without internal IDs or engineering vocabulary.
+4. Long-running work exposes honest milestone/activity progress and never fabricates percent complete.
+5. Every owner-required Build Studio gate has one canonical `DecisionInteraction` and at most one actionable Needs You card.
+6. The same decision can be opened from `/build`, `/workspace/inbox`, and mobile, subject to authority and authentication.
+7. Resolving a decision on one surface removes or updates it on the others.
+8. The proof packet distinguishes passed, failed, not applicable, not recorded, and stale evidence.
+9. Release remains explicit-go and shows recovery posture before execution.
+10. Technical details remain available to authorized operators but are not required for owner comprehension.
+11. `/build?v=2` no longer selects a demo shell, and no production route renders demo build, conversation, step, approval, or sandbox data.
+12. Mobile respects channel policy, quiet hours, offline behavior, multi-space scope, and high-risk authenticated review.
+13. A completed Change can schedule and record an outcome follow-up without creating a second improvement ledger.
+14. Targeted unit tests, web typecheck, production build, mobile tests when affected, accessibility checks, and UX verification pass.
+15. UI evidence includes desktop and mobile screenshots of intake, working, Needs You, proof, permission, empty, and failure states.
 
-## 14. Open Questions
+## 14. Architecture And UX Fit
 
-1. Should the owner-facing route stay `/build` for now, or should DPF introduce `/improvements` with `/build` as an admin/developer alias?
-2. Should "Improvements" be the permanent product word, or should archetypes override it with terms such as "Business changes" or "Upgrades"?
-3. Should the preview annotation model start as a `WorkCapsuleActivity` payload, or should it get a dedicated table once the toolbar lands?
-4. Should owner release approval be modal, inbox-item based, or both depending on risk class?
-5. Should `uxVerificationStatus="failed"` remain advisory in owner copy, or should owner-facing release copy treat failed UX checks as "needs review" even when the gate technically allows ship? (Confirmed values: `null | "running" | "complete" | "failed" | "skipped"`.)
-6. Convergence direction (§10): should `BuildStudioV2` (brief-driven, `?v=2`) be promoted to the default `/build` surface with the developer `BuildStudio` demoted to the drill-down, or should the developer surface stay default with V2 reachable behind a flag until parity? This is a genuine 2-option trade-off. The recommendation is V2-as-owner-target after parity (§12), but the route flip should still go through `dpf-decision-via-kernel` before implementation.
-7. Which Build Studio decision classes are phone-safe by default? Recommendation: plan approval, clarification answers, defer, and send-back can be mobile-first; release approval is mobile-eligible only after authenticated review with evidence and rollback state; high-risk or reachability-uncertain decisions remain portal/admin-first.
+**Result: fits with guardrails.**
+
+- **Product area:** Workspace for owner intake and attention; Delivery/Build Studio for Change detail.
+- **Route fit:** existing routes only; no new top-level navigation.
+- **Persona:** small-business owner first, authorized operator second.
+- **Data fit:** projection over existing canonical records; no new owner-domain table in the convergence release.
+- **Evidence fit:** Work Capsule and existing evidence records remain authoritative.
+- **HITL fit:** phase-boundary `DecisionInteraction` feeding the one Attention Surface.
+- **Mobile fit:** downstream projection over the same API and channel policy.
+
+The guardrails are: no demo path expansion, no latest-user brief lookup, no duplicated inbox, no direct device-token routing, no inferred evidence pass, and no release action from an unauthenticated notification.
 
 ## 15. Non-Goals
 
-- Replacing Build Studio's engine.
-- Replacing MCP coordination.
-- Replacing `FeatureBuild` evidence fields.
-- Adding a no-code WYSIWYG editor.
-- Making direct production changes from preview annotations.
-- Exposing raw tool execution to owners.
-- Solving all DAP process kinds in the first slice.
-- Building the mobile companion app, remote-access provisioning, or mobile job-pack registry in this Build Studio slice.
+- Replacing the Build Studio execution engine.
+- Making owners review source code or PRs.
+- Creating a no-code page builder.
+- Providing one native app or one workflow per archetype.
+- Building a second work-management system.
+- Adding a general analytics platform inside Build Studio.
+- Treating all Changes as low risk or fully autonomous.
+- Removing technical evidence from authorized operators.
 
-## 16. Next Step
+## 16. Open Dependencies
 
-Because the live portal and Build Studio runtime are currently undergoing rebuild testing, continue with Slice 0 first: complete the source-only convergence audit, V2 parity checklist, and mobile companion cross-surface contract without MCP or live UX claims. After the portal is healthy, route Open Question 6 through the decision kernel, then create a focused implementation plan for Slice 1: the owner projection layer and tests. That slice is the architectural foundation for the later UI work and keeps the refactor bounded.
+- `BI-78499309` covers honest progress for long-running Build Studio work.
+- `BI-950FE085` covers intake affordance hardening.
+- `BI-62075FF9` covers remaining status-strip technical leakage.
+- `BI-8F83933B` covers live capsule/build updates and derived-status reconciliation.
+- `BI-3F455757` covers generic proactive human-assist capability.
+- `BI-MOBAPP-SCREENS` and the mobile auth/multi-space items govern renderer and identity prerequisites.
+- `BI-96812FC2` owns HX loop closure through `ImprovementSignal`, proposals, backlog, and re-measurement.
+
+These dependencies are reused where they own the work. The implementation plan must file only uncovered convergence deliverables and record live backlog coverage before source implementation.
+
+## 17. Next Step
+
+Create the governed convergence plan with one independently reviewable BI per delivery slice. Implement Slice A first because it removes the split source of truth between the real Build Studio and the only persistent brief editor; then implement decision convergence before mobile so every surface consumes one canonical HITL contract.
