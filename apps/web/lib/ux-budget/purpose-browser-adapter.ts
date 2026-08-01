@@ -52,6 +52,35 @@ export function capturePurposeEvidenceFromDom(): PurposeDomEvidence | null {
       .replace(/\s+/g, " ")
       .trim();
 
+  const hiddenFromAccessibilityTree = (element: Element): boolean => {
+    if (element.closest("[hidden], [aria-hidden='true'], [inert]")) return true;
+    let current: Element | null = element;
+    while (current) {
+      const style = getComputedStyle(current);
+      if (
+        style.display === "none" ||
+        style.visibility === "hidden" ||
+        style.visibility === "collapse"
+      ) {
+        return true;
+      }
+      current = current.parentElement;
+    }
+    return false;
+  };
+
+  const accessibleDescendantText = (element: Element): string => {
+    if (hiddenFromAccessibilityTree(element)) return "";
+    return [...element.childNodes]
+      .map((node) => {
+        if (node.nodeType === Node.TEXT_NODE) return node.textContent ?? "";
+        return node instanceof Element ? accessibleDescendantText(node) : "";
+      })
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+  };
+
   const accessibleName = (element: HTMLElement): string => {
     const directLabel = element.getAttribute("aria-label")?.trim();
     if (directLabel) return directLabel;
@@ -62,16 +91,16 @@ export function capturePurposeEvidenceFromDom(): PurposeDomEvidence | null {
         .map((id) => {
           const labelElement = document.getElementById(id);
           if (!labelElement) return "";
-          return visible(labelElement)
-            ? visibleDescendantText(labelElement)
-            : labelElement.textContent?.trim() ?? "";
+          return hiddenFromAccessibilityTree(labelElement)
+            ? labelElement.textContent?.trim() ?? ""
+            : accessibleDescendantText(labelElement);
         })
         .filter(Boolean)
         .join(" ");
       if (label) return label;
     }
     return (
-      visibleDescendantText(element) ||
+      accessibleDescendantText(element) ||
       element.getAttribute("title")?.trim() ||
       ""
     );

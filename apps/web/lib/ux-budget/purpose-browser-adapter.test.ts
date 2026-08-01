@@ -32,6 +32,10 @@ describe("capturePurposeEvidenceFromDom", () => {
         <button aria-labelledby="visible-label-with-hidden-child" data-dpf-purpose-action-key="hidden-labelled-action"></button>
         <span id="explicit-hidden-label" hidden>Explicit hidden label</span>
         <button aria-labelledby="explicit-hidden-label" data-dpf-purpose-action-key="explicit-hidden-labelled-action"></button>
+        <span id="transparent-accessible-label" style="opacity:0">Transparent accessible label</span>
+        <button aria-labelledby="transparent-accessible-label" data-dpf-purpose-action-key="transparent-labelled-action"></button>
+        <span id="transparent-hidden-child-label" style="opacity:0"><span aria-hidden="true">Transparent hidden child</span></span>
+        <button aria-labelledby="transparent-hidden-child-label" data-dpf-purpose-action-key="transparent-hidden-child-action"></button>
         <a aria-label="Refresh status" href="/ops/self-upgrade" data-dpf-purpose-action-key="status-refresh" data-dpf-purpose-correction-signal-key="status-refresh"><svg aria-hidden="true"></svg></a>
         <div data-dpf-purpose-recovery-signal>
           <a href="/recover-widget" data-dpf-purpose-action-key="recover-widget" data-dpf-purpose-recovery-action>Recover widget</a>
@@ -63,7 +67,7 @@ describe("capturePurposeEvidenceFromDom", () => {
         };
       },
     );
-    vi.spyOn(window, "innerHeight", "get").mockReturnValue(1_600);
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(2_000);
     Object.defineProperty(document, "elementFromPoint", {
       configurable: true,
       value: vi.fn((_x: number, y: number) => {
@@ -116,6 +120,16 @@ describe("capturePurposeEvidenceFromDom", () => {
         (action) => action.key === "explicit-hidden-labelled-action",
       ),
     ).toMatchObject({ accessibleName: "Explicit hidden label" });
+    expect(
+      evidence?.actions.find(
+        (action) => action.key === "transparent-labelled-action",
+      ),
+    ).toMatchObject({ accessibleName: "Transparent accessible label" });
+    expect(
+      evidence?.actions.find(
+        (action) => action.key === "transparent-hidden-child-action",
+      ),
+    ).toMatchObject({ accessibleName: "" });
     expect(evidence?.recoverySignal).toEqual({
       present: true,
       actionKey: "recover-widget",
