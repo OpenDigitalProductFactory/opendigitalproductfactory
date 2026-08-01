@@ -3,14 +3,16 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import type { GraphData } from "@/lib/actions/graph";
 
-const LABEL_LEGEND = [
+export type GraphLegendEntry = { label: string; key: string; color: string };
+
+const DEFAULT_LABEL_LEGEND: GraphLegendEntry[] = [
   { label: "Portfolio", color: "var(--dpf-accent)", key: "Portfolio" },
   { label: "Product", color: "#4ade80", key: "DigitalProduct" },
   { label: "Taxonomy", color: "#fb923c", key: "TaxonomyNode" },
   { label: "Infrastructure", color: "#38bdf8", key: "InfraCI" },
 ];
 
-const LINK_TYPES = [
+const DEFAULT_LINK_LEGEND: GraphLegendEntry[] = [
   { label: "Belongs To", key: "BELONGS_TO", color: "var(--dpf-accent)" },
   { label: "Classified As", key: "CLASSIFIED_AS", color: "#fb923c" },
   { label: "Parent Of", key: "PARENT_OF", color: "var(--dpf-muted)" },
@@ -22,14 +24,33 @@ const LINK_TYPES = [
   { label: "Monitors", key: "MONITORS", color: "#fbbf24" },
 ];
 
+// The canvas force layout is shared by the inventory relationship view and the
+// admin graph explorer (BI-89A149A9). Everything domain-specific — the legends,
+// the heading, the empty/hint copy, and what a click means — arrives as props;
+// omitting them reproduces the original inventory behaviour exactly.
 type Props = {
   data: GraphData;
+  title?: string;
+  nodeLegend?: GraphLegendEntry[];
+  linkLegend?: GraphLegendEntry[];
+  emptyMessage?: string;
+  hint?: string;
+  /** Fires on every focus change, including clearing focus by clicking empty canvas. */
+  onFocusChange?: (nodeId: string | null) => void;
 };
 
 type SimNode = GraphData["nodes"][0] & { x?: number; y?: number; vx?: number; vy?: number };
 type SimLink = { source: SimNode | string; target: SimNode | string; type: string };
 
-export function RelationshipGraph({ data }: Props) {
+export function RelationshipGraph({
+  data,
+  title = "Relationship Graph",
+  nodeLegend = DEFAULT_LABEL_LEGEND,
+  linkLegend = DEFAULT_LINK_LEGEND,
+  emptyMessage = "No graph data available. Add products and portfolios to see relationships.",
+  hint = "Click a node to focus",
+  onFocusChange,
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 500 });
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
@@ -172,7 +193,7 @@ export function RelationshipGraph({ data }: Props) {
       if (!source?.x || !target?.x) continue;
 
       const isHighlighted = hoveredNode === source.id || hoveredNode === target.id || focusNodeId === source.id || focusNodeId === target.id;
-      const linkDef = LINK_TYPES.find((lt) => lt.key === link.type);
+      const linkDef = linkLegend.find((lt) => lt.key === link.type);
       const linkColor = linkDef?.color ?? "rgba(255,255,255,0.15)";
       ctx.strokeStyle = isHighlighted ? linkColor : `${linkColor}30`;
       ctx.lineWidth = isHighlighted ? 2 : 0.7;
@@ -212,7 +233,7 @@ export function RelationshipGraph({ data }: Props) {
         ctx.fillText(node.name, node.x, node.y - radius - 4);
       }
     }
-  }, [dimensions, hoveredNode, focusNodeId]);
+  }, [dimensions, hoveredNode, focusNodeId, linkLegend]);
 
   // Initialize — reset temperature on filter/data change
   useEffect(() => {
@@ -261,11 +282,16 @@ export function RelationshipGraph({ data }: Props) {
       const dx = mx - node.x;
       const dy = my - node.y;
       if (dx * dx + dy * dy < ((node.size ?? 4) + 6) ** 2) {
-        setFocusNodeId((prev) => prev === node.id ? null : node.id);
+        setFocusNodeId((prev) => {
+          const next = prev === node.id ? null : node.id;
+          onFocusChange?.(next);
+          return next;
+        });
         return;
       }
     }
     setFocusNodeId(null);
+    onFocusChange?.(null);
   }
 
   // Mouse hover detection
@@ -291,9 +317,7 @@ export function RelationshipGraph({ data }: Props) {
 
   if (data.nodes.length === 0) {
     return (
-      <div className="text-center py-8 text-sm text-[var(--dpf-muted)]">
-        No graph data available. Add products and portfolios to see relationships.
-      </div>
+      <div className="text-center py-8 text-sm text-[var(--dpf-muted)]">{emptyMessage}</div>
     );
   }
 
@@ -305,7 +329,7 @@ export function RelationshipGraph({ data }: Props) {
       <div className="flex items-start justify-between gap-4 mb-3 flex-wrap">
         <div>
           <h3 className="text-xs font-semibold uppercase tracking-widest text-[var(--dpf-muted)] mb-2">
-            Relationship Graph
+            {title}
           </h3>
 
           {/* Focus node info */}
@@ -318,7 +342,10 @@ export function RelationshipGraph({ data }: Props) {
               </span>
               <button
                 type="button"
-                onClick={() => setFocusNodeId(null)}
+                onClick={() => {
+                  setFocusNodeId(null);
+                  onFocusChange?.(null);
+                }}
                 className="text-[9px] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]"
               >
                 clear
@@ -350,7 +377,7 @@ export function RelationshipGraph({ data }: Props) {
           {/* Node type filters */}
           <div className="flex items-center gap-1">
             <span className="text-[9px] text-[var(--dpf-muted)] mr-1">Nodes:</span>
-            {LABEL_LEGEND.map((l) => {
+            {nodeLegend.map((l) => {
               const hidden = hiddenNodeTypes.has(l.key);
               return (
                 <button
@@ -374,7 +401,7 @@ export function RelationshipGraph({ data }: Props) {
           {/* Link type filters */}
           <div className="flex items-center gap-1">
             <span className="text-[9px] text-[var(--dpf-muted)] mr-1">Links:</span>
-            {LINK_TYPES.map((l) => {
+            {linkLegend.map((l) => {
               const hidden = hiddenLinkTypes.has(l.key);
               return (
                 <button
@@ -413,9 +440,7 @@ export function RelationshipGraph({ data }: Props) {
           {focusNodeId && maxHops > 0 ? ` · ${maxHops} hop${maxHops !== 1 ? "s" : ""} from focus` : ""}
         </div>
         {!focusNodeId && (
-          <div className="absolute bottom-2 left-2 text-[9px] text-[var(--dpf-muted)]">
-            Click a node to focus
-          </div>
+          <div className="absolute bottom-2 left-2 text-[9px] text-[var(--dpf-muted)]">{hint}</div>
         )}
       </div>
     </div>

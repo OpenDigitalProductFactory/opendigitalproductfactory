@@ -5,7 +5,11 @@ import {
 
 export type PurposeContractModule = readonly PurposeContractSource[];
 
-const CONTRACT_MODULES: readonly PurposeContractModule[] = [];
+import { GRAPH_EXPLORER_PURPOSE_CONTRACTS } from "./graph-explorer";
+
+const CONTRACT_MODULES: readonly PurposeContractModule[] = [
+  GRAPH_EXPLORER_PURPOSE_CONTRACTS,
+];
 
 export function buildPurposeContractSourceIndex(
   modules: readonly PurposeContractModule[] = CONTRACT_MODULES,
