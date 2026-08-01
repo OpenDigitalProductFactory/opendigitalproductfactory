@@ -42,6 +42,7 @@ observation pattern.
 | React transitions | Navigations are transitions and may wait for pending Actions | Long-running observation and inference stay outside navigation Actions |
 | WHATWG Server-Sent Events | One-way server push with reconnect semantics | Use SSE as an invalidation hint, never as durable truth |
 | MDN SSE guidance | HTTP/1.1 has a low per-origin connection ceiling across tabs | One shell-owned system stream per tab, shared by consumers |
+| WHATWG HTML Page Visibility | Hidden documents can be throttled and emit `visibilitychange` when restored | Pause background reconciliation while hidden and rehydrate on visibility restoration |
 | DPF SSE liveness design | Heartbeat/watchdog reconnect; transport never reloads the page | Reuse the resilient transport and keep navigation ownership above it |
 
 ## Phase 1 — one system event connection per shell

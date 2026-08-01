@@ -125,7 +125,7 @@ shrink when that item lands and may not grow without a filed architecture-debt b
   reconnection is part of the transport contract, but application state still requires rehydration.
 - [MDN EventSource](https://developer.mozilla.org/en-US/docs/Web/API/EventSource): EventSource is a
   persistent unidirectional connection; DPF shares the system connection within a tab.
-- [Page Visibility API](https://www.w3.org/TR/page-visibility-2/): hidden documents should avoid
+- [WHATWG HTML Page Visibility](https://html.spec.whatwg.org/multipage/interaction.html#page-visibility): hidden documents should avoid
   unnecessary background activity and reconcile when visible again.
 - [AbortController](https://dom.spec.whatwg.org/#interface-abortcontroller): lifecycle-bound reads
   are explicitly cancellable.
