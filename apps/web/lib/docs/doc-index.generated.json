@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 602,
+  "pageCount": 603,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -716,7 +716,7 @@
         "4-the-bridge-value-stream-stage-platform-surface-audit-phase",
         "5-the-value-stream-stages-map-onto-substrate-the-platform-already-carries",
         "51-architecture-and-usability-invariants",
-        "6-per-category-value-stream-profiles-all-103-archetypes-across-23-categories",
+        "6-per-category-value-stream-profiles-all-106-archetypes-across-24-categories",
         "61-trades-maintenance-run-1-plumber-electrician-facilities-maintenance-landscaping-cleaning-service",
         "62-beauty-personal-care-run-2-hair-salon-barber-shop-nail-salon-beauty-spa-personal-trainer-mobile-beauty",
         "63-healthcare-wellness-run-3-veterinary-clinic-dental-practice-medical-practice-physiotherapy-counselling-optician-plus-medical-mobile-leaves-in-102",
@@ -740,6 +740,7 @@
         "621-live-events-venues-event-venue-tour-promoter-talent-booking-agency",
         "622-warehousing-fulfilment-third-party-logistics-ecommerce-fulfilment-cold-chain-storage-cross-dock-transload",
         "623-fabric-care-services-dry-cleaning-plant-network-wash-and-fold-laundry-alterations-tailoring",
+        "624-agriculture-ranching-mixed-farm-ranch-crop-hay-farm-cattle-ranch",
         "7-demandcapacity-dynamics-at-the-load-bearing-stage",
         "71-the-model-capacity-unit-demand-signature-two-sided-risk",
         "72-per-archetype-demandcapacity-matrix",
@@ -6033,6 +6034,16 @@
         "the-structural-fact",
         "coppa-the-cleanly-sourced-example",
         "see-also"
+      ]
+    },
+    "docs/professions/marketing/wiki/agriculture-evidence-led-market-positioning.md": {
+      "publicHref": "/professions/marketing/wiki/agriculture-evidence-led-market-positioning/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "sources"
       ]
     },
     "docs/professions/marketing/wiki/brand-consistency.md": {
