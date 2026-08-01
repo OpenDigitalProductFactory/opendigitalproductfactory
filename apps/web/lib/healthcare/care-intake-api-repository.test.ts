@@ -10,6 +10,19 @@ import {
 } from "./care-intake-api-repository";
 import { digestCareIntakeResumeToken } from "./care-intake-access";
 
+/**
+ * Grant expiry is validated against the wall clock — `issueCareIntakeResumeGrant`
+ * rejects any `expiresAt` that is not strictly in the future — so this fixture
+ * MUST be relative to now, never a pinned instant.
+ *
+ * It was pinned to `2026-08-01T15:00:00.000Z`, which made it a time bomb: the
+ * suite passed until that moment and then began failing permanently, blocking
+ * the merge queue rather than any one PR. A single shared constant (not a fresh
+ * `new Date()` per call site) keeps every `toHaveBeenCalledWith` equality
+ * assertion comparing the same value.
+ */
+const GRANT_EXPIRES_AT = new Date(Date.now() + 60 * 60 * 1000);
+
 const packet = {
   id: "packet-row-a",
   packetId: "intake-a",
@@ -101,7 +114,7 @@ describe("issueCareIntakeResumeGrant", () => {
         granteePrincipalId: "principal-patient-a",
         issuedByPrincipalId: "principal-patient-a",
         permittedOperations: ["view", "save", "submit"],
-        expiresAt: new Date("2026-08-01T15:00:00.000Z"),
+        expiresAt: GRANT_EXPIRES_AT,
         authorityDecision: { effect: "allow", reasonCodes: ["patient-self-access"] },
       },
       db,
@@ -130,7 +143,7 @@ describe("issueCareIntakeResumeGrant", () => {
           granteePrincipalId: "principal-proxy",
           issuedByPrincipalId: "principal-proxy",
           permittedOperations: ["view"],
-          expiresAt: new Date("2026-08-01T15:00:00.000Z"),
+          expiresAt: GRANT_EXPIRES_AT,
           authorityDecision: { effect: "deny", reasonCodes: ["authority-not-found"] },
         },
         db,
@@ -148,14 +161,14 @@ describe("submitCareIntakePacket", () => {
     const issued = await issueCareIntakeResumeGrant({
       organizationId: "org-a", patientProfileId: "patient-a", patientPrincipalId: "principal-patient-a",
       packetId: "intake-a", granteePrincipalId: "principal-patient-a", issuedByPrincipalId: "principal-patient-a",
-      permittedOperations: ["submit"], expiresAt: new Date("2026-08-01T15:00:00.000Z"),
+      permittedOperations: ["submit"], expiresAt: GRANT_EXPIRES_AT,
       authorityDecision: { effect: "allow", reasonCodes: [] },
     }, db);
     tx.careIntakePacket.findFirst.mockResolvedValue({ ...packet, status: "in-progress", version: 2 });
     tx.careIntakeAccessGrant.findFirst.mockResolvedValue({
       grantId: issued.grantId, packetId: "packet-row-a", patientProfileId: "patient-a",
       granteePrincipalId: "principal-patient-a", tokenDigest: digestCareIntakeResumeToken(issued.token),
-      permittedOperations: ["submit"], expiresAt: new Date("2026-08-01T15:00:00.000Z"), revokedAt: null,
+      permittedOperations: ["submit"], expiresAt: GRANT_EXPIRES_AT, revokedAt: null,
     });
     return { db, tx, token: issued.token };
   }
@@ -223,7 +236,7 @@ describe("saveCareIntakePartialResponse", () => {
         granteePrincipalId: "principal-patient-a",
         issuedByPrincipalId: "principal-patient-a",
         permittedOperations: ["save"],
-        expiresAt: new Date("2026-08-01T15:00:00.000Z"),
+        expiresAt: GRANT_EXPIRES_AT,
         authorityDecision: { effect: "allow", reasonCodes: [] },
       },
       db,
@@ -235,7 +248,7 @@ describe("saveCareIntakePartialResponse", () => {
       granteePrincipalId: "principal-patient-a",
       tokenDigest: digestCareIntakeResumeToken(issued.token),
       permittedOperations: ["save"],
-      expiresAt: new Date("2026-08-01T15:00:00.000Z"),
+      expiresAt: GRANT_EXPIRES_AT,
       revokedAt: null,
     });
 
@@ -297,13 +310,13 @@ describe("saveCareIntakePartialResponse", () => {
     const issued = await issueCareIntakeResumeGrant({
       organizationId: "org-a", patientProfileId: "patient-a", patientPrincipalId: "principal-patient-a",
       packetId: "intake-a", granteePrincipalId: "principal-patient-a", issuedByPrincipalId: "principal-patient-a",
-      permittedOperations: ["save"], expiresAt: new Date("2026-08-01T15:00:00.000Z"),
+      permittedOperations: ["save"], expiresAt: GRANT_EXPIRES_AT,
       authorityDecision: { effect: "allow", reasonCodes: [] },
     }, db);
     tx.careIntakeAccessGrant.findFirst.mockResolvedValue({
       grantId: issued.grantId, packetId: "packet-row-a", patientProfileId: "patient-a",
       granteePrincipalId: "principal-patient-a", tokenDigest: digestCareIntakeResumeToken(issued.token),
-      permittedOperations: ["save"], expiresAt: new Date("2026-08-01T15:00:00.000Z"), revokedAt: null,
+      permittedOperations: ["save"], expiresAt: GRANT_EXPIRES_AT, revokedAt: null,
     });
 
     const result = await saveCareIntakePartialResponse({
@@ -323,13 +336,13 @@ describe("saveCareIntakePartialResponse", () => {
     const issued = await issueCareIntakeResumeGrant({
       organizationId: "org-a", patientProfileId: "patient-a", patientPrincipalId: "principal-patient-a",
       packetId: "intake-a", granteePrincipalId: "principal-patient-a", issuedByPrincipalId: "principal-patient-a",
-      permittedOperations: ["save"], expiresAt: new Date("2026-08-01T15:00:00.000Z"),
+      permittedOperations: ["save"], expiresAt: GRANT_EXPIRES_AT,
       authorityDecision: { effect: "allow", reasonCodes: [] },
     }, db);
     tx.careIntakeAccessGrant.findFirst.mockResolvedValue({
       grantId: issued.grantId, packetId: "packet-row-a", patientProfileId: "patient-a",
       granteePrincipalId: "principal-patient-a", tokenDigest: digestCareIntakeResumeToken(issued.token),
-      permittedOperations: ["save"], expiresAt: new Date("2026-08-01T15:00:00.000Z"), revokedAt: null,
+      permittedOperations: ["save"], expiresAt: GRANT_EXPIRES_AT, revokedAt: null,
     });
     tx.careIntakeResponse.findFirst.mockResolvedValue({
       id: "response-row-a", responseId: "intake-response-a", version: 3,
@@ -357,14 +370,14 @@ describe("saveCareIntakePartialResponse", () => {
       {
         organizationId: "org-a", patientProfileId: "patient-a", patientPrincipalId: "principal-patient-a",
         packetId: "intake-a", granteePrincipalId: "principal-patient-a", issuedByPrincipalId: "principal-patient-a",
-        permittedOperations: ["save"], expiresAt: new Date("2026-08-01T15:00:00.000Z"),
+        permittedOperations: ["save"], expiresAt: GRANT_EXPIRES_AT,
         authorityDecision: { effect: "allow", reasonCodes: [] },
       }, db,
     );
     tx.careIntakeAccessGrant.findFirst.mockResolvedValue({
       grantId: issued.grantId, packetId: "packet-row-a", patientProfileId: "patient-a",
       granteePrincipalId: "principal-patient-a", tokenDigest: digestCareIntakeResumeToken(issued.token),
-      permittedOperations: ["save"], expiresAt: new Date("2026-08-01T15:00:00.000Z"), revokedAt: null,
+      permittedOperations: ["save"], expiresAt: GRANT_EXPIRES_AT, revokedAt: null,
     });
     await expect(saveCareIntakePartialResponse({
       packetId: "intake-a", formId: "medical-history", token: issued.token,
@@ -390,7 +403,7 @@ describe("getCareIntakePacketProjection", () => {
         granteePrincipalId: "principal-patient-a",
         issuedByPrincipalId: "principal-patient-a",
         permittedOperations: ["view"],
-        expiresAt: new Date("2026-08-01T15:00:00.000Z"),
+        expiresAt: GRANT_EXPIRES_AT,
         authorityDecision: { effect: "allow", reasonCodes: [] },
       },
       db,
@@ -401,7 +414,7 @@ describe("getCareIntakePacketProjection", () => {
       patientProfileId: "patient-a",
       tokenDigest: digestCareIntakeResumeToken(issued.token),
       permittedOperations: ["view"],
-      expiresAt: new Date("2026-08-01T15:00:00.000Z"),
+      expiresAt: GRANT_EXPIRES_AT,
       revokedAt: null,
     });
 
@@ -439,13 +452,13 @@ describe("getCareIntakeSavedResponse", () => {
     const issued = await issueCareIntakeResumeGrant({
       organizationId: "org-a", patientProfileId: "patient-a", patientPrincipalId: "principal-patient-a",
       packetId: "intake-a", granteePrincipalId: "principal-patient-a", issuedByPrincipalId: "principal-patient-a",
-      permittedOperations: ["view"], expiresAt: new Date("2026-08-01T15:00:00.000Z"),
+      permittedOperations: ["view"], expiresAt: GRANT_EXPIRES_AT,
       authorityDecision: { effect: "allow", reasonCodes: [] },
     }, db);
     tx.careIntakeAccessGrant.findFirst.mockResolvedValue({
       grantId: issued.grantId, packetId: "packet-row-a", patientProfileId: "patient-a",
       granteePrincipalId: "principal-patient-a", tokenDigest: digestCareIntakeResumeToken(issued.token),
-      permittedOperations: ["view"], expiresAt: new Date("2026-08-01T15:00:00.000Z"), revokedAt: null,
+      permittedOperations: ["view"], expiresAt: GRANT_EXPIRES_AT, revokedAt: null,
     });
     tx.careIntakeResponse.findFirst.mockResolvedValue({
       id: "response-row-a", responseId: "response-a", version: 2,
@@ -466,13 +479,13 @@ describe("getCareIntakeSavedResponse", () => {
     const issued = await issueCareIntakeResumeGrant({
       organizationId: "org-a", patientProfileId: "patient-a", patientPrincipalId: "principal-patient-a",
       packetId: "intake-a", granteePrincipalId: "principal-patient-a", issuedByPrincipalId: "principal-patient-a",
-      permittedOperations: ["view"], expiresAt: new Date("2026-08-01T15:00:00.000Z"),
+      permittedOperations: ["view"], expiresAt: GRANT_EXPIRES_AT,
       authorityDecision: { effect: "allow", reasonCodes: [] },
     }, db);
     tx.careIntakeAccessGrant.findFirst.mockResolvedValue({
       grantId: issued.grantId, packetId: "packet-row-a", patientProfileId: "patient-a",
       granteePrincipalId: "principal-patient-a", tokenDigest: digestCareIntakeResumeToken(issued.token),
-      permittedOperations: ["view"], expiresAt: new Date("2026-08-01T15:00:00.000Z"), revokedAt: null,
+      permittedOperations: ["view"], expiresAt: GRANT_EXPIRES_AT, revokedAt: null,
     });
 
     await expect(getCareIntakeSavedResponse({
