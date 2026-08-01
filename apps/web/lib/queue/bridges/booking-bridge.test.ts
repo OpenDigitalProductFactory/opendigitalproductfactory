@@ -85,6 +85,7 @@ describe("bridgeBookingToWorkItem", () => {
     expect(data.effortClass).toBe("physical");
     expect(data.urgency).toBe("priority");
     expect(data.queueId).toBe("wq-dispatch");
+    expect(data.status).toBe("confirmed");
     expect(data.dueAt).toEqual(confirmedBooking.scheduledAt);
     expect(data.title).toContain("AC Repair");
     expect(data.title).toContain("Dana Rivera");

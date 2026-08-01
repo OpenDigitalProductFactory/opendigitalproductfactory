@@ -7,63 +7,144 @@
 
 import { dispatchQueueId } from "@/lib/queue/bridges/booking-bridge";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
+import {
+  FIELD_DISPATCH_JOB_STATUS_LABEL,
+  FIELD_DISPATCH_SOURCE_TYPE,
+  collectPartsUsed,
+  isTerminalStatus,
+  needsDispatcherAttention,
+  parseFieldDispatchEvidence,
+  parseFieldDispatchStatus,
+  type FieldDispatchJobStatus,
+} from "@dpf/validators";
 
 export interface DispatchJobView {
   itemId: string;
   title: string;
-  status: string;
+  status: FieldDispatchJobStatus;
+  statusLabel: string;
   urgency: string;
   dueAt: string | null;
   createdAt: string;
+  assigned: boolean;
+  assignmentLabel: string;
+  partsUsed: number;
+  attentionReasons: string[];
 }
 
-/** The board's columns, in operator workflow order. */
+/** The board's operational lanes, in dispatcher workflow order. */
 export const DISPATCH_COLUMNS = [
-  { key: "queued", label: "Unassigned" },
-  { key: "assigned", label: "Assigned" },
-  { key: "in-progress", label: "In progress" },
-  { key: "awaiting-input", label: "Needs input" },
-  { key: "completed", label: "Completed" },
+  { key: "needs-dispatch", label: "Needs dispatch" },
+  { key: "ready", label: "Ready" },
+  { key: "active", label: "En route / on site" },
+  { key: "complete", label: "Work done" },
+  { key: "settled", label: "Billed / paid" },
 ] as const;
 
 export type DispatchColumnKey = (typeof DISPATCH_COLUMNS)[number]["key"];
 
-export interface DispatchBoard {
-  columns: Array<{ key: string; label: string; jobs: DispatchJobView[] }>;
-  total: number;
+export interface DispatchBoardSummary {
+  needsAttention: number;
+  unassigned: number;
+  active: number;
+  readyToInvoice: number;
+  partsUsed: number;
 }
 
-/** Map a raw WorkItem status to its board column (others fold into "in-progress"). */
+export interface DispatchBoard {
+  columns: Array<{ key: DispatchColumnKey; label: string; jobs: DispatchJobView[] }>;
+  total: number;
+  summary: DispatchBoardSummary;
+  nextJob: DispatchJobView | null;
+  routeStops: DispatchJobView[];
+}
+
+const ASSIGNABLE: ReadonlySet<FieldDispatchJobStatus> = new Set(["scheduled", "confirmed"]);
+const ACTIVE: ReadonlySet<FieldDispatchJobStatus> = new Set(["en-route", "on-site"]);
+
+/** Map a raw WorkItem status to its board lane through the field-dispatch contract. */
 export function columnForStatus(status: string): DispatchColumnKey {
-  switch (status) {
-    case "queued":
-      return "queued";
-    case "assigned":
-      return "assigned";
-    case "awaiting-input":
-    case "awaiting-approval":
-      return "awaiting-input";
-    case "completed":
-      return "completed";
+  switch (parseFieldDispatchStatus(status)) {
+    case "confirmed":
+      return "ready";
+    case "en-route":
+    case "on-site":
+      return "active";
+    case "complete":
+      return "complete";
+    case "invoiced":
+    case "paid":
+    case "cancelled":
+      return "settled";
+    case "quoted":
+    case "scheduled":
+    case "needs-review":
     default:
-      return "in-progress";
+      return "needs-dispatch";
   }
 }
 
-/** Group job views into the fixed board columns. Pure. */
+function isAssigned(row: Record<string, unknown>): boolean {
+  return Boolean(row["assignedToUserId"] || row["assignedToAgentId"] || row["assignedToType"]);
+}
+
+function assignmentLabel(row: Record<string, unknown>, assigned: boolean): string {
+  if (!assigned) return "Needs assignment";
+  if (row["assignedToUserId"]) return "Assigned to employee";
+  if (row["assignedToAgentId"]) return "Assigned to AI coworker";
+  return "Assigned";
+}
+
+function attentionReasons(job: Pick<DispatchJobView, "status" | "assigned">): string[] {
+  const reasons: string[] = [];
+  if (job.status === "needs-review") reasons.push("No valid dispatch state");
+  if (job.status === "quoted") reasons.push("Quote awaiting scheduling");
+  if (job.status === "scheduled") reasons.push("Scheduled but not confirmed");
+  if (ASSIGNABLE.has(job.status) && !job.assigned) reasons.push("Needs assignment");
+  return reasons;
+}
+
+function dueOrder(job: DispatchJobView): number {
+  if (!job.dueAt) return Number.MAX_SAFE_INTEGER;
+  const t = Date.parse(job.dueAt);
+  return Number.isNaN(t) ? Number.MAX_SAFE_INTEGER : t;
+}
+
+function buildSummary(jobs: readonly DispatchJobView[]): DispatchBoardSummary {
+  return {
+    needsAttention: jobs.filter((j) => j.attentionReasons.length > 0 || needsDispatcherAttention(j.status)).length,
+    unassigned: jobs.filter((j) => ASSIGNABLE.has(j.status) && !j.assigned).length,
+    active: jobs.filter((j) => ACTIVE.has(j.status)).length,
+    readyToInvoice: jobs.filter((j) => j.status === "complete").length,
+    partsUsed: jobs.reduce((sum, j) => sum + j.partsUsed, 0),
+  };
+}
+
+/** Group job views into fixed operational lanes. Pure. */
 export function groupDispatchJobs(jobs: readonly DispatchJobView[]): DispatchBoard {
-  const byColumn = new Map<string, DispatchJobView[]>();
+  const normalized = jobs.map((j) => ({
+    ...j,
+    attentionReasons: j.attentionReasons.length > 0 ? j.attentionReasons : attentionReasons(j),
+  }));
+  const byColumn = new Map<DispatchColumnKey, DispatchJobView[]>();
   for (const col of DISPATCH_COLUMNS) byColumn.set(col.key, []);
-  for (const job of jobs) {
+  for (const job of normalized) {
     byColumn.get(columnForStatus(job.status))!.push(job);
   }
+  const routeStops = [...normalized]
+    .filter((j) => j.dueAt && !isTerminalStatus(j.status))
+    .sort((a, b) => dueOrder(a) - dueOrder(b))
+    .slice(0, 8);
   return {
     columns: DISPATCH_COLUMNS.map((col) => ({
       key: col.key,
       label: col.label,
       jobs: byColumn.get(col.key)!,
     })),
-    total: jobs.length,
+    total: normalized.length,
+    summary: buildSummary(normalized),
+    nextJob: routeStops[0] ?? null,
+    routeStops,
   };
 }
 
@@ -83,13 +164,25 @@ export interface DispatchBoardDeps {
 
 function toView(row: Record<string, unknown>): DispatchJobView {
   const iso = (v: unknown) => (v instanceof Date ? v.toISOString() : v == null ? null : String(v));
-  return {
+  const status = parseFieldDispatchStatus(row["status"]);
+  const assigned = isAssigned(row);
+  const evidence = parseFieldDispatchEvidence(row["evidence"]);
+  const view = {
     itemId: String(row["itemId"] ?? ""),
     title: String(row["title"] ?? ""),
-    status: String(row["status"] ?? "queued"),
+    status,
+    statusLabel: FIELD_DISPATCH_JOB_STATUS_LABEL[status],
     urgency: String(row["urgency"] ?? "routine"),
     dueAt: iso(row["dueAt"]),
     createdAt: iso(row["createdAt"]) ?? "",
+    assigned,
+    assignmentLabel: assignmentLabel(row, assigned),
+    partsUsed: collectPartsUsed(evidence).reduce((sum, part) => sum + Math.max(part.quantity, 0), 0),
+    attentionReasons: [] as string[],
+  };
+  return {
+    ...view,
+    attentionReasons: attentionReasons(view),
   };
 }
 
@@ -111,10 +204,22 @@ export async function getDispatchBoard(
     const finder = await getFinder();
     const rows = await finder.findMany({
       where: {
-        sourceType: "field-service-job",
+        sourceType: FIELD_DISPATCH_SOURCE_TYPE,
         queue: { is: { queueId: dispatchQueueId(storefrontId) } },
       },
       orderBy: [{ dueAt: "asc" }, { createdAt: "asc" }],
+      select: {
+        itemId: true,
+        title: true,
+        status: true,
+        urgency: true,
+        dueAt: true,
+        createdAt: true,
+        assignedToType: true,
+        assignedToUserId: true,
+        assignedToAgentId: true,
+        evidence: true,
+      },
       take: 200,
     });
     return groupDispatchJobs(rows.map(toView));

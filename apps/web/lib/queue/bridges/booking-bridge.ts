@@ -1,6 +1,7 @@
 import { prisma } from "@dpf/db";
 import { recordQueueTransition } from "@/lib/queue/queue-telemetry";
 import type { WorkItemUrgency } from "@/lib/queue/queue-types";
+import { FIELD_DISPATCH_SOURCE_TYPE, type FieldDispatchJobStatus } from "@dpf/validators";
 
 /**
  * EP-3516E23D field-service dispatch — bridge a confirmed, provider-assigned
@@ -14,7 +15,11 @@ import type { WorkItemUrgency } from "@/lib/queue/queue-types";
  * call site (a confirm must never fail because dispatch bridging did).
  */
 
-/** Statuses that mean a WorkItem is still live (not a candidate for a fresh bridge). */
+/**
+ * Statuses that mean a WorkItem is still live (not a candidate for a fresh
+ * bridge). Keep legacy generic states for idempotency over existing rows, but
+ * new field-dispatch jobs write the canonical lifecycle below.
+ */
 const LIVE_WORK_ITEM_STATUSES = [
   "queued",
   "assigned",
@@ -23,7 +28,16 @@ const LIVE_WORK_ITEM_STATUSES = [
   "awaiting-approval",
   "escalated",
   "deferred",
+  "quoted",
+  "scheduled",
+  "confirmed",
+  "en-route",
+  "on-site",
+  "complete",
+  "invoiced",
 ];
+
+const INITIAL_DISPATCH_STATUS: FieldDispatchJobStatus = "confirmed";
 
 /** Stable per-storefront dispatch queue id — one crew board per storefront. */
 export function dispatchQueueId(storefrontId: string): string {
@@ -50,7 +64,7 @@ export async function bridgeBookingToWorkItem(
 
   const existing = await prisma.workItem.findFirst({
     where: {
-      sourceType: "field-service-job",
+      sourceType: FIELD_DISPATCH_SOURCE_TYPE,
       sourceId: booking.id,
       status: { in: LIVE_WORK_ITEM_STATUSES },
     },
@@ -84,7 +98,7 @@ export async function bridgeBookingToWorkItem(
   const providerName = booking.provider?.name ?? "unassigned";
   const workItem = await prisma.workItem.create({
     data: {
-      sourceType: "field-service-job",
+      sourceType: FIELD_DISPATCH_SOURCE_TYPE,
       sourceId: booking.id,
       title: `${serviceName} — ${booking.customerName} (${booking.bookingRef})`,
       description:
@@ -96,7 +110,7 @@ export async function bridgeBookingToWorkItem(
       effortClass: "physical",
       workerConstraint: { workerType: "human" },
       queueId: dispatchQueue.id,
-      status: "queued",
+      status: INITIAL_DISPATCH_STATUS,
       dueAt: booking.scheduledAt,
     },
   });
