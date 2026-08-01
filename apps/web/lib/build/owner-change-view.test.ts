@@ -166,6 +166,36 @@ describe("projectOwnerChangeView", () => {
     expect(stale.proof.checks.find((check) => check.key === "automated")?.state).toBe("stale");
   });
 
+  it("does not present requested intent as a completed change when no diff is recorded", () => {
+    const view = projectOwnerChangeView({
+      build: build({
+        phase: "build",
+        description: "Let customers change a booking online.",
+        diffSummary: null,
+      }),
+    });
+
+    expect(view.proof.whatChanged).toBeNull();
+  });
+
+  it("does not claim automated checks passed without a recorded passed-test count", () => {
+    const view = projectOwnerChangeView({
+      build: build({
+        verificationOut: {
+          testsFailed: 0,
+          typecheckPassed: true,
+          fullOutput: "Typecheck passed; test count unavailable.",
+          timestamp: "2026-07-30T12:00:00.000Z",
+        } as unknown as FeatureBuildRow["verificationOut"],
+      }),
+    });
+
+    expect(view.proof.checks.find((check) => check.key === "automated")).toMatchObject({
+      state: "not-recorded",
+      summary: "No complete automated-check result is recorded.",
+    });
+  });
+
   it("projects plain-language status, Needs You, and pending decision identity", () => {
     const view = projectOwnerChangeView({
       build: build({

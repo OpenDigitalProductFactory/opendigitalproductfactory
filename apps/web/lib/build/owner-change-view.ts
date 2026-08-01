@@ -73,7 +73,7 @@ export function projectOwnerChangeView(input: {
     brief: build.businessBuildBrief ?? null,
     proof: {
       requestedOutcome: outcome,
-      whatChanged: firstTextOrNull(build.diffSummary, build.description),
+      whatChanged: firstTextOrNull(build.diffSummary),
       checks: [
         acceptanceCheck(build),
         automatedCheck(build),
@@ -115,6 +115,7 @@ function automatedCheck(build: FeatureBuildRow): OwnerProofCheck {
   const verification = normalizeVerificationOutput(build.verificationOut);
   if (
     verification.typecheckPassed === null
+    || verification.testsPassed === null
     || verification.testsFailed === null
   ) {
     return proof("automated", "Automated checks", "not-recorded", "No complete automated-check result is recorded.");

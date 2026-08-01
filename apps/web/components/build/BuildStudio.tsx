@@ -924,6 +924,16 @@ export function BuildStudio({
                     )}
                   </div>
                 )}
+                {(activeBuild.designDoc?.proposedApproach || activeBuild.description || autonomousCustody) ? (
+                  <div className="border-t border-[var(--dpf-border)] px-5 py-5 sm:px-7">
+                    <BuildSolutionSummaryBand
+                      problemStatement={activeBuild.designDoc?.problemStatement ?? null}
+                      proposedApproach={activeBuild.designDoc?.proposedApproach ?? null}
+                      fallbackIntent={activeBuild.description}
+                      custody={autonomousCustody}
+                    />
+                  </div>
+                ) : null}
                 {ownerChangeView ? (
                   <OwnerChangeProofPanel
                     view={ownerChangeView}
@@ -991,16 +1001,6 @@ export function BuildStudio({
                     {activeWorkWarrant !== null && activeWorkWarrant !== undefined ? (
                       <div className="border-b border-[var(--dpf-border)] px-4 py-3">
                         <BuildWorkWarrantBand warrant={activeWorkWarrant} />
-                      </div>
-                    ) : null}
-                    {(activeBuild.designDoc?.proposedApproach || activeBuild.description || autonomousCustody) ? (
-                      <div className="border-b border-[var(--dpf-border)] px-4 py-3">
-                        <BuildSolutionSummaryBand
-                          problemStatement={activeBuild.designDoc?.problemStatement ?? null}
-                          proposedApproach={activeBuild.designDoc?.proposedApproach ?? null}
-                          fallbackIntent={activeBuild.description}
-                          custody={autonomousCustody}
-                        />
                       </div>
                     ) : null}
                     {decisionLedger.length > 0 ? (
@@ -1172,7 +1172,11 @@ function buildDetailsDrawerSections(
       defaultOpen: defaultId === "brief",
       content: (
         activeBuild.businessBuildBrief ? (
-          <BusinessBriefPanel brief={activeBuild.businessBuildBrief} onSaved={onBriefSaved} />
+          <BusinessBriefPanel
+            key={activeBuild.buildId}
+            brief={activeBuild.businessBuildBrief}
+            onSaved={onBriefSaved}
+          />
         ) : (
           <FeatureBriefPanel
             brief={activeBuild.brief}
