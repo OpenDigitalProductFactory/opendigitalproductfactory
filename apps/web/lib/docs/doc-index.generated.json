@@ -11246,6 +11246,16 @@
         "finite-and-standing-rooms",
         "incomplete-or-unavailable-rooms"
       ]
+    },
+    "docs/ux-fit/2026-07-31-build-studio-owner-brief-proof-design-grounding.md": {
+      "publicHref": "/ux-fit/2026-07-31-build-studio-owner-brief-proof-design-grounding/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "build-studio-owner-brief-and-proof-design-grounding",
+        "design-grounding"
+      ]
     }
   }
 }
