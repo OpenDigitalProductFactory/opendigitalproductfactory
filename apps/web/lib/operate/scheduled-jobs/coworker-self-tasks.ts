@@ -266,12 +266,6 @@ export type CoworkerSelfTaskProceduralTool = {
   hasRecentArtifact: () => Promise<boolean>;
 };
 
-// A brief created within this window counts as "recent", so the forced fallback
-// stands down. Wider than the daily assertive cadence so a single placeholder is
-// never re-created tick-over-tick; the coworker's own (capable-model) briefs land
-// well inside it and suppress the fallback entirely.
-const RECENT_CAMPAIGN_BRIEF_WINDOW_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
-
 // Recency windows for the sub-daily self-tasks. Each is wider than that
 // coworker's Assertive cadence gap (twice-weekly) so a single placeholder is
 // never re-created between two consecutive runs.
@@ -298,34 +292,24 @@ async function hasRecentKnowledgeArticle(titlePrefix: string): Promise<boolean> 
  * the coworker's self-task has no procedural guarantee (the loop's own output is
  * sufficient). Mirrors getRequiredProceduralToolForScheduledTask for the curated
  * self-task registry above.
+ *
+ * The Marketing Strategist deliberately has NO guarantee (BI-71D945CD). It used
+ * to be forced to create a placeholder campaign brief, on the reasoning that a
+ * provisional brief beat an empty Campaigns page. The canonical marketing
+ * operating snapshot removed that premise: an empty marketing workspace now
+ * renders an honest, actionable next step ("establish one bounded campaign")
+ * plus a blocker carrying one recovery action, so a fabricated brief is strictly
+ * worse than the truth. Observed creating real placeholder rows on a live
+ * install while model dispatch was failing, which is exactly when the loop
+ * produces nothing and the fallback fires every tick.
+ *
+ * Before adding a guarantee for another coworker, check whether that surface has
+ * an honest empty state first — a placeholder is only ever better than a wall of
+ * zeros, never better than the truth.
  */
 export function coworkerSelfTaskRequiredTool(
   agentId: string,
 ): CoworkerSelfTaskProceduralTool | null {
-  if (agentId === "marketing-specialist") {
-    return {
-      name: "create_marketing_campaign_brief",
-      // Honest, generic placeholder. Only reached when the marketing page has no
-      // recent brief AND the coworker's loop failed to produce one — so a clearly
-      // provisional brief beats an empty Campaigns page. required: title, objective.
-      args: {
-        title: "Acquisition campaign brief (needs refresh)",
-        objective:
-          "Provisional acquisition brief created automatically because the Campaigns page had no recent brief. Refresh with a segment-specific objective, audience, and channel mix.",
-        notes:
-          "Auto-generated fallback so the Campaigns page is not empty. The Marketing Strategist should replace this with a grounded, ICP-specific brief on its next run.",
-      },
-      hasRecentArtifact: async () => {
-        const since = new Date(Date.now() - RECENT_CAMPAIGN_BRIEF_WINDOW_MS);
-        const recent = await prisma.marketingCampaignBrief.findFirst({
-          where: { createdAt: { gte: since } },
-          select: { briefId: true },
-        });
-        return recent !== null;
-      },
-    };
-  }
-
   if (agentId === "inventory-specialist") {
     return {
       name: "create_knowledge_article",

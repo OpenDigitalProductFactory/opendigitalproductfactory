@@ -222,6 +222,28 @@ describe("coworkerSelfTaskRequiredTool (anti-fabrication floor)", () => {
   it("returns null for a coworker with no self-task", () => {
     expect(coworkerSelfTaskRequiredTool("some-advisor")).toBeNull();
   });
+
+  // BI-71D945CD. The Marketing Strategist USED to be forced to create a
+  // placeholder "Acquisition campaign brief (needs refresh)" whenever its loop
+  // produced nothing, on the reasoning that a provisional brief beat an empty
+  // Campaigns page. The canonical marketing operating snapshot (BI-CEA797A1) now
+  // renders an honest, actionable empty state for exactly that case — next step
+  // "establish-campaign" plus a no-campaign blocker carrying one recovery action
+  // — so the fabricated brief is strictly worse than the truth. Observed live on
+  // 2026-07-31 creating real placeholder rows because model dispatch was failing.
+  it("does NOT force a placeholder brief for the Marketing Strategist", () => {
+    expect(coworkerSelfTaskRequiredTool(MKT)).toBeNull();
+  });
+
+  // The removal is deliberately marketing-only: the other three surfaces have no
+  // equivalent honest empty state, so dropping their fallbacks would trade a
+  // placeholder for a genuine wall of zeros. This pins the scope so a future
+  // edit cannot silently widen or narrow it.
+  it("leaves the other coworkers' procedural guarantees intact", () => {
+    expect(coworkerSelfTaskRequiredTool(INV)?.name).toBe("create_knowledge_article");
+    expect(coworkerSelfTaskRequiredTool(PLT)?.name).toBe("create_knowledge_article");
+    expect(coworkerSelfTaskRequiredTool(DOC)?.name).toBe("doc_save");
+  });
 });
 
 describe("inferLevelFromSelfTaskSchedule", () => {
