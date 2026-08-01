@@ -78,6 +78,34 @@ export function parseRuleBaseline(text) {
   return out;
 }
 
+/**
+ * Merge live plane anchors into an existing baseline — the `--update` semantics.
+ *
+ * UNION, NEVER RESCAN. The baseline is a ratchet on rule EXISTENCE, so an update
+ * may only ADD protection. Rescanning the plane alone looks right and is quietly
+ * destructive: every rule already relocated to a registered destination silently
+ * drops out of protection, which is the exact loss this guard exists to prevent.
+ * That regression shipped twice (BI-0020D511 §12f) — hence this seam and its tests.
+ *
+ * Consolidation REQUIRES an --update, so union semantics is what makes the
+ * curation `commons-are-curated-not-just-appended` mandates safe: no amount of
+ * rewording can lose a rule by accident. Retirement is a deliberate hand edit.
+ *
+ * Labels refresh from the live plane (consolidation rewords rules); an anchor
+ * absent from the plane keeps its recorded label rather than being emptied.
+ *
+ * @param {Map<string,string>} existing  parsed committed baseline
+ * @param {Array<{anchor: string, label: string}>} planeAnchors  anchors found in the plane
+ * @returns {Map<string,string>}
+ */
+export function mergeRuleBaseline(existing, planeAnchors) {
+  const merged = new Map(existing);
+  for (const { anchor, label } of planeAnchors) {
+    if (label || !merged.has(anchor)) merged.set(anchor, label);
+  }
+  return merged;
+}
+
 export function serializeRuleBaseline(anchors) {
   return (
     [...anchors.entries()]
@@ -366,16 +394,39 @@ function main() {
   const alwaysOnTexts = readTexts(manifest.alwaysOn);
 
   if (process.argv.includes("--update")) {
-    const anchors = new Map();
+    // The baseline is a RATCHET ON RULE EXISTENCE, so --update is a UNION with
+    // what is already protected — never a rescan-from-scratch.
+    //
+    // Rescanning the plane alone looks right and is quietly destructive: every
+    // rule already relocated to a skill or runbook silently drops out of
+    // protection, which is the exact loss this guard exists to prevent. It bit
+    // twice (BI-0020D511 §12f) before being fixed. Rescanning plane+destinations
+    // over-corrects the other way — it would protect anchors that were never
+    // plane rules and freeze ordinary runbook edits.
+    //
+    // Union is the correct semantics, and it is what makes curation safe:
+    // consolidation REQUIRES an --update, so an --update that can only ADD
+    // protection means no consolidation can ever lose a rule by accident.
+    // Retiring a rule is therefore a deliberate hand edit of this file —
+    // `commons-are-curated-not-just-appended` reserves retirement to the human.
+    let existing = new Map();
+    try {
+      existing = parseRuleBaseline(readFileSync(BASELINE_PATH, "utf8"));
+    } catch {
+      /* first run — no baseline yet */
+    }
+    const planeAnchors = [];
     for (const [file, text] of Object.entries(alwaysOnTexts)) {
       if (text == null) continue;
-      for (const { anchor, label } of ruleAnchors(text, anchorRe, file)) {
-        if (!anchors.has(anchor) || (!anchors.get(anchor) && label)) anchors.set(anchor, label);
-      }
+      planeAnchors.push(...ruleAnchors(text, anchorRe, file));
     }
+    const anchors = mergeRuleBaseline(existing, planeAnchors);
+    const carried = existing.size;
     writeFileSync(BASELINE_PATH, serializeRuleBaseline(anchors));
     console.log(
-      `Wrote instruction-plane rule baseline: ${anchors.size} rule anchors from ${manifest.alwaysOn.length} always-on files.`,
+      `Wrote instruction-plane rule baseline: ${anchors.size} rule anchors ` +
+        `(${carried} carried forward, ${anchors.size - carried} newly added). ` +
+        `Retiring a rule is a deliberate edit of this file, never an --update.`,
     );
     process.exit(0);
   }

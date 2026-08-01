@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 608,
+  "pageCount": 609,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -2677,6 +2677,24 @@
         "how-to-apply",
         "decision-dimensions",
         "examples",
+        "see-also"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/commons-are-curated-not-just-appended.md": {
+      "publicHref": "/founder-kernel/wiki/principles/commons-are-curated-not-just-appended/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "commons-are-curated-not-just-appended",
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "when-this-does-not-apply",
+        "sources",
         "see-also"
       ]
     },
