@@ -1,7 +1,7 @@
 # Business Activity Simulator — design spec
 
-**Status:** draft · 2026-07-04
-**Epic:** EP-BUSINESS-ACTIVITY-SIM (to be filed)
+**Status:** P1 shipped (PR #2720, BI-FDAD8788) · **P2 shipped** (BI-78B83F58) · P3/P4 open (BI-E51D594F / BI-041735BC) · updated 2026-07-09
+**Epic:** EP-BUSINESS-ACTIVITY-SIM
 **Author:** platform (via Claude Code, operator Mark)
 **Related:** [[living-business-workforce-activity]] concept (the read-side viz); EP-TRADES-FIELD-SERVICE; the finance spine (PRs #2546/#2548/#2559)
 
@@ -42,9 +42,9 @@ A **Business Activity Simulator**: a test/dogfood harness that drives the *real*
 ## 5. Phases
 
 - **P1 — one archetype, end-to-end, real, DB-free (this PR).** Field-service: compose the *real* `field-dispatch` lifecycle with the *real* pure `ledger.ts` posting into a single orchestrated flow, with **financial oracles** (GL balanced, AR settles to zero, revenue recognized, cash received, no phantom billing, job terminal-paid). Deterministic, runs in CI, no DB, no auth. Proves the model + gives the first re-runnable confidence run. Ships with a self-test proving the oracles have teeth (a deliberately broken flow must fail them).
-- **P2 — generalize.** Archetype factories + scenario templates (software-platform subscriptions, retail POS) → the cross-archetype coverage matrix.
-- **P3 — DB-backed fidelity.** Drive the service layer (`ledger-service`, invoice/payment services) against a test Postgres with a real seeded COA, so persistence + account-resolution are covered too. Requires the auth-context shim (§6).
-- **P4 — observability + viz.** Emit business events to `agent-event-bus`/`TaskRun`; wire the test-only archetype toggle in the living-business viz (read-side).
+- **P2 — generalize (SHIPPED, BI-78B83F58).** Extracted the universal invoice→payment→GL half into `runBillingCycle`; added SaaS (`software-platform`) + retail (`retail-goods`) archetype flows keyed to real StorefrontArchetype ids; generalized the P1 oracles to a shared `FinancialFlowShape` so one oracle set scores every archetype; `runArchetypeMatrix` produces the per-archetype pass/fail matrix. **Finding:** only field-service has a rich lifecycle in `@dpf/validators`; SaaS/retail lifecycles are sim-local — a real substrate gap (candidate follow-up: an operational-lifecycle vocabulary for non-trades archetypes). DB-backed service-layer fidelity (test Postgres + seeded COA + auth-context shim) is folded into P4.
+- **P3 — graphical living-business view (BI-E51D594F).** The read-side: archetype + its TAM (geography / market segmentation) as the visual frame, with AI-coworker / human / partner activity animated within it (network-topology / factory-automation / Porter's / IT4IT framings), drill-in to the existing portal + value-stream views. UX-fit review required.
+- **P4 — stubbed live-portal activity + DB fidelity (BI-041735BC).** Drive real dispatch/invoice/payment/AR/AP on the live portal (service layer against a real DB) behind a **test-instance-only toggle**; emit business events to `agent-event-bus`/`TaskRun` for the P3 viz.
 
 ## 6. Invocation seam (the one real design question)
 
