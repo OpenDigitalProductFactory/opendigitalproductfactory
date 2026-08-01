@@ -11,7 +11,7 @@
 //   - BS-Queue subsection has the canonical test ID for integration.
 
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DetailsDrawer, DetailsDrawerPill, type DetailsDrawerSection } from "./DetailsDrawer";
@@ -140,6 +140,25 @@ describe("DetailsDrawer", () => {
     );
     fireEvent.click(screen.getByLabelText("Close details drawer"));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("moves focus into the expanded section and restores the invoking control on close", async () => {
+    const trigger = document.createElement("button");
+    trigger.textContent = "Review outcome";
+    document.body.appendChild(trigger);
+    trigger.focus();
+
+    const { unmount } = render(
+      <DetailsDrawer isOpen onClose={vi.fn()} sections={sampleSections()} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Brief / Design Doc" })).toHaveFocus();
+    });
+
+    unmount();
+    expect(trigger).toHaveFocus();
+    trigger.remove();
   });
 
   it("renders an empty-state placeholder when sections is empty", () => {

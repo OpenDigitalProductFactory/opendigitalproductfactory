@@ -293,6 +293,36 @@ describe("BuildStudio active-build header layout", () => {
     expect(screen.queryByTestId("feature-brief-panel")).toBeNull();
   });
 
+  it("moves focus into owner review sections and restores it when the drawer closes", async () => {
+    render(
+      <BuildStudio
+        builds={[makeBuild({ phase: "review" })]}
+        portfolios={[]}
+        governedBacklogEnabled
+      />,
+    );
+
+    const outcomeTrigger = screen.getByRole("button", { name: "Review outcome" });
+    outcomeTrigger.focus();
+    fireEvent.click(outcomeTrigger);
+    await waitFor(() => {
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: "Outcome and brief" }),
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Close details drawer" }));
+    expect(document.activeElement).toBe(outcomeTrigger);
+
+    const proofTrigger = screen.getByRole("button", { name: "Review proof" });
+    proofTrigger.focus();
+    fireEvent.click(proofTrigger);
+    await waitFor(() => {
+      const reviewSection = screen.getByTestId("details-drawer-section-review");
+      expect(document.activeElement).toBe(reviewSection.querySelector("button"));
+    });
+  });
+
   it("keeps editable business briefs isolated across Change A, Change B, then A", () => {
     const businessBrief = (
       briefId: string,
