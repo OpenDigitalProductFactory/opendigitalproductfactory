@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import {
   ASSESSMENT_VIA_METHODS,
   assessIncumbentsViaPostureMatrix,
+  assessIncumbentsViaRule,
   assessmentIdFor,
   confirmCoverageAssessment,
+  coveringBusinessCapabilityForCategory,
   isAssessmentVia,
   isCoverageVerdict,
   providerOfIncumbent,
@@ -122,6 +124,60 @@ describe("assessIncumbentsViaPostureMatrix", () => {
     expect(result.assessed).toBe(1);
     expect(create).not.toHaveBeenCalled();
     expect(update.mock.calls[0]![0].data.verdict).toBe("generic_connector");
+  });
+});
+
+describe("stage 2 — rule (covering business capability)", () => {
+  it("resolves the covering capability for a covered category via the corpus", () => {
+    const covering = coveringBusinessCapabilityForCategory("fitness-recreation");
+    expect(covering).not.toBeNull();
+    expect(covering!.category).toBe("fitness-recreation");
+    expect(typeof covering!.businessCapabilityId).toBe("string");
+  });
+
+  it("returns null for an uncovered or missing category", () => {
+    expect(coveringBusinessCapabilityForCategory("not-a-category")).toBeNull();
+    expect(coveringBusinessCapabilityForCategory(null)).toBeNull();
+  });
+
+  function ruleDb(opts: { existing: { coveringBusinessCapabilityId: string | null; status: string } | null }) {
+    const update = vi.fn().mockResolvedValue({});
+    const db = {
+      digitalProduct: {
+        findMany: vi.fn().mockResolvedValue([
+          { productId: "DP-incumbent-mindbody", name: "Mindbody", observationConfig: { vendor: "Mindbody" } },
+        ]),
+      },
+      absorptionPosture: { findFirst: vi.fn().mockResolvedValue({ archetypeIds: ["gym", "yoga-studio"] }) },
+      storefrontArchetype: { findFirst: vi.fn().mockResolvedValue({ category: "fitness-recreation" }) },
+      incumbentCoverageAssessment: {
+        findUnique: vi.fn().mockResolvedValue(opts.existing),
+        update,
+      },
+    };
+    return { db, update };
+  }
+
+  it("enriches an existing assessment's covering capability", async () => {
+    const { db, update } = ruleDb({ existing: { coveringBusinessCapabilityId: null, status: "proposed" } });
+    const result = await assessIncumbentsViaRule(db as never);
+    expect(result.enriched).toBe(1);
+    expect(update.mock.calls[0]![0].data.coveringBusinessCapabilityId).toBeTruthy();
+  });
+
+  it("is idempotent when the covering capability is already set", async () => {
+    const perspective = coveringBusinessCapabilityForCategory("fitness-recreation")!;
+    const { db, update } = ruleDb({ existing: { coveringBusinessCapabilityId: perspective.businessCapabilityId, status: "proposed" } });
+    const result = await assessIncumbentsViaRule(db as never);
+    expect(result.skipped).toBe(1);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("never clobbers a human-confirmed assessment", async () => {
+    const { db, update } = ruleDb({ existing: { coveringBusinessCapabilityId: null, status: "confirmed" } });
+    const result = await assessIncumbentsViaRule(db as never);
+    expect(result.skipped).toBe(1);
+    expect(update).not.toHaveBeenCalled();
   });
 });
 

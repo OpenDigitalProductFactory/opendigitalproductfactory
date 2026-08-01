@@ -39,9 +39,27 @@ export async function GET(request: NextRequest) {
   });
 }
 
+/**
+ * Drop a leading YAML frontmatter block. Pages carry authoring metadata
+ * (title/area/order, and the `relatedCode:` doc-impact edges) that the Jekyll
+ * site and the in-portal /docs renderer both strip; without this, the raw
+ * viewer rendered it as a stray <hr> followed by the YAML as body text.
+ *
+ * Deliberately NOT exported: App Router `route.ts` modules may only export
+ * route handlers and the known segment-config keys, so a stray export is a
+ * production-build error waiting to happen.
+ */
+function stripFrontmatter(markdown: string): string {
+  if (!markdown.startsWith("---\n") && !markdown.startsWith("---\r\n")) return markdown;
+  const end = markdown.search(/\r?\n---[ \t]*(\r?\n|$)/);
+  if (end === -1) return markdown; // unterminated — leave the content untouched
+  const rest = markdown.slice(end + 1).replace(/^---[ \t]*(\r?\n)?/, "");
+  return rest;
+}
+
 function renderMarkdownPage(filePath: string, markdown: string): string {
   // Lightweight markdown → HTML (headings, lists, code blocks, bold, links)
-  let html = escapeHtml(markdown);
+  let html = escapeHtml(stripFrontmatter(markdown));
 
   // Code blocks (``` ... ```)
   html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_m, lang, code) =>

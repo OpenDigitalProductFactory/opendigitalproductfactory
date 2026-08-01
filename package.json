@@ -65,6 +65,8 @@
     "docs:diagrams": "node scripts/render-doc-diagrams.mjs",
     "docs:diagrams:check": "node scripts/render-doc-diagrams.mjs --check",
     "docs:impact": "node scripts/check-docs-impact.mjs",
+    "check:retired-substrate": "node --test scripts/check-retired-substrate.test.mjs && node scripts/check-retired-substrate.mjs",
+    "check:retired-substrate:update": "node scripts/check-retired-substrate.mjs --update",
     "docs:impact:test": "node --test scripts/check-docs-impact.test.mjs scripts/gen-doc-impact.test.mjs",
     "docs:impact:graph": "node scripts/gen-doc-impact.mjs",
     "docs:impact:graph:check": "node scripts/gen-doc-impact.mjs --check",

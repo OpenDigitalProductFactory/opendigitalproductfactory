@@ -4918,7 +4918,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 135
+    "textMass": 160
   },
   "apps/web/components/employee/ReviewPanel.tsx": {
     "vocabulary": 0,

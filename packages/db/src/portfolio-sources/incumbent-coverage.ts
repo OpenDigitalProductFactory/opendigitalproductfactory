@@ -15,6 +15,7 @@
 
 import type { PrismaClient } from "../../generated/client/client";
 import { ABSORPTION_VERDICTS, type AbsorptionVerdict } from "./absorption-posture";
+import { CATEGORY_BUSINESS_CAPABILITY_PERSPECTIVES } from "../business-capability-category-corpus";
 
 /** How a verdict was reached — provenance (spec §5.2). Closed enum. */
 export const ASSESSMENT_VIA_METHODS = [
@@ -200,4 +201,124 @@ export async function listCoverageAssessments(
       coveringCapabilityKey: true,
     },
   });
+}
+
+// ─── Stage 2 — rule (spec §5.4) ──────────────────────────────────────────────
+//
+// The deterministic covering-capability resolution: an incumbent's archetype
+// (carried by its matched posture's archetypeIds) → the archetype's category →
+// the business-capability the category corpus already maps
+// (CATEGORY_BUSINESS_CAPABILITY_PERSPECTIVES, keyed by archetype category). This
+// traverses EXISTING substrate (ALL_ARCHETYPES + the corpus), no authored
+// crosswalk. It populates coveringBusinessCapabilityId that stage 1 leaves
+// unresolved; it does NOT change the verdict or its posture_matrix provenance
+// (the verdict is still the authored posture default awaiting confirmation).
+//
+// Scope honesty: a rule stage that produces a VERDICT for gap incumbents (ones
+// the posture matrix never named) needs a crosswalk between the incumbent
+// identity vocabulary (CatalogIdentity CPE category) and the archetype/capability
+// vocabulary — that crosswalk does not exist and is a separate authoring effort.
+// This stage resolves what the existing substrate deterministically supports.
+
+/** The covering business capability for an archetype category, via the corpus
+ *  (CATEGORY_BUSINESS_CAPABILITY_PERSPECTIVES). Pure — no client, no cross-package
+ *  import. Returns null when the category is not one the corpus covers. */
+export function coveringBusinessCapabilityForCategory(
+  category: string | null | undefined,
+): { businessCapabilityId: string; category: string } | null {
+  if (!category) return null;
+  const perspective = CATEGORY_BUSINESS_CAPABILITY_PERSPECTIVES[category];
+  if (!perspective) return null;
+  // The covering capability is the perspective's root (level-1) business
+  // capability; fall back to the perspective id if the tree shape ever changes.
+  const root = perspective.capabilities.find((c) => c.level === 1);
+  return { businessCapabilityId: root?.key ?? perspective.perspectiveId, category };
+}
+
+export interface RuleStageResult {
+  /** Assessments whose coveringBusinessCapabilityId was resolved/updated. */
+  enriched: number;
+  /** Left untouched (no posture, no covered archetype, already set, or confirmed). */
+  skipped: number;
+}
+
+/**
+ * Stage 2 — resolve the covering business capability for each incumbent via the
+ * category corpus (deterministic, existing substrate). Enriches the current
+ * assessment produced by stage 1; never clobbers a human-confirmed row; idempotent.
+ * Correct over an empty set — 0 incumbents / no covered archetype → 0 enriched.
+ */
+export async function assessIncumbentsViaRule(db: PrismaClient): Promise<RuleStageResult> {
+  const result: RuleStageResult = { enriched: 0, skipped: 0 };
+
+  const incumbents = await db.digitalProduct.findMany({
+    where: { coverageStatus: "incumbent" },
+    select: { productId: true, name: true, observationConfig: true },
+  });
+
+  for (const incumbent of incumbents) {
+    const provider = providerOfIncumbent(incumbent);
+    const posture = await db.absorptionPosture.findFirst({
+      where: { providerName: { equals: provider, mode: "insensitive" } },
+      select: { archetypeIds: true },
+    });
+    if (!posture || posture.archetypeIds.length === 0) {
+      result.skipped += 1;
+      continue;
+    }
+    // archetypeId → category via StorefrontArchetype (the DB the pipeline already
+    // holds), then category → covering business capability via the corpus.
+    const archetype = await db.storefrontArchetype.findFirst({
+      where: { archetypeId: { in: posture.archetypeIds } },
+      select: { category: true },
+    });
+    const covering = coveringBusinessCapabilityForCategory(archetype?.category);
+    if (!covering) {
+      result.skipped += 1;
+      continue;
+    }
+
+    const assessmentId = assessmentIdFor(incumbent.productId);
+    const existing = await db.incumbentCoverageAssessment.findUnique({
+      where: { assessmentId },
+      select: { coveringBusinessCapabilityId: true, status: true },
+    });
+    // Stage 1 must have created the row; never touch a confirmed one; idempotent.
+    if (
+      !existing ||
+      existing.status === "confirmed" ||
+      existing.coveringBusinessCapabilityId === covering.businessCapabilityId
+    ) {
+      result.skipped += 1;
+      continue;
+    }
+
+    await db.incumbentCoverageAssessment.update({
+      where: { assessmentId },
+      data: { coveringBusinessCapabilityId: covering.businessCapabilityId },
+    });
+    result.enriched += 1;
+  }
+
+  return result;
+}
+
+export interface CoveragePipelineResult {
+  postureMatrix: CoverageAssessmentRunResult;
+  rule: RuleStageResult;
+}
+
+/**
+ * Run the deterministic stages of the coverage pipeline in the spec's order —
+ * cheapest and most trustworthy first: stage 1 (posture_matrix) then stage 2
+ * (rule). Stage 3 (AI) is a separate apps/web concern (it needs the inference
+ * chain) and runs after these; stage 4 (human) is on-demand via
+ * confirmCoverageAssessment.
+ */
+export async function runCoverageAssessmentPipeline(
+  db: PrismaClient,
+): Promise<CoveragePipelineResult> {
+  const postureMatrix = await assessIncumbentsViaPostureMatrix(db);
+  const rule = await assessIncumbentsViaRule(db);
+  return { postureMatrix, rule };
 }
