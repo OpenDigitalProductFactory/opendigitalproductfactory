@@ -3,13 +3,20 @@ import { EmailInput } from "@/components/ui/EmailInput";
 import { signIn } from "@/lib/auth";
 import { AuthError } from "next-auth";
 import { redirect } from "next/navigation";
+import { resolveReturnPath } from "@/lib/auth/safe-return-path";
 
 type Props = {
-  searchParams: Promise<{ reset?: string; error?: string }>;
+  searchParams: Promise<{ reset?: string; error?: string; callbackUrl?: string }>;
 };
 
 export default async function LoginPage({ searchParams }: Props) {
-  const { reset, error } = await searchParams;
+  const { reset, error, callbackUrl } = await searchParams;
+  // Honour where the user was actually headed. Without this, every deep link — an emailed
+  // attention link, a shared bill URL, a bookmark — dumps the user on /workspace after
+  // sign-in and makes them go looking, which is the cognitive load the attention surface
+  // exists to remove (BI-C7D25599). Validated to a same-origin relative path so the
+  // parameter cannot become an open redirect.
+  const returnPath = resolveReturnPath(callbackUrl);
   return (
     <div className="min-h-screen flex items-center justify-center bg-[var(--dpf-bg)]">
       <div className="w-full max-w-sm p-8 bg-[var(--dpf-surface-1)] rounded-xl border border-[var(--dpf-border)]">
@@ -31,11 +38,15 @@ export default async function LoginPage({ searchParams }: Props) {
               await signIn("workforce", {
                 email: formData.get("email"),
                 password: formData.get("password"),
-                redirectTo: "/workspace",
+                redirectTo: returnPath,
               });
             } catch (err) {
               if (err instanceof AuthError) {
-                redirect(`/login?error=${err.type}`);
+                // Preserve the destination across a failed attempt, or a mistyped password
+                // silently discards where the user was going.
+                redirect(
+                  `/login?error=${err.type}&callbackUrl=${encodeURIComponent(returnPath)}`,
+                );
               }
               throw err;
             }
