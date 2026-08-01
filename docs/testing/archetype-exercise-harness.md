@@ -46,6 +46,11 @@ A pack at `scripts/harness/scenarios/<name>.mjs` default-exports:
 - `catalog` — items for the admin items API (name/description/category/ctaType/price)
 - `personas` — named customers with emails and addresses
 - `demand` — ordered `{ kind: "order" | "booking", item, persona, qty }` wave
+- `stock` — supplies the operator counts (`unit`, `onHandQuantity`,
+  `reorderPoint`, `reorderQuantity`, optional `supplierName`) and `usedBy`
+  recipe lines naming the catalog items that consume them; seeded through
+  `POST /api/storefront/admin/stock-items` so `list_stock_coverage` has
+  something to project from
 - `stubs` — where real-world rails are stubbed or deferred (e.g. card payment is
   order-then-settle today, so no card stub is needed at order time; supplier
   ordering awaits an ingredient-stock substrate)
@@ -70,6 +75,7 @@ automation tracked as BI-0AA828E3).
   reads) are manual follow-ups today; candidates for a `--observe` pass.
 - Coworkers read the demand signal the harness generates through the
   `list_storefront_activity` tool (orders with an item-quantity rollup,
-  reservations, inquiries; `storefront_read` grant) — the read side of the
-  proactive restocking loop. Acting on it (draft purchase orders) still awaits
-  the ingredient-stock substrate (BI-SPEND-003).
+  reservations, inquiries; `storefront_read` grant), and turn it into coverage
+  through `list_stock_coverage` (`stock_read` grant): days of cover and a
+  suggested order quantity per supply, derived from sales × recipe. Generating
+  the purchase order itself remains BI-SPEND-003 scope.
