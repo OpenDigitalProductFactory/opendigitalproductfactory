@@ -105,12 +105,17 @@ function runGate(args, env) {
 // its entire duration, which would starve the very http.Server the child
 // needs to reach (self-deadlock — the child would hang until it times out).
 function runGateAsync(args, env) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [gateScript, ...args], { env });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk) => { stdout += chunk; });
     child.stderr.on("data", (chunk) => { stderr += chunk; });
+    // Without this, a spawn failure (ENOENT/EACCES, or EAGAIN/EMFILE under heavy
+    // CI parallelism) would surface as an uncaughtException that crashes the
+    // test subprocess and leaves this Promise forever pending. Reject instead so
+    // it lands as a clean test failure.
+    child.on("error", reject);
     child.on("close", (status) => resolve({ status, stdout, stderr }));
   });
 }
