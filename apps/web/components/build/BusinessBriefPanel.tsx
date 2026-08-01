@@ -284,7 +284,7 @@ function BusinessBriefPanelContent({ brief, onSaved }: Props) {
                 type="button"
                 disabled={isPending}
                 onClick={() => saveBrief(true)}
-                className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-[var(--dpf-accent)] px-3 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-md bg-[var(--dpf-accent)] px-3 text-[13px] font-semibold text-[var(--dpf-on-accent,var(--dpf-surface-1))] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <CheckCircle2 size={14} />
                 Accept brief
