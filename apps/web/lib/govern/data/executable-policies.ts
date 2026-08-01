@@ -18,6 +18,7 @@ import type {
   ProcessingPurposeKey,
   SubjectRole,
 } from "./taxonomy";
+import type { RegulatedScope } from "./field-classification";
 
 /** A single obligation a policy attaches to an allow-with-obligations effect (§6.5). */
 export type DataObligation =
@@ -42,6 +43,11 @@ export type PolicyMatch = {
   subjectRoles?: readonly SubjectRole[];
   destinations?: readonly DestinationClass[];
   transformations?: readonly DataProtectionTransformation[];
+  /** Regulated legal scope of the data (PCI/PHI), from field-classification.ts
+   *  (BI-0B4B16CA). Omitted = any. This is the axis that lets a policy require a
+   *  named human approver specifically for cardholder / health data rather than
+   *  for the whole "restricted" tier. */
+  regulatedScopes?: readonly RegulatedScope[];
 };
 
 export type DataExecutablePolicy = {
@@ -132,6 +138,28 @@ const POLICIES: readonly DataExecutablePolicy[] = [
     obligations: [{ kind: "disposition-evidence", evidenceProfileId: "default-disposition" }],
     explanationCode: "destructive-needs-disposition-evidence",
     effectiveFrom: "2026-07-17",
+  },
+  {
+    // BI-0B4B16CA: a change that collects, writes, or projects payment-card
+    // (PCI-DSS) or health (PHI/HIPAA) data requires a NAMED human approver — not
+    // just deeper AI review. Conditioned on the computable regulated scope
+    // (field-classification.ts, BI-81ABBDA2), never a regex over prose.
+    // separationOfDuties: the approver must differ from the actor. HR-000
+    // (CDIO / Executive Sponsor) is the accountable authority for regulated-data
+    // posture; no dedicated data-protection role exists in PlatformRole yet.
+    id: "regulated-scope-human-approval",
+    version: "1",
+    precedenceLevel: "organization-policy",
+    match: {
+      actions: ["collect", "write", "project"],
+      regulatedScopes: ["pci-cardholder", "phi-health"],
+    },
+    effect: "allow-with-obligations",
+    obligations: [
+      { kind: "human-approval", authorityRole: "HR-000", separationOfDuties: true },
+    ],
+    explanationCode: "regulated-data-needs-named-human-approval",
+    effectiveFrom: "2026-08-01",
   },
 ];
 

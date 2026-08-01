@@ -28,6 +28,7 @@ import {
   type DataObligation,
   type PolicyMatch,
 } from "./executable-policies";
+import type { RegulatedScope } from "./field-classification";
 
 /** Resolved facts the PDP evaluates. The caller (PEP) resolves classification from the
  *  registry; `known: false` marks context that could not be resolved. */
@@ -46,6 +47,10 @@ export type PolicyEvaluationContext = {
     masterDataDomain?: MasterDataDomainKey;
     subjectRoles?: readonly SubjectRole[];
     collectionRule?: "allowed" | "minimize" | "prohibited";
+    /** Regulated legal scope (PCI/PHI) of the data, from field-classification.ts
+     *  (BI-0B4B16CA). Lets a policy require a named human approver for cardholder
+     *  or health data specifically. */
+    regulatedScope?: RegulatedScope;
   };
   environmentKnown: boolean;
   assetVersion: string;
@@ -143,6 +148,7 @@ function policyMatches(m: PolicyMatch, ctx: PolicyEvaluationContext): boolean {
     inList(m.transformations, ctx.transformation ?? "none") &&
     inList(m.sensitivities, ctx.classification.sensitivity) &&
     inList(m.domains, ctx.classification.masterDataDomain) &&
+    inList(m.regulatedScopes, ctx.classification.regulatedScope) &&
     anyIn(m.categories, ctx.classification.categories) &&
     anyIn(m.subjectRoles, ctx.classification.subjectRoles)
   );
