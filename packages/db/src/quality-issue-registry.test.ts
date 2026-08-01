@@ -9,6 +9,7 @@ import {
   qualityIssueDrift,
   subjectBearingTypes,
 } from "./quality-issue-registry";
+import { COWORKER_SLUG_TO_CANONICAL_AGENT_ID } from "./agent-identity";
 
 // The registry IS the governance gate. These tests are what stop a detector
 // being added with no declared way to close what it opens — the defect that let
@@ -106,6 +107,20 @@ describe("quality issue registry — lifecycle contract", () => {
     expect(contract.autoResolveWhen).toContain("reconcile-on-recovery");
   });
 
+  it("every coworker owner resolves to a real coworker slug", () => {
+    // All 9 coworker-owned types named `coworker:estate-specialist` — an id that
+    // exists in NEITHER the slug map NOR the Agent table. It was written against
+    // the DISPLAY NAME of `inventory-specialist` ("Digital Product Estate
+    // Specialist"). Drift reports therefore named an owner nothing could route
+    // to, which is a large part of why 435 rows sat unworked for three months.
+    const unresolvable = QUALITY_ISSUE_TYPES.map((type) => QUALITY_ISSUE_REGISTRY[type].owner)
+      .filter((owner) => owner.startsWith("coworker:"))
+      .map((owner) => owner.slice("coworker:".length))
+      .filter((slug) => !(slug in COWORKER_SLUG_TO_CANONICAL_AGENT_ID));
+
+    expect([...new Set(unresolvable)]).toEqual([]);
+  });
+
   it("names the operator-actionable queues an owner is accountable for", () => {
     const actionable = operatorActionableTypes();
     expect(actionable).toContain("lifecycle_unverified");
@@ -129,7 +144,9 @@ describe("qualityIssueDrift — what a proactive sweep acts on", () => {
       "stale_entity",
     ]);
     expect(drift[0]).toMatchObject({ open: 178, budget: 0, over: 178 });
-    expect(drift[0].owner).toBe("coworker:estate-specialist");
+    // Was asserting `coworker:estate-specialist` — an owner that resolves to no
+    // agent. The test had codified the routing bug rather than catching it.
+    expect(drift[0].owner).toBe("coworker:inventory-specialist");
   });
 
   it("reports nothing when every queue is at its steady state", () => {

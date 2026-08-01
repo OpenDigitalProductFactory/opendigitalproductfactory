@@ -60,7 +60,9 @@ describe("runQualityIssueDriftSweep — drift detection", () => {
       "catalog_match_ambiguous",
     ]);
     expect(report.drift[0]).toMatchObject({ open: 178, budget: 0, over: 178 });
-    expect(report.drift[0].owner).toBe("coworker:estate-specialist");
+    // Was `coworker:estate-specialist`, which resolves to no agent — the second
+    // test that had codified the routing bug instead of catching it.
+    expect(report.drift[0].owner).toBe("coworker:inventory-specialist");
     expect(report.scannedAt).toBe(NOW);
   });
 
