@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 600,
+  "pageCount": 601,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -7447,6 +7447,32 @@
         "9-risks-and-mitigations",
         "10-open-questions",
         "11-definition-of-done"
+      ]
+    },
+    "docs/strategy/2026-09-cada-architects-forum-deck.md": {
+      "publicHref": "/strategy/2026-09-cada-architects-forum-deck/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "architects-forum-cada-cloud-sovereignty-deck-outline-speaker-notes",
+        "slide-1-title",
+        "slide-2-the-shift-from-politics-to-procurement-law",
+        "slide-3-hero-the-four-tier-sovereignty-ladder-the-four-tier-ladder-visual",
+        "slide-4-why-hyperscaler-ai-is-capped-at-l1l2",
+        "slide-5-whos-in-scope-and-the-cascade",
+        "slide-6-the-architecture-that-can-reach-the-top",
+        "slide-7-sovereign-by-construction-how-dpf-embodies-it",
+        "slide-8-the-evidence-trail-what-auditorsprocurement-now-demand",
+        "slide-9-live-demo-what-tier-is-this-install",
+        "slide-10-the-partner-reference-stack",
+        "slide-11-beyond-the-platform-governing-the-whole-estate",
+        "slide-12-honest-caveats-credibility-with-this-audience",
+        "slide-13-call-to-action",
+        "slide-14-appendix-pointer-qa",
+        "appendix-a-legislation-references",
+        "appendix-b-dpf-architecture-references",
+        "appendix-c-live-demo-script"
       ]
     },
     "docs/strategy/2026-09-cada-cloud-sovereignty-architects-forum.md": {
