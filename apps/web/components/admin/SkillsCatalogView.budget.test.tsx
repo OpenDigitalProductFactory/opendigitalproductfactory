@@ -7,11 +7,12 @@ import { measureUxBudget, UX_BUDGETS } from "@/lib/ux-budget";
 // BI-36CE8BAB / BI-1D718FCA — the wall-of-text regression guard for the catalog.
 //
 // `/platform/ai/skills` measured 5,349 default-visible words: the 2nd-worst
-// surface in the portal, ~12x its budget, 28x the 192-word median across the 201
-// routes swept. Nearly all of it came from ONE component — a card grid rendering
-// all 92 skills' full descriptions with `line-clamp-2`. Clamping is a paint-time
-// trick: the words stay in the DOM, so the reader's accessibility tree, the
-// route sweep, and any screen reader all still carry them.
+// surface in the portal and ~12x its budget. Nearly all of it came from ONE
+// component — a card grid rendering all 92 skills' full descriptions with
+// `line-clamp-2`. Clamping is a paint-time trick: the words stay in the DOM, so
+// the accessibility tree, the route sweep, and any screen reader still carry
+// them. An interim cap took the route to 1,352 by hiding rows; grouping takes it
+// to 203 while keeping every row reachable.
 //
 // This test measures the SAME artifact the CI sweep measures (served markup, via
 // the sweep's own measureUxBudget) at production scale, so the regression cannot
@@ -100,7 +101,8 @@ describe("SkillsCatalogView — default-visible budget at production scale", () 
   });
 
   it("stays far below the 5,349-word baseline this route regressed from", () => {
-    // Measured at 26 words when this landed. The ceiling is deliberately loose:
+    // This component measures 26 words in isolation; the full route measures 203
+    // (the route sweep is the binding number). The ceiling is deliberately loose:
     // it guards the ORDER OF MAGNITUDE so a real regression fails loudly without
     // turning every copy edit red.
     expect(metrics.defaultVisibleWords).toBeLessThan(200);

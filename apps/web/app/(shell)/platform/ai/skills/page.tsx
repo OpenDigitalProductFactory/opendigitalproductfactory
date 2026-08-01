@@ -26,16 +26,21 @@ import { isSkillLifecycleState } from "@/lib/skills/lifecycle";
 
 // Migrated to the L1 `list` shell (BI-36CE8BAB, EP-UX-SYSTEM §6 L1).
 //
-// This route measured 5,349 default-visible words against a 450-word budget —
-// the 2nd-worst surface in the portal and 28x the 192-word median across the
-// 201 routes swept — with ZERO lead-band words and an accessibility tree that
-// was a flat run of ~150 sibling paragraphs. It stacked five unrelated panels
-// vertically with no way to skip any of them.
+// This route was the portal's second-worst surface at 5,349 default-visible
+// words against a 450-word budget, with ZERO lead-band words and an
+// accessibility tree that was a flat run of ~150 sibling paragraphs. It stacked
+// five unrelated panels vertically with no way to skip any of them.
+//
+// An interim fix capped the catalog at 12 rows, which brought the measurement to
+// 1,352 but by HIDING skills — a masked list (BI-836923AD): a subset with no
+// indication of what is missing, and a search that silently disagrees with the
+// screen. This replaces the cap with structure and measures 203.
 //
 // The content did not shrink; it got a hierarchy. The catalog is what a reader
-// comes here for and stays default-visible; observability, the curator report
-// and seed-drift detail are diagnostics and now sit behind one disclosure.
-// Nothing was removed and every control remains reachable.
+// comes here for and stays default-visible, grouped by category and collapsed;
+// observability, the curator report and seed-drift detail are diagnostics and
+// now sit behind one disclosure. Nothing was removed and every control and every
+// skill remains reachable.
 
 export default async function SkillsObservatoryPage({
   searchParams,
