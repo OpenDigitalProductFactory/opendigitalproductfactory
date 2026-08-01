@@ -6,6 +6,17 @@
 // activity, recovery point) describe the SAME server data without redefining
 // it twice and risking drift.
 
+export type SelfUpgradeRunStatus =
+  | "queued"
+  | "pending"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "cancelled"
+  | "skipped"
+  | "completing"
+  | "rolled_back";
+
 export type LatestRun = {
   runId: string;
   status: string;

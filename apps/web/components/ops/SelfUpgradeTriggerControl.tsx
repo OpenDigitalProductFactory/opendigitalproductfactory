@@ -22,9 +22,9 @@ import { isExpectedDuringSwap } from "@/lib/self-upgrade/is-expected-during-swap
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import type { LatestRun, QuiescenceActivity } from "@/lib/self-upgrade/run-types";
 import SelfUpgradeJobEngineHealthAlert, {
-  shouldPollForJobEngineRecovery,
   type JobEngineHealth,
 } from "@/components/ops/SelfUpgradeJobEngineHealthAlert";
+import { useOptionalSelfUpgradeLive } from "@/components/ops/SelfUpgradeLiveProvider";
 
 type Props = {
   enabled: boolean;
@@ -37,11 +37,15 @@ type Props = {
 export default function SelfUpgradeTriggerControl({
   enabled,
   channel,
-  latestRun,
-  quiescence,
-  jobEngine,
+  latestRun: initialLatestRun,
+  quiescence: initialQuiescence,
+  jobEngine: initialJobEngine,
 }: Props) {
   const router = useRouter();
+  const live = useOptionalSelfUpgradeLive();
+  const latestRun = live?.snapshot.latestRun ?? initialLatestRun;
+  const quiescence = live?.snapshot.quiescence ?? initialQuiescence;
+  const jobEngine = live?.snapshot.jobEngine ?? initialJobEngine;
   const [isPending, startTransition] = useTransition();
   const [override, setOverride] = useState(false);
   const [justQueued, setJustQueued] = useState(false);
@@ -78,18 +82,6 @@ export default function SelfUpgradeTriggerControl({
     return () => clearTimeout(timeout);
   }, [justQueued]);
 
-  useEffect(() => {
-    if (!justQueued && !upgradeInFlight && !restarting) return;
-    const interval = setInterval(() => router.refresh(), 4_000);
-    return () => clearInterval(interval);
-  }, [justQueued, upgradeInFlight, restarting, router]);
-
-  useEffect(() => {
-    if (!shouldPollForJobEngineRecovery(jobEngine)) return;
-    const interval = setInterval(() => router.refresh(), 15_000);
-    return () => clearInterval(interval);
-  }, [jobEngine, router]);
-
   // A compact fingerprint of the server-derived state. When it changes after
   // a swap-induced disconnect, the new container has answered and the
   // reconnect banner can clear.
@@ -121,7 +113,17 @@ export default function SelfUpgradeTriggerControl({
     restartBaselineRef.current = serverSignature();
     setRestarting(true);
     setJustQueued(true);
-    router.refresh();
+    refreshStatus();
+  }
+
+  function refreshStatus() {
+    if (live) {
+      void live.refresh();
+    } else {
+      // Isolated rendering/tests outside the route provider retain the old
+      // bounded mutation behavior; production is always provider-backed.
+      router.refresh();
+    }
   }
 
   function handleTrigger() {
@@ -133,7 +135,7 @@ export default function SelfUpgradeTriggerControl({
         const result = await triggerSelfUpgrade(force ? { force: true } : undefined);
         setTriggerResult(result);
         if (result.queued) setJustQueued(true);
-        router.refresh();
+        refreshStatus();
       } catch (err) {
         if (isExpectedDuringSwap(err)) {
           enterRestarting();
@@ -155,7 +157,7 @@ export default function SelfUpgradeTriggerControl({
         const r = await forceActiveRun(runId);
         setForceConfirm(false);
         if (!r.ok) setInFlightError(r.error ?? "Force failed");
-        router.refresh();
+        refreshStatus();
       } catch (err) {
         setForceConfirm(false);
         if (isExpectedDuringSwap(err)) {
@@ -178,7 +180,7 @@ export default function SelfUpgradeTriggerControl({
         const r = await abortActiveRun(runId);
         setAbortConfirm(false);
         if (!r.ok) setInFlightError(r.error ?? "Abort failed");
-        router.refresh();
+        refreshStatus();
       } catch (err) {
         setAbortConfirm(false);
         if (isExpectedDuringSwap(err)) {

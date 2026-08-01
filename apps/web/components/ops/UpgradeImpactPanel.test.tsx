@@ -163,8 +163,9 @@ describe("UpgradeImpactPanel — activity indication", () => {
 
   it("shows an inline busy label and a panel skeleton while auto-generating on first view", async () => {
     // No initialSummary → the panel auto-fetches on mount (BI-4A400DE4). A
-    // never-resolving fetch keeps the useTransition pending so the loading UI
-    // stays on screen — no click needed, the activity shows behind the fetch.
+    // never-resolving fetch keeps the explicit request state pending so the
+    // loading UI stays on screen — no click needed, the activity shows behind
+    // the fetch.
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
     render(<UpgradeImpactPanel enabled />);
 
@@ -189,5 +190,22 @@ describe("UpgradeImpactPanel — activity indication", () => {
     expect(screen.getAllByText("Top change one")).toHaveLength(1);
     const okRegion = document.querySelector('[data-summary-state="ok"]');
     expect(okRegion?.getAttribute("aria-busy")).toBe("true");
+  });
+
+  it("aborts optional impact work when navigation unmounts the panel", async () => {
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url, init) => {
+        signal = init?.signal ?? undefined;
+        return new Promise<Response>(() => undefined);
+      }),
+    );
+    const { unmount } = render(<UpgradeImpactPanel enabled />);
+
+    await waitFor(() => expect(signal).toBeDefined());
+    expect(signal?.aborted).toBe(false);
+    unmount();
+    expect(signal?.aborted).toBe(true);
   });
 });

@@ -13,6 +13,7 @@ import { StatusBanner } from "@/components/shell/StatusBanner";
 import { UpdatePendingBanner } from "@/components/shell/UpdatePendingBanner";
 import { DeploymentSkewBanner } from "@/components/shell/DeploymentSkewBanner";
 import { PlatformBanner } from "@/components/platform/PlatformBanner";
+import { SystemEventProvider } from "@/components/platform/SystemEventProvider";
 import { ShellBannerOverlay } from "@/components/shell/ShellBannerOverlay";
 import { ModelWarmup } from "@/components/shell/ModelWarmup";
 import { SetupOverlay } from "@/components/setup/SetupOverlay";
@@ -156,6 +157,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
 
   return (
     <PhoneCountryProvider country={phoneCountry}>
+      <SystemEventProvider>
       {brandingCss && <style dangerouslySetInnerHTML={{ __html: brandingCss }} />}
       <div className="min-h-screen flex flex-col bg-[var(--dpf-bg)]">
         {/* Common Shell Action-Result Contract (BI-9C0954D0) C6: the first
@@ -265,6 +267,7 @@ export default async function ShellLayout({ children }: { children: React.ReactN
         <QueueFlusher />
         <ModelWarmup />
       </div>
+      </SystemEventProvider>
     </PhoneCountryProvider>
   );
 }
