@@ -1658,6 +1658,18 @@
         "references"
       ]
     },
+    "docs/architecture/work-room-participation-and-channel-continuity.md": {
+      "publicHref": "/architecture/work-room-participation-and-channel-continuity/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "work-room-participation-and-channel-continuity",
+        "authorization-boundary",
+        "participant-projection",
+        "external-channel-continuity"
+      ]
+    },
     "docs/business-types/_readability-report.md": {
       "publicHref": "/business-types/_readability-report/",
       "portalHref": null,
@@ -10570,6 +10582,7 @@
         "overview",
         "what-you-see-first",
         "activity-and-participants",
+        "access-and-other-channels",
         "finite-and-standing-rooms",
         "incomplete-or-unavailable-rooms"
       ]

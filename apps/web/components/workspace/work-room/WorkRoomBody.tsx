@@ -3,7 +3,6 @@ import {
   FileCheck2,
   MessageSquareText,
   ShieldCheck,
-  Users,
 } from "lucide-react";
 
 import { LocalTime } from "@/components/ui/LocalTime";
@@ -18,9 +17,9 @@ import type {
 
 import {
   ACTIVITY_KIND_LABEL,
-  roomLabel,
 } from "./presentation";
 import { WorkRoomCycles } from "./WorkRoomCycles";
+import { WorkRoomParticipants } from "./WorkRoomParticipants";
 
 type Props = {
   detail: WorkspaceWorkCaseDetailView;
@@ -85,55 +84,6 @@ function BoundaryNotice({ room }: { room: WorkRoomView }) {
   );
 }
 
-function ParticipantPanel({ room }: { room: WorkRoomView }) {
-  const hasUnavailableCoworker = room.participants.some(
-    (participant) => participant.kind === "agent" && participant.presence === "unknown",
-  );
-
-  return (
-    <section aria-labelledby="work-room-participants-title" className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
-      <details open={hasUnavailableCoworker}>
-        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)]">
-          <span id="work-room-participants-title" className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--dpf-text)]">
-            <Users className="size-4" aria-hidden="true" />
-            Participants
-          </span>
-          <span className="text-xs text-[var(--dpf-muted)]">{room.participants.length}</span>
-        </summary>
-        <div className="border-t border-[var(--dpf-border)] px-4 py-3">
-          {room.participants.length > 0 ? (
-            <ul className="space-y-3">
-              {room.participants.map((participant) => (
-                <li key={participant.principalRef} className="text-sm">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium text-[var(--dpf-text)]">{participant.displayName}</span>
-                    <StatusBadge intent={participant.kind === "agent" ? "accent" : "neutral"} label={roomLabel(participant.kind)} variant="outline" />
-                  </div>
-                  <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-                    {participant.roles.map(roomLabel).join(", ")}
-                    {participant.currentWorkSummary ? ` · ${participant.currentWorkSummary}` : ""}
-                  </p>
-                  {participant.kind === "agent" && participant.presence === "unknown" ? (
-                    <div className="mt-2">
-                      <Notice variant="warn" title="Coworker status unavailable">
-                        Continue with the room’s next action: {room.work.nextAction}.
-                      </Notice>
-                    </div>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm leading-6 text-[var(--dpf-muted)]">
-              No participants are listed yet. People and coworkers enter through assignment or governed work.
-            </p>
-          )}
-        </div>
-      </details>
-    </section>
-  );
-}
-
 function ContextPanels({ room }: { room: WorkRoomView }) {
   const decisions = room.activity.filter((event) =>
     event.kind === "decision-proposed" || event.kind === "decision-resolved",
@@ -141,7 +91,7 @@ function ContextPanels({ room }: { room: WorkRoomView }) {
 
   return (
     <div className="space-y-3">
-      <ParticipantPanel room={room} />
+      <WorkRoomParticipants room={room} />
 
       <section aria-label="Work" className="rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
         <details>
@@ -285,7 +235,7 @@ export function WorkRoomBody({ detail, room }: Props) {
           ) : null}
 
           <div className="border-t border-[var(--dpf-border)] p-4">
-            <WorkItemCommentBox workItemId={detail.workItemId} workItemTitle={detail.workItemTitle} />
+            <WorkItemCommentBox workItemId={detail.workItemId} workItemTitle={detail.workItemTitle} caseKey={room.roomKey} />
           </div>
         </section>
 

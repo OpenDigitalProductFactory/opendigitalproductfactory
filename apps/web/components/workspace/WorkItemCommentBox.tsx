@@ -10,9 +10,11 @@ import { submitWorkItemComment } from "@/lib/work-management/submit-work-item-co
 export function WorkItemCommentBox({
   workItemId,
   workItemTitle,
+  caseKey,
 }: {
   workItemId: string;
   workItemTitle: string;
+  caseKey: string;
 }) {
   const [body, setBody] = useState("");
   const [status, setStatus] = useState<string | null>(null);
@@ -22,7 +24,7 @@ export function WorkItemCommentBox({
     const text = body.trim();
     if (!text) return;
     startTransition(async () => {
-      const result = await submitWorkItemComment({ workItemId, workItemTitle, body: text });
+      const result = await submitWorkItemComment({ workItemId, workItemTitle, caseKey, body: text });
       if (result.ok) {
         setBody("");
         const notified = result.notifiedUserIds.length + result.mentionedAgentIds.length;
@@ -32,7 +34,13 @@ export function WorkItemCommentBox({
             : "Posted.",
         );
       } else {
-        setStatus(result.error === "empty" ? "Write something first." : "Please sign in to comment.");
+        setStatus(
+          result.error === "empty"
+            ? "Write something first."
+            : result.error === "forbidden"
+              ? "You do not have permission to update this room."
+              : "Please sign in to comment.",
+        );
       }
     });
   }

@@ -278,6 +278,10 @@ describe("WorkCaseDetailView", () => {
     expect(participantPanel).toContain("<details open=\"\"");
     expect(html.match(/Continue with the room’s next action:/g)).toHaveLength(1);
     expect(html).toContain("Collect the customer confirmation");
+    expect(participantPanel).toContain("Why here");
+    expect(participantPanel).toContain("Authority");
+    expect(participantPanel).toContain("Sponsor");
+    expect(participantPanel).toContain("person:dispatcher-1");
   });
 
   it("handles the transitional missing projection honestly", () => {
