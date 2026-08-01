@@ -13,11 +13,27 @@ import type {
   InferenceDataScreenReceipt,
   InferenceDataScreenResult,
   InferencePayloadSensitivity,
+  InferenceMatchProvenance,
   InferencePolicyVersionSnapshot,
 } from "./types";
 import { hasVerticalPolicyPacks } from "./vertical-policy-packs";
 
 const DEFAULT_ORGANIZATION_ID = "org:local-install";
+
+/** Collapse repeat matches of the same rule at the same path; a payload that
+ *  trips one rule fifty times needs one provenance row, not fifty. */
+function dedupeMatchProvenance(
+  rows: readonly InferenceMatchProvenance[],
+): InferenceMatchProvenance[] {
+  const seen = new Map<string, InferenceMatchProvenance>();
+  for (const row of rows) {
+    const key = `${row.dataClass}|${row.path}|${row.reason}|${row.confidence}`;
+    if (!seen.has(key)) seen.set(key, row);
+  }
+  return [...seen.values()].sort((a, b) =>
+    a.dataClass.localeCompare(b.dataClass) || a.path.localeCompare(b.path) || a.reason.localeCompare(b.reason),
+  );
+}
 
 const SENSITIVITY_RANK: Readonly<Record<RequestContract["sensitivity"], number>> = {
   public: 0,
@@ -157,6 +173,17 @@ export function screenInferencePayload(
         ...policy.obligations.map((obligation) => obligation.kind),
       ]),
       policyPackVersions: policy.policyPackVersions,
+      // Path + rule + confidence only — never the matched value, so the receipt
+      // stays rawPayloadStored:false while a local-only verdict becomes
+      // diagnosable from the record instead of by re-deriving the payload.
+      matchProvenance: dedupeMatchProvenance(
+        classification.matches.map((match) => ({
+          dataClass: match.dataClass,
+          path: match.path,
+          reason: match.reason,
+          confidence: match.confidence,
+        })),
+      ),
       rawPayloadStored: false,
     },
     classification,
