@@ -125,6 +125,11 @@ type InferenceDataScreenResult = {
     classifiedDataClasses: string[];
     obligations: string[];
     transformation: "none" | "masked" | "tokenized" | "blocked";
+    // Declared-vs-measured, so an over-broad route label is distinguishable
+    // from a genuine payload finding. Levels only, never values.
+    measuredSensitivity?: SensitivityLevel;
+    declaredSensitivity?: SensitivityLevel;
+    sensitivityFloorApplied?: boolean;
     rawPayloadStored: false;
   };
   rehydrationHandle?: string;
