@@ -84,9 +84,14 @@ react-data-grid. Range-select is scoped to a rectangle (not multi-range).
   every written cell through the same validated `persistCell` as a manual edit;
   `Delete` clears a multi-cell selection. Native `onCellCopy`/`onCellPaste` events
   (synchronous, so it round-trips with Excel). Flat grid only.
-- **S4 — Fill-handle + fill down/right.** Drag the selection corner to fill; `Ctrl+D`
-  / `Ctrl+R`. (Next.) Also: extract the range logic from `Grid.tsx` into a
-  `useCellRange` hook (Grid.tsx grew to 1585 LOC — decomposition follow-up).
+- **S4 — Fill-handle + fill down/right + cut + select-all — SHIPPED.** `Ctrl+D` /
+  `Ctrl+R` fill the selection's top row down / left column across (pure, unit-tested
+  `fillDownWrites`/`fillRightWrites`); `Ctrl+X` copies then clears; `Ctrl+A` selects
+  every cell. The **drag fill-handle** is react-data-grid's built-in `onFill` (flat
+  grid only) — dragging the active cell's corner copies its value down/up the column
+  through the validated `persistCell`. Excel cell parity for the flat grid is now
+  complete. **Decomposition follow-up:** extract the range/fill logic from `Grid.tsx`
+  into a `useCellRange` hook (Grid.tsx is 1653 LOC).
 
 ## Accessibility & testing
 

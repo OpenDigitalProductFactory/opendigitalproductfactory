@@ -141,3 +141,29 @@ export function pasteWrites(
   }
   return writes;
 }
+
+/** Excel Ctrl+D: copy each column's top-row value down over the rest of the rect. */
+export function fillDownWrites(
+  rect: RangeRect,
+  getCell: (row: number, col: number) => string,
+): { row: number; col: number; value: string }[] {
+  const writes: { row: number; col: number; value: string }[] = [];
+  for (let c = rect.left; c <= rect.right; c++) {
+    const v = getCell(rect.top, c);
+    for (let r = rect.top + 1; r <= rect.bottom; r++) writes.push({ row: r, col: c, value: v });
+  }
+  return writes;
+}
+
+/** Excel Ctrl+R: copy each row's left-column value across the rest of the rect. */
+export function fillRightWrites(
+  rect: RangeRect,
+  getCell: (row: number, col: number) => string,
+): { row: number; col: number; value: string }[] {
+  const writes: { row: number; col: number; value: string }[] = [];
+  for (let r = rect.top; r <= rect.bottom; r++) {
+    const v = getCell(r, rect.left);
+    for (let c = rect.left + 1; c <= rect.right; c++) writes.push({ row: r, col: c, value: v });
+  }
+  return writes;
+}
