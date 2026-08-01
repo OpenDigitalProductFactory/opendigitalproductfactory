@@ -65,6 +65,7 @@ export type WorkRoomParticipantAssignment = {
   currentWorkSummary: string | null;
   enteredReason: string | null;
   sponsorPrincipalRef: string | null;
+  sponsorDisplayName?: string | null;
   authoritySummary: string;
 };
 
@@ -88,7 +89,7 @@ export function projectWorkRoomParticipants(input: {
       ...assignment,
       workState: assignment.currentWorkSummary ? "working" : "unknown",
       presence: active.has(assignment.principalRef) ? "active" : "unknown",
-      sourceRefs: [{ kind: "principal", id: assignment.principalRef }],
+      sourceRefs: [{ kind: "evidence", id: assignment.principalRef, sourceType: "principal" }],
     });
   }
 
@@ -106,6 +107,7 @@ export function projectWorkRoomParticipants(input: {
       currentWorkSummary: participant.currentWorkSummary,
       enteredReason: participant.enteredReason,
       sponsorPrincipalRef: participant.sponsorPrincipalRef,
+      sponsorDisplayName: participant.sponsorDisplayName,
       authoritySummary: participant.authoritySummary,
       sourceRefs: [
         ...(existing?.sourceRefs ?? []),

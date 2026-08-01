@@ -56,7 +56,9 @@ export function WorkRoomParticipants({ room }: { room: WorkRoomView }) {
                     {participant.sponsorPrincipalRef ? (
                       <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-2">
                         <dt className="text-[var(--dpf-muted)]">Sponsor</dt>
-                        <dd className="break-all text-[var(--dpf-text)]">{participant.sponsorPrincipalRef}</dd>
+                        <dd className="text-[var(--dpf-text)]">
+                          {participant.sponsorDisplayName ?? participant.sponsorPrincipalRef}
+                        </dd>
                       </div>
                     ) : null}
                   </dl>

@@ -53,6 +53,7 @@ export const loadPrismaWorkRoomParticipants: WorkspaceRoomParticipantLoader = as
               { aliasType: "user", aliasValue: { in: aliasValues } },
               { aliasType: "agent", aliasValue: { in: aliasValues } },
             ],
+            issuer: "",
           },
           select: {
             aliasType: true,
@@ -107,6 +108,7 @@ export const loadPrismaWorkRoomParticipants: WorkspaceRoomParticipantLoader = as
       currentWorkSummary: input.title,
       enteredReason: "Assigned to this room's work",
       sponsorPrincipalRef: null,
+      sponsorDisplayName: null,
       authoritySummary: authoritySummary(assignedPerson),
     });
   }
@@ -123,6 +125,7 @@ export const loadPrismaWorkRoomParticipants: WorkspaceRoomParticipantLoader = as
       currentWorkSummary: input.title,
       enteredReason: "Assigned to this room's work",
       sponsorPrincipalRef: assignedAgent.sponsorPrincipal?.principalId ?? null,
+      sponsorDisplayName: assignedAgent.sponsorPrincipal?.displayName ?? null,
       authoritySummary: authoritySummary(assignedAgent),
     });
   }
@@ -134,13 +137,14 @@ export const loadPrismaWorkRoomParticipants: WorkspaceRoomParticipantLoader = as
     return [{
       principalRef: principal.principalId,
       displayName: participant.label,
-      roles: [participant.role === "owner" ? "contributor" : "contributor"],
+      roles: ["contributor"],
       workState: toWorkState(participant.state),
       currentWorkSummary: input.title,
       enteredReason: participant.role === "owner"
         ? "Routed into this room's active work"
         : `Joined automatically through ${participant.enteredVia} lineage`,
       sponsorPrincipalRef: principal.sponsorPrincipal?.principalId ?? null,
+      sponsorDisplayName: principal.sponsorPrincipal?.displayName ?? null,
       authoritySummary: authoritySummary(principal),
       sourceRef: {
         kind: "evidence",
