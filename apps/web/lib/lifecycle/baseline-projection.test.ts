@@ -19,8 +19,10 @@ function existing(partial: Partial<ExistingMembership> & Pick<ExistingMembership
 const activeServer = { kind: "InventoryEntity", status: "active", supportStatus: "supported" } as const;
 
 describe("planBaselineProjection", () => {
+  const complete = { evidenceComplete: true } as const;
+
   it("opens memberships for newly observed things", () => {
-    const plan = planBaselineProjection([member("InventoryEntity", "srv-1", activeServer)], []);
+    const plan = planBaselineProjection([member("InventoryEntity", "srv-1", activeServer)], [], complete);
     expect(plan.material).toBe(true);
     expect(plan.summary.opened).toBe(1);
     expect(plan.ops[0]).toMatchObject({ op: "open" });
@@ -29,7 +31,7 @@ describe("planBaselineProjection", () => {
   it("is idempotent — unchanged evidence produces no ops", () => {
     const snap = resolveLifecycle(activeServer);
     const ex = existing({ governedThingKind: "InventoryEntity", governedThingId: "srv-1", stateSnapshot: snap });
-    const plan = planBaselineProjection([member("InventoryEntity", "srv-1", activeServer)], [ex]);
+    const plan = planBaselineProjection([member("InventoryEntity", "srv-1", activeServer)], [ex], complete);
     expect(plan.material).toBe(false);
     expect(plan.ops).toHaveLength(0);
     expect(plan.summary.unchanged).toBe(1);
@@ -41,35 +43,36 @@ describe("planBaselineProjection", () => {
     const plan = planBaselineProjection(
       [member("InventoryEntity", "srv-1", { kind: "InventoryEntity", status: "active", supportStatus: "deprecated" })],
       [ex],
+      complete,
     );
     expect(plan.summary.refreshed).toBe(1);
-    expect(plan.ops[0]).toMatchObject({ op: "refresh", reopened: false });
+    expect(plan.ops[0]).toMatchObject({ op: "refresh" });
   });
 
-  it("reopens a previously-closed membership when the thing reappears", () => {
+  it("opens a new interval when a previously-closed membership reappears", () => {
     const ex = existing({ governedThingKind: "InventoryEntity", governedThingId: "srv-1", validTo: new Date("2026-01-01"), stateSnapshot: resolveLifecycle(activeServer) });
-    const plan = planBaselineProjection([member("InventoryEntity", "srv-1", activeServer)], [ex]);
-    expect(plan.summary.reopened).toBe(1);
-    expect(plan.ops[0]).toMatchObject({ op: "refresh", reopened: true });
+    const plan = planBaselineProjection([member("InventoryEntity", "srv-1", activeServer)], [ex], complete);
+    expect(plan.summary.opened).toBe(1);
+    expect(plan.ops[0]).toMatchObject({ op: "open" });
   });
 
   it("closes memberships that left the current-state estate", () => {
     const ex = existing({ governedThingKind: "InventoryEntity", governedThingId: "gone-1", stateSnapshot: resolveLifecycle(activeServer) });
-    const plan = planBaselineProjection([], [ex]);
+    const plan = planBaselineProjection([], [ex], complete);
     expect(plan.summary.closed).toBe(1);
     expect(plan.ops[0]).toMatchObject({ op: "close" });
   });
 
   it("ignores already-closed memberships that stay absent", () => {
     const ex = existing({ governedThingKind: "InventoryEntity", governedThingId: "gone-1", validTo: new Date("2026-01-01"), stateSnapshot: resolveLifecycle(activeServer) });
-    const plan = planBaselineProjection([], [ex]);
+    const plan = planBaselineProjection([], [ex], complete);
     expect(plan.material).toBe(false);
     expect(plan.ops).toHaveLength(0);
   });
 
   it("treats an empty/incomplete stored snapshot as changed (forces refresh)", () => {
     const ex = existing({ governedThingKind: "InventoryEntity", governedThingId: "srv-1", stateSnapshot: {} });
-    const plan = planBaselineProjection([member("InventoryEntity", "srv-1", activeServer)], [ex]);
+    const plan = planBaselineProjection([member("InventoryEntity", "srv-1", activeServer)], [ex], complete);
     expect(plan.summary.refreshed).toBe(1);
   });
 
@@ -82,8 +85,16 @@ describe("planBaselineProjection", () => {
     const plan = planBaselineProjection(
       [member("InventoryEntity", "keep", activeServer), member("DigitalProduct", "new", { kind: "DigitalProduct", lifecycleStage: "production", lifecycleStatus: "active" })],
       ex,
+      complete,
     );
-    expect(plan.summary).toMatchObject({ opened: 1, closed: 1, unchanged: 1, refreshed: 0, reopened: 0 });
+    expect(plan.summary).toMatchObject({ opened: 1, closed: 1, unchanged: 1, refreshed: 0 });
     expect(plan.material).toBe(true);
+  });
+
+  it("does not close unseen memberships after a partial evidence scan", () => {
+    const ex = existing({ governedThingKind: "InventoryEntity", governedThingId: "not-in-page", stateSnapshot: resolveLifecycle(activeServer) });
+    const plan = planBaselineProjection([], [ex], { evidenceComplete: false });
+    expect(plan.material).toBe(false);
+    expect(plan.summary.closed).toBe(0);
   });
 });

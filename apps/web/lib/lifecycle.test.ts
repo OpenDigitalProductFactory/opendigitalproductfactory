@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   resolveLifecycle,
   deriveCurrency,
+  deriveSupportEndDate,
   deriveManifestationClass,
   deriveTemporalPerspective,
   isLegalStageTransition,
@@ -50,6 +51,11 @@ describe("deriveTemporalPerspective", () => {
       deriveTemporalPerspective({ realizationStage: "conceptual", lifecycleStage: "plan", lifecycleStatus: "draft", freshness: null }),
     ).toBe("future");
   });
+  it("classifies inactive logical things as past without fake freshness", () => {
+    expect(
+      deriveTemporalPerspective({ realizationStage: "logical", lifecycleStage: "production", lifecycleStatus: "inactive", freshness: null }),
+    ).toBe("past");
+  });
   it("classifies actual+active production as current", () => {
     expect(
       deriveTemporalPerspective({ realizationStage: "actual", lifecycleStage: "production", lifecycleStatus: "active", freshness: "fresh" }),
@@ -80,6 +86,22 @@ describe("deriveCurrency", () => {
   });
   it("EOL date overrides supportStatus", () => {
     expect(deriveCurrency({ supportStatus: "supported", supportEndsAt: "2026-01-01T00:00:00Z", now })).toBe("end-of-life");
+  });
+});
+
+describe("deriveSupportEndDate", () => {
+  it("uses the canonical catalog milestone hierarchy", () => {
+    expect(deriveSupportEndDate([
+      { milestone: "eol", date: "2027-01-01", confidence: 0.9 },
+      { milestone: "extended_support_end", date: "2028-01-01", confidence: 0.8 },
+    ])?.toISOString()).toContain("2028-01-01");
+  });
+
+  it("prefers higher-confidence evidence within one milestone", () => {
+    expect(deriveSupportEndDate([
+      { milestone: "eol", date: "2027-01-01", confidence: 0.5 },
+      { milestone: "eol", date: "2029-01-01", confidence: 0.9 },
+    ])?.toISOString()).toContain("2029-01-01");
   });
 });
 
@@ -124,6 +146,17 @@ describe("resolveLifecycle — unifies heterogeneous models onto common axes", (
     expect(r.freshness).toBe("fresh");
     expect(r.currency).toBe("approaching-eol");
     expect(r.temporalPerspective).toBe("current");
+  });
+
+  it("InventoryEntity derives currency from CatalogLifecycleMilestone evidence", () => {
+    const r = resolveLifecycle({
+      kind: "InventoryEntity",
+      status: "active",
+      supportStatus: "supported",
+      supportMilestones: [{ milestone: "eol", date: "2026-01-01", confidence: 0.9 }],
+      now: new Date("2026-06-07T00:00:00Z"),
+    });
+    expect(r.currency).toBe("end-of-life");
   });
 
   it("InventoryEntity (inactive) → past/retired", () => {

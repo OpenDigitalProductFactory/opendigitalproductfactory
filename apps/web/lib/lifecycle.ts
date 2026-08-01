@@ -94,6 +94,12 @@ export type CanonicalLifecycle = {
   temporalPerspective: TemporalPerspective;
 };
 
+export type SupportLifecycleMilestone = {
+  milestone: string;
+  date: Date | string | null;
+  confidence?: number | null;
+};
+
 // ─── Derivation helpers ─────────────────────────────────────────────────────────────
 
 /** A thing is manifested (physical/operational) once it reaches the actual realization
@@ -124,9 +130,43 @@ export function deriveTemporalPerspective(input: {
   lifecycleStatus: LifecycleStatus;
   freshness: Freshness | null;
 }): TemporalPerspective {
-  if (input.lifecycleStage === "retirement" || input.freshness === "retired") return "past";
+  if (
+    input.lifecycleStage === "retirement" ||
+    input.lifecycleStatus === "inactive" ||
+    input.freshness === "retired"
+  ) return "past";
   if (input.lifecycleStage === "plan" || input.lifecycleStage === "design") return "future";
   return "current";
+}
+
+/**
+ * Resolve the support boundary from the canonical CatalogLifecycleMilestone spine.
+ * A more specific support boundary wins over the generic EOL date. When sources
+ * disagree for the same milestone, prefer the highest-confidence observation and
+ * then the earlier date as the conservative risk boundary.
+ */
+export function deriveSupportEndDate(
+  milestones: readonly SupportLifecycleMilestone[] | null | undefined,
+): Date | null {
+  const priority = [
+    "security_updates_end",
+    "extended_support_end",
+    "eosl",
+    "eol",
+    "mainstream_end",
+  ];
+  for (const milestone of priority) {
+    const candidates = (milestones ?? [])
+      .filter((row) => row.milestone === milestone && row.date != null)
+      .map((row) => ({
+        date: row.date instanceof Date ? row.date : new Date(row.date as string),
+        confidence: row.confidence ?? 0,
+      }))
+      .filter((row) => !Number.isNaN(row.date.getTime()))
+      .sort((left, right) => right.confidence - left.confidence || left.date.getTime() - right.date.getTime());
+    if (candidates[0]) return candidates[0].date;
+  }
+  return null;
 }
 
 /** Map a CMDB-style supportStatus + optional EOL date onto the canonical currency axis. */
@@ -194,7 +234,8 @@ export type ResolveLifecycleInput =
       kind: "InventoryEntity";
       status?: string | null;
       supportStatus?: string | null;
-      supportEndsAt?: Date | string | null;
+      /** Milestones joined through InventoryEntity.catalogIdentity. */
+      supportMilestones?: readonly SupportLifecycleMilestone[] | null;
       freshness?: string | null;
       now?: Date;
     }
@@ -318,7 +359,7 @@ export function resolveLifecycle(input: ResolveLifecycleInput): CanonicalLifecyc
             : "retired",
         currency: deriveCurrency({
           supportStatus: input.supportStatus,
-          supportEndsAt: input.supportEndsAt,
+          supportEndsAt: deriveSupportEndDate(input.supportMilestones),
           now: input.now,
         }),
       });

@@ -90,16 +90,21 @@ export async function resolveBaselinePlateau(prisma: BaselineProjectorClient): P
 export async function reconcileBaselinePlateau(deps: {
   prisma: BaselineProjectorClient;
   evidence: BaselineMemberInput[];
+  evidenceComplete: boolean;
   actorPrincipalId?: string | null;
 }): Promise<BaselineProjectionResult> {
   const { prisma, evidence } = deps;
   const plateauElementId = await resolveBaselinePlateau(prisma);
 
   const existing = await prisma.plateauMembership.findMany({
-    where: { plateauElementId, membershipSource: "projected" },
+    // Historical intervals are immutable. The planner reconciles only the active
+    // projection and opens a new row when a previously-seen thing returns.
+    where: { plateauElementId, membershipSource: "projected", validTo: null },
   });
 
-  const plan = planBaselineProjection(evidence, existing);
+  const plan = planBaselineProjection(evidence, existing, {
+    evidenceComplete: deps.evidenceComplete,
+  });
   if (!plan.material) {
     return { status: "noop", plateauElementId, summary: plan.summary };
   }
@@ -123,7 +128,6 @@ export async function reconcileBaselinePlateau(deps: {
         data: {
           stateSnapshot: op.member.stateSnapshot,
           evidenceRef: op.member.evidenceRef,
-          validTo: null, // clears a prior close on reopen
         },
       });
     } else if (op.op === "close") {

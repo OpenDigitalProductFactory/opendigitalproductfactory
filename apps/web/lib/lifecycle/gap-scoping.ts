@@ -9,9 +9,10 @@
 // without a live DB and reuses the canonical backlog shape (never a direct planning write
 // from a generator).
 
-import { randomUUID } from "crypto";
+import { createHash } from "crypto";
 import type { GapDimension, GapScopeLevel } from "./gaps";
 import type { BacklogWorkType } from "../explore/backlog";
+import type { BacklogIngestInput, BacklogIngestResult } from "../operate/backlog-ingest";
 
 /** Map a gap dimension to the closed BacklogItem.workType axis (AGENTS.md §3). */
 export function workTypeForDimension(dimension: GapDimension): BacklogWorkType {
@@ -80,17 +81,21 @@ export type GapScopingDb = {
     findUnique(args: Record<string, unknown>): Promise<GapForScoping | null>;
     update(args: Record<string, unknown>): Promise<unknown>;
   };
-  backlogItem: {
-    create(args: Record<string, unknown>): Promise<{ id: string; itemId: string }>;
-  };
 };
+
+export type GapBacklogIngest = (input: BacklogIngestInput) => Promise<BacklogIngestResult>;
 
 export type ScopeGapResult = {
   gapId: string;
   backlogItemId: string;
-  backlogItemRecordId: string;
+  backlogItemRecordId: string | null;
   alreadyLinked: boolean;
 };
+
+export function backlogItemIdForGap(gapId: string): string {
+  const suffix = createHash("sha256").update(gapId).digest("hex").slice(0, 8).toUpperCase();
+  return `BI-LCG-${suffix}`;
+}
 
 /**
  * Scope a gap to the backlog. Idempotent: if the gap already carries a backlogItemId it
@@ -100,35 +105,41 @@ export type ScopeGapResult = {
 export async function scopeGapToBacklog(
   db: GapScopingDb,
   input: { gapId: string; epicId?: string | null; submittedById?: string | null },
+  ingest: GapBacklogIngest,
 ): Promise<ScopeGapResult> {
   const gap = await db.lifecycleGap.findUnique({ where: { id: input.gapId } });
   if (!gap) throw new Error(`LifecycleGap not found: ${input.gapId}`);
 
   if (gap.backlogItemId) {
-    return { gapId: gap.id, backlogItemId: gap.backlogItemId, backlogItemRecordId: gap.backlogItemId, alreadyLinked: true };
+    return { gapId: gap.id, backlogItemId: gap.backlogItemId, backlogItemRecordId: null, alreadyLinked: true };
   }
 
   const draft = gapToBacklogInput(gap);
-  const created = await db.backlogItem.create({
-    data: {
-      itemId: `BI-${randomUUID()}`,
-      type: draft.type,
-      workType: draft.workType,
-      title: draft.title,
-      body: draft.body,
-      status: "open",
-      // Gaps are detected signals, not human requests.
-      source: "automated-detection",
-      digitalProductId: draft.digitalProductId,
-      epicId: input.epicId ?? null,
-      submittedById: input.submittedById ?? null,
-    },
+  const backlogItem = await ingest({
+    itemId: backlogItemIdForGap(gap.id),
+    type: draft.type,
+    workType: draft.workType,
+    title: draft.title,
+    body: draft.body,
+    status: "triaging",
+    proposedOutcome: "build",
+    // Gaps are detected signals, not human requests.
+    source: "automated-detection",
+    digitalProductId: draft.digitalProductId,
+    epicId: input.epicId ?? undefined,
+    submittedById: input.submittedById ?? null,
+    origin: { kind: "lifecycle-gap", id: gap.id },
   });
 
   await db.lifecycleGap.update({
     where: { id: gap.id },
-    data: { backlogItemId: created.itemId, status: "scoped" },
+    data: { backlogItemId: backlogItem.itemId, status: "scoped" },
   });
 
-  return { gapId: gap.id, backlogItemId: created.itemId, backlogItemRecordId: created.id, alreadyLinked: false };
+  return {
+    gapId: gap.id,
+    backlogItemId: backlogItem.itemId,
+    backlogItemRecordId: backlogItem.id,
+    alreadyLinked: !backlogItem.created,
+  };
 }

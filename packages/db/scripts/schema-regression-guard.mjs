@@ -165,6 +165,11 @@ function isDefaultValueChange(baseLine, headLine) {
 // drops the column, in a PR reviewed by the schema steward; prune entries once
 // they have shipped to every environment.
 export const INTENTIONAL_FIELD_REMOVALS = new Set([
+  // 2026-07-31 EP-LIFECYCLE: refinementLevel becomes required after the
+  // reconcile migration normalizes every existing row and installs a default.
+  // The parser represents optionality tightening as removal of the nullable
+  // field signature. Prune once the migration has shipped fleet-wide.
+  "EaElement.refinementLevel",
   // 2026-06-19 architecture-convergence: vestigial ModelProvider score columns.
   // Compiler-oracle-verified zero references — ModelProfile is the live per-model
   // scoring source. (The ModelProvider score columns still read by the provider

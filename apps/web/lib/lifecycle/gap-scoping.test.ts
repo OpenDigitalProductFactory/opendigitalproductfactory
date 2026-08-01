@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { gapToBacklogInput, workTypeForDimension, scopeGapToBacklog, type GapForScoping, type GapScopingDb } from "./gap-scoping";
+import {
+  backlogItemIdForGap,
+  gapToBacklogInput,
+  workTypeForDimension,
+  scopeGapToBacklog,
+  type GapForScoping,
+  type GapBacklogIngest,
+  type GapScopingDb,
+} from "./gap-scoping";
 
 function gap(over: Partial<GapForScoping> = {}): GapForScoping {
   return {
@@ -53,7 +61,11 @@ describe("gapToBacklogInput", () => {
 
 function makeDb(initial: GapForScoping) {
   let stored = { ...initial };
-  const calls = { created: 0, updated: 0 };
+  const calls = {
+    ingested: 0,
+    updated: 0,
+    input: null as Parameters<GapBacklogIngest>[0] | null,
+  };
   const db: GapScopingDb = {
     lifecycleGap: {
       findUnique: async () => stored,
@@ -63,40 +75,50 @@ function makeDb(initial: GapForScoping) {
         return stored;
       },
     },
-    backlogItem: {
-      create: async () => {
-        calls.created += 1;
-        return { id: "rec-1", itemId: "BI-NEW" };
-      },
-    },
   };
-  return { db, calls, get: () => stored };
+  const ingest: GapBacklogIngest = async (input) => {
+    calls.ingested += 1;
+    calls.input = input;
+    return { id: "rec-1", itemId: "BI-NEW", created: true };
+  };
+  return { db, ingest, calls, get: () => stored };
 }
 
 describe("scopeGapToBacklog", () => {
   it("creates a backlog item, links it back, and flips the gap to scoped", async () => {
-    const { db, calls, get } = makeDb(gap());
-    const res = await scopeGapToBacklog(db, { gapId: "gap-1" });
+    const { db, ingest, calls, get } = makeDb(gap());
+    const res = await scopeGapToBacklog(db, { gapId: "gap-1" }, ingest);
     expect(res.alreadyLinked).toBe(false);
     expect(res.backlogItemId).toBe("BI-NEW");
-    expect(calls.created).toBe(1);
+    expect(calls.ingested).toBe(1);
+    expect(calls.input).toMatchObject({
+      itemId: backlogItemIdForGap("gap-1"),
+      status: "triaging",
+      source: "automated-detection",
+      origin: { kind: "lifecycle-gap", id: "gap-1" },
+    });
     expect(get().status).toBe("scoped");
     expect(get().backlogItemId).toBe("BI-NEW");
   });
 
   it("is idempotent — does not create a second item when already linked", async () => {
-    const { db, calls } = makeDb(gap({ backlogItemId: "BI-EXISTING", status: "scoped" }));
-    const res = await scopeGapToBacklog(db, { gapId: "gap-1" });
+    const { db, ingest, calls } = makeDb(gap({ backlogItemId: "BI-EXISTING", status: "scoped" }));
+    const res = await scopeGapToBacklog(db, { gapId: "gap-1" }, ingest);
     expect(res.alreadyLinked).toBe(true);
     expect(res.backlogItemId).toBe("BI-EXISTING");
-    expect(calls.created).toBe(0);
+    expect(calls.ingested).toBe(0);
+    expect(res.backlogItemRecordId).toBeNull();
+  });
+
+  it("uses a stable semantic backlog id per gap", () => {
+    expect(backlogItemIdForGap("gap-1")).toBe(backlogItemIdForGap("gap-1"));
+    expect(backlogItemIdForGap("gap-1")).toMatch(/^BI-LCG-[A-F0-9]{8}$/);
   });
 
   it("throws when the gap is missing", async () => {
     const db: GapScopingDb = {
       lifecycleGap: { findUnique: async () => null, update: async () => ({}) },
-      backlogItem: { create: async () => ({ id: "x", itemId: "y" }) },
     };
-    await expect(scopeGapToBacklog(db, { gapId: "nope" })).rejects.toThrow(/not found/);
+    await expect(scopeGapToBacklog(db, { gapId: "nope" }, async () => ({ id: "x", itemId: "y", created: true }))).rejects.toThrow(/not found/);
   });
 });

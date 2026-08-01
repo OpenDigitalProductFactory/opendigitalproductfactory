@@ -75,7 +75,7 @@ describe("resolveBaselinePlateau", () => {
 describe("reconcileBaselinePlateau", () => {
   it("opens memberships for new evidence (no event on open)", async () => {
     const { client, calls } = makeClient({ plateauExists: true });
-    const res = await reconcileBaselinePlateau({ prisma: client, evidence: [member("srv-1"), member("srv-2")] });
+    const res = await reconcileBaselinePlateau({ prisma: client, evidence: [member("srv-1"), member("srv-2")], evidenceComplete: true });
     expect(res.status).toBe("applied");
     expect(res.summary.opened).toBe(2);
     expect(calls.created).toBe(2);
@@ -87,7 +87,7 @@ describe("reconcileBaselinePlateau", () => {
       { id: "m-gone", governedThingKind: "InventoryEntity", governedThingId: "gone", membershipSource: "projected", validTo: null, stateSnapshot: resolveLifecycle(activeServer) },
     ];
     const { client, calls } = makeClient({ plateauExists: true, memberships: existing });
-    const res = await reconcileBaselinePlateau({ prisma: client, evidence: [] });
+    const res = await reconcileBaselinePlateau({ prisma: client, evidence: [], evidenceComplete: true });
     expect(res.summary.closed).toBe(1);
     expect(calls.updated).toBe(1); // validTo set
     expect(calls.events).toBe(1); // close → lifecycle event
@@ -99,7 +99,7 @@ describe("reconcileBaselinePlateau", () => {
       { id: "m1", governedThingKind: "InventoryEntity", governedThingId: "srv-1", membershipSource: "projected", validTo: null, stateSnapshot: snap },
     ];
     const { client, calls } = makeClient({ plateauExists: true, memberships: existing });
-    const res = await reconcileBaselinePlateau({ prisma: client, evidence: [member("srv-1")] });
+    const res = await reconcileBaselinePlateau({ prisma: client, evidence: [member("srv-1")], evidenceComplete: true });
     expect(res.status).toBe("noop");
     expect(calls.created).toBe(0);
     expect(calls.updated).toBe(0);

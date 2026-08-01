@@ -37,13 +37,12 @@ export type ExistingMembership = {
 
 export type MembershipOp =
   | { op: "open"; member: BaselineMemberInput }
-  | { op: "refresh"; id: string; member: BaselineMemberInput; reopened: boolean }
+  | { op: "refresh"; id: string; member: BaselineMemberInput }
   | { op: "close"; id: string; ref: GovernedThingRef; reason: string };
 
 export type BaselinePlanSummary = {
   opened: number;
   refreshed: number;
-  reopened: number;
   closed: number;
   unchanged: number;
 };
@@ -84,23 +83,27 @@ function existingSnapshotKey(raw: unknown): string {
  *
  * Rules (idempotent):
  *  - key in evidence, no existing row            → open
- *  - key in evidence, existing row closed         → refresh (reopened: clear validTo)
  *  - key in evidence, existing open, snapshot ≠   → refresh
  *  - key in evidence, existing open, snapshot =   → unchanged (no op)
  *  - key NOT in evidence, existing open           → close (left current state)
- *  - key NOT in evidence, existing already closed → ignored (already historical)
+ *
+ * `existing` may include historical rows defensively, but only active intervals
+ * participate. A thing that returns after an interval closed gets a NEW membership row;
+ * reopening the old row would erase history.
  */
 export function planBaselineProjection(
   evidence: BaselineMemberInput[],
   existing: ExistingMembership[],
+  context: { evidenceComplete: boolean },
 ): BaselinePlan {
   const existingByKey = new Map<string, ExistingMembership>();
   for (const row of existing) {
+    if (row.validTo !== null) continue;
     existingByKey.set(`${row.governedThingKind}:${row.governedThingId}`, row);
   }
 
   const ops: MembershipOp[] = [];
-  const summary: BaselinePlanSummary = { opened: 0, refreshed: 0, reopened: 0, closed: 0, unchanged: 0 };
+  const summary: BaselinePlanSummary = { opened: 0, refreshed: 0, closed: 0, unchanged: 0 };
   const evidenceKeys = new Set<string>();
 
   for (const member of evidence) {
@@ -114,14 +117,10 @@ export function planBaselineProjection(
       continue;
     }
 
-    const wasClosed = row.validTo !== null;
     const snapshotChanged = existingSnapshotKey(row.stateSnapshot) !== snapshotKey(member.stateSnapshot);
 
-    if (wasClosed) {
-      ops.push({ op: "refresh", id: row.id, member, reopened: true });
-      summary.reopened += 1;
-    } else if (snapshotChanged) {
-      ops.push({ op: "refresh", id: row.id, member, reopened: false });
+    if (snapshotChanged) {
+      ops.push({ op: "refresh", id: row.id, member });
       summary.refreshed += 1;
     } else {
       summary.unchanged += 1;
@@ -132,6 +131,7 @@ export function planBaselineProjection(
     if (row.validTo !== null) continue; // already closed
     const key = `${row.governedThingKind}:${row.governedThingId}`;
     if (evidenceKeys.has(key)) continue; // still present
+    if (!context.evidenceComplete) continue; // bounded/partial scans cannot prove departure
     const ref: GovernedThingRef = {
       kind: row.governedThingKind as GovernedThingKind,
       id: row.governedThingId,

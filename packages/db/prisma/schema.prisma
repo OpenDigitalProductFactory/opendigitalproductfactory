@@ -5855,9 +5855,6 @@ model InventoryEntity {
   observedVersion             String?
   normalizedVersion           String?
   supportStatus               String                            @default("unknown")
-  // Vendor end-of-support date; drives the canonical `currency` axis + technology_currency
-  // gaps. Spec 2026-06-07 §8.7. Null = no EOL signal (currency falls back to supportStatus).
-  supportEndsAt               DateTime?
   status                      String                            @default("active")
   attributionStatus           String                            @default("needs_review")
   confidence                  Float?
@@ -8396,7 +8393,7 @@ model EaElement {
   portfolioId                   String?
   taxonomyNodeId                String?
   syncedAt                      DateTime?
-  refinementLevel               String?
+  refinementLevel               String                         @default("logical")
   itValueStream                 String?
   ontologyRole                  String?
   createdAt                     DateTime                       @default(now())
@@ -8470,7 +8467,9 @@ model PlateauMembership {
   updatedAt         DateTime  @updatedAt
   plateauElement    EaElement @relation("PlateauMembershipPlateau", fields: [plateauElementId], references: [id], onDelete: Cascade)
 
-  @@unique([plateauElementId, governedThingKind, governedThingId])
+  // The migration enforces one ACTIVE interval with a partial unique index
+  // (validTo IS NULL). Historical intervals remain immutable and repeatable.
+  @@index([plateauElementId, governedThingKind, governedThingId])
   @@index([governedThingKind, governedThingId])
   @@index([membershipSource])
   @@index([plateauElementId])
@@ -8486,7 +8485,7 @@ model LifecycleGap {
   id                   String    @id @default(cuid())
   gapKey               String    @unique // stable dedup key (dimension+thing+signal identity)
   kind                 String // add | change | remove
-  dimension            String // capability | technology_currency | vulnerability | data_quality | operational | cost | regulatory
+  dimension            String // capability | technology-currency | vulnerability | data-quality | operational | cost | regulatory
   severity             String    @default("medium") // info | low | medium | high | critical
   status               String    @default("open") // open | scoped | resolved | dismissed
   scopeLevel           String    @default("portfolio") // portfolio | product
@@ -8498,7 +8497,7 @@ model LifecycleGap {
   targetPlateauId      String? // EaElement.id (Plateau) — soft pointer
   workPackageElementId String? // EaElement.id (Work Package) — soft pointer
   eaGapElementId       String? // EaElement.id (ArchiMate Gap) — soft pointer
-  backlogItemId        String? // BacklogItem.id — soft pointer; gap never owns work status
+  backlogItemId        String? // BacklogItem.itemId — semantic soft pointer; gap never owns work status
   digitalProductId     String? // product-level scope target
   evidenceRef          String?
   detectedAt           DateTime  @default(now())

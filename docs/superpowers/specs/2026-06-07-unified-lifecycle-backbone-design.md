@@ -1,11 +1,12 @@
 # Unified Lifecycle Backbone — Common Current / Future / Past State Across Physical and Non-Physical Governed Things
 
-**Status:** Draft
+**Status:** Delivery candidate — slices 1–5 implemented; slices 6–7 remain separately tracked
 **Date:** 2026-06-07
 **Track:** Enterprise-architecture / platform-data-model design
 **Primary audience:** Platform architects and operators establishing lifecycle as a shared, cross-cutting design element
-**Backlog status (live, DB fallback 2026-06-07):** No live `EP-LIFECYCLE` epic exists. Closest live homes: `EP-PROACTIVE-OPS` (open, 11 items — *Digital Products as full-lifecycle assets, live status, drop detection, criticality*), `EP-DATA-ARCH` (open, 6 items — *data-model mirror into EA*), `EP-AI-OPSMAP` (open, 17 items — *discovery triage / ops map*), `EP-BIZ-CAP` (done — *capability map + maturity*). `EP-ONTOLOGY` referenced by the 2026-03 CSDM6 specs **no longer exists** as a live epic — that reference is stale.
+**Backlog status (live, verified 2026-07-31):** `EP-LIFECYCLE` exists with slices 1–4 in progress and slices 5–7 open. This delivery branch recovers and reconciles slices 1–5. Slice 6 (`/ea` States & Roadmap UX) and slice 7 (legacy-field convergence) remain separate work.
 **Chief-architect review note (2026-06-07):** Revised for DPF enum discipline, ArchiMate/CSDM alignment, logical-asset past-state handling, gap-register source truth, and UI/IA fit.
+**Current-main reconciliation note (2026-07-31):** Technology lifecycle dates now come from the canonical `CatalogIdentity` → `CatalogLifecycleMilestone` spine delivered under `EP-ASSET-INTELLIGENCE`; this design no longer adds a duplicate `InventoryEntity.supportEndsAt` source. Gap-to-backlog scoping uses the shared backlog-ingest front door, and the existing governed catalog-enrichment job drives the runtime projection.
 **Companion specs (do not duplicate):**
 - [2026-03-12-phase-ea-modeling-foundation-design.md](2026-03-12-phase-ea-modeling-foundation-design.md) — EA meta-model, `EaElement`, lifecycle-native current/future overlay
 - [2026-03-21-csdm6-digital-product-metamodel-and-ontology-design.md](2026-03-21-csdm6-digital-product-metamodel-and-ontology-design.md) — conceptual→logical→actual realization, governed things, Digital Product anchor
@@ -66,7 +67,7 @@ Per AGENTS.md §10. Open-source data models read, not just feature lists.
 |---|---|---|---|
 | **ServiceNow CSDM 5** | Two-attribute lifecycle: **lifecycle *stage*** (design→build→operate→retire family) separate from **install/operational *status*** (e.g. *Pipeline / Catalog / Operational / Retired / End-of-Life*). Plateau-like "desired state" lives in APM, not CMDB. | The stage-vs-status separation (already mirrored by DPF's `lifecycleStage`×`lifecycleStatus`). | Keeping desired-state in a *separate* product from operational state — that is the bifurcation we reject. |
 | **iTop / Combodo** | Explicit `operational status` (production/stock/obsolete) **separate from discovery freshness**; stale CIs are *downgraded, not deleted*. | Freshness as an axis orthogonal to lifecycle status (already adopted in `2026-04-30-discovery-portfolio-gap-closure-design.md`). | — |
-| **LeanIX** | Lifecycle as a **time-phased band** per fact sheet (plan/phase-in/active/phase-out/end-of-life *with dates*) driving an obsolescence-risk roadmap. | Time-phased currency dates (`supportEndsAt`, `targetDate` on plateaus) to drive obsolescence gaps. | LeanIX's separate "Technology Risk" surface — we fold it into the one gap register. |
+| **LeanIX** | Lifecycle as a **time-phased band** per fact sheet (plan/phase-in/active/phase-out/end-of-life *with dates*) driving an obsolescence-risk roadmap. | Time-phased `CatalogLifecycleMilestone` dates and target-plateau dates drive obsolescence gaps. | LeanIX's separate "Technology Risk" surface — we fold it into the one gap register. |
 | **BMC Helix / iTop CMDB** | Explicit CI classes + governed relationships; impact analysis only over typed edges. | Relationship-class-aware traversal (CSDM6 controlled-traversal rules). | Generic transitive closure as "impact." |
 | **Backstage** | Compact `kind` + relations catalog; lifecycle as a simple enum (`experimental/production/deprecated`). | Compact shared enum + a shared validation library over inventing per-model status soup. | Too-narrow enum — insufficient for audit/portfolio. |
 | **OpenMetadata** | First-class lifecycle *events* + lineage; state changes are append-only events. | A universal `LifecycleEvent` log (generalising the existing `DocumentLifecycleEvent`). | — |
@@ -104,7 +105,7 @@ The amalgamation rests on separating axes that today are conflated into ad-hoc `
 ### 4.3 Axis C — Operational condition *(current condition; `lifecycleStatus` + `freshness` + `currency`)*
 - `lifecycleStatus`: `draft | active | inactive` (existing).
 - `freshness`: `fresh | stale | retired` (existing on the discovery side, `2026-04-30` spec) — observed recency, **only meaningful for `actual`/manifested things**.
-- `currency` *(new, manifested only)*: `current | approaching-eol | unsupported | end-of-life` derived from `supportEndsAt` / vendor support data — the obsolescence dimension. Hyphens are mandatory per AGENTS.md §3.
+- `currency` *(new, manifested only)*: `current | approaching-eol | unsupported | end-of-life` derived from canonical catalog lifecycle milestones plus observed support posture — the obsolescence dimension. Hyphens are mandatory per AGENTS.md §3.
 
 ### 4.4 The temporal perspective is *derived*, via Plateau membership — not a fourth column
 This is the key amalgamation move. "Current / future / past" is **not** a field on each row; it is *which plateau a governed thing's state belongs to*:
@@ -115,7 +116,6 @@ This is the key amalgamation move. "Current / future / past" is **not** a field 
 
 ### 4.5 Physical vs non-physical *(manifestationClass — derived, formalised)*
 Already implicit in the seed's `LOGICAL_STAGES` vs `FULL_STAGES` split (`seed-ea-archimate4.ts:11-17`). Formalise as a derived classifier on element type:
-- **`logical` (non-physical):** capabilities, information objects (conceptual), services, controls, value streams. **No `retirement`/`inactive`** — they are *superseded*, not decommissioned. No `freshness`/`currency`.
 - **`logical` (non-physical):** capabilities, information objects (conceptual), services, controls, value streams. They do not have discovery `freshness` or vendor `currency`, but they still have history: a logical thing can be superseded, replaced, withdrawn, or archived and therefore appear in a past plateau.
 - **`manifested` (physical/operational):** technology nodes, devices, deployed product instances, data stores, AI coworker endpoints. **Full lifecycle** including `retirement`, plus `freshness` and `currency`.
 
@@ -150,7 +150,7 @@ The projector is a read-model builder, not a new source of truth.
 A **`LifecycleGap`** is a typed delta between a baseline and a target plateau, computed + curated. It may link to an ArchiMate `Gap` `EaElement`, but it is not itself the notation element:
 
 - **Gap kinds:** `add` (in target, not baseline), `change` (different state/version), `remove` (in baseline, not target), and the cross-cutting generators below.
-- **Gap dimensions** (why it matters, for prioritisation/funding): `capability` (maturity shortfall — already `currentMaturity` vs `targetMaturity`), `technology_currency` (EOL/obsolescence), `vulnerability` (security), `data_quality` (trust/housekeeping), `operational` (drop/break-fix), `cost`, `regulatory`/`risk`.
+- **Gap dimensions** (why it matters, for prioritisation/funding): `capability` (maturity shortfall — already `currentMaturity` vs `targetMaturity`), `technology-currency` (EOL/obsolescence), `vulnerability` (security), `data-quality` (trust/housekeeping), `operational` (drop/break-fix), `cost`, `regulatory`.
 - **Scoping into existing planning substrate (the investment driver):** each Gap is scoped to a level and lands as work:
   - **Portfolio level** → `BacklogItem.type = "portfolio"` (cross-product investment), optionally grouped under a **Work Package** element → `Epic`.
   - **Product level** → `BacklogItem.type = "product"` linked via `digitalProductId`.
@@ -169,9 +169,9 @@ Instead of separate Asset/CMDB/vuln/DQ tools, each concern is a **uniform produc
 
 | Concern ("job") | Signal source (existing/near) | Becomes |
 |---|---|---|
-| **Technology obsolescence / EOL** | `InventoryEntity.supportStatus` + new `supportEndsAt`/`currency`; LeanIX-style date bands | `technology_currency` gaps, ranked by criticality propagation (`BI-PROACT-D2`) |
+| **Technology obsolescence / EOL** | `CatalogLifecycleMilestone` + projected `InventoryEntity.supportStatus`; LeanIX-style date bands | `technology-currency` gaps, ranked by criticality propagation (`BI-PROACT-D2`) |
 | **Vulnerability** | findings on `actual` resources → CSDM6 blast-radius traversal (`resource → component → product → offer → consumer`) | `vulnerability` gaps with bounded impact |
-| **Data quality / housekeeping** | `PortfolioQualityIssue`, `EaConformanceIssue`, MDM (`EP-MDM`) survivorship | `data_quality` gaps that gate trustworthy analysis |
+| **Data quality / housekeeping** | `PortfolioQualityIssue`, `EaConformanceIssue`, MDM (`EP-MDM`) survivorship | `data-quality` gaps that gate trustworthy analysis |
 | **Operational break-fix** | `EP-PROACTIVE-OPS` drop-detection, derived operational status (`BI-PROACT-B2`) | `operational` gaps |
 
 One gap register, one prioritisation surface, one funding flow — across what industry splits into many tools. Data quality is explicitly in-scope because, as the goal states, you cannot do proper analysis/planning on a dirty baseline.
@@ -188,7 +188,7 @@ Recommended **hybrid** (see §10 decision):
 4. **`LifecycleEvent`** — universal append-only transition log keyed by `(governedThingKind, governedThingId, fromState, toState, reason, actorPrincipalId?, evidenceRef)`, generalising `DocumentLifecycleEvent`. Identity-bearing actors resolve through `Principal`, not a new actor table.
 5. **`PlateauMembership`** — `(plateauElementId, governedThingKind, governedThingId, membershipSource, validFrom, validTo?, stateSnapshot, evidenceRef?)`; the baseline projector writes `projected` rows, the architect curates `curated` target rows.
 6. **`LifecycleGap`** persistence — `(gapKey, baselinePlateauId, targetPlateauId?, kind, dimension, governedThingKind, governedThingId, severity, scopeLevel, backlogItemId?, workPackageElementId?, eaGapElementId?, status)`. The `Gap`/`Plateau`/`Work Package`/`Deliverable` *element types* already exist; this adds operational analytic rows that can point back to those elements.
-7. **`InventoryEntity.supportEndsAt` + derived `currency`** for obsolescence. Values use hyphenated strings: `current`, `approaching-eol`, `unsupported`, `end-of-life`.
+7. **Derived `currency` over the existing catalog lifecycle spine** for obsolescence. `resolveLifecycle()` consumes `CatalogLifecycleMilestone` evidence joined through `InventoryEntity.catalogIdentity`; no duplicate support-date column is introduced. Values use hyphenated strings: `current`, `approaching-eol`, `unsupported`, `end-of-life`.
 
 No change to the `BacklogItem`/`Epic`/`FeatureBuild` planning substrate — gaps *land in it*.
 
@@ -241,7 +241,7 @@ No change to the `BacklogItem`/`Epic`/`FeatureBuild` planning substrate — gaps
 2. **Event and membership substrate:** `LifecycleEvent`, `PlateauMembership`, projector read-model job, idempotency tests, and backfill from existing `DocumentLifecycleEvent` only after the new event contract is proven.
 3. **Baseline projection:** project actual/active/fresh inventory + bound digital products + production EA elements into a baseline Plateau; expose stale/failure states.
 4. **LifecycleGap register:** add generator contract, stable `gapKey`, EOL/currency generator first, then capability maturity and data-quality generators.
-5. **Backlog scoping:** add guarded "scope to backlog" flow that creates or links existing `BacklogItem` through the canonical backlog APIs/MCP path; do not mutate planning tables directly from the gap generator.
+5. **Backlog scoping:** add guarded "scope to backlog" flow that creates or links existing `BacklogItem` through the canonical backlog-ingest path; do not mutate planning tables directly from the gap generator.
 6. **UX:** `/ea` States & Roadmap plus gap register using report-kit; deep links from portfolio/product pages only after source-truth and permission states are clear.
 7. **Convergence cleanup:** once consumers read through `resolveLifecycle()`, deprecate or migrate bespoke lifecycle/status fields model-by-model. This is the refactoring budget target, not slice 1.
 
@@ -265,7 +265,7 @@ Additional acceptance checks:
 
 1. `resolveLifecycle()` returns the same canonical axes for `EaElement`, `DigitalProduct`, `InventoryEntity`, `ServiceOffering`, and `Document` without callers reading model-specific status strings.
 2. A logical capability can become historical through a superseding event and past Plateau membership without fake `freshness` or `currency`.
-3. An unsupported but still running CI produces a `technology_currency` `LifecycleGap` without automatically setting the asset to retired.
+3. An unsupported but still running CI produces a `technology-currency` `LifecycleGap` without automatically setting the asset to retired.
 4. Re-running the baseline projector over unchanged evidence produces no duplicate memberships or gaps.
-5. Closing a scoped backlog item resolves or updates the linked `LifecycleGap` and records a `LifecycleEvent`.
+5. Closing a scoped backlog item does not directly overwrite architectural truth. The next complete evidence run resolves the linked `LifecycleGap` only when the signal has cleared; baseline departure records a `LifecycleEvent`.
 6. `/ea` renders empty, stale-projector, no-permission, and happy-path states with report-kit primitives and DPF theme tokens.

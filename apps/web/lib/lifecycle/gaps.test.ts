@@ -28,37 +28,51 @@ describe("buildGapKey", () => {
 });
 
 describe("reconcileGaps", () => {
+  const complete = { dimension: "technology-currency", evidenceComplete: true } as const;
+
   it("creates gaps that don't exist yet", () => {
-    const plan = reconcileGaps([gapInput({ gapKey: "g1" })], []);
+    const plan = reconcileGaps([gapInput({ gapKey: "g1" })], [], complete);
     expect(plan.summary.created).toBe(1);
     expect(plan.material).toBe(true);
   });
 
   it("is idempotent for identical gaps", () => {
     const existing: ExistingGap[] = [{ id: "e1", gapKey: "g1", status: "open", severity: "medium", title: "t", detail: null }];
-    const plan = reconcileGaps([gapInput({ gapKey: "g1" })], existing);
+    const plan = reconcileGaps([gapInput({ gapKey: "g1" })], existing, complete);
     expect(plan.material).toBe(false);
     expect(plan.summary.unchanged).toBe(1);
   });
 
   it("updates when severity escalates", () => {
     const existing: ExistingGap[] = [{ id: "e1", gapKey: "g1", status: "open", severity: "medium", title: "t", detail: null }];
-    const plan = reconcileGaps([gapInput({ gapKey: "g1", severity: "critical" })], existing);
+    const plan = reconcileGaps([gapInput({ gapKey: "g1", severity: "critical" })], existing, complete);
     expect(plan.summary.updated).toBe(1);
     expect(plan.ops[0]).toMatchObject({ op: "update", id: "e1" });
   });
 
   it("resolves gaps no longer generated (signal cleared)", () => {
     const existing: ExistingGap[] = [{ id: "e1", gapKey: "g1", status: "open", severity: "medium", title: "t", detail: null }];
-    const plan = reconcileGaps([], existing);
+    const plan = reconcileGaps([], existing, complete);
     expect(plan.summary.resolved).toBe(1);
     expect(plan.ops[0]).toMatchObject({ op: "resolve", gapKey: "g1" });
   });
 
   it("resolves a scoped gap whose signal cleared (gap never blocks on work status)", () => {
     const existing: ExistingGap[] = [{ id: "e1", gapKey: "g1", status: "scoped", severity: "high", title: "t", detail: null }];
-    const plan = reconcileGaps([], existing);
+    const plan = reconcileGaps([], existing, complete);
     expect(plan.summary.resolved).toBe(1);
+  });
+
+  it("preserves gaps when evidence is incomplete", () => {
+    const existing: ExistingGap[] = [{ id: "e1", gapKey: "g1", status: "open", severity: "medium", title: "t", detail: null }];
+    const plan = reconcileGaps([], existing, { ...complete, evidenceComplete: false });
+    expect(plan.material).toBe(false);
+    expect(plan.summary).toMatchObject({ resolved: 0, preserved: 1 });
+  });
+
+  it("rejects duplicate keys and cross-dimension output", () => {
+    expect(() => reconcileGaps([gapInput({ gapKey: "g1" }), gapInput({ gapKey: "g1" })], [], complete)).toThrow(/duplicate gapKey/);
+    expect(() => reconcileGaps([gapInput({ gapKey: "g2", dimension: "cost" })], [], complete)).toThrow(/emitted 'cost'/);
   });
 });
 
@@ -68,7 +82,14 @@ describe("generateTechnologyCurrencyGaps", () => {
       kind: "InventoryEntity",
       id,
       name: `host-${id}`,
-      canonical: resolveLifecycle({ kind: "InventoryEntity", status: "active", supportStatus, supportEndsAt, now: new Date("2026-06-07T00:00:00Z") }),
+      baselinePlateauId: "plateau-1",
+      canonical: resolveLifecycle({
+        kind: "InventoryEntity",
+        status: "active",
+        supportStatus,
+        supportMilestones: supportEndsAt ? [{ milestone: "eol", date: supportEndsAt, confidence: 0.9 }] : [],
+        now: new Date("2026-06-07T00:00:00Z"),
+      }),
       evidenceRef: "discovery-run:R1",
     };
   }
@@ -87,7 +108,7 @@ describe("generateTechnologyCurrencyGaps", () => {
     for (const g of gaps) {
       expect(g.dimension).toBe("technology-currency");
       expect(g.kind).toBe("change");
-      expect(g.gapKey.startsWith("technology-currency:InventoryEntity:")).toBe(true);
+      expect(g.gapKey).toContain("technology-currency:InventoryEntity:");
     }
   });
 
@@ -105,10 +126,10 @@ describe("generateTechnologyCurrencyGaps", () => {
 
   it("end-to-end: generated EOL gaps reconcile to creates then noop", () => {
     const gaps = generateTechnologyCurrencyGaps([member("a", "end-of-life")]);
-    const first = reconcileGaps(gaps, []);
+    const first = reconcileGaps(gaps, [], { dimension: "technology-currency", evidenceComplete: true });
     expect(first.summary.created).toBe(1);
     const existing: ExistingGap[] = gaps.map((g, i) => ({ id: `e${i}`, gapKey: g.gapKey, status: "open", severity: g.severity, title: g.title, detail: g.detail ?? null }));
-    const second = reconcileGaps(gaps, existing);
+    const second = reconcileGaps(gaps, existing, { dimension: "technology-currency", evidenceComplete: true });
     expect(second.material).toBe(false);
   });
 });

@@ -5,7 +5,7 @@
 //
 // The first cross-cutting gap generator and the template for the rest (vulnerability,
 // data-quality, operational). It reads the canonical `currency` axis (derived by
-// resolveLifecycle from supportStatus + supportEndsAt) over current-state manifested
+// resolveLifecycle from supportStatus + CatalogLifecycleMilestone) over current-state manifested
 // things and raises one technology-currency gap per non-current thing. This is the
 // amalgamation in action: obsolescence becomes a gap in the same register as everything
 // else, instead of a separate asset-management tool.
@@ -21,6 +21,7 @@ export type CurrencyMember = {
   name: string;
   canonical: CanonicalLifecycle;
   digitalProductId?: string | null;
+  baselinePlateauId: string;
   evidenceRef?: string;
 };
 
@@ -50,7 +51,11 @@ export function generateTechnologyCurrencyGaps(members: CurrencyMember[]): Lifec
     const severity = SEVERITY_BY_CURRENCY[currency];
     const ref = { kind: m.kind, id: m.id };
     gaps.push({
-      gapKey: buildGapKey({ dimension: "technology-currency", ref }),
+      gapKey: buildGapKey({
+        dimension: "technology-currency",
+        ref,
+        baselinePlateauId: m.baselinePlateauId,
+      }),
       kind: "change",
       dimension: "technology-currency",
       severity,
@@ -61,6 +66,7 @@ export function generateTechnologyCurrencyGaps(members: CurrencyMember[]): Lifec
       detail: `${m.name} has reached "${currency}" technology currency and should be remediated, upgraded, or retired before it poses operational, security, or compliance risk.`,
       evidenceRef: m.evidenceRef,
       digitalProductId: m.digitalProductId ?? undefined,
+      baselinePlateauId: m.baselinePlateauId,
     });
   }
   return gaps;

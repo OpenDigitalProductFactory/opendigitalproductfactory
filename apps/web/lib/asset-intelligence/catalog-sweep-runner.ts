@@ -7,6 +7,7 @@
 
 import { gunzipSync } from "node:zlib";
 import type { CatalogSweepResult } from "@dpf/db";
+import type { InventoryLifecycleProjectionResult } from "@/lib/lifecycle/inventory-projector";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import {
   CATALOG_SWEEP_JOB_ID,
@@ -36,7 +37,7 @@ async function fetchLvfsCatalog(): Promise<string | null> {
 }
 
 export type CatalogSweepRunOutcome =
-  | ({ skipped: false } & CatalogSweepResult)
+  | ({ skipped: false; lifecycleProjection: InventoryLifecycleProjectionResult } & CatalogSweepResult)
   | { skipped: true; reason: string };
 
 /**
@@ -88,6 +89,14 @@ export async function runCatalogEnrichmentSweepJob(
         fetchers: { eolFetch: fetch, nvdFetch: fetch, wikidataFetch: fetch, lvfsFetch: fetchLvfsCatalog },
       },
     );
+    const { projectInventoryLifecycle } = await import("@/lib/lifecycle/inventory-projector");
+    const lifecycleProjection = await projectInventoryLifecycle(
+      prisma as unknown as Parameters<typeof projectInventoryLifecycle>[0],
+      {
+        limit: options.limit ?? CATALOG_SWEEP_BATCH_LIMIT,
+        upstreamEvidenceComplete: result.failures === 0,
+      },
+    );
 
     const now = new Date();
     await prisma.scheduledJob
@@ -102,7 +111,7 @@ export async function runCatalogEnrichmentSweepJob(
       })
       .catch(() => {});
 
-    return { skipped: false, ...result };
+    return { skipped: false, ...result, lifecycleProjection };
   } catch (err: unknown) {
     const message = getErrorMessage(err);
     await prisma.scheduledJob
