@@ -20,7 +20,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 
 import {
   BUILD_STUDIO_TEST_IDS,
@@ -45,9 +45,10 @@ export type DetailsDrawerProps = {
   isOpen: boolean;
   onClose: () => void;
   sections: readonly DetailsDrawerSection[];
+  fallbackFocusRef?: RefObject<HTMLElement | null>;
 };
 
-export function DetailsDrawer({ isOpen, onClose, sections }: DetailsDrawerProps) {
+export function DetailsDrawer({ isOpen, onClose, sections, fallbackFocusRef }: DetailsDrawerProps) {
   const drawerRef = useRef<HTMLElement>(null);
   const initialSectionButtonRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -80,9 +81,12 @@ export function DetailsDrawer({ isOpen, onClose, sections }: DetailsDrawerProps)
 
     return () => {
       cancelled = true;
-      if (returnFocus?.isConnected) returnFocus.focus();
+      const focusTarget = returnFocus?.isConnected
+        ? returnFocus
+        : fallbackFocusRef?.current;
+      if (focusTarget?.isConnected) focusTarget.focus();
     };
-  }, [isOpen]);
+  }, [fallbackFocusRef, isOpen]);
 
   // Esc to close — only when drawer is open, capture-phase so it wins over
   // nested inputs.
