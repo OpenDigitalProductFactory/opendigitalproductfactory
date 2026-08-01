@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 598,
+  "routeCount": 599,
   "routes": [
     {
       "routePath": "/",
@@ -6482,6 +6482,18 @@
         "productId"
       ],
       "file": "apps/web/app/(shell)/portfolio/products/[productId]/page.tsx"
+    },
+    {
+      "routePath": "/r/[token]",
+      "kind": "route",
+      "segments": [
+        "r",
+        "[token]"
+      ],
+      "dynamicParams": [
+        "token"
+      ],
+      "file": "apps/web/app/r/[token]/route.ts"
     },
     {
       "routePath": "/rental",

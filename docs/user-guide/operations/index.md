@@ -137,6 +137,13 @@ When you click "Deploy Now", the platform starts the promoter service for the go
 
 To upgrade the platform itself — building a fresh application image and swapping the running install — see [Self-Upgrade](./self-upgrade.md).
 
+## Being reached when you are away
+
+Most decisions do not happen at a desk. DPF can reach you by email when something genuinely
+needs you — a bill, a customer waiting, a booking — while deliberately never sending you
+technical noise and never letting a decision be made from the email itself. See
+[Being Reached When You Are Not At A Desk](./getting-reached.md).
+
 ## Business Journeys
 
 Promotions and self-upgrade tell you what the platform did. **Business Journeys** tells you whether your customers can still do what your business depends on — find you, enquire, book, sign in, and pay. A scheduled check exercises those paths against the live install on Monday, Wednesday and Friday, states honestly how much each check proved, and raises anything broken into your "Needs you" inbox. See [Business Journeys](./business-journeys.md).

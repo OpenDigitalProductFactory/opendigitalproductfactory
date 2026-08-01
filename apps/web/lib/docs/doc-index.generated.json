@@ -9978,6 +9978,21 @@
         "related"
       ]
     },
+    "docs/user-guide/operations/getting-reached.md": {
+      "publicHref": "/user-guide/operations/getting-reached/",
+      "portalHref": "/docs/operations/getting-reached",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "overview",
+        "what-gets-sent-to-you",
+        "what-never-gets-sent",
+        "what-the-message-says-and-why-it-says-so-little",
+        "why-you-still-have-to-sign-in",
+        "turning-it-off-or-changing-it",
+        "related"
+      ]
+    },
     "docs/user-guide/operations/index.md": {
       "publicHref": "/user-guide/operations/",
       "portalHref": "/docs/operations/index",
@@ -9992,6 +10007,7 @@
         "activate-local-demand",
         "founder-shared-portfolio",
         "promotions",
+        "being-reached-when-you-are-away",
         "business-journeys",
         "promoter-timeout"
       ]
