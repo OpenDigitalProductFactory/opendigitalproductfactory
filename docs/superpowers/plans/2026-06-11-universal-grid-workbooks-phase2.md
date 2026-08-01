@@ -307,6 +307,11 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   select-all; and react-data-grid's built-in **drag fill-handle** via `onFill`. Excel cell parity for
   the flat grid is complete. **Debt:** extract the range/fill logic into a `useCellRange` hook —
   Grid.tsx is now 1653 LOC (decomposition follow-up).
+- **Slice 28e — Find & Replace (S5) — SHIPPED.** In-grid `Ctrl+F` find bar (match across all field
+  types, `n/total` count, Enter/Shift+Enter navigation with scroll-to-match, Match-case + Whole-cell
+  toggles, tint + active-ring highlight) and `Ctrl+H` Replace / Replace-all through the validated
+  `persistCell` (string cells only). Pure, unit-tested `grid-find-replace.ts`; flat grid only. Closes
+  the last fully-absent Excel cell feature the survey found (kernel ledger DI-F48CE1B4C2F2).
 - **Remaining (not built):** manual row reordering for *platform* grids (would need a per-user client
   order; low value on 1000s of rows); platform-grid *shareable* views (needs a `WorkbookView.tableId`
   schema change — platform tables have no `WorkbookTable` row); richer charts (grouped/stacked/line);
