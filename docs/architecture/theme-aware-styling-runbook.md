@@ -2,7 +2,7 @@
 
 **Status:** procedure reference. The *rule* — no hardcoded colors, everything through `--dpf-*` tokens — lives in [`AGENTS.md`](../../AGENTS.md) §12 and stays always-on. This file holds the token table and component patterns. Relocated by BI-0020D511 Phase 1; no rule was dropped.
 
-→ [kernel principle](docs/founder-kernel/wiki/principles/no-hardcoded-colors.md)
+→ [kernel principle](../founder-kernel/wiki/principles/no-hardcoded-colors.md)
 
 **No hardcoded colors.** All UI uses CSS custom properties so light mode, dark mode, and branding all work automatically.
 
@@ -17,11 +17,11 @@
 
 Sole exception: `text-white` on `bg-[var(--dpf-accent)]` buttons. Inline `style={{ color: "#xxx" }}` is equally prohibited — use `var(--dpf-text)`. `<option>` elements need explicit `bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]`. Variables defined in `globals.css`, overridden at runtime by branding tokens.
 
-→ [kernel principle](docs/professions/frontend-engineer/wiki/compose-report-kit-for-reporting-ux.md)
+→ [kernel principle](../professions/frontend-engineer/wiki/compose-report-kit-for-reporting-ux.md)
 
 **Compose the report-kit palette for reporting UX.** Where the rule above binds *colors* to tokens, this binds whole *reporting components* to a shared palette. Reporting/data-display UX (status badges, list/detail tables, KPI cards, filters, CSV export, charts) is composed from `apps/web/components/ui/report-kit/` — `StatusBadge`, `DataTable`, `StatCard`, `FilterBar`, `ExportButton`/`toCsv`, `Chart`, and the `statusColors` intent registry. Never hand-roll a badge, `<table>`, per-page status color map, or KPI div. Status/severity colors resolve through `statusColors.ts` (status → semantic intent → `--dpf-*` token), never a local map or raw hex. **Discover before building:** read `apps/web/components/ui/report-kit/README.md`, and query the curated catalog via `search_design_intelligence` (domain `ux`/`chart`). If a primitive doesn't cover the case, extend report-kit rather than building a parallel one-off.
 
-→ [kernel principle](docs/founder-kernel/wiki/principles/no-native-browser-dialogs.md)
+→ [kernel principle](../founder-kernel/wiki/principles/no-native-browser-dialogs.md)
 
 **No native browser dialogs.** Portal code never calls `window.confirm()`, `window.alert()`, or `window.prompt()` (bare or `window.`-prefixed). They are a dead end for agent automation: a native dialog **blocks all browser automation** — CDP `Input.dispatchMouseEvent` times out while it is open, and the action only commits when a **human** clicks OK (proven live — an operator had to click OK twice to abandon two builds, BI-297863B2). They also block the JS thread, ignore branding/light-dark theming, and can't be tested. Use the in-app primitive instead: `import { confirmDialog, alertDialog, promptDialog } from "@/components/ui/Dialog";` — async, same call shape as the natives (`if (!(await confirmDialog({ title, message, tone: "danger" }))) return;`). It renders real DOM (`role="dialog"`, `aria-modal`, `--dpf-*` themed) with stable `data-dialog-action="confirm|cancel"` / `data-dialog-input` refs an agent can find and click; destructive flows keep a confirm step in `danger` tone. **Enforced in CI** by the `Repo Guard Loop` check (`scripts/check-no-native-dialogs.mjs`, run by `scripts/check-guards.mjs`), which fails any `apps/web` PR that (re)introduces one — surface-agnostic across Claude Code, Codex, Grok, and Build Studio (§17). Build Studio's code-gen agent carries the same rule in its prompt (`apps/web/lib/integrate/build-agent-prompts.ts`).
 

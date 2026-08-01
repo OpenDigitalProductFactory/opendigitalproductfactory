@@ -1,7 +1,6 @@
 ---
 name: dpf-verify-on-live-install
-description: "Use when working in the DPF codebase and asked to functionally verify that a feature WORKS on the live install — drive the happy path, confirm the feature behaves, do UX verification on the running portal. This is the step-zero gate: run ONE preflight that returns a deterministic verdict (CAN-TEST / MUST-ADVANCE / BLOCKED) and follow the decision tree, instead of hand-rolling git+curl skew checks every time. Its load-bearing rule is the BLOCKED stop-rule: when the governed path is blocked by an unrelated defect (e.g. main does not build in Docker), file a BI and STOP — never let a verification task silently become a multi-hour build-infra fix."
-
+description: "Use when asked to functionally verify that a DPF feature WORKS on the live install — drive the happy path, confirm behaviour, do UX verification on the running portal. The step-zero gate: run one preflight for a deterministic CAN-TEST / MUST-ADVANCE / BLOCKED verdict and follow its decision tree rather than hand-rolling skew checks. Its load-bearing rule is the BLOCKED stop-rule: file a BI and STOP; never let verification silently become a build-infra fix."
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
 user-invocable: true

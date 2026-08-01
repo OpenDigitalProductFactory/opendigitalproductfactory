@@ -1,7 +1,6 @@
 ---
 name: dpf-clear-dependabot-alerts
-description: "Use when clearing Dependabot / security-advisory alerts on the DPF repo — a batch of npm vulnerability alerts to resolve, a 'bump the vulnerable dependency' ask, or a security-tab sweep. Encodes the DPF pattern so no agent rediscovers it: fix a TRANSITIVE vuln by flooring it in the pnpm-workspace.yaml overrides block (not by bumping a manifest), tag every floor with its Dependabot #NN / GHSA id, regenerate the lockfile the RIGHT way via scripts/regen-lockfile.mjs (a naive pnpm install re-resolves the whole tree offline-stale and produces ~40 invalid downgrades), verify no vuln remains and nothing unrelated drifted, then ship a DCO PR. Composes after dpf-verify-substrate-first and before dpf-pr-with-dco."
-
+description: "Use when clearing Dependabot or security-advisory alerts on the DPF repo — a batch of npm vulnerability alerts, a 'bump the vulnerable dependency' ask, or a security-tab sweep. Covers the DPF pattern for transitive vulnerabilities, lockfile regeneration, verification, and shipping a DCO PR."
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
 user-invocable: true

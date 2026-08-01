@@ -103,13 +103,14 @@ Transport, token issuance/rotation, worktree MCP sync and grant-intersection mec
 - **Scope escalation is a stop, not a workaround.** On `insufficient_token_scope`, surface the required scope to the operator and stop the MCP workflow. Do not fall back to a direct database or filesystem route to achieve the same effect.
 - **Advise-safe tool classification** — stated once in §8a below.
 
-## 8a. Advise-safe tools, server-action exports, coworker coordination (pointers)
+## 8a. Advise-safe tools, server-action exports, coworker coordination
 
-**Advise-safe tool classification (BI-IMP-F710F41C).** A side-effect tool (`sideEffect: true` in `mcp-tools.ts`) may stay visible in **advise mode** only when it (1) preserves human visibility (SSE + UI cards), (2) writes an audit trail (e.g. `ToolExecution` / delegation chain), (3) is grant- and lifecycle-gated, and (4) is listed in a **shared constant** imported by every filter path (see `adviseHeldBackTools` / coworker tool filter). Do not invent a parallel allowlist per route. Prefer pure reads in advise mode; only promote a side-effect into advise when those four hold.
+Full statements and BI trail: [contributor procedure runbook](docs/architecture/contributor-procedure-runbook.md).
 
-**`"use server"` modules export only functions and concrete values (BI-IMP-21C466DE).** Type aliases and interfaces stay **local** (or live in a non-`"use server"` module). Exporting types from a server-action file breaks Turbopack registration. Prefer `export type` from a sibling `*.types.ts` or `lib/` module.
+- **A side-effect tool may stay visible in advise mode only if it is advise-safe** — read-shaped, reversible, and non-committing. Anything else is hidden, not merely warned about.
+- **`"use server"` modules export only functions and concrete values.** Type aliases and interfaces stay local or move to a non-server module.
+- **Coworker capability filtering is single-source:** grants live in `agent_registry.json` / `AgentToolGrant` and are intersected at runtime — never re-derived per surface. → [kernel principle](docs/founder-kernel/wiki/principles/single-source-of-truth.md)
 
-**Coworker capability filtering is single-source (BI-IMP-60B0893E).** Agent tool grants live in `agent_registry.json` / `AgentToolGrant`; runtime intersection is `getAvailableTools` + `TOOL_TO_GRANTS` + coworker filter helpers under `apps/web/lib/actions/coworker-tool-filter.ts` and `apps/web/lib/tak/agent-grants.ts`. Route-local allowlists that re-express the same policy are defects — extend the shared filter, do not fork it. Peer coordination tools (`request_coworker`, `summon_coworker`) follow the advise-safe pattern above.
 
 ## 9. External Tools
 

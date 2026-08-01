@@ -1,8 +1,7 @@
 ---
 # Single fields shared by both surfaces
 name: dpf-ux-fit-review
-description: "Use when reviewing, planning, or implementing UI-impacting DPF work for UX/IA fit before code or PR handoff. Triggers on UX fit, UI fit, design fit, feature fit, new route, new tab, first viewport, guided work, dashboard, cockpit, metric tile, KPI, status badge, card, coworker launcher, empty state, navigation change, portal UX, customer/workspace/business/platform surface, OR any config / settings / admin screen, form, or field a user fills in — a setting, preference, toggle, wizard, credential picker, per-model or per-provider option, or a numeric/text input such as a context-window or token value — or any feature that could add another dashboard, tab row, component family, confusing portal entry point, or an over-exposed control a non-technical user cannot answer. The 'operator-configurable / admin UX' framing counts: a config form is a UI surface."
-
+description: "Use when reviewing, planning, or implementing UI-impacting DPF work for UX/IA fit before code or PR handoff. Triggers on UX fit, UI fit, design fit, feature fit, new route, new tab, first viewport, guided work, dashboard, cockpit, metric tile, KPI, status badge, card, coworker launcher, empty state, navigation change, portal UX, and any customer/workspace/business/platform surface — including any config, settings or admin screen, form, or field a user fills in (setting, preference, toggle, wizard, credential picker, per-model option, numeric or text input). A config form is a UI surface."
 # Agent Skills standard fields (Surface A - Claude Code / Codex)
 disable-model-invocation: false
 user-invocable: true

@@ -4,7 +4,7 @@
 
 ## 3. Strongly-Typed String Enums (mandatory)
 
-→ [kernel principle](docs/professions/data-architect/wiki/strongly-typed-string-enums.md)
+→ [kernel principle](../professions/data-architect/wiki/strongly-typed-string-enums.md)
 
 DB string columns with fixed valid values are canonical enums. Source of truth: `apps/web/lib/backlog.ts` (`EPIC_STATUSES`, union types) and `apps/web/lib/mcp-tools.ts` (`enum:` arrays). Match exactly.
 
@@ -21,7 +21,7 @@ Hyphens, not underscores. Adding a new value requires updating both `backlog.ts`
 
 `Agent.kind` is the coworker role-type facet (EP-COWORKER-RT); its canonical list is `AGENT_KINDS` in `packages/db/src/agent-identity.ts`, enforced by `packages/db/src/agent-identity.test.ts`. `Agent.displayName` is the one human-facing coworker label (free-form Title Case, derived by `resolveAgentIdentity` — not an enum).
 
-`BacklogItem.workType` is the closed *work-type* axis (the WHAT) and `BacklogItem.source` is the closed *intake-origin* axis (the HOW). Together they replace the legacy mixed-axis `source` enum (which had `feature-gap`, `bug`, `tool-gap`, `skill-gap`, `doc-gap`, `user-request`, `automated-detection` in one list). `FeatureBuild.kind` is derived from `workType` at promote time (`workType==="bug" ? "fix" : "feature"`). Spec: [`docs/superpowers/specs/2026-05-30-unified-backlog-worktype-design.md`](docs/superpowers/specs/2026-05-30-unified-backlog-worktype-design.md).
+`BacklogItem.workType` is the closed *work-type* axis (the WHAT) and `BacklogItem.source` is the closed *intake-origin* axis (the HOW). Together they replace the legacy mixed-axis `source` enum (which had `feature-gap`, `bug`, `tool-gap`, `skill-gap`, `doc-gap`, `user-request`, `automated-detection` in one list). `FeatureBuild.kind` is derived from `workType` at promote time (`workType==="bug" ? "fix" : "feature"`). Spec: [`docs/superpowers/specs/2026-05-30-unified-backlog-worktype-design.md`](../superpowers/specs/2026-05-30-unified-backlog-worktype-design.md).
 
 ## 13. Login & Local QA
 
@@ -34,7 +34,7 @@ Hyphens, not underscores. Adding a new value requires updating both `backlog.ts`
 
 ## 9. External Tools
 
-→ [kernel principle](docs/professions/software-engineer/wiki/tool-evaluation-pipeline.md)
+→ [kernel principle](../professions/software-engineer/wiki/tool-evaluation-pipeline.md)
 
 External MCP servers, npm packages, and APIs must pass the Tool Evaluation Pipeline (EP-GOVERN-002) before adoption: 6 agents covering security, architecture, compliance, integration. Approved tools are version-pinned in `packages/db/data/approved_tools_registry.json` with re-evaluation scheduled.
 
@@ -52,23 +52,32 @@ Runbook skill: `dpf-clear-dependabot-alerts`. Posture / prune / vendoring strate
 **Subagents do not read this file.** They only know what the dispatcher prompt tells them. When dispatching: ⟦model: the injected "run the gate and fix errors" lines assume a subagent won't verify unprompted; newer models self-verify⟧
 
 - **For TypeScript work:** include "run `pnpm --filter web typecheck` before committing and fix any errors."
-- **For final-task-in-epic work:** include "run `pnpm --filter web build` and fix any errors" plus the required UX verification path. **Instruct the subagent to route that build through the shared local-CI convergence sandbox (`claim_nonprod_environment_lease(environmentKey="local-integration-ci")`) or the canonical local install — not inside the worktree itself.** (See §5 "Where each gate runs" and [kernel principle](docs/founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md).)
+- **For final-task-in-epic work:** include "run `pnpm --filter web build` and fix any errors" plus the required UX verification path. **Instruct the subagent to route that build through the shared local-CI convergence sandbox (`claim_nonprod_environment_lease(environmentKey="local-integration-ci")`) or the canonical local install — not inside the worktree itself.** (See §5 "Where each gate runs" and [kernel principle](../founder-kernel/wiki/principles/worktree-is-source-control-not-runtime.md).)
 - **For UI work:** include the Theme-Aware Styling rules from §11. Without them, components ignore the platform's branding system.
 - **For any implementation work:** include "perform a documentation impact check; update the relevant docs surface or record a concrete no-docs-needed attestation before claiming done."
 
 ## 14. Release Testing
 
-→ [kernel principle](docs/professions/release-service-management/wiki/release-qa-plan.md)
+→ [kernel principle](../professions/release-service-management/wiki/release-qa-plan.md)
 
 Every release passes the QA test plan at `tests/e2e/platform-qa-plan.md` (15 phases). For feature work, run the affected phases as part of definition of done — `next build` and unit tests do not replace UX exercise. Failures get a backlog item with repro steps under the active QA epic. Test results are release evidence. Release QA phases run against the canonical local install or a leased shared nonprod environment per §5 — never against a worktree's local harness. A worktree is the source-control container for the change under test, not a release-QA runtime.
 
 ## 15. Communication
 
-- If uncommitted changes exist, mention them before starting new work. → [kernel principle](docs/founder-kernel/wiki/principles/mention-uncommitted-changes.md)
+- If uncommitted changes exist, mention them before starting new work. → [kernel principle](../founder-kernel/wiki/principles/mention-uncommitted-changes.md)
 - When committing, list what's included.
-- State results and decisions directly. No running commentary on internal deliberation. → [kernel principle](docs/founder-kernel/wiki/principles/state-results-directly.md)
+- State results and decisions directly. No running commentary on internal deliberation. → [kernel principle](../founder-kernel/wiki/principles/state-results-directly.md)
 - Maintain forward momentum: when the current work naturally implies a next step, name the next smallest useful step from the thread direction and company context. Keep it quiet and operational - no sales pitch, no broad re-planning unless asked.
 - End-of-turn summary: one or two sentences — what changed, what's next.
 ---
 - **Name the substrate when reporting verification results.** "Tests passed" or "build succeeded" is incomplete without naming where it ran. State the substrate (canonical local install, shared local-CI convergence sandbox lease, or — for source-local-only gates — the worktree). See §6 for what counts as canonical-runtime evidence and §5 for which gates require it.
 ---
+
+
+## 8a. Advise-safe tools, server-action exports, coworker coordination (pointers)
+
+**Advise-safe tool classification (BI-IMP-F710F41C).** A side-effect tool (`sideEffect: true` in `mcp-tools.ts`) may stay visible in **advise mode** only when it (1) preserves human visibility (SSE + UI cards), (2) writes an audit trail (e.g. `ToolExecution` / delegation chain), (3) is grant- and lifecycle-gated, and (4) is listed in a **shared constant** imported by every filter path (see `adviseHeldBackTools` / coworker tool filter). Do not invent a parallel allowlist per route. Prefer pure reads in advise mode; only promote a side-effect into advise when those four hold.
+
+**`"use server"` modules export only functions and concrete values (BI-IMP-21C466DE).** Type aliases and interfaces stay **local** (or live in a non-`"use server"` module). Exporting types from a server-action file breaks Turbopack registration. Prefer `export type` from a sibling `*.types.ts` or `lib/` module.
+
+**Coworker capability filtering is single-source (BI-IMP-60B0893E).** Agent tool grants live in `agent_registry.json` / `AgentToolGrant`; runtime intersection is `getAvailableTools` + `TOOL_TO_GRANTS` + coworker filter helpers under `apps/web/lib/actions/coworker-tool-filter.ts` and `apps/web/lib/tak/agent-grants.ts`. Route-local allowlists that re-express the same policy are defects — extend the shared filter, do not fork it. Peer coordination tools (`request_coworker`, `summon_coworker`) follow the advise-safe pattern above.

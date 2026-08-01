@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 583,
+  "pageCount": 594,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -794,6 +794,15 @@
         "current-boundaries"
       ]
     },
+    "docs/architecture/backlog-and-planning-runbook.md": {
+      "publicHref": "/architecture/backlog-and-planning-runbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "backlog-planning-runbook"
+      ]
+    },
     "docs/architecture/backlog-archetype-scope.md": {
       "publicHref": "/architecture/backlog-archetype-scope/",
       "portalHref": null,
@@ -806,6 +815,34 @@
         "tooling-contract",
         "design-grounding",
         "planning-use"
+      ]
+    },
+    "docs/architecture/branch-and-worktree-runbook.md": {
+      "publicHref": "/architecture/branch-and-worktree-runbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "branch-worktree-runbook",
+        "merge-readiness",
+        "merge-mechanics",
+        "privatepublic-change-segregation-is-content-based",
+        "creating-a-worktree",
+        "seeding-a-new-worktree",
+        "verification-readiness-classification",
+        "compose-project-isolation",
+        "freshness-a-stale-worktree-base-is-a-landmine",
+        "rebasing-on-a-shallow-clone-never-a-bare-git-rebase-originmain",
+        "housekeeping"
+      ]
+    },
+    "docs/architecture/build-gate-runbook.md": {
+      "publicHref": "/architecture/build-gate-runbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "build-gate-runbook"
       ]
     },
     "docs/architecture/build-studio-namespace.md": {
@@ -869,6 +906,22 @@
         "related"
       ]
     },
+    "docs/architecture/contributor-procedure-runbook.md": {
+      "publicHref": "/architecture/contributor-procedure-runbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "contributor-procedure-runbook",
+        "3-strongly-typed-string-enums-mandatory",
+        "13-login-local-qa",
+        "9-external-tools",
+        "7-subagent-dispatch-discipline",
+        "14-release-testing",
+        "15-communication",
+        "8a-advise-safe-tools-server-action-exports-coworker-coordination-pointers"
+      ]
+    },
     "docs/architecture/customer-zero-and-use-case-zero.md": {
       "publicHref": "/architecture/customer-zero-and-use-case-zero/",
       "portalHref": null,
@@ -898,6 +951,15 @@
         "adapter-contract",
         "substrate-budget",
         "adoption-checklist"
+      ]
+    },
+    "docs/architecture/data-model-stewardship-runbook.md": {
+      "publicHref": "/architecture/data-model-stewardship-runbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "data-model-stewardship-runbook"
       ]
     },
     "docs/architecture/decision-vectors-by-archetype.md": {
@@ -993,6 +1055,15 @@
         "follow-ups-operator-verified"
       ]
     },
+    "docs/architecture/delivery-surfaces-runbook.md": {
+      "publicHref": "/architecture/delivery-surfaces-runbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "delivery-surfaces-runbook"
+      ]
+    },
     "docs/architecture/dependency-reduction-routine.md": {
       "publicHref": "/architecture/dependency-reduction-routine/",
       "portalHref": null,
@@ -1014,6 +1085,15 @@
         "the-customer-install-gap-the-part-still-to-build",
         "in-platform-assurance-gate-auto-file-reconcile-bi-91d1524f",
         "backlog"
+      ]
+    },
+    "docs/architecture/design-research-runbook.md": {
+      "publicHref": "/architecture/design-research-runbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "design-research-runbook"
       ]
     },
     "docs/architecture/dpf-patterns.md": {
@@ -1172,6 +1252,15 @@
         "relationship-to-the-other-engines"
       ]
     },
+    "docs/architecture/mcp-tool-authorization-runbook.md": {
+      "publicHref": "/architecture/mcp-tool-authorization-runbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "mcp-tool-authorization-runbook"
+      ]
+    },
     "docs/architecture/mcp-tool-packs.md": {
       "publicHref": "/architecture/mcp-tool-packs/",
       "portalHref": null,
@@ -1210,6 +1299,15 @@
         "command-contract",
         "performance-and-evidence",
         "reuse-boundary"
+      ]
+    },
+    "docs/architecture/orientation.md": {
+      "publicHref": "/architecture/orientation/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "architecture-orientation"
       ]
     },
     "docs/architecture/package-boundaries.md": {
@@ -1310,6 +1408,15 @@
         "adding-or-changing-a-section-nav"
       ]
     },
+    "docs/architecture/skill-surfaces-runbook.md": {
+      "publicHref": "/architecture/skill-surfaces-runbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "skill-surfaces-runbook"
+      ]
+    },
     "docs/architecture/standards-review-2026-05-12-round-2.md": {
       "publicHref": "/architecture/standards-review-2026-05-12-round-2/",
       "portalHref": null,
@@ -1384,6 +1491,15 @@
         "core-assertion-set",
         "evidence-publication-guidance",
         "use-in-dpf"
+      ]
+    },
+    "docs/architecture/theme-aware-styling-runbook.md": {
+      "publicHref": "/architecture/theme-aware-styling-runbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "theme-aware-styling-runbook"
       ]
     },
     "docs/architecture/trusted-ai-kernel.md": {

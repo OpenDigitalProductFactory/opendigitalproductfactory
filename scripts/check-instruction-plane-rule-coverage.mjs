@@ -101,11 +101,39 @@ export function ruleLabel(line) {
 }
 
 /**
+ * Resolve a markdown link target to a repo-relative path.
+ *
+ * WHY THIS EXISTS
+ * A rule's anchor identity must be the file it points AT, not the string used to reach
+ * it. When Phase 1 relocated procedure from `AGENTS.md` (repo root) into
+ * `docs/architecture/*.md`, every anchor's link text correctly changed from
+ * `docs/founder-kernel/…` to `../founder-kernel/…` — same target, different string.
+ * Comparing raw strings reported all six as DELETED. That false positive is worse than
+ * no guard: it fires on the exact operation Phase 1 exists to perform, and the cheapest
+ * way to silence it is `--update`, which is how a ratchet quietly stops ratcheting.
+ */
+export function resolveAnchor(target, fromFile = "") {
+  const clean = target.replace(/^\.\//, "");
+  if (clean.startsWith("/")) return clean.slice(1);
+  const dir = fromFile.includes("/") ? fromFile.slice(0, fromFile.lastIndexOf("/")) : "";
+  const segs = (dir ? `${dir}/${clean}` : clean).split("/");
+  const out = [];
+  for (const seg of segs) {
+    if (seg === "." || seg === "") continue;
+    if (seg === "..") out.pop();
+    else out.push(seg);
+  }
+  return out.join("/");
+}
+
+/**
  * Every rule anchor referenced by a doc, with the label of the line that carries it.
  * Returns `Array<{ anchor, label, line }>` — one entry per OCCURRENCE, so a rule linked
- * twice yields two entries (the duplicate signal below depends on that).
+ * twice yields two entries (the duplicate signal below depends on that). `fromFile` is
+ * the doc's own repo-relative path, used to resolve relative link targets to a stable
+ * identity — pass it whenever you have it.
  */
-export function ruleAnchors(text, anchorRe = DEFAULT_ANCHOR_RE) {
+export function ruleAnchors(text, anchorRe = DEFAULT_ANCHOR_RE, fromFile = "") {
   const re = new RegExp(anchorRe);
   const found = [];
   const lines = text.split(/\r?\n/);
@@ -114,7 +142,7 @@ export function ruleAnchors(text, anchorRe = DEFAULT_ANCHOR_RE) {
     let m;
     while ((m = linkRe.exec(lines[i])) !== null) {
       if (/:\/\//.test(m[1])) continue;
-      const anchor = m[1].replace(/^\.\//, "").replace(/^\//, "");
+      const anchor = resolveAnchor(m[1], fromFile);
       if (!re.test(anchor)) continue;
       found.push({ anchor, label: ruleLabel(lines[i]), line: i + 1 });
     }
@@ -125,9 +153,9 @@ export function ruleAnchors(text, anchorRe = DEFAULT_ANCHOR_RE) {
 /** Union of anchors referenced anywhere in a set of `path -> text` entries. */
 export function anchorsIn(fileTexts, anchorRe) {
   const set = new Set();
-  for (const text of Object.values(fileTexts)) {
+  for (const [file, text] of Object.entries(fileTexts)) {
     if (text == null) continue;
-    for (const { anchor } of ruleAnchors(text, anchorRe)) set.add(anchor);
+    for (const { anchor } of ruleAnchors(text, anchorRe, file)) set.add(anchor);
   }
   return set;
 }
@@ -181,7 +209,7 @@ export function evaluateRuleCoverage({
   for (const [file, text] of Object.entries(alwaysOnTexts)) {
     if (text == null) continue;
     const seen = new Map();
-    for (const { anchor, line } of ruleAnchors(text, anchorRe)) {
+    for (const { anchor, line } of ruleAnchors(text, anchorRe, file)) {
       if (!seen.has(anchor)) seen.set(anchor, []);
       seen.get(anchor).push(line);
     }
@@ -231,9 +259,9 @@ function main() {
 
   if (process.argv.includes("--update")) {
     const anchors = new Map();
-    for (const text of Object.values(alwaysOnTexts)) {
+    for (const [file, text] of Object.entries(alwaysOnTexts)) {
       if (text == null) continue;
-      for (const { anchor, label } of ruleAnchors(text, anchorRe)) {
+      for (const { anchor, label } of ruleAnchors(text, anchorRe, file)) {
         if (!anchors.has(anchor) || (!anchors.get(anchor) && label)) anchors.set(anchor, label);
       }
     }
