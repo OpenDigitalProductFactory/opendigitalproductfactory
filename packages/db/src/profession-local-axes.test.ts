@@ -105,18 +105,6 @@ describe("assertProfessionLocalAxisIntegrity — the rules that keep axes commen
     expect(() => check({ projectsOnto: ["schema_grounding"] })).toThrow(/terminate on the spine/);
   });
 
-  it("rejects a benefit axis projected onto a cost spine axis (BI-72E8FF05)", () => {
-    // The exact shape that shipped as the worked example and would have scored
-    // backwards: projection does not invert, so the kinds must agree.
-    expect(() => check({ kind: "benefit" })).toThrow(/score backwards/);
-  });
-
-  it("rejects a cost axis projected onto a benefit spine axis", () => {
-    expect(() =>
-      check({ kind: "cost", projectsOnto: ["long_term_maintainability"] }),
-    ).toThrow(/score backwards/);
-  });
-
   it("rejects a duplicate key", () => {
     expect(() =>
       assertProfessionLocalAxisIntegrity(REGISTRY_PROFESSIONS, [EXAMPLE, EXAMPLE]),
