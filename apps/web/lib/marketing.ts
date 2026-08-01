@@ -3,7 +3,7 @@ import {
   deriveRevenueModelFromActivationProfile,
   readActivationProfile,
 } from "@/lib/storefront/archetype-activation";
-
+import { upsertMarketingStrategyTolerant } from "@/lib/marketing/strategy-bootstrap";
 export const MARKETING_STRATEGY_STATUS = ["draft", "active", "archived"] as const;
 export type MarketingStrategyStatus = typeof MARKETING_STRATEGY_STATUS[number];
 
@@ -1119,7 +1119,7 @@ export async function getMarketingWorkspaceSnapshot(): Promise<MarketingWorkspac
       : null,
   ]).join(". ");
 
-  const strategy = await prisma.marketingStrategy.upsert({
+  const strategy = await upsertMarketingStrategyTolerant(prisma.marketingStrategy, {
     where: { organizationId: organization.id },
     update: {},
     create: {

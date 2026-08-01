@@ -582,12 +582,8 @@ type CampaignRow = {
  */
 export async function getMarketingOperatingSnapshot(options?: {
   /**
-   * An already-loaded workspace snapshot. Pass this when the caller has one:
-   * getMarketingWorkspaceSnapshot() UPSERTS the MarketingStrategy row, so
-   * loading it twice concurrently (e.g. both halves of a Promise.all) races two
-   * inserts on the organizationId unique key and one of them fails. Callers that
-   * already hold the workspace snapshot must hand it over rather than letting
-   * this function load a second one.
+   * An already-loaded workspace snapshot. Callers should pass it when available
+   * so both projections use the same point in time and avoid duplicate reads.
    */
   workspace?: MarketingWorkspaceSnapshot | null;
   now?: Date;
