@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 595,
+  "pageCount": 596,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -7602,6 +7602,20 @@
         "scenario-pack-contract",
         "the-persona-layer",
         "known-limits"
+      ]
+    },
+    "docs/testing/archetype-exercise-playbook.md": {
+      "publicHref": "/testing/archetype-exercise-playbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "archetype-exercise-playbook-what-it-costs-to-do-the-next-one",
+        "1-what-the-restaurant-exercise-actually-bought",
+        "2-what-the-next-archetype-costs",
+        "3-which-archetype-next",
+        "4-the-gap-to-close-before-the-next-run",
+        "5-where-scenario-data-lives"
       ]
     },
     "docs/testing/archetype-job-validation.md": {

@@ -1,4 +1,5 @@
 import { evaluateInventoryQuality } from "./discovery-attribution";
+import { persistQualityIssues } from "./discovery-quality-persistence";
 import type { NormalizedDiscoveryOutput } from "./discovery-normalize";
 import { deriveInventoryEvidenceSnapshot } from "./discovery-evidence";
 import { deriveInventoryEnrichment } from "./inventory-enrichment";
@@ -667,84 +668,17 @@ export async function persistBootstrapDiscoveryRun(
       })),
     );
 
-    let createdIssues = 0;
-    for (const issue of qualityEvaluation.issues) {
-      const inventoryEntityId = issue.inventoryEntityKey
-        ? entityIdsByEntityKey.get(issue.inventoryEntityKey)
-        : undefined;
-
-      const resolvedTaxonomyNodeId = issue.inventoryEntityKey
-        ? normalized.inventoryEntities.find(
-            (entity) => entity.entityKey === issue.inventoryEntityKey,
-          )?.taxonomyNodeId ?? undefined
-        : undefined;
-
-      await tx.portfolioQualityIssue.upsert({
-        where: { issueKey: issue.issueKey },
-        create: {
-          issueKey: issue.issueKey,
-          issueType: issue.issueType,
-          status: issue.status,
-          severity: issue.severity,
-          summary: issue.summary,
-          ...(resolvedTaxonomyNodeId
-            ? { taxonomyNode: { connect: { nodeId: resolvedTaxonomyNodeId } } }
-            : {}),
-          ...(inventoryEntityId ? { inventoryEntity: { connect: { id: inventoryEntityId } } } : {}),
-        },
-        update: {
-          issueType: issue.issueType,
-          status: issue.status,
-          severity: issue.severity,
-          summary: issue.summary,
-          ...(resolvedTaxonomyNodeId
-            ? { taxonomyNode: { connect: { nodeId: resolvedTaxonomyNodeId } } }
-            : {}),
-          ...(inventoryEntityId ? { inventoryEntity: { connect: { id: inventoryEntityId } } } : {}),
-        },
-      });
-
-      if (!existingIssueKeys.has(issue.issueKey)) {
-        createdIssues += 1;
-      }
-    }
-
-    // Reconcile-on-recovery: an entity or relationship observed active in THIS
-    // sweep is no longer stale, so any open stale_entity / stale_relationship
-    // issue for it must resolve. The stale-issue writer only ever opened rows and
-    // never resolved recovered ones, so a row that went stale for one sweep and
-    // came back stayed open forever (the churn that accumulated 1.5k+ open rows).
-    // Keyed by issueKey — the entity/relationship key is embedded — so this is
-    // source-bounded by construction: a key this sweep confirmed active belongs to
-    // this source, and another source's stale issue has a different key and is
-    // never matched. Docker-origin churn is handled by suppression at emission (it
-    // never recovers under the same key); this closes the loop for real estate.
-    const recoveredEntityIssueKeys = [...currentEntityKeys].map(
-      (entityKey) => `inventory_entity:${entityKey}:stale`,
-    );
-    if (recoveredEntityIssueKeys.length > 0) {
-      await tx.portfolioQualityIssue.updateMany({
-        where: {
-          issueType: "stale_entity",
-          status: "open",
-          issueKey: { in: recoveredEntityIssueKeys },
-        },
-        data: { status: "resolved", resolvedAt: now },
-      });
-    }
-    const recoveredRelationshipIssueKeys = normalized.inventoryRelationships.map(
-      (relationship) => `inventory_relationship:${relationship.relationshipKey}:stale`,
-    );
-    if (recoveredRelationshipIssueKeys.length > 0) {
-      await tx.portfolioQualityIssue.updateMany({
-        where: {
-          issueType: "stale_relationship",
-          status: "open",
-          issueKey: { in: recoveredRelationshipIssueKeys },
-        },
-        data: { status: "resolved", resolvedAt: now },
-      });
-    }
+    const { createdIssues } = await persistQualityIssues(tx, {
+      evaluation: qualityEvaluation,
+      entityIdsByEntityKey,
+      taxonomyNodeIdByEntityKey: new Map(
+        normalized.inventoryEntities.map((entity) => [entity.entityKey, entity.taxonomyNodeId ?? null]),
+      ),
+      existingIssueKeys,
+      currentEntityKeys,
+      currentRelationshipKeys: normalized.inventoryRelationships.map((r) => r.relationshipKey),
+      now,
+    });
 
     return {
       summary: summarizeDiscoveryPersistence({

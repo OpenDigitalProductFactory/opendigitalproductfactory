@@ -6,6 +6,13 @@ const mocks = vi.hoisted(() => ({
   resolve: vi.fn(),
   findMany: vi.fn(),
   isVoiceNarrationEnabled: vi.fn(),
+  notify: vi.fn(),
+  resolveRecipient: vi.fn(),
+}));
+
+vi.mock("@/lib/attention/notify-live", () => ({
+  notifyAttentionLive: mocks.notify,
+  resolveOperatorRecipient: mocks.resolveRecipient,
 }));
 
 vi.mock("@/lib/observability/alert-sources", () => ({
@@ -50,6 +57,94 @@ describe("runAlertDeliveryScan", () => {
       keyOf(a.labels.alertname, a.labels.service),
     );
     mocks.findMany.mockResolvedValue([]);
+    mocks.resolveRecipient.mockResolvedValue("owner-1");
+    mocks.notify.mockResolvedValue(undefined);
+  });
+
+  // The last mile that was missing when WindowsHostDiskCritical sat open for
+  // twelve days (2026-07-19 → the 2026-07-31 disk-full outage) with no
+  // human-facing signal: the row existed and projected into the inbox, but
+  // nothing ever pushed it.
+  describe("operator notification", () => {
+    it("pushes a newly-opened alert to the operator", async () => {
+      mocks.fetchAlertSources.mockResolvedValue({
+        alerts: [alert("WindowsHostDiskCritical", "prometheus", "firing")],
+        reached: BOTH_UP,
+      });
+
+      const res = await runAlertDeliveryScan();
+
+      expect(res.notified).toBe(1);
+      expect(mocks.notify).toHaveBeenCalledTimes(1);
+      const pushed = mocks.notify.mock.calls[0][0];
+      expect(pushed.source).toBe("platform-health");
+      expect(pushed.userId).toBe("owner-1");
+      expect(pushed.itemKey).toBe(keyOf("WindowsHostDiskCritical"));
+      expect(pushed.deepLink).toBe("/ops/health");
+    });
+
+    it("does NOT re-notify an alert that is already open", async () => {
+      // The row is already open from an earlier cycle — it is being re-confirmed,
+      // not newly detected. Re-notifying here is exactly what would turn a
+      // 5-minute cron into inbox noise once the first notification is read.
+      mocks.findMany.mockResolvedValue([
+        { issueKey: keyOf("WindowsHostDiskCritical"), details: { source: "prometheus" } },
+      ]);
+      mocks.fetchAlertSources.mockResolvedValue({
+        alerts: [alert("WindowsHostDiskCritical", "prometheus", "firing")],
+        reached: BOTH_UP,
+      });
+
+      const res = await runAlertDeliveryScan();
+
+      expect(res.delivered).toBe(1); // still refreshed
+      expect(res.notified).toBe(0);  // but not re-pushed
+      expect(mocks.notify).not.toHaveBeenCalled();
+    });
+
+    it("marks critical alerts high-risk and warnings bounded-write", async () => {
+      const critical = {
+        ...alert("WindowsHostDiskCritical", "prometheus", "firing"),
+        labels: { alertname: "WindowsHostDiskCritical", severity: "critical" },
+      };
+      const warning = {
+        ...alert("WindowsHostDiskPressure", "prometheus", "firing"),
+        labels: { alertname: "WindowsHostDiskPressure", severity: "warning" },
+      };
+      mocks.fetchAlertSources.mockResolvedValue({ alerts: [critical, warning], reached: BOTH_UP });
+
+      await runAlertDeliveryScan();
+
+      expect(mocks.notify.mock.calls[0][0].riskClass).toBe("high-risk");
+      expect(mocks.notify.mock.calls[1][0].riskClass).toBe("bounded-write");
+    });
+
+    it("skips notification when no operator resolves, without failing delivery", async () => {
+      mocks.resolveRecipient.mockResolvedValue(null);
+      mocks.fetchAlertSources.mockResolvedValue({
+        alerts: [alert("PostgresDown", "prometheus", "firing")],
+        reached: BOTH_UP,
+      });
+
+      const res = await runAlertDeliveryScan();
+
+      expect(res.delivered).toBe(1); // delivery still succeeded
+      expect(res.notified).toBe(0);
+      expect(mocks.notify).not.toHaveBeenCalled();
+    });
+
+    it("does not notify when both sources are unreachable", async () => {
+      mocks.fetchAlertSources.mockResolvedValue({
+        alerts: [],
+        reached: { prometheus: false, "loki-ruler": false },
+      });
+
+      const res = await runAlertDeliveryScan();
+
+      expect(res.sourcesUnreachable).toBe(true);
+      expect(res.notified).toBe(0);
+      expect(mocks.notify).not.toHaveBeenCalled();
+    });
   });
 
   it("delivers one issue per FIRING alert and ignores pending ones", async () => {
