@@ -6,6 +6,7 @@ import {
   buildxCreateArgs,
   classifyBoundedBuildExit,
   databaseUrlFromContainerEnvironment,
+  postgresContainerProbeArgs,
   validateBuilderInspection,
 } from "./local-ci-bounded-builder.mjs";
 
@@ -58,6 +59,20 @@ test("live PostgreSQL credentials are encoded without assuming the install passw
   assert.throws(
     () => databaseUrlFromContainerEnvironment("POSTGRES_USER=dpf"),
     /password is unavailable/,
+  );
+});
+
+test("container-local PostgreSQL probe does not assume a host-published port", () => {
+  assert.deepEqual(postgresContainerProbeArgs({
+    container: "dpf-postgres-1",
+    environment: "POSTGRES_USER=dpf\nPOSTGRES_PASSWORD=do-not-forward\nPOSTGRES_DB=dpf\n",
+  }), [
+    "exec", "dpf-postgres-1",
+    "psql", "-U", "dpf", "-d", "dpf", "-tAc", "SELECT 1",
+  ]);
+  assert.throws(
+    () => postgresContainerProbeArgs({ container: "", environment: "POSTGRES_USER=dpf" }),
+    /container identity is unavailable/,
   );
 });
 

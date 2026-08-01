@@ -61,6 +61,30 @@ export function databaseUrlFromContainerEnvironment(lines, {
     + `@${host}:${port}/${encodeURIComponent(database)}`;
 }
 
+export function postgresContainerProbeArgs({ container, environment }) {
+  if (!container) {
+    throw new Error("live PostgreSQL container identity is unavailable");
+  }
+  const values = Object.fromEntries(
+    String(environment || "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const separator = line.indexOf("=");
+        return separator > 0
+          ? [line.slice(0, separator), line.slice(separator + 1)]
+          : [line, ""];
+      }),
+  );
+  const user = values.POSTGRES_USER || "dpf";
+  const database = values.POSTGRES_DB || "dpf";
+  return [
+    "exec", container,
+    "psql", "-U", user, "-d", database, "-tAc", "SELECT 1",
+  ];
+}
+
 export function classifyBoundedBuildExit({ exitCode, output }) {
   if (
     exitCode !== 0

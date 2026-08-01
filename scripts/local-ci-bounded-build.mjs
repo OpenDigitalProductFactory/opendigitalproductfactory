@@ -9,7 +9,7 @@ import {
   buildxBuildArgs,
   buildxCreateArgs,
   classifyBoundedBuildExit,
-  databaseUrlFromContainerEnvironment,
+  postgresContainerProbeArgs,
   validateBuilderInspection,
 } from "./lib/local-ci-bounded-builder.mjs";
 import {
@@ -163,9 +163,10 @@ async function probePostgres(databaseUrl) {
   }
 }
 
-function resolveControlPlaneDatabaseUrl() {
+function resolveControlPlanePostgresProbe() {
   if (process.env.DPF_CONTROL_PLANE_DATABASE_URL) {
-    return process.env.DPF_CONTROL_PLANE_DATABASE_URL;
+    const databaseUrl = process.env.DPF_CONTROL_PLANE_DATABASE_URL;
+    return () => probePostgres(databaseUrl);
   }
   const container = process.env.DPF_CONTROL_PLANE_POSTGRES_CONTAINER
     || "dpf-postgres-1";
@@ -178,10 +179,14 @@ function resolveControlPlaneDatabaseUrl() {
   if (inspected.status !== 0) {
     throw new Error("live PostgreSQL container environment is unavailable");
   }
-  return databaseUrlFromContainerEnvironment(inspected.stdout);
+  const args = postgresContainerProbeArgs({
+    container,
+    environment: inspected.stdout,
+  });
+  return () => commandHealthy("docker", args, 2_500);
 }
 
-async function probeControlPlane(databaseUrl) {
+async function probeControlPlane(postgresProbe) {
   const portalUrl = process.env.DPF_CONTROL_PLANE_PORTAL_URL || "http://127.0.0.1:3000";
   const mcpUrl = process.env.DPF_MCP_URL || `${portalUrl}/api/mcp/v1`;
   const bearerToken = process.env.DPF_MCP_BEARER_TOKEN || "";
@@ -202,7 +207,7 @@ async function probeControlPlane(databaseUrl) {
       return response?.success === true;
     }),
     timedProbe(() => commandHealthy("docker", ["info"], 2_500)),
-    timedProbe(() => probePostgres(databaseUrl)),
+    timedProbe(postgresProbe),
   ]);
   return { portal, mcp, docker, postgres };
 }
@@ -251,9 +256,9 @@ async function main() {
     maxParallelism: builder.maxParallelism,
   };
 
-  let controlPlaneDatabaseUrl;
+  let controlPlanePostgresProbe;
   try {
-    controlPlaneDatabaseUrl = resolveControlPlaneDatabaseUrl();
+    controlPlanePostgresProbe = resolveControlPlanePostgresProbe();
   } catch (error) {
     const payload = {
       schemaVersion: 1,
@@ -272,7 +277,7 @@ async function main() {
   }
 
   const preflight = await establishHealthyControlPlane({
-    sample: () => probeControlPlane(controlPlaneDatabaseUrl),
+    sample: () => probeControlPlane(controlPlanePostgresProbe),
   });
   if (preflight.status !== "healthy") {
     const payload = {
@@ -341,7 +346,7 @@ async function main() {
     });
   });
   const watchdog = await monitorControlPlane({
-    sample: () => probeControlPlane(controlPlaneDatabaseUrl),
+    sample: () => probeControlPlane(controlPlanePostgresProbe),
     isComplete: () => childComplete,
   });
   let termination = null;

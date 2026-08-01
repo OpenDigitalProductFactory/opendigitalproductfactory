@@ -266,6 +266,17 @@ afterward. Against the motivating failure, this avoids at least the observed
 221.10 seconds of exhaustive test work; green candidates still execute the
 unchanged exhaustive suite and production build.
 
+**Production-build control-plane boundary (BI-CE6E2882).** On Windows, the
+production build runs in a resource-bounded BuildKit container while the gate
+independently probes the portal, MCP, Docker Engine, and live PostgreSQL. The
+live database is intentionally not required to publish port 5432 to the host:
+the default probe executes `SELECT 1` through `psql` inside the configured
+PostgreSQL container, using its own `POSTGRES_USER` / `POSTGRES_DB` identity.
+An explicit `DPF_CONTROL_PLANE_DATABASE_URL` remains the portable override for
+non-container deployments. Never infer the host endpoint as
+`127.0.0.1:5432`; Compose may keep PostgreSQL internal-only or publish it on a
+different host port.
+
 Claim, heartbeat, signal/fence, and release timestamps are included in the
 evidence and Git-local state. An expired TTL is never permission for the old
 owner to continue working. The gate does
