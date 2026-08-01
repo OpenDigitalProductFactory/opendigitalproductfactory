@@ -30,9 +30,11 @@ export {
 } from "./measure";
 
 export {
+  AUDIENCE_READING_LEVELS,
   UX_BUDGETS,
   UX_SHELLS,
   budgetFor,
+  readingLevelFor,
   type UxBudget,
   type UxShell,
 } from "./budgets";
@@ -90,13 +92,18 @@ export {
 import { measureUxBudget } from "./measure";
 import { evaluateUxBudget, type BudgetReport, type RouteStatus } from "./evaluate";
 import type { UxShell } from "./budgets";
+import type { RouteAudience } from "../navigation/route-audience";
 import type { ExemptCheck } from "./route-shells";
 
 /** Convenience: measure and evaluate a served-DOM HTML string in one call. */
 export function auditUxBudget(
   html: string,
   shell: UxShell,
-  options: { exemptChecks?: readonly ExemptCheck[]; routeStatus?: RouteStatus } = {},
+  options: {
+    exemptChecks?: readonly ExemptCheck[];
+    routeStatus?: RouteStatus;
+    audience?: RouteAudience | null;
+  } = {},
 ): BudgetReport {
   return evaluateUxBudget(measureUxBudget(html), shell, options);
 }

@@ -27,6 +27,8 @@ import {
 import { PROCESSING_GOVERNANCE_ASSETS } from "./processing-governance-assets";
 import { BUSINESS_PRODUCT_PORTFOLIO_ASSETS } from "./business-product-portfolio-assets";
 import { HOSPITALITY_CAPACITY_ASSETS } from "./hospitality-capacity-assets";
+import { BEAUTY_CAPACITY_ASSETS } from "./beauty-capacity-assets";
+import { LIFECYCLE_GOVERNANCE_ASSETS } from "./lifecycle-governance-assets";
 
 // ─── Definitions (spec §6.1) ─────────────────────────────────────────────────
 
@@ -652,6 +654,8 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
   },
   ...BUSINESS_PRODUCT_PORTFOLIO_ASSETS,
   ...HOSPITALITY_CAPACITY_ASSETS,
+  ...BEAUTY_CAPACITY_ASSETS,
+  ...LIFECYCLE_GOVERNANCE_ASSETS,
   ...PROCESSING_GOVERNANCE_ASSETS,
    {
     id: "data:agent-conversation",

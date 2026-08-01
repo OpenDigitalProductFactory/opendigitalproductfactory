@@ -3,9 +3,18 @@ import { INVOICE_COLUMNS, invoiceToGridRow } from "./invoice-adapter-mapping";
 import { RISK_COLUMNS, riskToGridRow, buildRiskInput } from "./risk-adapter-mapping";
 
 describe("invoice mapping", () => {
-  it("makes only status editable", () => {
+  it("makes only the non-economic fields editable", () => {
+    // Amounts, currency, refs, and issue date stay read-only in the grid: they are
+    // edited on the invoice itself, where totals recompute and the change is visible.
     const editable = INVOICE_COLUMNS.filter((c) => c.editable).map((c) => c.columnId);
-    expect(editable).toEqual(["status"]);
+    expect(editable).toEqual(["status", "dueDate"]);
+  });
+
+  it("keeps every amount column read-only in the grid", () => {
+    const amountColumns = ["totalAmount", "amountDue", "currency"];
+    for (const id of amountColumns) {
+      expect(INVOICE_COLUMNS.find((c) => c.columnId === id)?.editable, id).toBe(false);
+    }
   });
 
   it("maps an invoice to a row keyed by column with numeric amounts", () => {

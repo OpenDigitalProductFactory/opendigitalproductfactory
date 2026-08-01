@@ -163,6 +163,12 @@ export const ROUTE_SWEEP_EXCLUSIONS = {
 export type RouteShellPolicy = {
   routePath: string;
   shell: UxShell;
+  /**
+   * Who the route is for. Carried here so the sweep can resolve the reading tier
+   * without a second registry lookup (BI-1DE6F69E) — the shell alone cannot say
+   * whether a surface is operator-facing.
+   */
+  audience: RouteAudience;
   /** True once the route has adopted its L1 shell. */
   migrated: boolean;
   /** Checks waived while the route is pre-migration — recorded baseline debt. */
@@ -181,6 +187,7 @@ export function shellPolicyFor(routePath: string, c: ShellClassifiable): RouteSh
   return {
     routePath,
     shell: shellForRoute(c),
+    audience: c.audience,
     migrated,
     exemptChecks: migrated ? [] : PRE_MIGRATION_EXEMPT_CHECKS,
     sweepEligible: sweepExclusionReason === undefined,

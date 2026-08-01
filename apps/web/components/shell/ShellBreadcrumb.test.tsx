@@ -59,6 +59,17 @@ describe("buildBreadcrumbTrail", () => {
       { label: "Reference Data", href: "/admin/reference-data" },
     ]);
   });
+
+  it("decodes an encoded case key before presenting its fallback label", () => {
+    expect(buildBreadcrumbTrail("/workspace/cases/backlog-item%3ABI-CCE939AF")).toEqual([
+      { label: "Operations", href: "/workspace" },
+      { label: "Cases", href: "/workspace/cases" },
+      {
+        label: "Backlog Item:BI CCE939AF",
+        href: "/workspace/cases/backlog-item%3ABI-CCE939AF",
+      },
+    ]);
+  });
 });
 
 describe("ShellBreadcrumb", () => {

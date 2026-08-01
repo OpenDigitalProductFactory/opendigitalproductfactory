@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   auditUxBudget,
+  budgetFor,
   countDisclosureRegions,
   countPrimaryActions,
   countVisibleFields,
@@ -17,8 +18,11 @@ import {
   leadBandHtml,
   maxChoicesPerControl,
   measureUxBudget,
+  meetsReadingLevel,
+  readingLevelFor,
   removeSubtrees,
   shellForRoute,
+  UX_BUDGETS,
   UX_SHELLS,
 } from "./index";
 import { countWords } from "../owner-first/ux-audit";
@@ -147,6 +151,59 @@ describe("budget axes", () => {
 
   it("does not fabricate a reading grade for an empty surface", () => {
     expect(measureUxBudget("<div></div>").readingGradeLevel).toBe(0);
+  });
+});
+
+describe("reading tier resolves from audience, not shell alone (BI-1DE6F69E)", () => {
+  it("keeps the shell default for every audience without an override", () => {
+    for (const audience of ["owner", "worker", "customer", "public", "auth-setup"] as const) {
+      expect(readingLevelFor("detail", audience)).toBe("high-school");
+      expect(readingLevelFor("cockpit", audience)).toBe("high-school");
+    }
+  });
+
+  it("gives operator surfaces the college tier the readability policy specifies", () => {
+    expect(readingLevelFor("detail", "admin")).toBe("college");
+    expect(readingLevelFor("list", "admin")).toBe("college");
+    expect(readingLevelFor("detail", "builder")).toBe("college");
+  });
+
+  it("falls back to the shell default when no audience is supplied", () => {
+    expect(readingLevelFor("detail")).toBe("high-school");
+    expect(readingLevelFor("detail", null)).toBe("high-school");
+  });
+
+  it("only ever loosens — an already-permissive shell is never tightened", () => {
+    // `unclassified` sits at college; an audience with no override must not pull it
+    // back to high school.
+    expect(UX_BUDGETS.unclassified.readingLevel).toBe("college");
+    expect(readingLevelFor("unclassified", "customer")).toBe("college");
+    expect(readingLevelFor("unclassified", "admin")).toBe("college");
+  });
+
+  it("re-tiers the bar without deleting it — an operator surface still has a cap", () => {
+    // The whole point: 11.0 (the plainest admin surface measured) passes, but the
+    // family's real debt — 15.4, 18.6, 29.4, 57.9 — still fails.
+    const budget = budgetFor("detail", "admin");
+    expect(budget.readingLevel).toBe("college");
+    expect(meetsReadingLevel({ readingGradeLevel: 11 } as never, budget.readingLevel)).toBe(true);
+    expect(meetsReadingLevel({ readingGradeLevel: 13 } as never, budget.readingLevel)).toBe(true);
+    expect(meetsReadingLevel({ readingGradeLevel: 15.4 } as never, budget.readingLevel)).toBe(false);
+    expect(meetsReadingLevel({ readingGradeLevel: 57.9 } as never, budget.readingLevel)).toBe(false);
+  });
+
+  it("does not loosen a customer-facing surface", () => {
+    const budget = budgetFor("detail", "customer");
+    expect(budget.readingLevel).toBe("high-school");
+    expect(meetsReadingLevel({ readingGradeLevel: 11 } as never, budget.readingLevel)).toBe(false);
+  });
+
+  it("carries the audience on every generated shell row so the sweep can resolve it", () => {
+    const registry = JSON.parse(
+      readFileSync(resolve(__dirname, "route-shells.generated.json"), "utf8"),
+    ) as { routes: { routePath: string; audience?: string }[] };
+    expect(registry.routes.length).toBeGreaterThan(0);
+    expect(registry.routes.filter((r) => !r.audience)).toEqual([]);
   });
 });
 
@@ -324,7 +381,9 @@ describe("generated route-shell registry", () => {
     // /ops/self-upgrade and /admin/scheduled-jobs render live orchestration state
     // that concurrent sessions and in-run crons mutate. All three are tracked for
     // re-inclusion by BI-0C6C2153 once the fixture pins the clock and isolates state.
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(197);
+    // 197 -> 198: /admin/graph-explorer (BI-89A149A9) is sweep-eligible — it renders
+    // no wall-clock or live-orchestration state, only the graph mirror.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(198);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(120);

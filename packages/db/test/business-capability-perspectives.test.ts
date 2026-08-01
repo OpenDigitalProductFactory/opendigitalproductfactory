@@ -1,6 +1,8 @@
+import { ALL_ARCHETYPES } from "@dpf/storefront-templates";
 import { describe, expect, it, vi } from "vitest";
 import {
   BUSINESS_CAPABILITY_SEED_PREFIX,
+  COVERED_BUSINESS_CAPABILITY_CATEGORIES,
   applyBusinessCapabilityPerspective,
   resolveBusinessCapabilityPerspective,
 } from "../src/business-capability-perspectives";
@@ -16,10 +18,19 @@ describe("business capability perspectives", () => {
       category: "beauty-personal-care",
     });
 
-    expect(msp.sourcePerspectiveIds).toEqual(["common-small-business", "it-managed-services"]);
-    expect(msp.sources.map((source) => source.label)).toEqual(["Common Small Business", "IT Managed Services"]);
+    expect(msp.sourcePerspectiveIds).toEqual([
+      "common-small-business",
+      "professional-services",
+      "it-managed-services",
+    ]);
+    expect(msp.sources.map((source) => source.label)).toEqual([
+      "Common Small Business",
+      "Professional Services",
+      "IT Managed Services",
+    ]);
     expect(msp.sources.map((source) => source.source)).toEqual([
       "DPF baseline informed by APQC-style process families",
+      "DPF professional-services overlay informed by client intake, engagement scoping, delivery work, decisions/deliverables, time/billing, pipeline, and relationship management.",
       "DPF MSP overlay informed by managed services, customer estate, NIST CSF, and service-agreement operating patterns",
     ]);
     expect(msp.capabilities.some((capability) => capability.key === "msp-managed-customer-estate")).toBe(true);
@@ -60,6 +71,59 @@ describe("business capability perspectives", () => {
 
     expect(customSalon.sourcePerspectiveIds).toEqual(["common-small-business", "beauty-personal-care"]);
     expect(customSalon.capabilities.some((capability) => capability.key === "beauty-checkout-retail-payments")).toBe(true);
+  });
+
+  it("adds a food and hospitality category overlay for restaurant service-period work", () => {
+    const restaurant = resolveBusinessCapabilityPerspective({
+      archetypeId: "restaurant",
+      category: "food-hospitality",
+    });
+
+    expect(restaurant.sourcePerspectiveIds).toEqual(["common-small-business", "food-hospitality"]);
+    expect(restaurant.sources.map((source) => source.label)).toEqual([
+      "Common Small Business",
+      "Food And Hospitality",
+    ]);
+    const keys = restaurant.capabilities.map((capability) => capability.key);
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        "food-hospitality-operations",
+        "food-service-period-readiness",
+        "food-menu-prep-inventory",
+        "food-production-fulfillment",
+        "food-guest-experience-followup",
+        "food-deposits-tickets-billing",
+      ]),
+    );
+    expect(keys).toContain("customer-service-delivery");
+    expect(keys).not.toContain("beauty-service-operations");
+  });
+
+  it("keeps every storefront archetype category off the common-only fallback", () => {
+    const activeCategories = Array.from(new Set(ALL_ARCHETYPES.map((archetype) => archetype.category))).sort();
+
+    expect(COVERED_BUSINESS_CAPABILITY_CATEGORIES).toEqual(activeCategories);
+
+    for (const category of activeCategories) {
+      const resolved = resolveBusinessCapabilityPerspective({
+        archetypeId: "category-coverage-probe",
+        category,
+      });
+      const keys = resolved.capabilities.map((capability) => capability.key);
+      const byKey = new Set(keys);
+
+      expect(resolved.sourcePerspectiveIds, category).toContain("common-small-business");
+      expect(resolved.sourcePerspectiveIds.length, category).toBeGreaterThan(1);
+      expect(byKey.size, category).toBe(keys.length);
+
+      for (const capability of resolved.capabilities) {
+        if (capability.parentKey) {
+          expect(byKey.has(capability.parentKey), `${category}: ${capability.key} parent ${capability.parentKey}`).toBe(
+            true,
+          );
+        }
+      }
+    }
   });
 
   it("adds a trades and maintenance category overlay for field-service work", () => {
@@ -217,7 +281,11 @@ describe("business capability perspectives", () => {
       category: "professional-services",
     });
 
-    expect(result.sourcePerspectiveIds).toEqual(["common-small-business", "it-managed-services"]);
+    expect(result.sourcePerspectiveIds).toEqual([
+      "common-small-business",
+      "professional-services",
+      "it-managed-services",
+    ]);
     expect(result.appliedCount).toBeGreaterThan(10);
     expect(upsert).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -1,3 +1,7 @@
+import { CATEGORY_BUSINESS_CAPABILITY_PERSPECTIVES } from "./business-capability-category-corpus";
+
+export { COVERED_BUSINESS_CAPABILITY_CATEGORIES } from "./business-capability-category-corpus";
+
 export const BUSINESS_CAPABILITY_SEED_PREFIX = "BCAP-SEED-";
 
 type CapabilityRow = {
@@ -77,7 +81,7 @@ type ProjectedCapabilityUpdate = Omit<
   "capabilityId" | "currentMaturity" | "targetMaturity" | "maturityRationale"
 >;
 
-type BusinessCapabilityPerspective = {
+export type BusinessCapabilityPerspective = {
   perspectiveId: string;
   label: string;
   source: string;
@@ -162,259 +166,6 @@ const IT_MANAGED_SERVICES: BusinessCapabilityPerspective = {
   ],
 };
 
-const BEAUTY_PERSONAL_CARE: BusinessCapabilityPerspective = {
-  perspectiveId: "beauty-personal-care",
-  label: "Beauty And Personal Care",
-  source: "DPF beauty/personal-care overlay informed by appointment checkout, service menu, practitioner assignment, retail/POS payments, CRM/marketing automation, and local-presence operating patterns",
-  capabilities: [
-    l1(
-      "beauty-service-operations",
-      "Beauty And Personal Care Operations",
-      100,
-      "Operate appointment-led personal services across service menus, practitioners, client preferences, checkout, retail products, and local demand channels.",
-      ["consume", "operate"],
-    ),
-    l2(
-      "beauty-service-menu-packages",
-      "beauty-service-operations",
-      "Service Menu Packages And Pricing",
-      10,
-      "Define services, treatments, add-ons, packages, memberships, prices, durations, booking rules, and product/service bundles.",
-      ["explore", "consume"],
-    ),
-    l2(
-      "beauty-booking-practitioner-calendar",
-      "beauty-service-operations",
-      "Booking Practitioner Calendar",
-      20,
-      "Coordinate appointment slots, practitioner or stylist assignment, customer-choice booking, buffers, reminders, and schedule exceptions.",
-      ["consume", "operate"],
-    ),
-    l2(
-      "beauty-client-preferences-intake",
-      "beauty-service-operations",
-      "Client Preferences And Intake",
-      30,
-      "Maintain client records, preferences, sensitivities, consent notes, style or treatment history, and CRM/customer profile anchors.",
-      ["consume", "operate"],
-    ),
-    l2(
-      "beauty-checkout-retail-payments",
-      "beauty-service-operations",
-      "Checkout Retail And Payments",
-      40,
-      "Handle appointment checkout, deposits, tips, packages, product retail sales, refunds, and Stripe/Square-like POS or payment reconciliation posture.",
-      ["consume", "operate", "integrate"],
-    ),
-    l2(
-      "beauty-supplies-tools-stock",
-      "beauty-service-operations",
-      "Supplies Tools Stock And Procurement",
-      50,
-      "Track professional products, consumables, tools, equipment, retail stock, restock thresholds, suppliers, and purchasing needs.",
-      ["operate"],
-    ),
-    l2(
-      "beauty-local-marketing-reviews",
-      "beauty-service-operations",
-      "Local Marketing Reviews And Referrals",
-      60,
-      "Manage Google Business Profile/local presence, social proof, reviews, referrals, email campaigns, promotions, and HubSpot/Mailchimp-style growth anchors.",
-      ["explore"],
-    ),
-  ],
-};
-
-const TRADES_MAINTENANCE: BusinessCapabilityPerspective = {
-  perspectiveId: "trades-maintenance",
-  label: "Trades And Maintenance",
-  source: "DPF trades/maintenance overlay informed by field-service dispatch, work-order lifecycle, customer ETA communications, truck stock, subcontractor/safety, and trades finance operating patterns",
-  capabilities: [
-    l1(
-      "trades-field-service-operations",
-      "Trades And Maintenance Operations",
-      100,
-      "Operate field-service work across inquiry intake, dispatch, technician readiness, work orders, customer updates, vehicle stock, subcontractors, and contract billing.",
-      ["consume", "operate"],
-    ),
-    l2(
-      "trades-job-intake-triage",
-      "trades-field-service-operations",
-      "Job Intake And Triage",
-      10,
-      "Capture job descriptions, urgency, property type, photos, notes, quote requests, emergency call-outs, and customer contact preferences.",
-      ["consume"],
-    ),
-    l2(
-      "trades-dispatch-technician-readiness",
-      "trades-field-service-operations",
-      "Dispatch And Technician Readiness",
-      20,
-      "Assign technicians or crews, schedule visits, check skills, tools, and parts readiness, and keep dispatcher queues current.",
-      ["operate"],
-    ),
-    l2(
-      "trades-work-order-lifecycle",
-      "trades-field-service-operations",
-      "Work Order Lifecycle",
-      30,
-      "Track planned maintenance, reactive repair, inspections, site notes, completion evidence, follow-up tasks, and status handoffs.",
-      ["operate"],
-    ),
-    l2(
-      "trades-customer-updates-eta",
-      "trades-field-service-operations",
-      "Customer Updates ETA And Exceptions",
-      40,
-      "Send appointment confirmations, on-my-way ETA updates, running-late notices, access instructions, and completion follow-ups across communication channels.",
-      ["integrate", "operate"],
-    ),
-    l2(
-      "trades-truck-stock-parts",
-      "trades-field-service-operations",
-      "Truck Stock Parts And Materials",
-      50,
-      "Track truck stock, parts usage, materials, tools, restock needs, purchasing, and job-to-inventory evidence.",
-      ["operate"],
-    ),
-    l2(
-      "trades-quotes-contracts-billing",
-      "trades-field-service-operations",
-      "Quotes Contracts And Billing Readiness",
-      60,
-      "Prepare quotes, maintenance contracts, labour and materials billing, purchase orders, deposits, VAT/tax posture, and collections evidence.",
-      ["consume", "operate", "integrate"],
-    ),
-    l2(
-      "trades-safety-compliance-subcontractors",
-      "trades-field-service-operations",
-      "Safety Compliance And Subcontractors",
-      70,
-      "Manage site safety, PPE, certificates, insurance, subcontractors, waste disposal, and regulated trade obligations.",
-      ["operate"],
-    ),
-  ],
-};
-
-const FABRIC_CARE_SERVICES: BusinessCapabilityPerspective = {
-  perspectiveId: "fabric-care-services",
-  label: "Fabric Care Services",
-  source: "DPF fabric-care overlay informed by dry-cleaning POS, claim-ticket custody, plant/workroom flow, ready notifications, pickup routes, and garment-care operating patterns",
-  capabilities: [
-    l1(
-      "fabric-care-operations",
-      "Fabric Care Operations",
-      100,
-      "Operate garment and textile care across intake, claim tickets, plant/workroom processing, pickup and delivery, customer notices, and account billing readiness.",
-      ["consume", "operate"],
-    ),
-    l2(
-      "fabric-care-intake-claim-ticket",
-      "fabric-care-operations",
-      "Intake Claim Ticket And Tagging",
-      10,
-      "Capture customer, garment count, care instructions, stains, existing damage, special handling, and claim-ticket/tag evidence at drop-off or pickup.",
-      ["consume", "operate"],
-    ),
-    l2(
-      "fabric-care-plant-workroom-flow",
-      "fabric-care-operations",
-      "Plant Workroom And Route Flow",
-      20,
-      "Coordinate dry cleaning, laundry, pressing, alterations, commercial account work, and route handoffs through the plant or satellite-store network.",
-      ["operate"],
-    ),
-    l2(
-      "fabric-care-ready-promise-notices",
-      "fabric-care-operations",
-      "Ready Promise Notices And Exceptions",
-      30,
-      "Track promised-ready dates, send ready notices, escalate delays, and keep customer communication attached to the ticket.",
-      ["integrate", "operate"],
-    ),
-    l2(
-      "fabric-care-garment-custody-exceptions",
-      "fabric-care-operations",
-      "Garment Custody Exceptions",
-      40,
-      "Handle missing, damaged, mixed, delayed, or ambiguous garments as custody exceptions with manager visibility and resolution evidence.",
-      ["operate"],
-    ),
-    l2(
-      "fabric-care-supplies-equipment",
-      "fabric-care-operations",
-      "Supplies Equipment And Plant Readiness",
-      50,
-      "Track cleaning chemistry, tags, hangers, bags, equipment maintenance, and consumable purchasing that protect ready promises.",
-      ["operate"],
-    ),
-    l2(
-      "fabric-care-pos-account-billing",
-      "fabric-care-operations",
-      "POS Account And Billing Readiness",
-      60,
-      "Prepare point-of-sale payment, route delivery charges, recurring laundry plans, commercial account billing, and reconciliation evidence.",
-      ["consume", "operate", "integrate"],
-    ),
-  ],
-};
-
-const BIAN_BANKING_V14: BusinessCapabilityPerspective = {
-  perspectiveId: "bian-banking-v14",
-  label: "Banking (BIAN v14)",
-  source:
-    "BIAN Service Landscape v14.0 Value Chain View — docs/Reference/bian/bian-v14-service-landscape.json (curated SMB engagement-layer subset; L1=Business Area, L2=Business Domain, L3=Service Domain per the BIAN/CSDM v7.6 projection pattern)",
-  capabilities: [
-    // ── L1: BIAN Business Area "Customers" ─────────────────────────────────
-    l1("bian-customers", "Customers", 200, "BIAN Business Area: acquire, know, serve, and grow customer relationships.", ["consume", "operate"]),
-    l2("bian-relationship-management", "bian-customers", "Relationship Management", 10, "BIAN Business Domain: develop and maintain customer relationships, insight, and credit standing.", ["consume", "operate"]),
-    l3("bian-customer-relationship-management", "bian-relationship-management", "Customer Relationship Management", 10, "Develops and executes a customer plan to maintain and build a customer relationship.", ["consume", "operate"]),
-    l3("bian-customer-credit-rating", "bian-relationship-management", "Customer Credit Rating", 20, "Maintains and administers the bank's credit assessment for customers based on consolidated internal data and optionally external credit agency reports.", ["operate"]),
-    l3("bian-customer-behavior-insights", "bian-relationship-management", "Customer Behavior Insights", 30, "Applies behavioral analysis to customer event history to maintain a range of customer ratings/scores.", ["explore"]),
-    l2("bian-customer-care", "bian-customers", "Customer Care", 20, "BIAN Business Domain: handle customer servicing requests, cases, and contact.", ["consume", "operate"]),
-    l3("bian-customer-case", "bian-customer-care", "Customer Case", 10, "Handles the initiation, tracking, resolution and reporting on customer cases.", ["operate"]),
-    l3("bian-servicing-order", "bian-customer-care", "Servicing Order", 20, "Handles the processing of a customer servicing request as a predefined procedure.", ["operate"]),
-    l2("bian-sales", "bian-customers", "Sales", 30, "BIAN Business Domain: offers, campaigns, leads, and party onboarding.", ["explore", "consume"]),
-    l3("bian-customer-offer", "bian-sales", "Customer Offer", 10, "Orchestrates the processing of a product offer for a new or established customer.", ["consume"]),
-    l3("bian-lead-opportunity-management", "bian-sales", "Lead and Opportunity Management", 20, "Captures, classifies and tracks sales leads/opportunities with established clients.", ["explore"]),
-    l3("bian-party-lifecycle-management", "bian-sales", "Party Lifecycle Management", 30, "Tracks the state of a party relationship with the bank from the initial checks made during establishment — the membership/onboarding anchor.", ["consume", "operate"]),
-    l2("bian-party-reference", "bian-customers", "Party Reference", 40, "BIAN Business Domain: canonical party and location reference data.", ["operate"]),
-    l3("bian-party-reference-data-directory", "bian-party-reference", "Party Reference Data Directory", 10, "Maintains party reference information covering general reference details for customers and counterparties.", ["operate"]),
-
-    // ── L1: BIAN Business Area "Products" ──────────────────────────────────
-    l1("bian-products", "Products", 210, "BIAN Business Area: the deposit, lending, and card products the institution offers.", ["consume", "operate"]),
-    l2("bian-loans-and-deposits", "bian-products", "Loans and Deposits", 10, "BIAN Business Domain: deposit and lending product fulfillment.", ["consume", "operate"]),
-    l3("bian-savings-account", "bian-loans-and-deposits", "Savings Account", 10, "Orchestrates a consumer savings account including payments, deposits, interest, and fees.", ["operate"]),
-    l3("bian-term-deposit", "bian-loans-and-deposits", "Term Deposit", 20, "An interest bearing account into which a customer places a fixed amount of funds for a fixed term — certificates of deposit / share certificates.", ["operate"]),
-    l3("bian-consumer-loan", "bian-loans-and-deposits", "Consumer Loan", 30, "Handles the fulfillment of a consumer loan product including set-up and scheduled processing.", ["operate"]),
-    l3("bian-mortgage-loan", "bian-loans-and-deposits", "Mortgage Loan", 40, "Fulfillment of a loan product for the purpose of property purchase.", ["operate"]),
-    l3("bian-corporate-loan", "bian-loans-and-deposits", "Corporate Loan", 50, "Handles the fulfillment of a corporate loan product for business customers.", ["operate"]),
-    l3("bian-underwriting", "bian-loans-and-deposits", "Underwriting", 60, "Manages the underwriting decision process for products as appropriate, including many loan types.", ["operate"]),
-    l2("bian-consumer-banking", "bian-products", "Consumer Banking", 20, "BIAN Business Domain: everyday consumer banking facilities.", ["consume", "operate"]),
-    l3("bian-current-account", "bian-consumer-banking", "Current Account", 10, "Orchestrates a consumer checking/demand deposit account with its range of services and fees.", ["operate"]),
-    l3("bian-payment-order-initiation", "bian-consumer-banking", "Payment Order Initiation", 20, "Provides a customer payment service capturing payer and payee details and key payment properties.", ["consume"]),
-    l2("bian-cards", "bian-products", "Cards", 30, "BIAN Business Domain: card products and servicing.", ["consume", "operate"]),
-    l3("bian-credit-card", "bian-cards", "Credit Card", 10, "Orchestrates the scheduled maintenance and transactional activities associated with credit card products.", ["operate"]),
-
-    // ── L1: BIAN Business Area "Operations" ────────────────────────────────
-    l1("bian-operations", "Operations", 220, "BIAN Business Area: product and account back-office operations.", ["operate"]),
-    l2("bian-accounting-services", "bian-operations", "Accounting Services", 10, "BIAN Business Domain: position keeping, customer positions, and reconciliation.", ["operate"]),
-    l3("bian-position-keeping", "bian-accounting-services", "Position Keeping", 10, "Maintains a log of monetary or value transactions and entitlements posted to product facilities.", ["operate"]),
-    l3("bian-customer-position", "bian-accounting-services", "Customer Position", 20, "Maintains a consolidated financial position for a customer, combining details from all products.", ["operate"]),
-    l3("bian-account-reconciliation", "bian-accounting-services", "Account Reconciliation", 30, "Handles account reconciliation tasks.", ["operate"]),
-
-    // ── L1: BIAN Business Area "Finance And Risk Management" ───────────────
-    l1("bian-finance-risk", "Finance And Risk Management", 230, "BIAN Business Area: regulatory compliance and credit/fraud risk posture — where jurisdiction-specific regulatory governance attaches (spec §9.4).", ["operate"]),
-    l2("bian-compliance", "bian-finance-risk", "Compliance", 10, "BIAN Business Domain: interpret regulatory requirements, test adherence, and report — anchors the install's jurisdiction/charter posture.", ["operate"]),
-    l3("bian-regulatory-compliance", "bian-compliance", "Regulatory Compliance", 10, "Interprets regulatory requirements, provides guidance, and defines and implements compliance processes.", ["operate"]),
-    l3("bian-guideline-compliance", "bian-compliance", "Guideline Compliance", 20, "Develops and applies a portfolio of guideline compliance tests to confirm adherence to bank and regulatory guidelines.", ["operate"]),
-    l3("bian-regulatory-reporting", "bian-compliance", "Regulatory Reporting", 30, "Administers and orchestrates the tasks required to meet the institution's regulatory reporting obligations.", ["operate"]),
-    l2("bian-credit-risk", "bian-finance-risk", "Credit Risk", 20, "BIAN Business Domain: credit qualification and fraud response.", ["operate"]),
-    l3("bian-credit-management", "bian-credit-risk", "Credit Management", 10, "Provides a bank-wide oversight function to qualify credit pricing for offered products and services.", ["operate"]),
-    l3("bian-fraud-resolution", "bian-credit-risk", "Fraud Resolution", 20, "Sets up and processes a fraud case resulting from fraud behavior detected during production.", ["operate"]),
-  ],
-};
-
 function l1(
   key: string,
   name: string,
@@ -455,26 +206,6 @@ function l2(
   };
 }
 
-function l3(
-  key: string,
-  parentKey: string,
-  name: string,
-  sortOrder: number,
-  description: string,
-  it4itValueStreams: string[],
-): BusinessCapabilitySeedDefinition {
-  return {
-    key,
-    parentKey,
-    name,
-    description,
-    level: 3,
-    sortOrder,
-    currentMaturity: 1,
-    targetMaturity: 3,
-    it4itValueStreams,
-  };
-}
 
 export function capabilityIdForSeedKey(key: string): string {
   return `${BUSINESS_CAPABILITY_SEED_PREFIX}${key}`;
@@ -484,25 +215,16 @@ export function resolveBusinessCapabilityPerspective(
   input: BusinessCapabilityPerspectiveInput,
 ): ResolvedBusinessCapabilityPerspective {
   const perspectives = [COMMON_SMALL_BUSINESS];
+  const categoryPerspective = input.category
+    ? CATEGORY_BUSINESS_CAPABILITY_PERSPECTIVES[input.category]
+    : undefined;
+
+  if (categoryPerspective) {
+    perspectives.push(categoryPerspective);
+  }
 
   if (input.archetypeId === "it-managed-services") {
     perspectives.push(IT_MANAGED_SERVICES);
-  }
-
-  if (input.category === "beauty-personal-care") {
-    perspectives.push(BEAUTY_PERSONAL_CARE);
-  }
-
-  if (input.category === "trades-maintenance") {
-    perspectives.push(TRADES_MAINTENANCE);
-  }
-
-  if (input.category === "fabric-care-services") {
-    perspectives.push(FABRIC_CARE_SERVICES);
-  }
-
-  if (input.category === "banking-financial-services") {
-    perspectives.push(BIAN_BANKING_V14);
   }
 
   return {

@@ -30,6 +30,33 @@ Performance is a separate main destination, not a tab inside Operations. Simple
 navigation keeps the day-to-day Operations surface and hides the manager view;
 Full navigation exposes both when the signed-in role is permitted.
 
+## Spatial operations for tables and rooms
+
+Operations changes its primary visual model to match the business instead of
+forcing every physical resource into the same card grid.
+
+- Restaurants use a two-dimensional floor plan for table position, availability,
+  service state, and server load. An accessible list exposes the same facts
+  without relying on position or color alone.
+- Hotels and other room-based businesses use a **Room rack** first: rooms run
+  down the page and dates run across it, so continuous availability, arrivals,
+  departures, and assignment conflicts remain visible together.
+- **Floor & wing** answers a different question: where a room is and what needs
+  attention nearby. **Accessible list** provides the complete semantic
+  alternative for keyboard, assistive-technology, and dense scanning needs.
+
+Room operations deliberately keep four state axes separate. **Occupancy** says
+whether the space is vacant, reserved, occupied, or due to turn. **Readiness**
+tracks cleaning and inspection. **Inventory** says whether the room may be sold
+or assigned. **Privacy** warns whether staff may enter. Text labels accompany
+color throughout, because a room can be occupied, dirty, sellable, and subject
+to a do-not-enter restriction at the same time.
+
+When the room view is marked **Demonstration**, it is an honest preview of the
+operational grammar, not live hotel data. Live assignment, housekeeping, and
+maintenance commands remain unavailable until the business's durable room
+provider is connected.
+
 ## Confirming an operational suggestion
 
 An AI coworker can suggest an assignment, but the suggestion is not a completed
@@ -54,6 +81,7 @@ business action until the durable operations provider confirms it.
 - **Calendar** — Upcoming dates pulled from your backlog items, leave requests, deadlines, and any scheduled events in the areas you have access to.
 - **Managed Documents** — Maintained documents with lifecycle state, versions, references, and publication status.
 - **"Needs you" inbox** — The one place for business decisions that need you now. Routine technical recovery stays with your digital team, while money leaving the business and public actions always come to you.
+- **Work Rooms** — Active, access-controlled places where people and AI coworkers coordinate toward a named outcome. A Work Room is the friendly Workspace view over a governed Work Case.
 
 ## What You Can Do
 
@@ -62,5 +90,6 @@ business action until the durable operations provider confirms it.
 - Review recent activity from colleagues and digital coworkers without leaving your workspace
 - Access your calendar for today's events and upcoming deadlines
 - Open [Managed Documents](documents.md) to review document state, versions, and references
+- Open [My Work and Work Rooms](work-rooms.md) to see the outcome, accountable participants, current attention, activity, and next action for active company work
 - Use your digital coworker to get a personalized briefing on what needs your attention
 - Open the ["Needs you" inbox](attention-inbox.md) to review plain-language decision cards, weekly batches, and the full technical record when needed

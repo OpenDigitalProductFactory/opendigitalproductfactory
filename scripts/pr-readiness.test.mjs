@@ -286,6 +286,11 @@ test("shared PR skill and GitHub template require the mechanical readiness check
     "utf8",
   );
   assert.match(skill, /pnpm pr:ready -- --pr-body-file/);
+  assert.match(skill, /review_semantic_change/);
+  assert.ok(
+    skill.indexOf("review_semantic_change") < skill.indexOf("pnpm run pregate"),
+    "semantic review must occur on the stable local commit before pregate/first publication",
+  );
   assert.match(template, /## Pre-PR readiness/);
   assert.match(template, /pnpm pr:ready -- --pr-body-file/);
 });

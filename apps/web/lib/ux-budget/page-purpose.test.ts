@@ -486,10 +486,15 @@ describe("deterministic Page Purpose registry", () => {
   });
 
   it("allows an explicitly reviewed quarantine instead of silent regression", () => {
+    // Real contracts are merged in because this case asserts the identity ratchet
+    // is CLEAN: a fixture-only contract map would demote genuinely ratified routes
+    // to drafts and the ratchet would rightly complain about them.
     const base = buildPagePurposeRegistry(routeManifest.routes, {
+      ...buildPurposeContractSourceIndex(),
       "/workspace": ratifiedSourceFixture,
     });
     const quarantined = buildPagePurposeRegistry(routeManifest.routes, {
+      ...buildPurposeContractSourceIndex(),
       "/workspace": quarantinedSourceFixture,
     });
     const baselineWithoutWorkspace = {
@@ -547,10 +552,14 @@ describe("deterministic Page Purpose registry", () => {
       ...quarantinedSourceFixture,
       routePath,
     };
+    // Same reason as above: this case asserts a clean ratchet, so the real
+    // contracts have to be present alongside the fixture.
     const base = buildPagePurposeRegistry(manifest, {
+      ...buildPurposeContractSourceIndex(),
       [routePath]: ratifiedSource,
     });
     const quarantined = buildPagePurposeRegistry(manifest, {
+      ...buildPurposeContractSourceIndex(),
       [routePath]: quarantineSource,
     });
     expect([

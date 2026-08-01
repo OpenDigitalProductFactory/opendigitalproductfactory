@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 594,
+  "pageCount": 596,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -446,6 +446,7 @@
         "which-plane-owns-what",
         "evidence-earned-completion",
         "surface-neutral-semantic-change-review",
+        "design-grounding",
         "client-identity-and-trust",
         "operator-attention",
         "adding-another-consequential-gate"
@@ -7603,6 +7604,20 @@
         "known-limits"
       ]
     },
+    "docs/testing/archetype-exercise-playbook.md": {
+      "publicHref": "/testing/archetype-exercise-playbook/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "archetype-exercise-playbook-what-it-costs-to-do-the-next-one",
+        "1-what-the-restaurant-exercise-actually-bought",
+        "2-what-the-next-archetype-costs",
+        "3-which-archetype-next",
+        "4-the-gap-to-close-before-the-next-run",
+        "5-where-scenario-data-lives"
+      ]
+    },
     "docs/testing/archetype-job-validation.md": {
       "publicHref": "/testing/archetype-job-validation/",
       "portalHref": null,
@@ -9057,6 +9072,7 @@
         "overview",
         "key-concepts",
         "what-you-can-do",
+        "graph-explorer",
         "hive-result-review"
       ]
     },
@@ -9727,6 +9743,7 @@
         "invoice-and-collection-workflow",
         "starting-an-invoice-from-context",
         "decisions-recovery-and-evidence",
+        "what-you-can-edit-and-when",
         "status-movement-is-governed",
         "void-versus-delete",
         "related-help"
@@ -9900,6 +9917,7 @@
         "check-organization-placement",
         "work-with-the-org-chart",
         "change-who-someone-reports-to",
+        "change-someones-team-role-or-location",
         "find-people-and-spot-problems",
         "set-compensation-inputs",
         "record-and-approve-time",
@@ -10357,9 +10375,23 @@
       "anchors": [
         "overview",
         "operations-and-performance",
+        "spatial-operations-for-tables-and-rooms",
         "confirming-an-operational-suggestion",
         "key-concepts",
         "what-you-can-do"
+      ]
+    },
+    "docs/user-guide/workspace/work-rooms.md": {
+      "publicHref": "/user-guide/workspace/work-rooms/",
+      "portalHref": "/docs/workspace/work-rooms",
+      "publishedPublic": true,
+      "publishedPortal": true,
+      "anchors": [
+        "overview",
+        "what-you-see-first",
+        "activity-and-participants",
+        "finite-and-standing-rooms",
+        "incomplete-or-unavailable-rooms"
       ]
     }
   }

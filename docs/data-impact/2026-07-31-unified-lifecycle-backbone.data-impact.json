@@ -1,0 +1,100 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "Postgres lifecycle event, plateau membership, and lifecycle gap tables are canonical platform records; no external copy is introduced.",
+    "The baseline plateau and technology-currency gap register are deterministic projections from InventoryEntity and CatalogLifecycleMilestone evidence.",
+    "BacklogItem remains the source of truth for work status; LifecycleGap stores only the semantic BacklogItem.itemId pointer after canonical backlog ingestion."
+  ],
+  "migration": {
+    "name": "20260607135551_lifecycle_backbone_substrate + 20260607140753_lifecycle_gap_register + 20260731233000_reconcile_lifecycle_backbone",
+    "backfill": "Existing EaElement rows are deterministically classified as actual when linked to infrastructure and logical otherwise before refinementLevel becomes required. The corrective migration removes the unreleased duplicate InventoryEntity.supportEndsAt projection in favor of CatalogLifecycleMilestone, installs closed-value checks, and replaces the full plateau-membership uniqueness constraint with one-active-interval uniqueness. Rollback disables the lifecycle projector while preserving event, interval, and gap evidence; the forward-only migration chain does not delete released business records."
+  },
+  "tests": [
+    "apps/web/lib/lifecycle.test.ts",
+    "apps/web/lib/lifecycle/baseline-projection.test.ts",
+    "apps/web/lib/lifecycle/baseline-projector.test.ts",
+    "apps/web/lib/lifecycle/gaps.test.ts",
+    "apps/web/lib/lifecycle/gap-scoping.test.ts",
+    "apps/web/lib/lifecycle/inventory-projector.test.ts",
+    "apps/web/lib/govern/data/lifecycle-governance-assets.test.ts",
+    "apps/web/lib/govern/data/coverage.live.test.ts",
+    "packages/db/scripts/migration-safety-guard.mjs",
+    "packages/db/scripts/schema-regression-guard.mjs",
+    "scripts/check-stewardship-scope.mjs",
+    "scripts/check-data-impact.mjs"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:ea-element",
+      "prismaModel": "EaElement",
+      "lifecycleDisposition": "domain-lifecycle-managed - refinement is architecture-owned and retained with the EA element",
+      "fields": [
+        {
+          "fieldId": "data:ea-element#refinementLevel",
+          "resolution": "governed",
+          "reason": "the required conceptual, logical, or actual classification controls lifecycle realization views",
+          "provenance": "infrastructure linkage backfill followed by architect curation"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:lifecycle-event",
+      "prismaModel": "LifecycleEvent",
+      "lifecycleDisposition": "domain-lifecycle-managed - append-only evidence follows the referenced governed thing and is never age-purged independently",
+      "fields": [
+        {
+          "fieldId": "data:lifecycle-event#transition",
+          "resolution": "inherited",
+          "reason": "governed thing, stage, status, time, reason, and evidence fields form the append-only transition receipt",
+          "provenance": "validated lifecycle transition writers"
+        },
+        {
+          "fieldId": "data:lifecycle-event#actorPrincipalId",
+          "resolution": "governed",
+          "reason": "the accountable principal may identify a human operator or delegated coworker",
+          "provenance": "authenticated transition context",
+          "flags": ["subject", "sensitive"],
+          "fieldPolicy": "organization-scoped audit access; omit from public and customer projections"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:plateau-membership",
+      "prismaModel": "PlateauMembership",
+      "lifecycleDisposition": "derived-projection - operational baseline intervals reconcile from evidence and curated target intervals follow the architecture lifecycle",
+      "fields": [
+        {
+          "fieldId": "data:plateau-membership#interval-and-evidence",
+          "resolution": "governed",
+          "reason": "plateau identity, governed thing identity, validity interval, source, snapshot, and evidence provide temporal architecture provenance",
+          "provenance": "bounded inventory projector or architect curation"
+        }
+      ]
+    },
+    {
+      "kind": "model",
+      "assetId": "data:lifecycle-gap",
+      "prismaModel": "LifecycleGap",
+      "lifecycleDisposition": "domain-lifecycle-managed - reconciliation resolves signals and canonical backlog ingestion scopes work while preserving decision provenance",
+      "fields": [
+        {
+          "fieldId": "data:lifecycle-gap#signal-and-scope",
+          "resolution": "governed",
+          "reason": "stable signal identity, severity, scope, plateau pointers, evidence, and backlog pointer make architecture deltas traceable without duplicating work status",
+          "provenance": "dimension-specific gap generators and canonical backlog ingestion"
+        }
+      ]
+    },
+    {
+      "kind": "projection",
+      "store": "postgres:plateau-membership-and-lifecycle-gap",
+      "derivedContractId": "inventory-catalog-evidence->baseline-and-technology-currency-gaps",
+      "cleanupTest": "apps/web/lib/lifecycle/baseline-projection.test.ts",
+      "reconciliationTest": "apps/web/lib/lifecycle/inventory-projector.test.ts"
+    }
+  ]
+}

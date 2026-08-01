@@ -9,7 +9,7 @@ import {
   buildxBuildArgs,
   buildxCreateArgs,
   classifyBoundedBuildExit,
-  databaseUrlFromContainerEnvironment,
+  postgresContainerProbeArgs,
   validateBuilderInspection,
 } from "./lib/local-ci-bounded-builder.mjs";
 import {
@@ -18,6 +18,7 @@ import {
   monitorControlPlane,
   terminateProcessTreeCommand,
 } from "./lib/local-ci-control-plane-watchdog.mjs";
+import { reapSupersededSlotImages } from "./lib/local-integration-image-retention.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const BUILDKIT_CONFIG = join(SCRIPT_DIR, "config", "local-ci-buildkitd.toml");
@@ -61,6 +62,24 @@ function runDocker(args, timeout = 20_000) {
     windowsHide: true,
     timeout,
   });
+}
+
+// Repository-only listing: `docker images` prints one repository per line, and
+// these build tags carry the implicit `:latest`, so the repository name IS the
+// tag the build produced.
+function listLocalImageTags() {
+  const listed = runDocker(["images", "--format", "{{.Repository}}"], 30_000);
+  if (listed.status !== 0) {
+    throw new Error(listed.stderr?.trim() || "docker images failed");
+  }
+  return (listed.stdout || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+}
+
+function removeLocalImage(tag) {
+  const removed = runDocker(["rmi", tag], 60_000);
+  if (removed.status !== 0) {
+    throw new Error(removed.stderr?.trim() || `docker rmi ${tag} failed`);
+  }
 }
 
 function inspectBuilder(builder) {
@@ -163,9 +182,10 @@ async function probePostgres(databaseUrl) {
   }
 }
 
-function resolveControlPlaneDatabaseUrl() {
+function resolveControlPlanePostgresProbe() {
   if (process.env.DPF_CONTROL_PLANE_DATABASE_URL) {
-    return process.env.DPF_CONTROL_PLANE_DATABASE_URL;
+    const databaseUrl = process.env.DPF_CONTROL_PLANE_DATABASE_URL;
+    return () => probePostgres(databaseUrl);
   }
   const container = process.env.DPF_CONTROL_PLANE_POSTGRES_CONTAINER
     || "dpf-postgres-1";
@@ -178,10 +198,14 @@ function resolveControlPlaneDatabaseUrl() {
   if (inspected.status !== 0) {
     throw new Error("live PostgreSQL container environment is unavailable");
   }
-  return databaseUrlFromContainerEnvironment(inspected.stdout);
+  const args = postgresContainerProbeArgs({
+    container,
+    environment: inspected.stdout,
+  });
+  return () => commandHealthy("docker", args, 2_500);
 }
 
-async function probeControlPlane(databaseUrl) {
+async function probeControlPlane(postgresProbe) {
   const portalUrl = process.env.DPF_CONTROL_PLANE_PORTAL_URL || "http://127.0.0.1:3000";
   const mcpUrl = process.env.DPF_MCP_URL || `${portalUrl}/api/mcp/v1`;
   const bearerToken = process.env.DPF_MCP_BEARER_TOKEN || "";
@@ -202,7 +226,7 @@ async function probeControlPlane(databaseUrl) {
       return response?.success === true;
     }),
     timedProbe(() => commandHealthy("docker", ["info"], 2_500)),
-    timedProbe(() => probePostgres(databaseUrl)),
+    timedProbe(postgresProbe),
   ]);
   return { portal, mcp, docker, postgres };
 }
@@ -251,9 +275,9 @@ async function main() {
     maxParallelism: builder.maxParallelism,
   };
 
-  let controlPlaneDatabaseUrl;
+  let controlPlanePostgresProbe;
   try {
-    controlPlaneDatabaseUrl = resolveControlPlaneDatabaseUrl();
+    controlPlanePostgresProbe = resolveControlPlanePostgresProbe();
   } catch (error) {
     const payload = {
       schemaVersion: 1,
@@ -272,7 +296,7 @@ async function main() {
   }
 
   const preflight = await establishHealthyControlPlane({
-    sample: () => probeControlPlane(controlPlaneDatabaseUrl),
+    sample: () => probeControlPlane(controlPlanePostgresProbe),
   });
   if (preflight.status !== "healthy") {
     const payload = {
@@ -341,7 +365,7 @@ async function main() {
     });
   });
   const watchdog = await monitorControlPlane({
-    sample: () => probeControlPlane(controlPlaneDatabaseUrl),
+    sample: () => probeControlPlane(controlPlanePostgresProbe),
     isComplete: () => childComplete,
   });
   let termination = null;
@@ -382,6 +406,20 @@ async function main() {
   if (finalStatus === "blocked_control_plane_starvation") {
     process.stderr.write(`[local-ci-bounded-build] ${finalStatus} ${failures.join(",")}\n`);
     return EXIT_CONTROL_PLANE_STARVATION;
+  }
+  // Retention runs ONLY on a green build, so the slot always keeps a working
+  // image: the one just produced supersedes the slot's older images. Gating on
+  // success is what makes this safe — reaping after a failure would delete the
+  // last image that actually worked. Best-effort by construction; it must never
+  // turn a passing build red.
+  if (finalStatus === "healthy") {
+    reapSupersededSlotImages({
+      slotKey,
+      keepTag: tag,
+      listImages: listLocalImageTags,
+      removeImage: removeLocalImage,
+      log: (message) => process.stdout.write(`[local-ci-bounded-build] retention: ${message}\n`),
+    });
   }
   return buildOutcome.exitCode;
 }

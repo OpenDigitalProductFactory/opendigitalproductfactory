@@ -5,6 +5,7 @@ import { prisma } from "@dpf/db";
 import { applyBusinessCapabilityPerspective } from "@dpf/db/business-capability-perspectives";
 import { generateDesignSystem } from "@/lib/design-intelligence";
 import { seedBookingScheduleDefaults } from "@/lib/storefront/seed-booking-defaults";
+import { seedBeautyCapacityDefaults } from "@/lib/storefront/seed-beauty-capacity-defaults";
 import {
   deriveRevenueModelFromActivationProfile,
   readActivationProfile,
@@ -300,6 +301,11 @@ export async function POST(req: NextRequest) {
     storefrontId: config.id,
     archetypeId,
     providerName: orgName ?? org.name,
+  });
+  await seedBeautyCapacityDefaults(prisma, {
+    organizationId: org.id,
+    storefrontId: config.id,
+    archetypeId,
   });
 
   if (seededBooking) {

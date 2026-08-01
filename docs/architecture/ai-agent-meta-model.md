@@ -27,7 +27,48 @@ The core record is the `Agent` row; the seven items above are the components tha
 - **`agent_registry.json`** — the human-authorable definition (what you write to declare an agent).
 - **The `AIDoc`** — the projected, portable summary (what the platform publishes about an agent).
 
-**Diagram — Agent composition:** [view Mermaid source](agent-meta-model-diagrams/01-agent-composition.mmd)
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e3a5f', 'primaryTextColor': '#ffffff', 'primaryBorderColor': '#2d5a8e', 'lineColor': '#4a90d9', 'secondaryColor': '#2d5a8e', 'tertiaryColor': '#e8f0fe', 'fontFamily': 'Segoe UI, Arial', 'fontSize': '14px'}}}%%
+flowchart TB
+
+    %% ── The core record ────────────────────────────────────────────────────────
+    CORE["AGENT (core record)<br/>agentId · name · tier · type<br/>valueStream · lifecycleStage · sensitivity<br/>model: Agent"]
+
+    %% ── The seven components an agent is composed of ───────────────────────────
+    subgraph COMPOSE["What an agent is composed of"]
+        direction LR
+        ID["1. IDENTITY<br/>Principal + PrincipalAlias<br/>GAID + AIDoc"]
+        LLM["2. LLM ROUTING<br/>AgentModelConfig<br/>AgentExecutionConfig"]
+        MCP["3. MCP SERVERS + TOOLS<br/>McpServer / McpServerTool<br/>AgentToolGrant"]
+        PR["4. INTERNAL PROMPTS<br/>PromptTemplate<br/>AgentPromptContext"]
+        SK["5. SKILLS<br/>SkillDefinition<br/>SkillAssignment"]
+        GOV["6. GOVERNANCE + AUTHORITY<br/>AgentGovernanceProfile<br/>HITL tier · DelegationGrant"]
+        LIFE["7. LIFECYCLE + PERFORMANCE<br/>status · lifecycleStage<br/>AgentPerformance"]
+    end
+
+    CORE --> ID
+    CORE --> LLM
+    CORE --> MCP
+    CORE --> PR
+    CORE --> SK
+    CORE --> GOV
+    CORE --> LIFE
+
+    %% ── Authorable vs projected surfaces ───────────────────────────────────────
+    REG["agent_registry.json<br/>(human-authorable definition)"]
+    AIDOC["AIDoc<br/>(projected, portable summary)"]
+
+    REG -.seeds.-> CORE
+    CORE -.projects.-> AIDOC
+
+    classDef core fill:#e65100,stroke:#bf360c,color:#fff,font-weight:bold
+    classDef comp fill:#1e3a5f,stroke:#2d5a8e,color:#fff
+    classDef surf fill:#e8f0fe,stroke:#2d5a8e,color:#1e3a5f,font-style:italic
+
+    class CORE core
+    class ID,LLM,MCP,PR,SK,GOV,LIFE comp
+    class REG,AIDOC surf
+```
 
 ---
 
@@ -72,7 +113,38 @@ Three layers, each with a distinct job:
 
 GAID is deliberately complementary to **TAK** (Trusted AI Kernel): *GAID says who an agent is and what claims can be made about it; TAK says how a trustworthy runtime must govern it.* See `docs/architecture/trusted-ai-kernel.md` and `docs/architecture/agent-standards-dpf-conformance.md`.
 
-**Diagram — Identity projection (Agent → Principal/alias → AIDoc):** [view Mermaid source](agent-meta-model-diagrams/02-identity-projection.mmd)
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e3a5f', 'primaryTextColor': '#ffffff', 'primaryBorderColor': '#2d5a8e', 'lineColor': '#4a90d9', 'secondaryColor': '#2d5a8e', 'tertiaryColor': '#e8f0fe', 'fontFamily': 'Segoe UI, Arial', 'fontSize': '14px'}}}%%
+flowchart LR
+
+    AGENT["Agent<br/>agentId = AGT-ORCH-000<br/>name = coo-orchestrator"]
+
+    PRN["Principal<br/>kind = agent<br/>principalId = PRN-..."]
+
+    subgraph ALIASES["PrincipalAlias rows"]
+        direction TB
+        A1["aliasType = agent<br/>aliasValue = AGT-ORCH-000"]
+        A2["aliasType = gaid<br/>aliasValue = gaid:priv:dpf.internal:coo-orchestrator"]
+    end
+
+    AIDOC["InternalAIDoc (projected)<br/>gaid · principal_ref · status<br/>model_binding · hitl_profile<br/>tool_surface · authorization_classes<br/>operating_profile_fingerprint"]
+
+    AGENT -->|syncAgentPrincipal| PRN
+    PRN --> A1
+    PRN --> A2
+    AGENT -->|projectInternalAIDoc| AIDOC
+    A2 -.gaid.-> AIDOC
+
+    classDef a fill:#e65100,stroke:#bf360c,color:#fff,font-weight:bold
+    classDef p fill:#1e3a5f,stroke:#2d5a8e,color:#fff
+    classDef al fill:#e0e7ff,stroke:#4338ca,color:#0f172a
+    classDef d fill:#d1fae5,stroke:#166534,color:#0f172a
+
+    class AGENT a
+    class PRN p
+    class A1,A2 al
+    class AIDOC d
+```
 
 ### 3.2 LLM routing — *which model the agent runs on*
 
@@ -195,7 +267,38 @@ The `operating_profile_fingerprint` is the key idea for communication-at-scale: 
 
 Identity and config are static; the live agent is *assembled* per request. `getAvailableTools()`, prompt composition, skill loading, and model resolution all run at call time, then the authority gate and `ToolExecution` ledger close the loop.
 
-**Diagram — Runtime assembly:** [view Mermaid source](agent-meta-model-diagrams/03-runtime-assembly.mmd)
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1e3a5f', 'primaryTextColor': '#ffffff', 'primaryBorderColor': '#2d5a8e', 'lineColor': '#4a90d9', 'secondaryColor': '#2d5a8e', 'tertiaryColor': '#e8f0fe', 'fontFamily': 'Segoe UI, Arial', 'fontSize': '14px'}}}%%
+flowchart TB
+
+    REQ["Request lands<br/>(route / phase / coworker chat)"]
+    LOAD["Resolve + load agent<br/>Agent + relations"]
+    PROMPT["Assemble system prompt<br/>PromptTemplate + AgentPromptContext<br/>+ phase/route context"]
+    TOOLS["Resolve available tools<br/>getAvailableTools()<br/>user capability ∩ AgentToolGrant<br/>(+ baseline reads, + MCP server tools)"]
+    SKILLS["Load assigned skills<br/>SkillAssignment → SkillDefinition"]
+    MODEL["Select model<br/>AgentModelConfig (tier/budget/pins)<br/>→ route / vendor-CLI / local"]
+    EXEC["Execute under config<br/>AgentExecutionConfig<br/>temperature · tokens · timeout"]
+    GATE["Authority gate<br/>HITL tier · grant check<br/>→ CoworkerActionEnvelope"]
+    LEDGER["Record<br/>ToolExecution ledger<br/>AgentPerformance"]
+
+    REQ --> LOAD --> PROMPT
+    LOAD --> TOOLS
+    LOAD --> SKILLS
+    LOAD --> MODEL
+    PROMPT --> EXEC
+    TOOLS --> EXEC
+    SKILLS --> EXEC
+    MODEL --> EXEC
+    EXEC --> GATE --> LEDGER
+
+    classDef step fill:#1e3a5f,stroke:#2d5a8e,color:#fff
+    classDef io fill:#e8f0fe,stroke:#2d5a8e,color:#1e3a5f
+    classDef gate fill:#fef3c7,stroke:#92400e,color:#0f172a
+
+    class REQ,LEDGER io
+    class LOAD,PROMPT,TOOLS,SKILLS,MODEL,EXEC step
+    class GATE gate
+```
 
 ---
 

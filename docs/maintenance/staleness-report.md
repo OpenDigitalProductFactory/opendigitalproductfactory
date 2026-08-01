@@ -7,12 +7,11 @@
 > whether the doc's wording actually needs updating (BI-AA5DFEA2). It does NOT
 > mean the doc is definitely wrong.
 
-**4** stale-candidate doc(s).
+**3** stale-candidate doc(s).
 
 | Doc | Drift | Most-recently-changed reference(s) |
 | --- | ----- | ---------------------------------- |
 | `docs/architecture/context-engineering-standards.md` | 1d | `docs/superpowers/specs/2026-07-24-agent-instruction-plane-split-and-ratchet-design.md` (+1d) |
 | `docs/user-guide/getting-started/ai-coworker.md` | 1d | `docs/user-guide/market-archetypes.md` (+1d) |
-| `AGENTS.md` | 0d | `docs/testing/pr-health.md` (+0d)<br>`docs/testing/pre-pr-gate.md` (+0d) |
-| `docs/testing/pre-pr-gate.md` | 0d | `.github/workflows/ci.yml` (+0d)<br>`scripts/lib/ci-policy-guards.mjs` (+0d) |
+| `docs/testing/pre-pr-gate.md` | 0d | `.github/workflows/ci.yml` (+0d)<br>`AGENTS.md` (+0d)<br>`scripts/lib/ci-policy-guards.mjs` (+0d) |
 

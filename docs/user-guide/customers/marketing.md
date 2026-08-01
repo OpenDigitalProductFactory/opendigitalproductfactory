@@ -46,6 +46,12 @@ Because both the page and the coworker read the same thing, they cannot tell you
 two different stories about where marketing stands. The recommendation moves as
 the workspace moves:
 
+Opening Marketing in more than one tab, or loading page sections at the same
+time, still uses one strategy workspace for the organization. A concurrent
+first load may finish through either request, but both views resolve to that
+same saved strategy rather than presenting a setup error or creating competing
+records.
+
 | What the workspace looks like | What you are asked to do next |
 | --- | --- |
 | Drafts are waiting on you | Review them before anything reaches customers |
@@ -99,6 +105,13 @@ should establish:
 Campaign briefs precede individual assets. This order prevents a polished post
 or email from becoming the de facto strategy. Asset tasks are the concrete work
 items that can become approval-gated drafts.
+
+The Marketing Strategist will not invent a placeholder brief to make the page
+look busy. If it has nothing grounded to propose this cycle, Campaigns stays
+empty and the overview tells you so plainly, with the next step being to
+establish one bounded campaign. An empty Campaigns page is a truthful state, not
+a broken one — and it is more useful than a provisional brief you would have to
+recognise and discard.
 
 When no campaign exists, return to the strategist workspace rather than creating
 unrelated assets. When an asset is incomplete, revise the task or proof before

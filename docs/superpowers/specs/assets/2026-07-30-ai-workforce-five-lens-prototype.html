@@ -1,0 +1,1102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AI Workforce Five-Lens Design</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --background: #f5f7f8;
+        --foreground: #172126;
+        --card: #ffffff;
+        --card-foreground: #172126;
+        --muted-foreground: #5a6a72;
+        --border: #cdd6da;
+        --primary: #087e8b;
+        --primary-foreground: #ffffff;
+        --destructive: #bb2f3a;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          color-scheme: dark;
+          --background: #101719;
+          --foreground: #edf3f5;
+          --card: #182225;
+          --card-foreground: #edf3f5;
+          --muted-foreground: #aebdc3;
+          --border: #3a4a50;
+          --primary: #55c4cc;
+          --primary-foreground: #101719;
+          --destructive: #ff7a84;
+        }
+      }
+      html { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      body { margin: 0; background: var(--background); color: var(--foreground); }
+      main { width: min(1180px, calc(100% - 2rem)); margin: 0 auto; padding: 1.25rem 0 3rem; }
+      button, input, select, summary { font: inherit; }
+      button, a, input, select, summary { min-height: 44px; }
+      summary { display: flex; align-items: center; cursor: pointer; }
+      .btn { border: 1px solid var(--border); border-radius: 6px; padding: 0.55rem 0.8rem; cursor: pointer; }
+      .btn-primary { border-color: var(--primary); background: var(--primary); color: var(--primary-foreground); }
+      .btn-secondary { background: var(--card); color: var(--foreground); }
+      .form-control { border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--foreground); padding: 0.55rem 0.7rem; }
+      .text-small { font-size: 0.875rem; }
+      .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+      :focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 70%, white); outline-offset: 2px; }
+      .prototype-review-appendix { margin-top: 2rem; border-top: 1px solid var(--border); padding-top: 1rem; }
+      .prototype-review-appendix h2, .prototype-review-appendix p { margin: 0; }
+      .prototype-state-list { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+      .prototype-state-preview { display: grid; gap: 0.65rem; margin-top: 0.75rem; border-left: 3px solid var(--primary); background: var(--card); padding: 0.9rem; }
+      .prototype-state-preview h3, .prototype-state-preview p { margin: 0; }
+      .prototype-state-context { color: var(--muted-foreground); font-size: 0.875rem; }
+      @media (max-width: 760px) {
+        .prototype-state-list .btn { flex: 1 1 9rem; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+<section id="ai-workforce-five-lens-design" aria-label="AI Workforce target design">
+  <style>
+    #ai-workforce-five-lens-design {
+      color: var(--foreground);
+      background: var(--background);
+      font-family: inherit;
+    }
+    #ai-workforce-five-lens-design * {
+      box-sizing: border-box;
+    }
+    #ai-workforce-five-lens-design .aw-shell {
+      display: grid;
+      gap: 1rem;
+      min-width: 0;
+    }
+    #ai-workforce-five-lens-design .aw-breadcrumb {
+      color: var(--muted-foreground);
+    }
+    #ai-workforce-five-lens-design .aw-title-row {
+      display: block;
+    }
+    #ai-workforce-five-lens-design .aw-title-row h1,
+    #ai-workforce-five-lens-design .aw-title-row p,
+    #ai-workforce-five-lens-design .aw-section-heading h2,
+    #ai-workforce-five-lens-design .aw-section-heading p,
+    #ai-workforce-five-lens-design .aw-card h4,
+    #ai-workforce-five-lens-design .aw-card p {
+      margin: 0;
+    }
+    #ai-workforce-five-lens-design .aw-title-row p,
+    #ai-workforce-five-lens-design .aw-section-heading p,
+    #ai-workforce-five-lens-design .aw-card p,
+    #ai-workforce-five-lens-design .aw-muted {
+      color: var(--muted-foreground);
+    }
+    #ai-workforce-five-lens-design .aw-search {
+      display: grid;
+      gap: 0.35rem;
+    }
+    #ai-workforce-five-lens-design .aw-search input {
+      width: 100%;
+    }
+    #ai-workforce-five-lens-design .aw-shortcuts,
+    #ai-workforce-five-lens-design .aw-platform-families,
+    #ai-workforce-five-lens-design .aw-lenses,
+    #ai-workforce-five-lens-design .aw-card-actions,
+    #ai-workforce-five-lens-design .aw-tags {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    #ai-workforce-five-lens-design .aw-lenses {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.65rem;
+    }
+    #ai-workforce-five-lens-design .aw-platform-families {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.65rem;
+    }
+    #ai-workforce-five-lens-design .aw-platform-families a {
+      color: var(--muted-foreground);
+      padding: 0.5rem 0.65rem;
+      text-decoration: none;
+    }
+    #ai-workforce-five-lens-design .aw-platform-families a[aria-current="page"] {
+      color: var(--foreground);
+      font-weight: 700;
+    }
+    #ai-workforce-five-lens-design .aw-lens {
+      border-bottom: 2px solid transparent;
+      color: var(--muted-foreground);
+      padding: 0.5rem 0.65rem;
+      text-decoration: none;
+    }
+    #ai-workforce-five-lens-design .aw-lens[aria-current="page"] {
+      color: var(--foreground);
+      border-bottom-color: var(--primary);
+    }
+    #ai-workforce-five-lens-design .aw-mobile-lens {
+      display: none;
+    }
+    #ai-workforce-five-lens-design .aw-mobile-platform {
+      display: none;
+    }
+    #ai-workforce-five-lens-design .aw-view {
+      display: none;
+      gap: 1rem;
+    }
+    #ai-workforce-five-lens-design .aw-view.is-active {
+      display: grid;
+    }
+    #ai-workforce-five-lens-design .aw-section-heading {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      align-items: end;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.55rem;
+    }
+    #ai-workforce-five-lens-design .aw-groups {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 1.25rem;
+    }
+    #ai-workforce-five-lens-design .aw-coworker-controls {
+      display: grid;
+      grid-template-columns: minmax(14rem, 24rem) minmax(0, 1fr);
+      gap: 1rem;
+      align-items: end;
+    }
+    #ai-workforce-five-lens-design .aw-status-band {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      align-items: center;
+      border-left: 3px solid var(--primary);
+      background: var(--card);
+      padding: 0.7rem 0.85rem;
+    }
+    #ai-workforce-five-lens-design .aw-group {
+      display: grid;
+      align-content: start;
+      gap: 0.65rem;
+      min-width: 0;
+    }
+    #ai-workforce-five-lens-design .aw-group-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      align-items: baseline;
+    }
+    #ai-workforce-five-lens-design .aw-group-title h3 {
+      margin: 0;
+      font-size: 1rem;
+    }
+    #ai-workforce-five-lens-design .aw-card {
+      display: grid;
+      gap: 0.65rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--card);
+      color: var(--card-foreground);
+      padding: 0.9rem;
+    }
+    #ai-workforce-five-lens-design .aw-card-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      align-items: start;
+    }
+    #ai-workforce-five-lens-design .aw-card-actions {
+      justify-content: flex-end;
+    }
+    #ai-workforce-five-lens-design .aw-tag {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.2rem 0.45rem;
+      color: var(--muted-foreground);
+      white-space: nowrap;
+    }
+    #ai-workforce-five-lens-design .aw-tag.aw-attention {
+      border-color: var(--destructive);
+      color: var(--foreground);
+    }
+    #ai-workforce-five-lens-design .aw-table {
+      width: 100%;
+      border-collapse: collapse;
+      border-top: 1px solid var(--border);
+    }
+    #ai-workforce-five-lens-design .aw-table th,
+    #ai-workforce-five-lens-design .aw-table td {
+      padding: 0.75rem;
+      text-align: left;
+      vertical-align: middle;
+      border-bottom: 1px solid var(--border);
+    }
+    #ai-workforce-five-lens-design .aw-table th {
+      color: var(--muted-foreground);
+      font-weight: 500;
+    }
+    #ai-workforce-five-lens-design .aw-table td:last-child,
+    #ai-workforce-five-lens-design .aw-table th:last-child {
+      text-align: right;
+    }
+    #ai-workforce-five-lens-design .aw-primary-panel {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(14rem, 1fr);
+      gap: 1.25rem;
+      align-items: start;
+    }
+    #ai-workforce-five-lens-design .aw-detail {
+      border-left: 1px solid var(--border);
+      padding-left: 1rem;
+      display: grid;
+      gap: 0.75rem;
+    }
+    #ai-workforce-five-lens-design .aw-detail dl {
+      display: grid;
+      gap: 0.65rem;
+      margin: 0;
+    }
+    #ai-workforce-five-lens-design .aw-detail dt {
+      color: var(--muted-foreground);
+    }
+    #ai-workforce-five-lens-design .aw-detail dd {
+      margin: 0.1rem 0 0;
+    }
+    #ai-workforce-five-lens-design .aw-footer-note {
+      color: var(--muted-foreground);
+      border-top: 1px solid var(--border);
+      padding-top: 0.7rem;
+    }
+    #ai-workforce-five-lens-design .aw-offers {
+      display: grid;
+      gap: 0.4rem;
+      margin: 0;
+      padding-left: 1.1rem;
+    }
+    #ai-workforce-five-lens-design .aw-dialog {
+      width: min(40rem, calc(100% - 2rem));
+      max-height: calc(100% - 2rem);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--card);
+      color: var(--card-foreground);
+      padding: 1rem;
+    }
+    #ai-workforce-five-lens-design .aw-dialog::backdrop {
+      background: color-mix(in srgb, var(--background) 70%, transparent);
+    }
+    #ai-workforce-five-lens-design .aw-dialog-form,
+    #ai-workforce-five-lens-design .aw-dialog-body {
+      display: grid;
+      gap: 1rem;
+    }
+    #ai-workforce-five-lens-design .aw-dialog-head,
+    #ai-workforce-five-lens-design .aw-dialog-actions {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #ai-workforce-five-lens-design .aw-dialog-body dl {
+      display: grid;
+      grid-template-columns: minmax(8rem, 0.45fr) minmax(0, 1fr);
+      gap: 0.65rem 1rem;
+      margin: 0;
+    }
+    #ai-workforce-five-lens-design .aw-dialog-fields {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.75rem;
+    }
+    #ai-workforce-five-lens-design .aw-dialog-fields label {
+      display: grid;
+      gap: 0.3rem;
+    }
+    #ai-workforce-five-lens-design .aw-dialog-result {
+      border-left: 3px solid var(--primary);
+      padding-left: 0.65rem;
+    }
+    #ai-workforce-five-lens-design .aw-dialog-body dt {
+      color: var(--muted-foreground);
+    }
+    #ai-workforce-five-lens-design .aw-dialog-body dd {
+      margin: 0;
+    }
+    @media (max-width: 760px) {
+      #ai-workforce-five-lens-design .aw-title-row,
+      #ai-workforce-five-lens-design .aw-groups,
+      #ai-workforce-five-lens-design .aw-primary-panel,
+      #ai-workforce-five-lens-design .aw-coworker-controls {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      #ai-workforce-five-lens-design .aw-lenses {
+        display: none;
+      }
+      #ai-workforce-five-lens-design .aw-platform-families {
+        display: none;
+      }
+      #ai-workforce-five-lens-design .aw-mobile-platform,
+      #ai-workforce-five-lens-design .aw-mobile-lens {
+        display: grid;
+        gap: 0.35rem;
+      }
+      #ai-workforce-five-lens-design .aw-section-heading {
+        align-items: start;
+        flex-direction: column;
+      }
+      #ai-workforce-five-lens-design .aw-table thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      #ai-workforce-five-lens-design .aw-table,
+      #ai-workforce-five-lens-design .aw-table tbody,
+      #ai-workforce-five-lens-design .aw-table tr,
+      #ai-workforce-five-lens-design .aw-table td {
+        display: block;
+        width: 100%;
+      }
+      #ai-workforce-five-lens-design .aw-table tr {
+        border-bottom: 1px solid var(--border);
+        padding: 0.6rem 0;
+      }
+      #ai-workforce-five-lens-design .aw-table td {
+        display: grid;
+        grid-template-columns: minmax(7rem, 0.45fr) minmax(0, 1fr);
+        gap: 0.75rem;
+        border: 0;
+        padding: 0.35rem 0;
+        text-align: left;
+      }
+      #ai-workforce-five-lens-design .aw-table td::before {
+        content: attr(data-label);
+        color: var(--muted-foreground);
+      }
+      #ai-workforce-five-lens-design .aw-table td:last-child {
+        text-align: left;
+      }
+      #ai-workforce-five-lens-design .aw-dialog-body dl {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      #ai-workforce-five-lens-design .aw-dialog-fields {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      #ai-workforce-five-lens-design .aw-card-head {
+        flex-direction: column;
+      }
+      #ai-workforce-five-lens-design .aw-card-actions {
+        justify-content: flex-start;
+      }
+      #ai-workforce-five-lens-design .aw-detail {
+        border-left: 0;
+        border-top: 1px solid var(--border);
+        padding-left: 0;
+        padding-top: 1rem;
+      }
+    }
+  </style>
+
+  <div class="aw-shell">
+    <div class="aw-breadcrumb text-small">Platform / AI Workforce / Target design</div>
+
+    <header class="aw-title-row">
+      <div>
+        <h1>AI Workforce</h1>
+        <p>Find a coworker, start work, or resolve what needs attention.</p>
+      </div>
+    </header>
+
+    <nav class="aw-platform-families" aria-label="Platform areas">
+      <a href="/platform">Overview</a>
+      <a href="/platform/identity">Identity &amp; Access</a>
+      <a href="/platform/ai/coworkers" aria-current="page">AI Workforce</a>
+      <a href="/platform/tools">Tools &amp; Services</a>
+      <a href="/platform/audit">Governance &amp; Audit</a>
+    </nav>
+
+    <label class="aw-mobile-platform">
+      <span>Platform area</span>
+      <select class="form-control" aria-label="Platform area">
+        <option value="/platform">Overview</option>
+        <option value="/platform/identity">Identity &amp; Access</option>
+        <option value="/platform/ai/coworkers" selected>AI Workforce</option>
+        <option value="/platform/tools">Tools &amp; Services</option>
+        <option value="/platform/audit">Governance &amp; Audit</option>
+      </select>
+    </label>
+
+    <nav class="aw-lenses" aria-label="AI Workforce sections">
+      <a class="aw-lens" href="#ai-workforce-coworkers" aria-current="page" data-view="coworkers">Coworkers</a>
+      <a class="aw-lens" href="#ai-workforce-work" data-view="work">Work</a>
+      <a class="aw-lens" href="#ai-workforce-decisions" data-view="decisions">Decisions</a>
+      <a class="aw-lens" href="#ai-workforce-setup" data-view="setup">Setup</a>
+      <a class="aw-lens" href="#ai-workforce-health" data-view="health">Health</a>
+    </nav>
+
+    <label class="aw-mobile-lens">
+      <span>View</span>
+      <select class="form-control" aria-label="AI Workforce view">
+        <option value="coworkers">Coworkers</option>
+        <option value="work">Work</option>
+        <option value="decisions">Decisions</option>
+        <option value="setup">Setup</option>
+        <option value="health">Health</option>
+      </select>
+    </label>
+
+    <section class="aw-view is-active" id="ai-workforce-coworkers" data-panel="coworkers">
+      <div class="aw-section-heading">
+        <div>
+          <h2>Coworkers by business area</h2>
+          <p>Customer-facing work appears first. Technical classification stays out of the default view.</p>
+        </div>
+        <button class="btn btn-secondary" type="button">Filters</button>
+      </div>
+      <div class="aw-status-band" role="status">
+        <strong>Ready to choose</strong>
+        <span>4 business areas</span>
+        <span>3 available offers</span>
+        <span>1 coworker needs setup</span>
+      </div>
+      <div class="aw-coworker-controls">
+        <label class="aw-search">
+          <span>Find a coworker</span>
+          <input class="form-control" type="search" placeholder="Name or work" aria-label="Find a coworker">
+        </label>
+        <div class="aw-shortcuts" role="group" aria-label="Coworker filters">
+          <button class="btn btn-secondary" type="button" aria-pressed="false">Customer-facing</button>
+          <button class="btn btn-secondary" type="button" aria-pressed="false">Available now</button>
+          <button class="btn btn-secondary" type="button" aria-pressed="false">Needs attention</button>
+        </div>
+      </div>
+
+      <div class="aw-groups">
+        <section class="aw-group" aria-labelledby="aw-group-customers">
+          <div class="aw-group-title">
+            <h3 id="aw-group-customers">Customers and sales</h3>
+            <span class="aw-muted">Most customer-inward</span>
+          </div>
+          <article class="aw-card">
+            <div class="aw-card-head">
+              <div>
+                <h4>Marketing</h4>
+                <p>Plans campaigns, prepares content, and measures results.</p>
+              </div>
+              <span class="aw-tag">Available</span>
+            </div>
+            <div class="aw-tags">
+              <span class="aw-tag">Customer-facing work</span>
+              <span class="aw-tag">Prepares for approval</span>
+              <span class="aw-tag">Also: Platform and back office</span>
+            </div>
+            <div>
+              <strong>Best for</strong>
+              <ul class="aw-offers">
+                <li>Create a campaign brief</li>
+                <li>Review customer friction</li>
+              </ul>
+            </div>
+            <div class="aw-card-actions">
+              <a class="btn btn-secondary" href="/platform/ai/agent/AGT-MARKETING?returnTo=%2Fplatform%2Fai%2Fcoworkers">View Marketing</a>
+              <button class="btn btn-primary aw-start-work" type="button" data-coworker="Marketing" data-coworker-id="AGT-MARKETING" data-service="Create a campaign brief" data-offer-id="marketing-campaign-brief">Create campaign brief</button>
+            </div>
+          </article>
+          <article class="aw-card">
+            <div class="aw-card-head">
+              <div>
+                <h4>Customer Advisor</h4>
+                <p>Finds customer friction and prepares the next service action.</p>
+              </div>
+              <span class="aw-tag aw-attention">Setup needed</span>
+            </div>
+            <div class="aw-tags">
+              <span class="aw-tag">Customer-facing work</span>
+              <span class="aw-tag">Acts with approval</span>
+            </div>
+            <div>
+              <strong>Best for</strong>
+              <ul class="aw-offers">
+                <li>Review customer friction</li>
+              </ul>
+            </div>
+            <div class="aw-card-actions">
+              <a class="btn btn-primary" href="/platform/ai/setup?coworkerId=AGT-CUSTOMER-ADVISOR">Finish Customer Advisor setup</a>
+            </div>
+          </article>
+        </section>
+
+        <section class="aw-group" aria-labelledby="aw-group-team">
+          <div class="aw-group-title">
+            <h3 id="aw-group-team">Your team</h3>
+            <span class="aw-muted">Employee work</span>
+          </div>
+          <article class="aw-card">
+            <div class="aw-card-head">
+              <div>
+                <h4>People Operations</h4>
+                <p>Prepares hiring, onboarding, and employee support work.</p>
+              </div>
+              <span class="aw-tag">Available</span>
+            </div>
+            <div class="aw-tags">
+              <span class="aw-tag">Internal only</span>
+              <span class="aw-tag">Prepares for approval</span>
+              <span class="aw-tag">Also: Platform and back office</span>
+            </div>
+            <div>
+              <strong>Best for</strong>
+              <ul class="aw-offers">
+                <li>Prepare an onboarding plan</li>
+              </ul>
+            </div>
+            <div class="aw-card-actions">
+              <a class="btn btn-secondary" href="/platform/ai/agent/AGT-PEOPLE-OPS?returnTo=%2Fplatform%2Fai%2Fcoworkers">View People Operations</a>
+              <button class="btn btn-primary aw-start-work" type="button" data-coworker="People Operations" data-coworker-id="AGT-PEOPLE-OPS" data-service="Prepare an onboarding plan" data-offer-id="people-onboarding-plan">Prepare onboarding plan</button>
+            </div>
+          </article>
+        </section>
+
+        <section class="aw-group" aria-labelledby="aw-group-operations">
+          <div class="aw-group-title">
+            <h3 id="aw-group-operations">Operations and delivery</h3>
+            <span class="aw-muted">Daily business work</span>
+          </div>
+          <article class="aw-card">
+            <div class="aw-card-head">
+              <div>
+                <h4>Service Coordinator</h4>
+                <p>Coordinates requests, commitments, and delivery follow-up.</p>
+              </div>
+              <span class="aw-tag">Available</span>
+            </div>
+            <div class="aw-tags">
+              <span class="aw-tag">Works with partners</span>
+              <span class="aw-tag">Acts within limits</span>
+            </div>
+            <div>
+              <strong>Best for</strong>
+              <ul class="aw-offers">
+                <li>Coordinate a service request</li>
+              </ul>
+            </div>
+            <div class="aw-card-actions">
+              <a class="btn btn-secondary" href="/platform/ai/agent/AGT-SERVICE-COORDINATOR?returnTo=%2Fplatform%2Fai%2Fcoworkers">View Service Coordinator</a>
+              <button class="btn btn-primary aw-start-work" type="button" data-coworker="Service Coordinator" data-coworker-id="AGT-SERVICE-COORDINATOR" data-service="Coordinate a service request" data-offer-id="service-request-coordination">Coordinate service request</button>
+            </div>
+          </article>
+        </section>
+
+        <section class="aw-group" aria-labelledby="aw-group-platform">
+          <div class="aw-group-title">
+            <h3 id="aw-group-platform">Platform and back office</h3>
+            <span class="aw-muted">Internal operations</span>
+          </div>
+          <article class="aw-card">
+            <div class="aw-card-head">
+              <div>
+                <h4>Finance Controller</h4>
+                <p>Prepares financial controls, cost reviews, and reporting.</p>
+              </div>
+              <span class="aw-tag">Available</span>
+            </div>
+            <div class="aw-tags">
+              <span class="aw-tag">Internal only</span>
+              <span class="aw-tag">Requires approval</span>
+            </div>
+            <div>
+              <strong>Best for</strong>
+              <ul class="aw-offers">
+                <li>Review operating costs</li>
+              </ul>
+            </div>
+            <div class="aw-card-actions">
+              <a class="btn btn-secondary" href="/platform/ai/agent/AGT-FINANCE-CONTROLLER?returnTo=%2Fplatform%2Fai%2Fcoworkers">View Finance Controller</a>
+              <button class="btn btn-primary aw-start-work" type="button" data-coworker="Finance Controller" data-coworker-id="AGT-FINANCE-CONTROLLER" data-service="Review operating costs" data-offer-id="finance-operating-cost-review">Review operating costs</button>
+            </div>
+          </article>
+        </section>
+      </div>
+      <div class="aw-status-band">
+        <strong>1 coworker needs classification</strong>
+        <span>It stays out of the four portfolio groups until its service declaration is complete.</span>
+        <button class="btn btn-secondary" type="button" data-switch-view="setup">Review declaration</button>
+      </div>
+    </section>
+
+    <section class="aw-view" id="ai-workforce-work" data-panel="work">
+      <div class="aw-section-heading">
+        <div>
+          <h2>Work across coworkers</h2>
+          <p>A read-only projection of active work. Human decisions stay in Needs you.</p>
+        </div>
+        <a class="btn btn-secondary" href="/workspace/inbox">View all Needs you</a>
+      </div>
+      <div class="aw-status-band" role="status">
+        <strong>2 active</strong>
+        <span>1 waiting for you</span>
+        <span>Human action stays in Needs you</span>
+      </div>
+      <table class="aw-table">
+        <caption class="sr-only">Active coworker work</caption>
+        <thead>
+          <tr><th scope="col">Work</th><th scope="col">Coworker</th><th scope="col">Status</th><th scope="col">Action</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td data-label="Work"><strong>Campaign brief</strong></td>
+            <td data-label="Coworker">Marketing</td>
+            <td data-label="Status">Waiting for review</td>
+            <td data-label="Action"><a class="btn btn-secondary" href="/customer/marketing?workRef=TR-MARKETING-1">Open campaign brief</a></td>
+          </tr>
+          <tr>
+            <td data-label="Work"><strong>Customer friction review</strong></td>
+            <td data-label="Coworker">Customer Advisor</td>
+            <td data-label="Status">In progress</td>
+            <td data-label="Action"><a class="btn btn-secondary" href="/customer?workRef=TR-CUSTOMER-1">Open friction review</a></td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="aw-footer-note">Backlog items remain in Backlog. This lens does not create another queue.</p>
+    </section>
+
+    <section class="aw-view" id="ai-workforce-decisions" data-panel="decisions">
+      <div class="aw-section-heading">
+        <div>
+          <h2>Decision quality and business rules</h2>
+          <p>Recurring exceptions and missing doctrine appear here. Human-required actions remain in Needs you.</p>
+        </div>
+        <a class="btn btn-secondary" href="/workspace/inbox">View all Needs you</a>
+      </div>
+      <div class="aw-status-band" role="status">
+        <strong>2 recurring decision gaps</strong>
+        <span>1 human-required action in Needs you</span>
+        <span>Evidence refreshed today</span>
+      </div>
+      <div class="aw-primary-panel">
+        <table class="aw-table">
+          <caption class="sr-only">Decision quality findings</caption>
+          <thead>
+            <tr><th scope="col">Finding</th><th scope="col">Scope</th><th scope="col">Evidence</th><th scope="col">Next step</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td data-label="Finding"><strong>Customer offer exceptions are recurring</strong></td>
+              <td data-label="Scope">Marketing</td>
+              <td data-label="Evidence">4 similar approvals this month</td>
+              <td data-label="Next step"><a class="btn btn-secondary" href="/platform/ai/decisions?view=stances">Draft a business stance</a></td>
+            </tr>
+            <tr>
+              <td data-label="Finding"><strong>Business stance gap</strong></td>
+              <td data-label="Scope">All coworkers</td>
+              <td data-label="Evidence">No rule covers partner discounts</td>
+              <td data-label="Next step"><a class="btn btn-secondary" href="/platform/ai/decisions?view=stances">Define partner discount stance</a></td>
+            </tr>
+          </tbody>
+        </table>
+        <aside class="aw-detail">
+          <strong>Decision tools</strong>
+          <a class="btn btn-secondary" href="/platform/ai/decisions?view=stances">Business stances</a>
+          <a class="btn btn-secondary" href="/platform/ai/decisions?view=proactivity">Fleet proactivity</a>
+          <details>
+            <summary>Advanced doctrine</summary>
+            <p class="aw-muted">Decision history, profession craft, perspectives, and principle matrix.</p>
+          </details>
+        </aside>
+      </div>
+    </section>
+
+    <section class="aw-view" id="ai-workforce-setup" data-panel="setup">
+      <div class="aw-section-heading">
+        <div>
+          <h2>Setup blocking useful work</h2>
+          <p>Configuration gaps are grouped by the outcome they prevent.</p>
+        </div>
+        <a class="btn btn-secondary" href="/platform/ai/setup">View all setup</a>
+      </div>
+      <div class="aw-status-band" role="status">
+        <strong>2 blockers prevent useful work</strong>
+        <span>1 catalog declaration remains undefined</span>
+      </div>
+      <div class="aw-primary-panel">
+        <table class="aw-table">
+          <caption class="sr-only">Setup gaps blocking coworker work</caption>
+          <thead>
+            <tr><th scope="col">Blocked outcome</th><th scope="col">Area</th><th scope="col">Next step</th><th scope="col">Action</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td data-label="Blocked outcome"><strong>Customer Advisor cannot review customer friction</strong></td>
+              <td data-label="Area">Business setup</td>
+              <td data-label="Next step">Connect a customer contact channel</td>
+              <td data-label="Action"><a class="btn btn-primary" href="/storefront/settings">Connect customer channel</a></td>
+            </tr>
+            <tr>
+              <td data-label="Blocked outcome"><strong>Browser work unavailable</strong></td>
+              <td data-label="Area">Service account</td>
+              <td data-label="Next step">Complete one attended sign-in</td>
+              <td data-label="Action"><a class="btn btn-secondary" href="/platform/ai/browser-sessions/setup">Set up browser access</a></td>
+            </tr>
+          </tbody>
+        </table>
+        <aside class="aw-detail">
+          <strong>Configuration areas</strong>
+          <dl>
+            <div><dt>Business readiness</dt><dd>Services, hours, channels</dd></div>
+            <div><dt>Coworker capabilities</dt><dd>Tools, skills, service declarations</dd></div>
+            <div><dt>AI connections</dt><dd>Providers, models, browser profiles</dd></div>
+          </dl>
+        </aside>
+      </div>
+      <details>
+        <summary>Catalog declarations needing an administrator</summary>
+        <p class="aw-muted">Coworkers without a declared service, portfolio, interaction type, or readiness rule stay here until the catalog is completed.</p>
+      </details>
+      <p class="aw-footer-note">Product gaps link to Backlog; this lens only shows install and catalog configuration.</p>
+    </section>
+
+    <section class="aw-view" id="ai-workforce-health" data-panel="health">
+      <div class="aw-section-heading">
+        <div>
+          <h2>Exceptions affecting coworker work</h2>
+          <p>Symptoms and impact first; provider and runtime detail stay behind diagnostics.</p>
+        </div>
+        <a class="btn btn-primary" href="/platform/ai/providers">Review provider policy</a>
+      </div>
+      <div class="aw-status-band" role="status">
+        <strong>2 services degraded</strong>
+        <span>Customer-facing AI is limited</span>
+        <span>Checked 2 minutes ago</span>
+      </div>
+      <table class="aw-table">
+        <caption class="sr-only">Health exceptions affecting coworker work</caption>
+        <thead>
+          <tr><th scope="col">Impact</th><th scope="col">Cause area</th><th scope="col">Current limit</th><th scope="col">Action</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td data-label="Impact"><strong>Customer-facing AI is limited</strong></td>
+            <td data-label="Cause area">Provider policy</td>
+            <td data-label="Current limit">Use public or synthetic content only</td>
+            <td data-label="Action"><a class="btn btn-secondary" href="/platform/ai/providers">Diagnose provider policy</a></td>
+          </tr>
+          <tr>
+            <td data-label="Impact"><strong>Build coworker tool access is blocked</strong></td>
+            <td data-label="Cause area">Development token</td>
+            <td data-label="Current limit">Build work cannot use platform tools</td>
+            <td data-label="Action"><a class="btn btn-secondary" href="/admin/platform-development">Diagnose build tool access</a></td>
+          </tr>
+        </tbody>
+      </table>
+      <details>
+        <summary>Technical diagnostics</summary>
+        <p class="aw-muted">Provider routes, queue metrics, runtime services, browser sessions, and the operations map.</p>
+      </details>
+    </section>
+
+    <dialog class="aw-dialog" aria-labelledby="aw-start-work-title">
+      <form class="aw-dialog-form" method="dialog" data-dialog-form>
+        <div class="aw-dialog-head">
+          <div>
+            <strong id="aw-start-work-title">Start coworker work</strong>
+            <div class="aw-muted"><span data-dialog-coworker>Marketing</span> · <span data-dialog-service>Create a campaign brief</span></div>
+          </div>
+          <button class="btn btn-secondary" type="button" aria-label="Close start work" data-dialog-close>Close</button>
+        </div>
+        <div class="aw-dialog-body">
+          <dl>
+            <dt>Context sent</dt>
+            <dd data-dialog-context>Current restaurant, active offer catalog, customer segments, and this page.</dd>
+            <dt>You provide</dt>
+            <dd data-dialog-input-summary>Campaign objective, audience, timing, and budget limit.</dd>
+            <dt>Expected result</dt>
+            <dd data-dialog-expected>A campaign brief with channel plan, draft messages, assumptions, and measurable outcomes.</dd>
+            <dt>Authority</dt>
+            <dd data-dialog-authority>Prepares the brief. Publishing and customer contact require your approval.</dd>
+            <dt>Saved to</dt>
+            <dd data-dialog-destination>Marketing work, with a receipt linking the coworker, offer, inputs, result, and approvals.</dd>
+          </dl>
+          <div class="aw-dialog-fields">
+            <label>
+              <span data-field-label>Campaign objective</span>
+              <input class="form-control" name="objective" type="text" placeholder="Increase weekday dinner bookings" required>
+            </label>
+            <label>
+              <span data-field-label>Audience</span>
+              <input class="form-control" name="audience" type="text" placeholder="Nearby families" required>
+            </label>
+            <label>
+              <span data-field-label>Timing</span>
+              <input class="form-control" name="timing" type="text" placeholder="Next four weeks" required>
+            </label>
+            <label>
+              <span data-field-label>Budget limit</span>
+              <input class="form-control" name="budget" type="text" inputmode="decimal" placeholder="$500" required>
+            </label>
+          </div>
+          <p class="aw-dialog-result" role="status" data-dialog-result hidden></p>
+        </div>
+        <div class="aw-dialog-actions">
+          <span class="aw-muted" data-dialog-readiness>Ready for this restaurant · evidence checked today</span>
+          <button class="btn btn-primary" type="submit" value="confirm" data-dialog-submit>Confirm and start</button>
+        </div>
+      </form>
+    </dialog>
+  </div>
+
+  <script>
+    (() => {
+      const root = document.getElementById("ai-workforce-five-lens-design");
+      const links = [...root.querySelectorAll(".aw-lens")];
+      const platformSelect = root.querySelector(".aw-mobile-platform select");
+      const select = root.querySelector(".aw-mobile-lens select");
+      const panels = [...root.querySelectorAll(".aw-view")];
+      const shortcuts = root.querySelector(".aw-shortcuts");
+      const dialog = root.querySelector(".aw-dialog");
+      const dialogForm = root.querySelector("[data-dialog-form]");
+      const dialogCoworker = root.querySelector("[data-dialog-coworker]");
+      const dialogService = root.querySelector("[data-dialog-service]");
+      const dialogResult = root.querySelector("[data-dialog-result]");
+      const dialogSubmit = root.querySelector("[data-dialog-submit]");
+      const dialogClose = root.querySelector("[data-dialog-close]");
+      const dialogContext = root.querySelector("[data-dialog-context]");
+      const dialogInputSummary = root.querySelector("[data-dialog-input-summary]");
+      const dialogExpected = root.querySelector("[data-dialog-expected]");
+      const dialogAuthority = root.querySelector("[data-dialog-authority]");
+      const dialogDestination = root.querySelector("[data-dialog-destination]");
+      const dialogReadiness = root.querySelector("[data-dialog-readiness]");
+      const dialogFields = [...dialogForm.querySelectorAll(".aw-dialog-fields label")];
+      const offerPreviews = {
+        "marketing-campaign-brief": {
+          context: "Current restaurant, active offer catalog, customer segments, and this page.",
+          inputSummary: "Campaign objective, audience, timing, and budget limit.",
+          expected: "A campaign brief with channel plan, draft messages, assumptions, and measurable outcomes.",
+          authority: "Prepares the brief. Publishing and customer contact require your approval.",
+          destination: "Marketing work, with a receipt linking the coworker, offer, inputs, result, and approvals.",
+          readiness: "Ready for this restaurant · evidence checked today",
+          receipt: "Marketing campaign offer",
+          fields: [["Campaign objective", "Increase weekday dinner bookings"], ["Audience", "Nearby families"], ["Timing", "Next four weeks"], ["Budget limit", "$500"]]
+        },
+        "people-onboarding-plan": {
+          context: "Current team, approved role details, onboarding policies, and this page.",
+          inputSummary: "Onboarding goal, role or person, start date, and support constraints.",
+          expected: "An onboarding plan with owners, milestones, first-week activities, and unresolved decisions.",
+          authority: "Prepares the plan. Employment decisions and messages to the employee require your approval.",
+          destination: "People work, with a receipt linking the coworker, offer, inputs, result, and approvals.",
+          readiness: "Ready for this team · evidence checked today",
+          receipt: "People onboarding offer",
+          fields: [["Onboarding goal", "Prepare a confident first month"], ["Role or person", "Front of house manager"], ["Start date", "August 18"], ["Support constraints", "Weekday training only"]]
+        },
+        "service-request-coordination": {
+          context: "Current customer, open commitments, service capacity, and this page.",
+          inputSummary: "Requested outcome, customer, due date, and delivery constraints.",
+          expected: "A coordinated service plan with owners, commitments, dependencies, and follow-up points.",
+          authority: "Coordinates within approved limits. New commitments or customer messages require your approval.",
+          destination: "Operations work, with a receipt linking the coworker, offer, inputs, result, and approvals.",
+          readiness: "Ready for this service operation · evidence checked today",
+          receipt: "service coordination offer",
+          fields: [["Requested outcome", "Resolve the catering change"], ["Customer", "Northside Community Center"], ["Due date", "Friday at noon"], ["Delivery constraints", "No changes after Thursday"]]
+        },
+        "finance-operating-cost-review": {
+          context: "Current operating ledger, approved budget, reporting period, and this page.",
+          inputSummary: "Review objective, reporting period, materiality limit, and known assumptions.",
+          expected: "An operating-cost review with variances, evidence, risks, and decisions requiring approval.",
+          authority: "Prepares analysis only. Ledger changes, payments, and policy changes require your approval.",
+          destination: "Finance work, with a receipt linking the coworker, offer, inputs, result, and approvals.",
+          readiness: "Ready for this ledger · evidence checked today",
+          receipt: "operating cost review offer",
+          fields: [["Review objective", "Find avoidable monthly costs"], ["Reporting period", "Current quarter"], ["Materiality limit", "$250"], ["Known assumptions", "Exclude approved expansion costs"]]
+        }
+      };
+      let dialogInvoker = null;
+
+      function show(view) {
+        links.forEach((link) => {
+          if (link.dataset.view === view) {
+            link.setAttribute("aria-current", "page");
+          } else {
+            link.removeAttribute("aria-current");
+          }
+        });
+        panels.forEach((panel) => {
+          panel.classList.toggle("is-active", panel.dataset.panel === view);
+        });
+        shortcuts.hidden = view !== "coworkers";
+        select.value = view;
+      }
+
+      links.forEach((link) => {
+        link.addEventListener("click", (event) => {
+          event.preventDefault();
+          show(link.dataset.view);
+          history.replaceState(null, "", link.getAttribute("href"));
+        });
+      });
+      root.querySelectorAll("[data-switch-view]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const view = button.dataset.switchView;
+          show(view);
+          history.replaceState(null, "", `#ai-workforce-${view}`);
+        });
+      });
+      const platformDestinations = [
+        "/platform",
+        "/platform/identity",
+        "/platform/ai/coworkers",
+        "/platform/tools",
+        "/platform/audit",
+      ];
+      platformSelect.addEventListener("change", () => {
+        const destination = platformDestinations[platformSelect.selectedIndex];
+        if (destination) window.location.assign(destination);
+      });
+      select.addEventListener("change", () => {
+        show(select.value);
+        history.replaceState(null, "", `#ai-workforce-${select.value}`);
+      });
+      function openWork(button, { preserveInputs = false } = {}) {
+          const preview = offerPreviews[button.dataset.offerId];
+          dialogInvoker = button;
+          if (!preserveInputs) dialogForm.reset();
+          dialogResult.hidden = true;
+          dialogResult.textContent = "";
+          dialogSubmit.disabled = false;
+          dialogSubmit.textContent = "Confirm and start";
+          dialogCoworker.textContent = button.dataset.coworker;
+          dialogService.textContent = button.dataset.service;
+          dialogContext.textContent = preview.context;
+          dialogInputSummary.textContent = preview.inputSummary;
+          dialogExpected.textContent = preview.expected;
+          dialogAuthority.textContent = preview.authority;
+          dialogDestination.textContent = preview.destination;
+          dialogReadiness.textContent = preview.readiness;
+          dialogFields.forEach((field, index) => {
+            const [label, placeholder] = preview.fields[index];
+            field.querySelector("[data-field-label]").textContent = label;
+            field.querySelector("input").placeholder = placeholder;
+          });
+          dialog.dataset.coworkerId = button.dataset.coworkerId;
+          dialog.dataset.offerId = button.dataset.offerId;
+          dialog.dataset.receiptSubject = preview.receipt;
+          dialog.dataset.returnTo = "#ai-workforce-coworkers";
+          dialog.showModal();
+      }
+      root.querySelectorAll(".aw-start-work").forEach((button) => {
+        button.addEventListener("click", () => {
+          openWork(button);
+        });
+      });
+      dialogForm.addEventListener("submit", (event) => {
+        if (event.submitter?.value !== "confirm") return;
+        event.preventDefault();
+        if (!dialogForm.reportValidity()) return;
+        dialogSubmit.disabled = true;
+        dialogSubmit.textContent = "Started";
+        dialogResult.hidden = false;
+        dialogResult.textContent = `Started ${dialogService.textContent}. Receipt ENG-PROTOTYPE-001 preserves this request, its ${dialog.dataset.receiptSubject}, and approval boundary.`;
+      });
+      dialogClose.addEventListener("click", () => dialog.close("cancel"));
+      dialog.addEventListener("cancel", (event) => {
+        event.preventDefault();
+        dialog.close("cancel");
+      });
+      dialog.addEventListener("keydown", (event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        dialog.close("cancel");
+      });
+      dialog.addEventListener("close", () => {
+        dialogInvoker?.focus();
+        dialogInvoker = null;
+      });
+      root.querySelectorAll('.aw-shortcuts button[aria-pressed]').forEach((button) => {
+        button.addEventListener("click", () => {
+          button.setAttribute("aria-pressed", String(button.getAttribute("aria-pressed") !== "true"));
+        });
+      });
+
+      window.aiWorkforcePrototype = {
+        reopenMarketingRequest() {
+          const button = root.querySelector('.aw-start-work[data-coworker-id="AGT-MARKETING"]');
+          if (button) openWork(button, { preserveInputs: true });
+        },
+        resetCoworkerFilters() {
+          const search = root.querySelector('[aria-label="Find a coworker"]');
+          search.value = "";
+          root.querySelectorAll('.aw-shortcuts button[aria-pressed]').forEach((button) => button.setAttribute("aria-pressed", "false"));
+          search.focus();
+        }
+      };
+
+      const initialView = links.find((link) => link.getAttribute("href") === location.hash)?.dataset.view;
+      show(initialView || "coworkers");
+    })();
+  </script>
+</section>
+
+      <section class="prototype-review-appendix" aria-labelledby="prototype-state-review-title">
+        <h2 id="prototype-state-review-title">State treatment review</h2>
+        <p>Prototype appendix, not product UI. Each state preserves page identity and navigation, then replaces the affected content with one honest recovery.</p>
+        <div class="prototype-state-list" role="group" aria-label="State to review">
+          <button class="btn btn-secondary" type="button" data-prototype-state="loading" aria-pressed="true">Loading</button>
+          <button class="btn btn-secondary" type="button" data-prototype-state="empty" aria-pressed="false">Empty</button>
+          <button class="btn btn-secondary" type="button" data-prototype-state="partial" aria-pressed="false">Partial data</button>
+          <button class="btn btn-secondary" type="button" data-prototype-state="permission" aria-pressed="false">Permission denied</button>
+          <button class="btn btn-secondary" type="button" data-prototype-state="provider" aria-pressed="false">Provider unavailable</button>
+          <button class="btn btn-secondary" type="button" data-prototype-state="failed-launch" aria-pressed="false">Failed launch</button>
+          <button class="btn btn-secondary" type="button" data-prototype-state="no-results" aria-pressed="false">No results</button>
+        </div>
+        <section class="prototype-state-preview" aria-live="polite" aria-labelledby="prototype-state-title">
+          <span class="prototype-state-context" data-state-context>Coworkers · filters and page identity preserved</span>
+          <h3 id="prototype-state-title" data-state-title>Availability is loading</h3>
+          <p data-state-message>Stable row skeletons retain directory dimensions. No empty result or work action appears before evidence resolves.</p>
+          <a class="btn btn-secondary" href="#ai-workforce-coworkers" data-state-action>Return to Coworkers</a>
+        </section>
+      </section>
+      <script>
+        (() => {
+          const states = {
+            loading: ["Coworkers · filters and page identity preserved", "Availability is loading", "Stable row skeletons retain directory dimensions. No empty result or work action appears before evidence resolves.", "Return to Coworkers", "#ai-workforce-coworkers", "navigate"],
+            empty: ["Work · current filters preserved", "No work in motion", "The empty state replaces the table and offers one route back to useful coworker work.", "Start from Coworkers", "#ai-workforce-coworkers", "navigate"],
+            partial: ["Setup · unaffected blockers remain visible", "Provider readiness could not load", "Business and catalog setup remain usable. Recovery names only the failed provider source.", "Open provider setup", "/platform/ai/providers", "navigate"],
+            permission: ["Decisions · page identity preserved", "Decision evidence is restricted", "No coworker names, counts, policy details, or hidden status are disclosed.", "Return to Coworkers", "#ai-workforce-coworkers", "navigate"],
+            provider: ["Health · affected work preserved", "Customer-facing AI is unavailable", "Provider policy is the named cause; unaffected local work remains visible.", "Review provider policy", "/platform/ai/providers", "navigate"],
+            "failed-launch": ["Coworkers · Marketing request retained", "Campaign brief did not start", "No optimistic work row was created. Reopen the same Marketing offer with its inputs and return context.", "Reopen Marketing request", "#ai-workforce-coworkers", "reopen"],
+            "no-results": ["Coworkers · current filters visible", "No coworkers match these filters", "The result area is empty without hiding the active filters or changing business-area context.", "Reset filters", "#ai-workforce-coworkers", "reset"]
+          };
+          const buttons = [...document.querySelectorAll("[data-prototype-state]")];
+          const context = document.querySelector("[data-state-context]");
+          const title = document.querySelector("[data-state-title]");
+          const message = document.querySelector("[data-state-message]");
+          const action = document.querySelector("[data-state-action]");
+          let behavior = "navigate";
+          buttons.forEach((button) => {
+            button.addEventListener("click", () => {
+              const state = states[button.dataset.prototypeState];
+              buttons.forEach((candidate) => candidate.setAttribute("aria-pressed", String(candidate === button)));
+              [context.textContent, title.textContent, message.textContent, action.textContent, action.href, behavior] = state;
+            });
+          });
+          action.addEventListener("click", (event) => {
+            if (behavior === "navigate") return;
+            event.preventDefault();
+            document.querySelector('.aw-lens[data-view="coworkers"]')?.click();
+            if (behavior === "reopen") {
+              window.aiWorkforcePrototype?.reopenMarketingRequest();
+              return;
+            }
+            window.aiWorkforcePrototype?.resetCoworkerFilters();
+          });
+        })();
+      </script>
+    </main>
+  </body>
+</html>

@@ -41,8 +41,10 @@ type Registry = {
 
 function build(): Registry {
   const routes = buildRoutePolicies(readRouteManifestRows(ROOT)).map((policy) => {
+    // `audience` is retained (BI-1DE6F69E): the reading tier resolves from the
+    // route's audience as well as its shell, so the sweep needs it here rather
+    // than joining against the audience registry a second time.
     const {
-      audience: _audience,
       destinationKind: _destinationKind,
       classificationSource: _classificationSource,
       ...shellPolicy

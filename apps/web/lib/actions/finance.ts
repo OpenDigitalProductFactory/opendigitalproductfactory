@@ -5,7 +5,12 @@ import { requireCapability } from "@/lib/actions/shared/guards";
 import { revalidatePath } from "next/cache";
 import { newId } from "@/lib/shared/new-id";
 import { signInvoiceSchema } from "@/lib/finance-validation";
-import type { CreateInvoiceInput, RecordPaymentInput, SignInvoiceInput } from "@/lib/finance-validation";
+import type {
+  CreateInvoiceInput,
+  RecordPaymentInput,
+  SignInvoiceInput,
+  UpdateInvoiceContentInput,
+} from "@/lib/finance-validation";
 import type { INVOICE_STATUSES } from "@/lib/finance-validation";
 import { generateInvoicePdf, getInvoicePdfFilename } from "@/lib/invoice-pdf";
 import { getOrgIdentity } from "@/lib/org-identity";
@@ -14,8 +19,10 @@ import { postInvoiceIssued, postPaymentRecorded, reverseJournalEntry } from "@/l
 import {
   checkInvoiceTransition,
   checkInvoiceDeletion,
+  checkInvoiceEditScope,
   type InvoiceStatus as InvoiceLifecycleStatus,
 } from "@/lib/finance/invoice-lifecycle";
+import { buildInvoiceTotals, round2 } from "@/lib/finance/invoice-totals";
 import { customerAccountNormalizedColumns } from "@/lib/mdm/dedup-gate";
 import { registerCustomerAccountSource } from "@/lib/mdm/crosswalk";
 
@@ -41,34 +48,6 @@ async function generatePaymentRef(): Promise<string> {
   return `PAY-${year}-${seq}`;
 }
 
-// ─── Total calculation helpers ────────────────────────────────────────────────
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
-
-interface LineItemTotals {
-  lineSubtotal: number;
-  lineDiscount: number;
-  lineAfterDiscount: number;
-  lineTax: number;
-  lineTotal: number;
-}
-
-function calcLineItem(
-  quantity: number,
-  unitPrice: number,
-  taxRate: number,
-  discountPercent: number,
-): LineItemTotals {
-  const lineSubtotal = round2(quantity * unitPrice);
-  const lineDiscount = round2(lineSubtotal * (discountPercent / 100));
-  const lineAfterDiscount = round2(lineSubtotal - lineDiscount);
-  const lineTax = round2(lineAfterDiscount * (taxRate / 100));
-  const lineTotal = round2(lineAfterDiscount + lineTax);
-  return { lineSubtotal, lineDiscount, lineAfterDiscount, lineTax, lineTotal };
-}
-
 // ─── createInvoice ────────────────────────────────────────────────────────────
 
 export async function createInvoice(input: CreateInvoiceInput): Promise<{ id: string; invoiceRef: string }> {
@@ -76,36 +55,9 @@ export async function createInvoice(input: CreateInvoiceInput): Promise<{ id: st
 
   const invoiceRef = await generateInvoiceRef();
 
-  let subtotal = 0;
-  let discountAmount = 0;
-  let taxAmount = 0;
-  let totalAmount = 0;
-
-  const lineItemsData = input.lineItems.map((item, idx) => {
-    const { lineSubtotal, lineDiscount, lineTax, lineTotal } = calcLineItem(
-      item.quantity,
-      item.unitPrice,
-      item.taxRate ?? 0,
-      item.discountPercent ?? 0,
-    );
-
-    subtotal = round2(subtotal + lineSubtotal);
-    discountAmount = round2(discountAmount + lineDiscount);
-    taxAmount = round2(taxAmount + lineTax);
-    totalAmount = round2(totalAmount + lineTotal);
-
-    return {
-      description: item.description,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      taxRate: item.taxRate ?? 0,
-      taxAmount: lineTax,
-      discountPercent: item.discountPercent ?? 0,
-      lineTotal: lineTotal,
-      accountCode: item.accountCode ?? null,
-      sortOrder: idx,
-    };
-  });
+  const { lineItemsData, subtotal, discountAmount, taxAmount, totalAmount } = buildInvoiceTotals(
+    input.lineItems,
+  );
 
   const invoice = await prisma.invoice.create({
     data: {
@@ -190,6 +142,94 @@ export async function updateInvoiceStatus(
   revalidatePath("/finance");
   revalidatePath("/finance/invoices");
   return { ok: true };
+}
+
+// ─── updateInvoice ────────────────────────────────────────────────────────────
+
+export type UpdateInvoiceResult =
+  | { ok: true; totalAmount: number }
+  | { ok: false; error: "not_found" | "not_editable"; message: string; rejectedFields?: string[] };
+
+/**
+ * Edit an invoice's content.
+ *
+ * Draft invoices are fully editable, line items included. Once sent, only the
+ * fields that carry no economic claim can move — see checkInvoiceEditScope. Line
+ * items are REPLACED wholesale rather than diffed: an invoice's lines are one
+ * document, and per-line patching would let a partial failure leave totals that
+ * do not sum.
+ */
+export async function updateInvoice(
+  id: string,
+  input: UpdateInvoiceContentInput,
+): Promise<UpdateInvoiceResult> {
+  await requireManageFinance();
+
+  const existing = await prisma.invoice.findUnique({
+    where: { id },
+    select: { id: true, status: true, amountPaid: true },
+  });
+  if (!existing) {
+    return { ok: false, error: "not_found", message: "Invoice not found." };
+  }
+
+  // Only fields actually supplied are scope-checked; an untouched field is not
+  // an attempted change.
+  const suppliedFields = Object.keys(input).filter(
+    (k) => input[k as keyof UpdateInvoiceContentInput] !== undefined,
+  );
+  if (suppliedFields.length === 0) {
+    return { ok: true, totalAmount: 0 };
+  }
+
+  const scope = checkInvoiceEditScope(existing.status as InvoiceLifecycleStatus, suppliedFields);
+  if (!scope.allowed) {
+    return {
+      ok: false,
+      error: "not_editable",
+      message: scope.reason,
+      rejectedFields: scope.rejectedFields,
+    };
+  }
+
+  const header: Record<string, unknown> = {};
+  if (input.notes !== undefined) header.notes = input.notes;
+  if (input.internalNotes !== undefined) header.internalNotes = input.internalNotes;
+  if (input.paymentTerms !== undefined) header.paymentTerms = input.paymentTerms;
+  if (input.dueDate !== undefined) header.dueDate = new Date(input.dueDate);
+  if (input.accountId !== undefined) header.accountId = input.accountId;
+  if (input.contactId !== undefined) header.contactId = input.contactId;
+  if (input.type !== undefined) header.type = input.type;
+  if (input.currency !== undefined) header.currency = input.currency;
+
+  let totalAmount = 0;
+
+  await prisma.$transaction(async (tx) => {
+    if (input.lineItems !== undefined) {
+      const totals = buildInvoiceTotals(input.lineItems);
+      totalAmount = totals.totalAmount;
+
+      // Replace the whole set. InvoiceLineItem carries no external references, so
+      // there is nothing downstream to orphan.
+      await tx.invoiceLineItem.deleteMany({ where: { invoiceId: id } });
+      await tx.invoiceLineItem.createMany({
+        data: totals.lineItemsData.map((row) => ({ ...row, invoiceId: id })),
+      });
+
+      header.subtotal = totals.subtotal;
+      header.discountAmount = totals.discountAmount;
+      header.taxAmount = totals.taxAmount;
+      header.totalAmount = totals.totalAmount;
+      header.amountDue = round2(totals.totalAmount - Number(existing.amountPaid ?? 0));
+    }
+
+    await tx.invoice.update({ where: { id }, data: header });
+  });
+
+  revalidatePath("/finance");
+  revalidatePath("/finance/invoices");
+  revalidatePath(`/finance/invoices/${id}`);
+  return { ok: true, totalAmount };
 }
 
 // ─── deleteInvoice ────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 597,
+  "routeCount": 598,
   "routes": [
     {
       "routePath": "/",
@@ -131,6 +131,16 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/admin/diagnostics/page.tsx"
+    },
+    {
+      "routePath": "/admin/graph-explorer",
+      "kind": "page",
+      "segments": [
+        "admin",
+        "graph-explorer"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/admin/graph-explorer/page.tsx"
     },
     {
       "routePath": "/admin/hive",

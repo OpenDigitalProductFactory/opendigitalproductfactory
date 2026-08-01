@@ -16,6 +16,7 @@
     "./discovery-attribution": "./src/discovery-attribution.ts",
     "./estate-scope": "./src/estate-scope.ts",
     "./service-ticket-types": "./src/service-ticket-types.ts",
+    "./inventory-entity-lifecycle": "./src/inventory-entity-lifecycle.ts",
     "./customer-lifecycle": "./src/customer-lifecycle.ts",
     "./trust-link-lifecycle": "./src/trust-link-lifecycle.ts",
     "./federation-link-types": "./src/federation-link-types.ts",

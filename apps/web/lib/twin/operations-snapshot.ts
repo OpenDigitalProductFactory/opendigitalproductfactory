@@ -16,6 +16,10 @@ import type {
   UtilityMeterData,
   WorkItemData,
 } from "@/components/twin/types";
+import type {
+  OperationalDegradedSource,
+  OperationalSourceWatermark,
+} from "@/lib/operations/source-health";
 
 export const OPERATIONS_SNAPSHOT_SCHEMA_VERSION = "operations.v1" as const;
 
@@ -25,15 +29,8 @@ export interface OperationsIdentity {
   template: TwinTemplate;
 }
 
-export interface OperationsSourceWatermark {
-  source: string;
-  observedAt: string;
-}
-
-export interface OperationsDegradedSource {
-  source: string;
-  reason: string;
-}
+export type OperationsSourceWatermark = OperationalSourceWatermark;
+export type OperationsDegradedSource = OperationalDegradedSource;
 
 export interface OperationsSnapshotTelemetry {
   durationMs: number;

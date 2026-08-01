@@ -29,6 +29,7 @@ import type { UxBudget, UxShell } from "./budgets";
 import { budgetFor } from "./budgets";
 import { meetsReadingLevel, type UxBudgetMetrics } from "./measure";
 import type { ExemptCheck } from "./route-shells";
+import type { RouteAudience } from "../navigation/route-audience";
 
 export type BudgetSeverity = "advisory" | "blocking";
 
@@ -77,9 +78,14 @@ function within(actual: number, max: number): boolean {
 export function evaluateUxBudget(
   metrics: UxBudgetMetrics,
   shell: UxShell,
-  options: { exemptChecks?: readonly ExemptCheck[]; routeStatus?: RouteStatus } = {},
+  options: {
+    exemptChecks?: readonly ExemptCheck[];
+    routeStatus?: RouteStatus;
+    /** Route audience — loosens the reading tier for operator surfaces (BI-1DE6F69E). */
+    audience?: RouteAudience | null;
+  } = {},
 ): BudgetReport {
-  const budget: UxBudget = budgetFor(shell);
+  const budget: UxBudget = budgetFor(shell, options.audience);
   const routeStatus: RouteStatus = options.routeStatus ?? "pre-existing";
   // A net-new route cannot claim pre-migration debt it never accrued.
   const exempt = new Set<string>(routeStatus === "net-new" ? [] : (options.exemptChecks ?? []));

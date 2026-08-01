@@ -188,6 +188,13 @@
     "longSentences": 0,
     "textMass": 85
   },
+  "apps/web/app/(shell)/admin/graph-explorer/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 28
+  },
   "apps/web/app/(shell)/admin/hive/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -3177,6 +3184,13 @@
     "longSentences": 0,
     "textMass": 98
   },
+  "apps/web/components/admin/GraphExplorer.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 101
+  },
   "apps/web/components/admin/HiveContributionsPanel.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -3385,7 +3399,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 55
+    "textMass": 57
   },
   "apps/web/components/agent/AgentCoworkerPanel.tsx": {
     "vocabulary": 0,
@@ -4904,7 +4918,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 129
+    "textMass": 135
   },
   "apps/web/components/employee/ReviewPanel.tsx": {
     "vocabulary": 0,
@@ -5499,7 +5513,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 91
+    "textMass": 75
   },
   "apps/web/components/inventory/SavedConnectionRow.tsx": {
     "vocabulary": 0,
@@ -7594,6 +7608,27 @@
     "longSentences": 0,
     "textMass": 150
   },
+  "apps/web/components/twin/rooms/RoomsList.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/components/twin/rooms/RoomsOperations.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 66
+  },
+  "apps/web/components/twin/rooms/RoomsRack.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 12
+  },
   "apps/web/components/ui/DatePicker.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -8034,5 +8069,19 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 39
+  },
+  "apps/web/components/workspace/work-room/WorkRoomBody.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 64
+  },
+  "apps/web/components/workspace/work-room/WorkRoomHeader.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 46
   }
 }

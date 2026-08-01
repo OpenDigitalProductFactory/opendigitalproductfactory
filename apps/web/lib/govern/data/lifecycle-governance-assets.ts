@@ -1,0 +1,108 @@
+import type { DataAssetDefinition } from "./assets";
+
+const CONFIRMED_CLASSIFICATION = {
+  state: "confirmed",
+  source: "manual",
+  effectiveFrom: "2026-07-31",
+} as const;
+
+const FIELD_PROVENANCE = {
+  source: "manual",
+  state: "confirmed",
+  assertedBy: "data-steward",
+  effectiveFrom: "2026-07-31",
+} as const;
+
+export const LIFECYCLE_GOVERNANCE_ASSETS: readonly DataAssetDefinition[] = [
+  {
+    id: "data:lifecycle-event",
+    physical: { prismaModel: "LifecycleEvent" },
+    domain: "enterprise-architecture-lifecycle",
+    ownerRole: "enterprise-architect",
+    stewardRole: "data-steward",
+    categories: ["security-audit", "identity", "content"],
+    sensitivity: "confidential",
+    criticality: "high",
+    subjectLocators: [],
+    lifecycleClass: "legal-evidence",
+    purposeCapabilities: ["platform-operations", "compliance-and-legal"],
+    residencyClass: "local-only",
+    projectionClass: "masked-content",
+    classification: CONFIRMED_CLASSIFICATION,
+    fields: [
+      {
+        id: "data:lifecycle-event#actorPrincipalId",
+        physicalName: "actorPrincipalId",
+        resolution: "governed",
+        resolutionReason:
+          "The accountable principal can identify a human operator or delegated coworker.",
+        categories: ["identity", "security-audit"],
+        sensitivity: "confidential",
+        collectionRule: "minimize",
+        protection: "mask-on-read",
+        projectionOverride: "structure",
+        provenance: FIELD_PROVENANCE,
+      },
+      {
+        id: "data:lifecycle-event#reason",
+        physicalName: "reason",
+        resolution: "governed",
+        resolutionReason:
+          "Free-text transition rationale can contain operator and environment context.",
+        categories: ["content", "security-audit"],
+        sensitivity: "confidential",
+        collectionRule: "minimize",
+        protection: "mask-on-read",
+        projectionOverride: "masked-content",
+        provenance: FIELD_PROVENANCE,
+      },
+      {
+        id: "data:lifecycle-event#evidenceRef",
+        physicalName: "evidenceRef",
+        resolution: "governed",
+        resolutionReason:
+          "Evidence references can reveal internal topology and execution identifiers.",
+        categories: ["security-audit"],
+        sensitivity: "confidential",
+        collectionRule: "minimize",
+        protection: "mask-on-read",
+        projectionOverride: "structure",
+        provenance: FIELD_PROVENANCE,
+      },
+    ],
+  },
+  {
+    id: "data:plateau-membership",
+    physical: { prismaModel: "PlateauMembership" },
+    domain: "enterprise-architecture-lifecycle",
+    ownerRole: "enterprise-architect",
+    stewardRole: "data-steward",
+    categories: ["derived-analytic", "configuration", "operational"],
+    sensitivity: "internal",
+    criticality: "high",
+    subjectLocators: [],
+    lifecycleClass: "operational",
+    purposeCapabilities: ["platform-operations", "product-analytics"],
+    residencyClass: "local-only",
+    projectionClass: "metadata",
+    classification: CONFIRMED_CLASSIFICATION,
+    fields: [],
+  },
+  {
+    id: "data:lifecycle-gap",
+    physical: { prismaModel: "LifecycleGap" },
+    domain: "enterprise-architecture-lifecycle",
+    ownerRole: "enterprise-architect",
+    stewardRole: "data-steward",
+    categories: ["derived-analytic", "operational"],
+    sensitivity: "internal",
+    criticality: "high",
+    subjectLocators: [],
+    lifecycleClass: "business-record",
+    purposeCapabilities: ["platform-operations", "product-analytics"],
+    residencyClass: "local-only",
+    projectionClass: "metadata",
+    classification: CONFIRMED_CLASSIFICATION,
+    fields: [],
+  },
+];

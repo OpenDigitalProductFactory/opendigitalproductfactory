@@ -207,11 +207,14 @@ describe("business capability map data helpers", () => {
       records: seededRows,
     });
 
-    expect(provenance.activePerspectiveLabel).toBe("Common Small Business + IT Managed Services");
+    expect(provenance.activePerspectiveLabel).toBe(
+      "Common Small Business + Professional Services + IT Managed Services",
+    );
     expect(provenance.seedCapabilityCount).toBe(1);
     expect(provenance.projectionStatus).toBe("seed-projected");
     expect(provenance.sources.map((source) => source.perspectiveId)).toEqual([
       "common-small-business",
+      "professional-services",
       "it-managed-services",
     ]);
   });
