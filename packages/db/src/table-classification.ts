@@ -124,6 +124,8 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   McpServerTool: "internal",
   McpIntegration: "internal",
   McpCatalogSync: "internal",
+  // Per-customer incumbent coverage verdicts — operational, no PII (BI-548060D5).
+  IncumbentCoverageAssessment: "internal",
   StorefrontConfig: "internal",
   StorefrontSection: "internal",
   StorefrontItem: "internal",

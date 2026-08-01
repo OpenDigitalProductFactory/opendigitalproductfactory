@@ -620,6 +620,27 @@ const SEED_ASSETS: readonly DataAssetDefinition[] = [
     fields: [],
   },
   {
+    // Per-customer incumbent coverage verdict (BI-548060D5). Operational — the
+    // instantiated verdict for a customer's incumbent app, defaulted from the
+    // authored posture matrix; no data subject. Domain-lifecycle-managed
+    // (re-assessment supersedes).
+    id: "data:incumbent-coverage-assessment",
+    physical: { prismaModel: "IncumbentCoverageAssessment" },
+    domain: "asset-intelligence",
+    ownerRole: "platform-owner",
+    stewardRole: "data-steward",
+    categories: ["operational", "configuration"],
+    sensitivity: "internal",
+    criticality: "standard",
+    subjectLocators: [],
+    lifecycleClass: "operational",
+    purposeCapabilities: ["platform-operations", "service-delivery"],
+    residencyClass: "local-only",
+    projectionClass: "metadata",
+    classification: { state: "confirmed", source: "manual", effectiveFrom: "2026-08-01" },
+    fields: [],
+  },
+  {
     id: "data:runtime-capability-transition-event",
     physical: { prismaModel: "RuntimeCapabilityTransitionEvent" },
     domain: "platform-runtime",

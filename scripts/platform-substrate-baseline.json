@@ -17,7 +17,7 @@
     },
     "prismaModelCount": {
       "direction": "non-increasing",
-      "value": 569
+      "value": 570
     },
     "prismaSchemaLines": {
       "direction": "informational",
@@ -25,7 +25,7 @@
     },
     "productionModuleHotspotCount": {
       "direction": "non-increasing",
-      "value": 69
+      "value": 68
     },
     "providerConnectionStateProjectorCount": {
       "direction": "non-increasing",

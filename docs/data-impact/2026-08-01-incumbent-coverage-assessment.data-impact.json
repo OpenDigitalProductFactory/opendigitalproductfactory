@@ -1,0 +1,30 @@
+{
+  "version": "1",
+  "accountableOwner": "platform-architecture",
+  "affectedCopies": [
+    "Prisma-to-EA current-state data-model mirror"
+  ],
+  "migration": {
+    "name": "20260801130000_add_incumbent_coverage_assessment",
+    "backfill": "none — a new empty table. Rows are produced by the assessment pipeline (assessIncumbentsViaPostureMatrix) from existing incumbent DigitalProducts; no existing row is read or rewritten."
+  },
+  "tests": [
+    "packages/db/src/portfolio-sources/incumbent-coverage.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:incumbent-coverage-assessment",
+      "prismaModel": "IncumbentCoverageAssessment",
+      "lifecycleDisposition": "Per-customer coverage assessment for one incumbent application — domain-lifecycle-managed: re-assessment supersedes the prior row (status=superseded) rather than time-ageing. No data-subject content; references a DigitalProduct, a verdict, and provenance. A verdict reaches status=confirmed only through confirmCoverageAssessment (human/authorized action); posture_matrix defaults stay proposed.",
+      "fields": [
+        {
+          "fieldId": "data:incumbent-coverage-assessment#all",
+          "resolution": "governed",
+          "reason": "The instantiated, evidenced verdict (verdict, coveringCapabilityKey, confidence, assessedVia, evidence, status) for a customer's incumbent application, defaulted from the AbsorptionPosture matrix and consumed by the coverage surface (D6) and gap→backlog (D4). assessedVia keeps provenance honest so a posture_matrix default is never mistaken for a human_confirmed claim (spec R3). No personal or data-subject fields.",
+          "provenance": "docs/superpowers/plans/2026-08-01-incumbent-coverage-assessment.md §3; design docs/superpowers/specs/2026-07-23-incumbent-application-coverage-design.md §5.2"
+        }
+      ]
+    }
+  ]
+}
