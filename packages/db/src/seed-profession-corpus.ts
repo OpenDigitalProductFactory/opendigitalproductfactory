@@ -118,6 +118,41 @@ const PROFESSION_EXTERNAL_SOURCES: Record<string, ExternalSourceEntry> = {
     retrievedAt: "2026-06-20",
   },
 
+  // ── Data-architect: MDM + index/collation integrity (A2 / BI-B31072B8) ──
+  "dama-dmbok/master-data-management": {
+    sourceType: "framework",
+    title: "DAMA-DMBOK — Master and Reference Data Management",
+    url: "https://www.dama.org/cpages/body-of-knowledge",
+    license: "DAMA International (reference)",
+    abstract:
+      "The DAMA Data Management Body of Knowledge chapter on master and reference data: " +
+      "match, merge, survivorship, crosswalk, and the boundary that master data management " +
+      "reconciles existing records rather than preventing their creation.",
+    retrievedAt: "2026-08-01",
+  },
+  "postgresql/amcheck": {
+    sourceType: "documentation",
+    title: "PostgreSQL Documentation — amcheck",
+    url: "https://www.postgresql.org/docs/current/amcheck.html",
+    license: "PostgreSQL",
+    abstract:
+      "The amcheck extension verifies the logical consistency of B-tree indexes against the " +
+      "heap they index (bt_index_parent_check with heapallindexed => true), catching a corrupt " +
+      "index that pg_index still reports valid — the check for collation-comparator drift.",
+    retrievedAt: "2026-08-01",
+  },
+  "postgresql/collation-support": {
+    sourceType: "documentation",
+    title: "PostgreSQL Documentation — Collation Support",
+    url: "https://www.postgresql.org/docs/current/collation.html",
+    license: "PostgreSQL",
+    abstract:
+      "How PostgreSQL derives text ordering from a collation provider (libc or ICU), why a " +
+      "text B-tree is only valid relative to the provider it was built under, and how a " +
+      "provider change (e.g. musl to glibc) alters the comparator under existing indexes.",
+    retrievedAt: "2026-08-01",
+  },
+
   // ── Software-engineer family (WSID wave 2, all open-license) ──
   "owasp/asvs": {
     sourceType: "standard",
