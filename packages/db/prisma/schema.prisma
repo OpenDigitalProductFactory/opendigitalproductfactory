@@ -79,6 +79,7 @@ model User {
   groups                         UserGroup[]
   userSkills                     UserSkill[]                   @relation("UserSkillCreator")
   invoicesCreated                Invoice[]                     @relation("InvoiceCreations")
+  invoiceDocumentsCreated        InvoiceDocument[]
   paymentsCreated                Payment[]                     @relation("PaymentCreations")
   journalEntriesCreated          JournalEntry[]                @relation("JournalEntryCreations")
   journalEntriesPosted           JournalEntry[]                @relation("JournalEntryPostings")
@@ -6550,6 +6551,7 @@ model DocumentVersion {
   sourceReferences     DocumentReference[] @relation("DocumentReferenceSourceVersion")
   targetReferences     DocumentReference[] @relation("DocumentReferenceTargetVersion")
   renditions           DocumentRendition[]
+  invoiceDocuments     InvoiceDocument[]
 
   @@unique([documentId, version])
   @@index([documentId])
@@ -12018,11 +12020,45 @@ model Invoice {
   lineItems   InvoiceLineItem[]
   allocations PaymentAllocation[]
   dunningLogs DunningLog[]
+  documents   InvoiceDocument[]
 
   @@index([accountId])
   @@index([status])
   @@index([dueDate])
   @@index([sourceType, sourceId])
+}
+
+/// Binds an immutable document snapshot to the invoice it was produced for.
+///
+/// Chosen over a polymorphic ownerType/ownerId column on Document (kernel
+/// decision DI-763E5529F491): real foreign keys and cascade semantics, at the
+/// cost of one join table per record type. This is the precedent for quotes,
+/// purchase orders, and contracts.
+///
+/// A row is WRITE-ONCE. Reissuing an invoice appends revision N+1; it never
+/// mutates N, because the whole point is that what the customer received stays
+/// recoverable exactly as they received it.
+model InvoiceDocument {
+  id                String   @id @default(cuid())
+  invoiceId         String
+  documentVersionId String
+  /// What this snapshot IS: sent-copy | signed-copy | credit-note.
+  role              String   @default("sent-copy")
+  /// 1-based, per (invoice, role). Monotonic; gaps are not expected.
+  revision          Int
+  /// Who it went to, captured at send time — the contact email can change later.
+  sentToEmail       String?
+  createdById       String?
+  createdAt         DateTime @default(now())
+
+  invoice         Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  documentVersion DocumentVersion @relation(fields: [documentVersionId], references: [id], onDelete: Restrict)
+  createdBy       User?           @relation(fields: [createdById], references: [id])
+
+  @@unique([invoiceId, role, revision])
+  @@index([invoiceId])
+  @@index([documentVersionId])
+  @@index([createdAt])
 }
 
 model InvoiceLineItem {

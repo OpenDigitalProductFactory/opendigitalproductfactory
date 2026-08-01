@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "inline-gated-with-consequence-dialog",
+  "decisionInteractionId": "DI-2A771C0BDEF4",
+  "scope": {
+    "files": [
+      "apps/web/components/finance/InvoiceLifecycleActions.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "inline-gated-with-consequence-dialog",
+      "overflow-menu-for-destructive",
+      "separate-manage-tab"
+    ]
+  }
+}

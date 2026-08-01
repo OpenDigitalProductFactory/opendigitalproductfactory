@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-08-01T17:33:03.145Z",
-  "gitSha": "1c5273baa85ca0482d5a7a29107aeb344fe1c10a",
+  "generatedAt": "2026-08-01T21:39:49.088Z",
+  "gitSha": "c564834ed35e145107d3cb5206260507e18cadea",
   "manifestVersion": 2,
   "metrics": {
     "defaultRequiredServiceCount": {
@@ -17,11 +17,11 @@
     },
     "prismaModelCount": {
       "direction": "non-increasing",
-      "value": 570
+      "value": 571
     },
     "prismaSchemaLines": {
       "direction": "informational",
-      "value": 16152
+      "value": 16298
     },
     "productionModuleHotspotCount": {
       "direction": "non-increasing",

@@ -75,6 +75,23 @@ the business reason in supporting records. Do not mark an invoice paid to
 remove it from an overdue queue. For a partial receipt, record the actual
 amount; the remaining balance stays visible.
 
+### Sent Documents Are Kept
+
+Every time an invoice is sent, the exact PDF the customer receives is stored
+against that invoice as a numbered revision, and listed under **Sent Documents**
+on the invoice. Each revision records when it went out, who it went to, and its
+size, and can be downloaded exactly as it was sent.
+
+This is deliberately not the same as the **Download** button in the action row.
+Download re-creates the invoice from its *current* details; a stored revision is
+what the customer actually holds. After an edit the two can differ, and when they
+do, the stored revision is the one that settles a dispute.
+
+Reissuing an invoice adds revision 2, 3, and so on. Earlier revisions are never
+altered or replaced — that is what makes the history worth having. If sending
+succeeds but the copy cannot be stored, the invoice still shows as sent and the
+missing revision is visible in this list rather than being silently absent.
+
 ### What You Can Edit, And When
 
 A **draft** invoice is fully editable: line items, amounts, dates, account,

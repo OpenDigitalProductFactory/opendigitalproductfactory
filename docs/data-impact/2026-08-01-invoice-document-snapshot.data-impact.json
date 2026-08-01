@@ -1,0 +1,91 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [],
+  "migration": {
+    "name": "20260801120000_add_invoice_document_join",
+    "backfill": "none — new table. Existing invoices have no stored copies because none were ever retained; revisions begin at the next send."
+  },
+  "tests": [
+    "lib/govern/data/coverage.live.test.ts",
+    "lib/finance/invoice-document-store.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:invoice-document",
+      "prismaModel": "InvoiceDocument",
+      "lifecycleDisposition": "regulated-record",
+      "fields": [
+        {
+          "fieldId": "data:invoice-document#id",
+          "resolution": "not-applicable",
+          "reason": "Opaque internal identifier",
+          "provenance": "manual/data-steward"
+        },
+        {
+          "fieldId": "data:invoice-document#invoiceId",
+          "resolution": "not-applicable",
+          "reason": "Foreign key to Invoice; carries no subject data on its own",
+          "provenance": "manual/data-steward"
+        },
+        {
+          "fieldId": "data:invoice-document#documentVersionId",
+          "resolution": "not-applicable",
+          "reason": "Foreign key to DocumentVersion",
+          "provenance": "manual/data-steward"
+        },
+        {
+          "fieldId": "data:invoice-document#createdById",
+          "resolution": "not-applicable",
+          "reason": "Foreign key to the acting User",
+          "provenance": "manual/data-steward"
+        },
+        {
+          "fieldId": "data:invoice-document#role",
+          "resolution": "not-applicable",
+          "reason": "Structural: what the stored copy is (sent-copy | signed-copy | credit-note)",
+          "provenance": "manual/data-steward"
+        },
+        {
+          "fieldId": "data:invoice-document#revision",
+          "resolution": "not-applicable",
+          "reason": "Structural: monotonic revision number within (invoice, role)",
+          "provenance": "manual/data-steward"
+        },
+        {
+          "fieldId": "data:invoice-document#createdAt",
+          "resolution": "not-applicable",
+          "reason": "Structural timestamp",
+          "provenance": "manual/data-steward"
+        },
+        {
+          "fieldId": "data:invoice-document#invoice",
+          "resolution": "not-applicable",
+          "reason": "Prisma relation, not a stored column",
+          "provenance": "manual/data-steward"
+        },
+        {
+          "fieldId": "data:invoice-document#documentVersion",
+          "resolution": "not-applicable",
+          "reason": "Prisma relation, not a stored column",
+          "provenance": "manual/data-steward"
+        },
+        {
+          "fieldId": "data:invoice-document#createdBy",
+          "resolution": "not-applicable",
+          "reason": "Prisma relation, not a stored column",
+          "provenance": "manual/data-steward"
+        },
+        {
+          "fieldId": "data:invoice-document#sentToEmail",
+          "resolution": "governed",
+          "reason": "Customer contact address this copy was emailed to, captured at send time because the contact record can change afterwards. Personal data; masked on read and excluded from unapproved projections.",
+          "provenance": "manual/data-steward",
+          "flags": ["sensitive", "subject"],
+          "fieldPolicy": "mask-on-read"
+        }
+      ]
+    }
+  ]
+}
