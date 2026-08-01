@@ -545,6 +545,16 @@ The guardrails are: no demo path expansion, no latest-user brief lookup, no dupl
 
 ## 16. Open Dependencies
 
+Governed implementation coverage is recorded under umbrella `BI-A40C8A70` with receipt `cms9vd8j5009s01r2c65der0f`:
+
+- `BI-8B601F2F`: canonical `BusinessBuildBrief` and owner proof in production Build Studio.
+- `BI-1BBFE3E2`: DecisionInteraction-first Build Studio gates.
+- `BI-DC63D163`: retire the `BuildStudioV2` demo production route after brief/proof parity.
+- `BI-98A7B589`: mobile Today / Needs You for owner Change decisions.
+- `BI-3CBF6A99`: connect released Changes to governed outcome follow-up.
+
+Implementation plan: `docs/superpowers/plans/2026-07-31-build-studio-owner-change-convergence.md`.
+
 - `BI-78499309` covers honest progress for long-running Build Studio work.
 - `BI-950FE085` covers intake affordance hardening.
 - `BI-62075FF9` covers remaining status-strip technical leakage.
