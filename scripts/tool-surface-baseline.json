@@ -1,0 +1,18 @@
+{
+  "_comment": "Plane-4 standing tool-surface baseline (scripts/check-tool-surface.mjs). Growth is ALLOWED but never silent: raise a value and record `reason` + `recordedAt` saying what capability it buys. Dispatch-time caps are governed elsewhere and are not the subject of this baseline.",
+  "selectionCliff": 15,
+  "entries": {
+    "registry.toolDefinitions": {
+      "value": 347
+    },
+    "registry.packFiles": {
+      "value": 79
+    },
+    "tier.coreToolNames": {
+      "value": 22
+    },
+    "dispatch.maxAttachedTools": {
+      "value": 48
+    }
+  }
+}

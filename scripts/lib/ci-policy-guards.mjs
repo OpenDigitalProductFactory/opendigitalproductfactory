@@ -143,6 +143,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "scripts/check-context-economy.test.mjs"),
       node("scripts/check-context-economy.mjs"),
     ]),
+    // Plane 4 — the standing TOOL registry, same soft shape and reusing plane 3's claim
+    // review. Dispatch-time caps are governed elsewhere; this is the part that accretes.
+    guard("tool-surface-guard", "Tool Surface Guard", [
+      node("--test", "scripts/check-tool-surface.test.mjs"),
+      node("scripts/check-tool-surface.mjs"),
+    ]),
     guard("archetype-completeness-guard", "Archetype Completeness Guard", [
       node("--test", "scripts/check-archetype-completeness.test.mjs"),
       node("scripts/check-archetype-completeness.mjs"),
