@@ -8,7 +8,7 @@
 
 **Decision evidence:** DI-F20DB14D1B92 (mechanism: `served-judgment`, high confidence, margin 2.84) · DI-D4E46B42E22B (scope: `shells-then-migrate`, high confidence, margin 3.79)
 
-**Founder decisions, 2026-07-28:** declared borrow (not impersonation) · advisory authority until the corpus grounds it · seed the corpus from this session's work.
+**Founder decisions, 2026-07-31:** declared borrow (not impersonation) · advisory authority until the corpus grounds it · seed the corpus from this session's work.
 
 ## Outcome
 
@@ -16,7 +16,7 @@ AGT-906 `ux-design-critic` becomes a real participant in the external review pro
 
 The first job it reviews is the surface that prompted this work: `/platform/ai/skills`, measured at 5,349 default-visible words against a 450-word budget.
 
-## Grounding — verified live, 2026-07-28
+## Grounding — verified live, 2026-07-31
 
 Everything below was measured on this install, not inferred.
 
@@ -72,6 +72,29 @@ Build the L1 page shells and migrate `/platform/ai/skills` onto one, adding it t
 The externalized critic is **advisory**. It reports in session and on PRs and blocks nothing. Rationale: an ungrounded design judge is the UICrit zero-shot case at 13.1% comment validity, and a UX signal that cries wolf gets disabled — the failure mode that killed the checks catalogued in spec §2.
 
 The flip to blocking stays owned by BI-8316AC0C's data criteria and BI-42892849's entry condition. **Externalization must not become a back door around the staged authority grant.** The deterministic gates — route-budget regression ratchet, ARIA snapshot, axe — keep blocking throughout; they need no calibration and are unaffected by this plan.
+
+## Verification result — deliverable 1, 2026-07-31
+
+Run against `dpf_local_ci_0` (a real Postgres carrying the real schema and seed), driving
+`evaluateProfessionDecisionGate` with no agent identity and a declared borrow of `ux-design`.
+Deliberately not the production database: the point was to prove the code path, not to write
+borrow rows into the founder's live ledger.
+
+- Resolved `wsid-ux-design`, `professionProfileSelected: true`, **`materialCount: 8`** — the real
+  craft corpus was retrieved, not a fallback (sources included `critique-calibration-gate`,
+  `information-hierarchy-and-density`, `heuristic-evaluation-method`, `error-prevention-and-recovery`).
+- Ledger row `DI-E42BC51C3BE0`: `profileId: wsid-ux-design`, `gateKey: profession`,
+  `declaredBorrow: true`, `borrowedProfessionKey: ux-design`, `callingPopulation: external_coding_agent`.
+- Unknown craft `not-a-real-craft` → `escalate` with "does not fall back to platform doctrine". Fail-closed holds.
+
+**The verdict was `escalate`** — "profile confidence 0.35 is below the recommendation threshold 0.55",
+every material sitting at `effectiveWeight 0.45`. That is the design working, not a defect: the craft
+corpus is not yet strong enough for the critic to arbitrate, which is exactly the advisory posture this
+plan commits to and the reason the corpus is the gating asset.
+
+Not covered by this run: the MCP transport itself (`context.agentId` plumbing through the tool pack),
+which stays unit-covered until `:3001` frees or the portal image is rebuilt. The lease was held by
+another contributor throughout (`feat/restaurant-host-command-center`, to 2026-08-01T17:00Z).
 
 ## Verification
 

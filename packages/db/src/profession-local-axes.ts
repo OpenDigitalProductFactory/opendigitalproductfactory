@@ -71,12 +71,76 @@ export type ProfessionLocalAxis = {
 };
 
 /**
- * The registry. Ships EMPTY: the machinery lands proven, and the first real
- * axis lands with the profession that needs it (same discipline as
- * WIKI_SLUG_MIGRATIONS). A worked example lives only in the test, so this array
- * is never non-empty without a corresponding corpus that scores it.
+ * The registry. Shipped empty until a profession needed it; ux-design is the
+ * first (BI-F405AC58), which is what the module header anticipated — "a UX
+ * judgment about typographic hierarchy vs information density collapses into
+ * `human_cognitive_load` and becomes indistinguishable from a build-queue
+ * latency concern".
+ *
+ * ALL FOUR ARE COST-FRAMED, and deliberately so (BI-72E8FF05, DI-C8DD9DD0F9F8).
+ * They all roll up onto `human_cognitive_load`, a cost axis, and projection does
+ * not invert — so each axis measures the DEFICIT: high means more of the bad
+ * thing. The BI's original candidate names were benefit-framed
+ * (hierarchy_clarity, disclosure_quality, perceptual_coherence) and would have
+ * scored backwards; `content_density` needed no rename because it already read
+ * as a cost.
+ *
+ * Every one is scored on the DEFAULT-VISIBLE surface with collapsed disclosure
+ * excised, matching the measurement-scope rule the route sweep already applies —
+ * so deferring detail improves these scores instead of being taxed by them.
  */
-export const PROFESSION_LOCAL_AXES: readonly ProfessionLocalAxis[] = [];
+export const PROFESSION_LOCAL_AXES: readonly ProfessionLocalAxis[] = [
+  {
+    profession: "ux-design",
+    key: "ux-design/hierarchy_flatness",
+    kind: "cost",
+    highMeans:
+      "the option leaves the screen structurally flat — a long run of sibling content with no " +
+      "heading levels or grouping to navigate by, so the reader must scan everything to find anything",
+    projectsOnto: ["human_cognitive_load"],
+    // Hierarchy is the dominant failure mode of generated UI, and it is readable
+    // from the accessibility tree rather than a matter of taste.
+    source: "arxiv/2403.03163-design2code",
+  },
+  {
+    profession: "ux-design",
+    key: "ux-design/content_density",
+    kind: "cost",
+    highMeans:
+      "the option puts more words and controls in front of the reader on arrival, competing for " +
+      "the same attention",
+    // PLATFORM CALIBRATION, NOT SCIENCE. No surviving evidence validates
+    // words-per-screen or control-count thresholds against user outcomes, so
+    // this axis is honest about being DPF's own calibration — it may weigh an
+    // option, and it may not be presented as a measured human effect.
+    projectsOnto: ["human_cognitive_load"],
+    source: "dpf/platform-calibration-ux-budgets",
+  },
+  {
+    profession: "ux-design",
+    key: "ux-design/disclosure_debt",
+    kind: "cost",
+    highMeans:
+      "the option leaves detail undeferred that the reader did not ask for — advanced, diagnostic " +
+      "or exhaustive content sitting in the default view instead of behind a disclosure",
+    projectsOnto: ["human_cognitive_load"],
+    source: "nng/progressive-disclosure",
+  },
+  {
+    profession: "ux-design",
+    key: "ux-design/perceptual_clutter",
+    kind: "cost",
+    highMeans:
+      "the rendered pixels are more visually cluttered — weak grid alignment, little white space, " +
+      "many competing dominant colours, poor figure-ground contrast",
+    projectsOnto: ["human_cognitive_load"],
+    // The one VALIDATED member of this set: computational clutter/grid/white-space
+    // metrics explained up to 49% of variance in human aesthetic ratings, and they
+    // are deterministic — same pixels, same score — so unlike the calibration axes
+    // this one can carry weight on measured grounds.
+    source: "acm/10.1145-2702123.2702575-miniukovich-2015",
+  },
+];
 
 /** Namespaced key for a profession-local axis. */
 export function localAxisKey(profession: string, axis: string): string {
