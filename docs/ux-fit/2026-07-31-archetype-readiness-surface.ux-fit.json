@@ -4,10 +4,7 @@
   "decisionInteractionId": "DI-899975251014",
   "scope": {
     "files": [
-      "apps/web/app/(shell)/platform/archetype-readiness/page.tsx",
-      "apps/web/components/platform/ArchetypeReadinessMatrixPanel.tsx",
-      "apps/web/components/platform/ArchetypeReadinessMatrixTable.tsx",
-      "apps/web/components/platform/platform-nav.ts"
+      "apps/web/app/(shell)/platform/archetype-readiness/page.tsx"
     ]
   },
   "evidence": {

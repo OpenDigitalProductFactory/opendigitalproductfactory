@@ -6,35 +6,17 @@ import {
   compareArchetypeReadinessTiers,
   evaluateArchetypeReadinessClaim,
   type ArchetypeReadinessEvidenceRef,
-  type ArchetypeReadinessEvidenceStatus,
   type ArchetypeReadinessRecord,
   type ArchetypeReadinessTier,
 } from "@dpf/storefront-templates";
 
-import { KpiCard, Notice, StatusBadge, type Intent } from "@/components/ui/report-kit";
+import { KpiCard, Notice, StatusBadge } from "@/components/ui/report-kit";
 
 import {
   ArchetypeReadinessMatrixTable,
   type ArchetypeReadinessEvidenceView,
   type ArchetypeReadinessMatrixRow,
 } from "./ArchetypeReadinessMatrixTable";
-
-const TIER_INTENT: Record<ArchetypeReadinessTier, Intent> = {
-  "template-ready": "info",
-  "ops-ready": "accent",
-  "connector-ready": "warning",
-  "regulated-ready": "warning",
-  "sole-platform-ready": "success",
-};
-
-const EVIDENCE_STATUS_INTENT: Record<ArchetypeReadinessEvidenceStatus, Intent> = {
-  planned: "neutral",
-  open: "warning",
-  "in-progress": "info",
-  done: "success",
-  merged: "success",
-  required: "warning",
-};
 
 type ReadinessSummary = {
   totalCategories: number;
@@ -110,7 +92,8 @@ export function ArchetypeReadinessMatrixPanel({
             <li key={requirement.tier} className="flex flex-col gap-2 py-3 md:flex-row md:items-start">
               <div className="shrink-0 md:w-48">
                 <StatusBadge
-                  intent={TIER_INTENT[requirement.tier]}
+                  domain="archetypeReadinessTier"
+                  status={requirement.tier}
                   label={formatArchetypeReadinessLabel(requirement.tier)}
                   variant="soft"
                   uppercase={false}
@@ -153,7 +136,6 @@ export function buildArchetypeReadinessRows(
       ).length,
       highestTier: record.highestClaimableTier,
       highestTierLabel: formatArchetypeReadinessLabel(record.highestClaimableTier),
-      highestTierIntent: TIER_INTENT[record.highestClaimableTier],
       blockedTierLabels: ARCHETYPE_READINESS_TIERS.filter(
         (tier) => tier !== "template-ready" && blockedTierSet.has(tier),
       ).map(formatArchetypeReadinessLabel),
@@ -213,7 +195,7 @@ function toEvidenceView(ref: ArchetypeReadinessEvidenceRef): ArchetypeReadinessE
     id: ref.id,
     title: ref.title,
     kindLabel: formatArchetypeReadinessLabel(ref.kind),
+    status: ref.status,
     statusLabel: formatArchetypeReadinessLabel(ref.status),
-    statusIntent: EVIDENCE_STATUS_INTENT[ref.status],
   };
 }

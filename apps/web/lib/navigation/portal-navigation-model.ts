@@ -74,13 +74,7 @@ export type PortalShellNavEntry = PortalNavEntry & {
   sectionKey: PortalShellSectionKey;
 };
 
-const platformSectionSiblings = [
-  "/platform",
-  "/platform/identity",
-  "/platform/ai",
-  "/platform/tools",
-  "/platform/audit",
-] as const;
+const platformSectionSiblings = ["/platform", "/platform/archetype-readiness", "/platform/identity", "/platform/ai", "/platform/tools", "/platform/audit"] as const;
 
 function platformAiRoute(
   key: string,
@@ -494,6 +488,7 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     },
     sectionSiblings: platformSectionSiblings,
   },
+  { key: "platform-archetype-readiness", label: "Archetype Readiness", path: "/platform/archetype-readiness", parentPath: "/platform", domain: "platform", audienceModes: ["operator"], destinationKind: "section-page", capabilityKey: "view_platform" },
   {
     key: "platform-schedule",
     label: "Schedule",

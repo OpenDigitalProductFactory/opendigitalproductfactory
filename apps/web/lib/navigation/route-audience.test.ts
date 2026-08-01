@@ -91,6 +91,15 @@ describe("classifyRoute — overrides", () => {
     expect(c.confidence).toBe("high");
   });
 
+  it("pins the archetype readiness surface to the owner/operator audience", () => {
+    expect(classifyRoute(route("/platform/archetype-readiness"))).toMatchObject({
+      audience: "owner",
+      destinationKind: "detail",
+      confidence: "high",
+      source: "override",
+    });
+  });
+
   it("every override key is a well-formed absolute path", () => {
     for (const key of Object.keys(ROUTE_AUDIENCE_OVERRIDES)) {
       expect(key.startsWith("/")).toBe(true);

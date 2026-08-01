@@ -383,7 +383,9 @@ describe("generated route-shell registry", () => {
     // re-inclusion by BI-0C6C2153 once the fixture pins the clock and isolates state.
     // 197 -> 198: /admin/graph-explorer (BI-89A149A9) is sweep-eligible — it renders
     // no wall-clock or live-orchestration state, only the graph mirror.
-    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(198);
+    // 198 -> 199: /platform/archetype-readiness is sweep-eligible — it reads the
+    // static readiness matrix and does not depend on wall-clock or live runtime state.
+    expect(registry.routes.filter((route) => route.sweepEligible)).toHaveLength(199);
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(120);

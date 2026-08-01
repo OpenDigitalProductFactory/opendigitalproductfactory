@@ -143,6 +143,7 @@ export const ROUTE_AUDIENCE_OVERRIDES: Record<
   "/performance": { audience: "owner", destinationKind: "section-home" },
   "/workspace/my-queue": { audience: "worker", destinationKind: "detail" },
   "/workspace/inbox": { audience: "worker", destinationKind: "detail" },
+  "/platform/archetype-readiness": { audience: "owner", destinationKind: "detail" },
   "/knowledge": { audience: "public", destinationKind: "section-home" },
   "/docs": { audience: "public", destinationKind: "section-home" },
 };

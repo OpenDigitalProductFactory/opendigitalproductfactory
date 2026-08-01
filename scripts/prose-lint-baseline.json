@@ -1420,6 +1420,13 @@
     "longSentences": 0,
     "textMass": 89
   },
+  "apps/web/app/(shell)/platform/archetype-readiness/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 13
+  },
   "apps/web/app/(shell)/platform/audit/authority/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -6012,6 +6019,20 @@
     "longSentences": 0,
     "textMass": 4
   },
+  "apps/web/components/platform/ArchetypeReadinessMatrixPanel.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 34
+  },
+  "apps/web/components/platform/ArchetypeReadinessMatrixTable.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
   "apps/web/components/platform/AsyncOperationsTable.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -6759,7 +6780,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 99
+    "textMass": 101
   },
   "apps/web/components/platform/service-desk/ServiceTicketsTable.tsx": {
     "vocabulary": 0,

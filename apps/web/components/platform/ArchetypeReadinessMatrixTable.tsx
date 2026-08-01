@@ -1,20 +1,22 @@
 "use client";
 
-import type { ArchetypeReadinessTier } from "@dpf/storefront-templates";
+import type {
+  ArchetypeReadinessEvidenceStatus,
+  ArchetypeReadinessTier,
+} from "@dpf/storefront-templates";
 
 import {
   DataTable,
   StatusBadge,
   type Column,
-  type Intent,
 } from "@/components/ui/report-kit";
 
 export type ArchetypeReadinessEvidenceView = {
   id: string;
   title: string;
   kindLabel: string;
+  status: ArchetypeReadinessEvidenceStatus;
   statusLabel: string;
-  statusIntent: Intent;
 };
 
 export type ArchetypeReadinessMatrixRow = {
@@ -23,7 +25,6 @@ export type ArchetypeReadinessMatrixRow = {
   leafCount: number;
   highestTier: ArchetypeReadinessTier;
   highestTierLabel: string;
-  highestTierIntent: Intent;
   blockedTierLabels: string[];
   primaryBlocker: string;
   blockerCount: number;
@@ -57,7 +58,8 @@ const columns: Column<ArchetypeReadinessMatrixRow>[] = [
     sortAccessor: (row) => row.highestTier,
     cell: (row) => (
       <StatusBadge
-        intent={row.highestTierIntent}
+        domain="archetypeReadinessTier"
+        status={row.highestTier}
         label={row.highestTierLabel}
         variant="soft"
         uppercase={false}
@@ -105,7 +107,8 @@ const columns: Column<ArchetypeReadinessMatrixRow>[] = [
           >
             <span className="font-mono text-[var(--dpf-text)]">{ref.id}</span>
             <StatusBadge
-              intent={ref.statusIntent}
+              domain="archetypeReadinessEvidence"
+              status={ref.status}
               label={ref.statusLabel}
               variant="soft"
               uppercase={false}

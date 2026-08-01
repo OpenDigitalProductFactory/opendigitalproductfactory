@@ -8,6 +8,7 @@ import {
   parsePagePurposeContract,
   parsePagePurposeRegistry,
   type PagePurposeRegistry,
+  type PurposeContractSource,
   type RatifiedPurposeContract,
 } from "./page-purpose";
 import {
@@ -20,7 +21,10 @@ import {
   validatePurposeRouteReferences,
   validatePurposeStatusTransition,
 } from "../../scripts/build-page-purpose";
-import { buildPurposeContractSourceIndex } from "./purpose-contracts";
+import {
+  buildPurposeContractSourceIndex,
+  PURPOSE_CONTRACT_SOURCES,
+} from "./purpose-contracts";
 
 const draftFixture = {
   schemaVersion: 1,
@@ -168,6 +172,15 @@ const {
   derived: _derivedPurposePolicy,
   ...ratifiedSourceFixture
 } = ratifiedFixture;
+
+function withProductionPurposeContracts(
+  sources: Readonly<Record<string, PurposeContractSource>>,
+): Readonly<Record<string, PurposeContractSource>> {
+  return {
+    ...PURPOSE_CONTRACT_SOURCES,
+    ...sources,
+  };
+}
 
 const quarantinedSourceFixture = {
   schemaVersion: 1,
@@ -486,17 +499,18 @@ describe("deterministic Page Purpose registry", () => {
   });
 
   it("allows an explicitly reviewed quarantine instead of silent regression", () => {
-    // Real contracts are merged in because this case asserts the identity ratchet
-    // is CLEAN: a fixture-only contract map would demote genuinely ratified routes
-    // to drafts and the ratchet would rightly complain about them.
-    const base = buildPagePurposeRegistry(routeManifest.routes, {
-      ...buildPurposeContractSourceIndex(),
-      "/workspace": ratifiedSourceFixture,
-    });
-    const quarantined = buildPagePurposeRegistry(routeManifest.routes, {
-      ...buildPurposeContractSourceIndex(),
-      "/workspace": quarantinedSourceFixture,
-    });
+    const base = buildPagePurposeRegistry(
+      routeManifest.routes,
+      withProductionPurposeContracts({
+        "/workspace": ratifiedSourceFixture,
+      }),
+    );
+    const quarantined = buildPagePurposeRegistry(
+      routeManifest.routes,
+      withProductionPurposeContracts({
+        "/workspace": quarantinedSourceFixture,
+      }),
+    );
     const baselineWithoutWorkspace = {
       ...baseline,
       legacyDraftRoutePaths: baseline.legacyDraftRoutePaths.filter(
@@ -552,16 +566,18 @@ describe("deterministic Page Purpose registry", () => {
       ...quarantinedSourceFixture,
       routePath,
     };
-    // Same reason as above: this case asserts a clean ratchet, so the real
-    // contracts have to be present alongside the fixture.
-    const base = buildPagePurposeRegistry(manifest, {
-      ...buildPurposeContractSourceIndex(),
-      [routePath]: ratifiedSource,
-    });
-    const quarantined = buildPagePurposeRegistry(manifest, {
-      ...buildPurposeContractSourceIndex(),
-      [routePath]: quarantineSource,
-    });
+    const base = buildPagePurposeRegistry(
+      manifest,
+      withProductionPurposeContracts({
+        [routePath]: ratifiedSource,
+      }),
+    );
+    const quarantined = buildPagePurposeRegistry(
+      manifest,
+      withProductionPurposeContracts({
+        [routePath]: quarantineSource,
+      }),
+    );
     expect([
       ...validatePurposeIdentityRatchet(quarantined, baseline),
       ...validatePurposeStatusTransition(quarantined, base),

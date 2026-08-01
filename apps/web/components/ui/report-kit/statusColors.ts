@@ -450,6 +450,26 @@ export const STATUS_INTENT: Record<string, Record<string, Intent>> = {
     blocked: "danger",
     unknown: "neutral",
   },
+  // Business archetype readiness claim tiers. These are the claimability levels
+  // enforced by @dpf/storefront-templates; keep their badge semantics here so
+  // operator readiness surfaces do not carry private status-color maps.
+  archetypeReadinessTier: {
+    "template-ready": "info",
+    "ops-ready": "accent",
+    "connector-ready": "warning",
+    "regulated-ready": "warning",
+    "sole-platform-ready": "success",
+  },
+  // Evidence references shown on the archetype readiness matrix. planned/open
+  // items are not proof, in-progress is informative, and done/merged are proof.
+  archetypeReadinessEvidence: {
+    planned: "neutral",
+    open: "warning",
+    "in-progress": "info",
+    done: "success",
+    merged: "success",
+    required: "warning",
+  },
   // Field-dispatch job lifecycle (dispatch board). Mirrors FIELD_DISPATCH_JOB_STATUSES
   // in @dpf/validators (packages/validators/src/field-dispatch.ts). `needs-review` is the exception
   // bucket (a job with no valid dispatch state) so it is warning, not neutral; truly

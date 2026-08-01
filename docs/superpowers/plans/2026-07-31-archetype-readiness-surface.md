@@ -45,6 +45,23 @@ This belongs in Platform Overview, not AI Operations. The page answers "which bu
 
 The page should be quiet and dense: a short header, summary KPIs, a clear caution notice, and a matrix-derived table/list. It should use report-kit primitives where they fit and avoid a marketing-style hero.
 
+## Design grounding
+
+- Existing specs/plans reviewed:
+  - `docs/superpowers/specs/2026-07-21-archetype-provisioning-playbook-design.md`
+  - `docs/architecture/archetype-business-value-streams.md`
+  - `docs/architecture/2026-06-22-platform-adequacy-architecture-review.md`
+- Current code substrate reviewed:
+  - `packages/storefront-templates/src/archetype-readiness.ts`
+  - `packages/storefront-templates/src/archetype-catalog.ts`
+  - `apps/web/components/platform/platform-nav.ts`
+  - `apps/web/components/ui/report-kit/README.md`
+- Source of truth:
+  - `ARCHETYPE_READINESS_MATRIX` and its evaluator in `@dpf/storefront-templates` remain the readiness data source.
+  - Badge intent mapping lives in `apps/web/components/ui/report-kit/statusColors.ts`.
+- Decision:
+  - Expose a read-only Platform Overview subpage that consumes the shared readiness matrix and report-kit primitives; do not add route-local readiness data, status-color maps, database tables, or new claim semantics.
+
 ## Verification
 
 Source-local:
