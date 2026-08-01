@@ -35,6 +35,15 @@ export const HOST_BUILD_NODE_ENV = "NODE_ENV=production";
 // host implementation at process start so jsdom remains the environment owner.
 export const HOST_TEST_NODE_OPTIONS = "NODE_OPTIONS=--no-experimental-webstorage";
 export const HOST_TEST_MAX_WORKERS = "--maxWorkers=4";
+export const REPO_GUARD_RUNTIME_INSTALL_COMMAND = [
+  "pnpm",
+  "install",
+  "--frozen-lockfile",
+  "--ignore-scripts",
+  "--filter",
+  "@dpf/repo-guard-runtime",
+  "--config.confirmModulesPurge=false",
+];
 
 export function resolveCommandInvocation(command, baseEnv = process.env) {
   if (command[0] !== "env") {
@@ -302,6 +311,7 @@ export function createLocalIntegrationPlan(input) {
     // are stale. Run them here so local-CI catches the same failures pre-push.
     ["node", "scripts/gen-doc-index.mjs", "--check"],
     ["node", "scripts/check-doc-links.mjs"],
+    REPO_GUARD_RUNTIME_INSTALL_COMMAND,
     ["node", "scripts/check-guards.mjs"],
     // Fail fast on the definitive compile/type-generation proof before spending
     // the shared sandbox on the exhaustive suite. A red typecheck cannot become

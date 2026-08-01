@@ -95,6 +95,7 @@ describe("createLocalIntegrationPlan", () => {
       "pnpm --filter @dpf/db exec prisma generate",
       "node scripts/gen-doc-index.mjs --check",
       "node scripts/check-doc-links.mjs",
+      "pnpm install --frozen-lockfile --ignore-scripts --filter @dpf/repo-guard-runtime --config.confirmModulesPurge=false",
       "node scripts/check-guards.mjs",
       "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web typecheck",
       "env NODE_OPTIONS=--no-experimental-webstorage pnpm --filter web exec vitest run --maxWorkers=4",
@@ -225,6 +226,22 @@ describe("createLocalIntegrationPlan", () => {
     ));
   });
 
+  it("installs the pinned repo-guard runtime before the guard loop", () => {
+    const plan = createLocalIntegrationPlan({
+      candidateBranch: "feat/x",
+      mode: "single-branch",
+      siblingBranches: [],
+      hostPlatform: "linux",
+    });
+    const commands = plan.commands.map((command) => command.join(" "));
+    const runtimeInstallIndex = commands.indexOf(
+      "pnpm install --frozen-lockfile --ignore-scripts --filter @dpf/repo-guard-runtime --config.confirmModulesPurge=false",
+    );
+    const repoGuardIndex = commands.indexOf("node scripts/check-guards.mjs");
+    assert.ok(runtimeInstallIndex > -1, "local-CI must converge the isolated repo-guard runtime");
+    assert.ok(runtimeInstallIndex < repoGuardIndex, "repo-guard runtime must be ready before check-guards runs");
+  });
+
   it("runs fast PR guard parity before the expensive test/build gates", () => {
     const plan = createLocalIntegrationPlan({
       candidateBranch: "feat/x",
@@ -235,11 +252,15 @@ describe("createLocalIntegrationPlan", () => {
     const commands = plan.commands.map((command) => command.join(" "));
     const docIndexIndex = commands.indexOf("node scripts/gen-doc-index.mjs --check");
     const docsLinkIndex = commands.indexOf("node scripts/check-doc-links.mjs");
+    const runtimeInstallIndex = commands.indexOf(
+      "pnpm install --frozen-lockfile --ignore-scripts --filter @dpf/repo-guard-runtime --config.confirmModulesPurge=false",
+    );
     const repoGuardIndex = commands.indexOf("node scripts/check-guards.mjs");
     const vitestIndex = commands.findIndex((c) => c.includes("vitest run"));
     assert.ok(docIndexIndex > -1);
     assert.ok(docsLinkIndex > docIndexIndex);
-    assert.ok(repoGuardIndex > docsLinkIndex);
+    assert.ok(runtimeInstallIndex > docsLinkIndex);
+    assert.ok(repoGuardIndex > runtimeInstallIndex);
     assert.ok(repoGuardIndex < vitestIndex);
   });
 
