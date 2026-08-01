@@ -132,6 +132,48 @@ concurrency 1) delegating to the pure `runQualityIssueDriftSweep(db)`
    its owner. This is the runtime analogue of the compile-time gate: a NEW
    detector that starts accumulating is surfaced automatically.
 
+## Making `autoResolveWhen` executable (BI-A3D12F85)
+
+The two mechanisms above close rows by SUBJECT STATE. Neither evaluated a type's
+own declared close condition, because `autoResolveWhen` was **prose no code path
+read** — 18 types declared a machine-checkable condition in a string field with
+zero consumers.
+
+Measured on the live install after the direction-dual shipped: **134 of 196 open
+rows (68%) had their stated condition already satisfied** — 67
+`lifecycle_unverified` on entities already reporting `supported`, 67
+`catalog_match_ambiguous` on entities that already had a manufacturer. Discovery
+enriched them; nothing closed the tickets.
+
+**Where the condition is evaluated, and why.** `evaluateInventoryQuality` now
+returns `resolvedIssueKeys` alongside `issues`: each resolve is literally the
+`else` branch of its emit branch. Deriving both in one pass from one set of facts
+makes drift between raise and resolve structurally impossible — which is the
+failure this whole arc keeps re-encountering.
+
+It deliberately does NOT live in the drift sweep. Some warranting facts
+(evidence-derived `normalizationStatus`) never reach the `InventoryEntity` row,
+so a sweep-side predicate would be blind to them and would close real signal.
+
+**Bounded by construction.** Only entities present in the current sweep are
+reconciled; an entity nobody observed cannot have its facts re-evaluated, and
+each source clears its own entities on its own cadence. Docker-origin rows are
+skipped before any branch, so they emit no resolve keys either — emitting them
+would close issues raised by a source that DID evaluate them.
+
+**Ratchet.** A conformance test drives every emit branch and asserts each emitted
+type is either reconciled or `raisedBySubjectAbsence`, so a new detector cannot
+ship an emit branch without a resolve branch.
+
+**Ordering vs the router.** This precedes the phase-2 auto-processing loop
+deliberately. Routing first would have funded a coworker to hand-work 435 rows,
+~68% of which needed a boolean evaluated. Mechanical work mechanically; route
+only the residue.
+
+The write path (upsert warranted, reconcile-on-condition, reconcile-on-recovery)
+now lives in `packages/db/src/discovery-quality-persistence.ts`, extracted as a
+coherent seam when `discovery-sync.ts` passed the 800-LOC module ceiling.
+
 **Why not an open-count CI ratchet.** The `module-size-baseline.txt` pattern
 cannot apply — the open count lives in the operator's database, which CI has no
 access to. Drift monitoring must run at runtime, which is what this sweep is.

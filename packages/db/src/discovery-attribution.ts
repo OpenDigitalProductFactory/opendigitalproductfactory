@@ -97,7 +97,44 @@ export type InventoryQualityIssue = {
 
 export type InventoryQualityEvaluation = {
   issues: InventoryQualityIssue[];
+  /**
+   * Issue keys this pass proved are NO LONGER WARRANTED — the exact negation of
+   * the emission conditions above, for entities this sweep actually examined.
+   *
+   * Why this exists: `QualityIssueContract.autoResolveWhen` declared each type's
+   * close condition in PROSE that no code path read. Only stale_entity /
+   * stale_relationship ever had a real implementation. So `lifecycle_unverified`
+   * kept saying "resolves when supportStatus becomes known" while 67 rows sat
+   * open on entities that already reported `supported`, and
+   * `catalog_match_ambiguous` kept 67 open on entities that already had a
+   * manufacturer — 134 of 196 open rows (68%) whose stated condition was
+   * already true.
+   *
+   * Why it is computed HERE and not in the drift sweep: the resolve condition is
+   * the negation of the emit condition, so deriving both in one pass from one set
+   * of facts makes drift between them structurally impossible. The sweep could
+   * not do it correctly anyway — some warranting facts (evidence-derived
+   * normalizationStatus) never reach the InventoryEntity row, and a predicate
+   * blind to a warranting condition would close real signal.
+   *
+   * Bounded by construction: only entities in THIS sweep are reconciled. An
+   * entity nobody observed cannot have its facts re-evaluated, and each source
+   * clears its own entities on its own cadence.
+   */
+  resolvedIssueKeys: string[];
 };
+
+/**
+ * Entity-subject issue types whose warrant is recomputed on every sweep. Each
+ * must have BOTH an emit branch and a matching not-warranted branch in
+ * `evaluateInventoryQuality`; the registry conformance test asserts the set.
+ */
+export const RECONCILED_ENTITY_ISSUE_TYPES = [
+  "attribution_missing",
+  "taxonomy_attribution_low_confidence",
+  "lifecycle_unverified",
+  "catalog_match_ambiguous",
+] as const satisfies readonly QualityIssueType[];
 
 const IDENTITY_OPTIONAL_ENTITY_TYPES = new Set([
   "network_interface",
@@ -341,6 +378,7 @@ export function evaluateInventoryQuality(
   relationships: InventoryQualityRelationshipInput[] = [],
 ): InventoryQualityEvaluation {
   const issues: InventoryQualityIssue[] = [];
+  const resolvedIssueKeys: string[] = [];
 
   for (const entity of entities) {
     // Docker-origin entities (containers, bridge-IP hosts, vpnkit
@@ -352,7 +390,12 @@ export function evaluateInventoryQuality(
       continue;
     }
 
-    if (entity.attributionStatus === "needs_review" || entity.attributionStatus === "unmapped") {
+    // Each entity-subject type below emits when warranted and records its key as
+    // RESOLVED when not. The else-branch is the executable form of the contract's
+    // `autoResolveWhen` prose — same facts, same pass, so the two cannot drift.
+    const attributionUnresolved =
+      entity.attributionStatus === "needs_review" || entity.attributionStatus === "unmapped";
+    if (attributionUnresolved) {
       issues.push({
         issueKey: `inventory_entity:${entity.entityKey}:attribution_missing`,
         issueType: "attribution_missing",
@@ -361,10 +404,13 @@ export function evaluateInventoryQuality(
         summary: `${entity.entityType} ${entity.entityKey} requires taxonomy or product attribution review`,
         inventoryEntityKey: entity.entityKey,
       });
+    } else {
+      // "the entity gains a taxonomy or product attribution"
+      resolvedIssueKeys.push(`inventory_entity:${entity.entityKey}:attribution_missing`);
     }
 
     if (
-      (entity.attributionStatus === "needs_review" || entity.attributionStatus === "unmapped")
+      attributionUnresolved
       && (entity.attributionConfidence ?? 0) < LOW_CONFIDENCE_THRESHOLD
       && (entity.candidateTaxonomy?.length ?? 0) > 0
     ) {
@@ -376,6 +422,10 @@ export function evaluateInventoryQuality(
         summary: `${entity.entityType} ${entity.entityKey} has low-confidence taxonomy attribution candidates`,
         inventoryEntityKey: entity.entityKey,
       });
+    } else {
+      // "attribution confidence rises above the low-confidence threshold" — or the
+      // attribution resolved outright, or the candidate list emptied.
+      resolvedIssueKeys.push(`inventory_entity:${entity.entityKey}:taxonomy_low_confidence`);
     }
 
     // Only the MANAGED estate raises an issue when it vanishes. An ARP
@@ -397,6 +447,10 @@ export function evaluateInventoryQuality(
     }
 
     const normalizedSupportStatus = entity.supportStatus?.trim().toLowerCase() ?? "unknown";
+    if (normalizedSupportStatus !== "unknown") {
+      // "support lifecycle (supportStatus) becomes known for the entity"
+      resolvedIssueKeys.push(`inventory_entity:${entity.entityKey}:lifecycle_unverified`);
+    }
     if (normalizedSupportStatus === "unknown") {
       issues.push({
         issueKey: `inventory_entity:${entity.entityKey}:lifecycle_unverified`,
@@ -430,6 +484,10 @@ export function evaluateInventoryQuality(
         summary: `${entity.entityType} ${entity.entityKey} still needs identity review for ${detailParts.join(", ")}`,
         inventoryEntityKey: entity.entityKey,
       });
+    } else {
+      // "identity evidence resolves (manufacturer + normalized version + catalog
+      // match)" — also covers an entity whose type became identity-optional.
+      resolvedIssueKeys.push(`inventory_entity:${entity.entityKey}:catalog_match_ambiguous`);
     }
   }
 
@@ -461,6 +519,9 @@ export function evaluateInventoryQuality(
     }
   }
 
-  return { issues };
+  // An issue key can only appear on one side: each branch above is an if/else on
+  // the same condition, so a key emitted this pass is never also reported
+  // resolved. The caller closes `resolvedIssueKeys` and upserts `issues`.
+  return { issues, resolvedIssueKeys };
 }
 
