@@ -12,6 +12,106 @@
 | Operational precedent | `restaurant-floor` (Toast and OpenTable, accessed 2026-07-28) |
 | Coverage receipt | `cms89c2jv031001qo7gezoyzm` (`atomic`) |
 
+## Pressure-mode refinement — 2026-08-01
+
+Operator review of the merged surface found that the architecture was sound but
+the first-viewport operating hierarchy was not: the generic attention stack
+buried the floor, the 500px canvas plus a second full table report forced page
+scrolling, and the operable canvas accepted navigation gestures before the host
+understood that tables were the action targets. This follow-on stays inside the
+same atomic `BI-287AA5F7` workflow and ships on
+`feat/restaurant-host-command-center`.
+
+### Research & Benchmarking
+
+- **Toast Tables** keeps waiting parties beside the live floor and lets the host
+  seat, notify, pre-assign, manage reservations, check server rotation/covers,
+  and act on table states from the host home. It also demonstrates a failure
+  mode DPF will not copy: long-press/drag and a navigable floor can compete with
+  the primary seat-party action under pressure.
+- **OpenTable** treats floor, waitlist, assignment recommendations, pacing, and
+  flexible inventory as the shift command surface. DPF adopts recommendation
+  with operator confirmation and explicit constraint explanation.
+- **SevenRooms** brings reservations, walk-ins, table availability, and guest
+  conversations into one host-stand surface. DPF adopts the one-place operating
+  boundary while retaining its own canonical hospitality, staffing, and
+  customer-privacy authorities.
+- **DPF distinction:** the AI coworker continuously ranks the next party/table
+  match and explains server-load or capacity warnings, but never seats, moves,
+  releases, or changes a turn without the host's explicit confirmation.
+
+Current primary sources (accessed 2026-08-01):
+
+- https://support.toasttab.com/en/article/Using-Toast-Tables-Waitlist?lang=en_US
+- https://www.opentable.com/restaurant-solutions/products/table-management/
+- https://sevenrooms.com/platform/table-management/
+
+### UX fit review — restaurant shift console
+
+- **Decision:** `fits-with-guardrails`.
+- **Owning area:** Workspace; `/workspace` remains the canonical live-operation
+  home and `/storefront/tables` remains configuration.
+- **Primary persona:** hostess or shift manager with a line at the door, phone
+  demand arriving, reservations due, and tables changing state concurrently.
+- **Navigation layer:** local view mode and contextual commands only; no new
+  route, global nav item, or second restaurant dashboard.
+- **First viewport:** compact shift pulse, ranked party queue, locked floor or
+  equivalent table list, AI recommendation/confirmation, turn exceptions, and
+  server load must fit inside the available host-stand viewport. Pane contents
+  may scroll independently; the operator must not page-scroll to find the
+  floor or the next seating action.
+- **Progressive disclosure:** floor and accessible table list occupy the same
+  center pane rather than stacking. Generic owner decisions and workspace-area
+  launchers remain reachable below the shift console through secondary
+  disclosures and do not precede the hostess task.
+- **Interaction:** operate mode locks pan/zoom/drag by default for this embedded
+  floor. Table activation remains a normal button action with text status and a
+  visible focus state. Layout navigation and geometry editing stay in
+  `/storefront/tables`.
+- **AI boundary:** the coworker selects the most urgent waiting party, proposes
+  the best compatible table, exposes timing/server warnings, and prepares the
+  preview. The primary action remains explicit `Confirm seating`; conflict
+  results preserve the queue and return alternatives.
+- **Source truth:** the existing restaurant operating projection and versioned
+  command adapters remain authoritative. No new dashboard DTO, reservation
+  table, status map, or AI-only state is introduced.
+- **Empty/failure behavior:** missing scene uses the operable table list in the
+  same center pane; missing staffing is stated; no compatible table becomes an
+  explicit coworker hold/watch recommendation rather than a disabled mystery.
+- **Evidence before merge:** first-viewport component assertions, locked-canvas
+  interaction tests, queue/recommendation/confirmation tests, table-list parity,
+  theme scan, measured UX-fit manifest, and served desktop/tablet/200% browser
+  exercises.
+- **Kernel choice:** `DI-8AC53E1793E6` compared compressing the old stack, an
+  in-place restaurant shift console, and a new dedicated host route. It chose
+  `restaurant-shift-console` with high confidence (composite `3.560`, margin
+  `2.303`, strong structured coverage, no commandment conflict). The main
+  positive pull was durable reuse of the existing Workspace/scene/command
+  contracts; the main rejected cost was the cognitive load of the existing
+  vertical stack and the duplicate-home blast radius of a new route.
+
+### Architecture review (advisory)
+
+- **Alignment:** aligned with guardrails. This is a presentation and interaction
+  refinement over the merged read model and commands, not a new operating
+  substrate.
+- **Important:** do not move generic owner attention into a restaurant-only
+  data model. The Workspace hero may change hierarchy for a physical-operation
+  archetype, but the existing attention projection stays canonical and remains
+  reachable through secondary disclosure.
+- **Important:** do not fork `CartesianSceneCanvas`. Add a reusable embedded,
+  navigation-locked presentation option so other pressure-mode physical twins
+  can make activation primary without inheriting accidental canvas movement.
+- **Important:** do not fabricate phone-order, no-show, or POS state that the
+  restaurant operating projection does not currently carry. Surface only
+  canonical demand, turn, table, staffing, and storefront attention facts; add
+  new commands only through their existing versioned authorities.
+- **Refactor allocation:** extract pure host-priority/summary selectors and the
+  reusable embedded-canvas contract, and remove the duplicate always-visible
+  table report from the restaurant component. These changes satisfy the
+  approximately 20% refactor allocation while reducing rather than growing the
+  visual dialect.
+
 > **For agentic workers:** execute this plan one independently reviewable backlog item at a time — one BI, one branch, one PR. Use `dpf-tdd` for red-green implementation, `dpf-local-merge-ci-before-push` plus the plan's completion gate before any success claim, and `dpf-pr-with-dco` for handoff.
 
 ## Outcome

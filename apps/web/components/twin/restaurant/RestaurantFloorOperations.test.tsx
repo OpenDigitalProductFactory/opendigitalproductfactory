@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import "@testing-library/jest-dom/vitest";
+
 import {
   cleanup,
   fireEvent,
@@ -16,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   advance: vi.fn(),
   move: vi.fn(),
   refresh: vi.fn(),
+  canvasProps: null as Record<string, unknown> | null,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -29,13 +32,49 @@ vi.mock("@/lib/twin/restaurant-floor-actions", () => ({
 }));
 
 vi.mock("@/components/twin/cartesian/CartesianSceneCanvas", () => ({
-  CartesianSceneCanvas: () => <div>interactive floor canvas</div>,
+  CartesianSceneCanvas: (canvasProps: Record<string, unknown>) => {
+    mocks.canvasProps = canvasProps;
+    return (
+      <div
+        data-testid="restaurant-floor-canvas"
+        data-chrome={String(canvasProps.chrome)}
+        data-navigation={String(canvasProps.navigation)}
+      >
+        interactive floor canvas
+      </div>
+    );
+  },
 }));
 
 import { RestaurantFloorOperations } from "./RestaurantFloorOperations";
 
 const props: RestaurantFloorOperationsProps = {
-  scene: null,
+  scene: {
+    id: "scene-1",
+    version: 1,
+    createdFromStarter: false,
+    layout: {
+      schemaVersion: 1,
+      spaceKind: "cartesian-interior",
+      viewport: { x: 0, y: 0, zoom: 1 },
+      zones: [],
+      placements: [
+        {
+          id: "table-placement-1",
+          label: "Table 1",
+          entityRef: { kind: "table", id: "table-1" },
+          geometry: {
+            x: 20,
+            y: 20,
+            width: 72,
+            height: 72,
+            rotation: 0,
+            shapeKind: "square-table",
+          },
+        },
+      ],
+    },
+  },
   view: {
     floor: {
       asOf: "2026-07-31T18:14:00.000Z",
@@ -122,6 +161,7 @@ describe("RestaurantFloorOperations", () => {
     mocks.advance.mockReset();
     mocks.move.mockReset();
     mocks.refresh.mockReset();
+    mocks.canvasProps = null;
     mocks.execute.mockResolvedValue({
       status: "confirmed",
       idempotencyKey: "seat-key",
@@ -156,15 +196,107 @@ describe("RestaurantFloorOperations", () => {
     });
   });
 
+  it("puts the pressure-mode host console in one bounded first viewport", () => {
+    render(
+      <RestaurantFloorOperations
+        {...props}
+        serviceAttention={<div>Takeout order needs confirmation</div>}
+      />,
+    );
+
+    const console = screen.getByTestId("restaurant-host-command-center");
+    expect(console).toHaveAttribute("data-dpf-density", "compact");
+    expect(console.className).toContain("overflow-hidden");
+    expect(screen.getByRole("heading", { name: "Host stand" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Waiting now" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "AI host recommends" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Floor" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "Table list" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(screen.queryByRole("heading", { name: "All tables" })).toBeNull();
+    expect(
+      screen.getByText("Orders, calls and messages"),
+    ).toBeTruthy();
+    expect(screen.getByText("Takeout order needs confirmation")).toBeTruthy();
+  });
+
+  it("locks embedded floor navigation so table activation wins over canvas movement", () => {
+    render(<RestaurantFloorOperations {...props} />);
+
+    expect(screen.getByTestId("restaurant-floor-canvas")).toHaveAttribute(
+      "data-chrome",
+      "embedded",
+    );
+    expect(screen.getByTestId("restaurant-floor-canvas")).toHaveAttribute(
+      "data-navigation",
+      "locked",
+    );
+  });
+
+  it("uses coworker ranking to prepare the next safe seating confirmation", () => {
+    render(<RestaurantFloorOperations {...props} />);
+
+    expect(screen.getByText("Table 1 fits 2 and is open now.")).toBeTruthy();
+    expect(screen.getByText(/Seat Alex Kim \(2\) at Table 1/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Confirm seating" })).toBeTruthy();
+  });
+
+  it("keeps late reservations and their held capacity visible during service", () => {
+    render(
+      <RestaurantFloorOperations
+        {...props}
+        view={{
+          ...props.view,
+          reservationWatch: [
+            {
+              id: "reservation-late",
+              name: "Taylor Morgan",
+              covers: 4,
+              scheduledAt: "2026-07-31T18:04:00.000Z",
+              lateMinutes: 10,
+              state: "late",
+              tableLabels: ["Table 4"],
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByRole("heading", { name: "Reservations to watch" }),
+    ).toBeTruthy();
+    expect(screen.getByText(/Taylor Morgan · 4 guests/)).toBeTruthy();
+    expect(screen.getByText(/holding Table 4/)).toBeTruthy();
+    expect(screen.getAllByText("1").length).toBeGreaterThan(0);
+    expect(screen.getByText("10 min late")).toBeTruthy();
+  });
+
+  it("switches the center pane between the floor and the equivalent table list", () => {
+    render(<RestaurantFloorOperations {...props} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Table list" }));
+    expect(screen.queryByTestId("restaurant-floor-canvas")).toBeNull();
+    expect(screen.getByRole("table")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Floor" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+  });
+
   it("provides equivalent list controls for selecting and confirming a table", async () => {
     render(<RestaurantFloorOperations {...props} />);
 
     expect(screen.getByText(/waiting 14 min/)).toBeTruthy();
     expect(screen.getAllByText("Jordan Rivera").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Available").length).toBeGreaterThan(0);
 
-    fireEvent.click(screen.getByRole("button", { name: /Alex Kim/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Choose" }));
+    fireEvent.click(screen.getByRole("button", { name: "Table list" }));
+    expect(screen.getAllByText("Available").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Selected" })).toBeTruthy();
 
     expect(screen.getByText(/Seat Alex Kim \(2\) at Table 1/)).toBeTruthy();
     fireEvent.click(
@@ -188,6 +320,7 @@ describe("RestaurantFloorOperations", () => {
   it("keeps compatibility and assignment state in text, not color alone", () => {
     render(<RestaurantFloorOperations {...props} />);
 
+    fireEvent.click(screen.getByRole("button", { name: "Table list" }));
     expect(screen.getByText("Available")).toBeTruthy();
     expect(screen.getByText("Available for seating now")).toBeTruthy();
     expect(screen.getByText("Walk-in")).toBeTruthy();

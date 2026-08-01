@@ -47,6 +47,7 @@ export default async function WorkspacePage() {
     archetypeRef?.archetypeId ?? null,
     archetypeRef?.name ?? null,
   );
+  const restaurantShift = Boolean(twinPresentation?.restaurantFloor);
 
   const hasCloudProvider =
     (await prisma.modelProvider.count({
@@ -73,10 +74,10 @@ export default async function WorkspacePage() {
   // it never adds an empty panel to the surface we are decluttering.
   const cockpit = (
     <>
-      <WorkspaceStorefrontAttention density={simpleHome ? "simple" : "full"} />
+      <WorkspaceStorefrontAttention density={simpleHome || restaurantShift ? "simple" : "full"} />
       <OperatorCockpit
         userId={session.user.id}
-        audience={simpleHome ? "worker" : "operator"}
+        audience={simpleHome || restaurantShift ? "worker" : "operator"}
       />
     </>
   );

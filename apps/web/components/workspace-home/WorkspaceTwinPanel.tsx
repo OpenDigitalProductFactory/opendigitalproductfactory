@@ -13,19 +13,26 @@ import { RestaurantFloorOperations } from "@/components/twin/restaurant/Restaura
 import { RoomsOperations } from "@/components/twin/rooms";
 import type { WorkspaceTwinPresentation } from "@/lib/workspace-home/twin-panel-data";
 import type { CartesianScenePresentationMap } from "@/lib/twin/cartesian-scene";
+import type { ReactNode } from "react";
 
 export interface WorkspaceTwinPanelProps {
   presentation: WorkspaceTwinPresentation;
   className?: string;
+  serviceAttention?: ReactNode;
 }
 
-export function WorkspaceTwinPanel({ presentation, className = "" }: WorkspaceTwinPanelProps) {
+export function WorkspaceTwinPanel({
+  presentation,
+  className = "",
+  serviceAttention,
+}: WorkspaceTwinPanelProps) {
   if (presentation.restaurantFloor) {
     return (
       <div className={className}>
         <RestaurantFloorOperations
           view={presentation.restaurantFloor}
           scene={presentation.scene}
+          serviceAttention={serviceAttention}
         />
       </div>
     );

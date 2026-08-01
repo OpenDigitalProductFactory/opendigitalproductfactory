@@ -15,6 +15,11 @@ vi.mock("@xyflow/react", async () => {
         data-testid="react-flow"
         data-nodes-draggable={String(props.nodesDraggable)}
         data-elements-selectable={String(props.elementsSelectable)}
+        data-pan-on-scroll={String(props.panOnScroll)}
+        data-pan-on-drag={String(props.panOnDrag)}
+        data-zoom-on-scroll={String(props.zoomOnScroll)}
+        data-zoom-on-pinch={String(props.zoomOnPinch)}
+        data-zoom-on-double-click={String(props.zoomOnDoubleClick)}
       >
         {props.nodes.map((node: Record<string, any>) => {
           const NodeComponent = props.nodeTypes[node.type];
@@ -189,6 +194,45 @@ describe("CartesianSceneCanvas", () => {
     expect(
       screen.getByRole("list", { name: "Dining room layout details" }),
     ).toHaveTextContent("Table 1: Turning soon — Free in 8 minutes");
+  });
+
+  it("supports a chrome-free locked embed while keeping resource activation", () => {
+    const onActivate = vi.fn();
+    render(
+      <CartesianSceneCanvas
+        ariaLabel="Host stand floor"
+        mode="operate"
+        scene={scene()}
+        chrome="embedded"
+        navigation="locked"
+        bindings={{
+          "table:resource-1": {
+            label: "Table 1",
+            statusLabel: "Available",
+            intent: "success",
+          },
+        }}
+        onActivate={onActivate}
+      />,
+    );
+
+    const flow = screen.getByTestId("react-flow");
+    expect(flow).toHaveAttribute("data-pan-on-scroll", "false");
+    expect(flow).toHaveAttribute("data-pan-on-drag", "false");
+    expect(flow).toHaveAttribute("data-zoom-on-scroll", "false");
+    expect(flow).toHaveAttribute("data-zoom-on-pinch", "false");
+    expect(flow).toHaveAttribute("data-zoom-on-double-click", "false");
+    expect(screen.queryByText("Live operation")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("controls")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("list", { name: "Host stand floor details" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Table 1.*Available/i }));
+    expect(onActivate).toHaveBeenCalledWith("table-1", {
+      kind: "table",
+      id: "resource-1",
+    });
   });
 
   it("has no mutation or activation affordance in read-only mode", () => {
