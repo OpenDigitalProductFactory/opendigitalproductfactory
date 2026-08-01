@@ -9,6 +9,7 @@ describe("WorkItemCommentBox", () => {
       <WorkItemCommentBox
         workItemId="wi-cuid-1"
         workItemTitle="Confirm condenser appointment"
+        caseKey="booking%3ABK-1"
       />,
     );
 
