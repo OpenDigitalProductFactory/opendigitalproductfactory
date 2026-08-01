@@ -94,6 +94,7 @@ exports[`finance barrel export > exports all public symbols 1`] = `
   "transitionSupplierStatus",
   "updateBillSchema",
   "updateExpenseClaimSchema",
+  "updateInvoiceContentSchema",
   "updateInvoiceSchema",
   "updateScheduleStatusSchema",
   "updateSupplierProfile",

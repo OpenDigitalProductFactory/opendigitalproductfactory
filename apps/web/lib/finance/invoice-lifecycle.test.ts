@@ -2,9 +2,11 @@ import { describe, it, expect } from "vitest";
 import { INVOICE_STATUSES } from "@/lib/finance/finance-validation";
 import {
   INVOICE_TRANSITIONS,
+  POST_DRAFT_EDITABLE_FIELDS,
   canTransitionInvoice,
   checkInvoiceTransition,
   checkInvoiceDeletion,
+  checkInvoiceEditScope,
   describeInvoiceDeletionConsequences,
   describeInvoiceVoidConsequences,
   type InvoiceStatus,
@@ -125,6 +127,50 @@ describe("checkInvoiceDeletion", () => {
     expect(result.allowed).toBe(false);
     if (result.allowed) throw new Error("expected rejection");
     expect(result.reason).toContain("dunning");
+  });
+});
+
+describe("checkInvoiceEditScope", () => {
+  it("lets a draft change anything, line items included", () => {
+    expect(checkInvoiceEditScope("draft", ["lineItems", "accountId", "dueDate"])).toEqual({
+      allowed: true,
+    });
+  });
+
+  it.each(["sent", "viewed", "partially_paid", "paid", "overdue"] as const)(
+    "freezes the economics of a %s invoice",
+    (status) => {
+      const result = checkInvoiceEditScope(status, ["lineItems"]);
+      expect(result.allowed).toBe(false);
+      if (result.allowed) throw new Error("expected rejection");
+      expect(result.rejectedFields).toEqual(["lineItems"]);
+      expect(result.reason).toContain("credit note");
+    },
+  );
+
+  it("still allows the non-economic fields after sending", () => {
+    expect(checkInvoiceEditScope("sent", [...POST_DRAFT_EDITABLE_FIELDS])).toEqual({
+      allowed: true,
+    });
+  });
+
+  it("rejects only the offending fields in a mixed edit", () => {
+    const result = checkInvoiceEditScope("sent", ["notes", "lineItems", "accountId"]);
+    expect(result.allowed).toBe(false);
+    if (result.allowed) throw new Error("expected rejection");
+    expect(result.rejectedFields).toEqual(["lineItems", "accountId"]);
+    expect(result.rejectedFields).not.toContain("notes");
+  });
+
+  it("refuses every edit to a voided invoice", () => {
+    const result = checkInvoiceEditScope("void", ["notes"]);
+    expect(result.allowed).toBe(false);
+    if (result.allowed) throw new Error("expected rejection");
+    expect(result.reason).toContain("Raise a new invoice");
+  });
+
+  it("permits an empty edit regardless of status", () => {
+    expect(checkInvoiceEditScope("paid", [])).toEqual({ allowed: true });
   });
 });
 

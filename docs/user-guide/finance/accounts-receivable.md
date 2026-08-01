@@ -75,6 +75,25 @@ the business reason in supporting records. Do not mark an invoice paid to
 remove it from an overdue queue. For a partial receipt, record the actual
 amount; the remaining balance stays visible.
 
+### What You Can Edit, And When
+
+A **draft** invoice is fully editable: line items, amounts, dates, account,
+contact, currency, and type. Totals recompute from the line items whenever you
+change them, so the header always equals the sum of the lines.
+
+Once an invoice has been **sent**, its economics are frozen. The customer is
+holding a document stating what they owe, and changing the total underneath that
+document is exactly the discrepancy that makes an invoice indefensible in a
+dispute. After sending, you can still change the due date, payment terms, and
+customer-facing or internal notes — none of those alter what is owed. To change
+the amounts, void the invoice and raise a new one, or issue a credit note.
+
+A **voided** invoice cannot be edited at all.
+
+Editing from the invoice grid is limited to the same non-economic fields.
+Amounts and line items are edited on the invoice itself, where the totals
+recompute and you can see what changed before saving.
+
 ### Status Movement Is Governed
 
 Invoice status follows a declared transition map, so an unsupported move is
