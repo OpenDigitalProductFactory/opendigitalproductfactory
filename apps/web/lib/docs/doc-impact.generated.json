@@ -270,6 +270,12 @@
     "apps/web/app/(shell)/platform/ai/providers/page.tsx": [
       "docs/user-guide/ai-workforce/connecting-providers.md"
     ],
+    "apps/web/app/(shell)/workspace/cases/[caseKey]/page.tsx": [
+      "docs/user-guide/workspace/work-rooms.md"
+    ],
+    "apps/web/app/(shell)/workspace/my-queue/page.tsx": [
+      "docs/user-guide/workspace/work-rooms.md"
+    ],
     "apps/web/components/attention/AttentionInbox.tsx": [
       "docs/user-guide/workspace/attention-inbox.md"
     ],
@@ -281,6 +287,12 @@
     ],
     "apps/web/components/proactivity/ProactivityRosterList.tsx": [
       "docs/user-guide/ai-workforce/coworker-proactivity.md"
+    ],
+    "apps/web/components/workspace/WorkCaseAttentionLens.tsx": [
+      "docs/user-guide/workspace/work-rooms.md"
+    ],
+    "apps/web/components/workspace/WorkCaseDetailView.tsx": [
+      "docs/user-guide/workspace/work-rooms.md"
     ],
     "apps/web/lib/ai-inference.ts": [
       "docs/user-guide/ai-workforce/connecting-providers.md"
@@ -520,6 +532,12 @@
       "apps/web/components/attention/AttentionInbox.tsx",
       "apps/web/components/attention/OwnerDecisionCards.tsx",
       "apps/web/lib/attention/owner-projection.ts"
+    ],
+    "docs/user-guide/workspace/work-rooms.md": [
+      "apps/web/app/(shell)/workspace/cases/[caseKey]/page.tsx",
+      "apps/web/app/(shell)/workspace/my-queue/page.tsx",
+      "apps/web/components/workspace/WorkCaseAttentionLens.tsx",
+      "apps/web/components/workspace/WorkCaseDetailView.tsx"
     ]
   }
 }

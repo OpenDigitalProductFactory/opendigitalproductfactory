@@ -83,6 +83,13 @@ describe("statusColors", () => {
     expect(resolveIntent("selfUpgradeRun", "skipped")).toBe("neutral");
   });
 
+  it("maps Work Room state, outcome health, and activity through shared domains", () => {
+    expect(resolveIntent("workCaseState", "waiting-on-person")).toBe("warning");
+    expect(resolveIntent("workRoomOutcomeHealth", "at-risk")).toBe("warning");
+    expect(resolveIntent("workRoomActivity", "message")).toBe("neutral");
+    expect(resolveIntent("workRoomActivity", "decision-resolved")).toBe("success");
+  });
+
   // BI-5B2F5447 (D0): the portfolioCoverage badge map is the render side of the
   // PORTFOLIO_COVERAGE_STATUSES enum in @dpf/db. A coverage status with no explicit
   // intent falls through resolveIntent to "neutral" and reads wrong on the coverage

@@ -201,6 +201,21 @@ The existing Work Case detail route becomes a Work Room experience that is under
 - Compose report-kit for generic status/data display.
 - Keep touch targets at least 44px where practical and preserve visible focus.
 
+### UX fit review
+
+- Decision: `fits-with-guardrails`.
+- Governed comparison: `DI-3D4DAE04956D` recommended `outcome-first-existing-route` with usable, high-confidence signal and a 2.920 margin over the next option.
+- Primary persona: founder, operator, or employee coordinating a bounded company outcome with people and AI coworkers.
+- Navigation layer: local page navigation and contextual actions only; the canonical detail URL remains `/workspace/cases/[caseKey]`.
+- Reuse and convergence: retain the Workspace Work Case loader and route, compose report-kit status and notice primitives, and extract focused room components from the existing monolithic detail view.
+- Source truth: `WorkspaceWorkCaseDetailView.room` is the visible collaboration contract. The legacy summary remains compatibility data, not a second room model.
+- First viewport: name the outcome, attention reason, accountable participant, participant group, and next action before activity or diagnostics.
+- Empty/failure behavior: distinguish an incomplete boundary from an unavailable source. Each state explains what is known and gives one safe next action; permission denial remains a non-disclosing route-level not-found response.
+- AI boundary: informational disclosure controls do not send prompts. This slice adds no coworker-starting action; any future launcher must preview context and require explicit confirmation.
+- Mental model: use **My Work**, **Work Room**, **Activity**, **Outcome**, and **Room details** in user-facing copy. Preserve **Work Case** only in implementation and technical documentation where the underlying governed record matters.
+- Evidence before merge: focused component tests, source-unavailable and incomplete-boundary fixtures, permission non-disclosure regression, theme scan, production build, and desktop/narrow keyboard-accessible browser exercise.
+- Captured in: this implementation plan, BI-32E26F62.
+
 ### Verification
 
 - focused route/component Vitest;
@@ -225,6 +240,24 @@ Target 20-25 percent:
 ### Rollback
 
 The route continues to use the same loader. Revert the component composition to the prior `WorkCaseDetailView`; no data migration or route redirect rollback is required.
+
+### Design grounding
+
+- **Existing specs and plans reviewed:** this plan and its companion Work Rooms collaboration design, the Work Management architecture design, and the Work Case Wave 3 operator-surfaces plan.
+- **Current code substrate reviewed:** `workspace-case-loader`, `WorkCaseDetailView`, `WorkCaseAttentionLens`, `WorkItemCommentBox`, and report-kit status/empty-state primitives.
+- **Source of truth:** `WorkRoomView` remains a typed projection over the governed Work Case and its existing policy, activity, participant, action, and receipt seams.
+- **Decision:** keep `/workspace/cases/[caseKey]` as the canonical route, replace inspector composition with outcome-first room composition, reuse report-kit and theme tokens, keep diagnostics behind disclosure, and introduce neither a second work model nor a new navigation family.
+
+### Implementation record (updated 2026-08-01)
+
+- Preserved `/workspace/cases/[caseKey]` and composed the existing room projection into an outcome-first `WorkRoomHeader` and `WorkRoomBody`.
+- Put outcome, attention, accountability, participant summary, and next action ahead of activity; moved A2A/source diagnostics under **Room details**.
+- Integrated the existing update composer into Activity and kept informational disclosure controls prompt-free.
+- Added honest incomplete-boundary, unavailable-source, missing-projection, permission non-disclosure, customer-portal segregation, and unavailable-AI-coworker states. A coworker availability issue opens the participant disclosure and gives one safe continuation path.
+- Refactoring accounted for at least 25 percent of the slice: the monolithic detail component was split by responsibility, repeated room status intent moved into report-kit, and comment/activity presentation converged.
+- Current source evidence: 7 affected test files / 40 tests pass; scoped route generation, web typecheck, secret scan, and DCO hooks pass.
+- Final exact merged-tree evidence `cmsa2vs0701hx01qqc4vq7ygb` covers the complete candidate at `e3cec3ef8618eb32a2f7a0fd8c024ddd02f444ed` against accepted base `af398e985a30f9a7507d3ab7802fbe7d7f97c5c8`: migrations, documentation guards, typecheck, the full Vitest suite, and the production Docker/Next build passed.
+- Governed UX evidence `cms9zqzjx0doq01r2mknr75li` and `cms9vep3v00bs01r2e0vno56z` covers authenticated desktop and 390px narrow layouts, first-viewport outcome priority, no horizontal overflow, long-purpose disclosure, and the Activity/Context/details interactions. Interactive disclosures use native `details`/`summary`; browser focusability and component semantics are verified, while the harness's synthetic Enter/Space limitation is explicitly recorded rather than presented as a product failure.
 
 ## 7. BI-BA868848 — Standing cycles and Outcome Packets
 

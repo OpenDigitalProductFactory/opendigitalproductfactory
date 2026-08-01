@@ -53,6 +53,9 @@ describe("PortalWorkCases", () => {
     expect(html).toContain('href="/portal/support"');
     expect(html).not.toContain("sourceRefs");
     expect(html).not.toContain("work-item");
+    expect(html).not.toContain("Work Room");
+    expect(html).not.toContain("Participants");
+    expect(html).not.toContain("A2A status");
   });
 
   it("uses DPF theme tokens and avoids hardcoded status colors", () => {
