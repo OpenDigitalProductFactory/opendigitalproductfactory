@@ -27,9 +27,14 @@ import {
   readLocalCiGateState,
   writeLocalCiGateState,
 } from "./lib/local-ci-gate-state.mjs";
+import {
+  releaseDeadLocalQueueObserversForGate,
+  releaseLocalQueueObserver,
+} from "./lib/local-queue-observer.mjs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
+export const WINDOWS_WRAPPER_TERMINATED_STATUS = 4294967295;
 
 // Host-side guard parity preflight (BI-D35433FB): run the deterministic CI
 // policy guards before lease admission so a doomed gate never occupies a
@@ -134,6 +139,9 @@ export async function recoverInterruptedGateState({
   mcpUrl = process.env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1",
   bearerToken = process.env.DPF_MCP_BEARER_TOKEN,
   mcpCallImpl = mcpCall,
+  releaseLocalQueueObserverImpl = releaseLocalQueueObserver,
+  releaseDeadLocalQueueObserversForGateImpl = releaseDeadLocalQueueObserversForGate,
+  queueObserverFallbackDirectory = "",
   writeStateImpl = writeLocalCiGateState,
   now = () => new Date().toISOString(),
 } = {}) {
@@ -169,6 +177,53 @@ export async function recoverInterruptedGateState({
   };
   if (releaseError) recoveryEvent.releaseError = releaseError;
 
+  let queueObserverReleaseAttempted = false;
+  let queueObserverReleaseStatus = "";
+  let queueObserverReleaseError = "";
+  let queueObserverFallbackReleases = [];
+  const queueObserver = state.queueObserver;
+  if (
+    queueObserver
+    && typeof queueObserver.path === "string"
+    && typeof queueObserver.token === "string"
+  ) {
+    queueObserverReleaseAttempted = true;
+    try {
+      const released = releaseLocalQueueObserverImpl({
+        path: queueObserver.path,
+        token: queueObserver.token,
+      });
+      queueObserverReleaseStatus = released?.status || "unknown";
+    } catch (error) {
+      queueObserverReleaseError = error instanceof Error ? error.message : String(error);
+    }
+  }
+  if (!queueObserverReleaseAttempted && queueObserverFallbackDirectory) {
+    try {
+      queueObserverFallbackReleases = releaseDeadLocalQueueObserversForGateImpl({
+        directory: queueObserverFallbackDirectory,
+        branch,
+        sha,
+      });
+      if (queueObserverFallbackReleases.length > 0) {
+        queueObserverReleaseAttempted = true;
+        queueObserverReleaseStatus = `fallback-released:${queueObserverFallbackReleases.length}`;
+      }
+    } catch (error) {
+      queueObserverReleaseAttempted = true;
+      queueObserverReleaseError = error instanceof Error ? error.message : String(error);
+    }
+  }
+  if (queueObserverReleaseAttempted) {
+    recoveryEvent.queueObserverReleaseStatus = queueObserverReleaseStatus;
+    if (queueObserverFallbackReleases.length > 0) {
+      recoveryEvent.queueObserverFallbackReleases = queueObserverFallbackReleases;
+    }
+    if (queueObserverReleaseError) {
+      recoveryEvent.queueObserverReleaseError = queueObserverReleaseError;
+    }
+  }
+
   const leaseEvents = [
     ...(Array.isArray(state.leaseEvents) ? state.leaseEvents : []),
     recoveryEvent,
@@ -190,6 +245,10 @@ export async function recoverInterruptedGateState({
       childSignal: childSignal || "",
       releaseSucceeded,
       releaseError,
+      queueObserverReleaseAttempted,
+      queueObserverReleaseStatus,
+      queueObserverReleaseError,
+      queueObserverFallbackReleases,
     },
   });
   return {
@@ -198,6 +257,164 @@ export async function recoverInterruptedGateState({
     releaseError,
     leaseId: state.leaseId,
   };
+}
+
+export async function reviveInterruptedQueuedGateState({
+  stateFile,
+  state,
+  branch,
+  sha,
+  childStatus = null,
+  childSignal = "",
+  releaseLocalQueueObserverImpl = releaseLocalQueueObserver,
+  releaseDeadLocalQueueObserversForGateImpl = releaseDeadLocalQueueObserversForGate,
+  queueObserverFallbackDirectory = "",
+  writeStateImpl = writeLocalCiGateState,
+  now = () => new Date().toISOString(),
+} = {}) {
+  if (!isRecoverableInterruptedGateState(state, { branch, sha }) || state.status !== "queued") {
+    return { revived: false, reason: "state-not-queued-revivable" };
+  }
+  if (childStatus !== WINDOWS_WRAPPER_TERMINATED_STATUS) {
+    return { revived: false, reason: "status-not-wrapper-termination" };
+  }
+
+  let queueObserverReleaseAttempted = false;
+  let queueObserverReleaseStatus = "";
+  let queueObserverReleaseError = "";
+  let queueObserverFallbackReleases = [];
+  const queueObserver = state.queueObserver;
+  if (
+    queueObserver
+    && typeof queueObserver.path === "string"
+    && typeof queueObserver.token === "string"
+  ) {
+    queueObserverReleaseAttempted = true;
+    try {
+      const released = releaseLocalQueueObserverImpl({
+        path: queueObserver.path,
+        token: queueObserver.token,
+      });
+      queueObserverReleaseStatus = released?.status || "unknown";
+    } catch (error) {
+      queueObserverReleaseError = error instanceof Error ? error.message : String(error);
+    }
+  }
+  if (!queueObserverReleaseAttempted && queueObserverFallbackDirectory) {
+    try {
+      queueObserverFallbackReleases = releaseDeadLocalQueueObserversForGateImpl({
+        directory: queueObserverFallbackDirectory,
+        branch,
+        sha,
+      });
+      if (queueObserverFallbackReleases.length > 0) {
+        queueObserverReleaseAttempted = true;
+        queueObserverReleaseStatus = `fallback-released:${queueObserverFallbackReleases.length}`;
+      }
+    } catch (error) {
+      queueObserverReleaseAttempted = true;
+      queueObserverReleaseError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  const revivalEvent = {
+    type: "pregate_interrupted_queue_revival",
+    at: now(),
+    childStatus,
+    childSignal: childSignal || "",
+    leasePreserved: true,
+    queueObserverReleaseAttempted,
+    queueObserverReleaseStatus,
+  };
+  if (queueObserverFallbackReleases.length > 0) {
+    revivalEvent.queueObserverFallbackReleases = queueObserverFallbackReleases;
+  }
+  if (queueObserverReleaseError) revivalEvent.queueObserverReleaseError = queueObserverReleaseError;
+
+  const leaseEvents = [
+    ...(Array.isArray(state.leaseEvents) ? state.leaseEvents : []),
+    revivalEvent,
+  ];
+  writeStateImpl(stateFile, {
+    branch,
+    sha,
+    gatePassed: false,
+    leaseId: state.leaseId,
+    evidenceId: "",
+    status: "queued",
+    expiresAt: state.expiresAt || "",
+    resilience: state.resilience ?? null,
+    leaseEvents,
+    evidencePending: false,
+    recovery: {
+      reason: "queued-gate-wrapper-exited-resuming",
+      childStatus,
+      childSignal: childSignal || "",
+      leasePreserved: true,
+      queueObserverReleaseAttempted,
+      queueObserverReleaseStatus,
+      queueObserverReleaseError,
+      queueObserverFallbackReleases,
+    },
+  });
+  return {
+    revived: true,
+    leaseId: state.leaseId,
+    queueObserverReleaseStatus,
+    queueObserverReleaseError,
+  };
+}
+
+export async function reviveInterruptedQueuedGate({
+  args = [],
+  result,
+  cwd = process.cwd(),
+  spawnSyncImpl = spawnSync,
+  releaseLocalQueueObserverImpl = releaseLocalQueueObserver,
+  releaseDeadLocalQueueObserversForGateImpl = releaseDeadLocalQueueObserversForGate,
+  writeStateImpl = writeLocalCiGateState,
+  stderr = process.stderr,
+} = {}) {
+  const status = result?.status ?? 1;
+  if (
+    status !== WINDOWS_WRAPPER_TERMINATED_STATUS
+    || args.includes("--dry-run")
+    || args.includes("--finalize-evidence")
+  ) {
+    return { revived: false, reason: "not-a-queued-revival-invocation" };
+  }
+  let context;
+  try {
+    context = resolvePregateGateContext({ args, cwd, spawnSyncImpl });
+  } catch (error) {
+    stderr.write(`pregate: queued gate revival skipped (${error.message}).\n`);
+    return { revived: false, reason: "context-unavailable" };
+  }
+
+  const candidates = findRecoverableInterruptedGateStates({ context })
+    .filter((candidate) => candidate.state.status === "queued");
+  for (const candidate of candidates) {
+    const revived = await reviveInterruptedQueuedGateState({
+      stateFile: candidate.stateFile,
+      state: candidate.state,
+      branch: context.branch,
+      sha: context.sha,
+      childStatus: result?.status ?? null,
+      childSignal: result?.signal || "",
+      releaseLocalQueueObserverImpl,
+      releaseDeadLocalQueueObserversForGateImpl,
+      queueObserverFallbackDirectory: process.env.DPF_LOCAL_QUEUE_OBSERVER_DIR
+        || resolvePath(context.gitCommonDir, "dpf-local-ci-queue-observers"),
+      writeStateImpl,
+    });
+    if (revived.revived) {
+      stderr.write(
+        `pregate: revived interrupted queued local-CI gate for ${context.branch} @ ${context.sha}; preserved lease ${revived.leaseId}; restarting gate observer.\n`,
+      );
+      return revived;
+    }
+  }
+  return { revived: false, reason: "no-queued-state" };
 }
 
 export async function recoverInterruptedGate({
@@ -233,6 +450,8 @@ export async function recoverInterruptedGate({
       mcpUrl: env.DPF_MCP_URL || "http://127.0.0.1:3000/api/mcp/v1",
       bearerToken: env.DPF_MCP_BEARER_TOKEN,
       mcpCallImpl,
+      queueObserverFallbackDirectory: env.DPF_LOCAL_QUEUE_OBSERVER_DIR
+        || resolvePath(context.gitCommonDir, "dpf-local-ci-queue-observers"),
     });
     if (recovered.recovered) {
       const releaseText = recovered.releaseSucceeded
@@ -271,23 +490,35 @@ async function main() {
   const useShell = shouldUseShell();
 
   let result;
-  if (useShell) {
-    process.stderr.write("pregate: DPF_PREGATE_FORCE_SH=1 set — routing through compatibility shell entry point.\n");
-    result = spawnSync("sh", [join(SCRIPT_DIR, "gate-worktree.sh"), ...args], { stdio: "inherit" });
-  } else {
-    process.stderr.write("pregate: routing through the Node-native gate (scripts/gate-worktree.mjs).\n");
-    result = spawnSync(process.execPath, [join(SCRIPT_DIR, "gate-worktree.mjs"), ...args], { stdio: "inherit" });
-  }
+  let queuedRevivals = 0;
+  const maxQueuedRevivals = Number.parseInt(process.env.DPF_PREGATE_MAX_QUEUE_REVIVALS || "6", 10);
+  for (;;) {
+    if (useShell) {
+      process.stderr.write("pregate: DPF_PREGATE_FORCE_SH=1 set — routing through compatibility shell entry point.\n");
+      result = spawnSync("sh", [join(SCRIPT_DIR, "gate-worktree.sh"), ...args], { stdio: "inherit" });
+    } else {
+      process.stderr.write("pregate: routing through the Node-native gate (scripts/gate-worktree.mjs).\n");
+      result = spawnSync(process.execPath, [join(SCRIPT_DIR, "gate-worktree.mjs"), ...args], { stdio: "inherit" });
+    }
 
-  if (result.error) {
-    process.stderr.write(`pregate: failed to launch gate: ${result.error.message}\n`);
-    process.exit(1);
-  }
-  const status = result.status ?? 1;
-  if (status !== 0) {
+    if (result.error) {
+      process.stderr.write(`pregate: failed to launch gate: ${result.error.message}\n`);
+      process.exit(1);
+    }
+    const status = result.status ?? 1;
+    if (status === 0) break;
+    if (queuedRevivals < maxQueuedRevivals) {
+      const revived = await reviveInterruptedQueuedGate({ args, result });
+      if (revived.revived) {
+        queuedRevivals += 1;
+        process.stderr.write(`pregate: queued gate revival ${queuedRevivals}/${maxQueuedRevivals}; continuing without losing FIFO position.\n`);
+        continue;
+      }
+    }
     await recoverInterruptedGate({ args, result });
+    process.exit(status);
   }
-  process.exit(status);
+  process.exit(0);
 }
 
 // Guard against side effects on import (e.g. from tests importing routing

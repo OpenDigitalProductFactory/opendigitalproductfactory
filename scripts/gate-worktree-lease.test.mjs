@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -201,11 +201,235 @@ test("durable queue observation reuses claimKey and grants a fresh admitted TTL"
     assert.equal(claims[0].args.claimKey, claims[1].args.claimKey);
     assert.match(
       claims[0].args.claimKey,
-      /^local-ci:gate-v2-[0-9a-f-]{36}-\d+:/,
+      /^local-ci:[^:]+:[0-9a-f]{40}$/,
     );
     const grantedMs = Date.parse(claims[1].args.expiresAt) - claims[1].receivedAt;
     assert.ok(grantedMs >= 2_800, `expected a fresh ~3s TTL, got ${grantedMs}ms`);
     assert.match(result.output, /queued at position 2/);
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("released terminal claim from a prior run gets a fresh rerun claimKey", async () => {
+  const claims = [];
+  const server = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      const payload = JSON.parse(body);
+      const tool = payload.params.name;
+      if (tool === "claim_nonprod_environment_lease") {
+        claims.push(payload.params.arguments);
+      }
+      const result = tool === "claim_nonprod_environment_lease" && claims.length === 1
+        ? {
+          success: false,
+          error: "lease_terminal",
+          entityId: "NPEL-PRIOR-RUN",
+          data: {
+            reason: "released",
+            lease: {
+              leaseId: "NPEL-PRIOR-RUN",
+              status: "released",
+            },
+          },
+        }
+        : tool === "claim_nonprod_environment_lease"
+          ? {
+            success: true,
+            entityId: "NPEL-RERUN",
+            data: {
+              lease: { leaseId: "NPEL-RERUN" },
+              admission: { status: "admitted", slotKey: "slot-0", waitAgeMs: 0 },
+            },
+          }
+          : tool === "record_local_integration_result"
+            ? { success: true, entityId: "EVIDENCE-RERUN" }
+            : { success: true };
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({
+        jsonrpc: "2.0",
+        id: payload.id,
+        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+
+  try {
+    const result = await run(process.execPath, [
+      "scripts/gate-worktree.mjs",
+      "--branch", "fix/sandbox-lease-fencing",
+      "--worktree", makeTempWorktree(),
+      "--expires-minutes", "0.05",
+      "--poll-seconds", "0.01",
+      "--mcp-url", `http://127.0.0.1:${address.port}`,
+      "--no-push",
+    ], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        DPF_MCP_BEARER_TOKEN: "test-token",
+        DPF_ALLOW_LOCAL_CI_STUB: "1",
+        DPF_GATE_RETRY_JITTER: "0",
+        DPF_LOCAL_SANDBOX_FENCE_PATH: isolatedFencePath(),
+      },
+    });
+
+    assert.ok([0, 3].includes(result.code), result.output);
+    assert.equal(claims.length, 2);
+    assert.notEqual(claims[0].claimKey, claims[1].claimKey);
+    assert.match(claims[1].claimKey, /:rerun-1$/);
+    assert.match(result.output, /creating fresh admission attempt 1/);
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("cancelled terminal claim from an interrupted run gets a fresh rerun claimKey", async () => {
+  const claims = [];
+  const server = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      const payload = JSON.parse(body);
+      const tool = payload.params.name;
+      if (tool === "claim_nonprod_environment_lease") {
+        claims.push(payload.params.arguments);
+      }
+      const result = tool === "claim_nonprod_environment_lease" && claims.length === 1
+        ? {
+          success: false,
+          error: "lease_terminal",
+          entityId: "NPEL-INTERRUPTED-RUN",
+          data: {
+            reason: "cancelled",
+            lease: {
+              leaseId: "NPEL-INTERRUPTED-RUN",
+              status: "cancelled",
+            },
+          },
+        }
+        : tool === "claim_nonprod_environment_lease"
+          ? {
+            success: true,
+            entityId: "NPEL-RERUN",
+            data: {
+              lease: { leaseId: "NPEL-RERUN" },
+              admission: { status: "admitted", slotKey: "slot-0", waitAgeMs: 0 },
+            },
+          }
+          : tool === "record_local_integration_result"
+            ? { success: true, entityId: "EVIDENCE-RERUN" }
+            : { success: true };
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({
+        jsonrpc: "2.0",
+        id: payload.id,
+        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+
+  try {
+    const result = await run(process.execPath, [
+      "scripts/gate-worktree.mjs",
+      "--branch", "fix/sandbox-lease-fencing",
+      "--worktree", makeTempWorktree(),
+      "--expires-minutes", "0.05",
+      "--poll-seconds", "0.01",
+      "--mcp-url", `http://127.0.0.1:${address.port}`,
+      "--no-push",
+    ], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        DPF_MCP_BEARER_TOKEN: "test-token",
+        DPF_ALLOW_LOCAL_CI_STUB: "1",
+        DPF_GATE_RETRY_JITTER: "0",
+        DPF_LOCAL_SANDBOX_FENCE_PATH: isolatedFencePath(),
+      },
+    });
+
+    assert.ok([0, 3].includes(result.code), result.output);
+    assert.equal(claims.length, 2);
+    assert.notEqual(claims[0].claimKey, claims[1].claimKey);
+    assert.match(claims[1].claimKey, /:rerun-1$/);
+    assert.match(result.output, /previous local-CI lease claim was cancelled/);
+    assert.match(result.output, /creating fresh admission attempt 1/);
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("queued admission writes recoverable gate state before waiting", async () => {
+  const claims = [];
+  const server = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      const payload = JSON.parse(body);
+      const tool = payload.params.name;
+      if (tool === "claim_nonprod_environment_lease") {
+        claims.push(payload.params.arguments);
+      }
+      const result = tool === "claim_nonprod_environment_lease"
+        ? {
+          success: true,
+          entityId: "NPEL-QUEUED-STATE",
+          data: {
+            lease: { leaseId: "NPEL-QUEUED-STATE" },
+            admission: { status: "queued", queuePosition: 1, waitAgeMs: 10 },
+          },
+        }
+        : { success: true };
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({
+        jsonrpc: "2.0",
+        id: payload.id,
+        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  const worktree = makeTempWorktree();
+  const stateFile = join(worktree, ".git", "dpf-local-ci-gate.json");
+
+  try {
+    const result = await run(process.execPath, [
+      "scripts/gate-worktree.mjs",
+      "--branch", "fix/sandbox-lease-fencing",
+      "--worktree", worktree,
+      "--lease-wait-seconds", "0.02",
+      "--expires-minutes", "0.05",
+      "--poll-seconds", "0.01",
+      "--mcp-url", `http://127.0.0.1:${address.port}`,
+      "--no-push",
+    ], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        DPF_MCP_BEARER_TOKEN: "test-token",
+        DPF_ALLOW_LOCAL_CI_STUB: "1",
+        DPF_GATE_RETRY_JITTER: "0",
+        DPF_LOCAL_SANDBOX_FENCE_PATH: isolatedFencePath(),
+      },
+    });
+
+    assert.notEqual(result.code, 0, result.output);
+    assert.ok(claims.length >= 1);
+    const state = JSON.parse(readFileSync(stateFile, "utf8"));
+    assert.equal(state.status, "queued");
+    assert.equal(state.leaseId, "NPEL-QUEUED-STATE");
+    assert.equal(state.leaseEvents.at(-1).type, "queued");
   } finally {
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
