@@ -149,6 +149,22 @@ describe("budget axes", () => {
     expect(maxChoicesPerControl(html)).toBe(9);
   });
 
+  it("flags owner setup pages that dump hundreds of closed choices into the visible DOM", () => {
+    const html = `<main data-dpf-lead><p>Set business hours.</p><select aria-label="Timezone">${"<option>Zone</option>".repeat(200)}</select></main>`;
+    const report = auditUxBudget(html, "settings", { routeStatus: "net-new", audience: "owner" });
+    const finding = report.findings.find((f) => f.check === "choices-per-control");
+
+    expect(finding?.ok).toBe(false);
+    expect(finding?.severity).toBe("blocking");
+    expect(finding?.detail).toContain("200 choices");
+  });
+
+  it("does not count a closed searchable picker as if its full corpus were visible", () => {
+    const html = `<main><input role="combobox" value="(UTC-06:00) America/Chicago"><input type="hidden" name="timezone" value="America/Chicago"></main>`;
+    expect(measureUxBudget(html).maxChoicesPerControl).toBe(0);
+    expect(measureUxBudget(html).visibleFields).toBe(1);
+  });
+
   it("does not fabricate a reading grade for an empty surface", () => {
     expect(measureUxBudget("<div></div>").readingGradeLevel).toBe(0);
   });

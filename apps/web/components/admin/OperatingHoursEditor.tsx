@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import type { WeeklySchedule, DaySchedule } from "@/lib/operating-hours-types";
+import { SearchableSelect } from "@/components/ui/form";
 
 const DAY_ORDER = [
   "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
@@ -119,6 +120,10 @@ export function OperatingHoursEditor({ defaultSchedule, timezone, onSave, saving
     timezone && timezone !== "UTC" ? timezone : detected ?? timezone,
   );
   const zones = useMemo(() => buildZoneOptions(tz, detected), [tz, detected]);
+  const preferredTimeZones = useMemo(
+    () => [tz, detected, ...FALLBACK_TIMEZONES].filter((zone): zone is string => Boolean(zone)),
+    [detected, tz],
+  );
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -178,23 +183,23 @@ export function OperatingHoursEditor({ defaultSchedule, timezone, onSave, saving
           <label htmlFor="op-hours-tz" className="text-sm font-medium text-[var(--dpf-text)]">
             Timezone
           </label>
-          <select
+          <SearchableSelect
             id="op-hours-tz"
             name="operatingHoursTimezone"
             value={tz}
-            onChange={(e) => {
-              setTz(e.target.value);
+            onValueChange={(nextTimezone) => {
+              setTz(nextTimezone);
               setSaved(false);
             }}
-            aria-label="Business timezone — bookings and the maintenance window use this zone"
-            className="min-h-[44px] max-w-full px-2 py-1 rounded bg-[var(--dpf-surface-2)] border border-[var(--dpf-border)] text-[var(--dpf-text)] text-sm"
-          >
-            {zones.map((z) => (
-              <option key={z.value} value={z.value} className="bg-[var(--dpf-surface-2)] text-[var(--dpf-text)]">
-                {z.label}
-              </option>
-            ))}
-          </select>
+            ariaLabel="Business timezone — bookings and the maintenance window use this zone"
+            searchLabel="Search timezones"
+            placeholder="Choose timezone"
+            options={zones}
+            preferredValues={preferredTimeZones}
+            maxVisibleOptions={12}
+            className="min-w-[min(28rem,100%)] max-w-full"
+            controlClassName="bg-[var(--dpf-surface-2)]"
+          />
           {detected && detected !== tz && (
             <button
               type="button"

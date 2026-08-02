@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import "@testing-library/jest-dom/vitest";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { WeeklySchedule } from "@/lib/operating-hours-types";
@@ -28,23 +29,25 @@ describe("OperatingHoursEditor save feedback", () => {
 describe("OperatingHoursEditor timezone options", () => {
   it("labels zones with a UTC-offset prefix and a de-underscored name", () => {
     render(<OperatingHoursEditor defaultSchedule={schedule} timezone="America/New_York" onSave={vi.fn()} />);
-    const select = screen.getByLabelText(/Business timezone/i) as HTMLSelectElement;
-    const selected = Array.from(select.options).find((o) => o.value === "America/New_York");
+    const picker = screen.getByRole("combobox", { name: /Business timezone/i }) as HTMLInputElement;
     // Orthodox: "(UTC−05:00) America/New York" — offset prefix, no underscore.
-    expect(selected?.textContent).toMatch(/^\(UTC[+−±]\d{2}:\d{2}\) America\/New York$/);
-    expect(selected?.textContent).not.toContain("_");
+    expect(picker.value).toMatch(/^\(UTC[+−±]\d{2}:\d{2}\) America\/New York$/);
+    expect(picker.value).not.toContain("_");
   });
 
-  it("orders options by UTC offset, not raw alphabetical", () => {
+  it("keeps the full timezone corpus hidden until the picker is opened and searched", () => {
     render(<OperatingHoursEditor defaultSchedule={schedule} timezone="America/Chicago" onSave={vi.fn()} />);
-    const select = screen.getByLabelText(/Business timezone/i) as HTMLSelectElement;
-    const offsets = Array.from(select.options).map((o) => {
-      const m = o.textContent?.match(/^\(UTC([+−±])(\d{2}):(\d{2})\)/);
-      if (!m) return 0;
-      const sign = m[1] === "−" ? -1 : 1;
-      return sign * (parseInt(m[2], 10) * 60 + parseInt(m[3], 10));
+    const picker = screen.getByRole("combobox", { name: /Business timezone/i });
+
+    expect(screen.queryByRole("option", { name: /Europe\/London/ })).not.toBeInTheDocument();
+
+    fireEvent.click(picker);
+    expect(screen.getAllByRole("option")).toHaveLength(12);
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Search timezones" }), {
+      target: { value: "London" },
     });
-    const sorted = [...offsets].sort((a, b) => a - b);
-    expect(offsets).toEqual(sorted);
+
+    expect(screen.getByRole("option", { name: /Europe\/London/ })).toBeInTheDocument();
   });
 });
