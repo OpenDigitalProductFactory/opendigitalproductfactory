@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 613,
+  "pageCount": 614,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -7685,6 +7685,25 @@
         "integration-evidence",
         "conditions",
         "sources"
+      ]
+    },
+    "docs/security/tool-evaluations/2026-08-01-marketing-media-stack.md": {
+      "publicHref": "/security/tool-evaluations/2026-08-01-marketing-media-stack/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "marketing-media-stack-candidate-evaluation",
+        "executive-disposition",
+        "selection-architecture",
+        "evaluation-criteria",
+        "hyperframes-0787-conditional",
+        "ffmpeg-conditional-existing-substrate",
+        "remotion-40477-reject-as-default-conditional-alternative",
+        "gemini-31-flash-tts-preview-conditional-cloud-candidate",
+        "provenance-baseline",
+        "discovery-channel-note",
+        "approval-and-probe-work-still-required"
       ]
     },
     "docs/specs/device-identification-and-portfolio-placement-spec.md": {
