@@ -858,8 +858,7 @@ async function main() {
   let leaseReleased = false;
   let receivedSignal = "";
   let queuedClaimInterruptedByQuiescence = false;
-  let claimRecoverySequence = 0;
-  let terminalClaimRerunSequence = 0;
+  let terminalClaimAttemptSequence = 0;
   const leaseEvents = [];
   const hostPressureSamples = [];
   let admissionPoolPolicy = null;
@@ -1089,48 +1088,42 @@ async function main() {
       ?? claimResponse?.data?.lease?.status;
     if (
       claimResponse?.error === "lease_terminal"
-      && terminalReason === "expired"
-      && queuedClaimInterruptedByQuiescence
-    ) {
-      if (Date.now() >= deadline) {
-        die("local-CI queue claim expired during quiescence at the admission deadline");
-      }
-      claimRecoverySequence += 1;
-      claimKey = `${baseClaimKey}:recovery-${claimRecoverySequence}`;
-      leaseEvents.push({
-        type: "queue-intent-reestablished",
-        at: new Date().toISOString(),
-        priorLeaseId: leaseId,
-        recoverySequence: claimRecoverySequence,
-      });
-      leaseId = "";
-      queuedClaimInterruptedByQuiescence = false;
-      process.stdout.write(
-        `queued claim expired during portal quiescence; re-establishing queue intent with recovery ${claimRecoverySequence}...\n`,
-      );
-      continue;
-    }
-    if (
-      claimResponse?.error === "lease_terminal"
-      && ["released", "cancelled"].includes(terminalReason)
+      && ["released", "cancelled", "expired"].includes(terminalReason)
     ) {
       if (Date.now() >= deadline) {
         die(`previous local-CI lease claim was already ${terminalReason} at the admission deadline`);
       }
-      terminalClaimRerunSequence += 1;
-      claimKey = `${baseClaimKey}:rerun-${terminalClaimRerunSequence}`;
+      const priorClaimKey = claimKey;
+      const terminalAttemptPrefix = `${baseClaimKey}:rerun-`;
+      const priorAttemptText = priorClaimKey.startsWith(terminalAttemptPrefix)
+        ? priorClaimKey.slice(terminalAttemptPrefix.length)
+        : "";
+      const priorAttemptSequence = /^\d+$/.test(priorAttemptText)
+        ? Number.parseInt(priorAttemptText, 10)
+        : 0;
+      terminalClaimAttemptSequence = Math.max(
+        terminalClaimAttemptSequence,
+        Number.isSafeInteger(priorAttemptSequence) ? priorAttemptSequence : 0,
+      ) + 1;
+      claimKey = `${baseClaimKey}:rerun-${terminalClaimAttemptSequence}`;
+      const interruptedByQuiescence = queuedClaimInterruptedByQuiescence;
       leaseEvents.push({
-        type: "terminal-claim-replaced",
+        type: interruptedByQuiescence
+          ? "queue-intent-reestablished"
+          : "terminal-claim-replaced",
         at: new Date().toISOString(),
         priorLeaseId: leaseId,
+        priorClaimKey,
+        replacementClaimKey: claimKey,
         terminalReason,
-        rerunSequence: terminalClaimRerunSequence,
+        terminalAttemptSequence: terminalClaimAttemptSequence,
+        interruptedByQuiescence,
       });
       leaseId = "";
       queuedClaimInterruptedByQuiescence = false;
-      process.stdout.write(
-        `previous local-CI lease claim was ${terminalReason}; creating fresh admission attempt ${terminalClaimRerunSequence}...\n`,
-      );
+      process.stdout.write(interruptedByQuiescence
+        ? `queued claim ${terminalReason} during portal quiescence; re-establishing queue intent with terminal attempt ${terminalClaimAttemptSequence}...\n`
+        : `previous local-CI lease claim was ${terminalReason}; creating fresh admission attempt ${terminalClaimAttemptSequence}...\n`);
       continue;
     }
     die(`failed to claim local-CI lease: ${JSON.stringify(claimResponse)}`);
