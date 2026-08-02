@@ -3,6 +3,7 @@
 import type { FeatureBuildRow } from "@/lib/feature-build-types";
 import { safeRenderValue } from "@/lib/safe-render";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { semanticReviewDecisionPresentation } from "@/lib/change-review/review-decision-presentation";
 
 type Props = {
   build: FeatureBuildRow;
@@ -32,7 +33,7 @@ export function EvidenceSummary({ build, loading }: Props) {
     },
     {
       label: "Design Review",
-      status: build.designReview?.decision === "pass" ? "pass" : build.designReview ? "fail" : "missing",
+      status: build.designReview?.decision ?? "missing",
       detail: safeRenderValue(build.designReview?.summary) || "Not reviewed",
     },
     {
@@ -42,7 +43,7 @@ export function EvidenceSummary({ build, loading }: Props) {
     },
     {
       label: "Plan Review",
-      status: build.planReview?.decision === "pass" ? "pass" : build.planReview ? "fail" : "missing",
+      status: build.planReview?.decision ?? "missing",
       detail: safeRenderValue(build.planReview?.summary) || "Not reviewed",
     },
     {
@@ -89,6 +90,7 @@ export function EvidenceSummary({ build, loading }: Props) {
     pass: "var(--dpf-success)",
     complete: "var(--dpf-success)",
     fail: "var(--dpf-error)",
+    inconclusive: "var(--dpf-warning)",
     missing: "var(--dpf-muted)",
   };
 
@@ -103,7 +105,11 @@ export function EvidenceSummary({ build, loading }: Props) {
             title={item.status}
           />
           <span className="text-xs text-[var(--dpf-text)] flex-1">{item.label}</span>
-          <span className="text-[10px] text-[var(--dpf-muted)]">{item.detail}</span>
+          <span className="text-[10px] text-[var(--dpf-muted)]">
+            {item.status === "inconclusive"
+              ? `${semanticReviewDecisionPresentation("inconclusive").title}: ${item.detail}`
+              : item.detail}
+          </span>
         </div>
       ))}
 

@@ -24,7 +24,7 @@ function isReceipt(value: unknown): value is SemanticReviewReceipt {
   return Boolean(
     value &&
     typeof value === "object" &&
-    (value as { schemaVersion?: unknown }).schemaVersion === "semantic-change-review-receipt.v1",
+    (value as { schemaVersion?: unknown }).schemaVersion === "semantic-change-review-receipt.v2",
   );
 }
 

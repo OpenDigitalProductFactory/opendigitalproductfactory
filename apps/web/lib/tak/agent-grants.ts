@@ -176,14 +176,13 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // grant (BI-B2F7ABF5). Backwards-compat preserved by GRANT_IMPLICATIONS
   // (backlog_write → build_evidence).
   record_execution_evidence: ["build_evidence"],
-  // Non-build-scoped evidence remains on the broad backlog_write grant —
-  // these tools coordinate across the whole backlog surface, not just build.
+  // Non-build evidence stays on backlog_write because it coordinates the whole backlog surface.
   record_external_development_evidence: ["backlog_write"],
   review_semantic_change: ["backlog_write"],
+  record_semantic_review_outcome: ["backlog_write"],
   record_local_integration_result: ["backlog_write"],
   record_functional_failure_evidence: ["backlog_write"],
   get_next_recommended_work: ["backlog_read"],
-
   // Work Capsule control harness (spec 2026-05-14)
   list_work_capsules: ["work_capsule_read"],
   get_work_capsule: ["work_capsule_read"],

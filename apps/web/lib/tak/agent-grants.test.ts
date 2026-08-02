@@ -325,7 +325,7 @@ describe("TOOL_TO_GRANTS - Work Capsule entries", () => {
 describe("TOOL_TO_GRANTS - External development coordination entries", () => {
   it("evidence recording tools require backlog_write", () => {
     expect(isToolAllowedByGrants("record_external_development_evidence", ["backlog_write"])).toBe(true);
-    expect(isToolAllowedByGrants("review_semantic_change", ["backlog_write"])).toBe(true);
+    for (const tool of ["review_semantic_change", "record_semantic_review_outcome"]) expect(isToolAllowedByGrants(tool, ["backlog_write"])).toBe(true);
     expect(isToolAllowedByGrants("record_local_integration_result", ["backlog_write"])).toBe(true);
     expect(isToolAllowedByGrants("record_external_development_evidence", ["registry_read"])).toBe(false);
     expect(isToolAllowedByGrants("review_semantic_change", ["view_platform"])).toBe(false);

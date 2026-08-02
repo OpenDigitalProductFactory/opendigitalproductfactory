@@ -7,6 +7,11 @@ import {
   type SemanticChangeReviewMode,
 } from "@/lib/change-review/semantic-change-review-operation";
 import type { SemanticReviewReceipt, SemanticReviewRisk } from "@/lib/change-review/semantic-change-review";
+import {
+  SEMANTIC_REVIEW_OUTCOME_SCHEMA_VERSION,
+  projectSemanticReviewOutcome,
+  type SemanticReviewOutcome,
+} from "@/lib/change-review/semantic-review-enforcement";
 import type { DeliberationArtifactType, StrategyProfile } from "@/lib/deliberation/external-review-activation";
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
@@ -62,6 +67,33 @@ const definitions: ToolDefinition[] = [{
   executionMode: "immediate",
   sideEffect: true,
   buildPhases: ["build", "review", "ship"],
+}, {
+  name: "record_semantic_review_outcome",
+  description:
+    "Correlate one persisted semantic-review receipt with its terminal GitHub/CI outcome, recording measured quality telemetry while excluding infrastructure-inconclusive samples from precision and unique-yield denominators.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      capsuleId: { type: "string" },
+      receiptId: { type: "string", description: "ExternalEvidenceRecord id for semantic-change-review.receipt" },
+      surface: { type: "string", enum: ["external", "build-studio"] },
+      pullRequestNumber: { type: "number" },
+      ciPassed: { type: "boolean" },
+      merged: { type: "boolean" },
+      acceptedFindingCount: { type: "number" },
+      falsePositiveFindingCount: { type: "number" },
+      uniqueLocalFindingCount: { type: "number" },
+      postPublicationMissCount: { type: "number" },
+      correctivePushCount: { type: "number" },
+      timeToFirstSignalMs: { type: "number" },
+      costUsd: { type: "number" },
+    },
+    required: ["capsuleId", "receiptId", "surface", "pullRequestNumber", "ciPassed", "merged"],
+  },
+  requiredCapability: "view_platform",
+  executionMode: "immediate",
+  sideEffect: true,
+  buildPhases: ["review", "ship"],
 }];
 
 function stringParam(params: Record<string, unknown>, key: string): string {
@@ -76,7 +108,7 @@ function isReceipt(value: unknown): value is SemanticReviewReceipt {
   return Boolean(
     value &&
     typeof value === "object" &&
-    (value as { schemaVersion?: unknown }).schemaVersion === "semantic-change-review-receipt.v1",
+    (value as { schemaVersion?: unknown }).schemaVersion === "semantic-change-review-receipt.v2",
   );
 }
 
@@ -115,7 +147,7 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
   const previousEvidence = await prisma.externalEvidenceRecord.findFirst({
     where: { workCapsuleId: capsule.id, operationType: "semantic-change-review.receipt" },
     orderBy: { createdAt: "desc" },
-    select: { details: true },
+    select: { id: true, details: true },
   });
   const priorReceipt = isReceipt(previousEvidence?.details) ? previousEvidence.details : null;
   const risk = RISKS.includes(params.risk as SemanticReviewRisk) ? params.risk as SemanticReviewRisk : undefined;
@@ -146,6 +178,24 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
       mode: reviewMode(),
     }, { dispatch: dispatchRoutedSemanticReview });
 
+    if (outcome.reusedFreshReceipt && previousEvidence) {
+      return {
+        success: true,
+        entityId: previousEvidence.id,
+        message: `Reused the fresh semantic review receipt for ${capsuleId}.`,
+        data: {
+          receipt: outcome.receipt,
+          fresh: true,
+          reusedFreshReceipt: true,
+          staleReasons: outcome.staleReasons,
+          mayPublish: outcome.mayPublish,
+          nextAction: outcome.nextAction,
+          repairLimitReached: outcome.repairLimitReached,
+          mode: reviewMode(),
+        },
+      };
+    }
+
     const projection = outcome.evidence;
     const evidence = await recordExternalEvidence({
       actorUserId: userId,
@@ -174,9 +224,7 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
     return {
       success: true,
       entityId: evidence.id,
-      message: outcome.reusedFreshReceipt
-        ? `Reused the fresh semantic review receipt for ${capsuleId}.`
-        : `Recorded semantic review receipt for ${capsuleId}: ${outcome.receipt.result.decision}.`,
+      message: `Recorded semantic review receipt for ${capsuleId}: ${outcome.receipt.result.decision}.`,
       data: {
         receipt: outcome.receipt,
         fresh: true,
@@ -193,9 +241,100 @@ const reviewSemanticChange: ToolPackHandler = async (params, userId, context): P
   }
 };
 
+function nonNegativeNumber(params: Record<string, unknown>, key: string): number {
+  const value = params[key];
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
+}
+
+const recordSemanticReviewOutcome: ToolPackHandler = async (params, userId, context): Promise<ToolResult> => {
+  const capsuleId = stringParam(params, "capsuleId");
+  const receiptId = stringParam(params, "receiptId");
+  const surface = params.surface === "build-studio" ? "build-studio" : params.surface === "external" ? "external" : null;
+  const pullRequestNumber = nonNegativeNumber(params, "pullRequestNumber");
+  if (!capsuleId || !receiptId || !surface || !Number.isInteger(pullRequestNumber) || pullRequestNumber <= 0 ||
+    typeof params.ciPassed !== "boolean" || typeof params.merged !== "boolean") {
+    return { success: false, error: "invalid_input", message: "Capsule, receipt, surface, PR number, and terminal GitHub/CI state are required." };
+  }
+  const capsule = await prisma.workCapsule.findUnique({ where: { capsuleId }, select: { id: true } });
+  if (!capsule) return { success: false, error: "capsule_not_found", message: `Work Capsule ${capsuleId} was not found.` };
+  const receiptRow = await prisma.externalEvidenceRecord.findFirst({
+    where: { id: receiptId, workCapsuleId: capsule.id, operationType: "semantic-change-review.receipt" },
+    select: { details: true, createdAt: true },
+  });
+  if (!isReceipt(receiptRow?.details)) {
+    return { success: false, error: "receipt_not_found", message: `A current semantic-review receipt ${receiptId} was not found on ${capsuleId}.` };
+  }
+  const priorOutcome = await prisma.externalEvidenceRecord.findFirst({
+    where: {
+      workCapsuleId: capsule.id,
+      operationType: "semantic-change-review.outcome",
+      target: receiptId,
+    },
+    select: { id: true, resultSummary: true, details: true },
+  });
+  if (priorOutcome) {
+    return {
+      success: true,
+      entityId: priorOutcome.id,
+      message: priorOutcome.resultSummary,
+      data: { outcome: priorOutcome.details, reused: true },
+    };
+  }
+  const receipt = receiptRow.details;
+  const correlationStatus = receipt.result.decision === "inconclusive"
+    ? "infrastructure-inconclusive" as const
+    : "completed" as const;
+  const outcome: SemanticReviewOutcome = {
+    schemaVersion: SEMANTIC_REVIEW_OUTCOME_SCHEMA_VERSION,
+    receiptId,
+    capsuleId,
+    surface,
+    reviewDisposition: receipt.disposition,
+    reviewDecision: receipt.result.decision,
+    correlationStatus,
+    acceptedFindingCount: correlationStatus === "completed" ? nonNegativeNumber(params, "acceptedFindingCount") : 0,
+    falsePositiveFindingCount: correlationStatus === "completed" ? nonNegativeNumber(params, "falsePositiveFindingCount") : 0,
+    uniqueLocalFindingCount: correlationStatus === "completed" ? nonNegativeNumber(params, "uniqueLocalFindingCount") : 0,
+    postPublicationMissCount: correlationStatus === "completed" ? nonNegativeNumber(params, "postPublicationMissCount") : 0,
+    correctivePushCount: correlationStatus === "completed" ? nonNegativeNumber(params, "correctivePushCount") : 0,
+    timeToFirstSignalMs: correlationStatus === "completed" && typeof params.timeToFirstSignalMs === "number"
+      ? nonNegativeNumber(params, "timeToFirstSignalMs")
+      : null,
+    costUsd: correlationStatus === "completed" && typeof params.costUsd === "number" ? nonNegativeNumber(params, "costUsd") : null,
+    github: { pullRequestNumber, ciPassed: params.ciPassed, merged: params.merged },
+    recordedAt: new Date().toISOString(),
+  };
+  const projection = projectSemanticReviewOutcome(outcome);
+  const evidence = await recordExternalEvidence({
+    actorUserId: userId,
+    routeContext: projection.externalEvidence.routeContext,
+    operationType: projection.externalEvidence.operationType,
+    target: projection.externalEvidence.target,
+    provider: projection.externalEvidence.provider,
+    resultSummary: projection.externalEvidence.resultSummary,
+    details: projection.externalEvidence.details as unknown as Prisma.InputJsonValue,
+    workCapsuleId: capsule.id,
+    executorKind: context?.agentId ?? surface,
+    recordedByAgentId: context?.agentId,
+  });
+  await recordWorkCapsuleEvidence({
+    db: prisma,
+    capsuleId,
+    evidence: { kind: "verification", summary: projection.activity.summary, targetId: evidence.id, result: projection.activity.payload },
+    actor: { userId, agentId: context?.agentId ?? null, principalId: null },
+  });
+  return { success: true, entityId: evidence.id, message: projection.activity.summary, data: { outcome } };
+};
+
 export const changeReviewPack: ToolPack = {
   packId: "change-review",
   definitions,
-  handlers: { review_semantic_change: reviewSemanticChange },
-  grants: { review_semantic_change: ["backlog_write"] },
+  handlers: {
+    review_semantic_change: reviewSemanticChange,
+    record_semantic_review_outcome: recordSemanticReviewOutcome,
+  },
+  grants: {
+    review_semantic_change: ["backlog_write"],
+    record_semantic_review_outcome: ["backlog_write"],
+  },
 };

@@ -86,7 +86,9 @@ describe("surface-neutral review compatibility", () => {
   it("parses severity-driven results and fails closed on malformed output", () => {
     expect(parseSemanticReviewResponse('{"decision":"fail","issues":[{"severity":"important","description":"advisory"}],"summary":"ok"}').decision).toBe("pass");
     const malformed = parseSemanticReviewResponse("not json");
-    expect(malformed.decision).toBe("fail");
+    expect(malformed.decision).toBe("inconclusive");
+    expect(malformed.issues).toEqual([]);
+    expect(malformed.inconclusiveReason).toBe("unparseable-review-response");
     expect(malformed.parseError).toBe(true);
   });
 });
