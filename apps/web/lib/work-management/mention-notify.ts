@@ -29,6 +29,7 @@ export function buildMentionNotifications(input: {
   body: string;
   roster: MentionRoster;
   workItemId: string;
+  caseKey?: string;
   workItemTitle: string;
   actorLabel: string;
 }): MentionFanout {
@@ -43,7 +44,7 @@ export function buildMentionNotifications(input: {
         type: WORK_ITEM_MENTION_NOTIFICATION_TYPE,
         title: `${input.actorLabel} mentioned you`,
         body: `on “${input.workItemTitle}”`,
-        deepLink: `/workspace/cases/${input.workItemId}`,
+        deepLink: `/workspace/cases/${input.caseKey ?? input.workItemId}`,
       });
     } else if (!seenAgents.has(target.id)) {
       seenAgents.add(target.id);

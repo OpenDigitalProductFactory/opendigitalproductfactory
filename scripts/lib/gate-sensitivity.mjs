@@ -43,7 +43,26 @@ export const DOC_ARTIFACT_RE =
 export const UX_FIT_ATTESTATION_RE = new RegExp(`${PR_TRAILER_NAMES.uxFitRetired}:`, "i");
 
 // Added lines that introduce a user-facing control the operator must understand.
-export const UI_CONTROL_RE = /<input\b|<select\b|<textarea\b|type=["'](?:number|range)["']|<form\b/i;
+// Keep this list behavior-pinned to packages/dpf-skill-pack/hooks/ux-fit-precheck.mjs
+// via scripts/gate-context.test.mjs; the hook mirror is dependency-free because
+// the skill pack is distributed outside this repo.
+export const UI_CONTROL_DESCRIPTION =
+  "<input>, <select>, <textarea>, type=number|range|button|submit, <form>, <button>, " +
+  "<a>/<Link>, <details>/<summary>, custom *Button/*Link/*Trigger/*Disclosure/*Toggle controls, " +
+  "role=button/link/tab/switch/menuitem, aria-expanded, data-dpf-disclosure, or onClick";
+export const UI_CONTROL_RE = new RegExp(
+  [
+    String.raw`<(?:input|select|textarea|form|button|a|details|summary)\b`,
+    String.raw`<(?:Button|Link|Trigger|Disclosure|Toggle|Menu|Tab|Tabs|Accordion|Popover|Dialog|Drawer|Combobox|Command|Action)\b`,
+    String.raw`<[A-Z][A-Za-z0-9]*(?:Button|Link|Trigger|Disclosure|Toggle|Menu|Tab|Tabs|Accordion|Popover|Dialog|Drawer|Combobox|Command|Action)\b`,
+    String.raw`\btype=["'](?:number|range|button|submit)["']`,
+    String.raw`\brole=["'](?:button|link|tab|switch|menuitem|checkbox|radio)["']`,
+    String.raw`\baria-expanded=`,
+    String.raw`\bdata-dpf-disclosure\b`,
+    String.raw`\bonClick=`,
+  ].join("|"),
+  "i",
+);
 // A newly-added route is a new surface that deserves a fit review.
 export const UX_ROUTE_FILE_RE = /app\/.*\/page\.tsx$/;
 // Test/story scaffolding is never user-facing.

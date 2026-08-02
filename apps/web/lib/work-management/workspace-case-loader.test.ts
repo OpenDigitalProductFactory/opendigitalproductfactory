@@ -275,7 +275,106 @@ describe("workspace Work Case loader", () => {
     });
 
     expect(detail).toBeNull();
-    expect(JSON.stringify(query)).toContain('"assignedToUserId":"user-without-access"');
-    expect(JSON.stringify(query)).toContain('"assignedToUserId":null');
+    expect(JSON.stringify(query)).toContain('"sourceType":"booking"');
+  });
+
+  it("checks sensitivity before loading room messages", async () => {
+    let messagesLoaded = false;
+    const protectedItem = {
+      ...baseItem,
+      evidence: [{
+        kind: "work-room-policy",
+        workRoomPolicy: {
+          admittedPrincipalRefs: ["PRN-USER-1"],
+          sensitivityCeiling: "confidential",
+        },
+      }],
+    };
+    const client = prismaFor([protectedItem], protectedItem);
+    client.workItemMessage.findMany = async () => {
+      messagesLoaded = true;
+      return [];
+    };
+
+    const detail = await loadWorkspaceWorkCaseDetail({
+      prismaClient: client,
+      caseKey: "booking%3ABK-1",
+      userId: "user-1",
+      authContext: {
+        principalId: "PRN-USER-1",
+        sensitivityClearance: ["public", "internal"],
+        isSuperuser: false,
+      },
+    });
+
+    expect(detail).toBeNull();
+    expect(messagesLoaded).toBe(false);
+  });
+
+  it("projects governed participants through the room adapter", async () => {
+    let policyParticipants: unknown;
+    const itemWithParticipantPolicy = {
+      ...baseItem,
+      evidence: [{
+        workRoomPolicy: {
+          participants: [{
+            principalRef: "PRN-REVIEWER",
+            roles: ["reviewer"],
+            enteredReason: "Reviews completion evidence",
+          }],
+        },
+      }],
+    };
+    const detail = await loadWorkspaceWorkCaseDetail({
+      prismaClient: prismaFor([itemWithParticipantPolicy]),
+      caseKey: "booking%3ABK-1",
+      userId: "user-1",
+      participantLoader: async (input) => {
+        policyParticipants = input.policyParticipants;
+        return [{
+        principalRef: "PRN-AGENT",
+        displayName: "Scheduling Coworker",
+        kind: "agent",
+        roles: ["contributor"],
+        workState: "working",
+        presence: "active",
+        currentWorkSummary: "Checking available windows",
+        enteredReason: "Joined through active room lineage",
+        sponsorPrincipalRef: "PRN-USER-1",
+        authoritySummary: "May prepare options; approval remains human",
+        sourceRefs: [{ kind: "evidence", id: "TR-1", sourceType: "task-run" }],
+        }];
+      },
+    });
+
+    expect(detail?.room?.participants).toEqual([
+      expect.objectContaining({
+        principalRef: "PRN-AGENT",
+        sponsorPrincipalRef: "PRN-USER-1",
+      }),
+    ]);
+    expect(policyParticipants).toEqual([{
+      principalRef: "PRN-REVIEWER",
+      roles: ["reviewer"],
+      enteredReason: "Reviews completion evidence",
+      currentWorkSummary: null,
+    }]);
+  });
+
+  it("does not reveal a room assigned to another person", async () => {
+    let messagesLoaded = false;
+    const assignedElsewhere = { ...baseItem, assignedToUserId: "user-2" };
+    const client = prismaFor([assignedElsewhere], assignedElsewhere);
+    client.workItemMessage.findMany = async () => {
+      messagesLoaded = true;
+      return [];
+    };
+
+    expect(await loadWorkspaceWorkCaseDetail({
+      prismaClient: client,
+      caseKey: "booking%3ABK-1",
+      userId: "user-1",
+    })).toBeNull();
+    expect(messagesLoaded).toBe(false);
   });
 });

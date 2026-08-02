@@ -8,6 +8,12 @@ relatedCode:
   - apps/web/components/workspace/WorkCaseAttentionLens.tsx
   - apps/web/components/workspace/WorkCaseDetailView.tsx
   - apps/web/components/workspace/work-room/WorkRoomCycles.tsx
+  - apps/web/components/workspace/work-room/WorkRoomParticipants.tsx
+  - apps/web/lib/work-management/room-channel-continuity.ts
+  - apps/web/lib/work-management/room-channel-ingress.ts
+  - apps/web/lib/work-management/room-participation.ts
+  - apps/web/lib/work-management/workspace-case-loader.ts
+  - apps/web/lib/work-management/workspace-room-access.ts
 ---
 
 ## Overview
@@ -39,6 +45,23 @@ People and AI coworkers appear together as named participants. Their room role a
 - **Observer** follows the room without changing it.
 
 AI coworkers remain governed participants. Joining a room does not expand their authority, and a visible presence signal does not grant permission.
+
+Open **Participants** to see why each person or coworker is in the room, what they are working on, their authority summary, and an AI coworker's accountable sponsor. Coworkers created by the active thread's governed lineage appear automatically; the room does not provide an unrestricted coworker picker.
+
+## Access and Other Channels
+
+Room access has separate discovery, content, and action boundaries. Assignment or an explicit room policy admits a principal; a presence heartbeat never does. Sensitivity clearance is checked on the server before messages, participants, or context load. A person without content access receives the same not-found experience as an unknown room.
+
+When an existing communication adapter attaches a Teams, Slack, email, or other external conversation to a Work Room, DPF remains the canonical context:
+
+- concise notifications carry a link back to the internal room and its canonical Work Case reference;
+- the channel binding resolves the external subject to one `Principal` before an inbound event can attach;
+- a stable provider event identifier prevents duplicate room activity;
+- sensitive actions pause for stronger authentication instead of completing in chat;
+- sent or delivered status proves transport only, not that governed work completed;
+- if an adapter cannot receive or interact, the channel reports a degraded state while the DPF room remains usable.
+
+Unresolved external identities or room attachments are quarantined from room activity. Provider-specific setup and capabilities remain part of Employee Communication administration, not the Work Room itself.
 
 ## Finite and Standing Rooms
 

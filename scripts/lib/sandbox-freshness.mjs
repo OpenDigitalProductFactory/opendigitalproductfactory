@@ -300,6 +300,7 @@ export const EXIT_USAGE = 2;
 export const EXIT_SANDBOX_DRIFT = 3;
 export const EXIT_SANDBOX_NOT_READY = 4;
 export const EXIT_CONTROL_PLANE_STARVATION = 5;
+export const EXIT_VITEST_RUNNER_TERMINATION = 86;
 
 export function exitCodeForVerdict(verdict) {
   if (verdict === "green") return EXIT_GREEN;
@@ -335,6 +336,14 @@ export function classifyGateOutcome({ freshnessVerdict, gateExitCode }) {
       gatePassed: false,
       productEvidence: false,
       summary: "local-CI gate blocked: the shared portal/MCP/Docker/PostgreSQL control-plane degraded during the build. This is infrastructure evidence, NOT a product build failure.",
+    };
+  }
+  if (gateExitCode === EXIT_VITEST_RUNNER_TERMINATION) {
+    return {
+      status: "failed",
+      gatePassed: false,
+      productEvidence: false,
+      summary: "local-CI gate could not produce a test verdict: the exhaustive Vitest runner terminated twice without a failed-test summary. This is runner evidence, NOT a product test failure; inspect the attached attempt diagnostics before retrying.",
     };
   }
   if (gateExitCode === 0) {

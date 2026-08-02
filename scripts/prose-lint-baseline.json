@@ -2743,6 +2743,20 @@
     "longSentences": 0,
     "textMass": 10
   },
+  "apps/web/app/api/v1/finance/invoices/[id]/documents/[documentId]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/finance/invoices/[id]/documents/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
   "apps/web/app/api/v1/finance/invoices/[id]/pdf/route.ts": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -2763,6 +2777,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 4
+  },
+  "apps/web/app/api/v1/finance/invoices/[id]/void/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
   },
   "apps/web/app/api/v1/finance/invoices/route.ts": {
     "vocabulary": 0,
@@ -5137,12 +5158,26 @@
     "longSentences": 0,
     "textMass": 70
   },
+  "apps/web/components/finance/InvoiceDocumentHistory.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 50
+  },
   "apps/web/components/finance/InvoiceDownloadButton.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
     "textMass": 8
+  },
+  "apps/web/components/finance/InvoiceLifecycleActions.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 39
   },
   "apps/web/components/finance/InvoiceSendButton.tsx": {
     "vocabulary": 0,
@@ -7830,7 +7865,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 115
+    "textMass": 158
   },
   "apps/web/components/workbooks/CreateTableButton.tsx": {
     "vocabulary": 0,
@@ -8117,7 +8152,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 64
+    "textMass": 37
   },
   "apps/web/components/workspace/work-room/WorkRoomCycles.tsx": {
     "vocabulary": 0,
@@ -8132,5 +8167,12 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 46
+  },
+  "apps/web/components/workspace/work-room/WorkRoomParticipants.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 31
   }
 }

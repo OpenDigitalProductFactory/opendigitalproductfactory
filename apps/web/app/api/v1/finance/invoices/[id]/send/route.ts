@@ -9,6 +9,7 @@ import { getOrgIdentity } from "@/lib/org-identity";
 import { generateInvoicePdf, getInvoicePdfFilename } from "@/lib/invoice-pdf";
 import { sendEmail, composeInvoiceEmail, isEmailConfigured } from "@/lib/email";
 import { checkInvoiceTransition, type InvoiceStatus } from "@/lib/finance/invoice-lifecycle";
+import { snapshotInvoiceDocument } from "@/lib/finance/invoice-document-store";
 
 export async function POST(
   request: Request,
@@ -77,7 +78,35 @@ export async function POST(
       attachments: [{ filename, content: pdf, contentType: "application/pdf" }],
     });
 
-    return apiSuccess({ sent: true, payToken, payUrl });
+    // Snapshot AFTER the send succeeds: these exact bytes are now the document the
+    // customer holds, so this is the moment it becomes worth preserving. Recording
+    // it before a failed send would claim a delivery that never happened.
+    //
+    // Best-effort, deliberately: a storage hiccup must not turn a delivered invoice
+    // into a 500 the operator will retry, re-sending the customer a second copy.
+    // The failure is loud in the logs and the missing revision is visible on the
+    // invoice, which is the right place to notice it.
+    let revision: number | null = null;
+    try {
+      const snapshot = await snapshotInvoiceDocument({
+        invoiceId: invoice.id,
+        invoiceRef: invoice.invoiceRef,
+        accountName: invoice.account.name,
+        pdf,
+        role: "sent-copy",
+        sentToEmail: invoice.contact.email,
+      });
+      revision = snapshot.revision;
+    } catch (err) {
+      // The invoice id is a route parameter (tainted) and is intentionally not
+      // logged; invoiceRef carries the debugging signal instead.
+      console.error(
+        `[invoice-document] failed to persist the sent copy of ${invoice.invoiceRef}:`,
+        err,
+      );
+    }
+
+    return apiSuccess({ sent: true, payToken, payUrl, revision });
   } catch (e) {
     if (e instanceof ApiError) return e.toResponse();
     return NextResponse.json(

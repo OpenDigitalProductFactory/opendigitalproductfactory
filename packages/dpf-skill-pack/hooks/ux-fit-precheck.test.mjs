@@ -29,6 +29,29 @@ test("reminds on <select> added via MultiEdit", () => {
   assert.equal(v.remind, true);
 });
 
+test("reminds when a button, link, or disclosure trigger is added", () => {
+  const probes = [
+    "<button type=\"button\">Save</button>",
+    "<a href=\"/customer\">Customer</a>",
+    "<Link href=\"/workspace\">Workspace</Link>",
+    "<details>",
+    "<summary>Advanced</summary>",
+    "<SubmitButton pending={pending} />",
+    "<DropdownMenuTrigger asChild>",
+    "<div role=\"button\" onClick={open}>Open</div>",
+    "<PanelHeader aria-expanded={open}>",
+    "<section data-dpf-disclosure>",
+  ];
+
+  for (const new_string of probes) {
+    const v = decide("Edit", {
+      file_path: "apps/web/app/(shell)/x/page.tsx",
+      new_string,
+    });
+    assert.equal(v.remind, true, `expected UX fit reminder for ${new_string}`);
+  }
+});
+
 test("handles Windows backslash paths", () => {
   const v = decide("Write", {
     file_path: "apps\\web\\components\\Foo.tsx",

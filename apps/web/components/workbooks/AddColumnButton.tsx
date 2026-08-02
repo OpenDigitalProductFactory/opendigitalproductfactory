@@ -84,6 +84,11 @@ export function AddColumnButton({
   const [lookupRefColumnId, setLookupRefColumnId] = useState("");
   const [lookupTargetField, setLookupTargetField] = useState("");
   const [targetFields, setTargetFields] = useState<ReferenceFieldOption[]>([]);
+  // Number-format config (Excel "Format Cells"): decimals, currency symbol, etc.
+  const [precision, setPrecision] = useState("");
+  const [currencySymbol, setCurrencySymbol] = useState("$");
+  const [durationUnit, setDurationUnit] = useState<"minutes" | "seconds">("minutes");
+  const [ratingMax, setRatingMax] = useState("5");
   const [required, setRequired] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -135,8 +140,20 @@ export function AddColumnButton({
     setLookupRefColumnId("");
     setLookupTargetField("");
     setTargetFields([]);
+    setPrecision("");
+    setCurrencySymbol("$");
+    setDurationUnit("minutes");
+    setRatingMax("5");
     setRequired(false);
     setError(null);
+  }
+
+  // Optional integer from a text input; undefined when blank or unparseable.
+  function intOrUndefined(raw: string): number | undefined {
+    const t = raw.trim();
+    if (t === "") return undefined;
+    const n = Number(t);
+    return Number.isInteger(n) ? n : undefined;
   }
 
   function buildConfig(): FieldConfig | undefined {
@@ -147,6 +164,20 @@ export function AddColumnButton({
     if (fieldType === "formula") return { formula, resultType };
     if (fieldType === "lookup") {
       return { lookup: { referenceColumnId: lookupRefColumnId, targetField: lookupTargetField } };
+    }
+    // Number-format config (persisted to fieldConfig; the grid renderers read it).
+    if (fieldType === "currency") {
+      const p = intOrUndefined(precision);
+      return { currencySymbol: currencySymbol.trim() || "$", ...(p !== undefined ? { precision: p } : {}) };
+    }
+    if (fieldType === "percent" || fieldType === "number") {
+      const p = intOrUndefined(precision);
+      return p !== undefined ? { precision: p } : undefined;
+    }
+    if (fieldType === "duration") return { durationUnit };
+    if (fieldType === "rating") {
+      const m = intOrUndefined(ratingMax);
+      return m !== undefined ? { max: m } : undefined;
     }
     return undefined;
   }
@@ -331,6 +362,62 @@ export function AddColumnButton({
             ))}
           </select>
         </>
+      )}
+      {fieldType === "currency" && (
+        <>
+          <input
+            value={currencySymbol}
+            onChange={(e) => setCurrencySymbol(e.target.value)}
+            placeholder="Symbol"
+            aria-label="Currency symbol"
+            className={`${inputClass} w-20`}
+          />
+          <input
+            type="number"
+            min={0}
+            max={10}
+            value={precision}
+            onChange={(e) => setPrecision(e.target.value)}
+            placeholder="Decimals"
+            aria-label="Decimal places"
+            className={`${inputClass} w-28`}
+          />
+        </>
+      )}
+      {(fieldType === "percent" || fieldType === "number") && (
+        <input
+          type="number"
+          min={0}
+          max={10}
+          value={precision}
+          onChange={(e) => setPrecision(e.target.value)}
+          placeholder="Decimals"
+          aria-label="Decimal places"
+          className={`${inputClass} w-28`}
+        />
+      )}
+      {fieldType === "duration" && (
+        <select
+          value={durationUnit}
+          onChange={(e) => setDurationUnit(e.target.value as "minutes" | "seconds")}
+          className={selectClass}
+          aria-label="Duration unit"
+        >
+          <option value="minutes" className={optionClass}>Minutes</option>
+          <option value="seconds" className={optionClass}>Seconds</option>
+        </select>
+      )}
+      {fieldType === "rating" && (
+        <input
+          type="number"
+          min={1}
+          max={100}
+          value={ratingMax}
+          onChange={(e) => setRatingMax(e.target.value)}
+          placeholder="Max stars"
+          aria-label="Maximum stars"
+          className={`${inputClass} w-28`}
+        />
       )}
       <label className="flex items-center gap-1 text-sm text-[var(--dpf-muted)]">
         <input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} />

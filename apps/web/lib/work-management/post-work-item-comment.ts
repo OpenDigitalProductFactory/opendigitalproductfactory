@@ -10,6 +10,10 @@
 
 import { buildMentionNotifications } from "./mention-notify";
 import type { MentionRoster } from "./mentions";
+import {
+  buildCanonicalWorkRoomMetadata,
+  type CanonicalWorkRoomRef,
+} from "./room-channel-continuity";
 
 export interface PostCommentDb {
   workItemMessage: {
@@ -30,6 +34,7 @@ export async function postWorkItemComment(args: {
   db: PostCommentDb;
   workItemId: string;
   workItemTitle: string;
+  roomRef?: CanonicalWorkRoomRef;
   body: string;
   sender: { type: "user" | "agent"; id: string; label: string };
   roster: MentionRoster;
@@ -38,6 +43,7 @@ export async function postWorkItemComment(args: {
     body: args.body,
     roster: args.roster,
     workItemId: args.workItemId,
+    caseKey: args.roomRef?.caseKey,
     workItemTitle: args.workItemTitle,
     actorLabel: args.sender.label,
   });
@@ -52,8 +58,15 @@ export async function postWorkItemComment(args: {
       messageType: "comment",
       body: args.body,
       channel: "in-app",
-      ...(fanout.mentionedAgentIds.length > 0
-        ? { structuredPayload: { mentionedAgentIds: fanout.mentionedAgentIds } }
+      ...(fanout.mentionedAgentIds.length > 0 || args.roomRef
+        ? {
+            structuredPayload: {
+              ...(fanout.mentionedAgentIds.length > 0
+                ? { mentionedAgentIds: fanout.mentionedAgentIds }
+                : {}),
+              ...(args.roomRef ? buildCanonicalWorkRoomMetadata(args.roomRef) : {}),
+            },
+          }
         : {}),
     },
   });
