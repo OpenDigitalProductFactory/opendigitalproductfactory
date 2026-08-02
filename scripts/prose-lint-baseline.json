@@ -7669,7 +7669,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 150
+    "textMass": 218
   },
   "apps/web/components/twin/rooms/RoomsOperations.tsx": {
     "vocabulary": 0,
@@ -8061,7 +8061,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 5
+    "textMass": 8
   },
   "apps/web/components/workspace-home/WorkspaceTwinPanel.tsx": {
     "vocabulary": 0,
