@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 import { LocalTime } from "@/components/ui/LocalTime";
+import { InlineBusy } from "@/components/ui/InlineBusy";
 import { DataTable, type Column } from "@/components/ui/report-kit/DataTable";
 import { Notice } from "@/components/ui/report-kit/Notice";
 import { StatusBadge } from "@/components/ui/report-kit/StatusBadge";
@@ -328,7 +329,7 @@ export function RestaurantFloorOperations({
   return (
     <section
       aria-labelledby="restaurant-host-heading"
-      className="flex h-[clamp(38rem,calc(100dvh-8rem),64rem)] min-w-0 flex-col gap-dpf-sm overflow-hidden rounded-dpf-xl border border-dpf-border bg-dpf-bg p-dpf-sm shadow-dpf-sm"
+      className="flex min-w-0 flex-col gap-dpf-sm overflow-visible rounded-dpf-xl border border-dpf-border bg-dpf-bg p-dpf-sm shadow-dpf-sm lg:h-[clamp(38rem,calc(100dvh-8rem),64rem)] lg:overflow-hidden"
       data-testid="restaurant-host-command-center"
       data-dpf-density="compact"
     >
@@ -343,7 +344,7 @@ export function RestaurantFloorOperations({
               </p>
               {serviceAttention ? (
                 <details className="relative mt-1">
-                  <summary className="cursor-pointer text-dpf-caption font-dpf-semibold text-dpf-accent hover:underline">
+                  <summary className="dpf-tap-target cursor-pointer text-dpf-caption font-dpf-semibold text-dpf-accent hover:underline">
                     Orders, calls and messages
                   </summary>
                   <div className="absolute left-0 top-full z-30 mt-dpf-xs max-h-[min(32rem,70dvh)] w-[min(36rem,82vw)] overflow-y-auto rounded-dpf-lg border border-dpf-border bg-dpf-surface-1 p-dpf-md shadow-dpf-lg">
@@ -379,8 +380,8 @@ export function RestaurantFloorOperations({
 
       {resultNotice(result)}
 
-      <div className="grid min-h-0 flex-1 gap-dpf-sm lg:grid-cols-[minmax(15rem,0.72fr)_minmax(28rem,1.65fr)_minmax(18rem,0.9fr)]">
-        <section aria-labelledby="waiting-now-heading" className="flex min-h-0 flex-col overflow-hidden rounded-dpf-lg border border-dpf-border bg-dpf-surface-1">
+      <div className="grid min-h-0 gap-dpf-sm lg:flex-1 lg:grid-cols-[minmax(15rem,0.72fr)_minmax(28rem,1.65fr)_minmax(18rem,0.9fr)]">
+        <section aria-labelledby="waiting-now-heading" className="flex min-h-[18rem] max-h-[28rem] flex-col overflow-hidden rounded-dpf-lg border border-dpf-border bg-dpf-surface-1 lg:min-h-0 lg:max-h-none">
           <div className="shrink-0 border-b border-dpf-border p-dpf-sm">
             <div className="flex items-center justify-between gap-dpf-sm">
               <h3 id="waiting-now-heading" className="text-dpf-body font-dpf-semibold text-dpf-text">Waiting now</h3>
@@ -392,7 +393,7 @@ export function RestaurantFloorOperations({
                   key={filter}
                   type="button"
                   aria-pressed={queueFilter === filter}
-                  className="min-h-8 rounded-dpf-md border border-dpf-border px-dpf-xs text-dpf-caption font-dpf-medium text-dpf-text aria-pressed:bg-dpf-accent-soft aria-pressed:text-dpf-accent"
+                  className="dpf-tap-target rounded-dpf-md border border-dpf-border px-dpf-xs text-dpf-caption font-dpf-medium text-dpf-text aria-pressed:bg-dpf-accent-soft aria-pressed:text-dpf-accent"
                   onClick={() => setQueueFilter(filter)}
                 >
                   {filter === "all" ? "All" : filter === "walk-in" ? "Walk-ins" : "Reservations"}
@@ -410,7 +411,7 @@ export function RestaurantFloorOperations({
                     <button
                       type="button"
                       aria-pressed={selectedDemandId === demand.id}
-                      className="grid min-h-14 w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-dpf-xs rounded-dpf-md border border-transparent px-dpf-xs py-dpf-xs text-left text-dpf-text hover:bg-dpf-surface-2 aria-pressed:border-dpf-accent aria-pressed:bg-dpf-accent-soft"
+                      className="dpf-tap-target grid min-h-14 w-full grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-dpf-xs rounded-dpf-md border border-transparent px-dpf-xs py-dpf-xs text-left text-dpf-text hover:bg-dpf-surface-2 aria-pressed:border-dpf-accent aria-pressed:bg-dpf-accent-soft"
                       onClick={() => chooseDemand(demand.id)}
                     >
                       <span className="text-center text-dpf-caption font-dpf-semibold text-dpf-muted">{index + 1}</span>
@@ -434,7 +435,7 @@ export function RestaurantFloorOperations({
           </div>
         </section>
 
-        <section aria-label="Floor and tables" className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-dpf-lg border border-dpf-border bg-dpf-surface-1">
+        <section aria-label="Floor and tables" className="flex min-h-[30rem] min-w-0 flex-col overflow-hidden rounded-dpf-lg border border-dpf-border bg-dpf-surface-1 lg:min-h-0">
           <div className="flex shrink-0 items-center justify-between gap-dpf-sm border-b border-dpf-border p-dpf-xs">
             <div className="flex gap-1" aria-label="Floor view">
               <button type="button" aria-pressed={centerView === "floor"} className="dpf-tap-target rounded-dpf-md px-dpf-sm text-dpf-body font-dpf-semibold text-dpf-text aria-pressed:bg-dpf-accent-soft aria-pressed:text-dpf-accent" onClick={() => setCenterView("floor")}>Floor</button>
@@ -465,7 +466,7 @@ export function RestaurantFloorOperations({
           </div>
         </section>
 
-        <aside className="grid min-h-0 content-start gap-dpf-sm overflow-y-auto">
+        <aside className="grid min-h-0 content-start gap-dpf-sm overflow-visible lg:overflow-y-auto">
           <section aria-labelledby="ai-host-heading" className="rounded-dpf-lg border border-dpf-accent bg-dpf-accent-soft p-dpf-sm">
             <div className="flex items-center gap-dpf-xs">
               <span aria-hidden="true">✦</span>
@@ -480,7 +481,7 @@ export function RestaurantFloorOperations({
                   <p className="mt-dpf-xs text-dpf-caption text-dpf-muted">Best safe fit from live capacity, timing, and server load.</p>
                 )}
                 <p className="mt-dpf-sm text-dpf-body text-dpf-text">Seat {selectedDemand.name} ({selectedDemand.covers}) at {selectedOption.label}.</p>
-                <button type="button" className="dpf-tap-target mt-dpf-sm w-full rounded-dpf-md bg-dpf-accent px-dpf-md font-dpf-semibold text-[var(--dpf-on-accent,var(--dpf-surface-1))] disabled:opacity-60" disabled={pending} onClick={confirm}>{pending ? "Confirming…" : "Confirm seating"}</button>
+                <button aria-busy={pending} type="button" className="dpf-tap-target mt-dpf-sm w-full rounded-dpf-md bg-dpf-accent px-dpf-md font-dpf-semibold text-[var(--dpf-on-accent,var(--dpf-surface-1))] disabled:opacity-60" data-dpf-primary-action="true" data-owner-first-next-action="restaurant-confirm-seating" disabled={pending} onClick={confirm}>{pending ? <InlineBusy label="Confirming…" tone="current" /> : "Confirm seating"}</button>
               </>
             ) : (
               <p className="mt-dpf-sm text-dpf-body text-dpf-muted">Choose a party to see the safest live seating choice.</p>
@@ -560,10 +561,10 @@ export function RestaurantFloorOperations({
                         <StatusBadge intent={resolveIntent("restaurantFloor", turn.stage)} label={turn.stage === "dirty" ? "Needs clearing" : turn.stage} variant="soft" />
                       </div>
                       <div className="mt-dpf-xs flex gap-1">
-                        {next ? <button type="button" className="min-h-8 flex-1 rounded-dpf-md border border-dpf-border px-dpf-xs text-dpf-caption font-dpf-semibold text-dpf-text" disabled={pending} onClick={() => advanceTurn(turn, next)}>{next.label}</button> : null}
-                        {move?.options.length ? <button type="button" aria-expanded={choosingMove} className="min-h-8 rounded-dpf-md border border-dpf-border px-dpf-xs text-dpf-caption font-dpf-semibold text-dpf-text" onClick={() => { setSelectedMoveTurnId(choosingMove ? null : turn.id); setSelectedMoveOption(null); }}>Move party</button> : null}
+                        {next ? <button type="button" className="dpf-tap-target flex-1 rounded-dpf-md border border-dpf-border px-dpf-xs text-dpf-caption font-dpf-semibold text-dpf-text" disabled={pending} onClick={() => advanceTurn(turn, next)}>{next.label}</button> : null}
+                        {move?.options.length ? <button type="button" aria-expanded={choosingMove} className="dpf-tap-target rounded-dpf-md border border-dpf-border px-dpf-xs text-dpf-caption font-dpf-semibold text-dpf-text" disabled={pending} onClick={() => { setSelectedMoveTurnId(choosingMove ? null : turn.id); setSelectedMoveOption(null); }}>Move party</button> : null}
                       </div>
-                      {choosingMove && move ? <div className="mt-dpf-xs grid gap-1">{move.options.map((option) => <button key={option.resourceIds.join(",")} type="button" className="min-h-8 rounded-dpf-md bg-dpf-surface-2 px-dpf-xs text-left text-dpf-caption text-dpf-text" onClick={() => setSelectedMoveOption(option)}>Move to {option.label}</button>)}</div> : null}
+                      {choosingMove && move ? <div className="mt-dpf-xs grid gap-1">{move.options.map((option) => <button key={option.resourceIds.join(",")} type="button" aria-pressed={selectedMoveOption?.resourceIds.join(",") === option.resourceIds.join(",")} className="dpf-tap-target rounded-dpf-md bg-dpf-surface-2 px-dpf-xs text-left text-dpf-caption text-dpf-text aria-pressed:outline-2 aria-pressed:outline-dpf-accent" disabled={pending} onClick={() => setSelectedMoveOption(option)}>Move to {option.label}</button>)}</div> : null}
                     </li>
                   );
                 })}
@@ -575,7 +576,7 @@ export function RestaurantFloorOperations({
             <section aria-labelledby="move-preview-heading" className="rounded-dpf-lg border border-dpf-accent bg-dpf-surface-1 p-dpf-sm">
               <h3 id="move-preview-heading" className="text-dpf-body font-dpf-semibold text-dpf-text">Confirm table move</h3>
               <p className="mt-dpf-xs text-dpf-caption text-dpf-muted">Move {selectedMoveTurn.party?.name ?? "this party"} to {selectedMoveOption.label}. The current table releases only after confirmation.</p>
-              <button type="button" className="dpf-tap-target mt-dpf-sm w-full rounded-dpf-md bg-dpf-accent px-dpf-sm font-dpf-semibold text-[var(--dpf-on-accent,var(--dpf-surface-1))]" disabled={pending} onClick={confirmMove}>{pending ? "Moving…" : "Confirm move"}</button>
+              <button aria-busy={pending} type="button" className="dpf-tap-target mt-dpf-sm w-full rounded-dpf-md bg-dpf-accent px-dpf-sm font-dpf-semibold text-[var(--dpf-on-accent,var(--dpf-surface-1))]" disabled={pending} onClick={confirmMove}>{pending ? <InlineBusy label="Moving…" tone="current" /> : "Confirm move"}</button>
             </section>
           ) : null}
 

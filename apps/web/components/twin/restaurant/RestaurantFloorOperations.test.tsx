@@ -196,7 +196,7 @@ describe("RestaurantFloorOperations", () => {
     });
   });
 
-  it("puts the pressure-mode host console in one bounded first viewport", () => {
+  it("bounds the desktop pressure-mode console while preserving document flow below desktop", () => {
     render(
       <RestaurantFloorOperations
         {...props}
@@ -206,7 +206,8 @@ describe("RestaurantFloorOperations", () => {
 
     const console = screen.getByTestId("restaurant-host-command-center");
     expect(console).toHaveAttribute("data-dpf-density", "compact");
-    expect(console.className).toContain("overflow-hidden");
+    expect(console.className).toContain("overflow-visible");
+    expect(console.className).toContain("lg:overflow-hidden");
     expect(screen.getByRole("heading", { name: "Host stand" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Waiting now" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "AI host recommends" })).toBeTruthy();
@@ -243,7 +244,10 @@ describe("RestaurantFloorOperations", () => {
 
     expect(screen.getByText("Table 1 fits 2 and is open now.")).toBeTruthy();
     expect(screen.getByText(/Seat Alex Kim \(2\) at Table 1/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Confirm seating" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Confirm seating" })).toHaveAttribute(
+      "data-owner-first-next-action",
+      "restaurant-confirm-seating",
+    );
   });
 
   it("keeps late reservations and their held capacity visible during service", () => {
@@ -461,9 +465,10 @@ describe("RestaurantFloorOperations", () => {
 
     render(<RestaurantFloorOperations {...moveProps} />);
     fireEvent.click(screen.getByRole("button", { name: "Move party" }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Move to Table 2" }),
-    );
+    const moveOption = screen.getByRole("button", { name: "Move to Table 2" });
+    expect(moveOption.getAttribute("aria-pressed")).toBe("false");
+    fireEvent.click(moveOption);
+    expect(moveOption.getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByText(/Move Morgan Lee to Table 2/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Confirm move" }));
 
