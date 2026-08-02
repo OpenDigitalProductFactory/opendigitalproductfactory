@@ -69,7 +69,7 @@ export type BaselineFile = {
   routes: Record<string, RouteBaseline>;
 };
 
-/** Axes where MORE is a regression. Ordered for a readable report. */
+/** Ordered for a readable report. Each axis declares how regression is detected. */
 export const RATCHET_AXES = [
   "defaultVisibleWords",
   "leadBandWords",
@@ -81,6 +81,19 @@ export const RATCHET_AXES = [
   "axeViolations",
 ] as const;
 export type RatchetAxis = (typeof RATCHET_AXES)[number];
+
+type RatchetAxisPolarity = "max" | "presence";
+
+const RATCHET_AXIS_POLARITY: Record<RatchetAxis, RatchetAxisPolarity> = {
+  defaultVisibleWords: "max",
+  leadBandWords: "presence",
+  primaryActions: "max",
+  visibleFields: "max",
+  maxChoicesPerControl: "max",
+  subLegibleControls: "max",
+  buriedPrimaryAction: "max",
+  axeViolations: "max",
+};
 
 /**
  * Measured noise floor per axis — the residue that survives normalisation.
@@ -138,6 +151,17 @@ function measurementValue(m: RouteMeasurement, axis: RatchetAxis): number {
   return axis === "axeViolations" ? m.axeViolations : m.metrics[axis];
 }
 
+function ratchetAxisRegressed(axis: RatchetAxis, was: number, now: number): boolean {
+  switch (RATCHET_AXIS_POLARITY[axis]) {
+    case "max":
+      return now > was + NOISE_FLOOR[axis];
+    case "presence":
+      // Lead-band adoption is the retrofit path for legacy routes. Adding one is
+      // improvement; removing an established one is the regression the ratchet catches.
+      return was > 0 && now === 0;
+  }
+}
+
 /** Compare one route against its baseline (or judge it as net-new). */
 export function verdictForRoute(
   measurement: RouteMeasurement,
@@ -162,7 +186,7 @@ export function verdictForRoute(
       // the scan works — 0 > -1 is not an increase in violations, it is a scan that
       // recovered. Skip the axis and let the run that measured it decide.
       if (now < 0 || was < 0) continue;
-      if (now > was + NOISE_FLOOR[axis]) {
+      if (ratchetAxisRegressed(axis, was, now)) {
         regressions.push(`${AXIS_LABEL[axis]}: ${was} → ${now}`);
       }
     }
