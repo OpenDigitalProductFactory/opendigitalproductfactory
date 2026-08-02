@@ -36,7 +36,7 @@
     "check:prose-lint": "tsx scripts/check-prose-lint.ts",
     "check:prose-lint:test": "tsx --test scripts/check-prose-lint.test.ts",
     "check:fpaw-standard": "tsx scripts/check-fpaw-standard.ts",
-    "check:fpaw-standard:test": "tsx --test scripts/check-fpaw-standard.test.ts",
+    "check:fpaw-standard:test": "tsx --test scripts/check-fpaw-standard.test.ts scripts/check-fpaw-external-bridge.test.ts",
     "check:n1-caller-honesty": "node scripts/check-n-minus-one-caller-honesty.mjs",
     "check:module-size": "node scripts/check-module-size.mjs",
     "check:data-impact": "node scripts/check-data-impact.mjs",

@@ -1,7 +1,7 @@
 # Four-Portfolio Archetype and AI Workforce Operating Standard — Implementation Plan
 
 **Date:** 2026-08-01
-**Status:** Verification in progress after contributor-rights clarification
+**Status:** Publication verification in progress after technical hardening
 **Backlog:** `BI-C7DFE0F5` under `EP-BOM-WIRING`
 **Work Capsule:** `WC-1B88712B`
 **Branch:** `doc/four-portfolio-archetype-and-ai-workforce-operat`
@@ -226,11 +226,12 @@ Reserve approximately one-fifth of the effort for convergence rather than net-ne
   missing or extra catalog entries.
 - Verified the 24 × 10 shared-coworker matrix (240 controlled cells), 34 unique leaf deviations, and
   zero inherited-state mismatches.
-- Verified 190 unique and sequential `FPAW-*` requirements: 172 core-standard requirements and 18
+- Verified 193 unique and sequential `FPAW-*` requirements: 175 core-standard requirements and 18
   companion-catalog requirements.
-- Regenerated the 611-page document index and 29-diagram manifest; document-index freshness,
+- Regenerated the 612-page document index and 30-diagram manifest; document-index freshness,
   Mermaid freshness, 80-page user-guide link integrity, prose lint, and whitespace checks pass.
-- Added a mandatory FPAW workspace guard with 19 adversarial regression tests; the repository
+- Added a mandatory FPAW workspace guard with 42 regression tests, including adversarial IT4IT/CSDM
+  mapping, cardinality, identity-boundary, and Markdown-content mutations; the repository
   preflight now includes 33 applicable guards.
 - Independent semantic and conformance reviews are repeated against the exact committed tree before
   publication gates. This is not an

@@ -18,11 +18,12 @@ trademark license is claimed.
 This standard defines an enterprise operating-model bridge between:
 
 - the operator-contributed four portfolio roles and Mark Bodman's direct design direction, with
-  bibliographic lineage references to The Open Group IT4IT™ Reference Architecture, Version 3,
-  *The Shift to Digital Product* (`W205`), and Digital Product Portfolio Management (`G252`),
-  under the source-use controls in Section 13.1.1
-- DPF's DigitalProduct lifecycle architecture, with the IT4IT Reference Architecture, Version 3, as
-  a high-level public reference target
+  independently expressed lineage to The Open Group IT4IT™ Reference Architecture Version 3.0.1,
+  *The Shift to Digital Product* (`W205`), and Digital Product Portfolio Management (`G252`), under
+  the source-use controls in Section 13.1.1
+- DPF's DigitalProduct lifecycle architecture, with a source-validated IT4IT 3.0.1 map covering seven
+  value streams/28 stages, four functional groups/33 primary functional components, six supporting
+  functions, two backbones/nine key data objects, cardinalities, and system-of-record boundaries
 - the goods, services, experiences, access products, and public services/benefits an organization actually
   provides
 - the industry operational value streams that create those outcomes
@@ -32,12 +33,13 @@ This standard defines an enterprise operating-model bridge between:
   and accountably
 
 The IT4IT Reference Architecture is intentionally centered on managing the business of IT and the
-lifecycle of DigitalProducts.
-That scope remains valuable and unchanged. This standard adds the missing business-operating context
-around it. A veterinary clinic, bank, municipality, warehouse, builder, restaurant, or salon does not
-sell only DigitalProducts, even when its work is deeply digitally enabled. The organization's business
-products and value streams therefore remain first-class and link to the IT4IT Reference Architecture only where a DigitalProduct
-constitutes, enables, operates, governs, or depends on part of that value creation.
+lifecycle of Digital Products whose offered outcome essentially depends on software. Its source
+concept may describe a service, physical item, or digital item, so it is broader than FPAW's
+`DigitalProduct` software/capability identity and narrower than all FPAW BusinessProducts. This
+standard adds the missing business-operating context around it. A veterinary clinic, bank,
+municipality, warehouse, builder, restaurant, or salon does not sell only IT4IT-qualified Digital
+Products, even when its work is deeply digitally enabled. BusinessProducts and industry value streams
+therefore remain first-class and join IT4IT only through explicit composite digital touchpoints.
 
 An AI coworker is a particularly important bridge. It is simultaneously:
 
@@ -162,7 +164,7 @@ standards family join the business operating model at different, explicit seams.
 | Concern | Normative or canonical owner | `DPF-FPAW` relationship |
 |---|---|---|
 | Business Product, Offer, catalog, and sale truth | DPF commercial catalog | References; does not redefine transaction truth |
-| DigitalProduct lifecycle | DPF `DigitalProduct`/`ServiceOffering`; the IT4IT Reference Architecture is an external reference target and separately authorized assessment authority | Profiles and maps explicit digital touchpoints without asserting external conformance |
+| DigitalProduct lifecycle | DPF product/design/release/asset/package/deployment/instance/service/offer/agreement authorities; IT4IT 3.0.1 owns its external concepts | Applies the source-validated Section 13.3 map at explicit digital touchpoints without asserting external conformance |
 | Four portfolio roots | Mark Bodman's contributor-attested design direction plus DPF portfolio registry; published G252 expression remains separately governed | Generalizes governed membership across business and workforce aspects |
 | Operational value creation | This standard plus archetype profile catalog | Defines value-flow, stage, work, and evidence contracts |
 | Enterprise architecture view | ArchiMate and DPF EA substrate | Projects views; does not replace the source metamodel |
@@ -189,12 +191,18 @@ Cross-standard mappings **MUST** use one of these relationships:
 
 Concept mappings **SHOULD** additionally use the SKOS-style relations `exact`, `close`, `broad`,
 `narrow`, or `related`, with rationale, source and target versions, confidence, reviewer, and date.
-An `exact` mapping **MUST NOT** be used merely because two labels look alike.
+The relation is always read from the external source concept to the FPAW target: `broad` means the
+target is broader than the source, while `narrow` means the target is narrower than the source. A
+polyhierarchical or composite projection whose direction cannot be stated without qualification uses
+`related` plus explicit component edges; it **MUST NOT** use `broad` or `narrow` as shorthand for
+"the source covers more/fewer things." An `exact` mapping **MUST NOT** be used merely because two
+labels look alike.
 
 ## 4. Resolution model and trace spine
 
-`DPF-FPAW` uses six resolution levels. They provide a degree of specificity comparable to the
-IT4IT Reference Architecture without copying that architecture's metamodel.
+`DPF-FPAW` uses six cumulative resolution depths. They provide IT4IT-caliber specificity without
+copying that architecture's metamodel. They are orthogonal to IT4IT Levels 1–5 and **MUST NOT** be
+reported as numeric equivalents; Section 13.3 records only a qualified view-to-view relationship.
 
 | Level | View | Required content |
 |---|---|---|
@@ -272,8 +280,18 @@ The concepts below are logical contracts. They do not imply one new database tab
 | `BusinessProductOffering` | Commercial or public-value configuration of a BusinessProduct | Offering ID, BusinessProduct ID, price/funding/eligibility, catalog and sale references |
 | `OperationalServiceOffering` | Operational commitments for a ServiceDefinition or DigitalProduct-backed service | Offering ID, ServiceDefinition/DigitalProduct reference, SLO, support, entitlement and instance policy |
 | `CoworkerServiceOffering` | Terms under which a coworker service may be engaged; a DPF mapping specializes this as `CoworkerOffer` | Offering ID, CoworkerService reference, authority/qualification prerequisites, commercial/approval terms |
+| `ConsumptionAgreement` | Accepted, effective-dated terms under one Offering between one provider and one consumer Principal; kinds include transaction, subscription, service-contract, chargeback-contract, and coworker engagement | ID/version, agreement kind, Offering version, provider, consumer, accepted terms, price/showback rule, commitments, start/end, status, evidence |
+| `Entitlement` | Effective right of one Principal to request, access, use, or administer an Offering, service, or instance; distinct from acceptance, fulfillment, and observed usage | ID/version, entitled Principal, target, source agreement/policy, scope, constraints, start/end, status, evidence |
 | `DigitalProduct` | Governed digital capability or product with a digital lifecycle | ID, owner, value, lifecycle, versions/releases, service bindings |
+| `DigitalProductDesign` | Versioned logical design and requirement/architecture baseline for one DigitalProduct; it groups intended components, qualities, controls, and realization constraints without being a release or deployment | ID/version, DigitalProduct, requirements, architecture/design artifacts, intended components, quality/control constraints, owner, effective period |
 | `DigitalProductRelease` | Approved, versioned composition of DigitalProduct assets/packages intended for defined environments and consumers; distinct from a deployment operating profile | ID/version, DigitalProduct, composition, approval/status, effective period |
+| `DigitalProductAsset` | Versioned software, model, prompt, skill, tool definition, dataset, policy bundle, content, or other controlled digital constituent used by a design or release | ID/version, asset kind, owner, provenance, integrity/digest, dependencies, lifecycle, effective period |
+| `DeploymentPackage` | Immutable or content-addressed deployable artifact assembled from one release composition; distinct from its source assets and every deployment | ID/version/digest, DigitalProductRelease, included asset versions, target compatibility, provenance, rollback identity |
+| `DeploymentIntent` | Desired, approved configuration and resource state for one prospective or changed DigitalProduct instance | ID/version, DigitalProductRelease, consumer/environment, desired topology/configuration, resource and policy requirements, source request/agreement, approval, effective period |
+| `Deployment` | Attributable execution record that applies one DeploymentIntent with one or more DeploymentPackages to an environment to create, update, rollback, or remove an instance; it is an occurrence, not the resulting runtime | ID, intent, package versions/digests, environment, action, actor/automation, start/end, result, rollback, evidence |
+| `DigitalProductInstance` | Actual deployed or provisioned runtime realization of one effective DeploymentIntent and DigitalProductRelease; it may expose several service instances/endpoints and depend on other product instances | ID/version, DeploymentIntent, DigitalProductRelease, creating/current Deployment, environment/location, actual topology/configuration, package/dependency versions, status, owner, observed period |
+| `ServiceInstance` | Operational realization of one ServiceDefinition, exposed to consumers or other systems and realized by one or more DigitalProductInstances, resources, or partner services | ID/version, ServiceDefinition, realizing instances/resources, environment/region, endpoints, operational state, owner, service/dependency evidence |
+| `UsageOccurrence` | One measured act of access, invocation, consumption, or capacity use under a ConsumptionAgreement or Entitlement; distinct from the work performed and from the resulting OutcomeObservation | ID, agreement/entitlement, Offering/service/instance target, consumer, quantity/unit, start/end, charge/showback reference, evidence |
 | `ValueStream` | End-to-end flow from a stakeholder trigger to an accepted outcome | ID, beneficiary, trigger, outcome, stages, owner, profile/version |
 | `Stage` | Measurable value-state transition within a ValueStream | stable key, input/output state, acceptance, owner, evidence |
 | `Capability` | Repeatable organizational ability needed to achieve an outcome | ID, definition, owner, maturity/evidence |
@@ -541,6 +559,22 @@ The Workforce portfolio contains two linked but distinguishable lenses:
 
 An implementation **MUST** state which lens applies. An internal HR portal is not a performer; an AI
 coworker is not merely an internal application.
+
+### 6.5 IT4IT Digital Product portfolio perspective crosswalk
+
+IT4IT 3.0.1 describes market-facing, internal-facing, and foundational Digital Product portfolio
+perspectives. They classify IT4IT-qualified Digital Products, not every FPAW governed aspect, and do
+not replace FPAW's exactly-one primary placement decision.
+
+| IT4IT perspective | Qualified FPAW projection | Deliberate FPAW augmentation |
+|---|---|---|
+| market-facing Digital Product | Goods and Services for Sale only when the offered BusinessProduct meets the source Digital Product conditions; preserve the composite BusinessProduct/DigitalProduct/Offering/agreement/instance map | physical, human-labor-led, public-value, and other non-IT4IT BusinessProducts remain first-class |
+| internal-facing Digital Product | Workforce internal-consumption, dedicated Manufacturing and Delivery, or Foundational according to primary consumer, reuse, investment accountability, and lifecycle owner | one source perspective is intentionally split across three FPAW roles rather than nearest-label mapped |
+| foundational Digital Product | Foundational when broadly reusable across Products/consumers; otherwise the applicable dedicated role | non-digital shared facilities, governance, people structures, and physical resources may also be Foundational |
+
+IT4IT has no portfolio equivalent for FPAW's Workforce contribution lens or for non-digital
+Manufacturing and Delivery. Human, AI, robot, contractor, and partner performers plus jobs, skills,
+allocation, physical production, custody, and delivery work are normative FPAW augmentation.
 
 ## 7. Product, offer, service, and realization boundary
 
@@ -985,29 +1019,32 @@ A conforming AI-coworker implementation **SHOULD** expose this chain, using loca
 ```text
 strategy / portfolio decision
   → DigitalProduct definition
+  → DigitalProductDesign and controlled requirements
   → DigitalProductRelease definition
-  → versioned AI assets (model, prompt, data/corpus, skill packages, tools, policies)
-  → build/acquired package or deployment artifact
-  → deployed runtime/service instance
+  → versioned DigitalProductAssets (model, prompt, data/corpus, skill packages, tools, policies)
+  → immutable DeploymentPackage
+  → approved DeploymentIntent
+  → attributable Deployment
+  → actual DigitalProductInstance and exposed ServiceInstances/endpoints
   → deployment-scoped operating-profile fingerprint referencing the DigitalProductRelease and actual configuration
   → enduring GAID/Principal performer identity
-  → coworker service and eligible job/activity assignments
+  → Offering, ConsumptionAgreement, Entitlement, UsageOccurrence, coworker service, and eligible job/activity assignments
   → TAK-governed actions and attributable evidence
 ```
 
-This independently authored chain separates planning, Product definition, versioned Digital Assets,
-deployable packages, operational instances/services, and consumable services or offers. Those are
-candidate topics for a future authorized comparison with public CSDM guidance; this chain does not
-require ServiceNow tables or claim a semantic correspondence.
+This chain separates planning, Product definition, design, release, versioned assets, deployable
+packages, desired deployment, actual operational instances/services, and consumption. Sections 13.3
+and 13.4 supply the source-validated IT4IT 3.0.1 and CSDM 5 mappings; implementations remain free to
+use another conformant system of record.
 
 One DigitalProduct version **MAY** support several deployed instances. One enduring AI-coworker
 identity **MAY** move across approved versions over time. A conformance claim **MUST** identify which
 operating-profile fingerprint and deployed configuration produced the evidence.
 
-The release or deployment realizes the DigitalProduct; an AgentSubject does not. An
+The release or DigitalProductInstance realizes the DigitalProduct; an AgentSubject does not. An
 AIProductOperatingBinding states that one enduring subject performs under one release/profile
 combination for a declared role and period. Each binding references exactly one DigitalProductRelease,
-one operating-profile fingerprint, and one AgentSubjectReference, plus zero or one deployed instance:
+one operating-profile fingerprint, and one AgentSubjectReference, plus zero or one DigitalProductInstance:
 zero is permitted for approved pre-deployment qualification and exactly one is required for an
 active/`operated` claim.
 
@@ -1036,13 +1073,28 @@ at that time. Later suspension or retirement does not rewrite that historical ev
 The following cardinalities are the vendor-neutral default. A profile **MAY** narrow them but
 **MUST NOT** collapse the identities or lifecycles:
 
-- an AI-coworker DigitalProduct has `1..*` DigitalProductReleases over its life
-- a release composes `1..*` versioned assets and may produce `1..*` packages
+- an active AI-coworker DigitalProduct has `1..*` DigitalProductDesigns; each design belongs to exactly
+  one DigitalProduct
+- one DigitalProductDesign may govern `0..*` DigitalProductReleases; each release references exactly
+  one design and one DigitalProduct
+- a release composes `1..*` versioned DigitalProductAssets and may produce `1..*` DeploymentPackages;
+  an asset may be reused by several releases and a package belongs to exactly one release composition
+- one DigitalProductRelease may have `0..*` DeploymentIntents; each intent references exactly one
+  release, consumer/environment scope, desired topology, and approval
+- one DeploymentIntent has `0..*` Deployment attempts and `0..1` current DigitalProductInstance until
+  successful fulfillment, then exactly one; each instance realizes exactly one effective intent, while a
+  changed desired state creates a new intent version rather than rewriting deployment history
+- one DigitalProductInstance may realize `0..*` ServiceInstances and one ServiceInstance may depend on
+  `1..*` DigitalProductInstances/resources; each ServiceInstance references exactly one ServiceDefinition
 - one DigitalProductRelease may support many operating profiles; each operating profile references
   exactly one primary DigitalProductRelease plus `0..*` dependency releases and fingerprints the
   deployed model, prompt, skill package, tool, data, memory,
   policy, provider, and oversight configuration that TAK-JSI evaluates
-- a DigitalProduct has `0..*` offers and `0..*` runtime or service instances; the FPAW managed-product
+- a DigitalProduct has `0..*` Offering versions and `0..*` DigitalProductInstances; one Offering may
+  produce `0..*` ConsumptionAgreements, and each agreement accepts exactly one Offering version for
+  one provider/consumer pair and may establish `0..*` Entitlements, `0..*` DeploymentIntents, and
+  `0..*` UsageOccurrences
+- the FPAW managed-product
   qualification requires a formal offer, while an `operated` implementation-state claim also
   requires a managed instance in the assessed scope
 - a DigitalProduct has `0..*` AIProductOperatingBindings before managed-coworker qualification; the
@@ -1055,8 +1107,10 @@ The following cardinalities are the vendor-neutral default. A profile **MAY** na
 - CoworkerService-to-DigitalProduct is conceptually many-to-many: one product can provide several
   services, and a composite service can depend on several products
 
-The `Offer → Engagement/Contract → Instance/usage` chain and the
-`DigitalProduct → Release → Asset → Package → Deployment` chain are related but distinct. Neither
+The `Offering → ConsumptionAgreement → Entitlement/request → DeploymentIntent/UsageOccurrence`
+chain and the `DigitalProduct → Design → Release → Asset → Package → DeploymentIntent → Deployment
+→ DigitalProductInstance → ServiceInstance`
+chain are related but distinct. Neither
 chain substitutes for the GAID subject identity, qualification, assignment, or action-evidence
 chain.
 
@@ -1076,8 +1130,14 @@ expresses the requested end-to-end lifecycle pattern in DPF vocabulary.
 ```mermaid
 flowchart LR
     DP["AI-coworker DigitalProduct"]
+    DES["DigitalProductDesign"]
     REL["DigitalProductRelease"]
-    INS["Runtime or service instance"]
+    AST["DigitalProductAsset"]
+    PKG["DeploymentPackage"]
+    INT["DeploymentIntent"]
+    DEP["Deployment occurrence"]
+    INS["DigitalProductInstance"]
+    SVC["ServiceInstance"]
     PROF["Deployment operating-profile fingerprint"]
     SUBJ["GAID AgentSubject reference"]
     BND["AIProductOperatingBinding"]
@@ -1086,9 +1146,12 @@ flowchart LR
     GATE["TAK authority decision and execution receipt"]
     EVID["Outcome, control, and performance evidence"]
 
-    DP --> REL --> INS --> PROF
+    DP --> DES --> REL --> AST --> PKG --> INT --> DEP --> INS --> SVC
     REL -. "release" .-> BND
+    DEP -. "deployment occurrence" .-> BND
     INS -. "deployment" .-> BND
+    REL -. "release context" .-> PROF
+    INS -. "actual configuration" .-> PROF
     PROF -. "operating profile" .-> BND
     SUBJ -. "subject" .-> BND
     SUBJ --> PERF --> JOB --> GATE --> EVID
@@ -1097,37 +1160,44 @@ flowchart LR
 ```
 
 TAK owns the runtime authority, delegation, gating, and evidence semantics. FPAW owns only the typed
-bridge from DigitalProduct lifecycle and deployment context to the identity-bearing Performer and its work.
+bridge from the separate product, design, release, asset, package, desired-state, deployment-occurrence,
+product-instance, and service-instance identities to the identity-bearing Performer and its work.
 `CA-MB-2026-08-01-CSDM-PROVENANCE` records that origin/video provenance and direct design direction;
 it does not assert personal ownership of the ServiceNow publications. The local CSDM/AICT publication
 was used to challenge the technical level boundaries in Section 13.4, but the figure's entities,
 relationships, and geometry are DPF-owned TAK/FPAW expression. Public ServiceNow pages are
 `reference-only` citations; no external conformance or exact class equivalence is asserted.
 
-### 11.5 DPF lifecycle profile for future IT4IT review
+### 11.5 Source-validated IT4IT 3.0.1 lifecycle bridge
 
-| DPF lifecycle key | AI-coworker lifecycle concern | Minimum evidence examples |
-|---|---|---|
-| `Evaluate` | strategy, portfolio placement, value hypothesis, investment, risk appetite, make/buy/partner choice | decision record, owner, outcome hypothesis, portfolio dependency map |
-| `Explore` | job discovery, stakeholder impact, architecture, data/tool needs, controls, experience, feasibility | job/activity draft, impact assessment, architecture and evaluation plan |
-| `Integrate` | build/acquire/configure model, prompts, skills, tools, corpus, policies; test the complete operating profile | source/provenance, SBOM/AIBOM-style inventory, test and qualification evidence |
-| `Deploy` | place an approved artifact into an environment with configuration identity and rollback | deployment record, environment, artifact/fingerprint, controls and rollback proof |
-| `Release` | authorize a version for defined consumers, jobs, and service commitments | release decision, service/offer binding, qualification and policy status |
-| `Consume` | invoke or assign the coworker for eligible work and observe stakeholder experience | engagement/work assignment, entitlement, request, handoff and acceptance evidence |
-| `Operate` | monitor quality, latency, cost, drift, risk, safety, incidents, provider/dependency health; improve or retire | runtime telemetry, receipts, outcomes, surveillance, incident and revalidation records |
+The IT4IT Reference Architecture Version 3.0.1 defines seven value streams containing 28 stages. They
+are a connected value network, not a mandatory linear delivery process. The four current functional
+groups—Strategy to Portfolio, Requirement to Deploy, Request to Fulfill, and Detect to Correct—group
+functional components and were the four value streams in Version 2; they are not aliases for, parents
+of, or replacements for individual Version 3 value streams.
 
-These rows define a local DPF lifecycle profile using keys already present in DPF's EA registry. The
-Open Group public product page identifies only the external publication and its high-level lifecycle
-scope; it does not substantiate the semantics of these rows. The table is therefore a future review
-target, not a mapping record, reproduced IT4IT Reference Architecture requirement set, or conformance
-profile. Authoritative comparison and external conformance assessment require an authorized edition,
-applicable SourceUseDecision, complete mapping records, and a qualified human reviewer.
+| IT4IT value-stream key | Source stage sequence | FPAW AI-coworker lifecycle concern | Minimum FPAW evidence |
+|---|---|---|---|
+| `IT4IT-VS-EVALUATE` | Gather Influencers → Identify Gaps → Propose Investments → Define Backlog Mandates → Ensure Governance | strategy, portfolio placement, value hypothesis, investment, risk appetite, and make/buy/partner choice | decision record, owner, Outcome hypothesis, portfolio dependency map |
+| `IT4IT-VS-EXPLORE` | Prioritize Backlog Items → Define Digital Product Architecture → Refine Product Backlog → Finalize Roadmap & Scope Agreement | job discovery, stakeholder impact, architecture, data/tool needs, controls, experience, and feasibility | job/activity draft, impact assessment, architecture and evaluation plan |
+| `IT4IT-VS-INTEGRATE` | Plan Product Release → Design & Develop → Build, Integrate, & Test → Accept & Publish Release | design, build/acquire/configure, compose, test, accept, and publish the Product Release and its assets/packages | provenance, bill of composition, test, approval, release identity, and qualification evidence |
+| `IT4IT-VS-DEPLOY` | Plan & Approve Deployment → Fulfill Deployment → Validate Deployment → Observe Deployment | create or change Desired and Actual Product Instances from an accepted Product Release | intent, approval, package/digest, environment, actual configuration, validation, observation, and rollback evidence |
+| `IT4IT-VS-RELEASE` | Define Service Offer → Implement Service Offer → Publish Service Offer | define, implement, and publish the Service Offer and consumption terms; this stream does **not** create or authorize the Product Release | Offering version, release-blueprint relation, terms, commitments, channels, price/showback, and publication evidence |
+| `IT4IT-VS-CONSUME` | Select an Offer → Agree to Service Offer → Subscribe to Service Offer → Provide Service Support → Publish Service Status | select and agree to an Offering, establish subscription/entitlement, consume it, and receive support/status | accepted agreement, entitlement, request/subscription, instance relation, usage, support, and acceptance evidence |
+| `IT4IT-VS-OPERATE` | Detect Issue → Diagnose Issue → Resolve Issue | observe and restore actual instances/services while feeding learning into portfolio, release, deployment, offer, and work governance | telemetry, event/incident/problem/change evidence, TAK receipts, Outcome observations, revalidation, and retirement decisions |
 
-### 11.6 Vendor-neutral deployment patterns for future CSDM review
+The precise structural mapping is in Section 13.3. In particular, FPAW keeps `DigitalProductRelease`
+as the result of Integrate, `DeploymentIntent`/`DigitalProductInstance` as the Desired/Actual instance
+projection of Deploy, and Offering/ConsumptionAgreement as the Release/Consume seam. An industry
+ValueStream may intersect several of these touchpoints but **MUST NOT** be renamed to an IT4IT stream.
 
-The following are independently expressed DPF profiles. Public CSDM pages and videos are linked only
-as implementation orientation; their expression is not an input. The profiles are useful because the
-same DigitalProduct can have different product, asset, deployment, service, and dependency shapes.
+### 11.6 Source-validated CSDM 5 deployment patterns
+
+The following vendor-neutral profiles are grounded in the CSDM 5 separation among Product Model,
+Business Application/design context, SDLC component or AI Digital Asset, deployed CI/service instance,
+service/Service Offering, catalog representation, and consumption. Section 13.4 records the qualified
+semantic mappings and the constructs that CSDM does not supply. The same DigitalProduct can therefore
+have different product, asset, deployment, service, dependency, and physical-operation shapes.
 
 | Pattern | Distinguishing topology | DPF lifecycle implication |
 |---|---|---|
@@ -1140,9 +1210,13 @@ same DigitalProduct can have different product, asset, deployment, service, and 
 | `hybrid-orchestrated-ai` | local and external agents, models, data, MCP/API services, or humans collaborate | record component and action provenance across every boundary |
 | `multi-instance-product` | one product/asset version is deployed into several runtime instances | avoid duplicating product truth; version and observe each instance separately |
 
-An implementation **MUST** state whether a mapping describes product definition, versioned asset,
-deployment artifact, runtime instance, service dependency, or commercial offer. Treating all six as
-one "AI agent" record creates ambiguous ownership and lifecycle gaps.
+An implementation **MUST** state whether a mapping describes product definition, design record,
+release, versioned asset, deployment package, desired deployment, actual deployment, runtime CI,
+service instance, service definition, Offering, agreement/entitlement, usage, GAID AgentSubject, work,
+or evidence. Treating any of these as one "AI agent" record creates ambiguous ownership, cardinality,
+authority, and lifecycle gaps. A CSDM Product Model is not a CI; an AI Application/AI Function is a
+runtime projection, never an enduring AgentSubject identity; and a Product Model lifecycle state is
+not Product Release approval.
 
 ## 12. Archetype profile composition
 
@@ -1287,6 +1361,9 @@ one declared use and has exactly one status:
 
 - `permitted-public` — the declared use is authorized by a public license or public-domain basis
 - `permitted-contributor` — the declared use is authorized for a bounded contributor-origin source
+- `permitted-operator` — the authenticated operator/source custodian authorized bounded private
+  technical analysis and independently expressed mapping; this does not authorize quotation,
+  reproduction, redistribution, sublicensing, external submission, or an external conformance claim
 - `reference-only` — bibliographic or identifier reference is allowed, but protected expression is
   not an input
 - `excluded` — an applicable term expressly prohibits the declared access or use
@@ -1347,10 +1424,8 @@ separate complete record for each claimed correspondence.
 
 | Reference | Research question, not a relation | DPF concern to test in a future authorized mapping |
 |---|---|---|
-| [IT4IT Standard, Version 3.0.1](https://publications.opengroup.org/c24a) | Could a licensed mapping relate the lifecycle models? | DigitalProduct lifecycle; the compiled standard's definitions and criteria are not inputs |
 | [The Shift to Digital Product W205](https://publications.opengroup.org/w205) | Is there documentable conceptual lineage? | bibliographic lineage under `SUD-W205-2026-08-01` |
 | [DPPM Guide G252](https://publications.opengroup.org/g252) | Could the operator-contributed roles be reconciled? | direct statements remain separate; exact published expression/equivalence is not asserted |
-| [CSDM data domains](https://www.servicenow.com/docs/r/servicenow-platform/common-service-data-model-csdm/csdm-conceptual-model.html) and [AI Portfolio](https://www.servicenow.com/docs/r/application-portfolio-management/eaw-exploring-the-ai-portfolio.html?contentId=0wyzUqVB2jKs~oh7xWrGVA) | Could an implementation profile validate the Section 13.4 candidate? | product-model/asset/package/deployment/service/consumption levels and their non-collapse rules |
 | [OMG BACM](https://www.omg.org/spec/BACM) | Could FPAW profile or augment it? | business elements, value, capability, stakeholder, operational work, and assurance |
 | [OMG VDML 1.1](https://www.omg.org/spec/VDML/1.1/) | Could a semantic relation be established? | actor-neutral value creation and value networks |
 | [ArchiMate](https://www.opengroup.org/archimate-forum/archimate-overview) | Could architecture views be represented without conflating ontologies? | viewpoints and architecture relations |
@@ -1378,80 +1453,265 @@ This standard does not import the taxonomy. Implementers **MUST** obtain and rev
 license before mapping APQC content. The same reference-only rule applies to ISO/IEC full text and artifact-specific material
 from CSDM, SCOR, TM Forum, BIAN, ISA, GS1, or other licensors.
 
-### 13.3 IT4IT Reference Architecture candidate-binding contract
+### 13.3 Source-validated IT4IT Reference Architecture 3.0.1 bridge
 
-An FPAW candidate binding intended for comparison with the IT4IT Reference Architecture **MUST**
-contain every Section 13.1 mapping-envelope field, including owner/title/version/URI, source and
-local concept identifiers, relationship and semantic relation, complete SourceUseDecision
-ID/status/permitted-use scope, applicable ContributorAttestation, known loss, reviewer, and date. It
-**MUST** additionally contain:
+These records are independently expressed, source-reviewed mappings under
+`SUD-C24A-COMPILED-2026-08-01`; they are not reproduced functional criteria or an IT4IT conformance
+claim. The following common envelope applies to every value-stream, functional-group, functional-
+component, supporting-function, key-data-object, and cardinality row in Section 13.3; each row supplies
+its source identifier, FPAW target, semantic relation or the `related` default, and known loss.
 
-- `digitalProductId`
-- declared IT4IT Reference Architecture edition/version identifier
-- a local DPF lifecycle key and, only when an authorized source is available, the declared external
-  value-stream identifier being tested
-- local BusinessProduct, ValueStream, Stage, Capability, or WorkUnitDefinition reference
-- relation (`constitutes | enables | operates | governs | consumes | supplies`)
-- rationale and applicable lifecycle boundary
-- source criteria/component identifiers when licensed and available
-- evidence, confidence, reviewer, and date
+| Common mapping field | Section 13.3 value |
+|---|---|
+| standards owner / title / edition | The Open Group; *IT4IT Standard, Version 3.0.1*; publication `C24A` |
+| canonical URI / access date | <https://publications.opengroup.org/c24a>; source-reviewed 2026-08-01 |
+| cross-standard relationship | `maps-to` for each source correspondence; FPAW-only semantics named in a boundary column `augments` the source and never become an IT4IT requirement |
+| semantic direction / default | IT4IT source concept → FPAW target; `related` when a row does not state a narrower qualified relation |
+| rationale / known loss | the applicable row boundary plus the cardinality, participation, ownership, and source-conflict rules in Section 13.3.2 |
+| confidence | `high` for the source identifier, component/KDO ownership, notation, and value-stream structure; `medium` for independently expressed cross-model projection unless a row establishes a closer relation |
+| SourceUseDecision / permitted-use scope | `SUD-C24A-COMPILED-2026-08-01`; `permitted-operator` for bounded private technical analysis and independently expressed mapping only |
+| ContributorAttestation | `CA-MB-2026-08-01-IT4IT-PROVENANCE` records contributor provenance only; it is not evidence for a published-source mapping fact |
+| reviewer / review date | DPF candidate technical review; 2026-08-01 |
+| review cadence / trigger | at least annually and on IT4IT edition, source correction, local metamodel, mapping-method, or adapter-contract change |
 
-The current DPF lifecycle-key vocabulary is:
+`StandardMapState` records whether the source-to-FPAW semantic correspondence has been source
+reviewed; `present-verified` here means that this envelope and the cited comparison were reviewed. It
+does not mean that any DPF Product, ServiceNow record, or customer implementation conforms. A
+concrete implementation `BindingState` remains `present-unverified` until its objects, versions,
+relations, system-of-record controls, and evidence are inspected.
 
-`Evaluate | Explore | Integrate | Deploy | Release | Consume | Operate`.
+#### 13.3.1 Value streams and functional groups
 
-These labels are observed local registry state, not evidence that this candidate reproduces the
-external stream definitions. A binding that uses them **MUST** remain `present-unverified` until a
-source-authorized comparison satisfies Section 13.1. Legacy DPF labels such as Strategy to
-Portfolio, Requirement to Deploy, Request to Fulfill, Detect to Correct, and Deploy to Operate are
-distinct local identifiers and **MUST** be represented separately; no synonym or replacement
-relationship may be inferred without a complete mapping record.
+| Map ID | IT4IT 3.0.1 source identifier | FPAW target/touchpoint | Relation | Boundary and known loss | StandardMapState |
+|---|---|---|---|---|---|
+| `IT4IT-MAP-VS-EVALUATE-001` | Evaluate | portfolio/objective/outcome/investment governance around DigitalProduct-enabled realization | related | does not replace industry evaluation or four-portfolio placement | `present-verified` |
+| `IT4IT-MAP-VS-EXPLORE-001` | Explore | DigitalProduct architecture, design, feasibility, backlog, work-impact, and roadmap touchpoints | related | does not define the complete BusinessProduct or industry work design | `present-verified` |
+| `IT4IT-MAP-VS-INTEGRATE-001` | Integrate | DigitalProductDesign → DigitalProductRelease → DigitalProductAsset/DeploymentPackage | close | FPAW adds AI operating-profile, qualification, provenance, and non-software asset semantics | `present-verified` |
+| `IT4IT-MAP-VS-DEPLOY-001` | Deploy | DeploymentIntent → Deployment → DigitalProductInstance/ServiceInstance | close | FPAW distinguishes deployment event, actual instance, service instance, and GAID subject | `present-verified` |
+| `IT4IT-MAP-VS-RELEASE-001` | Release | Offering definition, implementation, and publication | close | IT4IT Release is the Service Offer lifecycle; it is not DigitalProductRelease authorization | `present-verified` |
+| `IT4IT-MAP-VS-CONSUME-001` | Consume | Offering selection → ConsumptionAgreement → Entitlement → UsageOccurrence/support | close | FPAW adds BusinessProduct sale/public-value, WorkOccurrence, Performer, and acceptance semantics | `present-verified` |
+| `IT4IT-MAP-VS-OPERATE-001` | Operate | ServiceInstance/DigitalProductInstance detection, diagnosis, resolution, evidence, and improvement | close | FPAW adds physical/human work, TAK action receipts, Outcome acceptance, and cross-portfolio impact | `present-verified` |
 
-If no evidenced DigitalProduct relation exists, binding state remains `absent`; a complete candidate
-record awaiting verification uses `present-unverified`.
-There is no DPF blanket Request-to-Fulfill fallback, and an industry ValueStream **MUST NOT** be
-classified wholesale as the `Consume` registry key.
+The 33 primary functional components remain grouped as follows; this is orthogonal to the seven rows
+above. A value stream uses components across groups, and a component may participate in several
+streams. The two Financial Management components are supporting components, not a fifth primary group.
 
-Binding state is a separate controlled axis:
+| Functional-group map ID | Current IT4IT functional group | Source functional components | FPAW bridge boundary |
+|---|---|---|---|
+| `IT4IT-MAP-FG-S2P-001` | Strategy to Portfolio | Strategy: Policy, Strategy, Enterprise Architecture. Portfolio: Portfolio Backlog, Proposal, Product Portfolio. | maps digital strategy/portfolio controls only; four FPAW portfolio roles remain the broader placement system |
+| `IT4IT-MAP-FG-R2D-001` | Requirement to Deploy | Develop: Product Backlog, Requirement, Product Design, Source Control, Pipeline, Build Package, Release Composition. Test: Test, Defect. | maps software/digital design and integration mechanisms, not non-digital manufacture or human work execution |
+| `IT4IT-MAP-FG-R2F-001` | Request to Fulfill | Consume: Consumption Experience, Identity, Offer, Order, Chargeback. Fulfill: Change, Fulfillment Orchestration, Resource, Fulfillment, Usage. | maps digital offer/fulfillment/consumption mechanisms; an industry ValueStream is not a Request-to-Fulfill instance |
+| `IT4IT-MAP-FG-D2C-001` | Detect to Correct | Support: Service Level, Incident, Problem, Knowledge. Assure: Configuration, Monitoring, Event, Diagnostics & Remediation. | maps digital operations management; physical work, product outcomes, and TAK authority remain FPAW extensions |
 
-- `present-verified` — every mandatory binding field is present and evidence verification is current
-- `present-unverified` — a complete candidate binding exists but its evidence has not been verified
-- `absent` — no binding is asserted
-- `not-applicable` — no binding is required for the scoped object, with the Section 4.1 decision record
+The controlled registry below expands all 33 primary functional components plus the two Financial
+Management components. The key-data-object names and single logical controlling component are source
+facts; the final column states the FPAW system-of-record boundary and does not transfer operational
+ownership to this standard or to `EaReferenceModelElement`.
 
-The word `unverified` in this section refers only to `present-unverified`; it is not a RequirementStatus.
-
-### 13.4 CSDM/AICT technical bridge candidate
-
-The operator-supplied *AICT with CSDM v1* paper prompted a stricter level-separation review, but its
-`undetermined` SourceUseDecision cannot substantiate a mapping. The independently authored technical
-hypotheses below are therefore a validation backlog, not Section 13.1 mapping records or Section 13.3
-bindings. Every row has BindingState `absent`: no CSDM correspondence is asserted. The lifecycle
-column identifies DPF phases in the review scope, not the single local lifecycle key required by a
-future binding. A complete mapping envelope and permitted source review are required before a row may
-become `present-unverified`.
-
-| Candidate ID | CSDM/AICT implementation level to validate | FPAW target level | DPF lifecycle phases in review scope (not binding keys) | Known loss and required verification |
+| Component map ID | IT4IT functional group / function | Functional component | Controlled key data object(s) | FPAW system-of-record boundary |
 |---|---|---|---|---|
-| `CSDM-CAND-STRATEGY-001` | ideation, strategy, planning, and portfolio context | Objective, intended Outcome, PortfolioDefinition/Portfolio, BusinessProduct or DigitalProduct idea | Evaluate, Explore | validate object identity, decision state, measure/target semantics, and Objective→Outcome cardinality |
-| `CSDM-CAND-PRODUCT-001` | AI System, AI Agent, or Digital Worker Product Model | AI-coworker DigitalProduct definition | Evaluate, Explore, Integrate | determine whether the model denotes a reusable Product, a sellable BusinessProduct, or only a template; do not infer GAID identity |
-| `CSDM-CAND-RELEASE-001` | approved Product Model version plus its approved composition | DigitalProductRelease | Integrate, Release | no single exact release authority is yet established; validate version, composition, approval, consumer/environment scope, and effective period |
-| `CSDM-CAND-ASSET-001` | versioned AI Digital Asset such as model, prompt, data, skill/tool definition, or agentic component | release-composed versioned asset | Integrate | validate asset kind, provenance, immutability, dependency direction, and whether the asset can be shared by several releases |
-| `CSDM-CAND-PACKAGE-001` | deployable Package or Artifact | package produced from one release composition | Integrate, Deploy | validate many-package/many-deployment cardinalities, digest, environment compatibility, and rollback identity |
-| `CSDM-CAND-RUNTIME-001` | Application Service Instance, AI Application, AI Function, model deployment, or equivalent operational CI | deployed instance/service realization | Deploy, Operate | validate whether the record is deployment, service instance, function, or model endpoint; one CI **MUST NOT** collapse all four |
-| `CSDM-CAND-CONSUME-001` | Product Offering, Service Offering, catalog/request, installed-base or usage context | typed Offering, engagement/contract, entitlement, instance/usage, and WorkOccurrence | Release, Consume, Operate | validate target kind, provider/consumer, accepted terms, entitlement, request-to-instance chain, and usage evidence |
-| `CSDM-CAND-IDENTITY-001` | operational AI Agent or Function record | deployed identity projection only; AgentSubjectReference remains GAID-owned | Deploy, Consume, Operate | prove an authoritative enduring subject resolver before identity mapping; a deployment/CI identifier alone is insufficient |
-| `CSDM-CAND-BINDING-001` | relation among Product Model/version, operational CI, service, and agent context | AIProductOperatingBinding | Release, Deploy, Consume, Operate | no single source entity is assumed; validate binding state, release/profile/subject/deployment temporal uniqueness, compatibility, and qualification |
-| `CSDM-CAND-WORK-001` | task, request, case, or operational assignment context | ActivityDefinition, WorkOccurrence, AllocationDecision, WorkAssignment, Collaboration | Consume, Operate | validate atomic responsibility/Performer cardinality, authority, human/AI synergy, handoff, and acceptance evidence; likely requires FPAW/TAK extension |
-| `CSDM-CAND-EVIDENCE-001` | monitoring, risk/governance, lifecycle, and consumption telemetry | Evidence, OutcomeObservation, ConformanceClaim, Gap, TAK receipt | Evaluate, Integrate, Operate | validate claim subject, deployed/profile identity, provenance, freshness, verifier, and separation of observed evidence from intended Outcome |
-| `CSDM-CAND-FEDERATION-001` | internal, external, or hybrid AI blueprint | provider/dependency topology plus external/federated Performer and service relations | Integrate, Deploy, Operate | preserve external identity/provenance, provider contract, data/authority boundary, internal accountability, fallback, and concentration risk |
+| `IT4IT-MAP-FC-POLICY-001` | Strategy to Portfolio / Strategy | Policy | Policy | project to governed Control/policy authority; retain the authoritative policy source |
+| `IT4IT-MAP-FC-STRATEGY-001` | Strategy to Portfolio / Strategy | Strategy | Strategic Theme; Strategic Objective | project to strategy and Objective references; Outcome targets and observations remain distinct |
+| `IT4IT-MAP-FC-ENTERPRISE-ARCHITECTURE-001` | Strategy to Portfolio / Strategy | Enterprise Architecture | Architecture Roadmap Item; Architecture Blueprint; Value Stream | project architecture/roadmap references and explicit IT4IT-stream touchpoints; do not replace an industry FPAW ValueStream |
+| `IT4IT-MAP-FC-PORTFOLIO-BACKLOG-001` | Strategy to Portfolio / Portfolio | Portfolio Backlog | Portfolio Backlog Item | reference the canonical portfolio mandate/backlog record; do not duplicate work status |
+| `IT4IT-MAP-FC-PROPOSAL-001` | Strategy to Portfolio / Portfolio | Proposal | Scope Agreement | project scope/roadmap decision and acceptance evidence; do not treat it as a ConsumptionAgreement |
+| `IT4IT-MAP-FC-PRODUCT-PORTFOLIO-001` | Strategy to Portfolio / Portfolio | Product Portfolio | Digital Product | apply the composite Digital Product projection below; four-portfolio placement remains FPAW-owned |
+| `IT4IT-MAP-FC-PRODUCT-BACKLOG-001` | Requirement to Deploy / Develop | Product Backlog | Product Backlog Item | reference canonical product backlog work and product scope; do not create a second backlog ledger |
+| `IT4IT-MAP-FC-REQUIREMENT-001` | Requirement to Deploy / Develop | Requirement | Requirement | retain requirement identity/version and trace it to DigitalProductDesign and verification evidence |
+| `IT4IT-MAP-FC-PRODUCT-DESIGN-001` | Requirement to Deploy / Develop | Product Design | Product Design | project to DigitalProductDesign; design is not release or runtime truth |
+| `IT4IT-MAP-FC-SOURCE-CONTROL-001` | Requirement to Deploy / Develop | Source Control | Source | project controlled source to DigitalProductAsset provenance; source is not a DeploymentPackage |
+| `IT4IT-MAP-FC-PIPELINE-001` | Requirement to Deploy / Develop | Pipeline | Pipeline | reference the governed integration pipeline and its evidence; the pipeline does not own release approval |
+| `IT4IT-MAP-FC-BUILD-PACKAGE-001` | Requirement to Deploy / Develop | Build Package | Build Package | project build output to asset/package build evidence; immutable DeploymentPackage identity remains explicit |
+| `IT4IT-MAP-FC-RELEASE-COMPOSITION-001` | Requirement to Deploy / Develop | Release Composition | Product Release; Product Release Blueprint | project to DigitalProductRelease and the versioned release-to-offer blueprint relation |
+| `IT4IT-MAP-FC-TEST-001` | Requirement to Deploy / Test | Test | Test Case; Test Plan | retain test definition/execution evidence and qualification scope; a passing test is not release approval |
+| `IT4IT-MAP-FC-DEFECT-001` | Requirement to Deploy / Test | Defect | Defect | project to defect/Gap evidence while keeping product-work and Gap verification states separate |
+| `IT4IT-MAP-FC-CONSUMPTION-EXPERIENCE-001` | Request to Fulfill / Consume | Consumption Experience | Interaction | project the consumer interaction occurrence; it is not agreement, entitlement, usage, work, or outcome acceptance |
+| `IT4IT-MAP-FC-IDENTITY-001` | Request to Fulfill / Consume | Identity | Identity; Entitlement | reference the authoritative Principal resolver and project Entitlement separately; identity does not grant authority |
+| `IT4IT-MAP-FC-OFFER-001` | Request to Fulfill / Consume | Offer | Service Offer Catalog; Service Offer | project to catalog representation and Offering respectively; keep those identities distinct |
+| `IT4IT-MAP-FC-ORDER-001` | Request to Fulfill / Consume | Order | Order; Subscription | retain request/order truth and project Subscription to its accepted ConsumptionAgreement; neither is an Entitlement |
+| `IT4IT-MAP-FC-CHARGEBACK-001` | Request to Fulfill / Consume | Chargeback | Chargeback Contract; Chargeback Record | project contract terms to typed ConsumptionAgreement and each charge/showback occurrence to separate evidence |
+| `IT4IT-MAP-FC-CHANGE-001` | Request to Fulfill / Fulfill | Change | Change | reference the authoritative change record and related deployment/work occurrences; change is not the resulting instance |
+| `IT4IT-MAP-FC-FULFILLMENT-ORCHESTRATION-001` | Request to Fulfill / Fulfill | Fulfillment Orchestration | Desired Product Instance | project to DeploymentIntent; preserve desired versus actual state |
+| `IT4IT-MAP-FC-RESOURCE-001` | Request to Fulfill / Fulfill | Resource | Resource | reference canonical digital/physical Resource identity and custody; do not copy operational state into the map |
+| `IT4IT-MAP-FC-FULFILLMENT-001` | Request to Fulfill / Fulfill | Fulfillment | Fulfillment Book | project to a fulfillment OperatingFlow/WorkUnitDefinition and occurrences; it is not DeploymentIntent or instance truth |
+| `IT4IT-MAP-FC-USAGE-001` | Request to Fulfill / Fulfill | Usage | Usage Record | project to UsageOccurrence with agreement/entitlement, target, quantity, time, and provenance |
+| `IT4IT-MAP-FC-SERVICE-LEVEL-001` | Detect to Correct / Support | Service Level | Service Contract; KPI | distinguish Service Contract template/instance projections and project KPI to Metric/observation evidence |
+| `IT4IT-MAP-FC-INCIDENT-001` | Detect to Correct / Support | Incident | Incident | reference the canonical Incident and evidence; incident handling remains separate work |
+| `IT4IT-MAP-FC-PROBLEM-001` | Detect to Correct / Support | Problem | Problem | reference the canonical problem/cause record; a hypothesis does not become verified Gap cause |
+| `IT4IT-MAP-FC-KNOWLEDGE-001` | Detect to Correct / Support | Knowledge | Knowledge Item | reference governed knowledge/information Resource with source, version, access, and provenance |
+| `IT4IT-MAP-FC-CONFIGURATION-001` | Detect to Correct / Assure | Configuration | Actual Product Instance | project to DigitalProductInstance and typed ServiceInstance views; never infer AgentSubject identity |
+| `IT4IT-MAP-FC-MONITORING-001` | Detect to Correct / Assure | Monitoring | Service Monitor; Log | project observations/logs to Evidence and OutcomeObservation without making telemetry authoritative product truth |
+| `IT4IT-MAP-FC-EVENT-001` | Detect to Correct / Assure | Event | Event | project attributable event evidence and incident triggers; an event is not a work or outcome record |
+| `IT4IT-MAP-FC-DIAGNOSTICS-REMEDIATION-001` | Detect to Correct / Assure | Diagnostics & Remediation | Runbook | project to governed OperatingFlow/WorkUnitDefinition and execution receipts; a runbook is not authority to act |
+| `IT4IT-MAP-FC-COST-MODELING-001` | Financial Management / supporting function | Cost Modeling | Cost Model | reference the authoritative cost model and project its outputs to economics/Metric evidence |
+| `IT4IT-MAP-FC-INVESTMENT-001` | Financial Management / supporting function | Investment | Budget Item | reference authoritative investment/budget decisions and four-portfolio economics; do not duplicate finance truth |
 
-The bridge's anti-collapse rule is normative for FPAW implementations: Product definition, release,
-asset, package, deployment, service definition/instance, Offering, engagement/usage, AgentSubject,
-AIProductOperatingBinding, WorkAssignment, and evidence **MUST** retain distinct identities and typed
-relations. A future CSDM adapter may map several source records to one FPAW level or one source record
-to several explicit projections, but it **MUST** report the mapping level and known loss rather than
-materializing a generic `AI Agent` object as all of them.
+| Supporting-function map ID | IT4IT supporting function | FPAW bridge boundary |
+|---|---|---|
+| `IT4IT-MAP-SF-FINANCE-001` | Financial Management: Cost Modeling; Investment | economics, investment, price/showback, cost, and benefit evidence across the four portfolios |
+| `IT4IT-MAP-SF-GRC-001` | Governance, Risk & Compliance | Control, Authority, policy, risk, conformance, and Gap relations |
+| `IT4IT-MAP-SF-WORKFORCE-001` | Workforce Management | human/contractor capacity is source scope; FPAW augments it with human, AI, robot, partner, job, skill, allocation, and collaboration semantics |
+| `IT4IT-MAP-SF-SOURCING-001` | Sourcing & Vendor Management | supplier/partner Products, contracts, dependencies, authority boundaries, concentration risk, and fallback |
+| `IT4IT-MAP-SF-INTELLIGENCE-001` | Intelligence & Reporting | Metric, Evidence, OutcomeObservation, and portfolio/operational reporting |
+| `IT4IT-MAP-SF-COLLABORATION-001` | Collaboration & Communication | coordination capability; FPAW adds atomic WorkAssignment/Collaboration responsibility and evidence |
+
+These six supporting functions and their chapter-level component descriptions are advisory/non-normative
+in IT4IT 3.0.1. Their FPAW projections are extension points, not imported IT4IT conformance obligations.
+
+#### 13.3.2 Digital Product and Service Offer backbones
+
+IT4IT `Digital Product` is not an exact synonym for FPAW `DigitalProduct`. The source concept may be a
+service, physical item, or digital item when software is essential to the offered outcome, an offer or
+contract and price/showback exist, and software/resources have an active lifecycle. FPAW therefore
+maps it to a composite graph with exactly one `BusinessProduct` projection, `1..*` essential
+`DigitalProduct`/system realizations, `1..*` Offerings, and economics. `0..*`
+`ConsumptionAgreements` and `0..*` Desired/Actual instance projections are contingent: they arise only
+when an offer is accepted and fulfillment/runtime exists, so they are not prerequisites for defining
+the Digital Product. Only when the value sold is itself software or a digitally delivered capability is
+the local `DigitalProduct` a close primary component projection. Human-labor-led and non-digital
+products remain FPAW BusinessProducts outside IT4IT's Digital Product definition.
+
+| Map ID | IT4IT 3.0.1 key data object | Controlling functional component | FPAW projection | Semantic relation | Preserved boundary / known loss | StandardMapState |
+|---|---|---|---|---|---|---|
+| `IT4IT-MAP-KDO-DIGITAL-PRODUCT-001` | Digital Product | Product Portfolio | exactly one BusinessProduct projection + `1..*` essential DigitalProduct realizations + `1..*` Offerings + economics + `0..*` contingent ConsumptionAgreements + `0..*` Desired/Actual instance lineage | related | this is a composite graph, not one taxonomic node: the source concept is broader than FPAW DigitalProduct but narrower than all BusinessProducts; qualified component edges carry the precision | `present-verified` |
+| `IT4IT-MAP-KDO-PRODUCT-DESIGN-001` | Product Design | Product Design | DigitalProductDesign | close | retain product and design identities; source design may not contain FPAW work/AI authority detail | `present-verified` |
+| `IT4IT-MAP-KDO-PRODUCT-RELEASE-001` | Product Release | Release Composition | DigitalProductRelease | close | produced/accepted in Integrate; never inferred from Service Offer publication or deployment state | `present-verified` |
+| `IT4IT-MAP-KDO-DESIRED-INSTANCE-001` | Desired Product Instance | Fulfillment Orchestration | DeploymentIntent | close | desired configuration is not an actual instance or one AIProductOperatingBinding | `present-verified` |
+| `IT4IT-MAP-KDO-ACTUAL-INSTANCE-001` | Actual Product Instance | Configuration | DigitalProductInstance, with typed ServiceInstance projections | close | preserve actual configuration, environment, dependencies, and subtype; never infer AgentSubject identity | `present-verified` |
+| `IT4IT-MAP-KDO-SERVICE-OFFER-001` | Service Offer | Offer | Offering with `offerKind=operational-service`, commitments, channels, and Product Release Blueprint relation | close | Offering is not Agreement, Entitlement, catalog item, or runtime instance | `present-verified` |
+| `IT4IT-MAP-KDO-SUBSCRIPTION-001` | Subscription | Order | ConsumptionAgreement with `agreementKind=subscription` plus `0..*` Entitlements when access is granted | close | accepted agreement and granted access remain distinct; a subscription need not itself prove an entitlement | `present-verified` |
+| `IT4IT-MAP-KDO-CHARGEBACK-001` | Chargeback Contract | Chargeback | ConsumptionAgreement with `agreementKind=chargeback-contract` | close | internal chargeback terms do not replace price, usage, or actual charge records | `present-verified` |
+| `IT4IT-MAP-KDO-SERVICE-CONTRACT-001` | Service Contract | Service Level | logical-service template → Offering commitment/SLO template projection; physical-service instance → ConsumptionAgreement with `agreementKind=service-contract` plus commitments/metrics | related | preserve template-versus-instance subtype and status: the offer-origin template is not an accepted agreement, while the instantiated contract is not ServiceDefinition, ServiceInstance, or measurement evidence | `present-verified` |
+
+The Service Contract mapping is conditional, not a union object. The logical-service record is the
+template from which terms can be offered; the physical-service record is the instance created for
+consumption. An adapter **MUST** retain template/instance subtype, status, originating Offering, and
+instantiation trace and **MUST NOT** materialize the template as an accepted ConsumptionAgreement.
+
+The Product Release-to-Service Offer seam is an explicit Release Blueprint relation. FPAW names the
+logical relation `realizes-offer-through-release-blueprint`; an adapter **MAY** use a dedicated
+blueprint object or a versioned relation carrying release, offer, compatibility, environment, and
+effective-period fields, but **MUST NOT** collapse Product Release and Service Offer.
+
+| Cardinality map ID | Source relation and notation | Normalized bounds retained by an adapter | FPAW relation |
+|---|---|---|---|
+| `IT4IT-MAP-CARD-PRODUCT-DESIGN-001` | Digital Product → Product Design, `1:n` | `0..1` Product per Design; `0..*` Designs per Product; `participationSpecified=false` | DigitalProduct has DigitalProductDesign |
+| `IT4IT-MAP-CARD-DESIGN-RELEASE-001` | Product Design → Product Release, `1:n` | `0..1` Design per Release; `0..*` Releases per Design; `participationSpecified=false` | DigitalProductDesign governs DigitalProductRelease |
+| `IT4IT-MAP-CARD-RELEASE-DESIRED-001` | Product Release → Desired Product Instance, `1:n` | `0..1` Release per Desired Instance; `0..*` Desired Instances per Release; `participationSpecified=false` | DigitalProductRelease authorizes DeploymentIntent |
+| `IT4IT-MAP-CARD-DESIRED-ACTUAL-001` | Desired Product Instance → Actual Product Instance, `1:1` | `0..1 : 0..1`; `participationSpecified=false` | DeploymentIntent is realized by DigitalProductInstance |
+| `IT4IT-MAP-CARD-RELEASE-BLUEPRINT-001` | Product Release → Product Release Blueprint, §7.1.7.1 `n:1` versus §7.1.7.2 `1:n` | under `n:1`: `0..1` Blueprint per Release and `0..*` Releases per Blueprint; under `1:n`: `0..*` Blueprints per Release and `0..1` Release per Blueprint; `participationSpecified=false`; `sourceConflict=true` | preserve a versioned DigitalProductRelease-to-release-blueprint relation without choosing one conflicting source cardinality |
+| `IT4IT-MAP-CARD-OFFER-BLUEPRINT-001` | Service Offer → Product Release Blueprint, §7.1.7.2 `n:m` versus §8.1.3.2 `n:1` | under `n:m`: `0..* : 0..*`; under `n:1`: `0..1` Blueprint per Offer and `0..*` Offers per Blueprint; `participationSpecified=false`; `sourceConflict=true` | preserve a versioned Offering-to-release-blueprint relation without choosing one conflicting source cardinality |
+| `IT4IT-MAP-CARD-SUBSCRIPTION-OFFER-001` | Subscription → Service Offer, `n:1` | `0..1` Offer per Subscription; `0..*` Subscriptions per Offer; `participationSpecified=false` | ConsumptionAgreement accepts Offering |
+| `IT4IT-MAP-CARD-SUBSCRIPTION-DESIRED-001` | Subscription → Desired Product Instance, `n:1` | `0..1` Desired Instance per Subscription; `0..*` Subscriptions per Desired Instance; `participationSpecified=false` | ConsumptionAgreement requests/entitles DeploymentIntent |
+| `IT4IT-MAP-CARD-SUBSCRIPTION-CHARGEBACK-001` | Subscription → Chargeback Contract, `1:n` | `0..*` Chargeback Contracts per Subscription; `0..1` source Subscription per contract; `participationSpecified=false` | ConsumptionAgreement relates typed agreements |
+| `IT4IT-MAP-CARD-SUBSCRIPTION-SERVICE-CONTRACT-001` | Subscription → instantiated Service Contract instance, `1:1` | `0..1 : 0..1`; `participationSpecified=false` | subscription agreement instantiates/relates a service-contract ConsumptionAgreement, never the logical-service template |
+| `IT4IT-MAP-CARD-ACTUAL-SERVICE-CONTRACT-001` | Actual Product Instance → Service Contract instance, `1:n` | `0..*` Service Contract instances per Actual Instance; `0..1` source Actual Instance per contract; `participationSpecified=false` | DigitalProductInstance is governed by an instantiated service-contract agreement |
+
+IT4IT §11.9.2 uses the relationship cardinalities to state maximum shape and globally does not
+prescribe mandatory participation. Owner-section prose such as "belongs to" or "one or more" remains
+valuable context, but an adapter **MUST** preserve source notation, normalized bounds, direction,
+`participationSpecified=false`, and any source conflict, and it **MUST NOT** convert that prose into an
+IT4IT minimum or silently strengthen `0..1` to exactly one. A stricter minimum must
+be an independently evidenced implementation rule and be reported separately from the source cardinality. Data-flow
+arrows are integration triggers, not process-flow or guaranteed one-way information semantics. Each
+IT4IT key data object is controlled by exactly one logical functional component, while one component
+may control several objects. A DPF adapter **MUST** record that logical owner and the concrete
+operational system of record; `EaReferenceModel` and `EaReferenceModelElement` are
+reference/assessment definitions, never operational object stores.
+
+The source prescribes no direct Product Release-to-Service Offer cardinality. The seam is mediated by
+Product Release Blueprint, and the two explicit conflict rows above retain the source's incompatible
+presentations instead of silently synthesizing `n:m`, `1:n`, or `n:1` as one authoritative rule.
+
+The FPAW `R0`–`R5` resolution depths and IT4IT Levels 1–5 are orthogonal. Implementations may report a
+qualified relation—typically R0/R1 to Level 1 context, R2 to Level 2, R3/R4 across Level 3 and
+implementation-specific Level 4, and R5 adjacent to Level 5 operational evidence—but **MUST NOT**
+assert numeric equivalence.
+
+### 13.4 Source-validated CSDM 5 and AICT bridge
+
+These are standard-level semantic mappings under `SUD-CSDM-LOCAL-2026-08-01`. The following common
+envelope applies to every concept and relation row in Section 13.4; each row adds its source identifier,
+FPAW target, semantic relation or sentinel, and known loss.
+
+| Common mapping field | Section 13.4 value |
+|---|---|
+| standards owner / title / edition | ServiceNow; *CSDM 5 White Paper* and *AI Control Tower with CSDM v1*; versions identified by the supplied publications |
+| canonical URI / access date | public orientation resolvers `SCIT-SNOW-CSDM-RESOURCES`, `SCIT-SNOW-CSDM-MODEL`, and `SCIT-SNOW-AICT-GUIDANCE`; complete supplied artifacts source-reviewed 2026-08-01 |
+| cross-standard relationship | `maps-to` for `present-verified` correspondences; `augments` for an `absent` extension boundary that FPAW must supply |
+| semantic direction / default | CSDM 5 or AICT source concept → FPAW target; `related` when a row does not establish a closer relation |
+| rationale / known loss | the applicable row boundary plus the anti-collapse, adapter-fingerprint, direction, and cardinality rules below |
+| confidence | `high` for source concept/relationship presence or verified absence; `medium` for independently expressed cross-model projection; concrete physical binding remains unverified |
+| SourceUseDecision / permitted-use scope | `SUD-CSDM-LOCAL-2026-08-01`; `permitted-operator` for bounded private technical analysis and independently expressed mapping only |
+| ContributorAttestation | `CA-MB-2026-08-01-CSDM-PROVENANCE` records origin/video provenance and design direction only; it is not evidence for a vendor-publication mapping fact |
+| reviewer / review date | DPF candidate technical review; 2026-08-01 |
+| review cadence / trigger | at least annually and on CSDM/AICT publication, ServiceNow family/plugin/dictionary, local metamodel, or adapter-contract change |
+
+A `StandardMapState` of `present-verified` means the source concept and FPAW relation were reviewed; a
+concrete ServiceNow adapter `BindingState` remains `present-unverified` until its family/release,
+plugins, table dictionary, relationship directions, lifecycle choices, and sample records are
+fingerprinted. `absent` is a verified extension boundary: the named source does not provide the FPAW
+construct and the adapter must preserve FPAW/TAK authority rather than fabricate an equivalence.
+
+The table uses `none` only as a sentinel when StandardMapState is `absent`; it is not an asserted
+Section 13.1 semantic relation. Every asserted mapping uses one of `exact`, `close`, `broad`, `narrow`,
+or `related` in the source-to-target direction defined by Section 3.3.
+
+| Map ID | CSDM 5 / AICT source concept/class | FPAW target | Semantic relation | StandardMapState | Adapter boundary / known loss |
+|---|---|---|---|---|---|
+| `CSDM-MAP-STRATEGY-001` | Goal; Target; Product Idea; Planning Item | Objective, Metric/target, candidate BusinessProduct/DigitalProduct proposal | related | `present-verified` | intended Outcome still requires beneficiary, acceptance, and observation semantics |
+| `CSDM-MAP-VALUESTREAM-001` | Value Stream; Value Stream Stage; Business Capability; Business Process | ValueStream, Stage, Capability, OperatingFlow | related | `present-verified` | CSDM associations do not supply the FPAW Stage contract, WorkUnitDefinition, Performer, or evidence |
+| `CSDM-MAP-PORTFOLIO-001` | generic Portfolio; Service Portfolio; Manage Portfolio domain | Portfolio projection/governance overlay | related | `present-verified` | there is no safe taxonomic hierarchy: these are not equivalent to the four FPAW portfolio roles; Foundation domain is referential data, not Foundational placement |
+| `CSDM-MAP-PRODUCT-MODEL-001` | Product Model (`cmdb_model`) and subtypes, including version-agnostic AI System Product Model | subtype-selected BusinessProduct, DigitalProduct, ServiceDefinition, Resource, model reference, or qualified DigitalProductDesign projection for a planned/designed subsystem | narrow | `present-verified` | Product Model is a specification, not a CI; the selected FPAW target is narrower than the source umbrella; preserve Product Model, Product, and Design identities, and do not infer portfolio placement or CI/runtime truth |
+| `CSDM-MAP-BUSINESS-APPLICATION-001` | Business Application (`cmdb_ci_business_app`); Application Model | logical DigitalProduct architecture/portfolio projection | broad | `present-verified` | the FPAW target is broader than this application-specific source; the record is non-version-specific and non-operational, not product, release, asset, or runtime truth by itself |
+| `CSDM-MAP-RELEASE-GAP-001` | no distinct release authority | DigitalProductRelease | none | `absent` | release activity and lifecycle status do not supply approved composition, scope, effective period, or release authority |
+| `CSDM-MAP-ASSET-001` | SDLC Component; AI System Digital Asset; AI Model/Dataset/Prompt Digital Assets; SBOM | DigitalProductAsset and release-composition evidence | close | `present-verified` | physical table, immutable version/digest, provenance, sharing, and composition cardinalities need implementation evidence |
+| `CSDM-MAP-PACKAGE-GAP-001` | System Component Model and deployable-form descriptions | DeploymentPackage | none | `absent` | no distinct package identity, digest, target compatibility, provenance, or rollback contract is defined |
+| `AICT-MAP-PACKAGE-001` | Package (Artifact), the deployable artifact assembled from AI Digital Assets | DeploymentPackage | close | `present-verified` | AICT supplies the logical deployable layer, but not a stable CSDM class/table plus immutable digest, target-compatibility, provenance, or rollback contract |
+| `AICT-MAP-DEPLOYMENT-INTENT-GAP-001` | Deploy lifecycle stage, tasks, approvals, and target descriptions | DeploymentIntent | none | `absent` | lifecycle evidence does not provide a stable, versioned desired-configuration identity with consumer/environment, topology, source agreement/request, and approval |
+| `AICT-MAP-DEPLOYMENT-OCCURRENCE-GAP-001` | deployment activity between Package (Artifact) and operational CI | Deployment | none | `absent` | no immutable attributable deployment-occurrence identity records intent, package digest, environment, actor/automation, result, rollback, and evidence |
+| `CSDM-MAP-REALIZATION-001` | Product Model `model_id`; Business Application → SDLC Component → Application Service | typed product/design/asset/runtime realization relations | close | `present-verified` | relation is not a release/profile/subject temporal binding; actual physical directions/cardinalities require fingerprinting |
+| `CSDM-MAP-RUNTIME-001` | Service Instance; Application Service; Data Service Instance; AI Application; AI Function; Application | DigitalProductInstance/ServiceInstance and typed runtime-component projections | close | `present-verified` | preserve every subtype; runtime CI/service instance is not Product, Release, Deployment, or AgentSubject |
+| `CSDM-MAP-DISCOVERY-001` | bottom-up discovery of Application, AI Application, AI Function, Application Service, and dependency topology | observed runtime/service/dependency projections and candidate Gaps | related | `present-verified` | discovery may refresh observed runtime topology only; it must not synthesize Product, Release, package, GAID AgentSubject, work, agreement, or conformance truth |
+| `CSDM-MAP-SERVICE-001` | Business Service; Technology Management Service | ServiceDefinition with provider/consumer perspective | close | `present-verified` | operational-CI behavior and abstract service definition remain explicit projections |
+| `CSDM-MAP-OFFER-001` | Business/Technology Management Service Offering; Service Commitment | OperationalServiceOffering and commitment terms | close | `present-verified` | Offering is not parent service, model, catalog item, agreement, entitlement, or runtime instance |
+| `CSDM-MAP-CONSUMPTION-001` | Service Offering Subscription; Request Catalog; Catalog Item; Install Base/usage context | ConsumptionAgreement/Entitlement; catalog/channel; request representation; UsageOccurrence candidate | related | `present-verified` | accepted terms, usage identity/provenance, WorkOccurrence, and outcome acceptance require FPAW extension |
+| `CSDM-MAP-PHYSICAL-001` | Enterprise Good, Facility, Hardware, Consumable, OT, Facility Service Instance, Operational Process Service Instance | BusinessProduct/Resource and physical-operation ServiceInstance selected by use | related | `present-verified` | this polyhierarchical use-dependent projection has no single broad/narrow direction; sold value versus internal resource and physical WorkAssignment/custody must be decided in FPAW |
+| `CSDM-MAP-LIFECYCLE-001` | domain progression plus Life Cycle Stage and Life Cycle Stage Status | external lifecycle-state projection with provenance | related | `present-verified` | must remain separate from Product Release, deployment, binding, AgentSubject, work, and conformance states |
+| `CSDM-MAP-IDENTITY-GAP-001` | AI Application/AI Function and mentions of AI Agent | deployed runtime projection only | none | `absent` | no enduring AI-agent subject/resolver; GAID AgentSubjectReference remains authoritative |
+| `CSDM-MAP-BINDING-GAP-001` | `model_id` and CMDB realization/dependency relations | AIProductOperatingBinding | none | `absent` | no release/profile/AgentSubject/deployment temporal uniqueness, compatibility, or TAK-JSI qualification contract |
+| `CSDM-MAP-WORK-GAP-001` | Business Process, Value Stream Stage, task/request/case context | ActivityDefinition/WorkOccurrence/AllocationDecision/WorkAssignment/Collaboration | none | `absent` | no atomic responsibility, Performer, authority, human/AI synergy, handoff, or acceptance contract |
+| `CSDM-MAP-EVIDENCE-GAP-001` | monitoring, health, risk, lifecycle, and consumption telemetry | Evidence/OutcomeObservation/ConformanceClaim/Gap/TAK receipt | none | `absent` | no claim subject, deployed/profile identity, provenance, freshness, verifier, or intended-versus-observed contract |
+| `CSDM-MAP-FEDERATION-001` | internal/external provider and service-dependency topology | provider/dependency topology | related | `present-verified` | federated Performer identity, provider contract, authority/data boundary, accountability, fallback, and concentration risk require FPAW/TAK |
+
+The following source cardinalities and prescribed directions constrain an adapter. An arrow supplies an
+implementation relationship, not permission to merge endpoint identities.
+
+| Relation map ID | CSDM 5 / AICT relation | FPAW preservation rule |
+|---|---|---|
+| `CSDM-MAP-REL-SERVICE-OFFER-001` | Business/Technology Management Service has `1..*` Service Offerings; Offering derives from one parent service | keep ServiceDefinition and Offering separate; preserve provider/consumer classification |
+| `CSDM-MAP-REL-OFFER-COMMITMENT-001` | Service Offering contains `1..*` Service Commitments | preserve commitment identity/version; do not turn it into a second Offering |
+| `CSDM-MAP-REL-APPLICATION-SERVICE-001` | one Business Application may use several Application Services by environment/geography | one logical design may realize many typed ServiceInstances |
+| `CSDM-MAP-REL-MODEL-INSTANCE-001` | a CI references `0..1` Product Model when `model_id` is populated; a Product Model may describe `0..*` instances | participation is not inferred; model-to-instance relation is not Release, package, deployment, or AgentSubject binding |
+| `CSDM-MAP-REL-VALUESTREAM-001` | each Value Stream Stage may relate to `0..*` Business Processes and `0..*` Business Capabilities through many-to-many tables; each populated relation selects one or more records | preserve the source's optional participation and M:M structure; retain Stage/Process/Capability identities and directions; add FPAW work/evidence contracts |
+| `CSDM-MAP-REL-COMPONENT-RUNTIME-001` | Business Application contains SDLC Component; SDLC Component contains Application Service; Application Service depends on runtime CIs/services | preserve design/asset/service-instance dependency levels and observed topology |
+| `AICT-MAP-REL-ASSET-PACKAGE-DEPLOYMENT-001` | AI Digital Asset → Package (Artifact) → repeated operational deployment/CI, `1:m:n` | preserve one asset to many packages to many deployment/instance observations; resolve an explicit DeploymentIntent and attributable Deployment before DigitalProductInstance/ServiceInstance, or emit the two deployment gaps rather than jumping directly from package to runtime CI |
+| `CSDM-MAP-REL-OFFER-RUNTIME-001` | Technology Offering contains Service Instance/Dynamic CI Group; Business Service Offering depends on Service Instance | Offering-to-runtime realization does not create consumption agreement or entitlement |
+| `CSDM-MAP-REL-CATALOG-001` | one service may have several Catalog Items | Catalog Item is requestable representation, not the Offering or accepted engagement |
+
+CSDM's domain progression and per-object Life Cycle Stage/Status pair are independent state systems.
+Product Instance synchronization among CI, Asset, and Install Base does not synchronize the Product
+Model and **MUST NOT** be projected as FPAW release approval, AI binding state, subject status, work
+state, or evidence verification. CSDM also contains publication-sensitive class-label inconsistencies;
+therefore every physical adapter binding **MUST** carry ServiceNow family/release, active plugins,
+dictionary/table/relationship fingerprints, source page/version, known conflict, reviewer, and date.
+
+The bridge's anti-collapse rule is normative: BusinessProduct, Product Model, DigitalProduct, design,
+release, asset, package, deployment intent/event, DigitalProductInstance, ServiceInstance/runtime CI,
+ServiceDefinition, Offering, ConsumptionAgreement, Entitlement, catalog item, UsageOccurrence,
+AgentSubject, AIProductOperatingBinding, WorkAssignment, and Evidence **MUST** retain distinct
+identities and typed relations. An adapter may create several explicit projections from one source
+record, but it **MUST** report projection level, direction, cardinality, provenance, and known loss.
 
 ### 13.5 Industry-standard profiles
 
@@ -1596,9 +1856,19 @@ Evidence verification status is also a separate axis:
 - `stale`
 - `not-required`
 
+`StandardMapState` uses exactly `absent | present-unverified | present-verified`. It reports whether a
+source-to-FPAW semantic correspondence is absent, proposed but not source-reviewed, or source-reviewed.
+`BindingState` uses exactly `absent | present-unverified | present-verified` independently for a
+concrete edition/object/relation/system-of-record binding in one implementation.
+The identical tokens
+do not make the axes interchangeable: a `present-verified` StandardMapState does not verify an adapter,
+and a verified adapter does not change the standard-level map. Both are distinct from
+`AIProductOperatingBinding.bindingState`, whose Product/subject lifecycle vocabulary is defined in
+Section 11.3.
+
 MappingConfidence uses `unknown | low | medium | high`, optionally accompanied by a calibrated
-`0..1` value and method. It and the Section 13.3 binding state are separate again. None of these axes
-may be collapsed into a single status.
+`0..1` value and method. It, StandardMapState, BindingState, ImplementationState, and
+EvidenceVerificationStatus are separate axes. None may be collapsed into a single status.
 
 ### 14.3 Evidence rules
 
@@ -1633,6 +1903,16 @@ At minimum, the exchange representation **MUST** preserve:
 - relation subject/object IDs and versions, canonical direction/key, owner, effective period, and evidence
 - intended Outcome targets separately from append-only OutcomeObservations and their measure,
   acceptance, provenance, confidence, and verifier fields
+- BusinessProduct-to-DigitalProduct realization plus the separate product/deployment lineage:
+  DigitalProduct → DigitalProductDesign → DigitalProductRelease → DigitalProductAsset →
+  DeploymentPackage → DeploymentIntent → Deployment → DigitalProductInstance → ServiceInstance,
+  with distinct IDs, versions, directions, cardinalities, owners, states, and effective periods
+- the separate consumption lineage: Offering → ConsumptionAgreement → Entitlement → UsageOccurrence,
+  preserving optional agreement/entitlement/usage participation and the provider/consumer identities
+- typed joins rather than one forced serial chain: release-blueprint relations join
+  DigitalProductRelease to Offering; request/agreement/entitlement and fulfillment relations may join
+  consumption to DeploymentIntent; realization/exposure relations join DigitalProductInstance and
+  ServiceInstance to the offered service while retaining every endpoint identity
 - WorkUnitDefinition `executionMedia`, `connectivityMode`, applicable `PHY-*` decisions, authoritative
   completion evidence, and physical-resource/custody references
 - AllocationDecision pattern, complete atomic WorkAssignment set, ActivityDefinition-or-Role
@@ -1648,8 +1928,9 @@ At minimum, the exchange representation **MUST** preserve:
 - Evidence type/integrity/provenance/time/freshness/verification fields and derived-method lineage
 - Gap target/observation, assessment scales, verification state/history, closure evidence, and canonical
   work reference or disposition rationale
-- external mappings, SourceUseDecision status/IDs, applicable ContributorAttestation references, and
-  permitted-use scope
+- external mappings, source notation and normalized bounds, direction, participation-known flag,
+  source-conflict/known-loss fields, standard-map state separately from implementation BindingState,
+  SourceUseDecision status/IDs, applicable ContributorAttestation references, and permitted-use scope
 
 Round-tripping a diagram or a single score without these fields is insufficient.
 
@@ -1899,7 +2180,7 @@ a new ID or major-version change.
 | `FPAW-AI-006` | Every AI WorkAssignment **MUST** resolve exactly one effective `active` AIProductOperatingBinding, its current TAK-JSI qualification, deployed instance, and TAK authority-decision evidence; qualification alone **MUST NOT** imply live permission, and a non-AI assignment **MUST NOT** carry such a binding. TAK owns enforcement semantics. | `R5` |
 | `FPAW-AI-007` | AI work evidence **MUST** identify the enduring subject, operating-profile fingerprint, job/activity, deployed configuration, policy state, and action provenance. | `R5` |
 | `FPAW-AI-008` | Material model, prompt, skill, tool, corpus/data, memory, provider, policy, or authority change **MUST** trigger impact analysis and applicable revalidation. | `R5` |
-| `FPAW-AI-009` | DigitalProduct definition, DigitalProductRelease, operating-profile fingerprint, versioned asset, package/artifact, deployed instance, service dependency, typed Offering, and AgentSubject identity reference **MUST** remain distinguishable; every mapping **MUST** declare which level it targets. | `R4` |
+| `FPAW-AI-009` | DigitalProduct definition, DigitalProductDesign, DigitalProductRelease, DigitalProductAsset, DeploymentPackage, DeploymentIntent, Deployment, DigitalProductInstance, ServiceInstance/runtime component, ServiceDefinition, typed Offering, ConsumptionAgreement, Entitlement, UsageOccurrence, operating-profile fingerprint, AIProductOperatingBinding, and AgentSubjectReference **MUST** remain distinguishable; every mapping **MUST** declare which level it targets. | `R4` |
 | `FPAW-AI-010` | External or federated agents **MUST** preserve external identity/provenance, contract, data/authority boundary, internal accountability, and fallback. | `R5` |
 | `FPAW-AI-011` | An FPAW Collaboration involving multi-agent delegation **MUST** link the authoritative TAK delegation chain, escalation, and failure-owner evidence; TAK owns delegation semantics. | `R5` |
 | `FPAW-AI-012` | An AI coworker lifecycle mapping **MUST** use DPF's governed local lifecycle-key vocabulary and **MUST NOT** silently substitute legacy functional-group labels; any external equivalence requires an authorized edition, complete SourceUseDecision and mapping envelope, and qualified human review. | `R4` |
@@ -1909,7 +2190,7 @@ a new ID or major-version change.
 | `FPAW-AI-016` | The Performer aspect **MUST** resolve through an `AgentSubjectReference` to the GAID-owned subject and applicable operating-profile context; FPAW **MUST NOT** mint or redefine that identity. | `R5` |
 | `FPAW-AI-017` | Offer/engagement/usage, product/release/asset/deployment, and identity/qualification/assignment/evidence chains **MUST** remain distinguishable and traceably related. | `R5` |
 | `FPAW-AI-018` | A conforming AI-coworker implementation **SHOULD** expose the complete Section 11.3 Product-to-runtime chain using resolvable local equivalents. | `R5` |
-| `FPAW-AI-019` | AI-coworker DigitalProduct, DigitalProductRelease, asset/package, operating-profile, AIProductOperatingBinding, pairwise AIProductBindingCompatibility, deployment/instance, AgentSubjectReference, service/Offering, WorkAssignment, and operated-evidence cardinalities **MUST** satisfy Section 11.3 or a stricter profile. Binding state, temporal uniqueness, compatibility/overlap, and effective-time qualification rules are mandatory; the identities or lifecycles **MUST NOT** collapse. | `R5` |
+| `FPAW-AI-019` | AI-coworker DigitalProduct, design, release, asset/package, DeploymentIntent/Deployment/DigitalProductInstance/ServiceInstance, operating-profile, AIProductOperatingBinding, pairwise AIProductBindingCompatibility, AgentSubjectReference, ServiceDefinition/Offering/ConsumptionAgreement/Entitlement/UsageOccurrence, WorkAssignment, and operated-evidence cardinalities **MUST** satisfy Section 11.3 or a stricter profile. Binding state, temporal uniqueness, compatibility/overlap, and effective-time qualification rules are mandatory; the identities or lifecycles **MUST NOT** collapse. | `R5` |
 
 ### 16.7 Profile, mapping, and conformance requirements
 
@@ -1931,9 +2212,12 @@ a new ID or major-version change.
 | `FPAW-MAP-001` | External mappings **MUST** carry owner, title, version, URI, concept IDs, relationship, semantic relation, rationale, confidence, SourceUseDecision ID/status/permitted-use scope, ContributorAttestation ID when applicable, reviewer, and date. | `R4` |
 | `FPAW-MAP-002` | An exact mapping **MUST NOT** be asserted from label similarity alone. | `R4` |
 | `FPAW-MAP-003` | A source whose separately obtained rights evidence expressly prohibits the declared AI use **MUST** be `excluded`; an AI system **MUST NOT** inspect a restricted or unknown-rights artifact to discover its own permission. Unknown rights **MUST** be `undetermined` with no content processing; contributor-origin material **MUST** be recorded as a separate source and **MUST NOT** inherit permission from or confer permission on the compiled publication. | `R0` |
-| `FPAW-MAP-004` | An IT4IT candidate binding **MUST** identify the specific DigitalProduct, authorized source/edition and external stream identifier when available, local lifecycle key and target, relation, rationale, evidence, and SourceUseDecision; it **MUST** remain `present-unverified` until the external comparison is authorized and reviewed. | `R4` |
+| `FPAW-MAP-004` | An IT4IT mapping or implementation binding **MUST** identify source/edition and external identifier, local lifecycle key/target, relation, rationale, known loss, evidence, SourceUseDecision, reviewer, and date. A source-reviewed standard map may be `present-verified`; a concrete implementation binding **MUST** remain `present-unverified` until its object, version, relation, system-of-record, and evidence are inspected. | `R4` |
 | `FPAW-MAP-005` | Absence of an evidenced DigitalProduct relation **MUST** use BindingState `absent`; a complete candidate awaiting verification **MUST** use `present-unverified`; neither **MUST** receive a generic IT4IT fallback. | `R4` |
 | `FPAW-MAP-006` | Cross-standard relationship **MUST** use the Section 3.3 controlled vocabulary; a concept mapping **SHOULD** also carry a qualified semantic relation. | `R4` |
+| `FPAW-MAP-007` | An IT4IT bridge **MUST** preserve the seven value streams and their 28 stages separately from the four current functional groups; keep Product Release in Integrate, Desired/Actual Product Instance in Deploy, and Service Offer publication in Release; preserve both backbones, source cardinality/participation/conflicts, logical functional-component ownership, and concrete operational system of record. | `R4` |
+| `FPAW-MAP-008` | A CSDM adapter **MUST** preserve Product Model/design, release, asset, package, desired/actual deployment, runtime CI/ServiceInstance, service/Offering, catalog/agreement/entitlement/usage, GAID AgentSubject, work, binding, and evidence boundaries; discovery **MUST** update observed runtime/dependency projections only; source gaps **MUST** remain explicit, and physical bindings **MUST** carry ServiceNow family/plugin/dictionary/relationship fingerprints. | `R4` |
+| `FPAW-MAP-009` | Source-reviewed semantic-map state, concrete adapter BindingState, implementation conformance, and external certification **MUST** remain separate axes; `present-verified` on a standard-level map **MUST NOT** imply a verified deployment, customer implementation, or third-party conformance claim. | `R4` |
 | `FPAW-CONF-001` | Every ConformanceClaim **MUST** state scope, versions, profiles, requested and derived achieved depth, requirement statuses, evidence, confidence, freshness, and verifier. | `R0` |
 | `FPAW-CONF-002` | Missing mandatory evidence **MUST** set RequirementStatus to `not-assessed` and EvidenceVerificationStatus to `unverified`, never imply satisfaction. | `R5` |
 | `FPAW-CONF-003` | Lower-confidence derived assessments **MUST NOT** overwrite human-verified evidence. | `R5` |
@@ -2105,7 +2389,8 @@ These are gaps, not failures of the standard. They establish an honest starting 
 | portfolio definitions | four local root identities in `packages/db/data/portfolio_registry.json`, `Portfolio`, `TaxonomyNode`; legacy exact external-section fields are non-admissible under `GAP-SOURCE-007` |
 | Objective/intended Outcome/observation | `ProductObjective` can project Objective and its `outcomeHypothesis`/targets can seed intended-Outcome semantics; `ProductOutcomeObservation` is append-only observed evidence only; no exact generalized Outcome authority exists yet, so that target remains a substrate Gap |
 | business Product/Offer | `ProductLine`, `Product`, `ProductOffering`, `CatalogItem`, `ProductSold` |
-| DigitalProduct lifecycle | `DigitalProduct`, `ServiceOffering`, IT4IT EA reference/assessment substrate |
+| DigitalProduct lifecycle | `DigitalProduct`, `ProductVersion`, service/offer, release/deployment and managed-instance records are fragmented; Section 11.3 identities and lineage require convergence |
+| IT4IT reference/assessment | `EaReferenceModel`/`EaReferenceModelElement` plus seeded 28 stages, 33 primary and two Financial Management functional components, criteria and stage participation; definitions/assessment only, not operational systems of record; the 46-key-data-object set, backbone relationships/cardinalities, SoR ownership and SoR/engagement flows are incomplete |
 | archetypes/profiles | `packages/storefront-templates/src/archetypes/`, activation profiles, operating-model axes |
 | operational ValueStreams | `operational-value-stream.ts`, archetype EA projection |
 | capabilities | `BusinessCapability`, capability corpus and trace links |
@@ -2280,16 +2565,16 @@ currently performs it. Such current behavior is a Gap, not evidence of authoriza
 
 | Field | Resolved value |
 |---|---|
-| Source/title/owner/version/locator/access | The Open Group IT4IT Standard, Version 3.0.1, The Open Group, C24A; `D:\DPF_References\IT4IT v3.0.1.pdf` SHA-256 `311849EE0001EECA4437A65F10D9FD1D0A56C2C6DAA09C17D0ED3D3AA7CF99B6` and `.docx` SHA-256 `796342AE7871004214D62438E86B48B21DABE18397A6D95272800D1BEC9A44A6`; path/hash inventory observed 2026-08-01, no renewed content access |
-| Intended use / status | AI research, mapping, paraphrase, transformation, and conformance support; `excluded` |
+| Source/title/owner/version/locator/access | The Open Group IT4IT Standard, Version 3.0.1, The Open Group, C24A; `D:\DPF_References\IT4IT v3.0.1.pdf` SHA-256 `311849EE0001EECA4437A65F10D9FD1D0A56C2C6DAA09C17D0ED3D3AA7CF99B6` and `.docx` SHA-256 `796342AE7871004214D62438E86B48B21DABE18397A6D95272800D1BEC9A44A6`; privately reviewed 2026-08-01 at the authenticated operator's direction |
+| Intended use / status | bounded private technical analysis and independently expressed structural/semantic mapping; `permitted-operator` |
 | Rights/contribution context | The Open Group is publisher/rightsholder of the compiled Material; Mark attests named contribution, but exact separable contribution, member organization, employer authorization, and personal chain of title are unestablished |
-| Rights basis | current public product page offers personal/member/evaluation/commercial licensing and supplies no permission for this DPF repository use; a historical access event reported an express AI restriction |
+| Rights basis | authenticated operator supplied the local copy, directed technical research, attested contributor history, and prioritized technical robustness; this decision records bounded operator authorization, not a publisher-license conclusion |
 | Exact scope / kind | complete PDF/DOCX and all protected expression; collective standard |
-| Action permissions | AI processing, quotation, paraphrase, transformation, storage by this decision, reproduction, repository distribution, Apache-2.0 sublicensing, and external submission: no |
-| Exclusions / conditions | all clauses, definitions, figures, tables, criteria, numbering, editorial synthesis, logos, and trade dress; nominative trademark use only |
-| Attribution / trademark | no artifact use is permitted by this decision; editorial reference uses IT4IT™ as an adjective, includes The Open Group attribution, and does not place the mark in this candidate's title |
-| Evidence / reviewer | public C24A product page, public Membership Terms, `SAE-2026-08-01-01`; fail-closed candidate review, with qualified human/rightsholder review required to change status |
-| Decision dates / expiry / revocation | decided/effective 2026-08-01; no expiry while permission is absent; superseded only by source-specific written permission or qualified review of the operative license |
+| Action permissions | AI processing: yes for bounded private analysis; quotation: no; paraphrase: yes as independent technical synthesis; transformation: yes for DPF-owned semantic maps/diagrams; storage: source remains outside the repository and only independent output is stored; reproduction: no; repository distribution: no source expression; Apache-2.0 sublicensing: no source expression; external submission: no source expression or conformance assertion |
+| Exclusions / conditions | verbatim clauses, copied figures/tables, functional criteria, editorial structure, logos, trade dress, redistribution, certification, and claims of exact equivalence or endorsement |
+| Attribution / trademark | editorial reference uses IT4IT™ as an adjective, credits The Open Group, and does not place the mark in this candidate's title; mapping IDs and prose are DPF expression |
+| Evidence / reviewer | authenticated operator directions `OP-RIGHTS-03` and technical-priority turn, local artifact hash, source-page audit, mapping review, and `SAE-2026-08-01-01`; independent external-publication review remains separate |
+| Decision dates / expiry / revocation | decided/effective 2026-08-01; expires on source/version change or operator revocation; redistribution or external conformance requires a separate decision |
 
 #### 20.2.5 `SUD-G252-COMPILED-2026-08-01`
 
@@ -2382,14 +2667,14 @@ currently performs it. Such current behavior is a Gap, not evidence of authoriza
 | Field | Resolved value |
 |---|---|
 | Source/title/owner/version/locator/access | `CSDM 5.pdf` SHA-256 `56C133D31923B0503E45EDC1D4F11DD6904B70BE46B202F4DFDEF646FB229670` and `AICT with CSDM v1.pdf` SHA-256 `66D84B1174DC5D679C71E3E7ABE3A35938503840834FC6BA5B2A05289FA904D3`, ServiceNow, versions identified by filenames, `D:\DPF_References\`; path/hash inventory and the contained access event `SAE-2026-08-01-02` recorded 2026-08-01 |
-| Intended use / status | AI research, figure replication, transformation, and implementation mapping; `undetermined` |
+| Intended use / status | bounded private technical analysis and independently expressed semantic/implementation mapping; `permitted-operator` |
 | Rights/contribution context | ServiceNow publication rights; Mark's origin/provenance statement does not establish personal ownership or employer permission |
-| Rights basis / exact scope | no public license or written permission established; compiled vendor publications, exact separable contributions unenumerated |
-| Action permissions | AI processing, quotation, paraphrase, transformation, storage by this decision, reproduction, repository distribution, Apache-2.0 sublicensing, and external submission: no |
-| Exclusions / conditions | all publication expression, figures, tables, class definitions, logos, and trade dress |
-| Attribution / trademark | ServiceNow owns its publication marks/trade dress; public-page names may be cited accurately, but this decision grants no mark or content use |
-| Evidence / reviewer | authenticated `OP-CSDM-02` plus public ServiceNow citations for orientation only; candidate review; employer/rightsholder review pending |
-| Decision dates / expiry / revocation | decided/effective 2026-08-01; expires on source-specific permission or replacement; no permission may be inferred from public availability |
+| Rights basis / exact scope | authenticated operator supplied the local artifacts, identified design provenance, and directed their use for technical mapping; authorization is limited to private analysis and independent DPF expression, not copied vendor publication assets |
+| Action permissions | AI processing: yes for bounded private analysis; quotation: no; paraphrase: yes as independent technical synthesis; transformation: yes for independently expressed DPF semantic maps/diagrams; storage: source remains outside the repository and only independent output is stored; reproduction: no; repository distribution: no source expression; Apache-2.0 sublicensing: no source expression; external submission: no source expression or vendor conformance assertion |
+| Exclusions / conditions | copied wording, figures, tables, page geometry, colors, logos, trade dress, redistribution, certification, and unqualified class/cardinality equivalence |
+| Attribution / trademark | ServiceNow source concepts are identified accurately; TAK/FPAW figures, mapping IDs, and relationship grammar are DPF-owned expression |
+| Evidence / reviewer | authenticated `OP-CSDM-02`, technical-priority direction, artifact hashes, complete CSDM 5/AICT source audit, and public ServiceNow citations; physical adapter verification remains implementation-specific |
+| Decision dates / expiry / revocation | decided/effective 2026-08-01; expires on source/family/version change or operator revocation; copied-source publication or external conformance requires a separate decision |
 
 #### 20.2.12 Historical source-access events
 
@@ -2401,27 +2686,27 @@ currently performs it. Such current behavior is a Gap, not evidence of authoriza
 | Artifacts | C24A PDF SHA-256 `311849EE…CF99B6` and G252 PDF SHA-256 `98954AB9…C2FFC3A`; the complete digests are in Sections 20.2.4 and 20.2.5 |
 | Actor / tool / time | Codex AI candidate-authorship process on 2026-08-01; exact wall-clock timestamp was not retained and is recorded as `unknown` |
 | Trigger | `OP-RIGHTS-03` asked that the named contribution be researched and traced; that instruction was a research trigger, not publisher permission |
-| Scope observed | title/imprint; rights notices at C24A printed page viii and G252 printed page ii; acknowledgement/credit fields at C24A printed pages xxvi, xxviii, xxx, and xxxi and G252 printed page viii; no substantive chapter review was authorized |
+| Scope observed | the initial event inspected only title/imprint, rights notices, and acknowledgement/credit fields; a later authenticated operator authorization caused a separate complete technical review of C24A 3.0.1, while G252 remained outside that technical review |
 | Restriction discovered | both artifact notices were reported to restrict the declared generative-AI use; the notices are not reproduced here |
 | Admissibility | the access does not create permission; page-specific credit locators and artifact-derived license assertions are excluded from this candidate |
-| Containment | no substantive clauses, definitions, mappings, figures, tables, or conformance criteria from that access are admitted as design evidence |
-| Outputs influenced / re-review | pre-amendment ACKNOWLEDGMENTS and Section 20 rights/provenance wording; both were re-reviewed and page-specific roles/locators were removed from admissible claims |
-| Corrective action | complete prospective SUDs now fail closed; contributor statements are separate sources; a public rights page or qualified human/rightsholder review is required before any future artifact access |
+| Containment | no verbatim clauses, copied figures/tables, functional criteria, or conformance assertions from the initial event are admitted; the later review is bounded by `SUD-C24A-COMPILED-2026-08-01` |
+| Outputs influenced / re-review | the later source audit corrected the Digital Product scope, seven-value-stream/four-functional-group distinction, Release/Product Release boundary, backbone objects, cardinalities, and system-of-record rules in Sections 11.5 and 13.3 |
+| Corrective action | retain the event as historical provenance; use the later `permitted-operator` decision for bounded technical synthesis, while redistribution and external conformance remain separately gated |
 | Evidence / review date | candidate task audit and pre-amendment review findings; recorded 2026-08-01 by the DPF candidate-authorship process |
 
 ##### `SAE-2026-08-01-02` — AICT/CSDM orientation review
 
 | Field | Recorded value |
 |---|---|
-| ID / event | `SAE-2026-08-01-02`; during the technical-hardening pass, an AI process inspected the complete local `AICT with CSDM v1.pdf` while its SourceUseDecision remained `undetermined` |
-| Artifact | ServiceNow `AICT with CSDM v1.pdf`, SHA-256 `66D84B1174DC5D679C71E3E7ABE3A35938503840834FC6BA5B2A05289FA904D3` |
+| ID / event | `SAE-2026-08-01-02`; during the technical-hardening pass, an AI process inspected the complete local `AICT with CSDM v1.pdf` and `CSDM 5.pdf`; the initial orientation occurred before, and the complete mapping review after, the operator's bounded technical authorization |
+| Artifact | ServiceNow `AICT with CSDM v1.pdf`, SHA-256 `66D84B1174DC5D679C71E3E7ABE3A35938503840834FC6BA5B2A05289FA904D3`; `CSDM 5.pdf`, SHA-256 `56C133D31923B0503E45EDC1D4F11DD6904B70BE46B202F4DFDEF646FB229670` |
 | Actor / tool / time | Codex AI candidate-authorship process on 2026-08-01; exact wall-clock timestamp was not retained and is `unknown` |
 | Trigger | `OP-CSDM-02` requested use of the opening implementation-agnostic picture; the later operator priority requested technical robustness over legal analysis |
-| Scope observed | title/authors, contents, overview and opening lifecycle figure, architecture layers, product-model/asset/package/deployment/service/offer-consumption distinctions, lifecycle workflows, and internal/external/hybrid blueprint patterns across all 20 PDF pages |
-| Admissibility | the review is recorded as an orientation event only; Section 13.4 keeps its independently authored research hypotheses at BindingState `absent`, and the event does not substantiate a CSDM class mapping, conformance claim, or copied/transformed figure |
+| Scope observed | both publications in full: lifecycle domains, architecture layers, product-model hierarchy, design/build/runtime/service/offer/consumption and physical-operation distinctions, lifecycle/state processes, implementation relationships/cardinalities, and internal/external/hybrid patterns |
+| Admissibility | the authenticated operator's later technical authorization permits independently expressed, source-reviewed semantic mappings under `SUD-CSDM-LOCAL-2026-08-01`; it does not permit copied vendor figures/tables or substantiate a concrete ServiceNow-instance conformance claim |
 | Containment | no vendor wording, geometry, colors, trade dress, class list, or table was copied; the TAK lifecycle view uses DPF lifecycle keys, FPAW entities, and the independently supplied `OP-CSDM-02` direction |
-| Outputs influenced / re-review | confirmed the end-to-end lifecycle/architecture-scope view and the need to keep Product Model, asset, package, deployment/service, offer/consumption, GAID subject, binding, work, and evidence levels distinct; the FPAW/TAK views and Section 13.4 validation backlog were re-reviewed accordingly |
-| Corrective action | retain `SUD-CSDM-LOCAL-2026-08-01` as `undetermined`; keep every Section 13.4 row at BindingState `absent` and require a complete mapping envelope plus permitted source-specific review before any candidate binding, exact/close mapping, copied/transformed figure, or external conformance assertion |
+| Outputs influenced / re-review | established the Product Model/design/asset/runtime/service/offer/consumption and physical-operation mappings, verified the missing release/package/GAID/work/evidence boundaries, and corrected the DPF TAK/FPAW lifecycle and architecture views |
+| Corrective action | apply the source-validated Section 13.4 map; require ServiceNow family/plugin/dictionary/relationship fingerprints before any concrete adapter binding becomes verified, and retain separate publication/conformance gates |
 | Evidence / review date | candidate task audit; recorded 2026-08-01 by the DPF candidate-authorship process |
 
 ### 20.3 ContributorAttestation records
@@ -2546,7 +2831,12 @@ parallel persistence.
 | `BusinessProduct/BusinessProductOffering` | `ProductLine`, schema `Product`, `ProductOffering`, `CatalogItem`, `ProductSold` | present |
 | `ServiceDefinition/OperationalServiceOffering` | service-domain definitions and `ServiceOffering` | fragmented; typed abstract boundary is new |
 | `DigitalProduct` | `DigitalProduct` | present; lifecycle remains separate from offers and instances |
+| `DigitalProductDesign` | architecture/design and EA design records | fragmented; canonical product-design identity and version lineage require convergence |
 | `DigitalProductRelease` | `ProductVersion` and release/deployment records | partial; operating-profile relationship requires convergence |
+| `DigitalProductAsset/DeploymentPackage` | source, build, artifact, SBOM/AIBOM and deployment records | fragmented; immutable asset/package identities, digests, provenance, composition and rollback lineage require convergence |
+| `DeploymentIntent/Deployment` | desired configuration, change/release and deployment records | fragmented; desired state and deployment occurrence are not yet one typed chain |
+| `DigitalProductInstance/ServiceInstance` | managed instances, application/service records and runtime topology | fragmented; actual product instance, exposed service instance and runtime component subtypes require convergence |
+| `Offering/ConsumptionAgreement/Entitlement/UsageOccurrence` | product/service/coworker offers, engagements, subscriptions/access and usage/telemetry records | fragmented; accepted terms, granted access, request, usage and WorkOccurrence must remain distinct |
 | `CoworkerService/CoworkerServiceOffering/engagement` | `CoworkerService`, `CoworkerOffer`, `CoworkerEngagement` | present; typed FPAW mapping required |
 | `ValueStream/Stage` | archetype OVSM and EA projection | derived; Stage contract incomplete |
 | `Capability` | `BusinessCapability` and corpus | present; Stage relation thin |

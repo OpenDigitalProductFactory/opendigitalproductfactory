@@ -1,3 +1,7 @@
+import { hasSemanticContent } from "./fpaw-semantic-content";
+
+export { hasSemanticContent } from "./fpaw-semantic-content";
+
 const REQUIRED_SUD_FIELDS = [
   "source/title/owner/version/locator/access",
   "intended use / status",
@@ -22,6 +26,7 @@ const REQUIRED_SUD_ACTIONS = [
 const SUD_STATUSES = new Set([
   "permitted-public",
   "permitted-contributor",
+  "permitted-operator",
   "reference-only",
   "excluded",
   "undetermined",
@@ -133,8 +138,15 @@ export const EXPECTED_DEVIATIONS = new Map<string, readonly [string, string]>([
 ]);
 
 export function section(body: string, start: string, end: string): string {
-  const from = body.indexOf(start);
-  const to = body.indexOf(end, from + start.length);
+  const markerIndex = (marker: string, offset: number): number => {
+    if (!/^#{1,6}\s/.test(marker)) return body.indexOf(marker, offset);
+    const escaped = marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = new RegExp(`^ {0,3}${escaped}.*\\r?$`, "gm");
+    match.lastIndex = offset;
+    return match.exec(body)?.index ?? -1;
+  };
+  const from = markerIndex(start, 0);
+  const to = markerIndex(end, from < 0 ? 0 : from + start.length);
   if (from < 0 || to < 0) return "";
   return body.slice(from, to);
 }
@@ -159,15 +171,61 @@ export function withoutHtmlComments(body: string): string {
   );
 }
 
-export function hasSemanticContent(value: string): boolean {
-  const visible = value
-    .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/<(https?:\/\/[^>]+)>/gi, "$1")
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/<[^>]*>/g, "")
-    .replace(/&(?:nbsp|#160|#xA0);/gi, "");
-  return /[\p{L}\p{N}]/u.test(visible);
+/**
+ * Retains rendered normative Markdown while blanking constructs whose contents
+ * are not document text. Character and line positions remain stable so existing
+ * diagnostics can still identify their source locations.
+ */
+export function visibleMarkdown(body: string): string {
+  const chunks = withoutHtmlComments(body).split(/(\r?\n)/);
+  let fenceCharacter = "";
+  let fenceLength = 0;
+
+  for (let index = 0; index < chunks.length; index += 2) {
+    const line = chunks[index];
+    if (fenceCharacter) {
+      const escaped = fenceCharacter === "`" ? "`" : "~";
+      const closing = new RegExp(`^ {0,3}${escaped}{${fenceLength},}[ \\t]*$`);
+      chunks[index] = " ".repeat(line.length);
+      if (closing.test(line)) {
+        fenceCharacter = "";
+        fenceLength = 0;
+      }
+      continue;
+    }
+
+    const opening = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+    if (opening) {
+      fenceCharacter = opening[1][0];
+      fenceLength = opening[1].length;
+      chunks[index] = " ".repeat(line.length);
+      continue;
+    }
+    if (/^(?: {4}|\t)/.test(line)) {
+      chunks[index] = " ".repeat(line.length);
+    }
+  }
+  return chunks.join("");
+}
+
+export function hasBalancedHtmlComments(body: string): boolean {
+  let cursor = 0;
+  let insideComment = false;
+  while (cursor < body.length) {
+    const opening = body.indexOf("<!--", cursor);
+    const closing = body.indexOf("-->", cursor);
+    if (!insideComment) {
+      if (opening < 0) return true;
+      insideComment = true;
+      cursor = opening + 4;
+      continue;
+    }
+    if (opening >= 0 && (closing < 0 || opening < closing)) return false;
+    if (closing < 0) return false;
+    insideComment = false;
+    cursor = closing + 3;
+  }
+  return !insideComment;
 }
 
 export function parseMarkdownRow(line: string): string[] {
@@ -650,7 +708,11 @@ export function validateSourceRecords(
   }
   exactDefinitionSet("SourceCitation", citationDefinitions, EXPECTED_SCIT_IDS, errors);
 
-  const orientationSection = section(visibleCore, "### 13.2 Orientation references", "### 13.3 IT4IT");
+  const orientationSection = section(
+    visibleCore,
+    "### 13.2 Orientation references",
+    "### 13.3 Source-validated IT4IT Reference Architecture 3.0.1 bridge",
+  );
   for (const match of orientationSection.matchAll(/\[[^\]]+\]\(([^)\s]+)\)/g)) {
     const locator = match[1];
     if (!locator.startsWith("https://")) {

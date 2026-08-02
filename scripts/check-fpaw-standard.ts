@@ -9,6 +9,7 @@ import {
   difference,
   duplicates,
   EXPECTED_DEVIATIONS,
+  hasBalancedHtmlComments,
   hasSemanticContent,
   numericRequirementRows,
   parseMarkdownTable,
@@ -19,13 +20,14 @@ import {
   validateRequirementSequence,
   validateRequirementTableSyntax,
   validateSourceRecords,
+  visibleMarkdown,
   withoutHtmlComments,
 } from "./lib/fpaw-standard-conformance";
 
 const CORE_PATH = "docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md";
 const CATALOG_PATH = "docs/architecture/four-portfolio-archetype-standard-profile-catalog.md";
 
-const EXPECTED_CORE_REQUIREMENTS = 172;
+const EXPECTED_CORE_REQUIREMENTS = 175;
 const EXPECTED_CATALOG_REQUIREMENTS = 18;
 const EXPECTED_WORKED_SPECIMENS = 7;
 
@@ -128,6 +130,12 @@ export function analyzeFPAW(
   inventory: Inventory = currentInventory(),
 ): CheckResult {
   const errors: string[] = [];
+  if (core.includes("<!--")) errors.push("core: HTML comments are not permitted in canonical standard Markdown");
+  else if (!hasBalancedHtmlComments(core)) errors.push("core: unbalanced HTML comment delimiter");
+  if (catalog.includes("<!--")) errors.push("catalog: HTML comments are not permitted in canonical standard Markdown");
+  else if (!hasBalancedHtmlComments(catalog)) errors.push("catalog: unbalanced HTML comment delimiter");
+  core = visibleMarkdown(core);
+  catalog = visibleMarkdown(catalog);
   validateCoreDomainContracts(core, errors);
   const categorySet = new Set(inventory.categories);
   const leafSet = new Set(inventory.leaves);

@@ -877,21 +877,25 @@ profile fields or evidence of completeness.
 | controls / evidence / measures | organization/land/field/herd/animal/equipment/material/provider identity; dated plan/actual, source/as-of/freshness/uncertainty, qualification/approval, treatment/withdrawal, lot/quality, incident/outcome; yield/quality, cycle, margin, capacity, welfare/safety/environment risk |
 | composition result / gaps | specialized agriculture and customer-care ceilings override shared families; null governance-profile references and unshipped typed records prevent an operated coworker claim; exact external registry fields are non-admissible |
 
-## 8. CSDM and AI DigitalProduct future review boundary
+## 8. CSDM 5 and AI DigitalProduct application boundary
 
-The specimens above are independently expressed from DPF-owned product, release, deployment,
-service/offer/engagement, runtime, work, TAK, GAID, and TAK-JSI semantics plus the bounded operator
-direction in `OP-CSDM-02`. Mark Bodman's attestation records that he originated CSDM as a ServiceNow
-internal standard and created several public pattern videos, but it does not enumerate the exact
-videos or grant rights in ServiceNow publications. No individual video is attributed to him here and
-no vendor page, video, figure, table, class definition, or terminology supplies catalog semantics.
+The specimens above remain vendor-neutral applications of DPF-owned product, deployment, service,
+work, TAK, GAID, and TAK-JSI semantics. The source-validated CSDM 5 map is centralized in the
+[core standard's Section 13.4](four-portfolio-archetype-ai-workforce-operating-standard.md#134-source-validated-csdm-5-and-aict-bridge);
+catalog specimens **MUST NOT** create a second mapping registry.
 
-A future authorized CSDM review may test platform/application, Product/component, shared-service,
-version/release/asset, offer/engagement/instance, and lifecycle relationships. Before doing so, it
-**MUST** enumerate each exact source, complete its SourceUseDecision and the
-[core standard's Section 13.1 mapping envelope](four-portfolio-archetype-ai-workforce-operating-standard.md#131-mapping-rules),
-and respect the vendor's website linking terms. The ServiceNow homepage and the page titles
-in the core standard's `SCIT-SNOW-*` records are research locators only.
+A ServiceNow implementation profile may project Product Model, Business Application/design, SDLC or
+AI Digital Assets, runtime CIs/Service Instances, services, Service Offerings, catalog and consumption
+records to the core levels. It **MUST** preserve the verified gaps: CSDM 5 does not supply FPAW's
+DigitalProductRelease authority, a stable concrete DeploymentPackage class/identity contract,
+DeploymentIntent, attributable Deployment occurrence, enduring GAID AgentSubject,
+AIProductOperatingBinding, atomic work allocation, or attributable evidence contract. The supplied
+AICT publication adds a logical Package (Artifact) layer and a source `1:m:n` AI Digital
+Asset-to-package-to-operational-deployment pattern; this closes the conceptual package-layer gap but
+does not establish a CSDM table, immutable digest, target-compatibility, provenance, rollback, desired
+configuration, or deployment-occurrence contract. Physical bindings also **MUST** carry the applicable
+ServiceNow family/release, plugins, dictionary/table and relationship fingerprints; source labels
+alone are not implementation evidence.
 
 ## 9. Current DPF coverage baseline
 

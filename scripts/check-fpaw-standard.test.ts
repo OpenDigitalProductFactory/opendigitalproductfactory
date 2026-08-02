@@ -1,45 +1,13 @@
-import { readFileSync } from "node:fs";
 import { strict as assert } from "node:assert";
 import test from "node:test";
 import { analyzeFPAW, currentInventory } from "./check-fpaw-standard";
-
-const core = readFileSync(
-  "docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md",
-  "utf8",
-);
-const catalog = readFileSync(
-  "docs/architecture/four-portfolio-archetype-standard-profile-catalog.md",
-  "utf8",
-);
-
-function assertRejected(
-  brokenCore: string,
-  brokenCatalog: string,
-  expectedError: RegExp,
-): void {
-  const result = analyzeFPAW(brokenCore, brokenCatalog, currentInventory());
-  assert(
-    result.errors.some((error) => expectedError.test(error)),
-    `expected ${expectedError}, received:\n${result.errors.join("\n")}`,
-  );
-}
-
-function replaceRequired(source: string, search: string, replacement: string): string {
-  assert(source.includes(search), `mutation fixture not found: ${search.slice(0, 120)}`);
-  return source.replace(search, replacement);
-}
-
-function replaceMatched(
-  source: string,
-  pattern: RegExp,
-  transform: (matched: string) => string,
-): string {
-  const matched = source.match(pattern)?.[0];
-  assert(matched, `mutation fixture not found: ${pattern}`);
-  const replacement = transform(matched);
-  assert.notEqual(replacement, matched, `mutation did not change fixture: ${pattern}`);
-  return source.replace(pattern, replacement);
-}
+import {
+  assertRejected,
+  catalog,
+  core,
+  replaceMatched,
+  replaceRequired,
+} from "./lib/fpaw-standard-test-fixtures";
 
 test("the checked-in FPAW standard reconciles with every canonical invariant", () => {
   const result = analyzeFPAW(core, catalog, currentInventory());
@@ -51,9 +19,9 @@ test("the checked-in FPAW standard reconciles with every canonical invariant", (
     matrixFamilies: 10,
     matrixCells: 240,
     deviations: 34,
-    coreRequirements: 172,
+    coreRequirements: 175,
     catalogRequirements: 18,
-    totalRequirements: 190,
+    totalRequirements: 193,
     profiles: 9,
     workedSpecimens: 7,
     sourceUseDecisions: 11,
@@ -760,26 +728,5 @@ test("a closed Gap reopens for stale same-target evidence while changed identity
     ),
     catalog,
     /closed-Gap reopening contract is incomplete/,
-  );
-});
-
-test("the CSDM bridge preserves exact Candidate IDs and shared absent non-binding state", () => {
-  assertRejected(
-    replaceRequired(
-      core,
-      "`CSDM-CAND-FEDERATION-001`",
-      "`CSDM-CAND-FABRICATED-001`",
-    ),
-    catalog,
-    /CSDM Candidate IDs must be exactly ordered/,
-  );
-  assertRejected(
-    replaceRequired(
-      core,
-      "Every row has BindingState `absent`: no CSDM correspondence is asserted. The lifecycle\ncolumn identifies DPF phases in the review scope, not the single local lifecycle key required by a\nfuture binding.",
-      "Every row has BindingState `present-unverified`: a CSDM correspondence is asserted. The lifecycle\ncolumn identifies binding keys rather than non-binding DPF review phases.",
-    ),
-    catalog,
-    /CSDM Candidate absent non-binding contract is incomplete/,
   );
 });
