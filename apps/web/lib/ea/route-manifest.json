@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 600,
+  "routeCount": 603,
   "routes": [
     {
       "routePath": "/",
@@ -2681,6 +2681,40 @@
       "file": "apps/web/app/api/v1/finance/invoices/[id]/route.ts"
     },
     {
+      "routePath": "/api/v1/finance/invoices/[id]/documents",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "invoices",
+        "[id]",
+        "documents"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/finance/invoices/[id]/documents/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/invoices/[id]/documents/[documentId]",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "invoices",
+        "[id]",
+        "documents",
+        "[documentId]"
+      ],
+      "dynamicParams": [
+        "id",
+        "documentId"
+      ],
+      "file": "apps/web/app/api/v1/finance/invoices/[id]/documents/[documentId]/route.ts"
+    },
+    {
       "routePath": "/api/v1/finance/invoices/[id]/pdf",
       "kind": "route",
       "segments": [
@@ -2711,6 +2745,22 @@
         "id"
       ],
       "file": "apps/web/app/api/v1/finance/invoices/[id]/send/route.ts"
+    },
+    {
+      "routePath": "/api/v1/finance/invoices/[id]/void",
+      "kind": "route",
+      "segments": [
+        "api",
+        "v1",
+        "finance",
+        "invoices",
+        "[id]",
+        "void"
+      ],
+      "dynamicParams": [
+        "id"
+      ],
+      "file": "apps/web/app/api/v1/finance/invoices/[id]/void/route.ts"
     },
     {
       "routePath": "/api/v1/finance/payment-runs",
