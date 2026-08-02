@@ -145,6 +145,7 @@ describe("getDispatchBoard", () => {
     expect(args.where.sourceType).toBe("field-service-job");
     expect(args.where.queue).toEqual({ is: { queueId: "dispatch-sf-1" } });
     expect(args.select).toMatchObject({ sourceType: true, status: true, evidence: true, assignedToUserId: true });
+    expect(args).not.toHaveProperty("take");
     const queuedJob = board.columns.find((c) => c.key === "needs-dispatch")!.jobs[0]!;
     expect(queuedJob.status).toBe("needs-review");
     expect(queuedJob.statusLabel).toBe("Needs review");

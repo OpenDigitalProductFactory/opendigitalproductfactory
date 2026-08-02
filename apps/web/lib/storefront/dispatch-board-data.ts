@@ -159,7 +159,6 @@ export interface DispatchWorkItemFinder {
     where: Record<string, unknown>;
     orderBy?: unknown;
     select?: unknown;
-    take?: number;
   }) => Promise<Array<Record<string, unknown>>>;
 }
 
@@ -226,7 +225,6 @@ export async function getDispatchBoard(
         assignedToAgentId: true,
         evidence: true,
       },
-      take: 200,
     });
     return groupDispatchJobs(rows.map(toView));
   } catch (err) {

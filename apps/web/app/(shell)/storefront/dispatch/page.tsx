@@ -39,16 +39,27 @@ function formatDue(iso: string | null): string {
   return `${iso.slice(0, 16).replace("T", " ")} UTC`;
 }
 
+function domSafeId(value: string): string {
+  return value.replace(/[^a-zA-Z0-9_-]/g, "-");
+}
+
 function JobCard({ job }: { job: DispatchJobView }) {
+  const cardId = domSafeId(job.itemId);
+  const titleId = `dispatch-job-${cardId}-title`;
+  const detailId = `dispatch-job-${cardId}-detail`;
+
   return (
     <article
-      aria-label={`${job.title}: ${job.statusLabel}, ${job.assignmentLabel}, due ${formatDue(job.dueAt)}`}
+      aria-labelledby={titleId}
+      aria-describedby={detailId}
       className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <h4 className="truncate text-sm font-semibold text-[var(--dpf-text)]">{job.title}</h4>
-          <p className="mt-1 text-xs text-[var(--dpf-muted)]">{formatDue(job.dueAt)}</p>
+          <h4 id={titleId} className="truncate text-sm font-semibold text-[var(--dpf-text)]">{job.title}</h4>
+          <p id={detailId} className="mt-1 text-xs text-[var(--dpf-muted)]">
+            {job.statusLabel}; {job.assignmentLabel}; due {formatDue(job.dueAt)}
+          </p>
         </div>
         <StatusBadge domain="fieldDispatchJob" status={job.status} label={job.statusLabel} size="sm" />
       </div>
@@ -93,7 +104,7 @@ function RouteView({ board }: { board: DispatchBoard }) {
       {board.routeStops.map((job, index) => (
         <li
           key={job.itemId}
-          aria-label={`Stop ${index + 1}: ${job.title}, ${formatDue(job.dueAt)}`}
+          aria-label={`${index === 0 ? "Next stop; " : ""}stop ${index + 1} of ${board.routeStops.length}: ${job.title}, ${formatDue(job.dueAt)}`}
           aria-current={index === 0 ? "step" : undefined}
           aria-posinset={index + 1}
           aria-setsize={board.routeStops.length}
@@ -112,6 +123,9 @@ function RouteView({ board }: { board: DispatchBoard }) {
           </div>
           <div className="min-w-0 pb-2">
             <p className="truncate text-sm font-medium text-[var(--dpf-text)]">{job.title}</p>
+            {index === 0 ? (
+              <p className="text-xs font-semibold text-[var(--dpf-accent)]">Next stop</p>
+            ) : null}
             <p className="text-xs text-[var(--dpf-muted)]">{formatDue(job.dueAt)}</p>
           </div>
         </li>
@@ -133,10 +147,10 @@ function ScheduleView({ board }: { board: DispatchBoard }) {
 
   return (
     <ol aria-label="Upcoming dispatch schedule" className="grid gap-2">
-      {jobs.map((job) => (
+      {jobs.map((job, index) => (
         <li
           key={job.itemId}
-          aria-label={`${formatDue(job.dueAt)}: ${job.title}; ${job.assignmentLabel}`}
+          aria-label={`Schedule item ${index + 1} of ${jobs.length}: ${formatDue(job.dueAt)}; ${job.title}; ${job.assignmentLabel}`}
           className="grid grid-cols-[6rem_1fr] gap-3 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3"
         >
           <p className="text-xs font-semibold text-[var(--dpf-text)]">
@@ -282,9 +296,7 @@ function DispatchOperationsSurface({ board }: { board: DispatchBoard }) {
           </h3>
           <div
             aria-labelledby="dispatch-lanes-heading"
-            role="region"
-            tabIndex={0}
-            className="grid gap-3 rounded-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--dpf-accent)] [grid-template-columns:repeat(auto-fit,minmax(14rem,1fr))]"
+            className="grid gap-3 rounded-md [grid-template-columns:repeat(auto-fit,minmax(14rem,1fr))]"
           >
             {board.columns.map((col) => (
               <section
