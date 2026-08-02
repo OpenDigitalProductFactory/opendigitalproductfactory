@@ -35,6 +35,7 @@
 // choice to turn a provider off, not a failure.
 
 import { getProviders } from "@/lib/ai-provider-data";
+import { AI_PROVIDER_CONNECTIONS_ROUTE } from "@/lib/ai-provider-routes";
 import type { prisma } from "@dpf/db";
 import {
   detectProviderSuitabilityDrift,
@@ -44,7 +45,7 @@ import {
 import type { AttentionItem } from "../types";
 
 /** Reconnect surface — the same target the honest failure message points at. */
-export const PROVIDER_RECONNECT_ROUTE = "/platform/ai/providers";
+export const PROVIDER_RECONNECT_ROUTE = AI_PROVIDER_CONNECTIONS_ROUTE;
 
 export type ExpiredCredentialProvider = {
   providerId: string;
