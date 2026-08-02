@@ -37,7 +37,11 @@ does this install actually understand about itself?".
 
 To explore, type a name, path, or key into **Find a starting point** — a data
 model such as `BacklogItem`, a route such as `/admin`, a tool such as
-`search_code_graph`. Pick a result and its neighbourhood is drawn. From there:
+`search_code_graph`. Pick a result and its neighbourhood is drawn. The selected
+starting point, domain filters, and hop depth are kept in the page address, so a
+focused view can be bookmarked or shared and will be rebuilt when opened. If a
+search or expansion cannot complete, the explorer keeps the current context and
+offers a retry instead of replacing the graph with a dead end. From there:
 
 - **Hops** controls how far out from your starting point the drawing reaches.
 - Clicking a node opens **Details**, which shows what it is, its stored
