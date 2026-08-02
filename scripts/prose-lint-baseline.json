@@ -1838,7 +1838,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 11
+    "textMass": 2
   },
   "apps/web/app/(shell)/service-requests/page.tsx": {
     "vocabulary": 0,
@@ -7363,6 +7363,13 @@
     "longSentences": 0,
     "textMass": 83
   },
+  "apps/web/components/storefront-admin/RentalPhysicalEditor.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 40
+  },
   "apps/web/components/storefront-admin/ScheduleEditor.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -7431,7 +7438,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 89
+    "textMass": 57
   },
   "apps/web/components/storefront-admin/content-editing-ui.tsx": {
     "vocabulary": 0,
