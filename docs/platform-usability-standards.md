@@ -78,6 +78,12 @@ read, the CI checkers, and the migration league table. Intended shell per route 
 | Deferred detail | Above a per-shell word threshold the surface **must** use disclosure |
 | Primary action reachable | A marked primary action (`data-dpf-primary-action` / `data-owner-first-next-action`) may not be buried behind a collapsed disclosure on action shells (cockpit/detail/settings/form) |
 
+**Lead-band adoption is presence-positive.** Adding a compliant `data-dpf-lead` to a
+pre-existing route is a retrofit improvement, not a regression, even though the measured
+lead-band word count rises from zero. The ratchet catches removal of an established lead
+band; absolute `maxLeadBandWords` budgets still report overlong copy and block net-new
+routes.
+
 **Hiding the primary action is a regression the word budgets cannot see.** Moving a
 trigger behind an "Advanced" collapse *reduces* the default-visible word and control
 counts, so the volume budgets read it as an improvement. The reachability axis is the
@@ -131,9 +137,10 @@ Three enforcement modes, decided by `lib/ux-budget/ratchet.ts`:
 
 1. **Pre-existing route → regression ratchet.** A changed route may not exceed its own
    frozen baseline on words, controls, fields, choices, sub-legible controls or axe
-   violations. Existing debt is reported every run but never blocks a PR that did not make
-   it worse. That restraint is deliberate: a gate that fails unrelated PRs on legacy debt
-   forces a blind mass-rewrite and gets switched off.
+   violations, and may not remove an established lead band. Existing debt is reported
+   every run but never blocks a PR that did not make it worse. That restraint is
+   deliberate: a gate that fails unrelated PRs on legacy debt forces a blind mass-rewrite
+   and gets switched off.
 2. **Net-new route → absolute budgets block.** No baseline to hide behind.
 3. **Structure → the ARIA snapshot must not drift.** Heading levels, landmarks and
    accessible names, as a diffable YAML projection. "This PR flattened the h2/h3 structure
