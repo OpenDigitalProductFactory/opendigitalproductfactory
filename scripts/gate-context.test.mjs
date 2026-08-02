@@ -76,6 +76,16 @@ test("the UX-Fit constraint names the measured manifest, never the retired trail
   assert.match(uxFit.alternative, /RETIRED/);
 });
 
+test("the UX-Fit conditional guidance names the complete control-sensitive set", () => {
+  const ctx = build([{ path: "apps/web/components/things/Panel.tsx", status: "M" }]);
+  const uxFit = ctx.trailers.find((t) => t.gate === "UX-Fit");
+  assert.equal(uxFit?.level, "conditional");
+  assert.match(uxFit.because, /button/);
+  assert.match(uxFit.because, /link/);
+  assert.match(uxFit.because, /disclosure/);
+  assert.match(uxFit.because, /custom .*Trigger/i);
+});
+
 test("schema changes surface the Data-Impact requirement and NAME the surface kind", () => {
   const ctx = build([{ path: "packages/db/prisma/schema.prisma", status: "M" }]);
   const dataImpact = ctx.trailers.find((t) => t.gate === "Data-Impact");
@@ -169,7 +179,17 @@ const CONTROL_PROBES = [
   { text: '<textarea rows={3}>', file: "apps/web/components/C.tsx" },
   { text: 'type="number"', file: "apps/web/components/D.tsx" },
   { text: "<form onSubmit={x}>", file: "apps/web/components/E.tsx" },
-  { text: "<div>plain</div>", file: "apps/web/components/F.tsx" },
+  { text: '<button type="button">Save</button>', file: "apps/web/components/F.tsx" },
+  { text: '<a href="/customer">Customer</a>', file: "apps/web/components/G.tsx" },
+  { text: '<Link href="/workspace">Workspace</Link>', file: "apps/web/components/H.tsx" },
+  { text: "<details>", file: "apps/web/components/I.tsx" },
+  { text: "<summary>Advanced</summary>", file: "apps/web/components/J.tsx" },
+  { text: "<SubmitButton pending={pending} />", file: "apps/web/components/K.tsx" },
+  { text: "<DropdownMenuTrigger asChild>", file: "apps/web/components/L.tsx" },
+  { text: '<div role="button" onClick={open}>Open</div>', file: "apps/web/components/M.tsx" },
+  { text: "<PanelHeader aria-expanded={open}>", file: "apps/web/components/N.tsx" },
+  { text: "<section data-dpf-disclosure>", file: "apps/web/components/O.tsx" },
+  { text: "<div>plain</div>", file: "apps/web/components/P.tsx" },
 ];
 
 test("ux-fit hook mirror agrees with canonical UI_CONTROL_RE on every probe", () => {
