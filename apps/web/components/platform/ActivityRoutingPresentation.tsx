@@ -37,10 +37,10 @@ export function TechnicalDetails({ entries }: { entries: TechnicalEntry[] }) {
 
   return (
     <details data-technical-details className="mt-2">
-      <summary className="cursor-pointer select-none text-[11px] text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">
+      <summary className="min-h-11 cursor-pointer select-none py-2 text-xs text-[var(--dpf-muted)] hover:text-[var(--dpf-text)]">
         Technical details
       </summary>
-      <dl className="mt-1 space-y-1 text-[11px]">
+      <dl className="mt-1 space-y-1 text-xs">
         {shown.map((entry) => (
           <div key={entry.label} className="flex items-center gap-2">
             <dt className="shrink-0 text-[var(--dpf-muted)]">{entry.label}</dt>
@@ -54,7 +54,7 @@ export function TechnicalDetails({ entries }: { entries: TechnicalEntry[] }) {
               type="button"
               onClick={() => void copy(entry)}
               aria-label={`Copy ${entry.label}`}
-              className="shrink-0 rounded border border-[var(--dpf-border)] px-1.5 py-0.5 text-[10px] text-[var(--dpf-muted)] hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-text)]"
+              className="min-h-11 shrink-0 rounded border border-[var(--dpf-border)] px-2 py-1.5 text-xs text-[var(--dpf-muted)] hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-text)]"
             >
               {copiedLabel === entry.label ? "Copied" : "Copy"}
             </button>

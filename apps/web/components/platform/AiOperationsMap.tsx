@@ -14,6 +14,10 @@ import type {
 import type { RoutingEvidenceConformanceProjection } from "@/lib/ai-operations-map/routing-evidence-conformance";
 import type { RoutingArchitectureMode } from "@/lib/ai-operations-map/routing-comparison-view-model";
 import {
+  buildOperationsMapOwnerSummary,
+  type OperationsMapOwnerSummary,
+} from "@/lib/ai-operations-map/owner-summary";
+import {
   buildStationProjectionTiles,
   filterOperationsMapProjections,
   getOperationsMapQuickViewFilters,
@@ -152,6 +156,10 @@ export function AiOperationsMap({
       a2aEdges: applyA2aControlFilters(routingTopology.a2aEdges, a2aControl),
     };
   }, [a2aControl, routingControl, routingTopology]);
+  const ownerSummary = useMemo(
+    () => buildOperationsMapOwnerSummary(routingTopology.activityRouting),
+    [routingTopology.activityRouting],
+  );
 
   useEffect(() => {
     const preference = loadOperationsMapViewPreference();
@@ -222,68 +230,81 @@ export function AiOperationsMap({
 
   return (
     <div className="space-y-4">
-      <RoutingArchitectureOverview
-        evidence={routingEvidence}
-        initialMode={initialArchitectureMode}
-        initialFocusStageId={initialFocusStageId}
-      />
+      <OperationsMapOwnerLead summary={ownerSummary} />
 
-      <section aria-label="Routing map workspace" className="space-y-3">
-        <header className="sr-only">
-          <p>AI workforce</p>
-          <h1>AI Operations Map</h1>
-          <p>Designed routing, observed evidence, and one technical topology for provider and coworker interactions.</p>
-        </header>
+      <ActivityRoutingWorkbench activityRouting={routingTopology.activityRouting} />
 
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2">
+      <details
+        data-dpf-disclosure
+        aria-label="Routing architecture and conformance"
+        className="group rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
+      >
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)]">
           <div>
-            <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Technical topology</h2>
-            <p className="mt-1 text-xs text-[var(--dpf-muted)]">
-              One map, one replay window, and one evidence table.
-            </p>
+            <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Routing architecture &amp; conformance</h2>
+            <p className="mt-1 text-xs text-[var(--dpf-muted)]">Compare the governed design with privacy-safe operating evidence.</p>
           </div>
-          <DimensionToggle dimension={dimension} onChange={setDimension} />
-        </div>
-
-        <OperationsTopologyControls
-          topology={routingTopology}
-          dimension={dimension}
-          evidenceRange={evidenceRange ?? null}
-          onRoutingChange={handleRoutingControlChange}
-          onA2aChange={handleA2aControlChange}
-          onReplayChange={handleReplayChange}
-        />
-
-        <section
-          data-authoritative-operations-canvas
-          aria-label="Unified operations topology"
-          className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3"
-        >
-          <OperationsTopologyCanvas
-            topology={canvasTopology}
-            dimension={dimension}
-            replayTime={sharedReplay?.time ?? null}
-            replayRange={sharedReplay?.range ?? null}
+          <DisclosureLabel />
+        </summary>
+        <div className="border-t border-[var(--dpf-border)] p-3">
+          <RoutingArchitectureOverview
+            evidence={routingEvidence}
+            initialMode={initialArchitectureMode}
+            initialFocusStageId={initialFocusStageId}
           />
-        </section>
+        </div>
+      </details>
 
-        <details
-          aria-label="Technical routing diagnostics"
-          className="group rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
-        >
-          <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)]">
-            <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Technical diagnostics</h2>
-            <DisclosureLabel />
-          </summary>
-          <div className="space-y-3 border-t border-[var(--dpf-border)] p-3">
-            <ActivityRoutingWorkbench activityRouting={routingTopology.activityRouting} />
-            {showA2a ? <DeliberationLensPanel deliberations={routingTopology.deliberations} /> : null}
-            {!showProvider && !showA2a ? (
-              <p className="text-sm text-[var(--dpf-muted)]">Select a topology dimension to inspect diagnostics.</p>
-            ) : null}
+      <details
+        id="technical-routing-map"
+        data-dpf-disclosure
+        aria-label="Technical routing map"
+        className="group rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]"
+      >
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)]">
+          <div>
+            <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Technical routing map</h2>
+            <p className="mt-1 text-xs text-[var(--dpf-muted)]">Inspect providers, coworker interactions, replay windows, and topology filters.</p>
           </div>
-        </details>
-      </section>
+          <DisclosureLabel />
+        </summary>
+        <section aria-label="Routing map workspace" className="space-y-3 border-t border-[var(--dpf-border)] p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 py-2">
+            <div>
+              <h3 className="text-sm font-semibold text-[var(--dpf-text)]">Topology controls</h3>
+              <p className="mt-1 text-xs text-[var(--dpf-muted)]">One map and one replay window for technical investigation.</p>
+            </div>
+            <DimensionToggle dimension={dimension} onChange={setDimension} />
+          </div>
+
+          <OperationsTopologyControls
+            topology={routingTopology}
+            dimension={dimension}
+            evidenceRange={evidenceRange ?? null}
+            onRoutingChange={handleRoutingControlChange}
+            onA2aChange={handleA2aControlChange}
+            onReplayChange={handleReplayChange}
+          />
+
+          <section
+            data-authoritative-operations-canvas
+            aria-label="Unified operations topology"
+            className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] p-3"
+          >
+            <OperationsTopologyCanvas
+              topology={canvasTopology}
+              dimension={dimension}
+              replayTime={sharedReplay?.time ?? null}
+              replayRange={sharedReplay?.range ?? null}
+            />
+          </section>
+
+          {showA2a ? <DeliberationLensPanel deliberations={routingTopology.deliberations} /> : null}
+          {!showProvider && !showA2a ? (
+            <p className="text-sm text-[var(--dpf-muted)]">Select a topology dimension to inspect diagnostics.</p>
+          ) : null}
+        </section>
+      </details>
 
       <ActivityProjectionDetails
         template={template}
@@ -311,6 +332,50 @@ export function AiOperationsMap({
         }}
       />
     </div>
+  );
+}
+
+const OWNER_LEAD_INTENT_CLASS: Record<OperationsMapOwnerSummary["intent"], string> = {
+  attention: "border-[var(--dpf-warning)] bg-[color-mix(in_srgb,var(--dpf-warning)_8%,var(--dpf-surface-1))]",
+  healthy: "border-[var(--dpf-success)] bg-[color-mix(in_srgb,var(--dpf-success)_8%,var(--dpf-surface-1))]",
+  waiting: "border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]",
+};
+
+function OperationsMapOwnerLead({ summary }: { summary: OperationsMapOwnerSummary }) {
+  return (
+    <section
+      data-dpf-lead
+      aria-labelledby="operations-map-title"
+      className={`rounded-xl border p-4 shadow-sm md:p-5 ${OWNER_LEAD_INTENT_CLASS[summary.intent]}`}
+    >
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+        <div className="max-w-4xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--dpf-accent)]">{summary.eyebrow}</p>
+          <h1 id="operations-map-title" className="mt-1 text-2xl font-semibold tracking-tight text-[var(--dpf-text)]">
+            {summary.title}
+          </h1>
+          <p className="mt-2 text-sm leading-6 text-[var(--dpf-muted)]">{summary.description}</p>
+        </div>
+        <a
+          data-dpf-primary-action
+          data-owner-first-next-action
+          href={summary.primaryAction.href}
+          className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[var(--dpf-accent)] px-4 py-2 text-sm font-semibold text-[var(--dpf-on-accent,var(--dpf-surface-1))] shadow-sm focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)] focus:ring-offset-2 focus:ring-offset-[var(--dpf-surface-1)]"
+        >
+          {summary.primaryAction.label}
+        </a>
+      </div>
+      {summary.facts.length > 0 ? (
+        <dl className="mt-4 grid gap-2 border-t border-[var(--dpf-border)] pt-4 sm:grid-cols-2 xl:grid-cols-4">
+          {summary.facts.map((fact) => (
+            <div key={fact.label} className="min-w-0">
+              <dt className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--dpf-muted)]">{fact.label}</dt>
+              <dd className="mt-1 text-sm leading-5 text-[var(--dpf-text)]">{fact.value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+    </section>
   );
 }
 
@@ -388,10 +453,10 @@ function ActivityProjectionDetails({
   onToggleSeverity: (severity: OperationsMapSeverity) => void;
 }) {
   return (
-    <details aria-label="Activity projection details" className="group rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
+    <details data-dpf-disclosure aria-label="Operational evidence" className="group rounded-xl border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)]">
       <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)]">
         <div>
-          <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Activity projection details</h2>
+          <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Operational evidence</h2>
           <p className="mt-1 text-xs text-[var(--dpf-muted)]">
             Showing {filteredProjections.length} of {projections.length} activities across {template.label}
           </p>

@@ -4,12 +4,19 @@ import { describe, expect, it } from "vitest";
 describe("AiOperationsMap cutover", () => {
   const source = readFileSync(new URL("./AiOperationsMap.tsx", import.meta.url), "utf8");
 
-  it("keeps the owner-readable Designed/Observed/Compare view first", () => {
+  it("puts the owner lead and routing decisions before architecture and topology", () => {
+    const lead = source.indexOf("<OperationsMapOwnerLead");
+    const workbench = source.indexOf("<ActivityRoutingWorkbench");
     const overview = source.indexOf("<RoutingArchitectureOverview");
     const topology = source.indexOf("<OperationsTopologyControls");
-    expect(overview).toBeGreaterThan(-1);
+    expect(lead).toBeGreaterThan(-1);
+    expect(workbench).toBeGreaterThan(lead);
+    expect(overview).toBeGreaterThan(workbench);
     expect(topology).toBeGreaterThan(overview);
     expect(source).toContain('aria-label="Routing map workspace"');
+    expect(source).toContain("data-dpf-lead");
+    expect(source).toContain("data-dpf-primary-action");
+    expect(source).toContain("data-owner-first-next-action");
   });
 
   it("uses one authoritative topology, control rail, replay window, and evidence table", () => {
@@ -32,10 +39,15 @@ describe("AiOperationsMap cutover", () => {
     expect(source).not.toContain("canvasPreview");
   });
 
-  it("keeps diagnostics progressively disclosed without duplicating topology", () => {
-    expect(source).toContain('aria-label="Technical routing diagnostics"');
+  it("keeps architecture, topology, and deliberation progressively disclosed without burying the workbench", () => {
+    expect(source).toContain('aria-label="Routing architecture and conformance"');
+    expect(source).toContain('aria-label="Technical routing map"');
+    expect(source).toContain("data-dpf-disclosure");
     expect(source).toContain("<ActivityRoutingWorkbench");
     expect(source).toContain("<DeliberationLensPanel");
+    const workbench = source.indexOf("<ActivityRoutingWorkbench");
+    const firstDisclosure = source.indexOf("data-dpf-disclosure");
+    expect(workbench).toBeLessThan(firstDisclosure);
   });
 
   it("preserves dimension and activity-filter preferences", () => {

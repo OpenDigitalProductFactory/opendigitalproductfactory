@@ -1,4 +1,5 @@
 import type { AuditClass } from "@/lib/audit-classes";
+import type { EnableCandidate } from "@/lib/inference/phase-enable-candidates";
 import type {
   ActivityClass,
   ActivityDistributionShape,
@@ -338,6 +339,8 @@ export type OperationsMapActivityRoutingExclusion = {
   providerId: string;
   modelId: string | null;
   reason: string;
+  code?: string;
+  remediation?: string;
 };
 
 export type OperationsMapActivityStep = {
@@ -364,6 +367,7 @@ export type OperationsMapActivityStep = {
   actionProposalSummary?: string | null;
   approvedConfidenceOverrideId?: string | null;
   exclusions: OperationsMapActivityRoutingExclusion[];
+  enableCandidates?: EnableCandidate[];
 };
 
 export type OperationsMapActivityRouting = {

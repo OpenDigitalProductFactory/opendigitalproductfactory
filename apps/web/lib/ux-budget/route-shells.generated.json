@@ -1,7 +1,7 @@
 {
   "generator": "apps/web/scripts/build-route-shells.ts",
   "pageRouteCount": 318,
-  "migratedCount": 0,
+  "migratedCount": 1,
   "summary": {
     "cockpit": 16,
     "list": 6,
@@ -2187,11 +2187,8 @@
       "routePath": "/platform/ai/operations-map",
       "shell": "detail",
       "audience": "admin",
-      "migrated": false,
-      "exemptChecks": [
-        "next-action-marker",
-        "lead-band"
-      ],
+      "migrated": true,
+      "exemptChecks": [],
       "sweepEligible": false,
       "sweepExclusionReason": "wall-clock-collection",
       "confidence": "high"

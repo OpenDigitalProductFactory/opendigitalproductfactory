@@ -142,9 +142,9 @@ export function RoutingArchitectureOverview({
             <p className="text-dpf-caption font-semibold uppercase tracking-[0.16em] text-[var(--dpf-accent)]">
               Governed AI routing
             </p>
-            <h1 id="routing-architecture-title" className="mt-1 text-xl font-semibold text-[var(--dpf-text)]">
+            <h2 id="routing-architecture-title" className="mt-1 text-xl font-semibold text-[var(--dpf-text)]">
               How an AI request moves — and what actually happened
-            </h1>
+            </h2>
             <p className="mt-1 text-sm leading-6 text-[var(--dpf-muted)]">
               Follow five owner-readable stations. The shape stays fixed while you switch between the governed design,
               privacy-safe operational evidence, and their differences.
@@ -165,7 +165,7 @@ export function RoutingArchitectureOverview({
                 onClick={() => selectMode(option.id)}
                 className={`min-h-11 rounded-md px-3 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--dpf-accent)] ${
                   mode === option.id
-                    ? "bg-[var(--dpf-accent)] text-white shadow-sm"
+                    ? "bg-[var(--dpf-accent)] text-[var(--dpf-on-accent,var(--dpf-surface-1))] shadow-sm"
                     : "text-[var(--dpf-muted)] hover:bg-[var(--dpf-surface-2)] hover:text-[var(--dpf-text)]"
                 }`}
               >

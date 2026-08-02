@@ -1,0 +1,22 @@
+{
+  "version": "1",
+  "decidedOption": "owner-first-selected-inspector",
+  "decisionInteractionId": "DI-1269D9D88345",
+  "scope": {
+    "files": [
+      "apps/web/components/platform/ActivityRoutingPresentation.tsx",
+      "apps/web/components/platform/ActivityRoutingWorkbench.tsx",
+      "apps/web/components/platform/AiOperationsMap.tsx",
+      "apps/web/components/platform/PhaseRemediationActions.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "content-cleanup-only",
+      "owner-first-selected-inspector",
+      "new-operator-route",
+      "workflow-tabs"
+    ]
+  }
+}

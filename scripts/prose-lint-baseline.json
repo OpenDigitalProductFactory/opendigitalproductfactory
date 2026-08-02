@@ -5982,7 +5982,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 132
+    "textMass": 145
   },
   "apps/web/components/platform/AddressValidationProviderGuidance.tsx": {
     "vocabulary": 0,
@@ -6031,7 +6031,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 156
+    "textMass": 162
   },
   "apps/web/components/platform/AiReadinessHeaderLink.tsx": {
     "vocabulary": 0,
@@ -6269,7 +6269,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 14
+    "textMass": 17
   },
   "apps/web/components/platform/PlatformBanner.tsx": {
     "vocabulary": 0,

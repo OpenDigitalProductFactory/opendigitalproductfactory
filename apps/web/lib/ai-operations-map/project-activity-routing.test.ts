@@ -69,13 +69,69 @@ describe("projectBuildStudioActivityRouting", () => {
         decisionSummary: "Local OpenCode runner selected coding endpoint.",
         exclusions: [
           {
+            code: "challenger",
             providerId: "routing-warning",
             modelId: null,
             reason: "GLM challenger",
+            remediation: "Monitor outcome",
           },
         ],
       }),
     ]);
+  });
+
+  it("preserves governed remediation evidence for an operator-facing blocked route", () => {
+    const projection = projectBuildStudioActivityRouting({
+      parentRef: { buildId: "BUILD-BLOCKED" },
+      generatedAt: new Date("2026-08-02T12:00:00.000Z"),
+      phases: [
+        {
+          phase: "ideate",
+          label: "Ideate",
+          providerId: null,
+          modelId: null,
+          rationale: "No model was selected for internal code-generation work.",
+          flags: [
+            {
+              severity: "error",
+              code: "no-eligible-endpoint",
+              message: "No allowed healthy engine can run Ideate.",
+              remediation: "Activate a provider that satisfies tools, context, and sensitivity.",
+            },
+          ],
+          enableCandidates: [
+            {
+              providerId: "anthropic",
+              displayName: "Anthropic",
+              action: "connect_credentials",
+              actionLabel: "Connect & enable",
+              oneClick: false,
+              satisfies: ["tool use", "internal sensitivity"],
+              note: "Needs credentials you must supply.",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(projection.activities[0]).toMatchObject({
+      selectedProviderId: null,
+      selectedModelId: null,
+      exclusions: [
+        expect.objectContaining({
+          code: "no-eligible-endpoint",
+          reason: "No allowed healthy engine can run Ideate.",
+          remediation: "Activate a provider that satisfies tools, context, and sensitivity.",
+        }),
+      ],
+      enableCandidates: [
+        expect.objectContaining({
+          providerId: "anthropic",
+          action: "connect_credentials",
+          satisfies: ["tool use", "internal sensitivity"],
+        }),
+      ],
+    });
   });
 
   it("merges observed activity outcomes into matching activity steps", () => {

@@ -12,6 +12,7 @@ import type {
 import { bindHarnessRecipeForActivity } from "@/lib/routing/harness-recipe";
 import type { ActivityParentRef } from "@/lib/routing/activity-contract";
 import type { ActivityPackage } from "@/lib/routing/activity-package";
+import type { EnableCandidate } from "@/lib/inference/phase-enable-candidates";
 import type {
   OperationsMapActivityOutcome,
   OperationsMapActivityRouting,
@@ -34,6 +35,7 @@ export type ActivityPhaseResolutionSourceRow = {
   modelId: string | null;
   rationale: string;
   flags: ActivityPhaseFlag[];
+  enableCandidates?: EnableCandidate[];
 };
 
 export type ProjectBuildStudioActivityRoutingInput = {
@@ -120,6 +122,7 @@ function projectPackageActivity(activityPackage: ActivityPackage): OperationsMap
     actionProposalSummary: null,
     approvedConfidenceOverrideId: null,
     exclusions: packageExclusions(activityPackage, providerId, modelId),
+    enableCandidates: [],
   };
 }
 
@@ -213,6 +216,7 @@ function projectPhaseActivity(
     actionProposalSummary: actionProposal?.summary ?? null,
     approvedConfidenceOverrideId: approvedOverride?.proposalId ?? null,
     exclusions: exclusionsFromFlags(phase.flags),
+    enableCandidates: phase.enableCandidates ?? [],
   };
 }
 
@@ -229,5 +233,7 @@ function exclusionsFromFlags(flags: ActivityPhaseFlag[]): OperationsMapActivityR
     providerId: flag.severity === "error" ? "routing-error" : "routing-warning",
     modelId: null,
     reason: flag.message,
+    code: flag.code,
+    remediation: flag.remediation,
   }));
 }

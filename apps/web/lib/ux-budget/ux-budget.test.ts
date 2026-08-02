@@ -372,11 +372,17 @@ describe("generated route-shell registry", () => {
   });
 
   it("records pre-migration debt rather than hiding it", () => {
-    // Nothing has adopted an L1 shell yet (shells are Phase 2, BI-36CE8BAB), so every
-    // route must carry its exemptions explicitly. When this starts failing, the
-    // migration has begun — update MIGRATED_ROUTES, do not weaken the check.
-    expect(registry.migratedCount).toBe(0);
-    expect(registry.routes.every((r) => r.exemptChecks.length > 0)).toBe(true);
+    const migrated = registry.routes.filter((route) => route.migrated);
+    expect(registry.migratedCount).toBe(1);
+    expect(migrated.map((route) => route.routePath)).toEqual([
+      "/platform/ai/operations-map",
+    ]);
+    expect(migrated[0]?.exemptChecks).toEqual([]);
+    expect(
+      registry.routes
+        .filter((route) => !route.migrated)
+        .every((route) => route.exemptChecks.length > 0),
+    ).toBe(true);
   });
 
   it("summary totals reconcile with the route list", () => {
