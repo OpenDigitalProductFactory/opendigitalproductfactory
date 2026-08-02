@@ -26,4 +26,3 @@ This is one atomic repair: the clone sanitization, preview-only credential boots
 - Requiring a separate preview password can stop `dev-init` when it is absent; the error must identify the variable without printing its value.
 - Omitting `UserGroup` removes role-specific preview behavior. The preview administrator remains a superuser, and role-specific authorization testing must use purpose-built fixtures rather than copied production authorization state.
 - Rollback is a normal PR revert. No production schema, credential, or data migration is involved.
-
