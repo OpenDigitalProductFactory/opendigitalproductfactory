@@ -7809,7 +7809,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 115
+    "textMass": 158
   },
   "apps/web/components/workbooks/CreateTableButton.tsx": {
     "vocabulary": 0,

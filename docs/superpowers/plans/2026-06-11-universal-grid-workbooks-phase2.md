@@ -320,6 +320,15 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   Functionally verified by a **round-trip unit test that parses the output back with the existing
   `read-excel-file` parser** and asserts the matrix (numbers, strings, sheet name) — structural *and*
   functional. Flat data of the current view (visible columns, current sort/filter).
+- **Slice 28g — number-format config UI + config-schema alignment — SHIPPED.** The Add-column form now
+  lets you set the display format the renderers already honour: **currency symbol + decimals**
+  (currency), **decimals** (percent / number), **unit** (duration: minutes/seconds), and **max stars**
+  (rating) — progressively disclosed per field type, so a text column shows none of it. Root cause of
+  the prior "hardcoded defaults": the server `fieldConfigSchema` (which zod-strips undeclared keys)
+  was **missing `currencySymbol`/`max`/`durationUnit` — and also `link`/`rollup`**, so those were
+  silently dropped on save (a latent bug for link/rollup columns too). Extracted the schemas into a
+  pure, prisma-free `apps/web/lib/workbooks/column-schema.ts` (unit-tested — 14 cases incl. the
+  link/rollup regression + bounds) and aligned it fully with the `FieldConfig` type.
 - **Remaining (not built):** manual row reordering for *platform* grids (would need a per-user client
   order; low value on 1000s of rows); platform-grid *shareable* views (needs a `WorkbookView.tableId`
   schema change — platform tables have no `WorkbookTable` row); richer charts (grouped/stacked/line);
