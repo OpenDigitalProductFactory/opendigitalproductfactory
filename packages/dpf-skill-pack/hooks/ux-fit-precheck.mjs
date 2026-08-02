@@ -23,10 +23,29 @@ import { readFileSync } from "node:fs";
 
 const UI_FILE_RE = /apps[\\/]web[\\/].*\.tsx$/;
 const EXCLUDE_RE = /\.(test|spec|stories)\.tsx$/;
-const UI_CONTROL_RE = /<input\b|<select\b|<textarea\b|type=["'](?:number|range)["']|<form\b/i;
+// Mirrors UI_CONTROL_RE in scripts/lib/gate-sensitivity.mjs. The pack is
+// distributed outside the repo, so this stays dependency-free and is
+// behavior-pinned by scripts/gate-context.test.mjs.
+const UI_CONTROL_DESCRIPTION =
+  "<input>, <select>, <textarea>, type=number|range|button|submit, <form>, <button>, " +
+  "<a>/<Link>, <details>/<summary>, custom *Button/*Link/*Trigger/*Disclosure/*Toggle controls, " +
+  "role=button/link/tab/switch/menuitem, aria-expanded, data-dpf-disclosure, or onClick";
+const UI_CONTROL_RE = new RegExp(
+  [
+    String.raw`<(?:input|select|textarea|form|button|a|details|summary)\b`,
+    String.raw`<(?:Button|Link|Trigger|Disclosure|Toggle|Menu|Tab|Tabs|Accordion|Popover|Dialog|Drawer|Combobox|Command|Action)\b`,
+    String.raw`<[A-Z][A-Za-z0-9]*(?:Button|Link|Trigger|Disclosure|Toggle|Menu|Tab|Tabs|Accordion|Popover|Dialog|Drawer|Combobox|Command|Action)\b`,
+    String.raw`\btype=["'](?:number|range|button|submit)["']`,
+    String.raw`\brole=["'](?:button|link|tab|switch|menuitem|checkbox|radio)["']`,
+    String.raw`\baria-expanded=`,
+    String.raw`\bdata-dpf-disclosure\b`,
+    String.raw`\bonClick=`,
+  ].join("|"),
+  "i",
+);
 
 const GUIDANCE =
-  "[ux-fit] This edit adds a user-facing control to a UI surface (apps/web/*.tsx). " +
+  `[ux-fit] This edit adds a user-facing control (${UI_CONTROL_DESCRIPTION}) to a UI surface (apps/web/*.tsx). ` +
   "Before committing, design for cognitive load: run the dpf-ux-fit-review skill and score the options with " +
   "principle_decide on the human_cognitive_load axis. Prefer progressive disclosure — auto-derive what the " +
   "platform can compute (model context, hardware limits), keep the default view to 3-5 plain choices, and " +
