@@ -11,7 +11,7 @@ A sanitized Contributor preview invalidates every copied password, omits authori
 This is one atomic repair: the clone sanitization, preview-only credential bootstrap, null-safe authorization projection, Compose wiring, and contributor instructions are not independently useful. Shipping only one part either leaves login unusable or weakens the clone boundary.
 
 1. Add source-local regression tests for copied-password invalidation, `UserGroup` omission, preview-admin provisioning, and role-less superuser authorization.
-2. Refactor confidential-row sanitization into a testable helper; keep all copied hashes invalid and provision only the cloned superuser from `CONTRIBUTOR_PREVIEW_PASSWORD` after the clone completes.
+2. Refactor confidential-row sanitization and preview credential provisioning into focused, testable helpers; keep all copied hashes invalid and provision only the cloned superuser from `CONTRIBUTOR_PREVIEW_PASSWORD` after the clone completes.
 3. Treat `UserGroup` as restricted because its required parent `PlatformRole` is restricted, and resolve workforce roles through a null-safe pure helper.
 4. Wire the separate preview password into `dev-init` and update contributor instructions without a hardcoded shared password.
 5. Run targeted DB/web/Compose tests, typecheck/build gates, then prove health plus authenticated `/workspace` under a governed Contributor-preview lease.
