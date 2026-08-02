@@ -4,9 +4,17 @@ import { UnitsManager } from "@/components/storefront-admin/UnitsManager";
 import { listOwnerMedia } from "@/lib/media";
 import { getVocabulary } from "@/lib/storefront/archetype-vocabulary";
 import { resolveResourceVocabulary } from "@/lib/storefront/resource-vocabulary";
+import {
+  parseRentalPhysicalProfile,
+  readRentalPoolCapacity,
+} from "@/lib/storefront/rental-physical-profile";
+import { resolveRentalStorefront } from "@/lib/storefront/rental-scope.server";
 
 export default async function UnitsPage() {
-  const config = await prisma.storefrontConfig.findFirst({
+  const scope = await resolveRentalStorefront();
+  if (!scope) redirect("/storefront/setup");
+  const config = await prisma.storefrontConfig.findUnique({
+    where: { id: scope.id },
     select: { id: true, archetype: { select: { archetypeId: true, category: true, customVocabulary: true } } },
   });
   if (!config) redirect("/storefront/setup");
@@ -23,8 +31,13 @@ export default async function UnitsPage() {
   const classes = await prisma.storefrontItem.findMany({
     where: { storefrontId: config.id, ctaType: "rental", isActive: true },
     orderBy: { sortOrder: "asc" },
-    select: { id: true, name: true },
+    select: { id: true, name: true, bookingConfig: true },
   });
+  const rentalClasses = classes.map((item) => ({
+    id: item.id,
+    name: item.name,
+    poolCapacity: readRentalPoolCapacity(item.bookingConfig),
+  }));
 
   const units = await prisma.rentableUnit.findMany({
     where: { storefrontId: config.id },
@@ -36,15 +49,17 @@ export default async function UnitsPage() {
       label: true,
       unitRef: true,
       status: true,
+      attributes: true,
     },
   });
 
   const withMedia = await Promise.all(
     units.map(async (u) => ({
       ...u,
+      physicalProfile: parseRentalPhysicalProfile(u.attributes),
       media: await listOwnerMedia("RentableUnit", u.id, "equipment"),
     })),
   );
 
-  return <UnitsManager classes={classes} units={withMedia} />;
+  return <UnitsManager archetypeId={scope.archetypeId} classes={rentalClasses} units={withMedia} />;
 }
