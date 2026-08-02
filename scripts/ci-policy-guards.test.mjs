@@ -27,6 +27,7 @@ const EXPECTED_LEGACY_JOBS = [
   "docs-link-integrity",
   "docs-staleness-detector",
   "finding-substrate-guard",
+  "fpaw-standard-guard",
   "instruction-plane-guard",
   "instruction-plane-rule-coverage",
   "janitor-tests",
@@ -79,7 +80,7 @@ describe("CI policy guard registry", () => {
     );
   });
 
-  it("accounts for every migrated legacy job exactly once", () => {
+  it("accounts for every registered guard exactly once", () => {
     const entries = Object.values(POLICY_GUARD_PROFILES).flat();
     const legacyJobs = entries.map((entry) => entry.legacyJobId).sort();
 
@@ -90,6 +91,17 @@ describe("CI policy guard registry", () => {
       assert.ok(entry.name);
       assert.ok(entry.commands.length > 0);
     }
+  });
+
+  it("runs the FPAW checker and its adversarial suite in the workspace profile", () => {
+    const fpaw = POLICY_GUARD_PROFILES.workspace.find(
+      (entry) => entry.id === "fpaw-standard-guard",
+    );
+    assert.ok(fpaw);
+    assert.deepEqual(fpaw.commands, [
+      ["pnpm", ["run", "check:fpaw-standard:test"]],
+      ["pnpm", ["run", "check:fpaw-standard"]],
+    ]);
   });
 
   it("runs every named guard and retains all failures", async () => {

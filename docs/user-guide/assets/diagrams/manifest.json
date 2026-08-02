@@ -20,6 +20,8 @@
     "architecture/application-boundaries/0": "023c667c79638a6e",
     "architecture/archetype-owner-positioning/0": "1df0cd530c89b260",
     "architecture/capability-driven-runtime-profiles/0": "5eab6fa2a09f0ded",
+    "architecture/four-portfolio-archetype-ai-workforce-operating-standard/0": "f234f3ac4dd4139b",
+    "architecture/four-portfolio-archetype-ai-workforce-operating-standard/1": "e36c31755fcf59c8",
     "architecture/platform-overview/0": "9c708514e7702ebd",
     "architecture/platform-overview/1": "2a1d843bd85ab6e8",
     "architecture/platform-overview/2": "68d006ae6ff7475e",
@@ -27,6 +29,8 @@
     "architecture/platform-overview/4": "14f432109f86d7e1",
     "architecture/platform-overview/5": "1b7650cb641d9ccf",
     "architecture/platform-overview/6": "2c35a3c490b4c41e",
+    "architecture/trusted-ai-kernel/0": "b5261b7f0efa7aff",
+    "architecture/trusted-ai-kernel/1": "ac612ecb7861818f",
     "architecture/unified-development-tracking/0": "207be4c1c22032b0"
   }
 }

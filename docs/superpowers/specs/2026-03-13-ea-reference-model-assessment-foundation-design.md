@@ -1,5 +1,12 @@
 # EA Reference Model Assessment Foundation Design
 
+> **Authority notice (2026-08-01):** This implemented design records historical lineage.
+> The criteria workbook now has `undetermined` source-use status under
+> `SUD-IT4IT-CRITERIA-WORKBOOK-2026-08-01` and MUST NOT be treated as current normative or
+> AI evidence. Current code and live data establish observed implementation state; the
+> [Four-Portfolio Archetype and AI Workforce Operating Standard](../../architecture/four-portfolio-archetype-ai-workforce-operating-standard.md)
+> governs target semantics and records the unresolved ingestion/distribution gap.
+
 **Date:** 2026-03-13  
 **Status:** Implemented (foundation slice)  
 **Scope:** Establish a generic Enterprise Architecture reference-model assessment framework in `/ea`, with portfolio-first scoring and IT4IT as the first seeded model.

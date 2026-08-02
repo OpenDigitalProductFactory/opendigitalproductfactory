@@ -1,11 +1,19 @@
-# Operating-Model Axes — Accepted Additions (sidecar to the 4-portfolio workbook)
+# Operating-Model Axes — Accepted Additions (historical sidecar)
 
-The canonical taxonomy lives in `4_portfolio_Reworked_V3_Definitions_IT4IT.xlsx`
-(Products and Services Sold sheet carries the axis columns). Per the workbook-first
-contract (2026-05-22 archetype capability spec §3.6), axis-vocabulary changes are
-proposed against the workbook and promoted into platform enums once accepted. This
-sidecar records accepted additions until the taxonomy team's next workbook pass folds
-them in; the workbook + this file together are the source of truth in the interim.
+> **Authority notice (2026-08-01):** This sidecar preserves an earlier workbook-first
+> decision; it is not the current normative source. The V3 workbook has an
+> `undetermined` source-use decision (`SUD-PORTFOLIO-WORKBOOK-V3-2026-08-01`) and MUST NOT
+> be used as new AI, mapping, conformance, or normative evidence until that decision is
+> resolved. Current code and live data establish observed platform state; the
+> [Four-Portfolio Archetype and AI Workforce Operating Standard](../architecture/four-portfolio-archetype-ai-workforce-operating-standard.md)
+> governs target semantics.
+
+The historical taxonomy was maintained in
+`4_portfolio_Reworked_V3_Definitions_IT4IT.xlsx`; its *Products and Services Sold* sheet
+carried the then-current axis columns. This sidecar records additions accepted while that
+workbook-first process was in force. Preserve it as decision lineage, and promote or
+change current vocabulary only through the governed typed registries and the FPAW
+source-use contract.
 
 ## Accepted 2026-06-09 — civic & member-governed archetypes
 
@@ -36,4 +44,5 @@ Operator-approved via `docs/superpowers/specs/2026-06-09-civic-and-member-govern
 ### Related (not an axis): `ledgerModel` on the finance profile
 
 `commercial` (default) | `fund-accounting` | `financial-institution` | `cooperative-equity` —
-see spec §6.2; lives in `packages/finance-templates`, not in the workbook axis columns.
+see spec §6.2; lives in `packages/finance-templates` and was not represented in the
+historical workbook axis columns.

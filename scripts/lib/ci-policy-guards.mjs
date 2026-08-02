@@ -225,6 +225,10 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
   // Keeping them separate preserves the source profile's minimal install while
   // letting CI, pregate preflight, and pr:ready consume one canonical inventory.
   workspace: Object.freeze([
+    guard("fpaw-standard-guard", "FPAW Standard Guard", [
+      pnpm("run", "check:fpaw-standard:test"),
+      pnpm("run", "check:fpaw-standard"),
+    ]),
     guard("prose-lint-guard", "Prose Lint Guard", [
       pnpm("run", "check:prose-lint:test"),
       pnpm("run", "check:prose-lint"),
