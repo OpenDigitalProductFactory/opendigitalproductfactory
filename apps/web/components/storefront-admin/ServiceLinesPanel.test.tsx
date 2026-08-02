@@ -84,13 +84,16 @@ describe("ServiceLinesPanel action safety (BI-7D7EE150)", () => {
 
   it("never adds a cross-archetype service line on a single unconfirmed click", async () => {
     confirmMock.mockResolvedValueOnce(false);
-    render(
+    const { container } = render(
       <ServiceLinesPanel
         storefrontId="sf-1"
         view={view}
         availableArchetypes={availableArchetypes}
       />,
     );
+
+    expect(container.querySelectorAll("option")).toHaveLength(0);
+    expect(screen.queryByRole("option", { name: /3PL Contract Warehousing/ })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Add service line" }));
 
@@ -120,6 +123,37 @@ describe("ServiceLinesPanel action safety (BI-7D7EE150)", () => {
 
     await waitFor(() =>
       expect(addMock).toHaveBeenCalledWith("sf-1", "third-party-logistics"),
+    );
+  });
+
+  it("searches the service-line catalog before adding a non-default option", async () => {
+    confirmMock.mockResolvedValueOnce(true);
+    render(
+      <ServiceLinesPanel
+        storefrontId="sf-1"
+        view={view}
+        availableArchetypes={[
+          ...availableArchetypes,
+          {
+            archetypeSlug: "software-platform",
+            name: "Software Platform",
+            category: "software-platform",
+            itemCount: 2,
+            sectionCount: 2,
+          },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("combobox", { name: "Service line to add" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Search service lines" }), {
+      target: { value: "software" },
+    });
+    fireEvent.click(screen.getByRole("option", { name: /Software Platform/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Add service line" }));
+
+    await waitFor(() =>
+      expect(addMock).toHaveBeenCalledWith("sf-1", "software-platform"),
     );
   });
 
