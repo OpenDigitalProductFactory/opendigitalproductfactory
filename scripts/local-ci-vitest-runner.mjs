@@ -195,7 +195,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
       process.env.DPF_LOCAL_CI_VITEST_DIAGNOSTICS_FILE
         || (metadataPath ? `${metadataPath}.vitest.json` : ".dpf-local-ci-vitest.json"),
     );
-    process.stderr.write(`[local-ci-vitest] supervisor failed: ${error.stack || error.message}\n`);
+    process.stderr.write(
+      `[local-ci-vitest] supervisor failed: ${error.stack || error.message} diagnostics=${diagnosticsPath}\n`,
+    );
     process.exit(86);
   });
 }
