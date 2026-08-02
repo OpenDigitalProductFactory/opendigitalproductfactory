@@ -96,6 +96,12 @@ export const CORE_MCP_TOOL_NAMES: ReadonlySet<string> = new Set([
   "list_work_capsules",
   "get_work_capsule",
   "get_build_progress_visibility",
+  // live delivery / verification
+  "get_quiescence_status",
+  "get_self_upgrade_queue_status",
+  "request_self_upgrade",
+  "repair_promoter_image",
+  "record_runtime_verification",
 ]);
 
 /**

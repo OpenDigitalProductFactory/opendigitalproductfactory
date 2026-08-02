@@ -13,7 +13,9 @@
       "recordedAt": "2026-08-01"
     },
     "tier.coreToolNames": {
-      "value": 22
+      "value": 27,
+      "reason": "Adds the governed live-delivery loop to Codex/Grok core discovery: quiescence status, self-upgrade queue status, request_self_upgrade, promoter-image repair, and runtime verification evidence. These tools are required immediately after a PR merges so an external coding agent can advance and prove the running install without opting into the full catalogue; authority remains bounded by capability, token scope, and grant gates.",
+      "recordedAt": "2026-08-02"
     },
     "dispatch.maxAttachedTools": {
       "value": 48
