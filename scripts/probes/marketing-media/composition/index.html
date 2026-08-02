@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>DPF — Run the business in front of you</title>
+    <script src="./vendor/gsap.min.js"></script>
+    <script src="./vendor/hyperframe.runtime.iife.js"></script>
+    <style>
+      :root {
+        --ink: #10211b;
+        --paper: #f5f0e4;
+        --mint: #b9f5d0;
+        --green: #1b6b4b;
+        --lime: #d8ff72;
+        --coral: #ff765e;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: var(--ink); color: var(--paper); font-family: Inter, "Segoe UI", Arial, sans-serif; }
+      #main { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: var(--ink); }
+      .scene { position: absolute; inset: 0; visibility: hidden; overflow: hidden; }
+      .scene-content { position: absolute; inset: 0; display: grid; align-content: center; padding: 96px 112px 132px; }
+      .eyebrow { margin: 0 0 24px; color: var(--lime); font-size: 24px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
+      h1, h2 { margin: 0; max-width: 1500px; font-size: 104px; line-height: .96; letter-spacing: -.055em; }
+      h2 { font-size: 84px; }
+      .lede { max-width: 1120px; margin: 38px 0 0; color: #d6e2dc; font-size: 34px; line-height: 1.34; }
+      .caption { position: absolute; left: 112px; right: 112px; bottom: 48px; display: flex; align-items: center; justify-content: space-between; padding-top: 18px; border-top: 2px solid rgba(245,240,228,.28); color: #dce7e1; font-size: 24px; }
+      .caption strong { color: var(--lime); }
+      .brand { display: inline-flex; align-items: center; gap: 14px; font-weight: 800; }
+      .brand-mark { width: 34px; height: 34px; border-radius: 10px 10px 4px 10px; background: var(--lime); transform: rotate(12deg); }
+      .glow { position: absolute; width: 720px; height: 720px; border-radius: 50%; background: radial-gradient(circle, rgba(185,245,208,.23), rgba(185,245,208,0) 68%); filter: blur(4px); }
+      .ring { position: absolute; width: 560px; height: 560px; border: 2px solid rgba(216,255,114,.34); border-radius: 50%; }
+      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 48px; }
+      .card { min-height: 250px; padding: 32px; border: 1px solid rgba(245,240,228,.2); border-radius: 24px; background: rgba(245,240,228,.07); backdrop-filter: blur(12px); }
+      .card-kicker { color: var(--mint); font-size: 22px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; }
+      .card-value { margin-top: 54px; font-size: 62px; font-weight: 850; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+      .card-note { margin-top: 8px; color: #c4d2cb; font-size: 24px; }
+      .day-board { display: grid; grid-template-columns: 280px 1fr; gap: 42px; margin-top: 44px; }
+      .queue { display: grid; gap: 14px; }
+      .queue-item { padding: 20px 22px; border-radius: 18px; background: rgba(245,240,228,.08); border-left: 7px solid var(--mint); font-size: 24px; }
+      .queue-item.hot { border-left-color: var(--coral); }
+      .route { position: relative; min-height: 330px; border-radius: 28px; background: linear-gradient(145deg, rgba(185,245,208,.16), rgba(245,240,228,.03)); overflow: hidden; }
+      .route-line { position: absolute; left: 9%; top: 48%; width: 82%; height: 6px; border-radius: 999px; background: var(--lime); transform: rotate(-7deg); transform-origin: center; }
+      .stop { position: absolute; width: 32px; height: 32px; border-radius: 50%; background: var(--paper); border: 8px solid var(--green); box-shadow: 0 0 0 10px rgba(185,245,208,.12); }
+      .stop.one { left: 13%; top: 59%; } .stop.two { left: 43%; top: 45%; } .stop.three { left: 76%; top: 31%; }
+      .proof { display: flex; gap: 22px; margin-top: 50px; }
+      .pill { padding: 18px 26px; border-radius: 999px; background: var(--paper); color: var(--ink); font-size: 24px; font-weight: 800; }
+      .pill.accent { background: var(--lime); }
+      .cta { display: inline-flex; width: fit-content; margin-top: 52px; padding: 24px 34px; border-radius: 16px; background: var(--lime); color: var(--ink); font-size: 30px; font-weight: 900; }
+      #s2 { background: linear-gradient(135deg, #10211b 0%, #163c2e 100%); }
+      #s3 { background: var(--paper); color: var(--ink); }
+      #s3 .lede, #s3 .caption { color: #355249; }
+      #s3 .caption { border-color: rgba(16,33,27,.22); }
+      #s3 .eyebrow { color: var(--green); }
+      #s4 { background: linear-gradient(150deg, #153126, #1b6b4b); }
+      #s5 { background: var(--ink); }
+    </style>
+  </head>
+  <body>
+    <div id="main" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="50">
+      <section class="scene clip" id="s1" data-start="0" data-duration="10" data-track-index="0">
+        <div class="glow" style="right:-80px;top:-120px"></div><div class="ring" style="right:100px;top:260px"></div>
+        <div class="scene-content"><p class="eyebrow">Your business · right now</p><h1>See the next decision before it becomes the next problem.</h1><p class="lede">One calm operating view for customers waiting, people working, inventory moving, and promises due.</p></div>
+        <div class="caption"><span class="brand"><span class="brand-mark"></span>Digital Product Factory</span><strong>Operations, in the moment</strong></div>
+      </section>
+      <section class="scene clip" id="s2" data-start="10" data-duration="10" data-track-index="0">
+        <div class="scene-content"><p class="eyebrow">At a glance</p><h2>Answer the customer while they are still standing there.</h2><div class="grid"><div class="card"><div class="card-kicker">Ready now</div><div class="card-value">Table 12</div><div class="card-note">Seats 4 · server assigned</div></div><div class="card"><div class="card-kicker">Next opening</div><div class="card-value">2:20 PM</div><div class="card-note">Stylist Maya · chair 3</div></div><div class="card"><div class="card-kicker">Turnaround</div><div class="card-value">18 min</div><div class="card-note">Room 204 · clean in progress</div></div></div></div>
+        <div class="caption"><span>Availability without a spreadsheet hunt</span><strong>Fast enough for the front desk</strong></div>
+      </section>
+      <section class="scene clip" id="s3" data-start="20" data-duration="10" data-track-index="0">
+        <div class="scene-content"><p class="eyebrow">Plan the day</p><h2>Spot the conflict. Protect the promise.</h2><div class="day-board"><div class="queue"><div class="queue-item hot">No-cool call · 9:00</div><div class="queue-item">Maintenance · 10:30</div><div class="queue-item">Estimate · 12:15</div><div class="queue-item hot">Parts pickup · conflict</div></div><div class="route"><div class="route-line"></div><span class="stop one"></span><span class="stop two"></span><span class="stop three"></span></div></div></div>
+        <div class="caption"><span>Routing stays advisory and explainable</span><strong>You confirm every change</strong></div>
+      </section>
+      <section class="scene clip" id="s4" data-start="30" data-duration="10" data-track-index="0">
+        <div class="glow" style="left:-130px;bottom:-220px"></div>
+        <div class="scene-content"><p class="eyebrow">Owner view</p><h2>Know what is working—and what deserves attention next.</h2><div class="proof"><span class="pill accent">Demand → capacity</span><span class="pill">Time → margin</span><span class="pill">Promise → outcome</span></div><p class="lede">Performance uses the same operating truth, rolled up for decisions instead of rebuilt as another dashboard.</p></div>
+        <div class="caption"><span>Trace every metric back to real work</span><strong>Performance, with context</strong></div>
+      </section>
+      <section class="scene clip" id="s5" data-start="40" data-duration="10" data-track-index="0">
+        <div class="ring" style="right:120px;top:140px;width:680px;height:680px"></div><div class="glow" style="right:80px;top:80px"></div>
+        <div class="scene-content"><p class="eyebrow">Built for the business you actually run</p><h1>Less searching. Better decisions. More time for customers.</h1><div class="cta">Run today. Improve tomorrow.</div></div>
+        <div class="caption"><span class="brand"><span class="brand-mark"></span>Digital Product Factory</span><strong>Operations + Performance</strong></div>
+      </section>
+    </div>
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      const scenes = ["#s1", "#s2", "#s3", "#s4", "#s5"];
+      scenes.forEach((scene, index) => {
+        const start = index * 10;
+        tl.set(scene, { autoAlpha: 1 }, start);
+        tl.from(`${scene} .eyebrow`, { y: 28, autoAlpha: 0, duration: .7, ease: "power3.out" }, start + .2);
+        tl.from(`${scene} h1, ${scene} h2`, { y: 58, autoAlpha: 0, duration: 1.05, ease: "power3.out" }, start + .35);
+        tl.from(`${scene} .lede, ${scene} .grid, ${scene} .day-board, ${scene} .proof, ${scene} .cta`, { y: 34, autoAlpha: 0, duration: .8, ease: "power2.out" }, start + .8);
+        tl.from(`${scene} .caption`, { autoAlpha: 0, duration: .5 }, start + .4);
+        tl.to(`${scene} .glow`, { scale: 1.13, duration: 4.8, repeat: 1, yoyo: true, ease: "sine.inOut" }, start);
+        tl.to(`${scene} .ring`, { rotation: 28, scale: 1.05, duration: 9.6, ease: "none" }, start);
+        if (index < scenes.length - 1) tl.set(scene, { autoAlpha: 0 }, start + 9.96);
+      });
+      tl.from("#s2 .card", { y: 30, autoAlpha: 0, duration: .65, stagger: .12 }, 11.1);
+      tl.from("#s3 .queue-item", { x: -24, autoAlpha: 0, duration: .5, stagger: .12 }, 21.1);
+      tl.from("#s3 .stop", { scale: 0, duration: .45, stagger: .22, ease: "back.out(1.7)" }, 22.0);
+      tl.from("#s4 .pill", { y: 20, autoAlpha: 0, duration: .55, stagger: .12 }, 31.3);
+      window.__timelines.main = tl;
+    </script>
+  </body>
+</html>
