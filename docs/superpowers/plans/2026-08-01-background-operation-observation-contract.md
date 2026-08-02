@@ -34,6 +34,28 @@ observation pattern.
   was reverted. This plan makes the route cheap to observe instead of relying
   on a loading boundary to conceal slow work.
 
+## Design grounding
+
+- Existing specs/plans reviewed:
+  `docs/superpowers/specs/2026-05-24-activity-quiescence-protocol-design.md`,
+  `docs/superpowers/specs/2026-06-19-sse-liveness-heartbeat-design.md`, and
+  this implementation plan.
+- Current code substrate reviewed:
+  `apps/web/app/(shell)/ops/self-upgrade/page.tsx`,
+  `apps/web/components/ops/SelfUpgradeClient.tsx`,
+  `apps/web/components/ops/SelfUpgradeTriggerControl.tsx`,
+  `apps/web/components/ops/UpgradeImpactPanel.tsx`,
+  `apps/web/app/api/agent/system-stream/route.ts`,
+  `apps/web/lib/tak/agent-event-bus.ts`, and
+  `apps/web/lib/self-upgrade/run-store.ts`.
+- Source of truth: `SelfUpgradeRun` remains the durable operation ledger;
+  `/api/agent/system-stream` is an invalidation transport; the authenticated
+  shell owns the singleton system-event connection; and the narrow status
+  projection rehydrates browser state.
+- Decision: replace page-owned interval refresh with shell-owned event
+  distribution plus abortable, single-flight projection reads. Slow optional
+  analysis owns only local request state and cannot participate in navigation.
+
 ## Research and benchmarking
 
 | Source | Standard/pattern | DPF decision |
