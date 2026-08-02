@@ -313,7 +313,7 @@ abandoned entry.
 [`scripts/local-ci-runner.mjs`](../../scripts/local-ci-runner.mjs) runs the
 canonical merged-code plan (`scripts/lib/local-integration-ci.mjs`: checkout
 the admission-resolved accepted-base ref, `origin/main` by default → merge
-candidate → sandbox-freshness converge → vitest → typecheck → production build)
+candidate → sandbox-freshness converge → typecheck → exhaustive Vitest → production build)
 in a dedicated **non-mutating scratch worktree** (`~/dpf-worktrees/.local-ci-runner`
 for slot 0 and a manifest-owned sibling for slot 1) — never in your topic
 worktree. It records content-addressed
@@ -347,12 +347,56 @@ tests and must never be used as release evidence.
 
 The command plan carries required process environment as `env NAME=value ...`
 prefixes, and the Node runner interprets those prefixes directly instead of
-depending on a host `env` executable. This keeps the 8 GiB `NODE_OPTIONS`
-headroom on both POSIX and Windows typecheck paths; the production build may
+depending on a host `env` executable. This keeps the 16 GiB `NODE_OPTIONS`
+headroom required by the current route graph on both POSIX and Windows
+typecheck paths; the production build may
 still use the host-specific strategy selected by the plan. Vitest runs with
 Node's experimental host web-storage disabled so Node 26 cannot shadow the
 `localStorage` and `sessionStorage` implementations owned by jsdom. This is a
 test-runner compatibility setting, not a change to application runtime policy.
+
+Web typecheck and exhaustive Vitest are supervised rather than invoked as
+opaque child processes (BI-872CB1BF). Vitest first runs the unchanged full suite with four
+workers and streams verbose progress while retaining a bounded output tail,
+the last completed test, host-memory samples, and the Vitest descendant process
+tree. A genuine failed-test summary is terminal product evidence and is never
+retried. A missing/sentinel exit status, signal/spawn error, or summary-free
+nonzero exit is runner evidence; the supervisor retries the same full suite
+exactly once with two workers. If that differentiated attempt also terminates,
+the gate exits 86, records both attempts in
+`dpf-local-ci-metadata.json.vitest.json`, and classifies the result as runner
+evidence rather than a product test failure. Local-CI writes its main metadata
+on failure as well as success so this diagnostic survives lease release.
+If the supervisor host itself disappears, the next exact-tree run recognizes
+the stale running receipt and starts directly at the two-worker differentiated
+profile; it does not repeat the already disproven four-worker profile.
+
+Typecheck writes a separate `web-typecheck` receipt before `next typegen &&
+tsc --noEmit` starts, heartbeats the compiler descendant tree, memory, and a
+bounded output tail, and records real compiler exits separately from opaque
+runner termination. A passed typecheck receipt is reusable only for the exact
+synthesized integration tree, command, and heap contract. This closes the same
+stage-boundary loss observed when a gate wrapper exited `0xFFFFFFFF` after route
+type generation while the compiler had emitted no diagnostic.
+
+Long-running production builds use the same durable stage contract. Before the
+Docker child starts, local-CI writes an exact-tree `running` receipt beside its
+metadata and refreshes it on every control-plane watchdog sample with the child
+PID and a bounded output tail. A normal exit writes the terminal build status.
+If the host disappears, the stale running receipt identifies the interrupted
+stage and last observation without inventing a terminating actor. A later run
+may reuse a passed typecheck, Vitest, or build receipt only when the synthesized integration
+tree and command/artifact identity match exactly; build reuse additionally
+requires the current image ID to match the passed receipt, not merely for its
+mutable tag to remain present. Setup, migrations, and guards still execute, and
+every reused heavy stage remains bound to the exact merged tree, so recovery
+does not weaken the merged-code gate.
+The reused receipt is atomically updated with `lastReusedAt` and `reuseCount`,
+so final metadata distinguishes an intentional exact-evidence reuse from a
+stage that simply did not execute. Receipt replacement retries bounded
+transient Windows `EPERM`/`EACCES`/`EBUSY` locks before failing, so a diagnostic
+reader or endpoint scanner cannot turn a successful heavy stage into a false
+gate failure.
 
 The candidate wrapper owns the slot-scoped freshness-evidence handoff path. Before each
 run it removes any prior report from the candidate gitdir and passes

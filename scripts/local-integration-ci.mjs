@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
   collectToolchainFingerprint,
@@ -14,6 +14,23 @@ import {
 function valueAfter(flag) {
   const index = process.argv.indexOf(flag);
   return index >= 0 ? process.argv[index + 1] : "";
+}
+
+function readJsonIfPresent(path) {
+  if (!path || !existsSync(path)) return null;
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function resolveGitRevisionOrNull(ref) {
+  try {
+    return resolveGitRevision(ref);
+  } catch {
+    return null;
+  }
 }
 
 const candidateBranch = valueAfter("--candidate");
@@ -53,15 +70,19 @@ const plan = createLocalIntegrationPlan({
 });
 const startedAt = new Date().toISOString();
 const execution = executeLocalIntegrationPlan(plan);
-if (execution.status !== 0) {
-  process.exit(execution.status);
-}
 if (metadataOut) {
-  const evidencePlan = evidencePlanOut
-    ? JSON.parse(readFileSync(evidencePlanOut, "utf8"))
-    : null;
-  const integrationCommitSha = resolveGitRevision("HEAD");
-  const synthesizedTreeSha = resolveGitRevision("HEAD^{tree}");
+  const evidencePlan = readJsonIfPresent(evidencePlanOut);
+  const vitestDiagnostics = readJsonIfPresent(
+    process.env.DPF_LOCAL_CI_VITEST_DIAGNOSTICS_FILE || `${metadataOut}.vitest.json`,
+  );
+  const typecheckDiagnostics = readJsonIfPresent(
+    process.env.DPF_LOCAL_CI_TYPECHECK_RECEIPT_FILE || `${metadataOut}.typecheck.json`,
+  );
+  const buildDiagnostics = readJsonIfPresent(
+    process.env.DPF_LOCAL_CI_BUILD_RECEIPT_FILE || `${metadataOut}.build.json`,
+  );
+  const integrationCommitSha = resolveGitRevisionOrNull("HEAD");
+  const synthesizedTreeSha = resolveGitRevisionOrNull("HEAD^{tree}");
   const imageTag = plan.buildStrategy === "docker-build"
     ? dockerBuildTag(candidateBranch, slotKey)
     : "";
@@ -77,19 +98,21 @@ if (metadataOut) {
   } catch {
     // Docker builds do not materialize the build output in the host checkout.
   }
-  const productionArtifact = createProductionArtifactIdentity({
-    buildStrategy: plan.buildStrategy,
-    integrationTreeSha: synthesizedTreeSha,
-    dockerImageTag: imageTag,
-    dockerImageId: imageInspect?.status === 0 ? imageInspect.stdout.trim() : "",
-    nextBuildId,
-  });
+  const productionArtifact = execution.status === 0
+    ? createProductionArtifactIdentity({
+        buildStrategy: plan.buildStrategy,
+        integrationTreeSha: synthesizedTreeSha,
+        dockerImageTag: imageTag,
+        dockerImageId: imageInspect?.status === 0 ? imageInspect.stdout.trim() : "",
+        nextBuildId,
+      })
+    : null;
   const payload = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     bi: "BI-76551B2D",
     mode,
     candidateRef: candidateBranch,
-    candidateSha: candidateSha || resolveGitRevision(candidateBranch),
+    candidateSha: candidateSha || resolveGitRevisionOrNull(candidateBranch),
     baseRef,
     fetchBase: baseFreshnessStatus === "remote-current" || fetchBase,
     baseFreshness: {
@@ -97,13 +120,23 @@ if (metadataOut) {
       resolvedAt: baseResolvedAt || null,
       fetchMode: baseFetchMode || null,
     },
-    baseSha: baseSha || resolveGitRevision(baseRef),
+    baseSha: baseSha || resolveGitRevisionOrNull(baseRef),
     integrationBranch: plan.integrationBranch,
     slotKey: slotKey || null,
     integrationCommitSha,
     synthesizedTreeSha,
     buildStrategy: plan.buildStrategy,
     productionArtifact,
+    execution: {
+      status: execution.status === 0 ? "passed" : "failed",
+      exitCode: execution.status,
+      completedCommandCount: execution.completedCommandCount,
+      failedCommand: execution.failedCommand?.join(" ") ?? null,
+      failureDiagnostics: execution.diagnostics,
+      typecheck: typecheckDiagnostics,
+      vitest: vitestDiagnostics,
+      productionBuild: buildDiagnostics,
+    },
     evidencePlan: evidencePlan ? {
       path: evidencePlanOut,
       digest: evidencePlan.digest,
@@ -120,7 +153,12 @@ if (metadataOut) {
   writeFileSync(metadataOut, `${JSON.stringify(payload, null, 2)}\n`);
   const artifactOut = process.env.DPF_LOCAL_CI_ARTIFACT_FILE;
   if (artifactOut) {
-    writeFileSync(artifactOut, `${JSON.stringify(productionArtifact, null, 2)}\n`);
+    if (productionArtifact) {
+      writeFileSync(artifactOut, `${JSON.stringify(productionArtifact, null, 2)}\n`);
+    }
   }
   console.log(`[local-integration-ci] metadata ${metadataOut}`);
+}
+if (execution.status !== 0) {
+  process.exit(execution.status);
 }
