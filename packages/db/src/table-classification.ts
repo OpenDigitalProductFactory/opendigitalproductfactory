@@ -179,7 +179,6 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   // observations for LL144/four-fifths bias audit. PII — obfuscate before any copy.
   ProtectedMonitoringObservation: "confidential",
   User: "confidential",
-  UserGroup: "confidential",
   CustomerContact: "confidential",
   SocialIdentity: "confidential",
   AccountInvite: "confidential",
@@ -285,6 +284,9 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   // -- restricted (16) --
   PasswordResetToken: "restricted",
   PlatformRole: "restricted",
+  // Memberships require PlatformRole, so retaining them while roles are
+  // omitted creates authorization references that can never be resolved.
+  UserGroup: "restricted",
   CredentialEntry: "restricted",
   DataPolicyException: "restricted",
   OAuthPendingFlow: "restricted",

@@ -566,6 +566,7 @@ services:
       DATABASE_URL: postgresql://dpf:dpf_dev@dev-postgres:5432/dpf
       PRODUCTION_DATABASE_URL: postgresql://dpf:${POSTGRES_PASSWORD:-dpf_dev}@postgres:5432/dpf
       DPF_ENVIRONMENT: dev
+      CONTRIBUTOR_PREVIEW_PASSWORD: ${CONTRIBUTOR_PREVIEW_PASSWORD:-}
     volumes: *dev-workspace-volumes
     depends_on:
       dev-postgres:

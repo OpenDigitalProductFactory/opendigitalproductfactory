@@ -20,6 +20,10 @@ import {
   runWithDestinationCleanup,
   insertRowsWithReplicationDisabled,
   resolveCompatibleCopyColumns,
+  sanitizeConfidentialRow,
+  provisionContributorPreviewAdmin,
+  CONTRIBUTOR_PREVIEW_ADMIN_EMAIL,
+  requireContributorPreviewPassword,
 } from "./sanitized-clone";
 
 describe("obfuscation", () => {
@@ -47,6 +51,67 @@ describe("obfuscation", () => {
   it("handles null/undefined fields", () => {
     expect(obfuscateField(null, "name", 1)).toBeNull();
     expect(obfuscateField(undefined, "name", 1)).toBeUndefined();
+  });
+
+  it("invalidates copied password hashes instead of preserving a live credential", () => {
+    const sanitized = sanitizeConfidentialRow(
+      { id: "user-1", passwordHash: "$2b$10$live-production-hash" },
+      1,
+    );
+
+    expect(sanitized.passwordHash).not.toBe("$2b$10$live-production-hash");
+    expect(sanitized.passwordHash).toMatch(/^\$2a\$10\$devhashplaceholder/);
+  });
+});
+
+describe("Contributor preview administrator", () => {
+  it("requires a separate development-only password with a minimum length", () => {
+    expect(() => requireContributorPreviewPassword(undefined)).toThrow(
+      "CONTRIBUTOR_PREVIEW_PASSWORD",
+    );
+    expect(() => requireContributorPreviewPassword("too-short")).toThrow(
+      "at least 12 characters",
+    );
+    expect(requireContributorPreviewPassword("preview-password-only")).toBe(
+      "preview-password-only",
+    );
+  });
+
+  it("provisions only the sanitized superuser with the separate development credential", async () => {
+    const statements: Array<{ sql: string; values: unknown[] }> = [];
+    const client = {
+      $queryRawUnsafe: async () => [{ id: "user-super" }],
+      $executeRawUnsafe: async (sql: string, ...values: unknown[]) => {
+        statements.push({ sql, values });
+        return 1;
+      },
+    };
+
+    await provisionContributorPreviewAdmin(
+      client as never,
+      "preview-password-only",
+      async (password) => `hashed:${password}`,
+    );
+
+    expect(statements).toEqual([
+      expect.objectContaining({
+        sql: expect.stringContaining('UPDATE "User"'),
+        values: [CONTRIBUTOR_PREVIEW_ADMIN_EMAIL, "hashed:preview-password-only", "user-super"],
+      }),
+    ]);
+  });
+
+  it("fails closed when the sanitized clone has no active superuser", async () => {
+    const client = {
+      $queryRawUnsafe: async () => [],
+      $executeRawUnsafe: async () => 1,
+    };
+
+    await expect(provisionContributorPreviewAdmin(
+      client as never,
+      "preview-password-only",
+      async () => "unused",
+    )).rejects.toThrow("active superuser");
   });
 });
 
@@ -326,6 +391,7 @@ describe("table classification helpers", () => {
   it("restricted tables should be skipped", () => {
     expect(shouldSkipTable("CredentialEntry")).toBe(true);
     expect(shouldSkipTable("ApiToken")).toBe(true);
+    expect(shouldSkipTable("UserGroup")).toBe(true);
   });
 
   it("keeps provider connections with their restricted provider parent", () => {

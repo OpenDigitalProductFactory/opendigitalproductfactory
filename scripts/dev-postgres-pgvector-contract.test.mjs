@@ -35,3 +35,19 @@ test("Contributor preview waits for a pgvector-capable database", async () => {
     "dev-init must use the disposable migrate converge wrapper (BI-4DB4B415)",
   );
 });
+
+test("Contributor preview receives a separate local-only login credential", async () => {
+  const compose = await readFile(new URL("../docker-compose.yml", import.meta.url), "utf8");
+  const init = composeService(compose, "dev-init");
+
+  assert.match(
+    init,
+    /^      CONTRIBUTOR_PREVIEW_PASSWORD: \$\{CONTRIBUTOR_PREVIEW_PASSWORD:-\}$/m,
+    "dev-init must receive the explicit Contributor preview credential",
+  );
+  assert.doesNotMatch(
+    init,
+    /CONTRIBUTOR_PREVIEW_PASSWORD:.*ADMIN_PASSWORD/,
+    "the preview credential must not reuse the live administrator password",
+  );
+});
