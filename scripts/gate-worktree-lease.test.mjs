@@ -290,6 +290,137 @@ test("released terminal claim from a prior run gets a fresh rerun claimKey", asy
   }
 });
 
+test("terminal claim replacement advances past an expired rerun from a prior process", async () => {
+  const claims = [];
+  const server = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      const payload = JSON.parse(body);
+      const tool = payload.params.name;
+      if (tool === "claim_nonprod_environment_lease") {
+        claims.push(payload.params.arguments);
+      }
+      const claimNumber = claims.length;
+      const result = tool === "claim_nonprod_environment_lease" && claimNumber === 1
+        ? {
+          success: false,
+          error: "lease_terminal",
+          entityId: "NPEL-PRIOR-RUN",
+          data: {
+            reason: "released",
+            lease: {
+              leaseId: "NPEL-PRIOR-RUN",
+              claimKey: claims[0].claimKey,
+              status: "released",
+            },
+          },
+        }
+        : tool === "claim_nonprod_environment_lease" && claimNumber === 2
+          ? {
+            success: false,
+            error: "lease_terminal",
+            entityId: "NPEL-EXPIRED-RERUN",
+            data: {
+              reason: "expired",
+              lease: {
+                leaseId: "NPEL-EXPIRED-RERUN",
+                claimKey: claims[1].claimKey,
+                status: "expired",
+              },
+            },
+          }
+          : tool === "claim_nonprod_environment_lease"
+            ? {
+              success: true,
+              entityId: "NPEL-FRESH-RERUN",
+              data: {
+                lease: { leaseId: "NPEL-FRESH-RERUN" },
+                admission: { status: "admitted", slotKey: "slot-0", waitAgeMs: 0 },
+              },
+            }
+            : tool === "record_local_integration_result"
+              ? { success: true, entityId: "EVIDENCE-FRESH-RERUN" }
+              : { success: true };
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({
+        jsonrpc: "2.0",
+        id: payload.id,
+        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  const worktree = makeTempWorktree();
+  const stateFile = join(worktree, ".git", "dpf-local-ci-gate.json");
+
+  try {
+    const result = await run(process.execPath, [
+      "scripts/gate-worktree.mjs",
+      "--branch", "fix/sandbox-lease-fencing",
+      "--worktree", worktree,
+      "--expires-minutes", "0.05",
+      "--poll-seconds", "0.01",
+      "--mcp-url", `http://127.0.0.1:${address.port}`,
+      "--no-push",
+    ], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        DPF_MCP_BEARER_TOKEN: "test-token",
+        DPF_ALLOW_LOCAL_CI_STUB: "1",
+        DPF_GATE_RETRY_JITTER: "0",
+        DPF_GATE_OWNER_PROVIDER: "codex",
+        DPF_GATE_OWNER_SESSION_ID: "test-terminal-claim-owner",
+        DPF_LOCAL_SANDBOX_FENCE_PATH: isolatedFencePath(),
+      },
+    });
+
+    assert.ok([0, 3].includes(result.code), result.output);
+    assert.equal(claims.length, 3);
+    assert.match(claims[0].claimKey, /^local-ci:[^:]+:[0-9a-f]{40}$/);
+    assert.match(claims[1].claimKey, /:rerun-1$/);
+    assert.match(claims[2].claimKey, /:rerun-2$/);
+    assert.ok(claims.every((claim) => claim.ownerProvider === "codex"));
+    assert.ok(claims.every(
+      (claim) => claim.ownerSessionId === "test-terminal-claim-owner",
+    ));
+    assert.match(result.output, /creating fresh admission attempt 2/);
+    const state = JSON.parse(readFileSync(stateFile, "utf8"));
+    assert.deepEqual(
+      state.leaseEvents
+        .filter((event) => event.type === "terminal-claim-replaced")
+        .map((event) => ({
+          terminalReason: event.terminalReason,
+          terminalAttemptSequence: event.terminalAttemptSequence,
+          priorClaimKey: event.priorClaimKey,
+          replacementClaimKey: event.replacementClaimKey,
+          interruptedByQuiescence: event.interruptedByQuiescence,
+        })),
+      [
+        {
+          terminalReason: "released",
+          terminalAttemptSequence: 1,
+          priorClaimKey: claims[0].claimKey,
+          replacementClaimKey: claims[1].claimKey,
+          interruptedByQuiescence: false,
+        },
+        {
+          terminalReason: "expired",
+          terminalAttemptSequence: 2,
+          priorClaimKey: claims[1].claimKey,
+          replacementClaimKey: claims[2].claimKey,
+          interruptedByQuiescence: false,
+        },
+      ],
+    );
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 test("cancelled terminal claim from an interrupted run gets a fresh rerun claimKey", async () => {
   const claims = [];
   const server = createServer((request, response) => {
@@ -498,12 +629,14 @@ test("a queued observer re-establishes intent after quiescence expires its claim
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
+  const worktree = makeTempWorktree();
+  const stateFile = join(worktree, ".git", "dpf-local-ci-gate.json");
 
   try {
     const result = await run(process.execPath, [
       "scripts/gate-worktree.mjs",
       "--branch", "fix/sandbox-lease-fencing",
-      "--worktree", process.cwd(),
+      "--worktree", worktree,
       "--expires-minutes", "0.05",
       "--poll-seconds", "0.01",
       "--mcp-url", `http://127.0.0.1:${address.port}`,
@@ -524,8 +657,27 @@ test("a queued observer re-establishes intent after quiescence expires its claim
     assert.equal(claims[0].claimKey, claims[1].claimKey);
     assert.equal(claims[1].claimKey, claims[2].claimKey);
     assert.notEqual(claims[2].claimKey, claims[3].claimKey);
-    assert.match(claims[3].claimKey, /:recovery-1$/);
+    assert.match(claims[3].claimKey, /:rerun-1$/);
     assert.match(result.output, /re-establishing queue intent/);
+    const recoveryEvent = JSON.parse(readFileSync(stateFile, "utf8"))
+      .leaseEvents
+      .find((event) => event.type === "queue-intent-reestablished");
+    assert.deepEqual(
+      {
+        terminalReason: recoveryEvent?.terminalReason,
+        terminalAttemptSequence: recoveryEvent?.terminalAttemptSequence,
+        priorClaimKey: recoveryEvent?.priorClaimKey,
+        replacementClaimKey: recoveryEvent?.replacementClaimKey,
+        interruptedByQuiescence: recoveryEvent?.interruptedByQuiescence,
+      },
+      {
+        terminalReason: "expired",
+        terminalAttemptSequence: 1,
+        priorClaimKey: claims[2].claimKey,
+        replacementClaimKey: claims[3].claimKey,
+        interruptedByQuiescence: true,
+      },
+    );
   } finally {
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
