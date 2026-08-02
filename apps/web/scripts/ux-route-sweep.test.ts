@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { BROWSER_EVALUATION_RUNTIME } from "../lib/ux-budget/purpose-browser-adapter";
 import {
-  BROWSER_EVALUATION_RUNTIME,
   DOM_SETTLE_EXPRESSION,
   captureAccessibilityStructure,
   executionOutcome,
