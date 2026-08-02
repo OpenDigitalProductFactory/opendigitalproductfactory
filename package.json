@@ -27,6 +27,7 @@
     "verify:preflight": "tsx scripts/dpf-verify-preflight.ts",
     "pr:ready": "node scripts/pr-readiness.mjs",
     "check:bundle-boundaries": "node scripts/check-bundle-boundaries.mjs",
+    "check:application-boundaries": "node scripts/check-application-boundaries.mjs",
     "check:diagram-dependency-pins": "node scripts/check-diagram-dependency-pins.mjs",
     "check:override-comments": "node scripts/check-override-comments.mjs && node --test scripts/check-override-comments.test.mjs",
     "audit:stale-overrides": "node scripts/audit-stale-overrides.mjs",

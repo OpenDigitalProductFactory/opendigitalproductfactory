@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 610,
+  "pageCount": 611,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -700,6 +700,21 @@
         "historical-records",
         "provider-and-model-pin-semantics",
         "planned-one-picture-experience"
+      ]
+    },
+    "docs/architecture/application-boundaries.md": {
+      "publicHref": "/architecture/application-boundaries/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "application-boundaries",
+        "governed-dependency-direction",
+        "why-this-direction",
+        "exception-contract",
+        "refactoring-pattern",
+        "commands-and-evidence",
+        "ownership-and-successor-work"
       ]
     },
     "docs/architecture/archetype-business-value-streams.md": {
