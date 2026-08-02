@@ -24,6 +24,12 @@ test("local-CI gate state helper writes and reads the shared evidence shape", ()
     resilience: null,
     leaseEvents: [{ type: "admitted", at: "2026-07-30T05:00:00.000Z" }],
     recovery: { reason: "test" },
+    queueObserver: {
+      path: "/tmp/dpf-local-ci-queue-observers/observer.json",
+      token: "observer-token",
+      pid: 12345,
+      ownerSessionId: "codex-thread",
+    },
   });
 
   const raw = JSON.parse(readFileSync(stateFile, "utf8"));
@@ -31,9 +37,10 @@ test("local-CI gate state helper writes and reads the shared evidence shape", ()
   assert.equal(raw.status, "running");
   assert.deepEqual(state, raw);
   assert.equal(state.recovery.reason, "test");
+  assert.equal(state.queueObserver.token, "observer-token");
 });
 
-test("only matching admitted/running gate states are recoverable", () => {
+test("only matching queued/admitted/running gate states are recoverable", () => {
   const base = {
     branch: "fix/local-ci-descendant-fence",
     sha: "d".repeat(40),
@@ -41,6 +48,10 @@ test("only matching admitted/running gate states are recoverable", () => {
     evidencePending: false,
   };
 
+  assert.equal(isRecoverableInterruptedGateState(
+    { ...base, status: "queued" },
+    { branch: base.branch, sha: base.sha },
+  ), true);
   assert.equal(isRecoverableInterruptedGateState(
     { ...base, status: "running" },
     { branch: base.branch, sha: base.sha },
