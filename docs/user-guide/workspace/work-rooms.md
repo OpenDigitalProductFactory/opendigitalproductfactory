@@ -8,6 +8,12 @@ relatedCode:
   - apps/web/components/workspace/WorkCaseAttentionLens.tsx
   - apps/web/components/workspace/WorkCaseDetailView.tsx
   - apps/web/components/workspace/work-room/WorkRoomCycles.tsx
+  - apps/web/components/workspace/work-room/WorkRoomParticipants.tsx
+  - apps/web/lib/work-management/room-channel-continuity.ts
+  - apps/web/lib/work-management/room-channel-ingress.ts
+  - apps/web/lib/work-management/room-participation.ts
+  - apps/web/lib/work-management/workspace-case-loader.ts
+  - apps/web/lib/work-management/workspace-room-access.ts
 ---
 
 ## Overview
