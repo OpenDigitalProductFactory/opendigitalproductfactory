@@ -2,5 +2,5 @@
 import { redirect } from "next/navigation";
 
 export default function EaAgentsPage() {
-  redirect("/admin/agents");
+  redirect("/platform/identity/agents");
 }
