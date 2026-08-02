@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 609,
+  "pageCount": 610,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1656,6 +1656,19 @@
         "4-where-ahp-style-pairwise-elicitation-would-actually-fit",
         "5-summary-table",
         "references"
+      ]
+    },
+    "docs/architecture/work-room-participation-and-channel-continuity.md": {
+      "publicHref": "/architecture/work-room-participation-and-channel-continuity/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "work-room-participation-and-channel-continuity",
+        "design-grounding",
+        "authorization-boundary",
+        "participant-projection",
+        "external-channel-continuity"
       ]
     },
     "docs/business-types/_readability-report.md": {
@@ -10571,6 +10584,7 @@
         "overview",
         "what-you-see-first",
         "activity-and-participants",
+        "access-and-other-channels",
         "finite-and-standing-rooms",
         "incomplete-or-unavailable-rooms"
       ]
