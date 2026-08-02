@@ -7,7 +7,7 @@ const tscBin = require.resolve("typescript/bin/tsc");
 const maxOldSpaceSizeMb =
   process.env.DPF_WEB_TYPECHECK_MAX_OLD_SPACE_SIZE_MB ||
   process.env.DPF_NEXT_BUILD_MAX_OLD_SPACE_SIZE_MB ||
-  "16384";
+  "24576";
 
 function run(args) {
   const result = spawnSync(process.execPath, args, {
