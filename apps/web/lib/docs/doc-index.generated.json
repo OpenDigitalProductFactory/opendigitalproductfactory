@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 615,
+  "pageCount": 616,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -907,6 +907,29 @@
         "backup-and-health-semantics",
         "observation-and-diagnostics-boundary",
         "safe-operating-rules"
+      ]
+    },
+    "docs/architecture/complexity-shield-acceptance-standard.md": {
+      "publicHref": "/architecture/complexity-shield-acceptance-standard/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "small-company-complexity-shield-acceptance-standard",
+        "purpose",
+        "thesis-one-sentence",
+        "non-goals",
+        "who-must-apply-it",
+        "acceptance-checklist-every-parity-feature",
+        "1-operator-job-not-suite-module",
+        "2-simplified-operator-facing-workflow",
+        "3-what-ai-coworkers-absorb",
+        "4-what-enterprise-complexity-is-hidden-automated-or-omitted",
+        "5-proof-without-enterprise-burden",
+        "worked-micro-examples",
+        "required-pr-spec-section-template",
+        "cross-references-apply-do-not-re-litigate",
+        "change-control"
       ]
     },
     "docs/architecture/context-engineering-standards.md": {
