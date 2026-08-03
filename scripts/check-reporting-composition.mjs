@@ -33,8 +33,11 @@ const BASELINE_PATH = join(REPO_ROOT, "scripts", "reporting-composition-baseline
 // report-kit owns the one legitimate raw <table> (DataTable's own render).
 const APPROVED = ["apps/web/components/ui/report-kit/"];
 
-// A JSX opening <table> tag: `<table` followed by whitespace, `>`, or `/`.
-const TABLE_RE = /<table[\s/>]/g;
+// A JSX opening <table> tag: `<table` followed by whitespace, `>`, `/`, or end
+// of line. End-of-line matters because pretty-printed JSX often puts attributes
+// on the next line (`<table\n  style=...>`), which previously slipped past the
+// ratchet (BI-F7792FC1).
+const TABLE_RE = /<table(?:[\s/>]|$)/g;
 const ALLOW_LINE = "reporting-composition-allow";
 
 /** Count raw `<table>` opening tags on a single line (0 if the line opts out). */
