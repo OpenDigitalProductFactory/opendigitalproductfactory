@@ -137,7 +137,7 @@ export {
   getNetworkTopologyAtLayer,
   getNetworkTopologyAtLayerForScope,
   type Neo4jTopologyScope,
-  pruneStaleInfraCIDatabaseRecords,
+  pruneStaleInfraCIs,
   type GraphNode,
   type GraphEdge,
   type ImpactResult,
