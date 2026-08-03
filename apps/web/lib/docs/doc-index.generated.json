@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 616,
+  "pageCount": 618,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -909,6 +909,29 @@
         "safe-operating-rules"
       ]
     },
+    "docs/architecture/complexity-shield-acceptance-standard.md": {
+      "publicHref": "/architecture/complexity-shield-acceptance-standard/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "small-company-complexity-shield-acceptance-standard",
+        "purpose",
+        "thesis-one-sentence",
+        "non-goals",
+        "who-must-apply-it",
+        "acceptance-checklist-every-parity-feature",
+        "1-operator-job-not-suite-module",
+        "2-simplified-operator-facing-workflow",
+        "3-what-ai-coworkers-absorb",
+        "4-what-enterprise-complexity-is-hidden-automated-or-omitted",
+        "5-proof-without-enterprise-burden",
+        "worked-micro-examples",
+        "required-pr-spec-section-template",
+        "cross-references-apply-do-not-re-litigate",
+        "change-control"
+      ]
+    },
     "docs/architecture/context-engineering-standards.md": {
       "publicHref": "/architecture/context-engineering-standards/",
       "portalHref": null,
@@ -931,6 +954,7 @@
       "publishedPortal": false,
       "anchors": [
         "contributor-procedure-runbook",
+        "new-page-routes-regenerate-companions-bi-206dab95",
         "3-strongly-typed-string-enums-mandatory",
         "13-login-local-qa",
         "9-external-tools",
@@ -1190,6 +1214,25 @@
         "derived-predicates-the-shipped-lifecycle-model",
         "adr-10-on-site-capture-is-evidence-metadata-references-never-inline-regulated-content",
         "what-is-built-vs-roadmap"
+      ]
+    },
+    "docs/architecture/finance-workforce-maturity-matrix.md": {
+      "publicHref": "/architecture/finance-workforce-maturity-matrix/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "finance-and-workforce-documentation-maturity-matrix",
+        "purpose",
+        "maturity-labels-closed-set",
+        "finance-matrix-snapshot",
+        "finance-doc-reconciliation-rules",
+        "workforce-matrix-snapshot",
+        "workforce-doc-reconciliation-rules",
+        "how-to-update-this-matrix",
+        "pr-checklist-financeworkforce-docs",
+        "related-backlog",
+        "change-control"
       ]
     },
     "docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md": {

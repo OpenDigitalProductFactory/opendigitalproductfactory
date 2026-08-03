@@ -2,6 +2,27 @@
 
 **Status:** procedure reference. Collected from `AGENTS.md` §3, §7, §9, §13, §14 and §15 by BI-0020D511 Phase 1. The *rules* from each stay always-on in their original section; everything here is how-to, reference tables, and rationale. No rule was dropped.
 
+## New page routes — regenerate companions (BI-206DAB95)
+
+Adding `apps/web/app/**/page.tsx` requires regenerating **four** derived artifacts. CI fails opaquely if any is stale. One command regenerates all of them against the **current** tree:
+
+```bash
+pnpm route:sync
+```
+
+That runs, in order:
+
+| Artifact | Generator |
+| --- | --- |
+| `apps/web/lib/ea/route-manifest.json` | `pnpm --filter web build:route-manifest` |
+| `apps/web/lib/ux-budget/route-shells.generated.json` | `pnpm --filter web build:route-shells` |
+| `apps/web/lib/navigation/route-audience.generated.json` | `pnpm --filter web build:route-audience` |
+| `apps/web/lib/docs/doc-index.generated.json` | `node scripts/gen-doc-index.mjs` |
+
+**Base-drift trap:** regenerate **after** rebasing onto current `origin/main`. Checking/regenerating on a pre-rebase tree reports “fresh” and still fails CI on the merged tree.
+
+**Typecheck heap:** if pre-commit typecheck OOMs, use `NODE_OPTIONS=--max-old-space-size=8192` (or `DPF_SKIP_TYPECHECK=1` only when justified and attested).
+
 ## 3. Strongly-Typed String Enums (mandatory)
 
 → [kernel principle](../professions/data-architect/wiki/strongly-typed-string-enums.md)

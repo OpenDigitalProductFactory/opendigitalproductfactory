@@ -5,6 +5,7 @@ import { getInvoiceByPayToken, markInvoiceViewed } from "@/lib/actions/finance";
 import { notFound } from "next/navigation";
 import { LocalTime } from "@/components/ui/LocalTime";
 import { InvoiceSignaturePad } from "@/components/finance/InvoiceSignaturePad";
+import { PublicLineItemsTable } from "@/components/storefront/PublicLineItemsTable";
 
 type Props = { params: Promise<{ token: string }> };
 
@@ -114,107 +115,17 @@ export default async function PayPage({ params }: Props) {
             )}
           </div>
 
-          {/* Line items */}
-          <table
-            style={{ width: "100%", borderCollapse: "collapse", marginBottom: 24 }}
-          >
-            <thead>
-              <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
-                <th
-                  style={{
-                    textAlign: "left",
-                    padding: "8px 0",
-                    fontSize: 12,
-                    color: "var(--dpf-muted)",
-                    fontWeight: 500,
-                  }}
-                >
-                  Description
-                </th>
-                <th
-                  style={{
-                    textAlign: "right",
-                    padding: "8px 0",
-                    fontSize: 12,
-                    color: "var(--dpf-muted)",
-                    fontWeight: 500,
-                  }}
-                >
-                  Qty
-                </th>
-                <th
-                  style={{
-                    textAlign: "right",
-                    padding: "8px 0",
-                    fontSize: 12,
-                    color: "var(--dpf-muted)",
-                    fontWeight: 500,
-                  }}
-                >
-                  Price
-                </th>
-                <th
-                  style={{
-                    textAlign: "right",
-                    padding: "8px 0",
-                    fontSize: 12,
-                    color: "var(--dpf-muted)",
-                    fontWeight: 500,
-                  }}
-                >
-                  Total
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoice.lineItems.map((li, i) => (
-                <tr key={i} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                  <td
-                    style={{ padding: "10px 0", fontSize: 14, color: "var(--dpf-text)" }}
-                  >
-                    {li.description}
-                  </td>
-                  <td
-                    style={{
-                      padding: "10px 0",
-                      fontSize: 14,
-                      color: "var(--dpf-muted)",
-                      textAlign: "right",
-                    }}
-                  >
-                    {Number(li.quantity)}
-                  </td>
-                  <td
-                    style={{
-                      padding: "10px 0",
-                      fontSize: 14,
-                      color: "var(--dpf-muted)",
-                      textAlign: "right",
-                    }}
-                  >
-                    {invoice.currency}{" "}
-                    {Number(li.unitPrice).toLocaleString("en-GB", {
-                      minimumFractionDigits: 2,
-                    })}
-                  </td>
-                  <td
-                    style={{
-                      padding: "10px 0",
-                      fontSize: 14,
-                      color: "var(--dpf-text)",
-                      textAlign: "right",
-                      fontWeight: 500,
-                    }}
-                  >
-                    {invoice.currency}{" "}
-                    {Number(li.lineTotal).toLocaleString("en-GB", {
-                      minimumFractionDigits: 2,
-                    })}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {/* Line items — shared report-kit DataTable (BI-F7792FC1) */}
+          <PublicLineItemsTable
+            rows={invoice.lineItems.map((li, i) => ({
+              id: `${invoice.id}-${i}`,
+              description: li.description,
+              quantity: Number(li.quantity),
+              unitPrice: Number(li.unitPrice),
+              lineTotal: Number(li.lineTotal),
+              currency: invoice.currency,
+            }))}
+          />
 
           {/* Totals */}
           <div
