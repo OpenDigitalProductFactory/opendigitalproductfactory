@@ -7,9 +7,9 @@ Nothing on the platform reclaims Docker disk space. The scheduled job named 'Inf
 - Add a new scheduled job or extend `infra-prune` to reclaim Docker disk space by pruning dangling images and build caches.
 - Target: `docker image prune -f --filter until=48h` and `docker builder prune -f --keep-storage 20gb`.
 - Preserve recent promoter images (last 3 tags).
-- Rename `pruneStaleInfraCIs` or add clear comments to prevent confusion about its purpose.
+- Clarify that `pruneStaleInfraCIs` is a *database* prune (not Docker disk) via a call-site comment — avoid a packages/db rename in this PR so scope stays one-concern.
 
 ## Implementation Details
-1. **Extend Infra-Prune Action**: Update `apps/web/lib/actions/infra-prune.ts` to include Docker pruning tasks.
-2. **Rename Function**: Rename `pruneStaleInfraCIs` to `pruneStaleInfraCIDatabaseRecords` (or add a clarifying comment) to explicitly indicate it prunes database records.
-3. **Execute Pruning Commands**: Use a subprocess to run the Docker pruning commands.
+1. **Extend Infra-Prune Job**: Add a `prune-docker-disk` step on the weekly `ops/infra-prune` Inngest function (DB prune step stays first).
+2. **Clarify Call Site**: Comment at the `pruneStaleInfraCIs` import that it prunes InfrastructureCI database rows, not Docker images (rename deferred to avoid unrelated packages/db churn).
+3. **Execute Pruning Commands**: Subprocess `docker image prune` / `docker builder prune`, plus keep the last 3 `dpf-promoter` image tags.

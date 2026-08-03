@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@dpf/db";
-import { pruneStaleInfraCIDatabaseRecords } from "@dpf/db";
+import { pruneStaleInfraCIs } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
 import { computeNextRunAt } from "@/lib/ai-provider-types";
@@ -52,7 +52,7 @@ export async function runInfraPruneNow(): Promise<{ ok: boolean; marked: number;
   });
 
   try {
-    const result = await pruneStaleInfraCIDatabaseRecords({
+    const result = await pruneStaleInfraCIs({
       markDecommissionedAfterDays: MARK_AFTER_DAYS,
       deleteAfterDays:             DELETE_AFTER_DAYS,
     });

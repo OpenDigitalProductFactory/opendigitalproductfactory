@@ -9,10 +9,12 @@ export const infraPrune = inngest.createFunction(
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     await step.run("prune-stale", async () => {
-      const { pruneStaleInfraCIDatabaseRecords, prisma } = await import("@dpf/db");
+      // pruneStaleInfraCIs prunes stale InfrastructureCI *database* rows —
+      // not Docker images. Docker disk cleanup is the next step.
+      const { pruneStaleInfraCIs, prisma } = await import("@dpf/db");
       const { computeNextRunAt } = await import("@/lib/ai-provider-types");
 
-      const result = await pruneStaleInfraCIDatabaseRecords({
+      const result = await pruneStaleInfraCIs({
         markDecommissionedAfterDays: 30,
         deleteAfterDays: 90,
       });
