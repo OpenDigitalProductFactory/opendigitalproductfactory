@@ -18,6 +18,7 @@ import { spawnSync } from "node:child_process";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mcpCall } from "./lib/mcp-client.mjs";
+import { checkHostDiskSpace } from "./lib/disk-space-preflight.mjs";
 import {
   createLocalCiSlotManifest,
   LOCAL_CI_SLOT_KEYS,
@@ -249,6 +250,12 @@ export async function recoverInterruptedGate({
 
 async function main() {
   const args = process.argv.slice(2);
+
+  const diskCheck = checkHostDiskSpace();
+  if (!diskCheck.ok) {
+    process.stderr.write(`pregate: ${diskCheck.message}\n`);
+    process.exit(1);
+  }
 
   if (shouldRunPreflight(args)) {
     const preflight = spawnSync(

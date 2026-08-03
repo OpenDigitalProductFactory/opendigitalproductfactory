@@ -10,6 +10,7 @@ import {
   executeLocalIntegrationPlan,
   resolveGitRevision,
 } from "./lib/local-integration-ci.mjs";
+import { checkHostDiskSpace } from "./lib/disk-space-preflight.mjs";
 
 function valueAfter(flag) {
   const index = process.argv.indexOf(flag);
@@ -51,6 +52,13 @@ const plan = createLocalIntegrationPlan({
   includeMigrateDeploy: process.argv.includes("--migrate-deploy"),
   slotKey: slotKey || undefined,
 });
+
+const diskCheck = checkHostDiskSpace();
+if (!diskCheck.ok) {
+  console.error(diskCheck.message);
+  process.exit(1);
+}
+
 const startedAt = new Date().toISOString();
 const execution = executeLocalIntegrationPlan(plan);
 if (execution.status !== 0) {
