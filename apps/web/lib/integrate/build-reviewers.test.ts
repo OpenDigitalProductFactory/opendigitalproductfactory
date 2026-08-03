@@ -385,11 +385,11 @@ describe("parseReviewResponse", () => {
     expect(result.decision).toBe("pass");
   });
 
-  it("returns fail with parseError:true for unparseable response", () => {
+  it("returns inconclusive with parseError:true for unparseable response", () => {
     const result = parseReviewResponse("This is not JSON");
-    expect(result.decision).toBe("fail");
-    expect(result.issues[0].severity).toBe("critical");
-    expect(result.parseError).toBe(true);
+    expect(result.decision).toBe("inconclusive");
+    expect(result.issues).toEqual([]);
+    expect(result).toMatchObject({ parseError: true, inconclusiveReason: "unparseable-review-response" });
   });
 
   it("does not set parseError on a successfully parsed response", () => {

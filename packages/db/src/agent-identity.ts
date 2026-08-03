@@ -42,6 +42,8 @@ export const AGENT_IDENTITY_OVERRIDES: Record<string, { displayName?: string; ki
   // Onboarding COO must Title-Case COO consistently (not "Onboarding Coo").
   "AGT-WS-ONBOARD": { displayName: "Onboarding COO" },
   "onboarding-coo": { displayName: "Onboarding COO" },
+  "AGT-WS-FARM-RANCH": { displayName: "Farm & Ranch Steward" },
+  "farm-ranch-steward": { displayName: "Farm & Ranch Steward" },
   // BI-29F07F46. Derivation tokenizes the slug `ea-architect` into "EA" (an
   // ACRONYM) + "Architect" = "EA Architect" — a name authored NOWHERE, which is
   // why grepping for it finds no origin. Meanwhile the seed name, the reviewer
@@ -92,6 +94,7 @@ export const COWORKER_SLUG_TO_CANONICAL_AGENT_ID: Readonly<Record<string, string
   // "manually-maintained map drifts" failure the BI names). The seed-integrity
   // guard (dual-seed-coverage) now fails the build on any future uncovered pair.
   "ux-design-critic": "AGT-906",
+  "farm-ranch-steward": "AGT-WS-FARM-RANCH",
 };
 
 /** Reverse map: canonical AGT-* → preferred slug handle. */

@@ -1,0 +1,25 @@
+{
+  "version": "1",
+  "decidedOption": "canonical-provider-connections-route",
+  "scope": {
+    "files": [
+      "apps/web/components/workspace-home/LocalOnlyProviderNotice.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "held",
+    "measured": {
+      "/workspace": {
+        "defaultVisibleWords": 199,
+        "leadBandWords": 0,
+        "primaryActions": 1,
+        "visibleFields": 0,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      }
+    }
+  }
+}

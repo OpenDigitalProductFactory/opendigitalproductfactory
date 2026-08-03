@@ -13,13 +13,19 @@ const SPECIALIST_SYSTEM_PROMPTS: Record<string, string> = {
 function mergeReviewResults(results: SemanticReviewResult[]): SemanticReviewResult {
   const issues = results.flatMap((result) => result.issues);
   const criticals = issues.filter((issue) => issue.severity === "critical").length;
+  const inconclusive = results.filter((result) => result.decision === "inconclusive");
   return {
-    decision: criticals > 0 ? "fail" : "pass",
+    decision: inconclusive.length > 0 ? "inconclusive" : criticals > 0 ? "fail" : "pass",
     issues,
-    summary: results.length === 1
+    summary: inconclusive.length > 0
+      ? `${inconclusive.length} required semantic review branch${inconclusive.length === 1 ? " was" : "es were"} infrastructure-inconclusive; retry without treating capacity as a semantic finding.`
+      : results.length === 1
       ? results[0]!.summary
       : `${results.length} independent review branches completed; ${criticals} blocking finding${criticals === 1 ? "" : "s"}.`,
     ...(results.some((result) => result.parseError) ? { parseError: true as const } : {}),
+    ...(inconclusive.length > 0
+      ? { inconclusiveReason: inconclusive.map((result) => result.inconclusiveReason ?? "review-branch-incomplete").join(",") }
+      : {}),
   };
 }
 
@@ -64,13 +70,10 @@ export async function dispatchRoutedSemanticReview(
   const rejected = settled.filter((branch) => branch.status === "rejected").length;
   if (rejected > 0) {
     completed.push({
-      decision: "fail",
-      issues: [{
-        severity: "critical",
-        description: `${rejected} required semantic review branch${rejected === 1 ? "" : "es"} did not complete`,
-      }],
-      summary: "Semantic review was incomplete — retry before publication.",
-      parseError: true,
+      decision: "inconclusive",
+      issues: [],
+      summary: `${rejected} required semantic review branch${rejected === 1 ? "" : "es"} did not complete.`,
+      inconclusiveReason: "review-branch-capacity-or-transport-failure",
     });
   }
   return mergeReviewResults(completed);

@@ -1838,7 +1838,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 11
+    "textMass": 2
   },
   "apps/web/app/(shell)/service-requests/page.tsx": {
     "vocabulary": 0,
@@ -2736,6 +2736,20 @@
     "longSentences": 0,
     "textMass": 10
   },
+  "apps/web/app/api/v1/finance/invoices/[id]/documents/[documentId]/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
+  "apps/web/app/api/v1/finance/invoices/[id]/documents/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
   "apps/web/app/api/v1/finance/invoices/[id]/pdf/route.ts": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -2756,6 +2770,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 4
+  },
+  "apps/web/app/api/v1/finance/invoices/[id]/void/route.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 6
   },
   "apps/web/app/api/v1/finance/invoices/route.ts": {
     "vocabulary": 0,
@@ -3252,7 +3273,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 1,
-    "textMass": 91
+    "textMass": 82
   },
   "apps/web/components/admin/PlatformDevelopmentForm.tsx": {
     "vocabulary": 0,
@@ -5130,12 +5151,26 @@
     "longSentences": 0,
     "textMass": 70
   },
+  "apps/web/components/finance/InvoiceDocumentHistory.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 50
+  },
   "apps/web/components/finance/InvoiceDownloadButton.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
     "textMass": 8
+  },
+  "apps/web/components/finance/InvoiceLifecycleActions.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 39
   },
   "apps/web/components/finance/InvoiceSendButton.tsx": {
     "vocabulary": 0,
@@ -5471,7 +5506,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 122
+    "textMass": 120
   },
   "apps/web/components/inventory/DiscoveryRunSummary.tsx": {
     "vocabulary": 0,
@@ -7328,6 +7363,13 @@
     "longSentences": 0,
     "textMass": 83
   },
+  "apps/web/components/storefront-admin/RentalPhysicalEditor.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 40
+  },
   "apps/web/components/storefront-admin/ScheduleEditor.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -7347,7 +7389,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 20
+    "textMass": 23
   },
   "apps/web/components/storefront-admin/SetupWizard.tsx": {
     "vocabulary": 7,
@@ -7396,7 +7438,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 89
+    "textMass": 57
   },
   "apps/web/components/storefront-admin/content-editing-ui.tsx": {
     "vocabulary": 0,
@@ -7678,6 +7720,13 @@
     "longSentences": 0,
     "textMass": 67
   },
+  "apps/web/components/ui/form/SearchableSelect.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 5
+  },
   "apps/web/components/ui/form/SelectField.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -7809,7 +7858,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 115
+    "textMass": 158
   },
   "apps/web/components/workbooks/CreateTableButton.tsx": {
     "vocabulary": 0,
@@ -7830,7 +7879,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 2,
-    "textMass": 501
+    "textMass": 512
   },
   "apps/web/components/workbooks/GridCalendar.tsx": {
     "vocabulary": 0,
@@ -7950,6 +7999,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 75
+  },
+  "apps/web/components/workbooks/grid-xlsx.ts": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 21
   },
   "apps/web/components/workspace-home/LocalOnlyProviderNotice.tsx": {
     "vocabulary": 0,
@@ -8089,7 +8145,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 64
+    "textMass": 37
   },
   "apps/web/components/workspace/work-room/WorkRoomCycles.tsx": {
     "vocabulary": 0,
@@ -8104,5 +8160,12 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 46
+  },
+  "apps/web/components/workspace/work-room/WorkRoomParticipants.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 31
   }
 }

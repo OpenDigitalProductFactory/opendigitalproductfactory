@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "progressive-physical-editor",
+  "decisionInteractionId": "DI-3D8FAF2F5720",
+  "scope": {
+    "files": [
+      "apps/web/components/storefront-admin/RentalPhysicalEditor.tsx",
+      "apps/web/components/storefront-admin/UnitsManager.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "generic-unit-list",
+      "progressive-physical-editor",
+      "full-yard-cockpit-now"
+    ]
+  }
+}

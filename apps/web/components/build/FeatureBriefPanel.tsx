@@ -7,6 +7,8 @@ import { customerChangeSummaryText } from "@/lib/build/customer-change-summary";
 import type { AttachmentInfo } from "@/lib/agent-coworker-types";
 import { AgentAttachmentCard } from "@/components/agent/AgentAttachmentCard";
 import { DeliberationSummaryCard } from "@/components/deliberation/DeliberationSummaryCard";
+import { semanticReviewDecisionPresentation } from "@/lib/change-review/review-decision-presentation";
+import type { SemanticReviewDecision } from "@/lib/change-review/semantic-change-review";
 import { EvidenceSummary } from "./EvidenceSummary";
 import { safeRenderValue } from "@/lib/safe-render";
 import { Skeleton } from "@/components/ui/report-kit";
@@ -94,7 +96,10 @@ export function FeatureBriefPanel({ brief, phase, changeNarrative, attachments, 
 
   // Ideate / Plan phase — show design doc if available, otherwise the feature brief
   const designDoc = build?.designDoc as Record<string, unknown> | null | undefined;
-  const designReview = build?.designReview as { decision?: string; summary?: string; issues?: Array<{ severity: string; description: string }> } | null | undefined;
+  const designReview = build?.designReview as { decision?: SemanticReviewDecision; summary?: string; issues?: Array<{ severity: string; description: string }> } | null | undefined;
+  const designReviewPresentation = designReview?.decision
+    ? semanticReviewDecisionPresentation(designReview.decision)
+    : null;
 
   if (designDoc) {
     const issues = designReview?.issues ?? [];
@@ -120,7 +125,7 @@ export function FeatureBriefPanel({ brief, phase, changeNarrative, attachments, 
                 border: `1px solid ${designReview.decision === "pass" ? "var(--dpf-success)" : "var(--dpf-warning)"}`,
               }}
             >
-              Review: {designReview.decision === "pass" ? "Passed" : "Needs revision"}
+              {designReviewPresentation?.title}
             </span>
           )}
         </div>

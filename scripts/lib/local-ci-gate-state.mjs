@@ -11,6 +11,7 @@ import {
 import { basename, dirname, join } from "node:path";
 
 export const NONTERMINAL_LOCAL_CI_GATE_STATUSES = Object.freeze(new Set([
+  "queued",
   "admitted",
   "running",
 ]));
@@ -47,6 +48,7 @@ export function writeLocalCiGateState(stateFile, {
   evidencePendingReason = "",
   quiescence = null,
   recovery = null,
+  queueObserver = null,
 }) {
   mkdirSync(dirname(stateFile), { recursive: true });
   const payload = {
@@ -65,6 +67,7 @@ export function writeLocalCiGateState(stateFile, {
   if (evidencePending) payload.evidencePendingReason = evidencePendingReason || "unknown";
   if (quiescence) payload.quiescence = quiescence;
   if (recovery) payload.recovery = recovery;
+  if (queueObserver) payload.queueObserver = queueObserver;
   writeGateStateAtomically(stateFile, `${JSON.stringify(payload, null, 2)}\n`);
 }
 

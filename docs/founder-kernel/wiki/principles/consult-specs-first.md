@@ -38,10 +38,11 @@ The substrate is denser than first reads suggest:
 - `docs/superpowers/specs/` has spec drafts that pre-date many features
   and have already resolved decisions the new work would otherwise
   re-litigate
-- IT4IT value-stream alignment (`/docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx`)
-  is the canonical mapping from feature work to stage and value stream;
-  features that don't fit a stage probably belong in a different value
-  stream
+- Current code and live data establish observed value-stream alignment; the
+  [Four-Portfolio Archetype and AI Workforce Operating Standard](../../../architecture/four-portfolio-archetype-ai-workforce-operating-standard.md)
+  governs target portfolio and value-stream semantics. The legacy criteria workbook has
+  `undetermined` source-use status and is not new AI or normative evidence; features that
+  do not fit a governed stream may belong in a different stream or expose a model gap
 - Existing models in `packages/db/prisma/schema.prisma` are already
   doing more than they look like at first glance — running `grep` for
   a noun before adding a new model usually finds it

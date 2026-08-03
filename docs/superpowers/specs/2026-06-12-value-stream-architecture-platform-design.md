@@ -1,13 +1,19 @@
 # Operational Value-Stream Architecture — Platform Implementation Design
 
-- **Status:** Draft for review
+- **Status:** Historical implementation design; current semantic authority is the 2026-08-01 FPAW standard
 - **Author:** Claude (directed by maintainer: "design to implement the value-stream research across the platform — coworker facilitation/interop, capture value streams as architecture to measure & optimize each archetype's business model, repurpose surfaces over new screens, lean into coworker proactivity on critical activities")
 - **Date:** 2026-06-12
-- **Source artefact:** [`docs/architecture/archetype-business-value-streams.md`](../../architecture/archetype-business-value-streams.md) — the operational value streams for all 53 archetypes (the *what*; this spec is the *how*).
+- **Source artefact:** [`docs/architecture/archetype-business-value-streams.md`](../../architecture/archetype-business-value-streams.md) — the 2026-08-01 snapshot covers 24 categories and 106 unique leaf archetypes (the *what*; this spec is the historical *how*).
 - **Related specs:** `2026-06-09-dap-experience-layer-design.md` (the experience layer this rides on), `2026-06-09-bian-banking-archetypes-design.md` (capability decomposition precedent), `2026-05-22-customer-surface-archetype-activation-design.md` (capability activation), `2026-06-09-civic-and-member-governed-archetypes-design.md` (governance axes).
 - **Primary backlog:** [opendigitalproductfactory#1724](https://github.com/OpenDigitalProductFactory/opendigitalproductfactory/issues/1724) (capture value-stream architecture at setup + WWWD substrate). Epics: `EP-ARCH-8D4F2A` (Archetype Model V2, primary), `EP-PROACTIVE-OPS`, `EP-COWORKER-RT`, `EP-A2A`, `EP-HX-LOOP`, `EP-AI-OPSMAP`, the DAP epic.
 
 > **Backlog context note:** the `dpf` MCP backlog tools were not reachable in the authoring session, so the live-backlog sweep that normally opens a DPF spec is deferred. #1724 is the capture-phase BI; this spec is its umbrella design. Reconcile epic links when MCP is back.
+
+> **Current authority (2026-08-01).** The [Four-Portfolio Archetype and AI Workforce Operating
+> Standard](../../architecture/four-portfolio-archetype-ai-workforce-operating-standard.md) owns the
+> distinction between independent industry operational ValueStreams and explicit DigitalProduct
+> lifecycle bindings. `PortfolioDecomposition.It4ItStage[]` is legacy migration metadata, not a
+> semantic authority and not evidence that an industry stream is IT4IT `Consume`.
 
 ---
 
@@ -43,7 +49,7 @@ A derived, persisted projection per org describing its operational value stream.
 | per-stage `metricBindings[]` | the KPI sources in Section 5 |
 | `capacityUnit` + `demandSignature` | derived from axes + category (artefact §7.1–7.2) |
 | `trustGates[]` | `GovernanceModel`, `ProvisioningModel`, `seededServiceCategories`, `disclosures` section (artefact §6) |
-| `it4itStageBinding` | `PortfolioDecomposition.It4ItStage[]` (the Consume seam, artefact §5) |
+| `legacyIt4itStageMetadata` | `PortfolioDecomposition.It4ItStage[]`; migration input only, to be replaced by complete evidence-bearing DigitalProduct bindings |
 
 ### 3.2 Where it lives (decision — see §10 Q1)
 
@@ -61,7 +67,7 @@ The EA feature already renders value streams: `/ea/value-streams` lists value-st
 
 **Plan (reuse, one new view type):**
 - Generate the OVSM as an **operational value-stream EA view** — a swimlane of the six stages + two cross-cuts, each stage bound (serving relationship) to the capabilities (`ActivationProfile.modules`) that enable it (artefact §5), with the **load-bearing stage(s) emphasized** and the **capacity unit / demand signature / trust gate** annotated on the relevant stage.
-- Surface it on the **existing** `/ea/value-streams` list alongside the reference-model projections, and render it on the **existing** `/ea/views/[id]` canvas. Distinguish it as the *operational* (Consume-expansion) stream vs the IT4IT seven (artefact §1) via the layout/label, joined through `PortfolioDecomposition.It4ItStage`.
+- Surface it on the **existing** `/ea/value-streams` list alongside reference-model projections and render it on the **existing** `/ea/views/[id]` canvas. Distinguish the independent industry operational stream from IT4IT lifecycle streams through its type and label. Any join must use a complete, evidence-bearing DigitalProduct binding; `PortfolioDecomposition.It4ItStage` is migration metadata only.
 - `exportArchimateFile()` gains the OVSM as an exportable scope — making the operational value stream a first-class ArchiMate **Value Stream** element (artefact §8, architecture/export presentation view), no new export surface.
 
 This satisfies "capture the value streams as architectures" with **zero new routes** — it is a new *generator + view type* on the EA canvas that already exists.

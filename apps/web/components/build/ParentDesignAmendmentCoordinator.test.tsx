@@ -69,11 +69,14 @@ describe("ParentDesignAmendmentCoordinator", () => {
       }),
     );
 
-    await waitFor(() => {
-      expect(contextMock).toHaveBeenCalledWith({ childBuildId: "FB-CHILD2" });
-    });
+    // The dialog shell mounts synchronously on open, but the parent summary and
+    // form fields render only after the async context action resolves (a
+    // transition update). Wait for context-dependent content with findBy* rather
+    // than asserting synchronously after a bare "contextMock was called" wait —
+    // that gap is the shard-timing race that made this suite flaky.
+    expect(await screen.findByText("Truck inventory")).toBeInTheDocument();
+    expect(contextMock).toHaveBeenCalledWith({ childBuildId: "FB-CHILD2" });
     expect(screen.getByRole("dialog", { name: "Amend parent design" })).toBeInTheDocument();
-    expect(screen.getByText("Truck inventory")).toBeInTheDocument();
     expect(screen.getByText("Read parts")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Proposed approach"), {
@@ -129,9 +132,11 @@ describe("ParentDesignAmendmentCoordinator", () => {
         detail: { buildId: "FB-CHILD2" },
       }),
     );
-    await screen.findByRole("dialog", { name: "Amend parent design" });
-
-    fireEvent.change(screen.getByLabelText("Amendment rationale"), {
+    // Wait for the context-loaded form field itself — not just the dialog shell,
+    // which renders synchronously on open before the async context resolves.
+    // getByLabelText immediately after findByRole("dialog") could run before the
+    // input mounted; that was the intermittent failure at this line.
+    fireEvent.change(await screen.findByLabelText("Amendment rationale"), {
       target: { value: "Adjust parent contract safely." },
     });
     fireEvent.click(screen.getByRole("button", { name: "Apply parent amendment" }));

@@ -3,9 +3,9 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 349,
-      "reason": "Adds one consolidated read that turns sales into supply coverage — days of cover and a suggested order quantity per stocked supply. Nothing in the registry could answer 'what are we about to run out of': the sales reads stop at what was ordered, and the finance/procurement tools start at a purchase order that already exists. Without it a proactive operations coworker can only report a capability gap, which is what the live restaurant run did.",
-      "recordedAt": "2026-08-01"
+      "value": 350,
+      "reason": "Combines two independent additions since the prior baseline: supply-coverage forecasting for proactive stocked-supply operations, and outcome correlation beside semantic review so external and Build Studio receipts can be compared with terminal GitHub/CI results while consistently excluding infrastructure-inconclusive samples.",
+      "recordedAt": "2026-08-02"
     },
     "registry.packFiles": {
       "value": 81,
@@ -13,7 +13,9 @@
       "recordedAt": "2026-08-01"
     },
     "tier.coreToolNames": {
-      "value": 22
+      "value": 27,
+      "reason": "Adds the governed live-delivery loop to Codex/Grok core discovery: quiescence status, self-upgrade queue status, request_self_upgrade, promoter-image repair, and runtime verification evidence. These tools are required immediately after a PR merges so an external coding agent can advance and prove the running install without opting into the full catalogue; authority remains bounded by capability, token scope, and grant gates.",
+      "recordedAt": "2026-08-02"
     },
     "dispatch.maxAttachedTools": {
       "value": 48

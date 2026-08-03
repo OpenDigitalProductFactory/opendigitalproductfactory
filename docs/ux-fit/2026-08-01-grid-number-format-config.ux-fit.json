@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "inline-progressive-per-type",
+  "decisionInteractionId": "DI-2C6474CB25BB",
+  "scope": {
+    "files": [
+      "apps/web/components/workbooks/AddColumnButton.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "inline-progressive-per-type",
+      "always-show-all-format-fields",
+      "separate-format-modal"
+    ]
+  }
+}

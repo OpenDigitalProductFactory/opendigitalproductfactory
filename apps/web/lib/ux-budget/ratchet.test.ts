@@ -63,6 +63,33 @@ describe("regression ratchet on a pre-existing route", () => {
     expect(verdictForRoute(after, baselineFrom(before).routes["/workspace"]).ok).toBe(true);
   });
 
+  it("passes when a legacy route adds a compliant lead band", () => {
+    const leadCopy = "clear next step ".repeat(10);
+    const before = measurement({ html: `<main><h1>Your day</h1><p>${leadCopy}</p></main>` });
+    const after = measurement({ html: `<main data-dpf-lead><h1>Your day</h1><p>${leadCopy}</p></main>` });
+
+    const v = verdictForRoute(after, baselineFrom(before).routes["/workspace"]);
+    expect(v.ok, v.regressions.join("; ")).toBe(true);
+    expect(v.regressions.join(" ")).not.toMatch(/lead-band words/);
+  });
+
+  it("catches when a legacy route removes its established lead band", () => {
+    const leadCopy = "clear next step ".repeat(10);
+    const before = measurement({ html: `<main data-dpf-lead><h1>Your day</h1><p>${leadCopy}</p></main>` });
+    const after = measurement({ html: `<main><h1>Your day</h1><p>${leadCopy}</p></main>` });
+
+    const v = verdictForRoute(after, baselineFrom(before).routes["/workspace"]);
+    expect(v.ok).toBe(false);
+    expect(v.regressions.join(" ")).toMatch(/lead-band words/);
+  });
+
+  it("does not punish shorter lead-band copy while the lead band remains present", () => {
+    const before = measurement({ html: `<main data-dpf-lead><h1>Your day</h1><p>${"word ".repeat(40)}</p></main>` });
+    const after = measurement({ html: `<main data-dpf-lead><h1>Your day</h1><p>Two things need you.</p></main>` });
+
+    expect(verdictForRoute(after, baselineFrom(before).routes["/workspace"]).ok).toBe(true);
+  });
+
   it("never blocks a pre-existing route on debt the PR did not make worse", () => {
     // A legacy surface that already violates its budget — over the word budget AND
     // over the deferred-detail threshold with no disclosure. Frozen as-is. An

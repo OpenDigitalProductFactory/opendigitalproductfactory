@@ -1,5 +1,13 @@
 # Taxonomy-to-Action V4/V5 Design
 
+> **Authority notice (2026-08-01):** This historical design records earlier lineage and
+> must not be read as a current source-rights determination. The V3 workbook is
+> `undetermined` under `SUD-PORTFOLIO-WORKBOOK-V3-2026-08-01`; compiled Open Group
+> publications remain bounded by their individual source-use decisions. Use current code
+> and live data for observed state and the
+> [Four-Portfolio Archetype and AI Workforce Operating Standard](../../architecture/four-portfolio-archetype-ai-workforce-operating-standard.md)
+> for target semantics and source-use controls.
+
 | Field | Value |
 |-------|-------|
 | **Status** | Draft |

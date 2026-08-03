@@ -94,6 +94,12 @@ test("buildPreflightPlan includes the workspace-dependent prose guard", () => {
   assert.deepEqual(prose.commands, [["pnpm", ["run", "check:prose-lint"]]]);
 });
 
+test("buildPreflightPlan enforces FPAW while stripping its self-test", () => {
+  const fpaw = buildPreflightPlan().find((entry) => entry.id === "fpaw-standard-guard");
+  assert.ok(fpaw, "FPAW conformance must run before a sandbox lease or PR");
+  assert.deepEqual(fpaw.commands, [["pnpm", ["run", "check:fpaw-standard"]]]);
+});
+
 // ── run + classification ────────────────────────────────────────────────────
 
 const PLAN = [

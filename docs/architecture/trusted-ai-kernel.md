@@ -45,6 +45,207 @@ This standard does not define:
 
 Those concerns are addressed by `GAID` and the companion [Job-Specific Intelligence (`TAK-JSI`) profile](job-specific-intelligence.md).
 
+### 1.1 AI-coworker operating reference architecture
+
+The following implementation-neutral view places the TAK runtime boundary inside the wider
+AI-coworker operating system. It is independently derived from DPF's TAK, GAID, TAK-JSI,
+DigitalProduct, and work-allocation semantics in response to the bounded operator direction recorded
+as `OP-CSDM-02` in the
+[FPAW source register](four-portfolio-archetype-ai-workforce-operating-standard.md#20-research-and-source-register).
+ServiceNow's current [Common Service Data Model (CSDM) shapes](https://www.servicenow.com/docs/r/application-portfolio-management/eaw-modeling-csdm-shapes.html)
+page, identified by `SCIT-SNOW-AICT-GUIDANCE`, is a `reference-only` implementation target for the
+source-validated [FPAW Section 13.4 bridge](four-portfolio-archetype-ai-workforce-operating-standard.md#134-source-validated-csdm-5-and-aict-bridge);
+its figure, terminology, and vendor data model were not copied into this view. A concrete ServiceNow
+adapter still requires release/plugin/dictionary and relationship fingerprints.
+
+```mermaid
+flowchart TB
+    subgraph L1["1. Outcomes and interaction"]
+        CON["Customer, workforce actor, or machine consumer"]
+        OUT["Desired and accepted outcome"]
+        OFF["Offering"]
+        AGR["ConsumptionAgreement and Entitlement"]
+        USE["UsageOccurrence or WorkOccurrence"]
+        CON --> OFF --> AGR --> USE --> OUT
+    end
+
+    subgraph L2["2. Governed agency and work"]
+        ID["GAID AgentSubject and Principal"]
+        OPF["Deployment operating-profile fingerprint"]
+        JOB["Job, activity, and TAK-JSI qualification"]
+        TEAM["Human oversight and agent collaboration"]
+        AUTH["TAK authority decision"]
+        ACT["Authorized action and execution receipt"]
+        JOB --> AUTH
+        TEAM --> AUTH
+        AUTH --> ACT
+    end
+
+    subgraph L3["3. Capabilities and controlled access"]
+        SK["Agent skill packages and procedures"]
+        TL["Tools and action interfaces"]
+        SV["Retrieval, decision, and execution services"]
+        GW["MCP, API, A2A, identity, and data gateways"]
+        SK --> AUTH
+        TL --> AUTH
+        SV --> AUTH
+        GW --> AUTH
+    end
+
+    subgraph L4["4. Knowledge, models, and runtime resources"]
+        MOD["Model routes and inference resources"]
+        DIR["Prompts, directives, policies, and memory"]
+        DAT["Structured and unstructured knowledge"]
+        RUN["Compute, runtime configuration, and telemetry"]
+        MOD --> AUTH
+        DIR --> AUTH
+        DAT --> AUTH
+        RUN --> AUTH
+    end
+
+    subgraph SPINE["Product, lifecycle, and assurance spine"]
+        DP["AI-coworker DigitalProduct"]
+        DES["DigitalProductDesign"]
+        REL["DigitalProductRelease"]
+        AST["DigitalProductAsset"]
+        PKG["DeploymentPackage"]
+        DIN["DeploymentIntent"]
+        DEP["Deployment"]
+        INS["DigitalProductInstance"]
+        SVI["ServiceInstance"]
+        BND["FPAW AIProductOperatingBinding"]
+        EVD["Controls, provenance, observations, and evidence"]
+        DP --> DES --> REL --> AST --> PKG --> DIN --> DEP --> INS --> SVI
+        REL -. "referenced by" .-> OPF
+        INS -. "configuration captured by" .-> OPF
+        REL -. "release" .-> BND
+        INS -. "instance" .-> BND
+        OPF -. "operating profile" .-> BND
+    end
+
+    AGR --> AUTH
+    ID -. "subject" .-> BND
+    BND --> AUTH
+    OPF --> AUTH
+    ACT --> EVD
+    OUT --> EVD
+    OFF -. "commercializes" .-> DP
+    SVI -. "supplies" .-> USE
+    BND -. "selects Product context" .-> JOB
+    EVD -. "assurance feedback" .-> DP
+```
+
+The fan-in is intentional: identity, operating profile, qualification, oversight, skills, tools,
+services, gateways, models, directives, data, and runtime state are independent control inputs to
+`AUTH`, not a linear transformation chain. The consequential-action path crosses `AUTH` and produces attributable evidence. TAK owns the
+authority decision, runtime gate, delegation, and execution-receipt semantics. GAID owns the
+AgentSubject and operating-profile identity; TAK-JSI owns job/activity qualification; the
+[Four-Portfolio Archetype and AI Workforce Operating
+Standard](four-portfolio-archetype-ai-workforce-operating-standard.md) owns the Product, service,
+work, and lifecycle bridge. Offering, accepted agreement, entitlement, usage, asset, package,
+deployment, product instance, and service instance remain separate identities. Context nodes in this
+view do not transfer that ownership to TAK.
+
+### 1.2 AI-coworker lifecycle and architecture view
+
+The operator direction in `OP-CSDM-02` also calls for an implementation-neutral lifecycle picture.
+The view below is DPF's own expression. It separates the FPAW DigitalProduct lifecycle-state axis from
+the IT4IT 3.0.1 seven-stream value network, architecture scope, and governed-entity maturity. The five
+product states are not aliases for IT4IT streams, and the seven streams are not a mandatory sequence.
+This is the lifecycle companion to the runtime stack above, not a vendor data model or a claim that
+every state or stream is executed by TAK.
+
+```mermaid
+flowchart LR
+    subgraph LIFE["FPAW DigitalProduct lifecycle-state axis"]
+        IDEA["Idea<br/>Value hypothesis and candidate Product"]
+        EVAL["Evaluate<br/>Outcomes, portfolio decision, feasibility and architecture"]
+        BUILD["Build<br/>Design, acquire, compose, test, release and deploy"]
+        LIVE["Operate<br/>Offer, consume, execute work, support and improve"]
+        RETIRE["Retire<br/>Withdraw offers, bindings, services and instances; retain evidence"]
+        IDEA --> EVAL --> BUILD --> LIVE --> RETIRE
+        LIVE -. "outcome and assurance feedback" .-> EVAL
+    end
+
+    subgraph ITNET["IT4IT 3.0.1 seven-stream value network - non-linear"]
+        HUB(("Connected<br/>value network"))
+        IEV["Evaluate"] --- HUB
+        IEX["Explore"] --- HUB
+        IIN["Integrate"] --- HUB
+        IDE["Deploy"] --- HUB
+        IRE["Release"] --- HUB
+        ICO["Consume"] --- HUB
+        IOP["Operate"] --- HUB
+    end
+
+    IDEA -. "candidate and portfolio inputs" .-> IEV
+    EVAL -. "discovery, architecture and roadmap" .-> IEX
+    BUILD -. "release composition" .-> IIN
+    BUILD -. "desired and actual realization" .-> IDE
+    LIVE -. "offer definition and publication" .-> IRE
+    LIVE -. "agreement, entitlement and usage" .-> ICO
+    LIVE -. "observe, diagnose and restore" .-> IOP
+    RETIRE -. "closure can affect every stream" .-> HUB
+
+    PORT["Portfolio and outcome governance across every product state"]
+    PORT -.-> IDEA
+    PORT -.-> EVAL
+    PORT -.-> BUILD
+    PORT -.-> LIVE
+    PORT -.-> RETIRE
+
+    PILOT["Pilot or controlled PoC"]
+    CANCEL["No-go or cancel"]
+    SUSPEND["Suspend or restrict"]
+    BUILD --> PILOT --> LIVE
+    IDEA -.-> CANCEL
+    EVAL -.-> CANCEL
+    PILOT -.-> CANCEL
+    LIVE --> SUSPEND
+    SUSPEND --> LIVE
+    SUSPEND --> RETIRE
+
+    subgraph ASSURE["Cross-cutting assurance loop"]
+        ASSESS["Assess"] --> CONTROL["Control"] --> MONITOR["Monitor"] --> REMEDIATE["Remediate and revalidate"] --> ASSESS
+    end
+    IDEA -.-> ASSESS
+    EVAL -.-> ASSESS
+    BUILD -.-> CONTROL
+    LIVE -.-> MONITOR
+    REMEDIATE -. "reopen evaluation, build or operation" .-> EVAL
+
+    DISC["Bottom-up discovery"] --> PROV["Provisional typed projections and Gaps"] --> REC["Reconcile identity, design, release and ownership"]
+    REC -.-> EVAL
+    REC -.-> LIVE
+```
+
+The solid five-state path governs Product lifecycle. The hub-and-spoke network preserves all seven
+IT4IT streams without inventing a process order; dotted state-to-stream edges identify common
+touchpoints, not exclusive ownership or mandatory sequencing. Architecture bands overlap both axes:
+
+| Architecture band | FPAW product-lifecycle coverage | Typical IT4IT network touchpoints |
+|---|---|---|
+| strategy and business model | Idea through Retire; stakeholder value, Outcomes, and four-portfolio decisions | Evaluate, Explore, plus Consume/Operate feedback |
+| business operational architecture | Evaluate through Operate, with retirement impact analysis | Explore, Consume, Operate |
+| solution architecture | Evaluate through Operate; design, releases, assets, packages, dependencies, security, and deployment topology | Explore, Integrate, Deploy, Operate |
+| service, engagement, sales, and support model | Build through Retire; ServiceDefinitions, Offerings, agreements, entitlements, service instances, support, and usage | Deploy, Release, Consume, Operate |
+| foundation | every state; Organization/Principal/GAID identity, TAK-JSI qualification, vocabulary, data, controls, provenance, and evidence | all seven streams as applicable |
+
+Within the Idea/Evaluate/Build/Operate/Retire state axis, Product lifecycle state **MUST** separately
+represent pilot, promotion, suspension, end-of-support, retirement, and decommissioning where
+applicable; `AIProductOperatingBinding.bindingState` does not substitute for Product, release, asset,
+deployment, instance, service, or Offering state. An IT4IT stream position does not substitute for a
+Product state. A discovered
+operational record creates provisional typed projections and Gaps only; discovery **MUST NOT**
+synthesize a Product definition, release, or GAID subject identity.
+
+FPAW owns the Product, portfolio, work, service, and
+AIProductOperatingBinding semantics; GAID owns the enduring subject; TAK-JSI owns qualification; TAK
+owns the action-time authority, delegation, execution, and receipt boundary in Consume/Operate. An AI
+Agent record, design, release, asset, package, deployment, product instance, service instance,
+AgentSubject, Offering, agreement, entitlement, usage, and WorkAssignment are therefore related but
+never interchangeable.
+
 ## 2. Conformance
 
 An implementation conforms to this standard only if it satisfies all requirements identified as `MUST` for its claimed conformance profile.

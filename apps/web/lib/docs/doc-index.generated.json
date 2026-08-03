@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 608,
+  "pageCount": 623,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -285,7 +285,7 @@
       "publishedPublic": true,
       "publishedPortal": false,
       "anchors": [
-        "workforce-portfolio-a-proposed-evolution-of-the-it4itdppm-internal-portfolio",
+        "workforce-portfolio-a-standards-proposal-for-internal-enablement",
         "status",
         "executive-summary",
         "why-this-matters-now",
@@ -298,7 +298,7 @@
         "recommended-standard-wording",
         "proposed-glossary-entry",
         "proposed-note-for-standards-text",
-        "implications-for-it4it-and-dppm",
+        "potential-implications-for-external-standards",
         "portfolio-taxonomy",
         "value-stream-line-of-sight",
         "governance-and-accountability",
@@ -567,6 +567,7 @@
         "trustworthy-ai-agent-standards-family",
         "purpose",
         "standards-map",
+        "enterprise-operating-model-bridge",
         "composition-rule",
         "adjacent-dpf-concepts",
         "source-of-truth-rule"
@@ -702,6 +703,21 @@
         "planned-one-picture-experience"
       ]
     },
+    "docs/architecture/application-boundaries.md": {
+      "publicHref": "/architecture/application-boundaries/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "application-boundaries",
+        "governed-dependency-direction",
+        "why-this-direction",
+        "exception-contract",
+        "refactoring-pattern",
+        "commands-and-evidence",
+        "ownership-and-successor-work"
+      ]
+    },
     "docs/architecture/archetype-business-value-streams.md": {
       "publicHref": "/architecture/archetype-business-value-streams/",
       "portalHref": null,
@@ -733,7 +749,7 @@
         "614-banking-financial-services-runs-14ac-community-bank-credit-union-mortgage-lending",
         "615-public-sector-law-enforcement-runs-1516-small-town-municipality-municipal-utility-law-enforcement-agency",
         "616-automotive-services-field-dispatch-auto-glass-mobile-mechanic-mobile-detailing-mobile-tire-roadside-assistance-locksmith",
-        "617-moving-logistics-field-dispatch-moving-company-junk-removal-courier-delivery-last-mile-freight",
+        "617-moving-logistics-moving-company-junk-removal-courier-delivery-last-mile-freight-freight-brokerage",
         "618-security-services-field-dispatch-guard-patrol-alarm-cctv-install",
         "619-real-estate-construction-new-home-builder-custom-home-builder",
         "620-media-production-film-video-production-post-production-studio-event-production-staging",
@@ -752,7 +768,7 @@
         "9-how-the-audit-consumes-this-and-the-back-reference",
         "10-recognized-gaps-value-stream-patterns-not-yet-covered-by-a-seeded-archetype",
         "101-the-rental-shared-asset-utilization-loop-now-modelled-upstream-asset-rental-agricultural-cooperative",
-        "102-the-field-dispatch-mobile-resource-to-customer-loop-now-modelled-gap-a-leaves-gap-b-categories-2026-06-13",
+        "102-the-field-dispatch-mobile-resource-to-customer-loop-now-modelled-gap-a-leaves-dispatch-native-gap-b-leaves-2026-06-13",
         "11-changelog"
       ]
     },
@@ -893,6 +909,54 @@
         "safe-operating-rules"
       ]
     },
+    "docs/architecture/complexity-shield-acceptance-standard.md": {
+      "publicHref": "/architecture/complexity-shield-acceptance-standard/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "small-company-complexity-shield-acceptance-standard",
+        "purpose",
+        "thesis-one-sentence",
+        "non-goals",
+        "who-must-apply-it",
+        "acceptance-checklist-every-parity-feature",
+        "1-operator-job-not-suite-module",
+        "2-simplified-operator-facing-workflow",
+        "3-what-ai-coworkers-absorb",
+        "4-what-enterprise-complexity-is-hidden-automated-or-omitted",
+        "5-proof-without-enterprise-burden",
+        "worked-micro-examples",
+        "required-pr-spec-section-template",
+        "cross-references-apply-do-not-re-litigate",
+        "change-control"
+      ]
+    },
+    "docs/architecture/complexity-shield-role-patterns.md": {
+      "publicHref": "/architecture/complexity-shield-role-patterns/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "ai-complexity-shield-patterns-by-role-and-company-size",
+        "purpose",
+        "size-bands",
+        "shared-shield-rules-all-roles",
+        "pattern-matrix-by-role",
+        "owner-founder",
+        "manager",
+        "employee-individual-contributor",
+        "accountant-bookkeeper",
+        "admin-business-admin-not-platform-sre",
+        "it-msp",
+        "sales-support",
+        "field-frontline",
+        "ai-coworker-interaction",
+        "cross-links-to-product-work",
+        "how-to-use-this-in-a-pr",
+        "non-goals"
+      ]
+    },
     "docs/architecture/context-engineering-standards.md": {
       "publicHref": "/architecture/context-engineering-standards/",
       "portalHref": null,
@@ -915,6 +979,7 @@
       "publishedPortal": false,
       "anchors": [
         "contributor-procedure-runbook",
+        "new-page-routes-regenerate-companions-bi-206dab95",
         "3-strongly-typed-string-enums-mandatory",
         "13-login-local-qa",
         "9-external-tools",
@@ -1126,6 +1191,32 @@
         "how-this-doc-evolves"
       ]
     },
+    "docs/architecture/edge-adapter-to-native-convergence.md": {
+      "publicHref": "/architecture/edge-adapter-to-native-convergence/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "edge-adapter-to-native-convergence-doctrine",
+        "purpose",
+        "thesis-one-sentence",
+        "non-goals",
+        "decision-modes",
+        "choose-integrate-when",
+        "choose-native-absorb-when",
+        "choose-coexist-when",
+        "choose-defer-when",
+        "graduation-criteria-adapter-native",
+        "anti-patterns-fail-review",
+        "pr-spec-checklist",
+        "worked-examples",
+        "good-quickbooks-bridge-then-native-gl-slice",
+        "good-stripe-stays-integrate",
+        "bad-native-workday",
+        "related",
+        "change-control"
+      ]
+    },
     "docs/architecture/enforced-ci-gates.md": {
       "publicHref": "/architecture/enforced-ci-gates/",
       "portalHref": null,
@@ -1133,6 +1224,29 @@
       "publishedPortal": false,
       "anchors": [
         "enforced-ci-gates-trigger-trailer-mechanics"
+      ]
+    },
+    "docs/architecture/external-planning-reference-boundary.md": {
+      "publicHref": "/architecture/external-planning-reference-boundary/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "external-planning-reference-boundary",
+        "purpose",
+        "non-goals",
+        "three-layers-single-vocabulary",
+        "allowed-citation-shapes",
+        "allowed-in-committed-docs",
+        "forbidden-in-committed-public-docs",
+        "how-backlog-and-epics-attach-evidence",
+        "it4it-bian-license-boundary-planning",
+        "competitor-research-packs",
+        "operator-checklist-before-a-pr-that-documents-research",
+        "worked-example-good",
+        "worked-example-bad",
+        "related-backlog",
+        "change-control"
       ]
     },
     "docs/architecture/field-service-work-item.md": {
@@ -1148,6 +1262,222 @@
         "derived-predicates-the-shipped-lifecycle-model",
         "adr-10-on-site-capture-is-evidence-metadata-references-never-inline-regulated-content",
         "what-is-built-vs-roadmap"
+      ]
+    },
+    "docs/architecture/finance-workforce-maturity-matrix.md": {
+      "publicHref": "/architecture/finance-workforce-maturity-matrix/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "finance-and-workforce-documentation-maturity-matrix",
+        "purpose",
+        "maturity-labels-closed-set",
+        "finance-matrix-snapshot",
+        "finance-doc-reconciliation-rules",
+        "workforce-matrix-snapshot",
+        "workforce-doc-reconciliation-rules",
+        "how-to-update-this-matrix",
+        "pr-checklist-financeworkforce-docs",
+        "related-backlog",
+        "change-control"
+      ]
+    },
+    "docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md": {
+      "publicHref": "/architecture/four-portfolio-archetype-ai-workforce-operating-standard/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "four-portfolio-archetype-and-ai-workforce-operating-standard",
+        "abstract",
+        "1-status-scope-and-normative-language",
+        "11-status",
+        "12-in-scope",
+        "13-out-of-scope",
+        "2-design-goals-and-invariants",
+        "3-standards-position-and-ownership",
+        "31-the-bridge-in-one-view",
+        "32-canonical-ownership-map",
+        "33-relationship-vocabulary",
+        "4-resolution-model-and-trace-spine",
+        "41-applicability-and-consequence-predicates",
+        "5-original-conceptual-metamodel",
+        "51-relationship-invariants",
+        "52-core-aspect-kind-registry",
+        "6-four-portfolio-enterprise-model",
+        "61-placement-algorithm",
+        "62-multi-aspect-decomposition",
+        "63-portfolio-dependency-contract",
+        "64-two-workforce-lenses",
+        "65-it4it-digital-product-portfolio-perspective-crosswalk",
+        "7-product-offer-service-and-realization-boundary",
+        "71-business-product-forms",
+        "72-dpf-authority-boundary",
+        "73-bill-of-realization",
+        "8-operational-value-streams",
+        "81-business-value-is-independent-from-the-it4it-reference-architecture",
+        "82-stage-contract",
+        "83-handoffs-and-flow-truth",
+        "9-work-system",
+        "91-operatingflow-types",
+        "92-work-unit-definition",
+        "93-physical-and-non-digital-work",
+        "94-capacity",
+        "10-performer-and-work-allocation-model",
+        "101-performer-kinds",
+        "102-allocation-is-a-governed-decision",
+        "103-allocation-patterns",
+        "104-accountability-and-collaboration",
+        "105-augmentation-and-substitution",
+        "106-shared-versus-industry-specific-ai-coworkers",
+        "11-ai-coworker-as-digitalproduct-and-performer",
+        "111-dual-aspect-rule",
+        "112-qualification-boundary-agent-ai-coworker-and-digitalproduct",
+        "113-product-to-runtime-chain",
+        "114-ai-coworker-operating-reference-view-using-tak",
+        "115-source-validated-it4it-301-lifecycle-bridge",
+        "116-source-validated-csdm-5-deployment-patterns",
+        "12-archetype-profile-composition",
+        "121-required-facets",
+        "122-composition-rules",
+        "123-coverage-manifest",
+        "13-external-standards-mappings",
+        "131-mapping-rules",
+        "1311-source-use-decisions-and-contributor-origin-material",
+        "132-orientation-references-not-mapping-records",
+        "133-source-validated-it4it-reference-architecture-301-bridge",
+        "1331-value-streams-and-functional-groups",
+        "1332-digital-product-and-service-offer-backbones",
+        "134-source-validated-csdm-5-and-aict-bridge",
+        "135-industry-standard-profiles",
+        "14-conformance-model",
+        "141-profiles",
+        "142-implementation-statement",
+        "143-evidence-rules",
+        "144-machine-readable-projection",
+        "15-gap-analysis-model",
+        "151-gap-types",
+        "152-gap-dimensions",
+        "153-assessment-scales",
+        "154-gap-record",
+        "155-prioritization",
+        "16-normative-requirement-catalog",
+        "161-core-semantic-requirements",
+        "162-four-portfolio-requirements",
+        "163-product-and-value-flow-requirements",
+        "164-work-workforce-and-allocation-requirements",
+        "165-physical-and-non-digital-work-requirements",
+        "166-ai-coworker-and-digitalproduct-requirements",
+        "167-profile-mapping-and-conformance-requirements",
+        "168-gap-requirements",
+        "169-publication-governance-requirements",
+        "1610-requirement-verification-contract",
+        "17-worked-end-to-end-traces",
+        "171-hvac-maintenance-agreement-with-ai-dispatch",
+        "172-community-bank-loan-application-delta",
+        "173-warehouse-custody-delta",
+        "18-dpf-implementation-baseline-and-convergence-plan",
+        "181-current-coverage",
+        "182-existing-substrate-to-reuse",
+        "183-priority-convergence-backlog",
+        "184-documentation-convergence-in-this-release",
+        "19-governance-and-versioning",
+        "191-ownership",
+        "192-versioning",
+        "193-change-process",
+        "194-review-cadence",
+        "20-research-and-source-register",
+        "201-bounded-operator-source-locators",
+        "202-complete-sourceusedecision-records",
+        "2021-sud-mb-fpaw-direct-2026-08-01",
+        "2022-sud-mb-csdm-direct-2026-08-01",
+        "2023-sud-mb-rights-statement-2026-08-01",
+        "2024-sud-c24a-compiled-2026-08-01",
+        "2025-sud-g252-compiled-2026-08-01",
+        "2026-sud-w205-2026-08-01",
+        "2027-sud-portfolio-workbook-v2-2026-08-01",
+        "2028-sud-portfolio-workbook-v3-2026-08-01",
+        "2029-sud-it4it-criteria-workbook-2026-08-01",
+        "20210-sud-taxonomy-v3-composite-2026-08-01",
+        "20211-sud-csdm-local-2026-08-01",
+        "20212-historical-source-access-events",
+        "sae-2026-08-01-01-c24ag252-front-matter",
+        "sae-2026-08-01-02-aictcsdm-orientation-review",
+        "203-contributorattestation-records",
+        "2031-ca-mb-2026-08-01-it4it-provenance",
+        "2032-ca-mb-2026-08-01-csdm-provenance",
+        "204-sourcecitation-register",
+        "205-current-source-control-and-ingestion-gaps",
+        "206-originality-and-licensing-declaration",
+        "appendix-a-dpf-logical-mapping",
+        "appendix-b-interpretation-precedence"
+      ]
+    },
+    "docs/architecture/four-portfolio-archetype-standard-profile-catalog.md": {
+      "publicHref": "/architecture/four-portfolio-archetype-standard-profile-catalog/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "four-portfolio-archetype-standard-profile-catalog",
+        "1-purpose",
+        "2-facet-registry",
+        "21-commercial-and-public-value-facets",
+        "22-delivery-topology-facets",
+        "23-resource-asset-and-custody-facets",
+        "24-workforce-and-allocation-facets",
+        "25-trust-and-control-facets",
+        "26-digitalproductcsdm-deployment-facets",
+        "3-shared-value-stream-overlays",
+        "4-category-baselines",
+        "5-leaf-delta-register",
+        "51-healthcare-and-wellness-9",
+        "52-beauty-and-personal-care-6",
+        "53-trades-and-maintenance-11",
+        "54-professional-services-8",
+        "55-software-platform-1",
+        "56-education-and-training-4",
+        "57-pet-services-5",
+        "58-food-and-hospitality-3",
+        "59-retail-goods-5",
+        "510-fitness-and-recreation-3",
+        "511-nonprofit-and-community-8",
+        "512-hoa-and-property-management-3",
+        "513-banking-and-financial-services-3",
+        "514-public-sector-3",
+        "515-asset-rental-3",
+        "516-real-estate-and-construction-2",
+        "517-automotive-services-6",
+        "518-moving-and-logistics-5",
+        "519-security-services-2",
+        "520-media-production-3",
+        "521-live-events-and-venues-3",
+        "522-warehousing-and-fulfilment-4",
+        "523-fabric-care-services-3",
+        "524-agriculture-and-ranching-3",
+        "6-shared-and-specialized-ai-coworker-families",
+        "61-controlled-activity-applicability-and-ai-realization-states",
+        "62-category-applicability-matrix",
+        "63-activity-authority-and-evidence-rationale",
+        "64-leaf-deviations",
+        "7-profile-manifest-contract",
+        "71-required-manifest-assertions",
+        "72-catalog-requirement-register",
+        "73-worked-profile-composition-specimens-informative",
+        "fpaw-ex-hvac-contractor010-physicallicensed-service",
+        "fpaw-ex-community-bank010-regulated-decision-work",
+        "fpaw-ex-furniture-delivery-install010-physical-goods-plus-service",
+        "fpaw-ex-third-party-logistics010-custodylogistics",
+        "fpaw-ex-small-town-municipality010-publicmember-value",
+        "fpaw-ex-software-platform010-wholly-digital-product",
+        "fpaw-ex-mixed-farm-ranch010-seasonal-biologicalphysical-work",
+        "8-csdm-5-and-ai-digitalproduct-application-boundary",
+        "9-current-dpf-coverage-baseline",
+        "91-highest-priority-cross-catalog-gaps",
+        "10-application-sequence",
+        "appendix-a-inventory-integrity-statement",
+        "appendix-b-proposed-future-machine-readable-registries"
       ]
     },
     "docs/architecture/gaid-conformance-tests.md": {
@@ -1277,6 +1607,31 @@
         "fifth-pack-first-inline-extraction",
         "next-packs",
         "enforcement-the-inline-case-ratchet-bi-opt-ratchets"
+      ]
+    },
+    "docs/architecture/mcp-tool-surface-ergonomics-audit.md": {
+      "publicHref": "/architecture/mcp-tool-surface-ergonomics-audit/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "mcp-tool-surface-ergonomics-audit",
+        "purpose",
+        "non-goals",
+        "harness-checklist-mapping-tool-plane",
+        "audit-checklist-every-tool-surface-pr",
+        "1-name-and-discoverability",
+        "2-schema-ergonomics",
+        "3-grant-and-population-fit",
+        "4-budget-and-deferred-loading",
+        "5-audit-and-evidence",
+        "6-docs-and-single-source-of-truth",
+        "scoring-rubric-optional-but-recommended",
+        "anti-patterns",
+        "worked-example-pass",
+        "worked-example-fail",
+        "related-tooling",
+        "change-control"
       ]
     },
     "docs/architecture/operational-precedent-corpus.md": {
@@ -1513,6 +1868,8 @@
         "trusted-ai-kernel-tak",
         "abstract",
         "1-scope",
+        "11-ai-coworker-operating-reference-architecture",
+        "12-ai-coworker-lifecycle-and-architecture-view",
         "2-conformance",
         "21-standard-versioning-lifecycle-and-conformance-assertions",
         "3-references",
@@ -1636,6 +1993,34 @@
         "where-to-look-learn-more"
       ]
     },
+    "docs/architecture/ux-archetype-audit-rubric.md": {
+      "publicHref": "/architecture/ux-archetype-audit-rubric/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "ux-archetype-audit-rubric",
+        "purpose",
+        "study-unit",
+        "route-sampling-rules-minimum-set",
+        "first-viewport-purpose-contract",
+        "quantitative-capture-every-page",
+        "cognitive-load-and-progressive-disclosure",
+        "inert-and-contradictory-actions",
+        "form-and-action-contracts",
+        "help-as-recovery",
+        "attention-continuity-single-owner-truth",
+        "resource-capacity-coherence",
+        "public-trust-and-unsupported-paths",
+        "archetype-contamination-and-publish-readiness",
+        "owner-setup-as-a-workflow",
+        "mobile-public-flow-pass",
+        "technical-admin-reachability-for-non-technical-owners",
+        "evidence-package-shape",
+        "standards-basis-do-not-re-derive",
+        "change-control"
+      ]
+    },
     "docs/architecture/vector-decisioning-and-jsi.md": {
       "publicHref": "/architecture/vector-decisioning-and-jsi/",
       "portalHref": null,
@@ -1656,6 +2041,35 @@
         "4-where-ahp-style-pairwise-elicitation-would-actually-fit",
         "5-summary-table",
         "references"
+      ]
+    },
+    "docs/architecture/work-room-participation-and-channel-continuity.md": {
+      "publicHref": "/architecture/work-room-participation-and-channel-continuity/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "work-room-participation-and-channel-continuity",
+        "design-grounding",
+        "authorization-boundary",
+        "participant-projection",
+        "external-channel-continuity"
+      ]
+    },
+    "docs/architecture/workos-iam-equivalence-scorecard.md": {
+      "publicHref": "/architecture/workos-iam-equivalence-scorecard/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "workos-equivalence-scorecard-and-dpf-ownership-matrix",
+        "purpose",
+        "ownership-classes-closed-set",
+        "scorecard-axes",
+        "capability-matrix",
+        "decision-rules",
+        "links-to-live-work",
+        "maintenance"
       ]
     },
     "docs/business-types/_readability-report.md": {
@@ -2037,7 +2451,8 @@
       "anchors": [
         "founder-kernel-raw-sources-licensing",
         "policy",
-        "frontmatter-convention",
+        "contributor-origin-boundary",
+        "target-frontmatter-contract",
         "per-source-index"
       ]
     },
@@ -2313,7 +2728,7 @@
       "publishedPortal": false,
       "anchors": [
         "why-its-cited",
-        "key-claims",
+        "rights-boundary",
         "see-also"
       ]
     },
@@ -2324,7 +2739,7 @@
       "publishedPortal": false,
       "anchors": [
         "why-its-cited",
-        "key-claims",
+        "rights-boundary",
         "see-also"
       ]
     },
@@ -2358,6 +2773,7 @@
       "anchors": [
         "why-its-cited",
         "key-claims",
+        "rights-boundary",
         "see-also"
       ]
     },
@@ -2677,6 +3093,24 @@
         "how-to-apply",
         "decision-dimensions",
         "examples",
+        "see-also"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/commons-are-curated-not-just-appended.md": {
+      "publicHref": "/founder-kernel/wiki/principles/commons-are-curated-not-just-appended/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "commons-are-curated-not-just-appended",
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "when-this-does-not-apply",
+        "sources",
         "see-also"
       ]
     },
@@ -4700,6 +5134,7 @@
         "color-system",
         "design-token-scales-l0",
         "ux-budgets-l2",
+        "design-grounding",
         "contrast-requirements",
         "form-elements",
         "user-facing-form-contract-mandatory",
@@ -6276,6 +6711,19 @@
         "see-also"
       ]
     },
+    "docs/professions/operations/wiki/rental-physical-capacity-and-readiness.md": {
+      "publicHref": "/professions/operations/wiki/rental-physical-capacity-and-readiness/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "heuristic",
+        "equipment-and-production-rental",
+        "self-storage",
+        "operations-versus-performance",
+        "sources"
+      ]
+    },
     "docs/professions/operations/wiki/runbook-driven-resolution.md": {
       "publicHref": "/professions/operations/wiki/runbook-driven-resolution/",
       "portalHref": null,
@@ -7436,6 +7884,25 @@
         "integration-evidence",
         "conditions",
         "sources"
+      ]
+    },
+    "docs/security/tool-evaluations/2026-08-01-marketing-media-stack.md": {
+      "publicHref": "/security/tool-evaluations/2026-08-01-marketing-media-stack/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "marketing-media-stack-candidate-evaluation",
+        "executive-disposition",
+        "selection-architecture",
+        "evaluation-criteria",
+        "hyperframes-0787-conditional",
+        "ffmpeg-conditional-existing-substrate",
+        "remotion-40477-reject-as-default-conditional-alternative",
+        "gemini-31-flash-tts-preview-conditional-cloud-candidate",
+        "provenance-baseline",
+        "discovery-channel-note",
+        "approval-and-probe-work-still-required"
       ]
     },
     "docs/specs/device-identification-and-portfolio-placement-spec.md": {
@@ -9486,6 +9953,7 @@
         "overview",
         "key-concepts",
         "what-you-can-do",
+        "ai-coworker-identity",
         "following-a-concern-across-views"
       ]
     },
@@ -9888,6 +10356,7 @@
         "invoice-and-collection-workflow",
         "starting-an-invoice-from-context",
         "decisions-recovery-and-evidence",
+        "sent-documents-are-kept",
         "what-you-can-edit-and-when",
         "status-movement-is-governed",
         "void-versus-delete",
@@ -10439,6 +10908,7 @@
       "anchors": [
         "overview",
         "key-concepts",
+        "run-the-rental-desk",
         "what-you-can-do",
         "related"
       ]
@@ -10552,6 +11022,7 @@
         "overview",
         "what-you-see-first",
         "activity-and-participants",
+        "access-and-other-channels",
         "finite-and-standing-rooms",
         "incomplete-or-unavailable-rooms"
       ]

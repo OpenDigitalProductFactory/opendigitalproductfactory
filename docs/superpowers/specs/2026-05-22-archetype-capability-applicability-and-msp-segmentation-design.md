@@ -1,5 +1,12 @@
 # Archetype Capability Applicability And MSP Segmentation Design
 
+> **Authority notice (2026-08-01):** This historical design records as-implemented
+> lineage. Its V3 workbook references have `undetermined` source-use status under
+> `SUD-PORTFOLIO-WORKBOOK-V3-2026-08-01`; they are not current normative or AI evidence.
+> Use current code and live data for observed state and the
+> [Four-Portfolio Archetype and AI Workforce Operating Standard](../../architecture/four-portfolio-archetype-ai-workforce-operating-standard.md)
+> for target semantics and source-use controls.
+
 **Date:** 2026-05-22
 **Status:** Draft
 **Author:** OpenAI Codex with user direction
@@ -170,20 +177,17 @@ Rejected patterns:
 - do not show a customer network workbench for non-MSP archetypes such as salons, retail shops, or appointment-service businesses.
 - do not rely on global device/IP uniqueness and repair it later with filters.
 
-### 3.6 Internal reference: 4-portfolio taxonomy workbook
+### 3.6 Historical input: 4-portfolio taxonomy workbook
 
-`docs/Reference/4_portfolio_Reworked_V3_Definitions_IT4IT.xlsx` is the canonical internal reference for how the business taxonomy team decomposes any digital product or service. Four sheets, four portfolios:
+The 2026-05-22 design used
+`docs/Reference/4_portfolio_Reworked_V3_Definitions_IT4IT.xlsx` as a working input for a four-sheet
+portfolio decomposition and operating-model axes. Its source-use status is now `undetermined`, so it
+is neither current authority nor admissible evidence for those semantics.
 
-- **For Employees** — internal-facing tooling (TBM business capabilities).
-- **Foundational** — substrate (compute, storage, network, identity, data fabric).
-- **Manufacturing and Delivery** — IT4IT v3.0.1 value streams (Detect to Correct, Deploy to Operate, Request to Fulfill, etc.).
-- **Products and Services Sold** — the external commercial offer. This sheet carries the operating-model axis columns added during the most recent pass — Digital/Physical, Goods/Services, Primary External Consumer, Consumption Channel, Commercial Model, Provisioning/Entitlement Model, Platform/Ecosystem.
-
-Adopted patterns:
-
-- treat the 4 portfolios as the macro classification for every archetype (see §6.6).
-- treat the axis columns as the canonical value vocabularies for the operating-model axes (see §6.5).
-- when an archetype needs a new value, propose it as a workbook column update first; promote into the platform enum only once the taxonomy team has accepted it. This keeps platform code and the business taxonomy in lockstep.
+The durable implementation outcome is the typed registry in
+`packages/storefront-templates/src/types.ts` and the current archetype records. The FPAW standard now
+owns four-portfolio meaning and source-use controls. New closed-axis values widen the typed registry
+through the governed enum/migration process; they are not proposed to this workbook first.
 
 ## 4. Design Goals
 
@@ -207,7 +211,10 @@ Adopted patterns:
 
 Archetype behavior should be driven by an `activationProfile` contract that names **operating-model axes**, **portfolio roles**, and **capability applicability rules** — in that order of authority. Per-capability records (scope, isolation, surfaces, billing pattern) are *derived* from the axes + portfolios via a named rule set; they should not be hand-authored per (capability × archetype).
 
-This is a deliberate inversion of the obvious approach. A flat `(archetype → capabilities[])` table works for two or three archetypes; it collapses under its own weight at ten. The reference workbook in `docs/Reference/4_portfolio_Reworked_V3_Definitions_IT4IT.xlsx` already encodes the right factoring — see §6.5 and §6.6.
+This is a deliberate inversion of the obvious approach. A flat `(archetype → capabilities[])` table
+works for two or three archetypes; it collapses under its own weight at ten. The historical design
+used axis-plus-portfolio factoring; current authority for that factoring is the typed code and FPAW,
+not the unresolved workbook.
 
 Current model:
 
@@ -251,17 +258,20 @@ Survival rule for legacy callers: when `readActivationProfile` encounters a prof
 
 ### 6.5 Operating-Model Axes
 
-Each archetype is classified along a small set of orthogonal axes. Capability applicability, default scope, and billing pattern are *derived* from these axis values, not declared per archetype. The value vocabularies are sourced from the **Products and Services Sold** sheet of the reference workbook so the platform classification stays aligned with how the business taxonomy team already thinks.
+Each archetype is classified along a small set of orthogonal axes. Capability applicability, default
+scope, and billing pattern are *derived* from these axis values, not declared per archetype. The
+current value vocabularies are owned by the typed registry; the workbook column names below are
+historical lineage notes, not current source authority.
 
-| Axis | Values (initial) | Source |
+| Axis | Values (initial) | Current DPF authority |
 | --- | --- | --- |
-| `form` | `goods`, `services` | workbook col *Goods/Services* |
-| `delivery` | `digital`, `physical`, `hybrid` | workbook col *Digital/Physical* |
-| `primaryConsumer` | `individual`, `household`, `business`, `patient-and-payer`, `channel-partner`, `internal` | workbook col *Primary External Consumer* (collapsed) |
-| `consumptionChannel` | `physical`, `web-app`, `portal-api`, `sales-assisted`, `onsite-plus-portal`, … | workbook col *Consumption Channel* (collapsed to ~8 canonical bands) |
-| `commercialModel` | `transactional`, `subscription`, `recurring-agreement`, `usage-based`, `account-based-fees`, `encounter-based`, `appointment-checkout`, `point-of-sale`, `hybrid` | workbook col *Commercial Model* |
-| `provisioning` | `none`, `account-with-billing`, `account-and-entitlement`, `account-with-kyc`, `device-bound`, `episode-of-care` | workbook col *Provisioning and Entitlement Model* |
-| `platform` | `no`, `yes-marketplace`, `yes-developer` | workbook col *Platform/Ecosystem* |
+| `form` | `goods`, `services` | `types.ts` `ProductForm` |
+| `delivery` | `digital`, `physical`, `hybrid` | `types.ts` `DeliveryMode` |
+| `primaryConsumer` | `individual`, `household`, `business`, `patient-and-payer`, `channel-partner`, `internal` | `types.ts` `PrimaryConsumer` |
+| `consumptionChannel` | `physical`, `web-app`, `portal-api`, `sales-assisted`, `onsite-plus-portal`, … | `types.ts` `ConsumptionChannel` |
+| `commercialModel` | `transactional`, `subscription`, `recurring-agreement`, `usage-based`, `account-based-fees`, `encounter-based`, `appointment-checkout`, `point-of-sale`, `hybrid` | `types.ts` `CommercialModel` |
+| `provisioning` | `none`, `account-with-billing`, `account-and-entitlement`, `account-with-kyc`, `device-bound`, `episode-of-care` | `types.ts` `ProvisioningModel` |
+| `platform` | `no`, `yes-marketplace`, `yes-developer` | `types.ts` `PlatformModel` |
 
 Rules engine examples (illustrative, not exhaustive):
 
@@ -272,14 +282,16 @@ Rules engine examples (illustrative, not exhaustive):
 
 The rule set is short, code-reviewed, and lives next to the capability registry (see §13). An archetype that needs to override a derived applicability uses `capabilityOverrides` with a stated reason — visible in PR review so deviations don't accumulate silently.
 
-### 6.6 Portfolio Decomposition
+### 6.6 Historical portfolio-decomposition implementation
 
-Every digital product or service an archetype touches falls into one of four portfolios. This matches the four sheets in the reference workbook and matches how the platform's existing IT4IT and TBM alignment thinks about it:
+The implementation introduced four local portfolio-role keys. Current FPAW semantics apply them to
+governed aspects of business goods, services, DigitalProducts, workforce contribution, physical and
+digital delivery, and shared foundations; the historical workbook is not the authority.
 
 | Portfolio | What it contains | Primary axis the rules engine reads |
 | --- | --- | --- |
 | **Foundational** | Compute, storage, network, identity, data fabric — substrate the business runs on | `delivery`, `provisioning` |
-| **Manufacture & Deliver** | IT4IT value streams the business *executes* — Detect to Correct, Deploy to Operate, Request to Fulfill, etc. | `commercialModel`, `it4itStages` |
+| **Manufacture & Deliver** | specialized creation and delivery means, plus legacy local lifecycle metadata pending convergence | `commercialModel`, `it4itStages` |
 | **For Employees** | Internal-facing tooling (TBM business capabilities such as Corp Comms, Finance, HR, Sales) | `primaryConsumer === internal`, headcount-scale heuristics |
 | **Products & Services Sold** | The external commercial offer — what the customer pays for | `form`, `primaryConsumer`, `commercialModel`, `consumptionChannel`, `platform` |
 
@@ -287,7 +299,10 @@ Each archetype declares the **scope** of each portfolio (`absent` / `minimal` / 
 
 Worked examples:
 
-- **MSP (`it-managed-services`)**: `manufactureAndDeliver` and `productsAndServicesSold` are *primary*. The MSP's "products sold" portfolio is largely a resale of `manufactureAndDeliver > Detect to Correct / Deploy to Operate / Request to Fulfill` against *customer* estates. `forEmployees` is *standard*. `foundational` is *minimal* (it's not infrastructure-as-product).
+- **MSP (`it-managed-services`)**: `manufactureAndDeliver` and `productsAndServicesSold` are
+  *primary*. Sold managed services are realized through customer-estate operating and delivery work;
+  legacy lifecycle labels are migration metadata, not external mappings. `forEmployees` is
+  *standard*. `foundational` is *minimal* (it is not infrastructure-as-product).
 - **Hair salon**: `productsAndServicesSold` is *primary*; `manufactureAndDeliver` and `forEmployees` are *minimal*; `foundational` is *minimal* (POS substrate only). No customer-estate falls out of the rules; appointment-checkout does.
 - **Retail**: `productsAndServicesSold` primary, with `form = goods` and `consumptionChannel = web-app` or `physical` flipping the activated surfaces (e-commerce vs in-store POS).
 - **HOA / property mgmt**: `productsAndServicesSold` primary with `commercialModel = recurring-agreement`, plus a managed external estate (sites/property) — which means *customer-estate falls out of the same rule that activates it for MSP*, demonstrating the architecture's reusability.

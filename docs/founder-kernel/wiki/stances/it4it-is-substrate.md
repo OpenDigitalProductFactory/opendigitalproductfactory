@@ -2,7 +2,7 @@
 title: IT4IT is the substrate — a hub of frameworks, not a competitor
 pageKind: stance
 status: published
-abstract: IT4IT integrates ITIL, COBIT, TOGAF, DevOps, and SAFe at the operating-model layer — it does not replace them. This is why DPF's own lifecycle, teams, and coworker routing are organised around IT4IT's seven value streams rather than a home-grown process model.
+abstract: The IT4IT Reference Architecture integrates ITIL, COBIT, TOGAF, DevOps, and SAFe at the operating-model layer — it does not replace them. This is why DPF's own lifecycle, teams, and coworker routing are organised around the seven value streams described by the IT4IT Reference Architecture rather than a home-grown process model.
 sources:
   - articles/briefings-direct-it4it-2019
   - articles/open-group-2017-managing-business-of-it

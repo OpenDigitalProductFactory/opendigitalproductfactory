@@ -12,6 +12,8 @@ import { z } from "zod";
 import { gridRegistry, type AdapterContext } from "./adapter";
 import "./custom-table-adapter"; // ensure the custom adapter self-registers
 import { genSemanticId } from "./ids";
+import { addColumnSchema } from "./column-schema";
+export { addColumnSchema } from "./column-schema";
 import {
   type ColumnDefinition,
   type GridRow,
@@ -22,7 +24,6 @@ import {
   type DataSourceFilter,
   type SortSpec,
   type GridCapabilities,
-  FIELD_TYPES,
   DEFAULT_PAGE_SIZE,
   MAX_PAGE_SIZE,
   MAX_GRID_ROWS,
@@ -69,49 +70,7 @@ export const createTableSchema = z.object({
   name: z.string().min(1).max(200),
 });
 
-const selectOptionSchema = z.object({
-  key: z.string().min(1),
-  label: z.string().min(1),
-  intent: z.string().optional(),
-});
-
-const lookupConfigSchema = z.object({
-  referenceColumnId: z.string().min(1),
-  targetField: z.string().min(1),
-  targetFieldType: z.enum(FIELD_TYPES as unknown as [string, ...string[]]).optional(),
-});
-
-const fieldConfigSchema = z
-  .object({
-    options: z.array(selectOptionSchema).optional(),
-    referenceType: z.string().optional(),
-    multiline: z.boolean().optional(),
-    precision: z.number().optional(),
-    formula: z.string().max(2000).optional(),
-    resultType: z.enum(FIELD_TYPES as unknown as [string, ...string[]]).optional(),
-    lookup: lookupConfigSchema.optional(),
-  })
-  .optional();
-
-export const addColumnSchema = z
-  .object({
-    name: z.string().min(1).max(200),
-    fieldType: z.enum(FIELD_TYPES as unknown as [string, ...string[]]),
-    config: fieldConfigSchema,
-    required: z.boolean().optional(),
-  })
-  .superRefine((val, ctx) => {
-    // Computed columns must carry their definition (fail-closed, not silent).
-    if (val.fieldType === "formula" && !val.config?.formula?.trim()) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "A formula is required for a formula column", path: ["config", "formula"] });
-    }
-    if (val.fieldType === "lookup" && !val.config?.lookup) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "A lookup column needs a reference column and target field", path: ["config", "lookup"] });
-    }
-    if (val.fieldType === "reference" && !val.config?.referenceType) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "A reference column needs a target entity", path: ["config", "referenceType"] });
-    }
-  });
+// Column create/config schemas live in ./column-schema (pure, prisma-free, tested).
 
 // ---------------------------------------------------------------------------
 // Access resolution

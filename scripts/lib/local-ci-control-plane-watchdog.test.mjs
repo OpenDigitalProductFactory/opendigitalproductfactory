@@ -51,6 +51,23 @@ test("one transient round recovers without tripping the boundary", async () => {
   assert.equal(result.samples.length, 3);
 });
 
+test("publishes every control-plane sample for durable stage heartbeats", async () => {
+  const observed = [];
+  let complete = false;
+  const result = await monitorControlPlane({
+    sample: async () => {
+      complete = true;
+      return healthy;
+    },
+    isComplete: () => complete,
+    wait: async () => {},
+    onSample: async (sample) => observed.push(sample),
+  });
+  assert.equal(result.status, "healthy");
+  assert.equal(observed.length, 1);
+  assert.equal(observed[0].healthy, true);
+});
+
 test("two consecutive unhealthy rounds form a sustained starvation breach", async () => {
   const result = await monitorControlPlane({
     sample: async () => ({

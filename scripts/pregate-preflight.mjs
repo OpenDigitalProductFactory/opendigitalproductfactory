@@ -16,6 +16,7 @@ import {
   buildPreflightPlan,
   runPreflight,
 } from "./lib/pregate-preflight.mjs";
+import { checkStaleRootClone } from "./lib/stale-root-clone.mjs";
 
 export async function main() {
   if (process.argv.includes("--plan")) {
@@ -26,6 +27,21 @@ export async function main() {
     }));
     process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`);
     return;
+  }
+
+  // BI-A900EA3F: fail fast when a linked worktree junctions @dpf/* into a root
+  // clone that is behind origin/main — phantom typecheck errors otherwise look
+  // like base drift and tempt Local-CI-Override.
+  const staleRoot = checkStaleRootClone({ worktreeRoot: process.cwd() });
+  if (!staleRoot.ok) {
+    process.stderr.write(`[pregate-preflight] ${staleRoot.message}\n`);
+    process.exitCode = 1;
+    return;
+  }
+  if (staleRoot.behind === 0 && staleRoot.rootClonePath) {
+    process.stdout.write(
+      `[pregate-preflight] root clone current (${staleRoot.rootClonePath})\n`,
+    );
   }
 
   const startedAt = Date.now();

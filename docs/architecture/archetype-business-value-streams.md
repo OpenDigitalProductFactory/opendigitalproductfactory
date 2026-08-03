@@ -1,18 +1,25 @@
 # Archetype Business Value Streams
 
-**Status:** Draft — 2026-07-22 (fabric-care archetype added; 103/23 source catalog reflected)
+**Status:** Draft — 2026-08-01 (106/24 source catalog reflected, including agriculture/ranching; lifecycle seam corrected to explicit DigitalProduct bindings)
 **Kind:** Planning artefact (architecture + testing + archetype documentation)
 **Owner surface:** Architecture feature (`/ea`), archetype documentation, and the archetype audit.
 **Consumed by:** [archetype-audit-plan.md](../testing/archetype-audit-plan.md) · the EA / architecture feature · per-archetype documentation.
 **Implemented by:** [2026-06-12-value-stream-architecture-platform-design.md](../superpowers/specs/2026-06-12-value-stream-architecture-platform-design.md) — platform design that captures these value streams as architecture, measures/optimizes each archetype's business model, and drives coworker facilitation + proactivity (the *how*).
-**Grounded in:** `packages/storefront-templates/src/archetypes/` (103 seeded archetypes across 23 categories as of 2026-07-22) and `packages/storefront-templates/src/types.ts` (operating-model axes, commercial models, activation profiles).
+**Grounded in:** `packages/storefront-templates/src/archetypes/` (106 seeded archetypes across 24 categories as of 2026-08-01) and `packages/storefront-templates/src/types.ts` (operating-model axes, commercial models, activation profiles).
 **Decision authority:** Defines value-stream interpretation, audit severity rationale, EA rendering semantics, and archetype documentation language. It does **not** override seed data, create new runtime tables, or authorize WWMD/WWWD perspective blending.
+
+> **Current standards authority (2026-08-01).** This document remains the detailed operational and
+> audit profile for the six-stage archetype backbone. The
+> [Four-Portfolio Archetype and AI Workforce Operating Standard](four-portfolio-archetype-ai-workforce-operating-standard.md)
+> now owns the distinction among industry value streams, local DigitalProduct lifecycle keys,
+> portfolios, work, performers, evidence, and candidate external mappings. External equivalence
+> requires the complete authorized mapping envelope in that standard.
 
 ---
 
 ## 0. Why this document exists
 
-The archetype audit drives 103 seeded archetypes through a browser-realistic experience and records gaps. The risk it names in its own Section 1 — *"The platform must behave correctly for each organizational model"* — is that **testing becomes arbitrary**: we click through phases A–H because the checklist says so, not because each click defends something the business actually depends on.
+The archetype audit drives 106 seeded archetypes through a browser-realistic experience and records gaps. The risk it names in its own Section 1 — *"The platform must behave correctly for each organizational model"* — is that **testing becomes arbitrary**: we click through phases A–H because the checklist says so, not because each click defends something the business actually depends on.
 
 This artefact removes the arbitrariness. It states, for every archetype, **the operational value stream the business runs in the real world** — the end-to-end sequence of value-adding stages that turns a stranger into a served, paid, retained customer. Every test phase then exists to validate a *named stage of a real value stream*, and every finding can be tied to *the stage of the business it threatens*. A vet booking form that drops the pet fields is not "an important finding because the checklist says pet fields" — it is a **break in the Capture-Demand → Deliver-Care handoff** that makes the clinic's core value stream non-functional.
 
@@ -29,28 +36,41 @@ Four consumers, one source of truth:
 
 ## 1. Two senses of "value stream" — keep them distinct
 
-The platform already has a canonical [Value Stream entity](../founder-kernel/wiki/entities/value-stream.md). It means the **IT4IT v3 seven cross-cutting flows** — Evaluate, Explore, Integrate, Deploy, Release, Operate, Consume — i.e. *how DPF itself builds and runs digital products*. That is the **producer/platform** value stream and it is unchanged by this document.
+The platform already has a canonical [Value Stream entity](../founder-kernel/wiki/entities/value-stream.md)
+and a local seven-key DigitalProduct lifecycle vocabulary — Evaluate, Explore, Integrate, Deploy,
+Release, Operate, Consume. These keys describe how DPF plans, changes, supplies, consumes, and runs
+DigitalProducts. Their correspondence to any external reference architecture remains
+`present-unverified` until an authorized mapping is completed.
 
 This document is about the other sense: the **operational value stream of the customer's business** — *how a salon, a bank, or a town creates and delivers value to its own end customers*. The two relate cleanly:
 
-| | IT4IT value streams (kernel entity) | Operational value streams (this doc) |
+| | DPF DigitalProduct lifecycle keys | Operational value streams (this doc) |
 |---|---|---|
-| Whose flow | DPF building/running the platform | The archetype business serving its customers |
+| Whose flow | Any organization managing a DigitalProduct lifecycle | The archetype business serving its customers |
 | Canonical slugs | `evaluate … consume` | `attract · capture · qualify · deliver · settle · retain` (Section 3) |
 | Example | "Voice STT slice moves Explore→Integrate→Deploy" | "A vet clinic moves a pet from booking → exam → invoice → recall" |
-| Standard | The Open Group IT4IT v3 | Business Architecture Guild BIZBOK® · TOGAF/ArchiMate value-stream element |
+| Standards posture | local lifecycle vocabulary; IT4IT™ is a future authorized comparison target | FPAW Stage contract; BACM/ArchiMate® are future representation-review targets |
 
-> **Standard used (research-and-use-standards):** ArchiMate defines a value stream as a sequence of activities that creates an overall result for a customer, stakeholder, or end user ([Open Group ArchiMate 3.2 reference card](https://www.opengroup.org/sites/default/files/docs/downloads/n221p.pdf)). The Business Architecture Guild frames business architecture value streams around customer and stakeholder value, with stages that realize value items and cross-map to capabilities ([Guild white paper, 2019](https://cdn.ymaws.com/www.businessarchitectureguild.org/resource/resmgr/public_resources/bpm_paper_final_dec2019.pdf)). DPF uses those standards together: stages describe stakeholder value accrual; capabilities describe what the platform must provide to enable each stage.
+> **Current semantic authority:** FPAW defines a Stage as a measurable stakeholder-value state
+> transition with acceptance, capability/work realization, evidence and measures. BACM and
+> ArchiMate® are reference-only targets for future authorized representation mappings; this document
+> does not use their publications to substantiate the local contract.
 
 This distinction matters. A value stream is not a click path, process map, or implementation workflow. A value-stream stage may be realized by multiple UI flows and processes, and one UI flow may touch multiple stages. The stage names therefore stay stable even when the portal design changes.
 
-The bridge: the customer's operational value stream lives almost entirely in IT4IT's **Consume** stream (request → fulfilment → customer-facing experience). DPF's job is to make a non-technical operator run their whole operational value stream *through* the platform's Consume surface. So this document is the detailed expansion of "Consume" for each of the 103 businesses we ship.
+The bridge is a typed, many-to-many relationship—not containment. An industry stage stands on its
+own because it describes stakeholder value whether the work is digital, human, physical, or mixed.
+When a DigitalProduct enables or constitutes part of that stage, the implementation maps the exact
+touchpoint to a named DigitalProduct and local lifecycle key with relationship, rationale, evidence,
+and binding state. An external stream identifier may be added only through the authorized FPAW
+mapping contract. A consumption interaction never contains the customer's complete operational
+value stream.
 
 ---
 
 ## 2. The universal small-business value stream
 
-Across all 103 archetypes, the same backbone recurs. Differences are not *which* stages exist — every business attracts, captures, delivers, settles, and retains — but **which stage is load-bearing, what "value delivered" means, and which trust gate governs it.** The backbone:
+Across all 106 archetypes, the same backbone recurs. Differences are not *which* stages exist — every business attracts, captures, delivers, settles, and retains — but **which stage is load-bearing, what "value delivered" means, and which trust gate governs it.** The backbone:
 
 ```
                  ┌─────────────────── TRUST & COMPLIANCE (cross-cutting) ───────────────────┐
@@ -135,7 +155,12 @@ Nothing here invents a new table. The stages bind to existing fields, which is w
 | Trust & Compliance | `GovernanceModel`, `ProvisioningModel` (`account-with-kyc`/`episode-of-care`), `seededServiceCategories` (e.g. BIAN `compliance`), `disclosures` section type |
 | Operate & Improve | coworker identity (`vocabulary.agentName`), `PortfolioDecomposition` with `It4ItStage` per role |
 
-The `PortfolioDecomposition` already tags each portfolio role with `It4ItStage[]` — that is the formal seam where the *operational* value stream (this doc) plugs into the *platform* value stream (the kernel entity). An archetype's `productsAndServicesSold` portfolio carrying `it4itStages: ["request-to-fulfill"]` is the machine-readable assertion that this business's S2–S5 live in Consume.
+The current `PortfolioDecomposition` tags each portfolio role with legacy `It4ItStage[]` metadata.
+That metadata is a migration input, not a conformance assertion: a generic
+`request-to-fulfill` value cannot prove an external correspondence. The standards-grade seam is an
+explicit mapping from a specific industry stage or work definition to a specific DigitalProduct and
+local lifecycle key, with relationship, rationale, confidence, evidence and BindingState. External
+identifiers additionally require FPAW's authorized source and complete mapping envelope.
 
 ### 5.1 Architecture and usability invariants
 
@@ -175,7 +200,7 @@ Each profile gives: the **value the end customer receives** (job-to-be-done), th
 |-----------|---------------------------|
 | `plumber` | Emergency call-out is the headline S2 path; boiler service is the recurring hook into S6. |
 | `electrician` | Stronger Trust gate (safety certification); EV-charger/consumer-unit are planned (S3) not emergency. |
-| `facilities-maintenance` | B2B; **recurring-agreement** planned-maintenance contract makes **S6 Retain** co-load-bearing; HVAC servicing is the AC-repair scenario. Known gap: no dedicated `hvac-contractor` leaf (BI-FS-001). |
+| `facilities-maintenance` | B2B; **recurring-agreement** planned-maintenance contract makes **S6 Retain** co-load-bearing; the dedicated `hvac-contractor` field-dispatch leaf is catalogued in §10.2. |
 | `landscaping` | Seasonal/recurring framing; gallery section feeds S1; `gardenSize` qualifies the quote. |
 | `cleaning-service` | `frequency` (one-off/weekly/…) is the S6 recurring signal captured at S2; residential vs commercial splits the stream. |
 
@@ -187,7 +212,7 @@ Each profile gives: the **value the end customer receives** (job-to-be-done), th
 - **Commercial model:** **appointment-checkout** — book and pay at service; **no running account/estate**.
 - **Load-bearing stage:** **S3 Schedule** — the calendar *is* the product. Practitioner availability, operating hours, slot length, and no-show buffers are the business. A booking that ignores the stylist's real hours is a broken business.
 - **Distinctive stage:** S2 → S3 handoff: provider selection must show *that provider's* slots, not generic ones.
-- **Trust gate:** low for the salon/spa/training leaves; `mobile-beauty` inherits the field-dispatch pattern in §10.2.
+- **Trust gate:** **unconfigured metadata gap — not evidence of low risk.** Until a complete organization/leaf profile binds the controls, audit the missing derived gate as a control-coverage gap and keep coworker action inside scheduling and operational-service boundaries. `beauty-spa` requires contraindication and consent checks, a bounded treatment/practitioner-escalation path, and sensitive-note provenance, access, and retention; `personal-trainer` requires consented health context, bounded non-diagnostic guidance, emergency handoff, session-safety/exception evidence, and controlled progress records; `mobile-beauty` additionally inherits the field-dispatch controls in §10.2.
 - **Value-stream-critical assertions:** `customer-estate` module is **NOT** active (appointment-checkout); coworker confirms "no account balance — pay at time of service"; duration variants render (spa 60/90 min); vocabulary "clients/appointments/stylists," not "patients/members."
 
 | Archetype | Diverges from category by |
@@ -227,7 +252,7 @@ Each profile gives: the **value the end customer receives** (job-to-be-done), th
 - **Commercial model:** appointment-checkout with an encounter-like estate (the pet record).
 - **Load-bearing stage:** **S4 Deliver** informed by the pet record + **S3 Schedule** (multi-night for boarding, recurring for walking).
 - **Distinctive stage:** S3 varies sharply — grooming is a slot, boarding is a **date range**, dog-walking is a **recurring** booking.
-- **Trust gate:** low; operational only.
+- **Trust gate:** **unconfigured metadata gap — not evidence of low risk.** Until a complete organization/leaf profile binds the controls, audit the missing derived gate as a control-coverage gap. The category boundary requires animal/owner identity, owner instructions, condition, custody transfers, incident/escalation, welfare, and return acceptance. `mobile-vet` additionally requires a specialized clinical profile for veterinary-advice boundaries, urgent triage and owner communication, qualified-clinician dispatch, controlled supplies/specimen custody, and clinical-record provenance, consent, access, retention, and veterinary approval.
 - **Value-stream-critical assertions:** pet `ConfigurationItem` carries to the inbox booking; size-based "from" pricing renders (grooming); multi-night date-range flow (boarding); recurring vs one-off distinction the coworker understands (walking).
 
 ---
@@ -379,7 +404,9 @@ Each profile gives: the **value the end customer receives** (job-to-be-done), th
 | `roadside-assistance` | Real-time, location-keyed (no VIN required); demand is emergency-reactive; the dispatch ETA *is* the product. |
 | `locksmith` | Spans **vehicle and property-site** serviced entities (auto + residential); bonding/licensing gate. |
 
-### 6.17 Moving & Logistics (field-dispatch) — `moving-company`, `junk-removal`, `courier-delivery`, `last-mile-freight`
+### 6.17 Moving & Logistics — `moving-company`, `junk-removal`, `courier-delivery`, `last-mile-freight`, `freight-brokerage`
+
+**Dispatch-native operator/crew leaves.**
 
 - **Value delivered:** a **crew and truck** travel to load, haul, and deliver goods — household possessions, junk, parcels, or freight.
 - **Commercial model:** **transactional** per-job for the household side (`moving-company`, `junk-removal`); **account-based-fees** for the B2B side (`courier-delivery`, `last-mile-freight`); consumer `household` vs `business`.
@@ -392,6 +419,16 @@ Each profile gives: the **value the end customer receives** (job-to-be-done), th
 |-----------|-------------|
 | `courier-delivery` / `last-mile-freight` | B2B account-based recurring routes rather than one-off household jobs; consolidated billing. |
 | `junk-removal` | Adds a disposal/manifest leg after the haul (S4→settle). |
+
+**Non-asset brokerage leaf — `freight-brokerage`.**
+
+- **Value delivered:** a shipper's load is matched to qualified third-party carrier capacity on the required lane, equipment class, date, service level, and price; the broker owns no truck and takes no physical custody.
+- **Commercial model:** **account-based-fees**, `sales-assisted`; revenue is the spread on a load rather than a charge for operating a fleet.
+- **Load-bearing stage:** **S3 Qualify & Match** — source and qualify carrier capacity, tender the load, and re-tender safely when the first carrier cannot accept or continue it.
+- **Distinctive value flow:** S1 acquire shipper/carrier relationships → S2 capture quote and load details → S3 source, qualify, tender, and cover → S4 track the carrier's delivery and coordinate exceptions without claiming custody → S5 reconcile carrier/shipper settlement and margin → S6 retain the account and lane history.
+- **Trust gate:** broker/contract authority, carrier qualification and insurance, tender/substitution approval, tracking/documentation, settlement evidence, and an explicit no-custody boundary.
+- **Capacity dynamic:** broker/operations case throughput × **qualified carrier-market capacity by lane, equipment, and date**. This is a load-coverage and tender pipeline, not mobile-labour routing; §7.2 gives the dedicated capacity row.
+- **Value-stream-critical assertions:** the source `sales-assisted` channel must keep Field Dispatch inapplicable; the load board uses quote → tender → covered → in transit → delivered → invoiced states; no surface assigns the broker's own truck, driver, or custody record.
 
 ### 6.18 Security Services (field-dispatch) — `guard-patrol`, `alarm-cctv-install`
 
@@ -481,7 +518,7 @@ Each profile gives: the **value the end customer receives** (job-to-be-done), th
 | `cold-chain-storage` | Temperature bands and continuous monitoring; compliance certification is the differentiator. |
 | `cross-dock-transload` | Near-zero dwell — dock-door time, not storage, is the constraint and the meter. |
 
-Related: `freight-brokerage` joins `moving-and-logistics` in the same change — the non-asset movement model (matches shipper to carrier, earns the spread, owns no trucks and takes no custody), so it is deliberately **not** dispatch-native and declares `sales-assisted`.
+Related: §6.17 carries the complete `freight-brokerage` leaf profile. It is the non-asset movement model and is deliberately **not** dispatch-native.
 
 ---
 
@@ -541,6 +578,7 @@ This section characterises those dynamics per archetype so the platform can late
 | **Durable inventory** | stock/parts that hold value | yes, but ties up cash | retail goods, plumbing/HVAC parts, wholesale stock |
 | **Throughput / processing capacity** | how many cases can be worked per period | slowly (skilled labour) | loan underwriting, permit/inspection processing, accounting returns, MSP tickets, dry-cleaning plant work |
 | **Mobile labour + route capacity** | technician-hours × drive-time geography | seasonally (temp crews) | trades, landscaping, dog-walking, field service |
+| **Brokerage / network capacity** | qualified third-party supply by lane/date/equipment × broker case throughput | carrier supply can flex, but availability and price are volatile | freight brokerage load coverage and tendering |
 
 **Demand has a signature.** The shape of the peak dictates how far ahead the operator must plan:
 
@@ -566,7 +604,8 @@ Severity note for the audit: a capacity/demand surface (calendar, inventory, ros
 | Archetype(s) | Constrained capacity unit | Peak demand signature | Over-capacity / waste failure mode | Primary platform lever implied |
 |--------------|---------------------------|------------------------|------------------------------------|--------------------------------|
 | `plumber`, `electrician` | technician-hours + **replacement-parts stock** (fittings, boilers) | winter burst/freeze; emergency-unpredictable; boiler service pre-winter | idle techs in shoulder seasons; cash tied in slow-moving parts | emergency-reserve slots; van-stock reorder points; planned-work backfill of troughs |
-| `facilities-maintenance` (HVAC) | technician-hours + HVAC parts | **AC repair +266% winter→summer; true peak October** (cooling→heating flip); emergency reserve needed | summer/winter overwhelmed, spring/fall idle | **shift planned maintenance into Feb–Apr troughs to flatten the curve**; block ~20% daily capacity for emergencies; seasonal temp techs ([Samsara](https://www.samsara.com/blog/peak-season-for-hvac), [BDR](https://www.bdrco.com/blog/hvac-maintenance-scheduling/)) |
+| `facilities-maintenance` | **mixed-trade technician/team hours** + subcontractor availability + cross-trade parts/materials | planned inspection/preventive cycles plus reactive HVAC, electrical, plumbing, and building-fabric failures; a multi-site contract portfolio can smooth trade-specific seasons | reactive work crowds out planned SLA commitments; one trade idles while another queue backlogs; wrong skill or part causes repeat visits | multi-trade skill matrix; planned-vs-reactive capacity bands; SLA/priority queue; subcontractor-pool and cross-trade parts readiness |
+| `hvac-contractor` | technician-hours + HVAC parts | **AC repair +266% winter→summer; true peak October** (cooling→heating flip); emergency reserve needed | summer/winter overwhelmed, spring/fall idle | **shift planned maintenance into Feb–Apr troughs to flatten the curve**; block ~20% daily capacity for emergencies; seasonal temp techs ([Samsara](https://www.samsara.com/blog/peak-season-for-hvac), [BDR](https://www.bdrco.com/blog/hvac-maintenance-scheduling/)) |
 | `landscaping` | seasonal crew + equipment + daylight | spring/summer growth peak; deep winter trough | **off-season crew with no billable work** (classic overstaffing trap) | seasonal rostering; winter service lines (clearance/gritting); recurring contracts to smooth |
 | `cleaning-service` | cleaner-hours | end-of-tenancy at month/term end; commercial contracts smooth | idle one-off capacity between spikes | recurring-frequency capture (weekly/fortnightly) to convert spikes into baseline load |
 | `hair-salon`, `barber-shop`, `nail-salon`, `beauty-spa` | **chair/practitioner slot-hours** | weekly (Thu–Sat, evenings); pre-holiday (Dec busiest); wedding/prom; **Jan–Feb −15–25%** | **<70% utilization = paying for idle chairs**; no-shows waste prime slots (10% no-show ≈ $30–60k/yr) | utilization target band (75–85%); **card-on-file + reminders cut no-shows 50–70%**; fill dead weekday mornings with promos ([FinancialModelsLab](https://financialmodelslab.com/blogs/kpi-metrics/hair-salon), [QuarkBooker](https://www.quarkbooker.com/blog/salon-capacity-problem-empty-chairs)) |
@@ -598,7 +637,8 @@ Severity note for the audit: a capacity/demand surface (calendar, inventory, ros
 | `municipal-utility` | meter/field crews | **usage-seasonal (summer water, winter heating)**; service connections in moving season; must-serve | crews idle off-peak vs universal-service obligation | seasonal crew planning; service-connection queue; must-serve sizing |
 | `law-enforcement-agency` | records/admin throughput | records/FOIA steady; community-concern event-driven; must-serve | n/a commercial; under-capacity = statutory delay | records-request queue/throughput; no commercial capacity lever |
 | `new-home-builder`, `custom-home-builder` | **build slots** (crews + subcontractor pool + working capital tied in WIP) + design/sales throughput | interest-rate + housing-season sensitive (spring purchase peak); production builder smooths via inventory homes, custom is pipeline-lumpy | overcommitted crews/subs → slipped completion + carrying cost on unsold spec homes; idle crews between contracts | project-pipeline capacity + subcontractor scheduling; milestone-draw cadence to keep WIP financed; model-home/design-centre throughput (production) vs consultative pipeline (custom) |
-| Field-dispatch leaves (Gap-A/Gap-B: `automotive-services`, `moving-and-logistics`, `security-services`, and the folded trades/healthcare/pet/professional/beauty/nonprofit/retail leaves) | **mobile labour × route/drive-time geography** (crew/technician/officer-hours) | per-vertical: emergency-reactive (roadside, HVAC no-heat, lockout), seasonal (moving, pest), steady-recurring (guard coverage, monitoring, pool service) | idle crews between geographically scattered jobs; emergency under-coverage; over-routed days that slip appointments | see §10.2 — route/assignment (skill×proximity×availability), emergency-reserve blocking, recurring-route capture; the horizontal Field Dispatch capability is the platform lever |
+| Field-dispatch leaves not otherwise given a dedicated row (Gap-A/Gap-B: all `automotive-services` and `security-services` leaves; `moving-company`, `junk-removal`, `courier-delivery`, `last-mile-freight`; and the folded trades/healthcare/pet/professional/beauty/nonprofit/retail leaves; **never `freight-brokerage`**) | **mobile labour × route/drive-time geography** (crew/technician/officer-hours) | per-vertical: emergency-reactive (roadside, lockout), seasonal (moving, pest), steady-recurring (guard coverage, monitoring, pool service) | idle crews between geographically scattered jobs; emergency under-coverage; over-routed days that slip appointments | see §10.2 — route/assignment (skill×proximity×availability), emergency-reserve blocking, recurring-route capture; the horizontal Field Dispatch capability is the platform lever |
+| `freight-brokerage` | **broker/operations case throughput × qualified carrier-market capacity** by lane, equipment, date, service level, and price | lane- and customer-specific seasons plus spot-market, weather, and disruption volatility | idle broker capacity when shipper demand falls; when loads outrun qualified carrier supply, tenders go uncovered or require re-tendering, compressing margin and risking service failure | load-coverage pipeline; carrier qualification/availability; tender and re-tender workflow; lane-capacity, margin, exception, and service-level alerts — no fleet dispatch |
 | `dry-cleaning-plant-network`, `wash-and-fold-laundry`, `alterations-tailoring` | **plant/workroom throughput** + counter/route capacity | weekly repeat laundry rhythm; weather and event spikes (coats, gowns, uniforms, back-to-school); commercial accounts smooth the baseline | idle plant labour in troughs; over-accepted work misses ready promises or causes garment mix-ups | promised-ready board; ticket/tag reconciliation; plant capacity lanes; recurring route/account smoothing; early delay notifications |
 | `mixed-farm-ranch`, `crop-hay-farm`, `cattle-ranch` | **land/forage carrying capacity × biological window × ready equipment/people/provider capacity** | seasonal and weather-driven; planting/harvest, breeding/calving, forage growth, care and regulatory calendars; market timing is exogenous | unused forage/field window, spoiled inputs or crop, idle capital equipment, animal-health/welfare risk, forced sale, or missed custom-operator slot | backward-plan from latest-safe biological/field dates; dependency readiness; fallback windows; forage/feed and herd-capacity scenarios; source-dated weather/market/regulatory evidence |
 
@@ -632,11 +672,22 @@ These are recorded here as the value-stream-derived requirement set; turning the
 
 The value streams are not free-text — they bind to substrate the EA surface already holds, so the architecture feature can render them per-archetype without new data:
 
-1. **Stage backbone as a value-stream lane.** Render the six primary stages + two cross-cuts (Section 2) as a value-stream element for the active archetype, in line with the canonical [Value Stream entity](../founder-kernel/wiki/entities/value-stream.md) and the `it4it-is-substrate` stance — but labelled as the *operational* stream (Consume expansion), distinct from the platform's seven flows.
+1. **Stage backbone as a value-stream lane.** Render the six primary stages + two cross-cuts
+   (Section 2) as the active archetype's independent operational value stream, in line with the
+   canonical [Value Stream entity](../founder-kernel/wiki/entities/value-stream.md). It is neither an
+   expansion of a DigitalProduct consumption interaction nor a synonym for any local lifecycle key.
 2. **Stage → capability binding from Section 5.** Each stage lights up the `ActivationProfile.modules`, `SchedulingDefaults`, and `BillingPatternProfile` that enable it, so the operator sees *which platform capability carries which stage of their business*.
-3. **IT4IT seam via `PortfolioDecomposition`.** The `It4ItStage[]` already attached per `PortfolioRole` is the join key: the operational stream's S2–S5 map to the `productsAndServicesSold` portfolio's `request-to-fulfill` (Consume) stage. The EA tool can therefore show both senses of value stream on one canvas without conflating them.
+3. **DigitalProduct lifecycle seam via explicit bindings.** Treat the legacy `It4ItStage[]` attached per
+   `PortfolioRole` as candidate migration metadata. A valid join identifies the industry stage or
+   work definition, the enabling or constituent DigitalProduct, the local lifecycle key, the
+   semantic relationship, rationale, confidence, evidence and BindingState. An external identifier
+   is optional and remains `present-unverified` until its source-authorized review. The EA tool can
+   then show both kinds of stream on one canvas without conflating them.
 4. **ArchiMate export.** `export_archimate` should emit each operational stage as an ArchiMate **Value Stream** element with **serving** relationships to the capabilities (modules) from Section 5 — making the operational stream a first-class, exportable architecture object, not a doc-only diagram.
-5. **Banking already shows the pattern.** The BIAN `seededServiceCategories` (Loans and Deposits, Relationship Management, Compliance) are exactly an operational-value-stream decomposition anchored to an industry standard — the model to generalise to the other 50 archetypes.
+5. **Banking already shows a useful local binding pattern.** The `seededServiceCategories` values are
+   industry capability/service-domain references that can serve operational stages; they are not the
+   operational ValueStream itself and are not external conformance evidence. Preserve that
+   distinction when generalizing across all 24 categories and 106 current leaves.
 6. **Demand–capacity overlay (Section 7).** Render the constrained capacity unit and demand signature on the load-bearing stage so the EA canvas shows not just *which* stage carries the business but *where it is capacity-constrained* — the join point to future capacity-management capabilities.
 
 ### 8.7 EA usability presentation contract
@@ -648,7 +699,7 @@ The architecture feature has two audiences: operators who need to run the busine
 | **Operator summary** | "What part of my business does DPF think is load-bearing, and what do I need to watch today?" | Stage ribbon; load-bearing stage highlighted; trust gate and capacity signal visible; stage labels in business vocabulary. |
 | **Capability map** | "Which platform modules carry this stage?" | Stage-to-capability list from Section 5; missing/optional modules called out as capability applicability, not hidden. |
 | **Audit / evidence view** | "Why is this defect important?" | Finding grouped by stage, capability, user impact, and severity rationale. |
-| **Architecture export view** | "How does this map to standards?" | ArchiMate value-stream elements, serving relationships to capabilities, and IT4IT Consume seam. |
+| **Architecture export view** | "How does this map to standards?" | ArchiMate value-stream elements, serving relationships to capabilities, and explicit evidence-bearing IT4IT DigitalProduct bindings. |
 
 Do not make the first viewport a wall of EA terminology. The load-bearing stage, trust gate, and next operational risk are the first-viewport signals; standards mapping is a drill-down.
 
@@ -720,12 +771,12 @@ The new element is **S4b Return & Inspect** and the re-pool — there is no "ret
 
 **Disposition:** archetypes — **done** (`equipment-rental`, `self-storage`, `production-equipment-rental`, `agricultural-cooperative`). The **rental/shared-asset value-stream pattern** and its **reusable-pooled-asset** capacity unit are now a recognized part of the model (this section is their canonical description). The asset-pool capacity engine is tracked as capacity-management work, not new-archetype work.
 
-### 10.2 The field-dispatch (mobile-resource-to-customer) loop (now modelled — Gap A leaves + Gap B categories, 2026-06-13)
+### 10.2 The field-dispatch (mobile-resource-to-customer) loop (now modelled — Gap A leaves + dispatch-native Gap B leaves, 2026-06-13)
 
 **Businesses:** any business where a **mobile resource travels to the customer's site, asset, or person** to perform the work, rather than the customer coming to a premises. This recurs across the catalog rather than living in one category:
 
 - **Folded into existing categories (Gap A leaves):** `hvac-contractor`, `pest-control`, `appliance-repair`, `pool-spa-service`, `pressure-washing`, `roofing-gutters` (trades); `home-health-care`, `mobile-phlebotomy`, `dme-delivery` (healthcare); `mobile-pet-grooming`, `mobile-vet` (pet); `field-inspection`, `land-surveying`, `process-serving-notary` (professional); `mobile-beauty` (beauty); `meal-delivery-program` (nonprofit); `furniture-delivery-install` (retail).
-- **New dispatch-native categories (Gap B):** `automotive-services` (§6.16), `moving-and-logistics` (§6.17), `security-services` (§6.18).
+- **New categories containing dispatch-native leaves (Gap B):** all leaves in `automotive-services` (§6.16) and `security-services` (§6.18), plus `moving-company`, `junk-removal`, `courier-delivery`, and `last-mile-freight` in `moving-and-logistics` (§6.17). `freight-brokerage` is expressly excluded: its `sales-assisted` non-asset brokerage flow owns no mobile resource and takes no custody, so it uses the separate §6.17/§7.2 load-coverage model.
 
 **Why it's a recognized pattern — not just a set of leaves.** In every commercial model in Section 3 the **Deliver (S4)** stage happens at the *operator's* premises or in a booked slot there. In field dispatch S4 happens at the *customer's* location, which inserts coordination stages a premises-based stream never has — **assign (skill × proximity × availability), en-route (on-my-way + ETA), and on-site capture.** It is **derived, not flagged**: applicability is a pure function of the operating-model axes —
 
@@ -742,15 +793,25 @@ read from `consumptionChannel: onsite-plus-portal` (and `episode-of-care` provis
             → Close → S5 Settle (job → invoice → payment)
 ```
 
-**The capacity dynamic (refines §7.1).** The capacity unit is **mobile labour + route capacity** — technician/crew/officer-hours × drive-time geography — already in the §7.1 taxonomy. Demand signatures vary: emergency-reactive (HVAC no-heat, roadside, lockout), seasonal (moving, pest), steady (guard coverage, monitoring).
+**The capacity dynamic (refines §7.1).** Within this loop, the capacity unit is **mobile labour + route capacity** — technician/crew/officer-hours × drive-time geography — already in the §7.1 taxonomy. Demand signatures vary: emergency-reactive (HVAC no-heat, roadside, lockout), seasonal (moving, pest), steady (guard coverage, monitoring). The `freight-brokerage` carrier-market capacity model is outside this loop.
 
 **Compliance overlays as job by-products — the moat.** Each vertical attaches a regulated artifact captured at job close: **EPA 608** (HVAC), **ADAS calibration** (auto-glass), **pesticide-applicator** logs (pest), **HIPAA/clinical** notes (home-health, phlebotomy, medical courier), **DOT** hours (moving, towing), **PSO / low-voltage** licensing (security). This is a pluggable overlay framework, not per-archetype code — and no field-service-management product in the market covers any of these.
 
-**Disposition:** archetypes — **done** (the 17 Gap-A leaves + 3 Gap-B categories above; all carry the `onsite-plus-portal` axes and compose under `service-operations` until the dispatch module ships). The **horizontal Field Dispatch capability** — the dispatch board (`map-dispatch` visual pattern), the dispatcher coworker, the skill/proximity/value-aware assignment engine, on-my-way/ETA, and the compliance-overlay framework — is built by a **parallel effort** and derives from these axes via `needsFieldDispatch()`; it is tracked as capability work, not new-archetype work. Source: the 2026-06-13 *Field Dispatch capability design* and its companion *archetype gap analysis*.
+**Disposition:** dispatch applicability — **done** for the 17 Gap-A leaves, every `automotive-services` and `security-services` leaf, and the four dispatch-native `moving-and-logistics` leaves named above. Those leaves carry the `onsite-plus-portal` axes and compose under `service-operations` until the dispatch module ships; `freight-brokerage` is intentionally outside the set. The **horizontal Field Dispatch capability** — the dispatch board (`map-dispatch` visual pattern), the dispatcher coworker, the skill/proximity/value-aware assignment engine, on-my-way/ETA, and the compliance-overlay framework — is built by a **parallel effort** and derives from these axes via `needsFieldDispatch()`; it is tracked as capability work, not new-archetype work. Source: the 2026-06-13 *Field Dispatch capability design* and its companion *archetype gap analysis*.
 
 ---
 
 ## 11. Changelog
+
+- **2026-08-01** — Reconciled agriculture/ranching and the **106 archetypes / 24 categories** source
+  baseline. Corrected the standards seam: industry operational value streams are independent
+  stakeholder-value flows, not lifecycle-consumption expansions. Recast legacy lifecycle metadata
+  as migration input and required explicit, evidence-bearing bindings to a named DigitalProduct and
+  local lifecycle key; external identifiers require authorized mapping review. Added the current
+  operating-standard authority pointer and removed the stale HVAC-leaf gap. Corrected absent trust
+  metadata to an unconfigured control-coverage gap, separated non-asset `freight-brokerage` from
+  Field Dispatch, and assigned HVAC-specific capacity evidence to `hvac-contractor` rather than the
+  mixed-trade `facilities-maintenance` leaf.
 
 - **2026-07-22** — Added **§6.23 `fabric-care-services`** (`dry-cleaning-plant-network`, `wash-and-fold-laundry`, `alterations-tailoring`) and updated the source catalog baseline to **103 archetypes / 23 categories**. The category models garment custody and ready-promise throughput without adding a new provisioning enum in this slice.
 - **2026-07-18** — Re-grounded the active text against the current source catalog: **95 archetypes / 21 categories**. Added §6.20 `media-production` and §6.21 `live-events-venues`, moved `medical-practice`/`optician` under healthcare-wellness, corrected fitness/education/nonprofit category headings, and added `production-equipment-rental` to the rental/shared-asset loop.

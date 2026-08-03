@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  WINDOWS_WRAPPER_TERMINATED_STATUS,
   detectWorkingShell,
   recoverInterruptedGateState,
+  reviveInterruptedQueuedGateState,
   shouldUseShell,
 } from "./pregate.mjs";
 
@@ -75,6 +77,202 @@ test("pregate recovery releases an interrupted running gate and marks it failed"
   assert.equal(written.gatePassed, false);
   assert.equal(written.leaseEvents.at(-1).type, "pregate_interrupted_gate_recovery");
   assert.equal(written.recovery.reason, "gate-wrapper-exited-before-terminal-state");
+});
+
+test("pregate recovery releases an interrupted queued gate and marks it failed", async () => {
+  const calls = [];
+  let written = null;
+  const recovered = await recoverInterruptedGateState({
+    stateFile: "/tmp/dpf-local-ci-gate.json",
+    state: {
+      branch: "fix/local-ci-queued-recovery",
+      sha: "c".repeat(40),
+      gatePassed: false,
+      leaseId: "NPEL-QUEUED",
+      evidenceRecordId: "",
+      status: "queued",
+      expiresAt: "2026-07-30T06:00:00.000Z",
+      leaseEvents: [{ type: "queued", at: "2026-07-30T05:00:00.000Z" }],
+      evidencePending: false,
+      queueObserver: {
+        path: "/tmp/dpf-local-ci-observer.json",
+        token: "observer-token",
+        pid: 12345,
+        ownerSessionId: "test-owner",
+      },
+    },
+    branch: "fix/local-ci-queued-recovery",
+    sha: "c".repeat(40),
+    childStatus: 4294967295,
+    bearerToken: "test-token",
+    mcpCallImpl: async (tool, args) => {
+      calls.push({ tool, args });
+      return { success: true };
+    },
+    releaseLocalQueueObserverImpl: (args) => {
+      calls.push({ tool: "releaseLocalQueueObserver", args });
+      return { status: "released" };
+    },
+    writeStateImpl: (_stateFile, payload) => {
+      written = payload;
+    },
+    now: () => "2026-07-30T05:02:00.000Z",
+  });
+
+  assert.equal(recovered.recovered, true);
+  assert.equal(recovered.releaseSucceeded, true);
+  assert.deepEqual(calls, [
+    {
+      tool: "release_nonprod_environment_lease",
+      args: { leaseId: "NPEL-QUEUED" },
+    },
+    {
+      tool: "releaseLocalQueueObserver",
+      args: {
+        path: "/tmp/dpf-local-ci-observer.json",
+        token: "observer-token",
+      },
+    },
+  ]);
+  assert.equal(written.status, "failed");
+  assert.equal(written.leaseEvents.at(-1).type, "pregate_interrupted_gate_recovery");
+  assert.equal(written.recovery.childStatus, 4294967295);
+  assert.equal(written.recovery.queueObserverReleaseStatus, "released");
+});
+
+test("pregate recovery falls back to dead observer cleanup by gate identity", async () => {
+  const calls = [];
+  let written = null;
+  const recovered = await recoverInterruptedGateState({
+    stateFile: "/tmp/dpf-local-ci-gate.json",
+    state: {
+      branch: "fix/local-ci-fallback-cleanup",
+      sha: "d".repeat(40),
+      gatePassed: false,
+      leaseId: "NPEL-FALLBACK",
+      evidenceRecordId: "",
+      status: "queued",
+      expiresAt: "2026-07-30T06:00:00.000Z",
+      leaseEvents: [{ type: "queued", at: "2026-07-30T05:00:00.000Z" }],
+      evidencePending: false,
+    },
+    branch: "fix/local-ci-fallback-cleanup",
+    sha: "d".repeat(40),
+    childStatus: 1,
+    bearerToken: "test-token",
+    mcpCallImpl: async (tool, args) => {
+      calls.push({ tool, args });
+      return { success: true };
+    },
+    releaseDeadLocalQueueObserversForGateImpl: (args) => {
+      calls.push({ tool: "releaseDeadLocalQueueObserversForGate", args });
+      return [{
+        observerToken: "fallback-token",
+        pid: 12345,
+        branch: args.branch,
+        sha: args.sha,
+        releaseStatus: "released",
+      }];
+    },
+    queueObserverFallbackDirectory: "/tmp/dpf-local-ci-queue-observers",
+    writeStateImpl: (_stateFile, payload) => {
+      written = payload;
+    },
+    now: () => "2026-07-30T05:02:30.000Z",
+  });
+
+  assert.equal(recovered.recovered, true);
+  assert.deepEqual(calls, [
+    {
+      tool: "release_nonprod_environment_lease",
+      args: { leaseId: "NPEL-FALLBACK" },
+    },
+    {
+      tool: "releaseDeadLocalQueueObserversForGate",
+      args: {
+        directory: "/tmp/dpf-local-ci-queue-observers",
+        branch: "fix/local-ci-fallback-cleanup",
+        sha: "d".repeat(40),
+      },
+    },
+  ]);
+  assert.equal(written.recovery.queueObserverReleaseStatus, "fallback-released:1");
+  assert.equal(written.recovery.queueObserverFallbackReleases.length, 1);
+});
+
+test("pregate revival preserves an interrupted queued gate lease", async () => {
+  const calls = [];
+  let written = null;
+  const revived = await reviveInterruptedQueuedGateState({
+    stateFile: "/tmp/dpf-local-ci-gate.json",
+    state: {
+      branch: "fix/local-ci-queued-revival",
+      sha: "e".repeat(40),
+      gatePassed: false,
+      leaseId: "NPEL-QUEUED-REVIVE",
+      evidenceRecordId: "",
+      status: "queued",
+      expiresAt: "2026-07-30T06:00:00.000Z",
+      leaseEvents: [{ type: "queued", at: "2026-07-30T05:00:00.000Z" }],
+      evidencePending: false,
+      queueObserver: {
+        path: "/tmp/dpf-local-ci-observer.json",
+        token: "observer-token",
+        pid: 12345,
+        ownerSessionId: "test-owner",
+      },
+    },
+    branch: "fix/local-ci-queued-revival",
+    sha: "e".repeat(40),
+    childStatus: WINDOWS_WRAPPER_TERMINATED_STATUS,
+    releaseLocalQueueObserverImpl: (args) => {
+      calls.push({ tool: "releaseLocalQueueObserver", args });
+      return { status: "released" };
+    },
+    writeStateImpl: (_stateFile, payload) => {
+      written = payload;
+    },
+    now: () => "2026-07-30T05:03:00.000Z",
+  });
+
+  assert.equal(revived.revived, true);
+  assert.equal(revived.leaseId, "NPEL-QUEUED-REVIVE");
+  assert.deepEqual(calls, [{
+    tool: "releaseLocalQueueObserver",
+    args: {
+      path: "/tmp/dpf-local-ci-observer.json",
+      token: "observer-token",
+    },
+  }]);
+  assert.equal(written.status, "queued");
+  assert.equal(written.gatePassed, false);
+  assert.equal(written.leaseId, "NPEL-QUEUED-REVIVE");
+  assert.equal(written.leaseEvents.at(-1).type, "pregate_interrupted_queue_revival");
+  assert.equal(written.recovery.reason, "queued-gate-wrapper-exited-resuming");
+  assert.equal(written.recovery.leasePreserved, true);
+});
+
+test("pregate revival refuses non-queued interrupted states", async () => {
+  let wrote = false;
+  const revived = await reviveInterruptedQueuedGateState({
+    stateFile: "/tmp/dpf-local-ci-gate.json",
+    state: {
+      branch: "fix/local-ci-running-recovery",
+      sha: "f".repeat(40),
+      leaseId: "NPEL-RUNNING",
+      status: "running",
+      evidencePending: false,
+    },
+    branch: "fix/local-ci-running-recovery",
+    sha: "f".repeat(40),
+    childStatus: WINDOWS_WRAPPER_TERMINATED_STATUS,
+    writeStateImpl: () => {
+      wrote = true;
+    },
+  });
+
+  assert.equal(revived.revived, false);
+  assert.equal(wrote, false);
 });
 
 test("pregate recovery ignores terminal gate states", async () => {

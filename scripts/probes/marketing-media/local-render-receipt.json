@@ -1,0 +1,246 @@
+{
+  "schemaVersion": 1,
+  "kind": "marketing-media-local-render",
+  "backlogItemId": "BI-0C891AC7",
+  "toolEvaluationId": "cmsb7dhyr06z601tcngsqzwyg",
+  "candidate": {
+    "tool": "HyperFrames",
+    "version": "0.7.87"
+  },
+  "composition": {
+    "durationSeconds": 50,
+    "width": 1920,
+    "height": 1080,
+    "sha256": "d7f57bac1f8ab7aa5f49678ac67d600783a877816bc4038de047e4ec616c96dd"
+  },
+  "toolchain": {
+    "hyperframes": {
+      "version": "0.7.87",
+      "executable": {
+        "path": "/tool/node_modules/.bin/hyperframes",
+        "sha256": "36e8bb630ba985c37f00c9fe908230bd16401884c30dced0d0ca4a3ed83e0710"
+      }
+    },
+    "ffmpeg": {
+      "version": "ffmpeg version 7.0.2-static https://johnvansickle.com/ffmpeg/  Copyright (c) 2000-2024 the FFmpeg developers",
+      "executable": {
+        "path": "/usr/local/bin/ffmpeg",
+        "sha256": "e7e7fb30477f717e6f55f9180a70386c62677ef8a4d4d1a5d948f4098aa3eb99"
+      },
+      "buildConfiguration": "configuration:\n    --enable-gpl\n    --enable-version3\n    --enable-static\n    --disable-debug\n    --disable-ffplay\n    --disable-indev=sndio\n    --disable-outdev=sndio\n    --cc=gcc\n    --enable-fontconfig\n    --enable-frei0r\n    --enable-gnutls\n    --enable-gmp\n    --enable-libgme\n    --enable-gray\n    --enable-libaom\n    --enable-libfribidi\n    --enable-libass\n    --enable-libvmaf\n    --enable-libfreetype\n    --enable-libmp3lame\n    --enable-libopencore-amrnb\n    --enable-libopencore-amrwb\n    --enable-libopenjpeg\n    --enable-librubberband\n    --enable-libsoxr\n    --enable-libspeex\n    --enable-libsrt\n    --enable-libvorbis\n    --enable-libopus\n    --enable-libtheora\n    --enable-libvidstab\n    --enable-libvo-amrwbenc\n    --enable-libvpx\n    --enable-libwebp\n    --enable-libx264\n    --enable-libx265\n    --enable-libxml2\n    --enable-libdav1d\n    --enable-libxvid\n    --enable-libzvbi\n    --enable-libzimg",
+      "licenseTextSha256": "a3aecc4e66f10f19bf9b8d1defc91937a39019b60bb3e33abb6aae7c28f423cf"
+    },
+    "ffprobe": {
+      "version": "ffprobe version 4.0.2-static https://johnvansickle.com/ffmpeg/  Copyright (c) 2007-2018 the FFmpeg developers",
+      "executable": {
+        "path": "/usr/local/bin/ffprobe",
+        "sha256": "e3624d8ff953c7e2f1f3e3ee24bfa64399bcb3bd5c302b2216d3f794b31bbbf6"
+      }
+    },
+    "browser": {
+      "version": "Google Chrome for Testing 152.0.7928.2",
+      "executable": {
+        "path": "/usr/local/bin/chrome-headless-shell",
+        "sha256": "55efa0c5ec72d027235402198607cdb438c673297a287186d6f16a7ada8908d4"
+      }
+    }
+  },
+  "validation": {
+    "lint": {
+      "durationMs": 3343,
+      "outputSha256": "1274f46bdfff3c3e51d670cdd96d6a4cb1a6d162318ff4c45742169fddc87424"
+    },
+    "validate": {
+      "durationMs": 6959,
+      "outputSha256": "a77b523d301aa299c0b4cf7a4713b7e9ebcdf1d6935a6ce682fe1b52569365e5"
+    },
+    "inspect": {
+      "durationMs": 3731,
+      "outputSha256": "d98223bf6df1446d4ca7ab78fda942f107036dd1c162e3b51fbf10ea758b548a"
+    }
+  },
+  "runs": [
+    {
+      "label": "a",
+      "durationMs": 254736,
+      "outputSha256": "216aea47c07f39c03b8e3b8cfb4aaa42ef28ac311c630af80987f4308ba69c15",
+      "normalizedFrameSha256": "2785d81ea2b54d2d78414b8c4bcb2e26530a75ca4c471e5b6ac5e3a99dd075b6",
+      "media": {
+        "streams": [
+          {
+            "index": 0,
+            "codec_name": "h264",
+            "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+            "profile": "High",
+            "codec_type": "video",
+            "codec_time_base": "1/60",
+            "codec_tag_string": "avc1",
+            "codec_tag": "0x31637661",
+            "width": 1920,
+            "height": 1080,
+            "coded_width": 1920,
+            "coded_height": 1088,
+            "has_b_frames": 0,
+            "sample_aspect_ratio": "1:1",
+            "display_aspect_ratio": "16:9",
+            "pix_fmt": "yuv420p",
+            "level": 40,
+            "color_range": "tv",
+            "color_space": "bt709",
+            "color_transfer": "bt709",
+            "color_primaries": "bt709",
+            "chroma_location": "center",
+            "refs": 1,
+            "is_avc": "true",
+            "nal_length_size": "4",
+            "r_frame_rate": "30/1",
+            "avg_frame_rate": "30/1",
+            "time_base": "1/15360",
+            "start_pts": 0,
+            "start_time": "0.000000",
+            "duration_ts": 768000,
+            "duration": "50.000000",
+            "bit_rate": "790849",
+            "bits_per_raw_sample": "8",
+            "nb_frames": "1500",
+            "disposition": {
+              "default": 1,
+              "dub": 0,
+              "original": 0,
+              "comment": 0,
+              "lyrics": 0,
+              "karaoke": 0,
+              "forced": 0,
+              "hearing_impaired": 0,
+              "visual_impaired": 0,
+              "clean_effects": 0,
+              "attached_pic": 0,
+              "timed_thumbnails": 0
+            },
+            "tags": {
+              "language": "und",
+              "handler_name": "VideoHandler",
+              "encoder": "Lavc61.3.100 libx264"
+            }
+          }
+        ],
+        "format": {
+          "filename": "/probe/outputs/run-a.mp4",
+          "nb_streams": 1,
+          "nb_programs": 0,
+          "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+          "format_long_name": "QuickTime / MOV",
+          "start_time": "0.000000",
+          "duration": "50.000000",
+          "size": "4949786",
+          "bit_rate": "791965",
+          "probe_score": 100,
+          "tags": {
+            "major_brand": "isom",
+            "minor_version": "512",
+            "compatible_brands": "isomiso2avc1mp41",
+            "encoder": "Lavf61.1.100"
+          }
+        }
+      }
+    },
+    {
+      "label": "b",
+      "durationMs": 250834,
+      "outputSha256": "222699112d69d30a3d12e1318e408d770a34a0b96289c57056b3e031df9a90e1",
+      "normalizedFrameSha256": "cc579f94f9591d83e5f2385baaa7c462458b18930298c24696b036c7e8169085",
+      "media": {
+        "streams": [
+          {
+            "index": 0,
+            "codec_name": "h264",
+            "codec_long_name": "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10",
+            "profile": "High",
+            "codec_type": "video",
+            "codec_time_base": "1/60",
+            "codec_tag_string": "avc1",
+            "codec_tag": "0x31637661",
+            "width": 1920,
+            "height": 1080,
+            "coded_width": 1920,
+            "coded_height": 1088,
+            "has_b_frames": 0,
+            "sample_aspect_ratio": "1:1",
+            "display_aspect_ratio": "16:9",
+            "pix_fmt": "yuv420p",
+            "level": 40,
+            "color_range": "tv",
+            "color_space": "bt709",
+            "color_transfer": "bt709",
+            "color_primaries": "bt709",
+            "chroma_location": "center",
+            "refs": 1,
+            "is_avc": "true",
+            "nal_length_size": "4",
+            "r_frame_rate": "30/1",
+            "avg_frame_rate": "30/1",
+            "time_base": "1/15360",
+            "start_pts": 0,
+            "start_time": "0.000000",
+            "duration_ts": 768000,
+            "duration": "50.000000",
+            "bit_rate": "791001",
+            "bits_per_raw_sample": "8",
+            "nb_frames": "1500",
+            "disposition": {
+              "default": 1,
+              "dub": 0,
+              "original": 0,
+              "comment": 0,
+              "lyrics": 0,
+              "karaoke": 0,
+              "forced": 0,
+              "hearing_impaired": 0,
+              "visual_impaired": 0,
+              "clean_effects": 0,
+              "attached_pic": 0,
+              "timed_thumbnails": 0
+            },
+            "tags": {
+              "language": "und",
+              "handler_name": "VideoHandler",
+              "encoder": "Lavc61.3.100 libx264"
+            }
+          }
+        ],
+        "format": {
+          "filename": "/probe/outputs/run-b.mp4",
+          "nb_streams": 1,
+          "nb_programs": 0,
+          "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+          "format_long_name": "QuickTime / MOV",
+          "start_time": "0.000000",
+          "duration": "50.000000",
+          "size": "4950739",
+          "bit_rate": "792118",
+          "probe_score": 100,
+          "tags": {
+            "major_brand": "isom",
+            "minor_version": "512",
+            "compatible_brands": "isomiso2avc1mp41",
+            "encoder": "Lavf61.1.100"
+          }
+        }
+      }
+    }
+  ],
+  "determinism": {
+    "byteIdentical": false,
+    "frameIdentical": false
+  },
+  "container": {
+    "imageTag": "dpf-marketing-media-probe:hyperframes-0.7.87",
+    "imageIdentity": "sha256:b68dca5087b59fb2b9008d5e2826976eda37218fcb61c246ab45c7dade888bef",
+    "baseImage": "node:24-bookworm-slim@sha256:235600a8101ab264e117b1768e925532262668dc9b581ef1dd7d96ced463b8e7",
+    "network": "none",
+    "limits": {
+      "cpus": 4,
+      "memory": "8g"
+    }
+  }
+}

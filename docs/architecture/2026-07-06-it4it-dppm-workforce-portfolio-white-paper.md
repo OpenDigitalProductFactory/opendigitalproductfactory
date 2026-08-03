@@ -1,12 +1,30 @@
-# Workforce Portfolio: A Proposed Evolution of the IT4IT/DPPM Internal Portfolio
+# Workforce Portfolio: A Standards Proposal for Internal Enablement
 
 ## Status
 
-Working draft for discussion with The Open Group IT4IT Forum and Digital Portfolio Work Group.
+Independent DPF working draft for possible discussion with The Open Group IT4IT™ Forum and Digital
+Portfolio Work Group. It is not an authorized Open Group white paper, submission, profile, or
+interpretation, and no affiliation, endorsement, certification, or trademark license is claimed.
+
+IT4IT™ is a trademark of The Open Group.
+
+This paper is the proposal record for the Workforce terminology. The
+[Four-Portfolio Archetype and AI Workforce Operating Standard](four-portfolio-archetype-ai-workforce-operating-standard.md)
+is the current normative DPF authority for the two-lens Workforce model, AI-coworker
+DigitalProduct/Performer semantics, work allocation, and conformance.
+
+External-standard statements in this proposal are discussion questions, not verified equivalence or
+conformance claims. Mark Bodman's IT4IT Reference Architecture contribution provenance,
+retained-rights assertion, and separate DPPM design direction are recorded by
+`CA-MB-2026-08-01-IT4IT-PROVENANCE` and the bounded operator-source records; the FPAW authority
+applies source- and use-specific decisions so his
+direct contribution-origin concepts remain admissible without treating the restricted compiled
+publications as AI inputs. Precise published equivalence and external conformance still require an
+authorized edition and qualified human review.
 
 ## Executive Summary
 
-The current Digital Product Portfolio Management (DPPM) model is built around four portfolio types: Provided Externally, Provided Internally, Foundational, and Manufacture and Delivery. In DPF, the Provided Internally concept has historically appeared as `For Employees`, with the stable platform slug `for_employees`.
+DPF's operator-directed portfolio model uses four roles historically described as Provided Externally, Provided Internally, Foundational, and Manufacture and Delivery. In DPF, the internal role has historically appeared as `For Employees`, with the current platform key `forEmployees` and the FPAW target exchange key `for_employees`.
 
 This paper proposes that standards-facing language evolve from `For Employees` to **Workforce**. The change is intentionally small in structure and significant in meaning: it preserves the four-portfolio model while recognizing that modern work is performed by a mixed set of accountable actors, including employees, contractors, AI coworkers, robots, non-human identities, managed-service roles, and future actor classes not yet common.
 
@@ -14,7 +32,12 @@ The proposed label is:
 
 > **Workforce Portfolio (Provided Internally)**
 
-The objective is not to replace the DPPM portfolio shape. It is to make the internal portfolio fit the operating reality that IT4IT and DPPM increasingly need to govern: digital products are consumed by people, AI coworkers, autonomous systems, service accounts, robotic systems, and blended human/non-human teams. Portfolio management should be able to account for all of them without treating non-employee actors as exceptions.
+The objective is to propose the operator-contributed DPF shape for reconciliation with the DPPM guide,
+not to assert that the guide already contains these exact roles or meanings. The proposal addresses an
+operating reality relevant to digital-product management: digital products are consumed by people, AI
+coworkers, autonomous systems, service accounts, robotic systems, and blended human/non-human teams.
+Portfolio management should be able to account for all of them without treating non-employee actors
+as exceptions.
 
 ## Why This Matters Now
 
@@ -42,16 +65,19 @@ In a product-managed digital enterprise, these actors create the same portfolio 
 
 ## The Four-Portfolio Model With Workforce
 
-The proposal keeps the DPPM four-portfolio model intact.
+The proposal keeps DPF's operator-contributed four-role structure intact. Exact equivalence to a
+published DPPM model remains an external review question.
 
-| Current DPPM portfolio role | Proposed standards-facing label | Purpose |
+| Operator-contributed DPF role | Proposed standards-facing label | Purpose |
 | --- | --- | --- |
-| Provided Externally | Goods and Services for Sale | Goods and services provided to customers, citizens, partners, or other external consumers. This is DPF's user-facing label for the source model's “Products and Services Sold” portfolio. |
+| Provided Externally | Goods and Services for Sale | Goods and services provided to customers, citizens, partners, or other external consumers. This is DPF's user-facing label for its externally provided portfolio role. |
 | Provided Internally / For Employees | Workforce | Internal digital products and workforce actor support capabilities used by employees, contractors, AI coworkers, robots, non-human identities, and other accountable work actors. |
-| Foundational | Foundational | Reusable technology building blocks, platforms, data, infrastructure, security, and shared services that enable the other portfolios. |
-| Manufacture and Delivery | Manufacture and Delivery | The digital factory products and capabilities used to build, deploy, release, operate, and support digital products. |
+| Foundational | Foundational | Reusable digital and non-digital foundations—platforms, data, infrastructure, facilities, shared equipment, security, and shared services—that enable the other portfolios. |
+| Manufacture and Delivery | Manufacturing and Delivery | The dedicated factory, field, fulfilment, production, service-delivery, release, and logistics aspects used to make and deliver the organization's goods, services, hybrids, and DigitalProducts. |
 
 The Workforce change is not a fifth portfolio. It is a terminology correction and scope clarification for the internal portfolio.
+
+`Manufacture and Delivery` remains the historical operator-contributed source wording; **Manufacturing and Delivery** is the current FPAW standards-facing label.
 
 ## What Changes Conceptually
 
@@ -67,12 +93,15 @@ That shift matters because AI coworkers and robotic systems are not merely tools
 
 The Provided Internally portfolio has traditionally focused on internal consumption: the tools and services internal users consume.
 
-The Workforce portfolio adds a second lens:
+The Workforce profile adds a second, linked lens:
 
 - **Consumption lens:** internal products the workforce uses, such as HR, ITSM, finance, collaboration, knowledge, identity, access, and productivity products.
 - **Contribution lens:** the workforce actors themselves, including their role, authority, capacity, tools, approvals, and unmet needs.
 
-Both lenses are necessary. A missing internal tool and an unfilled workforce capability are both internal operating-model gaps.
+Both lenses are necessary and remain distinguishable. Portfolio placement describes the internal
+product/support aspect; the contribution lens describes performers and work capacity. A missing
+internal tool and an unfilled workforce capability are both internal operating-model gaps, but an
+actor is not turned into an application record merely by appearing in the same portfolio view.
 
 ### From employee count to workforce capacity
 
@@ -91,23 +120,30 @@ The portfolio should therefore track the relationship between:
 
 ### Recommended standard wording
 
-Use **Workforce Portfolio (Provided Internally)** as the standards-facing label.
+Use **Workforce Portfolio (Provided Internally)** as the DPF standards-facing label and propose it to
+the relevant external work group for reconciliation.
 
 Use **For Employees** only as a legacy alias during transition.
 
 ### Proposed glossary entry
 
-**Workforce Portfolio:** The DPPM portfolio containing internally provided digital products, workforce actor support capabilities, and governance surfaces that enable accountable work actors to perform enterprise work. Workforce actors may include employees, contractors, AI coworkers, robotic systems, non-human identities, partner roles, and other approved human or non-human actors operating under enterprise authority.
+**Workforce Portfolio (DPF proposal):** A portfolio view containing internally provided digital
+products, workforce-actor support capabilities, and governance surfaces that enable accountable work
+actors to perform enterprise work. Workforce actors may include employees, contractors, AI coworkers,
+robotic systems, non-human identities, partner roles, and other approved human or non-human actors
+operating under enterprise authority.
 
 ### Proposed note for standards text
 
 The Workforce Portfolio extends the traditional employee-facing interpretation of Provided Internally. It includes internal digital products consumed by workforce actors and the support capabilities required to govern, equip, supervise, and improve those actors.
 
-## Implications for IT4IT and DPPM
+## Potential Implications for External Standards
 
 ### Portfolio taxonomy
 
-The portfolio taxonomy should continue to classify internal digital products, but examples should be updated so the internal portfolio does not imply employee-only scope.
+A receiving work group could continue to classify internal digital products while updating examples
+so the internal portfolio does not imply employee-only scope. This is a proposal, not a statement of
+current DPPM guide semantics.
 
 Examples that belong under Workforce include:
 
@@ -122,7 +158,10 @@ Examples that belong under Workforce include:
 
 ### Value-stream line of sight
 
-Workforce actors participate across IT4IT value streams. They help evaluate demand, explore options, integrate solutions, deploy changes, release value, operate products, and support consumption. Treating AI coworkers and non-human actors as workforce members lets the model express who or what is doing the work at each stage.
+DPF maps workforce actors to the lifecycle stream keys in its own EA registry. They can help evaluate
+demand, explore options, integrate solutions, deploy changes, release value, operate products, and
+support consumption. A receiving IT4IT Reference Architecture work group could decide how performer
+semantics should relate to its authoritative lifecycle model; this draft does not decide that mapping.
 
 ### Governance and accountability
 
@@ -155,10 +194,11 @@ The Workforce portfolio gives financial managers a more complete view of interna
 
 DPF now treats this as a platform terminology and architecture direction:
 
-- The canonical portfolio slug remains `for_employees` for compatibility.
+- The current runtime/persisted key remains `forEmployees`; the FPAW target exchange key is
+  `for_employees` until adapter convergence is implemented.
 - The operator-facing portfolio label is **Workforce**.
-- `For Employees` is retained as a legacy alias and standards cross-reference.
-- AI coworkers are associated structurally to the Workforce portfolio through Digital Product, taxonomy, coworker capability need, and epic fallback paths.
+- `For Employees` is retained as a legacy display alias and discussion cross-reference.
+- A managed AI coworker has linked DigitalProduct and Performer aspects. The current Agent-to-DigitalProduct projection establishes a candidate lifecycle association. The original FPAW managed-product qualification additionally requires verified product, offer, economic treatment, terms, and instance readiness; only an `operated` state requires a managed instance. This is not an IT4IT Reference Architecture conformance claim.
 - The AI Workforce surface is treated as an internal Workforce digital product, not a detached platform administration page.
 - Tax remittance and other internal operating surfaces remain under Workforce when they are internal capabilities used by the business to perform work.
 
@@ -183,19 +223,24 @@ This avoids breaking existing data while moving the human-facing model forward.
 
 ## Recommendation
 
-Adopt **Workforce Portfolio (Provided Internally)** as the next standards-facing label for the internal DPPM portfolio. Preserve the existing four-portfolio model and use the change to clarify that the internal portfolio now covers both:
+Adopt **Workforce Portfolio (Provided Internally)** within DPF as the standards-facing label for its
+operator-contributed internal role. Propose the concept to the relevant external work group, where an
+authorized-edition review can determine whether and how it reconciles with DPPM. Preserve DPF's
+four-role structure and clarify that its internal view covers both:
 
 - the internal digital products consumed by the workforce
 - the accountable human and non-human actors that perform enterprise work
 
-This is a small terminology change with a large architectural benefit. It lets IT4IT and DPPM recognize the parity between employees and AI coworkers without creating a new portfolio type or destabilizing existing implementations.
+This is a small DPF terminology change with a large architectural benefit. If accepted through the
+applicable standards process, it could help external digital-product guidance recognize the parity
+between employees and AI coworkers without creating a new portfolio type.
 
 ## References
 
-- The Open Group, [IT4IT](https://www.opengroup.org/it4it)
+- The Open Group, [IT4IT Reference Architecture](https://www.opengroup.org/it4it)
 - The Open Group, [IT4IT Standard Version 3.0 licensed downloads](https://www.opengroup.org/IT4IT/downloads)
 - The Open Group, [Digital Portfolio Work Group](https://www.opengroup.org/forum/digital-practitioners-work-group)
 - The Open Group, [Digital Portfolio of Open Standards](https://www.opengroup.org/digitalportfolio)
-- The Open Group Guide, `Digital Product Portfolio Management in the Digital Enterprise`, Document Number `G252`, March 2025, local reference: [`docs/Reference/digital_product_portfolio_mgmt.txt`](../Reference/digital_product_portfolio_mgmt.txt)
+- The Open Group Guide G252, [public product page](https://publications.opengroup.org/g252); this is bibliographic design lineage only, while Mark Bodman's direct statements and IT4IT involvement are separately recorded under the FPAW source-use policy
 - DPF, [`Business Operating Model - Portfolio Wiring Design`](../superpowers/specs/2026-06-07-business-operating-model-portfolio-wiring-design.md)
 - DPF, [`IT4IT` entity reference](../founder-kernel/wiki/entities/it4it.md)
