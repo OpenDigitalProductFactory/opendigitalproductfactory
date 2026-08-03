@@ -63,7 +63,7 @@ describe("Skill Telemetry (BI-901A567C)", () => {
       chatHistory: [],
       systemPrompt: "",
       sensitivity: "internal",
-      tools: [{ name: "test_tool", description: "", inputSchema: {}, requiredCapability: null, allEndpoints: true, allModels: true }],
+      tools: [{ name: "test_tool", description: "", inputSchema: {}, requiredCapability: null }],
       toolsForProvider: [],
       userId: "u1",
       routeContext: "/test",
