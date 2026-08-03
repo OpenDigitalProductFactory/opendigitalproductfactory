@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 617,
+  "pageCount": 618,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1164,6 +1164,32 @@
         "31-restraint-thresholds",
         "32-specific-over-engineering-reflexes-to-skip",
         "how-this-doc-evolves"
+      ]
+    },
+    "docs/architecture/edge-adapter-to-native-convergence.md": {
+      "publicHref": "/architecture/edge-adapter-to-native-convergence/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "edge-adapter-to-native-convergence-doctrine",
+        "purpose",
+        "thesis-one-sentence",
+        "non-goals",
+        "decision-modes",
+        "choose-integrate-when",
+        "choose-native-absorb-when",
+        "choose-coexist-when",
+        "choose-defer-when",
+        "graduation-criteria-adapter-native",
+        "anti-patterns-fail-review",
+        "pr-spec-checklist",
+        "worked-examples",
+        "good-quickbooks-bridge-then-native-gl-slice",
+        "good-stripe-stays-integrate",
+        "bad-native-workday",
+        "related",
+        "change-control"
       ]
     },
     "docs/architecture/enforced-ci-gates.md": {
