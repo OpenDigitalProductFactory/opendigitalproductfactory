@@ -112,4 +112,11 @@ describe("CORE_MCP_TOOL_NAMES drift guard", () => {
       ]),
     );
   });
+
+  it("keeps WWMD kernel tools discoverable for Grok/Codex (no client ToolSearch)", () => {
+    // Peer CLIs default to core; AGENTS.md requires principle_decide before
+    // multi-option platform menus. Discovery-only gap was blocking Grok WWMD.
+    expect(CORE_MCP_TOOL_NAMES.has("principle_decide")).toBe(true);
+    expect(CORE_MCP_TOOL_NAMES.has("wiki_query")).toBe(true);
+  });
 });
