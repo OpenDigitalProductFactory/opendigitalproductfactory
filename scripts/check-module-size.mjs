@@ -23,7 +23,7 @@
 //   node scripts/check-module-size.mjs --update   # regenerate the baseline
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join, relative } from "node:path";
 import {
   MODULE_SIZE_HARD_CAP as HARD_CAP,
@@ -35,13 +35,9 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 // Line-oriented `<path>\t<loc>` baseline, merged with git's built-in
 // `merge=union` driver (.gitattributes) so concurrent PRs that each re-baseline
 // never conflict (BI-3B0AD9CF). A union merge can leave duplicate paths; the
-// parser resolves a duplicate to the LARGEST recorded LOC (never falsely red
-// after a merge — the next --update rewrites sorted + deduped and retightens).
+// check fails closed on those duplicates (BI-EEB04701) so contributors re-run
+// `--update` rather than living with an ambiguous threshold.
 const BASELINE_PATH = join(REPO_ROOT, "scripts", "module-size-baseline.txt");
-
-// New files must stay under this; existing large files are carried in the
-// baseline and ratcheted down. Hard cap applies only to NEW files.
-const sizes = scanModuleSizesSync({ repoRoot: REPO_ROOT });
 
 function serializeBaseline(baseline) {
   const lines = Object.keys(baseline)
@@ -50,8 +46,30 @@ function serializeBaseline(baseline) {
   return `${lines.join("\n")}\n`;
 }
 
-/** Parse `<path>\t<loc>` lines; duplicates (from a union merge) resolve to max. */
-function parseBaseline(text) {
+/**
+ * Parse `<path>\t<loc>` lines.
+ * Union merges (BI-3B0AD9CF) can leave the same path on multiple lines. When
+ * that happens the file is corrupt: fail closed so contributors re-run
+ * `--update` rather than silently picking max/min (BI-EEB04701). Until then,
+ * if a consumer must resolve in memory, keep the SMALLER LOC so a stale
+ * duplicate never loosens the ratchet.
+ */
+export function findDuplicateBaselinePaths(text) {
+  const seen = new Map();
+  const dups = new Set();
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const m = line.match(/^(.+?)\s+(\d+)$/);
+    if (!m) continue;
+    const file = m[1];
+    if (seen.has(file)) dups.add(file);
+    else seen.set(file, true);
+  }
+  return [...dups].sort();
+}
+
+export function parseBaseline(text) {
   const baseline = {};
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
@@ -60,80 +78,105 @@ function parseBaseline(text) {
     if (!m) continue;
     const [, file, locStr] = m;
     const loc = Number(locStr);
-    if (!(file in baseline) || loc > baseline[file]) baseline[file] = loc;
+    if (!(file in baseline) || loc < baseline[file]) baseline[file] = loc;
   }
   return baseline;
 }
 
-if (process.argv.includes("--update")) {
-  // Snapshot every file currently OVER the soft ceiling. Files at or under the
-  // ceiling are not baselined — they are simply held to the ceiling as "new".
-  const over = Object.keys(sizes)
-    .filter((k) => sizes[k] > SOFT_CEILING)
-    .sort();
-  const baseline = Object.fromEntries(over.map((k) => [k, sizes[k]]));
-  writeFileSync(BASELINE_PATH, serializeBaseline(baseline));
-  console.log(
-    `Wrote module-size baseline: ${over.length} files over ${SOFT_CEILING} LOC (ratchet-down set).`,
-  );
-  process.exit(0);
-}
+function main() {
+  // New files must stay under this; existing large files are carried in the
+  // baseline and ratcheted down. Hard cap applies only to NEW files.
+  const sizes = scanModuleSizesSync({ repoRoot: REPO_ROOT });
 
-let baseline = {};
-try {
-  baseline = parseBaseline(readFileSync(BASELINE_PATH, "utf8"));
-} catch {
-  console.error(
-    `Missing baseline ${relative(REPO_ROOT, BASELINE_PATH)} — run: node scripts/check-module-size.mjs --update`,
-  );
-  process.exit(1);
-}
-
-const grew = []; // baselined file now larger than its recorded LOC
-const newOverSoft = []; // new file over the soft ceiling (<= hard cap)
-const newOverHard = []; // new file over the hard cap
-
-for (const [file, loc] of Object.entries(sizes)) {
-  if (file in baseline) {
-    if (loc > baseline[file]) grew.push(`${file} (${baseline[file]} -> ${loc})`);
-  } else if (loc > HARD_CAP) {
-    newOverHard.push(`${file} (${loc} LOC, hard cap ${HARD_CAP})`);
-  } else if (loc > SOFT_CEILING) {
-    newOverSoft.push(`${file} (${loc} LOC, ceiling ${SOFT_CEILING})`);
-  }
-}
-
-if (grew.length > 0 || newOverSoft.length > 0 || newOverHard.length > 0) {
-  console.error("Module-size ratchet failed (BI-OPT-RATCHETS).\n");
-  if (newOverHard.length) {
-    console.error(`New files over the ${HARD_CAP}-LOC hard cap — split before merge:`);
-    for (const f of newOverHard) console.error(`  - ${f}`);
-    console.error("");
-  }
-  if (newOverSoft.length) {
-    console.error(
-      `New files over the ${SOFT_CEILING}-LOC ceiling — keep modules focused (split, or`,
+  if (process.argv.includes("--update")) {
+    // Snapshot every file currently OVER the soft ceiling. Files at or under the
+    // ceiling are not baselined — they are simply held to the ceiling as "new".
+    const over = Object.keys(sizes)
+      .filter((k) => sizes[k] > SOFT_CEILING)
+      .sort();
+    const baseline = Object.fromEntries(over.map((k) => [k, sizes[k]]));
+    writeFileSync(BASELINE_PATH, serializeBaseline(baseline));
+    console.log(
+      `Wrote module-size baseline: ${over.length} files over ${SOFT_CEILING} LOC (ratchet-down set).`,
     );
-    console.error("extract a submodule):");
-    for (const f of newOverSoft) console.error(`  - ${f}`);
-    console.error("");
+    process.exit(0);
   }
-  if (grew.length) {
-    console.error("Baselined files that GREW — the baseline only allows shrinking:");
-    for (const f of grew) console.error(`  - ${f}`);
-    console.error("");
-    console.error("Reduce the file, or if the growth is unavoidable and intentional, justify it");
-    console.error("and run `node scripts/check-module-size.mjs --update` to re-baseline.");
-    console.error("");
+
+  let baseline = {};
+  let baselineText = "";
+  try {
+    baselineText = readFileSync(BASELINE_PATH, "utf8");
+    baseline = parseBaseline(baselineText);
+  } catch {
+    console.error(
+      `Missing baseline ${relative(REPO_ROOT, BASELINE_PATH)} — run: node scripts/check-module-size.mjs --update`,
+    );
+    process.exit(1);
   }
-  console.error(
-    "If you intentionally SHRANK a baselined file, run --update to retighten the baseline.",
+
+  const duplicatePaths = findDuplicateBaselinePaths(baselineText);
+  if (duplicatePaths.length > 0) {
+    console.error(
+      "Module-size baseline has duplicate paths (union-merge artifact, BI-EEB04701).\n" +
+        "The on-disk baseline must have one line per path. Re-run:\n" +
+        "  node scripts/check-module-size.mjs --update\n" +
+        "Duplicates:",
+    );
+    for (const p of duplicatePaths) console.error(`  - ${p}`);
+    process.exit(1);
+  }
+
+  const grew = []; // baselined file now larger than its recorded LOC
+  const newOverSoft = []; // new file over the soft ceiling (<= hard cap)
+  const newOverHard = []; // new file over the hard cap
+
+  for (const [file, loc] of Object.entries(sizes)) {
+    if (file in baseline) {
+      if (loc > baseline[file]) grew.push(`${file} (${baseline[file]} -> ${loc})`);
+    } else if (loc > HARD_CAP) {
+      newOverHard.push(`${file} (${loc} LOC, hard cap ${HARD_CAP})`);
+    } else if (loc > SOFT_CEILING) {
+      newOverSoft.push(`${file} (${loc} LOC, ceiling ${SOFT_CEILING})`);
+    }
+  }
+
+  if (grew.length > 0 || newOverSoft.length > 0 || newOverHard.length > 0) {
+    console.error("Module-size ratchet failed (BI-OPT-RATCHETS).\n");
+    if (newOverHard.length) {
+      console.error(`New files over the ${HARD_CAP}-LOC hard cap — split before merge:`);
+      for (const f of newOverHard) console.error(`  - ${f}`);
+      console.error("");
+    }
+    if (newOverSoft.length) {
+      console.error(
+        `New files over the ${SOFT_CEILING}-LOC ceiling — keep modules focused (split, or`,
+      );
+      console.error("extract a submodule):");
+      for (const f of newOverSoft) console.error(`  - ${f}`);
+      console.error("");
+    }
+    if (grew.length) {
+      console.error("Baselined files that GREW — the baseline only allows shrinking:");
+      for (const f of grew) console.error(`  - ${f}`);
+      console.error("");
+      console.error("Reduce the file, or if the growth is unavoidable and intentional, justify it");
+      console.error("and run `node scripts/check-module-size.mjs --update` to re-baseline.");
+      console.error("");
+    }
+    console.error(
+      "If you intentionally SHRANK a baselined file, run --update to retighten the baseline.",
+    );
+    process.exit(1);
+  }
+
+  const baselinedTotal = Object.keys(baseline).length;
+  console.log(
+    `Module-size OK — no new oversized files, no baselined file grew. ` +
+      `Baseline: ${baselinedTotal} files over ${SOFT_CEILING} LOC (ratchet down as refactored).`,
   );
-  process.exit(1);
 }
 
-const baselinedTotal = Object.keys(baseline).length;
-console.log(
-  `Module-size OK — no new oversized files, no baselined file grew. ` +
-    `Baseline: ${baselinedTotal} files over ${SOFT_CEILING} LOC (ratchet down as refactored).`,
-);
+// Run main() only when invoked directly, not when imported by the test.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}
