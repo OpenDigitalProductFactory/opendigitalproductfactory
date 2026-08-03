@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 618,
+  "pageCount": 619,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1199,6 +1199,29 @@
       "publishedPortal": false,
       "anchors": [
         "enforced-ci-gates-trigger-trailer-mechanics"
+      ]
+    },
+    "docs/architecture/external-planning-reference-boundary.md": {
+      "publicHref": "/architecture/external-planning-reference-boundary/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "external-planning-reference-boundary",
+        "purpose",
+        "non-goals",
+        "three-layers-single-vocabulary",
+        "allowed-citation-shapes",
+        "allowed-in-committed-docs",
+        "forbidden-in-committed-public-docs",
+        "how-backlog-and-epics-attach-evidence",
+        "it4it-bian-license-boundary-planning",
+        "competitor-research-packs",
+        "operator-checklist-before-a-pr-that-documents-research",
+        "worked-example-good",
+        "worked-example-bad",
+        "related-backlog",
+        "change-control"
       ]
     },
     "docs/architecture/field-service-work-item.md": {
