@@ -3149,7 +3149,7 @@
       "tier": "specialist",
       "value_stream": "cross-cutting",
       "role": "operator",
-      "capability_domain": "AI Ops Engineer. AI layer as a network of providers, models, costs, capabilities. Cost optimization, capability matching, failover design, profiling, workforce planning. Manages provider/model assignments and routing. Also owns host resource health (disk, filesystem free-space floors, Docker/container sprawl signals, and critical host alerts) — charter mandate so firing host alerts are owned, not orphaned (BI-1C88254D).",
+      "capability_domain": "AI Ops Engineer: providers, models, costs, capability matching, failover, routing, workforce planning. Owns host resource health — disk free-space floors, Docker/container sprawl, and critical host alerts (BI-1C88254D).",
       "human_supervisor_id": "HR-500",
       "hitl_tier_default": 1,
       "delegates_to": [],
