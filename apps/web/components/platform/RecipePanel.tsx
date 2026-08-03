@@ -3,24 +3,73 @@
 
 import { useState } from "react";
 import type { RecipeGridRow } from "@/lib/ai-provider-types";
+import { DataTable, type Column } from "@/components/ui/report-kit/DataTable";
 
 const STATUS_COLORS: Record<string, string> = {
-  champion:   "var(--dpf-success)",
+  champion: "var(--dpf-success)",
   challenger: "var(--dpf-warning)",
-  retired:    "var(--dpf-muted)",
+  retired: "var(--dpf-muted)",
 };
 
 const ADAPTER_LABELS: Record<string, string> = {
-  chat:          "Chat",
-  embedding:     "Embedding",
-  image_gen:     "Image Gen",
+  chat: "Chat",
+  embedding: "Embedding",
+  image_gen: "Image Gen",
   transcription: "Transcription",
-  async:         "Async",
+  async: "Async",
 };
 
 type Props = {
   recipes: RecipeGridRow[];
 };
+
+const columns: Column<RecipeGridRow>[] = [
+  {
+    key: "family",
+    header: "Contract Family",
+    mono: true,
+    cell: (r) => r.contractFamily,
+  },
+  {
+    key: "model",
+    header: "Model",
+    cell: (r) => r.modelId,
+  },
+  {
+    key: "adapter",
+    header: "Adapter",
+    cell: (r) => ADAPTER_LABELS[r.executionAdapter] ?? r.executionAdapter,
+  },
+  {
+    key: "status",
+    header: "Status",
+    cell: (r) => (
+      <span
+        style={{
+          fontSize: 9,
+          fontWeight: 700,
+          color: STATUS_COLORS[r.status] ?? "var(--dpf-muted)",
+          background: `color-mix(in srgb, ${STATUS_COLORS[r.status] ?? "var(--dpf-muted)"} 9%, transparent)`,
+          padding: "1px 5px",
+          borderRadius: 3,
+        }}
+      >
+        {r.status}
+      </span>
+    ),
+  },
+  {
+    key: "version",
+    header: "Ver",
+    align: "center",
+    cell: (r) => `v${r.version}`,
+  },
+  {
+    key: "origin",
+    header: "Origin",
+    cell: (r) => r.origin,
+  },
+];
 
 export function RecipePanel({ recipes }: Props) {
   const [expanded, setExpanded] = useState(false);
@@ -45,7 +94,9 @@ export function RecipePanel({ recipes }: Props) {
         role="button"
         tabIndex={0}
         onClick={() => setExpanded((v) => !v)}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") setExpanded((v) => !v); }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") setExpanded((v) => !v);
+        }}
         style={{
           display: "flex",
           alignItems: "center",
@@ -69,75 +120,14 @@ export function RecipePanel({ recipes }: Props) {
         </span>
       </div>
 
-      {/* Table */}
       {expanded && (
-        <div style={{ borderTop: "1px solid var(--dpf-border)", overflowX: "auto" }}>
-          <table
-            style={{
-              width: "100%",
-              borderCollapse: "collapse",
-              fontSize: 11,
-            }}
-          >
-            <thead>
-              <tr style={{ borderBottom: "1px solid var(--dpf-border)" }}>
-                {["Contract Family", "Model", "Adapter", "Status", "Ver", "Origin"].map((h) => (
-                  <th
-                    key={h}
-                    style={{
-                      padding: "6px 10px",
-                      textAlign: "left",
-                      color: "var(--dpf-muted)",
-                      fontSize: 9,
-                      fontWeight: 600,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.05em",
-                    }}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {recipes.map((r) => (
-                <tr
-                  key={r.id}
-                  style={{ borderBottom: "1px solid var(--dpf-border)" }}
-                >
-                  <td style={{ padding: "6px 10px", color: "var(--dpf-text)", fontFamily: "monospace" }}>
-                    {r.contractFamily}
-                  </td>
-                  <td style={{ padding: "6px 10px", color: "var(--dpf-muted)" }}>
-                    {r.modelId}
-                  </td>
-                  <td style={{ padding: "6px 10px", color: "var(--dpf-muted)" }}>
-                    {ADAPTER_LABELS[r.executionAdapter] ?? r.executionAdapter}
-                  </td>
-                  <td style={{ padding: "6px 10px" }}>
-                    <span
-                      style={{
-                        fontSize: 9,
-                        fontWeight: 700,
-                        color: STATUS_COLORS[r.status] ?? "var(--dpf-muted)",
-                        background: `color-mix(in srgb, ${STATUS_COLORS[r.status] ?? "var(--dpf-muted)"} 9%, transparent)`,
-                        padding: "1px 5px",
-                        borderRadius: 3,
-                      }}
-                    >
-                      {r.status}
-                    </span>
-                  </td>
-                  <td style={{ padding: "6px 10px", color: "var(--dpf-muted)", textAlign: "center" }}>
-                    v{r.version}
-                  </td>
-                  <td style={{ padding: "6px 10px", color: "var(--dpf-muted)" }}>
-                    {r.origin}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div style={{ borderTop: "1px solid var(--dpf-border)" }}>
+          <DataTable
+            columns={columns}
+            dense
+            getRowKey={(r) => r.id}
+            rows={recipes}
+          />
         </div>
       )}
     </div>

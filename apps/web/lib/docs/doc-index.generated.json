@@ -909,6 +909,29 @@
         "safe-operating-rules"
       ]
     },
+    "docs/architecture/complexity-shield-acceptance-standard.md": {
+      "publicHref": "/architecture/complexity-shield-acceptance-standard/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "small-company-complexity-shield-acceptance-standard",
+        "purpose",
+        "thesis-one-sentence",
+        "non-goals",
+        "who-must-apply-it",
+        "acceptance-checklist-every-parity-feature",
+        "1-operator-job-not-suite-module",
+        "2-simplified-operator-facing-workflow",
+        "3-what-ai-coworkers-absorb",
+        "4-what-enterprise-complexity-is-hidden-automated-or-omitted",
+        "5-proof-without-enterprise-burden",
+        "worked-micro-examples",
+        "required-pr-spec-section-template",
+        "cross-references-apply-do-not-re-litigate",
+        "change-control"
+      ]
+    },
     "docs/architecture/context-engineering-standards.md": {
       "publicHref": "/architecture/context-engineering-standards/",
       "portalHref": null,
@@ -931,6 +954,7 @@
       "publishedPortal": false,
       "anchors": [
         "contributor-procedure-runbook",
+        "new-page-routes-regenerate-companions-bi-206dab95",
         "3-strongly-typed-string-enums-mandatory",
         "13-login-local-qa",
         "9-external-tools",
