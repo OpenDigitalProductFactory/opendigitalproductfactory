@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "policyVersion": "2026-07-27.1",
+  "policyVersion": "2026-08-01.1",
   "plannerVersion": "1.0.0-shadow",
   "mode": "shadow",
   "selectionThresholdPercent": 70,
@@ -44,6 +44,10 @@
     ],
     "mobileOnly": [
       "^apps/mobile/"
+    ],
+    "workspaceRequiredDocs": [
+      "^docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard\\.md$",
+      "^docs/architecture/four-portfolio-archetype-standard-profile-catalog\\.md$"
     ]
   },
   "packageRoots": {

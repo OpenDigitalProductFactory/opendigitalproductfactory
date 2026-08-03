@@ -202,7 +202,7 @@ export function extractGroups(manifest, repoRoot) {
 /**
  * Contingency markers in an always-on doc, by kind.
  *
- * TWO KINDS, TWO CLOCKS — this is the whole point of keeping them separate:
+ * THREE KINDS, THREE CLOCKS — this is the whole point of keeping them separate:
  *   ⟦runtime: …⟧  drifts with the ENVIRONMENT (version pins, host literals, install
  *                 shape, in-flight states). Re-verify against the install. BI-ACC7A2B5.
  *   ⟦model:   …⟧  drifts with MODEL RELEASES. A rule written to compensate for a model's
@@ -212,17 +212,22 @@ export function extractGroups(manifest, repoRoot) {
  *                 should be deleted. Nothing else in this repo tracks that clock, so a
  *                 rule tuned for one model silently becomes wrong prose in the always-on
  *                 plane. Re-verify on model upgrade. BI-0020D511 §12d.
+ *   ⟦situational: …⟧ drifts with CIRCUMSTANCE — business phase, customer mix, team size, a
+ *                 regulatory moment. The generalisation of the other two: a rule that reads
+ *                 as absolute but was a response to conditions. Carries its own review
+ *                 trigger because no external clock ticks for it.
  *
  * A marker that is never grepped is worthless, so `malformed` (an opener with no `⟧`)
  * is reported as a HARD error by the caller rather than being silently skipped.
  *
- * @returns {{ runtime: number, model: number, malformed: Array<{ kind: string, line: number }> }}
+ * @returns {{ runtime: number, model: number, situational: number,
+ *             malformed: Array<{ kind: string, line: number }> }}
  */
 export function assumptionMarkers(text) {
-  const counts = { runtime: 0, model: 0, malformed: [] };
+  const counts = { runtime: 0, model: 0, situational: 0, malformed: [] };
   const lines = text.split(/\r?\n/);
   for (let i = 0; i < lines.length; i += 1) {
-    const opener = /⟦(runtime|model):/g;
+    const opener = /⟦(runtime|model|situational):/g;
     let m;
     while ((m = opener.exec(lines[i])) !== null) {
       // Markers are single-line by construction; a missing close means a broken grep.
@@ -311,13 +316,14 @@ export function evaluate({ manifest, fileTexts, baseline, strict, extracted = []
   }
 
   // 1c. Contingency markers — a malformed one breaks the grep the convention rests on.
-  const markers = { runtime: 0, model: 0 };
+  const markers = { runtime: 0, model: 0, situational: 0 };
   for (const file of alwaysOn) {
     const text = fileTexts[file];
     if (text == null) continue;
     const found = assumptionMarkers(text);
     markers.runtime += found.runtime;
     markers.model += found.model;
+    markers.situational += found.situational;
     for (const bad of found.malformed) {
       errors.push(
         `${file}:${bad.line} has an unterminated ⟦${bad.kind}:⟧ marker — the convention is only ` +
@@ -449,7 +455,7 @@ function main() {
   console.log(
     `Instruction-plane OK — ${currentTotal} bytes across ${manifest.alwaysOn.length} always-on files${extractedNote} ` +
       `(baseline ${baselineTotal}; ~${approxTokens} tokens advisory).` +
-      ` Contingency markers: ${markers.runtime} ⟦runtime⟧ / ${markers.model} ⟦model⟧.` +
+      ` Contingency markers: ${markers.runtime} ⟦runtime⟧ / ${markers.model} ⟦model⟧ / ${markers.situational} ⟦situational⟧.` +
       (warnings.length ? ` ${warnings.length} advisory structural note(s).` : ""),
   );
 }

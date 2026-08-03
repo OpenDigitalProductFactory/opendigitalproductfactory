@@ -1,5 +1,13 @@
 # Archetype Capability Applicability And MSP Segmentation Implementation Plan
 
+> **Authority notice (2026-08-01):** This completed historical plan preserves delivery
+> lineage; it does not grant the referenced V3 workbook normative or AI-evidence status.
+> That artifact is `undetermined` under
+> `SUD-PORTFOLIO-WORKBOOK-V3-2026-08-01`. Use current code and live data for observed
+> state and the
+> [Four-Portfolio Archetype and AI Workforce Operating Standard](../../architecture/four-portfolio-archetype-ai-workforce-operating-standard.md)
+> for target semantics and source-use controls.
+
 > **For agentic workers:** REQUIRED: Use `superpowers:subagent-driven-development` if subagents are explicitly authorized, otherwise use `superpowers:executing-plans`. Track every checkbox as work proceeds. For TypeScript work, run `pnpm --filter web typecheck` before committing and fix any errors. For UI work, follow AGENTS.md theme-aware styling rules: use DPF CSS variables, no hardcoded colors, and verify the affected route in the running app.
 
 **Goal:** Turn archetypes into typed operating-model activators so the MSP archetype can require customer estate segmentation, Edge Node customer deployment, service agreements, and billing readiness without forcing those workflows onto archetypes such as salons that primarily use appointment checkout or point-of-sale payment.
@@ -10,7 +18,11 @@
 
 **Refactoring allocation:** Reserve at least 20 percent of implementation time for shared contract cleanup and compatibility helpers. Do not implement MSP behavior as one-off `archetypeId === "it-managed-services"` checks in UI or server actions. Do not introduce a `profileType` string discriminator or a `version: N` field — the presence of `axes`/`portfolios` is the discriminator between legacy and new shape.
 
-**Reference vocabularies:** Axis value enums (`form`, `delivery`, `primaryConsumer`, `consumptionChannel`, `commercialModel`, `provisioning`, `platform`) are sourced from `docs/Reference/4_portfolio_Reworked_V3_Definitions_IT4IT.xlsx` (sheet *Products and Services Sold*, columns 8–14). Keep the platform enum a strict subset of workbook values; new values are proposed to the workbook first.
+**Reference vocabularies (current authority clarification):** Axis value enums (`form`, `delivery`,
+`primaryConsumer`, `consumptionChannel`, `commercialModel`, `provisioning`, `platform`) are now owned
+by `packages/storefront-templates/src/types.ts`. The V3 workbook records historical lineage only and
+is non-admissible while its SourceUseDecision is `undetermined`; new closed values follow the
+governed typed-enum migration process, not a workbook-first update.
 
 **Tech Stack:** Next.js App Router, TypeScript, Prisma 7, PostgreSQL, pnpm workspaces, vitest.
 
@@ -82,7 +94,7 @@
 **Files:**
 - `packages/storefront-templates/src/types.ts`
 
-- [x] Add `OperatingModelAxes` interface with: `form`, `delivery`, `primaryConsumer`, `consumptionChannel`, `commercialModel`, `provisioning`, `platform`. Each as a string-union enum sourced from the reference workbook (see plan header).
+- [x] Add `OperatingModelAxes` interface with: `form`, `delivery`, `primaryConsumer`, `consumptionChannel`, `commercialModel`, `provisioning`, `platform`. Each is a code-owned string-union enum; the historical workbook lineage is not current authority.
 - [x] Add `PortfolioRole = "foundational" | "manufactureAndDeliver" | "forEmployees" | "productsAndServicesSold"` and `PortfolioScope = "absent" | "minimal" | "standard" | "primary"`.
 - [x] Add `PortfolioDecomposition` interface keyed by `PortfolioRole` with `scope` and role-specific extras (e.g., `it4itStages[]` for `manufactureAndDeliver`).
 - [x] Add `CapabilityApplicability = "required" | "recommended" | "optional" | "hidden" | "not-applicable"`.

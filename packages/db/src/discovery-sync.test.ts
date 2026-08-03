@@ -235,8 +235,24 @@ describe("persistBootstrapDiscoveryRun", () => {
         "catalog_match_ambiguous",
       ]),
     );
-    expect(qualityIssues.find((issue) => issue.issueKey === "inventory_entity:host:hostname:dpf-dev:lifecycle_unverified")).toMatchObject({
-      taxonomyNode: { connect: { nodeId: "foundational/compute/servers" } },
+    // Retargeted from `host:hostname:dpf-dev`, which no longer raises either
+    // issue and SHOULD NOT: this fixture gives it postgres software evidence, so
+    // enrichment identifies it as PostgreSQL 16.3 and sets supportStatus
+    // "supported" on the persisted row. The quality evaluator used to score the
+    // raw evidence snapshot instead of the enriched values, so it raised "still
+    // needs support lifecycle verification" against an entity it had just
+    // identified — precisely the false nagging inventory-enrichment.ts exists to
+    // stop ("if we know who made it, we know enough to stop nagging the
+    // operator"). This assertion had codified that blindness; the taxonomyNode
+    // linkage it actually guards is checked here on an issue that still warrants
+    // raising.
+    expect(
+      qualityIssues.find(
+        (issue) =>
+          issue.issueKey === "inventory_entity:runtime:socket:/var/run/docker.sock:lifecycle_unverified",
+      ),
+    ).toMatchObject({
+      taxonomyNode: { connect: { nodeId: "foundational/platform_services/container_platform" } },
     });
   });
 

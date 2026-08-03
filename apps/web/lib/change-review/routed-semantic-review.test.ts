@@ -24,7 +24,7 @@ describe("routed semantic review", () => {
     expect(result.decision).toBe("pass");
   });
 
-  it("fails closed when any required review branch does not complete", async () => {
+  it("classifies an incomplete required branch as infrastructure-inconclusive", async () => {
     vi.mocked(routeAndCall)
       .mockResolvedValueOnce({
         content: JSON.stringify({ decision: "pass", issues: [], summary: "Pass." }),
@@ -38,8 +38,8 @@ describe("routed semantic review", () => {
       surface: "build-studio",
     });
 
-    expect(result.decision).toBe("fail");
-    expect(result.parseError).toBe(true);
-    expect(result.issues).toContainEqual(expect.objectContaining({ severity: "critical" }));
+    expect(result.decision).toBe("inconclusive");
+    expect(result.inconclusiveReason).toContain("review-branch-capacity-or-transport-failure");
+    expect(result.issues).toEqual([]);
   });
 });

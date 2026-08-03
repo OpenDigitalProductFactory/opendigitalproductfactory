@@ -105,7 +105,16 @@ export type CapacityAttentionKind =
   | "provider-overlap"
   | "late-demand"
   | "no-show-risk"
-  | "group-incomplete";
+  | "group-incomplete"
+  | "overdue-return"
+  | "return-inspection"
+  | "maintenance-hold"
+  | "verification-gap"
+  | "kit-incomplete"
+  | "repool-not-ready"
+  | "occupancy-opportunity"
+  | "waitlist-demand"
+  | "access-not-ready";
 
 export interface CapacityAttentionSignal {
   signalId: string;

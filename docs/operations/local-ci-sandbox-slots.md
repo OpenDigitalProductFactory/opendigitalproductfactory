@@ -144,11 +144,15 @@ A lost database heartbeat and a live local process fence is an unhealthy slot,
 not evidence that the slot is free. Admission fails closed until the owner is
 terminated or the dead fence is reaped.
 
-Portal quiescence can outlast a queued claim's short heartbeat window. The gate
-re-establishes queue intent with a new idempotency key only when live responses
-prove that the prior claim was queued, portal quiescence interrupted it, and
-the resulting terminal reason is `expired`. Recovery remains inside the
-original admission deadline; other terminal claims fail closed.
+Portal quiescence can outlast a queued claim's short heartbeat window, and a
+later process can encounter terminal claim keys left by earlier attempts. The
+gate uses one deterministic `rerun-N` sequence for every terminal result
+(`released`, `cancelled`, or `expired`). It probes existing terminal attempts
+monotonically until a fresh claim is accepted, always inside the original
+admission deadline and with the same owner session. Every fresh attempt enters
+at the FIFO tail; it never inherits a terminal row's former position. Durable
+lease events record the prior and replacement claim keys, terminal reason, and
+whether portal quiescence interrupted the queued observation.
 
 Port reachability is also not resource ownership. The runner verifies the exact
 manifest-named PostgreSQL container before reuse. If the assigned port is

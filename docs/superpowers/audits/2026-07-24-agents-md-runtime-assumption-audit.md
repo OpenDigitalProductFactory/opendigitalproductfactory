@@ -27,6 +27,22 @@ Examples:
 
 The convention is greppable (`⟦runtime:`) so a future guard can assert that no `## ` doctrine section carries an *un*tagged version/host/date token — the enforcement half, deferred to the instruction-plane ratchet's `--strict` phase.
 
+### Third clock — `⟦situational:⟧` (2026-08-01)
+
+`⟦runtime:⟧` and `⟦model:⟧` are two instances of a more general fact: **a rule can be true only under conditions, and the corpus does not otherwise record them.** The generalisation is the third marker:
+
+> `⟦situational: <condition that makes this true> — review <trigger or date>⟧`
+
+It covers the contingencies the first two clocks miss — business phase, customer mix, team size, a regulatory moment, or a decision taken under circumstances that have since moved. Examples:
+
+- `⟦situational: single-maintainer repo — review when a second full-time committer joins⟧`
+- `⟦situational: pre-GA, no external installs — review at first customer install⟧`
+- `⟦situational: while the seed shim is in place — review at the next release⟧`
+
+Use it when a rule reads as absolute but was in fact a response to circumstances. The marker is not a weakening: an unmarked rule claims to hold unconditionally, and most do. The marker is how a rule that *doesn't* stops silently masquerading as one that does.
+
+All three clocks feed the same review. `commons-are-curated-not-just-appended` question 2 (lapsed contingency) is the human's pass over them; a guard can only report that a marker exists, is malformed, or names a trigger that has passed — never that a condition still holds.
+
 ## Findings — five categories
 
 ### A. Dated snapshots stated as current fact

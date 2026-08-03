@@ -112,6 +112,18 @@ instead of oscillating. The adapters initially run in shadow mode; the next
 rollout phase ratchets deterministic publication enforcement only after outcome
 telemetry demonstrates sufficient signal quality.
 
+Publication enforcement is deliberately split from inference. Review persists
+an immutable receipt before publication; `pnpm review:semantic-gate` then
+validates an exact-tree git-dir sidecar with no model, portal, database, or
+network call. Explicit exemptions are policy-versioned, evidence-linked, and
+expiry-bound.
+
+Reviewer execution status is not a semantic verdict. Capacity, admission,
+transport, or response-parsing failure produces `inconclusive` and a retry
+action; it never fabricates a critical code finding. GitHub/CI correlation is
+written to the same evidence streams as `semantic-change-review.outcome`, and
+inconclusive samples are excluded from precision and unique-yield denominators.
+
 ## Design grounding
 
 - Existing specs/plans reviewed: the shared Change Reviewer control plan and
@@ -123,8 +135,9 @@ telemetry demonstrates sufficient signal quality.
 - Source of truth: the immutable receipt identity in
   `apps/web/lib/change-review/semantic-change-review.ts` plus Work Capsule
   evidence; no new persistence substrate is introduced.
-- Decision: both authoring paths use one operation and evidence shape in shadow
-  mode first. Deterministic enforcement remains owned by the next rollout phase.
+- Decision: both authoring paths use one operation and evidence shape. A local
+  no-network adapter enforces exact-tree freshness only after cross-surface
+  outcome telemetry calibrates the policy.
 
 ## Client identity and trust
 

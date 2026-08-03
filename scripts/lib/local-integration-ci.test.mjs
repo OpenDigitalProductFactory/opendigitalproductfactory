@@ -48,7 +48,7 @@ describe("createLocalIntegrationPlan", () => {
       arch: "arm64",
       lockfileSha256: "lock-sha",
       nodeEnv: "NODE_ENV=production",
-      nodeOptions: "NODE_OPTIONS=--max-old-space-size=8192",
+      nodeOptions: "NODE_OPTIONS=--max-old-space-size=16384",
       testNodeOptions: "NODE_OPTIONS=--no-experimental-webstorage",
     });
 
@@ -62,7 +62,7 @@ describe("createLocalIntegrationPlan", () => {
       arch: "arm64",
       lockfileSha256: "lock-sha",
       nodeEnv: "NODE_ENV=production",
-      nodeOptions: "NODE_OPTIONS=--max-old-space-size=8192",
+      nodeOptions: "NODE_OPTIONS=--max-old-space-size=16384",
       testNodeOptions: "NODE_OPTIONS=--no-experimental-webstorage",
     });
     assert.equal(evidence.toolchainFingerprint, createToolchainFingerprint({
@@ -71,7 +71,7 @@ describe("createLocalIntegrationPlan", () => {
       gitVersion: "git version 2.50.1",
       lockfileSha256: "lock-sha",
       nodeEnv: "NODE_ENV=production",
-      nodeOptions: "NODE_OPTIONS=--max-old-space-size=8192",
+      nodeOptions: "NODE_OPTIONS=--max-old-space-size=16384",
       testNodeOptions: "NODE_OPTIONS=--no-experimental-webstorage",
       nodeVersion: "v24.0.0",
       platform: "linux",
@@ -96,9 +96,9 @@ describe("createLocalIntegrationPlan", () => {
       "node scripts/gen-doc-index.mjs --check",
       "node scripts/check-doc-links.mjs",
       "node scripts/check-guards.mjs",
-      "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web typecheck",
-      "env NODE_OPTIONS=--no-experimental-webstorage pnpm --filter web exec vitest run --maxWorkers=4",
-      "env NODE_ENV=production NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web exec next build",
+      "env NODE_OPTIONS=--max-old-space-size=16384 node scripts/local-ci-typecheck-runner.mjs",
+      "env NODE_OPTIONS=--no-experimental-webstorage node scripts/local-ci-vitest-runner.mjs --initial-workers 4 --retry-workers 2",
+      "env NODE_ENV=production NODE_OPTIONS=--max-old-space-size=16384 pnpm --filter web exec next build",
     ]);
   });
 
@@ -141,7 +141,7 @@ describe("createLocalIntegrationPlan", () => {
     });
 
     assert.ok(plan.commands.map((command) => command.join(" ")).includes(
-      "env NODE_OPTIONS=--no-experimental-webstorage pnpm --filter web exec vitest run --maxWorkers=4",
+      "env NODE_OPTIONS=--no-experimental-webstorage node scripts/local-ci-vitest-runner.mjs --initial-workers 4 --retry-workers 2",
     ));
   });
 
@@ -154,11 +154,11 @@ describe("createLocalIntegrationPlan", () => {
     });
 
     const vitestCommand = plan.commands.map((command) => command.join(" ")).find((command) => (
-      command.includes("pnpm --filter web exec vitest run")
+      command.includes("scripts/local-ci-vitest-runner.mjs")
     ));
     assert.equal(
       vitestCommand,
-      "env NODE_OPTIONS=--no-experimental-webstorage pnpm --filter web exec vitest run --maxWorkers=4",
+      "env NODE_OPTIONS=--no-experimental-webstorage node scripts/local-ci-vitest-runner.mjs --initial-workers 4 --retry-workers 2",
     );
   });
 
@@ -204,7 +204,7 @@ describe("createLocalIntegrationPlan", () => {
     const preflightIndex = commands.findIndex((c) => c.includes("sandbox-freshness-preflight.mjs"));
     const evidencePlanIndex = commands.findIndex((c) => c.includes("ci-evidence-plan.mjs"));
     const lastMergeIndex = commands.map((c, i) => (c.startsWith("git merge") ? i : -1)).reduce((a, b) => Math.max(a, b), -1);
-    const firstGateIndex = commands.findIndex((c) => c.includes("vitest run"));
+    const firstGateIndex = commands.findIndex((c) => c.includes("local-ci-vitest-runner.mjs"));
     assert.ok(evidencePlanIndex > lastMergeIndex);
     assert.ok(evidencePlanIndex < preflightIndex);
     assert.ok(preflightIndex > lastMergeIndex);
@@ -236,7 +236,7 @@ describe("createLocalIntegrationPlan", () => {
     const docIndexIndex = commands.indexOf("node scripts/gen-doc-index.mjs --check");
     const docsLinkIndex = commands.indexOf("node scripts/check-doc-links.mjs");
     const repoGuardIndex = commands.indexOf("node scripts/check-guards.mjs");
-    const vitestIndex = commands.findIndex((c) => c.includes("vitest run"));
+    const vitestIndex = commands.findIndex((c) => c.includes("local-ci-vitest-runner.mjs"));
     assert.ok(docIndexIndex > -1);
     assert.ok(docsLinkIndex > docIndexIndex);
     assert.ok(repoGuardIndex > docsLinkIndex);
@@ -252,9 +252,9 @@ describe("createLocalIntegrationPlan", () => {
     });
     const commands = plan.commands.map((command) => command.join(" "));
     const typecheckIndex = commands.indexOf(
-      "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web typecheck",
+      "env NODE_OPTIONS=--max-old-space-size=16384 node scripts/local-ci-typecheck-runner.mjs",
     );
-    const vitestIndex = commands.findIndex((command) => command.includes("vitest run"));
+    const vitestIndex = commands.findIndex((command) => command.includes("local-ci-vitest-runner.mjs"));
     const buildIndex = commands.findIndex((command) => command.includes("next build"));
 
     assert.ok(typecheckIndex > -1, "typecheck must remain in the local-CI plan");
@@ -295,13 +295,13 @@ describe("createLocalIntegrationPlan", () => {
       "exec next build",
     ));
     assert.ok(plan.commands.map((command) => command.join(" ")).includes(
-      "env NODE_OPTIONS=--max-old-space-size=8192 pnpm --filter web typecheck",
+      "env NODE_OPTIONS=--max-old-space-size=16384 node scripts/local-ci-typecheck-runner.mjs",
     ));
   });
 
   it("resolves environment-prefixed commands without relying on a host env binary", () => {
     const invocation = resolveCommandInvocation(
-      ["env", "NODE_OPTIONS=--max-old-space-size=8192", "pnpm", "--filter", "web", "typecheck"],
+      ["env", "NODE_OPTIONS=--max-old-space-size=16384", "pnpm", "--filter", "web", "typecheck"],
       { PATH: "test-path", NODE_OPTIONS: "--trace-warnings" },
     );
 
@@ -309,7 +309,7 @@ describe("createLocalIntegrationPlan", () => {
     assert.deepEqual(invocation.args, ["--filter", "web", "typecheck"]);
     assert.deepEqual(invocation.env, {
       PATH: "test-path",
-      NODE_OPTIONS: "--max-old-space-size=8192",
+      NODE_OPTIONS: "--max-old-space-size=16384",
     });
   });
 
@@ -390,7 +390,7 @@ describe("executeLocalIntegrationPlan", () => {
       spawnSyncImpl(command, args) {
         launched.push([command, ...args]);
         return {
-          status: command === "pnpm" && args.includes("typecheck") ? 2 : 0,
+          status: command === "node" && args.includes("scripts/local-ci-typecheck-runner.mjs") ? 2 : 0,
           signal: null,
         };
       },
@@ -399,7 +399,7 @@ describe("executeLocalIntegrationPlan", () => {
     assert.equal(result.status, 2);
     assert.deepEqual(
       launched.at(-1),
-      ["pnpm", "--filter", "web", "typecheck"],
+      ["node", "scripts/local-ci-typecheck-runner.mjs"],
       "typecheck must be the terminal launched command",
     );
     assert.equal(
@@ -428,7 +428,7 @@ describe("createLocalIntegrationPlan migrate-deploy opt-in (BI-157DC9B2)", () =>
     const commands = plan.commands.map((command) => command.join(" "));
     const migrateIndex = commands.indexOf("pnpm --filter @dpf/db exec prisma migrate deploy");
     const freshnessIndex = commands.findIndex((c) => c.includes("sandbox-freshness-preflight.mjs"));
-    const vitestIndex = commands.findIndex((c) => c.includes("vitest run"));
+    const vitestIndex = commands.findIndex((c) => c.includes("local-ci-vitest-runner.mjs"));
     assert.ok(migrateIndex > freshnessIndex, "migrate deploy must run after deps convergence");
     assert.ok(migrateIndex < vitestIndex, "migrate deploy must run before the suite");
   });

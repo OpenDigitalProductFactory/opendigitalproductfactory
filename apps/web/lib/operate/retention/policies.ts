@@ -370,6 +370,10 @@ export const RETAINED_DATASETS: readonly RetainedDataset[] = [
   // Financial records — IRS/SOX-style 7-year floor.
   { model: "invoice", label: "Invoices", regulatoryBasis: "Financial record retention (IRS / SOX-style statutory)", minRetentionYears: 7 },
   { model: "invoiceLineItem", label: "Invoice line items", regulatoryBasis: "Financial record retention", minRetentionYears: 7 },
+  // The document the customer actually received. Retained at least as long as the
+  // invoice itself: it is the evidence of what was billed, and it is the artifact a
+  // dispute turns on when the invoice has since been edited.
+  { model: "invoiceDocument", label: "Sent invoice documents", regulatoryBasis: "Financial record retention (evidence of what was billed)", minRetentionYears: 7 },
   { model: "payment", label: "Payments", regulatoryBasis: "Financial record retention", minRetentionYears: 7 },
   { model: "paymentAllocation", label: "Payment allocations", regulatoryBasis: "Financial record retention", minRetentionYears: 7 },
   { model: "bill", label: "Bills (AP)", regulatoryBasis: "Financial record retention", minRetentionYears: 7 },

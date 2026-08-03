@@ -136,6 +136,14 @@ if git rev-parse --verify --quiet "$base_ref" >/dev/null 2>&1; then
   fi
 fi
 
+# Semantic-review freshness is a separate, cheap pre-publication control. It
+# performs no network/model call: it validates only the receipt sidecar minted
+# from review_semantic_change for this exact committed diff. Policy remains
+# shadow until measured external + Build Studio outcomes ratchet it to enforce.
+if [ -f "scripts/semantic-review-gate.mjs" ]; then
+  node scripts/semantic-review-gate.mjs validate || exit $?
+fi
+
 if [ ! -f "$state_file" ]; then
   echo "[pre-push-gate] No local-CI gate record exists for this worktree." >&2
   echo "[pre-push-gate] Run the sandbox gate first:  pnpm run pregate" >&2

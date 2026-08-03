@@ -4,7 +4,7 @@
 
 import { getExpenseClaimByApprovalToken } from "@/lib/actions/expenses";
 import { notFound } from "next/navigation";
-import { LocalTime } from "@/components/ui/LocalTime";
+import { PublicExpenseItemsTable } from "@/components/storefront/PublicExpenseItemsTable";
 import { ExpenseApprovalForm } from "./ExpenseApprovalForm";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -132,55 +132,17 @@ export default async function ExpenseApprovePage({ params }: Props) {
             </div>
           </div>
 
-          {/* Expense items table */}
-          <table
-            style={{ width: "100%", borderCollapse: "collapse", marginBottom: 32 }}
-          >
-            <thead>
-              <tr style={{ borderBottom: "1px solid #e5e7eb" }}>
-                {["Date", "Category", "Description", "Amount"].map((h) => (
-                  <th
-                    key={h}
-                    style={{
-                      textAlign: h === "Amount" ? "right" : "left",
-                      padding: "8px 0",
-                      fontSize: 12,
-                      color: "#6b7280",
-                      fontWeight: 500,
-                    }}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {claim.items.map((item, i) => (
-                <tr key={i} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                  <td style={{ padding: "10px 0", fontSize: 14, color: "#6b7280" }}>
-                    <LocalTime value={item.date} utc />
-                  </td>
-                  <td style={{ padding: "10px 0", fontSize: 14, color: "#374151" }}>
-                    {CATEGORY_LABELS[item.category] ?? item.category}
-                  </td>
-                  <td style={{ padding: "10px 0", fontSize: 14, color: "#111827" }}>
-                    {item.description}
-                  </td>
-                  <td
-                    style={{
-                      padding: "10px 0",
-                      fontSize: 14,
-                      color: "#111827",
-                      textAlign: "right",
-                      fontWeight: 500,
-                    }}
-                  >
-                    {claim.currency} {formatMoney(Number(item.amount))}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {/* Expense items — shared report-kit DataTable (BI-F7792FC1) */}
+          <PublicExpenseItemsTable
+            rows={claim.items.map((item, i) => ({
+              id: `${claim.claimId}-${i}`,
+              date: item.date,
+              categoryLabel: CATEGORY_LABELS[item.category] ?? item.category,
+              description: item.description,
+              amount: Number(item.amount),
+              currency: claim.currency,
+            }))}
+          />
 
           {/* Approve / Reject form */}
           {!isAlreadyResolved && <ExpenseApprovalForm token={token} />}

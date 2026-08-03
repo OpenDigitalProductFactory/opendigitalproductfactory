@@ -13,6 +13,20 @@ test("docs-only changes skip heavy and mobile CI", () => {
   });
 });
 
+for (const executableStandardPath of [
+  "docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md",
+  "docs/architecture/four-portfolio-archetype-standard-profile-catalog.md",
+]) {
+  test(`${executableStandardPath} requires heavy workspace CI`, () => {
+    assert.deepEqual(classifyChangedFiles([executableStandardPath]), {
+      heavy: true,
+      mobile: false,
+      docsOnly: false,
+      mobileOnly: false,
+    });
+  });
+}
+
 test("mobile app-only changes skip heavy CI and run mobile CI", () => {
   assert.deepEqual(classifyChangedFiles(["apps/mobile/src/session.ts", "apps/mobile/__tests__/session.test.ts"]), {
     heavy: false,

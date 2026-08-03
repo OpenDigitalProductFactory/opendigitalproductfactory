@@ -160,6 +160,44 @@ function resolveRootClone(repoTop) {
   return "";
 }
 
+export const LOCAL_CI_MISSING_DATABASE_URL = "postgresql://dpf:dpf_dev@127.0.0.1:1/dpf_local_ci_missing_database";
+
+export function createLocalIntegrationChildInvocation({
+  repoTop,
+  candidate,
+  baseRef,
+  candidateSha,
+  baseSha,
+  baseFreshness,
+  slotKey,
+  metadataFile,
+  testDatabaseUrl,
+  env = process.env,
+}) {
+  const childEnv = { ...env };
+  const args = [
+    join(repoTop, "scripts", "local-integration-ci.mjs"),
+    "--candidate", candidate,
+    "--base-ref", baseRef,
+    "--candidate-sha", candidateSha,
+    "--base-sha", baseSha,
+    "--base-freshness-status", baseFreshness.status,
+    "--base-resolved-at", baseFreshness.resolvedAt || "",
+    "--base-fetch-mode", baseFreshness.fetchMode || "",
+    "--slot-key", slotKey,
+    "--metadata-out", metadataFile,
+  ];
+  if (testDatabaseUrl) {
+    args.push("--migrate-deploy");
+    childEnv.DATABASE_URL = testDatabaseUrl;
+  } else {
+    // Do not let a host env var or preserved scratch .env silently become the
+    // gate database when the runner did not prove ownership of the slot DB.
+    childEnv.DATABASE_URL = LOCAL_CI_MISSING_DATABASE_URL;
+  }
+  return { args, env: childEnv };
+}
+
 function ensureScratchWorkspace(root, workspace) {
   if (existsSync(join(workspace, ".git"))) return;
   mkdirSync(dirname(workspace), { recursive: true });
@@ -305,29 +343,26 @@ async function main() {
   cleanScratchWorkspace(workspace, manifest);
 
   const slotEnv = localCiSlotEnvironment(manifest);
-  const childEnv = { ...env, ...slotEnv };
   const testDatabaseUrl = await resolveDatabaseUrl(env, manifest);
-  const args = [
-    join(repoTop, "scripts", "local-integration-ci.mjs"),
-    "--candidate", candidate,
-    "--base-ref", baseRef,
-    "--candidate-sha", candidateSha,
-    "--base-sha", baseSha,
-    "--base-freshness-status", baseFreshness.status,
-    "--base-resolved-at", baseFreshness.resolvedAt || "",
-    "--base-fetch-mode", baseFreshness.fetchMode || "",
-    "--slot-key", manifest.slotKey,
-    "--metadata-out", metadataFile,
-  ];
+  const invocation = createLocalIntegrationChildInvocation({
+    repoTop,
+    candidate,
+    baseRef,
+    candidateSha,
+    baseSha,
+    baseFreshness,
+    slotKey: manifest.slotKey,
+    metadataFile,
+    testDatabaseUrl,
+    env: { ...env, ...slotEnv },
+  });
   if (testDatabaseUrl) {
-    args.push("--migrate-deploy");
-    childEnv.DATABASE_URL = testDatabaseUrl;
     process.stdout.write(`local-ci-runner: test database ${redactUrl(testDatabaseUrl)}\n`);
   } else {
     process.stderr.write("local-ci-runner: WARNING no test database resolved — running without migrate deploy; Prisma-touching tests will fail loud\n");
   }
 
-  const result = spawnSync(process.execPath, args, { cwd: workspace, stdio: "inherit", env: childEnv });
+  const result = spawnSync(process.execPath, invocation.args, { cwd: workspace, stdio: "inherit", env: invocation.env });
   process.exit(result.status ?? 1);
 }
 

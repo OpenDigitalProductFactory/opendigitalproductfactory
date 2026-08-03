@@ -90,6 +90,6 @@ business action until the durable operations provider confirms it.
 - Review recent activity from colleagues and digital coworkers without leaving your workspace
 - Access your calendar for today's events and upcoming deadlines
 - Open [Managed Documents](documents.md) to review document state, versions, and references
-- Open [My Work and Work Rooms](work-rooms.md) to see the outcome, accountable participants, current attention, activity, and next action for active company work
+- Open [My Work and Work Rooms](work-rooms.md) to see the outcome, accountable participants, current attention, activity, and next action for active company work. Room access is checked before internal context loads; participant details explain each person or AI coworker's role, current work, authority, and sponsorship. Connected communication channels link back to the same canonical room and cannot treat message delivery as completed work.
 - Use your digital coworker to get a personalized briefing on what needs your attention
 - Open the ["Needs you" inbox](attention-inbox.md) to review plain-language decision cards, weekly batches, and the full technical record when needed

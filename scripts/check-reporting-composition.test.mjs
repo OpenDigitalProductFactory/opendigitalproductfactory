@@ -20,6 +20,13 @@ test("a raw <table> opening tag is caught", () => {
   assert.equal(rawTableMatches("return <table />;").length, 1);
 });
 
+test("pretty-printed multiline <table at end of line is caught (BI-F7792FC1)", () => {
+  // Attributes on the next line used to evade the ratchet because the line ended
+  // immediately after `<table` with no whitespace/`>`/`/` on that same line.
+  assert.equal(rawTableMatches("          <table").length, 1);
+  assert.equal(rawTableMatches("<table").length, 1);
+});
+
 test("a capitalized component like <TableRoot> is NOT a raw table", () => {
   // TABLE_RE requires whitespace/`>`/`/` right after `table`; `<TableRoot` and
   // `<Table` (a component) both start with a capital and never match `<table`.

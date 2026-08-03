@@ -8,6 +8,7 @@ import {
 import type { StorefrontCompositionView, StorefrontServiceLineView } from "@/lib/storefront/composition-view";
 import { intentStyle } from "@/components/ui/report-kit/statusColors";
 import { confirmDialog } from "@/components/ui/Dialog";
+import { SearchableSelect } from "@/components/ui/form";
 
 interface AvailableArchetype {
   archetypeSlug: string;
@@ -161,25 +162,24 @@ export function ServiceLinesPanel({ storefrontId, view, availableArchetypes }: P
             flexWrap: "wrap",
           }}
         >
-          <select
+          <SearchableSelect
             value={selectedSlug}
-            onChange={(e) => setSelectedSlug(e.target.value)}
             disabled={isPending}
-            className="border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] text-[var(--dpf-text)]"
-            style={{
-              flex: 1,
-              minWidth: 180,
-              padding: "7px 10px",
-              borderRadius: 6,
-              fontSize: 13,
-            }}
-          >
-            {availableArchetypes.map((a) => (
-              <option key={a.archetypeSlug} value={a.archetypeSlug}>
-                {a.name}
-              </option>
-            ))}
-          </select>
+            onValueChange={setSelectedSlug}
+            ariaLabel="Service line to add"
+            searchLabel="Search service lines"
+            placeholder="Choose service line"
+            options={availableArchetypes.map((a) => ({
+              value: a.archetypeSlug,
+              label: a.name,
+              description: `${plural(a.itemCount, "item")} · ${plural(a.sectionCount, "section")}`,
+              searchText: a.category,
+            }))}
+            preferredValues={[selectedSlug]}
+            maxVisibleOptions={8}
+            className="min-w-[180px] flex-1"
+            controlClassName="bg-[var(--dpf-surface-1)] text-sm"
+          />
           <button
             onClick={handleAdd}
             disabled={isPending || !selectedSlug}

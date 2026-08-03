@@ -34,6 +34,34 @@ function isProcessAlive(pid) {
   }
 }
 
+function readObserverRecords(directory) {
+  let entries;
+  try {
+    entries = readdirSync(directory);
+  } catch {
+    return [];
+  }
+  const records = [];
+  for (const entry of entries) {
+    if (!entry.endsWith(".json")) continue;
+    const token = entry.slice(0, -".json".length);
+    const path = observerPath(directory, token);
+    const record = readObserver(path);
+    if (
+      record?.schema !== OBSERVER_SCHEMA
+      || record.observerToken !== token
+      || !Number.isInteger(record.pid)
+      || record.pid <= 0
+      || typeof record.ownerSessionId !== "string"
+      || typeof record.registeredAt !== "string"
+    ) {
+      continue;
+    }
+    records.push({ path, record });
+  }
+  return records;
+}
+
 export function createGateObserverIdentity({
   pid = process.pid,
   token = randomUUID(),
@@ -90,36 +118,11 @@ export function registerLocalQueueObserver({
  * required to be a substring of the lease's identity.
  */
 function readObserversBySession(directory) {
-  let entries;
-  try {
-    entries = readdirSync(directory);
-  } catch {
-    return new Map();
-  }
   const bySession = new Map();
-  for (const entry of entries) {
-    if (!entry.endsWith(".json")) continue;
-    const token = entry.slice(0, -".json".length);
-    const record = readObserver(observerPath(directory, token));
-    if (
-      record?.schema !== OBSERVER_SCHEMA
-      // The file name is the token: a record claiming a different one is not
-      // trustworthy liveness proof.
-      || record.observerToken !== token
-      || !Number.isInteger(record.pid)
-      || record.pid <= 0
-      || typeof record.ownerSessionId !== "string"
-      || typeof record.registeredAt !== "string"
-    ) {
-      continue;
-    }
-    // A duplicate session id would make "which process owns this?" ambiguous,
-    // so refuse to treat either as proof rather than guessing.
-    if (bySession.has(record.ownerSessionId)) {
-      bySession.set(record.ownerSessionId, null);
-      continue;
-    }
-    bySession.set(record.ownerSessionId, record);
+  for (const { record } of readObserverRecords(directory)) {
+    const records = bySession.get(record.ownerSessionId) || [];
+    records.push(record);
+    bySession.set(record.ownerSessionId, records);
   }
   return bySession;
 }
@@ -139,19 +142,21 @@ export function findDeadLocalQueueObservers({
     ) {
       continue;
     }
-    const record = bySession.get(lease.ownerSessionId);
-    if (!record) continue;
-    if (processAlive(record.pid)) continue;
+    const records = bySession.get(lease.ownerSessionId);
+    if (!Array.isArray(records) || records.length === 0) continue;
+    if (records.some((record) => processAlive(record.pid))) continue;
+    const livenessProofs = records.map((record) => ({
+      schema: OBSERVER_SCHEMA,
+      observerToken: record.observerToken,
+      pid: record.pid,
+      registeredAt: record.registeredAt,
+    }));
     dead.push({
       leaseId: lease.leaseId,
       ownerSessionId: lease.ownerSessionId,
       reason: "same_host_observer_process_not_running",
-      livenessProof: {
-        schema: OBSERVER_SCHEMA,
-        observerToken: record.observerToken,
-        pid: record.pid,
-        registeredAt: record.registeredAt,
-      },
+      livenessProof: livenessProofs[0],
+      ...(livenessProofs.length > 1 ? { livenessProofs } : {}),
     });
   }
   return dead;
@@ -165,4 +170,35 @@ export function releaseLocalQueueObserver({ path, token }) {
   }
   unlinkSync(path);
   return { status: "released" };
+}
+
+export function releaseDeadLocalQueueObserversForGate({
+  directory,
+  branch,
+  sha,
+  ownerSessionId = "",
+  processAlive = isProcessAlive,
+}) {
+  const released = [];
+  for (const { path, record } of readObserverRecords(directory)) {
+    if (branch && record.branch !== branch) continue;
+    if (sha && record.sha !== sha) continue;
+    if (ownerSessionId && record.ownerSessionId !== ownerSessionId) continue;
+    if (processAlive(record.pid)) continue;
+    const result = releaseLocalQueueObserver({
+      path,
+      token: record.observerToken,
+    });
+    released.push({
+      schema: OBSERVER_SCHEMA,
+      observerToken: record.observerToken,
+      pid: record.pid,
+      ownerSessionId: record.ownerSessionId,
+      branch: record.branch,
+      sha: record.sha,
+      registeredAt: record.registeredAt,
+      releaseStatus: result.status,
+    });
+  }
+  return released;
 }

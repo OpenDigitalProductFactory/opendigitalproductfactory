@@ -7,7 +7,17 @@ import { InvoiceSendButton } from "@/components/finance/InvoiceSendButton";
 import { InvoiceDownloadButton } from "@/components/finance/InvoiceDownloadButton";
 import { RecordInvoicePaymentButton } from "@/components/finance/RecordInvoicePaymentButton";
 import { InvoiceSignatureToggle } from "@/components/finance/InvoiceSignatureToggle";
+import { InvoiceLifecycleActions } from "@/components/finance/InvoiceLifecycleActions";
+import { InvoiceDocumentHistory } from "@/components/finance/InvoiceDocumentHistory";
 import { LocalTime } from "@/components/ui/LocalTime";
+import { prisma } from "@dpf/db";
+import {
+  checkInvoiceDeletion,
+  checkInvoiceTransition,
+  describeInvoiceDeletionConsequences,
+  describeInvoiceVoidConsequences,
+  type InvoiceStatus,
+} from "@/lib/finance/invoice-lifecycle";
 
 const STATUS_COLOURS: Record<string, string> = {
   draft: "#8888a0",
@@ -35,6 +45,29 @@ export default async function InvoiceDetailPage({ params }: Props) {
   if (!invoice) {
     notFound();
   }
+
+  // Gates are evaluated here so the controls can explain THEMSELVES rather than
+  // only failing on click. The actions re-check server-side regardless.
+  const [allocationCount, dunningCount, journalEntryCount, timesheetEntryCount] = await Promise.all([
+    prisma.paymentAllocation.count({ where: { invoiceId: invoice.id } }),
+    prisma.dunningLog.count({ where: { invoiceId: invoice.id } }),
+    prisma.journalEntry.count({ where: { sourceType: "Invoice", sourceId: invoice.id } }),
+    prisma.timesheetEntry.count({ where: { invoiceId: invoice.id } }),
+  ]);
+
+  const deletion = checkInvoiceDeletion({
+    status: invoice.status as InvoiceStatus,
+    allocationCount,
+    dunningCount,
+    journalEntryCount,
+  });
+  const voiding = checkInvoiceTransition(invoice.status as InvoiceStatus, "void");
+  const consequenceFacts = {
+    lineItemCount: invoice.lineItems.length,
+    timesheetEntryCount,
+    journalEntryCount,
+    allocationCount,
+  };
 
   const sym = getCurrencySymbol(invoice.currency);
 
@@ -97,6 +130,18 @@ export default async function InvoiceDetailPage({ params }: Props) {
               outstanding={amountDue}
               currency={invoice.currency}
               status={invoice.status}
+            />
+            {/* Destructive actions sit after a divider so they are not adjacent to Send. */}
+            <span aria-hidden="true" className="w-px self-stretch bg-[var(--dpf-border)] mx-1" />
+            <InvoiceLifecycleActions
+              invoiceId={invoice.id}
+              status={invoice.status}
+              canDelete={deletion.allowed}
+              deleteBlockedReason={deletion.allowed ? null : deletion.reason}
+              canVoid={voiding.allowed}
+              voidBlockedReason={voiding.allowed ? null : voiding.reason}
+              deleteConsequences={describeInvoiceDeletionConsequences(consequenceFacts)}
+              voidConsequences={describeInvoiceVoidConsequences(consequenceFacts)}
             />
           </div>
         </div>
@@ -187,6 +232,9 @@ export default async function InvoiceDetailPage({ params }: Props) {
           )}
         </div>
       </section>
+
+      {/* Persisted documents — what the customer actually received */}
+      <InvoiceDocumentHistory invoiceId={invoice.id} />
 
       {/* Line items table */}
       <section className="mb-6">

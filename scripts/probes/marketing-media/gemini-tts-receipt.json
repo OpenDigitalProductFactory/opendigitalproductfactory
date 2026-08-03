@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "kind": "marketing-media-cloud-tts",
+  "backlogItemId": "BI-0C891AC7",
+  "toolEvaluationId": "cmsb7di2h06za01tcrkp1q1jz",
+  "candidate": {
+    "provider": "Google Gemini",
+    "model": "gemini-3.1-flash-tts-preview"
+  },
+  "input": {
+    "classification": "synthetic-non-sensitive",
+    "scriptSha256": "115f0aababa3a6240b2cb6ce0d71a2faa2f02f2f814021a7119e5c2df7821f57",
+    "characterCount": 113
+  },
+  "status": "blocked_external_configuration",
+  "reason": "paid-tier Gemini credential is not configured",
+  "requiredNextAction": "Configure a billed Gemini project through governed integration credentials, then rerun with DPF_GEMINI_PAID_TIER_CONFIRMED=1."
+}

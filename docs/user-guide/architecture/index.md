@@ -32,6 +32,14 @@ The EA Modeler is a canvas-based tool for building and maintaining your organiza
 - Use **Refresh live projections** when you are authorized to rebuild governed
   BPMN, SysML, and ArchiMate views from their canonical sources
 
+## AI Coworker Identity
+
+Architecture views may still contain older `/ea/agents` links from governance
+and route projections. Those links are compatibility paths. They now open
+`/platform/identity/agents`, the canonical **AI Coworker Identity** page for
+principal coverage, portable identity metadata, and authorization inspection.
+Use the AI Workforce area for everyday coworker discovery and work assignment.
+
 ## Following a Concern Across Views
 
 Select an element on an architecture canvas and open **Architecture context** in

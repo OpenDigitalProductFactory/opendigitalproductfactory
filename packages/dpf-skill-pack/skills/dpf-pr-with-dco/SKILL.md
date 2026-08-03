@@ -99,6 +99,12 @@ DPF's PR contract is strict and non-negotiable: **every change lands via PR**, *
 
 3c. **Run independent semantic review before pregate or first publication.** Call `review_semantic_change` for the governing Work Capsule and exact committed tree. Runtime code requires an actual Change Reviewer pass; a low-risk docs-only change may receive a durable auto-pass. Address blocking findings and re-run against the new commit. Stop after two failed repair rounds and escalate rather than oscillating. A commit, rebase, diff, reviewer/policy version, or specialist-set change invalidates the old receipt. Phase 3 defaults to shadow observation; never hide a failed receipt just because deterministic blocking has not yet been ratcheted on.
 
+   Persist the returned receipt into the worktree's git-dir sidecar before pregate so the pre-push control can validate it without a model, portal, database, or network call:
+   ```
+   pnpm review:semantic-gate -- record --receipt-file <tool-result.json> --evidence-id <ExternalEvidenceRecord-id>
+   ```
+   An infrastructure-inconclusive result is not a semantic failure and must not be repaired as though it found a code defect; retry the review when capacity returns.
+
 3d. **Local-CI sandbox gate (default-on pre-push, BI-C74F4DE9).** For runtime-code branches, run `pnpm run pregate` before the push — the chained pre-push hook refuses an ungated push otherwise. Carry the evidence into the PR body as a trailer so `pnpm pr:health` reads the branch as merge-ready even when checked from another machine:
    ```
    Local-CI-Evidence: <evidence-record-id> (<branch>@<sha>)
