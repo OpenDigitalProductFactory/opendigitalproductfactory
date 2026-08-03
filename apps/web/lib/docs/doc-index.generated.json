@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 615,
+  "pageCount": 616,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1490,6 +1490,31 @@
         "fifth-pack-first-inline-extraction",
         "next-packs",
         "enforcement-the-inline-case-ratchet-bi-opt-ratchets"
+      ]
+    },
+    "docs/architecture/mcp-tool-surface-ergonomics-audit.md": {
+      "publicHref": "/architecture/mcp-tool-surface-ergonomics-audit/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "mcp-tool-surface-ergonomics-audit",
+        "purpose",
+        "non-goals",
+        "harness-checklist-mapping-tool-plane",
+        "audit-checklist-every-tool-surface-pr",
+        "1-name-and-discoverability",
+        "2-schema-ergonomics",
+        "3-grant-and-population-fit",
+        "4-budget-and-deferred-loading",
+        "5-audit-and-evidence",
+        "6-docs-and-single-source-of-truth",
+        "scoring-rubric-optional-but-recommended",
+        "anti-patterns",
+        "worked-example-pass",
+        "worked-example-fail",
+        "related-tooling",
+        "change-control"
       ]
     },
     "docs/architecture/operational-precedent-corpus.md": {
