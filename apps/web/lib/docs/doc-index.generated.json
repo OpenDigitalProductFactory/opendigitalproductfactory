@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 617,
+  "pageCount": 623,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1191,6 +1191,32 @@
         "how-this-doc-evolves"
       ]
     },
+    "docs/architecture/edge-adapter-to-native-convergence.md": {
+      "publicHref": "/architecture/edge-adapter-to-native-convergence/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "edge-adapter-to-native-convergence-doctrine",
+        "purpose",
+        "thesis-one-sentence",
+        "non-goals",
+        "decision-modes",
+        "choose-integrate-when",
+        "choose-native-absorb-when",
+        "choose-coexist-when",
+        "choose-defer-when",
+        "graduation-criteria-adapter-native",
+        "anti-patterns-fail-review",
+        "pr-spec-checklist",
+        "worked-examples",
+        "good-quickbooks-bridge-then-native-gl-slice",
+        "good-stripe-stays-integrate",
+        "bad-native-workday",
+        "related",
+        "change-control"
+      ]
+    },
     "docs/architecture/enforced-ci-gates.md": {
       "publicHref": "/architecture/enforced-ci-gates/",
       "portalHref": null,
@@ -1198,6 +1224,29 @@
       "publishedPortal": false,
       "anchors": [
         "enforced-ci-gates-trigger-trailer-mechanics"
+      ]
+    },
+    "docs/architecture/external-planning-reference-boundary.md": {
+      "publicHref": "/architecture/external-planning-reference-boundary/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "external-planning-reference-boundary",
+        "purpose",
+        "non-goals",
+        "three-layers-single-vocabulary",
+        "allowed-citation-shapes",
+        "allowed-in-committed-docs",
+        "forbidden-in-committed-public-docs",
+        "how-backlog-and-epics-attach-evidence",
+        "it4it-bian-license-boundary-planning",
+        "competitor-research-packs",
+        "operator-checklist-before-a-pr-that-documents-research",
+        "worked-example-good",
+        "worked-example-bad",
+        "related-backlog",
+        "change-control"
       ]
     },
     "docs/architecture/field-service-work-item.md": {
@@ -1213,6 +1262,25 @@
         "derived-predicates-the-shipped-lifecycle-model",
         "adr-10-on-site-capture-is-evidence-metadata-references-never-inline-regulated-content",
         "what-is-built-vs-roadmap"
+      ]
+    },
+    "docs/architecture/finance-workforce-maturity-matrix.md": {
+      "publicHref": "/architecture/finance-workforce-maturity-matrix/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "finance-and-workforce-documentation-maturity-matrix",
+        "purpose",
+        "maturity-labels-closed-set",
+        "finance-matrix-snapshot",
+        "finance-doc-reconciliation-rules",
+        "workforce-matrix-snapshot",
+        "workforce-doc-reconciliation-rules",
+        "how-to-update-this-matrix",
+        "pr-checklist-financeworkforce-docs",
+        "related-backlog",
+        "change-control"
       ]
     },
     "docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md": {
@@ -1539,6 +1607,31 @@
         "fifth-pack-first-inline-extraction",
         "next-packs",
         "enforcement-the-inline-case-ratchet-bi-opt-ratchets"
+      ]
+    },
+    "docs/architecture/mcp-tool-surface-ergonomics-audit.md": {
+      "publicHref": "/architecture/mcp-tool-surface-ergonomics-audit/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "mcp-tool-surface-ergonomics-audit",
+        "purpose",
+        "non-goals",
+        "harness-checklist-mapping-tool-plane",
+        "audit-checklist-every-tool-surface-pr",
+        "1-name-and-discoverability",
+        "2-schema-ergonomics",
+        "3-grant-and-population-fit",
+        "4-budget-and-deferred-loading",
+        "5-audit-and-evidence",
+        "6-docs-and-single-source-of-truth",
+        "scoring-rubric-optional-but-recommended",
+        "anti-patterns",
+        "worked-example-pass",
+        "worked-example-fail",
+        "related-tooling",
+        "change-control"
       ]
     },
     "docs/architecture/operational-precedent-corpus.md": {
@@ -1900,6 +1993,34 @@
         "where-to-look-learn-more"
       ]
     },
+    "docs/architecture/ux-archetype-audit-rubric.md": {
+      "publicHref": "/architecture/ux-archetype-audit-rubric/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "ux-archetype-audit-rubric",
+        "purpose",
+        "study-unit",
+        "route-sampling-rules-minimum-set",
+        "first-viewport-purpose-contract",
+        "quantitative-capture-every-page",
+        "cognitive-load-and-progressive-disclosure",
+        "inert-and-contradictory-actions",
+        "form-and-action-contracts",
+        "help-as-recovery",
+        "attention-continuity-single-owner-truth",
+        "resource-capacity-coherence",
+        "public-trust-and-unsupported-paths",
+        "archetype-contamination-and-publish-readiness",
+        "owner-setup-as-a-workflow",
+        "mobile-public-flow-pass",
+        "technical-admin-reachability-for-non-technical-owners",
+        "evidence-package-shape",
+        "standards-basis-do-not-re-derive",
+        "change-control"
+      ]
+    },
     "docs/architecture/vector-decisioning-and-jsi.md": {
       "publicHref": "/architecture/vector-decisioning-and-jsi/",
       "portalHref": null,
@@ -1933,6 +2054,22 @@
         "authorization-boundary",
         "participant-projection",
         "external-channel-continuity"
+      ]
+    },
+    "docs/architecture/workos-iam-equivalence-scorecard.md": {
+      "publicHref": "/architecture/workos-iam-equivalence-scorecard/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "workos-equivalence-scorecard-and-dpf-ownership-matrix",
+        "purpose",
+        "ownership-classes-closed-set",
+        "scorecard-axes",
+        "capability-matrix",
+        "decision-rules",
+        "links-to-live-work",
+        "maintenance"
       ]
     },
     "docs/business-types/_readability-report.md": {
