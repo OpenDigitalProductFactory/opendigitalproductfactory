@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 617,
+  "pageCount": 619,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1166,6 +1166,32 @@
         "how-this-doc-evolves"
       ]
     },
+    "docs/architecture/edge-adapter-to-native-convergence.md": {
+      "publicHref": "/architecture/edge-adapter-to-native-convergence/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "edge-adapter-to-native-convergence-doctrine",
+        "purpose",
+        "thesis-one-sentence",
+        "non-goals",
+        "decision-modes",
+        "choose-integrate-when",
+        "choose-native-absorb-when",
+        "choose-coexist-when",
+        "choose-defer-when",
+        "graduation-criteria-adapter-native",
+        "anti-patterns-fail-review",
+        "pr-spec-checklist",
+        "worked-examples",
+        "good-quickbooks-bridge-then-native-gl-slice",
+        "good-stripe-stays-integrate",
+        "bad-native-workday",
+        "related",
+        "change-control"
+      ]
+    },
     "docs/architecture/enforced-ci-gates.md": {
       "publicHref": "/architecture/enforced-ci-gates/",
       "portalHref": null,
@@ -1211,6 +1237,25 @@
         "derived-predicates-the-shipped-lifecycle-model",
         "adr-10-on-site-capture-is-evidence-metadata-references-never-inline-regulated-content",
         "what-is-built-vs-roadmap"
+      ]
+    },
+    "docs/architecture/finance-workforce-maturity-matrix.md": {
+      "publicHref": "/architecture/finance-workforce-maturity-matrix/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "finance-and-workforce-documentation-maturity-matrix",
+        "purpose",
+        "maturity-labels-closed-set",
+        "finance-matrix-snapshot",
+        "finance-doc-reconciliation-rules",
+        "workforce-matrix-snapshot",
+        "workforce-doc-reconciliation-rules",
+        "how-to-update-this-matrix",
+        "pr-checklist-financeworkforce-docs",
+        "related-backlog",
+        "change-control"
       ]
     },
     "docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md": {
