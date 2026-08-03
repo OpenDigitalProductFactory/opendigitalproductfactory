@@ -1,4 +1,5 @@
 ---
+sourceKey: papers/shift-to-digital-product-w205
 sourceType: paper
 title: "Shift to Digital Product: A Full Lifecycle Perspective (W205)"
 authors:
@@ -6,25 +7,31 @@ authors:
   - Warfield, Dan
 publishedAt: 2020-12-01
 url: https://publications.opengroup.org/white-papers/w205
-license: third-party
+authorshipModel: abstract-only
+license: The-Open-Group-W205-retained-notice
+redistributable: false
+sourceUseDecision: SUD-W205-2026-08-01
 abstract: |
-  Open Group white paper. Foundational position paper: Digital Product is "the
-  single, simple, unifying element to manage IT and smart products and
-  services." Reframes IT4IT's Service Model Backbone as the Digital Product
-  Backbone — the conceptual move that landed in IT4IT v3 as a full refactor.
-  The Open Group publication W205; abstract + locator per
-  RAW-SOURCES-LICENSE.md.
+  The Open Group white paper W205 presents a full-lifecycle DigitalProduct
+  perspective. DPF records it as conceptual lineage under the publication's
+  retained-notice permission; the white paper is not a standard.
 ---
 
 ## Why it's cited
 
-The published-paper anchor for the **Digital Product as the unit of organization** stance. Earliest formal statement of the unification thesis that drives both IT4IT v3 and DPROM.
+An identified publication anchor for DPF's **Digital Product as the unit of organization** stance.
+Any claim about later external-standard lineage remains a question for authorized review.
 
 ## Key claims
 
-- Digital Product is the single unifying element across IT, smart products, and services.
-- The IT4IT Service Model Backbone should be reframed as a Digital Product Backbone.
-- A full-lifecycle perspective replaces the project-bounded model.
+- Treat DigitalProduct as an enduring lifecycle subject rather than a project-bounded deliverable.
+- Relate consumer outcomes, product management, delivery, operation, and retirement.
+- Keep the W205 publication's status distinct from an adopted standard.
+
+## Rights boundary
+
+`SUD-W205-2026-08-01` permits research and independently expressed synthesis under W205's
+retained-notice terms. It does not permit Apache-only relicensing of the publication.
 
 ## See also
 

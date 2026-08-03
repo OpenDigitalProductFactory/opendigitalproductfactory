@@ -1,7 +1,7 @@
 ---
 # Single fields shared by both surfaces
 name: dpf-ux-fit-review
-description: "Use when reviewing, planning, or implementing UI-impacting DPF work for UX/IA fit before code or PR handoff. Triggers on UX fit, UI fit, design fit, feature fit, new route, new tab, first viewport, guided work, dashboard, cockpit, metric tile, KPI, status badge, card, coworker launcher, empty state, navigation change, portal UX, and any customer/workspace/business/platform surface — including any config, settings or admin screen, form, or field a user fills in (setting, preference, toggle, wizard, credential picker, per-model option, numeric or text input). A config form is a UI surface."
+description: "Use before code or PR handoff for UI-impacting DPF work. Triggers on UX/UI/design/feature fit, route/tab, first viewport, guided work, dashboard/cockpit, metric/KPI/status/card/button/link/disclosure, coworker launcher, empty state, navigation, portal UX, and customer/workspace/business/platform surfaces, including config/settings/admin screens, forms, or fields (setting, preference, toggle, wizard, credential picker, per-model option, numeric/text input). Config forms are UI surfaces."
 # Agent Skills standard fields (Surface A - Claude Code / Codex)
 disable-model-invocation: false
 user-invocable: true
@@ -12,7 +12,7 @@ category: governance
 assignTo: ["ea-architect", "build-specialist", "platform-engineer"]
 capability: null
 taskType: review
-triggerPattern: "UX fit|UI fit|design fit|feature fit|new route|new tab|first viewport|guided work|dashboard|cockpit|metric tile|KPI|status badge|card|coworker launcher|empty state|navigation change|portal UX|customer surface|workspace surface|business surface|platform surface|config(uration)? (screen|form|ux|tab)|settings (page|screen|form|ux)|admin (screen|panel|form|ux)|preference|form field|input field|number input|numeric input|text field|operator.configurable|per-model|per-provider|context window|token (count|limit|window)|toggle|wizard|setup screen|credential (matrix|picker|source)"
+triggerPattern: "UX fit|UI fit|design fit|feature fit|new route|new tab|first viewport|guided work|dashboard|cockpit|metric tile|KPI|status badge|card|button|link|disclosure|coworker launcher|empty state|navigation change|portal UX|customer surface|workspace surface|business surface|platform surface|config(uration)? (screen|form|ux|tab)|settings (page|screen|form|ux)|admin (screen|panel|form|ux)|preference|form field|input field|number input|numeric input|text field|operator.configurable|per-model|per-provider|context window|token (count|limit|window)|toggle|wizard|setup screen|credential (matrix|picker|source)"
 userInvocable: true
 agentInvocable: true
 allowedTools: ["Read", "Grep", "Glob", "Bash", "mcp__dpf__search_specs_and_plans", "mcp__dpf__search_design_intelligence", "mcp__dpf__wiki_query", "mcp__dpf__list_epics", "mcp__dpf__list_backlog_items"]
@@ -37,7 +37,7 @@ This is a fit review, not a visual taste review. Decide where the feature belong
 
 ## When To Use
 
-- A feature plan adds or changes a route, tab, dashboard band, KPI, metric tile, status badge, empty state, card group, local navigation, or coworker launcher.
+- A feature plan adds or changes a route, tab, dashboard band, KPI, metric tile, status badge, empty state, card group, button, link, disclosure trigger, local navigation, or coworker launcher.
 - A reviewer asks whether a feature fits the portal architecture.
 - A Build Studio plan or external contributor plan touches Workspace, Business, Customer, Products, Platform, Knowledge, Storefront, or Portal UX.
 - User-facing labels might train the wrong mental model.
@@ -131,7 +131,7 @@ This is a fit review, not a visual taste review. Decide where the feature belong
 
 ## Committing the gate evidence (BI-D967DEE0)
 
-A UI-impacting change must land with a **measured** UX-fit manifest at
+A UI-impacting change, including added buttons, links, disclosure triggers, and custom operator-facing controls, must land with a **measured** UX-fit manifest at
 `docs/ux-fit/<date>-<slug>.ux-fit.json`. The `UX-Fit-Decision:` trailer is retired, and an
 acknowledgement (`evidence.kind: "budgets-acknowledged"`) is rejected by name — it is
 attestation theater with one extra row. Two kinds qualify:

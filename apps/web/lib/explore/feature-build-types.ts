@@ -4,7 +4,7 @@
 import * as crypto from "crypto";
 import type { BuildExecutionState } from "@/lib/build-exec-types";
 import type { DecisionInteractionGateView } from "@/lib/decision-perspective/types";
-import type { SemanticReviewResult } from "@/lib/change-review/semantic-change-review";
+import type { SemanticReviewDecision, SemanticReviewResult } from "@/lib/change-review/semantic-change-review";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -207,7 +207,7 @@ export type ReviewerVerdict = {
   label: string;
   /** "reviewer" verdicts gate via mergeReviews; "architect" is advisory only. */
   role: "reviewer" | "architect";
-  decision: "pass" | "fail";
+  decision: SemanticReviewDecision;
   /** Issue counts by severity — enough to render a chip without the full list. */
   issueCounts: { critical: number; important: number; minor: number };
   /** True when this reviewer's output failed to parse (absent, not dissenting). */

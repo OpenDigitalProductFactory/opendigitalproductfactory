@@ -7,12 +7,12 @@
  * streams without adding another finding or receipt table.
  */
 
-export const CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION = "semantic-change-review-receipt.v1";
-export const CHANGE_REVIEW_POLICY_VERSION = "semantic-change-review-policy.v1";
+export const CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION = "semantic-change-review-receipt.v2";
+export const CHANGE_REVIEW_POLICY_VERSION = "semantic-change-review-policy.v2";
 export const CHANGE_REVIEWER_VERSION = "change-reviewer.v1";
 
 export type SemanticReviewSeverity = "critical" | "important" | "minor";
-export type SemanticReviewDecision = "pass" | "fail";
+export type SemanticReviewDecision = "pass" | "fail" | "inconclusive";
 export type SemanticReviewRisk = "low" | "medium" | "high" | "critical";
 export type SemanticReviewDisposition = "reviewed" | "auto-pass";
 
@@ -28,6 +28,8 @@ export interface SemanticReviewResult {
   issues: SemanticReviewIssue[];
   summary: string;
   parseError?: true;
+  /** Infrastructure/protocol failure, deliberately separate from semantic findings. */
+  inconclusiveReason?: string;
 }
 
 export interface SemanticReviewIdentity {
@@ -50,6 +52,7 @@ export interface SemanticReviewReceipt extends Omit<SemanticReviewIdentity, "spe
 }
 
 export type SemanticReviewStaleReason =
+  | "schema-version-changed"
   | "capsule-changed"
   | "base-tree-changed"
   | "head-tree-changed"
@@ -102,6 +105,7 @@ export function assessSemanticReviewReceiptFreshness(
   current: SemanticReviewIdentity,
 ): { fresh: boolean; reasons: SemanticReviewStaleReason[] } {
   const reasons: SemanticReviewStaleReason[] = [];
+  if (receipt.schemaVersion !== CHANGE_REVIEW_RECEIPT_SCHEMA_VERSION) reasons.push("schema-version-changed");
   if (receipt.capsuleId !== current.capsuleId) reasons.push("capsule-changed");
   if (receipt.baseTreeHash !== current.baseTreeHash) reasons.push("base-tree-changed");
   if (receipt.headTreeHash !== current.headTreeHash) reasons.push("head-tree-changed");
@@ -209,10 +213,11 @@ export function parseSemanticReviewResponse(raw: string): SemanticReviewResult {
     };
   } catch {
     return {
-      decision: "fail",
-      issues: [{ severity: "critical", description: "Review agent returned unparseable response" }],
-      summary: "Review failed — could not parse agent response",
+      decision: "inconclusive",
+      issues: [],
+      summary: "Review was inconclusive — the reviewer response could not be parsed.",
       parseError: true,
+      inconclusiveReason: "unparseable-review-response",
     };
   }
 }

@@ -213,6 +213,7 @@ export const TABLE_CLASSIFICATION: Record<string, TableSensitivity> = {
   StorefrontInquiry: "confidential",
   StorefrontDonation: "confidential",
   Invoice: "confidential",
+  InvoiceDocument: "confidential",
   InvoiceLineItem: "confidential",
   Payment: "confidential",
   PaymentAllocation: "confidential",

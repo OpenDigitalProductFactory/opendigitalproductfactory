@@ -8,6 +8,7 @@ import {
   createGateObserverIdentity,
   findDeadLocalQueueObservers,
   registerLocalQueueObserver,
+  releaseDeadLocalQueueObserversForGate,
   releaseLocalQueueObserver,
 } from "./local-queue-observer.mjs";
 
@@ -149,6 +150,55 @@ test("observer cleanup is token-fenced", () => {
   assert.equal(existsSync(registered.path), false);
 });
 
+test("fallback cleanup releases only dead observers for the same gate", () => {
+  const directory = observerDirectory();
+  const targetBranch = "fix/current";
+  const targetSha = "c".repeat(40);
+  const deadTarget = registerLocalQueueObserver({
+    directory,
+    identity: createGateObserverIdentity({
+      pid: 606,
+      token: "66666666-6666-4666-8666-666666666666",
+    }),
+    ownerSessionId: "codex-thread",
+    branch: targetBranch,
+    sha: targetSha,
+  });
+  const liveTarget = registerLocalQueueObserver({
+    directory,
+    identity: createGateObserverIdentity({
+      pid: 707,
+      token: "77777777-7777-4777-8777-777777777777",
+    }),
+    ownerSessionId: "codex-thread",
+    branch: targetBranch,
+    sha: targetSha,
+  });
+  const otherBranch = registerLocalQueueObserver({
+    directory,
+    identity: createGateObserverIdentity({
+      pid: 808,
+      token: "88888888-8888-4888-8888-888888888888",
+    }),
+    ownerSessionId: "codex-thread",
+    branch: "fix/other",
+    sha: targetSha,
+  });
+
+  const released = releaseDeadLocalQueueObserversForGate({
+    directory,
+    branch: targetBranch,
+    sha: targetSha,
+    processAlive: (pid) => pid === 707,
+  });
+
+  assert.equal(released.length, 1);
+  assert.equal(released[0].observerToken, "66666666-6666-4666-8666-666666666666");
+  assert.equal(existsSync(deadTarget.path), false);
+  assert.equal(existsSync(liveTarget.path), true);
+  assert.equal(existsSync(otherBranch.path), true);
+});
+
 test("a lease named after its real client thread is still reconcilable (BI-3A34D7A9)", () => {
   // Liveness used to be proved by PARSING the lease's ownerSessionId for
   // gate-v2-<token>-<pid>. Once the lease carries the honest client thread id,
@@ -219,9 +269,9 @@ test("a live attributed waiter is never cancelled", () => {
   assert.deepEqual(dead, []);
 });
 
-test("two observers claiming one thread fail closed rather than guess", () => {
-  // One thread re-gating concurrently would make "which process owns this?"
-  // ambiguous; cancelling on a coin flip could kill a live waiter's lease.
+test("duplicate dead observers for one thread are still eligible for queue cancellation", () => {
+  // Hard-killed gate wrappers can leave old observer records behind. Duplicates
+  // are safe to reconcile when every recorded process is proven dead.
   const directory = observerDirectory();
   const shared = "thread-with-two-processes";
   for (const [pid, token] of [
@@ -246,6 +296,41 @@ test("two observers claiming one thread fail closed rather than guess", () => {
       ownerSessionId: shared,
     }],
     processAlive: () => false,
+  });
+
+  assert.equal(dead.length, 1);
+  assert.equal(dead[0].leaseId, "NPEL-AMBIGUOUS");
+  assert.deepEqual(
+    dead[0].livenessProofs.map((proof) => proof.pid).sort((a, b) => a - b),
+    [404, 505],
+  );
+});
+
+test("duplicate observers fail closed when any recorded process is alive", () => {
+  const directory = observerDirectory();
+  const shared = "thread-with-one-live-process";
+  for (const [pid, token] of [
+    [606, "66666666-6666-4666-8666-666666666666"],
+    [707, "77777777-7777-4777-8777-777777777777"],
+  ]) {
+    registerLocalQueueObserver({
+      directory,
+      identity: createGateObserverIdentity({ pid, token }),
+      ownerSessionId: shared,
+      branch: "feat/y",
+      sha: "e".repeat(40),
+    });
+  }
+
+  const dead = findDeadLocalQueueObservers({
+    directory,
+    queuedLeases: [{
+      leaseId: "NPEL-LIVE-DUPLICATE",
+      environmentKey: "local-integration-ci",
+      status: "queued",
+      ownerSessionId: shared,
+    }],
+    processAlive: (pid) => pid === 707,
   });
 
   assert.deepEqual(dead, []);

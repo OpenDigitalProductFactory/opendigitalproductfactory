@@ -24,6 +24,11 @@ describe("postWorkItemComment (BI-B416B12A)", () => {
       db,
       workItemId: "WI-1",
       workItemTitle: "Ship the export",
+      roomRef: {
+        caseKey: "manual-task%3AWI-1",
+        caseId: "manual-task:WI-1",
+        workItemId: "WI-1",
+      },
       body: "@mark can you and @ops-coworker take this?",
       sender: { type: "user", id: "author-1", label: "Alex" },
       roster,
@@ -36,11 +41,18 @@ describe("postWorkItemComment (BI-B416B12A)", () => {
         senderUserId: "author-1",
         messageType: "comment",
         body: "@mark can you and @ops-coworker take this?",
-        structuredPayload: { mentionedAgentIds: ["AGT-9"] },
+        structuredPayload: {
+          mentionedAgentIds: ["AGT-9"],
+          workRoom: {
+            caseKey: "manual-task%3AWI-1",
+            caseId: "manual-task:WI-1",
+            workItemId: "WI-1",
+          },
+        },
       }),
     });
     expect(notificationCreate).toHaveBeenCalledWith({
-      data: expect.objectContaining({ userId: "user-1", type: "work-item-mention", deepLink: "/workspace/cases/WI-1" }),
+      data: expect.objectContaining({ userId: "user-1", type: "work-item-mention", deepLink: "/workspace/cases/manual-task%3AWI-1" }),
     });
     expect(result).toEqual({ messageId: "WIM-1", notifiedUserIds: ["user-1"], mentionedAgentIds: ["AGT-9"] });
   });

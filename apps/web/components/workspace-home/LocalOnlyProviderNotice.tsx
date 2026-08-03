@@ -1,3 +1,5 @@
+import { AI_PROVIDER_CONNECTIONS_ROUTE } from "@/lib/ai-provider-routes";
+
 export function LocalOnlyProviderNotice() {
   return (
     <section
@@ -13,7 +15,7 @@ export function LocalOnlyProviderNotice() {
           </p>
         </div>
         <a
-          href="/platform/ai-operations/providers"
+          href={AI_PROVIDER_CONNECTIONS_ROUTE}
           className="inline-flex min-h-9 items-center justify-center rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] px-3 text-sm font-semibold text-[var(--dpf-text)]"
         >
           Connect a provider

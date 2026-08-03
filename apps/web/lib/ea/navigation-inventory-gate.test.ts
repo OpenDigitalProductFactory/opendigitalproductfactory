@@ -77,6 +77,24 @@ describe("navigation inventory gate (EP-NAV-COHERENCE P7)", () => {
     expect(entries.every((e) => e.path.startsWith("/"))).toBe(true);
   });
 
+  it("keeps the legacy EA agents route pointed at the canonical identity surface", () => {
+    const legacyRoute = (manifest.routes ?? []).find(
+      (r) => r.routePath === "/ea/agents",
+    );
+
+    expect(legacyRoute?.redirectTo).toBe("/platform/identity/agents");
+    expect((manifest.routes ?? []).some((r) => r.routePath === "/admin/agents")).toBe(
+      false,
+    );
+    expect(
+      entries.some(
+        (entry) =>
+          entry.path === "/admin/agents" ||
+          entry.effectivePath === "/admin/agents",
+      ),
+    ).toBe(false);
+  });
+
   it("counts converged per-domain section routes as navigable, not orphans (P3)", () => {
     for (const p of [
       "/finance/invoices", "/finance/bills", "/finance/reports", "/finance/banking",

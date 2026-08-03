@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "mode": "shadow",
+  "receiptSchemaVersion": "semantic-change-review-receipt.v2",
+  "policyVersion": "semantic-change-review-policy.v2",
+  "reviewerVersion": "change-reviewer.v1",
+  "calibration": {
+    "externalCompletedSamples": 0,
+    "buildStudioCompletedSamples": 0,
+    "precision": null,
+    "postPublicationMissRate": null,
+    "evidenceRecordedAt": null,
+    "evidenceIds": []
+  }
+}

@@ -22,6 +22,13 @@ The storefront is also the most visible expression of the selected market archet
 - **Service lines** — A service line is a secondary business type layered onto your primary archetype (for example, a restaurant that also runs contract catering). Adding or removing one is an advanced action — it's collapsed behind an **Advanced: service lines** disclosure on the storefront home rather than sitting open next to everyday setup and status, because the "add a line" list spans every archetype the platform supports. Open it to see active lines and add a new one; every add asks you to confirm first, since it seeds new items and sections.
 - **Generated content & recovery** — When you add a service line, the platform auto-creates items and sections for it. The storefront home lists this generated content grouped by what produced it. Removing a service line **retains** its items and sections (items are deactivated, sections hidden) rather than deleting them, so the removal is recoverable. From the collapsed **Generated content & recovery** panel you can **Restore** a removed line (reactivates its items) or **Remove permanently** (deletes the retained items and sections — this cannot be undone). Every recovery action first shows exactly how many items and sections it affects and asks you to confirm.
 - **Healthcare intake** — Medical and dental archetypes add an internal **Intake** workspace for receptionists and care-practice staff. It summarizes visit readiness, missing steps, and open exceptions without displaying clinical answers. Patient references are pseudonymous in this workspace; detailed clinical records remain on their governed care surfaces.
+- **Rental physical capacity** — Equipment rental, production-kit rental, and self-storage archetypes manage each physical unit from **Storefront → Units**. Record the unit's real site, zone, and position; its ready/inspection/maintenance state; and the detail appropriate to the asset. Equipment can carry serial, plate, meter, and pickup-readiness facts; production kits can track expected versus present pieces; storage units can track size, occupancy, access, move-in/out, and waitlist facts. Existing rental agreements remain the authority for who has a unit and when—the physical profile enriches that lifecycle rather than replacing it.
+
+### Run the rental desk
+
+Use **Business → Rental** for the in-the-moment operating view. The summary separates ready and blocked capacity from current commitments, then presents one highest-priority exception with one recommended action. Typical exceptions include an overdue return, a unit awaiting return inspection, a maintenance hold, an incomplete kit, storage move-in/out work, or demand that exceeds available stock.
+
+Keep the physical record current whenever a unit changes yard bay, facility position, readiness, maintenance state, kit completeness, or storage access state. If the screen cannot identify one organization safely, it refuses to choose instead of showing or changing another organization's units. Historical utilization, return on assets, and owner trends belong in **Business → Performance**; they are deliberately kept off the counter and yard hot path.
 
 ## What You Can Do
 
@@ -33,6 +40,7 @@ The storefront is also the most visible expression of the selected market archet
 - Track setup progress from the storefront home and see what generated content exists
 - Recover generated content after removing a service line — restore it, or remove the retained items and sections permanently
 - For medical and dental practices, review active patient-intake readiness from **Portal → Intake** and identify packets that need attention before a visit
+- For rental businesses, maintain physical placement and readiness in **Storefront → Units**, then work the single most important live exception from **Business → Rental**
 
 ## Related
 

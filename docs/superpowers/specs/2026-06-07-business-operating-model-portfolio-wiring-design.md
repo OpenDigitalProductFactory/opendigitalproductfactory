@@ -2,18 +2,38 @@
 
 | Field | Value |
 |-------|-------|
-| **Status** | Draft — founder review before fan-out. **Architect re-review 2026-07-04: current-state refreshed against origin/main — two Phase-0 preconditions (portfolio-decomposition persistence, BI-230C9EF7 org resolver) and the Decision Governance surfaces (EP-0AF96937) have LANDED since this spec's original pin. The design thesis is unchanged; see §0 Update Log.** |
+| **Status** | Historical design record. The operating-model thesis remains useful, but the 2026-08-01 authority notice below supersedes its Product/DigitalProduct and value-stream semantics. **Architect re-review 2026-07-04:** current-state refreshed against origin/main — two Phase-0 preconditions (portfolio-decomposition persistence, BI-230C9EF7 org resolver) and the Decision Governance surfaces (EP-0AF96937) had landed since the original pin. |
 | **Date** | 2026-06-07 (authored) · 2026-07-04 (architect current-state refresh) |
 | **Author** | Claude (Opus 4.8) with founder (Mark Bodman) |
 | **Primary Objective** | Wire each customer company's **top-down business direction** into the two business-critical portfolios — **Products & Services Sold** and **For Employees (→ Workforce)** — so they become populated, operational, and backlog-generating, and so they **ground the immature WWWD decision layer** the way founder principles ground the mature WWMD layer. |
 | **Scope** | The "missing middle" between the decision layer (WWMD/WWWD) and the capability-maturity layer: a structured per-company **Business Operating Model** seeded from archetype, refined by the operator + continuous corpus enrichment, consumed by WWWD decisions, and fanned out into the backlog. |
 | **Non-Goals** | Does not implement schema, routes, or migrations. Does not re-architect WWMD. Does not duplicate the agent-control-plane maturity model. Does not replace external systems of record (QuickBooks, HRIS, ERP) — those remain `boundary_adapter` conduits. |
 | **Original pin / current pin** | Authored against `1470ea1c`; refreshed against `origin/main` at `bebeb339c` (≈900 commits later). §3 reflects the current pin. |
-| **Primary Inputs** | `docs/Reference/digital_product_portfolio_mgmt.txt` (Open Group G252, DPPM), `docs/founder-kernel/wiki/entities/it4it.md`, `packages/db/data/portfolio_registry.json`, `apps/web/lib/onboarding/seed-org-wwwd-corpus.ts`, `apps/web/lib/onboarding/archetype-business-context.ts`, `docs/superpowers/specs/2026-05-21-four-portfolio-agent-control-plane-maturity-design.md`, `docs/superpowers/specs/2026-05-31-continuous-corpus-enrichment-design.md`, `docs/superpowers/specs/2026-05-31-archetype-aware-workspace-design.md`, `docs/superpowers/plans/2026-05-30-decision-surface-consolidation.md`, EP-AI-WORKFORCE-001 (`docs/superpowers/specs/2026-04-02-ai-workforce-consolidation-design.md`) |
+| **Historical inputs** | DPF-owned IT4IT Reference Architecture entity notes, portfolio registry, onboarding/business-context sources, agent-control-plane and archetype designs, decision-surface plan, and EP-AI-WORKFORCE-001. A local G252 text extract was consulted during the original 2026-06-07 draft but is excluded from successor AI evidence under the 2026-08-01 authority notice. |
+
+> **Current authority (2026-08-01).** This document remains the historical design record for the
+> operating-model wiring initiative. The
+> [Four-Portfolio Archetype and AI Workforce Operating Standard](../../architecture/four-portfolio-archetype-ai-workforce-operating-standard.md)
+> now owns portfolio, Product/DigitalProduct, business-value-stream, work-allocation, and AI
+> dual-aspect semantics. The
+> [Business Commercial Catalog](../../architecture/business-commercial-catalog.md) owns the current
+> `ProductLine → Product → ProductOffering → CatalogItem` hierarchy. Those sources supersede any
+> statement below that treats every customer offer as a `DigitalProduct` or equates an industry
+> value stream with the `Consume` stream of the IT4IT Reference Architecture.
+>
+> The supplied Open Group PDFs/text extracts and mixed-origin workbooks are not admissible
+> generative-AI sources under their current SourceUseDecisions. Mark Bodman's direct
+> contributor-origin concepts are a separate permitted source under the current FPAW policy. Precise
+> external-standard equivalence requires an authorized edition and qualified human reviewer.
 
 ---
 
 ## 0. Update Log
+
+**2026-08-01 — semantic convergence.** Reclassified this document as a historical design record,
+linked the new operating standard and commercial-catalog authorities, corrected the current market
+offer boundary to `ProductLine → Product → ProductOffering → CatalogItem`, and widened the
+realization dependency from DigitalProduct/SBOM-only to all four portfolios and non-digital work.
 
 **2026-07-04 — architect current-state refresh (against `origin/main` `bebeb339c`).** Verified every §3 claim against the live worktree. Three items the spec listed as "not yet built" have since **landed**; the design thesis (a structured operating model grounding WWWD and populating the two business portfolios) is **unchanged and still largely un-built** — what shipped are its *preconditions and surfaces*, not the BOM itself.
 
@@ -43,7 +63,7 @@ The platform has matured two layers in parallel:
 - **Archetype portfolio decomposition — was computed-but-never-persisted; now persisted (LANDED, BI-2D452667).** `readActivationProfile()` validates a `foundational | manufactureAndDeliver | forEmployees | productsAndServicesSold` decomposition (absent/minimal/standard/primary) at runtime. This spec's Phase 0 asked to persist it; that shipped — `BusinessContext.portfolioDecomposition` stores the per-org shape, seeded once from the archetype (`seed-portfolio-decomposition.ts`) then operator-refinable, with `resolvePortfolioDecomposition()` preferring the persisted value. The refinable portfolio shape now exists to drive from; the remaining gap is *populating* the two business portfolios beneath it (Facets A/B).
 - **The backlog is not business-driven.** `BacklogItem`/`Epic` are manually authored or sourced from storefront inquiries. Nothing converts business direction → portfolio gaps → backlog. This is precisely Mark's observation: **Build Studio is nearly autonomous on the engineering side; the business side is not, because no signal generates business backlog.**
 
-This is the classic top-down disconnect named in the DPPM paper (Open Group G252 §1.3): *leadership defines the business direction while IT manages infrastructure without line of sight to customers.* The four-portfolio model is the canonical fix — but only if the two business-facing portfolios are actually populated from leadership's direction and made load-bearing.
+This historical design addresses a top-down disconnect identified by the operator: leadership's business direction and internal technology management lack a traceable line of sight to customers. DPF's operator-directed four-portfolio model is the proposed fix, but only if the business-facing roles are populated from leadership direction and made load-bearing. No G252 section-level claim from the excluded local material is carried forward here.
 
 ## 2. Design Intent
 
@@ -52,9 +72,9 @@ Introduce a per-company **Business Operating Model (BOM)** — not a new substra
 ```text
 Archetype business context (top-down, leadership-defined)
   → seeds the two business-critical portfolios
-      • Products & Services Sold  (DPPM "Provided Externally" — the market offer, line of sight to customers)
-      • Workforce (DPPM "Provided Internally" + the workforce itself: humans + AI agents)
-  → those portfolios decompose down the DPPM dependency chain
+      • Products & Services Sold  (operator-directed external-value role)
+      • Workforce (operator-directed internal-value role + human and AI performers)
+  → those portfolios expose typed DPF dependency relationships
       • Foundational  ◀── depended on by
       • Manufacturing & Delivery  ◀── delivers
   → the populated operating model GROUNDS WWWD decisions (concrete nouns, not narrative)
@@ -62,7 +82,11 @@ Archetype business context (top-down, leadership-defined)
   → Build Studio executes the engineering; the operating model drives the business backlog
 ```
 
-The DPPM dependency hierarchy (G252 §4, verified) is the spine: **Provided Externally** and **Provided Internally** both depend on **Foundational**, which is deployed and supported by **Manufacture & Delivery**. Every internal activity must trace *up* to a customer-facing offer. That traceability is what gives "traditional IT" line of sight to the customer — the thing the paper says is missing in most enterprises.
+The historical design hypothesis is that external-value and workforce roles depend on shared
+Foundational and specialized Manufacturing and Delivery realization. The current FPAW standard
+supersedes this simplified hierarchy with typed, directional dependencies and permits an explicit
+non-applicability/Gap result. The customer-line-of-sight objective remains DPF-owned design intent,
+not a verified G252 claim.
 
 ### 2.1 Relationship to the existing maturity spec
 
@@ -82,7 +106,7 @@ The maturity spec measures DPF's portfolios; this spec **populates every custome
 
 Originally grounded at `1470ea1c`; **refreshed 2026-07-04 against `origin/main` `bebeb339c`** (≈900 commits later). Verdicts below carry a `[LANDED]` / `[unchanged]` tag where the state moved since authoring (see §0 Update Log for the landed items).
 
-- **Portfolios:** `packages/db/data/portfolio_registry.json` defines exactly four roots: `foundational`, `manufacturing_and_delivery`, `for_employees`, `products_and_services_sold` (registry schema `2.2.0`). Confirmed anchored to IT4IT §6.1–6.4 and DPPM. `[unchanged]`
+- **Portfolios:** `packages/db/data/portfolio_registry.json` defines exactly four roots: `foundational`, `manufacturing_and_delivery`, `for_employees`, `products_and_services_sold` (registry schema `2.2.0`). The roots are grounded in operator direction and DPF's registry; exact equivalence to IT4IT Reference Architecture or DPPM guide sections is not asserted by this historical record. `[unchanged]`
 - **Archetype decomposition:** `packages/storefront-templates/src/activation-profile.ts` `readActivationProfile()` normalizes a `PortfolioDecomposition` (roles `foundational | manufactureAndDeliver | forEmployees | productsAndServicesSold`, scope `absent | minimal | standard | primary`). **Now persisted** to `BusinessContext.portfolioDecomposition`, seeded once from the archetype by `apps/web/lib/onboarding/seed-portfolio-decomposition.ts` then operator-refinable; `resolvePortfolioDecomposition()` prefers the persisted value. `[LANDED — BI-2D452667]`
 - **Products portfolio:** `DigitalProduct.portfolioId` FK; `DigitalProduct.lifecycleStage` (default `"plan"`) and `DigitalProduct.bomDocuments` relation exist; routes `/portfolio/products/[productId]`; API `apps/web/app/api/v1/portfolio/[id]/products`. `ServiceOffering` model exists (`digitalProductId` FK, SLA/OLA refs, `consumers`). Still **no archetype→offer seeding for customer offers.** `[partly-landed: lifecycle field now exists → §4.1 / §11-Q1]`
 - **Employees:** `EmployeeProfile` (schema ~284–371) with department/position/manager; `/employee` route. **Still no portfolio FK.** `[unchanged — Facet B gap, §4.2]`
@@ -101,11 +125,22 @@ The BOM is the structured, top-down answer to *"what is this company, operationa
 
 The line-of-sight anchor. Everything else justifies its existence by tracing up to here. *(Full layered decomposition — abstract/commercial/running split, SBOM graph, unit economics, value-stream lifecycle — in §12.1.)*
 
-**What it contains, per company:** the company's actual revenue-generating offerings — for a clinic, appointment/treatment lines; for retail, product categories/SKU lines; for an MSP, the service catalog; for DPF itself (the recursion), the portal/agent control plane. Each offering is a `DigitalProduct` (or `ServiceOffering`) under `portfolioId = products_and_services_sold`, carrying:
+**What it contains, per company:** the company's actual revenue-generating offerings — for a clinic,
+appointment/treatment lines; for retail, product categories/SKU lines; for an MSP, the service
+catalog; for DPF itself (the recursion), the portal/agent control plane. The current implementation
+represents these through `ProductLine → Product → ProductOffering → CatalogItem`. A linked
+`DigitalProduct` is a digital realization or qualifying digital-product facet, not the universal
+type of every commercial offer. `ServiceOffering` remains the commitment surface of a
+DigitalProduct-provided service; it is not a substitute for the commercial ProductOffering.
 
-- **IT4IT lifecycle stage** (G252 §2.3): idea → designed → live → retiring → retired. **Audit answered (2026-07-04): `DigitalProduct.lifecycleStage` already exists (default `"plan"`) — reuse it, do not add a field.** Reconcile its enum values against the IT4IT vocabulary rather than introducing a parallel one (`single-source-of-truth`).
+- **Distinct lifecycles:** the business Product/Offering lifecycle belongs to the commercial
+  hierarchy. The IT4IT Reference Architecture governs only the explicitly linked DigitalProduct lifecycle. The 2026-07-04
+  finding that `DigitalProduct.lifecycleStage` exists remains valid for that digital aspect, but it
+  is not the lifecycle field for every good or service sold.
 - **Consumer domain** (who buys it) — links to the WWWD `who-we-serve` corpus.
-- **Decomposition / SBOM links** (G252 §2.3 "product ontology and SBOM"): which Foundational and Manufacturing & Delivery elements this offer depends on, and which Workforce roles deliver it. This is the dependency edge that gives IT line of sight.
+- **Bill-of-realization links:** which Workforce, Manufacturing and Delivery, Foundational,
+  DigitalProduct, physical-resource, partner, data, and control aspects realize the offer. SBOM is
+  one digital-release artifact within that wider dependency graph.
 
 **Seeding (top-down):** the archetype's `PortfolioDecomposition.productsAndServicesSold` scope plus `archetype-business-context.ts` profiles seed *starter offerings* the operator confirms/edits — the same "feels understood on day one, fully editable" discipline already used for the WWWD pages. A `healthcare-wellness` install lands with appointment/treatment offering stubs; `retail-goods` with product-line stubs.
 
@@ -239,7 +274,10 @@ The design is successful when later implementation can prove:
 4. Business decisions resolve against the **org WWWD profile** (BI-230C9EF7 landed), and WWWD answers cite concrete operating-model facts, not only stance narrative.
 5. Operating-model gaps (offering with no delivery, workforce gap, unmet agent need, unserved goal) generate **proposed** backlog items linked to their portfolio and originating element.
 6. Backlog prioritization for business items runs through the Gate against the org profile, weighted by captured goals.
-7. **No parallel substrate:** every new concept attaches to existing `Portfolio` / `DigitalProduct` / `EmployeeProfile` / `Agent` / `WikiPage` / `PerspectiveMaterial` / `BacklogItem`; any greenfield is justified by a written audit.
+7. **No parallel substrate:** every new concept attaches to the current `Portfolio`,
+   `ProductLine` / `Product` / `ProductOffering` / `CatalogItem`, `DigitalProduct`, `Principal` /
+   `EmployeeProfile` / `Agent`, `WikiPage`, `PerspectiveMaterial`, EA-assessment, and `BacklogItem`
+   substrate; any greenfield is justified by a written audit.
 8. **Conduit discipline preserved:** external systems (QuickBooks/HRIS/ERP) feed the model as `boundary_adapter` sources with attribution; DPF never becomes a partner/enrollee.
 9. Traceability: every Foundational / Manufacturing & Delivery element can trace *up* to a Products & Services Sold offering it serves (DPPM line-of-sight), or is flagged as an orphan.
 
@@ -271,20 +309,17 @@ Q1, Q6 are now partly answered by the 2026-07-04 audit (see §0). Q2–Q5 resolv
 
 ## 12. Industry-Grounded Facet Decomposition (2024–2026 research)
 
-This section deepens the two business-critical facets and the strategy→backlog engine with the current external state of the art, so the implementation BIs carry concrete structure rather than re-derive it. Sources are listed in §13 and tagged inline as `[Sn]`. Lineage note: IT4IT's "Digital Product" backbone originates in Open Group White Paper **W205, *The Shift to Digital Product* (Bodman & Warfield, 2020)** `[S3f]` — i.e. this spec builds directly on the founder's own published framework.
+This section deepens the two business-critical facets and the strategy→backlog engine with the current external state of the art, so the implementation BIs carry concrete structure rather than re-derive it. Sources are listed in §13 and tagged inline as `[Sn]`. Lineage hypothesis: the Digital Product backbone in the IT4IT Reference Architecture relates to Open Group White Paper **W205, *The Shift to Digital Product* (Bodman & Warfield, 2020)** `[S3f]`; authoritative lineage still requires the applicable source-use and external review.
 
 ### 12.1 Facet A — Products & Services Sold: layered decomposition
 
-The frameworks (IT4IT v3 Digital Product Backbone, TM Forum SID/Open APIs, ServiceNow CSDM 4.0) converge on one rule: **separate the abstract definition, the commercial offer, and the running instance — they have three different lifecycles. Conflating them is the #1 modeling error these standards exist to fix** `[S1a][S1c]`. The IT4IT v3 backbone threads exactly these objects through the seven value streams `[S3b][S3c]`:
-
-| Level | Canonical object (IT4IT v3 / SID) | Owning value stream | Key attributes to persist |
-|-------|-----------------------------------|---------------------|---------------------------|
-| **Strategy** | Strategic Theme → Outcome/OKR (see §12.3) | Evaluate | objective, key result, target, horizon |
-| **Abstract** | **Digital Product** / `ProductSpecification` | Evaluate → Explore | name, category, owner team, lifecycle-state, **recursive parent/child** |
-| **Design** | **Product Design** (conceptual → logical) | Explore | blueprint, target outcome, consumer domain |
-| **Build** | **Product Release** (versioned, buildable) | Integrate → Deploy | version, release notes, SBOM ref (§12.1.2) |
-| **Commercial** | **Service Offer** + `ProductOfferingPrice` + **Service Commitments** | Release | market/eligibility, **price as a separate versioned child** (one-time/recurring/usage/tiered), SLA/commitment terms |
-| **Running** | **Subscription** + **Desired/Actual Product Instance** | Consume/Fulfill → Operate | consumer, entitlement, status, deployment, telemetry |
+The original draft asserted exact cross-framework convergence and an object-to-IT4IT-stream table.
+That table is superseded and removed because this historical record does not carry a conforming
+SourceUseDecision or authorized-edition review for those correspondences. The current FPAW authority
+independently distinguishes BusinessProduct, ServiceDefinition, typed Offering, DigitalProduct,
+DigitalProductRelease, engagement/contract, and runtime/service instance. Any IT4IT, SID, or CSDM
+binding is now explicit, versioned, evidence-backed, and separately rights-governed rather than
+inherited from the removed table.
 
 **12.1.1 Service split (do not skip).** SID's signature insight, echoed by CSDM: split the service layer into **Customer-Facing Service (CFS)** vs **Resource-Facing Service (RFS)** `[S1a]`. The same internal service can back multiple sold offerings; modeling them as one hides cost and reuse. For DPF this is the join between a customer offer (Facet A) and the Foundational/Manufacturing capabilities it rests on (Facets C/D) — the dependency edge that gives "IT" line of sight to the customer.
 
@@ -299,7 +334,10 @@ The frameworks (IT4IT v3 Digital Product Backbone, TM Forum SID/Open APIs, Servi
 - **Revenue** via SID `ProductOfferingPrice` attached to the Offer.
 - **Consumer/allocation dimension** with a **showback-vs-chargeback flag** per consumer relationship (internal BU *or* external customer).
 
-**12.1.4 Lifecycle = value streams, not phases.** Evaluate and Operate run **continuously**, not as stages you exit `[S3b]`. Store `last-evaluated` / `last-reviewed` timestamps for the governance loop, plus an explicit **Retire/Sunset** terminal state (IT4IT covers retirement under Evaluate/Operate but names no stream for it `[S1b]`).
+**12.1.4 Lifecycle review is continuous.** DPF should store `last-evaluated` / `last-reviewed`
+timestamps for its governance loop and an explicit **Retire/Sunset** terminal state. The original
+draft's exact IT4IT value-stream and retirement assertions are not retained; external equivalence is
+governed by FPAW mappings against an authorized edition.
 
 ### 12.2 Facet B — Workforce: the five-block agent record
 
@@ -347,9 +385,16 @@ Vision (stable, multi-year)
 
 **AI's honest role (aligns exactly with DPF's PAR + governance gates)** `[S4-ai]`: empirical adoption of AI for backlog prioritization is ~7.3% today; AI identifies high-priority items 70–85% correctly — so **propose, never autonomously commit**. Ship the proven layer (multi-signal scoring + strategy-alignment filtering + candidate-generation-from-gaps, all governance-gated); pilot but don't yet trust real-time autonomous re-prioritization. **SAFe Lean Portfolio Management is the closest existing end-to-end blueprint** `[S4-safe]` and worth mining directly for the §7 implementation.
 
-### 12.4 Source-access caveat (G252 / IT4IT normative text)
+### 12.4 Source-use boundary (G252 and IT4IT Reference Architecture text)
 
-The Open Group's normative texts — **DPPM Guide G252** and **IT4IT v3.0.1** — sit behind Open Group SSO; the research corroborated the load-bearing facts (seven value-stream names, three→four portfolio evolution, backbone objects, dependency direction) across 3+ independent sources, but the following must be **verified verbatim against the licensed G252 PDF before being quoted as canonical** `[S3-verify]`: (1) the exact name + definition of the fourth portfolio ("Manufacture & Delivery"); (2) the dependency diagram as G252 draws it; (3) per-portfolio governance/financial/value-outcome wording. The DPF copy at `docs/Reference/digital_product_portfolio_mgmt.txt` + `docs/Reference/DigitaProductPortfolioManagement.pdf` is the authoritative local source — Phase 0 should reconcile this section's inferred mapping against it.
+Mark Bodman's `CA-MB-2026-08-01-IT4IT-PROVENANCE` attestation records bounded contributor provenance
+and direct design direction. It does not supply permission for compiled IT4IT Reference Architecture
+or DPPM guide material. Their PDFs, text extracts, and mixed-origin derivative workbooks remain
+`excluded` or `undetermined` under the complete FPAW decisions, so they are not successor AI
+research, paraphrase, mapping, or verification inputs. Exact published definitions, dependency
+figures, external conformance, and criteria require an authorized edition, a complete applicable
+SourceUseDecision, and qualified human review. The current FPAW standard owns this source/use policy
+and the independently expressed bridge semantics.
 
 ## 13. References (industry sources, 2024–2026)
 
@@ -373,7 +418,7 @@ The Open Group's normative texts — **DPPM Guide G252** and **IT4IT v3.0.1** �
 - `[S3b]` IT4IT v3 — The Seven Value Streams: https://digital-portfolio.opengroup.org/it4it-standard/latest/DigitalManagement/seven-it4it-value-streams.html
 - `[S3c]` IT4IT v3 — Digital Product backbone / functional components & data model: https://digital-portfolio.opengroup.org/it4it-standard/latest/DigitalManagement/functional-components-and-data-model.html
 - `[S3f]` Open Group W205 — *The Shift to Digital Product* (Bodman & Warfield, 2020): https://publications.opengroup.org/white-papers/w205
-- `[S3-verify]` IT4IT v3.0.1 standard: https://pubs.opengroup.org/it4it/3.0.1/standard/ ; local: `docs/Reference/digital_product_portfolio_mgmt.txt`
+- `[S3-verify]` IT4IT v3.0.1 [public product page](https://publications.opengroup.org/c24a), bibliography/high-level scope only; precise verification requires an authorized edition, SourceUseDecision, and qualified human reviewer
 
 **Strategy → capability → backlog**
 - `[S4-spm]` Gartner — Strategic Portfolio Management (2025 MQ / Critical Capabilities): https://www.gartner.com/en/documents/5468395

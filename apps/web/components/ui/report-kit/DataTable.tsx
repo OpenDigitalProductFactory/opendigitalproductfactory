@@ -43,6 +43,8 @@ export interface DataTableProps<T> {
   pageSize?: number;
   dense?: boolean;
   className?: string;
+  /** Accessible name for the underlying table element. */
+  ariaLabel?: string;
 }
 
 export type SortDir = "asc" | "desc";
@@ -105,6 +107,7 @@ export function DataTable<T>({
   pageSize,
   dense = false,
   className = "",
+  ariaLabel,
 }: DataTableProps<T>) {
   const [sort, setSort] = useState<{ key: string; dir: SortDir } | null>(
     initialSort ?? null,
@@ -138,7 +141,10 @@ export function DataTable<T>({
 
   return (
     <div className={className}>
-      <table className="w-full border-collapse text-xs">
+      <table
+        aria-label={ariaLabel}
+        className="w-full border-collapse text-xs"
+      >
         <thead>
           <tr className="border-b border-[var(--dpf-border)] text-left">
             {columns.map((col) => {

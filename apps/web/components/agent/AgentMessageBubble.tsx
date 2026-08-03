@@ -4,6 +4,7 @@ import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import { FileText, PlugZap } from "lucide-react";
 import type { AgentMessageProvider, AgentMessageRow } from "@/lib/agent-coworker-types";
+import { AI_PROVIDER_CONNECTIONS_ROUTE } from "@/lib/ai-provider-routes";
 import type { ReactNode } from "react";
 import { AgentAttachmentCard } from "./AgentAttachmentCard";
 import { providerModelLabel } from "@/lib/agent/provider-model-label";
@@ -106,7 +107,7 @@ function extractManagedDocumentIds(content: string): string[] {
 }
 
 /** Deep-link target for the AI provider reconnect / activation surface. */
-export const PROVIDER_ROUTING_ROUTE = "/platform/ai/providers";
+export const PROVIDER_ROUTING_ROUTE = AI_PROVIDER_CONNECTIONS_ROUTE;
 
 /**
  * True when an assistant message steers the operator to reconnect or activate an

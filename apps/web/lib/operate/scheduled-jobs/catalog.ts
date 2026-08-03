@@ -518,6 +518,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "mcp-call-efficiency-scan",
+    inngestId: "ops/mcp-call-efficiency-scan",
+    name: "MCP call efficiency scan",
+    purpose:
+      "BI-A08EBAEC: analyzes ToolExecution thrash, retry storms, and high-volume/failure tools; notifies AI Ops so agent token waste can be cut via skills, tool merges, or webhooks.",
+    cron: "15 6 * * *",
+    cadence: "Daily at 06:15",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "queue-metrics-aggregator",
     inngestId: "queue/metrics-aggregator",
     name: "Queue metrics aggregator",

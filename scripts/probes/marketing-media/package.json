@@ -1,0 +1,19 @@
+{
+  "name": "@dpf/marketing-media-probe",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@10.33.2",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test gemini-tts-response.test.mjs"
+  },
+  "dependencies": {
+    "@puppeteer/browsers": "3.0.6",
+    "ffmpeg-static": "5.3.0",
+    "ffprobe-static": "3.1.0",
+    "gsap": "3.14.2",
+    "hyperframes": "0.7.87"
+  }
+}

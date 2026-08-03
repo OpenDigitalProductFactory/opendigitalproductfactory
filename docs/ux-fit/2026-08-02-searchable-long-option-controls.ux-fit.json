@@ -1,0 +1,25 @@
+{
+  "version": "1",
+  "decidedOption": "closed-searchable-picker",
+  "scope": {
+    "files": [
+      "apps/web/components/ui/form/SearchableSelect.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "improved",
+    "measured": {
+      "/storefront/settings/operations": {
+        "defaultVisibleWords": 145,
+        "leadBandWords": 0,
+        "primaryActions": 1,
+        "visibleFields": 11,
+        "maxChoicesPerControl": 0,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 2
+      }
+    }
+  }
+}

@@ -629,20 +629,29 @@ async function cancelDeadLocalQueueObservers({
       );
       continue;
     }
-    releaseLocalQueueObserver({
-      path: resolvePath(directory, `${candidate.livenessProof.observerToken}.json`),
-      token: candidate.livenessProof.observerToken,
-    });
+    const proofs = Array.isArray(candidate.livenessProofs) && candidate.livenessProofs.length > 0
+      ? candidate.livenessProofs
+      : [candidate.livenessProof];
+    for (const proof of proofs) {
+      releaseLocalQueueObserver({
+        path: resolvePath(directory, `${proof.observerToken}.json`),
+        token: proof.observerToken,
+      });
+    }
     const event = {
       type: "dead_queue_observer_cancelled",
       leaseId: candidate.leaseId,
       reason: candidate.reason,
       livenessProof: candidate.livenessProof,
+      ...(proofs.length > 1 ? { livenessProofs: proofs } : {}),
       at: new Date().toISOString(),
     };
     leaseEvents.push(event);
+    const proofText = proofs.length === 1
+      ? `pid ${candidate.livenessProof.pid}`
+      : `${proofs.length} dead observer records`;
     process.stdout.write(
-      `cancelled dead same-host queue observer ${candidate.leaseId} (${candidate.reason}; pid ${candidate.livenessProof.pid})\n`,
+      `cancelled dead same-host queue observer ${candidate.leaseId} (${candidate.reason}; ${proofText})\n`,
     );
   }
 }
@@ -849,10 +858,18 @@ async function main() {
   let leaseReleased = false;
   let receivedSignal = "";
   let queuedClaimInterruptedByQuiescence = false;
-  let claimRecoverySequence = 0;
+  let terminalClaimAttemptSequence = 0;
   const leaseEvents = [];
   const hostPressureSamples = [];
   let admissionPoolPolicy = null;
+  const queueObserverState = () => queueObserverPath
+    ? {
+      path: queueObserverPath,
+      token: gateObserverIdentity.token,
+      pid: gateObserverIdentity.pid,
+      ownerSessionId,
+    }
+    : null;
   const signalHandlers = Object.fromEntries(["SIGINT", "SIGTERM"].map((signal) => [
     signal,
     () => {
@@ -995,11 +1012,32 @@ async function main() {
         resilience: null,
         leaseEvents,
         evidencePending: false,
+        queueObserver: queueObserverState(),
       });
       break;
     }
     if (claimResponse?.success === true && admission?.status === "queued") {
       queuedClaimInterruptedByQuiescence = false;
+      leaseEvents.push({
+        type: "queued",
+        at: new Date().toISOString(),
+        queuePosition: admission.queuePosition ?? null,
+        waitAgeMs: admission.waitAgeMs ?? null,
+        expiresAt,
+      });
+      writeState(stateFile, {
+        branch,
+        sha,
+        gatePassed: false,
+        leaseId,
+        evidenceId: "",
+        status: "queued",
+        expiresAt,
+        resilience: null,
+        leaseEvents,
+        evidencePending: false,
+        queueObserver: queueObserverState(),
+      });
       if (Date.now() >= deadline) {
         await releaseLeaseOnce();
         die("local-CI admission queue wait timed out");
@@ -1046,28 +1084,46 @@ async function main() {
       continue;
     }
     const terminalReason = claimResponse?.data?.reason
-      ?? claimResponse?.data?.lease?.reason;
+      ?? claimResponse?.data?.lease?.reason
+      ?? claimResponse?.data?.lease?.status;
     if (
       claimResponse?.error === "lease_terminal"
-      && terminalReason === "expired"
-      && queuedClaimInterruptedByQuiescence
+      && ["released", "cancelled", "expired"].includes(terminalReason)
     ) {
       if (Date.now() >= deadline) {
-        die("local-CI queue claim expired during quiescence at the admission deadline");
+        die(`previous local-CI lease claim was already ${terminalReason} at the admission deadline`);
       }
-      claimRecoverySequence += 1;
-      claimKey = `${baseClaimKey}:recovery-${claimRecoverySequence}`;
+      const priorClaimKey = claimKey;
+      const terminalAttemptPrefix = `${baseClaimKey}:rerun-`;
+      const priorAttemptText = priorClaimKey.startsWith(terminalAttemptPrefix)
+        ? priorClaimKey.slice(terminalAttemptPrefix.length)
+        : "";
+      const priorAttemptSequence = /^\d+$/.test(priorAttemptText)
+        ? Number.parseInt(priorAttemptText, 10)
+        : 0;
+      terminalClaimAttemptSequence = Math.max(
+        terminalClaimAttemptSequence,
+        Number.isSafeInteger(priorAttemptSequence) ? priorAttemptSequence : 0,
+      ) + 1;
+      claimKey = `${baseClaimKey}:rerun-${terminalClaimAttemptSequence}`;
+      const interruptedByQuiescence = queuedClaimInterruptedByQuiescence;
       leaseEvents.push({
-        type: "queue-intent-reestablished",
+        type: interruptedByQuiescence
+          ? "queue-intent-reestablished"
+          : "terminal-claim-replaced",
         at: new Date().toISOString(),
         priorLeaseId: leaseId,
-        recoverySequence: claimRecoverySequence,
+        priorClaimKey,
+        replacementClaimKey: claimKey,
+        terminalReason,
+        terminalAttemptSequence: terminalClaimAttemptSequence,
+        interruptedByQuiescence,
       });
       leaseId = "";
       queuedClaimInterruptedByQuiescence = false;
-      process.stdout.write(
-        `queued claim expired during portal quiescence; re-establishing queue intent with recovery ${claimRecoverySequence}...\n`,
-      );
+      process.stdout.write(interruptedByQuiescence
+        ? `queued claim ${terminalReason} during portal quiescence; re-establishing queue intent with terminal attempt ${terminalClaimAttemptSequence}...\n`
+        : `previous local-CI lease claim was ${terminalReason}; creating fresh admission attempt ${terminalClaimAttemptSequence}...\n`);
       continue;
     }
     die(`failed to claim local-CI lease: ${JSON.stringify(claimResponse)}`);
@@ -1243,6 +1299,7 @@ async function main() {
       { type: "started", at: new Date().toISOString() },
     ],
     evidencePending: false,
+    queueObserver: queueObserverState(),
   });
 
   // The preflight executes in the shared scratch integration worktree, whose

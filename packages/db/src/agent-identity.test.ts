@@ -83,6 +83,7 @@ describe("dual-seed slug → canonical map (BI-74FD6420)", () => {
     expect(resolveCanonicalAgentId("external-catalog-scout")).toBe("AGT-WS-SCOUT");
     expect(resolveCanonicalAgentId("inventory-specialist")).toBe("AGT-WS-INVENTORY");
     expect(resolveCanonicalAgentId("onboarding-coo")).toBe("AGT-WS-ONBOARD");
+    expect(resolveCanonicalAgentId("farm-ranch-steward")).toBe("AGT-WS-FARM-RANCH");
     // Unmapped seeds pass through unchanged.
     expect(resolveCanonicalAgentId("storefront-advisor")).toBe("storefront-advisor");
     expect(resolveCanonicalAgentId("AGT-ORCH-000")).toBe("AGT-ORCH-000");
@@ -112,6 +113,19 @@ describe("dual-seed slug → canonical map (BI-74FD6420)", () => {
     expect(resolveAgentIdentity({ agentId: "onboarding-coo", name: "Onboarding COO" }).displayName).toBe(
       "Onboarding COO",
     );
+  });
+
+  it("gives Farm & Ranch Steward one canonical identity across both seed paths", () => {
+    expect(
+      resolveAgentIdentity({ agentId: "AGT-WS-FARM-RANCH", name: "farm-ranch-steward" }).displayName,
+    ).toBe("Farm & Ranch Steward");
+    expect(
+      resolveAgentIdentity({
+        agentId: "farm-ranch-steward",
+        slugId: "farm-ranch-steward",
+        name: "Farm & Ranch Steward",
+      }).displayName,
+    ).toBe("Farm & Ranch Steward");
   });
 
   it("distinguishes the two Portfolio Backlog registry agents", () => {

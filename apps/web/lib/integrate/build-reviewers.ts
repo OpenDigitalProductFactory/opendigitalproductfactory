@@ -600,19 +600,20 @@ export function buildReviewBranchArtifacts(
     // Treat both null reviews and parse-error results as absent reviewers.
     // A parse-error branch is not a dissenting vote — it is infra noise and
     // must not contribute a "fail" recommendation to consensusState detection.
-    if (!input.review || input.review.parseError) {
+    if (!input.review || input.review.parseError || input.review.decision === "inconclusive") {
       return {
         branchNodeId: input.branchNodeId,
         role: input.role,
         completed: false,
         failureReason: input.review?.parseError
           ? "parse-error: reviewer returned unparseable output"
+          : input.review?.decision === "inconclusive"
+          ? `inconclusive: ${input.review.inconclusiveReason ?? "review did not complete"}`
           : (input.failureReason ?? "Reviewer did not produce a parsed response."),
       };
     }
     const { assertions, objections } = extractClaimsFromReview(input.review);
-    const recommendation =
-      input.review.decision === "pass" ? "pass" : "fail";
+    const recommendation = input.review.decision;
     return {
       branchNodeId: input.branchNodeId,
       role: input.role,

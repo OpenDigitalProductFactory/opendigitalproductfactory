@@ -132,6 +132,7 @@ export interface WorkRoomParticipantView {
   currentWorkSummary: string | null;
   enteredReason: string | null;
   sponsorPrincipalRef: string | null;
+  sponsorDisplayName?: string | null;
   authoritySummary: string;
   sourceRefs: WorkCaseSourceRef[];
 }

@@ -216,8 +216,12 @@ describe("Build Disciplines — Full Flow Integration", () => {
     it("gracefully handles LLM hallucination (non-JSON response)", () => {
       const raw = "I think this design looks great! The problem statement is clear and the approach is solid. I would recommend proceeding.";
       const result = parseReviewResponse(raw);
-      expect(result.decision).toBe("fail");
-      expect(result.issues[0].description).toContain("unparseable");
+      expect(result).toMatchObject({
+        decision: "inconclusive",
+        issues: [],
+        parseError: true,
+        inconclusiveReason: "unparseable-review-response",
+      });
     });
   });
 

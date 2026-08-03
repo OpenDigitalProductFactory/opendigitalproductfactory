@@ -26,7 +26,7 @@ Multi-step workflows use a hierarchical orchestrator-worker pattern. The orchest
 
 ## Why
 
-Simple phases (ideate, plan, review, ship) are deterministic workflows where smaller models perform well; complex phases (build, with multi-step tool reasoning) need frontier models. Routing decisions belong in the cheap-model orchestrator; reasoning depth belongs in the expensive-model worker. Direct peer-to-peer handoffs hide governance checkpoints, complicate error recovery, and burn tokens on transition logic that belongs in one place. The pattern matches IT4IT's value-stream gate model: the orchestrator IS the gate.
+Simple phases (ideate, plan, review, ship) are deterministic workflows where smaller models perform well; complex phases (build, with multi-step tool reasoning) need frontier models. Routing decisions belong in the cheap-model orchestrator; reasoning depth belongs in the expensive-model worker. Direct peer-to-peer handoffs hide governance checkpoints, complicate error recovery, and burn tokens on transition logic that belongs in one place. The pattern matches the value-stream gate model described by the IT4IT Reference Architecture: the orchestrator IS the gate.
 
 ## Applies To
 

@@ -18,17 +18,20 @@ export async function monitorControlPlane({
   wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   intervalMs = 5_000,
   consecutiveFailureLimit = 2,
+  onSample = () => {},
 }) {
   const samples = [];
   let consecutiveFailures = 0;
   while (true) {
     const probes = await sample();
     const classification = classifyControlPlaneSample(probes);
-    samples.push({
+    const observed = {
       observedAt: new Date().toISOString(),
       probes,
       ...classification,
-    });
+    };
+    samples.push(observed);
+    await onSample(observed);
     consecutiveFailures = classification.healthy
       ? 0
       : consecutiveFailures + 1;

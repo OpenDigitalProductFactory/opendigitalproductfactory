@@ -88,6 +88,7 @@ Edit `.claude/settings.json` and remove the `PostToolUse` + `SessionEnd` entries
 - **The hook fires AFTER each tool call.** The snapshot from just BEFORE a destructive action survives; nothing captures the state during the action itself (irrelevant — there's nothing to snapshot at the moment of destruction).
 - **The throttle means up to 2 minutes of conversation can be lost** during a crash mid-session-burst. The BI accepts this trade-off — "worst-case data loss is the last N actions, not the entire session" was the explicit ask.
 - **Snapshots include conversation contents.** If a session contained secrets / credentials, they will be on disk under `$DPF_BACKUPS_HOST_PATH`. Protect that directory the same way you protect any backup tree.
+- **Launcher bounds child lifetime (BI-BDA89375).** Hooks run through `scripts/hooks/run-hook.mjs`, which reads the payload once, pipes it into the target script, and kills the child tree if it exceeds `DPF_HOOK_TIMEOUT_MS` (default 15s). A hung snapshot never blocks the tool call and cannot pile up hundreds of Node/PowerShell processes.
 
 ## Composition with other DR-hardening features
 

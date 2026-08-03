@@ -67,7 +67,13 @@ describe("resolveEffectiveTier", () => {
 });
 
 describe("selectToolsByTier", () => {
-  const tools = [{ name: "query_backlog" }, { name: "deploy_feature" }, { name: "search_knowledge" }];
+  const tools = [
+    { name: "query_backlog" },
+    { name: "deploy_feature" },
+    { name: "search_knowledge" },
+    { name: "request_self_upgrade" },
+    { name: "record_runtime_verification" },
+  ];
 
   it("full tier is identity", () => {
     expect(selectToolsByTier(tools, "full")).toEqual(tools);
@@ -77,6 +83,8 @@ describe("selectToolsByTier", () => {
     expect(selectToolsByTier(tools, "core").map((t) => t.name)).toEqual([
       "query_backlog",
       "search_knowledge",
+      "request_self_upgrade",
+      "record_runtime_verification",
     ]);
   });
 });
@@ -91,5 +99,17 @@ describe("CORE_MCP_TOOL_NAMES drift guard", () => {
   it("core is a strict, lean subset (well under the full surface)", () => {
     expect(CORE_MCP_TOOL_NAMES.size).toBeLessThan(PLATFORM_TOOLS.length);
     expect(CORE_MCP_TOOL_NAMES.size).toBeLessThanOrEqual(30);
+  });
+
+  it("keeps the governed live-delivery workflow discoverable for non-Claude external agents", () => {
+    expect([...CORE_MCP_TOOL_NAMES]).toEqual(
+      expect.arrayContaining([
+        "get_quiescence_status",
+        "get_self_upgrade_queue_status",
+        "request_self_upgrade",
+        "repair_promoter_image",
+        "record_runtime_verification",
+      ]),
+    );
   });
 });

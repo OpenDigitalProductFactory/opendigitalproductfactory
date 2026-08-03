@@ -18,6 +18,9 @@ import { safeRenderValue } from "@/lib/safe-render";
 import { normalizeTaskResults, type NormalizedTaskResults } from "@/lib/build/task-results";
 import { normalizeVerificationOutput, type NormalizedVerificationOutput } from "@/lib/build/verification-output";
 import { DecompositionCoordinator } from "@/components/build/DecompositionCoordinator";
+import { Notice } from "@/components/ui/report-kit";
+import { semanticReviewDecisionPresentation } from "@/lib/change-review/review-decision-presentation";
+import type { SemanticReviewDecision } from "@/lib/change-review/semantic-change-review";
 
 type Props = {
   build: FeatureBuildRow;
@@ -213,7 +216,7 @@ function DesignDocSection({
   const [isFormatting, startFormatting] = useTransition();
 
   const reviewBadge = review
-    ? review.decision === "pass" ? "Approved" : "Failed"
+    ? semanticReviewDecisionPresentation(review.decision).title
     : doc ? "Not reviewed" : "Missing";
   const reviewColor = review?.decision === "pass"
     ? "var(--dpf-success)"
@@ -864,39 +867,26 @@ function ReviewBadgeBlock({
   summary,
   issues,
 }: {
-  decision: "pass" | "fail";
+  decision: SemanticReviewDecision;
   summary: string;
   issues: Array<{ severity: string; description: string }>;
 }) {
+  const presentation = semanticReviewDecisionPresentation(decision);
+
   return (
-    <div
-      className="mt-2 px-2 py-1.5 rounded border text-xs"
-      style={{
-        borderColor: decision === "pass"
-          ? "color-mix(in srgb, var(--dpf-success) 30%, var(--dpf-border))"
-          : "color-mix(in srgb, var(--dpf-error) 30%, var(--dpf-border))",
-        background: decision === "pass"
-          ? "color-mix(in srgb, var(--dpf-success) 5%, transparent)"
-          : "color-mix(in srgb, var(--dpf-error) 5%, transparent)",
-      }}
+    <Notice
+      className="mt-2 text-xs"
+      variant={presentation.variant}
+      title={`Review status: ${presentation.title}`}
     >
-      <div className="flex items-center gap-1.5">
-        <span
-          className="w-2 h-2 rounded-full"
-          style={{ background: decision === "pass" ? "var(--dpf-success)" : "var(--dpf-error)" }}
-        />
-        <span className="font-medium text-[var(--dpf-text)]">
-          Review: {decision === "pass" ? "Approved" : "Changes requested"}
-        </span>
-      </div>
       {summary && (
-        <p className="text-[10px] text-[var(--dpf-muted)] mt-1 leading-relaxed">{safeRenderValue(summary)}</p>
+        <p className="text-[10px] text-[var(--dpf-muted)] leading-relaxed">{safeRenderValue(summary)}</p>
       )}
       {Array.isArray(issues) && issues.length > 0 && (
         <div className="mt-1 text-[10px] text-[var(--dpf-muted)]">
           {issues.length} issue{issues.length !== 1 ? "s" : ""} noted
         </div>
       )}
-    </div>
+    </Notice>
   );
 }

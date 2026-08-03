@@ -225,6 +225,7 @@ export async function persistBootstrapDiscoveryRun(
     let createdEntities = 0;
     let updatedEntities = 0;
 
+    const enrichmentByEntityKey = new Map<string, ReturnType<typeof deriveInventoryEnrichment>>();
     for (const entity of normalized.inventoryEntities) {
       const existed = existingEntityKeys.has(entity.entityKey);
       const evidenceSnapshot = deriveInventoryEvidenceSnapshot(
@@ -247,6 +248,18 @@ export async function persistBootstrapDiscoveryRun(
         supportStatus: evidenceSnapshot.supportStatus,
         properties: entity.properties as unknown as import("../generated/client/client").Prisma.JsonValue,
       });
+      // The quality evaluator ran on `evidenceSnapshot` alone — package-manager
+      // software evidence — while THESE enriched values are what actually land
+      // on the persisted row. So discovery could enrich an entity
+      // (manufacturer=postgres, supportStatus=supported) and then immediately
+      // re-raise `catalog_match_ambiguous` / `lifecycle_unverified` against a
+      // snapshot that still said null/unknown. The detector was blind to the
+      // enrichment, which made those queues self-sustaining: enrichment could
+      // never satisfy a condition evaluated without it. Observed live — four of
+      // five sampled rows had a persisted manufacturer and ZERO
+      // DiscoveredSoftwareEvidence rows. Captured here so the evaluation below
+      // sees exactly what the row holds.
+      enrichmentByEntityKey.set(entity.entityKey, enrichment);
       const persistedEntity = await tx.inventoryEntity.upsert({
         where: { entityKey: entity.entityKey },
         create: {
@@ -626,6 +639,7 @@ export async function persistBootstrapDiscoveryRun(
           const evidenceSnapshot = deriveInventoryEvidenceSnapshot(
             softwareEvidenceByEntityKey.get(entity.entityKey) ?? [],
           );
+          const enriched = enrichmentByEntityKey.get(entity.entityKey);
           const qualityEntity = {
             entityKey: entity.entityKey,
             entityType: entity.entityType,
@@ -638,10 +652,15 @@ export async function persistBootstrapDiscoveryRun(
             })) ?? null,
             taxonomyNodeId: entity.taxonomyNodeId ?? null,
             digitalProductId: null,
-            manufacturer: evidenceSnapshot.manufacturer,
-            observedVersion: evidenceSnapshot.observedVersion,
-            normalizedVersion: evidenceSnapshot.normalizedVersion,
-            supportStatus: evidenceSnapshot.supportStatus,
+            // Enriched values, NOT the raw evidence snapshot. `enrichment` is what
+            // the upsert above writes to the row, so evaluating against anything
+            // else lets discovery enrich an entity and then re-raise an identity
+            // or lifecycle issue about the very fields it just populated. Fall
+            // back to the snapshot only where enrichment produced nothing.
+            manufacturer: enriched?.manufacturer ?? evidenceSnapshot.manufacturer,
+            observedVersion: enriched?.observedVersion ?? evidenceSnapshot.observedVersion,
+            normalizedVersion: enriched?.normalizedVersion ?? evidenceSnapshot.normalizedVersion,
+            supportStatus: enriched?.supportStatus ?? evidenceSnapshot.supportStatus,
             hasSoftwareEvidence: evidenceSnapshot.hasSoftwareEvidence,
             normalizationStatus: evidenceSnapshot.normalizationStatus,
           };
