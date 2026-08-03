@@ -74,12 +74,9 @@ export function RoomsList({ view, onSelectRoom }: RoomsListProps) {
   ];
 
   return (
-    <div
-      aria-label="Room operations"
-      className="overflow-x-auto rounded-xl border border-[var(--dpf-border)]"
-      role="region"
-    >
+    <div className="overflow-x-auto rounded-xl border border-[var(--dpf-border)]">
       <DataTable
+        ariaLabel="Room operations"
         className="min-w-[760px] bg-[var(--dpf-surface-1)]"
         columns={columns}
         getRowKey={(room) => room.id}
