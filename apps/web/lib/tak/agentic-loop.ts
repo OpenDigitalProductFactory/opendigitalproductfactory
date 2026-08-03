@@ -1114,7 +1114,8 @@ function compactAgenticMessages(
     });
 }
 
-export async function runAgenticLoop(params: {
+export type RunAgenticLoopParams = {
+
   chatHistory: ChatMessage[];
   systemPrompt: string;
   sensitivity: "public" | "internal" | "confidential" | "restricted";
@@ -1237,7 +1238,33 @@ export async function runAgenticLoop(params: {
    * caller is byte-for-byte unchanged until it opts in.
    */
   enableExecutionPlan?: boolean;
-}): Promise<AgenticResult> {
+
+};
+
+export async function runAgenticLoop(params: RunAgenticLoopParams): Promise<AgenticResult> {
+  const tracker = { activeSkillId: params.activeSkillId ?? null };
+  let isSuccess = false;
+  try {
+    const result = await _runAgenticLoop(params, tracker);
+    isSuccess = true;
+    return result;
+  } finally {
+    if (tracker.activeSkillId) {
+      const { recordSkillUsageEvents } = await import("@/lib/skills/usage-events");
+      void recordSkillUsageEvents({
+        phase: isSuccess ? "completed" : "failed",
+        skillIds: [tracker.activeSkillId],
+        agentId: params.agentId,
+        userId: params.userId,
+        threadId: params.threadId,
+        taskRunId: params.taskRunId ?? null,
+        routeContext: params.routeContext,
+      });
+    }
+  }
+}
+
+async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSkillId: string | null }): Promise<AgenticResult> {
   const {
     chatHistory,
     systemPrompt,
@@ -1256,9 +1283,9 @@ export async function runAgenticLoop(params: {
     agentDisplayName,
     taskRunId,
     apiTokenId,
-    activeSkillId,
     agentMessageId,
   } = params;
+  let hasResolvedSkillInvocation = false;
   const interactionMode: "chat" | "autonomous" = params.interactionMode ?? "autonomous";
   const proposeSideEffects = params.proposeSideEffects ?? false;
 
@@ -2527,6 +2554,30 @@ export async function runAgenticLoop(params: {
       const toolStartMs = Date.now();
       let toolResult: ToolResult;
       try {
+        if (!tracker.activeSkillId && !hasResolvedSkillInvocation && tc.name !== LOAD_TOOLS_TOOL_NAME && !EXECUTION_PLAN_TOOL_NAMES.has(tc.name)) {
+          hasResolvedSkillInvocation = true;
+          try {
+            const { getSkillsForAgent } = await import("@/lib/skills/runtime");
+            const agentSkills = await getSkillsForAgent(agentId);
+            const matchingSkill = agentSkills.find((s) => s.allowedTools.includes(tc.name));
+            if (matchingSkill) {
+              tracker.activeSkillId = matchingSkill.skillId;
+              const { recordSkillUsageEvents } = await import("@/lib/skills/usage-events");
+              void recordSkillUsageEvents({
+                phase: "invoked",
+                skillIds: [tracker.activeSkillId],
+                agentId,
+                userId,
+                threadId,
+                taskRunId: taskRunId ?? null,
+                routeContext,
+              });
+            }
+          } catch (err) {
+            console.warn("[agentic-loop] failed to infer skill invocation:", err);
+          }
+        }
+
         toolResult = await governedExecuteTool({
           toolName: tc.name,
           rawParams: tc.arguments,
@@ -2538,7 +2589,7 @@ export async function runAgenticLoop(params: {
             threadId,
             taskRunId: taskRunId ?? undefined,
             apiTokenId: apiTokenId ?? undefined,
-            skillId: activeSkillId ?? undefined,
+            skillId: tracker.activeSkillId ?? undefined,
             // In-portal coworker chat turns attach COWORKER_READ_BASELINE_GRANTS
             // to the tool surface (actions/agent-coworker.ts). Flag the turn so
             // the governed grant check honours the same baseline at execution
@@ -2588,22 +2639,7 @@ export async function runAgenticLoop(params: {
       iterationResults.push({ tc, toolResult });
       onProgress?.({ type: "tool:complete", tool: tc.name, success: toolResult.success });
 
-      // Governed Hermes learning Slice 1: attribute tool outcome to the
-      // active skill (if any). Fire-and-forget — the SkillUsageEvent writer
-      // catches DB errors so this can never delay the user response.
-      if (activeSkillId) {
-        const { recordSkillUsageEvents } = await import("@/lib/skills/usage-events");
-        void recordSkillUsageEvents({
-          phase: toolResult.success ? "completed" : "failed",
-          skillIds: [activeSkillId],
-          agentId,
-          userId,
-          threadId,
-          taskRunId: taskRunId ?? null,
-          routeContext,
-          metadata: { toolName: tc.name, iteration, durationMs },
-        });
-      }
+
     }
 
     // Append ONE assistant message (with toolCalls preserved) + N tool result messages.
@@ -2697,3 +2733,4 @@ export async function runAgenticLoop(params: {
     executionPlan,
   };
 }
+
