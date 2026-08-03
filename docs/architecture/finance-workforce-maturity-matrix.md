@@ -1,0 +1,92 @@
+# Finance and Workforce Documentation Maturity Matrix
+
+**Status:** operator-facing reconciliation of docs vs code (living matrix)  
+**Backlog:** BI-COP-004 / EP-COMPANY-OPS-PARITY  
+**Related:** [archetype-owner-positioning](archetype-owner-positioning.md), BI-COP-005 (edge-adapter convergence), BI-COP-006 (complexity shield), EP-FINANCE-ACCOUNTING-CORE, EP-QUICKBOOKS-ACCOUNTING-BRIDGE, EP-WORKFORCE-OPS
+
+## Purpose
+
+Public and internal language about finance and workforce has drifted: some docs still say DPF is "not a full accounting system" while code already includes ledger, journal, AR/AP, banking, assets, and QuickBooks import staging. Workforce docs describe staffing direction that is only partially shipped.
+
+This matrix is the **single place** that labels capability maturity so operators, marketers, and agents do not over- or under-claim.
+
+## Maturity labels (closed set)
+
+| Label | Meaning | Safe public claim |
+| --- | --- | --- |
+| **usable-now** | Reachable in the portal for a normal install with clear happy path | "You can do X in DPF today" |
+| **experimental** | Present in code/routes but incomplete, admin-only, or not complexity-shield ready | "Preview / evolving — not production-critical yet" |
+| **bridge-only** | Value depends on an external system of record via adapter | "Works with X; X remains SoR for …" |
+| **planned** | Spec/roadmap only; do not imply shipped | "On the roadmap" |
+| **out-of-scope** | Explicit non-goal for current product | "DPF does not replace …" |
+
+## Finance matrix (snapshot)
+
+Labels are intentional and conservative. Promote a row only when UX verification and complexity-shield acceptance support it.
+
+| Capability | Code anchors (indicative) | Maturity | Notes for docs/marketing |
+| --- | --- | --- | --- |
+| Chart of accounts / ledger accounts | `LedgerAccount`, finance shell routes | **experimental** | Substrate exists; do not claim full GL product parity |
+| Journal entry / subledger posting | `JournalEntry`, general-ledger reports | **experimental** | Internal posting paths; owner happy path still thin |
+| AR invoices | `/finance/invoices`, invoice APIs | **usable-now** (core path) | Customer-facing invoice flows exist; keep complexity shield |
+| AP / bills | AP models and finance routes | **experimental** | Present; verify per install before production claims |
+| Banking | `/finance/banking` | **experimental** | Surfaces exist; Plaid/bank rails remain partial |
+| Fixed assets / currency | asset & currency models | **experimental** | Not a full fixed-asset suite claim |
+| QuickBooks import / sync | QB bridge plans/specs, import staging | **bridge-only** | External SoR during bridge; see convergence doctrine |
+| Full multi-entity statutory accounting | — | **out-of-scope** (current) | Aligns with owner-positioning: do not claim full accounting suite replacement |
+| Payroll tax filing engine | — | **out-of-scope** / **bridge-only** via payroll vendors | Prefer Gusto/ADP-class bridges when needed |
+| Payments (cards) | Stripe-class adapters | **bridge-only** | Rails stay external |
+
+### Finance doc reconciliation rules
+
+1. **Do not** say "DPF has no ledger" — the models exist; say **experimental** or **usable-now** per row.
+2. **Do not** say "DPF replaces QuickBooks/Xero/Workday Finance" — use **bridge-only** + **planned** native slices.
+3. User guides should link this matrix when describing finance setup.
+4. Market vision remains the outer promise boundary; this matrix is the honesty layer for what is shipped.
+
+## Workforce matrix (snapshot)
+
+| Capability | Code anchors (indicative) | Maturity | Notes for docs/marketing |
+| --- | --- | --- | --- |
+| AI coworker roster / occupations | agent registry, occupation seed | **usable-now** | Core platform workforce of agents |
+| HR employee records (human) | HR workforce core models | **experimental** | Core models; not full HCM |
+| Timesheets | timesheet models | **experimental** | Present; owner UX varies by install |
+| Staffing / scheduling | workforce ops plans, scheduling specs | **experimental** / **planned** (depth) | Direction real; depth varies — do not claim Workday HCM |
+| Recruiting coworker | talent BIs | **planned** | Not a default claim |
+| Payroll processing | external adapters | **bridge-only** | Prefer integrate mode until native absorb criteria met |
+| Full Workday HCM admin | — | **out-of-scope** (current) | Complexity shield: ship jobs, not suite clones |
+
+### Workforce doc reconciliation rules
+
+1. Separate **AI workforce** (coworkers) from **human HR/HCM** in every public sentence.
+2. Staffing/scheduling language must match maturity — prefer "substrate + evolving UX" over "complete WFM."
+3. Identity/role features (WorkOS-class) follow edge-adapter convergence, not workforce marketing copy.
+
+## How to update this matrix
+
+| Event | Action |
+| --- | --- |
+| Feature PR ships a finance/workforce happy path | Update the row label in the **same PR** or a fast follow |
+| Adapter-only path | Label **bridge-only** and name the external SoR |
+| Docs-only claim without code | Reject; open a BI instead |
+| Uncertainty | Choose the **more conservative** label |
+
+## PR checklist (finance/workforce docs)
+
+- [ ] Claims map to a row in this matrix
+- [ ] No upgrade of label without UX proof
+- [ ] Bridge paths name the external system
+- [ ] Complexity-shield considered for owner-facing flows
+- [ ] Positioning docs (`archetype-owner-positioning`, market vision) not contradicted
+
+## Related backlog
+
+- BI-COP-004 — this reconciliation
+- BI-COP-001 — capability parity scorecard (what to build next)
+- BI-COP-005 — when bridge becomes native
+- BI-COP-006 — acceptance for simplified operator workflows
+- BI-COP-008 — market narrative alignment
+
+## Change control
+
+Matrix label changes are documentation of product truth. Inflating a label without runtime proof is a defect; deflating a stale overclaim is always welcome.

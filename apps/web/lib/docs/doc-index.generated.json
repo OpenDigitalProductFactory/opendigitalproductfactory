@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 616,
+  "pageCount": 617,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1188,6 +1188,25 @@
         "derived-predicates-the-shipped-lifecycle-model",
         "adr-10-on-site-capture-is-evidence-metadata-references-never-inline-regulated-content",
         "what-is-built-vs-roadmap"
+      ]
+    },
+    "docs/architecture/finance-workforce-maturity-matrix.md": {
+      "publicHref": "/architecture/finance-workforce-maturity-matrix/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "finance-and-workforce-documentation-maturity-matrix",
+        "purpose",
+        "maturity-labels-closed-set",
+        "finance-matrix-snapshot",
+        "finance-doc-reconciliation-rules",
+        "workforce-matrix-snapshot",
+        "workforce-doc-reconciliation-rules",
+        "how-to-update-this-matrix",
+        "pr-checklist-financeworkforce-docs",
+        "related-backlog",
+        "change-control"
       ]
     },
     "docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md": {
