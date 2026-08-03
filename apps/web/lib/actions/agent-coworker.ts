@@ -80,6 +80,7 @@ import { deriveEffortWarrant } from "@/lib/tak/effort-warrant";
 import { applyLocalDegradationCaveat } from "@/lib/tak/local-degradation-caveat";
 import { coworkerUnavailableResult } from "./coworker-send-eligibility";
 import {
+  classifyTurnMutationIntent,
   isConversationalExpansionRequest,
   isPageExplanationOnlyRequest,
   isPlatformMechanismQuestion,
@@ -1269,7 +1270,14 @@ export async function sendMessage(input: {
   // actions surface as selectable Approve/Reject cards instead of prose that
   // asks the employee to flip a global toggle. Off in Act mode (tools run) and
   // during a build phase (phase gating owns the surface).
-  const surfaceAsProposals = input.coworkerMode === "advise" && !activeBuildPhase;
+  //
+  // BI-FBBA70DF: Explicit read-only intent overrides proposal surfacing for
+  // this turn. When the operator explicitly says "do not create/change/publish
+  // anything", suppress proposals and strip side-effecting tools — identical to
+  // pre-BI-867263F4 advise behavior. Ambiguous planning language is unaffected.
+  const turnIntent = classifyTurnMutationIntent(input.content ?? "");
+  const surfaceAsProposals =
+    input.coworkerMode === "advise" && !activeBuildPhase && turnIntent !== "read-only";
   const availableTools = filterToolsForCoworkerRuntime(mergedTools, {
     coworkerMode: input.coworkerMode,
     surfaceAsProposals,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  classifyTurnMutationIntent,
   isConversationalExpansionRequest,
   isPageExplanationOnlyRequest,
   isPlatformMechanismQuestion,
@@ -185,5 +186,94 @@ describe("isConversationalExpansionRequest", () => {
     expect(isConversationalExpansionRequest("do it")).toBe(false);
     expect(isConversationalExpansionRequest("create the backlog item")).toBe(false);
     expect(isConversationalExpansionRequest("continue")).toBe(false);
+  });
+});
+
+// BI-FBBA70DF
+describe("classifyTurnMutationIntent", () => {
+  describe("read-only — regression prompt and negation+verb patterns", () => {
+    it("classifies the live regression prompt as read-only", () => {
+      expect(
+        classifyTurnMutationIntent(
+          "Draft a concise weekend dinner campaign plan for a fine dining restaurant. Do not publish or change anything.",
+        ),
+      ).toBe("read-only");
+    });
+
+    it("classifies common explicit suppression phrases as read-only", () => {
+      for (const msg of [
+        "Do not publish or change anything.",
+        "Don't create anything yet.",
+        "Do not save this please.",
+        "Do not send the email.",
+        "Please don't add a new record.",
+        "do not update the campaign",
+        "Without saving anything, show me what this would look like.",
+        "No changes — just a review.",
+        "Don't make any changes to this.",
+        "Do not make any changes.",
+      ]) {
+        expect(classifyTurnMutationIntent(msg), msg).toBe("read-only");
+      }
+    });
+
+    it("classifies read-only shorthand phrases as read-only", () => {
+      for (const msg of [
+        "Just a plan for now.",
+        "Just draft something for me.",
+        "Just show me what it would look like.",
+        "Preview only.",
+        "Planning only — no changes.",
+        "Read only, thanks.",
+        "Without creating anything.",
+        "Without saving anything.",
+        "No changes needed, just advise.",
+      ]) {
+        expect(classifyTurnMutationIntent(msg), msg).toBe("read-only");
+      }
+    });
+  });
+
+  describe("authorized — explicit mutation grant", () => {
+    it("classifies explicit mutation grants as authorized", () => {
+      for (const msg of [
+        "Save it.",
+        "Save that.",
+        "Please create the campaign brief.",
+        "Go ahead and publish this.",
+        "Go ahead and send the email.",
+        "Do it now.",
+        "Apply it.",
+      ]) {
+        expect(classifyTurnMutationIntent(msg), msg).toBe("authorized");
+      }
+    });
+  });
+
+  describe("unspecified — ambiguous or neutral messages", () => {
+    it("classifies ambiguous planning requests as unspecified", () => {
+      for (const msg of [
+        "Help me plan a weekend campaign for a fine dining restaurant.",
+        "Draft a campaign plan.",
+        "What should we do about the Friday dinner promotion?",
+        "Give me some ideas for weekend campaigns.",
+        "What are my open backlog items?",
+        "Summarize the last campaign results.",
+        "",
+        "   ",
+      ]) {
+        expect(classifyTurnMutationIntent(msg), msg).toBe("unspecified");
+      }
+    });
+
+    it("does not misfire on 'do not worry' + later create", () => {
+      // The early 'do not' must not sweep in a distantly-placed verb.
+      // The pattern has a 120-char look-ahead cap, so a 180+ char gap is safe.
+      const longGap =
+        "Do not worry about the existing draft — it looks great. " +
+        "We are all very excited about the work that has been done so far. " +
+        "Now please go ahead and create a new brief for the Sunday promotion.";
+      expect(classifyTurnMutationIntent(longGap)).toBe("unspecified");
+    });
   });
 });
