@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   analyzeCallEfficiency,
   type CallEfficiencyEvent,
-} from "./call-efficiency-analysis";
+} from "./analysis";
 
 function ev(
   partial: Partial<CallEfficiencyEvent> & Pick<CallEfficiencyEvent, "id" | "toolName">,

@@ -115,7 +115,7 @@ export default async function AuditAuthorityPage() {
     grants: binding.grants,
   }));
 
-  // Build tools list for effective permissions (serializable subset)
+  // Build tools list for effective permissions (serializable subset).
   const { PLATFORM_TOOLS } = await import("@/lib/mcp-tools");
   const toolsList = PLATFORM_TOOLS.map((t) => ({
     toolName: t.name,

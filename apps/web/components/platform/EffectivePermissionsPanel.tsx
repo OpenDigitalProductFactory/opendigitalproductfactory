@@ -661,9 +661,8 @@ export function EffectivePermissionsPanel({
             >
               <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
                 <span style={{ fontFamily: "monospace", fontSize: 10 }}>{tool.toolName}</span>
-                <span style={{ fontSize: 9, color: "var(--dpf-muted)", lineHeight: "12px" }}>
-                  {tool.description}
-                </span>
+                {/* Descriptions stay on title= hover only — 350+ full blurbs were
+                    blowing the UX default-visible word ratchet (~16k words). */}
                 {tool.authority.binding && (
                   <span style={{ fontSize: 9, color: "var(--dpf-muted)", lineHeight: "12px" }}>
                     {tool.authority.binding.bindingId} · {tool.authority.reasonCode}

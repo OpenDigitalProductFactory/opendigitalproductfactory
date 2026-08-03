@@ -30,7 +30,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "analyze_mcp_call_efficiency",
     description:
-      "Analyze recent ToolExecution ledger traffic (external MCP, portal agentic-loop, internal session) for thrash (same tool many times per thread), retry storms, high-volume tools, and high failure rates. Returns ranked findings with recommended actions: add_skill, merge_tools, webhook_or_event, fix_instructions, or investigate. Use when agent token spend or MCP call counts look too high. Read-only analysis; set notify=true to also post PlatformNotification for warning/critical findings (AI Ops).",
+      "Analyze ToolExecution thrash, retries, high volume, and failures. Recommends skill, tool-merge, or webhook fixes to cut agent token waste. notify=true posts AI Ops alerts.",
     inputSchema: {
       type: "object",
       properties: {
@@ -94,7 +94,7 @@ async function dispatchBet(
 async function analyzeMcpCallEfficiency(
   params: Record<string, unknown>,
 ): Promise<ToolResult> {
-  const { runCallEfficiencyReport } = await import("@/lib/mcp/call-efficiency-report");
+  const { runCallEfficiencyReport } = await import("@/lib/operate/mcp-call-efficiency/report");
   const windowHours =
     typeof params["windowHours"] === "number" ? params["windowHours"] : 24;
   const thrashThreshold =

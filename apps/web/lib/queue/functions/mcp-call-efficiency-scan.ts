@@ -21,7 +21,7 @@ export const mcpCallEfficiencyScan = inngest.createFunction(
 
     return step.run("analyze-and-notify", async () => {
       const { runCallEfficiencyReport } = await import(
-        "@/lib/mcp/call-efficiency-report"
+        "@/lib/operate/mcp-call-efficiency/report"
       );
       const { report, notified } = await runCallEfficiencyReport({
         windowHours: 24,

@@ -8,7 +8,7 @@ import {
   type CallEfficiencyEvent,
   type CallEfficiencyReport,
   type EfficiencyFinding,
-} from "./call-efficiency-analysis";
+} from "./analysis";
 
 export type LoadCallEfficiencyOptions = AnalyzeCallEfficiencyOptions & {
   /** Lookback hours (default 24, max 168). */
