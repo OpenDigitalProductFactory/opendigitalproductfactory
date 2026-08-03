@@ -35,19 +35,23 @@ describe("Skill Telemetry (BI-901A567C)", () => {
 
     vi.mocked(governedExecuteTool).mockResolvedValue({ success: true, text: "ok", content: [], name: "test_tool" } as any);
 
-    // 1st iteration: tool call
+    // routeAndCall returns already-normalized toolCalls: { id, name, arguments }
+    // (not the raw OpenAI function/name envelope).
     vi.mocked(routeAndCall)
       .mockResolvedValueOnce({
         content: "",
-        toolCalls: [{ id: "call_1", type: "function", function: { name: "test_tool", arguments: "{}" } }],
+        toolCalls: [{ id: "call_1", name: "test_tool", arguments: {} }],
         providerId: "test",
         modelId: "test",
         downgraded: false,
         downgradeMessage: null,
-        totalInputTokens: 0,
-        totalOutputTokens: 0,
+        downgradeReason: null,
+        toolsStripped: false,
+        inputTokens: 0,
+        outputTokens: 0,
+        routeDecision: {},
       } as any)
-      // 2nd iteration: text response
+      // 2nd iteration: text response — ends the loop
       .mockResolvedValueOnce({
         content: "Done",
         toolCalls: [],
@@ -55,8 +59,11 @@ describe("Skill Telemetry (BI-901A567C)", () => {
         modelId: "test",
         downgraded: false,
         downgradeMessage: null,
-        totalInputTokens: 0,
-        totalOutputTokens: 0,
+        downgradeReason: null,
+        toolsStripped: false,
+        inputTokens: 0,
+        outputTokens: 0,
+        routeDecision: {},
       } as any);
 
     const result = await runAgenticLoop({
