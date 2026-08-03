@@ -8,6 +8,8 @@ const inngestSendMock = vi.fn();
 const isStallWatchdogEnabledMock = vi.fn();
 
 vi.mock("@dpf/db", () => ({
+  // Production imports Prisma for Prisma.join(...) in the stall-candidate SQL.
+  Prisma: { join: (values: unknown[]) => values },
   prisma: {
     quiescenceRun: { findMany: (...a: unknown[]) => quiescenceFindManyMock(...a) },
     // Reached only past the flag check; default-empty so the handler short-circuits.
@@ -17,6 +19,8 @@ vi.mock("@dpf/db", () => ({
     // no candidates → no-op (returns 0).
     featureBuild: { findMany: vi.fn().mockResolvedValue([]), findUnique: vi.fn() },
     buildActivity: { count: vi.fn().mockResolvedValue(0) },
+    // Stale backlog claim reaper (best-effort) touches backlogItem.updateMany.
+    backlogItem: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
     $queryRaw: vi.fn().mockResolvedValue([]),
     $transaction: vi.fn().mockImplementation(async (cb) => {
       // Mock the transaction object
