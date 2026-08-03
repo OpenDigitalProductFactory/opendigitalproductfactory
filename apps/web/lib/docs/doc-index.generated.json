@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 615,
+  "pageCount": 616,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -1849,6 +1849,34 @@
         "what-you-see",
         "why-this-works",
         "where-to-look-learn-more"
+      ]
+    },
+    "docs/architecture/ux-archetype-audit-rubric.md": {
+      "publicHref": "/architecture/ux-archetype-audit-rubric/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "ux-archetype-audit-rubric",
+        "purpose",
+        "study-unit",
+        "route-sampling-rules-minimum-set",
+        "first-viewport-purpose-contract",
+        "quantitative-capture-every-page",
+        "cognitive-load-and-progressive-disclosure",
+        "inert-and-contradictory-actions",
+        "form-and-action-contracts",
+        "help-as-recovery",
+        "attention-continuity-single-owner-truth",
+        "resource-capacity-coherence",
+        "public-trust-and-unsupported-paths",
+        "archetype-contamination-and-publish-readiness",
+        "owner-setup-as-a-workflow",
+        "mobile-public-flow-pass",
+        "technical-admin-reachability-for-non-technical-owners",
+        "evidence-package-shape",
+        "standards-basis-do-not-re-derive",
+        "change-control"
       ]
     },
     "docs/architecture/vector-decisioning-and-jsi.md": {
