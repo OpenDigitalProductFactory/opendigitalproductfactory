@@ -3,9 +3,9 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 350,
-      "reason": "Combines two independent additions since the prior baseline: supply-coverage forecasting for proactive stocked-supply operations, and outcome correlation beside semantic review so external and Build Studio receipts can be compared with terminal GitHub/CI results while consistently excluding infrastructure-inconclusive samples.",
-      "recordedAt": "2026-08-02"
+      "value": 351,
+      "reason": "BI-A08EBAEC: analyze_mcp_call_efficiency turns the ToolExecution ledger into thrash/retry/volume findings so operators can cut agent token waste (skills, webhooks, tool merges) without a second telemetry store.",
+      "recordedAt": "2026-08-03"
     },
     "registry.packFiles": {
       "value": 81,

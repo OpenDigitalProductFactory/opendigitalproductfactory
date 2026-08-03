@@ -42,6 +42,7 @@ import { gitPromotionSandboxVerification } from "./git-promotion-sandbox-verific
 import { skillMetricsAggregator } from "./skill-metrics-aggregator";
 import { queueMetricsAggregator } from "./queue-metrics-aggregator";
 import { skillCurator } from "./skill-curator";
+import { mcpCallEfficiencyScan } from "./mcp-call-efficiency-scan";
 import { workPatternProfileReview } from "./work-pattern-profile-review";
 import {
   allBackupsDailyScheduled,
@@ -126,6 +127,8 @@ export const scheduledFunctions = [
   skillMetricsAggregator,
   queueMetricsAggregator, // EP-3516E23D P1: hourly QueueTelemetryEvent → QueueMetricSnapshot rollup
   skillCurator,
+  mcpCallEfficiencyScan, // BI-A08EBAEC: daily ToolExecution thrash/volume/failure findings → PlatformNotification
+
   workPatternProfileReview,
   researchScheduleScan,
   materialFreshnessDecay,
