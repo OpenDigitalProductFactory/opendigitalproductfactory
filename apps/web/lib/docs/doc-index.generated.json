@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 616,
+  "pageCount": 617,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -930,6 +930,31 @@
         "required-pr-spec-section-template",
         "cross-references-apply-do-not-re-litigate",
         "change-control"
+      ]
+    },
+    "docs/architecture/complexity-shield-role-patterns.md": {
+      "publicHref": "/architecture/complexity-shield-role-patterns/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "ai-complexity-shield-patterns-by-role-and-company-size",
+        "purpose",
+        "size-bands",
+        "shared-shield-rules-all-roles",
+        "pattern-matrix-by-role",
+        "owner-founder",
+        "manager",
+        "employee-individual-contributor",
+        "accountant-bookkeeper",
+        "admin-business-admin-not-platform-sre",
+        "it-msp",
+        "sales-support",
+        "field-frontline",
+        "ai-coworker-interaction",
+        "cross-links-to-product-work",
+        "how-to-use-this-in-a-pr",
+        "non-goals"
       ]
     },
     "docs/architecture/context-engineering-standards.md": {
