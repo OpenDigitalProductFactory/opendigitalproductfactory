@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 621,
+  "pageCount": 622,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -2029,6 +2029,22 @@
         "authorization-boundary",
         "participant-projection",
         "external-channel-continuity"
+      ]
+    },
+    "docs/architecture/workos-iam-equivalence-scorecard.md": {
+      "publicHref": "/architecture/workos-iam-equivalence-scorecard/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "workos-equivalence-scorecard-and-dpf-ownership-matrix",
+        "purpose",
+        "ownership-classes-closed-set",
+        "scorecard-axes",
+        "capability-matrix",
+        "decision-rules",
+        "links-to-live-work",
+        "maintenance"
       ]
     },
     "docs/business-types/_readability-report.md": {
