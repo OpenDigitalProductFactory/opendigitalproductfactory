@@ -40,8 +40,10 @@ specs. Contract 10 added 2026-05-09 to capture client/API surface
 governance — browser admin, storefront, customer portal, mobile API,
 MCP, Edge Node ingestion, OAuth and Codex callbacks all converge on
 the same Authority Core but with distinct auth models and ingress
-needs. The numbered list is therefore current at 10 and may grow;
-the count is informational, not the contract.)
+needs. Contract 12 added 2026-08-02 (BI-DIG-EB45310E) for
+contributor installer-state vs `.env` vs process-environment
+precedence so specs stop re-deriving that rule. The numbered list
+may grow; the count is informational, not the contract.)
 
 ### 1. Release artifacts
 
@@ -522,6 +524,74 @@ GA on a given substrate:
 These tests are part of the Authority Core's per-PR CI; they don't
 gate substrate-specific deployment templates, but they gate the
 runtime that all wrappers serve.
+
+### 12. Contributor installer state and configuration precedence
+
+Contributor and workstation installs keep **host-local facts** that
+are not the same thing as the **runtime env schema** in Contract 2.
+Specs and scripts that touch installers, worktrees, or bootstrap
+helpers must declare ownership using this layering. Do not invent a
+parallel rule per substrate.
+
+#### Three layers (highest wins only where stated)
+
+| Layer | Typical home | Role | Who may write |
+| --- | --- | --- | --- |
+| **1. Installer state (canonical)** | `%USERPROFILE%\.dpf\install-state.json` / `~/.dpf/install-state.json` (and peer files under `.dpf/`) | Durable machine/user install record: install path, mode, capability stamps, workspace topology, lifecycle metadata | Installer and governed bootstrap scripts only |
+| **2. Derived projection** | Repo-local `.env`, generated compose env, mirrored shell exports | Compatibility surface for Compose and tools that only read env files | Writers that **project from** layer 1 (or explicit first-run generation); never a second source of truth for the same fact |
+| **3. Process environment (ephemeral override)** | `process.env` / session shell | One-shot override for a single command or CI job | Operator or CI; must not be silently persisted back as if it were layer 1 |
+
+**Read precedence** when the same conceptual setting appears in more
+than one layer:
+
+1. Process environment (layer 3), if set for that invocation  
+2. Else installer state (layer 1), when the setting is an install/host fact  
+3. Else derived `.env` / compose projection (layer 2)  
+4. Else documented default
+
+**Write ownership:** a setting has exactly one canonical store. If
+`.env` mirrors it, the mirror is a projection: drift is resolved by
+re-projecting from the canonical store (or by an explicit operator
+migration), not by treating `.env` as authoritative on the next run.
+
+#### Contributor topology (two-tree model)
+
+- **Install / production tree** — may be self-upgrade managed; treat
+  as the runtime identity of the live portal.
+- **Writable dev workspaces / worktrees** — relocatable outside that
+  tree (sibling worktree base on Windows; equivalent elsewhere).  
+  Worktree helpers reuse existing readiness, Compose isolation, and
+  bootstrap contracts; they do not invent parallel env semantics.
+
+Path comparison across Windows / macOS / Linux must normalize
+(absolute form, consistent separators, case rules per platform) before
+equality checks. Nullable install-state fields keep explicit null
+semantics — do not collapse "unknown" and "unset" without a schema.
+
+#### Installer state vs database-owned state
+
+- **Installer / host config** → install-state (this contract).  
+- **Tenant / org / product facts** → PostgreSQL and platform identity
+  models (`Organization`, etc.).  
+Never store org branding, backlog, or runtime business records in
+`install-state.json`.
+
+#### What specs and scripts must declare
+
+When a design or script persists the same conceptual setting in more
+than one artifact, it must name:
+
+1. Canonical store  
+2. Any derived projections  
+3. Read precedence (or "inherits Contract 12")  
+4. Which component may mutate each artifact  
+5. Drift reconciliation behavior  
+
+Cross-platform pairs (`.ps1` / `.sh`) share one contract; substrate
+deltas are path and shell syntax only.
+
+Backlog origin: BI-DIG-EB45310E (canonical digest of repeated
+reference-doc findings on installer-state vs `.env` precedence).
 
 ## What deployment specs are required to do
 
