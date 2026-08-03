@@ -8,6 +8,8 @@ const inngestSendMock = vi.fn();
 const isStallWatchdogEnabledMock = vi.fn();
 
 vi.mock("@dpf/db", () => ({
+  // Production imports Prisma for Prisma.join(...) in the stall-candidate SQL.
+  Prisma: { join: (values: unknown[]) => values },
   prisma: {
     quiescenceRun: { findMany: (...a: unknown[]) => quiescenceFindManyMock(...a) },
     // Reached only past the flag check; default-empty so the handler short-circuits.
@@ -15,8 +17,26 @@ vi.mock("@dpf/db", () => ({
     taskRun: { findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
     // BI-8F45BA74 inert-build reaper runs every tick before the flag check;
     // no candidates → no-op (returns 0).
-    featureBuild: { findMany: vi.fn().mockResolvedValue([]) },
+    featureBuild: { findMany: vi.fn().mockResolvedValue([]), findUnique: vi.fn() },
     buildActivity: { count: vi.fn().mockResolvedValue(0) },
+    // Stale backlog claim reaper (best-effort) touches backlogItem.updateMany.
+    backlogItem: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    $queryRaw: vi.fn().mockResolvedValue([]),
+    $transaction: vi.fn().mockImplementation(async (cb) => {
+      // Mock the transaction object
+      const tx = {
+        taskRun: { update: vi.fn() },
+        stallEvent: { create: vi.fn() },
+        buildActivity: { create: vi.fn() },
+        featureBuild: { update: vi.fn() },
+        notification: {
+          findFirst: vi.fn().mockResolvedValue(null),
+          update: vi.fn(),
+          create: vi.fn(),
+        },
+      };
+      return await cb(tx);
+    }),
   },
 }));
 vi.mock("@/lib/self-upgrade/quiescence", () => ({
@@ -50,7 +70,8 @@ const stuck = (runId: string, status = "ready-to-swap") => ({
 });
 
 beforeEach(() => {
-  quiescenceFindManyMock.mockReset();
+  // Default empty so recoverStuckQuiescenceCoordinators never sees undefined.
+  quiescenceFindManyMock.mockReset().mockResolvedValue([]);
   transitionStateMock.mockReset().mockResolvedValue(undefined);
   setQuiescenceLevelMock.mockReset().mockResolvedValue(undefined);
   inngestSendMock.mockReset().mockResolvedValue(undefined);
@@ -184,5 +205,78 @@ describe("taskrunWatchdog handler (the early-return fix)", () => {
     });
     expect(transitionStateMock).toHaveBeenCalledWith("QR-1", "failed", expect.any(Object));
     expect(setQuiescenceLevelMock).toHaveBeenCalledWith("normal", null);
+  });
+
+  it("BI-15B42AFE: dedupes taskrun.stalled notification when an unread one already exists", async () => {
+    isStallWatchdogEnabledMock.mockResolvedValueOnce(true);
+    // Pre-flag recovery paths: no stuck coordinators / no other candidates.
+    quiescenceFindManyMock.mockResolvedValueOnce([]);
+
+    const { prisma } = await import("@dpf/db");
+    // recoverStuckQuiescingTaskRuns may call taskRun.findMany before the stall path.
+    const taskRunMock = vi.mocked(prisma.taskRun.findMany);
+    taskRunMock
+      .mockResolvedValueOnce([]) // quiescing-taskrun recovery
+      .mockResolvedValueOnce([{ id: "cuid1", taskRunId: "TR-1", userId: "owner-1" } as any]); // owner resolve
+
+    const featureBuildListMock = vi.mocked(prisma.featureBuild.findMany);
+    featureBuildListMock.mockResolvedValueOnce([]); // inert-build reaper
+
+    // 1. Mock threshold to allow candidates to process
+    const tMock = vi.mocked(prisma.buildStudioStallThreshold.findMany);
+    tMock.mockResolvedValueOnce([
+      { scope: "default", heartbeatTimeoutSeconds: 300, totalPhaseTimeoutSeconds: 1800 } as any,
+    ]);
+
+    // 2. Mock a stall candidate
+    const queryMock = vi.mocked(prisma.$queryRaw);
+    queryMock.mockResolvedValueOnce([
+      {
+        taskRunId: "TR-1",
+        buildId: "B-1",
+        phase: "build",
+        startedAt: new Date(Date.now() - 3_600_000),
+        lastHeartbeatAt: null,
+        source: "build",
+      },
+    ]);
+
+    // 3. Mock resolution to owner (featureBuild.findUnique for build owner)
+    const featureBuildMock = vi.mocked(prisma.featureBuild.findUnique);
+    featureBuildMock.mockResolvedValueOnce({
+      createdById: "owner-1",
+      buildExecState: {},
+      verificationOut: {},
+    } as any);
+
+    // 4. Mock the transaction callback capture
+    const txMock = vi.mocked(prisma.$transaction);
+    const existingNotification = { id: "notif-1" };
+    let capturedTx: any;
+    txMock.mockImplementationOnce(async (cb: any) => {
+      capturedTx = {
+        taskRun: { update: vi.fn().mockResolvedValue({}) },
+        stallEvent: { create: vi.fn().mockResolvedValue({}) },
+        buildActivity: { create: vi.fn().mockResolvedValue({}) },
+        featureBuild: { update: vi.fn().mockResolvedValue({}) },
+        notification: {
+          findFirst: vi.fn().mockResolvedValue(existingNotification),
+          update: vi.fn().mockResolvedValue({}),
+          create: vi.fn().mockResolvedValue({}),
+        },
+      };
+      return await cb(capturedTx);
+    });
+
+    const result = await (taskrunWatchdog as unknown as { fn: () => Promise<unknown> }).fn();
+
+    expect(result).toMatchObject({ processed: 1 });
+    expect(capturedTx.notification.findFirst).toHaveBeenCalledWith({
+      where: { userId: "owner-1", type: "taskrun.stalled", read: false },
+      select: { id: true },
+    });
+    // Should update existing, NOT create a new one
+    expect(capturedTx.notification.update).toHaveBeenCalled();
+    expect(capturedTx.notification.create).not.toHaveBeenCalled();
   });
 });
