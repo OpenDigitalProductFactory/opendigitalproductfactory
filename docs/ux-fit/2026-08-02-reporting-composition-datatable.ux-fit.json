@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "decidedOption": "report-kit-datatable",
+  "decisionInteractionId": "DI-F7792FC1A01",
+  "scope": {
+    "files": [
+      "apps/web/components/twin/rooms/RoomsList.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "report-kit-datatable",
+      "raw-table-allow-comment",
+      "custom-div-grid-without-shared-primitives"
+    ]
+  }
+}
