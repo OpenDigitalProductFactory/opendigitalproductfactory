@@ -1,7 +1,7 @@
 // BET-5 (BI-A1E864A5): Postgres graph traversal, a drop-in replacement for neo4j-graph.ts.
 // Reimplements the same exported surface (GraphNode, GraphEdge, ImpactResult, PruneResult,
 // LayeredDependency, Neo4jTopologyScope, getDownstreamImpact, getUpstreamDependencies,
-// getProductsByPortfolio, getProductsByTaxonomySubtree, shortestPath, pruneStaleInfraCIs,
+// getProductsByPortfolio, getProductsByTaxonomySubtree, shortestPath, pruneStaleInfraCIDatabaseRecords,
 // getLayeredDependencyStack, getNetworkTopologyAtLayer, getNetworkTopologyAtLayerForScope,
 // getInfraCIs, getNeighbours) over the `graph_node` / `graph_edge` tables (see the
 // 20260714120000_bet5_graph_mirror migration) so Neo4j can be retired with an import swap.
@@ -269,7 +269,7 @@ export type PruneResult = {
  * Uses a separate `decommissionedAt` timestamp rather than mutating `status`.
  * Idempotent; safe to run on a schedule. Does NOT touch recently-synced nodes.
  */
-export async function pruneStaleInfraCIs({
+export async function pruneStaleInfraCIDatabaseRecords({
   markDecommissionedAfterDays = 30,
   deleteAfterDays = 90,
 }: {

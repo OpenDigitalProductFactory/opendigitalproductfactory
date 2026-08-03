@@ -9,10 +9,10 @@ export const infraPrune = inngest.createFunction(
     if (!gate.proceed) return { skipped: true, reason: gate.reason };
 
     await step.run("prune-stale", async () => {
-      const { pruneStaleInfraCIs, prisma } = await import("@dpf/db");
+      const { pruneStaleInfraCIDatabaseRecords, prisma } = await import("@dpf/db");
       const { computeNextRunAt } = await import("@/lib/ai-provider-types");
 
-      const result = await pruneStaleInfraCIs({
+      const result = await pruneStaleInfraCIDatabaseRecords({
         markDecommissionedAfterDays: 30,
         deleteAfterDays: 90,
       });
@@ -29,6 +29,41 @@ export const infraPrune = inngest.createFunction(
       }).catch(() => {});
 
       return result;
+    });
+
+    await step.run("prune-docker-disk", async () => {
+      const { exec } = await import("child_process");
+      const util = await import("util");
+      const execAsync = util.promisify(exec);
+
+      // Keep recent promoter images (last 3 tags)
+      try {
+        const { stdout } = await execAsync("docker images dpf-promoter --format '{{.Repository}}:{{.Tag}}||{{.CreatedAt}}'");
+        if (stdout) {
+          const lines = stdout.trim().split("\n").filter(Boolean);
+          const parsed = lines.map(line => {
+            const [tag, created] = line.split("||");
+            return { tag, created: new Date(created).getTime() };
+          }).sort((a, b) => b.created - a.created);
+          
+          const toDelete = parsed.slice(3).map(p => p.tag);
+          for (const tag of toDelete) {
+            await execAsync(`docker image rm -f ${tag}`).catch(() => {});
+          }
+        }
+      } catch (err) {
+        // Ignore errors
+      }
+
+      // Prune dangling images and build cache
+      try {
+        await execAsync("docker image prune -f --filter until=48h");
+        await execAsync("docker builder prune -f --keep-storage 20gb");
+      } catch (err) {
+        // Ignore errors
+      }
+
+      return { prunedDockerDisk: true };
     });
 
     // Defense-in-depth: pollDeviceFlow self-deletes its session on the
