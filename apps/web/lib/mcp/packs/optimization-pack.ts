@@ -1,11 +1,9 @@
-// Optimization tool pack (BI-C350F8B0, EP-8DC217EB BET-0d).
+// Optimization tool pack (BI-C350F8B0, EP-8DC217EB BET-0d + BI-A08EBAEC).
 //
 // Coworker/operator-callable surface of the self-optimization engine: dispatch
 // a consolidation bet to Build Studio, attributed to its WSID-profiled
-// coworker. Pack-registered (not the frozen mcp-tools.ts inline switch); the
-// handler defers to the dispatch harness lib, which reuses the same governed
-// promotion core as promote_to_build_studio (WIP cap, governed auto-approve,
-// Ideate auto-dispatch).
+// coworker; and analyze MCP/governed-tool call efficiency (thrash, retries,
+// volume) from ToolExecution to cut agent token waste.
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack } from "../tool-pack";
@@ -28,6 +26,34 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "manage_backlog",
     executionMode: "immediate",
     sideEffect: true,
+  },
+  {
+    name: "analyze_mcp_call_efficiency",
+    description:
+      "Analyze recent ToolExecution ledger traffic (external MCP, portal agentic-loop, internal session) for thrash (same tool many times per thread), retry storms, high-volume tools, and high failure rates. Returns ranked findings with recommended actions: add_skill, merge_tools, webhook_or_event, fix_instructions, or investigate. Use when agent token spend or MCP call counts look too high. Read-only analysis; set notify=true to also post PlatformNotification for warning/critical findings (AI Ops).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        windowHours: {
+          type: "number",
+          description: "Lookback window in hours (default 24, max 168).",
+        },
+        thrashThreshold: {
+          type: "number",
+          description: "Same-tool calls per thread to flag thrash (default 8).",
+        },
+        notify: {
+          type: "boolean",
+          description:
+            "When true, create PlatformNotification rows for warning/critical findings (deduped 24h). Default false.",
+        },
+      },
+      required: [],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
+    sideEffect: false,
+    annotations: { readOnlyHint: true, idempotentHint: true },
   },
 ];
 
@@ -65,13 +91,53 @@ async function dispatchBet(
   };
 }
 
+async function analyzeMcpCallEfficiency(
+  params: Record<string, unknown>,
+): Promise<ToolResult> {
+  const { runCallEfficiencyReport } = await import("@/lib/mcp/call-efficiency-report");
+  const windowHours =
+    typeof params["windowHours"] === "number" ? params["windowHours"] : 24;
+  const thrashThreshold =
+    typeof params["thrashThreshold"] === "number"
+      ? params["thrashThreshold"]
+      : undefined;
+  const notify = params["notify"] === true;
+
+  const { report, notified } = await runCallEfficiencyReport({
+    windowHours,
+    thrashThreshold,
+    notify,
+  });
+
+  const top = report.findings
+    .slice(0, 5)
+    .map((f) => `${f.severity}:${f.kind}:${f.toolName}→${f.recommendedAction}`)
+    .join("; ");
+
+  return {
+    success: true,
+    message:
+      `${report.totalCalls} call(s) in window; ${(report.successRate * 100).toFixed(0)}% success; ` +
+      `${report.findings.length} finding(s)` +
+      (notified ? `; notified ${notified}` : "") +
+      (top ? ` — ${top}` : "") +
+      `. ${report.ledgerSufficiency.note}`,
+    data: {
+      ...report,
+      notified,
+    } as unknown as Record<string, unknown>,
+  };
+}
+
 export const optimizationPack: ToolPack = {
   packId: "optimization",
   definitions,
   handlers: {
     dispatch_consolidation_bet: (params, userId) => dispatchBet(params, userId),
+    analyze_mcp_call_efficiency: (params) => analyzeMcpCallEfficiency(params),
   },
   grants: {
     dispatch_consolidation_bet: ["build_promote"],
+    analyze_mcp_call_efficiency: ["agent_control_read"],
   },
 };

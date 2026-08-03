@@ -244,6 +244,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // declared the grant they intended; only the gating entry was missing, so
   // the intent is adopted verbatim rather than reinvented.
   dispatch_consolidation_bet: ["build_promote"],
+  // BI-A08EBAEC: MCP call thrash / volume analysis from ToolExecution
+  analyze_mcp_call_efficiency: ["agent_control_read"],
   spawn_subagents: ["coworker_engagement_write"],
 
   // Org/WWWD qa elicitation feeder (BI-44526F3E Phase C): capture a CONFIRMED
