@@ -637,7 +637,11 @@ describe("POST — tools/list", () => {
       }),
     );
     expect(coreNames).toContain("query_backlog"); // a core tool: present
-    expect(coreNames).not.toContain("wiki_query"); // granted but non-core: filtered out by default
+    // WWMD tools are core so Grok/Codex (no ToolSearch) can discover them.
+    expect(coreNames).toContain("wiki_query");
+    expect(coreNames).toContain("principle_decide");
+    // Still lean: bulk domain packs stay off the default list.
+    expect(coreNames).not.toContain("dispatch_consolidation_bet");
 
     // Same non-CC client, explicit ?tier=full -> opts back into the full surface.
     const fullNames = await names(
@@ -649,6 +653,18 @@ describe("POST — tools/list", () => {
       }),
     );
     expect(fullNames).toContain("wiki_query");
+    expect(fullNames.length).toBeGreaterThan(coreNames.length);
+
+    // Grok UA also gets WWMD on core (peer of Codex).
+    const grokNames = await names(
+      makeRequest({
+        bearer: "dpfmcp_X",
+        userAgent: "grok/2.0",
+        body: { jsonrpc: "2.0", id: 23, method: "tools/list" },
+      }),
+    );
+    expect(grokNames).toContain("principle_decide");
+    expect(grokNames).toContain("wiki_query");
 
     // Claude Code (default UA) keeps the full surface without opting in.
     const ccNames = await names(

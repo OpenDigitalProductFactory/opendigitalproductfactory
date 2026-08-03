@@ -18,6 +18,12 @@
  * Claude Code keeps "full" (it defers client-side), every other/unknown client
  * defaults to the lean "core" surface so it stops paying the full catalog. Any
  * caller opts back in with `?tier=full`.
+ *
+ * Core is not "backlog-only": peer CLIs (Grok, Codex) have no ToolSearch, so
+ * WWMD tools that AGENTS.md requires (`principle_decide`, `wiki_query`) must
+ * be discoverable on the lean list — otherwise agents cannot consult the
+ * kernel even when the token grants them. That is discovery only; execution
+ * already allowed by-name before this expansion.
  */
 
 export type McpToolTier = "core" | "full";
@@ -69,6 +75,10 @@ export function resolveEffectiveTier(
  * (tool-tier.test.ts) asserts every name here exists in PLATFORM_TOOLS, so a
  * tool rename can't silently leave a dangling core entry. `search_tool_marketplace`
  * is included so a model in core tier can still discover the rest.
+ *
+ * WWMD / kernel tools (`principle_decide`, `wiki_query`) are core for peer
+ * external agents (Grok, Codex, …) that cannot ToolSearch the full catalog —
+ * AGENTS.md requires principle_decide before multi-option platform menus.
  */
 export const CORE_MCP_TOOL_NAMES: ReadonlySet<string> = new Set([
   // discovery / read
@@ -80,6 +90,9 @@ export const CORE_MCP_TOOL_NAMES: ReadonlySet<string> = new Set([
   "list_project_directory",
   "read_codebase_manifest",
   "search_tool_marketplace",
+  // WWMD — founder-kernel decide + doctrine lookup (peer CLI discovery parity)
+  "principle_decide",
+  "wiki_query",
   // backlog lifecycle
   "query_backlog",
   "get_backlog_item",
