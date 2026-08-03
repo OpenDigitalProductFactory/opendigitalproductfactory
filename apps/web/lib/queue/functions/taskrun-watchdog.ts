@@ -451,16 +451,33 @@ export const taskrunWatchdog = inngest.createFunction(
         }
 
         // 4. Notification.
+        // BI-15B42AFE: per-type dedup/cap so we do not mint a fresh row per stall
+        // and bury the operator in 5000 unread rows.
         if (notifyUserId) {
-          await tx.notification.create({
-            data: {
-              userId: notifyUserId,
-              type: "taskrun.stalled",
-              title: `Task stalled in ${d.candidate.phase ?? "unknown"} phase`,
-              body: `Watchdog detected ${d.reason} after ${d.threshold.heartbeatTimeoutSeconds}s heartbeat / ${d.threshold.totalPhaseTimeoutSeconds}s total budget.`,
-              deepLink: d.candidate.buildId ? `/build` : `/platform/ai/operations`,
-            },
+          const existing = await tx.notification.findFirst({
+            where: { userId: notifyUserId, type: "taskrun.stalled", read: false },
+            select: { id: true },
           });
+          const payload = {
+            title: `Task stalled in ${d.candidate.phase ?? "unknown"} phase`,
+            body: `Watchdog detected ${d.reason} after ${d.threshold.heartbeatTimeoutSeconds}s heartbeat / ${d.threshold.totalPhaseTimeoutSeconds}s total budget.`,
+            deepLink: d.candidate.buildId ? `/build` : `/platform/ai/operations`,
+          };
+
+          if (existing) {
+            await tx.notification.update({
+              where: { id: existing.id },
+              data: { ...payload, createdAt: now },
+            });
+          } else {
+            await tx.notification.create({
+              data: {
+                userId: notifyUserId,
+                type: "taskrun.stalled",
+                ...payload,
+              },
+            });
+          }
         }
       });
 
