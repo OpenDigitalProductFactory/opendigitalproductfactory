@@ -78,6 +78,26 @@ read, the CI checkers, and the migration league table. Intended shell per route 
 | Deferred detail | Above a per-shell word threshold the surface **must** use disclosure |
 | Primary action reachable | A marked primary action (`data-dpf-primary-action` / `data-owner-first-next-action`) may not be buried behind a collapsed disclosure on action shells (cockpit/detail/settings/form) |
 
+**Lead-band adoption is presence-positive.** Adding a compliant `data-dpf-lead` to a
+pre-existing route is a retrofit improvement, not a regression, even though the measured
+lead-band word count rises from zero. The ratchet catches removal of an established lead
+band; absolute `maxLeadBandWords` budgets still report overlong copy and block net-new
+routes.
+
+**Long option lists use a searchable picker, not a native closed select.** Timezones,
+regions, currencies, integrations, industries, archetypes and service-line catalogs must
+render only the current value on arrival, then expose a bounded searchable list after the
+owner opens the picker. Use `SearchableSelect` for static closed sets so the route sweep
+does not count hundreds of hidden choices as default-visible text or `choices-per-control`
+debt.
+
+### Design grounding
+
+- Existing specs/plans reviewed: `BI-0EC59231`, EP-UX-SYSTEM UX budget guidance in this document, and `docs/architecture/build-gate-runbook.md`.
+- Current code substrate reviewed: `apps/web/components/admin/OperatingHoursEditor.tsx`, `apps/web/components/storefront-admin/ServiceLinesPanel.tsx`, `apps/web/components/ui/form/SelectField.tsx`, and `apps/web/lib/ux-budget/measure.ts`.
+- Source of truth: long static catalogs belong in `SearchableSelect`; route-level choice pressure is measured by `maxChoicesPerControl`.
+- Decision: replace long native owner-facing selects with a closed searchable picker, keep common/current choices first, and preserve native form posting through a hidden value field.
+
 **Hiding the primary action is a regression the word budgets cannot see.** Moving a
 trigger behind an "Advanced" collapse *reduces* the default-visible word and control
 counts, so the volume budgets read it as an improvement. The reachability axis is the
@@ -131,9 +151,10 @@ Three enforcement modes, decided by `lib/ux-budget/ratchet.ts`:
 
 1. **Pre-existing route → regression ratchet.** A changed route may not exceed its own
    frozen baseline on words, controls, fields, choices, sub-legible controls or axe
-   violations. Existing debt is reported every run but never blocks a PR that did not make
-   it worse. That restraint is deliberate: a gate that fails unrelated PRs on legacy debt
-   forces a blind mass-rewrite and gets switched off.
+   violations, and may not remove an established lead band. Existing debt is reported
+   every run but never blocks a PR that did not make it worse. That restraint is
+   deliberate: a gate that fails unrelated PRs on legacy debt forces a blind mass-rewrite
+   and gets switched off.
 2. **Net-new route → absolute budgets block.** No baseline to hide behind.
 3. **Structure → the ARIA snapshot must not drift.** Heading levels, landmarks and
    accessible names, as a diffable YAML projection. "This PR flattened the h2/h3 structure
@@ -189,6 +210,7 @@ consequence banner; a form that re-implements these is a defect (BI-8E74C749).
 |---|---|
 | `FormField` | Labeled-control wrapper (render-prop). Owns `<label htmlFor>`↔`id`, required/optional marker, `aria-required`, `aria-invalid`, hint + error wired via `aria-describedby`, and `role="alert"` on the error. |
 | `TextField` / `EmailField` / `SelectField` / `TextareaField` / `CheckboxField` | Typed controls built on `FormField`. `EmailField` also normalizes on blur via `EmailInput`. |
+| `SearchableSelect` | Static closed-set picker for long catalogs. Renders a single combobox value on arrival, hides the option corpus until opened/searched, and posts the selected value through a hidden field when `name` is provided. |
 | `SubmitButton` | Primary action with a first-class pending state (`aria-busy` + `InlineBusy`); disables to prevent double-submit. |
 | `FormStatus` | Settled outcome region — error is assertive (`role="alert"`), success is polite (`role="status"` + `aria-live`). |
 | `ConsequenceNotice` | Risk-proportional consequence copy behind progressive disclosure (native `<details>`): what changes, who's affected, reversibility, recovery. |

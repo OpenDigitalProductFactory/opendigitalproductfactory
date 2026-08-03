@@ -327,3 +327,11 @@ test("classifyGateOutcome reserves exit 5 for control-plane starvation", () => {
   assert.equal(outcome.productEvidence, false);
   assert.match(outcome.summary, /control-plane/i);
 });
+
+test("classifyGateOutcome distinguishes repeated Vitest runner termination from a product failure", () => {
+  const outcome = classifyGateOutcome({ freshnessVerdict: "green", gateExitCode: 86 });
+  assert.equal(outcome.status, "failed");
+  assert.equal(outcome.gatePassed, false);
+  assert.equal(outcome.productEvidence, false);
+  assert.match(outcome.summary, /runner evidence, NOT a product test failure/);
+});

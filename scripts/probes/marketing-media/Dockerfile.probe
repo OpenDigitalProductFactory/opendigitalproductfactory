@@ -1,0 +1,50 @@
+FROM node:24-bookworm-slim@sha256:235600a8101ab264e117b1768e925532262668dc9b581ef1dd7d96ced463b8e7
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    fonts-liberation \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libatk1.0-0 \
+    libatspi2.0-0 \
+    libcairo2 \
+    libcups2 \
+    libdbus-1-3 \
+    libdrm2 \
+    libgbm1 \
+    libglib2.0-0 \
+    libnspr4 \
+    libnss3 \
+    libpango-1.0-0 \
+    libx11-6 \
+    libxcb1 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxext6 \
+    libxfixes3 \
+    libxkbcommon0 \
+    libxrandr2 \
+    unzip \
+    xdg-utils \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /tool
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN corepack enable \
+  && corepack prepare pnpm@10.33.2 --activate \
+  && pnpm install --prod --frozen-lockfile \
+  && node -e "const fs=require('node:fs');fs.symlinkSync(require('ffmpeg-static'),'/usr/local/bin/ffmpeg')" \
+  && node -e "const fs=require('node:fs');fs.symlinkSync(require('ffprobe-static').path,'/usr/local/bin/ffprobe')" \
+  && pnpm exec browsers install chrome-headless-shell@152.0.7928.2 --path /root/.cache/hyperframes/chrome \
+  && browser_path="$(find /root/.cache -type f -name chrome-headless-shell -print -quit)" \
+  && test -n "$browser_path" \
+  && ln -s "$browser_path" /usr/local/bin/chrome-headless-shell \
+  && mkdir -p /tool/media-assets \
+  && cp node_modules/gsap/dist/gsap.min.js /tool/media-assets/gsap.min.js \
+  && cp node_modules/hyperframes/dist/hyperframe.runtime.iife.js /tool/media-assets/hyperframe.runtime.iife.js
+
+ENV PATH="/tool/node_modules/.bin:${PATH}"
+ENV HYPERFRAMES_BROWSER_PATH="/usr/local/bin/chrome-headless-shell"
+ENV PRODUCER_HEADLESS_SHELL_PATH="/usr/local/bin/chrome-headless-shell"
+WORKDIR /probe
+CMD ["sh", "-c", "mkdir -p /tmp/media-probe/composition/vendor && cp -R /probe/composition/. /tmp/media-probe/composition/ && cp /tool/media-assets/* /tmp/media-probe/composition/vendor/ && DPF_MEDIA_COMPOSITION_DIR=/tmp/media-probe/composition node run-local-render.mjs"]

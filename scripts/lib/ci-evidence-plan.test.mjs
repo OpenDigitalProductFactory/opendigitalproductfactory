@@ -119,6 +119,27 @@ describe("createEvidencePlan", () => {
     assert.deepEqual(plan.escalations, []);
   });
 
+  for (const executableStandardPath of [
+    "docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md",
+    "docs/architecture/four-portfolio-archetype-standard-profile-catalog.md",
+  ]) {
+    it(`requires workspace evidence for ${executableStandardPath}`, () => {
+      const plan = createEvidencePlan(input({
+        changedFiles: [
+          executableStandardPath,
+          "apps/mobile/app/index.tsx",
+        ],
+      }));
+
+      assert.deepEqual(plan.scope, {
+        docsOnly: false,
+        mobileOnly: false,
+        mobile: true,
+        heavy: true,
+      });
+    });
+  }
+
   it("recommends deterministic related tests but expands runtime source when graph input is missing", () => {
     const plan = createEvidencePlan(input({
       changedFiles: ["apps/web/lib/orders.ts"],

@@ -25,8 +25,9 @@ export function dockerBuildTag(candidateBranch, slotKey = "") {
 // during the TypeScript phase — an exit that is indistinguishable from a red
 // product build, so it poisons gate evidence exactly like sandbox staleness
 // did (and the freshness gate correctly stays green, so nothing else catches
-// it). Verified 2026-07-05: default heap SIGABRT; 8 GiB completes cleanly.
-export const HOST_BUILD_NODE_OPTIONS = "NODE_OPTIONS=--max-old-space-size=8192";
+// it). Re-verified 2026-08-01 after the stock coverage routes landed: 12 GiB
+// still aborts during the Next TypeScript phase; 16 GiB completes cleanly.
+export const HOST_BUILD_NODE_OPTIONS = "NODE_OPTIONS=--max-old-space-size=16384";
 export const HOST_BUILD_NODE_ENV = "NODE_ENV=production";
 
 // Node 26 exposes experimental host localStorage/sessionStorage accessors even
@@ -34,7 +35,8 @@ export const HOST_BUILD_NODE_ENV = "NODE_ENV=production";
 // web storage that jsdom installs in Vitest fork workers. Disable only Node's
 // host implementation at process start so jsdom remains the environment owner.
 export const HOST_TEST_NODE_OPTIONS = "NODE_OPTIONS=--no-experimental-webstorage";
-export const HOST_TEST_MAX_WORKERS = "--maxWorkers=4";
+export const HOST_TEST_INITIAL_WORKERS = "4";
+export const HOST_TEST_RETRY_WORKERS = "2";
 
 export function resolveCommandInvocation(command, baseEnv = process.env) {
   if (command[0] !== "env") {
@@ -311,8 +313,22 @@ export function createLocalIntegrationPlan(input) {
     // exactly like the build worker did (BI-B5011ACE) — observed live on the
     // first BI-157DC9B2 gate run, 2026-07-06. The runner interprets the `env`
     // prefix itself, so this heap contract is identical on every host.
-    ["env", HOST_BUILD_NODE_OPTIONS, "pnpm", "--filter", "web", "typecheck"],
-    ["env", HOST_TEST_NODE_OPTIONS, "pnpm", "--filter", "web", "exec", "vitest", "run", HOST_TEST_MAX_WORKERS],
+    [
+      "env",
+      HOST_BUILD_NODE_OPTIONS,
+      "node",
+      "scripts/local-ci-typecheck-runner.mjs",
+    ],
+    [
+      "env",
+      HOST_TEST_NODE_OPTIONS,
+      "node",
+      "scripts/local-ci-vitest-runner.mjs",
+      "--initial-workers",
+      HOST_TEST_INITIAL_WORKERS,
+      "--retry-workers",
+      HOST_TEST_RETRY_WORKERS,
+    ],
     productionBuildCommand,
   ];
   return {

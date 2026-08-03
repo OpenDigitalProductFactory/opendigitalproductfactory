@@ -21,6 +21,7 @@ import {
   resolveAnchor,
   labelsRestateEachOther,
   contentAssertionReaders,
+  mergeRuleBaseline,
 } from "./check-instruction-plane-rule-coverage.mjs";
 
 import { globSync, readFileSync } from "node:fs";
@@ -357,4 +358,68 @@ test("the live repo's content assertions are all registered", () => {
     "a new file that parses an always-on doc must be registered in the manifest",
   );
   assert.ok(readers.length >= 1, "dimension-catalog.test.ts should still be detected");
+});
+
+// --- `--update` union semantics (BI-0020D511 §12f) ----------------------------
+// This regression shipped TWICE: --update rescanned only the always-on plane, so
+// every rule already relocated to a registered destination silently lost its
+// protection. Consolidation requires an --update, so a weakening --update
+// penalises exactly the curation `commons-are-curated-not-just-appended` mandates.
+
+test("--update carries forward an anchor that no longer appears in the plane", () => {
+  // The relocation case: the rule moved to a skill/runbook, so it is absent from
+  // the plane but must stay protected. A rescan would drop it; a union keeps it.
+  const existing = new Map([
+    ["docs/founder-kernel/wiki/principles/relocated.md", "Relocated rule."],
+    ["docs/founder-kernel/wiki/principles/still-here.md", "Old wording."],
+  ]);
+  const plane = [
+    { anchor: "docs/founder-kernel/wiki/principles/still-here.md", label: "New wording." },
+  ];
+  const merged = mergeRuleBaseline(existing, plane);
+
+  assert.equal(merged.size, 2);
+  assert.equal(
+    merged.get("docs/founder-kernel/wiki/principles/relocated.md"),
+    "Relocated rule.",
+    "a relocated rule must survive --update",
+  );
+});
+
+test("--update refreshes the label of a reworded rule", () => {
+  // Consolidation rewords rules; the anchor is the identity, so the label follows
+  // the live plane rather than freezing at whatever it said when first baselined.
+  const merged = mergeRuleBaseline(
+    new Map([["docs/founder-kernel/wiki/principles/x.md", "Old wording."]]),
+    [{ anchor: "docs/founder-kernel/wiki/principles/x.md", label: "Lifted, general wording." }],
+  );
+  assert.equal(merged.get("docs/founder-kernel/wiki/principles/x.md"), "Lifted, general wording.");
+});
+
+test("--update adds a genuinely new anchor", () => {
+  const merged = mergeRuleBaseline(new Map(), [
+    { anchor: "docs/founder-kernel/wiki/principles/new.md", label: "Brand new rule." },
+  ]);
+  assert.deepEqual([...merged.keys()], ["docs/founder-kernel/wiki/principles/new.md"]);
+});
+
+test("--update never shrinks the protected set", () => {
+  // The ratchet property, stated directly: whatever the plane says, an update may
+  // only add. Retirement is a deliberate hand edit of the baseline file.
+  const existing = new Map(
+    Array.from({ length: 12 }, (_, i) => [`docs/founder-kernel/wiki/principles/p${i}.md`, `r${i}`]),
+  );
+  for (const plane of [[], [{ anchor: "docs/founder-kernel/wiki/principles/p3.md", label: "" }]]) {
+    assert.ok(mergeRuleBaseline(existing, plane).size >= existing.size);
+  }
+});
+
+test("an empty live label does not blank a recorded one", () => {
+  // ruleAnchors yields "" when a bullet has no parsable label. That must not
+  // erase a good label the baseline already carries.
+  const merged = mergeRuleBaseline(
+    new Map([["docs/founder-kernel/wiki/principles/x.md", "Recorded label."]]),
+    [{ anchor: "docs/founder-kernel/wiki/principles/x.md", label: "" }],
+  );
+  assert.equal(merged.get("docs/founder-kernel/wiki/principles/x.md"), "Recorded label.");
 });

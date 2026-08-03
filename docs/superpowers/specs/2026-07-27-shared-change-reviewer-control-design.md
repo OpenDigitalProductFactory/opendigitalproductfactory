@@ -238,6 +238,21 @@ slice; the Work Capsule/Build timeline is the canonical surface.
 5. Enforce receipt freshness for applicable runtime changes.
 6. Promote the coworker only after behavioral certification passes.
 
+### Enforcement and learning contract
+
+- `pass` and `fail` are completed semantic decisions; `inconclusive` is an
+  execution classification for capacity, transport, or protocol failure.
+- Inconclusive reviews may pause publication in enforce mode because fresh
+  evidence is absent, but they never create a critical semantic finding and are
+  excluded from quality-rate denominators.
+- The pre-push control reads an exact-tree git-dir sidecar minted from the
+  durable receipt. It performs no model, portal, database, or network call.
+- Explicit exemptions carry the policy version, capsule/diff identity, evidence
+  id, reason, and expiry.
+- GitHub/CI correlation reuses `ExternalEvidenceRecord` and Work Capsule
+  activity with operation type `semantic-change-review.outcome`; no review table
+  or dashboard is introduced.
+
 ## Non-goals
 
 - Replacing GitHub review.

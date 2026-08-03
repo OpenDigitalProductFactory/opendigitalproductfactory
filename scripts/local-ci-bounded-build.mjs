@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { mcpCall } from "./lib/mcp-client.mjs";
 import {
@@ -19,6 +19,14 @@ import {
   terminateProcessTreeCommand,
 } from "./lib/local-ci-control-plane-watchdog.mjs";
 import { reapSupersededSlotImages } from "./lib/local-integration-image-retention.mjs";
+import {
+  canonicalStageReceiptStatus,
+  classifyPriorStage,
+  createStageReceiptWriter,
+  markStageReceiptReused,
+  readStageReceipt,
+  reusablePassedStage,
+} from "./lib/local-ci-stage-receipt.mjs";
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const BUILDKIT_CONFIG = join(SCRIPT_DIR, "config", "local-ci-buildkitd.toml");
@@ -242,6 +250,30 @@ function writeEvidence(path, payload) {
   writeFileSync(path, `${JSON.stringify(payload, null, 2)}\n`);
 }
 
+function processAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function localImageId(tag) {
+  const inspected = runDocker(["image", "inspect", tag, "--format", "{{.Id}}"], 15_000);
+  return inspected.status === 0 ? inspected.stdout.trim() : null;
+}
+
+export function canReuseBuildReceipt({ receipt, identity, resolveImageId }) {
+  const exactPassedReceipt = reusablePassedStage({
+    receipt,
+    stage: "production-build",
+    identity,
+  });
+  if (!exactPassedReceipt || !receipt.artifact?.imageId) return false;
+  return resolveImageId() === receipt.artifact.imageId;
+}
+
 async function main() {
   if (process.argv.includes("--help")) {
     process.stdout.write(usage());
@@ -257,6 +289,9 @@ async function main() {
 
   const builder = builderFromEnvironment();
   const evidencePath = process.env.DPF_LOCAL_CI_CONTROL_PLANE_EVIDENCE_FILE || "";
+  const metadataPath = process.env.DPF_LOCAL_CI_METADATA_FILE || "";
+  const stageReceiptPath = process.env.DPF_LOCAL_CI_BUILD_RECEIPT_FILE
+    || (metadataPath ? `${metadataPath}.build.json` : "");
   const startedAt = new Date().toISOString();
   const identity = {
     candidate,
@@ -274,6 +309,49 @@ async function main() {
     cpuPeriod: builder.cpuPeriod,
     maxParallelism: builder.maxParallelism,
   };
+  const stageIdentity = {
+    candidateSha: identity.candidateSha,
+    integrationTreeSha: identity.integrationTreeSha,
+    imageTag: identity.imageTag,
+    command: JSON.stringify(buildxBuildArgs({ builder, tag, context: "." })),
+  };
+  const priorReceipt = readStageReceipt(stageReceiptPath);
+  if (canReuseBuildReceipt({
+    receipt: priorReceipt,
+    identity: stageIdentity,
+    resolveImageId: () => localImageId(tag),
+  })) {
+    const payload = markStageReceiptReused({
+      path: stageReceiptPath,
+      receipt: priorReceipt,
+    });
+    writeEvidence(evidencePath, payload);
+    process.stdout.write(
+      `[local-ci-bounded-build] reusing exact-tree passed receipt ${stageReceiptPath}\n`,
+    );
+    return 0;
+  }
+  const priorDisposition = classifyPriorStage({
+    receipt: priorReceipt,
+    isProcessAlive: processAlive,
+  });
+  const stageReceipt = createStageReceiptWriter({
+    path: stageReceiptPath,
+    stage: "production-build",
+    identity: stageIdentity,
+  });
+  stageReceipt.start({
+    bi: "BI-872CB1BF",
+    identity: stageIdentity,
+    policy,
+    recoveredFrom: priorDisposition === "externally-terminated"
+      ? {
+          hostPid: priorReceipt.hostPid ?? null,
+          childPid: priorReceipt.childPid ?? null,
+          lastHeartbeatAt: priorReceipt.lastHeartbeatAt ?? null,
+        }
+      : null,
+  });
 
   let controlPlanePostgresProbe;
   try {
@@ -291,6 +369,7 @@ async function main() {
       samples: [],
     };
     writeEvidence(evidencePath, payload);
+    stageReceipt.complete(payload.status, payload);
     process.stderr.write(`[local-ci-bounded-build] ${payload.status} ${payload.failures[0]}\n`);
     return EXIT_CONTROL_PLANE_STARVATION;
   }
@@ -311,6 +390,7 @@ async function main() {
       samples: preflight.samples,
     };
     writeEvidence(evidencePath, payload);
+    stageReceipt.complete(payload.status, payload);
     process.stderr.write(`[local-ci-bounded-build] ${payload.status} ${payload.failures.join(",")}\n`);
     return EXIT_CONTROL_PLANE_STARVATION;
   }
@@ -330,6 +410,7 @@ async function main() {
       samples: preflight.samples,
     };
     writeEvidence(evidencePath, payload);
+    stageReceipt.complete(payload.status, payload);
     process.stderr.write(`[local-ci-bounded-build] ${payload.status} ${payload.failures[0]}\n`);
     return EXIT_CONTROL_PLANE_STARVATION;
   }
@@ -367,6 +448,12 @@ async function main() {
   const watchdog = await monitorControlPlane({
     sample: () => probeControlPlane(controlPlanePostgresProbe),
     isComplete: () => childComplete,
+    onSample: (sample) => stageReceipt.heartbeat({
+      phase: "production-build",
+      childPid: child.pid ?? null,
+      controlPlane: sample,
+      outputTail: buildOutput.slice(-4_000),
+    }),
   });
   let termination = null;
   if (watchdog.status === "blocked_control_plane_starvation" && !childComplete) {
@@ -401,8 +488,13 @@ async function main() {
     samples: [...preflight.samples, ...watchdog.samples],
     buildExitCode: childExit,
     termination,
+    artifact: finalStatus === "healthy"
+      ? { imageTag: tag, imageId: localImageId(tag) }
+      : null,
   };
   writeEvidence(evidencePath, payload);
+  const receiptStatus = canonicalStageReceiptStatus(finalStatus);
+  stageReceipt.complete(receiptStatus, payload);
   if (finalStatus === "blocked_control_plane_starvation") {
     process.stderr.write(`[local-ci-bounded-build] ${finalStatus} ${failures.join(",")}\n`);
     return EXIT_CONTROL_PLANE_STARVATION;
@@ -424,4 +516,6 @@ async function main() {
   return buildOutcome.exitCode;
 }
 
-process.exitCode = await main();
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  process.exitCode = await main();
+}

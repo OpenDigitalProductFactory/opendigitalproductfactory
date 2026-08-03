@@ -22,9 +22,14 @@ import {
   selectCompletedWorkRoomCycles,
   selectCurrentWorkRoomCycle,
 } from "./room-cycle";
-import type { WorkRoomView } from "./room-types";
+import type { WorkRoomParticipantView, WorkRoomView } from "./room-types";
 import { getWorkCaseSourceEntry } from "./source-registry";
 import { fromWorkItemMessage } from "./receipt-envelope";
+import {
+  authorizeWorkspaceRoomItem,
+  readWorkspaceRoomPolicy,
+  type WorkspaceRoomPolicyParticipant,
+} from "./workspace-room-access";
 
 const CLOSED_WORK_ITEM_STATUSES = ["completed", "cancelled"];
 
@@ -62,6 +67,7 @@ type WorkspaceWorkItemRecord = {
   status: string;
   assignedToUserId: string | null;
   assignedToAgentId?: string | null;
+  assignedThreadId?: string | null;
   dueAt: Date | string | null;
   evidence?: unknown;
   createdAt: Date | string;
@@ -92,6 +98,23 @@ export type WorkspaceCasePrismaClient = {
     findMany(args: unknown): Promise<WorkspaceWorkItemMessageRecord[]>;
   };
 };
+
+export type WorkspaceRoomAuthContext = {
+  principalId: string | null;
+  sensitivityClearance: readonly string[];
+  isSuperuser: boolean;
+};
+
+export type WorkspaceRoomParticipantLoader = (input: {
+  workItemId: string;
+  assignedToUserId: string | null;
+  assignedToAgentId: string | null;
+  assignedThreadId: string | null;
+  title: string;
+  status: string;
+  now: Date;
+  policyParticipants: readonly WorkspaceRoomPolicyParticipant[];
+}) => Promise<WorkRoomParticipantView[]>;
 
 export type WorkspaceWorkCaseListItem = {
   caseId: string;
@@ -366,11 +389,15 @@ export async function loadWorkspaceWorkCaseDetail({
   prismaClient,
   caseKey,
   userId,
+  authContext,
+  participantLoader,
   now = new Date(),
 }: {
   prismaClient: WorkspaceCasePrismaClient;
   caseKey: string;
   userId: string;
+  authContext?: WorkspaceRoomAuthContext;
+  participantLoader?: WorkspaceRoomParticipantLoader;
   now?: Date;
 }): Promise<WorkspaceWorkCaseDetailView | null> {
   const decoded = decodeWorkCaseKey(caseKey);
@@ -378,31 +405,41 @@ export async function loadWorkspaceWorkCaseDetail({
 
   const item = await prismaClient.workItem.findFirst({
     where: {
-      AND: [
-        {
-          OR: [
-            { sourceType: decoded.sourceType, sourceId: decoded.sourceId },
-            { sourceType: decoded.sourceType, itemId: decoded.sourceId },
-            { itemId: decoded.sourceId },
-          ],
-        },
-        {
-          OR: [
-            { assignedToUserId: userId },
-            { assignedToUserId: null },
-          ],
-        },
+      OR: [
+        { sourceType: decoded.sourceType, sourceId: decoded.sourceId },
+        { sourceType: decoded.sourceType, itemId: decoded.sourceId },
       ],
     },
     include: { childItems: true },
   });
   if (!item) return null;
 
-  const messages = await prismaClient.workItemMessage.findMany({
-    where: { workItemId: { in: [item.id, ...(item.childItems ?? []).map((child) => child.id)] } },
-    orderBy: [{ createdAt: "asc" }],
-    take: 20,
+  const access = authorizeWorkspaceRoomItem({
+    requested: "content",
+    item,
+    userId,
+    authContext,
   });
+  if (access.level !== "content" && access.level !== "action") return null;
+  const roomPolicy = readWorkspaceRoomPolicy(item.evidence);
+
+  const [messages, participants] = await Promise.all([
+    prismaClient.workItemMessage.findMany({
+      where: { workItemId: { in: [item.id, ...(item.childItems ?? []).map((child) => child.id)] } },
+      orderBy: [{ createdAt: "asc" }],
+      take: 20,
+    }),
+    participantLoader?.({
+      workItemId: item.id,
+      assignedToUserId: item.assignedToUserId,
+      assignedToAgentId: item.assignedToAgentId ?? null,
+      assignedThreadId: item.assignedThreadId ?? null,
+      title: item.title,
+      status: item.status,
+      now,
+      policyParticipants: roomPolicy.participants ?? [],
+    }) ?? Promise.resolve([]),
+  ]);
   const source = sourceForItem(item);
   const evidence = [
     ...evidenceFromWorkItem(item),
@@ -459,6 +496,7 @@ export async function loadWorkspaceWorkCaseDetail({
     completedCycles,
     outcomePacket: storedPackets[0] ?? null,
     receipts: roomReceiptsFromMessages(item, messages),
+    participants,
     context: {
       refs: sourceRefs,
       digest: null,

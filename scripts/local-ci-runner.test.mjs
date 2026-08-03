@@ -3,7 +3,11 @@ import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { planPostgresOwnership } from "./local-ci-runner.mjs";
+import {
+  LOCAL_CI_MISSING_DATABASE_URL,
+  createLocalIntegrationChildInvocation,
+  planPostgresOwnership,
+} from "./local-ci-runner.mjs";
 
 const cli = fileURLToPath(new URL("./local-ci-runner.mjs", import.meta.url));
 
@@ -68,6 +72,44 @@ test("offline accepted-base operation requires an explicit flag", () => {
   assert.equal(run.baseFreshnessStatus, "offline-accepted");
   assert.equal(run.fetchBase, "0");
   assert.doesNotMatch(run.plan, /--fetch-base/);
+});
+
+test("child local-integration invocation uses only the runner-owned test database", () => {
+  const base = {
+    repoTop: "/repo",
+    candidate: "feat/topic",
+    baseRef: "refs/dpf/integration/main",
+    candidateSha: "candidate-sha",
+    baseSha: "base-sha",
+    baseFreshness: {
+      status: "remote-current",
+      resolvedAt: "2026-08-01T00:00:00.000Z",
+      fetchMode: "fetch",
+    },
+    slotKey: "slot-0",
+    metadataFile: "/repo/.git/dpf-local-ci-metadata.json",
+  };
+
+  const withOwnedDb = createLocalIntegrationChildInvocation({
+    ...base,
+    testDatabaseUrl: "postgresql://dpf:dpf_dev@127.0.0.1:54329/dpf_local_ci_slot_0",
+    env: { DATABASE_URL: "postgresql://dpf:dpf_dev@127.0.0.1:5432/root" },
+  });
+
+  assert.ok(withOwnedDb.args.includes("--migrate-deploy"));
+  assert.equal(
+    withOwnedDb.env.DATABASE_URL,
+    "postgresql://dpf:dpf_dev@127.0.0.1:54329/dpf_local_ci_slot_0",
+  );
+
+  const withoutOwnedDb = createLocalIntegrationChildInvocation({
+    ...base,
+    testDatabaseUrl: "",
+    env: { DATABASE_URL: "postgresql://dpf:dpf_dev@127.0.0.1:5432/root" },
+  });
+
+  assert.ok(!withoutOwnedDb.args.includes("--migrate-deploy"));
+  assert.equal(withoutOwnedDb.env.DATABASE_URL, LOCAL_CI_MISSING_DATABASE_URL);
 });
 
 test("a foreign listener never satisfies manifest Postgres ownership", () => {

@@ -9,6 +9,11 @@ export { FormField, type FormFieldProps, type FieldControlProps } from "./FormFi
 export { TextField, type TextFieldProps } from "./TextField";
 export { EmailField, type EmailFieldProps } from "./EmailField";
 export { SelectField, type SelectFieldProps, type SelectOption } from "./SelectField";
+export {
+  SearchableSelect,
+  type SearchableSelectOption,
+  type SearchableSelectProps,
+} from "./SearchableSelect";
 export { TextareaField, type TextareaFieldProps } from "./TextareaField";
 export { CheckboxField, type CheckboxFieldProps } from "./CheckboxField";
 export { FormStatus, type FormStatusProps } from "./FormStatus";

@@ -101,6 +101,7 @@ import {
   type FilterGroup,
 } from "./grid-filter-builder";
 import { rowsToCsv } from "./grid-csv";
+import { buildXlsx, type XlsxValue } from "./grid-xlsx";
 import {
   type ConditionalRule,
   rowColor,
@@ -1433,6 +1434,34 @@ export function WorkbookGrid({
     URL.revokeObjectURL(url);
   }, [columns, sortedRows, tableId]);
 
+  // Native .xlsx export of the current view (visible columns, current sort/filter).
+  // Numeric cells stay numbers so Excel treats them as numbers; everything else is
+  // the same display text as the CSV export. Dependency-free writer (grid-xlsx.ts).
+  const onExportXlsx = useCallback(() => {
+    if (typeof document === "undefined") return;
+    const header: XlsxValue[] = visibleCols.map((c) => c.name);
+    const dataRows: XlsxValue[][] = sortedRows.map((r) =>
+      visibleCols.map((c) => {
+        const raw = r[c.columnId];
+        return typeof raw === "number" ? raw : cellSearchText(raw ?? null);
+      }),
+    );
+    const bytes = buildXlsx([header, ...dataRows], { sheetName: tableId });
+    // Uint8Array is a valid BlobPart at runtime; the cast placates the DOM lib's
+    // stricter generic (Uint8Array<ArrayBufferLike>) under TS 5.7+.
+    const blob = new Blob([bytes as BlobPart], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${tableId}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, [visibleCols, sortedRows, tableId]);
+
   return (
     <div className="flex h-full flex-col gap-2" onKeyDown={onKeyDown}>
       <div className="flex items-center gap-2">
@@ -1522,6 +1551,16 @@ export function WorkbookGrid({
         >
           <Download size={15} aria-hidden />
           Export CSV
+        </button>
+        <button
+          type="button"
+          onClick={onExportXlsx}
+          disabled={columns.length === 0}
+          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] disabled:opacity-40"
+          title="Export the current view to an Excel .xlsx file"
+        >
+          <Download size={15} aria-hidden />
+          Export Excel
         </button>
         <button
           type="button"

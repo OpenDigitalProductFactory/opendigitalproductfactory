@@ -63,6 +63,7 @@ const room: WorkRoomView = {
       currentWorkSummary: "Checking available windows",
       enteredReason: "Assigned to support scheduling",
       sponsorPrincipalRef: "person:dispatcher-1",
+      sponsorDisplayName: "Jamie Rivera",
       authoritySummary: "May prepare options; may not confirm externally",
       sourceRefs: [],
     },
@@ -278,6 +279,10 @@ describe("WorkCaseDetailView", () => {
     expect(participantPanel).toContain("<details open=\"\"");
     expect(html.match(/Continue with the room’s next action:/g)).toHaveLength(1);
     expect(html).toContain("Collect the customer confirmation");
+    expect(participantPanel).toContain("Why here");
+    expect(participantPanel).toContain("Authority");
+    expect(participantPanel).toContain("Sponsor");
+    expect(participantPanel).toContain("Jamie Rivera");
   });
 
   it("handles the transitional missing projection honestly", () => {

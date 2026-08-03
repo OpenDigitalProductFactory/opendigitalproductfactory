@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 
 import {
   MEASURED_AXES,
+  UI_CONTROL_RE,
   checkMeasurementAgainstBaseline,
   manifestPathsFromDiff,
   routePathForPageFile,
@@ -100,6 +101,27 @@ test("a UI-impacting change with NO manifest fails and says the trailer is retir
   const result = runGate({ impactingFiles: [PAGE], manifests: [], baseline: BASELINE });
   assert.equal(result.ok, false);
   assert.ok(result.errors.some((e) => /trailer was retired/.test(e)), result.errors.join("; "));
+});
+
+test("UI control detection includes buttons, links, disclosures, and custom triggers", () => {
+  const shouldMatch = [
+    "<button type=\"button\">Save</button>",
+    "<a href=\"/customer\">Customer</a>",
+    "<Link href=\"/workspace\">Workspace</Link>",
+    "<details>",
+    "<summary>Advanced</summary>",
+    "<SubmitButton pending={pending} />",
+    "<DropdownMenuTrigger asChild>",
+    "<div role=\"button\" onClick={open}>Open</div>",
+    "<PanelHeader aria-expanded={open}>",
+    "<section data-dpf-disclosure>",
+  ];
+
+  for (const text of shouldMatch) {
+    assert.equal(UI_CONTROL_RE.test(text), true, `expected UI_CONTROL_RE to match ${text}`);
+  }
+
+  assert.equal(UI_CONTROL_RE.test("<div>plain status</div>"), false);
 });
 
 test("a trailer-shaped manifest cannot smuggle an acknowledgement through the gate", () => {

@@ -15,6 +15,10 @@ describe("selectable coworker identity", () => {
       canonicalAgentId: "AGT-WS-CUSTOMER",
       runtimeAgentId: "customer-advisor",
     });
+    expect(selectableCoworkerIdentityRefs("farm-ranch-steward")).toEqual({
+      canonicalAgentId: "AGT-WS-FARM-RANCH",
+      runtimeAgentId: "farm-ranch-steward",
+    });
   });
 
   it("uses the same active production predicate on every entry path", () => {

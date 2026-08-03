@@ -2,7 +2,9 @@
 
 The Open Digital Product Factory stands on the shoulders of decades of work from standards bodies, industry vendors, researchers, and authors. This document credits the sources that have shaped DPF's conceptual foundation.
 
-Most of the materials listed below are proprietary to their respective rightsholders and are **not redistributed with this repository**. Please obtain them directly from the links provided.
+Most source publications are linked rather than copied. The repository also contains a legacy set of
+tracked research artifacts, enumerated below. Their presence is not a representation that they are
+Apache-2.0 material, licensed for generative-AI use, or cleared for continued distribution.
 
 This file is a companion to [NOTICE](NOTICE), which lists the open-source software dependencies and their required attribution. Code contributors are recorded in the git commit history; this file credits the ideas.
 
@@ -12,13 +14,40 @@ This file is a companion to [NOTICE](NOTICE), which lists the open-source softwa
 
 ### IT4IT&trade; Reference Architecture
 
-The Open Group's reference model for the IT value chain. DPF's value stream alignment, agent role taxonomy, and functional criteria structure are based on IT4IT.
+The Open Group's reference architecture for managing the business of IT and DigitalProduct
+lifecycles. DPF uses the public product record as a research target and maintains independently
+expressed candidate mappings; exact standard content requires an authorized edition and a complete
+source-use decision.
+
+IT4IT&trade; is a trademark of The Open Group.
 
 - **Publisher**: The Open Group
 - **Version referenced**: 3.0.1
-- **Home**: <https://pubs.opengroup.org/it4it/3.0/standard/>
-- **Licensing**: evaluation, member, and commercial licenses via The Open Group; the specification is not redistributable under any tier
-- **Contributing author**: Mark Bodman (via The Open Group IT4IT Forum)
+- **Home**: <https://publications.opengroup.org/c24a>
+- **Licensing**: evaluation, member, and commercial terms via The Open Group; DPF does not redistribute or use the compiled publication as a generative-AI source
+- **Mark Bodman provenance**: Mark attests that he is a named contributor to the works discussed and
+  retains rights to his contributed material. The Open Group's
+  [member profile](https://www.opengroup.org/member-spotlight/mark-bodman) independently documents
+  involvement since the Forum's 2014 inception and an Adoption Forum chair role; it does not prove
+  exact contribution boundaries or personal/member/employer title.
+
+### Digital Product and Portfolio Publications
+
+DPF's design lineage references two Open Group publications under different source-use decisions:
+
+- **The Shift to Digital Product (W205, 2020)**: Mark is one of two identified authors. Its publication notice
+  permits use for any purpose when copies retain the copyright and proprietary notices. The paper is
+  conceptual lineage, not a formal standard.
+- **Digital Product Portfolio Management in the Digital Enterprise (G252, 2025)**: Mark identifies
+  the paper as design lineage, but this candidate does not use a contributor-credit locator from the
+  restricted guide. The compiled guide is excluded as a generative-AI source under the FPAW
+  decision, so DPF uses Mark's separately supplied direct statements and public bibliographic
+  metadata rather than the guide's protected expression.
+
+The governing distinction is documented in the
+[FPAW source-use policy](docs/architecture/four-portfolio-archetype-ai-workforce-operating-standard.md#1311-source-use-decisions-and-contributor-origin-material): contributor credit proves provenance,
+while each separable contribution and each use still needs its own rights basis. It does not imply
+that DPF, The Open Group, or any employer adopted or endorsed the other party's work.
 
 ### ArchiMate&reg; Specification
 
@@ -55,18 +84,23 @@ MIT-licensed, cross-platform ArchiMate modelling tool. A freely usable implement
 
 ### Common Service Data Model (CSDM) 5
 
-ServiceNow's conceptual model for CMDB-aligned service and product data. DPF's entity taxonomy for portfolio-to-configuration mapping draws on CSDM concepts.
+ServiceNow's conceptual model for CMDB-aligned service and product data. DPF maintains independently
+expressed portfolio-to-configuration profiles and links public CSDM pages only as implementation
+orientation.
 
 - **Publisher**: ServiceNow, Inc.
-- **White paper**: <https://www.servicenow.com/community/common-service-data-model/csdm-5-finally-get-the-csdm-5-white-paper-here/ta-p/3254967>
+- **Research locator**: <https://www.servicenow.com/>; use site search for the page titled “CSDM 5 — Finally get the CSDM 5 white paper here”
 - **Licensing**: &copy; ServiceNow, all rights reserved; hosted on ServiceNow Community under ServiceNow's terms of use
+- **Mark Bodman provenance**: Mark attests that he originated CSDM as a ServiceNow internal standard and created several public CSDM pattern videos. DPF does not attribute any particular linked video to him without a separate enumerated record. This records design provenance only; it does not claim personal ownership of ServiceNow publications, figures, tables, class definitions, or trade dress.
 
 ### ServiceNow CMDB CI Classes
 
-The canonical configuration item class hierarchy of the ServiceNow platform. DPF's CI class alignment patterns for portfolio inventory draw on this schema.
+The configuration item class hierarchy of the ServiceNow platform. DPF's independently expressed CI
+alignment patterns use public class names only as implementation orientation; exact schema use
+requires its own permission and mapping record.
 
 - **Publisher**: ServiceNow, Inc.
-- **Home**: <https://www.servicenow.com/docs/>
+- **Research locator**: <https://www.servicenow.com/>; use the Documentation navigation
 - **Licensing**: &copy; ServiceNow; proprietary
 
 ### Unified Data Model (UDM) &mdash; OpenText UCMDB
@@ -93,7 +127,17 @@ Formal models of cognitive diversity, toolbox theory, superadditivity, and diver
 
 ## Taxonomies and Process Classifications
 
-The DPF taxonomy (see [packages/db/data/taxonomy_v3.json](packages/db/data/taxonomy_v3.json) and [docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx](docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx)) is original work by Mark Bodman, substantially transformed from study of the sources below. It is distributed under this repository's Apache License 2.0. A donation of the taxonomy to the TBM Council is in progress; once accepted, the relevant license will reflect that transfer.
+The DPF-maintained composite at
+[packages/db/data/taxonomy_v3.json](packages/db/data/taxonomy_v3.json) is mechanically generated from
+the V3 research workbook and includes fields marked as originating from TBM/APQC. Its per-field
+authorship, transformation, license, and donation rights are therefore `undetermined` pending a
+lineage audit. No blanket originality, Apache-2.0 sublicensing, or donation-rights claim is made for
+inherited fields.
+
+The research workbook
+[docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx](docs/Reference/IT4IT_Functional_Criteria_Taxonomy.xlsx)
+has a separate `undetermined` SourceUseDecision. It is reference-only, excluded as successor AI
+evidence, and not covered by the originality, Apache-2.0, or donation statements above.
 
 ### Technology Business Management (TBM)
 
@@ -113,9 +157,20 @@ APQC's cross-industry process taxonomy informed the process classification struc
 
 ## A note on reference material
 
-Several documents previously included under [docs/Reference/](docs/Reference/) have been removed from version control to respect the copyrights of their owners. They remain important conceptual sources. Please obtain them from the original publishers at the links above.
+Several documents have been removed from version control, while the following material legacy
+exceptions remain tracked. This inventory describes repository state; it does not grant permission.
 
-All **original** content in this repository is licensed under the Apache License 2.0. See [LICENSE](LICENSE) for the code license and [NOTICE](NOTICE) for required attributions of bundled open-source dependencies.
+| Tracked artifact or family | Current posture |
+|---|---|
+| `DigitaProductPortfolioManagement.pdf` and `digital_product_portfolio_mgmt.txt` | G252 compiled material; excluded from AI use and flagged for removal/quarantine or source-specific permission |
+| `Shift to Digital Product.pdf` and `shift_to_digital_product.txt` | W205 third-party material with a retained-notice permission, but continued tracked-copy redistribution still awaits the independent acceptance required by FPAW §13.1.1 (`GAP-SOURCE-005`); not Apache-only content |
+| `4_portfolio_Reworked_V2_Definitions_IT4IT.xlsx` and `4_portfolio_Reworked_V3_Definitions_IT4IT.xlsx` | mixed-origin research workbooks; rights and per-cell provenance undetermined |
+| `IT4IT_Functional_Criteria_Taxonomy.xlsx` | rights/provenance undetermined; current seeding and image distribution are an FPAW conformance gap |
+| `BIAN_CSDM_Integration_v76-US-English - FINAL.pdf` and `Value-Delivery-Chain-1.jpg` | legacy third-party research artifacts; rights review pending |
+
+Content is covered by Apache License 2.0 only where DPF holds the necessary rights or an applicable
+grant says so. Third-party artifacts retain their own terms and are not relicensed merely by being
+tracked. See [LICENSE](LICENSE), [NOTICE](NOTICE), and the FPAW source register.
 
 ---
 
@@ -123,6 +178,10 @@ All **original** content in this repository is licensed under the Apache License
 
 The platform ships with a "founder kernel" wiki at [docs/founder-kernel/](docs/founder-kernel/) &mdash; Mark Bodman's research, articles, and platform thinking, captured as a structured Karpathy-style wiki that every install gets as the platform's heart and that each customer organization extends with its own overlay.
 
-The licensing approach for every bundled raw source is enumerated in [docs/founder-kernel/RAW-SOURCES-LICENSE.md](docs/founder-kernel/RAW-SOURCES-LICENSE.md). In summary: Mark's own original work (LinkedIn articles, papers he authored, DPF specs) is bundled fully under Apache-2.0; third-party material is included as abstract + locator only (or pointer-only when redistribution is restricted) &mdash; never full text.
+The licensing approach for every bundled raw source is enumerated in
+[docs/founder-kernel/RAW-SOURCES-LICENSE.md](docs/founder-kernel/RAW-SOURCES-LICENSE.md). In summary:
+work for which Mark holds the necessary rights and has granted Apache-2.0 is bundled fully;
+third-party or collective-work material is abstract + locator only, or pointer-only when
+redistribution is restricted. Authorship or contributor credit alone never expands that grant.
 
 Design spec: [docs/superpowers/specs/2026-05-09-platform-kernel-wiki-design.md](docs/superpowers/specs/2026-05-09-platform-kernel-wiki-design.md).

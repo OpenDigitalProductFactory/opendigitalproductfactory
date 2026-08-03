@@ -41,6 +41,7 @@ import {
   DOC_ARTIFACT_RE,
   NEW_SOURCE_FILE_RE,
   SOURCE_LINE_FILE_RE,
+  UI_CONTROL_DESCRIPTION,
   UX_EXCLUDE_RE,
   UX_ROUTE_FILE_RE,
 } from "./gate-sensitivity.mjs";
@@ -149,7 +150,7 @@ function trailerConstraints(files, addedLinesByFile) {
       trailer: UX_FIT_MANIFEST,
       alternative: UX_FIT_ALTERNATIVE,
       level: "conditional",
-      because: "apps/web .tsx changed — required if the diff ADDS a user-facing control (<input>, <select>, <textarea>, type=number|range, <form>)",
+      because: `apps/web .tsx changed - required if the diff ADDS a user-facing control (${UI_CONTROL_DESCRIPTION})`,
     });
   }
 
