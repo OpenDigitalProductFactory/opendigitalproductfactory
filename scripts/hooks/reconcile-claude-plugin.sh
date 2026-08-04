@@ -53,9 +53,11 @@ fi
 WANT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$MANIFEST" 2>/dev/null)" || exit 0
 [ -n "$WANT" ] || exit 0
 
-# Decide ok|drift. Drift = no entry for this repo, version mismatch, or a
-# missing installPath (wiped cache -- the exact "failed to load" failure).
-STATE="$(python3 - "$INSTALLED" "$REPO_ROOT" "$WANT" <<'PY' 2>/dev/null
+# Decide ok|drift for THIS repo. Drift = no entry for this repo, version
+# mismatch, or a missing installPath (wiped cache -- the "failed to load"
+# failure). Used both before reconcile and again after, to verify convergence.
+drift_state() {
+  python3 - "$INSTALLED" "$REPO_ROOT" "$WANT" <<'PY' 2>/dev/null
 import json, os, sys
 installed, repo, want = sys.argv[1], sys.argv[2], sys.argv[3]
 def norm(p): return os.path.normcase(os.path.normpath(p))
@@ -75,8 +77,50 @@ for e in entries:
         print("ok"); sys.exit(0)
 print("drift")
 PY
-)"
-[ "$STATE" = "drift" ] || exit 0
+}
+
+[ "$(drift_state)" = "drift" ] || exit 0
+
+# Prune every install record for THIS repo before reinstalling. This is the
+# load-bearing fix: `claude plugin install` no-ops when ANY project record for
+# this key already exists (it checks presence, not version) and never removes
+# stale-version records -- so a naive reinstall neither converges to a new
+# committed version nor cleans up after itself. Left unchecked that appended a
+# fresh record on every version bump, accumulating hundreds of duplicates.
+# Pruning first gives install a clean slate to materialize exactly one record
+# at the committed version. Records for OTHER repos are left untouched.
+prune_repo_records() {
+  python3 - "$INSTALLED" "$REPO_ROOT" <<'PY' 2>/dev/null || true
+import json, os, sys, tempfile
+installed, repo = sys.argv[1], sys.argv[2]
+def norm(p): return os.path.normcase(os.path.normpath(p))
+try:
+    data = json.load(open(installed))
+except Exception:
+    sys.exit(0)
+plugins = data.get("plugins")
+if not isinstance(plugins, dict):
+    sys.exit(0)
+key = "dpf-platform@dpf-platform-local"
+entries = plugins.get(key)
+if not isinstance(entries, list):
+    sys.exit(0)
+kept = [e for e in entries
+        if not (isinstance(e, dict) and e.get("projectPath")
+                and norm(e["projectPath"]) == norm(repo))]
+if len(kept) == len(entries):
+    sys.exit(0)  # nothing for this repo to prune
+if kept:
+    plugins[key] = kept
+else:
+    plugins.pop(key, None)
+# Atomic replace so a racing SessionStart hook never reads a half-written file.
+fd, tmp = tempfile.mkstemp(dir=os.path.dirname(installed))
+with os.fdopen(fd, "w") as f:
+    json.dump(data, f, indent=2)
+os.replace(tmp, installed)
+PY
+}
 
 # Reconcile. The directory-source marketplace validates live, so add/update +
 # install re-materialize the cache at the committed version. `add` is for the
@@ -85,10 +129,16 @@ PY
   cd "$REPO_ROOT" 2>/dev/null || exit 0
   "$CLAUDE_BIN" plugin marketplace add ./ --scope local >/dev/null 2>&1 || true
   "$CLAUDE_BIN" plugin marketplace update "$MARKETPLACE" >/dev/null 2>&1 || true
+  prune_repo_records
   "$CLAUDE_BIN" plugin install "$PLUGIN_KEY" --scope project >/dev/null 2>&1 || true
 )
 
-# SessionStart stdout is added to the session context, so the assistant can
-# relay this. Kept to a single line; only ever prints on real drift.
-printf 'DPF platform plugin synced to v%s. Restart Claude Code to load the updated skills/hooks.\n' "$WANT"
+# Verify convergence before announcing it: a reported install is not a
+# converged version (the exact false-success this hook exists to prevent).
+# SessionStart stdout is added to session context so the assistant can relay it.
+if [ "$(drift_state)" = "ok" ]; then
+  printf 'DPF platform plugin synced to v%s. Restart Claude Code to load the updated skills/hooks.\n' "$WANT"
+else
+  printf 'DPF platform plugin reconcile could NOT converge to v%s (still drifted). Run: %s plugin install %s --scope project\n' "$WANT" "$CLAUDE_BIN" "$PLUGIN_KEY"
+fi
 exit 0
