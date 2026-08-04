@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { acceptQuoteMock } = vi.hoisted(() => ({ acceptQuoteMock: vi.fn() }));
-vi.mock("@/lib/actions/crm", () => ({ acceptQuote: acceptQuoteMock }));
+// The public flow calls the IMPL, bypassing acceptQuote's internal capability
+// guard on purpose — token possession is the authority (BI-1017777D).
+vi.mock("@/lib/actions/crm-quote-acceptance", () => ({ acceptQuoteImpl: acceptQuoteMock }));
 
 vi.mock("@dpf/db", () => ({
   prisma: {
@@ -36,7 +38,7 @@ beforeEach(() => {
 describe("acceptQuoteByToken", () => {
   it("accepts a sent, in-date quote and records the acceptor on the timeline", async () => {
     const res = await acceptQuoteByToken({ token: "t".repeat(32), acceptedByName: "Ian Pruden", acceptedByEmail: "Ian@Emma3D.com" });
-    expect(acceptQuoteMock).toHaveBeenCalledWith("q1");
+    expect(acceptQuoteMock).toHaveBeenCalledWith("q1", undefined, expect.any(Function));
     const act = p.activity.create.mock.calls[0][0].data;
     expect(act.subject).toContain("Ian Pruden");
     expect(act.subject).toContain("ian@emma3d.com");

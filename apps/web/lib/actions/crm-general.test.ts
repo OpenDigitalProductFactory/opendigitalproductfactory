@@ -1,5 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+// crm.ts's quote decision actions are capability-guarded (BI-1017777D), which
+// pulls next-auth into this module graph. Stub it: these cases cover CRM
+// behaviour, not authorization (see crm-quote-authorization.test.ts).
+vi.mock("@/lib/auth", () => ({
+  auth: vi.fn(async () => ({
+    user: { id: "u-revenue", platformRole: "HR-200", isSuperuser: false },
+  })),
+}));
+
 vi.mock("@dpf/db", () => ({
   prisma: {
     // Default $transaction invokes its callback with a raw-capable tx so the

@@ -2,13 +2,20 @@
 
 import crypto from "crypto";
 import { prisma } from "@dpf/db";
-import { acceptQuote } from "@/lib/actions/crm";
+import { acceptQuoteImpl } from "@/lib/actions/crm-quote-acceptance";
+import { logSystemActivity } from "@/lib/crm/crm-activity";
 
 // PUBLIC quote acceptance, authorized by accept-token possession (the exact
 // pattern of the invoice payment portal: sendQuote mints Quote.acceptToken and
 // the customer opens /s/quote/[token]). Accepting drives the existing
 // acceptQuote flow — order + invoice + closed-won — with the acceptor's
 // name/email recorded on the timeline.
+//
+// Deliberately calls `acceptQuoteImpl`, not the `acceptQuote` server action:
+// that action carries the internal `operate_customer` capability guard, which a
+// signed-out customer clicking their own accept link will never hold. Token
+// possession IS the authority here, and it is checked below (token lookup +
+// status + expiry) before the commit runs.
 
 export async function getQuoteByAcceptToken(token: string) {
   if (!token || token.length < 16) return null;
@@ -45,7 +52,7 @@ export async function acceptQuoteByToken(input: {
     throw new Error("This quote has expired — please ask for a refreshed quote");
   }
 
-  await acceptQuote(quote.id);
+  await acceptQuoteImpl(quote.id, undefined, logSystemActivity);
 
   await prisma.activity
     .create({

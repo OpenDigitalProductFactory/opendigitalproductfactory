@@ -6,6 +6,12 @@ import crypto from "crypto";
 import { STAGE_DEFAULT_PROBABILITY } from "@dpf/validators";
 import { revalidatePath } from "next/cache";
 import { acceptQuoteImpl } from "./crm-quote-acceptance";
+import { requireCapability } from "./shared/guards";
+import {
+  logActivity as logActivityImpl,
+  logSystemActivity,
+  type ActivityInput,
+} from "@/lib/crm/crm-activity";
 import {
   checkCustomerAccountDuplicates,
   customerAccountNormalizedColumns,
@@ -50,53 +56,8 @@ export async function updateCustomerSite(
 
 // ─── Activity Logging (used by all other actions) ───────────────────────────
 
-export async function logActivity(input: {
-  type: string;
-  subject: string;
-  body?: string;
-  scheduledAt?: string;
-  completedAt?: string;
-  accountId?: string;
-  contactId?: string;
-  opportunityId?: string;
-  createdById?: string | null;
-}) {
-  return prisma.activity.create({
-    data: {
-      activityId: `ACT-${crypto.randomUUID()}`,
-      type: input.type,
-      subject: input.subject,
-      body: input.body || null,
-      scheduledAt: input.scheduledAt ? new Date(input.scheduledAt) : null,
-      completedAt: input.completedAt ? new Date(input.completedAt) : null,
-      accountId: input.accountId || null,
-      contactId: input.contactId || null,
-      opportunityId: input.opportunityId || null,
-      createdById: input.createdById || null,
-    },
-  });
-}
-
-/** Auto-log a system event (no user attribution) */
-async function logSystemActivity(
-  subject: string,
-  opts: {
-    type?: string;
-    body?: string;
-    accountId?: string;
-    contactId?: string;
-    opportunityId?: string;
-  } = {},
-) {
-  return logActivity({
-    type: opts.type || "system",
-    subject,
-    body: opts.body,
-    accountId: opts.accountId,
-    contactId: opts.contactId,
-    opportunityId: opts.opportunityId,
-    createdById: null,
-  });
+export async function logActivity(input: ActivityInput) {
+  return logActivityImpl(input);
 }
 
 // ─── Customer Account Actions ───────────────────────────────────────────────
@@ -1060,7 +1021,16 @@ export async function sendQuote(quoteId: string, userId?: string) {
   return quote;
 }
 
+// The quote DECISION surface. Unlike the draft-grade CRM writes above, accepting
+// commits: a SalesOrder is created, the opportunity closes WON, and an invoice is
+// auto-generated. Both decisions therefore take the shared capability guard —
+// `operate_customer`, the CRM authority, NOT the workforce org-chart approver walk
+// (there is no "accountable manager" for a customer's quote). Every entry point
+// carries its own authority: the /api/v1 route authenticates separately, and the
+// public accept-link flow authorizes by token possession and calls
+// `acceptQuoteImpl` directly rather than through this guarded action.
 export async function acceptQuote(quoteId: string, userId?: string) {
+  await requireCapability("operate_customer");
   return acceptQuoteImpl(quoteId, userId, logSystemActivity);
 }
 
@@ -1068,6 +1038,8 @@ export async function rejectQuote(
   quoteId: string,
   opts: { reason?: string; userId?: string } = {},
 ) {
+  await requireCapability("operate_customer");
+
   const quote = await prisma.quote.update({
     where: { id: quoteId },
     data: { status: "rejected", rejectedAt: new Date() },
