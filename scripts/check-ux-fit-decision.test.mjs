@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 
 import {
   MEASURED_AXES,
+  MEASURED_AXIS_POLARITY,
   UI_CONTROL_RE,
   checkMeasurementAgainstBaseline,
   manifestPathsFromDiff,
@@ -223,4 +224,75 @@ test("route groups contribute no path segment; dynamic segments survive", () => 
   assert.equal(routePathForPageFile("apps/web/app/(shell)/ops/page.tsx"), "/ops");
   assert.equal(routePathForPageFile("apps/web/app/(shell)/build/[id]/page.tsx"), "/build/[id]");
   assert.equal(routePathForPageFile("apps/web/lib/whatever.ts"), null);
+});
+
+// ── axis polarity (BI-E7F6C76E) ──
+
+test("a route adding its first lead band is an improvement, not a regression", () => {
+  // The change this whole programme exists to cause. leadBandWords 0 -> 31 was
+  // reported as a regression here even after lib/ux-budget/ratchet.ts stopped
+  // doing so, because this gate mirrored the axis LIST and not the polarity map.
+  const errors = checkMeasurementAgainstBaseline(
+    {
+      evidence: {
+        kind: "sweep-measurement",
+        baselineComparison: "improved",
+        measured: {
+          "/example": {
+            defaultVisibleWords: 120,
+            leadBandWords: 31,
+            primaryActions: 1,
+            visibleFields: 3,
+            maxChoicesPerControl: 3,
+            subLegibleControls: 0,
+            buriedPrimaryAction: 0,
+            axeViolations: 1,
+          },
+        },
+      },
+    },
+    { ...BASELINE, routes: { "/example": { ...BASELINE.routes["/example"], leadBandWords: 0 } } },
+  );
+  assert.deepEqual(errors, []);
+});
+
+test("a route LOSING its lead band still regresses", () => {
+  // The presence axis is not a free pass: dropping to zero is the real failure.
+  const errors = checkMeasurementAgainstBaseline(
+    {
+      evidence: {
+        kind: "sweep-measurement",
+        baselineComparison: "improved",
+        measured: {
+          "/example": {
+            defaultVisibleWords: 120,
+            leadBandWords: 0,
+            primaryActions: 1,
+            visibleFields: 3,
+            maxChoicesPerControl: 3,
+            subLegibleControls: 0,
+            buriedPrimaryAction: 0,
+            axeViolations: 1,
+          },
+        },
+      },
+    },
+    BASELINE,
+  );
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /leadBandWords/);
+});
+
+test("polarity does not drift from lib/ux-budget/ratchet.ts", () => {
+  // This gate and the ratchet compare the SAME numbers against the SAME frozen
+  // baseline, so a polarity fix in one that misses the other reintroduces exactly
+  // the BI-E7F6C76E failure. Pin them together rather than trusting a comment.
+  const ratchet = readFileSync("apps/web/lib/ux-budget/ratchet.ts", "utf8");
+  const block = /RATCHET_AXIS_POLARITY[^=]*=\s*\{([^}]*)\}/.exec(ratchet);
+  assert.ok(block, "could not find RATCHET_AXIS_POLARITY in ratchet.ts");
+  const source = Object.fromEntries(
+    [...block[1].matchAll(/(\w+)\s*:\s*"(max|presence)"/g)].map((m) => [m[1], m[2]]),
+  );
+  assert.deepEqual(MEASURED_AXIS_POLARITY, source);
+  assert.deepEqual(Object.keys(MEASURED_AXIS_POLARITY).sort(), [...MEASURED_AXES].sort());
 });
