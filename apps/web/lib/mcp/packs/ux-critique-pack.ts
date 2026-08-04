@@ -60,7 +60,7 @@ const definitions: ToolDefinition[] = [
           description:
             "Reference to the captured image. A critique of a screen nobody can look at again is not reviewable, so an entry without one cannot become calibration data.",
         },
-        commitSha: {
+        gitRef: {
           type: "string",
           description:
             "The commit the screen was rendered at. Without it a before/after pair cannot be reconstructed later — the failure that left the earlier cognitive-load findings text-only.",
@@ -143,12 +143,12 @@ async function captureUxCritique(
     callerKind: "agent",
     route,
     finding,
-    lens: lens as never,
+    lenses: [lens as never],
     ...(proposedVerdict
       ? { verdict: proposedVerdict as never, verdictAuthority: "agent-proposed" as const }
       : {}),
     screenshotRef: str("screenshotRef") ?? null,
-    commitSha: str("commitSha") ?? null,
+    gitRef: str("gitRef") ?? str("commitSha") ?? null,
     viewportWidth: num("viewportWidth") ?? null,
     colorScheme: (colorScheme as "light" | "dark" | undefined) ?? null,
   });
@@ -191,7 +191,7 @@ async function searchUxCritiqueCorpus(
 
   const pages = await prisma.wikiPage.findMany({
     where: { slug: { startsWith: CRITIQUE_SLUG_PREFIX } },
-    select: { slug: true, title: true, status: true, metadata: true, updatedAt: true },
+    select: { slug: true, title: true, body: true, status: true, metadata: true, updatedAt: true },
     orderBy: { updatedAt: "desc" },
   });
 
@@ -201,7 +201,7 @@ async function searchUxCritiqueCorpus(
       Boolean(row.entry),
     )
     .filter((row) => (routeFilter ? row.entry.route === routeFilter : true))
-    .filter((row) => (lensFilter ? row.entry.lens === lensFilter : true))
+    .filter((row) => (lensFilter ? row.entry.lenses.includes(lensFilter as never) : true))
     .filter((row) => (calibratedOnly ? isCalibrationEligible(row.entry) : true))
     .slice(0, limit);
 
@@ -224,12 +224,12 @@ async function searchUxCritiqueCorpus(
         title: page.title,
         status: page.status,
         route: entry.route,
-        lens: entry.lens,
+        lenses: entry.lenses,
         finding: entry.finding,
         verdict: entry.verdict ?? null,
         verdictAuthority: entry.verdictAuthority ?? null,
         calibrationEligible: isCalibrationEligible(entry),
-        commitSha: entry.commitSha ?? null,
+        gitRef: entry.gitRef ?? null,
         screenshotRef: entry.screenshotRef ?? null,
       })),
     },
