@@ -189,10 +189,13 @@ export function screenInferencePayload(
       // — plus whether the floor actually bound — makes that drift visible in
       // the record instead of only re-derivable by re-composing the payload.
       // Levels, never values: rawPayloadStored stays false.
+      //
+      // declaredSensitivity is always present: normalizeSensitivity defaults a
+      // missing/unrecognised route label to "internal", and that default is
+      // exactly what the floor above used — so recording it unconditionally
+      // reports the value routing actually applied.
       measuredSensitivity: routedPayloadSensitivity,
-      ...(originalSensitivity !== undefined
-        ? { declaredSensitivity: originalSensitivity }
-        : {}),
+      declaredSensitivity: originalSensitivity,
       sensitivityFloorApplied: sensitivity !== routedPayloadSensitivity,
       rawPayloadStored: false,
     },

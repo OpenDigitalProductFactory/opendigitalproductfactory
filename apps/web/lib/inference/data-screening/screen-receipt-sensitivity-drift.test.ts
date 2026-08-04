@@ -67,6 +67,11 @@ describe("inference screen receipt — declared vs measured sensitivity", () => 
 
     expect(receipt.measuredSensitivity).toBe("internal");
     expect(receipt.sensitivityFloorApplied).toBe(false);
+    // No route label still records a declared level: normalizeSensitivity
+    // defaults to "internal" and the floor uses that default, so the receipt
+    // reports the level routing actually applied rather than omitting the
+    // field and leaving a reader to guess.
+    expect(receipt.declaredSensitivity).toBe("internal");
   });
 
   it("keeps the receipt free of payload text", () => {
