@@ -111,9 +111,15 @@ test("enumerates ALL blockers at once (no early-out)", () => {
   assert.equal(r.blockers.length, 4); // conflict + failing + pending + unresolved
 });
 
-// ── Local-CI sandbox evidence guard (BI-C74F4DE9) ────────────────────────────
+// ── Local-CI sandbox evidence guard (BI-C74F4DE9 + BI-563F6AB6 P1) ───────────
 
-import { evaluatePrHealth as evalPr, parseLocalCiAttestation, isDocsOnlyFileSet } from "./pr-health.mjs";
+import {
+  evaluatePrHealth as evalPr,
+  parseLocalCiAttestation,
+  isDocsOnlyFileSet,
+  classifyLocalCiOverride,
+  LOCAL_CI_OVERRIDE_REASON_CODES,
+} from "./pr-health.mjs";
 
 const HEAD = "abc123def456abc123def456abc123def456abc1";
 
@@ -122,13 +128,31 @@ test("parseLocalCiAttestation matches Evidence and Override trailers", () => {
     kind: "evidence",
     value: "EXT-42 (feat/x@abc)",
   });
-  assert.deepEqual(parseLocalCiAttestation("Local-CI-Override: docs-adjacent config only"), {
+  assert.deepEqual(parseLocalCiAttestation("Local-CI-Override: docs-adjacent: config only"), {
     kind: "override",
-    value: "docs-adjacent config only",
+    value: "docs-adjacent: config only",
   });
   assert.equal(parseLocalCiAttestation("No trailer here"), null);
   assert.equal(parseLocalCiAttestation(""), null);
   assert.equal(parseLocalCiAttestation(null), null);
+});
+
+test("classifyLocalCiOverride accepts closed codes and rejects free text (BI-563F6AB6)", () => {
+  assert.deepEqual(classifyLocalCiOverride("operator-emergency"), {
+    ok: true,
+    code: "operator-emergency",
+    detail: "",
+  });
+  assert.deepEqual(classifyLocalCiOverride("docs-adjacent: prose under apps/"), {
+    ok: true,
+    code: "docs-adjacent",
+    detail: "prose under apps/",
+  });
+  assert.equal(classifyLocalCiOverride("unit tests only").ok, false);
+  assert.match(classifyLocalCiOverride("unit tests only").reason, /not allowlisted|must start with/);
+  assert.equal(classifyLocalCiOverride("vitest green, skip sandbox").ok, false);
+  assert.equal(classifyLocalCiOverride("").ok, false);
+  assert.ok(LOCAL_CI_OVERRIDE_REASON_CODES.includes("operator-emergency"));
 });
 
 test("isDocsOnlyFileSet — docs/memory/*.md only counts, empty set does not", () => {
@@ -171,7 +195,7 @@ test("localCi: stale gate record (different SHA) without attestation blocks", ()
   assert.match(r.blockers.join("\n"), /no local-CI sandbox evidence/);
 });
 
-test("localCi: recorded push-time override (skip + reason) is an attested note, ready", () => {
+test("localCi: recorded push-time override with allowlisted code is ready", () => {
   const r = evalPr({
     meta: okMeta,
     checks: [pass("Typecheck")],
@@ -180,22 +204,87 @@ test("localCi: recorded push-time override (skip + reason) is an attested note, 
       headSha: HEAD,
       docsOnly: false,
       attestation: null,
-      stateRecord: { branch: "feat/x", sha: HEAD, gatePassed: false, skipped: true, skipReason: "verified-clean revert" },
+      stateRecord: {
+        branch: "feat/x",
+        sha: HEAD,
+        gatePassed: false,
+        skipped: true,
+        skipReason: "operator-emergency: verified-clean revert",
+      },
     },
   });
   assert.equal(r.ready, true);
-  assert.match(r.notes.join("\n"), /overridden at push time.*verified-clean revert/);
+  assert.match(r.notes.join("\n"), /overridden at push time.*operator-emergency/);
 });
 
-test("localCi: PR-body attestation carries the verdict for remote PRs, ready", () => {
+test("localCi: free-text push-time skipReason is NOT READY (BI-563F6AB6)", () => {
   const r = evalPr({
     meta: okMeta,
     checks: [pass("Typecheck")],
     threads: [],
-    localCi: { headSha: HEAD, docsOnly: false, attestation: { kind: "override", value: "hotfix, operator-approved" }, stateRecord: null },
+    localCi: {
+      headSha: HEAD,
+      docsOnly: false,
+      attestation: null,
+      stateRecord: {
+        branch: "feat/x",
+        sha: HEAD,
+        gatePassed: false,
+        skipped: true,
+        skipReason: "unit tests only",
+      },
+    },
+  });
+  assert.equal(r.ready, false);
+  assert.match(r.blockers.join("\n"), /push-time override rejected|not allowlisted|must start with/);
+});
+
+test("localCi: allowlisted PR-body override is ready", () => {
+  const r = evalPr({
+    meta: okMeta,
+    checks: [pass("Typecheck")],
+    threads: [],
+    localCi: {
+      headSha: HEAD,
+      docsOnly: false,
+      attestation: { kind: "override", value: "operator-emergency: hotfix, human go" },
+      stateRecord: null,
+    },
   });
   assert.equal(r.ready, true);
-  assert.match(r.notes.join("\n"), /attestation in PR body/);
+  assert.match(r.notes.join("\n"), /override attestation in PR body.*operator-emergency/);
+});
+
+test("localCi: free-text PR-body override is NOT READY (BI-563F6AB6)", () => {
+  const r = evalPr({
+    meta: okMeta,
+    checks: [pass("Typecheck")],
+    threads: [],
+    localCi: {
+      headSha: HEAD,
+      docsOnly: false,
+      attestation: { kind: "override", value: "unit tests only" },
+      stateRecord: null,
+    },
+  });
+  assert.equal(r.ready, false);
+  assert.match(r.blockers.join("\n"), /PR-body override rejected|not allowlisted|must start with/);
+});
+
+test("localCi: Evidence trailer still ready without closed code", () => {
+  const r = evalPr({
+    meta: okMeta,
+    checks: [pass("Typecheck")],
+    threads: [],
+    localCi: {
+      headSha: HEAD,
+      docsOnly: false,
+      attestation: { kind: "evidence", value: "EXT-42 (feat/x@abc)" },
+      stateRecord: null,
+    },
+  });
+  assert.equal(r.ready, true);
+  assert.match(r.notes.join("\n"), /evidence attestation/);
 });
 
 test("localCi: docs-only PR needs no gate, ready", () => {

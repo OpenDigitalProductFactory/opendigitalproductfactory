@@ -476,14 +476,47 @@ The bypass is **recorded, never silent** — the reason is persisted into the
 gate state file and surfaced by `pnpm pr:health` at PR time:
 
 ```bash
-DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON="WIP handoff, gate before PR" git push
+DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON="operator-emergency: WIP handoff, gate before PR" git push
 ```
 
 **PR-time guard.** `pnpm pr:health` treats a runtime-code PR without local-CI
 evidence as NOT READY: it needs a passing gate record for the PR head SHA, a
-recorded push-time override, or an explicit `Local-CI-Override: <reason>` /
-`Local-CI-Evidence: <record-id>` trailer in the PR body. Docs-only PRs are
-exempt automatically.
+recorded push-time override with an **allowlisted reason code**, or a PR-body
+trailer. Docs-only PRs are exempt automatically.
+
+**`Local-CI-Override` is a closed code (BI-563F6AB6 P1), not free prose.** Agents
+cannot green-wash a runtime PR with `Local-CI-Override: unit tests only` (or any
+unstructured reason). Format:
+
+```text
+Local-CI-Override: <code>
+Local-CI-Override: <code>: <optional audit detail>
+```
+
+Allowlisted codes (see `LOCAL_CI_OVERRIDE_REASON_CODES` in
+[`scripts/pr-health.mjs`](../../scripts/pr-health.mjs)):
+
+| Code | When it is legitimate |
+| --- | --- |
+| `docs-adjacent` | Prose/config that `isDocsOnlyFileSet` missed |
+| `delete-or-tag-only` | Delete/tag publication (also hook-exempt) |
+| `operator-emergency` | Named human consciously waived the gate |
+| `external-contribution-no-install` | No local DPF install / cannot run pregate |
+| `install-bootstrap-recovery` | Sandbox/install is the patient under repair |
+
+Push-time `DPF_SKIP_PREPUSH_GATE_REASON` must use the same code format or
+`pr:health` treats the recorded skip as a **blocker**, not a pass. The normal
+path remains `pnpm run pregate` with **no** body trailer.
+
+### Agent PreToolUse refuse (BI-563F6AB6 P2)
+
+Claude / Codex / Grok PreToolUse runs
+`packages/dpf-skill-pack/hooks/pregate-evidence-guard.mjs` on shell tools. It
+**denies** `git push` and `gh pr create` when the worktree has no unexpired
+SHA-bound `dpf-local-ci-gate.json` for HEAD (or an allowlisted skip). This is
+the mechanical stop that prevents a surface from “finishing too fast” with only
+worktree vitest. Emergency: `DPF_ALLOW_UNGATED_PUSH=1` (still subject to
+`pr:health` / merge-readiness).
 
 ### Keep internal identifiers out of the PR body
 
