@@ -7664,13 +7664,6 @@
     "longSentences": 0,
     "textMass": 150
   },
-  "apps/web/components/twin/rooms/RoomsList.tsx": {
-    "vocabulary": 0,
-    "genericLabels": 0,
-    "readability": 0,
-    "longSentences": 0,
-    "textMass": 4
-  },
   "apps/web/components/twin/rooms/RoomsOperations.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -7886,7 +7879,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 2,
-    "textMass": 512
+    "textMass": 493
   },
   "apps/web/components/workbooks/GridCalendar.tsx": {
     "vocabulary": 0,
@@ -7894,6 +7887,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 22
+  },
+  "apps/web/components/workbooks/GridExportMenu.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 8
   },
   "apps/web/components/workbooks/GridFindBar.tsx": {
     "vocabulary": 0,

@@ -98,12 +98,20 @@ function findBar() {
 }
 
 describe("WorkbookGrid — toolbar", () => {
-  it("renders the CSV, Excel, and Find controls", () => {
+  it("renders the Export, Find, and Add-row controls", () => {
     renderGrid();
-    expect(screen.getByText("Export CSV")).toBeTruthy();
-    expect(screen.getByText("Export Excel")).toBeTruthy();
+    expect(screen.getByText("Export")).toBeTruthy();
     expect(screen.getByText("Find")).toBeTruthy();
     expect(screen.getByText("+ Add row")).toBeTruthy();
+  });
+
+  it("offers CSV and Excel choices behind the single Export button", () => {
+    renderGrid();
+    // formats are hidden until the menu is opened
+    expect(screen.queryByText(/CSV \(\.csv\)/)).toBeNull();
+    fireEvent.click(screen.getByText("Export"));
+    expect(screen.getByText(/CSV \(\.csv\)/)).toBeTruthy();
+    expect(screen.getByText(/Excel \(\.xlsx\)/)).toBeTruthy();
   });
 
   it("does not offer edit-only controls in a read-only grid", () => {
