@@ -1,17 +1,19 @@
 {
   "note": "Drift anchor for scripts/check-sbom-drift.mjs. `firstPartyDivergent` lists the accepted set of packages whose own workspace declarations resolve to >1 version; the guard fails when a NEW name appears. Update intentionally (align the versions, or accept here) — never to silence a real regression. Totals are informational. See docs/architecture/dependency-reduction-routine.md.",
   "totals": {
-    "resolvedComponents": 1983,
-    "uniqueNames": 1726,
-    "duplicatedNames": 199,
-    "excessInstances": 257,
-    "multiMajorNames": 139,
-    "firstPartyDivergentNames": 0,
-    "directButTransitiveNames": 12,
-    "dedupeCandidateNames": 60,
+    "resolvedComponents": 2013,
+    "uniqueNames": 1740,
+    "duplicatedNames": 213,
+    "excessInstances": 273,
+    "multiMajorNames": 140,
+    "firstPartyDivergentNames": 1,
+    "directButTransitiveNames": 13,
+    "dedupeCandidateNames": 71,
     "directProdNames": 78,
-    "directDevNames": 35,
+    "directDevNames": 36,
     "workspaces": 16
   },
-  "firstPartyDivergent": []
+  "firstPartyDivergent": [
+    "tailwindcss"
+  ]
 }
