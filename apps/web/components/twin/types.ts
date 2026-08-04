@@ -12,10 +12,11 @@
 
 import type { Intent } from "@/components/ui/report-kit";
 
-/** The defining doctrine of the operating twin: humans and AI coworkers inhabit
- *  the SAME surface. Every actor-bearing primitive carries this so the two are
- *  rendered on one plane (attributed, not segregated). */
-export type TwinActorKind = "human" | "ai";
+/** The defining doctrine of the operating twin: humans, AI coworkers, and
+ *  external partners (resellers/franchisees) inhabit the SAME surface. Every
+ *  actor-bearing primitive carries this so they render on one plane (attributed,
+ *  not segregated). */
+export type TwinActorKind = "human" | "ai" | "partner";
 
 export interface TwinActor {
   name: string;

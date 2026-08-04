@@ -5,7 +5,7 @@
 // work items, presence, and the feed so the two are always visually attributed
 // and never segregated into separate lists.
 
-import { Bot, User } from "lucide-react";
+import { Bot, Handshake, User } from "lucide-react";
 
 import type { TwinActorKind } from "./types";
 
@@ -17,22 +17,34 @@ export interface ActorMarkProps {
   className?: string;
 }
 
+// One visual treatment per actor kind, on one plane (parent spec §3.3). Partners
+// (resellers/franchisees) read distinctly from staff without a second list.
+const KIND_STYLE: Record<
+  TwinActorKind,
+  { Icon: typeof Bot; iconColor: string; textColor: string; suffix: string }
+> = {
+  ai: { Icon: Bot, iconColor: "var(--dpf-accent)", textColor: "var(--dpf-accent)", suffix: " (AI coworker)" },
+  partner: {
+    Icon: Handshake,
+    iconColor: "var(--dpf-info, var(--dpf-accent))",
+    textColor: "var(--dpf-text-secondary)",
+    suffix: " (partner)",
+  },
+  human: { Icon: User, iconColor: "var(--dpf-muted)", textColor: "var(--dpf-text-secondary)", suffix: "" },
+};
+
 export function ActorMark({ name, kind, compact, className = "" }: ActorMarkProps) {
-  const isAi = kind === "ai";
-  const Icon = isAi ? Bot : User;
-  const color = isAi ? "var(--dpf-accent)" : "var(--dpf-muted)";
+  const { Icon, iconColor, textColor, suffix } = KIND_STYLE[kind] ?? KIND_STYLE.human;
   return (
     <span
       className={`inline-flex items-center gap-1 text-[11px] ${className}`.trim()}
-      title={isAi ? `${name} (AI coworker)` : name}
+      title={`${name}${suffix}`}
     >
-      <Icon aria-hidden size={12} style={{ color }} />
+      <Icon aria-hidden size={12} style={{ color: iconColor }} />
       {compact ? (
-        <span className="sr-only">{isAi ? `${name}, AI coworker` : name}</span>
+        <span className="sr-only">{`${name}${suffix ? `,${suffix}` : ""}`}</span>
       ) : (
-        <span style={{ color: isAi ? "var(--dpf-accent)" : "var(--dpf-text-secondary)" }}>
-          {name}
-        </span>
+        <span style={{ color: textColor }}>{name}</span>
       )}
     </span>
   );
