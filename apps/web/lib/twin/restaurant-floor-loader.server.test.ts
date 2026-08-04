@@ -262,6 +262,51 @@ describe("restaurant floor operational loader", () => {
     ]);
   });
 
+  it("surfaces a late confirmed reservation and the capacity it still holds", async () => {
+    const db = database();
+    db.storefrontBooking.findMany.mockResolvedValue([
+      {
+        ...waitingBooking,
+        id: "booking-late",
+        bookingRef: "BOOK-LATE",
+        customerName: "Taylor Morgan",
+        demandKind: "reservation",
+        status: "confirmed",
+        scheduledAt: new Date("2026-07-31T18:04:00.000Z"),
+      },
+    ]);
+    db.hospitalityCapacityAllocation.findMany.mockResolvedValue([
+      {
+        id: "allocation-late",
+        resourceId: "table-2",
+        startsAt: new Date("2026-07-31T18:04:00.000Z"),
+        endsAt: new Date("2026-07-31T19:04:00.000Z"),
+        lifecycle: "reserved",
+        version: 1,
+        demandRef: "BOOK-LATE",
+        serviceTurn: null,
+      },
+    ]);
+
+    const view = await loadRestaurantFloorOperationalView(db, {
+      organizationId: "org-1",
+      storefrontId: "store-1",
+      now,
+    });
+
+    expect(view.reservationWatch).toEqual([
+      {
+        id: "booking-late",
+        name: "Taylor Morgan",
+        covers: 2,
+        scheduledAt: "2026-07-31T18:04:00.000Z",
+        lateMinutes: 10,
+        state: "late",
+        tableLabels: ["Table 2"],
+      },
+    ]);
+  });
+
   it("loads an allow-listed public snapshot by slug without exposing operator facts", async () => {
     const availability = await loadPublicRestaurantAvailabilityBySlug(
       database(),

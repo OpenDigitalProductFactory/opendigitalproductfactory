@@ -47,6 +47,24 @@ export function WorkspaceTwinHero({
   const simple = density === "simple";
   const operatingQuestion = contribution?.primaryOperatingQuestion ?? null;
 
+  if (presentation.restaurantFloor) {
+    return (
+      <div className="flex flex-col gap-dpf-sm">
+        <h1 className="sr-only">{presentation.archetypeName} operations</h1>
+        <WorkspaceTwinPanel
+          presentation={presentation}
+          serviceAttention={cockpit}
+        />
+        <details className="rounded-dpf-lg border border-dpf-border bg-dpf-surface-1">
+          <summary className="dpf-tap-target cursor-pointer px-dpf-md py-dpf-sm text-dpf-body font-dpf-semibold text-dpf-text">
+            All workspace areas
+          </summary>
+          <div className="border-t border-dpf-border p-dpf-md">{platformBody}</div>
+        </details>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <section

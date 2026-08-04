@@ -121,10 +121,21 @@ export interface RestaurantFloorMoveCommand {
   options: RestaurantFloorCommandOption[];
 }
 
+export interface RestaurantReservationWatch {
+  id: string;
+  name: string;
+  covers: number;
+  scheduledAt: string;
+  lateMinutes: number | null;
+  state: "upcoming" | "late";
+  tableLabels: string[];
+}
+
 export interface RestaurantFloorOperationalView {
   floor: RestaurantFloorProjection;
   commands: RestaurantFloorCommandDemand[];
   moves: RestaurantFloorMoveCommand[];
+  reservationWatch?: RestaurantReservationWatch[];
   telemetry: {
     durationMs: number;
     queryCount: number;
@@ -589,10 +600,48 @@ export async function loadRestaurantFloorOperationalView(
     }];
   });
 
+  const reservationWatch = bookings
+    .filter(
+      (booking) =>
+        booking.demandKind !== "walk-in" &&
+        ["confirmed", "scheduled"].includes(booking.status),
+    )
+    .map((booking): RestaurantReservationWatch => {
+      const minutesPast = Math.max(
+        0,
+        Math.round((now.getTime() - booking.scheduledAt.getTime()) / 60_000),
+      );
+      const tableLabels = allocations.flatMap((allocation) => {
+        if (
+          allocation.demandRef !== booking.bookingRef ||
+          !allocation.resourceId
+        ) {
+          return [];
+        }
+        const label = resourceById.get(allocation.resourceId)?.label;
+        return label ? [label] : [];
+      });
+      return {
+        id: booking.id,
+        name: booking.customerName,
+        covers: booking.covers ?? 0,
+        scheduledAt: booking.scheduledAt.toISOString(),
+        lateMinutes: minutesPast > 0 ? minutesPast : null,
+        state: minutesPast > 0 ? "late" : "upcoming",
+        tableLabels: [...new Set(tableLabels)],
+      };
+    })
+    .sort(
+      (left, right) =>
+        (right.lateMinutes ?? -1) - (left.lateMinutes ?? -1) ||
+        left.scheduledAt.localeCompare(right.scheduledAt),
+    );
+
   return attachExactPayloadBytes({
     floor,
     commands,
     moves,
+    reservationWatch,
     telemetry: {
       durationMs: Math.max(0, clock() - startedAt),
       queryCount,

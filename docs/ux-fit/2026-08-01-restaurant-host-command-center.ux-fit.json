@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "restaurant-shift-console",
+  "decisionInteractionId": "DI-8AC53E1793E6",
+  "scope": {
+    "files": [
+      "apps/web/components/twin/restaurant/RestaurantFloorOperations.tsx",
+      "apps/web/components/workspace-home/WorkspaceTwinHero.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "restaurant-shift-console",
+      "compress-existing-stack",
+      "dedicated-host-route"
+    ]
+  }
+}

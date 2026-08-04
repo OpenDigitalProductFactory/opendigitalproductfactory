@@ -35,9 +35,15 @@ Full navigation exposes both when the signed-in role is permitted.
 Operations changes its primary visual model to match the business instead of
 forcing every physical resource into the same card grid.
 
-- Restaurants use a two-dimensional floor plan for table position, availability,
-  service state, and server load. An accessible list exposes the same facts
-  without relying on position or color alone.
+- Restaurants open into a compact **Host stand** that keeps the ranked waiting
+  queue, two-dimensional floor plan, server load, active turns, and reservations
+  to watch in one bounded working area. The floor shows table position,
+  availability, service state, and server load; **Table list** exposes the same
+  facts without relying on position or color alone.
+- The restaurant coworker recommends a compatible table and explains capacity,
+  timing, and server-load tradeoffs, but the host must choose **Confirm seating**
+  before anything changes. The embedded floor is locked against accidental pan
+  and zoom during service so selecting a table does not move the drawing.
 - Hotels and other room-based businesses use a **Room rack** first: rooms run
   down the page and dates run across it, so continuous availability, arrivals,
   departures, and assignment conflicts remain visible together.

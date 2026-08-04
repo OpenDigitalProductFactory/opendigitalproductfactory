@@ -50,14 +50,34 @@ capacity:
 - **List** — the same live facts as a scannable alternative when the drawing is
   unavailable or a list is easier to operate.
 
-Use `/workspace` during service. The restaurant floor there joins the saved
-layout to waiting and reserved parties, active service turns, server sections,
-table availability, and workload. To seat a party:
+Use `/workspace` during service. A restaurant opens directly into the compact
+**Host stand** console, even when simple navigation is enabled. It keeps the
+ranked waiting queue, floor, live pulse, AI seating recommendation, active
+turns, reservations to watch, and server load in one bounded working area.
+Late reservations show the capacity they still hold so the host can confirm
+guest status before releasing it. Each pane scrolls
+independently when demand is high; the hostess does not have to scroll the page
+to find the floor.
 
-1. Choose a waiting party and review only compatible table choices.
-2. Check the table, timing, and server-load explanation.
-3. Preview and explicitly confirm the assignment.
-4. Advance the table through seated, ordered, paid, clearing, and cleared as
+The floor is locked against accidental pan and zoom during service, so tapping
+a table selects it instead of moving the drawing. Switch **Floor** to **Table
+list** in the same center pane when a list is faster or the drawing is
+unavailable. **Orders, calls and messages** opens the existing attention
+surface as an overlay inside the console, keeping takeout and customer contact
+in reach without displacing the floor. The rest of Operations remains in the
+disclosure directly below the host console.
+
+To seat a party:
+
+1. Start with the AI-ranked party selected at the top of **Waiting now**, or
+   choose another party.
+2. Review the coworker's recommended compatible table and its capacity,
+   timing, and server-load explanation.
+3. Tap a different table on the floor or in **Table list** when service judgment
+   calls for it.
+4. Explicitly choose **Confirm seating**. The coworker never seats a party
+   without host approval.
+5. Advance the table through seated, ordered, paid, clearing, and cleared as
    service progresses.
 
 To move an active party, choose **Move party**, select a compatible destination,
