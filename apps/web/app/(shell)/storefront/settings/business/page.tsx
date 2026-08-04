@@ -44,6 +44,7 @@ export default async function StorefrontBusinessSettingsPage() {
     employsIn: businessContext?.employsIn ?? [],
     dataResidency: businessContext?.dataResidency ?? [],
     handlesCardPayments: businessContext?.handlesCardPayments ?? false,
+    dataHandling: businessContext?.dataHandling ?? [],
     listingStatus: businessContext?.listingStatus ?? null,
     address: parseOrgAddress(org?.address),
     // Pre-set the risk posture from the stored value, else the industry default.

@@ -7,6 +7,7 @@ import {
   type ArchetypeSummary,
 } from "./business-context-form-state";
 import { EmailInput } from "@/components/ui/EmailInput";
+import { DataHandlingChips } from "@/components/admin/DataHandlingChips";
 import { PhoneInput } from "@/components/ui/PhoneInput";
 import { SubmitButton, FormStatus } from "@/components/ui/form";
 import { BusinessDocumentUpload } from "@/components/admin/BusinessDocumentUpload";
@@ -76,6 +77,7 @@ const LISTING_STATUS_OPTIONS = [
   { value: "other", label: "Other / not sure" },
 ];
 
+
 type JurisdictionScopeField = (typeof COMPLIANCE_SCOPE_DIMENSIONS)[number]["field"];
 
 type BusinessContextData = {
@@ -93,6 +95,7 @@ type BusinessContextData = {
   employsIn: string[];
   dataResidency: string[];
   handlesCardPayments: boolean;
+  dataHandling: string[];
   listingStatus: string | null;
   riskPosture: string | null;
   address: OrgAddress;
@@ -230,6 +233,11 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
         </div>
       </div>
     );
+  }
+
+  function togglePredicate(value: string) {
+    const cur = data.dataHandling;
+    update("dataHandling", cur.includes(value) ? cur.filter((v) => v !== value) : [...cur, value]);
   }
 
   async function handleSubmit() {
@@ -635,6 +643,12 @@ export function BusinessContextForm({ initial, archetypeSummary, isEdit, autoFil
           </div>
 
           {renderScopeChips("operatesIn", "Where is your business based / where do you operate?")}
+
+          <DataHandlingChips
+            value={data.dataHandling}
+            onToggle={togglePredicate}
+            label="What does your business do with data? (pick all that apply — this decides which privacy, AI, marketing and accessibility rules apply)"
+          />
 
           <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13 }}>
             <input

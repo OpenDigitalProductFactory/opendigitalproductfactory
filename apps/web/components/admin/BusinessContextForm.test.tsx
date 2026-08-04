@@ -30,6 +30,7 @@ const baseInitial = {
   employsIn: [],
   dataResidency: [],
   handlesCardPayments: false,
+  dataHandling: [],
   listingStatus: null,
   riskPosture: null,
   address: {},

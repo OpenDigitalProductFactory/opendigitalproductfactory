@@ -3133,7 +3133,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 488
+    "textMass": 510
   },
   "apps/web/components/admin/BusinessDocumentUpload.tsx": {
     "vocabulary": 0,
@@ -3183,6 +3183,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 15
+  },
+  "apps/web/components/admin/DataHandlingChips.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 44
   },
   "apps/web/components/admin/DataStewardPanel.tsx": {
     "vocabulary": 0,
