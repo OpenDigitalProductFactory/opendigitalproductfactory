@@ -32,6 +32,10 @@ import {
   releaseDeadLocalQueueObserversForGate,
   releaseLocalQueueObserver,
 } from "./lib/local-queue-observer.mjs";
+import {
+  installBrokenPipeTolerance,
+  isVerboseGateConsole,
+} from "./lib/pregate-console.mjs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
@@ -468,6 +472,10 @@ export async function recoverInterruptedGate({
 }
 
 async function main() {
+  // BI-B1065D41: `pnpm run pregate | head -5` must survive head exiting. Both
+  // this wrapper and the gate it spawns need the tolerance — the gate inherits
+  // these very file descriptors.
+  installBrokenPipeTolerance();
   const args = process.argv.slice(2);
 
   const diskCheck = checkHostDiskSpace();
@@ -477,16 +485,29 @@ async function main() {
   }
 
   if (shouldRunPreflight(args)) {
+    // BI-B1065D41: the guard-parity preflight is loud and, on a passing run,
+    // uninteresting — including a TOLERATED GuardRuntimeEnvironmentError that
+    // prints `Error:` and a red cross on runs that PASS, which is exactly the
+    // text a log-tail reader mistakes for a failure. Capture it and replay it
+    // only when it actually fails.
+    const verbose = isVerboseGateConsole();
     const preflight = spawnSync(
       process.execPath,
       [join(SCRIPT_DIR, "pregate-preflight.mjs")],
-      { stdio: "inherit" },
+      verbose ? { stdio: "inherit" } : { encoding: "utf8" },
     );
     if (preflight.error || (preflight.status ?? 1) !== 0) {
+      if (!verbose) {
+        process.stderr.write(String(preflight.stdout || ""));
+        process.stderr.write(String(preflight.stderr || ""));
+      }
       process.stderr.write(
         "pregate: guard parity preflight failed — fix the deterministic guard failures above before the sandbox gate runs (no lease was claimed).\n",
       );
       process.exit(preflight.status ?? 1);
+    }
+    if (!verbose) {
+      process.stdout.write("pregate: guard parity preflight passed.\n");
     }
   } else if (process.env.DPF_SKIP_PREGATE_PREFLIGHT_REASON) {
     process.stderr.write(

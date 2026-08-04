@@ -209,6 +209,7 @@ test("gate-worktree.mjs refuses to run when neither an explicit command, the stu
   cpSync(join(repoRoot, "scripts", "lib", "local-queue-observer.mjs"), join(temp, "scripts", "lib", "local-queue-observer.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-slot-manifest.mjs"), join(temp, "scripts", "lib", "local-ci-slot-manifest.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-gate-state.mjs"), join(temp, "scripts", "lib", "local-ci-gate-state.mjs"));
+  cpSync(join(repoRoot, "scripts", "lib", "pregate-console.mjs"), join(temp, "scripts", "lib", "pregate-console.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-host-pressure.mjs"), join(temp, "scripts", "lib", "local-ci-host-pressure.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "agent-identity.mjs"), join(temp, "scripts", "lib", "agent-identity.mjs"));
   cpSync(join(repoRoot, "scripts", "lib", "local-ci-base-freshness.mjs"), join(temp, "scripts", "lib", "local-ci-base-freshness.mjs"));
@@ -717,4 +718,164 @@ test("local-ci-runner.mjs refuses to gate main or a detached HEAD", () => {
   });
   assert.notEqual(onMain.status, 0);
   assert.match(onMain.stderr, /gate topic branches, not main/);
+});
+
+// ── BI-B1065D41 Phase 1: the gate must be READABLE and VERDICTABLE ───────────
+//
+// These are functional, not structural: they run the real gate against a real
+// (loud) child command and assert on what actually reaches stdout. The old
+// behaviour mirrored every child line, producing ~28,000 lines for one run —
+// which is what made piping to `head` the rational response, and that pipe is
+// what SIGPIPE-killed runs mid-install.
+
+/** Env for a gate run whose child command prints `lines` lines. */
+function loudGateEnv(mcpUrl, lines, extra = {}) {
+  return {
+    ...process.env,
+    DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+    DPF_GATE_OWNER_PROVIDER: "codex",
+    DPF_GATE_OWNER_SESSION_ID: "contract-thread",
+    DPF_LOCAL_CI_COMMAND: `${JSON.stringify(process.execPath)} -e "for(let i=0;i<${lines};i++)console.log('sandbox build step '+i)"`,
+    ...extra,
+  };
+}
+
+async function passingMcp() {
+  return startMockMcp({
+    claim_nonprod_environment_lease: () => ({ success: true, entityId: "NPEL-LOUD" }),
+    record_local_integration_result: () => ({ success: true, entityId: "EXT-LOUD" }),
+    release_nonprod_environment_lease: () => ({ success: true, entityId: "NPEL-LOUD" }),
+  });
+}
+
+test("gate stdout stays bounded while the full transcript lands in the log (BI-B1065D41)", async () => {
+  const { dir } = makeTempRepo();
+  const mcp = await passingMcp();
+  try {
+    const result = await runGateAsync(
+      ["--branch", "feat/loud", "--sha", "loud-sha", "--worktree", dir, "--no-push", "--mcp-url", mcp.url],
+      loudGateEnv(mcp.url, 20_000),
+    );
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+
+    const stdoutLines = result.stdout.split("\n").filter((l) => l.trim() !== "");
+    assert.ok(
+      stdoutLines.length <= 40,
+      `stdout must stay readable; got ${stdoutLines.length} lines:\n${result.stdout.slice(0, 2000)}`,
+    );
+    assert.equal(stdoutLines.at(-1), "gate passed", "the documented ^gate passed anchor must be the last line");
+    assert.ok(
+      !result.stdout.includes("sandbox build step 5000"),
+      "the child transcript must not be mirrored to stdout",
+    );
+
+    // …but it is not LOST: the full log holds every line, and stdout names it.
+    const logFile = join(dir, ".git", "dpf-local-ci-output.log");
+    assert.ok(result.stdout.includes(logFile), "stdout must name the full log path");
+    const logLines = readFileSync(logFile, "utf8").split("\n").filter((l) => l.trim() !== "");
+    assert.equal(logLines.length, 20_000, "the full transcript must be persisted");
+  } finally {
+    await mcp.close();
+  }
+});
+
+test("DPF_PREGATE_VERBOSE=1 restores the full mirror (BI-B1065D41)", async () => {
+  const { dir } = makeTempRepo();
+  const mcp = await passingMcp();
+  try {
+    const result = await runGateAsync(
+      ["--branch", "feat/verbose", "--sha", "verbose-sha", "--worktree", dir, "--no-push", "--mcp-url", mcp.url],
+      loudGateEnv(mcp.url, 200, { DPF_PREGATE_VERBOSE: "1" }),
+    );
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    assert.ok(result.stdout.includes("sandbox build step 150"), "verbose mode must mirror the child");
+  } finally {
+    await mcp.close();
+  }
+});
+
+test("a piped gate completes and still records a gate record (BI-B1065D41)", async () => {
+  // The literal trap: three runs were SIGPIPE-killed mid-install by `| head`.
+  // A closed reader must degrade the OUTPUT, never terminate the run — the run
+  // holds a shared lease, so dying mid-flight wedges the queue for everyone.
+  const { dir } = makeTempRepo();
+  const mcp = await passingMcp();
+  try {
+    const status = await new Promise((resolve, reject) => {
+      const gate = spawn(process.execPath, [
+        gateScript,
+        "--branch", "feat/piped", "--sha", "piped-sha", "--worktree", dir, "--no-push", "--mcp-url", mcp.url,
+      ], { env: loudGateEnv(mcp.url, 20_000, { DPF_PREGATE_VERBOSE: "1" }), stdio: ["ignore", "pipe", "ignore"] });
+      gate.on("error", reject);
+      let seen = 0;
+      gate.stdout.on("data", (chunk) => {
+        seen += String(chunk).split("\n").length;
+        // Emulate `| head -5`: stop reading and destroy the pipe early.
+        if (seen >= 5 && !gate.stdout.destroyed) gate.stdout.destroy();
+      });
+      gate.on("close", resolve);
+    });
+
+    assert.equal(status, 0, "a closed stdout reader must not kill the gate");
+    const state = JSON.parse(readFileSync(join(dir, ".git", "dpf-local-ci-gate.json"), "utf8"));
+    assert.equal(state.gatePassed, true, "the gate record must still be written");
+    assert.equal(state.sha, "piped-sha");
+    assert.ok(
+      mcp.calls.some((c) => c.params.name === "record_local_integration_result"),
+      "evidence must still be recorded when the reader went away",
+    );
+  } finally {
+    await mcp.close();
+  }
+});
+
+// ── BI-B1065D41 Phase 2: pregate:status is the authoritative verdict ─────────
+
+const statusScript = join(repoRoot, "scripts", "pregate-status.mjs");
+
+function runStatus(cwd) {
+  const r = spawnSync(process.execPath, [statusScript, "--json"], { cwd, encoding: "utf8" });
+  return { status: r.status, report: r.stdout.trim() ? JSON.parse(r.stdout) : null, stderr: r.stderr };
+}
+
+test("pregate:status reports NO-RECORD (exit 1) for a worktree that never gated", () => {
+  const { dir } = makeTempRepo();
+  const out = runStatus(dir);
+  assert.equal(out.status, 1, "no record must never exit 0");
+  assert.equal(out.report.verdict, "NO-RECORD");
+});
+
+test("pregate:status reports PASS for the gated SHA, then STALE once HEAD moves", async () => {
+  const { dir, g } = makeTempRepo();
+  const headSha = g(["rev-parse", "HEAD"]);
+  const branch = g(["rev-parse", "--abbrev-ref", "HEAD"]);
+  const mcp = await passingMcp();
+  try {
+    const gate = await runGateAsync(
+      ["--branch", branch, "--sha", headSha, "--worktree", dir, "--no-push", "--mcp-url", mcp.url],
+      loudGateEnv(mcp.url, 50),
+    );
+    assert.equal(gate.status, 0, `${gate.stdout}\n${gate.stderr}`);
+
+    const passed = runStatus(dir);
+    assert.equal(passed.status, 0, `expected exit 0 for a gated HEAD: ${passed.report?.reason}`);
+    assert.equal(passed.report.verdict, "PASS");
+    assert.equal(passed.report.boundSha, headSha);
+    assert.equal(passed.report.headSha, headSha);
+
+    // The whole point of the command: gate once, commit again, and the verdict
+    // flips WITHOUT re-reading a log or trusting the previous run's exit code.
+    writeFileSync(join(dir, "code.ts"), "export const x = 2;\n");
+    g(["add", "."]);
+    g(["commit", "-q", "-m", "second"]);
+
+    const stale = runStatus(dir);
+    assert.equal(stale.status, 1, "a moved HEAD must never exit 0");
+    assert.equal(stale.report.verdict, "STALE");
+    assert.equal(stale.report.staleness, "head-moved");
+    assert.equal(stale.report.boundSha, headSha);
+    assert.notEqual(stale.report.headSha, headSha);
+  } finally {
+    await mcp.close();
+  }
 });

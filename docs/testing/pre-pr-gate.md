@@ -289,28 +289,52 @@ is available only as an explicit `scripts/gate-worktree.sh --push` (or
 `scripts/gate-worktree.mjs --push`) operation for recovery/transition cases
 that intentionally need it.
 
-### Reading the result — a queued run can exit 0
+### Reading the result — ask the record, not the run
 
-Admission is queued (one slot until BI-A4427AB8). While waiting, the run prints
-`local-CI admission queued at position N`. **A run that never reaches admission
-can still terminate with exit code 0**, so exit status alone does not
-distinguish "gate passed" from "gate never ran". Confirm by artifact:
+```bash
+pnpm run pregate:status
+```
 
-1. The run ends with the literal line `gate passed`.
-2. It wrote the metadata record (the path is echoed as
-   `[local-integration-ci] metadata …`), and in that record **`candidateSha` is
-   the commit you are about to push**, with `baseSha` the base it merged
-   against. Check `evidencePlan.evidenceTier` / `fullSuite` describe the
-   coverage you expected.
-3. `grep -v "admission queued"` over the log. If only queue polling remains,
-   nothing ran.
+That is the whole answer, and it is the only signal you should act on. It reads
+the SHA-bound gate record plus the schema-versioned metadata record, and prints
+one verdict — `PASS`, `FAIL`, `STALE`, `PENDING`, or `NO-RECORD` — with the
+bound SHA, how it compares to current HEAD, and how old it is. **It exits 0 only
+for a `PASS` bound to the current HEAD**, so `pnpm run pregate:status && git
+push` is a correct composition. Add `--json` for machine use. It never claims a
+lease and never runs a gate, so it is safe to call at any time, including while
+someone else's gate is mid-run.
 
-**Never wrap `pregate` in `timeout`.** Killing it mid-queue is what produces the
-false green above; run it unbounded. Queue contention is not a reason to reach
-for `DPF_SKIP_PREPUSH_GATE` — with a valid record for the head SHA the push is
-admitted normally. Cancelling a run can also leave a stale queued lease pinned
-to the **old** SHA; release it, or the next run queues behind your own
-abandoned entry.
+Everything else about a pregate run lies in a documented direction, which is why
+the reader exists (BI-B1065D41):
+
+| Signal | How it lies |
+| --- | --- |
+| The **exit code** | `pregate …; echo $?; tail …` reports *tail's* status. And a run that gave up while queued exits 0 having gated nothing (BI-2C7F51BA). |
+| The **log tail** | A *tolerated* `GuardRuntimeEnvironmentError` prints `Error:` and a red ✖ ~28,000 lines before a **passing** verdict. A watcher grepping `Error:` fabricates a failure. |
+| **`gate passed`** | True about the run you watched; silent about whether HEAD has moved since. `pregate:status` compares. |
+
+`gate passed` remains the last line of a passing run and is still a valid
+anchor *for that run* — it is what the closing summary block ends with. It is
+just not the thing to build automation on.
+
+**How to invoke it.** Run `pregate` in the **foreground**, unpiped, as the sole
+command. On timeout the harness migrates a foreground run to the background and
+it **continues** — that is the working path, and it is the opposite of the
+intuitive choice. Do not background it (`&` or `run_in_background`: the harness
+caps and kills it mid-install), do not chain another command after it with `;`
+or `||` (you get that command's exit code), and never wrap it in `timeout`
+(cutting it off mid-queue manufactures a false green and leaves a stale lease
+pinned to the **old** SHA). `pregate-invocation-guard.mjs` denies all four
+shapes at the tool edge on Claude, Codex, and Grok.
+
+Queue contention is not a reason to reach for `DPF_SKIP_PREPUSH_GATE` — with a
+valid record for the head SHA the push is admitted normally.
+
+**Output.** A run prints roughly 30 lines: admission, the full-log path, a
+periodic progress heartbeat, and a bounded closing summary. The complete
+~28,000-line transcript goes to the log file whose path is printed before the
+long stage begins. `DPF_PREGATE_VERBOSE=1` restores the full mirror for
+debugging the gate itself.
 
 **The gate command has a checked-in default (BI-157DC9B2, BI-4BE30454):**
 [`scripts/local-ci-runner.mjs`](../../scripts/local-ci-runner.mjs) runs the
@@ -637,8 +661,11 @@ Name them so you catch yourself.
 | Reaching for `DPF_SKIP_*` to get past a hook | Bypasses are for verified false positives only | Fix the underlying error; CI gates it anyway |
 | Verifying UX against worktree `next dev` | Not the production-bundled runtime | Use the canonical install or sandbox lease (AGENTS.md §13) |
 | Treating a local green as the merge gate | The binding gate is the CI **Unit Tests** check | Local pass = evidence; CI pass = the gate |
-| Reading a `pregate` exit code as the verdict | A run killed while queued exits 0 without running | Require `gate passed` + a metadata record whose `candidateSha` is yours |
-| Wrapping `pregate` in `timeout` | Cuts it off mid-queue and manufactures a false green | Run it unbounded; background it and wait |
+| Reading a `pregate` exit code as the verdict | A run killed while queued exits 0 without running | `pnpm run pregate:status` — it reads the SHA-bound record and exits 0 only for a PASS at HEAD |
+| Piping `pregate` to `head`/`grep` | The verdict is the LAST line, so a truncating reader removes exactly what you wanted (and it used to SIGPIPE-kill the run mid-install) | Let it print its ~30 lines; open the log path it prints for detail |
+| Backgrounding `pregate` (`&` / `run_in_background`) | The harness caps and kills a backgrounded run mid-install | Run it in the FOREGROUND — on timeout the harness migrates it and it continues |
+| Wrapping `pregate` in `timeout` | Cuts it off mid-queue and manufactures a false green | Run it unbounded in the foreground |
+| Trusting a worktree's typecheck/test failures | An unprovisioned worktree fails as `'next' is not recognized` / `Cannot find package 'react'`, which look like real breakage | `node scripts/lib/bootstrap-worktree-deps.mjs . --classify-only` before blaming your change |
 | Trusting a green test run without naming the tree | Sibling worktrees hold identical paths; shell cwd persists between calls | Check the runner's root banner; reconcile the test count against your file |
 
 ## What this gate is NOT

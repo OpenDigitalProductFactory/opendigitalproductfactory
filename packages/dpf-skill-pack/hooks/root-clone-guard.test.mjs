@@ -8,6 +8,7 @@ import {
   isUnderRootSharedArea,
   recursiveDeleteTargets,
   isDestructiveGitClean,
+  isNodeModulesWritingInstall,
 } from "./root-clone-guard.mjs";
 
 // A nested worktree (the dominant, dangerous layout: inside the root clone),
@@ -175,4 +176,73 @@ test("isDestructiveGitClean: true only when ignored dirs are swept", () => {
   assert.equal(isDestructiveGitClean("git clean -fdX"), true);
   assert.equal(isDestructiveGitClean("git clean -fd"), false);
   assert.equal(isDestructiveGitClean("git status"), false);
+});
+
+// ── BI-1C1483C6: install THROUGH a junctioned node_modules ───────────────────
+// The delete-through-junction case was already covered above. This is the other
+// half of the same foot-gun: a package manager writing through the link into the
+// shared root, which previously gutted the root clone (1198 deleted sources).
+
+const WT = "D:/DPF-worktrees/topic";
+const junctionedNodeModules = (p) => p === "D:/DPF-worktrees/topic/node_modules";
+
+test("isNodeModulesWritingInstall: matches the commands that materialize packages", () => {
+  for (const cmd of [
+    "pnpm install",
+    "pnpm i",
+    "pnpm install --frozen-lockfile",
+    "pnpm add zod",
+    "pnpm update",
+    "npm install",
+    "npm ci --no-audit",
+    "yarn",
+    "bun install",
+    "pnpm --filter web add zod",
+    "pnpm -C apps/web install",
+  ]) {
+    assert.equal(isNodeModulesWritingInstall(cmd), true, cmd);
+  }
+});
+
+test("isNodeModulesWritingInstall: does NOT match read-only queries or script runners", () => {
+  for (const cmd of [
+    "pnpm ls --depth -1",
+    "pnpm why react",
+    "pnpm store status",
+    "pnpm run pregate",
+    "pnpm test",
+    "pnpm --filter web typecheck",
+    "git install",
+  ]) {
+    assert.equal(isNodeModulesWritingInstall(cmd), false, cmd);
+  }
+});
+
+test("blocks a bare pnpm install when node_modules IS a junction", () => {
+  const v = decide({ command: "pnpm install", cwd: WT, isSymlink: junctionedNodeModules });
+  assert.equal(v.block, true);
+  assert.match(v.reason, /writes THROUGH it/);
+  assert.match(v.reason, /bootstrap-worktree-deps/, "the denial must name the managed alternative");
+  assert.match(v.reason, /cmd \/c rmdir/, "and the junction-safe way to drop the link");
+});
+
+test("ALLOWS the same install when node_modules is a real directory", () => {
+  // The root clone, and any worktree with its own real node_modules, install
+  // normally. The guard keys on runtime state, not on the command text — so it
+  // can never become a blanket ban on installing.
+  assert.equal(decide({ command: "pnpm install", cwd: WT, isSymlink: () => false }).block, false);
+});
+
+test("ALLOWS the managed bootstrap's own install (no node_modules yet, so no junction)", () => {
+  assert.equal(
+    decide({ command: "pnpm install --prefer-offline --frozen-lockfile", cwd: WT, isSymlink: () => false }).block,
+    false,
+  );
+});
+
+test("the junction install block honors the existing root-mutation escape hatch", () => {
+  assert.equal(
+    decide({ command: "DPF_ALLOW_ROOT_CLONE_MUTATION=1 pnpm install", cwd: WT, isSymlink: junctionedNodeModules }).block,
+    false,
+  );
 });
