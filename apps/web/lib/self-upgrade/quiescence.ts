@@ -18,6 +18,7 @@
  * BI-QUIESCE-002.
  */
 import { prisma } from "@dpf/db";
+import { recentActivityWhere } from "@/lib/self-upgrade/activity-signal";
 import { sanitizeForLog } from "@/lib/security/safe-log";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { TASK_LIVE_STATES } from "@/lib/tak/task-states";
@@ -851,7 +852,6 @@ export type BlockerSignal =
   | { class: "G"; reason: string; mitigations: string[] };
 
 const TOOL_EXECUTION_RECENCY_MS = 5 * 60 * 1000;
-const EDGE_AGENT_PREFIX = "edge-node:";
 const TERMINAL_BUILD_PHASES = ["complete", "failed", "abandoned"] as const;
 
 /**
@@ -1163,11 +1163,10 @@ export async function captureActiveSessionBlockers(opts?: {
   // Acts as a proxy for "server actions / MCP tool calls were happening
   // recently"; not as authoritative as A/C/D-class direct signals.
   const cutoff = new Date(now.getTime() - thresholdMs);
+  // What counts as activity — and, critically, what does NOT (a waiter polling
+  // for permission to proceed) — is owned by activity-signal.ts (BI-2C7F51BA).
   const recentToolExecs = await prisma.toolExecution.findMany({
-    where: {
-      createdAt: { gte: cutoff },
-      NOT: { agentId: { startsWith: EDGE_AGENT_PREFIX } },
-    },
+    where: recentActivityWhere(cutoff),
     select: { toolName: true, createdAt: true },
     orderBy: { createdAt: "desc" },
     take: 5,

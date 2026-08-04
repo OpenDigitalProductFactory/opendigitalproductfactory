@@ -30,6 +30,7 @@ import {
   createGateObserverIdentity,
   findDeadLocalQueueObservers,
   registerLocalQueueObserver,
+  releaseDeadLocalQueueObserversForGate,
   releaseLocalQueueObserver,
 } from "./lib/local-queue-observer.mjs";
 import {
@@ -878,6 +879,40 @@ async function main() {
     },
   ]));
   for (const [signal, handler] of Object.entries(signalHandlers)) process.once(signal, handler);
+
+  // BI-2C7F51BA defect 1 — sweep the observer directory on STARTUP, before we
+  // add our own record to it.
+  //
+  // Every other reap site is conditional: a gate releases its OWN record on the
+  // release path, and pregate.mjs only reaps inside its interrupted/revival
+  // recovery paths — which sit behind `could not resolve worktree path` and so
+  // are skipped on exactly the failure the cleanup exists for. Nothing swept the
+  // directory unconditionally, so a hard-killed gate leaked a record forever:
+  // 192 records observed, 185 with dead pids, the oldest six days old, throttling
+  // admission for EVERY session on the host until swept by hand.
+  //
+  // The filters are DELIBERATELY EMPTY. This sweep must clear other branches',
+  // other shas', and other SESSIONS' dead records — a record leaked by a session
+  // that has since exited will otherwise never be reaped by anyone, because the
+  // only process that would scope a sweep to it is gone. Narrowing this to the
+  // current gate silently restores the leak. Liveness is proven per record
+  // (pid + process start time, TTL only when unverifiable), so a sweep can never
+  // take a slot from a gate that is genuinely running.
+  const sweptObservers = releaseDeadLocalQueueObserversForGate({
+    directory: queueObserverDirectory,
+  });
+  if (sweptObservers.length > 0) {
+    process.stdout.write(
+      `gate-worktree: swept ${sweptObservers.length} dead local-CI queue observer record(s) `
+        + `(pids ${sweptObservers.map((entry) => entry.pid).join(", ")})\n`,
+    );
+    leaseEvents.push({
+      type: "dead_queue_observers_swept",
+      count: sweptObservers.length,
+      observers: sweptObservers,
+      at: new Date().toISOString(),
+    });
+  }
 
   // Always register: the observer proves THIS PROCESS is alive, which is what
   // lets a dead waiter be reconciled out of the queue. It records the lease's

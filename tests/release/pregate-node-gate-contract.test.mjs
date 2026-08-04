@@ -8,13 +8,17 @@
 // tests/release/local-ci-gate-contract.test.mjs.
 
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, cpSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync, cpSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:http";
 import { spawn, spawnSync } from "node:child_process";
 import { test } from "node:test";
 import { detectWorkingShell } from "../../scripts/pregate.mjs";
+import {
+  createGateObserverIdentity,
+  registerLocalQueueObserver,
+} from "../../scripts/lib/local-queue-observer.mjs";
 
 const repoRoot = new URL("../..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 const pregateScript = join(repoRoot, "scripts", "pregate.mjs");
@@ -746,4 +750,61 @@ test("local-ci-runner.mjs refuses to gate main or a detached HEAD", () => {
   });
   assert.notEqual(onMain.status, 0);
   assert.match(onMain.stderr, /gate topic branches, not main/);
+});
+
+test("gate-worktree.mjs sweeps ANOTHER session's leaked observer record at startup (BI-2C7F51BA)", async () => {
+  // Defect 1 functionally: a gate that is hard-killed leaks its observer record,
+  // and the record keeps throttling admission for every session on the host.
+  // Nothing swept unconditionally — pregate.mjs only reaps inside recovery paths
+  // that sit behind `could not resolve worktree path`, i.e. they are skipped on
+  // exactly the failure they exist for. 192 records accumulated that way.
+  //
+  // Real dead process, real record, real gate launch. The leaked record belongs
+  // to a DIFFERENT branch, sha, and session than the gate being launched: the
+  // startup sweep is deliberately unfiltered, because the only process that
+  // would ever scope a sweep to that record has already exited.
+  const { dir } = makeTempRepo();
+  const observerDir = mkdtempSync(join(tmpdir(), "dpf-gate-observers-"));
+
+  const victim = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" });
+  const victimPid = victim.pid;
+  const leaked = registerLocalQueueObserver({
+    directory: observerDir,
+    identity: createGateObserverIdentity({ pid: victimPid }),
+    ownerSessionId: "some-other-session-that-died",
+    branch: "feat/someone-elses-branch",
+    sha: "leaked-sha",
+  });
+  assert.equal(existsSync(leaked.path), true);
+
+  const exited = new Promise((resolve) => victim.once("exit", resolve));
+  victim.kill("SIGKILL");
+  await exited;
+
+  const mcp = await startMockMcp({
+    claim_nonprod_environment_lease: () => ({ success: true, entityId: "NPEL-SWEEP" }),
+    record_local_integration_result: () => ({ success: true, entityId: "EXT-SWEEP" }),
+    release_nonprod_environment_lease: () => ({ success: true, entityId: "NPEL-SWEEP" }),
+  });
+  try {
+    const result = await runGateAsync(
+      ["--branch", "feat/local-ci-sandbox", "--sha", "candidate-sha", "--worktree", dir, "--no-push", "--mcp-url", mcp.url],
+      {
+        ...process.env,
+        DPF_MCP_BEARER_TOKEN: "dpfmcp_test",
+        DPF_GATE_OWNER_PROVIDER: "codex",
+        DPF_GATE_OWNER_SESSION_ID: "sweeping-thread",
+        DPF_ALLOW_LOCAL_CI_STUB: "1",
+        DPF_LOCAL_QUEUE_OBSERVER_DIR: observerDir,
+      },
+    );
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    assert.match(result.stdout, /swept 1 dead local-CI queue observer record/);
+    assert.equal(existsSync(leaked.path), false, "the leaked record must not survive a gate launch");
+    // The gate cleans up after itself too, so the directory ends empty.
+    assert.deepEqual(readdirSync(observerDir), []);
+  } finally {
+    await mcp.close();
+    rmSync(observerDir, { recursive: true, force: true });
+  }
 });

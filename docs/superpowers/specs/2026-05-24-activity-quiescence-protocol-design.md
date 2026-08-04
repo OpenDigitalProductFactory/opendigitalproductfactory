@@ -567,6 +567,15 @@ Every existing Inngest function in `apps/web/lib/queue/functions/` is wrapped wi
 
 **Detection** — B-class proxy via `ToolExecution` recency (today's stopgap). Sharpened by Node-runtime mutation wrappers writing an `inFlightActions` gauge (new in-memory counter exposed through the same internal state route). Proxy itself should not own this gauge because it cannot reliably observe route completion.
 
+**Observation is not activity (BI-2C7F51BA).** The recency query counts rows that represent WORK, not rows that represent WATCHING. It excludes two classes, and the exclusion set is the contract — `apps/web/lib/self-upgrade/activity-signal.ts` owns it:
+
+- `agentId` starting with `edge-node:` — edge agents heartbeat continuously and are not interactive work.
+- `auditClass = metrics_only` — the class `deriveAuditClassForTool` assigns a tool with neither a side effect nor external access, i.e. a pure read.
+
+Without the second exclusion the signal is self-sustaining: every MCP call writes a `ToolExecution` row including read-only ones, so an agent asking whether it is safe to proceed re-arms the blocker it is asking about. Observed live — a local-CI gate polling `get_quiescence_status` while waiting for the drain held this surface armed at count 1, its own poll, and the diagnostic used to inspect the stall did the same.
+
+The remedy is deliberately applied to the SIGNAL, not to the coordinator's tolerance for soft blockers. Discounting soft blockers at swap time would regress the unattended scheduled path, which must never drain while real work is in flight (§6.5, BI-F36E7510). Rows classified `ledger` (mutating) or `journal` (external-reaching) still arm the blocker, as do unclassified pre-Phase-3 rows, which fail closed. This is the same argument BI-CC82B9A8 applied one stage earlier at trigger time.
+
 **Stop-accept** — extend the existing `apps/web/proxy.ts` (§2.4 gap). Next.js 16 renamed Middleware to Proxy; Proxy runs in the Edge runtime and cannot import Prisma, `@dpf/db`, filesystem APIs, or Node-only helpers. Therefore the gate has two layers:
 
 1. **Proxy path** — injects version headers on all matched responses and rejects mutation POSTs / new SSE handshakes when cached quiescence state is `draining` or `swapping`.

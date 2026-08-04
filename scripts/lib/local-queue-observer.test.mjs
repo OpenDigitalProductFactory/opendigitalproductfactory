@@ -1,15 +1,18 @@
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
 import {
+  OBSERVER_TTL_MS,
   createGateObserverIdentity,
   findDeadLocalQueueObservers,
+  readHostProcessStartTimes,
   registerLocalQueueObserver,
   releaseDeadLocalQueueObserversForGate,
   releaseLocalQueueObserver,
+  resetHostProcessTableCache,
 } from "./local-queue-observer.mjs";
 
 function observerDirectory() {
@@ -334,4 +337,144 @@ test("duplicate observers fail closed when any recorded process is alive", () =>
   });
 
   assert.deepEqual(dead, []);
+});
+
+// ── BI-2C7F51BA defect 2: pid liveness must survive pid REUSE ───────────────
+//
+// These exercise the REAL host process-table probe (no injected oracle), which
+// is the half `process.kill(pid, 0)` could never do. `process.pid` stands in for
+// a recycled pid: it is unambiguously alive, so kill(0) says "live" — the whole
+// bug — and only the start-time comparison can tell the two apart.
+
+const hostStartTimes = readHostProcessStartTimes();
+const hostProbeSkip = hostStartTimes?.has(process.pid)
+  ? false
+  : "host process table is unreadable on this platform; start-time liveness degrades to pid + TTL";
+
+test("a RECYCLED pid is reaped even though the pid is alive", { skip: hostProbeSkip }, () => {
+  const directory = observerDirectory();
+  const identity = createGateObserverIdentity({
+    pid: process.pid,
+    token: "a1111111-1111-4111-8111-111111111111",
+  });
+  // The gate that wrote this record died long ago; the OS has since handed its
+  // pid to this test process.
+  const recycled = registerLocalQueueObserver({
+    directory,
+    identity,
+    branch: "fix/dead-gate",
+    sha: "a".repeat(40),
+    processStartedAtMs: Date.parse("2026-07-29T20:00:00.000Z"),
+  });
+  assert.equal(existsSync(recycled.path), true);
+
+  resetHostProcessTableCache();
+  const released = releaseDeadLocalQueueObserversForGate({ directory });
+
+  assert.equal(released.length, 1);
+  assert.equal(released[0].pid, process.pid);
+  assert.equal(released[0].releaseStatus, "released");
+  assert.equal(existsSync(recycled.path), false);
+});
+
+test("a genuinely running gate is never reaped, however long it has run", { skip: hostProbeSkip }, () => {
+  const directory = observerDirectory();
+  // registerLocalQueueObserver stamps THIS process's real start time.
+  const live = registerLocalQueueObserver({
+    directory,
+    identity: createGateObserverIdentity({
+      pid: process.pid,
+      token: "a2222222-2222-4222-8222-222222222222",
+    }),
+    branch: "fix/long-running",
+    sha: "b".repeat(40),
+    // Older than the TTL: a verified-live process outranks the TTL backstop, so
+    // the TTL can never take a slot from a gate we can see is still running.
+    now: () => new Date(Date.now() - OBSERVER_TTL_MS - 60_000),
+  });
+
+  resetHostProcessTableCache();
+  assert.deepEqual(releaseDeadLocalQueueObserversForGate({ directory }), []);
+  assert.equal(existsSync(live.path), true);
+});
+
+test("a pre-fix record with no start time is bounded by the TTL", () => {
+  const directory = observerDirectory();
+  // Shape written before this fix: live-looking pid, no start time, so reuse is
+  // undetectable. Without a TTL this record is immortal — the permanent
+  // queue-slot leak. The probe is forced unavailable to isolate the TTL path.
+  const legacy = registerLocalQueueObserver({
+    directory,
+    identity: createGateObserverIdentity({
+      pid: 909,
+      token: "a3333333-3333-4333-8333-333333333333",
+    }),
+    branch: "fix/legacy",
+    sha: "c".repeat(40),
+    processStartedAtMs: null,
+    now: () => new Date(Date.now() - OBSERVER_TTL_MS - 60_000),
+  });
+  assert.equal(JSON.parse(readFileSync(legacy.path, "utf8")).processStartedAtMs, undefined);
+
+  const released = releaseDeadLocalQueueObserversForGate({
+    directory,
+    processAlive: () => true,
+    processStartTimes: null,
+  });
+
+  assert.equal(released.length, 1);
+  assert.equal(existsSync(legacy.path), false);
+});
+
+test("a pre-fix record inside the TTL still holds its slot", () => {
+  const directory = observerDirectory();
+  const fresh = registerLocalQueueObserver({
+    directory,
+    identity: createGateObserverIdentity({
+      pid: 910,
+      token: "a4444444-4444-4444-8444-444444444444",
+    }),
+    branch: "fix/legacy-fresh",
+    sha: "d".repeat(40),
+    processStartedAtMs: null,
+  });
+
+  assert.deepEqual(
+    releaseDeadLocalQueueObserversForGate({
+      directory,
+      processAlive: () => true,
+      processStartTimes: null,
+    }),
+    [],
+  );
+  assert.equal(existsSync(fresh.path), true);
+});
+
+test("a recycled pid also stops holding its LEASE in the queue", { skip: hostProbeSkip }, () => {
+  const directory = observerDirectory();
+  registerLocalQueueObserver({
+    directory,
+    identity: createGateObserverIdentity({
+      pid: process.pid,
+      token: "a5555555-5555-4555-8555-555555555555",
+    }),
+    ownerSessionId: "thread-whose-gate-died",
+    branch: "fix/queued",
+    sha: "e".repeat(40),
+    processStartedAtMs: Date.parse("2026-07-29T20:00:00.000Z"),
+  });
+
+  resetHostProcessTableCache();
+  const dead = findDeadLocalQueueObservers({
+    directory,
+    queuedLeases: [{
+      leaseId: "NPEL-RECYCLED",
+      environmentKey: "local-integration-ci",
+      status: "queued",
+      ownerSessionId: "thread-whose-gate-died",
+    }],
+  });
+
+  assert.equal(dead.length, 1);
+  assert.equal(dead[0].leaseId, "NPEL-RECYCLED");
 });
