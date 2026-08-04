@@ -1,0 +1,29 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [],
+  "migration": {
+    "name": "20260804120000_add_route_decision_log_route_context",
+    "backfill": "none — the route was never captured on prior decisions, so it cannot be reconstructed. Existing rows stay NULL and the drift rollup reports them as unattributed rather than guessing an origin."
+  },
+  "tests": [
+    "lib/inference/sensitivity-drift-rollup.test.ts",
+    "lib/routing/loader.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:route-decision-log",
+      "prismaModel": "RouteDecisionLog",
+      "lifecycleDisposition": "operational-telemetry",
+      "fields": [
+        {
+          "fieldId": "data:route-decision-log#routeContext",
+          "resolution": "not-applicable",
+          "reason": "A portal route path such as \"/customer/marketing\" — application topology, not subject data. It identifies WHICH route-context entry declared the sensitivity a decision routed at, so a declared-vs-measured drift is attributable to the route rather than only to the agent that happened to be on that page (BI-CF3049E7). Carries no personal, customer, or employee data, and no payload content. Nullable: callers with no route (scheduled jobs, system tasks) write NULL.",
+          "provenance": "manual/data-steward"
+        }
+      ]
+    }
+  ]
+}

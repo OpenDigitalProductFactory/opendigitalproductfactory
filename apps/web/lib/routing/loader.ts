@@ -399,6 +399,12 @@ type RouteDecisionPersistenceContext = {
   /** @deprecated Prefer actor: { kind: "agent", id }. */
   agentId?: string | null;
   agentMessageId?: string | null;
+  /**
+   * The portal route whose static context supplied the decision's sensitivity,
+   * e.g. "/customer/marketing". Omitted by non-route callers (scheduled jobs,
+   * system tasks), which genuinely have no route.
+   */
+  routeContext?: string | null;
 };
 
 export async function persistRouteDecision(
@@ -407,6 +413,7 @@ export async function persistRouteDecision(
   shadowMode = false,
 ): Promise<string> {
   const agentMessageId = typeof context === "string" ? context : context?.agentMessageId;
+  const routeContext = typeof context === "string" ? null : context?.routeContext ?? null;
   const actor = normalizeRouteDecisionActor(
     typeof context === "string"
       ? null
@@ -420,6 +427,7 @@ export async function persistRouteDecision(
       actorKind: actor.actorKind,
       actorId: actor.actorId,
       agentId: actor.agentId,
+      routeContext,
       selectedEndpointId: decision.selectedEndpoint ?? "none",
       selectedModelId: decision.selectedModelId ?? null,
       taskType: decision.taskType,

@@ -9894,6 +9894,12 @@ model RouteDecisionLog {
   actorKind                  String
   actorId                    String
   agentId                    String?
+  /// The portal route whose static context supplied `sensitivity` (e.g.
+  /// "/customer/marketing"). Nullable: non-route callers (scheduled jobs,
+  /// system tasks) have no route, and rows predating this column have none.
+  /// Without it a declared-vs-measured drift can only be attributed to an
+  /// agent, not to the route-context entry that actually declared the level.
+  routeContext               String?
   selectedEndpointId         String
   taskType                   String
   sensitivity                String
@@ -9913,6 +9919,7 @@ model RouteDecisionLog {
   @@index([taskType])
   @@index([actorKind, actorId, createdAt])
   @@index([agentId, createdAt])
+  @@index([routeContext, createdAt])
   @@index([selectedEndpointId])
   @@index([createdAt])
   @@index([traceId])

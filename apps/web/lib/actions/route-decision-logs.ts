@@ -72,10 +72,10 @@ export async function getRouteDecisionLogs(limit = 100): Promise<RouteDecisionLo
  * measured. Reads only the two levels and the floor flag off each receipt —
  * no payload text — so the rollup is as safe to surface as the receipt itself.
  *
- * Attribution is per agent + task type, not per route: RouteDecisionLog has no
- * routeContext column, and the route is only visible here as the declared level
- * it contributed. Adding that column is the next slice; until then a drifting
- * agent points at its route via tak/route-context-map rather than naming it.
+ * Attributed to the route that declared the level. Decisions with no route
+ * (scheduled jobs, system tasks) and rows predating the routeContext column
+ * group under null rather than being dropped — dropping them would understate
+ * drift.
  */
 export async function getSensitivityDriftRollup(
   limit = 500,
@@ -83,7 +83,12 @@ export async function getSensitivityDriftRollup(
   const rows = await prisma.routeDecisionLog.findMany({
     orderBy: { createdAt: "desc" },
     take: limit,
-    select: { taskType: true, agentId: true, inferenceDataScreenReceipt: true },
+    select: {
+      taskType: true,
+      agentId: true,
+      routeContext: true,
+      inferenceDataScreenReceipt: true,
+    },
   });
 
   return rollUpSensitivityDrift(
@@ -92,6 +97,7 @@ export async function getSensitivityDriftRollup(
       return {
         taskType: r.taskType,
         agentId: r.agentId,
+        routeContext: r.routeContext,
         declaredSensitivity: receipt?.declaredSensitivity,
         measuredSensitivity: receipt?.measuredSensitivity,
         sensitivityFloorApplied: receipt?.sensitivityFloorApplied,

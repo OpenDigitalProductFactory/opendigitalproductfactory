@@ -1366,7 +1366,7 @@ async function _runAgenticLoop(params: RunAgenticLoopParams, tracker: { activeSk
     // EP-AGENT-CAP-002: Capability floor — passed through to pipeline Stage 1
     minimumCapabilities,
     agentMinimumContextTokens,
-    agentId,
+    agentId, routeContext,
     ...(agentMessageId ? { agentMessageId } : {}),
     // mcpSession is forwarded through callWithFallbackChain → callProvider →
     // AdapterRequest. The Claude CLI execution adapter consumes it to mint a

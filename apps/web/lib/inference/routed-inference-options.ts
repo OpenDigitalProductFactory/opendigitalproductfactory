@@ -59,6 +59,13 @@ export interface RouteAndCallOptions {
    *  completeBuildPhaseRun can aggregate per-phase tokens/cost (BI-0A6B8B38). */
   buildId?: string;
   routingActor?: RouteDecisionActor;
+  /**
+   * Portal route this call originates from, e.g. "/customer/marketing".
+   * Persisted on the RouteDecisionLog so a declared-vs-measured sensitivity
+   * drift is attributable to the route-context entry that declared the level,
+   * rather than only to the agent that happened to be on that page.
+   */
+  routeContext?: string;
   effort?: "low" | "medium" | "high" | "max";
   previousResponseId?: string;
   activityContract?: ActivityContract;
