@@ -86,7 +86,11 @@ import {
   resolveAgentModelDefaultUpdate,
 } from "./agent-model-defaults.js";
 import { toModelProfileSeedCreateData } from "./model-profile-seed.js";
-import { deriveLocalModelCapabilityPrior, localInputModalities } from "./local-model-capabilities.js";
+import {
+  deriveLocalModelCapabilityPrior,
+  localInputModalities,
+  localOutputModalities,
+} from "./local-model-capabilities.js";
 import { ensureDefaultProviderConnection } from "./provider-connection.js";
 import { seedIntegrationCoverage } from "../scripts/seed-integration-coverage.js";
 import { seedAbsorptionPosture } from "./seed-absorption-posture.js";
@@ -1750,11 +1754,16 @@ async function seedLocalModels(): Promise<void> {
             ...(prior.supportsVision ? { imageInput: true } : {}),
             ...(prior.supportsAudio ? { audioInput: true } : {}),
           } as any,
+          // An embedding model must never be born modelClass="chat" (the schema
+          // default): routing would dispatch chat completions at an
+          // embeddings-only llama.cpp context, which 500s with "the current
+          // context does not logits computation".
+          modelClass: prior.isEmbedding ? "embedding" : "chat",
           inputModalities: localInputModalities(prior),
-          outputModalities: ["text"],
+          outputModalities: localOutputModalities(m.id),
           supportedModalities: {
             input: localInputModalities(prior),
-            output: ["text"],
+            output: localOutputModalities(m.id),
           },
         },
       });

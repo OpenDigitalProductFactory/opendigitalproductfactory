@@ -192,6 +192,44 @@ describe("ollamaAdapter", () => {
       });
     });
 
+    // ── embedding models are never chat-routable ──────────────────────
+
+    describe("embedding models", () => {
+      // Regression: DMR advertises no modality metadata, so the adapter used to
+      // hardcode outputModalities=["text"] and register nomic-embed with
+      // modelClass="chat". Routing then dispatched chat completions at an
+      // embeddings-only llama.cpp context, which 500s with "the current context
+      // does not logits computation" — surfaced to the operator as the generic
+      // "No AI model can handle this request right now".
+      const EMBEDDING_IDS = [
+        "docker.io/ai/nomic-embed-text-v1.5:latest",
+        "ai/nomic-embed-text:latest",
+        "bge-large:latest",
+      ];
+
+      for (const modelId of EMBEDDING_IDS) {
+        it(`classifies ${modelId} as embedding, not chat`, () => {
+          expect(ollamaAdapter.classifyModel(modelId, {})).toBe("embedding");
+        });
+
+        it(`emits embeddings output modality for ${modelId}`, () => {
+          const card = ollamaAdapter.extractModelCard(modelId, {});
+          expect(card.modelClass).toBe("embedding");
+          expect(card.outputModalities).toEqual(["embeddings"]);
+          expect(card.capabilities.toolUse).toBe(false);
+        });
+      }
+
+      it("still classifies a chat model as chat", () => {
+        const card = ollamaAdapter.extractModelCard(
+          "docker.io/ai/qwen3.6:latest",
+          {},
+        );
+        expect(card.modelClass).toBe("chat");
+        expect(card.outputModalities).toEqual(["text"]);
+      });
+    });
+
     // ── modelFamily extraction ────────────────────────────────────────
 
     describe("modelFamily extraction", () => {

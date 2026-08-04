@@ -132,6 +132,24 @@ export function detectLocalModelAudio(modelId: string): boolean {
  * Always includes "text"; adds "image"/"audio" for multimodal-IN models. Used by
  * the seed to populate ModelProfile.inputModalities/supportedModalities.
  */
+/**
+ * Output modalities a local model produces, derived from its id.
+ *
+ * Embedding models emit `["embeddings"]` — the modality-based branch of
+ * `classifyModel` (apps/web/lib/routing/model-classifier.ts) keys off exactly
+ * that to return modelClass="embedding". The DMR/Ollama discovery adapter used
+ * to hardcode `["text"]` here, and DMR advertises no modality metadata of its
+ * own, so `nomic-embed-text` was registered with modelClass="chat". Routing then
+ * treated an embeddings-only runner as a chat endpoint; llama.cpp answers such a
+ * request with HTTP 500 "the current context does not logits computation" and
+ * the fallback chain surfaced it as the generic "No AI model can handle this
+ * request right now" coworker error. `isEmbedding` is the same prior that
+ * already drives supportsToolUse=false, so the two can no longer disagree.
+ */
+export function localOutputModalities(modelId: string): string[] {
+  return detectLocalModelFamily(modelId) === "embedding" ? ["embeddings"] : ["text"];
+}
+
 export function localInputModalities(prior: LocalModelCapabilityPrior): string[] {
   const mods = ["text"];
   if (prior.supportsVision) mods.push("image");
