@@ -13,6 +13,8 @@ import {
   mergeReproducibleBaselines,
   normaliseSnapshot,
   normaliseVolatileText,
+  summariseStructureDiff,
+  STRUCTURE_DIFF_LIMIT,
   verdictForRoute,
   type BaselineFile,
   type RouteMeasurement,
@@ -396,5 +398,86 @@ describe("same-SHA baseline reproducibility", () => {
     expect(compareBaselineReproducibility(source, missing)).toMatchObject([
       { routePath: "/a", axis: "route", second: "missing" },
     ]);
+  });
+});
+
+describe("structural diff reporting", () => {
+  // Why this exists: a structureChanged failure used to report only THAT the shape
+  // moved. The report artifact carries no snapshot, so diagnosing one meant
+  // reproducing the route against a live portal by hand (the /platform/ai/
+  // operations-map investigation, PR #3901). The diff makes it readable from CI.
+
+  it("names the landmark that disappeared", () => {
+    const before = measurement({ ariaSnapshot: "- banner\n- main:\n  - heading [level=1]" });
+    const after = measurement({ ariaSnapshot: "- main:\n  - heading [level=1]" });
+
+    const v = verdictForRoute(after, baselineFrom(before).routes["/workspace"]);
+    expect(v.structureChanged).toBe(true);
+    expect(v.structureDiff).toContain("[-] banner");
+  });
+
+  it("names a heading that flattened into text", () => {
+    const before = measurement({ ariaSnapshot: "- main:\n  - heading [level=2]" });
+    const after = measurement({ ariaSnapshot: "- main:\n  - text" });
+
+    const v = verdictForRoute(after, baselineFrom(before).routes["/workspace"]);
+    expect(v.structureDiff.map((d) => d.trim())).toEqual(
+      expect.arrayContaining(["[-] heading [level=2]", "[+] text"]),
+    );
+  });
+
+  it("stays EMPTY when the structure held — no diff noise on a passing route", () => {
+    const m = measurement();
+    const v = verdictForRoute(m, baselineFrom(m).routes["/workspace"]);
+    expect(v.structureChanged).toBe(false);
+    expect(v.structureDiff).toEqual([]);
+  });
+
+  it("reports nothing for row-count churn, because the gate ignores it too", () => {
+    // The diff must describe what the gate COMPARED, not the raw tree — otherwise it
+    // sends the reader chasing repetition that collapseRepeatedSiblings discarded.
+    const oneRow = "- table:\n  - row:\n    - cell";
+    const manyRows = "- table:\n  - row:\n    - cell\n  - row:\n    - cell";
+    const v = verdictForRoute(
+      measurement({ ariaSnapshot: manyRows }),
+      baselineFrom(measurement({ ariaSnapshot: oneRow })).routes["/workspace"],
+    );
+    expect(v.structureChanged).toBe(false);
+    expect(v.structureDiff).toEqual([]);
+  });
+
+  it("truncates a large diff instead of flooding the log", () => {
+    const before = measurement({ ariaSnapshot: "- main:\n  - heading [level=1]" });
+    const after = measurement({
+      ariaSnapshot: [
+        "- main:",
+        ...Array.from({ length: 40 }, (_, i) => `  - heading [level=${(i % 6) + 1}]`),
+      ].join("\n"),
+    });
+
+    const diff = verdictForRoute(after, baselineFrom(before).routes["/workspace"]).structureDiff;
+    expect(diff.length).toBe(STRUCTURE_DIFF_LIMIT + 1);
+    expect(diff[diff.length - 1]).toMatch(/more structural line\(s\)/);
+  });
+
+  it("surfaces the diff in the human report under the REGRESSION line", () => {
+    const before = measurement({ ariaSnapshot: "- banner\n- main:\n  - heading [level=1]" });
+    const after = measurement({ ariaSnapshot: "- main:\n  - heading [level=1]" });
+
+    const report = formatSweepReport(evaluateSweep([after], baselineFrom(before)));
+    expect(report).toMatch(/accessibility tree changed shape/);
+    expect(report).toMatch(/\[-\] banner/);
+  });
+
+  it("still reports a first-divergence hint when the projection is too large to diff", () => {
+    // Distinct adjacent roles so collapseRepeatedSiblings cannot shrink it, nested
+    // under main so the projection keeps them.
+    const wide = (n: number) =>
+      Array.from({ length: n }, (_, i) => `  - heading [level=${(i % 6) + 1}]`).join("\n");
+    const diff = summariseStructureDiff(
+      `- banner\n- main:\n${wide(2100)}`,
+      `- main:\n${wide(2100)}`,
+    );
+    expect(diff.join(" ")).toMatch(/first divergence|too large/);
   });
 });
