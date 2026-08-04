@@ -438,6 +438,26 @@ describe("generated route-shell registry", () => {
     }
   });
 
+  it("holds no frozen baseline for a route the sweep does not measure", () => {
+    // BI-0C6C2153. The sweep only compares routes it measures, so a leftover
+    // baseline entry for an EXCLUDED route is inert — and therefore invisible.
+    // It stops being inert the moment the route is re-included: the sweep would
+    // then diff a live measurement against a months-stale frozen structure and
+    // report a regression that is really just the age of the entry. The prune
+    // must happen at exclusion time, and #3719 already missed three routes once
+    // (/admin/scheduled-jobs, /ops/self-upgrade, /workspace) while pruning the
+    // other three in the same cohort. This test is why it cannot happen twice:
+    // re-inclusion must go through a fresh freeze, never a resurrected one.
+    const baseline = JSON.parse(
+      readFileSync(resolve(__dirname, "route-budget-baseline.json"), "utf8"),
+    ) as { routes: Record<string, unknown> };
+
+    const excluded = new Set(
+      registry.routes.filter((route) => !route.sweepEligible).map((route) => route.routePath),
+    );
+    expect(Object.keys(baseline.routes).filter((routePath) => excluded.has(routePath))).toEqual([]);
+  });
+
   it("the committed registry is in sync with its generator", async () => {
     // The assertion `pnpm --filter web check:route-shells` makes in CI, repeated here
     // so staleness fails the REQUIRED Unit check too — not only the advisory workflow.
