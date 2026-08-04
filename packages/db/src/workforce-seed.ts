@@ -304,7 +304,18 @@ export const HARDCODED_COWORKER_GRANTS: Record<string, readonly string[]> = {
   // graph/architecture reads — a prime case for programmatic filtering in the
   // sandbox (the script's JWT is read-only-scoped regardless of these grants).
   "ea-architect": ["ea_graph_read", "ea_graph_write", "architecture_read", "file_read", "registry_read", "tool_script_exec"],
-  "hr-specialist": ["registry_read", "consumer_read", "consumer_write"],
+  // BI-3CDEC5F0: policy_read/write so HR can draft company policies into Policy
+  // (not chat-only). Publish remains human HITL on /compliance/policies.
+  "hr-specialist": [
+    "registry_read",
+    "consumer_read",
+    "consumer_write",
+    "policy_read",
+    "policy_write",
+    "backlog_read",
+    "backlog_write",
+    "web_search",
+  ],
   // The Customer Success Manager operates the CRM (accounts, pipeline, quotes),
   // so it needs crm_read/crm_write — NOT backlog_write (which let it retire live
   // backlog items while flailing) or marketing_read (wrong domain). Its runtime
