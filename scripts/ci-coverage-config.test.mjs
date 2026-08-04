@@ -48,8 +48,8 @@ test("calibration workflow is scheduled, manual, observable, and non-blocking to
   assert.match(calibrationWorkflow, /^\s+workflow_dispatch:/m);
   assert.doesNotMatch(calibrationWorkflow, /^\s+pull_request:/m);
   assert.match(calibrationWorkflow, /actions:\s*read/);
-  assert.match(calibrationWorkflow, /actions\/cache\/restore@v5/);
-  assert.match(calibrationWorkflow, /actions\/cache\/save@v5/);
+  assert.match(calibrationWorkflow, /actions\/cache\/restore@v6/);
+  assert.match(calibrationWorkflow, /actions\/cache\/save@v6/);
   assert.match(calibrationWorkflow, /name:\s*Run web coverage/);
   assert.match(calibrationWorkflow, /name:\s*Run database coverage/);
   assert.match(calibrationWorkflow, /name:\s*Run shadow related tests/);
