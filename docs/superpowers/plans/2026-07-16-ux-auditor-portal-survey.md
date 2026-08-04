@@ -47,6 +47,41 @@ DPF_RECORD_FUNCTIONAL_FAILURES=1 pnpm test:e2e -- --project=ux-audit
 
 **Defect found and fixed in this phase — `evaluate_page` reported false cleans.** `browse_extract` answers HTTP 200 with `status: "completed"` even when its agent failed every step; the payload is then `AgentHistoryList(all_results=[], all_model_outputs=[])`. The handler's parse swallowed that into `findings = []`, so the tool announced "Found 0 UX/accessibility issues" for a page it had never analyzed. `interpretExtraction` (`lib/tak/page-evaluator.ts`) now separates a genuinely clean page (`[]`) from a run that never happened, and the handler returns the existing NOT-RUN shape. This extends the BI-1BAA177C contract, which only covered the case where browser-use self-reported `degraded`.
 
+### First-mission run — 2026-08-04
+
+The survey ran end to end against the live portal at `localhost:3000` and produced a real
+`UxAuditReport`. What the machinery proved, and what it did NOT:
+
+**Proven.** `planSurvey` → `runSurvey` → per-lens isolation → `aggregateReport` → artifact,
+against the live portal with a real authenticated session. The page lens correctly reported
+`page: evaluate_page did NOT RUN for /workspace: Page evaluation DEGRADED — bad marshal data`
+instead of a clean page — the `interpretExtraction` fix working in production. The behavioral
+lens drove a real coworker on a real route and read back its rendered turn.
+
+**Not proven — the button-decision lens has not yet observed rendered buttons live.** Two
+host-level outages block it, both filed:
+
+| Blocker | Effect | Filed |
+| --- | --- | --- |
+| browser-use sidecar down (pinned model absent, then `bad marshal data`) | page lens reports NOT-RUN on every route | BI-D26CEBBB |
+| Local inference engine unusable — the only chat model is a 30B MoE at 4096 context; a 16-token completion does not return in 180s on a warm model | coworker answers "AI providers are momentarily busy", so no decision closeout is ever produced | BI-32631D86 |
+
+The lens behaved correctly throughout: it emits no finding when the coworker did not close on
+a decision, and — after this run exposed the gap — a **critical NOT-RUN** when the reply is an
+inference-failure notice, so a saturated engine can never read as "no decision offered,
+nothing wrong". Re-run once either blocker clears:
+
+```
+DPF_RECORD_FUNCTIONAL_FAILURES=1 pnpm test:e2e -- --project=ux-audit
+```
+
+**Operational notes for the next runner.** The survey persists its report after EACH route,
+because a long live-inference run is exactly the job an outer process budget cuts short and an
+all-at-the-end write loses every route that did complete. `DPF_UX_AUDIT_ROUTES` scopes a run to
+a slice. On Windows/Git Bash, pass `MSYS_NO_PATHCONV=1` or the leading slash is rewritten into a
+native path (`/workspace` → `C:/Program Files/Git/workspace`) and the survey silently plans zero
+routes; the runner also tolerates a missing leading slash.
+
 ## Verification
 
 - P1: unit tests for planner (filter/sample/lens-assignment) + aggregator (severity→verdict rollup, dedup, portal rollup) against the real transpiled source; esbuild transform-clean.

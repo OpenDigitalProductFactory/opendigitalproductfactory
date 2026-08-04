@@ -49,6 +49,24 @@ export type ButtonDecisionObservation = {
 const FINDING_ELEMENT = '[data-testid="agent-decision"]';
 
 /**
+ * The user-facing messages the panel renders when inference never happened —
+ * provider saturation, routing failure, a degraded local engine.
+ *
+ * These matter because they are the silent-pass trap: such a reply is not a
+ * decision closeout, so the lens would emit NO finding and the route would read
+ * as "coworker offered no decision, nothing wrong". That is a NOT-RUN wearing a
+ * pass's clothes. Observed live 2026-08-04, when the local engine hit admission
+ * timeouts and the coworker answered "The AI providers are momentarily busy".
+ */
+const INFERENCE_FAILURE_RE =
+  /\b(AI providers are momentarily busy|rate.?limited or overloaded|no eligible endpoints|all endpoints failed|inference admission timeout|try again in about \d+ seconds|I cannot proceed|my tools are limited)\b/i;
+
+/** Did the panel render an inference-failure notice instead of a real turn? */
+export function isInferenceFailureReply(reply: string): boolean {
+  return INFERENCE_FAILURE_RE.test(reply);
+}
+
+/**
  * Does this reply END on a decision the human must answer? Two signals, both
  * conservative:
  *  - the deterministic prose fallback recognizes an enumerated choice, or
@@ -110,6 +128,18 @@ export function evaluateButtonDecision(
         "The coworker produced no visible reply, so the button-decision lens could not observe a closeout. This is a NOT-RUN, not a pass.",
       recommendation:
         "Check the coworker's model routing and tool grants for this route; the lens needs a completed turn to judge.",
+    });
+    return findings;
+  }
+
+  if (isInferenceFailureReply(reply)) {
+    findings.push({
+      severity: "critical",
+      category: "semantic-html",
+      element: '[data-agent-panel="true"]',
+      issue: `The coworker returned an inference-failure notice instead of a turn, so the button-decision lens could not observe a closeout. This is a NOT-RUN, not a pass. Reply: "${reply.slice(0, 160)}"`,
+      recommendation:
+        "Re-run the lens once inference is healthy. If it persists, check the route's model routing and the local engine's admission queue — a saturated engine makes every behavioral lens silently unmeasurable.",
     });
     return findings;
   }

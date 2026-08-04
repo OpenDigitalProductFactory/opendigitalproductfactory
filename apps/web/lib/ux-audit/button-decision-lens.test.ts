@@ -3,6 +3,7 @@ import {
   evaluateButtonDecision,
   expectedCarrier,
   isDecisionCloseout,
+  isInferenceFailureReply,
   type ButtonDecisionObservation,
 } from "./button-decision-lens";
 import { formatDecisionSentinel } from "@/lib/tak/decision-block";
@@ -136,5 +137,37 @@ describe("evaluateButtonDecision", () => {
     expect(findings).toHaveLength(1);
     expect(findings[0]!.severity).toBe("critical");
     expect(findings[0]!.issue).toContain("NOT-RUN");
+  });
+});
+
+describe("inference-failure replies are NOT-RUN, never a silent pass", () => {
+  it("detects the provider-busy notice", () => {
+    expect(
+      isInferenceFailureReply(
+        "The AI providers are momentarily busy (usually rate-limited or overloaded). Please try again in about 30 seconds.",
+      ),
+    ).toBe(true);
+    expect(isInferenceFailureReply("Here is the next step I recommend.")).toBe(false);
+  });
+
+  it("reports a critical NOT-RUN instead of passing silently", () => {
+    const findings = evaluateButtonDecision(
+      observation({
+        reply:
+          "The AI providers are momentarily busy (usually rate-limited or overloaded). Please try again in about 30 seconds — no setup change is needed.",
+        buttons: [],
+      }),
+    );
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.severity).toBe("critical");
+    expect(findings[0]!.issue).toContain("NOT-RUN");
+  });
+
+  it("does not let a no-eligible-endpoints reply read as 'no decision offered'", () => {
+    const findings = evaluateButtonDecision(
+      observation({ reply: "All endpoints failed for this request.", buttons: [] }),
+    );
+    expect(findings).toHaveLength(1);
+    expect(findings[0]!.severity).toBe("critical");
   });
 });

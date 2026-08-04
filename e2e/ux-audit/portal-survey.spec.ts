@@ -27,10 +27,12 @@ import {
   waitForCoworkerIdle,
 } from "../helpers/coworker";
 import {
+  aggregateReport,
   planSurvey,
   runSurvey,
   type LensSpec,
   type RouteManifest,
+  type RouteSurveyResult,
   type UxAuditReport,
   type UxFinding,
 } from "../../apps/web/lib/ux-audit/portal-survey";
@@ -93,11 +95,31 @@ test("portal-shell UX survey — page lens + coworker button-decision lens", asy
   );
 
   const lensById = new Map<string, LensSpec>(PORTAL_SHELL_LENSES.map((lens) => [lens.id, lens]));
+  // Scope override: a full survey is long, and driving live inference on every
+  // shell route is exactly the kind of job an outer process budget cuts short.
+  // `DPF_UX_AUDIT_ROUTES=/workspace,/knowledge` runs a slice.
+  // Accept `workspace` as well as `/workspace`: a POSIX-looking value passed
+  // through Git Bash on Windows gets rewritten to a native path by MSYS path
+  // conversion, so tolerate a missing leading slash rather than silently
+  // planning zero routes.
+  const routeFilter = (process.env.DPF_UX_AUDIT_ROUTES ?? "")
+    .split(",")
+    .map((r) => r.trim())
+    .filter(Boolean)
+    .map((r) => (r.startsWith("/") ? r : `/${r}`));
+  const surveyRoutes = routeFilter.length > 0 ? routeFilter : portalShellRoutes();
+
   const plan = planSurvey(routeManifest, {
     lenses: PORTAL_SHELL_LENSES,
-    include: (entry) => portalShellRoutes().includes(entry.routePath),
+    include: (entry) => surveyRoutes.includes(entry.routePath),
     coworkerRoute: isPortalShellCoworkerRoute,
   });
+
+  // eslint-disable-next-line no-console
+  console.log(
+    `[ux-audit] planning ${plan.entries.length} route(s) from ${surveyRoutes.length} target(s): ` +
+      `${surveyRoutes.join(",")} -> ${plan.entries.map((e) => e.route).join(",") || "(none)"}`,
+  );
 
   // What the behavioral lens actually saw, kept alongside the report so a finding
   // can be read back to the transcript that produced it.
@@ -108,15 +130,13 @@ test("portal-shell UX survey — page lens + coworker button-decision lens", asy
     expectedCarrier: string;
   }> = [];
 
-  const report: UxAuditReport = await runSurvey(
-    plan,
-    {
+  const evaluators = {
       page: createPageLensEvaluator({
         config: mcpConfig!,
         baseUrl: BROWSER_USE_PORTAL_URL,
         timeoutMs: PAGE_LENS_TIMEOUT_MS,
       }),
-      behavioral: async (route, lens): Promise<UxFinding[]> => {
+      behavioral: async (route: string, lens: LensSpec): Promise<UxFinding[]> => {
         if (lens.id !== "coworker-button-decision") return [];
 
         await page.goto(`${HOST_URL}${route}`);
@@ -154,24 +174,52 @@ test("portal-shell UX survey — page lens + coworker button-decision lens", asy
 
         return evaluateButtonDecision({ route, ...observed });
       },
-    },
-    lensById,
-  );
-
-  const artifact = {
-    epic: "EP-UX-AUDITOR",
-    backlogItemId: "BI-C3768478",
-    hostUrl: HOST_URL,
-    browserUseUrl: BROWSER_USE_PORTAL_URL,
-    sections: targets,
-    plan,
-    report,
-    transcripts,
   };
 
+  // Survey one route at a time and persist after EACH, rather than aggregating
+  // only at the end. A full survey runs for tens of minutes on live inference;
+  // when an outer budget cuts the process short, an all-at-the-end write loses
+  // every route that DID complete. Partial evidence beats none.
   const reportPath = join(testInfo.outputDir, "ux-audit-report.json");
   await mkdir(dirname(reportPath), { recursive: true });
-  await writeFile(reportPath, JSON.stringify(artifact, null, 2), "utf8");
+
+  const results: RouteSurveyResult[] = [];
+  let report: UxAuditReport = aggregateReport(results);
+
+  for (const entry of plan.entries) {
+    const partial = await runSurvey({ entries: [entry], skipped: [] }, evaluators, lensById);
+    results.push(...partial.routes);
+    report = aggregateReport(results);
+
+    await writeFile(
+      reportPath,
+      JSON.stringify(
+        {
+          epic: "EP-UX-AUDITOR",
+          backlogItemId: "BI-C3768478",
+          complete: results.length === plan.entries.length,
+          surveyedSoFar: results.length,
+          plannedRoutes: plan.entries.length,
+          hostUrl: HOST_URL,
+          browserUseUrl: BROWSER_USE_PORTAL_URL,
+          sections: targets,
+          plan,
+          report,
+          transcripts,
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    // eslint-disable-next-line no-console
+    console.log(
+      `[ux-audit] ${entry.route}: verdict=${results[results.length - 1]!.verdict} ` +
+        `findings=${results[results.length - 1]!.findings.length} ` +
+        `(${results.length}/${plan.entries.length})`,
+    );
+  }
+
   testInfo.attachments.push({
     name: "ux-audit-report",
     contentType: "application/json",
