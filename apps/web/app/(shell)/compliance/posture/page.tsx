@@ -74,6 +74,33 @@ export default async function PosturePage() {
         </div>
       </div>
 
+      {/* By Function (domain) — the centralized rollup of what each functional context must apply */}
+      <section className="mb-8">
+        <h2 className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-3">By Function</h2>
+        {posture.domainScores.length === 0 ? (
+          <p className="text-sm text-[var(--dpf-muted)]">No applicable regulations yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {posture.domainScores.map((d) => (
+              <div key={d.domain} className="p-3 rounded-lg border border-[var(--dpf-border)] flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-[var(--dpf-text)]">{d.label}</span>
+                  <StatusBadge intent="neutral"
+                    label={`${d.regulationCount} regulation${d.regulationCount !== 1 ? "s" : ""}`}
+                    variant="soft" uppercase={false} />
+                </div>
+                <div className="flex items-center gap-4 text-xs text-[var(--dpf-muted)]">
+                  <span>{d.coveredObligations}/{d.totalObligations} covered</span>
+                  <span className="font-semibold" style={{ color: intentStyle(scoreIntent(d.coveragePercent)).fg }}>
+                    {d.coveragePercent}%
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
       {/* Per-Regulation Breakdown */}
       <section className="mb-8">
         <h2 className="text-xs text-[var(--dpf-muted)] uppercase tracking-widest mb-3">By Regulation</h2>

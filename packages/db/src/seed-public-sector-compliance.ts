@@ -1,6 +1,6 @@
 import type { PrismaClient, Prisma } from "../generated/client/client";
 import * as crypto from "crypto";
-import { type RegulationApplicability } from "./regulation-applicability";
+import { type RegulationApplicability, type RegulationDomain } from "./regulation-applicability";
 
 // BI-8D477188 Phase 2 — town/public-body compliance pack (civic spec §10).
 // Seeds the universal state-law FAMILIES as global Regulation rows (industry
@@ -36,6 +36,8 @@ type RegulationSeed = {
   industry: string;
   /** Data-driven applicability spec — scopes the regime to matching archetypes. */
   applicability: RegulationApplicability;
+  /** Functional domain (attribution/reporting only). */
+  domain: RegulationDomain;
   sourceType: "external";
   sourceUrl: string | null;
   notes: string;
@@ -59,6 +61,7 @@ const MUNICIPAL_APPLICABILITY: RegulationApplicability = {
 export const PUBLIC_SECTOR_REGULATIONS: RegulationSeed[] = [
   {
     regulationId: "REG-US-STATE-OPEN-MEETINGS",
+    domain: "sector",
     name: "State Open Meetings Law (Sunshine Law)",
     shortName: "Open Meetings",
     jurisdiction: "US-state",
@@ -122,6 +125,7 @@ export const PUBLIC_SECTOR_REGULATIONS: RegulationSeed[] = [
   },
   {
     regulationId: "REG-US-STATE-PUBLIC-RECORDS",
+    domain: "sector",
     name: "State Public Records Law (FOIA equivalent)",
     shortName: "Public Records",
     jurisdiction: "US-state",
@@ -175,6 +179,7 @@ export const PUBLIC_SECTOR_REGULATIONS: RegulationSeed[] = [
   },
   {
     regulationId: "REG-US-STATE-MUNI-FINANCE",
+    domain: "sector",
     name: "State Municipal Finance, Audit & Procurement Requirements",
     shortName: "Municipal Finance",
     jurisdiction: "US-state",
@@ -249,6 +254,7 @@ export const PUBLIC_SECTOR_REGULATIONS: RegulationSeed[] = [
   },
   {
     regulationId: "REG-US-EPA-SDWA",
+    domain: "sector",
     name: "Safe Drinking Water Act (via state primacy agency)",
     shortName: "SDWA",
     jurisdiction: "US-federal",
@@ -314,6 +320,7 @@ export const PUBLIC_SECTOR_REGULATIONS: RegulationSeed[] = [
   },
   {
     regulationId: "REG-US-EPA-NPDES",
+    domain: "sector",
     name: "Clean Water Act — NPDES Discharge Permits",
     shortName: "NPDES",
     jurisdiction: "US-federal",
@@ -448,6 +455,7 @@ export async function seedPublicSectorCompliance(prisma: PrismaClient): Promise<
         sourceUrl: regData.sourceUrl,
         notes: regData.notes,
         applicability,
+        domain: regData.domain,
       },
       create: { ...regData, applicability },
     });

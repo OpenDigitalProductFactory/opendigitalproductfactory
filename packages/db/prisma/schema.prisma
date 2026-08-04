@@ -9146,6 +9146,13 @@ model Regulation {
   // adding a governance requirement is a data operation, not a code change.
   // Null → fall back to the legacy jurisdiction/industry string matcher.
   applicability     Json?
+  // Functional domain that owns tracking this regulation (REGULATION_DOMAINS in
+  // regulation-applicability.ts: privacy-security | hr-employment | finance |
+  // ai-governance | consumer-marketing | accessibility | corporate-governance |
+  // sector | cross-cutting). ATTRIBUTION/REPORTING ONLY — it does NOT affect
+  // applicability. Lets each functional context own its slice while everything
+  // rolls up to one posture. Null → treated as cross-cutting until backfilled.
+  domain            String?
   sourceType        String                 @default("external")
   effectiveDate     DateTime?
   reviewDate        DateTime?

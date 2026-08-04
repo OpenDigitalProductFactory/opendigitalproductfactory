@@ -1,6 +1,6 @@
 import type { PrismaClient, Prisma } from "../generated/client/client";
 import * as crypto from "crypto";
-import { type RegulationApplicability } from "./regulation-applicability";
+import { type RegulationApplicability, type RegulationDomain } from "./regulation-applicability";
 
 // BI-242F344C — HORIZONTAL compliance pack. Unlike the vertical packs (banking,
 // public-sector, …) these regimes bind on WHAT an org does with data, not on its
@@ -45,6 +45,8 @@ type RegulationSeed = {
   sourceType: "external" | "framework";
   sourceUrl: string | null;
   applicability: RegulationApplicability;
+  /** Functional domain that owns tracking this regulation (attribution/reporting only). */
+  domain: RegulationDomain;
   notes: string;
   obligations: ObligationSeed[];
 };
@@ -70,6 +72,7 @@ export const SOFTWARE_HORIZONTAL_REGULATIONS: RegulationSeed[] = [
   // ── Family 1 — US state comprehensive privacy ──
   {
     regulationId: "REG-US-CCPA",
+    domain: "privacy-security",
     name: "California Consumer Privacy Act (as amended by CPRA)",
     shortName: "CCPA/CPRA",
     jurisdiction: "US-state",
@@ -142,6 +145,7 @@ export const SOFTWARE_HORIZONTAL_REGULATIONS: RegulationSeed[] = [
   },
   {
     regulationId: "REG-US-STATE-PRIVACY",
+    domain: "privacy-security",
     name: "US State Comprehensive Privacy Laws (VCDPA family — 19+ states)",
     shortName: "State Privacy",
     jurisdiction: "US-state",
@@ -203,6 +207,7 @@ export const SOFTWARE_HORIZONTAL_REGULATIONS: RegulationSeed[] = [
   // ── Family 2 — breach notification ──
   {
     regulationId: "REG-US-STATE-BREACH-NOTIFICATION",
+    domain: "privacy-security",
     name: "US State Data Breach Notification Laws (all 50 states + DC)",
     shortName: "Breach Notification",
     jurisdiction: "US-state",
@@ -264,6 +269,7 @@ export const SOFTWARE_HORIZONTAL_REGULATIONS: RegulationSeed[] = [
   // ── Family 3 — security frameworks / attestation (NOT law) ──
   {
     regulationId: "REG-FRAMEWORK-SOC2",
+    domain: "privacy-security",
     name: "SOC 2 — AICPA System and Organization Controls 2 (Trust Services Criteria)",
     shortName: "SOC 2",
     jurisdiction: "global",
@@ -310,6 +316,7 @@ export const SOFTWARE_HORIZONTAL_REGULATIONS: RegulationSeed[] = [
   },
   {
     regulationId: "REG-FRAMEWORK-ISO-27001",
+    domain: "privacy-security",
     name: "ISO/IEC 27001:2022 — Information Security Management System",
     shortName: "ISO 27001",
     jurisdiction: "global",
@@ -354,6 +361,7 @@ export const SOFTWARE_HORIZONTAL_REGULATIONS: RegulationSeed[] = [
   // ── Family 4 — AI governance ──
   {
     regulationId: "REG-FRAMEWORK-NIST-AI-RMF",
+    domain: "ai-governance",
     name: "NIST AI Risk Management Framework (AI RMF 1.0 + Generative AI Profile)",
     shortName: "NIST AI RMF",
     jurisdiction: "global",
@@ -396,6 +404,7 @@ export const SOFTWARE_HORIZONTAL_REGULATIONS: RegulationSeed[] = [
   },
   {
     regulationId: "REG-US-TX-TRAIGA",
+    domain: "ai-governance",
     name: "Texas Responsible AI Governance Act (TRAIGA)",
     shortName: "TX TRAIGA",
     jurisdiction: "US-state",
@@ -433,6 +442,7 @@ export const SOFTWARE_HORIZONTAL_REGULATIONS: RegulationSeed[] = [
   },
   {
     regulationId: "REG-US-CO-AI-ACT",
+    domain: "ai-governance",
     name: "Colorado Artificial Intelligence Act (SB 24-205, as amended)",
     shortName: "CO AI Act",
     jurisdiction: "US-state",
@@ -469,6 +479,7 @@ export const SOFTWARE_HORIZONTAL_REGULATIONS: RegulationSeed[] = [
   // ── Family 5 — consumer / marketing ──
   {
     regulationId: "REG-US-CAN-SPAM",
+    domain: "consumer-marketing",
     name: "CAN-SPAM Act",
     shortName: "CAN-SPAM",
     jurisdiction: "US-federal",
@@ -514,6 +525,7 @@ export const SOFTWARE_HORIZONTAL_REGULATIONS: RegulationSeed[] = [
   },
   {
     regulationId: "REG-US-TCPA",
+    domain: "consumer-marketing",
     name: "Telephone Consumer Protection Act",
     shortName: "TCPA",
     jurisdiction: "US-federal",
@@ -551,6 +563,7 @@ export const SOFTWARE_HORIZONTAL_REGULATIONS: RegulationSeed[] = [
   // ── Family 6 — accessibility ──
   {
     regulationId: "REG-US-ADA-WCAG",
+    domain: "accessibility",
     name: "ADA Title III + WCAG (digital accessibility)",
     shortName: "ADA/WCAG",
     jurisdiction: "US-federal",
@@ -600,6 +613,7 @@ export const SOFTWARE_HORIZONTAL_REGULATIONS: RegulationSeed[] = [
   // ── Family 7 — sector overlays (dormant until the data type / customer is onboarded) ──
   {
     regulationId: "REG-US-HIPAA",
+    domain: "privacy-security",
     name: "Health Insurance Portability and Accountability Act (HIPAA)",
     shortName: "HIPAA",
     jurisdiction: "US-federal",
@@ -647,6 +661,7 @@ export const SOFTWARE_HORIZONTAL_REGULATIONS: RegulationSeed[] = [
   },
   {
     regulationId: "REG-US-GLBA",
+    domain: "finance",
     name: "Gramm-Leach-Bliley Act + FTC Safeguards Rule",
     shortName: "GLBA",
     jurisdiction: "US-federal",
@@ -693,6 +708,7 @@ export const SOFTWARE_HORIZONTAL_REGULATIONS: RegulationSeed[] = [
   },
   {
     regulationId: "REG-US-FERPA",
+    domain: "privacy-security",
     name: "Family Educational Rights and Privacy Act (FERPA)",
     shortName: "FERPA",
     jurisdiction: "US-federal",
@@ -730,6 +746,7 @@ export const SOFTWARE_HORIZONTAL_REGULATIONS: RegulationSeed[] = [
   },
   {
     regulationId: "REG-US-FEDRAMP",
+    domain: "privacy-security",
     name: "FedRAMP (cloud authorization for US federal customers)",
     shortName: "FedRAMP",
     jurisdiction: "US-federal",
@@ -768,6 +785,7 @@ export const SOFTWARE_HORIZONTAL_REGULATIONS: RegulationSeed[] = [
   // ── Family 8 — EU / UK (dormant until an EU/UK nexus is captured) ──
   {
     regulationId: "REG-EU-GDPR",
+    domain: "privacy-security",
     name: "EU General Data Protection Regulation (2016/679)",
     shortName: "GDPR",
     jurisdiction: "EU",
@@ -815,6 +833,7 @@ export const SOFTWARE_HORIZONTAL_REGULATIONS: RegulationSeed[] = [
   },
   {
     regulationId: "REG-UK-GDPR",
+    domain: "privacy-security",
     name: "UK GDPR + Data Protection Act 2018",
     shortName: "UK GDPR",
     jurisdiction: "UK",
@@ -851,6 +870,7 @@ export const SOFTWARE_HORIZONTAL_REGULATIONS: RegulationSeed[] = [
   },
   {
     regulationId: "REG-EU-AI-ACT",
+    domain: "ai-governance",
     name: "EU Artificial Intelligence Act (Regulation 2024/1689)",
     shortName: "EU AI Act",
     jurisdiction: "EU",
@@ -908,6 +928,7 @@ export async function seedSoftwareHorizontalCompliance(prisma: PrismaClient): Pr
         sourceUrl: regData.sourceUrl,
         notes: regData.notes,
         applicability,
+        domain: regData.domain,
       },
       create: { ...regData, applicability },
     });

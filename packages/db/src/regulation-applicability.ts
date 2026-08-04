@@ -64,6 +64,34 @@ export function isDataHandlingPredicate(value: string | null | undefined): value
   return typeof value === "string" && (DATA_HANDLING_PREDICATES as readonly string[]).includes(value);
 }
 
+/**
+ * The FUNCTIONAL DOMAIN a regulation belongs to — which part of the business
+ * owns tracking and satisfying it. This is an ATTRIBUTION / REPORTING dimension
+ * ONLY: it never enters {@link RegulationApplicability} and never affects
+ * {@link regulationApplies}. A regulation is put in scope by its triggers
+ * (basis/jurisdiction/archetype/data-handling); `domain` is orthogonal — it lets
+ * each functional context (HR, finance, security…) see its own contextual
+ * compliance while everything rolls up to one central posture. Obligations
+ * inherit their regulation's domain (no separate column). Closed set — a new
+ * domain is a data-model change, so the taxonomy stays curated, not free-text.
+ */
+export const REGULATION_DOMAINS = [
+  "privacy-security", // data protection, breach notification, information security
+  "hr-employment", // employment law, wage/hour, leave, workplace safety
+  "finance", // banking/financial-services supervision, tax, financial reporting
+  "ai-governance", // automated-decisioning / AI transparency & risk regimes
+  "consumer-marketing", // marketing, telemarketing, consumer-protection
+  "accessibility", // digital/physical accessibility
+  "corporate-governance", // board/entity governance, listing, cooperative governance
+  "sector", // industry-vertical regimes tied to an archetype (public-sector, law-enforcement, …)
+  "cross-cutting", // spans functions or not yet attributed
+] as const;
+export type RegulationDomain = (typeof REGULATION_DOMAINS)[number];
+
+export function isRegulationDomain(value: string | null | undefined): value is RegulationDomain {
+  return typeof value === "string" && (REGULATION_DOMAINS as readonly string[]).includes(value);
+}
+
 /** An org's regional footprint + archetype. Jurisdiction values are bloc slugs (e.g. "eu", "us", "uk"). */
 export interface RegionProfile {
   operatesIn: string[];

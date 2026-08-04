@@ -8,7 +8,7 @@ import {
   getSessionEmployeeId, logComplianceAction,
 } from "@/lib/actions/compliance-helpers";
 import {
-  generateSnapshotId, calculatePostureScore,
+  generateSnapshotId, calculatePostureScore, calculateDomainScores,
   isValidSubmissionTransition,
   type RegulationGapSummary, type ObligationGap, type ObligationGapStatus,
 } from "@/lib/reporting-types";
@@ -77,6 +77,7 @@ export async function getGapAssessment(): Promise<RegulationGapSummary[]> {
       id: reg.id,
       shortName: reg.shortName,
       jurisdiction: reg.jurisdiction,
+      domain: reg.domain,
       totalObligations: obligations.length,
       coveredObligations: covered,
       partialObligations: partial,
@@ -92,6 +93,11 @@ export async function getGapAssessment(): Promise<RegulationGapSummary[]> {
 export async function getCompliancePosture() {
   await requireViewCompliance();
 
+  // Scope regulation/obligation counts to what APPLIES to this install, so the
+  // headline stat cards match the applicability-scoped by-regulation table
+  // below them (previously these counts were org-wide — a discrepancy).
+  const applicableRegulationIds = await resolveApplicableRegulationDbIds();
+
   const [
     totalRegulations,
     totalObligations,
@@ -102,8 +108,8 @@ export async function getCompliancePosture() {
     publishedPolicies,
     pendingAlerts,
   ] = await Promise.all([
-    prisma.regulation.count({ where: { status: "active" } }),
-    prisma.obligation.count({ where: { status: "active" } }),
+    prisma.regulation.count({ where: { status: "active", id: { in: applicableRegulationIds } } }),
+    prisma.obligation.count({ where: { status: "active", regulationId: { in: applicableRegulationIds } } }),
     prisma.control.count({ where: { status: "active" } }),
     prisma.control.count({ where: { status: "active", implementationStatus: "implemented" } }),
     prisma.complianceIncident.count({ where: { status: { in: ["open", "investigating"] } } }),
@@ -112,10 +118,11 @@ export async function getCompliancePosture() {
     prisma.regulatoryAlert.count({ where: { status: "pending" } }),
   ]);
 
-  // Covered obligations: those with at least one implemented control
+  // Covered obligations: those (in an applicable regulation) with at least one implemented control
   const coveredObligations = await prisma.obligation.count({
     where: {
       status: "active",
+      regulationId: { in: applicableRegulationIds },
       controls: {
         some: {
           control: { implementationStatus: "implemented", status: "active" },
@@ -142,6 +149,10 @@ export async function getCompliancePosture() {
     uncoveredObligations: r.uncoveredObligations,
   }));
 
+  // By-function (domain) breakdown — the centralized rollup of what each
+  // functional context must apply, over the same applicable-scoped gap data.
+  const domainScores = calculateDomainScores(gapData);
+
   return {
     overallScore,
     totalRegulations,
@@ -154,6 +165,7 @@ export async function getCompliancePosture() {
     publishedPolicies,
     pendingAlerts,
     regulationScores,
+    domainScores,
   };
 }
 
