@@ -38,10 +38,10 @@ test("Production Build is bounded and identifies timed-out evidence", () => {
   const block = jobBlock("build", "ux-route-sweep-runtime");
   const buildStep = stepBlock("Build web (Next.js production)");
 
-  assert.match(block, /\n\s{4}timeout-minutes:\s*20\s*\n/);
+  assert.match(block, /\n\s{4}timeout-minutes:\s*30\s*\n/);
   assert.match(buildStep, /production-build.*run=\$\{\{ github\.run_id \}\}/);
   assert.match(buildStep, /tree=\$\{\{ github\.sha \}\}/);
-  assert.match(buildStep, /timeout=20m/);
+  assert.match(buildStep, /timeout=30m/);
   assert.match(buildStep, /pnpm --filter web build/);
   assert.doesNotMatch(buildStep, /continue-on-error:\s*true/);
 });
