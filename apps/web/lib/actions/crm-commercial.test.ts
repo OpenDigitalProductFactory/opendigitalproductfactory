@@ -38,6 +38,16 @@ vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }));
 
+// acceptQuote is capability-guarded (BI-1017777D); these cases exercise the
+// commercial lineage behind the guard, so sign in as a role holding
+// operate_customer. Authorization itself is covered by
+// crm-quote-authorization.test.ts.
+vi.mock("@/lib/auth", () => ({
+  auth: vi.fn(async () => ({
+    user: { id: "u-revenue", platformRole: "HR-200", isSuperuser: false },
+  })),
+}));
+
 vi.mock("@/lib/actions/finance", () => ({
   generateInvoiceFromSalesOrder: vi.fn(),
 }));

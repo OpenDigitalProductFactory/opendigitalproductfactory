@@ -122,3 +122,62 @@ Counting authorization references across the action files that export `approve*`
 `leave` and `timesheet` were in the left column and are now fixed. **A zero count is a signal to
 look, not proof of a hole** — some surfaces may authorize by another route. The four remaining
 have not been read and are not claimed to be defective; they are the next place to look.
+
+## Addendum 2 — the four remaining surfaces, read (BI-1017777D)
+
+All four were read. **Two were clean, two were defective**, which is the point of the caveat
+above: the grep is a search heuristic, not a verdict.
+
+| Surface | Verdict | Authority |
+| --- | --- | --- |
+| `civic-governance` | **Clean** | Every action opens with `requireManageCompliance()` |
+| `compliance-proposals` | **Clean** | `requireViewCompliance()` to propose, `requireManageCompliance()` to approve/reject — the propose/approve split was already deliberate |
+| `crm` | **Defective — fixed** | `acceptQuote` / `rejectQuote` had *no* check at all, not even a session read |
+| `research-proposals` | **Defective — fixed** | `approve*`/`decline*` checked `session.user.id` and nothing else |
+
+### The regex was the weakest part of the sweep
+
+`requireManageCompliance` matches none of the alternatives in the original pattern, so both clean
+surfaces scored zero. Worse, **`leave` and `timesheet` still score zero after being fixed** —
+`authorizeApprovalDecision` doesn't match either. A zero is worth roughly one thing: read the file.
+Do not build a gate on this count.
+
+### Authority chosen per surface, and why not the org chart
+
+Neither fix uses `approval-authority.ts`. That helper resolves an *accountable manager* by walking
+the org chart, which is the right question for leave and timesheets and a meaningless one for a
+customer's quote or a market-research question — neither has an employee subject to walk up from.
+Both fixes instead use the shared capability primitive:
+
+- **`crm.acceptQuote` / `rejectQuote` → `requireCapability("operate_customer")`** (via the existing
+  `lib/actions/shared/guards.ts`). Accepting is not a draft edit: it creates a `SalesOrder`, closes
+  the opportunity WON, and auto-generates an invoice. `operate_customer` shares a role set with
+  `view_customer`, so no user who can see the button loses it.
+- **`research-proposals` → `can(..., "manage_business_models")`**, kept inline because these actions
+  contract for an `{ ok, error }` result rather than a throw — the case `shared/guards.ts` explicitly
+  documents as not routing through `requireCapability`. Proposals are scoped to a digital product /
+  product line / business product, so product-direction authority is the right source.
+
+### Every entry point carries its own authority
+
+`crm.ts` had three callers, and only guarding the action would have broken one of them:
+
+- `/api/v1/customer/quotes/[id]` — authenticates separately via `authenticateRequest`. Unchanged.
+- `QuoteLifecycleActions.tsx` — the internal portal button. Now guarded.
+- `quote-accept-public.ts` — the PUBLIC `/s/quote/[token]` flow, where a signed-out customer accepts
+  their own quote. Token possession *is* the authority. It now calls `acceptQuoteImpl` directly
+  rather than the guarded action, so the internal guard cannot lock out the customer it was never
+  aimed at. `logSystemActivity` moved to `lib/crm/crm-activity.ts` so both paths share one writer.
+
+There is **no Next.js middleware in `apps/web`**, so a page-level or layout-level guard does not
+protect a server action — the action body runs before any render-time redirect. Every exported
+`"use server"` function is its own endpoint and must carry its own check. That is the structural
+reason these holes keep appearing.
+
+### Still open
+
+- `crm.ts` and `customer-sites.ts` have **zero authorization across every action**, not just the
+  quote decisions — `createCustomerAccount`, `closeOpportunity`, `sendQuote` and ~15 others remain
+  unguarded. Out of scope here (this BI is the approval surfaces); worth its own item.
+- `listPendingResearchProposalsAction` still gates on session alone, leaking pending research topics
+  to any signed-in user. Lower severity than the decision actions, not fixed here.
