@@ -29,6 +29,7 @@ const GUARD_SCRIPTS = [
   "root-clone-guard.mjs",
   "compose-guard.mjs",
   "lease-punt-guard.mjs",
+  "pregate-evidence-guard.mjs",
   "decision-routing-guard.mjs",
   "plan-backlog-coverage-guard.mjs",
   "ux-fit-precheck.mjs",

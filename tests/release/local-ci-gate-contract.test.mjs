@@ -1009,14 +1009,28 @@ shellContractTest("pre-push-gate override requires a reason and RECORDS it (no s
   assert.notEqual(noReason.status, 0);
   assert.match(noReason.stderr, /requires DPF_SKIP_PREPUSH_GATE_REASON/);
 
+  // BI-563F6AB6: free-text skip reasons are rejected (same allowlist as pr:health).
+  const freeText = runGateHook(dir, {
+    input: refsLine(g),
+    env: cleanHookEnv({
+      DPF_SKIP_PREPUSH_GATE: "1",
+      DPF_SKIP_PREPUSH_GATE_REASON: "WIP recovery push",
+    }),
+  });
+  assert.notEqual(freeText.status, 0, freeText.stderr);
+  assert.match(freeText.stderr, /allowlisted code/i);
+
   const withReason = runGateHook(dir, {
     input: refsLine(g),
-    env: cleanHookEnv({ DPF_SKIP_PREPUSH_GATE: "1", DPF_SKIP_PREPUSH_GATE_REASON: "WIP recovery push" }),
+    env: cleanHookEnv({
+      DPF_SKIP_PREPUSH_GATE: "1",
+      DPF_SKIP_PREPUSH_GATE_REASON: "operator-emergency: WIP recovery push",
+    }),
   });
   assert.equal(withReason.status, 0, withReason.stderr);
   const state = JSON.parse(readFileSync(join(dir, ".git", "dpf-local-ci-gate.json"), "utf8"));
   assert.equal(state.skipped, true);
-  assert.equal(state.skipReason, "WIP recovery push");
+  assert.equal(state.skipReason, "operator-emergency: WIP recovery push");
   assert.equal(state.gatePassed, false);
 });
 

@@ -1,6 +1,6 @@
 # Agent local-CI / sandbox enforcement (close the optional-gap)
 
-**Status:** design + P1 implementation (BI-563F6AB6)  
+**Status:** design + P1/P2 implementation (BI-563F6AB6)  
 **Related:** BI-2272D840 (done — auto-route pregate into sandbox from source-only worktrees), pre-PR gate docs, `pnpm pr:health`, AGENTS.md §5 / §17
 
 ## Problem
@@ -39,7 +39,7 @@ Result: **same doctrine, different effective process per delivery surface** — 
 |-----------|--------------|------------------------|
 | `pnpm run pregate` | Claims lease, runs sandbox local-CI, records evidence | Agent never invokes it |
 | Pre-push hook | Blocks push without record | Bypass env vars; some agents force-push patterns; not always wired in every surface |
-| `pnpm pr:health` | NOT READY without evidence | Advisory unless operator/agent runs it; free-text Override trailer green-washed until P1 |
+| `pnpm pr:health` | NOT READY without evidence | Advisory unless operator/agent runs it; free-text Override trailer green-washed (fixed P1) |
 | AGENTS.md §5 | Doctrine | Not mechanically enforced at `gh pr create` until P2 PreToolUse |
 | BI-2272D840 | Node-native pregate when no `sh` | Solves *can't run* on Windows Codex; not *won't run* on Grok |
 
@@ -70,8 +70,8 @@ A required CI/status check that queries the install gate store by PR head SHA.
 | Phase | Deliverable | Done when |
 |-------|-------------|-----------|
 | **P0** | File BI + this design | BI-563F6AB6 open — **done** |
-| **P1** | Allowlist `Local-CI-Override` reasons; reject free-text | `pr:health` + tests red on "unit tests only" — **this PR** (`classifyLocalCiOverride`) |
-| **P2** | PreToolUse refuse `git push` / `gh pr create` without SHA evidence | Peer surfaces deny without pregate (follow-on PR) |
+| **P1** | Allowlist `Local-CI-Override` reasons; reject free-text | `pr:health` + tests red on "unit tests only" — **done** (`classifyLocalCiOverride`) |
+| **P2** | PreToolUse refuse `git push` / `gh pr create` without SHA evidence | Grok/Claude/Codex deny without pregate — **done** (`pregate-evidence-guard.mjs`) |
 | **P3** | UI/route changes require local-CI UX or `:3001` lease metadata | UI PR without either is NOT READY |
 | **P4** | Ops signal: % of runtime PRs with local-CI evidence by client | Operator can see Grok vs Claude vs Codex |
 
@@ -100,6 +100,6 @@ A required CI/status check that queries the install gate store by PR head SHA.
 
 ## Docs impact
 
-- `docs/testing/pre-pr-gate.md` — override allowlist  
+- `docs/testing/pre-pr-gate.md` — override allowlist + agent PreToolUse refuse  
 - Delivery-surfaces runbook — peer surface pregate parity  
 - AGENTS.md — only a one-line pointer if enforcement location changes; no rule duplication  
