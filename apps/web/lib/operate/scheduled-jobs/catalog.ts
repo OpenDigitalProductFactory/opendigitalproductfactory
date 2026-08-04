@@ -530,6 +530,18 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
     runNowEvent: null,
   },
   {
+    jobId: "a2a-collaboration-health-scan",
+    inngestId: "ops/a2a-collaboration-health-scan",
+    name: "A2A collaboration health scan",
+    purpose:
+      "BI-3003EE63: analyzes coworker↔coworker edges (delegation, handoff, task lineage) for failed/blocked paths, stuck active delegations, and orphan lineage; slice 1 logs findings — notify/BI/AI Ops handoff in slice 2 (MCP-efficiency twin).",
+    cron: "25 6 * * *",
+    cadence: "Daily at 06:25",
+    category: "editable",
+    tracksRunData: false,
+    runNowEvent: null,
+  },
+  {
     jobId: "queue-metrics-aggregator",
     inngestId: "queue/metrics-aggregator",
     name: "Queue metrics aggregator",
