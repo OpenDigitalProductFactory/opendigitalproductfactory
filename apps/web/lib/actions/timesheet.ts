@@ -6,6 +6,7 @@ import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import * as crypto from "crypto";
+import { authorizeApprovalDecision } from "@/lib/workforce/approval-authority";
 
 // ─── Save timesheet entries ──────────────────────────────────────────────────
 
@@ -179,16 +180,20 @@ export async function approveTimesheet(
   if (!period) return { success: false, error: "Timesheet not found" };
   if (period.status !== "submitted") return { success: false, error: "Timesheet not in submitted status" };
 
-  const approverProfile = await prisma.employeeProfile.findUnique({
-    where: { userId: session.user.id },
-    select: { id: true },
-  });
+  // Authority comes from the org chart, not from merely being signed in (BI-HCM-004).
+  const authorized = await authorizeApprovalDecision(
+    session.user.id,
+    period.employeeProfileId,
+    "this timesheet",
+  );
+  if (!authorized.ok) return { success: false, error: authorized.error };
+  const approverProfile = { id: authorized.approverEmployeeId };
 
   await prisma.timesheetPeriod.update({
     where: { periodId },
     data: {
       status: "approved",
-      approvedById: approverProfile?.id ?? null,
+      approvedById: approverProfile.id,
       approvedAt: new Date(),
     },
   });
@@ -210,16 +215,19 @@ export async function rejectTimesheet(
   if (!period) return { success: false, error: "Timesheet not found" };
   if (period.status !== "submitted") return { success: false, error: "Timesheet not in submitted status" };
 
-  const approverProfile = await prisma.employeeProfile.findUnique({
-    where: { userId: session.user.id },
-    select: { id: true },
-  });
+  const authorized = await authorizeApprovalDecision(
+    session.user.id,
+    period.employeeProfileId,
+    "this timesheet",
+  );
+  if (!authorized.ok) return { success: false, error: authorized.error };
+  const approverProfile = { id: authorized.approverEmployeeId };
 
   await prisma.timesheetPeriod.update({
     where: { periodId },
     data: {
       status: "rejected",
-      approvedById: approverProfile?.id ?? null,
+      approvedById: approverProfile.id,
       rejectionReason: reason,
     },
   });
