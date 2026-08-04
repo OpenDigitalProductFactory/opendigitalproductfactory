@@ -32,6 +32,15 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+
+// Single SoT for override codes (BI-563F6AB6) — shared with PreToolUse guards.
+import {
+  LOCAL_CI_OVERRIDE_REASON_CODES,
+  classifyLocalCiOverride,
+} from "../packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs";
+
+export { LOCAL_CI_OVERRIDE_REASON_CODES, classifyLocalCiOverride };
 
 // `gh pr checks --json` normalizes every check into a `bucket`:
 //   pass | fail | pending | skipping | cancel
@@ -42,70 +51,8 @@ const PENDING_BUCKETS = new Set(["pending"]);
 // `Local-CI-Evidence:` carries an evidence record id from a passing
 // `pnpm run pregate` run; `Local-CI-Override:` is an explicit operator
 // attestation that the sandbox gate was consciously skipped and why.
-//
-// BI-563F6AB6 P1: override values must use a CLOSED reason code (optionally
-// followed by free detail). Free-text alone (e.g. "unit tests only") used to
-// green-wash runtime PRs when agents skipped pregate — that path is closed.
+// BI-563F6AB6: Override values must use a closed reason code (see local-ci-override.mjs).
 const LOCAL_CI_TRAILER_RE = /^\s*Local-CI-(Evidence|Override):\s*(\S.*)$/m;
-
-/**
- * Closed allowlist for Local-CI-Override / push-time skipReason (BI-563F6AB6).
- * Format accepted: `<code>` or `<code>: <detail>` (also `—` / `-` separators).
- * Codes are the only machine-checked part; detail is audit prose.
- */
-export const LOCAL_CI_OVERRIDE_REASON_CODES = Object.freeze([
-  // Change set is docs-adjacent but isDocsOnlyFileSet did not classify it
-  // (e.g. config-only under scripts/docs, or markdown outside docs/).
-  "docs-adjacent",
-  // Delete/tag-only publication path already hook-exempt; trailer for remotes.
-  "delete-or-tag-only",
-  // Named human operator consciously waived the gate (emergency only).
-  "operator-emergency",
-  // Contributor has no local DPF install / cannot run pregate (fork path).
-  "external-contribution-no-install",
-  // Install/bootstrap recovery where the sandbox itself is the patient.
-  "install-bootstrap-recovery",
-]);
-
-const LOCAL_CI_OVERRIDE_CODE_SET = new Set(LOCAL_CI_OVERRIDE_REASON_CODES);
-
-/**
- * @param {string | null | undefined} value
- * @returns {{ ok: true, code: string, detail: string } | { ok: false, reason: string }}
- */
-export function classifyLocalCiOverride(value) {
-  const raw = typeof value === "string" ? value.trim() : "";
-  if (!raw) {
-    return {
-      ok: false,
-      reason:
-        "empty Local-CI-Override — use a closed reason code " +
-        `(one of: ${LOCAL_CI_OVERRIDE_REASON_CODES.join(", ")})`,
-    };
-  }
-  // Leading code is [a-z0-9-]+; optional detail after : / — / -
-  const match = raw.match(/^([a-z0-9-]+)(?:\s*[:—\-]\s*(.*))?$/i);
-  if (!match) {
-    return {
-      ok: false,
-      reason:
-        `Local-CI-Override must start with a closed reason code ` +
-        `(got ${JSON.stringify(raw)}); allowed: ${LOCAL_CI_OVERRIDE_REASON_CODES.join(", ")}`,
-    };
-  }
-  const code = match[1].toLowerCase();
-  const detail = (match[2] ?? "").trim();
-  if (!LOCAL_CI_OVERRIDE_CODE_SET.has(code)) {
-    return {
-      ok: false,
-      reason:
-        `Local-CI-Override code ${JSON.stringify(code)} is not allowlisted — ` +
-        `allowed: ${LOCAL_CI_OVERRIDE_REASON_CODES.join(", ")}. ` +
-        `Free-text alone (e.g. "unit tests only") is not an override.`,
-    };
-  }
-  return { ok: true, code, detail };
-}
 
 export function parseLocalCiAttestation(prBody) {
   const match = LOCAL_CI_TRAILER_RE.exec(prBody || "");

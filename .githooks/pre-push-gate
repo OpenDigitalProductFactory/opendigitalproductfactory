@@ -75,9 +75,16 @@ if [ "${DPF_SKIP_PREPUSH_GATE:-}" = "1" ]; then
   reason="${DPF_SKIP_PREPUSH_GATE_REASON:-}"
   if [ -z "$reason" ]; then
     echo "[pre-push-gate] DPF_SKIP_PREPUSH_GATE=1 requires DPF_SKIP_PREPUSH_GATE_REASON." >&2
-    echo "[pre-push-gate] The override is recorded and surfaced at PR time — state why this" >&2
-    echo "[pre-push-gate] push is verified-clean without a sandbox gate run, e.g.:" >&2
-    echo "[pre-push-gate]   DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON=\"WIP handoff, gate before PR\" git push" >&2
+    echo "[pre-push-gate] Use a closed reason code (BI-563F6AB6), e.g.:" >&2
+    echo "[pre-push-gate]   DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON=\"operator-emergency: brief why\" git push" >&2
+    exit 1
+  fi
+  # Validate allowlisted code before writing the skip record (same SoT as pr:health).
+  if ! node --input-type=module -e '
+import { classifyLocalCiOverride } from "./packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs";
+const r = classifyLocalCiOverride(process.argv[1]);
+if (!r.ok) { console.error("[pre-push-gate]", r.reason); process.exit(1); }
+' "$reason"; then
     exit 1
   fi
   mkdir -p "$(dirname "$state_file")"
@@ -94,8 +101,7 @@ fs.writeFileSync(file, JSON.stringify({
 }, null, 2) + "\n");
 ' "$state_file" "$branch" "$sha" "$reason"
   echo "[pre-push-gate] override recorded for $branch@$sha: $reason"
-  echo "[pre-push-gate] NOTE: pnpm pr:health will require a passing gate record or a"
-  echo "[pre-push-gate] Local-CI-Override attestation in the PR body before merge-readiness."
+  echo "[pre-push-gate] NOTE: pnpm pr:health accepts only allowlisted override codes."
   exit 0
 fi
 

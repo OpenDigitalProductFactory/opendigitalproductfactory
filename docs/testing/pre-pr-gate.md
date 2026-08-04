@@ -508,6 +508,16 @@ Push-time `DPF_SKIP_PREPUSH_GATE_REASON` must use the same code format or
 `pr:health` treats the recorded skip as a **blocker**, not a pass. The normal
 path remains `pnpm run pregate` with **no** body trailer.
 
+### Agent PreToolUse refuse (BI-563F6AB6 P2)
+
+Claude / Codex / Grok PreToolUse runs
+`packages/dpf-skill-pack/hooks/pregate-evidence-guard.mjs` on shell tools. It
+**denies** `git push` and `gh pr create` when the worktree has no unexpired
+SHA-bound `dpf-local-ci-gate.json` for HEAD (or an allowlisted skip). This is
+the mechanical stop that prevents a surface from “finishing too fast” with only
+worktree vitest. Emergency: `DPF_ALLOW_UNGATED_PUSH=1` (still subject to
+`pr:health` / merge-readiness).
+
 ### Keep internal identifiers out of the PR body
 
 The trailers above are a **fallback**, not the normal path: a branch gated
