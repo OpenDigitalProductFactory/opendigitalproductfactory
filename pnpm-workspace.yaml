@@ -43,8 +43,11 @@ overrides:
   # GHSA-w62v-xxxg-mg59 server-side XSS via cx() JSX escaping bypass, and
   # GHSA-xgm2-5f3f-mvvc API Gateway v1 header de-dup drop (Dependabot #106/#107/#108,
   # medium), on top of the earlier < 4.12.25 CORS-with-credentials wildcard
-  # reflection (GHSA-88fw-hqm2-52qc, high). Runtime dependency; floor to 4.12.27.
-  hono: '^4.12.27'
+  # reflection (GHSA-88fw-hqm2-52qc, high), then < 4.12.34 GHSA-8j4g-w8fx-2239 /
+  # CVE-2026-69207 ReDoS in the CORS middleware via a crafted
+  # Access-Control-Request-Headers value (Dependabot #139, medium).
+  # Runtime dependency; floor to the patched 4.12.34.
+  hono: '^4.12.34'
   # Keep the CLI's diagram stack on the last policy-vetted releases. Floating
   # transitive ranges let lockfile regeneration pull a same-day ZenUML/Floating
   # UI graph even after the CLI itself was rolled back (BI-72E0A27B).
