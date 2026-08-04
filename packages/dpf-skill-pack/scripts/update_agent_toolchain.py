@@ -1066,6 +1066,7 @@ GROK_HOOK_GUARDS = (
     "root-clone-guard.mjs",
     "compose-guard.mjs",
     "plan-backlog-coverage-guard.mjs",
+    "pregate-evidence-guard.mjs",
 )
 # Matcher-scoped groups (BI-pretooluse): without matchers Grok runs EVERY PreToolUse
 # command on EVERY tool (6 serial node spawns per call), which looks like
@@ -1079,6 +1080,7 @@ GROK_PRETOOLUSE_GROUPS = (
             "lease-guard.mjs",
             "root-clone-guard.mjs",
             "compose-guard.mjs",
+            "pregate-evidence-guard.mjs",
         ),
     ),
     (
@@ -1285,6 +1287,7 @@ CODEX_BASH_GUARDS = (
     "root-clone-guard.mjs",
     "compose-guard.mjs",
     "lease-punt-guard.mjs",
+    "pregate-evidence-guard.mjs",
 )
 CODEX_ASK_GUARDS = ("decision-routing-guard.mjs",)
 CODEX_WRITE_GUARDS = ("plan-backlog-coverage-guard.mjs",)
@@ -1457,6 +1460,7 @@ HOOK_PURPOSES = {
     "lease-punt-guard.mjs": "blocks a runtime-bound gate (prisma migrate / db push) in a source-only worktree",
     "decision-routing-guard.mjs": "blocks asking the operator a platform decision with no kernel consultation",
     "plan-backlog-coverage-guard.mjs": "blocks production source edits until xlarge and independently shippable plan work has live BI coverage",
+    "pregate-evidence-guard.mjs": "blocks git push / gh pr create when HEAD has no unexpired local-CI sandbox evidence",
     "ux-fit-precheck.mjs": "reminds to run a UX-fit review when editing UI surfaces",
     "spec-plan-doc-precheck.mjs": "reminds to attach a spec/plan/doc when writing gated files",
     "design-grounding-precheck.mjs": "reminds to review specs and current code substrate before UX/workflow edits",

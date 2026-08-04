@@ -67,7 +67,10 @@ class InstallGrokHooksTest(unittest.TestCase):
             managed = home / ".agents" / "plugins" / "plugins" / "dpf-platform"
             updater.copy_skill_pack(skill_pack, managed, dry_run=False)
             status = updater.install_grok_hooks(managed, home, dry_run=False)
-            self.assertIn("wired 6 PreToolUse guard", status)
+            # Derived, not hardcoded: adding a blocking guard to hooks.json must
+            # not make this assertion rot (the drift tests above already pin the
+            # roster itself against hooks.json).
+            self.assertIn(f"wired {len(updater.GROK_HOOK_GUARDS)} PreToolUse guard", status)
             self.assertIn("matcher group", status)
             self.assertIn("SessionStart+Stop", status)
             hook_file = updater.grok_hooks_file(home)
@@ -79,7 +82,7 @@ class InstallGrokHooksTest(unittest.TestCase):
             self.assertEqual(len(entries), 3)
             self.assertTrue(all(e.get("matcher") for e in entries))
             cmds = [h["command"] for e in entries for h in e["hooks"]]
-            self.assertEqual(len(cmds), 6)
+            self.assertEqual(len(cmds), len(updater.GROK_HOOK_GUARDS))
             self.assertTrue(any("lease-punt-guard.mjs" in c for c in cmds))
             shell_group = next(e for e in entries if "Shell" in str(e.get("matcher")))
             self.assertTrue(any("lease-guard.mjs" in h["command"] for h in shell_group["hooks"]))
