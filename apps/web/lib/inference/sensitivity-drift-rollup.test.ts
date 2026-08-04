@@ -8,6 +8,7 @@ function sample(over: Partial<SensitivityDriftSample> = {}): SensitivityDriftSam
   return {
     taskType: "creative",
     agentId: "marketing-specialist",
+    routeContext: "/customer/marketing",
     declaredSensitivity: "confidential",
     measuredSensitivity: "internal",
     sensitivityFloorApplied: true,
@@ -88,6 +89,36 @@ describe("rollUpSensitivityDrift", () => {
 
     expect(rollup.drifting.map((g) => g.agentId)).toEqual(["b", "a"]);
     expect(rollup.drifting[0].levelsAbove).toBe(3);
+  });
+
+  it("attributes drift to the route that declared the level", () => {
+    const rollup = rollUpSensitivityDrift([sample(), sample()]);
+
+    expect(rollup.drifting[0].routeContext).toBe("/customer/marketing");
+    expect(rollup.drifting[0].observations).toBe(2);
+  });
+
+  it("separates two routes served by the same agent", () => {
+    // The whole point of the route column: one agent on two routes, only one of
+    // which over-declares, must not have them averaged into a single group.
+    const rollup = rollUpSensitivityDrift([
+      sample({ routeContext: "/customer/marketing" }),
+      sample({ routeContext: "/customer/crm" }),
+    ]);
+
+    expect(rollup.drifting.map((g) => g.routeContext).sort()).toEqual([
+      "/customer/crm",
+      "/customer/marketing",
+    ]);
+  });
+
+  it("reports a decision with no route rather than dropping it", () => {
+    // Scheduled jobs and system tasks genuinely have no route, and every row
+    // predating the column has none. Dropping them would understate drift.
+    const rollup = rollUpSensitivityDrift([sample({ routeContext: null })]);
+
+    expect(rollup.drifting).toHaveLength(1);
+    expect(rollup.drifting[0].routeContext).toBeNull();
   });
 
   it("reports an empty estate without inventing a clean bill of health", () => {

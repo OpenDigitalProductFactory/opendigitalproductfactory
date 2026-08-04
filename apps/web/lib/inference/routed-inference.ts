@@ -564,6 +564,7 @@ export async function routeAndCall(
     routeDecisionLogId = persistRouteDecision(decision, {
       actor: options?.routingActor ?? (options?.agentId ? { kind: "agent", id: options.agentId } : { kind: "system", id: "routed-inference" }),
       agentMessageId: options?.agentMessageId ?? null,
+      routeContext: options?.routeContext ?? null,
     }).catch((err) => {
       console.error("[routeAndCall] Failed to persist route decision:", err);
       return null;

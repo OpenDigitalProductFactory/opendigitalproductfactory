@@ -23,6 +23,13 @@ import type { InferencePayloadSensitivity } from "./data-screening/types";
 export type SensitivityDriftSample = {
   taskType: string;
   agentId: string | null;
+  /**
+   * The route whose static context declared the sensitivity. Null for callers
+   * with no route (scheduled jobs, system tasks) and for rows predating the
+   * column — those are reported unattributed rather than dropped, since
+   * dropping them would understate drift.
+   */
+  routeContext?: string | null;
   /** Absent on receipts written before the drift fields shipped (#3919). */
   declaredSensitivity?: InferencePayloadSensitivity;
   measuredSensitivity?: InferencePayloadSensitivity;
@@ -32,6 +39,8 @@ export type SensitivityDriftSample = {
 export type SensitivityDriftGroup = {
   taskType: string;
   agentId: string | null;
+  /** The route that declared the level, or null when there was none. */
+  routeContext: string | null;
   declared: InferencePayloadSensitivity;
   measured: InferencePayloadSensitivity;
   /** How far the declared label sits above the measured payload. Always ≥ 1. */
@@ -86,7 +95,10 @@ export function rollUpSensitivityDrift(
     // Key on the declared/measured pair as well as the agent: an agent whose
     // payload sometimes genuinely carries records would otherwise have its
     // real findings averaged away by its clean turns.
-    const key = groupKey([sample.agentId, sample.taskType, declared, measured]);
+    // Route first: one agent can serve several routes, and only one of them
+    // may over-declare. Merging them would average a real finding away.
+    const routeContext = sample.routeContext ?? null;
+    const key = groupKey([routeContext, sample.agentId, sample.taskType, declared, measured]);
     const existing = groups.get(key);
     if (existing) {
       existing.observations += 1;
@@ -96,6 +108,7 @@ export function rollUpSensitivityDrift(
     groups.set(key, {
       taskType: sample.taskType,
       agentId: sample.agentId,
+      routeContext,
       declared,
       measured,
       levelsAbove,
@@ -111,6 +124,7 @@ export function rollUpSensitivityDrift(
     (a, b) =>
       b.levelsAbove - a.levelsAbove ||
       b.observations - a.observations ||
+      (a.routeContext ?? "").localeCompare(b.routeContext ?? "") ||
       (a.agentId ?? "").localeCompare(b.agentId ?? "") ||
       a.taskType.localeCompare(b.taskType),
   );
