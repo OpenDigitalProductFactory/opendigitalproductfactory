@@ -98,3 +98,27 @@ path to anyone accountable.
   attribution (single, multiple, and permanent-departure cases), all four unresolved reasons, loop
   handling, and the operator copy.
 - Typecheck clean; 150 tests green across the affected suites.
+
+## Addendum — same day: second consumer, and the same hole again
+
+Timesheets were the planned next consumer. Sweeping the approval surfaces first (because
+`leave.ts` having *zero* authorization meant none could be assumed sound) found
+`approveTimesheet` and `rejectTimesheet` carrying the **identical defect**: no authorization
+beyond an authenticated session, `approvedById` recording whoever clicked or `null`. Timesheets
+feed payroll.
+
+Both now route through the org chart. The authority check moved out of `leave.ts` into
+`apps/web/lib/workforce/approval-authority.ts` so the two surfaces share ONE rule — writing a
+second private copy is how the codebase arrived at two surfaces with no rule at all.
+
+### Sweep result, for whoever picks this up next
+
+Counting authorization references across the action files that export `approve*`/`reject*`:
+
+| Zero references | Has references |
+| --- | --- |
+| `civic-governance`, `compliance-proposals`, `crm`, `research-proposals` | `build`, `change-management`, `decomposition-actions`, `edge-nodes`, `federation-links`, `federation-proposals`, `finance`, `organization-join`, `promotions`, `proposals`, `skill-proposal-actions` |
+
+`leave` and `timesheet` were in the left column and are now fixed. **A zero count is a signal to
+look, not proof of a hole** — some surfaces may authorize by another route. The four remaining
+have not been read and are not claimed to be defective; they are the next place to look.

@@ -6,11 +6,7 @@ import { prisma } from "@dpf/db";
 import { auth } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import * as crypto from "crypto";
-import {
-  describeUnresolvedRouting,
-  resolveAccountableApprover,
-} from "@/lib/workforce/approval-routing";
-import type { WorkforceStatus } from "@/lib/workforce/workforce-types";
+import { authorizeApprovalDecision } from "@/lib/workforce/approval-authority";
 
 // ─── Leave Request Flow ──────────────────────────────────────────────────────
 
@@ -67,72 +63,6 @@ export async function submitLeaveRequest(input: {
   return { success: true, requestId };
 }
 
-/**
- * Decide whether the signed-in user may rule on this employee's leave (BI-HCM-004).
- *
- * Before this existed, `approveLeaveRequest` and `rejectLeaveRequest` loaded the requester's
- * `managerEmployeeId` and never compared it to anything: any signed-in user could approve
- * anyone's leave, and `approverEmployeeId` recorded whoever happened to click — or null.
- *
- * Authority now comes from the org chart via the shared approval walk, so leave, timesheets,
- * and anything else route the same way instead of each inventing a single-hop rule.
- */
-async function authorizeLeaveDecision(
-  userId: string,
-  subjectEmployeeProfileId: string,
-): Promise<
-  | { ok: true; approverEmployeeId: string; onBehalfOf: string | null }
-  | { ok: false; error: string }
-> {
-  const actor = await prisma.employeeProfile.findUnique({
-    where: { userId },
-    select: { id: true },
-  });
-  if (!actor) {
-    return { ok: false, error: "You do not have an employee profile, so you cannot decide leave." };
-  }
-
-  const rows = await prisma.employeeProfile.findMany({
-    select: { id: true, managerEmployeeId: true, status: true },
-  });
-
-  const routing = resolveAccountableApprover(
-    rows.map((r) => ({
-      id: r.id,
-      managerEmployeeId: r.managerEmployeeId,
-      status: r.status as WorkforceStatus,
-    })),
-    subjectEmployeeProfileId,
-  );
-
-  if (!routing.resolved) {
-    // Fail loudly with the reason and the fix, rather than letting the request sit unexplained.
-    const names = new Map(rows.map((r) => [r.id, r.id]));
-    const withNames = await prisma.employeeProfile.findMany({
-      where: { id: { in: [subjectEmployeeProfileId] } },
-      select: { id: true, displayName: true },
-    });
-    for (const r of withNames) names.set(r.id, r.displayName);
-    return {
-      ok: false,
-      error: describeUnresolvedRouting(
-        routing,
-        (id) => names.get(id) ?? "This employee",
-        subjectEmployeeProfileId,
-      ),
-    };
-  }
-
-  if (routing.approverEmployeeId !== actor.id) {
-    return {
-      ok: false,
-      error: "You are not the accountable approver for this request.",
-    };
-  }
-
-  return { ok: true, approverEmployeeId: actor.id, onBehalfOf: routing.onBehalfOf };
-}
-
 export async function approveLeaveRequest(
   requestId: string,
 ): Promise<{ success: boolean; error?: string }> {
@@ -145,7 +75,7 @@ export async function approveLeaveRequest(
 
   // Authority check BEFORE any state change — the balance deduction below is not something to
   // do on behalf of someone who may not decide this.
-  const authorized = await authorizeLeaveDecision(session.user.id, request.employeeProfileId);
+  const authorized = await authorizeApprovalDecision(session.user.id, request.employeeProfileId, "leave");
   if (!authorized.ok) return { success: false, error: authorized.error };
   const approverProfile = { id: authorized.approverEmployeeId };
 
@@ -195,7 +125,7 @@ export async function rejectLeaveRequest(
   if (!request) return { success: false, error: "Request not found" };
   if (request.status !== "pending") return { success: false, error: "Request already decided" };
 
-  const authorized = await authorizeLeaveDecision(session.user.id, request.employeeProfileId);
+  const authorized = await authorizeApprovalDecision(session.user.id, request.employeeProfileId, "leave");
   if (!authorized.ok) return { success: false, error: authorized.error };
   const approverProfile = { id: authorized.approverEmployeeId };
 
