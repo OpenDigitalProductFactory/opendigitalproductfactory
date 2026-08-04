@@ -12,7 +12,7 @@
     "baselineComparison": "improved",
     "measured": {
       "/platform/ai/skills": {
-        "defaultVisibleWords": 203,
+        "defaultVisibleWords": 205,
         "leadBandWords": 31,
         "primaryActions": 1,
         "visibleFields": 3,
