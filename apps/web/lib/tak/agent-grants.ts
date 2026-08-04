@@ -250,6 +250,18 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   analyze_a2a_collaboration_health: ["agent_control_read"],
   spawn_subagents: ["coworker_engagement_write"],
 
+  // UX critique corpus (BI-52839DEA). Reading past design findings is advisory
+  // and read-only, so it matches the decision gates. Capture writes a DRAFT
+  // WikiPage under the craft overlay — the same shape and scope as
+  // `record_org_business_answer` writing into the org corpus.
+  //
+  // `registry_write` is not authority over the corpus: the pack pins every MCP
+  // caller to `callerKind: "agent"`, so a captured entry can only ever carry an
+  // agent-proposed verdict and is never calibration-eligible. Attaching a
+  // founder/designer verdict stays a human act in the portal.
+  capture_ux_critique: ["registry_write"],
+  search_ux_critique_corpus: ["registry_read"],
+
   // Org/WWWD qa elicitation feeder (BI-44526F3E Phase C): capture a CONFIRMED
   // operator answer about the business into the org corpus via enrichOrgCorpus
   // (qa provenance, first-party trust, draft-by-default per BI-1378). Requires
