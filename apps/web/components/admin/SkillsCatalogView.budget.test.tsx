@@ -12,7 +12,7 @@ import { measureUxBudget, UX_BUDGETS } from "@/lib/ux-budget";
 // `line-clamp-2`. Clamping is a paint-time trick: the words stay in the DOM, so
 // the accessibility tree, the route sweep, and any screen reader still carry
 // them. An interim cap took the route to 1,352 by hiding rows; grouping takes it
-// to 203 while keeping every row reachable.
+// to 205 while keeping every row reachable.
 //
 // This test measures the SAME artifact the CI sweep measures (served markup, via
 // the sweep's own measureUxBudget) at production scale, so the regression cannot
@@ -101,8 +101,9 @@ describe("SkillsCatalogView — default-visible budget at production scale", () 
   });
 
   it("stays far below the 5,349-word baseline this route regressed from", () => {
-    // This component measures 26 words in isolation; the full route measures 203
-    // (the route sweep is the binding number). The ceiling is deliberately loose:
+    // This component measures 26 words in isolation; the full route freezes at 205
+    // (the route sweep is the binding number, and it carries a 2-word noise floor
+    // for relative-time phrasing). The ceiling is deliberately loose:
     // it guards the ORDER OF MAGNITUDE so a real regression fails loudly without
     // turning every copy edit red.
     expect(metrics.defaultVisibleWords).toBeLessThan(200);
