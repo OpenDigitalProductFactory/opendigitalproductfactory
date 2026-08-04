@@ -54,6 +54,12 @@ export {
 } from "./ExpandableCard";
 
 export {
+  SearchableSelect,
+  type SearchableSelectProps,
+  type SearchableSelectOption,
+} from "./SearchableSelect";
+
+export {
   EmptyState,
   type EmptyStateProps,
 } from "./EmptyState";
