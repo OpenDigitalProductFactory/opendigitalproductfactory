@@ -79,11 +79,28 @@ if [ "${DPF_SKIP_PREPUSH_GATE:-}" = "1" ]; then
     echo "[pre-push-gate]   DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON=\"operator-emergency: brief why\" git push" >&2
     exit 1
   fi
-  # Validate allowlisted code before writing the skip record (same SoT as pr:health).
-  if ! node --input-type=module -e '
-import { classifyLocalCiOverride } from "./packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs";
-const r = classifyLocalCiOverride(process.argv[1]);
-if (!r.ok) { console.error("[pre-push-gate]", r.reason); process.exit(1); }
+  # Validate allowlisted code before writing the skip record (BI-563F6AB6).
+  # Inline codes (no monorepo import) so temp-dir gate contract tests still work;
+  # keep in sync with packages/dpf-skill-pack/hooks/lib/local-ci-override.mjs.
+  if ! node -e '
+const reason = process.argv[1] || "";
+const codes = new Set([
+  "docs-adjacent",
+  "delete-or-tag-only",
+  "operator-emergency",
+  "external-contribution-no-install",
+  "install-bootstrap-recovery",
+]);
+const raw = reason.trim();
+const m = raw.match(/^([a-z0-9-]+)(?:\s*[:\u2014\-]\s*(.*))?$/i);
+if (!m || !codes.has(m[1].toLowerCase())) {
+  console.error(
+    "[pre-push-gate] DPF_SKIP_PREPUSH_GATE_REASON must start with an allowlisted code:",
+    [...codes].join(", "),
+  );
+  console.error("[pre-push-gate] got:", JSON.stringify(raw));
+  process.exit(1);
+}
 ' "$reason"; then
     exit 1
   fi
