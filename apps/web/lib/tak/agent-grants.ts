@@ -269,6 +269,13 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   // draft WikiPage/WikiPageRevision rows under the org's overlay.
   record_org_business_answer: ["registry_write"],
 
+  // Compliance-scope capture (BI-0B867B67): the compliance coworker records what
+  // the business does with data (dataHandling predicates) and where it employs
+  // people (employsIn) into BusinessContext, moving matching regulations from
+  // "needs review" to "applies". Requires `data_governance_validate` — the same
+  // data-governance scope the compliance-officer already holds.
+  record_compliance_scope: ["data_governance_validate"],
+
   // Open decision reviews — the /coworker-decisions governance hub's queue of deferred/escalated
   // decisions awaiting a human. Read-only tool on the `registry_read` baseline: any
   // coworker may read and recommend on the queue; resolving stays a human action
