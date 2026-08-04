@@ -104,9 +104,11 @@ function runGate(args, env) {
 // MUST spawn asynchronously: spawnSync blocks this process's event loop for
 // its entire duration, which would starve the very http.Server the child
 // needs to reach (self-deadlock — the child would hang until it times out).
-function runGateAsync(args, env) {
+// `execPath` is injectable so the spawn-failure contract below can force an
+// 'error' event deterministically; every production caller uses the default.
+function runGateAsync(args, env, { execPath = process.execPath } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [gateScript, ...args], { env });
+    const child = spawn(execPath, [gateScript, ...args], { env });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk) => { stdout += chunk; });
@@ -119,6 +121,33 @@ function runGateAsync(args, env) {
     child.on("close", (status) => resolve({ status, stdout, stderr }));
   });
 }
+
+// ── test-harness contract: runGateAsync spawn failure (BI-58B02382) ─────────
+
+// Guards the child 'error' listener added in #3910. A ChildProcess that emits
+// 'error' with no listener does not fail the awaiting test — Node re-throws it
+// as an uncaughtException that kills this whole test file, while the
+// 'close'-based Promise stays forever pending. Deleting the listener must break
+// a test rather than silently reopen that crash surface, so assert on the
+// rejection directly instead of trusting the other cases to notice.
+test("runGateAsync rejects (not crashes) when the child cannot be spawned (BI-58B02382)", async () => {
+  const missingInterpreter = join(tmpdir(), "dpf-58b02382-no-such-interpreter");
+  assert.equal(existsSync(missingInterpreter), false, "fixture path must not exist");
+
+  await assert.rejects(
+    runGateAsync(
+      ["--dry-run", "--branch", "feat/x", "--worktree", repoRoot],
+      { ...process.env },
+      { execPath: missingInterpreter },
+    ),
+    (error) => {
+      assert.ok(error instanceof Error, "spawn failure must reject with an Error");
+      assert.equal(error.code, "ENOENT");
+      assert.equal(error.path, missingInterpreter);
+      return true;
+    },
+  );
+});
 
 // ── scripts/pregate.mjs: shell detection + routing ──────────────────────────
 
