@@ -425,6 +425,22 @@ Not `archetype-scoped` or `vertical-scoped` (nothing about curation is specific 
 
 Recorded here durably in addition to the `Seed-Fit-Decision:` PR trailer the CI gate reads.
 
-### 13f. Cadence — the open decision
+### 13f. First real `⟦situational:⟧` application — the consolidated refusal rule was Claude-shaped
+
+Found 2026-08-04, three days after §13 merged, from operator context about external agent platforms.
+
+The rule §13c lifted read, unconditionally:
+
+> *Branch protection, the DCO bot, `PreToolUse` hooks, token grant-intersection and the decision-routing guard **refuse rather than warn**.*
+
+`hooks.json` is Claude Code hook format keyed on `${CLAUDE_PLUGIN_ROOT}`. Per [EP-ANTIGRAVITY-001](2026-07-17-antigravity-first-class-support-design.md), Grok reads Claude-format hooks natively and Codex aliases the variable, but Antigravity is VS Code / Windsurf-derived with its own AI-Rules / MCP-config model, so `lease-guard`, `worktree-create` and `decision-routing` **may not transfer**. An agent on such a host read the rule and believed it was protected by refusals that never fire.
+
+**This was a regression introduced by consolidation, and a specific one worth naming.** The enumeration it replaced listed four named hooks — visibly Claude-plumbing, easy to doubt on a foreign host. The general form asserts the guarantee with more confidence and no visible seam, so it is *more* misleading precisely because it is better written. Raising altitude increases reach; where a rule's truth was silently host-conditional, it also increases blast radius.
+
+The fix is the third clock's first real use: the marker names the condition (Claude-format hook plane transfers), states the fallback (on an unverified host, honour the hook-enforced rules yourself), and carries the review trigger (EP-ANTIGRAVITY-001's evidence gate). Costs 196 bytes and re-baselines the ratchet upward — justified growth under the documented escape hatch, because the alternative is a rule that is wrong on a surface the platform intends to support.
+
+**Generalised lesson for question 4.** "Does a machine now enforce this?" is not host-invariant. The curation review must ask *on which surfaces* the enforcement fires before folding a prohibition into a stance, because a peer-surfaces platform (§12) has no single answer. `commons-are-curated-not-just-appended` question 4 should be read with that qualifier.
+
+### 13g. Cadence — the open decision
 
 The principle specifies *what* a review asks and *who* owns it. It deliberately does not fix the interval, which is a founder call per corpus. The recommendation: trigger on whichever comes first — a release boundary, growth past the corpus ratchet since the last review, or a calendar floor so a quiet corpus is still examined. WWWD and WSID need their own rule-identity mechanism (the anchor equivalent) before they can be consolidated as safely as `AGENTS.md`; that is unbuilt and is the natural next BI.
