@@ -37,15 +37,31 @@ const EXAMPLE: ProfessionLocalAxis = {
   kind: "cost",
   highMeans: "the option makes the visual hierarchy HARDER to parse at a glance",
   projectsOnto: ["human_cognitive_load"],
-  source: "nng/visual-hierarchy",
+  source: "arxiv/2403.03163-design2code",
 };
 
 describe("PROFESSION_LOCAL_AXES registry", () => {
-  it("ships empty — machinery lands before any axis scores", () => {
-    expect(PROFESSION_LOCAL_AXES).toHaveLength(0);
+  it("carries ux-design's axes — the first profession to need local resolution", () => {
+    const ux = localAxesFor("ux-design");
+    expect(ux.map((a) => a.key).sort()).toEqual([
+      "ux-design/content_density",
+      "ux-design/disclosure_debt",
+      "ux-design/hierarchy_flatness",
+      "ux-design/perceptual_clutter",
+    ]);
   });
 
-  it("passes integrity against the real profession registry (empty is valid)", () => {
+  it("declares every ux-design axis cost-framed, matching its cost-axis target", () => {
+    // The BI-72E8FF05 invariant, asserted on the SHIPPED registry rather than
+    // only on a fixture: all four roll up onto human_cognitive_load, so a
+    // benefit framing here would score the better option worse.
+    for (const axis of localAxesFor("ux-design")) {
+      expect(axis.kind).toBe("cost");
+      expect(axis.projectsOnto).toEqual(["human_cognitive_load"]);
+    }
+  });
+
+  it("passes integrity for the shipped registry", () => {
     expect(() => assertProfessionLocalAxisIntegrity(REGISTRY_PROFESSIONS)).not.toThrow();
   });
 

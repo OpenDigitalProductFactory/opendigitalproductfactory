@@ -131,6 +131,26 @@ function failClosedEvaluation(input: {
 export async function evaluateProfessionDecisionGate(input: {
   db: ProfessionGateClient;
   agentIdentity: ProfessionAgentIdentityInput;
+  /**
+   * Declared borrow (BI-52839DEA). Set only when an EXTERNAL caller — a Claude
+   * Code / Codex / Grok development session — consults a profession it does not
+   * hold an identity for. The gate resolves the named craft profile and its
+   * corpus exactly as it would for the coworker, and stamps the ledger so the
+   * borrow is never mistaken for the coworker's own reasoning.
+   *
+   * That stamp is load-bearing, not bookkeeping: the critique corpus calibrates
+   * a judge against founder verdicts, and a judge calibrated on rows it cannot
+   * distinguish from its own output is calibrated against itself.
+   *
+   * Refused when the caller already carries an agent identity — an in-portal
+   * coworker reasons from the craft it practises, never from one it names.
+   */
+  declaredBorrow?: {
+    /** Which population is borrowing. Mirrors principle_decide's callingPopulation. */
+    callingPopulation: string;
+    /** professionKey from docs/professions/registry.json. */
+    professionKey: string;
+  } | null;
   question: string;
   options: string[];
   /**
@@ -167,6 +187,23 @@ export async function evaluateProfessionDecisionGate(input: {
   const { question, options, domainClass, riskTier } = input;
   const resolve = input.resolver ?? resolveProfileMaterialForProfession;
 
+  // A borrow is only honoured for a caller with no craft identity of its own.
+  // An in-portal coworker naming a profession would be impersonation, and the
+  // founder decision on BI-52839DEA was explicitly declared-borrow, not
+  // impersonation.
+  const hasAgentIdentity = Boolean(
+    input.agentIdentity.agentId ?? input.agentIdentity.slugId ?? input.agentIdentity.roleSlug,
+  );
+  const borrow = input.declaredBorrow && !hasAgentIdentity ? input.declaredBorrow : null;
+  /** Ledger stamp: present and true only on a real borrow. */
+  const borrowLedgerFields = borrow
+    ? {
+        declaredBorrow: true,
+        borrowedProfessionKey: borrow.professionKey,
+        callingPopulation: borrow.callingPopulation,
+      }
+    : { declaredBorrow: false };
+
   let resolved: Awaited<ReturnType<typeof resolveProfileMaterialForProfession>> | undefined;
   let profile: DecisionPerspectiveProfile = MARK_DPF_PLATFORM_PROFILE;
   let professionProfileSelected = false;
@@ -176,6 +213,7 @@ export async function evaluateProfessionDecisionGate(input: {
     resolved = await resolve({
       db: input.db,
       agentIdentity: input.agentIdentity,
+      declaredProfessionKey: borrow?.professionKey ?? null,
       domainClass,
       fallbackProfileId: input.fallbackProfileId,
     });
@@ -222,6 +260,7 @@ export async function evaluateProfessionDecisionGate(input: {
         professionProfileSelected,
         professionKey,
         caller: input.caller ?? null,
+        ...borrowLedgerFields,
       },
     });
     traceWsid("wsid.ledger.written", { interactionId, outcomeType: evaluation.outcomeType });
@@ -238,6 +277,7 @@ export async function evaluateProfessionDecisionGate(input: {
   traceWsid("wsid.profession-gate.invoked", {
     interactionId,
     agentIdentity: input.agentIdentity,
+    ...borrowLedgerFields,
     profileId: profile.profileId,
     professionKey,
     professionProfileSelected,
@@ -333,6 +373,7 @@ export async function evaluateProfessionDecisionGate(input: {
       professionProfileSelected,
       professionKey,
       caller: input.caller ?? null,
+      ...borrowLedgerFields,
     },
   });
   traceWsid("wsid.ledger.written", {

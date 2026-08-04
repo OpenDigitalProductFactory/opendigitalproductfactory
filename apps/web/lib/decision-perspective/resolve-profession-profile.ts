@@ -75,6 +75,23 @@ export function findProfessionFamily(agentIdOrSlug: string): ProfessionFamily | 
   return PROFESSION_REGISTRY.families.find((f) => f.roles.includes(agentIdOrSlug)) ?? null;
 }
 
+/**
+ * Find a family by its professionKey rather than by a role binding (BI-52839DEA).
+ *
+ * The identity-driven lookups above answer "which craft does THIS coworker
+ * practise". This one answers "does this named craft exist at all", which is
+ * what a declared borrow needs: an external development surface has no agent
+ * identity to resolve from, so it names the profession it wants to consult and
+ * the registry either recognises the name or the call fails closed. Deliberately
+ * NOT a fallback for the identity path — an in-portal coworker still resolves
+ * from who it is, never from what it asks for.
+ */
+export function findProfessionFamilyByKey(professionKey: string): ProfessionFamily | null {
+  const key = professionKey.trim();
+  if (!key) return null;
+  return PROFESSION_REGISTRY.families.find((f) => f.professionKey === key) ?? null;
+}
+
 function professionIdentityCandidates(identity: ProfessionAgentIdentity): string[] {
   const seen = new Set<string>();
   const candidates: string[] = [];

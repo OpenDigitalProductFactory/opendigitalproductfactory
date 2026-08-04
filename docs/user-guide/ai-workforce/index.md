@@ -72,8 +72,19 @@ Model assignments explicitly saved by an operator remain unchanged during upgrad
 - Connect external coding surfaces such as Claude, Codex, and Grok while keeping the same MCP, evidence, documentation, and PR gates as Build Studio
 - Open **Runtime Health** to see which local services are required by enabled capabilities and which AI runtimes are managed by configured providers
 
+## Reading the Skills Catalog
+
+`/platform/ai/skills` answers one question on arrival: what your coworkers know how to do. It opens with a short summary, the count of catalog entries, and one action — **Grant a skill to a coworker**, which takes you to the directory, because skills are granted per coworker on their own record rather than from the catalog.
+
+Skills are grouped by category and collapsed. Open a category to see its skills; open a skill to read its description, version, risk band, source, tags, and how many coworkers it is assigned to. Nothing is hidden from you and nothing is truncated — the grouping means you choose what to read instead of scrolling past everything.
+
+Search and the status/source filters work across the whole catalog, and the groups open automatically when a filter is active so you see matches straight away.
+
+If any skill has drifted from the seed, a warning appears under the summary: a fresh install would not match this one. The drift detail, along with route-level skills, observability, and the curator report, sits under **Technical details** — one control at the foot of the page. Those are diagnostics for when you are investigating something specific, not part of reading the catalog.
+
 ## Related Routes
 
+- `/platform/ai/skills` — the global skills catalog and observatory
 - `/platform/ai/overview` — customer-first coworker directory
 - `/platform/ai/agent/[agentId]` — selected coworker record and work entry
 - `/platform/ai/providers/[providerId]` — provider setup and the Finance Bridge panel

@@ -405,3 +405,131 @@ describe("resolveProfileMaterialForProfession", () => {
     expect(resolved.professionProfileSelected).toBe(false);
   });
 });
+
+// BI-52839DEA — declared borrow. An external development surface holds no
+// coworker identity, so it names the craft it wants to consult. The invariants
+// that matter are: the real profile still decides, the ledger can always tell a
+// borrow from the coworker's own reasoning, an in-portal caller cannot borrow,
+// and an unknown craft fails rather than quietly becoming platform doctrine.
+describe("evaluateProfessionDecisionGate — declared borrow", () => {
+  const externalBase = {
+    // No agentId/slugId: this is what an external MCP caller actually looks like.
+    agentIdentity: {},
+    question: "Adopt a reusable page shell, or restructure this one page bespoke?",
+    options: ["Reusable shell", "Bespoke tabs"],
+    domainClass: DOMAIN,
+    riskTier: "medium" as const,
+    routeContext: "/external/claude-code",
+  };
+
+  it("resolves the named craft and stamps the borrow on the ledger", async () => {
+    const db = makeDb();
+    const resolver = fakeResolver({ professionKey: "ux-design" });
+
+    const result = await evaluateProfessionDecisionGate({
+      ...externalBase,
+      db: db as never,
+      declaredBorrow: {
+        callingPopulation: "external_coding_agent",
+        professionKey: "ux-design",
+      },
+      resolver: resolver as never,
+      evaluator: () => makeEval({ outcomeType: "recommend" }),
+    });
+
+    // The craft profile decided — not a platform fallback wearing its name.
+    expect(result.professionProfileSelected).toBe(true);
+    expect(result.professionKey).toBe("ux-design");
+
+    // The resolver was asked for the DECLARED craft, not one derived from identity.
+    expect(resolver.mock.calls[0]![0]).toMatchObject({ declaredProfessionKey: "ux-design" });
+
+    // The ledger row is distinguishable from the coworker's own reasoning.
+    // This is the calibration invariant: a judge calibrated against rows it
+    // cannot tell apart from its own output is calibrated against itself.
+    const data = db.decisionInteraction.create.mock.calls[0]![0].data as Record<string, unknown>;
+    const payload = data.outcomePayload as Record<string, unknown>;
+    expect(payload.declaredBorrow).toBe(true);
+    expect(payload.borrowedProfessionKey).toBe("ux-design");
+    expect(payload.callingPopulation).toBe("external_coding_agent");
+    expect(data.gateKey).toBe("profession");
+  });
+
+  it("marks declaredBorrow=false for an ordinary in-portal consult", async () => {
+    const db = makeDb();
+    await evaluateProfessionDecisionGate({
+      ...base,
+      db: db as never,
+      resolver: fakeResolver() as never,
+      evaluator: () => makeEval({ outcomeType: "recommend" }),
+    });
+
+    const data = db.decisionInteraction.create.mock.calls[0]![0].data as Record<string, unknown>;
+    const payload = data.outcomePayload as Record<string, unknown>;
+    expect(payload.declaredBorrow).toBe(false);
+    expect(payload.borrowedProfessionKey).toBeUndefined();
+  });
+
+  it("refuses a borrow from a caller that already has an agent identity", async () => {
+    const db = makeDb();
+    const resolver = fakeResolver();
+
+    const result = await evaluateProfessionDecisionGate({
+      ...base, // carries agentId AGT-DATA-ARCH
+      db: db as never,
+      declaredBorrow: {
+        callingPopulation: "external_coding_agent",
+        professionKey: "ux-design",
+      },
+      resolver: resolver as never,
+      evaluator: () => makeEval({ outcomeType: "recommend" }),
+    });
+
+    // A coworker reasons from the craft it practises, never from one it names.
+    // Founder decision on BI-52839DEA was declared borrow, NOT impersonation —
+    // and impersonation in this direction is what would break it.
+    expect(resolver.mock.calls[0]![0]).toMatchObject({ declaredProfessionKey: null });
+    expect(result.professionKey).toBe("data-architect");
+
+    const data = db.decisionInteraction.create.mock.calls[0]![0].data as Record<string, unknown>;
+    expect((data.outcomePayload as Record<string, unknown>).declaredBorrow).toBe(false);
+  });
+
+  it("fails closed when the borrowed craft is not a registered profession", async () => {
+    const db = {
+      decisionPerspectiveProfile: { findUnique: vi.fn().mockResolvedValue(null) },
+      perspectiveMaterial: { findMany: vi.fn().mockResolvedValue([]) },
+    };
+
+    await expect(
+      resolveProfileMaterialForProfession({
+        db: db as never,
+        agentIdentity: {},
+        declaredProfessionKey: "not-a-real-craft",
+        domainClass: DOMAIN,
+      }),
+    ).rejects.toThrow(/Unknown professionKey/);
+  });
+
+  it("resolves a real registered craft by key without any agent identity", async () => {
+    const db = {
+      decisionPerspectiveProfile: {
+        findUnique: vi.fn().mockResolvedValue(null),
+      },
+      perspectiveMaterial: { findMany: vi.fn().mockResolvedValue([]) },
+    };
+
+    const resolved = await resolveProfileMaterialForProfession({
+      db: db as never,
+      agentIdentity: {},
+      declaredProfessionKey: "ux-design",
+      domainClass: DOMAIN,
+    });
+
+    // The key resolved through the registry to the wsid-* profile convention.
+    expect(resolved.professionKey).toBe("ux-design");
+    expect(db.decisionPerspectiveProfile.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { profileId: "wsid-ux-design" } }),
+    );
+  });
+});

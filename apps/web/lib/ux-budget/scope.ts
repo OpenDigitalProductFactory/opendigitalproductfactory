@@ -233,7 +233,44 @@ export function isDisclosureRegion(tag: TagToken): boolean {
  */
 export function defaultVisibleHtml(html: string): string {
   const rendered = removeSubtrees(html, (tag) => NON_RENDERED.has(tag.name));
-  return removeSubtrees(rendered, isStructurallyHidden);
+  return removeSubtrees(promoteClosedSummaries(rendered), isStructurallyHidden);
+}
+
+/**
+ * A closed `<details>` still SHOWS its `<summary>` — that label is the row the
+ * reader scans. Excising the whole subtree therefore under-counts every
+ * disclosure-based list, and rewards the wrong thing: a page could hide 92 rows
+ * behind 92 collapsed summaries and measure as if the screen were empty.
+ *
+ * Found while migrating `/platform/ai/skills` (BI-36CE8BAB): the redesigned
+ * catalog measured 10 default-visible words, when a reader actually meets 92 row
+ * labels. Lifting the summaries out before the disclosure pass keeps the
+ * deferred BODY excised — which is the behaviour progressive disclosure should
+ * earn — while still counting what is on screen.
+ */
+function promoteClosedSummaries(html: string): string {
+  // Depth-aware, not a regex: these nest. A collapsed category containing
+  // collapsed rows is the exact shape a grouped catalog produces, and a lazy
+  // regex matches the first `</details>` it sees — which belongs to the INNER
+  // element — mangling the parse and inventing a word count.
+  //
+  // extractSubtrees captures outermost-first and skips nested matches, which is
+  // precisely right here: rows inside a COLLAPSED group are not on screen, so
+  // they disappear with the group. If the group is open the predicate misses it,
+  // the scan descends, and each row is then judged on its own.
+  const closedDetails = extractSubtrees(
+    html,
+    (tag) => tag.name === "details" && !("open" in tag.attrs),
+  );
+
+  let out = html;
+  for (const block of closedDetails) {
+    const summary = extractSubtrees(block, (tag) => tag.name === "summary")[0];
+    // A <details> with no <summary> shows a UA-default label; nothing of the
+    // author's to count, so let the normal excision handle it.
+    out = out.replace(block, summary ? `<div data-dpf-was-summary="">${summary}</div>` : "");
+  }
+  return out;
 }
 
 /** The lead band(s) — concatenated, already scoped to what is visible. */

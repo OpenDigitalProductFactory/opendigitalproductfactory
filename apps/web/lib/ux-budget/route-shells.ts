@@ -47,16 +47,21 @@ export function shellForRoute(c: ShellClassifiable): UxShell {
 /**
  * Routes that have actually adopted their L1 page shell.
  *
- * INTENTIONALLY EMPTY. The shells themselves are BI-36CE8BAB (Phase 2) — nothing has
- * migrated yet, and saying so in code is the point: spec §7.1 requires pre-migration
- * debt to be RECORDED, not hidden behind a check that quietly passes. Until a route
- * appears here it is exempt from the shell-structure expectations below, and the
- * regression ratchet is what actually holds it.
+ * Until a route appears here it is exempt from the shell-structure expectations
+ * below, and the regression ratchet is what actually holds it. Spec §7.1 requires
+ * pre-migration debt to be RECORDED, not hidden behind a check that quietly passes.
  *
  * Each migration PR (spec §7.2) adds its route here in the same change that adopts
  * the shell, so the exemption list shrinks visibly as the redesign lands.
+ *
+ * Cohort 0 — the worst-measured surface first, which is the ordering the league
+ * table exists to give. `/platform/ai/skills` measured 5,349 default-visible
+ * words against a 450-word budget with zero lead band; it is the proof that the
+ * shells actually move the number, not just the markup.
  */
-export const MIGRATED_ROUTES: ReadonlySet<string> = new Set<string>([]);
+export const MIGRATED_ROUTES: ReadonlySet<string> = new Set<string>([
+  "/platform/ai/skills",
+]);
 
 /** Checks a pre-migration route is not yet expected to satisfy. */
 export const PRE_MIGRATION_EXEMPT_CHECKS = ["next-action-marker", "lead-band"] as const;

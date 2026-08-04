@@ -94,6 +94,37 @@ export const MEASURED_AXES = [
   "axeViolations",
 ];
 
+/**
+ * Per-axis polarity. Mirrors RATCHET_AXIS_POLARITY in lib/ux-budget/ratchet.ts —
+ * and it has to, because this gate compares the SAME numbers against the SAME
+ * frozen baseline. It previously mirrored only the axis LIST and applied
+ * `now > was` to all of them, so the leadBandWords fix (BI-E7F6C76E) landed in
+ * the ratchet and left this second consumer still failing the change it exists
+ * to encourage: a migrated route adding its first lead band (0 -> 31) was
+ * reported as a regression here even after the ratchet stopped doing so.
+ *
+ * "max"      — more is worse; an increase beyond the baseline is a regression.
+ * "presence" — the budget wants this axis to EXIST. Going up is the fix, so only
+ *              losing it (dropping to 0 when the baseline had one) regresses.
+ */
+export const MEASURED_AXIS_POLARITY = {
+  defaultVisibleWords: "max",
+  leadBandWords: "presence",
+  primaryActions: "max",
+  visibleFields: "max",
+  maxChoicesPerControl: "max",
+  subLegibleControls: "max",
+  buriedPrimaryAction: "max",
+  axeViolations: "max",
+};
+
+/** True when `now` is worse than the frozen `was` for this axis's polarity. */
+export function axisRegressed(axis, was, now) {
+  return MEASURED_AXIS_POLARITY[axis] === "presence"
+    ? was > 0 && now === 0
+    : now > was;
+}
+
 /** Evidence kinds that represent a real measurement or a real recorded choice. */
 export const QUALIFYING_EVIDENCE_KINDS = ["sweep-measurement", "propose-n-pick"];
 /**
@@ -250,7 +281,7 @@ export function checkMeasurementAgainstBaseline(manifest, baseline) {
       const now = metrics?.[axis];
       const was = frozen[axis];
       if (!isFiniteNumber(now) || !isFiniteNumber(was)) continue;
-      if (now > was) {
+      if (axisRegressed(axis, was, now)) {
         errors.push(
           `"${route}" regresses ${axis}: ${was} -> ${now}. The UX budget ratchet only allows ` +
             `a changed route to hold or improve its own frozen baseline.`,

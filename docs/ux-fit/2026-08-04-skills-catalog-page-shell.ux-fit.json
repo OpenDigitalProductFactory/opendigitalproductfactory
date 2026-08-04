@@ -1,0 +1,26 @@
+{
+  "version": "1",
+  "decidedOption": "group-and-defer-behind-a-page-shell",
+  "scope": {
+    "files": [
+      "apps/web/components/admin/SkillsCatalogView.tsx",
+      "apps/web/components/page-shells/PageShell.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "sweep-measurement",
+    "baselineComparison": "improved",
+    "measured": {
+      "/platform/ai/skills": {
+        "defaultVisibleWords": 205,
+        "leadBandWords": 31,
+        "primaryActions": 1,
+        "visibleFields": 3,
+        "maxChoicesPerControl": 3,
+        "subLegibleControls": 0,
+        "buriedPrimaryAction": 0,
+        "axeViolations": 3
+      }
+    }
+  }
+}

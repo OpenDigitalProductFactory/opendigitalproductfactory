@@ -7,6 +7,16 @@
 // craft profile, with platform doctrine as advisory fallback only), and
 // records it to the DecisionInteraction ledger. Advisory: it returns a
 // recommendation; consequential actions still pass their own authority gates.
+//
+// BI-52839DEA — declared borrow. WSID used to be reachable ONLY from an
+// in-portal coworker session, while its WWMD sibling `principle_decide` had
+// accepted an explicit `callingPopulation` from external development surfaces
+// all along. That asymmetry meant a coworker's craft judgment could not
+// participate in the Claude Code / Codex / Grok review process at all. An
+// external caller now declares its population and NAMES the craft it wants to
+// consult; the gate serves the real profile and corpus and stamps the ledger
+// with `declaredBorrow`. What crosses the boundary is a consult, never a copy —
+// the coworker definition stays single-homed in the platform.
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack } from "../tool-pack";
@@ -45,6 +55,17 @@ const definitions: ToolDefinition[] = [
           enum: ["low", "medium", "high", "critical"],
           description:
             "How consequential the decision is; higher tiers require more confidence before a recommendation.",
+        },
+        callingPopulation: {
+          type: "string",
+          enum: ["in_platform_coworker", "external_coding_agent", "human"],
+          description:
+            "Who is calling. In-platform coworkers may omit this — the profession is derived from their own identity. An EXTERNAL development surface (Claude Code / Codex / Grok) has no coworker identity, so it declares its population here and names `professionKey` to borrow that craft's judgment. The borrow is stamped on the decision ledger; it is never recorded as the coworker's own reasoning.",
+        },
+        professionKey: {
+          type: "string",
+          description:
+            "Required for a declared borrow (external population, no coworker identity): the professionKey to consult, e.g. 'ux-design'. Must be a family registered in docs/professions/registry.json — an unknown key fails rather than degrading to platform defaults. Ignored for in-platform callers, who always reason from the craft they practise.",
         },
       },
       required: ["question", "options", "domainClass", "riskTier"],
@@ -100,27 +121,57 @@ async function evaluateProfessionDecision(
     return { success: false, error: "invalid_params", message: parsedFeatures.message };
   }
 
-  if (!context?.agentId) {
+  // Declared borrow (BI-52839DEA). An external development surface holds no
+  // coworker identity, so it names the population it belongs to and the craft it
+  // wants to consult. `principle_decide` already externalizes WWMD this way;
+  // this closes the same door on WSID.
+  const declaredPopulation = String(params["callingPopulation"] ?? "").trim();
+  const declaredProfessionKey = String(params["professionKey"] ?? "").trim();
+  const isExternalPopulation =
+    declaredPopulation === "external_coding_agent" || declaredPopulation === "human";
+
+  if (!context?.agentId && !isExternalPopulation) {
     return {
       success: false,
       error: "no_agent_identity",
       message:
-        "A profession decision is scoped to the calling coworker, but no agent identity reached the tool. Route the call through a coworker session.",
+        "A profession decision is scoped to the calling coworker, but no agent identity reached the tool. " +
+        "Route the call through a coworker session, or — from an external development surface — declare " +
+        "callingPopulation ('external_coding_agent' or 'human') together with the professionKey to consult.",
     };
   }
 
-  const agent = await prisma.agent.findFirst({
-    where: { OR: [{ agentId: context.agentId }, { slugId: context.agentId }] },
-    select: { agentId: true, name: true, slugId: true },
-  });
+  if (!context?.agentId && isExternalPopulation && !declaredProfessionKey) {
+    return {
+      success: false,
+      error: "no_profession_declared",
+      message:
+        "A declared borrow must name the craft it is consulting. Pass professionKey (e.g. 'ux-design'); " +
+        "there is no default profession, because borrowing an unnamed craft would return platform doctrine " +
+        "wearing a profession's name.",
+    };
+  }
+
+  const agent = context?.agentId
+    ? await prisma.agent.findFirst({
+        where: { OR: [{ agentId: context.agentId }, { slugId: context.agentId }] },
+        select: { agentId: true, name: true, slugId: true },
+      })
+    : null;
 
   const decision = await evaluateProfessionDecisionGate({
     db: prisma,
     agentIdentity: {
-      agentId: agent?.agentId ?? context.agentId,
+      agentId: agent?.agentId ?? context?.agentId ?? null,
       agentName: agent?.name ?? null,
-      slugId: agent?.slugId ?? context.agentId,
+      slugId: agent?.slugId ?? context?.agentId ?? null,
     },
+    // The gate itself refuses a borrow from a caller that already carries an
+    // agent identity, so an in-portal coworker cannot name its way into another
+    // craft even if it passes these fields.
+    declaredBorrow: isExternalPopulation
+      ? { callingPopulation: declaredPopulation, professionKey: declaredProfessionKey }
+      : null,
     question,
     options,
     scoredOptions: parsedFeatures.scoredOptions,
@@ -149,6 +200,9 @@ async function evaluateProfessionDecision(
       confidenceScore: decision.evaluation.confidenceScore,
       professionKey: decision.professionKey,
       professionProfileSelected: decision.professionProfileSelected,
+      // Echoed so an external caller can see, without reading the ledger, that
+      // it consulted a real craft profile rather than platform doctrine.
+      declaredBorrow: !context?.agentId && isExternalPopulation,
       recommendedOptionId: decision.evaluation.recommendedOptionId ?? null,
       rationale: rationale.length > 500 ? `${rationale.slice(0, 500)}...` : rationale,
     },

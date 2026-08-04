@@ -1418,7 +1418,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 89
+    "textMass": 69
   },
   "apps/web/app/(shell)/platform/audit/authority/page.tsx": {
     "vocabulary": 0,
@@ -3357,7 +3357,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 11
+    "textMass": 48
   },
   "apps/web/components/admin/SocialAuthPanel.tsx": {
     "vocabulary": 1,
@@ -5969,6 +5969,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 0
+  },
+  "apps/web/components/page-shells/PageShell.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 19
   },
   "apps/web/components/platform/ActivityRoutingPresentation.tsx": {
     "vocabulary": 0,

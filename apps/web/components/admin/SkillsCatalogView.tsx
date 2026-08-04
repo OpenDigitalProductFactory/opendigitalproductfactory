@@ -2,8 +2,6 @@
 
 import { useState, useMemo } from "react";
 
-const INITIAL_SKILL_COUNT = 12;
-
 // ---------------------------------------------------------------------------
 // Types matching the server query shape
 // ---------------------------------------------------------------------------
@@ -70,7 +68,6 @@ export function SkillsCatalogView({
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
-  const [visibleCount, setVisibleCount] = useState(INITIAL_SKILL_COUNT);
 
   // Derive unique values for filter dropdowns
   const statuses = useMemo(
@@ -99,8 +96,30 @@ export function SkillsCatalogView({
     }
     return list;
   }, [skills, search, statusFilter, sourceFilter]);
-  const visible = filtered.slice(0, visibleCount);
-  const remaining = filtered.length - visible.length;
+
+  // When any filter is active the reader has already narrowed the set, so the
+  // groups open — collapsing a 3-result search behind category headers would be
+  // disclosure working against the reader instead of for them.
+  const isFiltering = Boolean(search || statusFilter || sourceFilter);
+
+  /**
+   * Grouped by category, because 92 flat rows is still a wall.
+   *
+   * Measured: the flat list rendered 562 default-visible words against this
+   * shell's 450-word budget — better than the 5,349 it replaced, but still over.
+   * Grouping defers the rows behind ~8 category headers, so arrival costs a few
+   * dozen words and every skill is two clicks away at worst. Nothing is dropped;
+   * a capped or paged list would trade this defect for a worse one (BI-836923AD).
+   */
+  const grouped = useMemo(() => {
+    const byCategory = new Map<string, SkillRow[]>();
+    for (const skill of filtered) {
+      const bucket = byCategory.get(skill.category);
+      if (bucket) bucket.push(skill);
+      else byCategory.set(skill.category, [skill]);
+    }
+    return [...byCategory.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [filtered]);
 
   return (
     <div>
@@ -126,18 +145,12 @@ export function SkillsCatalogView({
           type="text"
           placeholder="Search skills..."
           value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setVisibleCount(INITIAL_SKILL_COUNT);
-          }}
+          onChange={(e) => setSearch(e.target.value)}
           className="px-3 py-1.5 rounded-md text-xs bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] border border-[var(--dpf-border)] focus:outline-none focus:ring-1 focus:ring-[var(--dpf-accent)] w-56"
         />
         <select
           value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value);
-            setVisibleCount(INITIAL_SKILL_COUNT);
-          }}
+          onChange={(e) => setStatusFilter(e.target.value)}
           className="px-3 py-1.5 rounded-md text-xs bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] border border-[var(--dpf-border)]"
         >
           <option value="">All statuses</option>
@@ -149,10 +162,7 @@ export function SkillsCatalogView({
         </select>
         <select
           value={sourceFilter}
-          onChange={(e) => {
-            setSourceFilter(e.target.value);
-            setVisibleCount(INITIAL_SKILL_COUNT);
-          }}
+          onChange={(e) => setSourceFilter(e.target.value)}
           className="px-3 py-1.5 rounded-md text-xs bg-[var(--dpf-surface-1)] text-[var(--dpf-text)] border border-[var(--dpf-border)]"
         >
           <option value="">All sources</option>
@@ -175,110 +185,108 @@ export function SkillsCatalogView({
             : "No skills match the current filters."}
         </p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {visible.map((skill) => (
-            <div
-              key={skill.id}
-              className="p-4 rounded-lg bg-[var(--dpf-surface-1)] border-l-4"
-              style={{
-                borderLeftColor: STATUS_COLOURS[skill.status] ?? "var(--dpf-muted)",
-              }}
+        // One row per skill, detail deferred (BI-36CE8BAB).
+        //
+        // This used to be a 3-column card grid rendering every skill's FULL
+        // description. `line-clamp-2` hid the overflow visually but left every
+        // word in the DOM, which is how one catalog of 92 skills put 5,349
+        // words on arrival — 12x this route's budget and the 2nd-worst surface
+        // in the portal. Clamping is a paint-time trick; it is not disclosure.
+        //
+        // Each row is now a closed <details>: the summary carries what you scan
+        // by (name, status, category), and description, provenance and tags
+        // live one click away. The sweep excises closed disclosures, so the
+        // route is measured on what a reader actually meets.
+        <div className="space-y-2">
+          {grouped.map(([category, rows]) => (
+            <details
+              key={category}
+              open={isFiltering}
+              className="group/cat rounded border border-[var(--dpf-border)]"
             >
-              {/* Header */}
-              <div className="flex items-start justify-between gap-2 mb-1.5">
-                <p className="text-sm font-semibold text-[var(--dpf-text)] leading-tight truncate">
-                  {skill.name}
-                </p>
+              <summary className="dpf-tap-target flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-sm font-medium text-[var(--dpf-text)] marker:hidden hover:bg-[var(--dpf-surface-2)] [&::-webkit-details-marker]:hidden">
                 <span
-                  className="text-[9px] px-1.5 py-0.5 rounded-full shrink-0"
-                  style={{
-                    background: `color-mix(in srgb, ${STATUS_COLOURS[skill.status] ?? "var(--dpf-muted)"} 13%, transparent)`,
-                    color: STATUS_COLOURS[skill.status] ?? "var(--dpf-muted)",
-                  }}
+                  aria-hidden
+                  className="text-[var(--dpf-muted)] transition-transform group-open/cat:rotate-90"
                 >
-                  {skill.status}
+                  ▸
                 </span>
-              </div>
+                <span className="flex-1">{category}</span>
+                <span className="text-xs text-[var(--dpf-muted)]">{rows.length}</span>
+              </summary>
 
-              {/* Description */}
-              <p className="text-[11px] text-[var(--dpf-muted)] line-clamp-2 mb-2">
-                {skill.description}
-              </p>
-
-              {/* Meta row */}
-              <div className="flex flex-wrap items-center gap-1.5 text-[9px]">
-                <span className="font-mono text-[var(--dpf-muted)]">
-                  v{skill.version}
-                </span>
-                <span
-                  className="px-1 py-0.5 rounded"
-                  style={{
-                    background: `color-mix(in srgb, ${RISK_COLOURS[skill.riskBand] ?? "var(--dpf-muted)"} 10%, transparent)`,
-                    color: RISK_COLOURS[skill.riskBand] ?? "var(--dpf-muted)",
-                  }}
+              <ul className="divide-y divide-[var(--dpf-border)] border-t border-[var(--dpf-border)]">
+                {rows.map((skill) => (
+            <li key={skill.id}>
+              <details className="group">
+                <summary
+                  className="dpf-tap-target flex cursor-pointer list-none items-center gap-3 px-3 py-2 marker:hidden hover:bg-[var(--dpf-surface-2)] [&::-webkit-details-marker]:hidden"
+                  style={{ borderLeft: `3px solid ${STATUS_COLOURS[skill.status] ?? "var(--dpf-muted)"}` }}
                 >
-                  {skill.riskBand} risk
-                </span>
-                <span className="text-[var(--dpf-muted)]">
-                  {skill.sourceType}
-                  {skill.sourceRegistry ? ` / ${skill.sourceRegistry}` : ""}
-                </span>
-                <span className="text-[var(--dpf-muted)]">
-                  {skill.category}
-                </span>
-              </div>
+                  <span
+                    aria-hidden
+                    className="text-[var(--dpf-muted)] transition-transform group-open:rotate-90"
+                  >
+                    ▸
+                  </span>
+                  <span className="flex-1 truncate text-sm text-[var(--dpf-text)]">{skill.name}</span>
+                  <span
+                    className="shrink-0 rounded-full px-1.5 py-0.5 text-[10px]"
+                    style={{
+                      background: `color-mix(in srgb, ${STATUS_COLOURS[skill.status] ?? "var(--dpf-muted)"} 13%, transparent)`,
+                      color: STATUS_COLOURS[skill.status] ?? "var(--dpf-muted)",
+                    }}
+                  >
+                    {skill.status}
+                  </span>
+                </summary>
 
-              {/* Tags */}
-              {skill.tags.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {skill.tags.slice(0, 5).map((tag) => (
+                <div className="border-t border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-3">
+                  <p className="mb-2 text-xs text-[var(--dpf-muted)]">{skill.description}</p>
+
+                  <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                    <span className="font-mono text-[var(--dpf-muted)]">v{skill.version}</span>
                     <span
-                      key={tag}
-                      className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--dpf-surface-2)] text-[var(--dpf-muted)]"
+                      className="rounded px-1 py-0.5"
+                      style={{
+                        background: `color-mix(in srgb, ${RISK_COLOURS[skill.riskBand] ?? "var(--dpf-muted)"} 10%, transparent)`,
+                        color: RISK_COLOURS[skill.riskBand] ?? "var(--dpf-muted)",
+                      }}
                     >
-                      {tag}
+                      {skill.riskBand} risk
                     </span>
-                  ))}
-                  {skill.tags.length > 5 && (
-                    <span className="text-[9px] text-[var(--dpf-muted)]">
-                      +{skill.tags.length - 5}
+                    <span className="text-[var(--dpf-muted)]">
+                      {skill.sourceType}
+                      {skill.sourceRegistry ? ` / ${skill.sourceRegistry}` : ""}
                     </span>
+                    <span className="text-[var(--dpf-muted)]">
+                      {skill._count.assignments} agent{skill._count.assignments !== 1 ? "s" : ""} assigned
+                    </span>
+                    {skill.author ? (
+                      <span className="text-[var(--dpf-muted)]">by {skill.author}</span>
+                    ) : null}
+                  </div>
+
+                  {skill.tags.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {skill.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="rounded bg-[var(--dpf-surface-2)] px-1.5 py-0.5 text-[10px] text-[var(--dpf-muted)]"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
                   )}
                 </div>
-              )}
-
-              {/* Skill quality indicators */}
-              <div className="flex flex-wrap gap-1 mt-2">
-                {skill.description.length > 50 && (
-                  <span className="text-[8px] px-1 py-0.5 rounded bg-[color-mix(in_srgb,var(--dpf-success)_10%,transparent)] text-[var(--dpf-success)]">
-                    rich description
-                  </span>
-                )}
-              </div>
-
-              {/* Footer */}
-              <div className="flex items-center justify-between mt-3 pt-2 border-t border-[var(--dpf-border)]">
-                <span className="text-[9px] text-[var(--dpf-muted)]">
-                  {skill._count.assignments} agent{skill._count.assignments !== 1 ? "s" : ""} assigned
-                </span>
-                {skill.author && (
-                  <span className="text-[9px] text-[var(--dpf-muted)] truncate max-w-[120px]">
-                    by {skill.author}
-                  </span>
-                )}
-              </div>
-            </div>
+              </details>
+            </li>
+                ))}
+              </ul>
+            </details>
           ))}
         </div>
-      )}
-      {remaining > 0 && (
-        <button
-          type="button"
-          onClick={() => setVisibleCount((count) => count + INITIAL_SKILL_COUNT)}
-          className="mt-4 rounded border border-[var(--dpf-border)] px-3 py-1.5 text-xs text-[var(--dpf-text)] hover:bg-[var(--dpf-surface-2)]"
-        >
-          Show {remaining} more
-        </button>
       )}
     </div>
   );

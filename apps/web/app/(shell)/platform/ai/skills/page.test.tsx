@@ -59,28 +59,73 @@ vi.mock("@/components/platform/SkillLifecycleControls", () => ({
   SkillLifecycleControls: () => <div>skills-lifecycle-controls</div>,
 }));
 
+// Forward every prop, not just href: the shell stamps structural markers
+// (data-owner-first-next-action, data-dpf-primary-action) onto links, and a mock
+// that swallows them makes the page measure as if it had no next action. The
+// fixture must not be the thing that fails the check.
 vi.mock("next/link", () => ({
-  default: ({ href, children }: { href: string; children: React.ReactNode }) => (
-    <a href={href}>{children}</a>
+  default: ({
+    href,
+    children,
+    ...rest
+  }: { href: string; children: React.ReactNode } & Record<string, unknown>) => (
+    <a href={href} {...rest}>
+      {children}
+    </a>
   ),
 }));
 
 import { getSkillReviewDetail } from "@/lib/actions/skills-observatory";
 
 describe("PlatformAiSkillsPage", () => {
-  it("renders catalog, observability, and curator under AI Operations", async () => {
+  // BI-36CE8BAB: the page now declares a shell. The contract under test is the
+  // READING ORDER — the catalog is what the reader came for and stays on
+  // arrival; observability and the curator report are diagnostics and are
+  // deferred. Everything still renders; nothing was removed.
+  it("leads with the catalog and defers the diagnostics", async () => {
     const { default: PlatformAiSkillsPage } = await import("./page");
     const html = renderToStaticMarkup(await PlatformAiSkillsPage({}));
 
-    expect(html).toContain("AI Operations");
-    expect(html).toContain("Catalog");
-    expect(html).toContain("Route Skills");
-    expect(html).toContain("Observability");
-    expect(html).toContain('href="/platform/ai/prompts"');
+    // Adopts the L1 shell, with a measurable lead band and one h1.
+    expect(html).toContain('data-dpf-shell="list"');
+    expect(html).toContain("data-dpf-lead");
+    expect(html.split("<h1").length - 1).toBe(1);
+    expect(html).toContain(">Skills</h1>");
+
+    // The catalog is default-visible.
     expect(html).toContain("skills-catalog-view");
-    expect(html).toContain("skills-observatory-panel");
-    expect(html).toContain("Curator");
-    expect(html).toContain("skills-curator-report-panel");
+
+    // The diagnostics still render — inside the closed technical disclosure.
+    const disclosure = html.slice(html.indexOf("data-dpf-disclosure"));
+    expect(disclosure).toContain("Route skills");
+    expect(disclosure).toContain("Observability");
+    expect(disclosure).toContain("skills-observatory-panel");
+    expect(disclosure).toContain("Curator");
+    expect(disclosure).toContain("skills-curator-report-panel");
+
+    // Closed by default, or it defers nothing.
+    expect(html).not.toMatch(/<details[^>]*\sopen/);
+
+    expect(html).toContain('href="/platform/ai/prompts"');
+  });
+
+  // The route is in MIGRATED_ROUTES, which strips its pre-migration exemptions —
+  // so it is now held to the FULL shell contract. This asserts that with the
+  // sweep's own evaluator, so the claim cannot rot into a comment.
+  it("passes every budget check for the shell it resolves to", async () => {
+    const { auditUxBudget } = await import("@/lib/ux-budget");
+    const { default: PlatformAiSkillsPage } = await import("./page");
+    const html = renderToStaticMarkup(await PlatformAiSkillsPage({}));
+
+    // `detail` is what shellForRoute derives for this route (admin +
+    // advanced-diagnostic) and it is the stricter budget.
+    const report = auditUxBudget(html, "detail", {
+      exemptChecks: [],
+      routeStatus: "pre-existing",
+    });
+
+    const failing = report.findings.filter((f) => !f.ok);
+    expect(failing.map((f) => `${f.check}: ${f.detail}`)).toEqual([]);
   });
 
   it("renders scoped evidence for a focused skill detail", async () => {
