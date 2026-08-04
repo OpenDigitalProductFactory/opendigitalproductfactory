@@ -9,6 +9,7 @@ import {
   type CallEfficiencyReport,
   type EfficiencyFinding,
 } from "./analysis";
+import type { AiOpsHandoffResult } from "./aiops-handoff";
 
 export type LoadCallEfficiencyOptions = AnalyzeCallEfficiencyOptions & {
   /** Lookback hours (default 24, max 168). */
@@ -17,11 +18,20 @@ export type LoadCallEfficiencyOptions = AnalyzeCallEfficiencyOptions & {
   limit?: number;
   /** When true, create PlatformNotification for warning+ findings. */
   notify?: boolean;
+  /**
+   * When true, run the AI Ops closed loop: ImprovementSignals, critical BIs,
+   * TaskRun report artifact, and one-shot platform-engineer review task.
+   * Requires `ownerUserId` (scheduled owner). Cron enables this daily.
+   */
+  dispatchAiOps?: boolean;
+  /** Real User.id owning proactive TaskRun / ScheduledAgentTask. */
+  ownerUserId?: string;
 };
 
 export type CallEfficiencyRunResult = {
   report: CallEfficiencyReport;
   notified: number;
+  aiOps: AiOpsHandoffResult | null;
 };
 
 function clampWindowHours(raw: unknown): number {
@@ -112,7 +122,7 @@ async function notifyFindings(findings: EfficiencyFinding[]): Promise<number> {
 }
 
 /**
- * Full report load + optional platform notifications for AI Ops follow-up.
+ * Full report load + optional platform notifications + AI Ops handoff.
  */
 export async function runCallEfficiencyReport(
   opts: LoadCallEfficiencyOptions = {},
@@ -128,5 +138,25 @@ export async function runCallEfficiencyReport(
       console.warn("[mcp-call-efficiency] notify failed:", err);
     }
   }
-  return { report, notified };
+
+  let aiOps: AiOpsHandoffResult | null = null;
+  if (opts.dispatchAiOps) {
+    if (!opts.ownerUserId) {
+      console.warn(
+        "[mcp-call-efficiency] dispatchAiOps requested without ownerUserId; skipping handoff",
+      );
+    } else {
+      try {
+        const { dispatchMcpEfficiencyAiOps } = await import("./aiops-handoff");
+        aiOps = await dispatchMcpEfficiencyAiOps({
+          report,
+          ownerUserId: opts.ownerUserId,
+        });
+      } catch (err) {
+        console.warn("[mcp-call-efficiency] AI Ops handoff failed:", err);
+      }
+    }
+  }
+
+  return { report, notified, aiOps };
 }
