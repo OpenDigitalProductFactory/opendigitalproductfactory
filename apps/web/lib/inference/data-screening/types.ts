@@ -87,6 +87,27 @@ export type InferenceDataScreenReceipt = {
    * value itself is exactly what must not be persisted.
    */
   matchProvenance?: InferenceMatchProvenance[];
+  /**
+   * What the PAYLOAD measured, before the route's declared label was applied as
+   * a floor. Absent on pre-drift v1 receipts.
+   */
+  measuredSensitivity?: InferencePayloadSensitivity;
+  /**
+   * What the ROUTE declared, independent of the payload — the static
+   * `sensitivity` on its route-context entry. Absent when the caller supplied
+   * no route context.
+   */
+  declaredSensitivity?: InferencePayloadSensitivity;
+  /**
+   * True when the declaration RAISED this turn above what the payload measured,
+   * i.e. the routing sensitivity came from the label rather than from the data.
+   *
+   * Without this the two are indistinguishable in the record, and an over-broad
+   * route label reads exactly like a genuine payload finding — while silently
+   * collapsing that route's endpoint pool and surfacing to the user as a
+   * provider outage.
+   */
+  sensitivityFloorApplied?: boolean;
   rawPayloadStored: false;
 };
 
