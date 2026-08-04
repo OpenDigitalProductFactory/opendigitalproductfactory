@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -51,11 +51,28 @@ export function loadPinnedGuardTypeScript(options = {}) {
       `Pinned repo guard TypeScript ${pin} is missing; run ${INSTALL_COMMAND}.`,
     );
   }
-  const normalizedResolved = normalize(resolve(resolvedPackagePath));
-  const normalizedRoot = normalize(repoRoot);
-  const localPath = `${normalizedRoot}/packages/repo-guard-runtime/node_modules/typescript/package.json`;
-  const hoistedPath = `${normalizedRoot}/node_modules/typescript/package.json`;
-  const pnpmPath = new RegExp(`^${escapeRegex(normalizedRoot)}/node_modules/\\.pnpm/typescript@${exactPin}(?:_[^/]+)?/node_modules/typescript/package\\.json$`);
+  // Resolve the CANDIDATES through the filesystem, not just the repo root.
+  // A git worktree's `node_modules` is a junction/symlink to the shared root
+  // clone, and node resolves through it — so the resolved path lands under the
+  // ROOT while `repoRoot` is the WORKTREE. Realpathing `repoRoot` alone does
+  // not help, because the link is at `<root>/node_modules`, not at the root
+  // itself. Realpathing each candidate makes the worktree and the root clone
+  // compare equal while still rejecting a TypeScript genuinely outside the
+  // pinned graph (BI-A76F0481).
+  const real = (value) => {
+    try { return normalize(realpathSync(value)); }
+    catch { return normalize(resolve(value)); }
+  };
+  const normalizedResolved = real(resolvedPackagePath);
+  const normalizedRoot = normalize(resolve(repoRoot));
+  const realNodeModules = real(resolve(normalizedRoot, "node_modules"));
+  const localPath = real(
+    resolve(normalizedRoot, "packages/repo-guard-runtime/node_modules/typescript/package.json"),
+  );
+  const hoistedPath = normalize(`${realNodeModules}/typescript/package.json`);
+  // Double-escaped on purpose: inside a template literal `\.` collapses to `.`
+  // and would make the dots wildcards in the compiled regex.
+  const pnpmPath = new RegExp(`^${escapeRegex(realNodeModules)}/\\.pnpm/typescript@${exactPin}(?:_[^/]+)?/node_modules/typescript/package\\.json$`);
   if (normalizedResolved !== localPath && normalizedResolved !== hoistedPath && !pnpmPath.test(normalizedResolved)) {
     throw new GuardRuntimeEnvironmentError(
       `Repo guard TypeScript resolved outside its isolated pnpm graph: ${resolvedPackagePath}; run ${INSTALL_COMMAND}.`,
