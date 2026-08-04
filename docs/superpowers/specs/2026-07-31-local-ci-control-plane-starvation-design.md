@@ -106,6 +106,33 @@ Exit code 5 maps to `blocked_control_plane_starvation`. It is:
 Normal Docker build errors remain `failed`. Dependency drift remains
 `blocked_sandbox_drift`. The statuses are intentionally disjoint.
 
+## Queue observer records must be self-healing (BI-2C7F51BA)
+
+The admission queue is shared by every concurrent session on the host, so a leaked
+liveness record throttles the whole fleet, not just the session that leaked it.
+`.git/dpf-local-ci-queue-observers` was observed holding 192 records, 185 with dead
+pids and the oldest six days old; a pregate sat at "queued at position 3" for ~30
+minutes and reported position 1 the moment they were swept by hand.
+
+Three properties are binding:
+
+1. **Sweep on every gate startup.** The reaper was previously wired only into
+   pregate's interrupted/revival recovery paths, which are themselves skipped when
+   the worktree path cannot be resolved — i.e. on exactly the failure the cleanup
+   exists for. `gate-worktree.mjs` now sweeps before its first claim, so one crashed
+   run is reclaimed by the next launch rather than leaking permanently.
+2. **The sweep is cross-session by design.** Its branch/sha/session filters stay
+   EMPTY: the session that leaked a record is by definition no longer around to clean
+   it up. Records still backing a lease the queue knows about are retained, because a
+   record is the liveness PROOF that lets a dead waiter's lease be cancelled —
+   sweeping it first would trade a leaked file for a leaked slot.
+3. **Liveness may not rest on `process.kill(pid, 0)` alone.** Windows recycles pids,
+   so a reassigned pid reads as alive forever. Records carry the observer process's
+   start time — `(pid, start time)` is unique, so reuse is provable — and a 12h TTL
+   bounds any record whose start time cannot be established (older records, or a host
+   that will not answer the process-table query). Every "dead" verdict must be
+   proven; an unreadable process table yields "unknown", never "dead".
+
 ## Recovery and rollout
 
 The watchdog may stop only its admitted build process tree. It may not restart or

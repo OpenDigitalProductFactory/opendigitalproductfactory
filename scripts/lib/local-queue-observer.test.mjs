@@ -5,8 +5,10 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  OBSERVER_RECORD_TTL_MS,
   createGateObserverIdentity,
   findDeadLocalQueueObservers,
+  readProcessStartTimes,
   registerLocalQueueObserver,
   releaseDeadLocalQueueObserversForGate,
   releaseLocalQueueObserver,
@@ -28,6 +30,7 @@ test("a dead same-host gate observer is eligible for queue cancellation", () => 
     branch: "fix/old",
     sha: "a".repeat(40),
     now: () => new Date("2026-07-29T20:00:00.000Z"),
+    startedAt: "2026-07-29T19:59:00.000Z",
   });
 
   const dead = findDeadLocalQueueObservers({
@@ -39,6 +42,7 @@ test("a dead same-host gate observer is eligible for queue cancellation", () => 
       ownerSessionId: identity.ownerSessionId,
     }],
     processAlive: () => false,
+    processStartTimes: new Map(),
   });
 
   assert.deepEqual(dead, [{
@@ -50,6 +54,8 @@ test("a dead same-host gate observer is eligible for queue cancellation", () => 
       observerToken: identity.token,
       pid: 101,
       registeredAt: "2026-07-29T20:00:00.000Z",
+      startedAt: "2026-07-29T19:59:00.000Z",
+      reason: "same_host_observer_process_not_running",
     },
   }]);
 });
@@ -77,6 +83,7 @@ test("a live observer is never cancelled from queue age or TTL alone", () => {
       expiresAt: "2020-01-01T00:00:00.000Z",
     }],
     processAlive: () => true,
+    processStartTimes: new Map(),
   });
 
   assert.deepEqual(dead, []);
@@ -117,6 +124,7 @@ test("manual, malformed, and cross-host owners fail closed", () => {
       },
     ],
     processAlive: () => false,
+    processStartTimes: new Map(),
   });
 
   assert.deepEqual(dead, []);
@@ -190,6 +198,7 @@ test("fallback cleanup releases only dead observers for the same gate", () => {
     branch: targetBranch,
     sha: targetSha,
     processAlive: (pid) => pid === 707,
+    processStartTimes: new Map(),
   });
 
   assert.equal(released.length, 1);
@@ -231,6 +240,7 @@ test("a lease named after its real client thread is still reconcilable (BI-3A34D
       ownerSessionId: honestThread,
     }],
     processAlive: () => false,
+    processStartTimes: new Map(),
   });
 
   assert.equal(dead.length, 1);
@@ -264,6 +274,7 @@ test("a live attributed waiter is never cancelled", () => {
       ownerSessionId: "codex-thread-alive",
     }],
     processAlive: () => true,
+    processStartTimes: new Map(),
   });
 
   assert.deepEqual(dead, []);
@@ -296,6 +307,7 @@ test("duplicate dead observers for one thread are still eligible for queue cance
       ownerSessionId: shared,
     }],
     processAlive: () => false,
+    processStartTimes: new Map(),
   });
 
   assert.equal(dead.length, 1);
@@ -331,7 +343,239 @@ test("duplicate observers fail closed when any recorded process is alive", () =>
       ownerSessionId: shared,
     }],
     processAlive: (pid) => pid === 707,
+    processStartTimes: new Map(),
   });
 
   assert.deepEqual(dead, []);
+});
+
+// ─── BI-2C7F51BA Defect 2 — PID liveness must be sound ──────────────────────
+
+test("a recycled pid is reaped even though process.kill(pid, 0) says alive", () => {
+  // The field failure: Windows reuses pids, so `process.kill(pid, 0)` on a
+  // record whose pid has been reassigned reads as alive FOREVER and the record
+  // can never be reaped — a permanent queue-slot leak. The (pid, start time)
+  // pair is unique, so a start time that does not match the recorded one proves
+  // the pid now belongs to a different process.
+  const directory = observerDirectory();
+  const identity = createGateObserverIdentity({
+    pid: 909,
+    token: "99999999-9999-4999-8999-999999999999",
+  });
+  registerLocalQueueObserver({
+    directory,
+    identity,
+    ownerSessionId: "codex-thread-recycled",
+    branch: "feat/recycled",
+    sha: "f".repeat(40),
+    now: () => new Date("2026-08-01T00:00:00.000Z"),
+    startedAt: "2026-08-01T00:00:00.000Z",
+  });
+
+  const dead = findDeadLocalQueueObservers({
+    directory,
+    queuedLeases: [{
+      leaseId: "NPEL-RECYCLED",
+      environmentKey: "local-integration-ci",
+      status: "queued",
+      ownerSessionId: "codex-thread-recycled",
+    }],
+    // The pid IS alive — it just belongs to something else now.
+    processAlive: () => true,
+    processStartTimes: new Map([[909, Date.parse("2026-08-04T12:00:00.000Z")]]),
+    // Well inside the TTL, so the reap must rest on the start-time proof alone.
+    now: () => Date.parse("2026-08-01T01:00:00.000Z"),
+  });
+
+  assert.equal(dead.length, 1);
+  assert.equal(dead[0].leaseId, "NPEL-RECYCLED");
+  assert.equal(dead[0].reason, "same_host_observer_pid_recycled");
+});
+
+test("a still-running gate whose start time matches is never reaped", () => {
+  const directory = observerDirectory();
+  const identity = createGateObserverIdentity({
+    pid: 909,
+    token: "99999999-9999-4999-8999-999999999999",
+  });
+  const startedAt = "2026-08-04T12:00:00.000Z";
+  registerLocalQueueObserver({
+    directory,
+    identity,
+    ownerSessionId: "codex-thread-running",
+    branch: "feat/running",
+    sha: "f".repeat(40),
+    now: () => new Date(startedAt),
+    startedAt,
+  });
+
+  const dead = findDeadLocalQueueObservers({
+    directory,
+    queuedLeases: [{
+      leaseId: "NPEL-RUNNING",
+      environmentKey: "local-integration-ci",
+      status: "queued",
+      ownerSessionId: "codex-thread-running",
+    }],
+    processAlive: () => true,
+    // Sub-second skew between process creation and V8 init must not read as reuse.
+    processStartTimes: new Map([[909, Date.parse(startedAt) + 400]]),
+    now: () => Date.parse(startedAt) + 60_000,
+  });
+
+  assert.deepEqual(dead, []);
+});
+
+test("a record with no start-time evidence is bounded by the TTL instead", () => {
+  // Pre-BI-2C7F51BA records carry no `startedAt`, and a hardened host may not
+  // answer the process-table query at all. Neither may leave a record immortal.
+  const directory = observerDirectory();
+  const now = Date.parse("2026-08-04T00:00:00.000Z");
+  const registered = registerLocalQueueObserver({
+    directory,
+    identity: createGateObserverIdentity({
+      pid: 1010,
+      token: "10101010-1010-4010-8010-101010101010",
+    }),
+    ownerSessionId: "codex-thread-legacy",
+    branch: "feat/legacy",
+    sha: "a".repeat(40),
+    now: () => new Date(now - OBSERVER_RECORD_TTL_MS - 1),
+    startedAt: undefined,
+  });
+
+  const releasedTooSoon = releaseDeadLocalQueueObserversForGate({
+    directory,
+    processAlive: () => true,
+    processStartTimes: null,
+    now: () => now - OBSERVER_RECORD_TTL_MS - 1,
+  });
+  assert.deepEqual(releasedTooSoon, []);
+  assert.equal(existsSync(registered.path), true);
+
+  const released = releaseDeadLocalQueueObserversForGate({
+    directory,
+    processAlive: () => true,
+    processStartTimes: null,
+    now: () => now,
+  });
+  assert.equal(released.length, 1);
+  assert.equal(released[0].reason, "same_host_observer_record_expired");
+  assert.equal(existsSync(registered.path), false);
+});
+
+// ─── BI-2C7F51BA Defect 1 — the startup sweep is cross-session by design ─────
+
+test("an unfiltered sweep clears OTHER sessions' dead records", () => {
+  // The point of sweeping on gate startup is that the session which leaked a
+  // record is by definition no longer around to clean it up. Tightening these
+  // filters to the current branch silently restores the leak.
+  const directory = observerDirectory();
+  const foreign = registerLocalQueueObserver({
+    directory,
+    identity: createGateObserverIdentity({
+      pid: 1111,
+      token: "11111111-1111-4111-8111-111111111112",
+    }),
+    ownerSessionId: "some-other-session",
+    branch: "feat/someone-else",
+    sha: "b".repeat(40),
+  });
+  const mine = registerLocalQueueObserver({
+    directory,
+    identity: createGateObserverIdentity({
+      pid: 2222,
+      token: "22222222-2222-4222-8222-222222222223",
+    }),
+    ownerSessionId: "my-session",
+    branch: "feat/mine",
+    sha: "c".repeat(40),
+  });
+
+  const released = releaseDeadLocalQueueObserversForGate({
+    directory,
+    processAlive: (pid) => pid === 2222,
+    processStartTimes: new Map(),
+  });
+
+  assert.equal(released.length, 1);
+  assert.equal(released[0].ownerSessionId, "some-other-session");
+  assert.equal(existsSync(foreign.path), false);
+  assert.equal(existsSync(mine.path), true);
+});
+
+test("the sweep retains records still backing a known lease", () => {
+  // A record is the liveness PROOF that lets findDeadLocalQueueObservers cancel
+  // a dead waiter's lease. Sweeping it first would strand that lease in the
+  // queue permanently — trading a leaked file for a leaked slot.
+  const directory = observerDirectory();
+  const queued = registerLocalQueueObserver({
+    directory,
+    identity: createGateObserverIdentity({
+      pid: 3333,
+      token: "33333333-3333-4333-8333-333333333334",
+    }),
+    ownerSessionId: "session-with-queued-lease",
+    branch: "feat/queued",
+    sha: "d".repeat(40),
+  });
+  const orphan = registerLocalQueueObserver({
+    directory,
+    identity: createGateObserverIdentity({
+      pid: 4444,
+      token: "44444444-4444-4444-8444-444444444445",
+    }),
+    ownerSessionId: "session-with-no-lease",
+    branch: "feat/orphan",
+    sha: "e".repeat(40),
+  });
+
+  const released = releaseDeadLocalQueueObserversForGate({
+    directory,
+    retainOwnerSessionIds: new Set(["session-with-queued-lease"]),
+    processAlive: () => false,
+    processStartTimes: new Map(),
+  });
+
+  assert.equal(released.length, 1);
+  assert.equal(released[0].ownerSessionId, "session-with-no-lease");
+  assert.equal(existsSync(queued.path), true);
+  assert.equal(existsSync(orphan.path), false);
+
+  // With the lease gone from the listing, the next sweep reclaims it.
+  const followUp = releaseDeadLocalQueueObserversForGate({
+    directory,
+    retainOwnerSessionIds: new Set(),
+    processAlive: () => false,
+    processStartTimes: new Map(),
+  });
+  assert.equal(followUp.length, 1);
+  assert.equal(existsSync(queued.path), false);
+});
+
+test("readProcessStartTimes reports unknown rather than dead when the query fails", () => {
+  assert.equal(
+    readProcessStartTimes({
+      platform: "win32",
+      spawnSyncImpl: () => ({ status: 1, stdout: "" }),
+    }),
+    null,
+  );
+  assert.equal(
+    readProcessStartTimes({
+      platform: "linux",
+      spawnSyncImpl: () => { throw new Error("ps: not found"); },
+    }),
+    null,
+  );
+  assert.deepEqual(
+    readProcessStartTimes({
+      platform: "linux",
+      spawnSyncImpl: () => ({
+        status: 0,
+        stdout: "  912 Mon Aug  4 21:37:32 2026\n  913 not-a-date\n",
+      }),
+    }),
+    new Map([[912, Date.parse("Mon Aug 4 21:37:32 2026")]]),
+  );
 });

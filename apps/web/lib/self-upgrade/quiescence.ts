@@ -22,6 +22,7 @@ import { sanitizeForLog } from "@/lib/security/safe-log";
 import { getErrorMessage } from "@/lib/shared/get-error-message";
 import { TASK_LIVE_STATES } from "@/lib/tak/task-states";
 import { newestSignal, isStale } from "@/lib/shared/staleness";
+import { resolveReadOnlyToolNames } from "./read-only-tool-signal";
 
 // ─── Quiescence level — runtime state, hot-read by middleware + gates ────
 
@@ -852,6 +853,7 @@ export type BlockerSignal =
 
 const TOOL_EXECUTION_RECENCY_MS = 5 * 60 * 1000;
 const EDGE_AGENT_PREFIX = "edge-node:";
+
 const TERMINAL_BUILD_PHASES = ["complete", "failed", "abandoned"] as const;
 
 /**
@@ -1162,11 +1164,18 @@ export async function captureActiveSessionBlockers(opts?: {
   // B-class: ToolExecution recency — the existing stopgap signal.
   // Acts as a proxy for "server actions / MCP tool calls were happening
   // recently"; not as authoritative as A/C/D-class direct signals.
+  // BI-2C7F51BA Defect 3 (see read-only-tool-signal.ts): a waiter must not count
+  // as activity. Excluded IN the query, never after it — post-filtering a
+  // `take: 5` page of reads would hide a sixth, genuinely mutating call.
   const cutoff = new Date(now.getTime() - thresholdMs);
+  const readOnly = await resolveReadOnlyToolNames();
   const recentToolExecs = await prisma.toolExecution.findMany({
     where: {
       createdAt: { gte: cutoff },
-      NOT: { agentId: { startsWith: EDGE_AGENT_PREFIX } },
+      NOT: { OR: [
+        { agentId: { startsWith: EDGE_AGENT_PREFIX } },
+        ...(readOnly.length > 0 ? [{ toolName: { in: readOnly } }] : []),
+      ] },
     },
     select: { toolName: true, createdAt: true },
     orderBy: { createdAt: "desc" },
