@@ -60,7 +60,12 @@ export const metricsEnvelopeSchema = z.object({
   /** ISO 8601 timestamp when the metrics were captured. */
   observedAt: z.string().datetime(),
   metricsVersion: z.literal("1"),
-  interfaces: z.array(interfaceMetricSchema),
+  // FP7 (BI-4B381171): bound per-envelope interface count so an
+  // unbounded array can't inflate payload size or downstream write
+  // volume before the 64 KB body cap even engages. 2000 is far above
+  // any real node's interface count (SNMP/UniFi/LLDP adapters see at
+  // most a few hundred ports per poll cycle).
+  interfaces: z.array(interfaceMetricSchema).max(2000),
 });
 
 export type MetricsEnvelope = z.infer<typeof metricsEnvelopeSchema>;

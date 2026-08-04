@@ -645,6 +645,26 @@ jobs:
       - name: Assert third-party compose images are pinned
         run: bash scripts/check-compose-image-pins.sh docker-compose.yml
 
+  edge-footprint-bom:
+    name: Edge Footprint Bill-of-Materials
+    runs-on: ubuntu-latest
+    # BI-4B381171 — makes "the edge install doesn't need everything the
+    # portal has" (docs/superpowers/specs/
+    # 2026-06-19-edge-node-deployment-topology-and-remote-provisioning-design.md
+    # §6) a CI-enforced contract instead of a doc-only claim. Fails if
+    # services/edge-node or services/edge-node-go gain a relational/graph/
+    # vector-store dependency (FP2), an LLM/model-runtime dependency or a
+    # hardcoded model-provider API key reference (FP3), an inbound network
+    # listener (FP1 static half), a dynamically-linked release binary
+    # (FP4 static half), or a Prometheus scrape-server dependency
+    # (FP5 static half). The dynamic egress-only check (FP1) is
+    # scripts/verify-edge-node-air-gap.sh, which needs root/iptables/a real
+    # host and so runs out-of-band, not in CI.
+    steps:
+      - uses: actions/checkout@v7
+      - name: Assert edge-node image bill-of-materials stays minimal
+        run: node scripts/check-edge-node-image-bom.mjs
+
   adp-integration-tests:
     name: ADP Integration Tests
     runs-on: ubuntu-latest
@@ -715,6 +735,7 @@ jobs:
       - ux-route-sweep
       - dockerfile-node-version
       - compose-image-pins
+      - edge-footprint-bom
       - adp-integration-tests
     steps:
       - uses: actions/checkout@v7

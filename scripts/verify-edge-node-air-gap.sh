@@ -19,8 +19,22 @@
 # you can spot it.
 #
 # Spec:    docs/superpowers/specs/2026-05-09-dpf-edge-node-design.md
+# Footprint contract (FP1, BI-4B381171): docs/superpowers/specs/
+#   2026-06-19-edge-node-deployment-topology-and-remote-provisioning-design.md §6
 # Runbook: docs/install/edge-node-air-gapped.md
 # Report:  docs/install/edge-node-air-gapped-verification-report.md
+#
+# --allow-federation-discovery-mdns (BI-4B381171): the native Go edge
+# runtime's optional `federation.discovery` capability (only ever accepted
+# by the Authority — services/edge-node-go/internal/federation/zeroconf.go)
+# sends/receives IPv4 mDNS on 224.0.0.251:5353 to find nearby DPF
+# installations. That traffic never touches the Authority IP, so a node
+# running with this capability accepted will otherwise show as a FAIL
+# against the default allow-list even though it never opens an inbound
+# listener and never talks to any host outside the mDNS multicast group.
+# Pass this flag when testing a node with federation.discovery accepted;
+# omit it (the default) to verify the strict single-Authority-destination
+# posture most nodes run under.
 
 set -euo pipefail
 
@@ -33,6 +47,7 @@ Usage:
     [--duration-sec N] \
     [--report PATH] \
     [--allow-extra IP[,IP...]] \
+    [--allow-federation-discovery-mdns] \
     [--log-prefix PREFIX] \
     [--no-iptables]
 
@@ -52,6 +67,12 @@ Optional:
   --allow-extra     Additional IPs to ACCEPT (e.g. internal DNS,
                     internal NTP). Comma-separated. Loopback is
                     always allowed implicitly.
+  --allow-federation-discovery-mdns
+                    ACCEPT outbound UDP to 224.0.0.251:5353 (IPv4 mDNS)
+                    for nodes running with the native binary's
+                    federation.discovery capability accepted. Off by
+                    default — most nodes should verify clean against
+                    the Authority-only allow-list.
   --log-prefix      iptables LOG prefix. Default: "dpf-airgap: "
   --no-iptables     Skip iptables setup (for environments that
                     manage egress filtering externally). Script
@@ -74,6 +95,7 @@ AUTHORITY_URL=""
 DURATION_SEC=""
 REPORT=""
 ALLOW_EXTRA=""
+ALLOW_MDNS=0
 LOG_PREFIX="dpf-airgap: "
 NO_IPTABLES=0
 
@@ -84,6 +106,7 @@ while [[ $# -gt 0 ]]; do
     --duration-sec)    shift; DURATION_SEC="${1:?--duration-sec requires a value}" ;;
     --report)          shift; REPORT="${1:?--report requires a value}" ;;
     --allow-extra)     shift; ALLOW_EXTRA="${1:?--allow-extra requires a value}" ;;
+    --allow-federation-discovery-mdns) ALLOW_MDNS=1 ;;
     --log-prefix)      shift; LOG_PREFIX="${1:?--log-prefix requires a value}" ;;
     --no-iptables)     NO_IPTABLES=1 ;;
     -h|--help)         usage; exit 0 ;;
@@ -175,6 +198,13 @@ if [[ $NO_IPTABLES -eq 0 ]]; then
       iptables -A "$CHAIN" -d "$ip" -j ACCEPT
     done
   fi
+  if [[ $ALLOW_MDNS -eq 1 ]]; then
+    # federation.discovery capability (native binary only, Authority
+    # opt-in): outbound IPv4 mDNS query/response on 224.0.0.251:5353.
+    # See the BI-4B381171 header comment above for why this is a
+    # legitimate non-Authority egress class, not a violation.
+    iptables -A "$CHAIN" -d 224.0.0.251 -p udp --dport 5353 -j ACCEPT
+  fi
   # Match outgoing established/related back, so reply traffic isn't logged.
   iptables -A "$CHAIN" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
   iptables -A "$CHAIN" -j LOG --log-prefix "$LOG_PREFIX" --log-level 4
@@ -186,6 +216,9 @@ if [[ $NO_IPTABLES -eq 0 ]]; then
   if [[ -n "$ALLOW_EXTRA" ]]; then
     IFS=',' read -ra EXTRA_IPS <<< "$ALLOW_EXTRA"
     printf "        - %s (extra)\n" "${EXTRA_IPS[@]}"
+  fi
+  if [[ $ALLOW_MDNS -eq 1 ]]; then
+    echo "        - 224.0.0.251:5353/udp (federation.discovery mDNS)"
   fi
 fi
 
@@ -241,6 +274,9 @@ EGRESS_HITS="$(wc -l < "$EGRESS_TMP" 2>/dev/null || echo 0)"
   for ip in "${AUTHORITY_IPS[@]}"; do echo "  - $ip"; done
   if [[ -n "$ALLOW_EXTRA" ]]; then
     echo "- Extra allow-list IPs: $ALLOW_EXTRA"
+  fi
+  if [[ $ALLOW_MDNS -eq 1 ]]; then
+    echo "- federation.discovery mDNS allowed: 224.0.0.251:5353/udp"
   fi
   echo "- iptables installed: $([[ $NO_IPTABLES -eq 0 ]] && echo yes || echo no)"
   echo "- Log source: $([[ -n \"$KERN_LOG\" ]] && echo \"$KERN_LOG\" || ([[ $USE_JOURNAL -eq 1 ]] && echo journalctl -k || echo none))"
