@@ -6,6 +6,10 @@ packages:
   - "services/integration-test-harness"
 overrides:
   '@types/react': '^19'
+  # find-my-way < 9.7.0: GHSA-c96f-x56v-gq3h / CVE-2026-47219, high severity
+  # (OSV vulnerability scan on PR #3893). Transitive of the Expo SDK 56 dev
+  # server toolchain. Floor to the patched 9.7.0.
+  find-my-way: '^9.7.0'
   # @hono/node-server < 2.0.5: GHSA-frvp-7c67-39w9 path traversal in serve-static
   # on Windows via encoded backslash (%5C) (Dependabot #105, medium). First patched
   # release is on the 2.x line. Dev/tooling transitive of @modelcontextprotocol/sdk
