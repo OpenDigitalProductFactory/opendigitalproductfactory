@@ -30,7 +30,7 @@ const definitions: ToolDefinition[] = [
   {
     name: "analyze_mcp_call_efficiency",
     description:
-      "Analyze ToolExecution thrash, retries, high volume, and failures. Recommends skill, tool-merge, or webhook fixes to cut agent token waste. notify=true posts AI Ops alerts.",
+      "Analyze ToolExecution thrash, retries, high volume, and failures. Recommends skill, tool-merge, or webhook fixes to cut agent token waste. notify=true posts AI Ops alerts; dispatchAiOps=true files critical BIs and queues a one-shot platform-engineer review.",
     inputSchema: {
       type: "object",
       properties: {
@@ -47,13 +47,19 @@ const definitions: ToolDefinition[] = [
           description:
             "When true, create PlatformNotification rows for warning/critical findings (deduped 24h). Default false.",
         },
+        dispatchAiOps: {
+          type: "boolean",
+          description:
+            "When true, file critical findings as backlog items, record ImprovementSignals, and queue a one-shot AI Ops (platform-engineer) review task. Default false (daily cron enables this).",
+        },
       },
       required: [],
     },
     requiredCapability: "view_platform",
     executionMode: "immediate",
-    sideEffect: false,
-    annotations: { readOnlyHint: true, idempotentHint: true },
+    // notify/dispatchAiOps write platform rows; default path is read-only analysis.
+    sideEffect: true,
+    annotations: { readOnlyHint: false, idempotentHint: true },
   },
 ];
 
@@ -93,6 +99,7 @@ async function dispatchBet(
 
 async function analyzeMcpCallEfficiency(
   params: Record<string, unknown>,
+  userId: string,
 ): Promise<ToolResult> {
   const { runCallEfficiencyReport } = await import("@/lib/operate/mcp-call-efficiency/report");
   const windowHours =
@@ -102,11 +109,14 @@ async function analyzeMcpCallEfficiency(
       ? params["thrashThreshold"]
       : undefined;
   const notify = params["notify"] === true;
+  const dispatchAiOps = params["dispatchAiOps"] === true;
 
-  const { report, notified } = await runCallEfficiencyReport({
+  const { report, notified, aiOps } = await runCallEfficiencyReport({
     windowHours,
     thrashThreshold,
     notify,
+    dispatchAiOps,
+    ownerUserId: dispatchAiOps ? userId : undefined,
   });
 
   const top = report.findings
@@ -114,17 +124,26 @@ async function analyzeMcpCallEfficiency(
     .map((f) => `${f.severity}:${f.kind}:${f.toolName}→${f.recommendedAction}`)
     .join("; ");
 
+  const aiOpsNote =
+    aiOps == null
+      ? ""
+      : aiOps.skipped
+        ? `; aiOps skipped (${aiOps.reason})`
+        : `; aiOps task=${aiOps.agentTaskId} bis=${aiOps.backlogItemsFiled.length}`;
+
   return {
     success: true,
     message:
       `${report.totalCalls} call(s) in window; ${(report.successRate * 100).toFixed(0)}% success; ` +
       `${report.findings.length} finding(s)` +
       (notified ? `; notified ${notified}` : "") +
+      aiOpsNote +
       (top ? ` — ${top}` : "") +
       `. ${report.ledgerSufficiency.note}`,
     data: {
       ...report,
       notified,
+      aiOps,
     } as unknown as Record<string, unknown>,
   };
 }
@@ -134,7 +153,8 @@ export const optimizationPack: ToolPack = {
   definitions,
   handlers: {
     dispatch_consolidation_bet: (params, userId) => dispatchBet(params, userId),
-    analyze_mcp_call_efficiency: (params) => analyzeMcpCallEfficiency(params),
+    analyze_mcp_call_efficiency: (params, userId) =>
+      analyzeMcpCallEfficiency(params, userId),
   },
   grants: {
     dispatch_consolidation_bet: ["build_promote"],
