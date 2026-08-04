@@ -537,6 +537,12 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   create_employee: ["consumer_write"],
   transition_employee_status: ["consumer_write"],
   propose_leave_policy: ["policy_write"],
+  // BI-3CDEC5F0: company/compliance Policy draft lifecycle for coworkers
+  list_policies: ["policy_read"],
+  get_policy: ["policy_read"],
+  create_policy: ["policy_write"],
+  update_policy: ["policy_write"],
+  request_policy_review: ["policy_write"],
 
   // Feedback
   submit_feedback: ["backlog_write"],

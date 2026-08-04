@@ -2875,7 +2875,10 @@
           "backlog_read",
           "backlog_write",
           "consumer_read",
+          "consumer_write",
           "registry_read",
+          "policy_read",
+          "policy_write",
           "web_search"
         ]
       }
