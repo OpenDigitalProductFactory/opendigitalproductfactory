@@ -34,7 +34,7 @@
 //
 //   node scripts/check-edge-node-image-bom.mjs
 
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, relative } from "node:path";
 
