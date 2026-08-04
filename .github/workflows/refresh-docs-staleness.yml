@@ -42,7 +42,7 @@ jobs:
         with:
           fetch-depth: 0 # the detector reads full commit history for last-change timestamps
       - name: Set up Node.js
-        uses: actions/setup-node@v7.0.0
+        uses: actions/setup-node@v7
         with:
           node-version: 24
       - name: Test the detector
