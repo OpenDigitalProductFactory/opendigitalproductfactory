@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "plain-chip-multiselect",
+  "scope": {
+    "files": [
+      "apps/web/components/admin/DataHandlingChips.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "plain-chip-multiselect",
+      "raw-predicate-dropdown",
+      "coworker-only-capture"
+    ],
+    "rationale": "principle_decide scored the three capture UXs on human_cognitive_load (and maintainability/reusability/schema-grounding). plain-chip-multiselect won with high confidence: nine plain-language toggle chips reusing the existing compliance-scope chip pattern, no jargon or typing, card-payments kept as its existing checkbox. Rejected the raw-predicate dropdown (exposes machine keys, higher load) and coworker-only capture (forces a conversational detour for a simple tick-what-applies declaration; the coworker path still ships in phase 3 as an additional route)."
+  },
+  "decisionInteractionId": "DI-7582E8416949"
+}

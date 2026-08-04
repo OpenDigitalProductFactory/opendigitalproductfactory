@@ -4,6 +4,7 @@ import { prisma, type Prisma } from "@dpf/db";
 import { parseOrgAddress, sanitizeOrgAddressInput, serializeOrgAddress } from "@/lib/shared/org-address";
 import { isRiskPosture } from "@/lib/govern/risk-posture";
 import { applyRiskEnvelopeToOrgProfile } from "@/lib/onboarding/apply-risk-envelope-to-profile";
+import { isDataHandlingPredicate } from "@dpf/db/regulation-applicability";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -26,6 +27,7 @@ export async function POST(req: NextRequest) {
     employsIn,
     dataResidency,
     handlesCardPayments,
+    dataHandling,
     listingStatus,
     riskPosture,
     address,
@@ -44,6 +46,7 @@ export async function POST(req: NextRequest) {
     employsIn?: string[];
     dataResidency?: string[];
     handlesCardPayments?: boolean;
+    dataHandling?: string[];
     listingStatus?: string | null;
     riskPosture?: string;
     address?: unknown;
@@ -67,12 +70,20 @@ export async function POST(req: NextRequest) {
   ]);
   const sanitizeListingStatus = (v: unknown): string | null =>
     typeof v === "string" && ALLOWED_LISTING_STATUSES.has(v) ? v : null;
+  // Data-handling predicates gate the horizontal regimes (privacy, AI, marketing,
+  // accessibility, sector overlays). Filter to the closed DATA_HANDLING_PREDICATES
+  // set so a stray value can't create a phantom trigger; dedupe.
+  const sanitizeDataHandling = (v: unknown): string[] =>
+    Array.isArray(v)
+      ? [...new Set(v.filter((p): p is string => typeof p === "string" && isDataHandlingPredicate(p)))]
+      : [];
   const complianceScopeProvided =
     operatesIn !== undefined ||
     sellsTo !== undefined ||
     employsIn !== undefined ||
     dataResidency !== undefined ||
     handlesCardPayments !== undefined ||
+    dataHandling !== undefined ||
     listingStatus !== undefined;
   const complianceScope = complianceScopeProvided
     ? {
@@ -81,6 +92,7 @@ export async function POST(req: NextRequest) {
         employsIn: sanitizeJurisdictions(employsIn),
         dataResidency: sanitizeJurisdictions(dataResidency),
         handlesCardPayments: handlesCardPayments === true,
+        dataHandling: sanitizeDataHandling(dataHandling),
         listingStatus: sanitizeListingStatus(listingStatus),
         complianceScopeCapturedAt: new Date(),
       }
