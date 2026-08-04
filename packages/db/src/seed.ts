@@ -1705,12 +1705,24 @@ async function seedLocalModels(): Promise<void> {
     const existing = await prisma.modelProfile.findUnique({
       where: { providerId_modelId: { providerId: "local", modelId: m.id } },
     });
-    if (existing && existing.modelStatus === "retired") {
+    if (existing && (existing.modelStatus === "retired" || existing.retiredAt !== null)) {
       // DMR lists this model right now, so it is loadable — a retired profile
       // here is a stale tombstone from an outage-time 404 or a dedupe
       // migration (BI-84792669 deferred exactly this reactivation decision).
       // Healing at boot keeps the bundled local fallback routable without
       // waiting for the next discovery cycle (BI-B6B8C1F9).
+      //
+      // The `retiredAt !== null` arm matters independently of modelStatus:
+      // queryEndpointManifests (apps/web/lib/routing/loader.ts) filters on
+      // `retiredAt: null`, NOT on modelStatus, so a row can read
+      // modelStatus="active" in the admin UI while being invisible to routing.
+      // A transient local-engine admission timeout auto-retires the bundled
+      // model and leaves exactly that split state; because the old condition
+      // only matched modelStatus="retired", boot never healed it. On an install
+      // where the local model is the ONLY provider cleared for restricted data,
+      // that silently removed the last eligible endpoint and every HR/finance
+      // coworker request failed with "No AI model can handle this request right
+      // now" — for weeks, with the model itself perfectly healthy.
       await prisma.modelProfile.update({
         where: { id: existing.id },
         data: { modelStatus: "active", retiredAt: null, retiredReason: null },

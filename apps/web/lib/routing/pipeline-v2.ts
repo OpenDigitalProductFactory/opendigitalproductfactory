@@ -439,6 +439,20 @@ export async function routeEndpointV2(
 
   // ── No eligible endpoints ──────────────────────────────────────────────
   if (working.length === 0) {
+    // The per-endpoint reasons are the only thing that explains WHY a route
+    // died, and they were previously computed and then dropped on the floor:
+    // callers surface just a count, and the operator-facing coworker copy
+    // guesses ("your cloud providers are disconnected") — which sent a real
+    // outage investigation down the wrong path entirely. Log them so the next
+    // "No AI model can handle this request" is diagnosable from the portal
+    // logs alone.
+    console.warn(
+      `[routing] no eligible endpoints task=${contract.taskType} sensitivity=${sensitivity} ` +
+      `residency=${contract.residencyPolicy ?? "any_enabled"} ` +
+      `minDims=${JSON.stringify(contract.minimumDimensions ?? {})} ` +
+      `excluded=${allCandidates.length}`,
+    );
+    for (const line of allExcludedReasons) console.warn(`[routing]   ✗ ${line}`);
     return {
       selectedEndpoint: null,
       selectedModelId: null,
