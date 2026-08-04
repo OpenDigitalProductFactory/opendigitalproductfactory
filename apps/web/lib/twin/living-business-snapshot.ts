@@ -35,6 +35,7 @@ import {
   bookingsToQueueItems,
   longestWaitMs,
 } from "./booking-queue-projection";
+import { activeAwarePresence, loadTwinWorkforceView } from "./live-workforce-activity";
 import type { LiveTwinSnapshot } from "./operations-snapshot";
 import {
   createOperationsLoadRuntime,
@@ -99,6 +100,8 @@ export type LivingBusinessClient = WorkforceRosterClient & OrgLocaleClient & {
   serviceProvider: { findMany: FindMany };
   hospitalityResource: { findMany: FindMany };
   hospitalityCapacityAllocation: { findMany: FindMany };
+  /** Optional — live workforce-activity read (BI-FB233706); degrades if absent. */
+  taskRun?: { findMany: FindMany };
 };
 
 // ── Row shapes we select (kept narrow; amounts may arrive as Prisma.Decimal) ──
@@ -169,18 +172,10 @@ export {
 
 // ─────────────────────────── pure mapping helpers ───────────────────────────
 
-/** Humans + AI coworkers on one plane — the roster IS the presence row. */
+/** Humans + AI coworkers on one plane — the roster IS the presence row. Thin
+ *  wrapper over `activeAwarePresence` with no active work (identical output). */
 export function rosterToPresence(members: WorkforceMember[], limit = 8): TwinActor[] {
-  return members
-    .filter((m) => m.status.toLowerCase() !== "archived" && m.status.toLowerCase() !== "inactive")
-    // AI coworkers first (they're the differentiator), then humans.
-    .sort((a, b) => Number(b.kind === "agent") - Number(a.kind === "agent"))
-    .slice(0, limit)
-    .map((m) => ({
-      name: m.displayName,
-      kind: m.kind === "agent" ? "ai" : "human",
-      focus: m.role ?? undefined,
-    }));
+  return activeAwarePresence(members, [], new Date(0), { limit });
 }
 
 /**
@@ -747,6 +742,15 @@ export async function loadLivingBusinessProjection(
     ? [readinessQuest(floorSnapshot), ...genericQuests].filter((q): q is QuestData => q != null)
     : genericQuests;
 
+  // Real coworker activity (BI-FB233706): presence shows who is working on what;
+  // the feed leads with real coworker activity. Fail-soft; read via rawDb.
+  const workforceView = await loadTwinWorkforceView({
+    client: rawDb,
+    members,
+    now,
+    demandFeed: bookingsToFeed(bookings, profile.workItemNoun.singular),
+  });
+
   const twin: LiveTwinSnapshot = {
     live: true,
     archetypeId,
@@ -767,8 +771,8 @@ export async function loadLivingBusinessProjection(
     workItems: bookingsToWorkItems(bookings, profile.workItemNoun.singular),
     queues,
     cog,
-    presence: rosterToPresence(members),
-    feed: bookingsToFeed(bookings, profile.workItemNoun.singular),
+    presence: workforceView.presence,
+    feed: workforceView.feed,
     quests,
     utility: financeToUtility({
       billsDueCount: bills.length,
