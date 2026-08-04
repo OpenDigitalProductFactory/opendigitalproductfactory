@@ -74,4 +74,64 @@ describe("design-intelligence data plane (BI-018AE129)", () => {
     expect(search.length).toBeGreaterThanOrEqual(2);
     expect(search[0]?.data["Official Source URL"]).toMatch(/^https:\/\//);
   });
+
+  it("retrieves current room-assignment and drive-time routing precedents", () => {
+    const hotel = searchDesignDomain(
+      "room assignment housekeeping attendant inspection",
+      "precedent",
+      5,
+    );
+    expect(hotel.some((result) => result.data["Provider Name"] === "Oracle OPERA Cloud")).toBe(true);
+
+    const hvac = searchDesignDomain(
+      "drive time route optimization technician schedule conflict",
+      "precedent",
+      5,
+    );
+    expect(hvac.some((result) => result.data["Provider Name"] === "Housecall Pro")).toBe(true);
+
+    const hotelRack = searchDesignDomain(
+      "room condition housekeeper maintenance unassigned accommodation",
+      "precedent",
+      5,
+    );
+    expect(hotelRack.some((result) => result.data["Provider Name"] === "Cloudbeds")).toBe(true);
+
+    const dispatchBoard = searchDesignDomain(
+      "job tray teams skills zones priority route technician",
+      "precedent",
+      5,
+    );
+    expect(dispatchBoard.some((result) => result.data["Provider Name"] === "ServiceTitan")).toBe(true);
+  });
+
+  it("retrieves current provider-resource, room-timeline, and serialized-inventory precedents", () => {
+    const salonResources = searchDesignDomain(
+      "staff resource chair machine availability assignment double booking",
+      "precedent",
+      5,
+    );
+    expect(salonResources.some((result) => result.data["Provider Name"] === "Mangomint")).toBe(true);
+
+    const hotelTimeline = searchDesignDomain(
+      "room timeline locked reservation housekeeping out of service",
+      "precedent",
+      5,
+    );
+    expect(hotelTimeline.some((result) => result.data["Provider Name"] === "Mews")).toBe(true);
+
+    const rentalInventory = searchDesignDomain(
+      "serialized equipment location movement repair shortage subrental",
+      "precedent",
+      5,
+    );
+    expect(rentalInventory.some((result) => result.data["Provider Name"] === "Rentman")).toBe(true);
+
+    const hoaMap = searchDesignDomain(
+      "association property map violation work order architectural request past cure",
+      "precedent",
+      5,
+    );
+    expect(hoaMap.some((result) => result.data["Provider Name"] === "Vantaca")).toBe(true);
+  });
 });
