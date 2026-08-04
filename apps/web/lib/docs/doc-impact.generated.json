@@ -264,8 +264,35 @@
     ]
   },
   "codeToDocs": {
+    ".githooks/lib/pre-push-chained.sh": [
+      "docs/testing/pre-pr-gate.md"
+    ],
+    ".github/workflows/ci.yml": [
+      "docs/security/2026-05-24-shift-left-rollout.md",
+      "docs/testing/pre-pr-gate.md"
+    ],
+    ".github/workflows/codeql.yml": [
+      "docs/security/2026-05-24-shift-left-rollout.md",
+      "docs/security/secrets-scan.md",
+      "docs/testing/pre-pr-gate.md"
+    ],
+    ".github/workflows/install-verification.yml": [
+      "docs/install/linux.md"
+    ],
+    ".github/workflows/secrets-scan.yml": [
+      "docs/security/2026-05-24-shift-left-rollout.md"
+    ],
+    ".github/workflows/security-inflow-gate.yml": [
+      "docs/security/secrets-scan.md"
+    ],
+    "apps/mobile/eas.json": [
+      "docs/operations/mobile-store-launch-runbook.md"
+    ],
     "apps/web/app/(shell)/coworker-decisions/proactivity/page.tsx": [
       "docs/user-guide/ai-workforce/coworker-proactivity.md"
+    ],
+    "apps/web/app/(shell)/delivery/page.tsx": [
+      "docs/architecture/delivery-ia.md"
     ],
     "apps/web/app/(shell)/platform/ai/providers/page.tsx": [
       "docs/user-guide/ai-workforce/connecting-providers.md"
@@ -276,17 +303,53 @@
     "apps/web/app/(shell)/workspace/my-queue/page.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
+    "apps/web/app/api/integrations/email-postmark/inbound/route.ts": [
+      "docs/architecture/2026-06-14-odysseus-review-depth-pass.md"
+    ],
+    "apps/web/app/api/v1/edge/adapters/route.ts": [
+      "docs/edge-node/unifi-adapter.md"
+    ],
     "apps/web/components/attention/AttentionInbox.tsx": [
       "docs/user-guide/workspace/attention-inbox.md"
     ],
     "apps/web/components/attention/OwnerDecisionCards.tsx": [
       "docs/user-guide/workspace/attention-inbox.md"
     ],
+    "apps/web/components/build/BuildDispatchHistoryCard.tsx": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/components/build/BuildProgressOperationalPanel.tsx": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/components/build/DecisionPerspectiveGatePanel.tsx": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/components/build/ProcessGraph.tsx": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/components/build/StallEventHistoryStrip.tsx": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/components/build/UnifiedEvidenceTimeline.tsx": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/components/build/WorkflowStageInspector.tsx": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/components/monitoring/health-summary.ts": [
+      "docs/install/platform-support-watchlist.md"
+    ],
     "apps/web/components/platform/ProviderSuitabilityGuide.tsx": [
       "docs/user-guide/ai-workforce/connecting-providers.md"
     ],
+    "apps/web/components/platform/StalledTaskRecoveryActions.tsx": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
     "apps/web/components/proactivity/ProactivityRosterList.tsx": [
       "docs/user-guide/ai-workforce/coworker-proactivity.md"
+    ],
+    "apps/web/components/shell/SectionNav.tsx": [
+      "docs/architecture/section-navigation.md"
     ],
     "apps/web/components/workspace/WorkCaseAttentionLens.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
@@ -300,11 +363,50 @@
     "apps/web/components/workspace/work-room/WorkRoomParticipants.tsx": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
+    "apps/web/instrumentation.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/actions/build.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/actions/sovereignty.ts": [
+      "docs/strategy/2026-09-cada-architects-forum-deck.md"
+    ],
     "apps/web/lib/ai-inference.ts": [
       "docs/user-guide/ai-workforce/connecting-providers.md"
     ],
     "apps/web/lib/attention/owner-projection.ts": [
       "docs/user-guide/workspace/attention-inbox.md"
+    ],
+    "apps/web/lib/build-pipeline.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/build/progress-visibility.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/contracts/entity-contract-drift.ts": [
+      "docs/architecture/package-boundaries.md"
+    ],
+    "apps/web/lib/contracts/package-boundaries.test.ts": [
+      "docs/architecture/package-boundaries.md"
+    ],
+    "apps/web/lib/decision-perspective/build-studio-gate.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/decision/golden-decisions.baseline.json": [
+      "docs/founder-kernel/AUTHORING.md"
+    ],
+    "apps/web/lib/decision/golden-decisions.test.ts": [
+      "docs/founder-kernel/AUTHORING.md"
+    ],
+    "apps/web/lib/ea/ai-routing-architecture-extract.ts": [
+      "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md"
+    ],
+    "apps/web/lib/ea/ai-routing-architecture-registry.ts": [
+      "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md"
+    ],
+    "apps/web/lib/explore/feature-build-types.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
     "apps/web/lib/inference/data-screening/evaluate-inference-policy.ts": [
       "docs/user-guide/ai-workforce/sensitive-data-policy-packs.md"
@@ -312,14 +414,123 @@
     "apps/web/lib/inference/data-screening/vertical-policy-packs.ts": [
       "docs/user-guide/ai-workforce/sensitive-data-policy-packs.md"
     ],
+    "apps/web/lib/inference/local-only.ts": [
+      "docs/strategy/2026-09-cada-architects-forum-deck.md"
+    ],
+    "apps/web/lib/inference/routed-inference.ts": [
+      "docs/architecture/2026-06-14-odysseus-review-depth-pass.md"
+    ],
     "apps/web/lib/integrate/build-orchestrator.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
       "docs/user-guide/build-studio/index.md"
+    ],
+    "apps/web/lib/integrate/build-pipeline.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/integrate/build-studio-config.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/integrate/claude-dispatch.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/marketing/channels/email-postmark/responder.ts": [
+      "docs/architecture/2026-06-14-odysseus-review-depth-pass.md"
+    ],
+    "apps/web/lib/marketing/scheduler.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/mcp/packs/deliberation-siem-pack.ts": [
+      "docs/architecture/mcp-tool-packs.md"
+    ],
+    "apps/web/lib/mcp/packs/feedback-pack.ts": [
+      "docs/architecture/mcp-tool-packs.md"
+    ],
+    "apps/web/lib/mcp/packs/runtime-coordination-pack.ts": [
+      "docs/architecture/mcp-tool-packs.md"
+    ],
+    "apps/web/lib/mcp/packs/work-capsules-pack.ts": [
+      "docs/architecture/mcp-tool-packs.md"
+    ],
+    "apps/web/lib/mcp/packs/workbooks-pack.ts": [
+      "docs/architecture/mcp-tool-packs.md"
+    ],
+    "apps/web/lib/mcp/tool-pack.ts": [
+      "docs/architecture/mcp-tool-packs.md"
+    ],
+    "apps/web/lib/mcp/tool-registry.ts": [
+      "docs/architecture/mcp-tool-packs.md"
+    ],
+    "apps/web/lib/navigation/section-nav-model.ts": [
+      "docs/architecture/section-navigation.md"
+    ],
+    "apps/web/lib/platform-runtime/capability-service-projection.ts": [
+      "docs/architecture/capability-driven-runtime-profiles.md"
+    ],
+    "apps/web/lib/platform-runtime/operational-state.ts": [
+      "docs/architecture/capability-driven-runtime-profiles.md"
     ],
     "apps/web/lib/proactivity/proactivity-roster.ts": [
       "docs/user-guide/ai-workforce/coworker-proactivity.md"
     ],
+    "apps/web/lib/queue/functions/deliberation-run.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/design/golden-triangle-design.md"
+    ],
+    "apps/web/lib/queue/functions/index.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/queue/functions/quiescence-run.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/queue/functions/taskrun-watchdog.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/queue/inngest-client.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/queue/notification-adapter.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/routes.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "apps/web/lib/routing/chat-adapter.ts": [
+      "docs/design/golden-triangle-design.md"
+    ],
+    "apps/web/lib/routing/cost-ranking.ts": [
+      "docs/design/golden-triangle-design.md"
+    ],
+    "apps/web/lib/routing/pipeline-v2.ts": [
+      "docs/architecture/2026-06-14-odysseus-review-depth-pass.md",
+      "docs/strategy/2026-09-cada-architects-forum-deck.md"
+    ],
     "apps/web/lib/routing/provider-suitability/workload-profile.ts": [
       "docs/user-guide/ai-workforce/sensitive-data-policy-packs.md"
+    ],
+    "apps/web/lib/routing/request-contract.ts": [
+      "docs/architecture/2026-06-14-odysseus-review-depth-pass.md",
+      "docs/design/golden-triangle-design.md"
+    ],
+    "apps/web/lib/self-upgrade/local-changes-ledger.ts": [
+      "docs/architecture/branch-and-worktree-runbook.md"
+    ],
+    "apps/web/lib/shared/action-result.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "apps/web/lib/shared/coerce.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "apps/web/lib/shared/org-address.ts": [
+      "docs/architecture/data-model-stewardship-runbook.md"
+    ],
+    "apps/web/lib/tak/agent-grants.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
+    ],
+    "apps/web/lib/tak/agentic-loop.ts": [
+      "docs/design/golden-triangle-design.md"
+    ],
+    "apps/web/lib/tak/autonomous-work-run.ts": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md"
     ],
     "apps/web/lib/work-management/room-channel-continuity.ts": [
       "docs/user-guide/workspace/work-rooms.md"
@@ -336,15 +547,71 @@
     "apps/web/lib/work-management/workspace-room-access.ts": [
       "docs/user-guide/workspace/work-rooms.md"
     ],
+    "config/merge-readiness-policy.json": [
+      "docs/testing/pr-health.md"
+    ],
+    "docker-compose.edge-snmp.yml": [
+      "docs/edge-node/deployment-topology.md"
+    ],
+    "docker-compose.edge-standalone-tls.yml": [
+      "docs/edge-node/deployment-topology.md",
+      "docs/install/edge-node-air-gapped.md",
+      "docs/install/edge-node-multi-host.md"
+    ],
+    "docker-compose.edge-standalone.yml": [
+      "docs/edge-node/deployment-topology.md",
+      "docs/install/cloud-single-vm.md",
+      "docs/install/edge-node-air-gapped.md",
+      "docs/install/edge-node-multi-host.md"
+    ],
+    "docker-compose.edge.macvlan.yml": [
+      "docs/edge-node/deployment-topology.md",
+      "docs/edge-node/macvlan-deployment.md"
+    ],
+    "docker-compose.edge.yml": [
+      "docs/edge-node/deployment-topology.md",
+      "docs/install/edge-node-multi-host.md"
+    ],
+    "docker-compose.tls.yml": [
+      "docs/install/edge-node-multi-host.md"
+    ],
     "docker-compose.yml": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
       "docs/architecture/platform-overview.md",
       "docs/operations/disaster-recovery.md"
+    ],
+    "docs/testing/ci-observation-baseline.json": [
+      "docs/testing/ci-evidence.md"
     ],
     "monitoring/prometheus/prometheus.yml": [
       "docs/architecture/platform-overview.md"
     ],
+    "packages/db/data/platform-runtime-capabilities.json": [
+      "docs/architecture/capability-driven-runtime-profiles.md",
+      "docs/architecture/platform-substrate-boundaries.md"
+    ],
     "packages/db/prisma/schema.prisma": [
+      "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md",
+      "docs/architecture/2026-06-14-odysseus-review-depth-pass.md",
       "docs/architecture/platform-overview.md"
+    ],
+    "packages/db/scripts/check-cada-readiness.ts": [
+      "docs/strategy/2026-09-cada-architects-forum-deck.md"
+    ],
+    "packages/db/scripts/seed-cada-regulation.ts": [
+      "docs/strategy/2026-09-cada-architects-forum-deck.md"
+    ],
+    "packages/db/src/cada-readiness.ts": [
+      "docs/strategy/2026-09-cada-architects-forum-deck.md"
+    ],
+    "packages/db/src/discovery-collectors/network.ts": [
+      "docs/install/platform-support-watchlist.md"
+    ],
+    "packages/db/src/eu-jurisdictions.ts": [
+      "docs/strategy/2026-09-cada-architects-forum-deck.md"
+    ],
+    "packages/db/src/migrations/exact-key-repair.ts": [
+      "docs/runbooks/2026-07-20-collation-drift-index-corruption.md"
     ],
     "packages/db/src/pg-graph.ts": [
       "docs/architecture/platform-overview.md"
@@ -352,11 +619,61 @@
     "packages/db/src/pgvector-store.ts": [
       "docs/architecture/platform-overview.md"
     ],
+    "packages/db/src/regulation-applicability.ts": [
+      "docs/strategy/2026-09-cada-architects-forum-deck.md"
+    ],
     "packages/db/src/seed-platform-backup.ts": [
       "docs/operations/disaster-recovery.md"
     ],
+    "packages/db/src/seed.ts": [
+      "docs/dogfood/2026-05-23-dale-hvac-build-studio.md"
+    ],
+    "packages/db/src/sovereignty-assessment.ts": [
+      "docs/strategy/2026-09-cada-architects-forum-deck.md"
+    ],
+    "packages/db/src/wiki-taxonomy.ts": [
+      "docs/founder-kernel/AUTHORING.md",
+      "docs/founder-kernel/SCHEMA.md"
+    ],
+    "packages/storefront-templates/src/archetypes/index.ts": [
+      "docs/testing/archetype-audit-plan.md"
+    ],
+    "packages/validators/src/field-dispatch.ts": [
+      "docs/architecture/field-service-work-item.md"
+    ],
     "scripts/backup-postgres.sh": [
       "docs/operations/disaster-recovery.md"
+    ],
+    "scripts/capability-service-catalog.generated.json": [
+      "docs/architecture/capability-driven-runtime-profiles.md"
+    ],
+    "scripts/check-build-namespace.mjs": [
+      "docs/architecture/build-studio-namespace.md"
+    ],
+    "scripts/check-capability-compose-profiles.mjs": [
+      "docs/architecture/capability-driven-runtime-profiles.md"
+    ],
+    "scripts/check-mcp-tool-pack.mjs": [
+      "docs/architecture/mcp-tool-packs.md"
+    ],
+    "scripts/check-mobile-jest-pin.mjs": [
+      "docs/security/2026-05-24-shift-left-rollout.md",
+      "docs/testing/pre-pr-gate.md"
+    ],
+    "scripts/check-module-size.mjs": [
+      "docs/architecture/mcp-tool-packs.md"
+    ],
+    "scripts/check-no-private-identity.mjs": [
+      "docs/operations/oss-repo-identity-hygiene.md"
+    ],
+    "scripts/check-package-boundaries.mjs": [
+      "docs/architecture/package-boundaries.md"
+    ],
+    "scripts/check-style-drift.mjs": [
+      "docs/architecture/ui-token-styling.md"
+    ],
+    "scripts/compile-capability-service-catalog.mjs": [
+      "docs/architecture/capability-driven-runtime-profiles.md"
     ],
     "scripts/dpf-bootstrap-agent-toolchain.ps1": [
       "docs/user-guide/contributing/agent-dev-environments.md"
@@ -364,8 +681,79 @@
     "scripts/dpf-bootstrap-agent-toolchain.sh": [
       "docs/user-guide/contributing/agent-dev-environments.md"
     ],
+    "scripts/dpf-compose.mjs": [
+      "docs/architecture/capability-driven-runtime-profiles.md"
+    ],
+    "scripts/fresh-install.ps1": [
+      "docs/testing/archetype-audit-plan.md"
+    ],
+    "scripts/hooks/run-hook.mjs": [
+      "docs/install/platform-support-watchlist.md"
+    ],
+    "scripts/installer/install-state.schema.json": [
+      "docs/operations/install.md"
+    ],
+    "scripts/installer/lib/platform.sh": [
+      "docs/install/platform-support-watchlist.md"
+    ],
+    "scripts/issue-authority-tls-cert.sh": [
+      "docs/install/edge-node-air-gapped.md",
+      "docs/install/edge-node-multi-host.md"
+    ],
+    "scripts/lib/ci-policy-guards.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
+    "scripts/lib/resolve-capability-compose-profiles.mjs": [
+      "docs/architecture/capability-driven-runtime-profiles.md"
+    ],
+    "scripts/local-ci-runner.mjs": [
+      "docs/testing/pre-pr-gate.md"
+    ],
+    "scripts/mcp-tool-pack-baseline.json": [
+      "docs/architecture/mcp-tool-packs.md"
+    ],
+    "scripts/measure-platform-substrate-runtime.mjs": [
+      "docs/architecture/platform-substrate-boundaries.md"
+    ],
+    "scripts/measure-platform-substrate.mjs": [
+      "docs/architecture/platform-substrate-boundaries.md"
+    ],
+    "scripts/platform-substrate-baseline.json": [
+      "docs/architecture/platform-substrate-boundaries.md"
+    ],
+    "scripts/platform-substrate-manifest.json": [
+      "docs/architecture/capability-driven-runtime-profiles.md",
+      "docs/architecture/platform-substrate-boundaries.md"
+    ],
+    "scripts/platform-substrate-runtime-baseline.json": [
+      "docs/architecture/platform-substrate-boundaries.md"
+    ],
+    "scripts/pr-health.mjs": [
+      "docs/testing/pr-health.md",
+      "docs/testing/pre-pr-gate.md"
+    ],
+    "scripts/pr-health.test.mjs": [
+      "docs/testing/pr-health.md"
+    ],
+    "scripts/probes/marketing-media/local-render-receipt.json": [
+      "docs/security/tool-evaluations/2026-08-01-marketing-media-stack.md"
+    ],
     "scripts/restore-postgres.sh": [
       "docs/operations/disaster-recovery.md"
+    ],
+    "scripts/style-drift-baseline.json": [
+      "docs/architecture/ui-token-styling.md"
+    ],
+    "scripts/verify-edge-node-air-gap.sh": [
+      "docs/edge-node/security-and-sovereignty.md",
+      "docs/install/edge-node-air-gapped-verification-report.md",
+      "docs/install/edge-node-air-gapped.md"
+    ],
+    "services/edge-node/scripts/verify-lifecycle.ts": [
+      "docs/install/verification-runbook.md"
+    ],
+    "services/edge-node/src/collectors/unifi.ts": [
+      "docs/edge-node/unifi-adapter.md"
     ]
   },
   "docToRoutes": {
@@ -552,6 +940,95 @@
     ]
   },
   "docToCode": {
+    "docs/architecture/2026-06-09-long-running-agentic-process-architecture.md": [
+      "apps/web/components/build/BuildDispatchHistoryCard.tsx",
+      "apps/web/components/build/BuildProgressOperationalPanel.tsx",
+      "apps/web/components/build/DecisionPerspectiveGatePanel.tsx",
+      "apps/web/components/build/ProcessGraph.tsx",
+      "apps/web/components/build/StallEventHistoryStrip.tsx",
+      "apps/web/components/build/UnifiedEvidenceTimeline.tsx",
+      "apps/web/components/build/WorkflowStageInspector.tsx",
+      "apps/web/components/platform/StalledTaskRecoveryActions.tsx",
+      "apps/web/instrumentation.ts",
+      "apps/web/lib/actions/build.ts",
+      "apps/web/lib/build-pipeline.ts",
+      "apps/web/lib/build/progress-visibility.ts",
+      "apps/web/lib/decision-perspective/build-studio-gate.ts",
+      "apps/web/lib/explore/feature-build-types.ts",
+      "apps/web/lib/integrate/build-orchestrator.ts",
+      "apps/web/lib/integrate/build-pipeline.ts",
+      "apps/web/lib/integrate/build-studio-config.ts",
+      "apps/web/lib/integrate/claude-dispatch.ts",
+      "apps/web/lib/marketing/scheduler.ts",
+      "apps/web/lib/queue/functions/deliberation-run.ts",
+      "apps/web/lib/queue/functions/index.ts",
+      "apps/web/lib/queue/functions/quiescence-run.ts",
+      "apps/web/lib/queue/functions/taskrun-watchdog.ts",
+      "apps/web/lib/queue/inngest-client.ts",
+      "apps/web/lib/queue/notification-adapter.ts",
+      "apps/web/lib/tak/agent-grants.ts",
+      "apps/web/lib/tak/autonomous-work-run.ts",
+      "docker-compose.yml",
+      "packages/db/prisma/schema.prisma"
+    ],
+    "docs/architecture/2026-06-14-ai-cockpit-sysml-architecture-note.md": [
+      "apps/web/lib/ea/ai-routing-architecture-extract.ts",
+      "apps/web/lib/ea/ai-routing-architecture-registry.ts"
+    ],
+    "docs/architecture/2026-06-14-odysseus-review-depth-pass.md": [
+      "apps/web/app/api/integrations/email-postmark/inbound/route.ts",
+      "apps/web/lib/inference/routed-inference.ts",
+      "apps/web/lib/marketing/channels/email-postmark/responder.ts",
+      "apps/web/lib/routing/pipeline-v2.ts",
+      "apps/web/lib/routing/request-contract.ts",
+      "packages/db/prisma/schema.prisma"
+    ],
+    "docs/architecture/branch-and-worktree-runbook.md": [
+      "apps/web/lib/self-upgrade/local-changes-ledger.ts"
+    ],
+    "docs/architecture/build-studio-namespace.md": [
+      "scripts/check-build-namespace.mjs"
+    ],
+    "docs/architecture/capability-driven-runtime-profiles.md": [
+      "apps/web/lib/platform-runtime/capability-service-projection.ts",
+      "apps/web/lib/platform-runtime/operational-state.ts",
+      "packages/db/data/platform-runtime-capabilities.json",
+      "scripts/capability-service-catalog.generated.json",
+      "scripts/check-capability-compose-profiles.mjs",
+      "scripts/compile-capability-service-catalog.mjs",
+      "scripts/dpf-compose.mjs",
+      "scripts/lib/resolve-capability-compose-profiles.mjs",
+      "scripts/platform-substrate-manifest.json"
+    ],
+    "docs/architecture/data-model-stewardship-runbook.md": [
+      "apps/web/lib/routes.ts",
+      "apps/web/lib/shared/action-result.ts",
+      "apps/web/lib/shared/coerce.ts",
+      "apps/web/lib/shared/org-address.ts"
+    ],
+    "docs/architecture/delivery-ia.md": [
+      "apps/web/app/(shell)/delivery/page.tsx"
+    ],
+    "docs/architecture/field-service-work-item.md": [
+      "packages/validators/src/field-dispatch.ts"
+    ],
+    "docs/architecture/mcp-tool-packs.md": [
+      "apps/web/lib/mcp/packs/deliberation-siem-pack.ts",
+      "apps/web/lib/mcp/packs/feedback-pack.ts",
+      "apps/web/lib/mcp/packs/runtime-coordination-pack.ts",
+      "apps/web/lib/mcp/packs/work-capsules-pack.ts",
+      "apps/web/lib/mcp/packs/workbooks-pack.ts",
+      "apps/web/lib/mcp/tool-pack.ts",
+      "apps/web/lib/mcp/tool-registry.ts",
+      "scripts/check-mcp-tool-pack.mjs",
+      "scripts/check-module-size.mjs",
+      "scripts/mcp-tool-pack-baseline.json"
+    ],
+    "docs/architecture/package-boundaries.md": [
+      "apps/web/lib/contracts/entity-contract-drift.ts",
+      "apps/web/lib/contracts/package-boundaries.test.ts",
+      "scripts/check-package-boundaries.mjs"
+    ],
     "docs/architecture/platform-overview.md": [
       "docker-compose.yml",
       "monitoring/prometheus/prometheus.yml",
@@ -559,11 +1036,150 @@
       "packages/db/src/pg-graph.ts",
       "packages/db/src/pgvector-store.ts"
     ],
+    "docs/architecture/platform-substrate-boundaries.md": [
+      "packages/db/data/platform-runtime-capabilities.json",
+      "scripts/measure-platform-substrate-runtime.mjs",
+      "scripts/measure-platform-substrate.mjs",
+      "scripts/platform-substrate-baseline.json",
+      "scripts/platform-substrate-manifest.json",
+      "scripts/platform-substrate-runtime-baseline.json"
+    ],
+    "docs/architecture/section-navigation.md": [
+      "apps/web/components/shell/SectionNav.tsx",
+      "apps/web/lib/navigation/section-nav-model.ts"
+    ],
+    "docs/architecture/ui-token-styling.md": [
+      "scripts/check-style-drift.mjs",
+      "scripts/style-drift-baseline.json"
+    ],
+    "docs/design/golden-triangle-design.md": [
+      "apps/web/lib/queue/functions/deliberation-run.ts",
+      "apps/web/lib/routing/chat-adapter.ts",
+      "apps/web/lib/routing/cost-ranking.ts",
+      "apps/web/lib/routing/request-contract.ts",
+      "apps/web/lib/tak/agentic-loop.ts"
+    ],
+    "docs/dogfood/2026-05-23-dale-hvac-build-studio.md": [
+      "packages/db/src/seed.ts"
+    ],
+    "docs/edge-node/deployment-topology.md": [
+      "docker-compose.edge-snmp.yml",
+      "docker-compose.edge-standalone-tls.yml",
+      "docker-compose.edge-standalone.yml",
+      "docker-compose.edge.macvlan.yml",
+      "docker-compose.edge.yml"
+    ],
+    "docs/edge-node/macvlan-deployment.md": [
+      "docker-compose.edge.macvlan.yml"
+    ],
+    "docs/edge-node/security-and-sovereignty.md": [
+      "scripts/verify-edge-node-air-gap.sh"
+    ],
+    "docs/edge-node/unifi-adapter.md": [
+      "apps/web/app/api/v1/edge/adapters/route.ts",
+      "services/edge-node/src/collectors/unifi.ts"
+    ],
+    "docs/founder-kernel/AUTHORING.md": [
+      "apps/web/lib/decision/golden-decisions.baseline.json",
+      "apps/web/lib/decision/golden-decisions.test.ts",
+      "packages/db/src/wiki-taxonomy.ts"
+    ],
+    "docs/founder-kernel/SCHEMA.md": [
+      "packages/db/src/wiki-taxonomy.ts"
+    ],
+    "docs/install/cloud-single-vm.md": [
+      "docker-compose.edge-standalone.yml"
+    ],
+    "docs/install/edge-node-air-gapped-verification-report.md": [
+      "scripts/verify-edge-node-air-gap.sh"
+    ],
+    "docs/install/edge-node-air-gapped.md": [
+      "docker-compose.edge-standalone-tls.yml",
+      "docker-compose.edge-standalone.yml",
+      "scripts/issue-authority-tls-cert.sh",
+      "scripts/verify-edge-node-air-gap.sh"
+    ],
+    "docs/install/edge-node-multi-host.md": [
+      "docker-compose.edge-standalone-tls.yml",
+      "docker-compose.edge-standalone.yml",
+      "docker-compose.edge.yml",
+      "docker-compose.tls.yml",
+      "scripts/issue-authority-tls-cert.sh"
+    ],
+    "docs/install/linux.md": [
+      ".github/workflows/install-verification.yml"
+    ],
+    "docs/install/platform-support-watchlist.md": [
+      "apps/web/components/monitoring/health-summary.ts",
+      "packages/db/src/discovery-collectors/network.ts",
+      "scripts/hooks/run-hook.mjs",
+      "scripts/installer/lib/platform.sh"
+    ],
+    "docs/install/verification-runbook.md": [
+      "services/edge-node/scripts/verify-lifecycle.ts"
+    ],
     "docs/operations/disaster-recovery.md": [
       "docker-compose.yml",
       "packages/db/src/seed-platform-backup.ts",
       "scripts/backup-postgres.sh",
       "scripts/restore-postgres.sh"
+    ],
+    "docs/operations/install.md": [
+      "scripts/installer/install-state.schema.json"
+    ],
+    "docs/operations/mobile-store-launch-runbook.md": [
+      "apps/mobile/eas.json"
+    ],
+    "docs/operations/oss-repo-identity-hygiene.md": [
+      "scripts/check-no-private-identity.mjs"
+    ],
+    "docs/runbooks/2026-07-20-collation-drift-index-corruption.md": [
+      "packages/db/src/migrations/exact-key-repair.ts"
+    ],
+    "docs/security/2026-05-24-shift-left-rollout.md": [
+      ".github/workflows/ci.yml",
+      ".github/workflows/codeql.yml",
+      ".github/workflows/secrets-scan.yml",
+      "scripts/check-mobile-jest-pin.mjs"
+    ],
+    "docs/security/secrets-scan.md": [
+      ".github/workflows/codeql.yml",
+      ".github/workflows/security-inflow-gate.yml"
+    ],
+    "docs/security/tool-evaluations/2026-08-01-marketing-media-stack.md": [
+      "scripts/probes/marketing-media/local-render-receipt.json"
+    ],
+    "docs/strategy/2026-09-cada-architects-forum-deck.md": [
+      "apps/web/lib/actions/sovereignty.ts",
+      "apps/web/lib/inference/local-only.ts",
+      "apps/web/lib/routing/pipeline-v2.ts",
+      "packages/db/scripts/check-cada-readiness.ts",
+      "packages/db/scripts/seed-cada-regulation.ts",
+      "packages/db/src/cada-readiness.ts",
+      "packages/db/src/eu-jurisdictions.ts",
+      "packages/db/src/regulation-applicability.ts",
+      "packages/db/src/sovereignty-assessment.ts"
+    ],
+    "docs/testing/archetype-audit-plan.md": [
+      "packages/storefront-templates/src/archetypes/index.ts",
+      "scripts/fresh-install.ps1"
+    ],
+    "docs/testing/ci-evidence.md": [
+      "docs/testing/ci-observation-baseline.json"
+    ],
+    "docs/testing/pr-health.md": [
+      "config/merge-readiness-policy.json",
+      "scripts/pr-health.mjs",
+      "scripts/pr-health.test.mjs"
+    ],
+    "docs/testing/pre-pr-gate.md": [
+      ".githooks/lib/pre-push-chained.sh",
+      ".github/workflows/ci.yml",
+      ".github/workflows/codeql.yml",
+      "scripts/check-mobile-jest-pin.mjs",
+      "scripts/lib/ci-policy-guards.mjs",
+      "scripts/local-ci-runner.mjs",
+      "scripts/pr-health.mjs"
     ],
     "docs/user-guide/ai-workforce/connecting-providers.md": [
       "apps/web/app/(shell)/platform/ai/providers/page.tsx",
