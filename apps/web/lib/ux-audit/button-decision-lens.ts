@@ -86,12 +86,19 @@ export function isDecisionCloseout(reply: string): boolean {
  * attribute a miss precisely: a sentinel that never rendered is a different
  * defect from a prose closeout the fallback failed to recover.
  */
-export function expectedCarrier(rawReply: string): "sentinel" | "prose-fallback" | "none" {
+export function expectedCarrier(
+  rawReply: string,
+  buttonsRendered = false,
+): "sentinel" | "sentinel-stripped" | "prose-fallback" | "none" {
   if (rawReply.includes("dpf-decision")) {
     const { decision } = parseDecisionFromContent(rawReply);
     if (decision) return "sentinel";
   }
   if (deriveDecisionFromProse(rawReply)) return "prose-fallback";
+  // Buttons rendered but the visible text explains neither: the renderer strips
+  // the sentinel before the DOM is readable (parseDecisionFromContent runs at
+  // render time), so a live observation can only attribute it by elimination.
+  if (buttonsRendered) return "sentinel-stripped";
   return "none";
 }
 

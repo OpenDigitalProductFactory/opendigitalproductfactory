@@ -171,3 +171,21 @@ describe("inference-failure replies are NOT-RUN, never a silent pass", () => {
     expect(findings[0]!.severity).toBe("critical");
   });
 });
+
+describe("carrier attribution when the sentinel is stripped at render time", () => {
+  it("attributes rendered buttons with no visible carrier to a stripped sentinel", () => {
+    expect(expectedCarrier("Here is what I found. No question here.", true)).toBe(
+      "sentinel-stripped",
+    );
+  });
+
+  it("still reports none when no buttons rendered", () => {
+    expect(expectedCarrier("Here is what I found. No question here.", false)).toBe("none");
+  });
+
+  it("prefers a real prose closeout over the stripped-sentinel fallback", () => {
+    expect(
+      expectedCarrier("Should I fix the render first, or prioritize the CLI saturation?", true),
+    ).toBe("prose-fallback");
+  });
+});

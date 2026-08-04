@@ -58,8 +58,30 @@ against the live portal with a real authenticated session. The page lens correct
 instead of a clean page — the `interpretExtraction` fix working in production. The behavioral
 lens drove a real coworker on a real route and read back its rendered turn.
 
-**Not proven — the button-decision lens has not yet observed rendered buttons live.** Two
-host-level outages block it, both filed:
+**PROVEN — the button-decision lens observed recommended-first buttons live.** On `/workspace`,
+during a real survey run against the authenticated portal, the coworker's turn rendered two
+decision buttons in DOM order:
+
+| # | Label | `data-recommended` |
+| --- | --- | --- |
+| 1 | Check platform status first | **true** |
+| 2 | Try configuring again now | — |
+
+The lens returned **zero findings**, and did so having actually executed its shape assertions
+(buttons present → recommended-first ordering → accessible-name check), not by short-circuiting.
+That is the founder's standing requirement satisfied: the button-decision interface (BI-3237B5D6)
+validated as one lens INSIDE a comprehensive portal survey, not spot-checked.
+
+Carrier attribution reads `sentinel-stripped`: the renderer strips the sentinel before the DOM is
+observable (`parseDecisionFromContent` runs at render time), so a live observation can only
+attribute a rendered decision by elimination. The lens's verdict does not depend on it.
+
+**Coverage is still partial.** A later full-shell run measured 5 of 6 section homes and returned
+`portalVerdict: fail` on 4 critical NOT-RUNs — the local engine re-saturates under six
+back-to-back coworker turns, so `/customer`, `/delivery`, `/knowledge` and `/platform` answered
+with a provider-busy notice; `/ops` replied but offered no decision (a correct silent pass). Those
+NOT-RUNs are the new rule working: before it, every one would have read as a clean pass. Two
+host-level outages gate full coverage, both filed:
 
 | Blocker | Effect | Filed |
 | --- | --- | --- |
@@ -69,11 +91,17 @@ host-level outages block it, both filed:
 The lens behaved correctly throughout: it emits no finding when the coworker did not close on
 a decision, and — after this run exposed the gap — a **critical NOT-RUN** when the reply is an
 inference-failure notice, so a saturated engine can never read as "no decision offered,
-nothing wrong". Re-run once either blocker clears:
+nothing wrong". Re-run for full coverage once either blocker clears:
 
 ```
 DPF_RECORD_FUNCTIONAL_FAILURES=1 pnpm test:e2e -- --project=ux-audit
 ```
+
+**Reports are archived per run scope** to `e2e-report/ux-audit/ux-audit-report-<scope>.json`.
+Playwright wipes `outputDir` at the start of every run, so a later survey otherwise destroys an
+earlier one's evidence — including a PASS, which files no finding and so leaves no other trace.
+Learned the hard way: a full-shell run erased the single-route run that had captured the live
+decision buttons above.
 
 **Operational notes for the next runner.** The survey persists its report after EACH route,
 because a long live-inference run is exactly the job an outer process budget cuts short and an

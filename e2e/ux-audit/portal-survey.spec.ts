@@ -169,7 +169,7 @@ test("portal-shell UX survey — page lens + coworker button-decision lens", asy
           route,
           reply: observed.reply,
           buttons: observed.buttons,
-          expectedCarrier: expectedCarrier(observed.reply),
+          expectedCarrier: expectedCarrier(observed.reply, observed.buttons.length > 0),
         });
 
         return evaluateButtonDecision({ route, ...observed });
@@ -183,6 +183,18 @@ test("portal-shell UX survey — page lens + coworker button-decision lens", asy
   const reportPath = join(testInfo.outputDir, "ux-audit-report.json");
   await mkdir(dirname(reportPath), { recursive: true });
 
+  // Playwright wipes outputDir at the start of every run, so a later survey
+  // silently destroys an earlier one's evidence — including a PASS, which files
+  // no finding and therefore leaves no other trace. Keep a durable copy per run
+  // scope outside outputDir. (Observed the hard way: a full-shell run erased the
+  // single-route run that had captured live decision buttons.)
+  const scopeTag = (routeFilter.length > 0 ? routeFilter.join("_") : "shell")
+    .replace(/[^a-z0-9]+/gi, "-")
+    .replace(/^-+|-+$/g, "");
+  const archiveDir = join("e2e-report", "ux-audit");
+  const archivePath = join(archiveDir, `ux-audit-report-${scopeTag}.json`);
+  await mkdir(archiveDir, { recursive: true });
+
   const results: RouteSurveyResult[] = [];
   let report: UxAuditReport = aggregateReport(results);
 
@@ -191,9 +203,7 @@ test("portal-shell UX survey — page lens + coworker button-decision lens", asy
     results.push(...partial.routes);
     report = aggregateReport(results);
 
-    await writeFile(
-      reportPath,
-      JSON.stringify(
+    const serialized = JSON.stringify(
         {
           epic: "EP-UX-AUDITOR",
           backlogItemId: "BI-C3768478",
@@ -209,9 +219,9 @@ test("portal-shell UX survey — page lens + coworker button-decision lens", asy
         },
         null,
         2,
-      ),
-      "utf8",
-    );
+      );
+    await writeFile(reportPath, serialized, "utf8");
+    await writeFile(archivePath, serialized, "utf8");
     // eslint-disable-next-line no-console
     console.log(
       `[ux-audit] ${entry.route}: verdict=${results[results.length - 1]!.verdict} ` +
