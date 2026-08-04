@@ -32,7 +32,6 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
 
 // Single SoT for override codes (BI-563F6AB6) — shared with PreToolUse guards.
 import {

@@ -476,7 +476,7 @@ The bypass is **recorded, never silent** — the reason is persisted into the
 gate state file and surfaced by `pnpm pr:health` at PR time:
 
 ```bash
-DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON="WIP handoff, gate before PR" git push
+DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON="operator-emergency: WIP handoff, gate before PR" git push
 ```
 
 **PR-time guard.** `pnpm pr:health` treats a runtime-code PR without local-CI

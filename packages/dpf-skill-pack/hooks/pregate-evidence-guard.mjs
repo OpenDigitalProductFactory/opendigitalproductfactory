@@ -14,7 +14,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
 import {
   readHookPayload,
