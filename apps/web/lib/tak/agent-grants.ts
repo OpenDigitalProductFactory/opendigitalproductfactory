@@ -246,6 +246,8 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
   dispatch_consolidation_bet: ["build_promote"],
   // BI-A08EBAEC: MCP call thrash / volume analysis from ToolExecution
   analyze_mcp_call_efficiency: ["agent_control_read"],
+  // BI-3003EE63: A2A coworker↔coworker edge health (MCP-efficiency twin)
+  analyze_a2a_collaboration_health: ["agent_control_read"],
   spawn_subagents: ["coworker_engagement_write"],
 
   // Org/WWWD qa elicitation feeder (BI-44526F3E Phase C): capture a CONFIRMED

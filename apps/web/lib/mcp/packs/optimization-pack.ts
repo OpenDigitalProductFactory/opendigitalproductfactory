@@ -1,9 +1,9 @@
-// Optimization tool pack (BI-C350F8B0, EP-8DC217EB BET-0d + BI-A08EBAEC).
+// Optimization tool pack (BI-C350F8B0, EP-8DC217EB BET-0d + BI-A08EBAEC + BI-3003EE63).
 //
 // Coworker/operator-callable surface of the self-optimization engine: dispatch
 // a consolidation bet to Build Studio, attributed to its WSID-profiled
-// coworker; and analyze MCP/governed-tool call efficiency (thrash, retries,
-// volume) from ToolExecution to cut agent token waste.
+// coworker; analyze MCP/governed-tool call efficiency (thrash, retries,
+// volume) from ToolExecution; and analyze A2A coworker↔coworker edge health.
 
 import type { ToolDefinition, ToolResult } from "@/lib/mcp-tools";
 import type { ToolPack } from "../tool-pack";
@@ -58,6 +58,35 @@ const definitions: ToolDefinition[] = [
     requiredCapability: "view_platform",
     executionMode: "immediate",
     // notify/dispatchAiOps write platform rows; default path is read-only analysis.
+    sideEffect: true,
+    annotations: { readOnlyHint: false, idempotentHint: true },
+  },
+  {
+    name: "analyze_a2a_collaboration_health",
+    description:
+      "Analyze coworker↔coworker (A2A) edges for failed/blocked handoffs, stuck active delegations, orphan task lineage, and pair failure rates. notify=true posts AI Ops alerts; dispatchAiOps=true files critical BIs and queues a one-shot platform-engineer review. Twin of analyze_mcp_call_efficiency for the multi-agent plane.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        windowHours: {
+          type: "number",
+          description: "Lookback window in hours (default 24, max 168).",
+        },
+        notify: {
+          type: "boolean",
+          description:
+            "When true, create PlatformNotification rows for warning/critical findings (deduped 24h). Default false.",
+        },
+        dispatchAiOps: {
+          type: "boolean",
+          description:
+            "When true, file critical findings as backlog items, record ImprovementSignals, and queue a one-shot AI Ops (platform-engineer) review task. Default false (daily cron enables this).",
+        },
+      },
+      required: [],
+    },
+    requiredCapability: "view_platform",
+    executionMode: "immediate",
     sideEffect: true,
     annotations: { readOnlyHint: false, idempotentHint: true },
   },
@@ -148,6 +177,54 @@ async function analyzeMcpCallEfficiency(
   };
 }
 
+async function analyzeA2aCollaborationHealth(
+  params: Record<string, unknown>,
+  userId: string,
+): Promise<ToolResult> {
+  const { runCollaborationHealthReport } = await import(
+    "@/lib/operate/a2a-collaboration-health/report"
+  );
+  const windowHours =
+    typeof params["windowHours"] === "number" ? params["windowHours"] : 24;
+  const notify = params["notify"] === true;
+  const dispatchAiOps = params["dispatchAiOps"] === true;
+
+  const { report, notified, aiOps } = await runCollaborationHealthReport({
+    windowHours,
+    notify,
+    dispatchAiOps,
+    ownerUserId: dispatchAiOps ? userId : undefined,
+  });
+
+  const top = report.findings
+    .slice(0, 5)
+    .map((f) => `${f.severity}:${f.kind}:${f.edgeKind}→${f.recommendedAction}`)
+    .join("; ");
+
+  const aiOpsNote =
+    aiOps == null
+      ? ""
+      : aiOps.skipped
+        ? `; aiOps skipped (${aiOps.reason})`
+        : `; aiOps task=${aiOps.agentTaskId} bis=${aiOps.backlogItemsFiled.length}`;
+
+  return {
+    success: true,
+    message:
+      `${report.totalEdges} edge(s) in window; ${(report.successRate * 100).toFixed(0)}% completed; ` +
+      `${report.findings.length} finding(s)` +
+      (notified ? `; notified ${notified}` : "") +
+      aiOpsNote +
+      (top ? ` — ${top}` : "") +
+      `. ${report.ledgerSufficiency.note}`,
+    data: {
+      ...report,
+      notified,
+      aiOps,
+    } as unknown as Record<string, unknown>,
+  };
+}
+
 export const optimizationPack: ToolPack = {
   packId: "optimization",
   definitions,
@@ -155,9 +232,12 @@ export const optimizationPack: ToolPack = {
     dispatch_consolidation_bet: (params, userId) => dispatchBet(params, userId),
     analyze_mcp_call_efficiency: (params, userId) =>
       analyzeMcpCallEfficiency(params, userId),
+    analyze_a2a_collaboration_health: (params, userId) =>
+      analyzeA2aCollaborationHealth(params, userId),
   },
   grants: {
     dispatch_consolidation_bet: ["build_promote"],
     analyze_mcp_call_efficiency: ["agent_control_read"],
+    analyze_a2a_collaboration_health: ["agent_control_read"],
   },
 };

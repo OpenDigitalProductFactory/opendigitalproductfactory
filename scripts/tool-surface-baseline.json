@@ -1,24 +1,24 @@
 {
-  "_comment": "Plane-4 standing tool-surface baseline (scripts/check-tool-surface.mjs). Growth is ALLOWED but never silent: raise a value and record `reason` + `recordedAt` saying what capability it buys. Dispatch-time caps are governed elsewhere and are not the subject of this baseline.",
-  "selectionCliff": 15,
-  "entries": {
-    "registry.toolDefinitions": {
-      "value": 351,
-      "reason": "BI-A08EBAEC: analyze_mcp_call_efficiency turns the ToolExecution ledger into thrash/retry/volume findings so operators can cut agent token waste (skills, webhooks, tool merges) without a second telemetry store.",
-      "recordedAt": "2026-08-03"
-    },
-    "registry.packFiles": {
-      "value": 81,
-      "reason": "Keeps supply coverage in its own bounded pack rather than widening the storefront pack, so the capability travels with its own grant (stock_read) and an archetype that stocks nothing never pays for it in its selection space.",
-      "recordedAt": "2026-08-01"
-    },
-    "tier.coreToolNames": {
-      "value": 29,
-      "reason": "Adds WWMD kernel discovery to core for peer CLIs (Grok/Codex): principle_decide + wiki_query. Those clients have no ToolSearch, so a lean core that omitted WWMD blocked AGENTS-required kernel consults even when the token already granted registry_read. Still lean vs full catalogue; authority stays grant/scope gated.",
-      "recordedAt": "2026-08-03"
-    },
-    "dispatch.maxAttachedTools": {
-      "value": 48
-    }
+ "_comment": "Plane-4 standing tool-surface baseline (scripts/check-tool-surface.mjs). Growth is ALLOWED but never silent: raise a value and record `reason` + `recordedAt` saying what capability it buys. Dispatch-time caps are governed elsewhere and are not the subject of this baseline.",
+ "selectionCliff": 15,
+ "entries": {
+  "registry.toolDefinitions": {
+   "value": 352,
+   "reason": "Adds analyze_a2a_collaboration_health (BI-3003EE63): observes the coworker↔coworker (A2A) delegation plane — failed/blocked handoffs, stuck active delegations, orphan task lineage, pair failure rates. No existing tool covers this surface; analyze_mcp_call_efficiency is its twin for the tool-call plane and cannot see agent-to-agent edges. It carries its own grant and feeds AI-Ops alerting/BI dispatch.",
+   "recordedAt": "2026-08-04"
+  },
+  "registry.packFiles": {
+   "value": 81,
+   "reason": "Keeps supply coverage in its own bounded pack rather than widening the storefront pack, so the capability travels with its own grant (stock_read) and an archetype that stocks nothing never pays for it in its selection space.",
+   "recordedAt": "2026-08-01"
+  },
+  "tier.coreToolNames": {
+   "value": 29,
+   "reason": "Adds WWMD kernel discovery to core for peer CLIs (Grok/Codex): principle_decide + wiki_query. Those clients have no ToolSearch, so a lean core that omitted WWMD blocked AGENTS-required kernel consults even when the token already granted registry_read. Still lean vs full catalogue; authority stays grant/scope gated.",
+   "recordedAt": "2026-08-03"
+  },
+  "dispatch.maxAttachedTools": {
+   "value": 48
   }
+ }
 }

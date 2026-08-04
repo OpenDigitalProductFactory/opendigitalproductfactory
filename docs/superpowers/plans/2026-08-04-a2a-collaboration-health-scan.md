@@ -25,19 +25,20 @@ Daily (or on-demand) pass over coworker↔coworker substrate that **finds collab
 
 ## Phases
 
-### Slice 1 (this PR) — analyzer + registration
+### Slice 1 (merged #3964) — analyzer + registration
 
 1. Pure `analyzeCollaborationHealth(events)` — hermetic, no Prisma/React.
 2. Unit tests: failed/blocked density, stuck active delegations, orphan lineage, sparse capture honesty.
-3. Job catalog row + Inngest function that loads recent rows → pure analyzer → logs rollup (notify/BI deferred).
-4. This plan + pointer from inventory follow-on language (optional body note only if inventory already merged).
+3. Job catalog row + Inngest function that loads recent rows → pure analyzer → logs rollup.
+4. Plan checked in under `docs/superpowers/plans/`.
 
-### Slice 2 — closed loop
+### Slice 2 (this PR) — closed loop
 
-1. PlatformNotification for warning+ findings.
+1. PlatformNotification for warning+ findings (`category: a2a-collaboration-health`).
 2. ImprovementSignal `sourceType: a2a-collaboration-health`.
-3. Critical auto-BI `BI-A2A-EFF-*` + optional platform-engineer one-shot (copy MCP aiops-handoff).
-4. MCP tool `analyze_a2a_collaboration_health` in optimization pack.
+3. Critical auto-BI `BI-A2A-EFF-*` + one-shot platform-engineer review task.
+4. MCP tool `analyze_a2a_collaboration_health` in optimization pack + agent-grants.
+5. Daily cron enables notify + dispatchAiOps (owner from scheduled-owner).
 
 ### Slice 3 — polish
 
