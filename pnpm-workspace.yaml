@@ -6,6 +6,10 @@ packages:
   - "services/integration-test-harness"
 overrides:
   '@types/react': '^19'
+  # find-my-way < 9.7.0: GHSA-c96f-x56v-gq3h / CVE-2026-47219, high severity
+  # (OSV vulnerability scan on PR #3893). Transitive of the Expo SDK 56 dev
+  # server toolchain. Floor to the patched 9.7.0.
+  find-my-way: '^9.7.0'
   # @hono/node-server < 2.0.5: GHSA-frvp-7c67-39w9 path traversal in serve-static
   # on Windows via encoded backslash (%5C) (Dependabot #105, medium). First patched
   # release is on the 2.x line. Dev/tooling transitive of @modelcontextprotocol/sdk
@@ -13,10 +17,11 @@ overrides:
   # 2.0.5 needs Node >=20 + hono ^4, both already satisfied by this workspace.
   '@hono/node-server': '^2.0.5'
   '@expo/cli@0.24.24>picomatch': '3.0.2'
-  # brace-expansion <= 5.0.7: GHSA-mh99-v99m-4gvg / CVE-2026-14257
-  # high-severity advisory (Dependabot #133). Floor every transitive line to
-  # the patched release accepted by OSV.
-  'brace-expansion@<=5.0.7': '5.0.8'
+  # brace-expansion <= 5.0.8: GHSA-mh99-v99m-4gvg / CVE-2026-14257, then
+  # GHSA-rgw5-rvv9-x895 / CVE-2026-69152 (unbounded intermediate arrays,
+  # bypassing the 5.0.8 mitigation — found on PR #3893's OSV scan). Floor
+  # every transitive line to the current patched release, 5.0.9.
+  'brace-expansion@<=5.0.8': '5.0.9'
   lodash: '4.18.0'
   lodash-es: '4.18.0'
   node-forge: '1.4.0'
@@ -51,7 +56,11 @@ overrides:
   '@floating-ui/react-dom': '2.1.8'
   '@floating-ui/react': '0.27.19'
   '@floating-ui/utils': '0.2.11'
-  ip-address: '^10.2.0'
+  # ip-address < 10.3.1: GHSA-mwp4-54f8-5fhr / CVE-2026-69192, high severity —
+  # Address4 decodes leading-zero octets as decimal while resolvers decode
+  # them as octal, an SSRF-adjacent parser confusion (found on PR #3893's
+  # OSV scan). Was floored at ^10.2.0 for an earlier issue; raised to ^10.3.1.
+  ip-address: '^10.3.1'
   # sharp < 0.35.0: inherited libvips vulnerabilities CVE-2026-33327/33328/35590/35591
   # (Dependabot #110, high). apps/web already depends on ^0.35.3 directly; this floor
   # also lifts the stale sharp@0.34.5 that Next.js ships as a bundled optionalDependency.

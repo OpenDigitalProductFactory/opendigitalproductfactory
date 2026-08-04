@@ -229,6 +229,16 @@
       ],
       "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
     },
+    "@react-native/jest-preset": {
+      "added": "2026-08-04",
+      "workspaces": [
+        "apps/mobile"
+      ],
+      "kinds": [
+        "dev"
+      ],
+      "note": "Official Meta/React Native package (@react-native scope, same publisher as react-native itself). Split out of react-native's own package in RN 0.85 / jest-expo 57 as an explicit peer dep — dev-only, test-config surface, no runtime code shipped to the app bundle. Pinned to 0.85.3 to match the workspace's react-native version (BI-91077E80)."
+    },
     "@react-pdf/renderer": {
       "added": "2026-06-21",
       "workspaces": [
@@ -774,16 +784,6 @@
       "added": "2026-06-21",
       "workspaces": [
         "apps/mobile"
-      ],
-      "kinds": [
-        "prod"
-      ],
-      "note": "bootstrap — pre-existing dependency, acknowledged in bulk"
-    },
-    "neo4j-driver": {
-      "added": "2026-06-21",
-      "workspaces": [
-        "packages/db"
       ],
       "kinds": [
         "prod"
