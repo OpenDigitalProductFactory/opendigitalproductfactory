@@ -126,6 +126,25 @@ function digest(value: string): string {
 }
 
 /**
+ * Whether this install can sign a receipt at all.
+ *
+ * Exposed so callers can decide EXPLICITLY rather than by catching an exception.
+ * A2A task creation uses it to omit the receipt when no secret is configured:
+ * emitting no receipt is truthful, whereas emitting one signed with a guessable
+ * value is a lie that looks exactly like the real thing — and failing task
+ * creation outright would turn a configuration gap into an outage of the whole
+ * collaboration path (BI-2F318FB3).
+ */
+export function canSignDelegationReceipts(): boolean {
+  try {
+    receiptSecret();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Signing secret. Throws when unset — there is deliberately NO fallback constant.
  *
  * The previous default was a literal in this file, so anyone who could read the

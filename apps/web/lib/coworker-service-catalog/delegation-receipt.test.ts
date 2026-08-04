@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  canSignDelegationReceipts,
   createCoworkerDelegationReceipt,
   verifyCoworkerDelegationReceipt,
 } from "./delegation-receipt";
@@ -183,5 +184,39 @@ describe("signing secret must be configured (BI-2F318FB3)", () => {
         {},
       ),
     ).toThrow(/signing secret/i);
+  });
+});
+
+describe("canSignDelegationReceipts (BI-2F318FB3)", () => {
+  const saved = {
+    receipt: process.env.DPF_DELEGATION_RECEIPT_SECRET,
+    auth: process.env.AUTH_SECRET,
+    nextAuth: process.env.NEXTAUTH_SECRET,
+  };
+
+  afterEach(() => {
+    if (saved.receipt === undefined) delete process.env.DPF_DELEGATION_RECEIPT_SECRET;
+    else process.env.DPF_DELEGATION_RECEIPT_SECRET = saved.receipt;
+    if (saved.auth === undefined) delete process.env.AUTH_SECRET;
+    else process.env.AUTH_SECRET = saved.auth;
+    if (saved.nextAuth === undefined) delete process.env.NEXTAUTH_SECRET;
+    else process.env.NEXTAUTH_SECRET = saved.nextAuth;
+  });
+
+  it("reports false when nothing is configured, so callers can decide explicitly", () => {
+    // Exposed as a predicate rather than left as an exception: A2A task creation
+    // omits the receipt instead of either emitting an untrustworthy one or
+    // failing the whole task.
+    delete process.env.DPF_DELEGATION_RECEIPT_SECRET;
+    delete process.env.AUTH_SECRET;
+    delete process.env.NEXTAUTH_SECRET;
+    expect(canSignDelegationReceipts()).toBe(false);
+  });
+
+  it("reports true once any accepted source is set", () => {
+    delete process.env.DPF_DELEGATION_RECEIPT_SECRET;
+    delete process.env.NEXTAUTH_SECRET;
+    process.env.AUTH_SECRET = "configured";
+    expect(canSignDelegationReceipts()).toBe(true);
   });
 });
