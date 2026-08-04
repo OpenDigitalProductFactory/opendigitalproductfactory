@@ -147,10 +147,14 @@ describe("rollout registry (BI-E962B9CD)", () => {
     const entry = COWORKER_SELF_TASKS[PLT];
     expect(entry).toBeDefined();
     expect(entry!.routeContext).toBe("/platform");
+    expect(entry!.title).toMatch(/host resource/i);
     expect(entry!.prompt).toMatch(/create_knowledge_article/);
     // Grounded on real AI-layer data, not invented.
     expect(entry!.prompt).toMatch(/provider|model|cost|agent/i);
     expect(entry!.prompt).toMatch(/do not invent/i);
+    // BI-1C88254D: scheduled sweep must own host resource health, not only AI spend.
+    expect(entry!.prompt).toMatch(/host resource|disk|container sprawl|host alerts/i);
+    expect(entry!.prompt).toMatch(/BI-1C88254D|create_backlog_item/i);
   });
 
   it("keeps the new coworkers sub-daily even at Assertive (conservative cadence)", () => {

@@ -170,27 +170,43 @@ export const COWORKER_SELF_TASKS: Record<string, CoworkerSelfTask> = {
   // registry_write (create_knowledge_article) + agent_control_read for the real
   // AI-layer data, and its article is deduped on a stable title prefix so it never
   // collides with the Digital Product Estate Specialist's estate-posture article.
+  //
+  // BI-1C88254D: the same coworker also OWNS host resource health (disk free-space
+  // floors, Docker/container sprawl, critical host alerts). Charter alone was not
+  // enough — a scheduled sweep must notice firing host alerts and file work, so a
+  // disk alert cannot sit ownerless for days.
   "platform-engineer": {
-    title: "Refresh the AI platform posture article",
+    title: "Refresh AI platform posture and host resource health",
     prompt: [
       "You are running as a scheduled, autonomous task — no human is watching this",
       "turn, so finish the work rather than asking questions.",
       "",
       "Goal: keep a current AI platform posture knowledge article on the Platform",
-      "surface so the AI layer's health is legible without a human asking. Steps:",
+      "surface so the AI layer's health is legible without a human asking, AND act as",
+      "owner of host resource health (BI-1C88254D). Steps:",
       "1. Review the REAL AI-layer state available to you (provider status, model",
       "   profiles and tiers, token spend, failover chains, agent-to-provider",
       "   assignments, scheduled jobs) using your read tools.",
-      "2. Search existing knowledge articles first (search_knowledge_base). If there",
+      "2. Review host resource health with the tools you have (platform notifications",
+      "   and alerts, telemetry, scheduled jobs such as infra-prune, any disk /",
+      "   container / filesystem free-space signals). Note open critical/warning",
+      "   host alerts and whether infra pruning or other jobs already cover them.",
+      "3. Search existing knowledge articles first (search_knowledge_base). If there",
       "   is NO recent AI-platform-posture article, create ONE with",
       `   create_knowledge_article: a concise reference article (category`,
       `   'reference') whose title STARTS WITH "${AI_PLATFORM_POSTURE_ARTICLE_TITLE_PREFIX}"`,
       "   (this stable prefix is how the platform recognizes your own article),",
-      "   summarizing provider health, cost posture, any underpowered or unassigned",
-      "   agents, and what needs review — grounded ONLY in real AI-layer data.",
-      "3. If a recent posture article already exists, do NOT duplicate it — refresh",
-      "   the assessment only if the AI layer has materially changed, otherwise stop.",
-      "Do not invent providers, models, costs, or agents; cite only real data.",
+      "   summarizing provider health, cost posture, underpowered or unassigned",
+      "   agents, host disk/container posture, open host alerts, and what needs",
+      "   review — grounded ONLY in real data.",
+      "4. If a recent posture article already exists, do NOT duplicate it — refresh",
+      "   the assessment only if the AI layer or host resource picture has materially",
+      "   changed, otherwise stop after step 5.",
+      "5. For each open critical host-resource alert with no recent backlog item,",
+      "   file or update a backlog item (create_backlog_item / update path) so disk",
+      "   free-space floors, container sprawl, and critical host alerts have an owner",
+      "   and a tracked next action. Do not invent hosts, paths, or free-space numbers.",
+      "Do not invent providers, models, costs, agents, disks, or alerts; cite only real data.",
     ].join("\n"),
     routeContext: "/platform",
     cadence: {
@@ -335,7 +351,7 @@ export function coworkerSelfTaskRequiredTool(
       args: {
         title: `${AI_PLATFORM_POSTURE_ARTICLE_TITLE_PREFIX} (needs refresh)`,
         body:
-          "Provisional AI-platform-posture article created automatically because the Platform surface had no recent posture summary. The AI Ops Engineer should replace this with a grounded assessment of provider health, cost posture, model routing, and any underpowered or unassigned agents on its next run.",
+          "Provisional AI-platform-posture article created automatically because the Platform surface had no recent posture summary. The AI Ops Engineer should replace this with a grounded assessment of provider health, cost posture, model routing, underpowered or unassigned agents, and host resource health (disk free-space, container sprawl, critical host alerts — BI-1C88254D) on its next run.",
         category: "reference",
       },
       hasRecentArtifact: () => hasRecentKnowledgeArticle(AI_PLATFORM_POSTURE_ARTICLE_TITLE_PREFIX),
