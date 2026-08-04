@@ -6,6 +6,28 @@ const turbopackRoot = fileURLToPath(new URL("../..", import.meta.url));
 const config = {
   output: "standalone",
   reactStrictMode: true,
+  // Type checking is OWNED BY THE `Typecheck` CI JOB, not by `next build`.
+  //
+  // `next build` runs its own TypeScript pass after compiling. On this monorepo
+  // that pass is where the production build dies: the compile finishes in ~2min,
+  // then "Running TypeScript ..." never completes and the runner is reclaimed
+  // 13-23 minutes later ("The runner has received a shutdown signal") — well
+  // inside the job's 45m timeout, so it is the runner going away, not the job
+  // timing out. Observed on PR #3872 (three merge-queue evictions, cache OFF on
+  // merge_group) and PR #3982 (cache ON, pull_request), so it is NOT the
+  // experimental Turbopack build cache: it hangs either way.
+  //
+  // Safe because the SAME work already runs, reliably, as its own required gate:
+  // in the very run where the build hung 13min, the standalone `Typecheck` job
+  // (tsc across all workspaces) passed in 3m36s. Merge Readiness depends on it,
+  // so a type error still blocks merge.
+  //
+  // Coverage checked before flipping this, not assumed: `typedRoutes` is NOT
+  // enabled, so the generated `.next/types` surface that only `next build`
+  // produces is negligible, and tsconfig already covers `**/*.ts(x)`. If
+  // typedRoutes is ever enabled, this needs revisiting — the Typecheck job would
+  // then have to generate those types first.
+  typescript: { ignoreBuildErrors: true },
   transpilePackages: ["@dpf/db", "@dpf/storefront-templates", "@dpf/validators"],
   // Server-only document parsers loaded via dynamic `import()` in the upload
   // route (lib/shared/file-parsers.ts). They MUST stay external (not bundled)
