@@ -34,7 +34,7 @@ import { isSkillLifecycleState } from "@/lib/skills/lifecycle";
 // An interim fix capped the catalog at 12 rows, which brought the measurement to
 // 1,352 but by HIDING skills — a masked list (BI-836923AD): a subset with no
 // indication of what is missing, and a search that silently disagrees with the
-// screen. This replaces the cap with structure and measures 203.
+// screen. This replaces the cap with structure and freezes at 205.
 //
 // The content did not shrink; it got a hierarchy. The catalog is what a reader
 // comes here for and stays default-visible, grouped by category and collapsed;
