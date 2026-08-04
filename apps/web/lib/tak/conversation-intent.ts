@@ -163,3 +163,57 @@ export function isPlatformMechanismQuestion(content: string): boolean {
   if (!PLATFORM_MECHANISM_VERB_PATTERN.test(text)) return false;
   return true;
 }
+
+// BI-FBBA70DF: Read-only intent — negation marker followed (within 120 chars)
+// by a mutation verb. Anchored to word boundaries so "don't" in "I don't want
+// to miss anything" doesn't fire. The look-ahead cap (120 chars) prevents a
+// late-sentence mutation from being swept in by an early "do not" unrelated to
+// the request ("Do not worry — just create the brief").
+const READ_ONLY_NEGATION_PATTERN =
+  /\b(?:do\s+not|don't|dont|without|no)\b.{0,120}\b(?:publish|create|save|update|change|add|modify|schedule|send|post|submit|record|log|store|write|make\s+any\s+changes?|apply)\b/i;
+
+// Explicit read-only shorthand phrases that stand alone without a negation+verb pair.
+const READ_ONLY_SHORTHAND_PATTERN =
+  /\b(?:just\s+(?:a\s+)?(?:plan|draft|show|tell|preview|advise|recommend|suggest)|preview\s+only|planning\s+only|read[\s-]only|no\s+changes?|don't\s+(?:touch|do)\s+anything|without\s+(?:making|saving|creating|publishing|changing)\s+anything)\b/i;
+
+// Explicit mutation authorization — operator explicitly grants permission to act.
+// Defined for symmetry and future use; not acted on by the current fix.
+const MUTATION_AUTHORIZED_PATTERN =
+  /\b(?:go\s+ahead\s+and\s+(?:create|save|publish|send|add|update|post)|please\s+(?:create|save|publish|send|add|update)|save\s+(?:it|that|this)|publish\s+(?:it|that|this)|do\s+it\s+now|make\s+the\s+changes?|apply\s+(?:it|that|those))\b/i;
+
+// Any negation word anywhere in the message makes an authorization signal ambiguous —
+// e.g. "Do not worry ... go ahead and create" must not return "authorized".
+const ANY_NEGATION_PATTERN = /\b(?:do\s+not|don't|dont|without|no\b)\b/i;
+
+/**
+ * Classify the operator's mutation intent for the current turn.
+ *
+ * - `"read-only"` — the message contains explicit suppression language
+ *   (e.g. "do not publish or change anything", "just a plan, no changes").
+ *   The caller should suppress side-effecting tool exposure for this turn.
+ *
+ * - `"authorized"` — the message contains an explicit mutation grant
+ *   (e.g. "save it", "go ahead and create"). Defined for future use;
+ *   the current fix only acts on `"read-only"`.
+ *
+ * - `"unspecified"` — no explicit signal either way; existing mode logic applies.
+ *
+ * Conservative by design: only UNAMBIGUOUS suppression phrases qualify for
+ * `"read-only"`. Ambiguous planning language ("help me plan a campaign") returns
+ * `"unspecified"` so normal proposal surfacing continues.
+ *
+ * Pure function — no I/O. (BI-FBBA70DF)
+ */
+export function classifyTurnMutationIntent(
+  content: string,
+): "read-only" | "authorized" | "unspecified" {
+  const text = content.trim();
+  if (!text) return "unspecified";
+  if (READ_ONLY_NEGATION_PATTERN.test(text) || READ_ONLY_SHORTHAND_PATTERN.test(text)) {
+    return "read-only";
+  }
+  if (MUTATION_AUTHORIZED_PATTERN.test(text) && !ANY_NEGATION_PATTERN.test(text)) {
+    return "authorized";
+  }
+  return "unspecified";
+}
