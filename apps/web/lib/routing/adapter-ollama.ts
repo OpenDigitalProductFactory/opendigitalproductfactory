@@ -13,7 +13,10 @@ import {
 } from "./model-card-types";
 import { classifyModel } from "./model-classifier";
 import { computeMetadataHash } from "./metadata-hash";
-import { deriveLocalModelCapabilityPrior } from "@dpf/db/local-model-capabilities";
+import {
+  deriveLocalModelCapabilityPrior,
+  localOutputModalities,
+} from "@dpf/db/local-model-capabilities";
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -80,7 +83,7 @@ export const ollamaAdapter: ProviderAdapter = {
     const bareId = extractModelFamily(modelId) ?? modelId;
     return classifyModel(bareId, {
       input: ["text"],
-      output: ["text"],
+      output: localOutputModalities(modelId),
     });
   },
 
@@ -100,14 +103,14 @@ export const ollamaAdapter: ProviderAdapter = {
       modelFamily: extractModelFamily(modelId),
       modelClass: classifyModel(bareId, {
         input: ["text"],
-        output: ["text"],
+        output: localOutputModalities(modelId),
       }),
 
       maxInputTokens: null,
       maxOutputTokens: null,
 
       inputModalities: ["text"],
-      outputModalities: ["text"],
+      outputModalities: localOutputModalities(modelId),
 
       capabilities: {
         ...EMPTY_CAPABILITIES,
