@@ -43,6 +43,15 @@ export type PromptInput = {
    */
   workingNotes?: string | null;
   /**
+   * BI-45514C4E: fully-rendered extra context sections appended after Block 7
+   * (attachments) — the form-assist instruction and Build Studio context that
+   * the legacy path injects inline. Produced by the caller via
+   * `buildCoworkerExtraSections()` (apps/web/lib/tak/coworker-context-sections.ts).
+   * Empty/absent is a strict no-op, so the unified path is unchanged for turns
+   * with no form-assist or build context.
+   */
+  extraSections?: string[];
+  /**
    * WSID Phase 3: the coworker's profession corpus — graded, cited excerpts of
    * its professional knowledge base, resolved from the agent's profession family
    * (apps/web/lib/decision-perspective/profession-corpus.ts). Rendered at the TOP
@@ -255,6 +264,15 @@ export async function assembleSystemPrompt(input: PromptInput): Promise<string> 
   // Block 7: Attachments (conditional)
   if (input.attachmentContext !== null) {
     dynamicBlocks.push(input.attachmentContext);
+  }
+
+  // Block 8: Extra context sections (BI-45514C4E) — form-assist instruction and
+  // Build Studio context, so the unified path reaches parity with the legacy
+  // path. Each entry is a fully-rendered section; empty/absent is a no-op.
+  if (input.extraSections) {
+    for (const section of input.extraSections) {
+      if (section) dynamicBlocks.push(section);
+    }
   }
 
   return withCoworkerInteractionContract(staticBlocks.join("\n\n")

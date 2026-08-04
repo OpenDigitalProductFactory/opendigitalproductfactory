@@ -928,6 +928,21 @@ export async function sendMessage(input: {
       console.warn("[coworker-memory] working-note injection failed (fail-open):", err);
     }
 
+    // BI-45514C4E: reach parity with the legacy path — inject the form-assist
+    // instruction and Build Studio context (and auto-resolve the /build-route
+    // build id so build-scoped tool filtering below applies on the unified path
+    // too). Empty when neither applies, so this is a no-op for ordinary turns.
+    const { buildCoworkerExtraSections } = await import("@/lib/tak/coworker-context-sections");
+    const coworkerExtra = await buildCoworkerExtraSections({
+      buildId: resolvedBuildId,
+      routeContext: input.routeContext,
+      userId: user.id!,
+      chatHistory,
+      elevatedFormFillEnabled: input.elevatedFormFillEnabled,
+      formAssistContext: input.formAssistContext,
+    });
+    resolvedBuildId = coworkerExtra.resolvedBuildId;
+
     populatedPrompt = await assembleSystemPrompt({
       hrRole: user.platformRole ?? "none",
       grantedCapabilities: granted,
@@ -941,6 +956,7 @@ export async function sendMessage(input: {
       professionContext: selectedProfessionContext,
       wikiContext,
       workingNotes,
+      extraSections: coworkerExtra.sections,
       skills: skillSummaries,
       questionPacket: input.questionPacket ?? null,
       // BI-8F8C5F28: on customer-copy surfaces, hold the coworker to the org's

@@ -99,6 +99,32 @@ describe("assembleSystemPrompt", () => {
     expect(withNull).toBe(without);
   });
 
+  // BI-45514C4E: extra context sections (form-assist / Build Studio) append
+  // after attachments (Block 8), so the unified path reaches legacy parity.
+  it("appends extraSections after attachments when present", async () => {
+    const prompt = await assembleSystemPrompt({
+      ...fullInput,
+      extraSections: ["--- BUILD STUDIO CONTEXT ---\nPhase: ideate", "FORM ASSIST INSTRUCTION"],
+    });
+    const attachIdx = indexOf(prompt, "quarterly-report.pdf");
+    const buildIdx = indexOf(prompt, "BUILD STUDIO CONTEXT");
+    const formIdx = indexOf(prompt, "FORM ASSIST INSTRUCTION");
+    expect(buildIdx).toBeGreaterThan(attachIdx);
+    expect(formIdx).toBeGreaterThan(buildIdx);
+  });
+
+  it("is a strict no-op when extraSections is empty or omitted", async () => {
+    const withEmpty = await assembleSystemPrompt({ ...minimalInput, extraSections: [] });
+    const without = await assembleSystemPrompt(minimalInput);
+    expect(withEmpty).toBe(without);
+  });
+
+  it("skips empty-string entries in extraSections", async () => {
+    const prompt = await assembleSystemPrompt({ ...minimalInput, extraSections: ["", "REAL SECTION", ""] });
+    expect(prompt).toContain("REAL SECTION");
+    expect(prompt).not.toContain("\n\n\n\n"); // no blank-section padding
+  });
+
   // Test 2: Advise mode text is injected correctly
   it("injects advise mode text when mode is 'advise'", async () => {
     const prompt = await assembleSystemPrompt(minimalInput);
