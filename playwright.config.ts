@@ -25,6 +25,7 @@ export default defineConfig({
         /.*ai-routing-.*\.spec\.ts/,
         /.*storefront-owner-mobile\.spec\.ts/,
         /.*coworker-catalog-mobile\.spec\.ts/,
+        /ux-audit[\\/].*\.spec\.ts/,
       ],
       use: { ...devices["Desktop Chrome"] },
     },
@@ -52,6 +53,14 @@ export default defineConfig({
     {
       name: "ops-backlog",
       testMatch: /.*ai-routing-ops-backlog\.spec\.ts/,
+      use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/state.json" },
+    },
+    {
+      // EP-UX-AUDITOR portal survey. Opt-in only — it drives live inference on
+      // every shell route, so it must never ride along in an ordinary e2e run.
+      name: "ux-audit",
+      testMatch: /ux-audit[\\/].*\.spec\.ts/,
+      timeout: 40 * 60_000,
       use: { ...devices["Desktop Chrome"], storageState: "e2e/.auth/state.json" },
     },
   ],

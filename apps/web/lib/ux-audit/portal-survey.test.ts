@@ -187,3 +187,105 @@ describe("runSurvey + aggregateReport", () => {
     expect(report.routes[0]!.verdict).toBe("pass");
   });
 });
+
+describe("runSurvey — lens failure isolation", () => {
+  const pageLens: LensSpec = { id: "page-evaluation", mode: "page", description: "page" };
+  const lensById = new Map<string, LensSpec>([
+    [pageLens.id, pageLens],
+    [BUTTON_DECISION_LENS.id, BUTTON_DECISION_LENS],
+  ]);
+  const plan = {
+    entries: [{ route: "/workspace", lenses: [pageLens.id, BUTTON_DECISION_LENS.id] }],
+    skipped: [],
+  };
+
+  it("still runs the behavioral lens when the page lens throws", async () => {
+    const behavioralFinding: UxFinding = {
+      severity: "important",
+      category: "semantic-html",
+      element: '[data-testid="agent-decision"]',
+      issue: "no buttons",
+      recommendation: "emit the sentinel",
+    };
+
+    const report = await runSurvey(
+      plan,
+      {
+        page: async () => {
+          throw new Error("evaluate_page did NOT RUN");
+        },
+        behavioral: async () => [behavioralFinding],
+      },
+      lensById,
+    );
+
+    const route = report.routes[0]!;
+    expect(route.evaluated).toEqual({ page: false, behavioral: true });
+    expect(route.error).toContain("page: evaluate_page did NOT RUN");
+    expect(route.findings).toHaveLength(1);
+    expect(route.findings[0]!.lens).toBe(BUTTON_DECISION_LENS.id);
+    // An unmeasured lens is at least `concerns`; the important finding agrees.
+    expect(route.verdict).toBe("concerns");
+  });
+
+  it("still runs the page lens when the behavioral lens throws", async () => {
+    const report = await runSurvey(
+      plan,
+      {
+        page: async () => [],
+        behavioral: async () => {
+          throw new Error("coworker unreachable");
+        },
+      },
+      lensById,
+    );
+
+    const route = report.routes[0]!;
+    expect(route.evaluated).toEqual({ page: true, behavioral: false });
+    expect(route.error).toContain("coworker-button-decision: coworker unreachable");
+    expect(route.verdict).toBe("concerns");
+  });
+
+  it("reports both lens errors when both fail", async () => {
+    const report = await runSurvey(
+      plan,
+      {
+        page: async () => {
+          throw new Error("page down");
+        },
+        behavioral: async () => {
+          throw new Error("coworker down");
+        },
+      },
+      lensById,
+    );
+
+    expect(report.routes[0]!.error).toBe(
+      "page: page down; coworker-button-decision: coworker down",
+    );
+    expect(report.evaluatedRouteCount).toBe(0);
+  });
+
+  it("keeps a critical finding's fail verdict even when a lens errored", async () => {
+    const report = await runSurvey(
+      plan,
+      {
+        page: async () => [
+          {
+            severity: "critical",
+            category: "contrast",
+            element: "button",
+            issue: "unreadable",
+            recommendation: "fix",
+          },
+        ],
+        behavioral: async () => {
+          throw new Error("coworker down");
+        },
+      },
+      lensById,
+    );
+
+    expect(report.routes[0]!.verdict).toBe("fail");
+  });
+});
