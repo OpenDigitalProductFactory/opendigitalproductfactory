@@ -226,6 +226,12 @@ export async function persistBootstrapDiscoveryRun(
     let updatedEntities = 0;
 
     const enrichmentByEntityKey = new Map<string, ReturnType<typeof deriveInventoryEnrichment>>();
+    const persistedIdentityByEntityKey = new Map<string, {
+      manufacturer: string | null;
+      observedVersion: string | null;
+      normalizedVersion: string | null;
+      supportStatus: string;
+    }>();
     for (const entity of normalized.inventoryEntities) {
       const existed = existingEntityKeys.has(entity.entityKey);
       const evidenceSnapshot = deriveInventoryEvidenceSnapshot(
@@ -349,8 +355,19 @@ export async function persistBootstrapDiscoveryRun(
           lastSeenAt: now,
           lastConfirmedRun: { connect: { id: run.id } },
         },
-        select: { id: true, entityKey: true },
+        // Identity columns come back so quality can be evaluated against the
+        // PERSISTED row — see persistedIdentityByEntityKey below.
+        select: {
+          id: true,
+          entityKey: true,
+          manufacturer: true,
+          observedVersion: true,
+          normalizedVersion: true,
+          supportStatus: true,
+        },
       });
+
+      persistedIdentityByEntityKey.set(entity.entityKey, persistedEntity);
 
       entityIdsByDiscoveredKey.set(entity.discoveredKey, persistedEntity.id);
       entityIdsByEntityKey.set(entity.entityKey, persistedEntity.id);
@@ -640,6 +657,7 @@ export async function persistBootstrapDiscoveryRun(
             softwareEvidenceByEntityKey.get(entity.entityKey) ?? [],
           );
           const enriched = enrichmentByEntityKey.get(entity.entityKey);
+          const persisted = persistedIdentityByEntityKey.get(entity.entityKey);
           const qualityEntity = {
             entityKey: entity.entityKey,
             entityType: entity.entityType,
@@ -652,15 +670,30 @@ export async function persistBootstrapDiscoveryRun(
             })) ?? null,
             taxonomyNodeId: entity.taxonomyNodeId ?? null,
             digitalProductId: null,
-            // Enriched values, NOT the raw evidence snapshot. `enrichment` is what
-            // the upsert above writes to the row, so evaluating against anything
-            // else lets discovery enrich an entity and then re-raise an identity
-            // or lifecycle issue about the very fields it just populated. Fall
-            // back to the snapshot only where enrichment produced nothing.
-            manufacturer: enriched?.manufacturer ?? evidenceSnapshot.manufacturer,
-            observedVersion: enriched?.observedVersion ?? evidenceSnapshot.observedVersion,
-            normalizedVersion: enriched?.normalizedVersion ?? evidenceSnapshot.normalizedVersion,
-            supportStatus: enriched?.supportStatus ?? evidenceSnapshot.supportStatus,
+            // PERSISTED row first, then this sweep's enrichment, then the snapshot.
+            // manufacturer/supportStatus are sticky across sources (written only
+            // when enrichment yields them) while `properties` is replaced every
+            // sweep — so a poor source (ARP, no MAC) starves enrichment and, judged
+            // on this sweep alone, re-raises an issue for an entity the row already
+            // identifies. That is why the previous enrichment-only fix did not
+            // drain the queues. See BI-A3D12F85.
+            manufacturer:
+              persisted?.manufacturer ?? enriched?.manufacturer ?? evidenceSnapshot.manufacturer,
+            observedVersion:
+              persisted?.observedVersion
+              ?? enriched?.observedVersion
+              ?? evidenceSnapshot.observedVersion,
+            normalizedVersion:
+              persisted?.normalizedVersion
+              ?? enriched?.normalizedVersion
+              ?? evidenceSnapshot.normalizedVersion,
+            // supportStatus is non-nullable and defaults to "unknown", so a plain
+            // ?? chain would stop at the persisted default and never consult the
+            // sweep. Take the first value that is actually known.
+            supportStatus:
+              [persisted?.supportStatus, enriched?.supportStatus, evidenceSnapshot.supportStatus]
+                .find((value) => value && value !== "unknown")
+              ?? "unknown",
             hasSoftwareEvidence: evidenceSnapshot.hasSoftwareEvidence,
             normalizationStatus: evidenceSnapshot.normalizationStatus,
           };

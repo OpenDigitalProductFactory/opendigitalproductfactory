@@ -70,8 +70,26 @@ export type DiscoverySyncTx = InventoryEntityHeapIntegrityTx & {
       where: { entityKey: string };
       create: Record<string, unknown>;
       update: Record<string, unknown>;
-      select: { id: true; entityKey: true };
-    }): Promise<{ id: string; entityKey: string }>;
+      // Identity columns are selected back so quality evaluation can read the
+      // PERSISTED row. `manufacturer` / `supportStatus` are sticky across sources
+      // while `properties` is replaced each sweep, so the row is the only complete
+      // view of what discovery has established about an entity.
+      select: {
+        id: true;
+        entityKey: true;
+        manufacturer: true;
+        observedVersion: true;
+        normalizedVersion: true;
+        supportStatus: true;
+      };
+    }): Promise<{
+      id: string;
+      entityKey: string;
+      manufacturer: string | null;
+      observedVersion: string | null;
+      normalizedVersion: string | null;
+      supportStatus: string;
+    }>;
     updateMany(args: {
       where: { scopeKey?: string; entityKey: { in: string[] } };
       data: { status: string; lastSeenAt: Date };
