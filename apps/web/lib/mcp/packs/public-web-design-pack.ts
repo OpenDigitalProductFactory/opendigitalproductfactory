@@ -442,14 +442,21 @@ async function evaluatePageHandler(
       signal: AbortSignal.timeout(10000),
     });
 
-    // Parse findings — the AI extraction returns structured data
-    let findings: Array<Record<string, unknown>> = [];
-    try {
-      const rawData = typeof evalContent.data === "string" ? JSON.parse(evalContent.data) : evalContent.data;
-      findings = Array.isArray(rawData) ? rawData : [];
-    } catch {
-      findings = [];
+    // Parse findings — the AI extraction returns structured data.
+    // An unreadable payload is a NOT-RUN, never an empty findings list: a failed
+    // extraction otherwise reports as "0 UX/accessibility issues", i.e. a clean
+    // page (BI-C3768478, extending the BI-1BAA177C contract above).
+    const { interpretExtraction } = await import("@/lib/tak/page-evaluator");
+    const outcome = interpretExtraction(evalContent.data);
+    if (outcome.kind === "not-run") {
+      return {
+        success: false,
+        error: `Page evaluation DEGRADED — did not run: ${outcome.reason}`,
+        message: `Page evaluation did not run: ${outcome.reason}. This is a NOT-RUN, not a zero-findings result.`,
+        data: { url: targetUrl, degraded: true, reason: outcome.reason },
+      };
     }
+    const findings = outcome.raw;
 
     // Visual cognitive-load assessment — feed the rendered screenshot to a
     // vision-capable model (capability-routed; local Gemma 4 when configured)

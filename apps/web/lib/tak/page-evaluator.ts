@@ -72,6 +72,74 @@ export function categorizeAxeViolation(violation: AxeViolation): UxFinding {
   };
 }
 
+/**
+ * What a browser-use extraction actually produced (BI-C3768478, extending the
+ * BI-1BAA177C NOT-RUN contract).
+ *
+ * `browse_extract` answers HTTP 200 with `status: "completed"` even when its
+ * agent failed every step — the payload is then the repr of an empty history,
+ * `AgentHistoryList(all_results=[], all_model_outputs=[])`. Read naively that
+ * becomes "0 findings", i.e. a clean page, which is the single most dangerous
+ * thing a UX auditor can report. Observed on-machine 2026-08-04: the sidecar's
+ * pinned LLM was absent from the model runner, so every extraction returned that
+ * empty history and `evaluate_page` announced "Found 0 UX/accessibility issues".
+ *
+ * A clean page and a run that never happened are different answers. This is the
+ * one place that tells them apart.
+ */
+export type ExtractionOutcome =
+  | { kind: "findings"; raw: Array<Record<string, unknown>> }
+  | { kind: "not-run"; reason: string };
+
+const EMPTY_AGENT_HISTORY = /AgentHistoryList\(\s*all_results\s*=\s*\[\s*\]/;
+
+export function interpretExtraction(data: unknown): ExtractionOutcome {
+  if (data === null || data === undefined) {
+    return { kind: "not-run", reason: "the browser agent returned no extraction payload" };
+  }
+
+  let value: unknown = data;
+
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (!text) {
+      return { kind: "not-run", reason: "the browser agent returned an empty extraction payload" };
+    }
+    if (EMPTY_AGENT_HISTORY.test(text)) {
+      return {
+        kind: "not-run",
+        reason:
+          "the browser agent produced no model output (empty AgentHistoryList) — check the sidecar's LLM_MODEL is present on the configured endpoint",
+      };
+    }
+    try {
+      value = JSON.parse(text);
+    } catch {
+      return {
+        kind: "not-run",
+        reason: `the browser agent returned a non-JSON extraction payload: ${text.slice(0, 160)}`,
+      };
+    }
+  }
+
+  // A findings array is the contract. `[]` is a legitimately clean page.
+  if (Array.isArray(value)) {
+    return { kind: "findings", raw: value as Array<Record<string, unknown>> };
+  }
+
+  if (typeof value === "object" && Array.isArray((value as { findings?: unknown }).findings)) {
+    return {
+      kind: "findings",
+      raw: (value as { findings: Array<Record<string, unknown>> }).findings,
+    };
+  }
+
+  return {
+    kind: "not-run",
+    reason: "the browser agent's extraction payload was not a findings array",
+  };
+}
+
 export function groupFindingsByCategory(
   findings: UxFinding[],
 ): Record<string, UxFinding[]> {

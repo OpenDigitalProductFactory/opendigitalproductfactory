@@ -257,9 +257,15 @@ export function aggregateReport(routes: RouteSurveyResult[]): UxAuditReport {
 
 /**
  * Run a planned survey with the injected evaluators and aggregate the report.
- * Sequential + deterministic for P1 (bounded concurrency is a Phase-2 concern).
- * A thrown evaluator degrades that route to an error entry — it never aborts the
- * whole survey. A route whose evaluator is absent simply doesn't run that lens.
+ * Sequential + deterministic (bounded concurrency remains a later concern).
+ *
+ * Failure is isolated PER LENS, not per route (corrected in Phase 2). A route's
+ * lenses are independent measurements: when the page lens cannot run — a browser
+ * sidecar outage, say — the coworker button-decision lens on that same route is
+ * still perfectly runnable, and cancelling it would silently shrink the survey to
+ * whatever the weakest dependency allows. Each lens error is recorded and the
+ * remaining lenses continue; a route reports `error` only for the lenses that
+ * actually failed. A route whose evaluator is absent simply doesn't run that lens.
  */
 export async function runSurvey(
   plan: SurveyPlan,
@@ -271,35 +277,46 @@ export async function runSurvey(
   for (const entry of plan.entries) {
     const findings: AuditFinding[] = [];
     const evaluated = { page: false, behavioral: false };
-    let error: string | undefined;
+    const errors: string[] = [];
 
     const hasPageLens = entry.lenses.some((id) => lensById.get(id)?.mode === "page");
     const behavioralLenses = entry.lenses
       .map((id) => lensById.get(id))
       .filter((l): l is LensSpec => l?.mode === "behavioral");
 
-    try {
-      if (hasPageLens && evaluators.page) {
+    if (hasPageLens && evaluators.page) {
+      try {
         const pageFindings = await evaluators.page(entry.route);
         for (const f of pageFindings) findings.push({ ...f, route: entry.route, lens: "page" });
         evaluated.page = true;
+      } catch (e) {
+        errors.push(`page: ${getErrorMessage(e)}`);
       }
-      for (const lens of behavioralLenses) {
-        if (!evaluators.behavioral) break;
+    }
+
+    for (const lens of behavioralLenses) {
+      if (!evaluators.behavioral) break;
+      try {
         const behFindings = await evaluators.behavioral(entry.route, lens);
         for (const f of behFindings) {
           findings.push({ ...f, route: entry.route, lens: lens.id });
         }
         evaluated.behavioral = true;
+      } catch (e) {
+        errors.push(`${lens.id}: ${getErrorMessage(e)}`);
       }
-    } catch (e) {
-      error = getErrorMessage(e);
     }
+
+    const error = errors.length > 0 ? errors.join("; ") : undefined;
 
     const deduped = dedupeFindings(findings);
     results.push({
       route: entry.route,
-      verdict: error ? "concerns" : verdictForFindings(deduped),
+      // A lens that could not run is at least `concerns` — an unmeasured route is
+      // not a clean one — but real findings can still push the verdict worse.
+      verdict: error
+        ? maxVerdict("concerns", verdictForFindings(deduped))
+        : verdictForFindings(deduped),
       findings: deduped,
       evaluated,
       ...(error ? { error } : {}),

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   categorizeAxeViolation,
   groupFindingsByCategory,
+  interpretExtraction,
   type UxFinding,
 } from "./page-evaluator";
 
@@ -59,5 +60,46 @@ describe("groupFindingsByCategory", () => {
   it("returns empty object for empty findings", () => {
     const grouped = groupFindingsByCategory([]);
     expect(Object.keys(grouped)).toHaveLength(0);
+  });
+});
+
+describe("interpretExtraction", () => {
+  it("reads a JSON findings array", () => {
+    const outcome = interpretExtraction('[{"severity":"minor","issue":"x"}]');
+    expect(outcome.kind).toBe("findings");
+    expect(outcome.kind === "findings" && outcome.raw).toHaveLength(1);
+  });
+
+  it("treats an empty findings array as a legitimately clean page", () => {
+    expect(interpretExtraction("[]")).toEqual({ kind: "findings", raw: [] });
+    expect(interpretExtraction([])).toEqual({ kind: "findings", raw: [] });
+  });
+
+  it("unwraps a { findings: [...] } envelope", () => {
+    const outcome = interpretExtraction({ findings: [{ issue: "x" }] });
+    expect(outcome.kind === "findings" && outcome.raw).toHaveLength(1);
+  });
+
+  it("reports an empty AgentHistoryList as NOT-RUN, never a clean page", () => {
+    const outcome = interpretExtraction(
+      "AgentHistoryList(all_results=[], all_model_outputs=[])",
+    );
+    expect(outcome.kind).toBe("not-run");
+    expect(outcome.kind === "not-run" && outcome.reason).toContain("no model output");
+  });
+
+  it("reports a non-JSON payload as NOT-RUN", () => {
+    const outcome = interpretExtraction("the agent could not read the page");
+    expect(outcome.kind).toBe("not-run");
+  });
+
+  it("reports missing or empty payloads as NOT-RUN", () => {
+    expect(interpretExtraction(null).kind).toBe("not-run");
+    expect(interpretExtraction(undefined).kind).toBe("not-run");
+    expect(interpretExtraction("   ").kind).toBe("not-run");
+  });
+
+  it("reports a non-array JSON payload as NOT-RUN", () => {
+    expect(interpretExtraction('{"status":"ok"}').kind).toBe("not-run");
   });
 });
