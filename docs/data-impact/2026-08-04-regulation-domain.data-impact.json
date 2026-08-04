@@ -1,0 +1,34 @@
+{
+  "version": "1",
+  "accountableOwner": "data-steward",
+  "affectedCopies": [
+    "Regulation compliance-library registry (new domain attribution column)",
+    "Compliance posture / gap reporting projections (by-function rollup)",
+    "Prisma-to-EA current-state data-model mirror"
+  ],
+  "migration": {
+    "name": "20260805100000_add_regulation_domain + 20260805100100_backfill_regulation_domain",
+    "backfill": "Additive only: adds Regulation.domain TEXT NULL, then a data-only backfill (WHERE domain IS NULL, one UPDATE per functional-domain bucket) assigning every seeded regulationId its primary domain. No column dropped or rewritten; no row deleted. The IS-NULL guard preserves any operator/seed-set value and is a no-op on fresh installs (rows are seeded after migrations run). Seed writers also carry domain so fresh installs and re-seeds stay authoritative. domain is attribution/reporting only — it never affects applicability. Verified on scratch Postgres: NULL rows backfilled to the correct domain, a pre-set value left untouched."
+  },
+  "tests": [
+    "packages/db/src/seed-regulation-domain.test.ts",
+    "apps/web/lib/reporting-types.test.ts",
+    "apps/web/lib/actions/reporting.test.ts"
+  ],
+  "changes": [
+    {
+      "kind": "model",
+      "assetId": "data:regulation#functional-domain-attribution",
+      "prismaModel": "Regulation",
+      "lifecycleDisposition": "Additive nullable column with a data-only backfill. Existing rows are untouched and remain valid; the field is curated in the seed packs and backfilled for existing installs. No lifecycle transition, no supersession, no deletion.",
+      "fields": [
+        {
+          "fieldId": "data:regulation#domain",
+          "resolution": "governed",
+          "reason": "The functional domain (privacy-security, hr-employment, finance, ai-governance, consumer-marketing, accessibility, corporate-governance, sector, cross-cutting) that owns tracking a regulation. Lets each functional context see its contextual compliance while everything rolls up to one central posture. Attribution/reporting only — it does not affect which triggers put a regulation in scope.",
+          "provenance": "BI-0B867B67; kernel principle_decide chose explicit-domain-tag (composite 14.6, high confidence); closed REGULATION_DOMAINS enum guard + backfill-lockstep tests."
+        }
+      ]
+    }
+  ]
+}

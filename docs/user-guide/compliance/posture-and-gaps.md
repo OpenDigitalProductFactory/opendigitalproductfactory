@@ -26,6 +26,17 @@ The gap view evaluates regulations applicable to the current install. It does
 not judge whether an implemented control is legally sufficient or whether its
 evidence is current.
 
+## By Function
+
+The posture view groups applicable regulations by **functional domain**
+(Privacy & Security, HR & Employment, Finance, AI Governance, Consumer &
+Marketing, Accessibility, Corporate Governance, Sector-specific, Cross-cutting),
+so each functional context sees the compliance it owns while everything still
+rolls up to one posture. Each domain row shows how many regulations apply and
+their combined obligation coverage. A regulation is attributed to a single
+primary domain; this grouping is for tracking and reporting and does not change
+which regulations apply.
+
 ## Review Workflow
 
 1. Open `/compliance/posture` and note the overall score, obligation coverage,

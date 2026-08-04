@@ -1,6 +1,6 @@
 import type { PrismaClient, Prisma } from "../generated/client/client";
 import * as crypto from "crypto";
-import { type RegulationApplicability } from "./regulation-applicability";
+import { type RegulationApplicability, type RegulationDomain } from "./regulation-applicability";
 
 // BI-AFC178F3 — cooperative compliance pack (civic spec §10).
 // Same global-Regulation pattern as the public-sector pack, industry
@@ -32,6 +32,8 @@ type RegulationSeed = {
   industry: string;
   /** Data-driven applicability spec — scopes the regime to matching archetypes. */
   applicability: RegulationApplicability;
+  /** Functional domain (attribution/reporting only). */
+  domain: RegulationDomain;
   sourceType: "external";
   sourceUrl: string | null;
   notes: string;
@@ -47,6 +49,7 @@ const COOPERATIVE_APPLICABILITY: RegulationApplicability = {
 export const COOPERATIVE_REGULATIONS: RegulationSeed[] = [
   {
     regulationId: "REG-US-IRS-SUBCHAPTER-T",
+    domain: "finance",
     name: "IRC Subchapter T — Cooperative Patronage Taxation",
     shortName: "Subchapter T",
     jurisdiction: "US-federal",
@@ -110,6 +113,7 @@ export const COOPERATIVE_REGULATIONS: RegulationSeed[] = [
   },
   {
     regulationId: "REG-US-COOP-GOVERNANCE",
+    domain: "corporate-governance",
     name: "Cooperative Governance Requirements (state co-op statutes & bylaws)",
     shortName: "Co-op Governance",
     jurisdiction: "US-state",
@@ -233,6 +237,7 @@ export async function seedCooperativeCompliance(prisma: PrismaClient): Promise<v
         sourceUrl: regData.sourceUrl,
         notes: regData.notes,
         applicability,
+        domain: regData.domain,
       },
       create: { ...regData, applicability },
     });

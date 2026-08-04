@@ -1,6 +1,6 @@
 import type { PrismaClient, Prisma } from "../generated/client/client";
 import * as crypto from "crypto";
-import { UK_CORP_GOV_CODE_APPLICABILITY } from "./regulation-applicability";
+import { UK_CORP_GOV_CODE_APPLICABILITY, type RegulationDomain } from "./regulation-applicability";
 
 // UK Corporate Governance Code (FRC, 2024 edition) compliance pack, focused on
 // Provision 29 — the board internal-controls accountability declaration. This is
@@ -38,6 +38,8 @@ type RegulationSeed = {
   industry: string | null;
   sourceType: "external";
   sourceUrl: string | null;
+  /** Functional domain (attribution/reporting only). */
+  domain: RegulationDomain;
   notes: string;
   obligations: ObligationSeed[];
 };
@@ -46,6 +48,7 @@ type RegulationSeed = {
 export const UK_CORP_GOV_REGULATIONS: RegulationSeed[] = [
   {
     regulationId: "REG-UK-CORP-GOV-CODE",
+    domain: "corporate-governance",
     name: "UK Corporate Governance Code (2024) — Provision 29 board internal-controls declaration",
     shortName: "UK Corp Gov Code / Provision 29",
     jurisdiction: "UK",
@@ -165,6 +168,7 @@ export async function seedUkCorpGovCompliance(prisma: PrismaClient): Promise<voi
         sourceUrl: regData.sourceUrl,
         notes: regData.notes,
         applicability,
+        domain: regData.domain,
       },
       create: { ...regData, applicability },
     });

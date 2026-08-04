@@ -2,7 +2,57 @@
 import { describe, expect, it } from "vitest";
 import {
   generateSnapshotId, calculatePostureScore, isValidSubmissionTransition, SUBMISSION_STATUS_FLOW,
+  calculateDomainScores, type RegulationGapSummary,
 } from "./reporting-types";
+
+function gap(overrides: Partial<RegulationGapSummary>): RegulationGapSummary {
+  return {
+    id: "r", shortName: "R", jurisdiction: "US", domain: "privacy-security",
+    totalObligations: 0, coveredObligations: 0, partialObligations: 0, uncoveredObligations: 0,
+    coveragePercent: 100, obligations: [], ...overrides,
+  };
+}
+
+describe("calculateDomainScores (by-function rollup)", () => {
+  it("groups regulations by domain and sums their obligations", () => {
+    const scores = calculateDomainScores([
+      gap({ id: "a", domain: "privacy-security", totalObligations: 4, coveredObligations: 2, uncoveredObligations: 2 }),
+      gap({ id: "b", domain: "privacy-security", totalObligations: 6, coveredObligations: 3, uncoveredObligations: 3 }),
+      gap({ id: "c", domain: "hr-employment", totalObligations: 2, coveredObligations: 2, uncoveredObligations: 0 }),
+    ]);
+    const privacy = scores.find((s) => s.domain === "privacy-security")!;
+    expect(privacy.regulationCount).toBe(2);
+    expect(privacy.totalObligations).toBe(10);
+    expect(privacy.coveredObligations).toBe(5);
+    expect(privacy.coveragePercent).toBe(50);
+    const hr = scores.find((s) => s.domain === "hr-employment")!;
+    expect(hr.coveragePercent).toBe(100);
+    expect(hr.label).toBe("HR & Employment");
+  });
+
+  it("folds NULL/unknown domain into cross-cutting", () => {
+    const scores = calculateDomainScores([
+      gap({ id: "a", domain: null, totalObligations: 1 }),
+      gap({ id: "b", domain: "not-a-real-domain", totalObligations: 1 }),
+    ]);
+    expect(scores).toHaveLength(1);
+    expect(scores[0].domain).toBe("cross-cutting");
+    expect(scores[0].regulationCount).toBe(2);
+  });
+
+  it("a domain with no obligations reports 100% (nothing outstanding)", () => {
+    const scores = calculateDomainScores([gap({ domain: "finance", totalObligations: 0 })]);
+    expect(scores[0].coveragePercent).toBe(100);
+  });
+
+  it("orders domains by the canonical enum order", () => {
+    const scores = calculateDomainScores([
+      gap({ id: "a", domain: "sector", totalObligations: 1 }),
+      gap({ id: "b", domain: "privacy-security", totalObligations: 1 }),
+    ]);
+    expect(scores.map((s) => s.domain)).toEqual(["privacy-security", "sector"]);
+  });
+});
 
 describe("ID generator", () => {
   it("generates snapshot IDs with SNAP- prefix", () => {

@@ -1,6 +1,6 @@
 import type { PrismaClient, Prisma } from "../generated/client/client";
 import * as crypto from "crypto";
-import { type RegulationApplicability } from "./regulation-applicability";
+import { type RegulationApplicability, type RegulationDomain } from "./regulation-applicability";
 
 // BI-C1578821 — law-enforcement compliance pack (civic spec §10).
 // industry "public-safety". Phase 1 is NO-CJI by design: this pack covers POST
@@ -34,6 +34,8 @@ type RegulationSeed = {
   industry: string;
   /** Data-driven applicability spec — scopes the regime to matching archetypes. */
   applicability: RegulationApplicability;
+  /** Functional domain (attribution/reporting only). */
+  domain: RegulationDomain;
   sourceType: "external";
   sourceUrl: string | null;
   notes: string;
@@ -49,6 +51,7 @@ const LAW_ENFORCEMENT_APPLICABILITY: RegulationApplicability = {
 export const LAW_ENFORCEMENT_REGULATIONS: RegulationSeed[] = [
   {
     regulationId: "REG-US-STATE-POST",
+    domain: "sector",
     name: "Peace Officer Standards & Training (state POST)",
     shortName: "POST",
     jurisdiction: "US-state",
@@ -113,6 +116,7 @@ export const LAW_ENFORCEMENT_REGULATIONS: RegulationSeed[] = [
   },
   {
     regulationId: "REG-US-LE-POLICY-ATTESTATION",
+    domain: "sector",
     name: "Law Enforcement Policy Issuance & Attestation",
     shortName: "LE Policy",
     jurisdiction: "US-state",
@@ -164,6 +168,7 @@ export const LAW_ENFORCEMENT_REGULATIONS: RegulationSeed[] = [
   },
   {
     regulationId: "REG-US-CJIS-READINESS",
+    domain: "sector",
     name: "FBI CJIS Security Policy — Readiness Gate (Phase 2 prerequisite)",
     shortName: "CJIS Gate",
     jurisdiction: "US-federal",
@@ -260,6 +265,7 @@ export async function seedLawEnforcementCompliance(prisma: PrismaClient): Promis
         sourceUrl: regData.sourceUrl,
         notes: regData.notes,
         applicability,
+        domain: regData.domain,
       },
       create: { ...regData, applicability },
     });

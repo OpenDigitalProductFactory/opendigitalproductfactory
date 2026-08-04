@@ -445,7 +445,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 34
+    "textMass": 40
   },
   "apps/web/app/(shell)/compliance/regulations/[id]/page.tsx": {
     "vocabulary": 0,

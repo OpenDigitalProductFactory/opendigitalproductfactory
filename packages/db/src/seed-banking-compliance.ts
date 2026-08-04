@@ -1,6 +1,6 @@
 import type { PrismaClient, Prisma } from "../generated/client/client";
 import * as crypto from "crypto";
-import { type RegulationApplicability } from "./regulation-applicability";
+import { type RegulationApplicability, type RegulationDomain } from "./regulation-applicability";
 
 // BI-D9ACE184 + BI-E677F250 — banking deltas compliance pack (civic spec §10).
 // industry "financial". The recurring-obligation regimes the BIAN leaf work
@@ -36,6 +36,8 @@ type RegulationSeed = {
   industry: string;
   /** Data-driven applicability spec — scopes the regime to matching archetypes. */
   applicability: RegulationApplicability;
+  /** Functional domain (attribution/reporting only). */
+  domain: RegulationDomain;
   sourceType: "external";
   sourceUrl: string | null;
   notes: string;
@@ -45,6 +47,7 @@ type RegulationSeed = {
 export const BANKING_REGULATIONS: RegulationSeed[] = [
   {
     regulationId: "REG-US-BSA-AML",
+    domain: "finance",
     name: "Bank Secrecy Act / Anti-Money Laundering",
     shortName: "BSA/AML",
     jurisdiction: "US-federal",
@@ -118,6 +121,7 @@ export const BANKING_REGULATIONS: RegulationSeed[] = [
   },
   {
     regulationId: "REG-US-NCUA",
+    domain: "finance",
     name: "NCUA Regulatory Requirements (federally insured credit unions)",
     shortName: "NCUA",
     jurisdiction: "US-federal",
@@ -178,6 +182,7 @@ export const BANKING_REGULATIONS: RegulationSeed[] = [
   },
   {
     regulationId: "REG-US-FDIC-CRA",
+    domain: "finance",
     name: "FDIC/OCC Bank Supervision — Call Report, CRA & Fair Lending",
     shortName: "Bank Supervision",
     jurisdiction: "US-federal",
@@ -322,6 +327,7 @@ export async function seedBankingCompliance(prisma: PrismaClient): Promise<void>
         sourceUrl: regData.sourceUrl,
         notes: regData.notes,
         applicability,
+        domain: regData.domain,
       },
       create: { ...regData, applicability },
     });
