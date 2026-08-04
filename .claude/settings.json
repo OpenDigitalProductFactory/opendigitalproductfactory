@@ -90,6 +90,11 @@
             "type": "command",
             "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/hooks/run-hook.mjs\" hooks/janitor-throttle",
             "async": false
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/hooks/run-hook.mjs\" hooks/reconcile-claude-plugin",
+            "async": true
           }
         ]
       }
