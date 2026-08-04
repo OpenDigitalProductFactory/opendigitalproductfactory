@@ -1,5 +1,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
+import { canonicalJson } from "@/lib/shared/canonical-json";
+
 export type CoworkerDelegationReceiptAccessProfile = "internal-a2a" | "partner-a2a" | "external-a2a";
 
 export type CoworkerDelegationReceiptInput = {
@@ -123,24 +125,36 @@ function digest(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+/**
+ * Signing secret. Throws when unset — there is deliberately NO fallback constant.
+ *
+ * The previous default was a literal in this file, so anyone who could read the
+ * repository could mint a receipt that verified. A receipt exists to let a
+ * RECEIVING party trust a delegation they did not witness; one signed with a
+ * public constant carries no such assurance while looking exactly like one that
+ * does. Failing to start is the correct behaviour (BI-2F318FB3).
+ */
 function receiptSecret(): string {
-  return process.env.DPF_DELEGATION_RECEIPT_SECRET
-    ?? process.env.AUTH_SECRET
-    ?? process.env.NEXTAUTH_SECRET
-    ?? "dpf-local-delegation-receipt";
+  const secret =
+    process.env.DPF_DELEGATION_RECEIPT_SECRET ??
+    process.env.AUTH_SECRET ??
+    process.env.NEXTAUTH_SECRET;
+  if (!secret || secret.trim().length === 0) {
+    throw new Error(
+      "Coworker delegation receipts require a signing secret: set DPF_DELEGATION_RECEIPT_SECRET (or AUTH_SECRET / NEXTAUTH_SECRET).",
+    );
+  }
+  return secret;
 }
 
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
-function stableJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map((entry) => stableJson(entry)).join(",")}]`;
-  if (value && typeof value === "object") {
-    return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([left], [right]) => left.localeCompare(right))
-      .map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`)
-      .join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
+// Canonicalisation is delegated to the shared helper. The local copy sorted keys
+// with `localeCompare`, which resolves against the host's default locale and ICU
+// data — so the same receipt could canonicalise differently on two machines,
+// producing a signature mismatch that looks exactly like tampering. That is the
+// worst possible way for this to fail: the receipt exists to establish trust, and
+// the failure mode accuses the counterparty of forging it (BI-2F318FB3).
+const stableJson = canonicalJson;
