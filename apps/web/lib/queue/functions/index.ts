@@ -43,6 +43,7 @@ import { skillMetricsAggregator } from "./skill-metrics-aggregator";
 import { queueMetricsAggregator } from "./queue-metrics-aggregator";
 import { skillCurator } from "./skill-curator";
 import { mcpCallEfficiencyScan } from "./mcp-call-efficiency-scan";
+import { a2aCollaborationHealthScan } from "./a2a-collaboration-health-scan";
 import { workPatternProfileReview } from "./work-pattern-profile-review";
 import {
   allBackupsDailyScheduled,
@@ -128,6 +129,7 @@ export const scheduledFunctions = [
   queueMetricsAggregator, // EP-3516E23D P1: hourly QueueTelemetryEvent → QueueMetricSnapshot rollup
   skillCurator,
   mcpCallEfficiencyScan, // BI-A08EBAEC: daily ToolExecution thrash/volume/failure findings → PlatformNotification
+  a2aCollaborationHealthScan, // BI-3003EE63: daily A2A edge health (failed/blocked/stuck/orphan) — slice 1 analyze+log
 
   workPatternProfileReview,
   researchScheduleScan,
