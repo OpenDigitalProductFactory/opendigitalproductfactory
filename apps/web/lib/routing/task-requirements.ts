@@ -7,7 +7,8 @@
  *
  *   greeting / status-query / summarization → adequate (Haiku-equivalent, effort=low)
  *   data-extraction / web-search / creative  → strong  (Sonnet-equivalent, effort=medium)
- *   reasoning / code-gen / tool-action       → frontier (Opus/Sonnet, effort=high)
+ *   tool-action                              → strong  (see the note on its entry)
+ *   reasoning / code-gen                     → frontier (Opus/Sonnet, effort=high)
  */
 
 import { prisma } from "@dpf/db";
@@ -103,10 +104,27 @@ export const BUILT_IN_TASK_REQUIREMENTS: Record<string, TaskRequirement> = {
   "tool-action": {
     taskType: "tool-action",
     description: "Multi-step tool use with external APIs.",
-    selectionRationale: "Requires tool-calling fidelity — frontier only.",
+    // Tool-calling fidelity is what this task actually needs, and the tier floor
+    // is a proxy for it. `frontier` (TIER_MINIMUM_DIMENSIONS: codegen/toolFidelity/
+    // reasoning all >= 85) over-constrained that proxy: it gates on *reasoning*
+    // and *codegen* too, so a model with perfect tool fidelity was excluded for
+    // scoring 79 on reasoning. That made restricted-sensitivity tool work
+    // unroutable by construction — the only provider cleared for `restricted`
+    // data is the bundled local model, and no local model clears an 85 reasoning
+    // floor, so employee/finance requests had zero eligible endpoints and
+    // surfaced as "No AI model can handle this request right now".
+    //
+    // `strong` (>= 70) still comfortably exceeds this requirement's own stated
+    // preferredMinScores.toolFidelity of 70. Cloud endpoints are unaffected in
+    // practice: the Stage-5b tier sort (pipeline-v2.ts) ranks user-configured
+    // endpoints ahead of bundled local ones, so a capable cloud provider is still
+    // chosen first wherever its sensitivity clearance permits. Lowering the floor
+    // only adds a fallback where the alternative was failing outright.
+    selectionRationale:
+      "Requires tool-calling fidelity; strong tier or better, cloud preferred where clearance allows.",
     requiredCapabilities: { supportsToolUse: true },
     preferredMinScores: { toolFidelity: 70 },
-    minimumTier: "frontier",
+    minimumTier: "strong",
     preferCheap: false,
     origin: "system",
   },

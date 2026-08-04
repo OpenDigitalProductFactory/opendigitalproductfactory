@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { getTaskRequirement, BUILT_IN_TASK_REQUIREMENTS } from "./task-requirements";
+import { TIER_MINIMUM_DIMENSIONS } from "./quality-tiers";
 
 const { mockPrisma } = vi.hoisted(() => ({
   mockPrisma: {
@@ -26,7 +27,22 @@ describe("BUILT_IN_TASK_REQUIREMENTS", () => {
   it("assigns frontier tier to complex tasks", () => {
     expect(BUILT_IN_TASK_REQUIREMENTS["reasoning"]?.minimumTier).toBe("frontier");
     expect(BUILT_IN_TASK_REQUIREMENTS["code-gen"]?.minimumTier).toBe("frontier");
-    expect(BUILT_IN_TASK_REQUIREMENTS["tool-action"]?.minimumTier).toBe("frontier");
+  });
+
+  // tool-action is deliberately NOT frontier. The tier floor gates on codegen and
+  // reasoning as well as toolFidelity, so a frontier floor excluded models with
+  // perfect tool fidelity for scoring below 85 on reasoning. That left
+  // restricted-sensitivity tool work unroutable: the only provider cleared for
+  // `restricted` data is the bundled local model, which no local model can lift
+  // above an 85 reasoning floor. `strong` still exceeds this requirement's own
+  // preferredMinScores.toolFidelity of 70.
+  it("assigns strong (not frontier) tier to tool-action so local can serve restricted work", () => {
+    expect(BUILT_IN_TASK_REQUIREMENTS["tool-action"]?.minimumTier).toBe("strong");
+    const floor =
+      TIER_MINIMUM_DIMENSIONS[BUILT_IN_TASK_REQUIREMENTS["tool-action"]!.minimumTier!];
+    expect(floor.toolFidelity).toBeLessThanOrEqual(
+      BUILT_IN_TASK_REQUIREMENTS["tool-action"]!.preferredMinScores!.toolFidelity!,
+    );
   });
 
   it("marks cheap tasks as preferCheap=true", () => {
