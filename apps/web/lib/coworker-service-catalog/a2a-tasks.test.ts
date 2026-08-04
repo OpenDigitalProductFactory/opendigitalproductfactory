@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   createCoworkerA2aTask,
@@ -6,6 +6,19 @@ import {
   readCoworkerA2aTask,
 } from "./a2a-tasks";
 import type { CreateCoworkerEngagementInput, CoworkerEngagementResult } from "./engagements";
+
+// These tests exercise the RECEIPT-BEARING path, which requires a signing secret.
+// Without one, createCoworkerA2aTask deliberately omits the receipt rather than
+// signing with an untrustworthy value (BI-2F318FB3), so the assertions below
+// would be testing the unsigned path by accident.
+const savedAuthSecret = process.env.AUTH_SECRET;
+beforeAll(() => {
+  process.env.AUTH_SECRET = "a2a-task-test-secret";
+});
+afterAll(() => {
+  if (savedAuthSecret === undefined) delete process.env.AUTH_SECRET;
+  else process.env.AUTH_SECRET = savedAuthSecret;
+});
 
 function db() {
   const engagement = {

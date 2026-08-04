@@ -5,6 +5,7 @@ import {
   type CreateCoworkerEngagementInput,
 } from "./engagements";
 import {
+  canSignDelegationReceipts,
   createCoworkerDelegationReceipt,
   type CoworkerDelegationReceipt,
   type CoworkerDelegationReceiptAccessProfile,
@@ -113,7 +114,10 @@ export async function createCoworkerA2aTask(
     throw new Error("Cross-boundary A2A tasks require delegatedAgentId and delegatedAgentGaid.");
   }
 
-  const delegationReceipt = actingAgentGaid && delegatingAgentGaid && input.delegatedAgentId && input.delegatedAgentGaid
+  // No signing secret => no receipt. Not an error: a receipt that cannot be
+  // trusted is worse than none, and refusing the task would make a config gap an
+  // outage of the whole A2A path.
+  const delegationReceipt = canSignDelegationReceipts() && actingAgentGaid && delegatingAgentGaid && input.delegatedAgentId && input.delegatedAgentGaid
     ? createCoworkerDelegationReceipt({
         protocol: "a2a",
         accessProfile,
