@@ -1,0 +1,50 @@
+name: Missing CI Dispatch Watch
+
+# Every other CI failure mode in this repo turns a check RED. This one makes
+# checks ABSENT, which is indistinguishable from "still pending" — nothing
+# alerts, auto-merge waits forever, and the PR never moves.
+#
+# On 2026-08-01 the installation's GitHub API rate limit was exhausted (the same
+# exhaustion that reported "CodeQL job status was configuration error"). PR #3907
+# was opened inside that window and got FIVE checks instead of the usual ~36 —
+# the CI workflow never dispatched. Auto-merge was armed and would have waited
+# indefinitely on required contexts that were never created. A human noticed by
+# eyeballing the check count, which is not a control.
+#
+# Detection is shape-based, not cause-based: an open non-draft PR whose head has
+# been pushed a while and has ZERO check runs. Rate limiting is only the cause we
+# have seen; a disabled workflow, an over-broad `paths` filter, or a dropped
+# webhook present identically and are equally worth catching. Pairs with
+# merge-queue-churn-watch.yml, which covers the other silent PR-level stall.
+
+on:
+  schedule:
+    - cron: "*/30 * * * *" # every 30 minutes
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pull-requests: write # post the one-time flag comment
+
+concurrency:
+  group: watch-missing-ci-dispatch
+  cancel-in-progress: true
+
+jobs:
+  watch:
+    name: Watch for PRs with no dispatched CI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 24
+      - name: Flag PRs whose head received no check runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # Single `gh pr list` call for the whole sweep — statusCheckRollup
+        # answers "any checks?" per PR, so there is no per-PR follow-up. This
+        # watch exists because API budget ran out; a detector that is itself
+        # expensive would be part of the problem it reports.
+        run: node scripts/check-missing-ci-dispatch.mjs
