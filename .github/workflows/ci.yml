@@ -235,9 +235,30 @@ jobs:
         uses: actions/setup-node@v7.0.0
         with:
           node-version: 24
+      - name: Resolve a trustworthy base SHA
+        # github.event.pull_request.base.sha can go stale relative to the
+        # actual main tip and NOT self-refresh on a later push, an
+        # empty-commit-forced synchronize event, or even a close+reopen
+        # (observed live on PR #3893, BI-9E5E6063) — main on this repo
+        # advances too fast for whatever caches that field. A stale base
+        # makes every downstream gate that diffs BASE_SHA...HEAD (seed-fit,
+        # ux-fit, docs-impact) misattribute every real change from the
+        # intervening PRs to whichever PR happens to run this job. This step
+        # already has full history via fetch-depth:0 above, so recompute a
+        # live merge-base and use it whenever it disagrees with the event.
+        id: base_sha
+        env:
+          EVENT_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --quiet origin main
+          FRESH_BASE="$(git merge-base HEAD origin/main)"
+          if [ "$EVENT_BASE" != "$FRESH_BASE" ]; then
+            echo "::notice::github.event.pull_request.base.sha ($EVENT_BASE) disagrees with a freshly computed merge-base ($FRESH_BASE) — using the fresh one. See BI-9E5E6063."
+          fi
+          echo "sha=$FRESH_BASE" >> "$GITHUB_OUTPUT"
       - name: Run named pull-request policy guards
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_SHA: ${{ steps.base_sha.outputs.sha }}
           PR_BODY: ${{ github.event.pull_request.body }}
           PR_LABELS_JSON: ${{ toJSON(github.event.pull_request.labels) }}
           GITHUB_EVENT_NAME: ${{ github.event_name }}
