@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 623,
+  "pageCount": 624,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -3388,6 +3388,21 @@
     },
     "docs/founder-kernel/wiki/principles/findability-is-part-of-capture.md": {
       "publicHref": "/founder-kernel/wiki/principles/findability-is-part-of-capture/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "rule",
+        "why",
+        "applies-to",
+        "how-to-apply",
+        "decision-dimensions",
+        "examples",
+        "sources"
+      ]
+    },
+    "docs/founder-kernel/wiki/principles/gate-coverage-matches-blast-radius.md": {
+      "publicHref": "/founder-kernel/wiki/principles/gate-coverage-matches-blast-radius/",
       "portalHref": null,
       "publishedPublic": true,
       "publishedPortal": false,
