@@ -44,7 +44,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
 
@@ -67,7 +67,7 @@ jobs:
 
       - name: Restore pnpm store cache
         id: pnpm-cache-restore
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: ${{ env.PNPM_STORE_PATH }}
           key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
@@ -95,7 +95,7 @@ jobs:
 
       - name: Save pnpm store cache
         if: steps.pnpm-cache-restore.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: ${{ env.PNPM_STORE_PATH }}
           key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
@@ -243,7 +243,7 @@ jobs:
 
       - name: Restore Turbopack build cache
         id: turbopack-cache-restore
-        uses: actions/cache/restore@v5
+        uses: actions/cache/restore@v6
         with:
           path: apps/web/.next/cache
           # hashFiles does not expand brace globs. Keep every supported web
@@ -286,7 +286,7 @@ jobs:
 
       - name: Save Turbopack build cache
         if: steps.turbopack-cache-restore.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
+        uses: actions/cache/save@v6
         with:
           path: apps/web/.next/cache
           key: turbopack-build-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('apps/web/**/*.ts', 'apps/web/**/*.tsx', 'apps/web/**/*.js', 'apps/web/**/*.jsx') }}

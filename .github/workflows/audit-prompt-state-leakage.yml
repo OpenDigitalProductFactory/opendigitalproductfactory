@@ -45,7 +45,7 @@ jobs:
           fetch-depth: 0  # need base branch for shrink-only guard
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7.0.0
+        uses: actions/setup-node@v7
         with:
           node-version: 24
 

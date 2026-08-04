@@ -83,7 +83,7 @@ unsuccessful.
   static-import-based test discovery. Dynamic or otherwise unmapped changes
   therefore fail safe to exhaustive execution in shadow evidence.
 - [GitHub Actions cache](https://github.com/actions/cache) defines the granular
-  `restore@v5` and `save@v5` actions used to measure transfer cost separately
+  `restore@v6` and `save@v6` actions used to measure transfer cost separately
   from downstream install/build duration.
 
 ## Scheduled calibration
@@ -94,7 +94,7 @@ Workflow: `.github/workflows/ci-calibration.yml` (`CI Calibration`)
 - Never runs on `pull_request` and is never a required merge check
 - Executes observation unit tests, web + database coverage, shadow related-test comparison
 - Measures exact-key cache economics for `pnpm-store` and `turbopack-build`
-  (`actions/cache/restore@v5` + `actions/cache/save@v5`, no prefix
+  (`actions/cache/restore@v6` + `actions/cache/save@v6`, no prefix
   `restore-keys` on Turbopack). The Turbopack key hashes the lockfile plus
   explicit `ts`, `tsx`, `js`, and `jsx` source globs; GitHub `hashFiles` does
   not expand brace globs.

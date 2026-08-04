@@ -1,5 +1,15 @@
 strictDepBuilds: true
 
+# This probe resolves independently of the root workspace, so the root
+# pnpm-workspace.yaml overrides do not reach it — security floors must be
+# repeated here.
+overrides:
+  # hono < 4.12.34: GHSA-8j4g-w8fx-2239 / CVE-2026-69207 ReDoS in the CORS
+  # middleware via a crafted Access-Control-Request-Headers value
+  # (Dependabot #140, medium). Transitive of hyperframes, which declares an
+  # open `hono: ^4` range. Floor to the patched 4.12.34.
+  hono: '^4.12.34'
+
 allowBuilds:
   "@google/genai@1.52.0": false
   "esbuild@0.25.12": false

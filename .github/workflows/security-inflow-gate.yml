@@ -68,7 +68,7 @@ jobs:
         # the PR being evaluated.
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7.0.0
+        uses: actions/setup-node@v7
         with:
           node-version: 24
 

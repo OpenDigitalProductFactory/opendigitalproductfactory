@@ -176,7 +176,7 @@ jobs:
           # N-1 Caller Honesty reads the merge base.
           fetch-depth: 0
       - name: Set up Node.js
-        uses: actions/setup-node@v7.0.0
+        uses: actions/setup-node@v7
         with:
           node-version: 24
       - name: Install guard AST dependency
@@ -232,7 +232,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Set up Node.js
-        uses: actions/setup-node@v7.0.0
+        uses: actions/setup-node@v7
         with:
           node-version: 24
       - name: Resolve a trustworthy base SHA
