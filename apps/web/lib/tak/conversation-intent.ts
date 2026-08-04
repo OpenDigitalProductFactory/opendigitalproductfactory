@@ -181,6 +181,10 @@ const READ_ONLY_SHORTHAND_PATTERN =
 const MUTATION_AUTHORIZED_PATTERN =
   /\b(?:go\s+ahead\s+and\s+(?:create|save|publish|send|add|update|post)|please\s+(?:create|save|publish|send|add|update)|save\s+(?:it|that|this)|publish\s+(?:it|that|this)|do\s+it\s+now|make\s+the\s+changes?|apply\s+(?:it|that|those))\b/i;
 
+// Any negation word anywhere in the message makes an authorization signal ambiguous —
+// e.g. "Do not worry ... go ahead and create" must not return "authorized".
+const ANY_NEGATION_PATTERN = /\b(?:do\s+not|don't|dont|without|no\b)\b/i;
+
 /**
  * Classify the operator's mutation intent for the current turn.
  *
@@ -208,7 +212,7 @@ export function classifyTurnMutationIntent(
   if (READ_ONLY_NEGATION_PATTERN.test(text) || READ_ONLY_SHORTHAND_PATTERN.test(text)) {
     return "read-only";
   }
-  if (MUTATION_AUTHORIZED_PATTERN.test(text)) {
+  if (MUTATION_AUTHORIZED_PATTERN.test(text) && !ANY_NEGATION_PATTERN.test(text)) {
     return "authorized";
   }
   return "unspecified";
