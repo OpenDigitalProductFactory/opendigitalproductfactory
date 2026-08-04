@@ -1,6 +1,8 @@
 # MCP Tool Tiering & Deferred Loading on the External-CLI Path (R3)
 
-**Status:** Phase 1 SHIPPED (core tier on `tools/list`, opt-in, default unchanged). Phase 2 (model-driven deferral) STAGED — design below.
+**Status:** Phase 1 SHIPPED — core tier on `tools/list`, and it is **on by default for every non-Claude-Code client**, not opt-in. `defaultTierForClient` (`apps/web/lib/mcp/tool-tier.ts`) returns `full` only for a `claude-code/*` user-agent — which defers client-side via ToolSearch — and `core` for everything else; an explicit `?tier=` overrides. Phase 2 (model-driven deferral) STAGED — design below.
+
+> **Status corrected 2026-08-04.** This line previously read "opt-in, default unchanged", which sent a reader looking for an unsolved token problem on external surfaces that is in fact already solved by default. Verified against the code, not the changelog. Tier narrows **discovery only** — `tools/call` still executes any *granted* tool by name (`route.ts`), so the core set is never an authorization boundary and `search_tool_marketplace` keeps the rest reachable.
 **Date:** 2026-06-20
 **Standard:** `docs/architecture/context-engineering-standards.md` (P4/P5). **Parent research:** `docs/superpowers/specs/2026-06-20-context-engineering-tool-efficiency-design.md` (R3).
 
