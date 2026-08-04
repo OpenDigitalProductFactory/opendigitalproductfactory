@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/permissions", () => ({ can: vi.fn() }));
@@ -180,6 +180,13 @@ describe("createInvoice total calculation", () => {
 // ─── Sequential ref generation ───────────────────────────────────────────────
 
 describe("createInvoice sequential ref generation", () => {
+  // Pinned because `createInvoice` stamps the ref with `new Date().getFullYear()`
+  // (finance.ts:38) while the case below hardcodes INV-2026-…. Unpinned, it would
+  // pass until 2027-01-01 and then fail forever on a required unit shard — the
+  // same shape as the 2026-08-01T15:00Z outage fixed in #3883/#3885.
+  beforeEach(() => vi.useFakeTimers().setSystemTime("2026-06-15T12:00:00.000Z"));
+  afterEach(() => vi.useRealTimers());
+
   it("generates INV-2026-0042 when invoice count is 41", async () => {
     mockPrisma.invoice.count.mockResolvedValue(41);
     mockPrisma.invoice.create.mockResolvedValue({ id: "inv-42", invoiceRef: "INV-2026-0042" });

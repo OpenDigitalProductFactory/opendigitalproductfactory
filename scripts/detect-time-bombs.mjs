@@ -77,23 +77,38 @@ async function runSuite({ shiftDays, filter, outFile }) {
   const label = shiftDays ? `+${shiftDays}d` : "baseline";
   process.stdout.write(`[time-bombs] running suite (${label})…\n`);
 
-  const exitCode = await new Promise((resolve) => {
+  const { exitCode, signal, spawnError } = await new Promise((resolve) => {
     const child = spawn(process.execPath, args, {
       cwd: WEB_DIR,
       env,
       stdio: ["ignore", "ignore", "inherit"],
     });
-    child.on("close", (code) => resolve(code ?? 1));
-    child.on("error", () => resolve(1));
+    child.on("close", (code, receivedSignal) =>
+      resolve({ exitCode: code ?? 1, signal: receivedSignal, spawnError: null }),
+    );
+    child.on("error", (error) => resolve({ exitCode: 1, signal: null, spawnError: error }));
   });
 
   let report;
   try {
     report = JSON.parse(await readFile(outFile, "utf8"));
   } catch (error) {
+    // Report HOW the child died, not just that no report showed up. The two
+    // causes look identical from the missing file alone and need opposite
+    // responses: `signal` set (usually SIGKILL/SIGTERM) means the run was killed
+    // from outside — a job timeout or the OOM killer under memory pressure, so
+    // the suite is fine and the harness needs more room; a non-zero `exitCode`
+    // with no signal means vitest itself failed and the suite is the problem.
+    // Without this distinction the message reads "the run produced no parseable
+    // output" for both, which is where the diagnosis stalls.
+    const cause = spawnError
+      ? `could not spawn vitest: ${spawnError.message}`
+      : signal
+        ? `vitest was KILLED by ${signal} — an external timeout or the OOM killer, not a test failure`
+        : `vitest exited ${exitCode} without writing the report`;
     throw new Error(
-      `could not read the ${label} JSON report — the run produced no parseable ` +
-        `output, so its result cannot be trusted (${String(error)})`,
+      `could not read the ${label} JSON report — ${cause}, so its result cannot ` +
+        `be trusted (${String(error)})`,
     );
   }
 
