@@ -42,7 +42,70 @@ const PENDING_BUCKETS = new Set(["pending"]);
 // `Local-CI-Evidence:` carries an evidence record id from a passing
 // `pnpm run pregate` run; `Local-CI-Override:` is an explicit operator
 // attestation that the sandbox gate was consciously skipped and why.
+//
+// BI-563F6AB6 P1: override values must use a CLOSED reason code (optionally
+// followed by free detail). Free-text alone (e.g. "unit tests only") used to
+// green-wash runtime PRs when agents skipped pregate — that path is closed.
 const LOCAL_CI_TRAILER_RE = /^\s*Local-CI-(Evidence|Override):\s*(\S.*)$/m;
+
+/**
+ * Closed allowlist for Local-CI-Override / push-time skipReason (BI-563F6AB6).
+ * Format accepted: `<code>` or `<code>: <detail>` (also `—` / `-` separators).
+ * Codes are the only machine-checked part; detail is audit prose.
+ */
+export const LOCAL_CI_OVERRIDE_REASON_CODES = Object.freeze([
+  // Change set is docs-adjacent but isDocsOnlyFileSet did not classify it
+  // (e.g. config-only under scripts/docs, or markdown outside docs/).
+  "docs-adjacent",
+  // Delete/tag-only publication path already hook-exempt; trailer for remotes.
+  "delete-or-tag-only",
+  // Named human operator consciously waived the gate (emergency only).
+  "operator-emergency",
+  // Contributor has no local DPF install / cannot run pregate (fork path).
+  "external-contribution-no-install",
+  // Install/bootstrap recovery where the sandbox itself is the patient.
+  "install-bootstrap-recovery",
+]);
+
+const LOCAL_CI_OVERRIDE_CODE_SET = new Set(LOCAL_CI_OVERRIDE_REASON_CODES);
+
+/**
+ * @param {string | null | undefined} value
+ * @returns {{ ok: true, code: string, detail: string } | { ok: false, reason: string }}
+ */
+export function classifyLocalCiOverride(value) {
+  const raw = typeof value === "string" ? value.trim() : "";
+  if (!raw) {
+    return {
+      ok: false,
+      reason:
+        "empty Local-CI-Override — use a closed reason code " +
+        `(one of: ${LOCAL_CI_OVERRIDE_REASON_CODES.join(", ")})`,
+    };
+  }
+  // Leading code is [a-z0-9-]+; optional detail after : / — / -
+  const match = raw.match(/^([a-z0-9-]+)(?:\s*[:—\-]\s*(.*))?$/i);
+  if (!match) {
+    return {
+      ok: false,
+      reason:
+        `Local-CI-Override must start with a closed reason code ` +
+        `(got ${JSON.stringify(raw)}); allowed: ${LOCAL_CI_OVERRIDE_REASON_CODES.join(", ")}`,
+    };
+  }
+  const code = match[1].toLowerCase();
+  const detail = (match[2] ?? "").trim();
+  if (!LOCAL_CI_OVERRIDE_CODE_SET.has(code)) {
+    return {
+      ok: false,
+      reason:
+        `Local-CI-Override code ${JSON.stringify(code)} is not allowlisted — ` +
+        `allowed: ${LOCAL_CI_OVERRIDE_REASON_CODES.join(", ")}. ` +
+        `Free-text alone (e.g. "unit tests only") is not an override.`,
+    };
+  }
+  return { ok: true, code, detail };
+}
 
 export function parseLocalCiAttestation(prBody) {
   const match = LOCAL_CI_TRAILER_RE.exec(prBody || "");
@@ -113,10 +176,11 @@ export function evaluatePrHealth({ meta = {}, checks = [], threads = [], localCi
     );
   }
 
-  // Local-CI sandbox evidence (BI-C74F4DE9): a runtime-code PR must carry a
-  // passing local-integration-ci gate for its head SHA, a recorded pre-push
-  // override, or an explicit PR-body attestation. "No evidence and no
-  // attestation" is the exact state that shipped unverified branches.
+  // Local-CI sandbox evidence (BI-C74F4DE9 + BI-563F6AB6 P1): a runtime-code PR
+  // must carry a passing local-integration-ci gate for its head SHA, a recorded
+  // pre-push override with an allowlisted reason code, or a PR-body attestation
+  // (Evidence id, or Override with allowlisted code). Free-text overrides are
+  // blockers — agents cannot green-wash "unit tests only".
   if (localCi) {
     const rec = localCi.stateRecord;
     const recMatchesHead = rec && localCi.headSha && rec.sha === localCi.headSha;
@@ -125,15 +189,48 @@ export function evaluatePrHealth({ meta = {}, checks = [], threads = [], localCi
     } else if (recMatchesHead && rec.gatePassed === true) {
       notes.push(`local-CI sandbox gate passed for head ${localCi.headSha.slice(0, 12)}`);
     } else if (recMatchesHead && rec.skipped && rec.skipReason) {
-      notes.push(`local-CI gate overridden at push time (recorded): ${rec.skipReason}`);
+      const classified = classifyLocalCiOverride(rec.skipReason);
+      if (classified.ok) {
+        notes.push(
+          `local-CI gate overridden at push time (code=${classified.code}` +
+            (classified.detail ? `; ${classified.detail}` : "") +
+            ")",
+        );
+      } else {
+        blockers.push(
+          `local-CI push-time override rejected: ${classified.reason}`,
+        );
+      }
     } else if (localCi.attestation) {
-      notes.push(`local-CI ${localCi.attestation.kind} attestation in PR body: ${localCi.attestation.value}`);
+      if (localCi.attestation.kind === "evidence") {
+        notes.push(
+          `local-CI evidence attestation in PR body: ${localCi.attestation.value}`,
+        );
+      } else if (localCi.attestation.kind === "override") {
+        const classified = classifyLocalCiOverride(localCi.attestation.value);
+        if (classified.ok) {
+          notes.push(
+            `local-CI override attestation in PR body (code=${classified.code}` +
+              (classified.detail ? `; ${classified.detail}` : "") +
+              ")",
+          );
+        } else {
+          blockers.push(
+            `local-CI PR-body override rejected: ${classified.reason}`,
+          );
+        }
+      } else {
+        blockers.push(
+          `unknown local-CI attestation kind ${JSON.stringify(localCi.attestation.kind)}`,
+        );
+      }
     } else {
       blockers.push(
         "no local-CI sandbox evidence for the PR head SHA — run `pnpm run pregate` from the " +
           "branch worktree (claims the local-integration-ci lease, runs the checked-in runner, " +
-          "records evidence), or add an explicit `Local-CI-Override: <reason>` / " +
-          "`Local-CI-Evidence: <record-id>` trailer to the PR body",
+          "records evidence), or add `Local-CI-Evidence: <record-id>` / " +
+          `Local-CI-Override: <code>[: detail] where <code> is one of: ` +
+          `${LOCAL_CI_OVERRIDE_REASON_CODES.join(", ")}`,
       );
     }
   }

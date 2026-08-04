@@ -481,9 +481,32 @@ DPF_SKIP_PREPUSH_GATE=1 DPF_SKIP_PREPUSH_GATE_REASON="WIP handoff, gate before P
 
 **PR-time guard.** `pnpm pr:health` treats a runtime-code PR without local-CI
 evidence as NOT READY: it needs a passing gate record for the PR head SHA, a
-recorded push-time override, or an explicit `Local-CI-Override: <reason>` /
-`Local-CI-Evidence: <record-id>` trailer in the PR body. Docs-only PRs are
-exempt automatically.
+recorded push-time override with an **allowlisted reason code**, or a PR-body
+trailer. Docs-only PRs are exempt automatically.
+
+**`Local-CI-Override` is a closed code (BI-563F6AB6 P1), not free prose.** Agents
+cannot green-wash a runtime PR with `Local-CI-Override: unit tests only` (or any
+unstructured reason). Format:
+
+```text
+Local-CI-Override: <code>
+Local-CI-Override: <code>: <optional audit detail>
+```
+
+Allowlisted codes (see `LOCAL_CI_OVERRIDE_REASON_CODES` in
+[`scripts/pr-health.mjs`](../../scripts/pr-health.mjs)):
+
+| Code | When it is legitimate |
+| --- | --- |
+| `docs-adjacent` | Prose/config that `isDocsOnlyFileSet` missed |
+| `delete-or-tag-only` | Delete/tag publication (also hook-exempt) |
+| `operator-emergency` | Named human consciously waived the gate |
+| `external-contribution-no-install` | No local DPF install / cannot run pregate |
+| `install-bootstrap-recovery` | Sandbox/install is the patient under repair |
+
+Push-time `DPF_SKIP_PREPUSH_GATE_REASON` must use the same code format or
+`pr:health` treats the recorded skip as a **blocker**, not a pass. The normal
+path remains `pnpm run pregate` with **no** body trailer.
 
 ### Keep internal identifiers out of the PR body
 
