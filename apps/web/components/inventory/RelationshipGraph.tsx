@@ -5,6 +5,46 @@ import type { GraphData } from "@/lib/actions/graph";
 
 export type GraphLegendEntry = { label: string; key: string; color: string };
 
+// ── Layout tuning (BI-C2B6396B) ──────────────────────────────────────────────
+//
+// The forces are expressed relative to `k`, the ideal node separation, which is
+// derived per frame from canvas area over node count (Fruchterman-Reingold).
+// Fixed constants collapsed the graph into a knot once the canvas carried ~100
+// nodes — well inside the 400-node cap the graph-explorer spec sanctions.
+
+/** Below this temperature the layout is at rest and the loop stops. */
+const COOLED_TEMPERATURE = 0.01;
+/** Ideal separation is clamped: unbounded k scatters a 3-node graph to the edges. */
+const MIN_IDEAL_SEPARATION = 34;
+const MAX_IDEAL_SEPARATION = 130;
+/** Repulsion at exactly the ideal separation. */
+const REPULSION_GAIN = 0.6;
+/** Ceiling for near-coincident nodes, which would otherwise be flung off-canvas. */
+const REPULSION_CAP = 6;
+const SPRING_GAIN = 0.0035;
+/** Padding around a label's box when testing it against already-placed labels. */
+const LABEL_PADDING = 2;
+
+/**
+ * Deterministic seed position for a node, derived from its id.
+ *
+ * Replaces `Math.random()` so a given graph always lays out identically. The
+ * golden-angle step spreads consecutive hashes around the circle instead of
+ * clustering them, and the radius varies so nodes do not land on one ring.
+ */
+function hashToUnitAngle(id: string): { angle: number; radius: number } {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const unit = ((h >>> 0) % 100000) / 100000;
+  return {
+    angle: unit * Math.PI * 2 * 1.618033988749895,
+    radius: 30 + unit * 140,
+  };
+}
+
 const DEFAULT_LABEL_LEGEND: GraphLegendEntry[] = [
   { label: "Portfolio", color: "var(--dpf-accent)", key: "Portfolio" },
   { label: "Product", color: "#4ade80", key: "DigitalProduct" },
@@ -124,11 +164,36 @@ export function RelationshipGraph({
     const cy = dimensions.height / 2;
     const temp = temperatureRef.current;
 
-    if (temp <= 0.01) return;
+    if (temp <= COOLED_TEMPERATURE) return;
     temperatureRef.current *= 0.98;
 
+    // Ideal node separation, Fruchterman-Reingold style: k = sqrt(area / n).
+    // The forces below are expressed relative to k so the layout self-scales with
+    // how crowded the canvas is (BI-C2B6396B). The previous constants were fixed —
+    // repulsion of 80/d² and a spring pulling every edge to a flat 100px — which
+    // meant repulsion was already negligible at ~30px apart while the spring kept
+    // pulling inward. Past roughly a hundred nodes (a two-hop expansion in the
+    // graph explorer reaches that easily) the whole graph collapsed into an
+    // unreadable knot in the middle of the canvas.
+    const k = Math.max(
+      MIN_IDEAL_SEPARATION,
+      Math.min(
+        MAX_IDEAL_SEPARATION,
+        Math.sqrt((dimensions.width * dimensions.height) / Math.max(1, nodes.length)),
+      ),
+    );
+
     for (const node of nodes) {
-      if (node.x === undefined) { node.x = cx + (Math.random() - 0.5) * 300; node.y = cy + (Math.random() - 0.5) * 200; }
+      if (node.x === undefined) {
+        // Seeded from the node id rather than Math.random (BI-C2B6396B). Two
+        // benefits: the same graph lays out the same way every time, so the
+        // picture is stable across reloads and reproducible in tests; and no two
+        // nodes can start exactly coincident, where dx and dy are both zero, the
+        // repulsion direction is undefined, and the pair stays fused forever.
+        const seed = hashToUnitAngle(node.id);
+        node.x = cx + Math.cos(seed.angle) * seed.radius;
+        node.y = cy + Math.sin(seed.angle) * seed.radius * 0.7;
+      }
       node.vx = (node.vx ?? 0) * 0.6;
       node.vy = (node.vy ?? 0) * 0.6;
       node.vx! += (cx - node.x!) * 0.002 * temp;
@@ -141,8 +206,11 @@ export function RelationshipGraph({
         const b = nodes[j]!;
         const dx = (a.x ?? 0) - (b.x ?? 0);
         const dy = (a.y ?? 0) - (b.y ?? 0);
-        const dist = Math.max(10, Math.sqrt(dx * dx + dy * dy));
-        const force = Math.min(3, 80 / (dist * dist)) * temp;
+        const dist = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+        // Coulomb term relative to the ideal separation: at dist == k this is
+        // REPULSION_GAIN, and it falls off as 1/d². Capped so two nodes that spawn
+        // almost on top of each other cannot fling themselves off the canvas.
+        const force = Math.min(REPULSION_CAP, REPULSION_GAIN * ((k * k) / (dist * dist))) * temp;
         const fx = (dx / dist) * force;
         const fy = (dy / dist) * force;
         a.vx! += fx; a.vy! += fy;
@@ -158,7 +226,9 @@ export function RelationshipGraph({
       const dx = (target.x ?? 0) - (source.x ?? 0);
       const dy = (target.y ?? 0) - (source.y ?? 0);
       const dist = Math.max(1, Math.sqrt(dx * dx + dy * dy));
-      const force = (dist - 100) * 0.003 * temp;
+      // Spring toward the same ideal separation the repulsion is scaled to, so
+      // the two forces balance at k rather than fighting to a fixed 100px.
+      const force = (dist - k) * SPRING_GAIN * temp;
       const fx = (dx / dist) * force;
       const fy = (dy / dist) * force;
       source.vx! += fx; source.vy! += fy;
@@ -225,13 +295,44 @@ export function RelationshipGraph({
       }
 
       ctx.globalAlpha = 1;
+    }
 
-      if (isHovered || isFocus || node.size >= 6) {
-        ctx.font = `${isHovered || isFocus ? 11 : 9}px -apple-system, sans-serif`;
-        ctx.fillStyle = isHovered || isFocus ? "#fff" : "rgba(224,224,255,0.6)";
-        ctx.textAlign = "center";
-        ctx.fillText(node.name, node.x, node.y - radius - 4);
-      }
+    // Labels last, as their own pass with greedy overlap rejection (BI-C2B6396B).
+    // Drawing them inside the node loop meant every eligible label was painted
+    // unconditionally and in arbitrary order, so a crowded centre became a pile of
+    // overlapping text. Hovered and focused labels are drawn first and always win
+    // their space; the rest take what is left and are skipped when they would
+    // collide. A skipped label is not lost — hovering the node reveals it.
+    const placed: Array<{ x0: number; y0: number; x1: number; y1: number }> = [];
+    const labelled = nodes
+      .filter((n) => n.x !== undefined && n.y !== undefined)
+      .filter((n) => hoveredNode === n.id || focusNodeId === n.id || (n.size ?? 4) >= 6)
+      .sort((a, b) => {
+        const rank = (n: SimNode) =>
+          (hoveredNode === n.id || focusNodeId === n.id ? 1000 : 0) + (n.size ?? 4);
+        return rank(b) - rank(a);
+      });
+
+    ctx.textAlign = "center";
+    for (const node of labelled) {
+      const important = hoveredNode === node.id || focusNodeId === node.id;
+      const fontSize = important ? 11 : 9;
+      ctx.font = `${fontSize}px -apple-system, sans-serif`;
+      const width = ctx.measureText(node.name).width;
+      const radius = (node.size ?? 4) * (important ? 1.5 : 1);
+      const x0 = node.x! - width / 2 - LABEL_PADDING;
+      const x1 = node.x! + width / 2 + LABEL_PADDING;
+      const y1 = node.y! - radius - 4;
+      const y0 = y1 - fontSize - LABEL_PADDING;
+
+      if (
+        !important
+        && placed.some((r) => !(x1 < r.x0 || x0 > r.x1 || y1 < r.y0 || y0 > r.y1))
+      ) continue;
+
+      placed.push({ x0, y0, x1, y1 });
+      ctx.fillStyle = important ? "#fff" : "rgba(224,224,255,0.6)";
+      ctx.fillText(node.name, node.x!, y1);
     }
   }, [dimensions, hoveredNode, focusNodeId, linkLegend]);
 
@@ -256,18 +357,43 @@ export function RelationshipGraph({
     return () => ro.disconnect();
   }, []);
 
-  // Animation loop
+  // A resize moves the centre and changes the ideal separation, so let the layout
+  // settle again rather than leaving nodes where the old geometry put them. Partial
+  // re-heat: enough to rearrange, not so much that the graph jumps on every drag of
+  // a window edge. Declared before the animation effect so the temperature is
+  // already raised when that effect re-runs.
+  useEffect(() => {
+    temperatureRef.current = Math.max(temperatureRef.current, 0.4);
+  }, [dimensions]);
+
+  // Animation loop — runs only while the layout is still settling (BI-C2B6396B).
+  //
+  // This used to re-arm requestAnimationFrame unconditionally. Once cooled,
+  // `simulate()` returned immediately but `draw()` kept repainting an unchanged
+  // canvas at ~60fps for as long as the page was open — pinning a renderer thread
+  // on both /inventory and /admin/graph-explorer, and timing out CDP screenshots
+  // against the page, which is how it was noticed.
+  //
+  // Stopping is safe because every input that changes the picture re-runs this
+  // effect: `filteredData` covers data and filter changes, and `draw`'s identity
+  // changes with hover, focus, dimensions, and the link legend. The cooled branch
+  // still paints one final frame, so a restart triggered purely by a repaint
+  // concern (a hover, say) renders correctly without restarting the physics.
   useEffect(() => {
     let running = true;
     function tick() {
       if (!running) return;
+      if (temperatureRef.current <= COOLED_TEMPERATURE) {
+        draw();
+        return;
+      }
       simulate();
       draw();
       animRef.current = requestAnimationFrame(tick);
     }
     tick();
     return () => { running = false; cancelAnimationFrame(animRef.current); };
-  }, [simulate, draw]);
+  }, [simulate, draw, filteredData]);
 
   // Click to focus
   function handleClick(e: React.MouseEvent<HTMLCanvasElement>) {
