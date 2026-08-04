@@ -52,9 +52,14 @@ External MCP clients (Claude/Codex/Grok) and in-portal coworkers burn tokens via
 
 1. **On demand:** MCP tool `analyze_mcp_call_efficiency` (optimization pack).  
 2. **Scheduled:** daily Inngest job (06:15 UTC) runs same analysis; posts `PlatformNotification` when high-severity findings exist.  
-3. **Human/AI Ops:** act on findings → skill, pack, or webhook BI.  
+3. **Closed loop (slice 2):** when warning/critical findings exist:
+   - Persist full report as `TaskArtifact` (`metadata.kind=mcp-call-efficiency-report`) under a proactive `TaskRun` owned by `platform-engineer`.
+   - Touch `ImprovementSignal` rows (`sourceType=mcp-call-efficiency`, `sourceId=kind:toolName`) for every actionable finding.
+   - **Immediately file backlog items** for **critical** findings via `ingestBacklogItem` (prefix `BI-MCP-EFF-*`, workType from recommended action).
+   - Enqueue a **one-shot** `ScheduledAgentTask` (`mcp-efficiency-aiops-YYYYMMDD`) for the AI Ops coworker with a mandate prompt; `agent/task-dispatch` runs it within ~5 minutes; task deactivates after one fire.
+4. **Human/AI Ops:** coworker reviews remaining warnings, avoids re-filing already-sourced BIs, proposes skill/tool/webhook work.
 
-Later slices: file `ImprovementProposal` / backlog automatically; tools/list metrics_only; OTel export; authority UI panel.
+Later slices: tools/list metrics_only; OTel export; authority UI panel; auto-promote selected BIs to Build Studio.
 
 ## Slice 1 deliverables
 
@@ -64,6 +69,15 @@ Later slices: file `ImprovementProposal` / backlog automatically; tools/list met
 - Design + unit tests  
 - No new Prisma models  
 
+## Slice 2 deliverables (this PR)
+
+- `dispatchMcpEfficiencyAiOps` handoff module + unit tests  
+- Cron wires `dispatchAiOps: true` + scheduled owner principal  
+- Critical BI auto-file + ImprovementSignals + TaskRun artifact  
+- One-shot platform-engineer review task  
+- MCP tool gains optional `dispatchAiOps`  
+- Catalog purpose updated  
+
 ## Docs impact
 
-Operator-facing: tool appears in MCP tool list for agents with `agent_control_read`. Architecture: this design note. No user-guide route until a portal page ships.
+Operator-facing: tool appears in MCP tool list for agents with `agent_control_read`; daily job purpose describes AI Ops dispatch. Architecture: this design note. No user-guide route until a portal page ships.
