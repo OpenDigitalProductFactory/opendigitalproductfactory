@@ -142,6 +142,14 @@ export type RouteVerdict = {
   advisoryBudgetFailures: string[];
   /** True when the accessibility tree changed shape. */
   structureChanged: boolean;
+  /**
+   * WHAT changed in that tree, as `-` baseline / `+` measured lines — empty unless
+   * structureChanged. Without this the gate says only "shape changed" and the failure
+   * is undiagnosable from CI: the report artifact carries no snapshot, so finding the
+   * cause meant reproducing the route against a live portal by hand. Safe to publish
+   * — the projection is roles-only and VOLATILE_PATTERNS has already redacted names.
+   */
+  structureDiff: string[];
   ok: boolean;
   findings: BudgetFinding[];
   metrics: UxBudgetMetrics;
@@ -176,6 +184,7 @@ export function verdictForRoute(
 
   const regressions: string[] = [];
   let structureChanged = false;
+  let structureDiff: string[] = [];
 
   if (baseline) {
     for (const axis of RATCHET_AXES) {
@@ -192,6 +201,9 @@ export function verdictForRoute(
     }
     // Whitespace-only reformatting of the YAML projection is not a hierarchy change.
     structureChanged = normaliseSnapshot(measurement.ariaSnapshot) !== normaliseSnapshot(baseline.ariaSnapshot);
+    if (structureChanged) {
+      structureDiff = summariseStructureDiff(baseline.ariaSnapshot, measurement.ariaSnapshot);
+    }
   }
 
   const failed = report.findings.filter((f) => !f.ok);
@@ -221,6 +233,7 @@ export function verdictForRoute(
     blockingBudgetFailures,
     advisoryBudgetFailures,
     structureChanged,
+    structureDiff,
     ok: regressions.length === 0 && !structureChanged && blockingBudgetFailures.length === 0,
     findings: report.findings,
     metrics: measurement.metrics,
@@ -396,6 +409,88 @@ function collapseRepeatedSiblings(lines: string[]): string[] {
   const flat: string[] = [];
   flatten(dedupe(toTree(lines)), flat);
   return flat;
+}
+
+/** Diff lines emitted into the report before truncating. Enough to name the cause. */
+export const STRUCTURE_DIFF_LIMIT = 12;
+
+/**
+ * A line-level diff of the two NORMALISED projections, as `-` baseline / `+` measured.
+ *
+ * Both sides are already collapsed and redacted by normaliseSnapshot, so this reports
+ * the same thing the gate actually compared — not the raw tree, which would show
+ * repetition the gate deliberately ignores and send the reader chasing row counts.
+ *
+ * Longest-common-subsequence, with a size guard: the projections are roles-only and
+ * collapsed (hundreds of lines), but a pathological surface must not turn a reporting
+ * nicety into a quadratic blowup inside the gate. Past the guard, fall back to naming
+ * the first point of divergence, which is still strictly better than a bare boolean.
+ */
+export function summariseStructureDiff(
+  baselineSnapshot: string,
+  measuredSnapshot: string,
+  limit: number = STRUCTURE_DIFF_LIMIT,
+): string[] {
+  const was = normaliseSnapshot(baselineSnapshot).split("\n");
+  const now = normaliseSnapshot(measuredSnapshot).split("\n");
+  if (was.join("\n") === now.join("\n")) return [];
+
+  const truncate = (out: string[]): string[] =>
+    out.length > limit
+      ? [...out.slice(0, limit), `… ${out.length - limit} more structural line(s)`]
+      : out;
+
+  // Replace the projection's own `- ` bullet rather than prefixing it: a `- ` diff
+  // marker in front of a `- role` line reads as `- - banner`. Indentation is kept,
+  // because depth is how the reader locates the node in the tree.
+  const render = (marker: "[-]" | "[+]", line: string): string => {
+    const indent = line.slice(0, line.length - line.trimStart().length);
+    return `${indent}${marker} ${line.trimStart().replace(/^-\s*/, "")}`;
+  };
+
+  const LCS_GUARD = 4_000_000; // cells; ~2000x2000 lines
+  if (was.length * now.length > LCS_GUARD) {
+    let i = 0;
+    while (i < was.length && i < now.length && was[i] === now[i]) i++;
+    return truncate(
+      [
+        `first divergence at line ${i + 1} (diff truncated — projection too large)`,
+        ...(was[i] === undefined ? [] : [render("[-]", was[i])]),
+        ...(now[i] === undefined ? [] : [render("[+]", now[i])]),
+      ].filter(Boolean),
+    );
+  }
+
+  // lcs[i][j] = length of the longest common subsequence of was[i..] and now[j..].
+  const lcs: number[][] = Array.from({ length: was.length + 1 }, () =>
+    new Array<number>(now.length + 1).fill(0),
+  );
+  for (let i = was.length - 1; i >= 0; i--) {
+    for (let j = now.length - 1; j >= 0; j--) {
+      lcs[i][j] =
+        was[i] === now[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+    }
+  }
+
+  const out: string[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < was.length && j < now.length) {
+    if (was[i] === now[j]) {
+      i++;
+      j++;
+    } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
+      out.push(render("[-]", was[i]));
+      i++;
+    } else {
+      out.push(render("[+]", now[j]));
+      j++;
+    }
+  }
+  for (; i < was.length; i++) out.push(render("[-]", was[i]));
+  for (; j < now.length; j++) out.push(render("[+]", now[j]));
+
+  return truncate(out);
 }
 
 export function normaliseSnapshot(snapshot: string): string {
@@ -613,6 +708,9 @@ export function formatSweepReport(sweep: SweepVerdict): string {
     for (const r of v.regressions) lines.push(`  REGRESSION  ${r}`);
     if (v.structureChanged) {
       lines.push("  REGRESSION  accessibility tree changed shape (heading/landmark structure)");
+      // The diff is the whole point of the line above: without it the reader knows
+      // only THAT the shape moved, and the log tail is where they look first.
+      for (const d of v.structureDiff) lines.push(`                ${d}`);
     }
     for (const f of v.blockingBudgetFailures) lines.push(`  BLOCKING    ${f}`);
     for (const f of v.advisoryBudgetFailures) lines.push(`  advisory    ${f}`);
