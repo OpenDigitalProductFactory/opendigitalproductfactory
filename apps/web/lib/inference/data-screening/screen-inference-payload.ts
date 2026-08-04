@@ -17,6 +17,7 @@ import type {
   InferencePolicyVersionSnapshot,
 } from "./types";
 import { hasVerticalPolicyPacks } from "./vertical-policy-packs";
+import { SENSITIVITY_RANK } from "./sensitivity-rank";
 
 const DEFAULT_ORGANIZATION_ID = "org:local-install";
 
@@ -35,12 +36,9 @@ function dedupeMatchProvenance(
   );
 }
 
-const SENSITIVITY_RANK: Readonly<Record<RequestContract["sensitivity"], number>> = {
-  public: 0,
-  internal: 1,
-  confidential: 2,
-  restricted: 3,
-};
+// Shared with the drift rollup, which must agree on what "above" means when it
+// decides whether a declared route label sits higher than its measured payload.
+
 
 type ScreenRouteContextInput = Partial<InferenceDataScreenResult["routeContext"]> & {
   sensitivity?: string;

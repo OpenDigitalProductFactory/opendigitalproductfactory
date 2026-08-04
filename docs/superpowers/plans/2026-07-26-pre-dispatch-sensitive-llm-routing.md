@@ -136,6 +136,16 @@ type InferenceDataScreenResult = {
 };
 ```
 
+#### Reading the declared-vs-measured fields back (BI-CF3049E7)
+
+Recording both levels only helps if something reconciles them. `apps/web/lib/inference/sensitivity-drift-rollup.ts` rolls receipts up into the groups whose declared label sits **above** what their payload measured, worst over-declaration first; `getSensitivityDriftRollup()` in `apps/web/lib/actions/route-decision-logs.ts` is the DB-backed accessor. Three properties are deliberate:
+
+- **Drift is one-directional.** A payload measuring *above* its declared label is the screen working as intended (the floor only raises), so it is never reported as drift — reporting it would invite someone to lower a correct label.
+- **Receipts predating these fields are held in their own bucket**, not counted as aligned. Treating unmeasured receipts as agreeing would report a clean estate that was never checked.
+- **Levels only.** No payload text passes through the rollup, so it is as safe to surface as the receipts it reads.
+
+Attribution is per agent + task type rather than per route, because `RouteDecisionLog` has no `routeContext` column — the route is visible only as the declared level it contributed. Adding that column is the next slice; until then a drifting agent is traced back to its route through `tak/route-context-map`. The measured case that motivated this: `/customer/marketing` declares `confidential` at `route-context-map.ts:351` while every assembled context tier measures `internal` with zero governed data classes, which left exactly one eligible endpoint (BI-8058697C).
+
 The screen runs before `inferContract()` when possible so route previews match live dispatch, and it must also guard the final dispatch seam so no alternate caller can bypass it. The default insertion points are:
 
 - `apps/web/lib/inference/routed-inference.ts`: screen before `inferContract()` / `prepareRoute()` output and attach the receipt to route evidence.
