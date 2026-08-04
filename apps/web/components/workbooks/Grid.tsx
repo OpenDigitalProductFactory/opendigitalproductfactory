@@ -132,6 +132,7 @@ import {
   normalizeViewState,
 } from "./grid-named-views";
 import { GridViewsMenu } from "./GridViewsMenu";
+import { GridExportMenu } from "./GridExportMenu";
 import { type PivotAgg, type SummaryMode } from "./grid-pivot";
 import {
   type CellRange,
@@ -180,7 +181,6 @@ import {
 } from "./grid-footer-summary";
 import { RecordDetailModal } from "./RecordDetailModal";
 import {
-  Download,
   Filter,
   Palette,
   BarChart3,
@@ -1542,26 +1542,11 @@ export function WorkbookGrid({
             onSetDefault={handleSetDefaultView}
           />
         </div>
-        <button
-          type="button"
-          onClick={onExportCsv}
+        <GridExportMenu
           disabled={columns.length === 0}
-          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] disabled:opacity-40"
-          title="Export the current view to CSV"
-        >
-          <Download size={15} aria-hidden />
-          Export CSV
-        </button>
-        <button
-          type="button"
-          onClick={onExportXlsx}
-          disabled={columns.length === 0}
-          className="inline-flex items-center gap-1.5 rounded-md border border-[var(--dpf-border)] px-3 py-1.5 text-sm text-[var(--dpf-muted)] hover:text-[var(--dpf-text)] disabled:opacity-40"
-          title="Export the current view to an Excel .xlsx file"
-        >
-          <Download size={15} aria-hidden />
-          Export Excel
-        </button>
+          onExportCsv={onExportCsv}
+          onExportXlsx={onExportXlsx}
+        />
         <button
           type="button"
           onClick={() => setShowFilters((v) => !v)}

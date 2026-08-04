@@ -329,6 +329,11 @@ are low-risk config. Build 1 → 2 → 3 in order; 4 and 5 can land any time.
   silently dropped on save (a latent bug for link/rollup columns too). Extracted the schemas into a
   pure, prisma-free `apps/web/lib/workbooks/column-schema.ts` (unit-tested — 14 cases incl. the
   link/rollup regression + bounds) and aligned it fully with the `FieldConfig` type.
+- **Slice 28h — one Export menu — SHIPPED.** The two adjacent "Export CSV" / "Export Excel" toolbar
+  buttons are consolidated into a single **Export ▾** button that opens a format menu (CSV / Excel),
+  mirroring the `GridViewsMenu` dropdown pattern. Same download handlers; just one control instead of
+  two. New `GridExportMenu.tsx` + component tests; the grid component suite asserts the menu opens and
+  each choice fires its handler and closes.
 - **Remaining (not built):** manual row reordering for *platform* grids (would need a per-user client
   order; low value on 1000s of rows); platform-grid *shareable* views (needs a `WorkbookView.tableId`
   schema change — platform tables have no `WorkbookTable` row); richer charts (grouped/stacked/line);

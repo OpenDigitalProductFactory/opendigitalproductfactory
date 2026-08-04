@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "decidedOption": "single-export-menu",
+  "decisionInteractionId": "DI-A203E8B6CEFB",
+  "scope": {
+    "files": [
+      "apps/web/components/workbooks/Grid.tsx",
+      "apps/web/components/workbooks/GridExportMenu.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "single-export-menu",
+      "two-buttons",
+      "segmented-toggle"
+    ]
+  }
+}
