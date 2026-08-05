@@ -1,0 +1,45 @@
+{
+  "_note": "Draft UX critique entries for the design corpus (BI-52839DEA, EP-UX-SYSTEM §6 L6). Shaped to CritiqueEntry in apps/web/lib/ux-critique/critique-entry.ts so they can be imported through the portal capture form or capture_ux_critique once a token carries the critique_capture grant. EVERY entry here is agent-proposed and NOT calibration-eligible: the verdicts below are proposals, and only a founder/designer verdict attached in the portal makes an entry calibration data. A judge calibrated on agent-authored verdicts is calibrated against itself.",
+  "_screenshots": "None attached. The type treats screenshotRef as required for reviewability — a critique of a screen nobody can look at again is not reviewable — so these are INCOMPLETE until images are attached. Each entry carries a gitRef so the screen can be re-rendered and captured at the exact state described.",
+  "entries": [
+    {
+      "title": "Skills catalog put 5,349 words on arrival by clamping, not deferring",
+      "route": "/platform/ai/skills",
+      "gitRef": "83535a8bb13",
+      "viewportWidth": 1280,
+      "colorScheme": "dark",
+      "screenshotRef": null,
+      "lenses": ["density", "hierarchy"],
+      "finding": "The catalog rendered all 92 skills as cards carrying their full description, held back only by `line-clamp-2`. Clamping is a paint-time trick: every word stayed in the DOM, so the route measured 5,349 default-visible words against a 450-word budget — the second-worst surface in the portal and 28x the 192-word median across 201 routes. The accessibility tree was a flat run of ~150 sibling paragraphs with no heading structure to navigate by, and the page stacked five unrelated panels (catalog, route skills, observability, curator, focused detail) vertically with no way to skip any of them. What a reader met on arrival was undifferentiated text; what they came for — which skill does what — required scrolling past all of it. Zero lead-band words, so nothing told them where to start.",
+      "verdict": "change-needed",
+      "verdictAuthority": "agent-proposed",
+      "status": "draft"
+    },
+    {
+      "title": "Capping the catalog at 12 rows traded a wall of text for a masked list",
+      "route": "/platform/ai/skills",
+      "gitRef": "f1ae4fe1d40",
+      "viewportWidth": 1280,
+      "colorScheme": "dark",
+      "screenshotRef": null,
+      "lenses": ["density", "miller"],
+      "finding": "An interim fix capped the rendered catalog at 12 rows with a 'Show N more' control, taking the measurement from 5,349 to 1,352 words. The number improved and the defect got worse in kind: a capped list is a MASKED list (BI-836923AD). The reader sees a subset with no indication of what is missing, and search runs over the full set — so typing a query silently disagrees with what is on screen. Worth capturing as a NEGATIVE example: it shows a measurement moving in the right direction while the reading experience regresses, which is exactly the failure mode a word-count budget cannot catch on its own. The lesson is that hiding rows and deferring rows are not the same act.",
+      "verdict": "change-needed",
+      "verdictAuthority": "agent-proposed",
+      "status": "draft"
+    },
+    {
+      "title": "Grouping by category with a lead band brought the skills route inside budget with nothing hidden",
+      "route": "/platform/ai/skills",
+      "gitRef": "68abe660fda",
+      "viewportWidth": 1280,
+      "colorScheme": "dark",
+      "screenshotRef": null,
+      "lenses": ["hierarchy", "density", "hick"],
+      "finding": "The route now opens with a 31-word lead band, one marked next action ('Grant a skill to a coworker', which is the verb people actually come for and lives on the coworker record rather than this page), and the catalog grouped into ~8 collapsed category headers. Diagnostics — observability, curator report, seed drift — sit behind a single closed disclosure. Measured 205 default-visible words against a 450-word budget, reading grade 4.7, 11 of 11 budget checks passing. The content did not shrink: every skill, description, tag and control is still reachable, and filtering auto-opens the groups so a search never disagrees with the screen. Arrival costs a few category names instead of 92 rows or a truncated 12. Proposed as no-change-needed, but the honest open question for a designer is whether ~8 collapsed groups is the right first screen for a catalog, or whether the most-used categories should open by default.",
+      "verdict": "no-change-needed",
+      "verdictAuthority": "agent-proposed",
+      "status": "draft"
+    }
+  ]
+}
