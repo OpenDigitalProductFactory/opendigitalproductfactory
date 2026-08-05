@@ -9,11 +9,29 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const DEFAULT_MANIFEST = resolve(ROOT, "config/merge-readiness-policy.json");
 const TERMINAL_SUCCESS = new Set(["success", "skipped"]);
 
+/**
+ * BI-F75AADB7: `cancelled` is the least self-explanatory conclusion GitHub
+ * reports here, and it is also the one that reads as a second, unrelated
+ * failure — a hung Production Build that burns its job cap surfaces to the
+ * operator only as "build concluded cancelled" while every other dependency
+ * succeeded. The conclusion alone does not distinguish a timeout from a queue
+ * eviction or a human cancel, and a cancelled job keeps no retrievable log, so
+ * name the likely causes in the annotation rather than leaving the reader to
+ * rediscover them.
+ */
+function failureHint(result) {
+  return result === "cancelled"
+    ? " — a cancelled job is a timeout (the job cap, not a step bound), a queue eviction, or a manual cancel; its log is not retrievable, so check the job's step durations for the step that never completed"
+    : "";
+}
+
 export function evaluateDependencyResults(needs) {
   const failures = [];
   for (const [jobId, value] of Object.entries(needs ?? {})) {
     const result = typeof value === "string" ? value : value?.result;
-    if (!TERMINAL_SUCCESS.has(result)) failures.push({ jobId, result: result ?? "missing" });
+    if (!TERMINAL_SUCCESS.has(result)) {
+      failures.push({ jobId, result: result ?? "missing", hint: failureHint(result) });
+    }
   }
   return { ok: failures.length === 0, failures };
 }
@@ -160,7 +178,9 @@ function main() {
   if (command === "evaluate-needs") {
     const result = evaluateDependencyResults(JSON.parse(process.env.NEEDS_JSON ?? "{}"));
     if (!result.ok) {
-      for (const failure of result.failures) console.error(`::error::${failure.jobId} concluded ${failure.result}`);
+      for (const failure of result.failures) {
+        console.error(`::error::${failure.jobId} concluded ${failure.result}${failure.hint ?? ""}`);
+      }
       process.exitCode = 1;
     }
     return;
