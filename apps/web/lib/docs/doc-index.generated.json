@@ -1,7 +1,7 @@
 {
   "generatedBy": "scripts/gen-doc-index.mjs",
   "root": "docs",
-  "pageCount": 624,
+  "pageCount": 625,
   "pages": {
     "docs/README.md": {
       "publicHref": "/README/",
@@ -4635,6 +4635,19 @@
         "documentation-maintenance",
         "staleness-reportmdstaleness-reportmd",
         "how-this-fits-the-anti-drift-system"
+      ]
+    },
+    "docs/maintenance/staleness-coverage.md": {
+      "publicHref": "/maintenance/staleness-coverage/",
+      "portalHref": null,
+      "publishedPublic": true,
+      "publishedPortal": false,
+      "anchors": [
+        "doc-staleness-signal-coverage-measurement",
+        "why-this-exists",
+        "the-finding",
+        "coverage-by-area",
+        "what-this-implies-for-bi-3e5969df"
       ]
     },
     "docs/maintenance/staleness-report.md": {

@@ -1,0 +1,99 @@
+name: Policy Guards Recheck
+
+# BI-6868891B — make the trailer/label gates' own documented fix evaluable.
+#
+# THE PROBLEM. Several PR gates (Seed Contribution Fit, UX Fit, Design Grounding,
+# Local CI Override) tell an author to add a trailer such as `Seed-Fit-Decision:`
+# to the PR body, or to apply a label, and re-run. That fix could not be evaluated.
+# ci.yml declares `pull_request:` with no `types:`, so it defaults to
+# opened / synchronize / reopened — `edited` and `labeled` never fire. Editing the
+# body did nothing. The only way to re-evaluate was to PUSH, which also re-STALEs
+# any local pregate record keyed to the previous SHA. The gate documented a fix it
+# would not read.
+#
+# WHY THIS IS A SEPARATE WORKFLOW rather than `types:` added to ci.yml — the
+# obvious one-line change is unsafe, and the reason is worth keeping written down:
+#
+#   Check runs are keyed per commit SHA, and the LATEST result for a name wins.
+#   Adding edited/labeled to ci.yml re-runs the whole pipeline on a body edit. To
+#   avoid that cost you would skip the heavy jobs on those actions — but a skipped
+#   required job posts a `skipped` conclusion that branch protection treats as
+#   satisfied, OVERWRITING the real result already on that SHA. A PR whose Unit
+#   Tests genuinely FAILED would go green because somebody fixed a typo in the
+#   description. That is a merge-gate bypass, and it is precisely the
+#   green-check-that-means-less-than-it-looks failure this repo has been closing
+#   (see the `gate-coverage-matches-blast-radius` principle).
+#
+#   Letting the full pipeline re-run instead is safe but burns a complete CI cycle
+#   on every description edit, and `concurrency: cancel-in-progress` in ci.yml
+#   would cancel the in-flight real run to do it.
+#
+# So: narrow trigger, separate workflow, DISTINCT check name, and it touches no
+# other job's check run. This posts an advisory verdict so an author can confirm
+# their trailer or label is now correct without pushing. The binding required
+# check still comes from ci.yml's `Policy Guards (PR)` on the next push — this
+# never overwrites it, and deliberately cannot.
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    branches: [main]
+    # The narrow trigger. `synchronize`/`opened` are deliberately ABSENT: on those
+    # events ci.yml's Policy Guards (PR) already runs, and duplicating it here
+    # would double the work and post a second, confusing verdict.
+    types: [edited, labeled, unlabeled]
+
+concurrency:
+  # Distinct from ci.yml's group so a rapid sequence of body edits collapses to the
+  # newest recheck WITHOUT cancelling a real CI run for the same ref.
+  group: policy-guards-recheck-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  recheck:
+    name: Policy Guards (recheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Resolve a trustworthy base SHA
+        # Same reasoning as ci.yml's policy-guards-pr job (BI-9E5E6063):
+        # github.event.pull_request.base.sha goes stale against a fast-moving main
+        # and does not self-refresh, which would misattribute other PRs' changes to
+        # this one. Full history is available via fetch-depth:0, so recompute.
+        id: base_sha
+        env:
+          EVENT_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --quiet origin main
+          FRESH_BASE="$(git merge-base HEAD origin/main)"
+          if [ "$EVENT_BASE" != "$FRESH_BASE" ]; then
+            echo "::notice::github.event.pull_request.base.sha ($EVENT_BASE) disagrees with a freshly computed merge-base ($FRESH_BASE) — using the fresh one. See BI-9E5E6063."
+          fi
+          echo "sha=$FRESH_BASE" >> "$GITHUB_OUTPUT"
+      - name: Re-evaluate pull-request policy guards
+        # PR_BODY and PR_LABELS_JSON come from THIS event's payload, which is the
+        # whole point: on an `edited`/`labeled` event they carry the author's new
+        # trailer or label, where a re-run of the original workflow would replay
+        # the frozen payload from the last push and report the same failure.
+        env:
+          BASE_SHA: ${{ steps.base_sha.outputs.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS_JSON: ${{ toJSON(github.event.pull_request.labels) }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+        run: node scripts/ci-policy-guards.mjs --profile pull-request --results "$RUNNER_TEMP/policy-guards-recheck.json"
+      - name: Upload recheck results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: policy-guards-recheck-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/policy-guards-recheck.json
+          if-no-files-found: error
+          retention-days: 30

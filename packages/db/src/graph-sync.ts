@@ -25,7 +25,7 @@ import { NETWORK_RELATIONSHIP_TYPES } from "./neo4j-schema";
  *  labels on DigitalProduct, the type-specific EaElement label — survive a re-sync
  *  (Neo4j `MERGE ... SET` never touched the label set). Props are shallow-merged,
  *  mirroring `SET n.x = …` (only named keys change; others are left intact). */
-async function upsertGraphNode(
+export async function upsertGraphNode(
   key: string,
   labels: string[],
   props: Record<string, unknown>,
@@ -68,7 +68,7 @@ async function addGraphNodeLabels(
 }
 
 /** UPSERT a directed edge keyed by (src_key, dst_key, rel_type). Props shallow-merged. */
-async function upsertGraphEdge(
+export async function upsertGraphEdge(
   srcKey: string,
   dstKey: string,
   relType: string,

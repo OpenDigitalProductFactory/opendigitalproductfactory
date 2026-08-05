@@ -47,14 +47,23 @@ jobs:
           node-version: 24
       - name: Test the detector
         run: node --test scripts/build-docs-staleness.test.mjs
+      - name: Test the coverage measurement
+        run: node --test scripts/measure-doc-staleness-coverage.test.mjs
       - name: Regenerate the report
         run: node scripts/build-docs-staleness.mjs
+      # BI-3E5969DF. The detector above reports how many candidates it FOUND; this
+      # reports how much of the corpus it could ever have looked at. Refreshed on
+      # the same cadence because the two numbers are only meaningful together — a
+      # low candidate count against low coverage is silence, not health. Ordered
+      # after the detector so the coverage report can cite its candidate count.
+      - name: Regenerate the coverage measurement
+        run: node scripts/measure-doc-staleness-coverage.mjs
       - name: Detect drift
         id: check
         run: |
-          if git diff --quiet -- docs/maintenance/staleness-report.md; then
+          if git diff --quiet -- docs/maintenance/staleness-report.md docs/maintenance/staleness-coverage.md; then
             echo "drift=false" >> "$GITHUB_OUTPUT"
-            echo "No change in the staleness report."
+            echo "No change in the staleness report or coverage measurement."
           else
             echo "drift=true" >> "$GITHUB_OUTPUT"
           fi
@@ -70,7 +79,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "$BRANCH"
-          git add docs/maintenance/staleness-report.md
+          git add docs/maintenance/staleness-report.md docs/maintenance/staleness-coverage.md
           git commit -s \
             -m "docs(maintenance): refresh documentation staleness report (auto)" \
             -m "Automated weekly refresh by Docs Staleness Refresh (BI-AA5DFEA2). Each row is a live doc referencing a repo file committed more recently than the doc itself — a deterministic stale-candidate signal for a reviewer to confirm, not a proven error." \

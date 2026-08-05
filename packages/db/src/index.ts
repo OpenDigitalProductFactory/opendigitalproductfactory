@@ -330,6 +330,20 @@ export {
   syncEaRelationship,
 } from "./graph-sync";
 export {
+  CODE_GRAPH_KEY,
+  DOC_GRAPH_KEY,
+  DOC_IMPACT_REL,
+  DOC_IMPACT_SOURCE_LABEL,
+  DOC_PAGE_LABEL,
+  docPageKey,
+  planDocImpactProjection,
+  routeKey,
+  sourceFileKey,
+  type DocImpactManifest,
+  type DocImpactPlan,
+} from "./doc-impact-graph";
+export { projectDocImpactManifest } from "./doc-impact-graph-sync";
+export {
   readCanonicalPrismaSchema,
   CANONICAL_PRISMA_SCHEMA_PATH,
 } from "./schema-source";
