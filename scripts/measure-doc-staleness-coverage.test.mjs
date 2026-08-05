@@ -99,6 +99,50 @@ test("renders deterministically — same input, byte-identical report", () => {
   assert.equal(renderReport(cov, 3), renderReport(cov, 3));
 });
 
+// ─── Inert vs recoverable split (BI-22207E9A) ───────────────────────────────
+// Without this split, "N% covered" reads as N% of a population that could all be
+// covered — and it cannot. A profession doctrine page names no source file, so no
+// code-edge derivation will ever reach it.
+
+test("splits the uncovered remainder into recoverable and inert", () => {
+  const corpus = ["docs/a.md", "docs/b.md", "docs/c.md", "docs/d.md"];
+  const manifest = { docToCode: { "docs/a.md": ["x.ts"] } };
+  // b cites code but has no edge yet; c and d cite nothing at all.
+  const mentions = new Set(["docs/a.md", "docs/b.md"]);
+
+  const cov = computeCoverage(corpus, manifest, mentions);
+
+  assert.equal(cov.covered, 1);
+  assert.equal(cov.uncovered, 3);
+  assert.equal(cov.recoverable, 1); // b
+  assert.equal(cov.inert, 2); // c, d
+});
+
+test("recoverable + inert always accounts for the whole uncovered set", () => {
+  const corpus = ["docs/a.md", "docs/b.md", "docs/c.md"];
+  const cov = computeCoverage(corpus, {}, new Set(["docs/a.md"]));
+  assert.equal(cov.recoverable + cov.inert, cov.uncovered);
+});
+
+test("reports nulls rather than guessing when no corpus scan is supplied", () => {
+  // Silently reporting inert=0 would overstate the remaining opportunity.
+  const cov = computeCoverage(["docs/a.md"], {});
+  assert.equal(cov.inert, null);
+  assert.equal(cov.recoverable, null);
+});
+
+test("report states the addressable-corpus percentage, not just the headline", () => {
+  // The headline understates the gate: most of what it excludes is doctrine.
+  const cov = computeCoverage(
+    ["docs/a.md", "docs/b.md", "docs/c.md"],
+    { docToCode: { "docs/a.md": ["x.ts"] } },
+    new Set(["docs/a.md"]),
+  );
+  const out = renderReport(cov, 0);
+  assert.match(out, /reference no repo file anywhere in their text/);
+  assert.match(out, /1 of 1 \(100%\) now carry an edge/);
+});
+
 test("excludes its own output from the corpus it measures", () => {
   // Without this the report is part of the corpus the moment it is written, the
   // total grows by one, and `--check` reports the just-written file as stale.
