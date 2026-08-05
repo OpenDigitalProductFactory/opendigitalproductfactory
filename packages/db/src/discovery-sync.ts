@@ -1,4 +1,5 @@
 import { evaluateInventoryQuality } from "./discovery-attribution";
+import { buildQualityEvaluationEntities } from "./discovery-quality-input";
 import { persistQualityIssues } from "./discovery-quality-persistence";
 import type { NormalizedDiscoveryOutput } from "./discovery-normalize";
 import { deriveInventoryEvidenceSnapshot } from "./discovery-evidence";
@@ -142,16 +143,30 @@ export async function persistBootstrapDiscoveryRun(
     // its view cannot mark dpf_bootstrap rows stale. Composes with the
     // scopeKey filter so cross-customer isolation still holds.
     const sourceFilter = { lastConfirmedRun: { sourceSlug: runMeta.sourceSlug } };
-    const existingEntityKeys = new Set(
+    // Identity columns come back with the key set because the STALE branch needs
+    // them: an entity this sweep did not re-observe is absent from
+    // `normalized.inventoryEntities`, so persistedIdentityByEntityKey (built from
+    // the payload) has nothing for it, and the quality input was previously
+    // assembled with no manufacturer/version/supportStatus at all. Same query,
+    // more columns — no extra round trip.
+    const existingEntityByKey = new Map(
       (await tx.inventoryEntity.findMany({
         where: {
           ...INVENTORY_ENTITY_CANONICAL_WHERE,
           ...scopeWhere,
           ...sourceFilter,
         },
-        select: { entityKey: true },
-      })).map((entity) => entity.entityKey),
+        select: {
+          entityKey: true,
+          entityType: true,
+          manufacturer: true,
+          observedVersion: true,
+          normalizedVersion: true,
+          supportStatus: true,
+        },
+      })).map((entity) => [entity.entityKey, entity] as const),
     );
+    const existingEntityKeys = new Set(existingEntityByKey.keys());
     // BI-PIR-7d69a445 (part 2): key existing relationships by their canonical
     // tuple (fromEntityId, toEntityId, relationshipType) rather than by
     // relationshipKey. relationshipKey is source-scoped provenance that can differ
@@ -651,68 +666,14 @@ export async function persistBootstrapDiscoveryRun(
         })).count;
 
     const qualityEvaluation = evaluateInventoryQuality(
-      [
-        ...normalized.inventoryEntities.map((entity) => {
-          const evidenceSnapshot = deriveInventoryEvidenceSnapshot(
-            softwareEvidenceByEntityKey.get(entity.entityKey) ?? [],
-          );
-          const enriched = enrichmentByEntityKey.get(entity.entityKey);
-          const persisted = persistedIdentityByEntityKey.get(entity.entityKey);
-          const qualityEntity = {
-            entityKey: entity.entityKey,
-            entityType: entity.entityType,
-            attributionStatus: entity.attributionStatus,
-            attributionMethod: entity.attributionMethod ?? null,
-            attributionConfidence: entity.attributionConfidence ?? null,
-            candidateTaxonomy: entity.candidateTaxonomy?.map((candidate) => ({
-              nodeId: candidate.nodeId,
-              score: candidate.score,
-            })) ?? null,
-            taxonomyNodeId: entity.taxonomyNodeId ?? null,
-            digitalProductId: null,
-            // PERSISTED row first, then this sweep's enrichment, then the snapshot.
-            // manufacturer/supportStatus are sticky across sources (written only
-            // when enrichment yields them) while `properties` is replaced every
-            // sweep — so a poor source (ARP, no MAC) starves enrichment and, judged
-            // on this sweep alone, re-raises an issue for an entity the row already
-            // identifies. That is why the previous enrichment-only fix did not
-            // drain the queues. See BI-A3D12F85.
-            manufacturer:
-              persisted?.manufacturer ?? enriched?.manufacturer ?? evidenceSnapshot.manufacturer,
-            observedVersion:
-              persisted?.observedVersion
-              ?? enriched?.observedVersion
-              ?? evidenceSnapshot.observedVersion,
-            normalizedVersion:
-              persisted?.normalizedVersion
-              ?? enriched?.normalizedVersion
-              ?? evidenceSnapshot.normalizedVersion,
-            // supportStatus is non-nullable and defaults to "unknown", so a plain
-            // ?? chain would stop at the persisted default and never consult the
-            // sweep. Take the first value that is actually known.
-            supportStatus:
-              [persisted?.supportStatus, enriched?.supportStatus, evidenceSnapshot.supportStatus]
-                .find((value) => value && value !== "unknown")
-              ?? "unknown",
-            hasSoftwareEvidence: evidenceSnapshot.hasSoftwareEvidence,
-            normalizationStatus: evidenceSnapshot.normalizationStatus,
-          };
-
-          if (entity.attributionStatus === "needs_review") {
-            return {
-              ...qualityEntity,
-              qualityStatus: "warning" as const,
-            };
-          }
-
-          return qualityEntity;
-        }),
-        ...staleEntityKeys.map((entityKey) => ({
-          entityKey,
-          entityType: "inventory_entity",
-          attributionStatus: "stale" as const,
-        })),
-      ],
+      buildQualityEvaluationEntities({
+        observedEntities: normalized.inventoryEntities,
+        softwareEvidenceByEntityKey,
+        enrichmentByEntityKey,
+        persistedIdentityByEntityKey,
+        staleEntityKeys,
+        existingEntityByKey,
+      }),
       staleRelationshipKeys.map((relationshipKey) => ({
         relationshipKey,
         relationshipType: "inventory_relationship",

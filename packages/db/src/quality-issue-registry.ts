@@ -190,7 +190,8 @@ const REGISTRY = {
     resolvedBy: "coworker",
     subject: "entity",
     raisedBySubjectAbsence: false,
-    autoResolveWhen: "identity evidence resolves (manufacturer + normalized version + catalog match)",
+    autoResolveWhen:
+      "identity evidence resolves (manufacturer + normalized version + catalog match), or the subject is observed rather than managed estate",
     operatorActionable: true,
     expectedSteadyState: 0,
     owner: "coworker:inventory-specialist",
@@ -200,7 +201,8 @@ const REGISTRY = {
     resolvedBy: "coworker",
     subject: "entity",
     raisedBySubjectAbsence: false,
-    autoResolveWhen: "support lifecycle (supportStatus) becomes known for the entity",
+    autoResolveWhen:
+      "support lifecycle (supportStatus) becomes known for the entity, or the subject is observed rather than managed estate",
     operatorActionable: true,
     expectedSteadyState: 0,
     owner: "coworker:inventory-specialist",
