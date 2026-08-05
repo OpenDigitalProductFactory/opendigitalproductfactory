@@ -194,6 +194,24 @@ export const BACKLOG_STATUS_VALUES = [
 ] as const;
 export type BacklogStatus = (typeof BACKLOG_STATUS_VALUES)[number];
 
+// Federation demand sharing operates on OPEN work only — "closed is closed."
+// Closed items are never projected to a peer; an item that transitions out of
+// this set leaves projection scope and is withdrawn from peers on the next
+// reconciliation. `deferred` is treated as not-currently-syncable per the
+// live-work convention (paused work resumes syncing when it reopens); `done`
+// is terminal. This is the single source of truth for that grouping — the same
+// federation lanes (demand-reconciliation, channel-demand) must import it rather
+// than re-listing statuses. See BI-8A8C1D3A.
+export const FEDERATION_SYNCABLE_BACKLOG_STATUSES = [
+  "triaging",
+  "open",
+  "in-progress",
+] as const satisfies readonly BacklogStatus[];
+
+export function isFederationSyncableBacklogStatus(status: string): boolean {
+  return (FEDERATION_SYNCABLE_BACKLOG_STATUSES as readonly string[]).includes(status);
+}
+
 export const BACKLOG_TRIAGE_OUTCOMES = [
   "build",
   "runbook",

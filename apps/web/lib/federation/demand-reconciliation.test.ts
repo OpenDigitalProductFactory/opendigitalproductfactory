@@ -57,6 +57,28 @@ describe("runDemandReconciliation", () => {
     });
   });
 
+  it("projects only open backlog items — closed work is excluded from the query", async () => {
+    const db = {
+      federationLink: { findMany: vi.fn().mockResolvedValue(links) },
+      backlogItem: { findMany: vi.fn().mockResolvedValue([]) },
+      federatedRecordMirror: { findMany: vi.fn().mockResolvedValue([]) },
+    } as unknown as DemandReconciliationDb;
+
+    await runDemandReconciliation(db, {
+      resolveIdentity: vi.fn().mockResolvedValue({ installationId: `inst_${"a".repeat(32)}`, projectionSecret: "b".repeat(64) }),
+      queueProjection: vi.fn(),
+      queueWithdrawal: vi.fn(),
+      reconcileDigests: vi.fn().mockResolvedValue({ linksChecked: 0, requeued: 0, confirmed: 0, failedLinks: 0 }),
+      dispatch: vi.fn().mockResolvedValue({ attempted: 0, delivered: 0, deferred: 0, deadLettered: 0 }),
+    });
+
+    expect(db.backlogItem.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        status: { in: ["triaging", "open", "in-progress"] },
+      }),
+    }));
+  });
+
   it("never re-egresses a locally adopted peer envelope", async () => {
     const queueProjection = vi.fn();
     const db = {

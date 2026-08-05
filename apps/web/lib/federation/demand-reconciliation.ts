@@ -2,6 +2,8 @@ import { prisma } from "@dpf/db";
 import { DEMAND_PROJECTION_TEMPLATES } from "@dpf/db/federated-demand-contract";
 import type { FederationRelationshipPreset } from "@dpf/db/federation-link-types";
 
+import { FEDERATION_SYNCABLE_BACKLOG_STATUSES } from "@/lib/explore/backlog";
+
 import {
   dispatchDueDemand,
   queueDemandProjection,
@@ -92,6 +94,9 @@ export async function runDemandReconciliation(
     const items = await db.backlogItem.findMany({
       where: {
         digitalProduct: { productId: "dpf-portal" },
+        // Open work only. A closed item is excluded here, drops out of
+        // eligibleIds below, and is withdrawn from the peer. See BI-8A8C1D3A.
+        status: { in: [...FEDERATION_SYNCABLE_BACKLOG_STATUSES] },
         NOT: { body: { contains: "[origin:federatedDemand:" } },
       },
       select: {

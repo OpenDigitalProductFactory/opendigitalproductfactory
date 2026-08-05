@@ -5,6 +5,8 @@ import {
   BACKLOG_STATUS_COLOURS,
   EPIC_STATUS_COLOURS,
   EPIC_STATUSES,
+  FEDERATION_SYNCABLE_BACKLOG_STATUSES,
+  isFederationSyncableBacklogStatus,
   LIFECYCLE_STAGE_LABELS,
   initialDemandStageForInput,
   type BacklogItemInput,
@@ -113,6 +115,24 @@ describe("LIFECYCLE_STAGE_LABELS", () => {
     for (const stage of ["plan", "design", "build", "production", "retirement"]) {
       expect(LIFECYCLE_STAGE_LABELS[stage]).toBeDefined();
     }
+  });
+});
+
+describe("isFederationSyncableBacklogStatus()", () => {
+  it("treats open work (triaging/open/in-progress) as syncable", () => {
+    expect(FEDERATION_SYNCABLE_BACKLOG_STATUSES).toEqual(["triaging", "open", "in-progress"]);
+    for (const status of FEDERATION_SYNCABLE_BACKLOG_STATUSES) {
+      expect(isFederationSyncableBacklogStatus(status)).toBe(true);
+    }
+  });
+
+  it("treats closed work (done) and paused work (deferred) as not syncable", () => {
+    expect(isFederationSyncableBacklogStatus("done")).toBe(false);
+    expect(isFederationSyncableBacklogStatus("deferred")).toBe(false);
+  });
+
+  it("returns false for an unknown status rather than defaulting to syncable", () => {
+    expect(isFederationSyncableBacklogStatus("bogus")).toBe(false);
   });
 });
 
