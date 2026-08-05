@@ -6,6 +6,18 @@ packages:
   - "services/integration-test-harness"
 overrides:
   '@types/react': '^19'
+  # react / react-dom pinned to 19.2.3 (BI-E5E72FE3 mobile-runtime repair).
+  # React enforces a RUNTIME invariant that the standalone `react` package
+  # version EXACTLY equals the reconciler that react-native embeds. RN 0.85.3
+  # (Expo SDK 56) embeds React 19.2.3's renderer, so a hoisted react 19.2.8
+  # (pulled up by apps/web / Next 16) crashes the mobile app at boot with
+  # "Incompatible React versions: react 19.2.8 vs react-native-renderer 19.2.3".
+  # One hoisted copy serves both apps, so both must sit on 19.2.3. This is a
+  # patch-level move within 19.2.x — Next 16 (^19.2.0) is unaffected; the web
+  # production build gate on this PR proves it. Re-pin in lockstep whenever
+  # react-native's bundled renderer version changes on an SDK bump.
+  react: 19.2.3
+  react-dom: 19.2.3
   # find-my-way < 9.7.0: GHSA-c96f-x56v-gq3h / CVE-2026-47219, high severity
   # (OSV vulnerability scan on PR #3893). Transitive of the Expo SDK 56 dev
   # server toolchain. Floor to the patched 9.7.0.
