@@ -305,8 +305,71 @@ wide headroom: 174 baseline default-visible words versus a 450 cap, and
 `deferred-detail` is only required above 300. The ratified purpose contract's
 `triggeringNeed` and `prerequisites` were updated to name the corpus accurately.
 
+## The arrival picture (BI-F9AA0872, 2026-08-05)
+
+Query-first was the right call and is unchanged — the corpus is ~25k nodes and
+drawing it whole is not viable. The consequence not reckoned with was that the page
+opened **empty**: to see anything you had to already know a search term, so someone
+being *shown* the platform had no way in, and the scale was conveyed as a number
+rather than as a picture.
+
+### The wished-for slice does not exist
+
+The preferred option recorded on the backlog item was "a route → its implementing
+file → the model it touches". Measured, that path is not constructible:
+`schema.prisma` has **zero inbound edges**, and `PrismaModel` nodes are reachable
+only from it or from each other. No route or application file reaches a data model.
+
+Measured cross-domain edges — the complete list:
+
+| Bridge | Edges |
+| --- | --- |
+| infra → portfolio | 562 |
+| code → data | 397 |
+| portfolio → infra | 291 |
+
+The graph is a set of weakly-connected islands. That is why the default view is a
+**curated** seed rather than a sample: a random sample lands between the islands and
+looks like unconnected dust, demonstrating the opposite of what is wanted.
+
+### Seeds are resolved by rule, not hardcoded
+
+A hardcoded node key is an install-specific fact that would silently render an empty
+canvas on any other install. Each slice names a rule instead —
+
+| Slice | Rule |
+| --- | --- |
+| Data model | The file that defines the most data models. |
+| Knowledge | The most-linked page in the knowledge corpus. |
+| Portfolio | The busiest portfolio node. |
+
+— resolved against whatever the install holds, with the node key used only as a
+deterministic tie-break. Slices resolve independently and one that resolves to
+nothing is **dropped**, so a fresh install with no knowledge corpus still gets a
+data-model picture rather than an empty frame or an error.
+
+### Small on purpose
+
+The first attempt used a 120-node cap per slice and drew 268 nodes on arrival —
+accurate, but not the "small, hand-picked slice" this is meant to be. At 40 per
+slice the arrival picture is 108 nodes / 357 links and still spans five domains.
+
+Measured on the live install, arrival at rest: mean nearest-neighbour **46.4px**,
+**0** nodes off-canvas, 44 labels drawn with **0** overlapping pairs, layout at rest
+after 228 frames, occupying 733px of the 800px canvas.
+
+### UX budget
+
+The caption is one line — "A sample across Data model, Knowledge, Portfolio. Search
+to explore anything else." — because arrival words are the scarce resource. The
+canvas was already a `default-visible` region in the ratified contract, so no new
+region appears; the route keeps wide headroom against the `detail` shell's 450-word
+cap and the 300-word `deferred-detail` threshold.
+
 ## Follow-ups
 
 - Derive knowledge → code/data edges so the "decision that governed this route"
-  path closes. No FK exists for it today (see Known limits above).
+  path closes. No FK exists for it today (see Known limits above). This is also
+  what would let the arrival picture show one connected story instead of three
+  islands side by side.
 - Saved views ("perspectives") are deliberately out of scope for the first cut.
