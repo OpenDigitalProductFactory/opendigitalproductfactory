@@ -50,7 +50,7 @@ apps/web/lib/queue/functions/self-upgrade.test.ts	1383
 apps/web/lib/routing/chat-adapter.test.ts	924
 apps/web/lib/routing/fallback.test.ts	1140
 apps/web/lib/self-upgrade/quiescence.test.ts	951
-apps/web/lib/self-upgrade/quiescence.ts	1612
+apps/web/lib/self-upgrade/quiescence.ts	1621
 apps/web/lib/skills/evidence-search.ts	803
 apps/web/lib/tak/agent-grants.test.ts	915
 apps/web/lib/tak/agent-grants.ts	887

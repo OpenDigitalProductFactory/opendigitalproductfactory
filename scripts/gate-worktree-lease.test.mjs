@@ -1577,3 +1577,100 @@ test("POSIX gate heartbeats and releases through its injectable transport", asyn
     await new Promise((resolve) => server.close(resolve));
   }
 });
+
+test("a gate launch sweeps observer records leaked by a killed run (BI-2C7F51BA)", async () => {
+  // Defect 1: releaseDeadLocalQueueObserversForGate was never called on the
+  // success path — only from pregate's interrupted/revival recovery, which is
+  // itself skipped when the worktree path cannot be resolved, i.e. on the very
+  // failure the cleanup exists for. The field directory reached 192 records,
+  // 185 with dead pids, the oldest six days old, throttling every session on
+  // the host. Every gate launch must now self-heal the shared directory.
+  const observerDirectory = mkdtempSync(join(tmpdir(), "dpf-gate-observer-dir-"));
+
+  // A REAL process, killed — not a fabricated pid, so liveness is genuinely
+  // resolved by the platform rather than by a stub.
+  const victim = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60000)"], {
+    stdio: "ignore",
+  });
+  const victimPid = victim.pid;
+  await new Promise((resolve) => {
+    victim.once("exit", resolve);
+    victim.kill("SIGKILL");
+  });
+
+  const leakedToken = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const leakedPath = join(observerDirectory, `${leakedToken}.json`);
+  writeFileSync(leakedPath, `${JSON.stringify({
+    schema: "dpf-local-ci-queue-observer/v1",
+    observerToken: leakedToken,
+    pid: victimPid,
+    // A DIFFERENT session: the thread that leaked the record is by definition
+    // gone, so a sweep filtered to the current branch/session would never
+    // reclaim it.
+    ownerSessionId: "some-long-dead-session",
+    branch: "feat/killed-somewhere-else",
+    sha: "9".repeat(40),
+    registeredAt: new Date().toISOString(),
+    startedAt: new Date().toISOString(),
+  }, null, 2)}\n`);
+
+  const server = createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      const payload = JSON.parse(body);
+      const tool = payload.params.name;
+      const result = tool === "list_nonprod_environment_leases"
+        ? { success: true, data: { leases: [], queued: [] } }
+        : tool === "claim_nonprod_environment_lease"
+          ? {
+            success: true,
+            entityId: "NPEL-SWEEP-TEST",
+            data: {
+              lease: { leaseId: "NPEL-SWEEP-TEST" },
+              admission: { status: "admitted", slotKey: "slot-0", waitAgeMs: 0 },
+            },
+          }
+          : tool === "record_local_integration_result"
+            ? { success: true, entityId: "EVIDENCE-SWEEP-TEST" }
+            : { success: true };
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({
+        jsonrpc: "2.0",
+        id: payload.id,
+        result: { content: [{ type: "text", text: JSON.stringify(result) }] },
+      }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+
+  try {
+    assert.equal(existsSync(leakedPath), true);
+
+    const result = await run(process.execPath, [
+      "scripts/gate-worktree.mjs",
+      "--branch", "fix/sandbox-lease-fencing",
+      "--worktree", makeTempWorktree(),
+      "--expires-minutes", "0.05",
+      "--mcp-url", `http://127.0.0.1:${address.port}`,
+      "--no-push",
+    ], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        DPF_MCP_BEARER_TOKEN: "test-token",
+        DPF_ALLOW_LOCAL_CI_STUB: "1",
+        DPF_LOCAL_QUEUE_OBSERVER_DIR: observerDirectory,
+        DPF_LOCAL_SANDBOX_FENCE_PATH: isolatedFencePath(),
+      },
+    });
+
+    assert.ok([0, 3].includes(result.code), result.output);
+    assert.equal(existsSync(leakedPath), false, result.output);
+    assert.match(result.output, /swept 1 leaked local-CI queue observer record/);
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});

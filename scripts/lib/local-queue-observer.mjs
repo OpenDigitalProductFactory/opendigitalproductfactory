@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
   mkdirSync,
@@ -11,6 +12,34 @@ import { join } from "node:path";
 const OBSERVER_SCHEMA = "dpf-local-ci-queue-observer/v1";
 const OWNER_PATTERN =
   /^gate-v2-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-([1-9][0-9]*)$/i;
+
+// BI-2C7F51BA Defect 2 — `process.kill(pid, 0)` alone is an UNSOUND liveness
+// proof. Windows recycles PIDs aggressively, so a record whose pid has been
+// reassigned to an unrelated process reads as alive forever and can never be
+// reaped: a permanent queue-slot leak. Two independent bounds close that:
+//
+//   1. START TIME. The pair (pid, process start time) IS unique, so recording
+//      the observer process's own start time lets a later reap detect that the
+//      pid now belongs to a DIFFERENT process. This is the sound check and it
+//      fires within one gate launch.
+//   2. TTL. When the platform start-time query is unavailable (unsupported
+//      shell, hardened host, pre-BI-2C7F51BA record with no `startedAt`) there
+//      is no proof either way, so a record may not outlive a plausible gate
+//      run. `--lease-wait-seconds` defaults to 7200 (2h) of admission waiting
+//      plus the run itself; 12h is comfortably above any honest gate and far
+//      below the multi-DAY leaks observed in the field.
+export const OBSERVER_RECORD_TTL_MS = 12 * 60 * 60 * 1000;
+
+// `startedAt` is derived from `process.uptime()` (V8 init) while the platform
+// reports true process creation, and `ps -o lstart` has 1-second resolution.
+// Those disagree by well under a second; a recycled pid disagrees by minutes to
+// days. 10s separates the two without ever mistaking clock noise for reuse.
+const START_TIME_TOLERANCE_MS = 10_000;
+
+// The reap runs on every admission-loop iteration (~10s while queued, for up to
+// 2h). Shelling out that often would be gratuitous, and process start times do
+// not change for a live pid — cache the snapshot briefly.
+const START_TIME_CACHE_TTL_MS = 60_000;
 
 function readObserver(path) {
   try {
@@ -32,6 +61,122 @@ function isProcessAlive(pid) {
   } catch {
     return false;
   }
+}
+
+/** This process's start time, as an ISO string, sourced the same way on every
+ *  platform so a record written on one host reads the same on the next launch. */
+export function processStartedAt({ now = () => Date.now(), uptime = () => process.uptime() } = {}) {
+  return new Date(now() - Math.round(uptime() * 1000)).toISOString();
+}
+
+function parseStartTimeLines(stdout) {
+  const map = new Map();
+  for (const line of String(stdout).split(/\r?\n/)) {
+    const match = line.match(/^\s*(\d+)\s+(.*\S)\s*$/);
+    if (!match) continue;
+    const pid = Number(match[1]);
+    const started = Date.parse(match[2]);
+    if (!Number.isInteger(pid) || pid <= 0 || !Number.isFinite(started)) continue;
+    map.set(pid, started);
+  }
+  return map;
+}
+
+/**
+ * A single batched snapshot of `pid -> process start time (epoch ms)`.
+ *
+ * Batched on purpose: the leaked directory observed in the field held 192
+ * records, and one shell-out per record would take tens of seconds on Windows.
+ * Returns `null` — meaning "unknown", never "dead" — when the platform query is
+ * unavailable, so an unreadable process table can never cause a LIVE gate's
+ * lease to be cancelled. The TTL above is the bound that still applies.
+ */
+export function readProcessStartTimes({
+  platform = process.platform,
+  spawnSyncImpl = spawnSync,
+} = {}) {
+  try {
+    if (platform === "win32") {
+      const result = spawnSyncImpl("powershell.exe", [
+        "-NoProfile",
+        "-Command",
+        "Get-CimInstance Win32_Process | ForEach-Object { \"$($_.ProcessId) $($_.CreationDate.ToUniversalTime().ToString('o'))\" }",
+      ], { encoding: "utf8", windowsHide: true });
+      if (result.status !== 0 || !result.stdout) return null;
+      const map = parseStartTimeLines(result.stdout);
+      return map.size > 0 ? map : null;
+    }
+    const result = spawnSyncImpl("ps", ["-eo", "pid=,lstart="], { encoding: "utf8" });
+    if (result.status !== 0 || !result.stdout) return null;
+    const map = parseStartTimeLines(result.stdout);
+    return map.size > 0 ? map : null;
+  } catch {
+    return null;
+  }
+}
+
+let startTimeSnapshot = null;
+
+function cachedProcessStartTimes(nowMs) {
+  if (startTimeSnapshot && nowMs - startTimeSnapshot.at < START_TIME_CACHE_TTL_MS) {
+    return startTimeSnapshot.map;
+  }
+  startTimeSnapshot = { at: nowMs, map: readProcessStartTimes() };
+  return startTimeSnapshot.map;
+}
+
+/**
+ * Build the liveness predicate the reapers share.
+ *
+ * Returns `{ alive, reason }`. Every "dead" verdict must be PROVEN — an
+ * unavailable start-time snapshot or a missing `startedAt` on an older record
+ * yields "alive" and leaves the TTL as the only bound, because cancelling a
+ * live gate's lease is strictly worse than reaping a leaked record late.
+ */
+export function createObserverLivenessProbe({
+  processAlive = isProcessAlive,
+  processStartTimes,
+  now = () => Date.now(),
+  ttlMs = OBSERVER_RECORD_TTL_MS,
+} = {}) {
+  let snapshot = processStartTimes;
+  let snapshotResolved = processStartTimes !== undefined;
+  return (record) => {
+    const nowMs = now();
+    // A dead pid is the cheapest proof and the most specific reason — check it
+    // first so a reap reports WHY, not merely that the record got old.
+    if (!processAlive(record?.pid)) {
+      return { alive: false, reason: "same_host_observer_process_not_running" };
+    }
+
+    // POSITIVE PROOF OUTRANKS THE TTL. A gate we can SEE is still running must
+    // never be reaped, however long it has run: the TTL exists only to bound
+    // records whose liveness cannot be established, and letting it override a
+    // matching start time would yank a live gate's slot at the threshold. Only
+    // a start time that DISAGREES is proof of pid reuse.
+    const recordedStart = Date.parse(record?.startedAt ?? "");
+    if (Number.isFinite(recordedStart)) {
+      if (!snapshotResolved) {
+        snapshot = cachedProcessStartTimes(nowMs);
+        snapshotResolved = true;
+      }
+      const actualStart = snapshot?.get?.(record.pid);
+      if (Number.isFinite(actualStart)) {
+        return Math.abs(actualStart - recordedStart) <= START_TIME_TOLERANCE_MS
+          ? { alive: true, reason: "" }
+          : { alive: false, reason: "same_host_observer_pid_recycled" };
+      }
+    }
+
+    // Unverifiable — an older record with no `startedAt`, or a host that would
+    // not answer the process-table query. Fall back to pid-only liveness bounded
+    // by the TTL, so nothing can leak forever on evidence we cannot get.
+    const registeredAt = Date.parse(record?.registeredAt ?? "");
+    if (Number.isFinite(registeredAt) && nowMs - registeredAt > ttlMs) {
+      return { alive: false, reason: "same_host_observer_record_expired" };
+    }
+    return { alive: true, reason: "" };
+  };
 }
 
 function readObserverRecords(directory) {
@@ -89,6 +234,9 @@ export function registerLocalQueueObserver({
   // observer's own id so pre-existing callers keep working unchanged.
   ownerSessionId = identity.ownerSessionId,
   now = () => new Date(),
+  // BI-2C7F51BA Defect 2: the pid's own start time, so a later reap can tell
+  // "this gate is still running" from "this pid was recycled".
+  startedAt = processStartedAt(),
 }) {
   mkdirSync(directory, { recursive: true });
   const path = observerPath(directory, identity.token);
@@ -100,6 +248,7 @@ export function registerLocalQueueObserver({
     branch,
     sha,
     registeredAt: now().toISOString(),
+    startedAt,
   };
   writeFileSync(path, `${JSON.stringify(record, null, 2)}\n`, {
     encoding: "utf8",
@@ -131,6 +280,9 @@ export function findDeadLocalQueueObservers({
   directory,
   queuedLeases,
   processAlive = isProcessAlive,
+  processStartTimes,
+  now = () => Date.now(),
+  observerAlive = createObserverLivenessProbe({ processAlive, processStartTimes, now }),
 }) {
   const dead = [];
   const bySession = readObserversBySession(directory);
@@ -144,17 +296,20 @@ export function findDeadLocalQueueObservers({
     }
     const records = bySession.get(lease.ownerSessionId);
     if (!Array.isArray(records) || records.length === 0) continue;
-    if (records.some((record) => processAlive(record.pid))) continue;
-    const livenessProofs = records.map((record) => ({
+    const verdicts = records.map((record) => ({ record, verdict: observerAlive(record) }));
+    if (verdicts.some(({ verdict }) => verdict.alive)) continue;
+    const livenessProofs = verdicts.map(({ record, verdict }) => ({
       schema: OBSERVER_SCHEMA,
       observerToken: record.observerToken,
       pid: record.pid,
       registeredAt: record.registeredAt,
+      ...(record.startedAt ? { startedAt: record.startedAt } : {}),
+      reason: verdict.reason,
     }));
     dead.push({
       leaseId: lease.leaseId,
       ownerSessionId: lease.ownerSessionId,
-      reason: "same_host_observer_process_not_running",
+      reason: livenessProofs[0].reason,
       livenessProof: livenessProofs[0],
       ...(livenessProofs.length > 1 ? { livenessProofs } : {}),
     });
@@ -172,19 +327,51 @@ export function releaseLocalQueueObserver({ path, token }) {
   return { status: "released" };
 }
 
+/**
+ * Reap dead observer records from the directory.
+ *
+ * BI-2C7F51BA Defect 1: this is the ONLY thing that stops leaked records
+ * accumulating forever, and until that item it was wired exclusively into
+ * pregate's interrupted/revival recovery paths — which are themselves skipped
+ * when the worktree path cannot be resolved, i.e. on the very failure the
+ * cleanup exists for. It now runs on every gate startup instead.
+ *
+ * DO NOT default the branch/sha/ownerSessionId filters to the calling gate's
+ * own values. A startup sweep leaves them EMPTY so it clears OTHER sessions'
+ * dead records too; that cross-session behaviour is the entire point, because
+ * the queue is shared by every session on the host and the session that leaked
+ * a record is by definition no longer around to clean it up. "Tightening" this
+ * to the current branch silently restores the leak.
+ *
+ * `retainOwnerSessionIds` is the one narrowing that is safe: a record is the
+ * liveness PROOF that lets `findDeadLocalQueueObservers` cancel a dead waiter's
+ * lease, so sweeping a record whose lease is still queued would strand that
+ * lease in the queue permanently — trading a leaked file for a leaked slot.
+ * Callers that hold a lease listing pass those session ids here and let the
+ * lease reconciler consume the proof first.
+ */
 export function releaseDeadLocalQueueObserversForGate({
   directory,
   branch,
   sha,
   ownerSessionId = "",
+  retainOwnerSessionIds,
   processAlive = isProcessAlive,
+  processStartTimes,
+  now = () => Date.now(),
+  observerAlive = createObserverLivenessProbe({ processAlive, processStartTimes, now }),
 }) {
+  const retained = retainOwnerSessionIds instanceof Set
+    ? retainOwnerSessionIds
+    : new Set(Array.isArray(retainOwnerSessionIds) ? retainOwnerSessionIds : []);
   const released = [];
   for (const { path, record } of readObserverRecords(directory)) {
     if (branch && record.branch !== branch) continue;
     if (sha && record.sha !== sha) continue;
     if (ownerSessionId && record.ownerSessionId !== ownerSessionId) continue;
-    if (processAlive(record.pid)) continue;
+    if (retained.has(record.ownerSessionId)) continue;
+    const verdict = observerAlive(record);
+    if (verdict.alive) continue;
     const result = releaseLocalQueueObserver({
       path,
       token: record.observerToken,
@@ -197,6 +384,8 @@ export function releaseDeadLocalQueueObserversForGate({
       branch: record.branch,
       sha: record.sha,
       registeredAt: record.registeredAt,
+      ...(record.startedAt ? { startedAt: record.startedAt } : {}),
+      reason: verdict.reason,
       releaseStatus: result.status,
     });
   }

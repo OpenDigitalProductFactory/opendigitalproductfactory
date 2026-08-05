@@ -30,6 +30,7 @@ import {
   createGateObserverIdentity,
   findDeadLocalQueueObservers,
   registerLocalQueueObserver,
+  releaseDeadLocalQueueObserversForGate,
   releaseLocalQueueObserver,
 } from "./lib/local-queue-observer.mjs";
 import {
@@ -684,6 +685,43 @@ async function cancelDeadLocalQueueObservers({
       `cancelled dead same-host queue observer ${candidate.leaseId} (${candidate.reason}; ${proofText})\n`,
     );
   }
+
+  // BI-2C7F51BA Defect 1 — self-heal the shared observer directory.
+  //
+  // Every killed gate leaks its record, and nothing on the success path ever
+  // swept them: the field directory held 192 records, 185 with dead pids, the
+  // oldest six days old. Sweeping here (rather than only in pregate's recovery
+  // paths, which are skipped exactly when the worktree path cannot be resolved)
+  // means any single crashed run is cleaned up by the NEXT launch on this host.
+  //
+  // Deliberately unfiltered by branch/sha/session — see the reaper's contract.
+  // Records backing a lease the queue still knows about are retained so the
+  // reconciliation above keeps its liveness proof.
+  const leaseSessions = new Set(
+    [...(Array.isArray(data.leases) ? data.leases : []), ...queued]
+      .map((lease) => lease?.ownerSessionId)
+      .filter((id) => typeof id === "string" && id.length > 0),
+  );
+  const sweptRecords = releaseDeadLocalQueueObserversForGate({
+    directory,
+    retainOwnerSessionIds: leaseSessions,
+  });
+  if (sweptRecords.length > 0) {
+    const reasons = [...new Set(sweptRecords.map((entry) => entry.reason))].join(", ");
+    // Recorded as a lease event, not just stdout: the cross-session reach is the
+    // property most likely to be "tightened" later, and an evidence record makes
+    // it auditable after the fact — which session's record was reclaimed, why,
+    // and that the sweep left live records alone.
+    leaseEvents.push({
+      type: "dead_queue_observers_swept",
+      count: sweptRecords.length,
+      observers: sweptRecords,
+      at: new Date().toISOString(),
+    });
+    process.stdout.write(
+      `swept ${sweptRecords.length} leaked local-CI queue observer record(s) (${reasons})\n`,
+    );
+  }
 }
 
 function warnAboutMainFreshness({ gitBin, worktreePath }) {
@@ -828,10 +866,20 @@ async function main() {
       process.stderr.write("gate-worktree: no expensive local-CI command was run; use get_quiescence_status for drain blockers.\n");
       process.exit(4);
     }
+    // BI-2C7F51BA Defect 3 (secondary) — back off while the portal drains.
+    //
+    // `retryAfterSeconds` alone pins this at a fixed ~30s forever, and every
+    // poll is itself a ToolExecution row, i.e. the waiter re-arms the very
+    // `request.recent-tool-execution` soft blocker it is waiting on. Excluding
+    // read-only calls from that signal is the primary fix (quiescence.ts);
+    // widening the interval as the drain persists is the defence in depth.
+    // Capped at 8x the server's own retry-after so a cleared drain is still
+    // noticed within a few minutes of the 2h admission budget.
+    const drainBackoff = 2 ** Math.min(quiescenceAttempt, 3);
     const delayMs = retryDelayMs({
       attempt: quiescenceAttempt,
       pollSeconds: options.pollSeconds,
-      retryAfterSeconds,
+      retryAfterSeconds: retryAfterSeconds * drainBackoff,
     });
     quiescenceAttempt += 1;
     waiting(`portal is ${quiescence.level || "quiescing"}; retrying governed admission in ${(delayMs / 1000).toFixed(1)}s...`);
