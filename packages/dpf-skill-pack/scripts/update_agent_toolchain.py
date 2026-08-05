@@ -1108,6 +1108,12 @@ GROK_SESSION_END_SCRIPTS = (
     "uncommitted-work-guard.mjs",
     "worktree-session-hygiene.mjs",
 )
+# Stop is NOT SessionEnd (BI-E5D810B8). Grok fires `Stop` after every turn, so a
+# destructive reap wired here removes the worktree the session is still working
+# in — from the turn its PR merges (when a live tree first satisfies Tier A)
+# onward. Stop carries the non-destructive uncommitted-work warning only; the
+# reaper stays on SessionEnd. Mirrors hooks.json for the Claude plane.
+GROK_STOP_SCRIPTS = ("uncommitted-work-guard.mjs",)
 # Back-compat single names (older docs / tests may reference these).
 GROK_SESSION_START_SCRIPT = GROK_SESSION_START_SCRIPTS[0]
 GROK_SESSION_END_SCRIPT = GROK_SESSION_END_SCRIPTS[0]
@@ -1173,7 +1179,13 @@ def build_grok_hooks_payload(managed: Path, dry_run: bool = False) -> dict[str, 
     ]
     if end:
         payload["hooks"]["SessionEnd"] = end
-        payload["hooks"]["Stop"] = end
+    stop = [
+        _grok_command_entry(hooks_dir, script, timeout=60)
+        for script in GROK_STOP_SCRIPTS
+        if dry_run or (hooks_dir / script).exists()
+    ]
+    if stop:
+        payload["hooks"]["Stop"] = stop
     return payload
 
 

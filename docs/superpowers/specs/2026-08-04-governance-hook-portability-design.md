@@ -29,7 +29,16 @@ That unknown is larger than it looks, and it already produced a live doctrine de
 | `PreToolUse` | `Write\|Edit\|MultiEdit` | `plan-backlog-coverage-guard`, `ux-fit-precheck`, `spec-plan-doc-precheck`, `design-grounding-precheck`, `tool-economy-precheck` |
 | `WorktreeCreate` | `*` | `worktree-create` |
 | `SessionStart` | `*` | `process-spine-health-check`, `governance-freshness-check`, `worktree-session-hygiene` |
-| `SessionEnd` / `Stop` | `*` | `uncommitted-work-guard`, `worktree-session-hygiene` |
+| `SessionEnd` | `*` | `uncommitted-work-guard`, `worktree-session-hygiene` |
+| `Stop` | `*` | `uncommitted-work-guard` |
+
+> `Stop` and `SessionEnd` are **not** interchangeable. `Stop` fires after every
+> assistant turn, so it carries only non-destructive guards. The Tier-A worktree
+> reaper is SessionEnd-only: wired to `Stop` it removed the worktree the session
+> was still working in, starting the turn its own PR merged — that is exactly when
+> a live tree first satisfies Tier A (merged + clean + no open PR). See BI-E5D810B8
+> and §D4 of `2026-07-26-multi-client-governance-parity-design.md`, which assigns
+> the reaper to SessionEnd.
 
 **Portability is worse than "does the host support hooks".** The matchers are Claude Code's *tool names* (`Bash`, `AskUserQuestion`, `MultiEdit`) and the events are its *session lifecycle*. A host would need not merely a hook plane but the same tool vocabulary and session model. Full parity is not a realistic onboarding gate for any surface that is not Claude-derived.
 

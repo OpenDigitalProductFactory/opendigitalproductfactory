@@ -4,8 +4,20 @@
 // Session-lifecycle worktree hygiene (operator concern: transactional, not cron).
 //
 // SessionStart — OBSERVE: report worktree count / non-canonical cwd; never delete.
-// SessionEnd / Stop — TRANSACTIONAL REAP of THIS session's worktree only when it
-//   is Tier A (merged + clean + no open PR + not pinned). Fail-open always.
+// SessionEnd — TRANSACTIONAL REAP of THIS session's worktree only when it is
+//   Tier A (merged + clean + no open PR + not pinned). Fail-open always.
+//
+// NOT on Stop (BI-E5D810B8). `Stop` fires after EVERY assistant turn, not at the
+// end of a session. Wired there, this hook force-removed the worktree the session
+// was still working in — from the turn its PR merged (which is exactly when a live
+// tree first satisfies Tier A) onward, every turn. The removal could not complete
+// against a live cwd, so it gutted the tree instead: 59 tracked files deleted,
+// `.git` intact, presenting as a pile of "uncommitted deletions".
+//
+// Per the governing spec (2026-07-26-multi-client-governance-parity-design.md),
+// §D4 assigns the reaper to SessionEnd; G4 gives `Stop` only uncommitted-artifact
+// warnings and lease release. The uncommitted-work-guard remains on Stop; this
+// hook must not. Destructive reaping belongs to a session-lifecycle event only.
 //
 // Why not cron-first: client CLIs do not run fleets of crons; portal Inngest may
 // not see host worktrees; schedules get disabled or go dark. Session hooks fire
@@ -167,6 +179,32 @@ function gatherThisWorktreeFacts(cwd, mainRoot) {
   };
 }
 
+/**
+ * Undo a PARTIAL reap (BI-E5D810B8).
+ *
+ * `git worktree remove --force` deletes files as it walks and can then fail —
+ * e.g. the tree is a live cwd, or a file is held open. What it leaves behind is
+ * worse than either outcome: a directory with an intact `.git` and dozens of
+ * tracked files missing, which reads as "N uncommitted deletions" rather than
+ * "a reap failed". Observed 2026-08-04: 59 files gone, including pnpm-lock.yaml,
+ * tsconfig.base.json and .githooks/* — so the tree also silently lost its
+ * pre-commit and pre-push gates.
+ *
+ * Restoring is safe precisely BECAUSE we only get here on a Tier-A candidate,
+ * and Tier A requires `dirty === false`: the tree had no uncommitted work, so
+ * every difference from HEAD is damage this reap caused. Nothing of the
+ * operator's can be clobbered.
+ */
+function restorePartialReap(wtPath) {
+  if (!existsSync(join(wtPath, ".git"))) return null; // fully removed — nothing to undo
+  const before = runGit(["status", "--porcelain"], wtPath);
+  if (!before.ok || !before.stdout) return null; // intact, or not readable
+  const r = runGit(["restore", "--", "."], wtPath);
+  const after = runGit(["status", "--porcelain"], wtPath);
+  const remaining = after.ok ? after.stdout.split("\n").filter(Boolean).length : -1;
+  return { attempted: true, ok: r.ok && remaining === 0, remaining };
+}
+
 function removeThisWorktree(mainRoot, wtPath) {
   const helper = join(repoRootGuess, "scripts/lib/junction-safe-worktree-remove.mjs");
   if (!existsSync(helper)) {
@@ -177,10 +215,17 @@ function removeThisWorktree(mainRoot, wtPath) {
     windowsHide: true,
     timeout: 120_000,
   });
-  return {
-    ok: r.status === 0,
-    detail: (r.stdout || r.stderr || "").trim().slice(0, 400),
-  };
+  const ok = r.status === 0;
+  let detail = (r.stdout || r.stderr || "").trim().slice(0, 400);
+  if (!ok) {
+    const undo = restorePartialReap(wtPath);
+    if (undo?.attempted) {
+      detail += undo.ok
+        ? " — partial delete reverted (worktree left intact)."
+        : ` — partial delete only PARTIALLY reverted, ${undo.remaining} path(s) still differ from HEAD; run \`git restore -- .\` in ${wtPath}.`;
+    }
+  }
+  return { ok, detail };
 }
 
 function emitContext(hookEventName, text) {

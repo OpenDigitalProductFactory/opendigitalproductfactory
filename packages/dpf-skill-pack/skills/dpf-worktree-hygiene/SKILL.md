@@ -36,7 +36,7 @@ Creates are covered by [`dpf-worktree-per-session`](../dpf-worktree-per-session/
 
 | Path | Owner | Agent freestyle? |
 |------|--------|------------------|
-| **Primary reaper** — this session's worktree on SessionEnd/Stop when Tier-A (merged + clean) | Client hooks (`worktree-session-hygiene.mjs`) | No — automatic when dpf-platform / global hooks are installed |
+| **Primary reaper** — this session's worktree on **SessionEnd** when Tier-A (merged + clean). Never on `Stop`: that fires every turn, and a live tree becomes Tier-A the moment its own PR merges (BI-E5D810B8) | Client hooks (`worktree-session-hygiene.mjs`) | No — automatic when dpf-platform / global hooks are installed |
 | **Fleet soak** — scheduled observe / optional Tier-A, sandbox leftover GC | Portal Inngest (`ops/worktree-janitor`, `ops/sandbox-build-gc`) + env flags | No — enable flags; do not hand-cron |
 | **Exceptional reclaim** — live Tier-A bulk prune, force-delete locked dirs, kill locking shells | Operator + explicit "go" | Only after dry-run report + operator approval |
 
