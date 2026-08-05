@@ -59,6 +59,51 @@ describe("diffExcludingOverrides", () => {
     const diff = diffExcludingOverrides(profile as any, entry as any, null);
     expect(diff).toEqual({});
   });
+
+  // BI-E552BB73. A nulled capability inside the blob must register as drift.
+  // The routing hard filter drops any endpoint whose capabilities.streaming is
+  // not exactly `true` on a sync call, so this specific divergence silently made
+  // all 8 zai-coding models unroutable and left the Build Studio plan phase with
+  // no eligible provider.
+  it("detects a nulled capability inside the capabilities blob", () => {
+    const profile = {
+      capabilities: { ...EMPTY_CAPABILITIES, toolUse: true, streaming: null },
+    };
+    const entry = {
+      capabilities: { ...EMPTY_CAPABILITIES, toolUse: true, streaming: true },
+    };
+    const diff = diffExcludingOverrides(profile as any, entry as any, null);
+    expect(diff).toHaveProperty("capabilities");
+    expect((diff.capabilities as Record<string, unknown>).streaming).toBe(true);
+  });
+
+  // Postgres jsonb re-orders object keys on write (by length, then bytewise), so
+  // the stored blob never comes back in the source order of the catalog literal.
+  // Comparing raw JSON.stringify would therefore report `capabilities` as changed
+  // on EVERY run and write a changelog entry at every boot. Compare canonically.
+  it("does not report drift when only key order differs (jsonb round-trip)", () => {
+    const profile = {
+      capabilities: { streaming: true, toolUse: true, thinking: false },
+    };
+    const entry = {
+      capabilities: { toolUse: true, thinking: false, streaming: true },
+    };
+    const diff = diffExcludingOverrides(profile as any, entry as any, null);
+    expect(diff).toEqual({});
+  });
+
+  it("still honours capabilityOverrides for a drifted capabilities blob", () => {
+    const profile = {
+      capabilities: { ...EMPTY_CAPABILITIES, streaming: null },
+    };
+    const entry = {
+      capabilities: { ...EMPTY_CAPABILITIES, streaming: true },
+    };
+    const diff = diffExcludingOverrides(profile as any, entry as any, {
+      capabilities: true,
+    });
+    expect(diff).toEqual({});
+  });
 });
 
 describe("catalogEntryToProfileFields", () => {

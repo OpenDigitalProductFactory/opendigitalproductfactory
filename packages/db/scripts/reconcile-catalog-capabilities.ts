@@ -135,8 +135,13 @@ export function diffExcludingOverrides(
   const diff: Record<string, unknown> = {};
   for (const key of Object.keys(incoming)) {
     if (overrides && key in overrides) continue; // admin-pinned field
-    const currentVal = JSON.stringify(current[key] ?? null);
-    const incomingVal = JSON.stringify(incoming[key] ?? null);
+    // Compare canonically. `capabilities` round-trips through Postgres jsonb,
+    // which re-orders keys (by length, then bytewise), so a plain
+    // JSON.stringify of the stored blob never matches the source order of the
+    // catalog literal. Without sorting, that field would report as changed on
+    // every single run and write a changelog entry each boot.
+    const currentVal = JSON.stringify(sortedJson(current[key] ?? null));
+    const incomingVal = JSON.stringify(sortedJson(incoming[key] ?? null));
     if (currentVal !== incomingVal) {
       diff[key] = incoming[key];
     }
@@ -292,11 +297,26 @@ async function reconcile(): Promise<void> {
         continue;
       }
 
-      // Hash match — no change needed
-      if (profile.catalogHash === hash) {
-        noChange++;
-        continue;
-      }
+      // NOTE: catalogHash is deliberately NOT used to skip the comparison below.
+      // It hashes the catalog ENTRY (the source), so a match only proves the
+      // catalog has not changed since we last wrote — it says nothing about
+      // whether the profile ROW still matches it. Anything that mutates the row
+      // afterwards (metadata-sync, an activation eval, an admin edit, a manual
+      // repair) leaves the hash matching while the row has drifted, and the old
+      // short-circuit then reported "unchanged" forever without ever comparing a
+      // field.
+      //
+      // That is not hypothetical: every zai-coding profile sat with
+      // capabilities.streaming = null while the catalog declared `true`. The
+      // routing hard filter drops any endpoint without streaming === true on a
+      // sync call, so all 8 models were silently unroutable and the Build Studio
+      // plan phase had no eligible provider at all — while reconcile logged
+      // "12 unchanged, 0 updated" at every boot (BI-E552BB73).
+      //
+      // The row is already fetched with every managed field selected, so the
+      // diff below costs no extra query. The hash is still written, and is still
+      // useful as a provenance marker, but it can no longer vouch for state it
+      // does not describe.
 
       // Compute what changed, excluding admin-pinned fields
       const overrides = profile.capabilityOverrides as Record<string, unknown> | null;
