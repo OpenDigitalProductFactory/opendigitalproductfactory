@@ -146,7 +146,7 @@ technical noise and never letting a decision be made from the email itself. See
 
 ## Business Journeys
 
-Promotions and self-upgrade tell you what the platform did. **Business Journeys** tells you whether your customers can still do what your business depends on — find you, enquire, book, sign in, and pay. A scheduled check exercises those paths against the live install on Monday, Wednesday and Friday, states honestly how much each check proved, and raises anything broken into your "Needs you" inbox. See [Business Journeys](./business-journeys.md).
+Promotions and self-upgrade tell you what the platform did. **Business Journeys** tells you whether your customers can still do what your business depends on — find you, enquire, book, sign in, and pay. A scheduled check exercises those paths against the live install on Monday, Wednesday and Friday, states honestly how much each check proved, and raises anything broken into your "Needs you" inbox. A check that could not run at all — most often because no public web address is set yet — is shown as "Could not check" rather than as a failure, because nothing was tested and so nothing is known. See [Business Journeys](./business-journeys.md).
 
 ### Promoter timeout
 

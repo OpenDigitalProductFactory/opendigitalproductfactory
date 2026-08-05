@@ -49,6 +49,23 @@ checked, the page says so and does not tell you the journey is fine. This is del
 a check that overstates what it knows is worse than no check, because you would stop
 looking.
 
+## When a check cannot run at all
+
+Sometimes a check cannot even start. The most common reason is that your install has no
+public web address set yet, so there is no customer-facing page to open.
+
+That is shown as **Could not check**, and it is deliberately not shown as a failure. It is
+a statement about the check, not about your business. Nothing was tested, so nothing is
+known — your booking page is not being called broken, because it was never opened.
+
+You get one item for each cause, not one for each journey. If a single missing setting
+blocks four checks, that is one thing to fix, so it arrives as one item that names the
+checks it blocked. It is raised as a warning rather than an error, because a setting you
+have not filled in yet is not an outage.
+
+The page headline says how many checks could not run, and the check clears itself once the
+setting is in place.
+
 ## Nothing you see is a real record
 
 Some checks need to create a real booking or enquiry to prove the path works. They do it
