@@ -666,6 +666,7 @@ Name them so you catch yourself.
 | Backgrounding `pregate` (`&` / `run_in_background`) | The harness caps and kills a backgrounded run mid-install | Run it in the FOREGROUND — on timeout the harness migrates it and it continues |
 | Wrapping `pregate` in `timeout` | Cuts it off mid-queue and manufactures a false green | Run it unbounded in the foreground |
 | Trusting a worktree's typecheck/test failures | An unprovisioned worktree fails as `'next' is not recognized` / `Cannot find package 'react'`, which look like real breakage | `node scripts/lib/bootstrap-worktree-deps.mjs . --classify-only` before blaming your change |
+| Editing the PR body to satisfy a trailer gate, then re-running the job | `PR_BODY` / `PR_LABELS_JSON` come from `github.event.pull_request.*` — the **frozen webhook payload**. A rerun replays that same payload, so the edited body (or a new label) is invisible and the gate fails identically. `ci.yml` is triggered by bare `pull_request`, whose default types exclude `edited`. | Add the trailer, then **push a commit** — only a new `synchronize` event refreshes the payload. Budget for a re-gate: the new SHA makes your local-CI record `STALE`. |
 | Trusting a green test run without naming the tree | Sibling worktrees hold identical paths; shell cwd persists between calls | Check the runner's root banner; reconcile the test count against your file |
 
 ## What this gate is NOT
