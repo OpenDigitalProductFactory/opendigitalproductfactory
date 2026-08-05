@@ -127,7 +127,13 @@ describe("layout spreads to fill the canvas (BI-C2B6396B)", () => {
 
   it("does not scatter a tiny graph to the edges", () => {
     // The clamp on ideal separation earns its keep here: unbounded k for 3 nodes
-    // in 800x500 would be ~365px and push them into the corners.
+    // in 800x500 is ~365px, which spreads them far wider than the canvas wants.
+    //
+    // The threshold below is calibrated against both branches rather than guessed.
+    // Measured x-span for this fixture: 266px with the clamp, 483px with
+    // MAX_IDEAL_SEPARATION raised out of the way. An earlier version asserted
+    // < 800 * 0.75 (600px), which both branches satisfy — it would have passed
+    // with the clamp deleted and so proved nothing. 320px sits clear of both.
     framesLeft = 400;
     render(
       <RelationshipGraph
@@ -142,7 +148,7 @@ describe("layout spreads to fill the canvas (BI-C2B6396B)", () => {
 
     const points = finalPositions(3);
     const xs = points.map((p) => p.x);
-    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(800 * 0.75);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThan(800 * 0.4);
   });
 });
 
