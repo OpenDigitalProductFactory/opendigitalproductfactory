@@ -104,14 +104,15 @@ For normal feature/fix work: commit from the worktree, then route runtime-bound 
    git log origin/main..HEAD --oneline  # should be empty (no commits yet)
    ```
 
-7. **Classify verification readiness.** Read `.dpf-worktree-readiness.json` or re-check:
+7. **Classify verification readiness.** Run the probe — do **not** hand-check with `test -d node_modules`:
    ```
-   command -v pnpm >/dev/null || command -v corepack >/dev/null
-   test -d node_modules
+   node scripts/lib/bootstrap-worktree-deps.mjs . --classify-only
    ```
-   - `compile-ready`: package manager plus dependencies are present. Cheap source-local gates may run here.
-   - `source-only`: Git/MCP/Compose isolation is present, but local compile/test gates are not proven. Do code work here, but get verification from the shared local-CI convergence sandbox or canonical install.
-   - If a task requires cheap source-local gates and the worktree is source-only, try to make it compile-ready only when low-risk (`pnpm install --frozen-lockfile` with pinned pnpm available). If dependency bootstrap is unavailable or would distract from the task, record `source-only` and do not claim local gate passes.
+   A structural presence test is what let an **empty** `apps/web/node_modules` read as provisioned (BI-1C1483C6, 2026-08-04); the probe checks dependency resolution, `@dpf/*` workspace-link locality, and each named compile artifact for emptiness as well as absence.
+   - `compile-ready`: dependencies resolve and every compile artifact is populated. Cheap source-local gates may run here.
+   - `source-only`: Git/MCP/Compose isolation is present, but local compile/test gates are not proven. Do code work here, but get verification from the shared local-CI convergence sandbox or canonical install. The `missing` array names each gap and **what it forbids** — `apps/web/node_modules` forbids `pnpm --filter web typecheck` (it fails as `'next' is not recognized`); `packages/db/generated` forbids Prisma-touching tests (they fail as `Cannot find module '../generated/client/client'`). Those messages look exactly like real breakage; in a source-only worktree they are not.
+   - Since BI-1C1483C6 a SessionStart hook (`worktree-readiness-banner.mjs`) prints this automatically. Its silence means compile-ready.
+   - To become compile-ready, use the **managed** bootstrap — `node scripts/lib/bootstrap-worktree-deps.mjs .` — never a bare `pnpm install` in a worktree. A worktree's `node_modules` is normally a junction to the root clone, so a bare install writes **through** it into the root clone (which it has previously gutted); `root-clone-guard.mjs` now denies that shape. If bootstrap is unavailable or would distract from the task, stay `source-only` and do not claim local gate passes.
 
 ## Instructions for agents entering an existing worktree
 
@@ -119,7 +120,7 @@ Before editing or reviewing from an existing worktree:
 
 1. Run `git status --short --branch` and `git rev-parse --abbrev-ref HEAD`. Abort serious implementation on `main` or detached `HEAD` unless the user explicitly asked for inspection only.
 2. Confirm `.env` has a non-root `COMPOSE_PROJECT_NAME`. If it is missing or `dpf`, run `scripts/seed-worktree-mcp.{ps1,sh}` before any Compose command.
-3. Read `.dpf-worktree-readiness.json` if present. If absent, run `scripts/seed-worktree-mcp.{ps1,sh}` for this worktree or `scripts/sync-mcp-worktrees.{ps1,sh}` from the root to refresh all worktrees; treat the worktree as `source-only` until a marker proves otherwise.
+3. Classify readiness with `node scripts/lib/bootstrap-worktree-deps.mjs . --classify-only`. `.dpf-worktree-readiness.json` is a cached marker, not the authority — a worktree created by the `WorktreeCreate` hook has no marker at all (that hook only PLACES the worktree; provisioning is deliberately opt-in per BI-3047C122). Treat the worktree as `source-only` until the probe says otherwise, and run `scripts/seed-worktree-mcp.{ps1,sh}` if the marker is missing and you want one written.
 4. If `source-only`, you may edit and commit, but final answers and PR/evidence notes must say local worktree gates were not run and must point to canonical-runtime/local-CI evidence for any verification claim.
 5. Commit or capture dirty work frequently. A dirty active worker worktree blocks upgrade apply because uncommitted output cannot be safely rebased, promoted, or abandoned by automation.
 

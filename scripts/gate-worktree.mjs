@@ -44,6 +44,13 @@ import {
   summarizeLocalCiPressureSamples,
 } from "./lib/local-ci-host-pressure.mjs";
 import { buildAttributionEvidence, resolveAgentIdentity } from "./lib/agent-identity.mjs";
+import {
+  createGateOutputRelay,
+  createRepeatNotice,
+  formatGateSummary,
+  installBrokenPipeTolerance,
+  isVerboseGateConsole,
+} from "./lib/pregate-console.mjs";
 
 const THIS_FILE = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(THIS_FILE);
@@ -52,6 +59,17 @@ const LOCAL_CI_ACTIVE_LEASE_TTL_MS = 2 * 60_000;
 function die(message) {
   process.stderr.write(`gate-worktree: ${message}\n`);
   process.exit(1);
+}
+
+// BI-B1065D41: every "still waiting" line goes through ONE repeat notice. A
+// queued run polled admission ~40 times and printed 40 near-identical lines,
+// which is a large slice of a readable budget for a single bit of information.
+// The notice prints when the shape changes (the queue position moved, a
+// different blocker appeared) and otherwise re-prints periodically so a long
+// wait still proves liveness.
+const waitNotice = createRepeatNotice({ write: (text) => process.stdout.write(text) });
+function waiting(text) {
+  waitNotice.notice(text);
 }
 
 function sleep(ms) {
@@ -473,11 +491,21 @@ function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFile }) {
   let trackerTimer = null;
   let output = "";
   writeFileSync(fullLogFile, "");
-  const append = (chunk, stream) => {
+  // BI-B1065D41: the child's transcript is ~28,000 lines. It is persisted in
+  // full to fullLogFile (and its tail travels in the evidence record), so
+  // mirroring it to stdout bought nothing except unreadability — and the piping
+  // habit that unreadability provoked SIGPIPE-killed runs mid-install. stdout
+  // now gets a throttled heartbeat; DPF_PREGATE_VERBOSE=1 restores the mirror
+  // for anyone debugging the gate itself.
+  const relay = createGateOutputRelay({
+    write: (text) => process.stdout.write(text),
+    verbose: isVerboseGateConsole(),
+  });
+  const append = (chunk) => {
     const text = String(chunk);
     output = `${output}${text}`.slice(-12000);
     appendFileSync(fullLogFile, text);
-    stream.write(text);
+    relay.absorb(text);
   };
   return {
     run: () => new Promise((resolve, reject) => {
@@ -499,8 +527,8 @@ function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFile }) {
         () => tracker.sample(),
         Math.max(50, numberOrDefault(process.env.DPF_GATE_PROCESS_SCAN_MS, defaultProcessScanMs())),
       );
-      child.stdout.on("data", (chunk) => append(chunk, process.stdout));
-      child.stderr.on("data", (chunk) => append(chunk, process.stderr));
+      child.stdout.on("data", (chunk) => append(chunk));
+      child.stderr.on("data", (chunk) => append(chunk));
       child.once("error", reject);
       child.once("close", async (code, signal) => {
         if (trackerTimer) {
@@ -519,13 +547,15 @@ function createGateCommand(commandSpec, { cwd, env, allowStub, fullLogFile }) {
         if (terminated.length > 0) {
           append(
             `gate-worktree: terminated ${terminated.length} descendant process(es) before lease release: ${terminated.join(", ")}\n`,
-            process.stderr,
           );
         }
+        relay.finish();
         resolve({
           label: commandSpec.label,
           status: code ?? (signal ? 143 : 1),
           output,
+          logLines: relay.stats().lines,
+          elapsedMs: relay.stats().elapsedMs,
         });
       });
     }),
@@ -680,6 +710,10 @@ function writePendingEvidence(path, { branch, sha, expiresAt, reason, retryAfter
 }
 
 async function main() {
+  // BI-B1065D41: a stray `| head` must DEGRADE, not kill a 20-minute run that is
+  // holding a shared lease. Without this, the EPIPE raised when the reader exits
+  // is an unhandled stream error and the gate dies mid-install.
+  installBrokenPipeTolerance();
   const options = parseArgs(process.argv.slice(2));
   const gitBin = process.env.DPF_GATE_GIT_BIN || "git";
   const allowStub = process.env.DPF_ALLOW_LOCAL_CI_STUB === "1";
@@ -800,7 +834,7 @@ async function main() {
       retryAfterSeconds,
     });
     quiescenceAttempt += 1;
-    process.stdout.write(`portal is ${quiescence.level || "quiescing"}; retrying governed admission in ${(delayMs / 1000).toFixed(1)}s...\n`);
+    waiting(`portal is ${quiescence.level || "quiescing"}; retrying governed admission in ${(delayMs / 1000).toFixed(1)}s...`);
     await sleep(Math.min(delayMs, Math.max(10, deadline - Date.now())));
   }
 
@@ -963,7 +997,7 @@ async function main() {
       if (!isTransientMcpError(error) || Date.now() >= deadline) throw error;
       const delayMs = retryDelayMs({ attempt: claimAttempt, pollSeconds: options.pollSeconds });
       claimAttempt += 1;
-      process.stdout.write(`local-CI admission transport unavailable (${error.message}); retrying in ${(delayMs / 1000).toFixed(1)}s...\n`);
+      waiting(`local-CI admission transport unavailable (${error.message}); retrying in ${(delayMs / 1000).toFixed(1)}s...`);
       await sleep(Math.min(delayMs, Math.max(10, deadline - Date.now())));
       continue;
     }
@@ -1044,7 +1078,7 @@ async function main() {
       }
       const delayMs = retryDelayMs({ attempt: claimAttempt, pollSeconds: options.pollSeconds });
       claimAttempt += 1;
-      process.stdout.write(`local-CI admission queued at position ${admission.queuePosition}; observing again in ${(delayMs / 1000).toFixed(1)}s...\n`);
+      waiting(`local-CI admission queued at position ${admission.queuePosition}; observing again in ${(delayMs / 1000).toFixed(1)}s...`);
       await sleep(Math.min(delayMs, Math.max(10, deadline - Date.now())));
       continue;
     }
@@ -1061,7 +1095,7 @@ async function main() {
         pollSeconds: options.pollSeconds,
       });
       claimAttempt += 1;
-      process.stdout.write(`local-CI portal is on the legacy conflict contract; observing admission again in ${(delayMs / 1000).toFixed(1)}s...\n`);
+      waiting(`local-CI portal is on the legacy conflict contract; observing admission again in ${(delayMs / 1000).toFixed(1)}s...`);
       await sleep(Math.min(delayMs, Math.max(10, deadline - Date.now())));
       continue;
     }
@@ -1079,7 +1113,7 @@ async function main() {
         retryAfterSeconds,
       });
       claimAttempt += 1;
-      process.stdout.write(`portal is quiescing; preserving queue intent and retrying in ${(delayMs / 1000).toFixed(1)}s...\n`);
+      waiting(`portal is quiescing; preserving queue intent and retrying in ${(delayMs / 1000).toFixed(1)}s...`);
       await sleep(Math.min(delayMs, Math.max(10, deadline - Date.now())));
       continue;
     }
@@ -1259,11 +1293,11 @@ async function main() {
       expiresAt,
     });
     if (localFence.liveMutatorPids?.length > 0) {
-      process.stdout.write(
-        `local-CI sandbox still has live mutator processes (${localFence.liveMutatorPids.join(", ")}); retrying after admission...\n`,
+      waiting(
+        `local-CI sandbox still has live mutator processes (${localFence.liveMutatorPids.join(", ")}); retrying after admission...`,
       );
     } else {
-      process.stdout.write(`local-CI sandbox process fence held by ${localFence.active?.ownerSessionId || "unknown"}; retrying after admission...\n`);
+      waiting(`local-CI sandbox process fence held by ${localFence.active?.ownerSessionId || "unknown"}; retrying after admission...`);
     }
     await sleep(Math.min(options.pollSeconds * 1000, Math.max(10, deadline - Date.now())));
   }
@@ -1282,6 +1316,9 @@ async function main() {
   }
 
   process.stdout.write(`local-CI sandbox admitted: ${leaseId}\n`);
+  // BI-B1065D41: name the full log BEFORE the long stage, so the detail is one
+  // command away for the whole run rather than only after it finishes.
+  process.stdout.write(`full log: ${fullLogFile}\n`);
   if (commandSpec) process.stdout.write(`running local-CI command: ${commandSpec.label}\n`);
   else process.stdout.write("sandbox checkout/build stub: gate passed (explicit test-only mode)\n");
 
@@ -1596,10 +1633,30 @@ async function main() {
     evidencePending: false,
   });
 
+  // BI-B1065D41 Phase 1: one bounded, stable block closes every run. On a pass
+  // its LAST line is still the literal `gate passed` — the documented anchor,
+  // load-bearing because the exit code lies in two independent directions (a
+  // chained command surfaces someone else's status; a run that gave up while
+  // queued exits 0 without gating anything). Failure paths keep their own
+  // terminal wording, so the block carries only the supporting facts there.
+  const summaryInput = {
+    branch,
+    sha,
+    logFile: fullLogFile,
+    logLines: runResult.logLines,
+    elapsedMs: runResult.elapsedMs,
+    metadataFile: contentMetadata ? metadataFile : "",
+    candidateSha: contentMetadata?.candidateSha || "",
+    evidenceId,
+  };
+
   if (outcome.gatePassed) {
-    process.stdout.write("gate passed\n");
+    process.stdout.write(`${formatGateSummary({ ...summaryInput, verdictLine: "gate passed" }).join("\n")}\n`);
     process.exit(0);
   }
+  process.stderr.write(
+    `${formatGateSummary({ ...summaryInput, verdictLine: "", failureSummary }).join("\n")}\n`,
+  );
   if (outcome.status === "blocked_sandbox_drift") {
     process.stderr.write(`gate-worktree: BLOCKED (sandbox drift): ${outcome.summary}\n`);
     process.stderr.write("gate-worktree: this is a sandbox defect, not product build evidence; converge the sandbox and re-run the gate\n");

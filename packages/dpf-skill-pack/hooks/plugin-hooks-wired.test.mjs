@@ -30,6 +30,7 @@ const GUARD_SCRIPTS = [
   "compose-guard.mjs",
   "lease-punt-guard.mjs",
   "pregate-evidence-guard.mjs",
+  "pregate-invocation-guard.mjs",
   "decision-routing-guard.mjs",
   "plan-backlog-coverage-guard.mjs",
   "ux-fit-precheck.mjs",

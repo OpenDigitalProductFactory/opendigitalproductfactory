@@ -51,6 +51,12 @@ const ROOT_GIT_STATE_GUIDANCE =
   "Root clone git state mutation blocked (BI-B6AF69E1). The install/root clone must stay on main and clean; active work belongs in a sibling worktree such as D:/DPF-worktrees/<topic>. Raw `git switch`, `git checkout`, `git reset`, `git pull`, `git merge`, or `git rebase` in the root clone moves the checkout before the pre-commit guard can help and is how sessions strand D:/DPF on feature branches with uncommitted work. " +
   "Use scripts/new-dev-worktree.sh (or the surface worktree command) for feature work. If this is verified root-clone maintenance, prefix the command with DPF_ALLOW_ROOT_CLONE_MUTATION=1.";
 
+const INSTALL_THROUGH_JUNCTION_GUIDANCE =
+  "Package install through a JUNCTIONED node_modules blocked (BI-1C1483C6). This worktree's node_modules is a link to the shared root clone, so an install here writes THROUGH it into D:/DPF — the mechanism that previously gutted the root clone (1198 deleted sources). " +
+  "To make this worktree compile-ready without touching the root, use the managed bootstrap: `node scripts/lib/bootstrap-worktree-deps.mjs .` (shared pnpm store, --frozen-lockfile, never junctions). " +
+  "To drop the junction first, remove the reparse point with `cmd /c rmdir node_modules` — NEVER `rm -rf`, which follows the link. " +
+  "If you genuinely intend to install into the shared root, do it from the root clone, or prefix this command with DPF_ALLOW_ROOT_CLONE_MUTATION=1.";
+
 // ── path helpers (forward-slash, drive-letter aware) ─────────────────────────
 
 function norm(p) {
@@ -171,6 +177,37 @@ export function recursiveDeleteTargets(seg) {
 }
 
 /**
+ * True when this segment is a package-manager command that WRITES into
+ * node_modules (BI-1C1483C6). Read-only queries (`pnpm ls`, `pnpm why`,
+ * `pnpm store status`) and script runners (`pnpm run x`, `pnpm test`) are not
+ * included — they do not materialize packages, so they cannot write through a
+ * junction. `pnpm install` is matched in both its bare and aliased forms.
+ * @param {string} seg
+ */
+export function isNodeModulesWritingInstall(seg) {
+  const tokens = tokenize(seg);
+  let i = 0;
+  while (i < tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i])) i += 1; // leading VAR=val
+  if (tokens[i] === "sudo") i += 1;
+  const bin = tokens[i];
+  if (!bin) return false;
+  if (!/^(?:pnpm|npm|yarn|bun)(?:\.cmd|\.exe)?$/.test(bin)) return false;
+  // The first non-flag token after the binary is the subcommand — but several
+  // pnpm flags take a SEPARATE value (`pnpm --filter web add zod`), and reading
+  // that value as the subcommand would miss the install entirely.
+  const FLAGS_WITH_VALUES = new Set(["--filter", "-F", "--dir", "-C", "--workspace-concurrency", "--config"]);
+  let j = i + 1;
+  while (j < tokens.length && tokens[j].startsWith("-")) {
+    if (FLAGS_WITH_VALUES.has(tokens[j]) && !tokens[j].includes("=")) j += 1;
+    j += 1;
+  }
+  // A bare `yarn` / `bun` with no subcommand IS an install.
+  const sub = tokens[j] ?? (bin === "yarn" || bin === "bun" ? "install" : "");
+  return ["install", "i", "ci", "add", "update", "up", "upgrade", "dedupe", "rebuild", "prune", "link"]
+    .includes(sub);
+}
+
+/**
  * True when this segment is a `git clean` that removes ignored directories
  * (`-d` to recurse into dirs AND `-x`/`-X` to include ignored) — the form that
  * sweeps an ignored, junctioned node_modules and follows it into the shared root.
@@ -254,6 +291,21 @@ export function decide({ command, cwd = "", env = {}, isSymlink = () => false, i
   const cloneRoot = () => (cloneRootMemo !== undefined ? cloneRootMemo : (cloneRootMemo = deriveCloneRoot(cwd, isDir)));
 
   for (const seg of segments(command)) {
+    // BI-1C1483C6: the OTHER junction foot-gun. A recursive delete through a
+    // junctioned node_modules was already covered below; an INSTALL through the
+    // same junction was not, and it has its own history — the root clone was
+    // previously gutted (1198 deleted sources) by a package manager writing
+    // through a worktree's node_modules link into D:/DPF.
+    //
+    // The condition is runtime state, not command text: this fires only when
+    // <cwd>/node_modules is ACTUALLY a junction/symlink. So a normal install in
+    // the root clone (a real directory) and the managed worktree bootstrap
+    // (which installs only when node_modules does not exist yet) both stay
+    // allowed, and the guard cannot become a blanket ban on installing.
+    if (isNodeModulesWritingInstall(seg) && isSymlink(resolveAgainst(cwd, "node_modules"))) {
+      return { block: true, reason: INSTALL_THROUGH_JUNCTION_GUIDANCE };
+    }
+
     if (isRootCloneGitStateMutation(seg, cwd, isDir)) {
       return { block: true, reason: ROOT_GIT_STATE_GUIDANCE };
     }

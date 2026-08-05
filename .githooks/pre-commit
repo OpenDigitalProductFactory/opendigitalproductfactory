@@ -299,6 +299,18 @@ run_typecheck() {
     echo ""
     cat /tmp/pre-commit-tc.log | tail -40
     echo ""
+    # BI-1C1483C6: "'next' is not recognized" and "Cannot find package 'react'"
+    # look exactly like real breakage. When the readiness probe corroborates that
+    # this worktree is unprovisioned, say so HERE rather than leaving the reader
+    # to lose a stash-and-re-run cycle discovering it. Silent otherwise; never
+    # changes the verdict.
+    if command -v node >/dev/null 2>&1 && [ -f scripts/lib/bootstrap-worktree-deps.mjs ]; then
+      diagnosis="$(node scripts/lib/bootstrap-worktree-deps.mjs . --diagnose-failure </tmp/pre-commit-tc.log 2>/dev/null || true)"
+      if [ -n "$diagnosis" ]; then
+        echo "$diagnosis"
+        echo ""
+      fi
+    fi
     FAILED="$FAILED $label"
   fi
 }
