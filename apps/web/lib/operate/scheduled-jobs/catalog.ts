@@ -239,9 +239,9 @@ export const SCHEDULED_JOB_CATALOG: readonly ScheduledJobCatalogEntry[] = [
   {
     jobId: "runtime-artifact-janitor",
     inngestId: "ops/runtime-artifact-janitor",
-    name: "Runtime-artifact janitor (observe)",
+    name: "Runtime-artifact janitor",
     purpose:
-      "Observe-only: logs the orphaned CI build images + stray compose projects it WOULD reap. Never deletes — real --apply reaping is a separate founder-gated action.",
+      "Reaps orphaned CI build images + stray compose projects (and their named volumes). Default OFF; ENABLED alone = observe-only (logs would-reap); ENABLED + DPF_RUNTIME_ARTIFACT_JANITOR_AUTO_REAP=1 = live reap. CLI guards keep root dpf, running, and live-worktree stacks safe.",
     cron: "20 5 * * *",
     cadence: "Daily at 05:20",
     category: "core",
