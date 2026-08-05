@@ -23,7 +23,7 @@ import {
 import { useRouter } from "expo-router";
 import { useTheme } from "@/src/lib/theme";
 import {
-  fetchInstanceDescriptor,
+  resolveInstall,
   setServerUrl,
 } from "@/src/lib/serverConfig";
 import { useSpacesStore } from "@/src/stores/spaces";
@@ -44,7 +44,10 @@ export default function ConnectScreen(): React.JSX.Element {
     setError(null);
     setSubmitting(true);
     try {
-      const descriptor = await fetchInstanceDescriptor(url.trim());
+      // Resilient resolve: a reachable install with no (or a not-yet-served)
+      // discovery descriptor still connects — we synthesize a minimal one and
+      // proceed to sign-in rather than dying on a /welcome HTML redirect.
+      const { descriptor } = await resolveInstall(url.trim());
       const persisted = await setServerUrl(url.trim());
       addSpace({ url: persisted, descriptor });
       router.replace("/login");
