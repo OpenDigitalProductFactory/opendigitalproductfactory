@@ -192,3 +192,50 @@ describe("deriveDecisionFromProse (fallback when the model emits no sentinel)", 
     expect(decision!.options[0]!.label).toBe("Go");
   });
 });
+
+describe("deriveDecisionFromProse — long real-world clauses (BI-AE7058FB)", () => {
+  // Verbatim closeout observed live on /customer during the EP-UX-AUDITOR portal
+  // survey (2026-08-04). The old 90-char clause cap rejected the first option
+  // (~117 chars), so a textbook two-option choice produced NO buttons at all.
+  const LIVE_CUSTOMER_CLOSEOUT =
+    "Based on the customer overview page, the highest-value next step is to review the onboarding journey for your top accounts. " +
+    "Would you like me to start by analyzing the onboarding journey for your highest-value accounts to surface the most critical friction points, " +
+    "or would you prefer to review the underlying customer data and engagement metrics first?";
+
+  it("recovers both options from the live /customer closeout", () => {
+    const decision = deriveDecisionFromProse(LIVE_CUSTOMER_CLOSEOUT);
+    expect(decision).not.toBeNull();
+    expect(decision!.options).toHaveLength(2);
+  });
+
+  it("marks the first option recommended so buttons render recommended-first", () => {
+    const decision = deriveDecisionFromProse(LIVE_CUSTOMER_CLOSEOUT)!;
+    expect(decision.options[0]!.recommended).toBe(true);
+    expect(decision.options[1]!.recommended).toBeUndefined();
+  });
+
+  it("strips the repeated lead-in so the second button reads as an imperative", () => {
+    const decision = deriveDecisionFromProse(LIVE_CUSTOMER_CLOSEOUT)!;
+    expect(decision.options[1]!.value).toMatch(/^Review the underlying customer data/);
+    expect(decision.options[1]!.value).not.toMatch(/would you prefer/i);
+  });
+
+  it("still truncates the visible label while keeping the full submitted value", () => {
+    const decision = deriveDecisionFromProse(LIVE_CUSTOMER_CLOSEOUT)!;
+    for (const option of decision.options) {
+      expect(option.label.length).toBeLessThanOrEqual(56);
+      expect(option.value.length).toBeGreaterThanOrEqual(option.label.length);
+    }
+  });
+
+  it("still refuses a paragraph-sized clause — the cap bounds runaway prose", () => {
+    const runaway = `Should I ${"a".repeat(200)}, or ${"b".repeat(200)}?`;
+    expect(deriveDecisionFromProse(runaway)).toBeNull();
+  });
+
+  it("still refuses a noun disjunction with no comma", () => {
+    expect(
+      deriveDecisionFromProse("Should this be tagged for reliability or incidents?"),
+    ).toBeNull();
+  });
+});

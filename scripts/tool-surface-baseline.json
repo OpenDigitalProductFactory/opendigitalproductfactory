@@ -3,13 +3,13 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 354,
-      "reason": "BI-52839DEA: search_ux_critique_corpus + capture_ux_critique open the design-critique corpus to external review sessions (on top of BI-3003EE63's analyze_a2a_collaboration_health at 352). They earn permanent places because the corpus is the gating asset of the UX-quality programme \u2014 an ungrounded design judge is the UICrit zero-shot case at 13.1% valid comments, and its accrual rate decides when the critic may gate at all. Until now its only door was a portal server action, so a review happening in a Claude Code / Codex / Grok session produced nothing durable; that is how the EP-UX-COGLOAD wave ended up text-only. Two tools rather than one because reading before judging and writing what you observed are separate acts with different authority: search is read-only and advisory, capture writes a draft that can never carry a calibration-eligible verdict.",
+      "value": 355,
+      "reason": "Adds record_compliance_scope (BI-0B867B67 phase 3): the compliance coworker captures what the business does with data / where it employs people into BusinessContext, moving matching regulations from needs-review to applies. Earns a permanent place \u2014 it is the conversational half of the setup-form capture and the only tool that writes the applicability-triggering profile; authority stays data_governance_validate-gated.",
       "recordedAt": "2026-08-04"
     },
     "registry.packFiles": {
-      "value": 82,
-      "reason": "BI-52839DEA: the critique corpus travels in its own pack rather than widening an existing one, so the capability carries its own grants (registry_read for search, registry_write for capture) and a surface that never reviews UX does not pay for it in its selection space. Same containment rationale as the supply-coverage pack this replaces the record of.",
+      "value": 83,
+      "reason": "Adds compliance-scope-pack (BI-0B867B67 phase 3) hosting record_compliance_scope in its own scoped pack per the pack-registry convention (one capability domain per pack), rather than bloating an unrelated pack. Permanent: it is the compliance coworkers capture surface.",
       "recordedAt": "2026-08-04"
     },
     "tier.coreToolNames": {
