@@ -97,8 +97,16 @@ class InstallGrokHooksTest(unittest.TestCase):
             self.assertTrue(any("worktree-session-hygiene.mjs" in c for c in session_cmds))
             stop_cmds = [h["command"] for e in data["hooks"]["Stop"] for h in e["hooks"]]
             self.assertTrue(any("uncommitted-work-guard.mjs" in c for c in stop_cmds))
-            self.assertTrue(any("worktree-session-hygiene.mjs" in c for c in stop_cmds))
+            # BI-E5D810B8: Stop fires every turn, so it must never carry the
+            # destructive reaper — that removed the worktree the session was
+            # still working in, the moment its own PR merged.
+            self.assertFalse(
+                any("worktree-session-hygiene.mjs" in c for c in stop_cmds),
+                f"worktree-session-hygiene must not run on Grok Stop: {stop_cmds}",
+            )
             self.assertIn("SessionEnd", data["hooks"])
+            end_cmds = [h["command"] for e in data["hooks"]["SessionEnd"] for h in e["hooks"]]
+            self.assertTrue(any("worktree-session-hygiene.mjs" in c for c in end_cmds))
 
     def test_dry_run_writes_nothing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
