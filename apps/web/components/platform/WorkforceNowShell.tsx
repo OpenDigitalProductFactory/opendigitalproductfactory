@@ -9,6 +9,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 import type {
   WorkforceActivity,
   WorkforceCoworker,
@@ -95,7 +96,11 @@ export function WorkforceNowShell({ initialData }: { initialData: WorkforceActiv
           disabled={refreshing}
           className="inline-flex items-center gap-1.5 rounded-md border border-[var(--dpf-border)] px-2 py-1 font-medium text-[var(--dpf-text)] transition-colors hover:border-[var(--dpf-accent)] disabled:opacity-50"
         >
-          <RefreshCw aria-hidden className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+          {refreshing ? (
+            <Spinner size="xs" tone="current" presentational />
+          ) : (
+            <RefreshCw aria-hidden className="h-3.5 w-3.5" />
+          )}
           Refresh now
         </button>
       </div>

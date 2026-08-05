@@ -11,6 +11,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
+import { apiErrorResponse } from "@/lib/api/error";
 import { loadWorkforceActivity } from "@/lib/platform-runtime/workforce-activity";
 
 export const dynamic = "force-dynamic";
@@ -29,7 +30,7 @@ export async function GET() {
       "view_platform",
     )
   ) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return apiErrorResponse("NOT_FOUND", "Not found", 404);
   }
 
   const data = await loadWorkforceActivity();
