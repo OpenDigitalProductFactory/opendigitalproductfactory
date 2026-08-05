@@ -3,9 +3,12 @@
 import { useSearchParams, useRouter } from "next/navigation";
 import { SectionNav } from "@/components/shell/SectionNav";
 
+// "Grid" is deliberately NOT a tab (BI-00CB9CCC). The grid is a *view mode* of the
+// Directory — the in-place-view-toggle pattern this platform standardised on
+// (2026-06-06-workbooks-per-surface-integration-design §4) — reached via the
+// List/Grid/Board switcher inside Directory, not a sibling destination.
 const TABS = [
   { label: "Directory", value: "directory" },
-  { label: "Grid", value: "grid" },
   { label: "Workforce", value: "workforce" },
   { label: "Org Chart", value: "orgchart" },
   { label: "Timesheets", value: "timesheets" },
@@ -21,7 +24,11 @@ export type EmployeeTab = (typeof TABS)[number]["value"];
 export function EmployeeTabNav() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const currentTab = searchParams.get("view") ?? "directory";
+  const rawView = searchParams.get("view");
+  // grid/board are Directory view modes, not tabs — keep Directory lit for them
+  // so the switcher never leaves the tab strip with nothing active.
+  const currentTab =
+    rawView === null || rawView === "grid" || rawView === "board" ? "directory" : rawView;
 
   function handleClick(value: string) {
     const params = new URLSearchParams(searchParams.toString());

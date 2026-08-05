@@ -22,14 +22,15 @@ import { loadWorkforceActivity } from "@/lib/workforce/workforce-activity";
 import { TimesheetGrid } from "@/components/employee/TimesheetGrid";
 import { TimesheetApprovalPanel } from "@/components/employee/TimesheetApprovalPanel";
 import { MyPoliciesView } from "@/components/employee/MyPoliciesView";
-import { SurfacePlatformGrid } from "@/components/workbooks/SurfacePlatformGrid";
 import {
   getEmployeeDirectoryRows,
   getEmployeeLifecycleEvents,
-  getEmployeeProfileByUserId,
+  getEmployeeProfileById,
   getWorkforceReferenceData,
 } from "@/lib/workforce-data";
 import { getEmployeeAddresses } from "@/lib/address-data";
+import { EditEmployeeButton } from "@/components/employee/EditEmployeeButton";
+import { PlatformGridSection, parseSurfaceView } from "@/components/workbooks/PlatformGridSection";
 import { getTimesheetForWeek, getPendingTimesheetsForManager, getCurrentWeekStart } from "@/lib/timesheet-data";
 import { auth } from "@/lib/auth";
 import { can } from "@/lib/permissions";
@@ -45,6 +46,9 @@ type Props = {
 export default async function EmployeePage({ searchParams }: Props) {
   const params = await searchParams;
   const view = typeof params.view === "string" ? params.view : "directory";
+  // grid/board are view modes OF the directory, not sibling tabs — the platform's
+  // in-place-view-toggle pattern (2026-06-06-workbooks-per-surface-integration §4).
+  const surfaceView = parseSurfaceView(typeof params.view === "string" ? params.view : null);
 
   const [roles, users, employees, workforceReferenceData] = await Promise.all([
     prisma.platformRole.findMany({
@@ -92,9 +96,18 @@ export default async function EmployeePage({ searchParams }: Props) {
       )
     : false;
 
-  const primaryEmployeeUserId = employees.find((employee) => employee.userId)?.userId ?? null;
-  const selectedEmployee = primaryEmployeeUserId
-    ? await getEmployeeProfileByUserId(primaryEmployeeUserId)
+  // Which person the record panels describe. Driven by ?employee=<profile id> so
+  // every employee is reachable — the previous behaviour pinned the whole surface
+  // to the first employee that happened to have a linked user account, which made
+  // every other record (and anyone with no account at all) unreachable, and so
+  // uneditable (BI-00CB9CCC).
+  const requestedEmployeeId = typeof params.employee === "string" ? params.employee : null;
+  const selectedEmployeeId =
+    (requestedEmployeeId && employees.some((e) => e.id === requestedEmployeeId)
+      ? requestedEmployeeId
+      : employees[0]?.id) ?? null;
+  const selectedEmployee = selectedEmployeeId
+    ? await getEmployeeProfileById(selectedEmployeeId)
     : null;
   const [lifecycleEvents, employeeAddresses] = selectedEmployee
     ? await Promise.all([
@@ -222,9 +235,7 @@ export default async function EmployeePage({ searchParams }: Props) {
       <div className="mt-8">
         <EmployeeTabNav />
 
-        {view === "grid" ? (
-          <SurfacePlatformGrid entityType="employee_profile" view="grid" />
-        ) : view === "workforce" && workforceRoster ? (
+        {view === "workforce" && workforceRoster ? (
           <div className="space-y-8">
             {workforceActivity && <WorkforceActivityPanel activity={workforceActivity} />}
             <div className="pt-2 border-t border-[var(--dpf-border)]">
@@ -274,9 +285,49 @@ export default async function EmployeePage({ searchParams }: Props) {
           <MyPoliciesView />
         ) : (
           <>
+            {/* One People list, three ways to read it. The grid is a view mode here,
+                not a separate destination (BI-00CB9CCC). */}
+            <PlatformGridSection entityType="employee_profile" view={surfaceView} />
+
+            {surfaceView ? null : (
+          <>
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              <EmployeeDirectoryPanel employees={employees} />
-              <EmployeeProfilePanel employee={selectedEmployee} addresses={employeeAddresses} />
+              <EmployeeDirectoryPanel
+                employees={employees}
+                selectedEmployeeId={selectedEmployeeId}
+              />
+              <EmployeeProfilePanel
+                employee={selectedEmployee}
+                addresses={employeeAddresses}
+                action={
+                  selectedEmployee && canManageWorkforce ? (
+                    <EditEmployeeButton
+                      employee={selectedEmployee}
+                      addresses={employeeAddresses}
+                      departments={workforceReferenceData.departments.map((d) => ({
+                        id: d.id,
+                        label: d.name,
+                      }))}
+                      positions={workforceReferenceData.positions.map((p) => ({
+                        id: p.id,
+                        label: p.title,
+                      }))}
+                      workLocations={workforceReferenceData.workLocations.map((wl) => ({
+                        id: wl.id,
+                        label: wl.name,
+                      }))}
+                      employmentTypes={workforceReferenceData.employmentTypes.map((et) => ({
+                        id: et.id,
+                        label: et.name,
+                      }))}
+                      existingEmployees={employees.map((emp) => ({
+                        id: emp.id,
+                        label: emp.displayName,
+                      }))}
+                    />
+                  ) : null
+                }
+              />
             </div>
 
             <div className="mt-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -295,6 +346,8 @@ export default async function EmployeePage({ searchParams }: Props) {
                 currency={orgSettings?.baseCurrency ?? "GBP"}
               />
             </div>
+          </>
+            )}
           </>
         )}
       </div>

@@ -57,40 +57,52 @@ export async function getEmployeeDirectoryRows(): Promise<EmployeeDirectoryRow[]
   }));
 }
 
-export async function getEmployeeProfileByUserId(userId: string): Promise<EmployeeProfileRecord | null> {
-  const employee = await prisma.employeeProfile.findUnique({
-    where: { userId },
-    select: {
-      id: true,
-      employeeId: true,
-      userId: true,
-      firstName: true,
-      middleName: true,
-      lastName: true,
-      displayName: true,
-      workEmail: true,
-      personalEmail: true,
-      phoneWork: true,
-      phoneMobile: true,
-      phoneEmergency: true,
-      status: true,
-      departmentId: true,
-      positionId: true,
-      managerEmployeeId: true,
-      workLocationId: true,
-      timezone: true,
-      startDate: true,
-      confirmationDate: true,
-      endDate: true,
-      department: { select: { name: true } },
-      position: { select: { title: true } },
-      manager: { select: { displayName: true } },
-      workLocation: { select: { name: true } },
-    },
-  });
+// One select shape for the full profile record, shared by every lookup path.
+// Keeping it in one place means a field added to EmployeeProfileRecord cannot be
+// served by one accessor and silently missing from another.
+const EMPLOYEE_PROFILE_SELECT = {
+  id: true,
+  employeeId: true,
+  userId: true,
+  firstName: true,
+  middleName: true,
+  lastName: true,
+  displayName: true,
+  workEmail: true,
+  personalEmail: true,
+  phoneWork: true,
+  phoneMobile: true,
+  phoneEmergency: true,
+  status: true,
+  employmentTypeId: true,
+  departmentId: true,
+  positionId: true,
+  managerEmployeeId: true,
+  dottedLineManagerId: true,
+  workLocationId: true,
+  timezone: true,
+  startDate: true,
+  confirmationDate: true,
+  endDate: true,
+  department: { select: { name: true } },
+  position: { select: { title: true } },
+  manager: { select: { displayName: true } },
+  workLocation: { select: { name: true } },
+} as const;
 
-  if (!employee) return null;
+/** The row shape produced by EMPLOYEE_PROFILE_SELECT. */
+type EmployeeProfileRow = Omit<
+  EmployeeProfileRecord,
+  "status" | "departmentName" | "positionTitle" | "managerName" | "workLocationName"
+> & {
+  status: string;
+  department: { name: string } | null;
+  position: { title: string } | null;
+  manager: { displayName: string } | null;
+  workLocation: { name: string } | null;
+};
 
+function toEmployeeProfileRecord(employee: EmployeeProfileRow): EmployeeProfileRecord {
   return {
     id: employee.id,
     employeeId: employee.employeeId,
@@ -105,12 +117,14 @@ export async function getEmployeeProfileByUserId(userId: string): Promise<Employ
     phoneMobile: employee.phoneMobile,
     phoneEmergency: employee.phoneEmergency,
     status: employee.status as EmployeeProfileRecord["status"],
+    employmentTypeId: employee.employmentTypeId,
     departmentId: employee.departmentId,
     departmentName: employee.department?.name ?? null,
     positionId: employee.positionId,
     positionTitle: employee.position?.title ?? null,
     managerEmployeeId: employee.managerEmployeeId,
     managerName: employee.manager?.displayName ?? null,
+    dottedLineManagerId: employee.dottedLineManagerId,
     workLocationId: employee.workLocationId,
     workLocationName: employee.workLocation?.name ?? null,
     timezone: employee.timezone,
@@ -118,6 +132,29 @@ export async function getEmployeeProfileByUserId(userId: string): Promise<Employ
     confirmationDate: employee.confirmationDate,
     endDate: employee.endDate,
   };
+}
+
+export async function getEmployeeProfileByUserId(userId: string): Promise<EmployeeProfileRecord | null> {
+  const employee = await prisma.employeeProfile.findUnique({
+    where: { userId },
+    select: EMPLOYEE_PROFILE_SELECT,
+  });
+  return employee ? toEmployeeProfileRecord(employee) : null;
+}
+
+/**
+ * Look a profile up by its own primary key. The directory selects on this, not on
+ * userId: an employee with no linked user account has no userId, so the byUserId
+ * path could never reach them at all (BI-00CB9CCC).
+ */
+export async function getEmployeeProfileById(
+  employeeProfileId: string,
+): Promise<EmployeeProfileRecord | null> {
+  const employee = await prisma.employeeProfile.findUnique({
+    where: { id: employeeProfileId },
+    select: EMPLOYEE_PROFILE_SELECT,
+  });
+  return employee ? toEmployeeProfileRecord(employee) : null;
 }
 
 export async function getWorkforceReferenceData() {

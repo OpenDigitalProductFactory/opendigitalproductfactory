@@ -172,12 +172,16 @@ export type EmployeeProfileRecord = {
   phoneMobile: string | null;
   phoneEmergency: string | null;
   status: WorkforceStatus;
+  // Carried so the edit form can show the CURRENT employment type and dotted-line
+  // manager instead of defaulting them to "None" (BI-00CB9CCC).
+  employmentTypeId: string | null;
   departmentId: string | null;
   departmentName: string | null;
   positionId: string | null;
   positionTitle: string | null;
   managerEmployeeId: string | null;
   managerName: string | null;
+  dottedLineManagerId: string | null;
   workLocationId: string | null;
   workLocationName: string | null;
   timezone: string | null;

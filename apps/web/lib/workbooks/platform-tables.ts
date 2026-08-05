@@ -13,7 +13,7 @@ import "./backlog-adapter"; // self-register the backlog adapter
 import "./invoice-adapter"; // self-register the invoice adapter
 import "./risk-adapter"; // self-register the risk-assessment adapter
 import { registerGenericReadTable, type GenericTableConfig } from "./generic-read-adapter";
-import { PEOPLE_SUPPLIER_TABLES } from "./people-supplier-configs";
+import { registerPeopleSupplierTables } from "./people-supplier-registration";
 import {
   type ColumnDefinition,
   type GridRow,
@@ -541,9 +541,9 @@ registerGenericReadTable(BILL_TABLE);
 registerGenericReadTable(BANK_ACCOUNT_TABLE);
 registerGenericReadTable(EXPENSE_CLAIM_TABLE);
 registerGenericReadTable(FIXED_ASSET_TABLE);
-// Customers, people (safe org-directory fields only), suppliers — explicit
-// allow-lists live in people-supplier-configs.ts (unit-tested for safe omission).
-for (const cfg of PEOPLE_SUPPLIER_TABLES) registerGenericReadTable(cfg);
+// Customers, people, suppliers — allow-lists in people-supplier-configs.ts, and the
+// governed write path for employee_profile in people-supplier-registration.ts.
+registerPeopleSupplierTables();
 
 /** The registry of platform datasets available as grids. Add a row per adapter. */
 export const PLATFORM_TABLES: PlatformTableDef[] = [
@@ -718,9 +718,9 @@ export const PLATFORM_TABLES: PlatformTableDef[] = [
   {
     entityType: "employee_profile",
     label: "People",
-    description: "The team directory as a read-only grid (safe fields only) — board by status.",
+    description: "The team directory as an editable grid (safe fields only) — board by status.",
     viewCapability: "view_employee",
-    manageCapability: "view_employee", // read-only grid; adapter performs no writes
+    manageCapability: "manage_user_lifecycle", // seeing the directory ≠ editing it; governed write-through
     homeSurface: { path: "/employee", label: "People", board: true },
   },
   {

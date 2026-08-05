@@ -1,10 +1,14 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import type { EmployeeDirectoryRow } from "@/lib/workforce-types";
 
 type Props = {
   employees: EmployeeDirectoryRow[];
+  /** The profile the surrounding panels are showing; drives the selected state. */
+  selectedEmployeeId?: string | null;
 };
 
 function formatStatus(status: EmployeeDirectoryRow["status"]): string {
@@ -81,14 +85,29 @@ function EmployeeCard({
   employee,
   directReportCount,
   indentLevel,
+  href,
+  isSelected,
 }: {
   employee: EmployeeDirectoryRow;
   directReportCount: number;
   indentLevel: number;
+  href: string;
+  isSelected: boolean;
 }) {
   return (
-    <article
-      className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 space-y-3"
+    <Link
+      href={href}
+      scroll={false}
+      aria-current={isSelected ? "page" : undefined}
+      // Without this the accessible name is the entire card — id, email, status,
+      // and all four definition-list pairs read out as one string. Name the link
+      // after the person; the detail stays available as the link's content.
+      aria-label={`Open ${employee.displayName}'s record`}
+      className={`block rounded-md border p-3 space-y-3 transition-colors ${
+        isSelected
+          ? "border-[var(--dpf-accent)] bg-[var(--dpf-surface-2)] ring-1 ring-[var(--dpf-accent)]"
+          : "border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] hover:border-[var(--dpf-accent)]"
+      }`}
       style={{ marginLeft: indentLevel > 0 ? `${indentLevel * 12}px` : undefined }}
     >
       <div className="flex items-start justify-between gap-3">
@@ -127,12 +146,13 @@ function EmployeeCard({
           <dd className="text-[var(--dpf-text)]">{employee.workLocationName ?? "Unset"}</dd>
         </div>
       </dl>
-    </article>
+    </Link>
   );
 }
 
-export function EmployeeDirectoryPanel({ employees }: Props) {
+export function EmployeeDirectoryPanel({ employees, selectedEmployeeId = null }: Props) {
   const [groupByMgr, setGroupByMgr] = useState(false);
+  const searchParams = useSearchParams();
 
   const directReportCounts = useMemo(() => buildDirectReportCounts(employees), [employees]);
   const depthMap = useMemo(() => buildDepthMap(employees), [employees]);
@@ -140,6 +160,14 @@ export function EmployeeDirectoryPanel({ employees }: Props) {
     () => (groupByMgr ? groupByManager(employees) : null),
     [employees, groupByMgr],
   );
+
+  // Selecting a person only swaps ?employee=; every other param (tab view, week)
+  // is preserved so selection never knocks the user out of where they were.
+  function hrefFor(employeeProfileId: string): string {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("employee", employeeProfileId);
+    return `/employee?${params.toString()}`;
+  }
 
   return (
     <section className="rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] p-4 space-y-4">
@@ -180,6 +208,8 @@ export function EmployeeDirectoryPanel({ employees }: Props) {
                     employee={employee}
                     directReportCount={directReportCounts.get(employee.id) ?? 0}
                     indentLevel={depthMap.get(employee.id) ?? 0}
+                    href={hrefFor(employee.id)}
+                    isSelected={employee.id === selectedEmployeeId}
                   />
                 ))}
               </div>
@@ -194,6 +224,8 @@ export function EmployeeDirectoryPanel({ employees }: Props) {
               employee={employee}
               directReportCount={directReportCounts.get(employee.id) ?? 0}
               indentLevel={depthMap.get(employee.id) ?? 0}
+              href={hrefFor(employee.id)}
+              isSelected={employee.id === selectedEmployeeId}
             />
           ))}
         </div>

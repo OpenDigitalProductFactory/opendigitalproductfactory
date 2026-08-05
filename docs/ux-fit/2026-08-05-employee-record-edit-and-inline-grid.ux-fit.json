@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "in-place-view-toggle-with-record-edit",
+  "decisionInteractionId": "DI-49419B2004D2",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/employee/page.tsx",
+      "apps/web/components/employee/EmployeeDirectoryPanel.tsx",
+      "apps/web/components/employee/EditEmployeeButton.tsx"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "in-place-view-toggle-with-record-edit",
+      "keep-grid-tab-add-edit-only",
+      "dedicated-grid-subroute"
+    ]
+  }
+}

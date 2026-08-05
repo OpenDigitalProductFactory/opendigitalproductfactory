@@ -73,6 +73,20 @@ export interface GenericTableConfig {
    * query per rollup, then assigned per row — no N+1.
    */
   rollups?: RollupSpec[];
+  /**
+   * Optional governed write path. When set, a validated edit is handed to this
+   * function INSTEAD of being written straight to Prisma — so a model that owns a
+   * governed domain action (audit log, capability check, lifecycle rules) keeps
+   * those guarantees for grid edits too. The raw-write tier stays the default for
+   * models with no domain action of their own (e.g. supplier).
+   *
+   * Receives the grid rowId and the already-validated Prisma scalars. Must throw
+   * or return a failure result to reject the edit.
+   */
+  writeThrough?: (
+    rowId: string,
+    data: Record<string, unknown>,
+  ) => Promise<{ ok: boolean; message: string }>;
 }
 
 /**
@@ -410,10 +424,16 @@ class GenericReadAdapter implements DataSourceAdapter {
       throw new Error("You do not have permission to edit this data");
     }
     const data = genericUpdateData(this.cfg, changes); // validates; throws fail-closed
-    await delegate(this.cfg.prismaModel).update({
-      where: { [this.cfg.idField]: rowId },
-      data,
-    });
+    if (this.cfg.writeThrough) {
+      // Governed path: the domain action owns the audit log and any domain rules.
+      const result = await this.cfg.writeThrough(rowId, data);
+      if (!result.ok) throw new Error(result.message);
+    } else {
+      await delegate(this.cfg.prismaModel).update({
+        where: { [this.cfg.idField]: rowId },
+        data,
+      });
+    }
     const row = await this.getRow(entityType, rowId);
     if (!row) throw new Error("Row updated but could not be read back");
     return row;

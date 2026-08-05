@@ -117,3 +117,41 @@ Decision: `fits-with-guardrails`.
 - **Hub link rot** — sweep internal `/workbooks` links when relocating; the system back-link derives from the registry.
 - **Ordering** — don't strip the hub's Platform-data section until per-surface grids are live (same PR keeps them coupled).
 - **Runtime-bound verification** — worktree is source-control only; build + UX evidence from CI / canonical install / shared sandbox.
+
+## 11. Amendment — 2026-08-05 (BI-00CB9CCC)
+
+Two clauses of this design are superseded by operator review of `/employee`.
+
+### 11.1 The "Grid tab" fallback is retired
+
+The rollout plan carved out an exception for tabbed pages whose `?view=` param was
+already taken (people): add a sibling **Grid tab** instead of the in-place toggle.
+Operator verdict on the result: *"the grid view is in its own tab, vs being part of
+the main workforce list. Seems unorthodox."*
+
+That is precisely the "here, not there" outcome §4 scored lowest. The exception was
+never a UX judgement — it was a query-param workaround, and the collision does not
+actually need dodging: `grid`/`board` are simply not tab values, so a tab-nav can
+resolve them to its list tab and one `?view=` param serves both roles. **§5.1's
+in-place toggle is now the pattern for every surface, tabbed or not.**
+
+### 11.2 A grid over a governed model writes through its domain action
+
+§3 recorded that per-surface grids inherit the registry's domain capability and need
+no change. That holds for *reads*. For *writes* it is not sufficient: the generic
+adapter's raw-write tier goes straight to Prisma, and `EmployeeProfile` writes are
+otherwise wrapped in `withGovernedWorkforceAction`, which lands an
+`AuthorizationDecisionLog`. A raw grid write would have edited people's records with
+no audit trail.
+
+`GenericTableConfig` therefore gains an optional **`writeThrough`** hook. When set,
+a validated edit is handed to the domain action instead of Prisma, so the grid
+inherits the capability check, governance resolution, and audit entry. The raw-write
+tier remains the default for models with no domain action of their own (supplier).
+
+Corollaries now in force:
+- `employee_profile.manageCapability` is `manage_user_lifecycle`, not `view_employee` —
+  seeing the directory is not permission to edit it.
+- Fields carrying domain rules a cell edit cannot express stay off the allow-list.
+  `status` is excluded: it is a lifecycle transition guarded by
+  `validateLifecycleTransition`, not a cell value.

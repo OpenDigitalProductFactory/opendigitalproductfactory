@@ -7,10 +7,9 @@ description: "Operate the employee directory, workforce view, organization chart
 
 ## What the People Area Owns
 
-Open **People** at `/employee` to maintain the workforce record and see how employees and AI coworkers contribute to the business. The page combines six views:
+Open **People** at `/employee` to maintain the workforce record and see how employees and AI coworkers contribute to the business. The page combines five views:
 
-- **Directory** — employee identity, organization placement, lifecycle dates, contact details, addresses, and pay basis
-- **Grid** — the same employee records in the shared workbook-style grid
+- **Directory** — employee identity, organization placement, lifecycle dates, contact details, addresses, and pay basis. Switch the same list between **List**, **Grid**, and **Board** without leaving Directory.
 - **Workforce** — current work, concerns that need an operator, and a unified employee/AI roster
 - **Org Chart** — an interactive reporting chart you can rearrange, with span-of-control signal
 - **Timesheets** — weekly time entry, manager approval, and optional customer/service billing context
@@ -73,6 +72,30 @@ Use the directory’s **Group by manager** option to find missing or unexpected 
 The **Org Chart** view is where reporting structure is read and changed. See [Work With the Org Chart](#work-with-the-org-chart) below.
 
 The directory’s detail panels show lifecycle dates, contact information, organization assignment, reference coverage, and recent append-only lifecycle events. Use the event history as evidence of what changed; do not rewrite prior events to make the current record look cleaner.
+
+### Open and Edit a Person’s Record
+
+Select any card in the directory to load that person into the detail panels. The selected card is
+outlined, and the address bar carries the selection, so a link to a specific person can be shared or
+bookmarked. Everyone in the directory can be selected, including people who have no platform account.
+
+With the workforce management permission, the profile panel shows **Edit**. It opens the full record —
+names, work and personal contact, status, start date, team, role, employment type, location, manager,
+and addresses. Fields you do not touch are left as they are; clearing a field is treated as a
+deliberate instruction to clear it.
+
+### Edit Several People at Once
+
+Switch Directory to **Grid** to edit the same records as a spreadsheet. Name, work email, timezone,
+and start date can be changed in place. Grid edits are governed exactly like edits made through the
+form: they require the workforce management permission and are recorded in the authorization audit
+trail.
+
+Two limits are deliberate. Fields the grid does not show — pay, personal contact, national
+identifiers, addresses, termination dates — cannot be reached or changed from it. And **status is not
+editable in the grid**, because moving someone between onboarding, active, leave, offboarding, and
+terminated is a lifecycle transition with its own rules, not a cell value. Change status through the
+lifecycle controls so the employment event is recorded.
 
 ## Work With the Org Chart
 

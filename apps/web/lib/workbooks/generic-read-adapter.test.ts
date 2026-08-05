@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import {
   toCell,
   genericRowToGridRow,
@@ -190,6 +190,67 @@ describe("generic adapter getCapabilities", () => {
     expect(editable.getCapabilities({ userId: "u", canManage: false }).canEditCell).toBe(false);
     const readonly = makeGenericReadAdapter(config);
     expect(readonly.getCapabilities({ userId: "u", canManage: true }).canEditCell).toBe(false);
+  });
+});
+
+// BI-00CB9CCC. The People grid must not write to an HR record via the raw Prisma
+// tier — EmployeeProfile owns a governed action that lands an AuthorizationDecisionLog,
+// and a grid edit has to inherit it. These lock the seam that guarantees that.
+describe("generic adapter updateCells — governed write-through", () => {
+  const calls: Array<{ rowId: string; data: Record<string, unknown> }> = [];
+
+  function configWithWriteThrough(
+    result: { ok: boolean; message: string },
+  ): GenericTableConfig {
+    return {
+      ...editableConfig,
+      writeThrough: async (rowId, data) => {
+        calls.push({ rowId, data });
+        return result;
+      },
+    };
+  }
+
+  beforeEach(() => {
+    calls.length = 0;
+  });
+
+  /** updateCells is optional on DataSourceAdapter; narrow it once, loudly. */
+  function updateCellsOf(result: { ok: boolean; message: string }) {
+    const adapter = makeGenericReadAdapter(configWithWriteThrough(result));
+    const fn = adapter.updateCells?.bind(adapter);
+    if (!fn) throw new Error("generic adapter should implement updateCells");
+    return fn;
+  }
+
+  it("hands the validated data to writeThrough instead of writing Prisma directly", async () => {
+    // writeThrough reports failure, which short-circuits before the read-back —
+    // so this asserts the seam without needing a live Prisma client.
+    const updateCells = updateCellsOf({
+      ok: false,
+      message: "Governance denied this workforce action.",
+    });
+    await expect(
+      updateCells("supplier", "SUP-1", { name: "Acme" }, { userId: "u", canManage: true }),
+    ).rejects.toThrow("Governance denied this workforce action.");
+
+    expect(calls).toEqual([{ rowId: "SUP-1", data: { name: "Acme" } }]);
+  });
+
+  it("refuses a non-allow-listed field before writeThrough is ever reached", async () => {
+    const updateCells = updateCellsOf({ ok: true, message: "ok" });
+    await expect(
+      updateCells("supplier", "SUP-1", { taxId: "GB123" }, { userId: "u", canManage: true }),
+    ).rejects.toThrow('Field "taxId" is not editable');
+    expect(calls).toEqual([]);
+  });
+
+  it("refuses without canManage even when a write-through is configured", async () => {
+    const updateCells = updateCellsOf({ ok: true, message: "ok" });
+    await expect(
+      updateCells("supplier", "SUP-1", { name: "Acme" }, { userId: "u", canManage: false }),
+    ).rejects.toThrow("You do not have permission to edit this data");
+    expect(calls).toEqual([]);
   });
 });
 

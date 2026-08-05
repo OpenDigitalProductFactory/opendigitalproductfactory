@@ -5,6 +5,12 @@ import type { AddressWithHierarchy } from "@/lib/address-types";
 type Props = {
   employee: EmployeeProfileRecord | null;
   addresses?: AddressWithHierarchy[];
+  /**
+   * Write affordance for this record (the Edit door). Passed in rather than
+   * rendered here so the panel stays a server component and the caller owns the
+   * capability check — a user without manage_user_lifecycle gets no control at all.
+   */
+  action?: React.ReactNode;
 };
 
 function formatAddress(a: AddressWithHierarchy["address"]): string {
@@ -21,19 +27,22 @@ function formatAddress(a: AddressWithHierarchy["address"]): string {
   return parts.join(", ");
 }
 
-export function EmployeeProfilePanel({ employee, addresses = [] }: Props) {
+export function EmployeeProfilePanel({ employee, addresses = [], action = null }: Props) {
   const primaryAddress = addresses.find((a) => a.isPrimary) ?? addresses[0] ?? null;
   return (
     <section className="rounded-lg bg-[var(--dpf-surface-1)] border border-[var(--dpf-border)] p-4 space-y-4">
-      <div>
-        <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Employee profile</h2>
-        <p className="text-xs text-[var(--dpf-muted)] mt-1">
-          Current portal-facing workforce record and lifecycle dates.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-[var(--dpf-text)]">Employee profile</h2>
+          <p className="text-xs text-[var(--dpf-muted)] mt-1">
+            Current portal-facing workforce record and lifecycle dates.
+          </p>
+        </div>
+        {action}
       </div>
 
       {!employee ? (
-        <p className="text-sm text-[var(--dpf-muted)]">Select or link an employee profile to view detailed workforce data.</p>
+        <p className="text-sm text-[var(--dpf-muted)]">Select a person from the directory to see their record.</p>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="rounded-md border border-[var(--dpf-border)] bg-[var(--dpf-surface-2)] p-3 space-y-2">

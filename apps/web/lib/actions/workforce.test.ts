@@ -60,6 +60,7 @@ import { resolveGovernedAction } from "@/lib/governance-resolver";
 import {
   createEmployeeProfile,
   recordEmploymentLifecycleEvent,
+  updateEmployeeProfile,
 } from "./workforce";
 import {
   validateEmployeeProfileInput,
@@ -235,6 +236,81 @@ describe("createEmployeeProfile", () => {
       ],
       skipDuplicates: true,
     });
+  });
+});
+
+// BI-00CB9CCC regression. updateEmployeeProfile used to write every optional field
+// with a blanket trimOptional(input.x), so a caller that did not mention a field
+// wiped it — including userId, which unlinks the person's login account. The edit
+// form omits several of these, and the form only became reachable in this change,
+// so the wipe would have shipped as a live data-loss bug.
+describe("updateEmployeeProfile — PATCH semantics", () => {
+  const stored = {
+    id: "emp-db-1",
+    userId: "user-42",
+    middleName: "Augusta",
+    workEmail: "ada@example.com",
+    personalEmail: "ada@home.example",
+    phoneWork: "+14155551234",
+    phoneMobile: null,
+    phoneEmergency: null,
+    employmentTypeId: "et-permanent",
+    departmentId: "dept-people",
+    positionId: "pos-hr",
+    managerEmployeeId: "emp-db-2",
+    dottedLineManagerId: "emp-db-3",
+    workLocationId: "loc-remote",
+    timezone: "America/Chicago",
+    startDate: new Date("2026-03-13"),
+    confirmationDate: new Date("2026-03-20"),
+    endDate: null,
+  };
+
+  it("keeps fields the caller never mentioned instead of nulling them", async () => {
+    vi.mocked(prisma.employeeProfile.findUnique).mockResolvedValue(stored as never);
+    vi.mocked(prisma.employeeProfile.update).mockResolvedValue({} as never);
+
+    // A minimal edit: rename only. Every other field is absent from the input.
+    const result = await updateEmployeeProfile({
+      employeeProfileId: "emp-db-1",
+      employeeId: "EMP-001",
+      firstName: "Ada",
+      lastName: "King",
+      status: "active",
+    });
+
+    expect(result.ok).toBe(true);
+    const data = vi.mocked(prisma.employeeProfile.update).mock.calls[0][0].data;
+    expect(data.userId).toBe("user-42"); // login link survives
+    expect(data.middleName).toBe("Augusta");
+    expect(data.employmentTypeId).toBe("et-permanent");
+    expect(data.dottedLineManagerId).toBe("emp-db-3");
+    expect(data.timezone).toBe("America/Chicago");
+    expect(data.confirmationDate).toEqual(new Date("2026-03-20"));
+    expect(data.startDate).toEqual(new Date("2026-03-13"));
+  });
+
+  it("still clears a field when the caller explicitly passes null", async () => {
+    vi.mocked(prisma.employeeProfile.findUnique).mockResolvedValue(stored as never);
+    vi.mocked(prisma.employeeProfile.update).mockResolvedValue({} as never);
+
+    const result = await updateEmployeeProfile({
+      employeeProfileId: "emp-db-1",
+      employeeId: "EMP-001",
+      firstName: "Ada",
+      lastName: "Lovelace",
+      status: "active",
+      dottedLineManagerId: null,
+      timezone: null,
+      endDate: null,
+    });
+
+    expect(result.ok).toBe(true);
+    const data = vi.mocked(prisma.employeeProfile.update).mock.calls[0][0].data;
+    expect(data.dottedLineManagerId).toBeNull();
+    expect(data.timezone).toBeNull();
+    // ...while an untouched field is still preserved.
+    expect(data.employmentTypeId).toBe("et-permanent");
   });
 });
 
