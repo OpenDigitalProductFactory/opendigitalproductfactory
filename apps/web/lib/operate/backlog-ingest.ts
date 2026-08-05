@@ -28,6 +28,13 @@ import {
   type BacklogScopeKind,
   type DemandStage,
 } from "@/lib/explore/backlog";
+import {
+  findImplementationCandidates,
+  type ImplementationCandidate,
+} from "@/lib/operate/implementation-scan";
+import { listRepoSourceFiles } from "@/lib/operate/repo-file-inventory";
+
+const defaultListRepoFiles = listRepoSourceFiles;
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -78,6 +85,22 @@ export interface BacklogIngestResult {
   id: string;
   /** false = matched an existing non-terminal item (deduped, occurrence bumped). */
   created: boolean;
+  /**
+   * Files that may ALREADY implement what this item proposes to build
+   * (BI-1A1EC5EC). Advisory — the item is still created. Empty when the item is
+   * not build-intent, when nothing scored, or when no inventory was available.
+   *
+   * Existing dedup answers "is there another BI for this?"; this answers the
+   * different question "does this already EXIST?" A backlog sweep cannot: it
+   * searches backlog rows, not source.
+   *
+   * OPTIONAL on purpose. `ingestBacklogItem` always populates it, but the many
+   * test fakes and injected ingest functions across the codebase legitimately
+   * return only the identity fields. Requiring an advisory that a fake does not
+   * produce would make every one of them a type error — the field is metadata
+   * about the filing, not part of the filing contract.
+   */
+  implementationCandidates?: ImplementationCandidate[];
 }
 
 /**
@@ -102,6 +125,12 @@ export interface BacklogIngestDeps {
   store?: IngestBacklogStore;
   /** Override knowledge indexing (default: fire-and-forget semantic-memory store). */
   indexKnowledge?: (args: { entityId: string; title: string; content: string }) => void;
+  /**
+   * Repo file inventory for the implementation scan (BI-1A1EC5EC). Injectable so
+   * tests need no filesystem, and so a deployment with no source checkout simply
+   * returns nothing rather than failing to file.
+   */
+  listRepoFiles?: () => Promise<string[]>;
 }
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
@@ -314,7 +343,14 @@ export async function ingestBacklogItem(
         data: { occurrenceCount: { increment: 1 }, lastSeenAt: new Date() },
       });
       await writeOriginActivity(existing.id, false);
-      return { itemId: existing.itemId, id: existing.id, created: false };
+      // A recurrence of a known origin needs no scan — the item already exists
+      // and was already advised when it was first filed.
+      return {
+        itemId: existing.itemId,
+        id: existing.id,
+        created: false,
+        implementationCandidates: [],
+      };
     }
   }
 
@@ -383,5 +419,40 @@ export async function ingestBacklogItem(
   }
   indexKnowledge({ entityId: item.itemId, title: input.title, content: input.body ?? "" });
 
-  return { itemId: item.itemId, id: item.id, created: true };
+  // ─── Implementation scan (BI-1A1EC5EC) ──────────────────────────────────────
+  // Runs AFTER the create, deliberately. It is advisory, and a filing surface
+  // that could fail because a heuristic threw would be a worse defect than the
+  // one being fixed. Any error is swallowed to an empty result.
+  //
+  // Recorded as an activity row so the advice survives the tool response — the
+  // whole failure mode this addresses is a check whose output vanished.
+  let implementationCandidates: ImplementationCandidate[] = [];
+  try {
+    const files = deps.listRepoFiles ? await deps.listRepoFiles() : await defaultListRepoFiles();
+    if (files.length > 0) {
+      implementationCandidates = findImplementationCandidates(input.title, files, {
+        workType: input.workType,
+      });
+    }
+    if (implementationCandidates.length > 0) {
+      await store.backlogItemActivity.create({
+        data: {
+          backlogItemId: item.id,
+          kind: "intake_origin",
+          summary: `Possible existing implementation: ${implementationCandidates[0].path}`,
+          payload: {
+            createdBy: "implementation-scan",
+            advisory: true,
+            candidates: implementationCandidates,
+          },
+          ...(input.submittedById ? { recordedById: input.submittedById } : {}),
+          ...(input.agentId ? { recordedByAgentId: input.agentId } : {}),
+        },
+      });
+    }
+  } catch {
+    implementationCandidates = [];
+  }
+
+  return { itemId: item.itemId, id: item.id, created: true, implementationCandidates };
 }

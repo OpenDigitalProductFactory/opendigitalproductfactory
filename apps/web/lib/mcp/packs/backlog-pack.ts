@@ -134,7 +134,10 @@ async function createBacklogItem(
         },
       });
     }
-    return { success: true, entityId: result.itemId, message: `Created backlog item ${result.itemId}` };
+    const { withScanAdvisory } = await import("@/lib/operate/implementation-scan");
+    const created = `Created backlog item ${result.itemId}`;
+    const message = withScanAdvisory(created, result.implementationCandidates ?? []);
+    return { success: true, entityId: result.itemId, message };
   } catch (err) {
     const msg =
       err instanceof Error
