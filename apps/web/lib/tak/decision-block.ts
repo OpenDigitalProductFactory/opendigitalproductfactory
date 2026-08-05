@@ -193,13 +193,37 @@ export function formatDecisionSentinel(decision: CoworkerDecision): string {
 // noun disjunction ("tagged for reliability or incidents?", which has no comma)
 // — a wrong button is worse than no button, so we only act on the strong signal.
 
-// Lead-in phrases that precede the actual options in a choice question.
+// Lead-in phrases that precede the actual options in a choice question. Applied
+// to the question head AND to each split clause: a coworker routinely repeats the
+// lead-in on the second option ("…, or would you prefer to review the data?"), and
+// without stripping it the button reads "Would you prefer to review the data"
+// instead of the imperative "Review the data".
 const PROSE_LEADIN_RE =
-  /^(?:what(?:'s| is) your call|what would you like(?: me to do)?|which would you prefer|would you like me to|do you want me to|want me to|should i|shall i|shall we|should we|do you want to|do you want)\b[\s,:—–-]*/i;
+  /^(?:what(?:'s| is) your call|what would you like(?: me to do)?|which would you prefer|would you (?:like me to|prefer(?: to)?|rather)|do you want me to|want me to|should i|shall i|shall we|should we|do you want to|do you want)\b[\s,:—–-]*/i;
 
 const PROSE_OPTION_PREFIX_RE = /^(?:perhaps|maybe|instead|else|or|either)\s+/i;
 
 const PROSE_LABEL_MAX = 56;
+
+/**
+ * Upper bound on a single option clause (BI-AE7058FB).
+ *
+ * This was 90, which rejected how coworkers actually phrase a substantive choice.
+ * Observed live on /customer during the EP-UX-AUDITOR portal survey: "…start by
+ * analyzing the onboarding journey for your highest-value accounts to surface the
+ * most critical friction points, or would you prefer to review the underlying
+ * customer data and engagement metrics first?" — a textbook two-option closeout
+ * whose first clause is ~117 characters. The 90-cap rejected it, so the whole
+ * decision returned null and the human got no buttons at all.
+ *
+ * The cap is not what protects against a wrong button — the STRUCTURAL guards do:
+ * the comma-or must sit inside the FINAL question, there must be 2-3 parts, no
+ * clause may contain sentence punctuation, and labels must be distinct. Display
+ * length is already handled separately by PROSE_LABEL_MAX truncation. So this
+ * bound exists only to reject runaway prose, and 160 leaves real closeouts room
+ * while still refusing anything paragraph-sized.
+ */
+const PROSE_CLAUSE_MAX = 160;
 
 /** Isolate the final sentence when the trimmed content ends with a question. */
 function finalQuestion(content: string): string | null {
@@ -239,11 +263,14 @@ export function deriveDecisionFromProse(content: string): CoworkerDecision | nul
   rawParts.forEach((part, index) => {
     const clause = part
       .replace(PROSE_OPTION_PREFIX_RE, "")
+      // A repeated lead-in on the second option ("or would you prefer to …")
+      // would otherwise become the button text verbatim.
+      .replace(PROSE_LEADIN_RE, "")
       .replace(/\s+/g, " ")
       .replace(/[.,;:\s]+$/, "")
       .trim();
     // Guardrails: each option must be a clean, sentence-free clause with letters.
-    if (clause.length < 4 || clause.length > 90) return;
+    if (clause.length < 4 || clause.length > PROSE_CLAUSE_MAX) return;
     if (!/[a-z]/i.test(clause)) return;
     if (/[.!?]/.test(clause)) return; // a period/bang means we split across sentences
     const value = clause.charAt(0).toUpperCase() + clause.slice(1);
