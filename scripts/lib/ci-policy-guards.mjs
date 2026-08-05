@@ -216,6 +216,13 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "scripts/lib/agent-identity.test.mjs",
         "tests/release/local-ci-gate-contract.test.mjs",
         "tests/release/pregate-node-gate-contract.test.mjs",
+        // BI-B1065D41: the gate's console policy (what reaches stdout, EPIPE
+        // tolerance, the bounded verdict block) and the pregate:status verdict
+        // reader. This inventory is hand-enumerated — there is no glob — so a
+        // test file omitted here simply never runs in CI, and a green PR says
+        // nothing about it.
+        "scripts/lib/pregate-console.test.mjs",
+        "scripts/lib/pregate-status.test.mjs",
       ),
       node("scripts/runtime-artifact-janitor.mjs", "--help"),
     ]),
@@ -275,6 +282,14 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
       node("--test", "packages/dpf-skill-pack/hooks/root-clone-guard.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/compose-guard.test.mjs"),
       node("--test", "packages/dpf-skill-pack/hooks/worktree-create.test.mjs"),
+      // BI-B1065D41 / BI-1C1483C6: the sixth PreToolUse guard and the
+      // SessionStart readiness banner. Both are hand-added here for the same
+      // reason as every entry above — an unlisted test file never runs.
+      node(
+        "--test",
+        "packages/dpf-skill-pack/hooks/pregate-invocation-guard.test.mjs",
+        "packages/dpf-skill-pack/hooks/worktree-readiness-banner.test.mjs",
+      ),
       node(
         "--test",
         "packages/dpf-skill-pack/hooks/plugin-hooks-wired.test.mjs",
