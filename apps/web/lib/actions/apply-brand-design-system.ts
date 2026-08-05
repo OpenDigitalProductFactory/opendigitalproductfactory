@@ -3,6 +3,7 @@
 import { prisma } from "@dpf/db";
 import { isBrandDesignSystem, type BrandDesignSystem } from "@/lib/brand/types";
 import { designSystemToThemeTokens } from "@/lib/brand/apply";
+import { requireCapability } from "@/lib/actions/shared/guards";
 
 export type ApplyResult =
   | { success: true }
@@ -50,6 +51,32 @@ export async function applyBrandDesignSystem(
   organizationId: string,
   overrides?: Partial<Omit<BrandDesignSystem, "version" | "overrides">>,
 ): Promise<ApplyResult> {
+  // Authority check FIRST — this writes the organization's visual identity across the
+  // whole portal (BI-6197FFE3). `manage_branding` is the capability the MCP brand tools
+  // already require (lib/mcp/packs/public-web-design-pack.ts), so this closes a
+  // per-transport gap rather than inventing a new rule: the coworker calling the tool
+  // was checked, a direct POST to this action was not.
+  //
+  // The /admin layout enforces view_admin, but a layout guard does NOT protect a server
+  // action — there is no middleware in apps/web, so the body runs before any
+  // render-time redirect. manage_branding and view_admin are both ["HR-000"], so no
+  // user who can reach the branding page loses the ability to apply.
+  //
+  // `organizationId` stays caller-supplied: every caller passes the single install org
+  // resolved server-side, and with authority now restricted to HR-000 — who can rebrand
+  // the install regardless — narrowing it further buys nothing. Revisit if this action
+  // is ever exposed to a broader role or a multi-org install.
+  //
+  // Returned rather than thrown: every other failure here returns ApplyResult, and the
+  // sole caller (BrandExtractionSection) checks `result.success` without a try/catch, so
+  // throwing would break this module's contract and surface as an unhandled rejection.
+  // The refusal is identical either way — nothing below runs.
+  try {
+    await requireCapability("manage_branding");
+  } catch {
+    return { success: false, error: "You do not have permission to change branding." };
+  }
+
   const org = await prisma.organization.findUnique({
     where: { id: organizationId },
     select: { designSystem: true },
