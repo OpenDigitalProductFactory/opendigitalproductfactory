@@ -18,7 +18,7 @@ import {
   scoreRetrieval,
   scoreDimension,
 } from "./eval-scoring";
-import { BACKGROUND_EVAL_ENDPOINT_TYPES } from "./provider-eligibility";
+import { BACKGROUND_EVAL_ENDPOINT_TYPES, MODEL_ROUTING_ENDPOINT_TYPES } from "./provider-eligibility";
 
 // ── Infrastructure Error Classifier (BI-INST-008 circuit breaker) ──────────
 //
@@ -37,6 +37,18 @@ const INFRASTRUCTURE_ERROR_PATTERNS: RegExp[] = [
   /socket hang up/i,
   /Docker Model Runner is not running/i,
   /could not resolve host/i,
+  // Capacity/admission timeouts describe a BUSY engine, not a broken model.
+  // A local engine holding a 20GB model can exceed the admission budget purely
+  // from load or a cold weight-load, and the same model answers a direct
+  // request seconds later. Retiring on this stranded the bundled model for five
+  // weeks on a live install: "Auto-retired: inference admission timeout on
+  // local engine after 120000ms" (BI-32426CA0). The existing
+  // /operation was aborted due to timeout/ pattern did not match this wording.
+  /admission timeout/i,
+  /timed? ?out after \d+ms/i,
+  /request timeout/i,
+  /engine is busy/i,
+  /capacity/i,
 ];
 
 /**
@@ -50,6 +62,49 @@ const INFRASTRUCTURE_ERROR_PATTERNS: RegExp[] = [
  */
 export function errorLooksLikeInfrastructure(error: string | null): boolean {
   return error !== null && INFRASTRUCTURE_ERROR_PATTERNS.some((re) => re.test(error));
+}
+
+/**
+ * Which sensitivity classes would lose their last routable endpoint if this
+ * profile were retired.
+ *
+ * Mirrors the candidate query in `queryEndpointManifests`
+ * (apps/web/lib/routing/loader.ts) exactly — modelStatus active|degraded,
+ * retiredAt null, provider active|degraded, provider endpointType routable.
+ * A transcription/embedding endpoint therefore never counts as cover, which
+ * matters: on the install that motivated this, the only other provider holding
+ * `restricted` clearance was a transcription endpoint that can never serve a
+ * chat request.
+ *
+ * Pure-ish and exported so the guard is unit-testable without driving a full
+ * eval run.
+ */
+export async function sensitivityClassesLeftUncoveredByRetiring(
+  providerId: string,
+  modelId: string,
+): Promise<string[]> {
+  const self = await prisma.modelProfile.findUnique({
+    where: { providerId_modelId: { providerId, modelId } },
+    select: { id: true, provider: { select: { sensitivityClearance: true } } },
+  });
+  const covered = self?.provider?.sensitivityClearance ?? [];
+  if (covered.length === 0) return [];
+
+  const peers = await prisma.modelProfile.findMany({
+    where: {
+      id: { not: self!.id },
+      modelStatus: { in: ["active", "degraded"] },
+      retiredAt: null,
+      provider: {
+        status: { in: ["active", "degraded"] },
+        endpointType: { in: [...MODEL_ROUTING_ENDPOINT_TYPES] },
+      },
+    },
+    select: { provider: { select: { sensitivityClearance: true } } },
+  });
+
+  const peerCover = new Set(peers.flatMap((p) => p.provider?.sensitivityClearance ?? []));
+  return covered.filter((level) => !peerCover.has(level));
 }
 
 // ── Config-gap Error Classifier ────────────────────────────────────────────
@@ -672,7 +727,24 @@ export async function runDimensionEval(
   const looksLikeInfrastructure = errorLooksLikeInfrastructure(firstError);
   const looksLikeConfigGap = errorLooksLikeConfigGap(firstError);
 
-  if (allInconclusive && firstError && !looksLikeInfrastructure && !looksLikeConfigGap) {
+  // Last line of defence, independent of what the error text looks like: never
+  // auto-retire the last routable endpoint for a sensitivity class. Retiring is
+  // load-bearing in a way the classifier above cannot see — routing filters
+  // candidates on `retiredAt: null`, so a retirement does not merely downrank an
+  // endpoint, it removes it. On an install where one provider is the sole holder
+  // of a clearance (typically the bundled local model for `restricted`), that
+  // silently leaves the class with zero eligible endpoints and every request in
+  // it fails with the generic "No AI model can handle this request right now"
+  // (BI-32426CA0). Degrade instead: the model keeps ranking last but stays
+  // reachable, and the operator gets a warning naming the exposed class.
+  const strandedClasses = allInconclusive && firstError
+    ? await sensitivityClassesLeftUncoveredByRetiring(providerId, modelId)
+    : [];
+
+  if (
+    allInconclusive && firstError && !looksLikeInfrastructure && !looksLikeConfigGap &&
+    strandedClasses.length === 0
+  ) {
     await prisma.modelProfile.update({
       where: { providerId_modelId: { providerId, modelId } },
       data: {
@@ -682,6 +754,14 @@ export async function runDimensionEval(
       },
     });
     console.log(`[eval-runner] Auto-retired ${providerId}/${modelId}: all tests failed — ${firstError.slice(0, 100)}`);
+  } else if (allInconclusive && firstError && strandedClasses.length > 0) {
+    await prisma.modelProfile.update({
+      where: { providerId_modelId: { providerId, modelId } },
+      data: { modelStatus: "degraded" },
+    });
+    console.warn(
+      `[eval-runner] All dimensions inconclusive for ${providerId}/${modelId} but it is the LAST routable endpoint cleared for [${strandedClasses.join(", ")}] — degrading instead of retiring, so that sensitivity class keeps an eligible endpoint. Error: ${firstError.slice(0, 200)}`,
+    );
   } else if (allInconclusive && (looksLikeInfrastructure || looksLikeConfigGap)) {
     console.warn(
       `[eval-runner] All dimensions inconclusive for ${providerId}/${modelId} but error looks like ${looksLikeConfigGap ? "a config gap" : "infrastructure"} — NOT retiring. Error: ${firstError?.slice(0, 200)}`,

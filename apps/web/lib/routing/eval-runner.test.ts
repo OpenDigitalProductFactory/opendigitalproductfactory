@@ -12,6 +12,9 @@ const evalState = vi.hoisted(() => ({
   reapedCount: 0,
   // BI-C8164664: recency-cooldown fixture
   lastEvalAt: null as Date | null,
+  // BI-32426CA0: last-endpoint-standing guard fixtures
+  selfClearance: ["public", "internal", "confidential", "restricted"] as string[],
+  peerClearances: [] as string[][],
 }));
 
 vi.mock("@/lib/ai-inference", () => {
@@ -35,10 +38,18 @@ vi.mock("@dpf/db", () => ({
   prisma: {
     modelProfile: {
       findUnique: vi.fn(async () => ({
+        id: "self-profile-id",
         evalCount: 0,
         modelStatus: "active",
         lastEvalAt: evalState.lastEvalAt,
+        // Clearance of the profile under test, for the last-endpoint-standing
+        // guard (BI-32426CA0). Extra keys are ignored by the other suites.
+        provider: { sensitivityClearance: evalState.selfClearance },
       })),
+      // Peer endpoints that would still be routable if this profile retired.
+      findMany: vi.fn(async () =>
+        evalState.peerClearances.map((c) => ({ provider: { sensitivityClearance: c } })),
+      ),
       update: vi.fn(async (args: { data: Record<string, unknown> }) => {
         evalState.profileUpdates.push(args.data);
         return {};
@@ -77,9 +88,53 @@ import {
   errorEndsEvalCycle,
   resolveEvaluatedToolUse,
   runDimensionEval,
+  sensitivityClassesLeftUncoveredByRetiring,
   TOOL_USE_MIN_FIDELITY,
   type DriftResult,
 } from "./eval-runner";
+
+// BI-32426CA0. Retiring is not a downrank — routing filters candidates on
+// `retiredAt: null`, so retiring the sole holder of a clearance leaves that
+// sensitivity class with zero eligible endpoints and every request in it fails
+// with the generic "No AI model can handle this request right now".
+describe("sensitivityClassesLeftUncoveredByRetiring (last-endpoint-standing guard)", () => {
+  beforeEach(() => {
+    evalState.selfClearance = ["public", "internal", "confidential", "restricted"];
+    evalState.peerClearances = [];
+  });
+
+  it("reports the classes only this endpoint covers", async () => {
+    // The live shape: bundled local model is the only holder of `restricted`;
+    // a cloud peer covers everything below it.
+    evalState.peerClearances = [["public", "internal", "confidential"]];
+    const stranded = await sensitivityClassesLeftUncoveredByRetiring("local", "qwen3.6");
+    expect(stranded).toEqual(["restricted"]);
+  });
+
+  it("reports nothing when a peer covers every class", async () => {
+    evalState.peerClearances = [["public", "internal", "confidential", "restricted"]];
+    const stranded = await sensitivityClassesLeftUncoveredByRetiring("local", "qwen3.6");
+    expect(stranded).toEqual([]);
+  });
+
+  it("reports every class when no routable peer remains", async () => {
+    evalState.peerClearances = [];
+    const stranded = await sensitivityClassesLeftUncoveredByRetiring("local", "qwen3.6");
+    expect(stranded).toEqual(["public", "internal", "confidential", "restricted"]);
+  });
+
+  it("unions cover across several peers", async () => {
+    evalState.peerClearances = [["public"], ["internal"], ["confidential", "restricted"]];
+    const stranded = await sensitivityClassesLeftUncoveredByRetiring("local", "qwen3.6");
+    expect(stranded).toEqual([]);
+  });
+
+  it("does not guard a provider that holds no clearance at all", async () => {
+    evalState.selfClearance = [];
+    const stranded = await sensitivityClassesLeftUncoveredByRetiring("x", "y");
+    expect(stranded).toEqual([]);
+  });
+});
 
 describe("resolveEvaluatedToolUse — calibrate half (BI-DFC30977)", () => {
   const dim = (newScore: number, inconclusive = false) => ({ newScore, inconclusive });
@@ -194,6 +249,26 @@ describe("errorLooksLikeInfrastructure (BI-INST-008 circuit breaker)", () => {
     expect(errorLooksLikeInfrastructure(
       "Network error calling local: The operation was aborted due to timeout",
     )).toBe(true);
+  });
+
+  // BI-32426CA0. Verbatim retiredReason observed on a live install; it retired
+  // the bundled local model for five weeks while that model answered direct
+  // curl requests fine. The pre-existing
+  // /operation was aborted due to timeout/ pattern did not match this wording.
+  it("classifies a local-engine admission timeout as infrastructure", () => {
+    expect(errorLooksLikeInfrastructure(
+      "inference admission timeout on local engine after 120000ms (origin=interactive, provider=local)",
+    )).toBe(true);
+  });
+  it("classifies a generic 'timed out after Nms' as infrastructure", () => {
+    expect(errorLooksLikeInfrastructure(
+      "Provider call timed out after 60000ms",
+    )).toBe(true);
+  });
+  it("still treats a genuine model failure as retirable", () => {
+    expect(errorLooksLikeInfrastructure(
+      "404 model_not_found: The model 'gpt-4-vision-preview' has been deprecated",
+    )).toBe(false);
   });
   it("classifies generic 'network error' as infrastructure", () => {
     expect(errorLooksLikeInfrastructure(
