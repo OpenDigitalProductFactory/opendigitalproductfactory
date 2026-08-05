@@ -5,8 +5,7 @@
   "scope": {
     "files": [
       "apps/web/app/(shell)/platform/ai/right-now/page.tsx",
-      "apps/web/components/platform/WorkforceNowShell.tsx",
-      "apps/web/components/platform/platform-nav.ts"
+      "apps/web/components/platform/WorkforceNowShell.tsx"
     ]
   },
   "evidence": {

@@ -5,6 +5,13 @@
 - **Decisions:** DI-621EB7CA2134 (information design — workforce-primary, aggregate-safe, high confidence) · DI-B78B2A014223 (new lean surface over augmenting the Operations Map)
 - **Date:** 2026-08-05
 
+## Backlog coverage
+- Decision: atomic
+- Parent: BI-1A68257F
+- Receipt: cmsgg9w490a9e01o4fnaknmow
+- Rationale: The view is one cohesive surface — the action-outcome map + workforce-activity loaders produce nothing user-visible alone, the API exposes only what they compute, and the page renders nothing without both. No phase ships independent operator value, so the plan is atomic.
+- Dependencies: none
+
 ## Problem
 The AI coworker workforce is "like people," but the portal had no view of **what
 the coworkers are doing and have accomplished**. Resource metrics already exist
