@@ -8,6 +8,7 @@ import {
   ageInDays,
   decideBuildImage,
   decideComposeProject,
+  decideVolumeReclaim,
   isLocalCiBuildImage,
   planReap,
 } from "./runtime-artifact-janitor.mjs";
@@ -132,6 +133,15 @@ test("an orphaned dpf-<topic> project (no live worktree) past threshold is REAPE
   assert.match(d.reason, /orphaned worktree compose project/);
 });
 
+test("a project with a running container is NEVER reaped, even when ancient (in use now)", () => {
+  const d = decideComposeProject(
+    { projectName: "dpf-long-lived-devstack", newestContainerCreatedMs: daysAgo(99), hasRunningContainer: true },
+    { nowMs: NOW, liveWorktreeProjectNames: [] },
+  );
+  assert.equal(d.verdict, "KEEP");
+  assert.match(d.reason, /running container/);
+});
+
 test("a foreign (non-dpf) project past threshold is REAPED and labeled foreign", () => {
   const d = decideComposeProject(
     { projectName: "some-other-stack", newestContainerCreatedMs: daysAgo(10) },
@@ -198,4 +208,30 @@ test("planReap tolerates empty/missing inputs", () => {
   assert.deepEqual(plan.projectDecisions, []);
   assert.deepEqual(plan.imagesToReap, []);
   assert.deepEqual(plan.projectsToReap, []);
+});
+
+// ── decideVolumeReclaim ───────────────────────────────────────────────────────
+
+test("reclaims volumes for a stray dpf-<topic> project", () => {
+  const r = decideVolumeReclaim("dpf-provider-openrouter-policy");
+  assert.equal(r.ok, true);
+  assert.match(r.reason, /orphaned and reclaimable/);
+});
+
+test("reclaims volumes for a foreign compose project", () => {
+  assert.equal(decideVolumeReclaim("some-foreign-project").ok, true);
+});
+
+test("NEVER reclaims the root dpf project's volumes (never-wipe-db, case-insensitive)", () => {
+  for (const name of [ROOT_COMPOSE_PROJECT, "dpf", "DPF", " Dpf "]) {
+    const r = decideVolumeReclaim(name);
+    assert.equal(r.ok, false, `expected ${JSON.stringify(name)} refused`);
+    assert.match(r.reason, /root dpf project/);
+  }
+});
+
+test("refuses an empty/nullish project name rather than reclaiming broadly", () => {
+  for (const name of ["", "   ", null, undefined]) {
+    assert.equal(decideVolumeReclaim(name).ok, false);
+  }
 });

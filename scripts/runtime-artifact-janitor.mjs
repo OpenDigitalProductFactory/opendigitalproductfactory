@@ -44,7 +44,7 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { DEFAULT_STALENESS_DAYS, planReap } from "./lib/runtime-artifact-janitor.mjs";
+import { DEFAULT_STALENESS_DAYS, decideVolumeReclaim, planReap } from "./lib/runtime-artifact-janitor.mjs";
 import { deriveWorktreeComposeProjectName } from "./lib/compose-safety.mjs";
 
 // ── Arg parse ────────────────────────────────────────────────────────────────
@@ -128,30 +128,72 @@ function discoverBuildImages() {
 }
 
 /**
- * Discover compose projects and the creation time of their newest container.
- * Uses `docker ps -a` with the compose project label so we see stopped projects too.
+ * Discover compose projects and the newest activity timestamp of each.
+ *
+ * Two sources are unioned, because a stray project can outlive its containers:
+ *   1. `docker ps -a` container labels — sees running AND stopped projects.
+ *   2. `docker volume ls` volume labels + each volume's CreatedAt — sees projects
+ *      whose containers are already gone (e.g. `docker container prune` ran) but
+ *      whose named volumes still hold disk. Container-only discovery is blind to
+ *      these, which is exactly how the observed volume bloat became invisible:
+ *      dead dev stacks with no container but a lingering pgdata + node_modules.
+ *
+ * The staleness signal is the NEWEST timestamp seen across a project's containers
+ * and volumes (so a project stays "fresh" while any part of it is recent).
  */
 function discoverComposeProjects() {
-  const out = runCapture("docker", [
+  const newestByProject = new Map();
+  const runningProjects = new Set();
+  // NB: never `line.trim()` before splitting — when the project label is empty the
+  // line begins with a tab, and trimming would shift the NEXT field into the project
+  // slot (a container with no compose label would masquerade as a project named after
+  // its CreatedAt). Split the raw line; trim individual fields.
+  const bump = (projectName, ms) => {
+    const key = (projectName ?? "").trim();
+    if (!key) return;
+    const value = Number.isFinite(ms) ? ms : 0;
+    const prev = newestByProject.get(key);
+    if (prev === undefined || value > prev) newestByProject.set(key, value);
+  };
+
+  const containers = runCapture("docker", [
     "ps",
     "-a",
     "--format",
-    "{{.Label \"com.docker.compose.project\"}}\t{{.CreatedAt}}",
+    "{{.Label \"com.docker.compose.project\"}}\t{{.CreatedAt}}\t{{.State}}",
   ]);
-  const newestByProject = new Map();
-  for (const line of out.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed) continue;
-    const [projectName, createdAt] = trimmed.split("\t");
-    if (!projectName) continue; // containers not part of a compose project
-    const createdMs = Date.parse(createdAt);
-    const ms = Number.isFinite(createdMs) ? createdMs : 0;
-    const prev = newestByProject.get(projectName);
-    if (prev === undefined || ms > prev) newestByProject.set(projectName, ms);
+  for (const line of containers.split("\n")) {
+    if (!line) continue;
+    const [projectName, createdAt, state] = line.split("\t");
+    bump(projectName, Date.parse((createdAt || "").trim()));
+    if ((state || "").trim() === "running") {
+      const key = (projectName || "").trim();
+      if (key) runningProjects.add(key);
+    }
   }
+
+  // Volume-labelled projects (may include ones with no surviving container).
+  const volumes = runCapture("docker", [
+    "volume",
+    "ls",
+    "--format",
+    "{{.Name}}\t{{.Label \"com.docker.compose.project\"}}",
+  ]);
+  for (const line of volumes.split("\n")) {
+    if (!line) continue;
+    const [name, projectName] = line.split("\t");
+    if (!(projectName || "").trim()) continue; // anonymous / non-compose volumes are out of scope
+    // Fetch this volume's creation time so a volume-only project has a staleness signal.
+    const inspect = spawnSync("docker", ["volume", "inspect", name, "--format", "{{.CreatedAt}}"], {
+      encoding: "utf8",
+    });
+    bump(projectName, inspect.status === 0 ? Date.parse((inspect.stdout || "").trim()) : 0);
+  }
+
   return [...newestByProject.entries()].map(([projectName, newestContainerCreatedMs]) => ({
     projectName,
     newestContainerCreatedMs,
+    hasRunningContainer: runningProjects.has(projectName),
   }));
 }
 
@@ -174,15 +216,52 @@ function reapImage(repository) {
   return { ok: res.status === 0, detail: (res.status === 0 ? res.stdout : res.stderr || "").trim() };
 }
 
+/** List the named volumes Docker labelled as belonging to `projectName`. */
+function discoverProjectVolumes(projectName) {
+  const res = spawnSync(
+    "docker",
+    ["volume", "ls", "-q", "--filter", `label=com.docker.compose.project=${projectName}`],
+    { encoding: "utf8" },
+  );
+  if (res.status !== 0) return [];
+  return (res.stdout ?? "")
+    .split("\n")
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
 function reapComposeProject(projectName) {
-  // `down` removes containers + networks for the project. We do NOT pass --volumes:
-  // volumes are explicitly out of scope (never-wipe-db rule). COMPOSE_PROJECT_NAME
-  // scopes the teardown to exactly this stray project.
+  // `down` removes containers + networks for the project. We deliberately do NOT
+  // pass --volumes here: a bare `docker compose -p <name> down` runs without the
+  // project's compose file in context, so `--volumes` would not know its named
+  // volumes anyway. Volume reclaim is a separate, label-scoped step below, gated
+  // by decideVolumeReclaim() (the never-wipe-db rule). COMPOSE_PROJECT_NAME scopes
+  // the teardown to exactly this stray project.
   const res = spawnSync("docker", ["compose", "-p", projectName, "down", "--remove-orphans"], {
     encoding: "utf8",
     env: { ...process.env, COMPOSE_PROJECT_NAME: projectName },
   });
-  return { ok: res.status === 0, detail: (res.status === 0 ? res.stdout : res.stderr || "").trim() };
+  const down = { ok: res.status === 0, detail: (res.status === 0 ? res.stdout : res.stderr || "").trim() };
+
+  // Reclaim the stray project's orphaned named volumes (pgdata / node_modules /
+  // per-package caches). Without this the project's storage lingers after its
+  // worktree is gone — the observed volume bloat. decideVolumeReclaim() refuses
+  // the root `dpf` project as defense-in-depth; the project reached here only
+  // because planReap already classified it a stray REAP candidate.
+  const volumes = [];
+  const gate = decideVolumeReclaim(projectName);
+  if (gate.ok) {
+    for (const name of discoverProjectVolumes(projectName)) {
+      const rm = spawnSync("docker", ["volume", "rm", name], { encoding: "utf8" });
+      volumes.push({
+        name,
+        ok: rm.status === 0,
+        detail: (rm.status === 0 ? rm.stdout : rm.stderr || "").trim(),
+      });
+    }
+  }
+
+  return { ...down, volumesSkippedReason: gate.ok ? undefined : gate.reason, volumes };
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -278,6 +357,12 @@ function renderText(plan, opts, applied) {
     }
     for (const r of applied.projects) {
       console.log(`  ${r.ok ? "tore down project " : "FAILED project "}${r.projectName}  ${r.detail}`);
+      for (const v of r.volumes ?? []) {
+        console.log(`    ${v.ok ? "reclaimed volume " : "FAILED volume "}${v.name}  ${v.detail}`);
+      }
+      if (r.volumesSkippedReason) {
+        console.log(`    volumes kept — ${r.volumesSkippedReason}`);
+      }
     }
   }
 
