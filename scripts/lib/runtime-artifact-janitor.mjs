@@ -34,6 +34,38 @@ export const ROOT_COMPOSE_PROJECT = "dpf";
 export const DEFAULT_STALENESS_DAYS = 7;
 export const MS_PER_DAY = 86_400_000;
 
+/**
+ * May the reaper delete the named Docker volumes of `projectName`?
+ *
+ * A compose `down --remove-orphans` reaps a stray project's containers + networks
+ * but never its named volumes (the `pgdata` / `node_modules` volumes), so a
+ * reaped project's storage lingers forever — the observed volume bloat: dead
+ * `dpf-<topic>` dev stacks whose worktree is long gone still holding ~1GB pgdata +
+ * node_modules each. Volume storage is only reclaimed when we ALSO remove those.
+ *
+ * This is the decision the "never-wipe-db rule" governs, so it is deliberately its
+ * own gate rather than an inline `--volumes` flag on `down`:
+ *   - A project only reaches here after decideComposeProject() already ruled it
+ *     REAP — not root, no live worktree, idle past the staleness threshold. Its
+ *     pgdata belongs to a branch that no longer exists on disk.
+ *   - The root `dpf` project is refused here too, as defense-in-depth independent
+ *     of the caller — deleting `dpf_pgdata` is the 2026-06-23 live-data revert
+ *     (BI-B61779DB), which the compose-safety guard also blocks.
+ *
+ * @param {string} projectName
+ * @returns {{ok:boolean, reason:string}}
+ */
+export function decideVolumeReclaim(projectName) {
+  const name = String(projectName ?? "").trim();
+  if (!name) {
+    return { ok: false, reason: "empty project name — refusing volume reclaim" };
+  }
+  if (name.toLowerCase() === ROOT_COMPOSE_PROJECT) {
+    return { ok: false, reason: "root dpf project — its volumes are never reclaimed" };
+  }
+  return { ok: true, reason: `stray project ${name} — its named volumes are orphaned and reclaimable` };
+}
+
 // `dpf-local-integration-<slug>-build` — the per-branch CI build image tag produced by
 // scripts/lib/local-integration-ci.mjs `dockerBuildTag()`.
 const CI_BUILD_IMAGE_RE = /^dpf-local-integration-[a-z0-9-]+-build$/i;
@@ -103,9 +135,12 @@ export function decideBuildImage(image, opts) {
  *   1. It is NOT the root `dpf` project (commandment: never touch root).
  *   2. It has no live worktree backing it. A `dpf-<topic>` project whose worktree is
  *      still present is active infrastructure — KEEP regardless of age.
- *   3. Its newest container is older than the staleness threshold.
+ *   3. It has no running container. A stack that is still `Up` is in use right now,
+ *      even if it was created long ago (a long-lived dev stack is created once and
+ *      runs for weeks) — KEEP regardless of age, independent of worktree naming.
+ *   4. Its newest container/volume is older than the staleness threshold.
  *
- * @param {{projectName:string, newestContainerCreatedMs:number}} project
+ * @param {{projectName:string, newestContainerCreatedMs:number, hasRunningContainer?:boolean}} project
  * @param {{
  *   nowMs:number,
  *   stalenessDays?:number,
@@ -131,6 +166,10 @@ export function decideComposeProject(project, opts) {
 
   if (live.has(name)) {
     return { verdict: "KEEP", reason: `backed by a live worktree (${name})`, ageDays: 0 };
+  }
+
+  if (project?.hasRunningContainer) {
+    return { verdict: "KEEP", reason: `has a running container (${name}) — in use`, ageDays: 0 };
   }
 
   const ageDays = ageInDays(project.newestContainerCreatedMs, opts.nowMs);
