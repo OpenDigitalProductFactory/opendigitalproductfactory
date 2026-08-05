@@ -1,11 +1,11 @@
 {
   "generator": "apps/web/scripts/build-route-shells.ts",
-  "pageRouteCount": 318,
+  "pageRouteCount": 319,
   "migratedCount": 1,
   "summary": {
     "cockpit": 16,
     "list": 6,
-    "detail": 245,
+    "detail": 246,
     "settings": 12,
     "form": 18,
     "public": 21,
@@ -2267,6 +2267,19 @@
         "lead-band"
       ],
       "sweepEligible": true,
+      "confidence": "high"
+    },
+    {
+      "routePath": "/platform/ai/right-now",
+      "shell": "detail",
+      "audience": "admin",
+      "migrated": false,
+      "exemptChecks": [
+        "next-action-marker",
+        "lead-band"
+      ],
+      "sweepEligible": false,
+      "sweepExclusionReason": "wall-clock-collection",
       "confidence": "high"
     },
     {

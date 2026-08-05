@@ -595,6 +595,9 @@ export const PORTAL_NAV_ROUTES: readonly PortalNavRecord[] = [
     capabilityKey: "view_platform",
   },
   platformAiRoute("platform-ai-operations-map", "Operations Map", "/platform/ai/operations-map"),
+  // BI-1A68257F: the live workforce activity view (what coworkers are doing + did
+  // today), a sibling altitude to the Operations Map.
+  platformAiRoute("platform-ai-right-now", "Right Now", "/platform/ai/right-now"),
   // EP-GOLDEN-TRIANGLE surface consolidation: no "platform-ai-priority" record —
   // /platform/ai/priority is now a redirect-only shim into the unified
   // "Priority & Models" surface (mirrors /platform/ai/model-assignment, which

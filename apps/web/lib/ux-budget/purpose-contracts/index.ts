@@ -6,9 +6,11 @@ import {
 export type PurposeContractModule = readonly PurposeContractSource[];
 
 import { GRAPH_EXPLORER_PURPOSE_CONTRACTS } from "./graph-explorer";
+import { RIGHT_NOW_PURPOSE_CONTRACTS } from "./right-now";
 
 const CONTRACT_MODULES: readonly PurposeContractModule[] = [
   GRAPH_EXPLORER_PURPOSE_CONTRACTS,
+  RIGHT_NOW_PURPOSE_CONTRACTS,
 ];
 
 export function buildPurposeContractSourceIndex(

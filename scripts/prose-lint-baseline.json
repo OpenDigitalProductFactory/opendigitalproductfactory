@@ -760,7 +760,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 107
+    "textMass": 98
   },
   "apps/web/app/(shell)/error.tsx": {
     "vocabulary": 0,
@@ -1406,6 +1406,13 @@
     "longSentences": 0,
     "textMass": 93
   },
+  "apps/web/app/(shell)/platform/ai/right-now/page.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 4
+  },
   "apps/web/app/(shell)/platform/ai/runtime-health/page.tsx": {
     "vocabulary": 0,
     "genericLabels": 0,
@@ -1425,7 +1432,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 78
+    "textMass": 74
   },
   "apps/web/app/(shell)/platform/audit/journal/page.tsx": {
     "vocabulary": 0,
@@ -4862,7 +4869,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 51
+    "textMass": 41
   },
   "apps/web/components/employee/EmployeeFormPanel.tsx": {
     "vocabulary": 0,
@@ -4876,7 +4883,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 43
+    "textMass": 42
   },
   "apps/web/components/employee/EmployeeReachabilityPanel.tsx": {
     "vocabulary": 0,
@@ -6164,7 +6171,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 95
+    "textMass": 90
   },
   "apps/web/components/platform/EndpointPerformancePanel.tsx": {
     "vocabulary": 0,
@@ -6487,6 +6494,13 @@
     "readability": 0,
     "longSentences": 0,
     "textMass": 17
+  },
+  "apps/web/components/platform/WorkforceNowShell.tsx": {
+    "vocabulary": 0,
+    "genericLabels": 0,
+    "readability": 0,
+    "longSentences": 0,
+    "textMass": 77
   },
   "apps/web/components/platform/a2a-interaction-graph.ts": {
     "vocabulary": 0,
@@ -6815,7 +6829,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 99
+    "textMass": 101
   },
   "apps/web/components/platform/service-desk/ServiceTicketsTable.tsx": {
     "vocabulary": 0,

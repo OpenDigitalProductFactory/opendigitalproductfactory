@@ -190,6 +190,15 @@ export const ROUTE_SWEEP_EXCLUSIONS = {
   // Remove alongside the two above once the fixture pins the clock and isolates
   // platform state (BI-0C6C2153).
   "/platform/ai/operations-map": "wall-clock-collection",
+  // /platform/ai/right-now (BI-1A68257F) is the same class as operations-map: its
+  // loader reads the live orchestration set (working TaskRuns, today's
+  // ToolExecutions, TokenUsage) that concurrent sessions and crons mutate; it
+  // derives "quiet Nd" and last-acted labels from the wall clock; and its
+  // WorkforceNowShell re-fetches on a 12s timer, mutating its own roles-only tree
+  // while the sweep measures it. An exact frozen ariaSnapshot is the wrong
+  // instrument here for the identical reasons. Remove alongside the others once
+  // the fixture pins the clock and isolates platform state (BI-0C6C2153).
+  "/platform/ai/right-now": "wall-clock-collection",
 } as const satisfies Record<string, RouteSweepExclusionReason>;
 
 export type RouteShellPolicy = {

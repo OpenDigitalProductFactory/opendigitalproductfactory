@@ -1,6 +1,6 @@
 {
   "generator": "apps/web/scripts/build-route-manifest.ts",
-  "routeCount": 603,
+  "routeCount": 605,
   "routes": [
     {
       "routePath": "/",
@@ -1262,6 +1262,17 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/api/platform/version/route.ts"
+    },
+    {
+      "routePath": "/api/platform/workforce-activity",
+      "kind": "route",
+      "segments": [
+        "api",
+        "platform",
+        "workforce-activity"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/api/platform/workforce-activity/route.ts"
     },
     {
       "routePath": "/api/portfolio/product/[id]/supply-chain/bom",
@@ -5518,6 +5529,17 @@
       ],
       "dynamicParams": [],
       "file": "apps/web/app/(shell)/platform/ai/readiness/page.tsx"
+    },
+    {
+      "routePath": "/platform/ai/right-now",
+      "kind": "page",
+      "segments": [
+        "platform",
+        "ai",
+        "right-now"
+      ],
+      "dynamicParams": [],
+      "file": "apps/web/app/(shell)/platform/ai/right-now/page.tsx"
     },
     {
       "routePath": "/platform/ai/routing",

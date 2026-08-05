@@ -421,7 +421,9 @@ describe("generated route-shell registry", () => {
     // 110 -> 113: the three exclusions above. Product Direction then adds seven
     // explicitly classified dynamic routes, bringing the combined total to 120.
     // 120 -> 121: /platform/ai/operations-map.
-    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(121);
+    // 121 -> 122: /platform/ai/right-now (BI-1A68257F) joins the same wall-clock /
+    // live-orchestration exclusion — it polls the live workforce set on a 12s timer.
+    expect(registry.routes.filter((route) => !route.sweepEligible)).toHaveLength(122);
   });
 
   it("keeps contextual sweep exclusions explicit, valid, and non-stale", () => {
