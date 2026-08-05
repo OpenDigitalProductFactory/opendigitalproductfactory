@@ -15,11 +15,19 @@
 // would mean churn across several teams' tests, would prevent nothing, and
 // would manufacture confidence that the class was handled.
 //
-// WHAT ACTUALLY WORKS. Run the suite twice — once normally, once with the clock
-// shifted forward — and take the set difference. A test that passes now and
-// fails at now+90d IS a bomb, by definition, with no heuristic and no judgement.
-// Benign fixtures stay green and produce no noise. `scripts/detect-time-bombs.mjs`
-// drives that comparison; this file is the shift half.
+// WHAT ACTUALLY WORKS BETTER. Run the suite twice — once normally, once with the
+// clock shifted forward — and take the set difference. Benign fixtures mostly stay
+// green. `scripts/detect-time-bombs.mjs` drives that comparison; this file is the
+// shift half.
+//
+// BUT NOT PERFECTLY. This comment used to claim the difference was a bomb "with no
+// heuristic and no judgement". A +365d sweep on 2026-08-04 measured otherwise: 17
+// findings, 5 real, 12 artifacts of one class — subprocess boundaries. Because the
+// shim patches `Date` in the vitest process ONLY (see the note below), a test that
+// spawns a child hands it parent-built timestamps the child then checks against the
+// real clock. Those fixtures can be perfectly drift-proof and still fail here. So
+// this catches real bombs the static grep misses, at ~2.4:1 rather than ~6:1 — a
+// shortlist worth investigating, not a verdict. Tracked as BI-F8808EDA.
 //
 // DESIGN NOTES.
 //   * Off unless `DPF_CLOCK_SHIFT_DAYS` is set to a non-zero finite number, so

@@ -3,14 +3,23 @@
 //
 // Runs the web unit suite twice — once normally, once with the clock shifted
 // forward — and reports the SET DIFFERENCE: tests that pass now and fail later.
-// That difference is the definition of a time bomb, so there is no heuristic to
-// tune and no false-positive class to triage.
 //
 // Context: on 2026-08-01 a single test with a hardcoded `expiresAt` went red at
 // the instant it encoded and blocked every PR in the repo (a required shard).
 // The obvious static sweep was measured on this repo and over-reports ~6:1 — 29
 // files matched, the 5 most imminent all passed — because a future date is inert
 // unless something compares it to now. Hence this dynamic check.
+//
+// THIS IS NOT JUDGEMENT-FREE — the original version of this comment claimed
+// "no false-positive class to triage", and a +365d sweep on 2026-08-04 falsified
+// that: 17 findings, 5 real, 12 (71%) one artifact class. The shim patches `Date`
+// in THIS process only, so a test that spawns a subprocess straddles two clocks —
+// parent-built fixtures carry shifted timestamps that the child validates against
+// the real one. See promote-script-functional.test.ts, where a relative (and
+// therefore drift-proof) `expiresAt` makes promote.sh exit 78 under shift alone.
+// Treat a finding whose test shells out as suspect until you have read it.
+// Tracked as BI-F8808EDA. Still far better than the static grep — 2.4:1 beats
+// 6:1 — but the output is a shortlist to investigate, not a verdict.
 //
 // Usage:
 //   node scripts/detect-time-bombs.mjs                  # +90d (default)
