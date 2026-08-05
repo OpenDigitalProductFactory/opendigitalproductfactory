@@ -100,13 +100,46 @@ node scripts/worktree-janitor.mjs --live --tier-a-only --json
 - Never use bare `git worktree remove --force` on Windows (BI-F6AC1A56).
 - Never target the root clone path.
 
-### D. Locked leftovers (exceptional)
+### D. Unregistered leftovers and fake worktrees (exceptional)
 
-If dry-run/live leaves dirs that are **not** registered worktrees but still on disk:
+A directory under the worktrees root that is **not** in `git worktree list` is not a worktree — it is a **fake worktree**, and it is actively dangerous:
 
-1. Identify lockers by **process cwd** (e.g. orphaned bash/powershell with cwd in the path) — do **not** kill unrelated Claude Desktop / codex host processes.
-2. Stop only those PIDs; then remove via junction-safe helper or long-path purge.
-3. Require operator go if the agent cannot prove the process is abandoned session debris.
+- It has no `.git` file, so **every git command run inside it silently operates on the ROOT clone** — `git status`, `git commit`, and `git worktree list` all report the root clone's state.
+- The path is gitignored, so any edit made there is **uncommittable**.
+
+Detect before trusting a directory:
+
+```bash
+git worktree list | grep -F "<path>"        # absent, or marked "prunable"
+test -e "<path>/.git" || echo "FAKE worktree"
+```
+
+`git worktree prune` removes only the **metadata** — it never deletes the directory, and it routinely surfaces *more* fake worktrees (their gitdir file points at a non-existent location). **Re-sweep the worktrees root after every prune**; one cleanup pass typically uncovers several more.
+
+Before deleting a `.git`-less directory, prove it holds no unsaved work by diffing it against its branch with a throwaway index (read-only, touches nothing):
+
+```bash
+export GIT_INDEX_FILE=$(mktemp)
+git --git-dir=<root>/.git --work-tree=<path> read-tree <branch>
+git --git-dir=<root>/.git --work-tree=<path> diff --ignore-cr-at-eol --numstat
+unset GIT_INDEX_FILE
+```
+
+Read the output correctly or you will scare yourself: the **first** status column is branch-vs-root-HEAD noise, not disk state — only the **second** column reflects the directory. On Windows the raw diff is dominated by CRLF churn, so `--ignore-cr-at-eol` is what separates real edits from line-ending noise. A file that differs but does **not exist on disk** is an absence, not lost work.
+
+Then remove:
+
+1. **Scan junction targets first — do not assume.** Junctions inside a worktree usually point *within that same worktree* (`apps/web/node_modules/@dpf/* → packages/*`), which is harmless. The root-clone-eating case is a junction whose target lies **outside** the tree. Read the targets, then unlink every reparse point with `cmd /c rmdir` before any recursive delete.
+2. Identify lockers by **process cwd** (e.g. orphaned bash/powershell with cwd in the path) — do **not** kill unrelated Claude Desktop / codex host processes. Stop only those PIDs.
+3. `rd /s /q` the tree. It will **fail on `node_modules` paths over `MAX_PATH` (260 chars)** — deep `expo` / `xcframework` prebuild trees are the usual culprit, and the failure looks like an unexplained partial delete. Purge with robocopy, which handles long paths natively, then remove the shell:
+
+```bash
+robocopy "$(mktemp -d)" "<path>" /MIR /NFL /NDL /NJH /NJS /R:1 /W:1
+cmd /c rd /s /q "<path>"
+```
+
+4. An **empty husk that still refuses to unlink** (0 files, 0 dirs, `rd` exit 32) is inert — no files, no `.git`, no junctions, no metadata, so the trap is already defused. Retrying is futile; leave it for the next reboot rather than terminating another session's processes to reclaim an empty folder.
+5. Require operator go if the agent cannot prove the process is abandoned session debris.
 
 ### E. Sandbox GC one-shot (destructive — needs go)
 
