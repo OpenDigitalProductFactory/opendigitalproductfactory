@@ -279,6 +279,9 @@
     ".github/workflows/install-verification.yml": [
       "docs/install/linux.md"
     ],
+    ".github/workflows/policy-guards-recheck.yml": [
+      "docs/testing/pre-pr-gate.md"
+    ],
     ".github/workflows/secrets-scan.yml": [
       "docs/security/2026-05-24-shift-left-rollout.md"
     ],
@@ -1176,6 +1179,7 @@
       ".githooks/lib/pre-push-chained.sh",
       ".github/workflows/ci.yml",
       ".github/workflows/codeql.yml",
+      ".github/workflows/policy-guards-recheck.yml",
       "scripts/check-mobile-jest-pin.mjs",
       "scripts/lib/ci-policy-guards.mjs",
       "scripts/local-ci-runner.mjs",

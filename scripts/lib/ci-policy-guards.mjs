@@ -255,6 +255,12 @@ export const POLICY_GUARD_PROFILES = Object.freeze({
         "--test",
         "scripts/check-docs-impact.test.mjs",
         "scripts/gen-doc-impact.test.mjs",
+        // BI-3E5969DF. The coverage measurement is NOT run as a gate here (it is
+        // advisory, refreshed weekly by refresh-docs-staleness.yml) but its
+        // arithmetic is tested here, because a wrong coverage number argues for
+        // the wrong gating decision. This list is hand-enumerated with no glob —
+        // a test that is not named here never runs.
+        "scripts/measure-doc-staleness-coverage.test.mjs",
       ),
       node("scripts/gen-doc-impact.mjs", "--check"),
       node("scripts/check-docs-impact.mjs"),

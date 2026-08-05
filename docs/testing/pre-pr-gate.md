@@ -101,6 +101,31 @@ The profiles reflect execution substrate, not separate policy inventories:
   lint and the executable FPAW standard/inventory conformance guard; and
 - `pull-request` uses PR event context and trailers.
 
+#### Re-evaluating a trailer or label without pushing
+
+Several `pull-request` guards — Seed Contribution Fit, UX Fit, Design Grounding,
+Docs Impact — tell you to add a trailer such as `Seed-Fit-Decision:` to the PR
+body, or to apply a label. **Editing the body alone used to do nothing.**
+`ci.yml` declares `pull_request:` with no `types:`, so it fires only on
+opened / synchronize / reopened; `edited` and `labeled` never reached it. The
+only way to re-evaluate was to push, which also re-STALEs a `pregate` record
+keyed to the previous SHA.
+
+[`.github/workflows/policy-guards-recheck.yml`](../../.github/workflows/policy-guards-recheck.yml)
+closes that (BI-6868891B). It runs the same `pull-request` profile on
+`edited` / `labeled` / `unlabeled` only, and posts **`Policy Guards (recheck)`** —
+a separate, advisory check. Add your trailer, wait for the recheck, and you know
+whether the fix is accepted before spending a push.
+
+It is deliberately **not** the binding check, and `ci.yml` is deliberately
+unchanged. Check runs are keyed per commit SHA and the latest result for a name
+wins, so re-running the pipeline on an edit while skipping the heavy jobs would
+post `skipped` conclusions that branch protection treats as satisfied —
+overwriting a real failure already recorded on that SHA. A PR whose Unit Tests
+genuinely failed would go green because someone fixed a typo in the description.
+The recheck workflow uses a distinct check name and its own concurrency group,
+so it can neither overwrite `Policy Guards (PR)` nor cancel a running CI job.
+
 `pregate:preflight` and `pr:ready` consume all locally honest checks from these
 same profiles. In a source-only worktree, a missing workspace runtime is
 reported as environment-skipped and remains CI-enforced; in a compile-ready
