@@ -329,6 +329,8 @@ export const COWORKER_SERVICE_CATALOG_SERVICE_SEEDS: readonly CoworkerServiceSee
   // missing an offer, so it never surfaced in list_coworker_offers. Advisory
   // ONLY — matches the deliberate no-release_gate_create stance on the critic
   // until it is calibrated against the founder critique corpus.
+  // Seed-fit: global-default — a platform-wide UX-quality capability every
+  // install benefits from (not archetype- or vertical-scoped).
   serviceSeed("svc-ux-design-critique", "ux-design-critic", {
     ownerAreaSlug: "foundational",
     name: "UX design critique",
