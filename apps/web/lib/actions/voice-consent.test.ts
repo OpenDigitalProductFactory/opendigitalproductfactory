@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest"
+import { afterEach, beforeEach, describe, it, expect, vi } from "vitest"
 
 const mockCreate = vi.hoisted(() => vi.fn().mockResolvedValue({ id: "vcr-1" }))
 const mockUpsert = vi.hoisted(() => vi.fn().mockResolvedValue({ id: "vp-1" }))
@@ -20,6 +20,13 @@ vi.mock("@dpf/db", () => ({
 import { createVoiceConsentRecord } from "./voice-consent"
 
 describe("createVoiceConsentRecord", () => {
+  // Pinned because the fixture below carries `expiresAt: 2027-01-01` while the
+  // guard in voice-consent.ts:31 compares it to `new Date()`. Unpinned, this
+  // passes until 2027-01-01 and then fails forever — the same shape as the
+  // 2026-08-01T15:00Z outage fixed in #3883/#3885.
+  beforeEach(() => vi.useFakeTimers().setSystemTime("2026-06-15T12:00:00.000Z"))
+  afterEach(() => vi.useRealTimers())
+
   it("creates a VoiceConsentRecord and upserts VoiceProfile in a transaction", async () => {
     const result = await createVoiceConsentRecord({
       profileId: "mark-dpf-platform",

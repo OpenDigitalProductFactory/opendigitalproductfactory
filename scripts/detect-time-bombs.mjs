@@ -3,14 +3,23 @@
 //
 // Runs the web unit suite twice — once normally, once with the clock shifted
 // forward — and reports the SET DIFFERENCE: tests that pass now and fail later.
-// That difference is the definition of a time bomb, so there is no heuristic to
-// tune and no false-positive class to triage.
 //
 // Context: on 2026-08-01 a single test with a hardcoded `expiresAt` went red at
 // the instant it encoded and blocked every PR in the repo (a required shard).
 // The obvious static sweep was measured on this repo and over-reports ~6:1 — 29
 // files matched, the 5 most imminent all passed — because a future date is inert
 // unless something compares it to now. Hence this dynamic check.
+//
+// THIS IS NOT JUDGEMENT-FREE — the original version of this comment claimed
+// "no false-positive class to triage", and a +365d sweep on 2026-08-04 falsified
+// that: 17 findings, 5 real, 12 (71%) one artifact class. The shim patches `Date`
+// in THIS process only, so a test that spawns a subprocess straddles two clocks —
+// parent-built fixtures carry shifted timestamps that the child validates against
+// the real one. See promote-script-functional.test.ts, where a relative (and
+// therefore drift-proof) `expiresAt` makes promote.sh exit 78 under shift alone.
+// Treat a finding whose test shells out as suspect until you have read it.
+// Tracked as BI-F8808EDA. Still far better than the static grep — 2.4:1 beats
+// 6:1 — but the output is a shortlist to investigate, not a verdict.
 //
 // Usage:
 //   node scripts/detect-time-bombs.mjs                  # +90d (default)
@@ -77,23 +86,38 @@ async function runSuite({ shiftDays, filter, outFile }) {
   const label = shiftDays ? `+${shiftDays}d` : "baseline";
   process.stdout.write(`[time-bombs] running suite (${label})…\n`);
 
-  const exitCode = await new Promise((resolve) => {
+  const { exitCode, signal, spawnError } = await new Promise((resolve) => {
     const child = spawn(process.execPath, args, {
       cwd: WEB_DIR,
       env,
       stdio: ["ignore", "ignore", "inherit"],
     });
-    child.on("close", (code) => resolve(code ?? 1));
-    child.on("error", () => resolve(1));
+    child.on("close", (code, receivedSignal) =>
+      resolve({ exitCode: code ?? 1, signal: receivedSignal, spawnError: null }),
+    );
+    child.on("error", (error) => resolve({ exitCode: 1, signal: null, spawnError: error }));
   });
 
   let report;
   try {
     report = JSON.parse(await readFile(outFile, "utf8"));
   } catch (error) {
+    // Report HOW the child died, not just that no report showed up. The two
+    // causes look identical from the missing file alone and need opposite
+    // responses: `signal` set (usually SIGKILL/SIGTERM) means the run was killed
+    // from outside — a job timeout or the OOM killer under memory pressure, so
+    // the suite is fine and the harness needs more room; a non-zero `exitCode`
+    // with no signal means vitest itself failed and the suite is the problem.
+    // Without this distinction the message reads "the run produced no parseable
+    // output" for both, which is where the diagnosis stalls.
+    const cause = spawnError
+      ? `could not spawn vitest: ${spawnError.message}`
+      : signal
+        ? `vitest was KILLED by ${signal} — an external timeout or the OOM killer, not a test failure`
+        : `vitest exited ${exitCode} without writing the report`;
     throw new Error(
-      `could not read the ${label} JSON report — the run produced no parseable ` +
-        `output, so its result cannot be trusted (${String(error)})`,
+      `could not read the ${label} JSON report — ${cause}, so its result cannot ` +
+        `be trusted (${String(error)})`,
     );
   }
 
