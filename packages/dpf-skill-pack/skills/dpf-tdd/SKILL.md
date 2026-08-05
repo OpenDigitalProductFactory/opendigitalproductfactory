@@ -67,6 +67,7 @@ This is [AGENTS.md §5 "Where each gate runs"](../../../../AGENTS.md) applied to
 - **Never report a test as passing without running it.** `never-fabricate`: "should pass" is not "passes." Run it; quote the result.
 - **A bug fix without a first-failing regression test is incomplete** — you can't prove the fix is what closed the symptom.
 - **Green for the right reason.** A test that passes before your change (or with the assertion inverted) is testing nothing — make it fail first.
+- **Revert-to-red is necessary but NOT sufficient — calibrate the threshold against BOTH branches.** A numeric assertion can fail against the *unfixed* code for the wrong reason and still not test the thing its comment claims. Real case: a layout test asserted an x-span `< 600px` "because the clamp keeps a tiny graph from scattering". Measured, the span was **266px with the clamp and 483px without** — both under 600, so deleting the clamp kept it green. Fix: measure the metric on both branches and put the threshold *between* them (320px), then delete the guarded behaviour and confirm red. **If a test's comment names what it guards, delete exactly that and watch it fail** — otherwise the comment, not the test, is doing the work.
 - **Typecheck/build green ≠ tests green.** They are different gates; clear both.
 
 ## See also
