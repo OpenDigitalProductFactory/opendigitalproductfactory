@@ -8,6 +8,8 @@ import {
   validateWorkflowConformance,
 } from "./merge-readiness-policy.mjs";
 
+const CANCELLED_HINT = evaluateDependencyResults({ j: { result: "cancelled" } }).failures[0].hint;
+
 const manifest = {
   requiredContexts: ["Merge Readiness", "UX Route Budget Sweep", "DCO"],
   strict: false,
@@ -31,10 +33,22 @@ test("dependency evaluator accepts only success and intentional skips", () => {
   }), {
     ok: false,
     failures: [
-      { jobId: "build", result: "failure" },
-      { jobId: "cancelled", result: "cancelled" },
+      { jobId: "build", result: "failure", hint: "" },
+      { jobId: "cancelled", result: "cancelled", hint: CANCELLED_HINT },
     ],
   });
+});
+
+test("a cancelled dependency names its likely causes (BI-F75AADB7)", () => {
+  // "build concluded cancelled" alone reads as a second, unrelated failure and
+  // gives no hint that the cause was a timeout rather than a queue eviction or a
+  // user cancel — and a cancelled job keeps no retrievable log to check.
+  const { failures } = evaluateDependencyResults({ build: { result: "cancelled" } });
+  assert.match(failures[0].hint, /timeout/);
+  assert.match(failures[0].hint, /queue eviction/);
+  assert.match(failures[0].hint, /log is not retrievable/);
+  // Ordinary failures carry their own log, so they get no extra prose.
+  assert.equal(evaluateDependencyResults({ build: { result: "failure" } }).failures[0].hint, "");
 });
 
 test("workflow conformance requires complete aggregate coverage and merge-group triggers", () => {

@@ -81,6 +81,10 @@ export interface CartesianSceneCanvasProps {
   empty?: ReactNode;
   height?: number;
   className?: string;
+  /** Hide mode and list chrome when a parent owns those controls. */
+  chrome?: "full" | "embedded";
+  /** Lock viewport gestures while preserving activation of resource nodes. */
+  navigation?: "interactive" | "locked";
 }
 
 function toFlowNodes(
@@ -136,6 +140,8 @@ export function CartesianSceneCanvas({
   empty,
   height = 520,
   className = "",
+  chrome = "full",
+  navigation = "interactive",
 }: CartesianSceneCanvasProps) {
   const versionRef = useRef(persistence?.version ?? 1);
   useEffect(() => {
@@ -245,6 +251,7 @@ export function CartesianSceneCanvas({
       aria-label={ariaLabel}
       className={`flex flex-col gap-dpf-sm ${className}`.trim()}
     >
+      {chrome === "full" ? (
       <div className="flex min-h-11 flex-wrap items-center justify-between gap-dpf-sm">
         {onModeChange && modeOptions && modeOptions.length > 1 ? (
           <label className="flex items-center gap-dpf-xs text-dpf-body font-dpf-medium text-dpf-text">
@@ -281,6 +288,7 @@ export function CartesianSceneCanvas({
           />
         ) : null}
       </div>
+      ) : null}
 
       {mode === "configure" && !persistence ? (
         <Notice variant="warn" title="Layout editing unavailable">
@@ -307,14 +315,21 @@ export function CartesianSceneCanvas({
           elementsSelectable={effectiveMode !== "read-only"}
           snapToGrid={effectiveMode === "configure"}
           snapGrid={[8, 8]}
-          panOnScroll
+          panOnScroll={navigation === "interactive"}
+          panOnDrag={navigation === "interactive"}
+          zoomOnScroll={navigation === "interactive"}
+          zoomOnPinch={navigation === "interactive"}
+          zoomOnDoubleClick={navigation === "interactive"}
           proOptions={{ hideAttribution: true }}
         >
           <Background gap={24} color="var(--dpf-border)" />
-          <Controls showInteractive={false} />
+          {navigation === "interactive" ? (
+            <Controls showInteractive={false} />
+          ) : null}
         </ReactFlow>
       </div>
 
+      {chrome === "full" ? (
       <details className="rounded-dpf-md border border-dpf-border bg-dpf-surface-1">
         <summary className="dpf-tap-target cursor-pointer px-dpf-md py-dpf-xs text-dpf-body font-dpf-medium text-dpf-text">
           View layout as a list
@@ -337,6 +352,7 @@ export function CartesianSceneCanvas({
           ))}
         </ul>
       </details>
+      ) : null}
     </section>
   );
 }

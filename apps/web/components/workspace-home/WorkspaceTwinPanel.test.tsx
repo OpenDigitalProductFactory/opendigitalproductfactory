@@ -62,11 +62,15 @@ describe("WorkspaceTwinPanel restaurant scene", () => {
     } as unknown as WorkspaceTwinPresentation;
 
     const html = renderToStaticMarkup(
-      <WorkspaceTwinPanel presentation={presentation} />,
+      <WorkspaceTwinPanel
+        presentation={presentation}
+        serviceAttention={<div>cross-channel service work</div>}
+      />,
     );
 
     expect(html).toContain("live restaurant host stand");
     expect(captured.restaurant?.view).toBe(presentation.restaurantFloor);
+    expect(captured.restaurant?.serviceAttention).toBeTruthy();
   });
 
   it("replaces the generic resource grid with the authored floor and live bindings", () => {

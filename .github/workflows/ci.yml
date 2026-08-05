@@ -462,6 +462,9 @@ jobs:
     # hang or exceed 20–30m when Turbopack FS cache is enabled with an exact-key
     # miss (overnight 2026-08-04: #3958 / #3963). Cap at 45m and disable the
     # experimental Turbopack cache on merge_group (see build step env).
+    #
+    # BI-F75AADB7: this is the OUTER backstop only. The compile step carries its
+    # own inner bound — see `timeout-minutes` on "Build web (Next.js production)".
     timeout-minutes: 45
     needs: [changes, exact-tree-evidence-shadow]
     if: >-
@@ -502,6 +505,23 @@ jobs:
 
       - name: Build web (Next.js production)
         if: needs.changes.outputs.heavy == 'true'
+        # BI-F75AADB7 — inner, fail-fast bound on the compile itself.
+        #
+        # Without it a hung compile runs until the 45m JOB cap, and the job then
+        # ends `cancelled` rather than `failure`. Three things follow from that,
+        # all measured on #3984 job 92139777135 (twice, deterministically): ~53
+        # minutes burned in this one step (55m1s wall); NO retrievable log,
+        # because `gh run view --job <id> --log` returns "log not found" for a
+        # cancelled job, so the hang is undiagnosable after the fact; and Merge
+        # Readiness reports "build concluded cancelled" even though every other
+        # dependency succeeded, which reads as a second, unrelated failure.
+        #
+        # 15m sits near the healthy ceiling — pull_request builds on the same
+        # config that day all finished in 3–4m against the 8–10m expectation
+        # documented on the job above — so a hang trips it while a merely slow
+        # cold compile does not. Timing out the STEP fails the job for real and
+        # RETAINS this step's log.
+        timeout-minutes: 15
         # Experimental Turbopack FS cache on pull_request only. On merge_group
         # exact-key misses have produced multi-tens-of-minutes hangs that eject
         # otherwise-green PRs from the merge queue; webpack/default build is
@@ -509,7 +529,7 @@ jobs:
         env:
           DPF_TURBOPACK_BUILD_CACHE: ${{ github.event_name == 'pull_request' && '1' || '' }}
         run: |
-          echo "[production-build] run=${{ github.run_id }} attempt=${{ github.run_attempt }} tree=${{ github.sha }} event=${{ github.event_name }} turbopack_cache=${{ github.event_name == 'pull_request' && '1' || '0' }} timeout=45m command=pnpm --filter web build"
+          echo "[production-build] run=${{ github.run_id }} attempt=${{ github.run_attempt }} tree=${{ github.sha }} event=${{ github.event_name }} turbopack_cache=${{ github.event_name == 'pull_request' && '1' || '0' }} timeout=15m/step 45m/job command=pnpm --filter web build"
           pnpm --filter web build
 
       # BI-959F4F38. PR and merge-group UX runs consume this exact-tree output
