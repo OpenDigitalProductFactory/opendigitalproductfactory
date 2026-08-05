@@ -16,9 +16,16 @@ import {
   NODE_CATEGORY_COLORS,
   REL_TYPE_COLORS,
   UNKNOWN_CATEGORY_COLOR,
+  WIKI_DEFAULT_COLOR,
 } from "./explorer-chart-colors";
 
-export type GraphDomainKey = "code" | "data" | "architecture" | "infrastructure" | "portfolio";
+export type GraphDomainKey =
+  | "code"
+  | "data"
+  | "knowledge"
+  | "architecture"
+  | "infrastructure"
+  | "portfolio";
 
 export type GraphDomain = {
   key: GraphDomainKey;
@@ -36,6 +43,12 @@ export const GRAPH_DOMAINS: GraphDomain[] = [
     key: "data",
     label: "Data model",
     description: "Prisma models and their fields.",
+  },
+  {
+    key: "knowledge",
+    label: "Knowledge",
+    description:
+      "Wiki pages and the links between them: decision rules, organizational stances, profession corpora, and the founder kernel.",
   },
   {
     key: "architecture",
@@ -108,6 +121,39 @@ const LABEL_DESCRIPTORS: LabelDescriptor[] = [
     size: 5,
   },
 
+  // ── Knowledge ───────────────────────────────────────────────────────────────
+  //
+  // One label per node, not a generic `WikiPage` marker plus a specific kind. The
+  // census sums per-label counts, so a node carrying two labels is counted twice —
+  // which is exactly why `EaElement` needs a hard-coded skip there. A single
+  // specific label keeps the knowledge domain out of that trap (BI-3045CC18).
+  {
+    key: "Wiki__Principle",
+    label: "Principle",
+    domain: "knowledge",
+    color: NODE_CATEGORY_COLORS.Wiki__Principle,
+    size: 6,
+  },
+  { key: "Wiki__Stance", label: "Stance", domain: "knowledge", color: NODE_CATEGORY_COLORS.Wiki__Stance, size: 6 },
+  {
+    key: "Wiki__Heuristic",
+    label: "Heuristic",
+    domain: "knowledge",
+    color: NODE_CATEGORY_COLORS.Wiki__Heuristic,
+    size: 5,
+  },
+  {
+    key: "Wiki__Decision",
+    label: "Decision rule",
+    domain: "knowledge",
+    color: NODE_CATEGORY_COLORS.Wiki__Decision,
+    size: 6,
+  },
+  { key: "Wiki__Entity", label: "Entity page", domain: "knowledge", color: NODE_CATEGORY_COLORS.Wiki__Entity, size: 5 },
+  { key: "Wiki__Summary", label: "Summary", domain: "knowledge", color: NODE_CATEGORY_COLORS.Wiki__Summary, size: 4 },
+  { key: "Wiki__Runbook", label: "Runbook", domain: "knowledge", color: NODE_CATEGORY_COLORS.Wiki__Runbook, size: 5 },
+  { key: "Wiki__Index", label: "Index page", domain: "knowledge", color: NODE_CATEGORY_COLORS.Wiki__Index, size: 7 },
+
   // ── Portfolio ───────────────────────────────────────────────────────────────
   { key: "Portfolio", label: "Portfolio", domain: "portfolio", color: NODE_CATEGORY_COLORS.Portfolio, size: 8 },
   {
@@ -131,6 +177,11 @@ const DESCRIPTOR_BY_KEY = new Map(LABEL_DESCRIPTORS.map((d) => [d.key, d]));
 /** The `ArchiMate__<Type>` family is open-ended — one rule covers every member. */
 const ARCHIMATE_PREFIX = "ArchiMate__";
 
+/** `Wiki__<PageKind>`. `WikiPage.pageKind` is a plain string in the schema, so a
+ *  kind added later must still land in the knowledge domain rather than in the
+ *  architecture-flavoured unknown bucket (BI-3045CC18). */
+const WIKI_PREFIX = "Wiki__";
+
 const UNKNOWN_DESCRIPTOR: Omit<LabelDescriptor, "key" | "label"> = {
   domain: "architecture",
   color: UNKNOWN_CATEGORY_COLOR,
@@ -139,7 +190,11 @@ const UNKNOWN_DESCRIPTOR: Omit<LabelDescriptor, "key" | "label"> = {
 
 /** Split a PascalCase / prefixed storage label into readable words. */
 export function humanizeLabel(raw: string): string {
-  const stripped = raw.startsWith(ARCHIMATE_PREFIX) ? raw.slice(ARCHIMATE_PREFIX.length) : raw;
+  const stripped = raw.startsWith(ARCHIMATE_PREFIX)
+    ? raw.slice(ARCHIMATE_PREFIX.length)
+    : raw.startsWith(WIKI_PREFIX)
+      ? raw.slice(WIKI_PREFIX.length)
+      : raw;
   return stripped
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/_+/g, " ")
@@ -158,6 +213,16 @@ export function describeLabel(raw: string): LabelDescriptor {
       domain: "architecture",
       color: ARCHIMATE_DEFAULT_COLOR,
       size: 4,
+    };
+  }
+
+  if (raw.startsWith(WIKI_PREFIX)) {
+    return {
+      key: raw,
+      label: humanizeLabel(raw),
+      domain: "knowledge",
+      color: WIKI_DEFAULT_COLOR,
+      size: 5,
     };
   }
 

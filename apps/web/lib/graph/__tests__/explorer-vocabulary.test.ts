@@ -16,6 +16,10 @@ describe("humanizeLabel", () => {
   it("strips the ArchiMate namespace prefix", () => {
     expect(humanizeLabel("ArchiMate__DataObject")).toBe("Data Object");
   });
+
+  it("strips the Wiki namespace prefix", () => {
+    expect(humanizeLabel("Wiki__Principle")).toBe("Principle");
+  });
 });
 
 describe("describeLabel", () => {
@@ -29,6 +33,20 @@ describe("describeLabel", () => {
     const descriptor = describeLabel("ArchiMate__ApplicationService");
     expect(descriptor.label).toBe("Application Service");
     expect(descriptor.domain).toBe("architecture");
+  });
+
+  it("returns the curated descriptor for a knowledge page kind", () => {
+    const descriptor = describeLabel("Wiki__Principle");
+    expect(descriptor.label).toBe("Principle");
+    expect(descriptor.domain).toBe("knowledge");
+  });
+
+  it("keeps an uncurated wiki page kind inside the knowledge domain", () => {
+    // `WikiPage.pageKind` is a plain string, so a kind added later must not fall
+    // through to the architecture-flavoured unknown bucket (BI-3045CC18).
+    const descriptor = describeLabel("Wiki__FieldGuide");
+    expect(descriptor.domain).toBe("knowledge");
+    expect(descriptor.label).toBe("Field Guide");
   });
 
   it("degrades rather than throwing on an unknown label", () => {

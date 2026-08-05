@@ -128,10 +128,10 @@
       },
       "intent": {
         "primaryUser": "A platform operator or architect who wants to see how the platform is wired together.",
-        "triggeringNeed": "Understanding or demonstrating the breadth of what the platform knows about itself — source code, data model, architecture, and infrastructure — which was only possible through the Neo4j browser before BET-5 retired it.",
+        "triggeringNeed": "Understanding or demonstrating the breadth of what the platform knows about itself — source code, data model, knowledge corpus, architecture, infrastructure, and business portfolio — which was only possible through the Neo4j browser before BET-5 retired it.",
         "prerequisites": [
           "Signed in with the view_admin capability.",
-          "The graph mirror has been populated by the code-graph indexer and the EA/discovery sync."
+          "The graph mirror has been populated by the code-graph indexer, the EA/discovery sync, and the knowledge/portfolio backfill."
         ],
         "job": "Find a starting point in the corpus and follow its relationships outward to see what it connects to.",
         "successOutcome": "The operator can name a thing (a file, a data model, a route, a tool, an EA element), see its neighbourhood drawn, and read its properties and degree.",
