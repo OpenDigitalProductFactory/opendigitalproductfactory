@@ -110,3 +110,7 @@ __pycache__/
 # `.git/hooks/`. Multiple Windows worktrees in this repo have observed it.
 # Without this entry, a `git add -A` would happily commit the stray hooks.
 dev/null/
+
+# Local-integration-CI runner verdict artifacts (never committed)
+.dpf-local-ci-*.json
+.dpf-sandbox-freshness.json

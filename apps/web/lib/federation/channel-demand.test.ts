@@ -47,6 +47,7 @@ describe("selectLocalDemandForLink direction", () => {
           itemId: "BI-LOCAL",
           title: "Local need",
           body: null,
+          status: "open",
           workType: "feature",
           occurrenceCount: 1,
           createdAt: new Date(),
@@ -60,6 +61,42 @@ describe("selectLocalDemandForLink direction", () => {
         linkId: "FL-REVERSE",
         itemId: "BI-LOCAL",
       })).rejects.toThrow("Local demand can only be shared toward your distributor or Founder Hub.");
+    },
+  );
+
+  it.each(["done", "deferred"])(
+    "rejects sharing a closed (%s) backlog item — only open demand is projected",
+    async (status) => {
+      const db = {
+        federationLink: { findUnique: vi.fn().mockResolvedValue({
+          linkId: "FL-FOUNDER",
+          role: "channel-downstream",
+          linkState: "trusted",
+          peerAuthorityUrl: "https://founder-hub.example",
+          peerTokenEnc: "token",
+          peerInstallationId: "inst_founder",
+          projectionContractId: null,
+          revokedAt: null,
+          quarantinedAt: null,
+        }) },
+        backlogItem: { findUnique: vi.fn().mockResolvedValue({
+          itemId: "BI-CLOSED",
+          title: "Resolved need",
+          body: null,
+          status,
+          workType: "feature",
+          occurrenceCount: 1,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          digitalProduct: null,
+        }) },
+        projectionContract: { findFirst: vi.fn().mockResolvedValue(null) },
+      };
+
+      await expect(selectLocalDemandForLink(db as never, {
+        linkId: "FL-FOUNDER",
+        itemId: "BI-CLOSED",
+      })).rejects.toThrow("Closed backlog items cannot be shared; only open demand is projected to a connection.");
     },
   );
 
@@ -80,6 +117,7 @@ describe("selectLocalDemandForLink direction", () => {
         itemId: "BI-LOCAL",
         title: "Distributor need",
         body: null,
+        status: "open",
         workType: "feature",
         occurrenceCount: 1,
         createdAt: new Date(),

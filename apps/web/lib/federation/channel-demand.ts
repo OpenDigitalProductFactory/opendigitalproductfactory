@@ -13,6 +13,8 @@ import {
   type FederationRole,
 } from "@dpf/db/federation-link-types";
 
+import { isFederationSyncableBacklogStatus } from "@/lib/explore/backlog";
+
 import {
   queueDemandProjection,
   queueDemandWithdrawal,
@@ -39,6 +41,7 @@ interface ChannelBacklogItem {
   itemId: string;
   title: string;
   body: string | null;
+  status: string;
   workType: string | null;
   occurrenceCount: number;
   createdAt: Date;
@@ -228,6 +231,7 @@ export async function selectLocalDemandForLink(
         itemId: true,
         title: true,
         body: true,
+        status: true,
         workType: true,
         occurrenceCount: true,
         createdAt: true,
@@ -247,6 +251,9 @@ export async function selectLocalDemandForLink(
     );
   }
   if (!item) throw new Error("Local demand item was not found.");
+  if (!isFederationSyncableBacklogStatus(item.status)) {
+    throw new Error("Closed backlog items cannot be shared; only open demand is projected to a connection.");
+  }
   if ((item.body ?? "").includes("[origin:federatedDemand:")) {
     throw new Error("Adopted demand must use governed forwarding so original provenance is preserved.");
   }
