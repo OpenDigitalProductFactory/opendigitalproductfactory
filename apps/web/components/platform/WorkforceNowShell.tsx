@@ -140,7 +140,7 @@ export function WorkforceNowShell({ initialData }: { initialData: WorkforceActiv
 function Kpi({ label, value, sub, flag }: { label: string; value: string; sub?: string; flag?: boolean }) {
   return (
     <div className="rounded-lg border border-[var(--dpf-border)] bg-[var(--dpf-surface-1)] px-3 py-2">
-      <div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">{label}</div>
+      <div className="text-dpf-caption font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">{label}</div>
       <div
         className="mt-0.5 text-xl font-bold tabular-nums"
         style={{ color: flag ? "var(--dpf-warning)" : "var(--dpf-text)" }}
@@ -148,7 +148,7 @@ function Kpi({ label, value, sub, flag }: { label: string; value: string; sub?: 
         {value}
         {flag ? " ⚠" : ""}
       </div>
-      {sub ? <div className="text-[11px] text-[var(--dpf-muted)] tabular-nums">{sub}</div> : null}
+      {sub ? <div className="text-dpf-caption text-[var(--dpf-muted)] tabular-nums">{sub}</div> : null}
     </div>
   );
 }
@@ -156,8 +156,8 @@ function Kpi({ label, value, sub, flag }: { label: string; value: string; sub?: 
 function SectionHead({ title, hint }: { title: string; hint: string }) {
   return (
     <div className="mt-4 flex items-baseline justify-between px-1">
-      <h2 className="text-[11px] font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">{title}</h2>
-      <span className="text-[11px] text-[var(--dpf-muted)]">{hint}</span>
+      <h2 className="text-dpf-caption font-semibold uppercase tracking-wide text-[var(--dpf-muted)]">{title}</h2>
+      <span className="text-dpf-caption text-[var(--dpf-muted)]">{hint}</span>
     </div>
   );
 }
@@ -214,10 +214,10 @@ function CoworkerRow({
               style={{ background: quiet ? "var(--dpf-muted)" : "var(--dpf-success)" }}
             />
             <span className="truncate">{c.name}</span>
-            {c.role ? <span className="text-[11px] font-normal text-[var(--dpf-muted)]">· {c.role}</span> : null}
+            {c.role ? <span className="text-dpf-caption font-normal text-[var(--dpf-muted)]">· {c.role}</span> : null}
             {c.handlesSensitive ? (
               <span
-                className="rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide"
+                className="rounded px-1.5 py-0.5 text-dpf-caption font-bold uppercase tracking-wide"
                 style={{ background: "var(--dpf-state-warning)", color: "var(--dpf-warning)" }}
                 title="Handled sensitive data today — details are access-gated"
               >
@@ -227,16 +227,16 @@ function CoworkerRow({
           </div>
 
           {c.now ? (
-            <div className="mt-1 text-[13px] text-[var(--dpf-muted)]">
+            <div className="mt-1 text-dpf-body text-[var(--dpf-muted)]">
               <span className="text-[var(--dpf-muted)]">Now → </span>
               {c.now.title}
-              <span className="ml-2 rounded border border-[var(--dpf-border)] px-1.5 py-0.5 font-mono text-[10px] uppercase text-[var(--dpf-muted)]">
+              <span className="ml-2 rounded border border-[var(--dpf-border)] px-1.5 py-0.5 font-mono text-dpf-caption uppercase text-[var(--dpf-muted)]">
                 {c.now.status}
               </span>
             </div>
           ) : (
-            <div className="mt-1 flex items-center gap-2 text-[13px]">
-              <span className="font-mono text-[11px] text-[var(--dpf-muted)]">{daysSince(c.lastActedAt)}</span>
+            <div className="mt-1 flex items-center gap-2 text-dpf-body">
+              <span className="font-mono text-dpf-caption text-[var(--dpf-muted)]">{daysSince(c.lastActedAt)}</span>
               {c.didToday.length === 0 ? (
                 <span className="text-[var(--dpf-muted)]">— no actions today</span>
               ) : null}
@@ -245,7 +245,7 @@ function CoworkerRow({
 
           {c.didToday.length > 0 ? (
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              <span className="text-[10px] uppercase tracking-wide text-[var(--dpf-muted)]">Today</span>
+              <span className="text-dpf-caption uppercase tracking-wide text-[var(--dpf-muted)]">Today</span>
               {c.didToday.map((o, i) => (
                 <span
                   key={i}
@@ -267,7 +267,7 @@ function CoworkerRow({
             </div>
           ) : null}
 
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--dpf-muted)]">
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-dpf-caption text-[var(--dpf-muted)]">
             {c.now ? (
               <span className="tabular-nums">
                 <b className="text-[var(--dpf-text)]">{fmtTokens(c.tokensToday)}</b> tokens today · {fmtCost(c.costToday)}
@@ -288,7 +288,7 @@ function CoworkerRow({
                 <a
                   key={l.label}
                   href={l.href}
-                  className="rounded-md border border-[var(--dpf-border)] px-2 py-1 text-[11px] text-[var(--dpf-accent)] hover:border-[var(--dpf-accent)]"
+                  className="rounded-md border border-[var(--dpf-border)] px-2 py-1 text-dpf-caption text-[var(--dpf-accent)] hover:border-[var(--dpf-accent)]"
                 >
                   {l.label}
                 </a>
@@ -301,7 +301,7 @@ function CoworkerRow({
           type="button"
           onClick={() => setOpenManage(isOpen ? null : c.agentId)}
           aria-expanded={isOpen}
-          className="shrink-0 rounded-md border border-[var(--dpf-border)] px-2 py-1 text-[11px] text-[var(--dpf-muted)] hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-text)]"
+          className="shrink-0 rounded-md border border-[var(--dpf-border)] px-2 py-1 text-dpf-caption text-[var(--dpf-muted)] hover:border-[var(--dpf-accent)] hover:text-[var(--dpf-text)]"
         >
           Manage {isOpen ? "▲" : "▾"}
         </button>
