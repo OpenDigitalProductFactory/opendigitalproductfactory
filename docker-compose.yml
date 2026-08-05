@@ -226,6 +226,16 @@ services:
       # explicit per-install operator opt-in after a clean observe soak.
       DPF_WORKTREE_JANITOR_ENABLED: ${DPF_WORKTREE_JANITOR_ENABLED:-1}
       DPF_SANDBOX_BUILD_GC_ENABLED: ${DPF_SANDBOX_BUILD_GC_ENABLED:-1}
+      # Runtime-artifact janitor (BI-DBF3F426 / BI-A55BE432): reaps orphaned
+      # per-branch CI images + stray compose projects INCLUDING their named
+      # volumes — the dominant local-disk leak (dead dpf-<topic> dev stacks
+      # still holding pgdata/node_modules). Same soak model as the worktree
+      # janitor: observe defaults ON so operators get the daily would-reap log;
+      # AUTO_REAP is live/destructive and stays OFF until a per-install opt-in
+      # after a clean observe soak. The portal mounts the docker socket, so the
+      # daily 05:20 job can actually see Docker on a compose install.
+      DPF_RUNTIME_ARTIFACT_JANITOR_ENABLED: ${DPF_RUNTIME_ARTIFACT_JANITOR_ENABLED:-1}
+      DPF_RUNTIME_ARTIFACT_JANITOR_AUTO_REAP: ${DPF_RUNTIME_ARTIFACT_JANITOR_AUTO_REAP:-0}
       # Register ScheduledJob heartbeat rows and other low-risk boot hygiene
       # for installed runtimes. Without this, first-run installs have no
       # code-graph job row and status surfaces report missing background work.
