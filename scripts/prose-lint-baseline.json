@@ -5849,7 +5849,7 @@
     "genericLabels": 0,
     "readability": 0,
     "longSentences": 0,
-    "textMass": 40
+    "textMass": 46
   },
   "apps/web/components/ops/LocalChangesLedger.tsx": {
     "vocabulary": 0,

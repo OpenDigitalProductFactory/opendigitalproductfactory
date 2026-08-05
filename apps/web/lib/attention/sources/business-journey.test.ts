@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { journeyFailureToAttentionItem, journeyWhyNow } from "./business-journey";
+import {
+  journeyFailureToAttentionItem,
+  journeyUnverifiableToAttentionItem,
+  journeyWhyNow,
+} from "./business-journey";
 
 const BASE = {
   issueKey: "journey-failure:storefront-booking",
@@ -75,5 +79,52 @@ describe("journeyFailureToAttentionItem", () => {
     const item = journeyFailureToAttentionItem({ ...BASE, details: "not-an-object" });
     expect(item.deepLink).toBe("/ops/journeys?journey=storefront-booking");
     expect(item.title).toBe(BASE.summary);
+  });
+});
+
+// BI-04CC2090 — the could-not-check card. It must never read like the failure
+// card above: same source, opposite meaning.
+describe("journeyUnverifiableToAttentionItem", () => {
+  const UNVERIFIABLE = {
+    issueKey: "journey-unverifiable:no-public-address",
+    severity: "warn",
+    summary:
+      "Checks cannot run — this install has no public web address set, so the pages a customer would use cannot be opened.",
+    firstDetectedAt: new Date("2026-08-03T06:00:00.000Z"),
+    details: {
+      reason: "no-public-address",
+      blockedJourneys: [
+        { journeyId: "storefront-booking", outcome: "Customers can book a time with you", revenueBearing: true },
+        { journeyId: "customer-sign-in", outcome: "Existing customers can sign in to their account", revenueBearing: false },
+      ],
+    },
+  };
+
+  it("never claims anything is not working", () => {
+    const item = journeyUnverifiableToAttentionItem(UNVERIFIABLE);
+    expect(item.title).toBe("Some checks could not run");
+    expect(`${item.title} ${item.context}`).not.toMatch(/not working/i);
+  });
+
+  it("is never high-risk, even when it blocks a revenue-bearing journey", () => {
+    // storefront-booking is revenueBearing above. A missing setting is still not
+    // an outage, and ranking it with the reds is what buried the real signal.
+    expect(journeyUnverifiableToAttentionItem(UNVERIFIABLE).riskClass).toBe("bounded-write");
+  });
+
+  it("names the journeys it could not check, and says so plainly", () => {
+    const item = journeyUnverifiableToAttentionItem(UNVERIFIABLE);
+    expect(item.context).toContain("Customers can book a time with you");
+    expect(item.context).toContain("They were not tested.");
+  });
+
+  it("lands on the journeys surface, since no single journey owns the cause", () => {
+    expect(journeyUnverifiableToAttentionItem(UNVERIFIABLE).deepLink).toBe("/ops/journeys");
+  });
+
+  it("survives malformed details without inventing coverage", () => {
+    const item = journeyUnverifiableToAttentionItem({ ...UNVERIFIABLE, details: "garbage" });
+    expect(item.title).toBe("Some checks could not run");
+    expect(item.context).not.toMatch(/undefined/);
   });
 });

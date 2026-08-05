@@ -23,9 +23,11 @@ import {
   type InstallJourneyContext,
   type JourneyDefinition,
   type JourneyResult,
+  type JourneyStatus,
   type JourneyStepResult,
   type JourneySweepResult,
   type StepProbeResult,
+  type UnverifiableReason,
 } from "./types";
 
 export type JourneySweepDeps = {
@@ -56,6 +58,7 @@ export async function runJourney(
   const probeCtx = { ...ctx, fetchImpl: deps.fetchImpl, now: deps.now };
   const steps: JourneyStepResult[] = [];
   let failedAlready = false;
+  let blockedReason: UnverifiableReason | null = null;
 
   for (const step of journey.steps) {
     if (failedAlready) {
@@ -64,7 +67,9 @@ export async function runJourney(
         label: step.label,
         depth: step.depth,
         outcome: "skipped",
-        detail: "Not checked — an earlier step in this journey already failed.",
+        detail: blockedReason
+          ? "Not checked — an earlier step in this journey could not be checked."
+          : "Not checked — an earlier step in this journey already failed.",
         durationMs: 0,
       });
       continue;
@@ -83,12 +88,23 @@ export async function runJourney(
         actual: getErrorMessage(err),
       };
     }
-    if (!result.passed) failedAlready = true;
+    if (!result.passed) {
+      failedAlready = true;
+      // Record the reason from the FIRST blocking step only. Later steps are
+      // skipped, so they cannot contribute a competing cause.
+      if (result.unverifiable && result.unverifiableReason) {
+        blockedReason = result.unverifiableReason;
+      }
+    }
     steps.push({
       stepId: step.stepId,
       label: step.label,
       depth: step.depth,
-      outcome: result.passed ? "passed" : "failed",
+      outcome: result.passed
+        ? "passed"
+        : result.unverifiable
+          ? "unverifiable"
+          : "failed",
       detail: result.detail,
       ...(result.expected !== undefined ? { expected: result.expected } : {}),
       ...(result.actual !== undefined ? { actual: result.actual } : {}),
@@ -96,7 +112,11 @@ export async function runJourney(
     });
   }
 
-  const status = failedAlready ? "failed" : "passed";
+  const status: JourneyStatus = blockedReason
+    ? "unverifiable"
+    : failedAlready
+      ? "failed"
+      : "passed";
   const depth = status === "passed" ? achievedDepth(steps) : null;
   return {
     journeyId: journey.journeyId,
@@ -106,6 +126,7 @@ export async function runJourney(
     status,
     achievedDepth: depth,
     uncheckedDepths: uncheckedDepths(depth),
+    ...(blockedReason ? { unverifiableReason: blockedReason } : {}),
     steps,
     durationMs: deps.now().getTime() - journeyStartedAt,
   };
@@ -167,6 +188,7 @@ export async function runJourneySweep(
     passed: results.filter((r) => r.status === "passed").length,
     failed: results.filter((r) => r.status === "failed").length,
     notApplicable: results.filter((r) => r.status === "not-applicable").length,
+    unverifiable: results.filter((r) => r.status === "unverifiable").length,
   };
 }
 
@@ -182,6 +204,12 @@ async function persistSweep(
   deps: JourneySweepDeps,
 ): Promise<void> {
   const anyFailed = results.some((r) => r.status === "failed");
+  // A sweep that established nothing must never record `passed`. `inconclusive`
+  // is already in this column's live vocabulary, so no new state is invented.
+  // A genuine failure outranks an unverifiable one: if any journey is actually
+  // broken, the run failed.
+  const anyUnverifiable = results.some((r) => r.status === "unverifiable");
+  const runStatus = anyFailed ? "failed" : anyUnverifiable ? "inconclusive" : "passed";
 
   await deps.db.assuranceRun.create({
     data: {
@@ -191,7 +219,7 @@ async function persistSweep(
       scopeId: "install",
       adapterKey: JOURNEY_ADAPTER_KEY,
       adapterVersion: JOURNEY_ADAPTER_VERSION,
-      status: anyFailed ? "failed" : "passed",
+      status: runStatus,
       startedAt,
       completedAt,
       summary: {
@@ -202,6 +230,7 @@ async function persistSweep(
           achievedDepth: r.achievedDepth,
           uncheckedDepths: r.uncheckedDepths,
           notApplicableReason: r.notApplicableReason ?? null,
+          unverifiableReason: r.unverifiableReason ?? null,
           durationMs: r.durationMs,
           steps: r.steps,
         })),

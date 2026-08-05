@@ -55,7 +55,12 @@ export const DEPTH_MEANING: Record<VerificationDepth, string> = {
   interaction: "a customer doing this in a browser",
 };
 
-export type StepOutcome = "passed" | "failed" | "skipped";
+export type StepOutcome = "passed" | "failed" | "skipped" | "unverifiable";
+
+/** Why a step could not run at all. Keyed, not free text, because the operator
+ *  signal is grouped by cause: four journeys blocked by one missing setting are
+ *  ONE thing to fix, not four. */
+export type UnverifiableReason = "no-public-address" | "no-organization-slug";
 
 /** One probe within a journey. Steps run cheapest-first and a step is skipped
  *  when an earlier step in the same journey failed — a broken storefront costs
@@ -76,6 +81,13 @@ export type StepProbeResult = {
   detail: string;
   expected?: string;
   actual?: string;
+  /** The probe could not run — it established NOTHING about the business. This
+   *  is not a failure: "I could not check" and "I checked and it is broken" are
+   *  different claims, and reporting the first as the second tells the owner
+   *  their business is down on evidence that never touched their business. */
+  unverifiable?: true;
+  /** Required whenever `unverifiable` is set — it keys the operator signal. */
+  unverifiableReason?: UnverifiableReason;
 };
 
 export type JourneyStepResult = {
@@ -126,7 +138,11 @@ export type JourneyDefinition = {
   steps: JourneyStep[];
 };
 
-export type JourneyStatus = "passed" | "failed" | "not-applicable";
+/** `unverifiable` is deliberately NOT a flavour of `failed`. A failed journey is
+ *  a claim about the business; an unverifiable one is a claim about the watchdog.
+ *  Collapsing them is what produced four error-severity "not working" rows on an
+ *  install the watchdog had never once been able to reach (BI-04CC2090). */
+export type JourneyStatus = "passed" | "failed" | "not-applicable" | "unverifiable";
 
 export type JourneyResult = {
   journeyId: string;
@@ -140,6 +156,8 @@ export type JourneyResult = {
   /** Depths this run did not establish. Rendered as "Not checked: …". */
   uncheckedDepths: VerificationDepth[];
   notApplicableReason?: string;
+  /** Set when `status === "unverifiable"` — why the run could not check. */
+  unverifiableReason?: UnverifiableReason;
   steps: JourneyStepResult[];
   durationMs: number;
 };
@@ -152,6 +170,7 @@ export type JourneySweepResult = {
   passed: number;
   failed: number;
   notApplicable: number;
+  unverifiable: number;
 };
 
 export const JOURNEY_ADAPTER_KEY = "journey-watchdog";

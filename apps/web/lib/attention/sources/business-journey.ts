@@ -18,6 +18,10 @@ import type { AttentionItem } from "../types";
 
 type Db = typeof prisma;
 
+/** The journeys surface itself — the only honest destination for a grouped
+ *  could-not-check row, which has no single journey to land on. */
+const JOURNEYS_LINK = "/ops/journeys";
+
 export type OpenJourneyFailureIssue = {
   issueKey: string;
   severity: string;
@@ -33,6 +37,7 @@ type JourneyIssueDetails = {
   revenueBearing?: boolean;
   achievedDepth?: VerificationDepth | null;
   failedSteps?: Array<{ label?: string; detail?: string }>;
+  blockedJourneys?: Array<{ journeyId?: string; outcome?: string; revenueBearing?: boolean }>;
 };
 
 function detailsOf(raw: unknown): JourneyIssueDetails {
@@ -86,15 +91,69 @@ export function journeyFailureToAttentionItem(issue: OpenJourneyFailureIssue): A
 }
 
 /**
- * Load open journey failures. Customer-scoped rows are excluded for the same
- * reason platform-health excludes them: they belong to the customer estate
- * queue, not the operator's own attention.
+ * Projection of a grouped "checks could not run" row (BI-04CC2090).
+ *
+ * Kept separate from `journeyFailureToAttentionItem` rather than sharing it with
+ * a flag, because almost every field differs in kind: this card must never say
+ * an outcome is "not working", never rank as high-risk, and never imply the
+ * business was measured. The two look similar and mean opposite things — one
+ * reports the business, the other reports the watchdog.
+ */
+export function journeyUnverifiableToAttentionItem(
+  issue: OpenJourneyFailureIssue,
+): AttentionItem {
+  const details = detailsOf(issue.details);
+  const blocked = details.blockedJourneys ?? [];
+  const named = blocked
+    .map((j) => j.outcome?.trim())
+    .filter((o): o is string => Boolean(o));
+  const context = [
+    issue.summary,
+    named.length > 0 ? `Not checked: ${named.join("; ")}.` : null,
+    "This says nothing about whether those journeys work. They were not tested.",
+  ]
+    .filter((p): p is string => Boolean(p))
+    .join(" ");
+
+  return {
+    id: `business-journey:${issue.issueKey}`,
+    source: "business-journey",
+    title: "Some checks could not run",
+    context,
+    decisionClass: { scorability: "unscorable" },
+    // Never high-risk, even when the journeys it blocks are revenue-bearing. The
+    // risk of a missing setting is not the risk of a broken checkout, and
+    // ranking them together is what buried the real signal.
+    riskClass: "bounded-write",
+    triage: {
+      timeToAct: "none",
+      residueReason: "no-self-heal",
+      decideEffort: "review",
+      irreversible: false,
+    },
+    createdAtIso: issue.firstDetectedAt.toISOString(),
+    actions: [{ kind: "open-in-context", label: "See what could not be checked", href: JOURNEYS_LINK }],
+    deepLink: JOURNEYS_LINK,
+    audience: { operator: true },
+  };
+}
+
+/**
+ * Load open journey rows — both genuine failures and could-not-check groups.
+ * Customer-scoped rows are excluded for the same reason platform-health excludes
+ * them: they belong to the customer estate queue, not the operator's own
+ * attention.
  */
 export async function loadBusinessJourneyItems(db: Db): Promise<AttentionItem[]> {
   const rows = await db.portfolioQualityIssue.findMany({
-    where: { issueType: "journey_failure", status: "open", customerAccountId: null },
+    where: {
+      issueType: { in: ["journey_failure", "journey_unverifiable"] },
+      status: "open",
+      customerAccountId: null,
+    },
     select: {
       issueKey: true,
+      issueType: true,
       severity: true,
       summary: true,
       details: true,
@@ -102,5 +161,9 @@ export async function loadBusinessJourneyItems(db: Db): Promise<AttentionItem[]>
     },
     orderBy: { firstDetectedAt: "asc" },
   });
-  return rows.map(journeyFailureToAttentionItem);
+  return rows.map((row) =>
+    row.issueType === "journey_unverifiable"
+      ? journeyUnverifiableToAttentionItem(row)
+      : journeyFailureToAttentionItem(row),
+  );
 }
