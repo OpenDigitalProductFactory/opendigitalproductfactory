@@ -9540,6 +9540,7 @@
         "which-gate-runs-where",
         "what-runs-in-ci",
         "policy-guard-profiles",
+        "re-evaluating-a-trailer-or-label-without-pushing",
         "where-ci-runs-it",
         "run-locally-before-pushing",
         "the-pre-push-gate-pregate-default-on",
