@@ -115,7 +115,16 @@ describe("persistBootstrapDiscoveryRun customer-scope isolation", () => {
         scopeKey: "customer:cust_a:site:site_austin",
         lastConfirmedRun: { sourceSlug: "edge-node:node-a" },
       },
-      select: { entityKey: true },
+      // Identity columns ride along with the key set so the stale branch can
+      // judge on the persisted row; the scope `where` above is the subject here.
+      select: {
+        entityKey: true,
+        entityType: true,
+        manufacturer: true,
+        observedVersion: true,
+        normalizedVersion: true,
+        supportStatus: true,
+      },
     });
 
     expect(relationshipFindMany).toHaveBeenCalledWith({

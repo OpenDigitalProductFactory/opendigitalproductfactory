@@ -1,4 +1,5 @@
 import { evaluateInventoryQuality } from "./discovery-attribution";
+import { buildQualityEvaluationEntities } from "./discovery-quality-input";
 import { persistQualityIssues } from "./discovery-quality-persistence";
 import type { NormalizedDiscoveryOutput } from "./discovery-normalize";
 import { deriveInventoryEvidenceSnapshot } from "./discovery-evidence";
@@ -665,89 +666,14 @@ export async function persistBootstrapDiscoveryRun(
         })).count;
 
     const qualityEvaluation = evaluateInventoryQuality(
-      [
-        ...normalized.inventoryEntities.map((entity) => {
-          const evidenceSnapshot = deriveInventoryEvidenceSnapshot(
-            softwareEvidenceByEntityKey.get(entity.entityKey) ?? [],
-          );
-          const enriched = enrichmentByEntityKey.get(entity.entityKey);
-          const persisted = persistedIdentityByEntityKey.get(entity.entityKey);
-          const qualityEntity = {
-            entityKey: entity.entityKey,
-            entityType: entity.entityType,
-            attributionStatus: entity.attributionStatus,
-            attributionMethod: entity.attributionMethod ?? null,
-            attributionConfidence: entity.attributionConfidence ?? null,
-            candidateTaxonomy: entity.candidateTaxonomy?.map((candidate) => ({
-              nodeId: candidate.nodeId,
-              score: candidate.score,
-            })) ?? null,
-            taxonomyNodeId: entity.taxonomyNodeId ?? null,
-            digitalProductId: null,
-            // PERSISTED row first, then this sweep's enrichment, then the snapshot.
-            // manufacturer/supportStatus are sticky across sources (written only
-            // when enrichment yields them) while `properties` is replaced every
-            // sweep — so a poor source (ARP, no MAC) starves enrichment and, judged
-            // on this sweep alone, re-raises an issue for an entity the row already
-            // identifies. That is why the previous enrichment-only fix did not
-            // drain the queues. See BI-A3D12F85.
-            manufacturer:
-              persisted?.manufacturer ?? enriched?.manufacturer ?? evidenceSnapshot.manufacturer,
-            observedVersion:
-              persisted?.observedVersion
-              ?? enriched?.observedVersion
-              ?? evidenceSnapshot.observedVersion,
-            normalizedVersion:
-              persisted?.normalizedVersion
-              ?? enriched?.normalizedVersion
-              ?? evidenceSnapshot.normalizedVersion,
-            // supportStatus is non-nullable and defaults to "unknown", so a plain
-            // ?? chain would stop at the persisted default and never consult the
-            // sweep. Take the first value that is actually known.
-            supportStatus:
-              [persisted?.supportStatus, enriched?.supportStatus, evidenceSnapshot.supportStatus]
-                .find((value) => value && value !== "unknown")
-              ?? "unknown",
-            hasSoftwareEvidence: evidenceSnapshot.hasSoftwareEvidence,
-            normalizationStatus: evidenceSnapshot.normalizationStatus,
-          };
-
-          if (entity.attributionStatus === "needs_review") {
-            return {
-              ...qualityEntity,
-              qualityStatus: "warning" as const,
-            };
-          }
-
-          return qualityEntity;
-        }),
-        // A stale entity is judged on its PERSISTED identity, exactly as an
-        // observed one is (#3967). Passing only {entityKey, attributionStatus}
-        // made the detector re-raise catalog_match_ambiguous and
-        // lifecycle_unverified for EVERY stale entity on facts it had not
-        // checked but merely omitted — `database:prom:qdrant:qdrant:6333` carries
-        // manufacturer "qdrant" and still re-raised every sweep. Omission is not
-        // evidence of absence, and the resolve branch must weigh the same facts
-        // as the emit branch (the #3873 invariant).
-        //
-        // `normalizationStatus` is deliberately absent rather than defaulted: it
-        // is derived from this sweep's DiscoveredSoftwareEvidence and is not a
-        // persisted column, so a sweep that did not observe the entity genuinely
-        // has no value for it. The persisted identity columns are the whole of
-        // the available truth, and both branches now read them.
-        ...staleEntityKeys.map((entityKey) => {
-          const persisted = existingEntityByKey.get(entityKey);
-          return {
-            entityKey,
-            entityType: persisted?.entityType ?? "inventory_entity",
-            attributionStatus: "stale" as const,
-            manufacturer: persisted?.manufacturer ?? null,
-            observedVersion: persisted?.observedVersion ?? null,
-            normalizedVersion: persisted?.normalizedVersion ?? null,
-            supportStatus: persisted?.supportStatus ?? "unknown",
-          };
-        }),
-      ],
+      buildQualityEvaluationEntities({
+        observedEntities: normalized.inventoryEntities,
+        softwareEvidenceByEntityKey,
+        enrichmentByEntityKey,
+        persistedIdentityByEntityKey,
+        staleEntityKeys,
+        existingEntityByKey,
+      }),
       staleRelationshipKeys.map((relationshipKey) => ({
         relationshipKey,
         relationshipType: "inventory_relationship",

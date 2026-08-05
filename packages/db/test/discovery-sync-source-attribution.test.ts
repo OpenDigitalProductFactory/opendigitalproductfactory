@@ -144,7 +144,16 @@ describe("persistBootstrapDiscoveryRun source attribution", () => {
         scopeKey: "organization:internal",
         lastConfirmedRun: { sourceSlug: "unifi" },
       },
-      select: { entityKey: true },
+      // Identity columns ride along with the key set so the stale branch can
+      // judge on the persisted row; the `where` above is what this test asserts.
+      select: {
+        entityKey: true,
+        entityType: true,
+        manufacturer: true,
+        observedVersion: true,
+        normalizedVersion: true,
+        supportStatus: true,
+      },
     });
 
     // Only unifi's own row was a candidate for staleness — and it WAS
@@ -196,13 +205,24 @@ describe("persistBootstrapDiscoveryRun source attribution", () => {
       },
     );
 
+    // The `where` is the subject of this test — the source-attribution filter
+    // composed with the scope filter. The `select` is incidental to it: identity
+    // columns are read back with the key set so the STALE branch can judge an
+    // entity on its persisted row rather than on omitted facts (BI-A3D12F85).
     expect(entityFindMany).toHaveBeenCalledWith({
       where: {
         mergedIntoId: null,
         scopeKey,
         lastConfirmedRun: { sourceSlug: "edge-node:node-a" },
       },
-      select: { entityKey: true },
+      select: {
+        entityKey: true,
+        entityType: true,
+        manufacturer: true,
+        observedVersion: true,
+        normalizedVersion: true,
+        supportStatus: true,
+      },
     });
 
     // Only node-a's key is in the stale candidate set; node-b's row is
