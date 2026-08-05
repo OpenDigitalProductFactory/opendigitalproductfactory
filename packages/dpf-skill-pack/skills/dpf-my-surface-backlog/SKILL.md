@@ -1,6 +1,6 @@
 ---
 name: dpf-my-surface-backlog
-description: "Use when an AI coworker needs to see, open, or add backlog items for its OWN area — the BIs against its surface (portfolio) and occupation — and track their status. This is the shared-evolution loop: the coworker and its human counterpart drive the coworker's own capability growth through the backlog. Scope is resolved from the coworker's identity and cannot be widened to another area, so it is safe on a small local model and for sensitivity-restricted portfolios."
+description: "See, open, and file backlog items for your OWN area — the BIs against your surface (portfolio) and occupation — and track their status. Scope is resolved from your identity and cannot be widened, so it stays safe on a small local model and for sensitive portfolios."
 
 # Agent Skills standard fields (Surface A — Claude Code)
 disable-model-invocation: false
