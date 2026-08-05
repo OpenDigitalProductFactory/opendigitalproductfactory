@@ -161,7 +161,9 @@ The rollout is cumulative and ordered: compiler shadow → admin preview → onb
 | Admin clicks "Discover Models" | Calls provider's model list API, creates discovery records, profiles using quality tiers. |
 | Model restricted by `modelRestrictions` | Profiling auto-retires it with reason "Model not accessible with provider credential type." |
 | New model pulled into Docker Model Runner | Discovered automatically on next providers page load. |
-| Model returns inference errors | Fallback chain tries the next model. After repeated failures, model status degrades to `retired`. |
+| Model returns inference errors | Fallback chain tries the next model. After repeated failures, model status degrades to `retired` — unless the error looks like infrastructure/capacity (timeouts, connection failures, a busy engine) or a credential gap, or unless retiring would strand a sensitivity class (see below). |
+| Model times out under load | Not retired. Capacity and admission timeouts describe a busy engine, not a broken model — a local engine holding a large model can exceed its admission budget from load or a cold weight-load alone. |
+| Retiring would strand a sensitivity class | Not retired. The model is marked `degraded` instead and a warning names the exposed class. |
 | Model disappears from provider API | After 2+ discovery cycles without seeing it, model is retired. |
 | Pre-evaluated profile re-profiled | Metadata is updated but dimension scores are NOT overwritten (`profileSource: "evaluated"` is protected). |
 | Admin overrides AgentModelConfig | Takes effect immediately. Seed will not overwrite admin-configured rows on next restart. |
@@ -210,6 +212,11 @@ Local models are automatically discovered and profiled. They are assigned the `b
 - Discovery is manual for cloud providers. Go to AI Workforce > Providers > select the provider > click "Discover Models"
 - After discovery, click "Profile Models" to assign quality tiers and dimension scores
 - Models outside the provider's `modelRestrictions` allowlist will be automatically retired
+
+**Every request in one sensitivity class fails with "No AI model can handle this request right now":**
+- That message names cloud sign-in as the likely cause, but it is emitted whenever routing finds no eligible endpoint — for any reason. Check the router's own verdict before re-authenticating anything: `docker logs dpf-portal-1 | grep -A25 "no eligible endpoints"` prints the contract inputs and the rejection reason for every candidate.
+- Routing filters candidates on `retiredAt IS NULL`, **not** on `modelStatus`. A profile can therefore read `active` in the admin UI and still be invisible to routing. Compare the router's excluded-endpoint count against the profiles the manifest query would return — an endpoint missing from the rejection list never became a candidate at all.
+- Auto-retirement will not strand a class on its own (see the lifecycle table), but a row stranded before that guard existed is healed at boot.
 
 **A provider is active but restricted work is blocked:**
 - Open the provider detail page and review **Provider trust evidence**.

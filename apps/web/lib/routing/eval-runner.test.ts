@@ -12,6 +12,9 @@ const evalState = vi.hoisted(() => ({
   reapedCount: 0,
   // BI-C8164664: recency-cooldown fixture
   lastEvalAt: null as Date | null,
+  // BI-32426CA0: last-endpoint-standing guard fixtures
+  selfClearance: ["public", "internal", "confidential", "restricted"] as string[],
+  peerClearances: [] as string[][],
 }));
 
 vi.mock("@/lib/ai-inference", () => {
@@ -35,10 +38,18 @@ vi.mock("@dpf/db", () => ({
   prisma: {
     modelProfile: {
       findUnique: vi.fn(async () => ({
+        id: "self-profile-id",
         evalCount: 0,
         modelStatus: "active",
         lastEvalAt: evalState.lastEvalAt,
+        // Clearance of the profile under test, for the last-endpoint-standing
+        // guard (BI-32426CA0). Extra keys are ignored by the other suites.
+        provider: { sensitivityClearance: evalState.selfClearance },
       })),
+      // Peer endpoints that would still be routable if this profile retired.
+      findMany: vi.fn(async () =>
+        evalState.peerClearances.map((c) => ({ provider: { sensitivityClearance: c } })),
+      ),
       update: vi.fn(async (args: { data: Record<string, unknown> }) => {
         evalState.profileUpdates.push(args.data);
         return {};
@@ -80,6 +91,7 @@ import {
   TOOL_USE_MIN_FIDELITY,
   type DriftResult,
 } from "./eval-runner";
+
 
 describe("resolveEvaluatedToolUse — calibrate half (BI-DFC30977)", () => {
   const dim = (newScore: number, inconclusive = false) => ({ newScore, inconclusive });
@@ -194,6 +206,26 @@ describe("errorLooksLikeInfrastructure (BI-INST-008 circuit breaker)", () => {
     expect(errorLooksLikeInfrastructure(
       "Network error calling local: The operation was aborted due to timeout",
     )).toBe(true);
+  });
+
+  // BI-32426CA0. Verbatim retiredReason observed on a live install; it retired
+  // the bundled local model for five weeks while that model answered direct
+  // curl requests fine. The pre-existing
+  // /operation was aborted due to timeout/ pattern did not match this wording.
+  it("classifies a local-engine admission timeout as infrastructure", () => {
+    expect(errorLooksLikeInfrastructure(
+      "inference admission timeout on local engine after 120000ms (origin=interactive, provider=local)",
+    )).toBe(true);
+  });
+  it("classifies a generic 'timed out after Nms' as infrastructure", () => {
+    expect(errorLooksLikeInfrastructure(
+      "Provider call timed out after 60000ms",
+    )).toBe(true);
+  });
+  it("still treats a genuine model failure as retirable", () => {
+    expect(errorLooksLikeInfrastructure(
+      "404 model_not_found: The model 'gpt-4-vision-preview' has been deprecated",
+    )).toBe(false);
   });
   it("classifies generic 'network error' as infrastructure", () => {
     expect(errorLooksLikeInfrastructure(
