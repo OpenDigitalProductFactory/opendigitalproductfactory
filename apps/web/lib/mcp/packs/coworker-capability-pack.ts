@@ -39,16 +39,11 @@ import {
 } from "@/lib/coworker-self-assessment/types";
 
 import type { ToolPack, ToolPackHandler } from "../tool-pack";
+import { requireCurrentCoworker } from "./coworker-scope";
 
 // ─── Helpers (moved verbatim; used only by these handlers) ──────────────────
-
-function requireCurrentCoworker(context?: { agentId?: string }): string {
-  const agentId = context?.agentId?.trim();
-  if (!agentId) {
-    throw new Error("A current coworker agentId is required for this tool.");
-  }
-  return agentId;
-}
+// requireCurrentCoworker now lives in ./coworker-scope so the backlog-lens pack
+// shares one identity-resolution path (BI-474A1F55). Re-imported above.
 
 function routeValueStream(capability: CapabilityKey | null): string {
   return capability?.replace(/^(view|manage)_/, "") || "cross-cutting";
