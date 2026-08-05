@@ -103,6 +103,7 @@ describe("runtime-artifact-janitor — dry-run / no-apply invariant (BI-DBF3F426
     expect(result.skipped).toBe(false);
     if (result.skipped) throw new Error("expected a summary");
     expect(result.mode).toBe("dry-run");
+    if (result.mode !== "dry-run") throw new Error("expected dry-run summary");
     expect(result.wouldReapImages).toBe(1); // only the REAP verdict, not the KEEP
     expect(result.wouldReapImageRepositories).toEqual(["dpf-local-integration-foo-build"]);
     expect(result.wouldReapProjects).toBe(1);
