@@ -3,14 +3,14 @@
   "selectionCliff": 15,
   "entries": {
     "registry.toolDefinitions": {
-      "value": 355,
-      "reason": "Adds record_compliance_scope (BI-0B867B67 phase 3): the compliance coworker captures what the business does with data / where it employs people into BusinessContext, moving matching regulations from needs-review to applies. Earns a permanent place \u2014 it is the conversational half of the setup-form capture and the only tool that writes the applicability-triggering profile; authority stays data_governance_validate-gated.",
-      "recordedAt": "2026-08-04"
+      "value": 360,
+      "reason": "Adds the five Policy draft-lifecycle tools (BI-3CDEC5F0): list_policies, get_policy, create_policy, update_policy, request_policy_review. Earns a permanent place \u2014 before them a coworker asked to write a company policy could only emit prose into chat, leaving no governed Policy row for anyone to review or publish; these are the only tools that write the Policy store, and they are deliberately publish-incapable so the human lifecycle action on /compliance/policies stays the sole publisher. list/get precede write so a coworker discriminates against existing policies instead of duplicating them; update and request_policy_review are distinct because one edits content and the other moves lifecycle state, and collapsing them would let an edit silently advance a policy toward publication.",
+      "recordedAt": "2026-08-05"
     },
     "registry.packFiles": {
-      "value": 83,
-      "reason": "Adds compliance-scope-pack (BI-0B867B67 phase 3) hosting record_compliance_scope in its own scoped pack per the pack-registry convention (one capability domain per pack), rather than bloating an unrelated pack. Permanent: it is the compliance coworkers capture surface.",
-      "recordedAt": "2026-08-04"
+      "value": 84,
+      "reason": "Adds policy-pack (BI-3CDEC5F0) hosting the Policy draft lifecycle in its own scoped pack per the pack-registry convention (one capability domain per pack) rather than bloating compliance-scope-pack or the HR pack \u2014 Policy is its own governed store with its own lifecycle and its own policy_read/policy_write grants. Permanent: it is the coworker-facing half of the /compliance/policies surface.",
+      "recordedAt": "2026-08-05"
     },
     "tier.coreToolNames": {
       "value": 29,

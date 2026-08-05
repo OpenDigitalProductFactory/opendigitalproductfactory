@@ -31,6 +31,20 @@ as a new version; that increments the version and clears the prior approval,
 publication, and retirement timestamps. A published policy must be retired
 before a new draft cycle.
 
+## Ask A Coworker To Draft One
+
+You can ask a coworker, such as the HR specialist, to write a policy for you.
+The coworker creates it as a **draft** and tells you where to review it. It can
+also edit its own draft and move it to in-review when the content is ready.
+
+A coworker cannot approve, publish, or retire a policy. Those steps stay with a
+person on `/compliance/policies`, so a drafted policy is a proposal, not an
+active rule. Read the draft before you approve it: the coworker wrote the
+words, and you own what the policy says.
+
+Audience is not yet a structured field. If a policy applies to part of your
+workforce, say so in the notes and check the scope yourself before you publish.
+
 ## Publish A Policy
 
 1. Define the title, category, owner, body or file reference, effective date,
