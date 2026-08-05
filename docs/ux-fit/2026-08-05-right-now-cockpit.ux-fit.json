@@ -1,0 +1,20 @@
+{
+  "version": "1",
+  "decidedOption": "new-lean-right-now-cockpit",
+  "decisionInteractionId": "DI-B78B2A014223",
+  "scope": {
+    "files": [
+      "apps/web/app/(shell)/platform/ai/right-now/page.tsx",
+      "apps/web/components/platform/RightNowLiveShell.tsx",
+      "apps/web/components/platform/platform-nav.ts"
+    ]
+  },
+  "evidence": {
+    "kind": "propose-n-pick",
+    "consideredOptions": [
+      "new-lean-right-now-cockpit",
+      "strip-operations-map-in-place",
+      "add-now-panel-to-map"
+    ]
+  }
+}

@@ -59,6 +59,10 @@ export const PLATFORM_FAMILIES: PlatformFamily[] = [
       // altitudes (Readiness, Operations Map) one tab away. /platform/ai
       // redirects here for the same reason.
       { label: "Workforce", href: "/platform/ai/overview" },
+      // BI-1A68257F: "Right Now" is the lean live cockpit — resource pressure +
+      // active work this moment. It sits beside the Operations Map, which keeps
+      // the deep analytical/planning altitude (topology, replay, forecasts).
+      { label: "Right Now", href: "/platform/ai/right-now" },
       { label: "Readiness", href: "/platform/ai/readiness" },
       { label: "Operations Map", href: "/platform/ai/operations-map" },
       { label: "Capacity Continuity", href: "/platform/ai/capacity-continuity" },
