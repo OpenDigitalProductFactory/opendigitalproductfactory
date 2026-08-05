@@ -219,6 +219,16 @@ async function searchUxCritiqueCorpus(
     message,
     data: {
       total: entries.length,
+      // The fail-loud signal lives in DATA, not only in `message`. Verified
+      // 2026-08-04 against the deployed tool: an empty corpus came back as a
+      // bare `{total: 0, entries: []}` because this client surfaces `data` and
+      // drops `message` — so the one sentence that stops a caller treating
+      // silence as "nothing relevant" never arrived. A warning a client can
+      // discard is not a warning.
+      grounding:
+        entries.length > 0
+          ? "grounded"
+          : "UNGROUNDED — no matching critique entries. Any design judgement offered here is not backed by this product's design authority. Say so explicitly rather than asserting a verdict, and capture what you observe so the corpus starts accruing.",
       entries: entries.map(({ page, entry }) => ({
         slug: page.slug,
         title: page.title,
@@ -248,11 +258,13 @@ export const uxCritiquePack: ToolPack = {
   // does not carry is DENIED for every coworker while looking authoritative —
   // the BI-88B77204 failure.
   //
-  // Capture writes a draft WikiPage into the craft overlay, so it takes
-  // `registry_write`, the same scope `record_org_business_answer` uses for the
-  // org corpus. Search is read-only and advisory, like the WWMD/WSID gates.
+  // Capture takes its OWN narrow grant rather than `registry_write`: the
+  // coding-agent (`development`) token holds registry_read but not
+  // registry_write, so shipping on the broad grant made this tool unreachable
+  // from the external review sessions it exists for. Search is read-only and
+  // advisory, like the WWMD/WSID gates.
   grants: {
-    capture_ux_critique: ["registry_write"],
+    capture_ux_critique: ["critique_capture"],
     search_ux_critique_corpus: ["registry_read"],
   },
 };
