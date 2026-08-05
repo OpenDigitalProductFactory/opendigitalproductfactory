@@ -93,8 +93,14 @@ export interface BacklogIngestResult {
    * Existing dedup answers "is there another BI for this?"; this answers the
    * different question "does this already EXIST?" A backlog sweep cannot: it
    * searches backlog rows, not source.
+   *
+   * OPTIONAL on purpose. `ingestBacklogItem` always populates it, but the many
+   * test fakes and injected ingest functions across the codebase legitimately
+   * return only the identity fields. Requiring an advisory that a fake does not
+   * produce would make every one of them a type error — the field is metadata
+   * about the filing, not part of the filing contract.
    */
-  implementationCandidates: ImplementationCandidate[];
+  implementationCandidates?: ImplementationCandidate[];
 }
 
 /**

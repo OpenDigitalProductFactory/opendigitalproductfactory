@@ -302,7 +302,7 @@ describe("ingestBacklogItem", () => {
         { store, indexKnowledge: () => {}, listRepoFiles: async () => REPO },
       );
 
-      expect(result.implementationCandidates.map((c) => c.path)).toEqual([
+      expect((result.implementationCandidates ?? []).map((c) => c.path)).toEqual([
         "scripts/build-docs-staleness.mjs",
       ]);
       // The advice must OUTLIVE the tool response. The failure being fixed is a

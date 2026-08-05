@@ -136,7 +136,7 @@ async function createBacklogItem(
     }
     const { withScanAdvisory } = await import("@/lib/operate/implementation-scan");
     const created = `Created backlog item ${result.itemId}`;
-    const message = withScanAdvisory(created, result.implementationCandidates);
+    const message = withScanAdvisory(created, result.implementationCandidates ?? []);
     return { success: true, entityId: result.itemId, message };
   } catch (err) {
     const msg =
