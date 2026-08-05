@@ -57,6 +57,11 @@ export type DiscoverySyncTx = InventoryEntityHeapIntegrityTx & {
     }): Promise<{ id: string }>;
   };
   inventoryEntity: {
+    // Identity columns come back with the key set for the same reason `upsert`
+    // selects them (below): quality is evaluated against the PERSISTED row. This
+    // read is the only source of that row for an entity the sweep did NOT
+    // re-observe — the stale branch — which previously had no identity at all
+    // and so re-raised identity/lifecycle on omitted rather than checked facts.
     findMany(args: {
       where?: {
         scopeKey?: string;
@@ -64,8 +69,22 @@ export type DiscoverySyncTx = InventoryEntityHeapIntegrityTx & {
         mergedIntoId?: null;
         status?: { not: string };
       };
-      select: { entityKey: true };
-    }): Promise<Array<{ entityKey: string }>>;
+      select: {
+        entityKey: true;
+        entityType: true;
+        manufacturer: true;
+        observedVersion: true;
+        normalizedVersion: true;
+        supportStatus: true;
+      };
+    }): Promise<Array<{
+      entityKey: string;
+      entityType: string;
+      manufacturer: string | null;
+      observedVersion: string | null;
+      normalizedVersion: string | null;
+      supportStatus: string;
+    }>>;
     upsert(args: {
       where: { entityKey: string };
       create: Record<string, unknown>;

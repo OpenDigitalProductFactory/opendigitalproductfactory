@@ -142,16 +142,30 @@ export async function persistBootstrapDiscoveryRun(
     // its view cannot mark dpf_bootstrap rows stale. Composes with the
     // scopeKey filter so cross-customer isolation still holds.
     const sourceFilter = { lastConfirmedRun: { sourceSlug: runMeta.sourceSlug } };
-    const existingEntityKeys = new Set(
+    // Identity columns come back with the key set because the STALE branch needs
+    // them: an entity this sweep did not re-observe is absent from
+    // `normalized.inventoryEntities`, so persistedIdentityByEntityKey (built from
+    // the payload) has nothing for it, and the quality input was previously
+    // assembled with no manufacturer/version/supportStatus at all. Same query,
+    // more columns — no extra round trip.
+    const existingEntityByKey = new Map(
       (await tx.inventoryEntity.findMany({
         where: {
           ...INVENTORY_ENTITY_CANONICAL_WHERE,
           ...scopeWhere,
           ...sourceFilter,
         },
-        select: { entityKey: true },
-      })).map((entity) => entity.entityKey),
+        select: {
+          entityKey: true,
+          entityType: true,
+          manufacturer: true,
+          observedVersion: true,
+          normalizedVersion: true,
+          supportStatus: true,
+        },
+      })).map((entity) => [entity.entityKey, entity] as const),
     );
+    const existingEntityKeys = new Set(existingEntityByKey.keys());
     // BI-PIR-7d69a445 (part 2): key existing relationships by their canonical
     // tuple (fromEntityId, toEntityId, relationshipType) rather than by
     // relationshipKey. relationshipKey is source-scoped provenance that can differ
@@ -707,11 +721,32 @@ export async function persistBootstrapDiscoveryRun(
 
           return qualityEntity;
         }),
-        ...staleEntityKeys.map((entityKey) => ({
-          entityKey,
-          entityType: "inventory_entity",
-          attributionStatus: "stale" as const,
-        })),
+        // A stale entity is judged on its PERSISTED identity, exactly as an
+        // observed one is (#3967). Passing only {entityKey, attributionStatus}
+        // made the detector re-raise catalog_match_ambiguous and
+        // lifecycle_unverified for EVERY stale entity on facts it had not
+        // checked but merely omitted — `database:prom:qdrant:qdrant:6333` carries
+        // manufacturer "qdrant" and still re-raised every sweep. Omission is not
+        // evidence of absence, and the resolve branch must weigh the same facts
+        // as the emit branch (the #3873 invariant).
+        //
+        // `normalizationStatus` is deliberately absent rather than defaulted: it
+        // is derived from this sweep's DiscoveredSoftwareEvidence and is not a
+        // persisted column, so a sweep that did not observe the entity genuinely
+        // has no value for it. The persisted identity columns are the whole of
+        // the available truth, and both branches now read them.
+        ...staleEntityKeys.map((entityKey) => {
+          const persisted = existingEntityByKey.get(entityKey);
+          return {
+            entityKey,
+            entityType: persisted?.entityType ?? "inventory_entity",
+            attributionStatus: "stale" as const,
+            manufacturer: persisted?.manufacturer ?? null,
+            observedVersion: persisted?.observedVersion ?? null,
+            normalizedVersion: persisted?.normalizedVersion ?? null,
+            supportStatus: persisted?.supportStatus ?? "unknown",
+          };
+        }),
       ],
       staleRelationshipKeys.map((relationshipKey) => ({
         relationshipKey,

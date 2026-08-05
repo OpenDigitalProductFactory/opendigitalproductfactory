@@ -142,6 +142,42 @@ const IDENTITY_OPTIONAL_ENTITY_TYPES = new Set([
   "vlan",
 ]);
 
+/**
+ * Every issue-key suffix the entity loop below can open for one subject.
+ *
+ * Suffixes, not issue types: `taxonomy_attribution_low_confidence` is keyed
+ * `:taxonomy_low_confidence`, so deriving keys from the type names would silently
+ * miss it.
+ */
+const ENTITY_ISSUE_KEY_SUFFIXES = [
+  "attribution_missing",
+  "taxonomy_low_confidence",
+  "lifecycle_unverified",
+  "catalog_match_ambiguous",
+  "stale",
+] as const;
+
+/**
+ * Resolve EVERY issue this loop can open for a subject it is about to skip.
+ *
+ * Why suppression must resolve rather than `continue`: a bare `continue` puts the
+ * subject in neither `issues` nor `resolvedIssueKeys`, so any row opened before
+ * the suppression rule existed has no close path and stays open forever. That is
+ * not hypothetical — tightening the Docker guard to match `:container:`
+ * positionally correctly stopped NEW rows for `monitoring_service:container:<id>`
+ * but stranded 19 already-open ones, which is exactly the 5-row residual in
+ * BI-A3D12F85 that no close condition explained.
+ *
+ * Suppressing a subject means "the platform asks nothing of this thing", and the
+ * honest expression of that is an explicit resolve, not silence. Every future
+ * skip in this loop must call this instead of `continue`ing bare.
+ */
+function resolveAllEntityIssues(entityKey: string, resolvedIssueKeys: string[]): void {
+  for (const suffix of ENTITY_ISSUE_KEY_SUFFIXES) {
+    resolvedIssueKeys.push(`inventory_entity:${entityKey}:${suffix}`);
+  }
+}
+
 function normalizeToken(value: string): string {
   return value
     .toLowerCase()
@@ -387,6 +423,7 @@ export function evaluateInventoryQuality(
     // entire issue-generation loop for them. Entity-key heuristics
     // catch every Docker shape without needing a name pass-through.
     if (isDockerOriginEntityKey(entity.entityKey)) {
+      resolveAllEntityIssues(entity.entityKey, resolvedIssueKeys);
       continue;
     }
 
@@ -428,13 +465,18 @@ export function evaluateInventoryQuality(
       resolvedIssueKeys.push(`inventory_entity:${entity.entityKey}:taxonomy_low_confidence`);
     }
 
+    // The managed/observed split, applied to all three subject-scoped types
+    // below. See the `observedEstate` uses for why identity and lifecycle now
+    // share the gate that staleness already had.
+    const observedEstate = classifyEntityObservation(entity.entityKey) === "observed";
+
     // Only the MANAGED estate raises an issue when it vanishes. An ARP
     // neighbour, a UniFi client (phone/laptop), or a platform Prometheus target
     // disappearing is normal churn, not an operator-actionable gap — surfacing
     // it produces a permanently-open row nobody can resolve.
     if (
       entity.attributionStatus === "stale"
-      && classifyEntityObservation(entity.entityKey) === "managed"
+      && !observedEstate
     ) {
       issues.push({
         issueKey: `inventory_entity:${entity.entityKey}:stale`,
@@ -446,12 +488,20 @@ export function evaluateInventoryQuality(
       });
     }
 
+    // Lifecycle verification is asked only of the managed estate, for the same
+    // reason staleness is. "Verify the support lifecycle of this device" is not a
+    // question anyone can answer about a phone that joined the wifi — and the
+    // measurement in BI-A3D12F85 shows that is literally the population: every
+    // ARP host swept today carries a locally-administered (randomised) MAC, which
+    // has no OUI and therefore no vendor, no catalog identity and no lifecycle,
+    // by construction rather than by omission. Those rows are unresolvable, not
+    // merely unresolved, and 180 of them buried the 21 that describe real gear.
     const normalizedSupportStatus = entity.supportStatus?.trim().toLowerCase() ?? "unknown";
-    if (normalizedSupportStatus !== "unknown") {
-      // "support lifecycle (supportStatus) becomes known for the entity"
+    if (observedEstate || normalizedSupportStatus !== "unknown") {
+      // "support lifecycle (supportStatus) becomes known for the entity" — or the
+      // subject is observed rather than managed, so it is never asked.
       resolvedIssueKeys.push(`inventory_entity:${entity.entityKey}:lifecycle_unverified`);
-    }
-    if (normalizedSupportStatus === "unknown") {
+    } else {
       issues.push({
         issueKey: `inventory_entity:${entity.entityKey}:lifecycle_unverified`,
         issueType: "lifecycle_unverified",
@@ -462,7 +512,11 @@ export function evaluateInventoryQuality(
       });
     }
 
-    const identityAmbiguous = !IDENTITY_OPTIONAL_ENTITY_TYPES.has(entity.entityType)
+    // Identity review is likewise a managed-estate question: see the lifecycle
+    // block above. An observed neighbour with no resolvable vendor is not an
+    // identity gap the operator can close.
+    const identityAmbiguous = !observedEstate
+      && !IDENTITY_OPTIONAL_ENTITY_TYPES.has(entity.entityType)
       && (
         !entity.manufacturer
         || (!!entity.observedVersion && !entity.normalizedVersion)
@@ -498,13 +552,19 @@ export function evaluateInventoryQuality(
     // relationshipKey as permanently `stale` — one open stale_relationship issue
     // per orphan that never resolves. Skip issue generation for them, exactly as
     // the entity loop above skips isDockerOriginEntityKey rows.
+    //
+    // Both skips below RESOLVE the subject's key rather than `continue`ing bare,
+    // for the reason given on resolveAllEntityIssues: a suppression that only
+    // stops emitting strands every row opened before the rule existed.
     if (isDockerOriginRelationshipKey(relationship.relationshipKey)) {
+      resolvedIssueKeys.push(`inventory_relationship:${relationship.relationshipKey}:stale`);
       continue;
     }
     // A relationship is only as durable as its least-durable endpoint: a
     // transient client attached to a managed AP vanishes the moment that client
     // leaves. Managed<->managed topology (AP uplink to switch) still raises.
     if (classifyRelationshipObservation(relationship.relationshipKey) === "observed") {
+      resolvedIssueKeys.push(`inventory_relationship:${relationship.relationshipKey}:stale`);
       continue;
     }
     if (relationship.status === "stale") {
