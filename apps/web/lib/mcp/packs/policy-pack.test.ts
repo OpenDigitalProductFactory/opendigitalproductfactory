@@ -81,6 +81,40 @@ describe("policyPack (BI-3CDEC5F0)", () => {
     );
   });
 
+  it("create_policy only claims a US audience when notes actually name one", async () => {
+    // A substring test for "us" fires on "business", "must", "use" — and would
+    // report an audience the operator never captured. Word boundaries only.
+    vi.mocked(prisma.policy.create).mockResolvedValue({
+      id: "cuid2",
+      policyId: "POL-TEST5678",
+      title: "Expense Policy",
+      category: "operations",
+      lifecycleStatus: "draft",
+    } as never);
+
+    const misleading = await policyPack.handlers.create_policy(
+      {
+        title: "Expense Policy",
+        category: "operations",
+        notes: "Applies to the whole business; users must use the portal.",
+      },
+      "user-1",
+    );
+    expect(misleading.success).toBe(true);
+    expect(misleading.message).not.toMatch(/Intended US audience/i);
+    expect(misleading.message).toMatch(/Add intended audience/i);
+
+    const genuine = await policyPack.handlers.create_policy(
+      {
+        title: "Expense Policy",
+        category: "operations",
+        notes: "Audience: US employees only.",
+      },
+      "user-1",
+    );
+    expect(genuine.message).toMatch(/Intended US audience/i);
+  });
+
   it("create_policy rejects bad category", async () => {
     const res = await policyPack.handlers.create_policy(
       { title: "X", category: "not-a-category" },

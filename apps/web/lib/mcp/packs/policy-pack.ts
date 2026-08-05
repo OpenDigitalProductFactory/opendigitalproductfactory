@@ -283,8 +283,10 @@ async function createPolicyHandler(
       `Created draft policy ${record.policyId}: "${record.title}" (category=${record.category}). ` +
       `Human review/edit/publish: /compliance/policies/${record.id}. ` +
       `This is a DRAFT — not published. ` +
-      (notes?.toLowerCase().includes("us")
-        ? "Intended US audience is noted in notes; structured audience scoping is P1 (BI-3CDEC5F0)."
+      // Word-boundary match: a substring test fires on "business", "must", "use"
+      // and would tell the operator an audience was captured when none was.
+      (notes && /\b(?:us|u\.s\.|usa|united states)\b/i.test(notes)
+        ? "Intended US audience is noted in notes; structured audience fields are not shipped yet, so publication scope stays a human decision."
         : "Add intended audience in notes if not global (e.g. US-based employees only)."),
     data: {
       id: record.id,
