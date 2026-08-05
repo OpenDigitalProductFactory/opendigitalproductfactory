@@ -88,53 +88,10 @@ import {
   errorEndsEvalCycle,
   resolveEvaluatedToolUse,
   runDimensionEval,
-  sensitivityClassesLeftUncoveredByRetiring,
   TOOL_USE_MIN_FIDELITY,
   type DriftResult,
 } from "./eval-runner";
 
-// BI-32426CA0. Retiring is not a downrank — routing filters candidates on
-// `retiredAt: null`, so retiring the sole holder of a clearance leaves that
-// sensitivity class with zero eligible endpoints and every request in it fails
-// with the generic "No AI model can handle this request right now".
-describe("sensitivityClassesLeftUncoveredByRetiring (last-endpoint-standing guard)", () => {
-  beforeEach(() => {
-    evalState.selfClearance = ["public", "internal", "confidential", "restricted"];
-    evalState.peerClearances = [];
-  });
-
-  it("reports the classes only this endpoint covers", async () => {
-    // The live shape: bundled local model is the only holder of `restricted`;
-    // a cloud peer covers everything below it.
-    evalState.peerClearances = [["public", "internal", "confidential"]];
-    const stranded = await sensitivityClassesLeftUncoveredByRetiring("local", "qwen3.6");
-    expect(stranded).toEqual(["restricted"]);
-  });
-
-  it("reports nothing when a peer covers every class", async () => {
-    evalState.peerClearances = [["public", "internal", "confidential", "restricted"]];
-    const stranded = await sensitivityClassesLeftUncoveredByRetiring("local", "qwen3.6");
-    expect(stranded).toEqual([]);
-  });
-
-  it("reports every class when no routable peer remains", async () => {
-    evalState.peerClearances = [];
-    const stranded = await sensitivityClassesLeftUncoveredByRetiring("local", "qwen3.6");
-    expect(stranded).toEqual(["public", "internal", "confidential", "restricted"]);
-  });
-
-  it("unions cover across several peers", async () => {
-    evalState.peerClearances = [["public"], ["internal"], ["confidential", "restricted"]];
-    const stranded = await sensitivityClassesLeftUncoveredByRetiring("local", "qwen3.6");
-    expect(stranded).toEqual([]);
-  });
-
-  it("does not guard a provider that holds no clearance at all", async () => {
-    evalState.selfClearance = [];
-    const stranded = await sensitivityClassesLeftUncoveredByRetiring("x", "y");
-    expect(stranded).toEqual([]);
-  });
-});
 
 describe("resolveEvaluatedToolUse — calibrate half (BI-DFC30977)", () => {
   const dim = (newScore: number, inconclusive = false) => ({ newScore, inconclusive });

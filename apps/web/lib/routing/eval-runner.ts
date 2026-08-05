@@ -18,7 +18,8 @@ import {
   scoreRetrieval,
   scoreDimension,
 } from "./eval-scoring";
-import { BACKGROUND_EVAL_ENDPOINT_TYPES, MODEL_ROUTING_ENDPOINT_TYPES } from "./provider-eligibility";
+import { BACKGROUND_EVAL_ENDPOINT_TYPES } from "./provider-eligibility";
+import { sensitivityClassesLeftUncoveredByRetiring } from "./endpoint-retirement-guard";
 
 // ── Infrastructure Error Classifier (BI-INST-008 circuit breaker) ──────────
 //
@@ -62,49 +63,6 @@ const INFRASTRUCTURE_ERROR_PATTERNS: RegExp[] = [
  */
 export function errorLooksLikeInfrastructure(error: string | null): boolean {
   return error !== null && INFRASTRUCTURE_ERROR_PATTERNS.some((re) => re.test(error));
-}
-
-/**
- * Which sensitivity classes would lose their last routable endpoint if this
- * profile were retired.
- *
- * Mirrors the candidate query in `queryEndpointManifests`
- * (apps/web/lib/routing/loader.ts) exactly — modelStatus active|degraded,
- * retiredAt null, provider active|degraded, provider endpointType routable.
- * A transcription/embedding endpoint therefore never counts as cover, which
- * matters: on the install that motivated this, the only other provider holding
- * `restricted` clearance was a transcription endpoint that can never serve a
- * chat request.
- *
- * Pure-ish and exported so the guard is unit-testable without driving a full
- * eval run.
- */
-export async function sensitivityClassesLeftUncoveredByRetiring(
-  providerId: string,
-  modelId: string,
-): Promise<string[]> {
-  const self = await prisma.modelProfile.findUnique({
-    where: { providerId_modelId: { providerId, modelId } },
-    select: { id: true, provider: { select: { sensitivityClearance: true } } },
-  });
-  const covered = self?.provider?.sensitivityClearance ?? [];
-  if (covered.length === 0) return [];
-
-  const peers = await prisma.modelProfile.findMany({
-    where: {
-      id: { not: self!.id },
-      modelStatus: { in: ["active", "degraded"] },
-      retiredAt: null,
-      provider: {
-        status: { in: ["active", "degraded"] },
-        endpointType: { in: [...MODEL_ROUTING_ENDPOINT_TYPES] },
-      },
-    },
-    select: { provider: { select: { sensitivityClearance: true } } },
-  });
-
-  const peerCover = new Set(peers.flatMap((p) => p.provider?.sensitivityClearance ?? []));
-  return covered.filter((level) => !peerCover.has(level));
 }
 
 // ── Config-gap Error Classifier ────────────────────────────────────────────
