@@ -191,6 +191,14 @@ const DEVELOPMENT_TEMPLATE_GRANTS = [
   "document_read",
   "coworker_catalog_read",
   // Writes / actions for the build-studio + ship loop
+  // `critique_capture` lets an external review session DRAFT a UX critique into
+  // the design corpus (BI-52839DEA). Narrow on purpose: capture originally
+  // required `registry_write`, which this template does not hold, so the tool
+  // was unreachable from the surface it exists for. Granting registry_write
+  // here would have come with eleven other registry tools; this grants exactly
+  // the one capability, and the entry is still only ever agent-proposed —
+  // never calibration-eligible until a founder attaches a verdict in the portal.
+  "critique_capture",
   "backlog_write",
   "backlog_triage",
   "build_promote",

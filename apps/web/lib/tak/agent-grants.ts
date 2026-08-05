@@ -42,6 +42,11 @@ export const GRANT_IMPLICATIONS: Readonly<Record<string, readonly string[]>> = {
   siem_investigate: ["siem_read"],
   siem_tune: ["siem_read"],
   incident_respond: ["siem_read"],
+  // A holder of broad registry write authority can already write the craft
+  // overlay directly, so it implies the narrow critique-capture grant. One-way:
+  // `critique_capture` never implies `registry_write` — that narrowing is the
+  // entire point of splitting it out.
+  registry_write: ["critique_capture"],
 };
 
 /** Expand a list of held grants by applying GRANT_IMPLICATIONS one-way.
@@ -252,14 +257,29 @@ export const TOOL_TO_GRANTS: Record<string, string[]> = {
 
   // UX critique corpus (BI-52839DEA). Reading past design findings is advisory
   // and read-only, so it matches the decision gates. Capture writes a DRAFT
-  // WikiPage under the craft overlay — the same shape and scope as
-  // `record_org_business_answer` writing into the org corpus.
+  // WikiPage under the craft overlay.
   //
-  // `registry_write` is not authority over the corpus: the pack pins every MCP
+  // `critique_capture` is DELIBERATELY ITS OWN GRANT rather than `registry_write`
+  // (BI-52839DEA follow-up). Capture shipped on `registry_write`, which the
+  // `development` template — the coding-agent token — does not hold, so the tool
+  // was unreachable from the exact surface it was built for: a review happening
+  // in Claude Code / Codex / Grok could read the corpus but never feed it.
+  //
+  // Widening the development template to `registry_write` would have fixed that
+  // by also handing coding agents wiki_ingest, publish_wiki_overlay_pages,
+  // create_knowledge_article, doc_save/doc_link/doc_state_change,
+  // run_discovery_triage, attribute_entity_to_product, dismiss_entity and
+  // resolve_portfolio_quality_issue — eleven tools of authority to enable one.
+  // A narrow per-capability grant is the platform's own pattern here
+  // (browser_read/browser_drive, siem_read/siem_investigate), and it keeps the
+  // authority story honest: a coding agent may draft critique entries, and
+  // nothing else in the registry.
+  //
+  // The grant is not authority over the corpus either: the pack pins every MCP
   // caller to `callerKind: "agent"`, so a captured entry can only ever carry an
   // agent-proposed verdict and is never calibration-eligible. Attaching a
   // founder/designer verdict stays a human act in the portal.
-  capture_ux_critique: ["registry_write"],
+  capture_ux_critique: ["critique_capture"],
   search_ux_critique_corpus: ["registry_read"],
 
   // Org/WWWD qa elicitation feeder (BI-44526F3E Phase C): capture a CONFIRMED
